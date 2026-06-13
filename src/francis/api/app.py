@@ -25,6 +25,7 @@ from francis.api.routes import (
     executor_substrate,
     federation,
     forge,
+    ingest,
     industrial,
     knowledge_fabric,
     lens,
@@ -82,6 +83,7 @@ def create_app() -> FastAPI:
     app.include_router(web_learning.router, prefix="/system/web-learning", tags=["web_learning"])
     app.include_router(federation.router, prefix="/federation", tags=["federation"])
     app.include_router(forge.router, prefix="/forge", tags=["forge"])
+    app.include_router(ingest.router, prefix="/ingest", tags=["ingest"])
     app.include_router(explanation.router, prefix="/explanation", tags=["explanation"])
     app.include_router(explanation.router, prefix="/explanations", tags=["explanation"])
     app.include_router(memory_timeline.router, prefix="/memory/timeline", tags=["memory_timeline"])

@@ -163,6 +163,126 @@ INDUSTRIAL_WRITE_TEST_ACTORS = (
     "operator:world_state",
     "test.industrial.write",
 )
+INGEST_LAB_READBACK_TEST_SCOPE = "ingest.lab.readback"
+INGEST_LAB_READBACK_TEST_ACTORS = ("test.ingest.lab.readback", "chat_ui.ingest")
+INGEST_FORGE_TEST_ACTORS = ("test.ingest.forge", "chat_ui.ingest")
+INGEST_FORGE_TEST_SCOPES = (
+    "ingest.forge.synthesize",
+    "ingest.forge.review",
+    "ingest.forge.apply.execute",
+    "ingest.forge.bind",
+    "ingest.acquire",
+)
+INGEST_LAB_RECEIPT_WRITE_TEST_SCOPE = "ingest.lab.receipt.write"
+INGEST_LAB_RECEIPT_WRITE_TEST_ACTORS = ("test.ingest.lab.receipt.write",)
+INGEST_LAB_APPROVAL_CONSUME_TEST_SCOPE = "ingest.lab.approval.consume"
+INGEST_LAB_APPROVAL_CONSUME_TEST_ACTORS = ("test.ingest.lab.approval.consume",)
+INGEST_LAB_NOOP_RUNNER_TEST_SCOPE = "ingest.lab.runner.noop"
+INGEST_LAB_NOOP_RUNNER_TEST_ACTORS = ("test.ingest.lab.runner.noop",)
+INGEST_LAB_NOOP_RUNNER_TRANSCRIPT_TEST_SCOPE = "ingest.lab.runner.noop.transcript"
+INGEST_LAB_NOOP_RUNNER_TRANSCRIPT_TEST_ACTORS = ("test.ingest.lab.runner.noop.transcript",)
+INGEST_LAB_NOOP_RUNNER_IDENTITY_TEST_SCOPE = "ingest.lab.runner.noop.identity"
+INGEST_LAB_NOOP_RUNNER_IDENTITY_TEST_ACTORS = ("test.ingest.lab.runner.noop.identity",)
+INGEST_LAB_SOURCE_MOUNT_READINESS_TEST_SCOPE = "ingest.lab.source_mount.readiness"
+INGEST_LAB_SOURCE_MOUNT_READINESS_TEST_ACTORS = ("test.ingest.lab.source_mount.readiness",)
+INGEST_LAB_SOURCE_MOUNT_CONTRACT_TEST_SCOPE = "ingest.lab.source_mount.contract"
+INGEST_LAB_SOURCE_MOUNT_CONTRACT_TEST_ACTORS = ("test.ingest.lab.source_mount.contract",)
+INGEST_LAB_SANDBOX_PROVIDER_CONTRACT_TEST_SCOPE = "ingest.lab.sandbox.provider_contract"
+INGEST_LAB_SANDBOX_PROVIDER_CONTRACT_TEST_ACTORS = ("test.ingest.lab.sandbox.provider_contract",)
+INGEST_LAB_SANDBOX_PROVIDER_BINDING_TEST_SCOPE = "ingest.lab.sandbox.provider_binding"
+INGEST_LAB_SANDBOX_PROVIDER_BINDING_TEST_ACTORS = ("test.ingest.lab.sandbox.provider_binding",)
+INGEST_LAB_SANDBOX_PROVIDER_SELECTION_TEST_SCOPE = "ingest.lab.sandbox.provider_selection"
+INGEST_LAB_SANDBOX_PROVIDER_SELECTION_TEST_ACTORS = ("test.ingest.lab.sandbox.provider_selection",)
+INGEST_LAB_SANDBOX_PROVIDER_VERIFIER_TEST_SCOPE = "ingest.lab.sandbox.provider_verifier"
+INGEST_LAB_SANDBOX_PROVIDER_VERIFIER_TEST_ACTORS = ("test.ingest.lab.sandbox.provider_verifier",)
+INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_TEST_SCOPE = "ingest.lab.sandbox.provider_runtime_probe"
+INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_TEST_ACTORS = ("test.ingest.lab.sandbox.provider_runtime_probe",)
+INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_HARNESS_TEST_SCOPE = "ingest.lab.sandbox.provider_runtime_probe_harness"
+INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_HARNESS_TEST_ACTORS = (
+    "test.ingest.lab.sandbox.provider_runtime_probe_harness",
+)
+INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_RUNNER_READINESS_TEST_SCOPE = (
+    "ingest.lab.sandbox.provider_runtime_probe_runner_readiness"
+)
+INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_RUNNER_READINESS_TEST_ACTORS = (
+    "test.ingest.lab.sandbox.provider_runtime_probe_runner_readiness",
+)
+INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_RUNNER_BINDING_TEST_SCOPE = (
+    "ingest.lab.sandbox.provider_runtime_probe_runner_binding"
+)
+INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_RUNNER_BINDING_TEST_ACTORS = (
+    "test.ingest.lab.sandbox.provider_runtime_probe_runner_binding",
+)
+INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_RUNNER_ENFORCEMENT_TEST_SCOPE = (
+    "ingest.lab.sandbox.provider_runtime_probe_runner_enforcement"
+)
+INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_RUNNER_ENFORCEMENT_TEST_ACTORS = (
+    "test.ingest.lab.sandbox.provider_runtime_probe_runner_enforcement",
+)
+INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_EXECUTION_BOUNDARY_TEST_SCOPE = (
+    "ingest.lab.sandbox.provider_runtime_probe_execution_boundary"
+)
+INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_EXECUTION_BOUNDARY_TEST_ACTORS = (
+    "test.ingest.lab.sandbox.provider_runtime_probe_execution_boundary",
+)
+INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_REFUSAL_TEST_SCOPE = "ingest.lab.sandbox.provider_runtime_probe.refuse"
+INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_REFUSAL_TEST_ACTORS = (
+    "test.ingest.lab.sandbox.provider_runtime_probe_refusal",
+)
+INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_APPROVAL_REQUEST_TEST_SCOPE = (
+    "ingest.lab.sandbox.provider_runtime_probe.request_approval"
+)
+INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_APPROVAL_REQUEST_TEST_ACTORS = (
+    "test.ingest.lab.sandbox.provider_runtime_probe_approval_request",
+)
+INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_APPROVAL_CONSUME_TEST_SCOPE = (
+    "ingest.lab.sandbox.provider_runtime_probe.consume_approval"
+)
+INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_APPROVAL_CONSUME_TEST_ACTORS = (
+    "test.ingest.lab.sandbox.provider_runtime_probe_approval_consume",
+)
+INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_INVOCATION_BOUNDARY_TEST_SCOPE = (
+    "ingest.lab.sandbox.provider_runtime_probe.invocation_boundary"
+)
+INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_INVOCATION_BOUNDARY_TEST_ACTORS = (
+    "test.ingest.lab.sandbox.provider_runtime_probe_invocation_boundary",
+)
+INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_RUNNER_PRE_EXECUTION_BOUNDARY_TEST_SCOPE = (
+    "ingest.lab.sandbox.provider_runtime_probe.runner_pre_execution_boundary"
+)
+INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_RUNNER_PRE_EXECUTION_BOUNDARY_TEST_ACTORS = (
+    "test.ingest.lab.sandbox.provider_runtime_probe_runner_pre_execution_boundary",
+)
+INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_RUNNER_CONTROL_BINDING_TEST_SCOPE = (
+    "ingest.lab.sandbox.provider_runtime_probe.runner_control_binding"
+)
+INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_RUNNER_CONTROL_BINDING_TEST_ACTORS = (
+    "test.ingest.lab.sandbox.provider_runtime_probe_runner_control_binding",
+)
+INGEST_LAB_SANDBOXED_REBUILD_RUN_TEST_BOUNDARY_TEST_SCOPE = "ingest.lab.sandboxed_rebuild_run_test.boundary"
+INGEST_LAB_SANDBOXED_REBUILD_RUN_TEST_BOUNDARY_TEST_ACTORS = ("test.ingest.lab.sandboxed_rebuild_run_test_boundary",)
+INGEST_LAB_SANDBOXED_REBUILD_RUN_TEST_APPROVAL_REQUEST_TEST_SCOPE = (
+    "ingest.lab.sandboxed_rebuild_run_test.request_approval"
+)
+INGEST_LAB_SANDBOXED_REBUILD_RUN_TEST_APPROVAL_REQUEST_TEST_ACTORS = (
+    "test.ingest.lab.sandboxed_rebuild_run_test_approval_request",
+)
+INGEST_LAB_SANDBOXED_REBUILD_RUN_TEST_APPROVAL_CONSUME_TEST_SCOPE = (
+    "ingest.lab.sandboxed_rebuild_run_test.consume_approval"
+)
+INGEST_LAB_SANDBOXED_REBUILD_RUN_TEST_APPROVAL_CONSUME_TEST_ACTORS = (
+    "test.ingest.lab.sandboxed_rebuild_run_test_approval_consume",
+)
+INGEST_LAB_SANDBOXED_REBUILD_RUN_TEST_RUNNER_BINDING_TEST_SCOPE = "ingest.lab.sandboxed_rebuild_run_test.runner_binding"
+INGEST_LAB_SANDBOXED_REBUILD_RUN_TEST_RUNNER_BINDING_TEST_ACTORS = (
+    "test.ingest.lab.sandboxed_rebuild_run_test_runner_binding",
+)
+INGEST_LAB_SANDBOXED_REBUILD_RUN_TEST_SANDBOX_POLICY_TEST_SCOPE = "ingest.lab.sandboxed_rebuild_run_test.sandbox_policy"
+INGEST_LAB_SANDBOXED_REBUILD_RUN_TEST_SANDBOX_POLICY_TEST_ACTORS = (
+    "test.ingest.lab.sandboxed_rebuild_run_test_sandbox_policy",
+)
+INGEST_LAB_RUN_BOUNDARY_PREFLIGHT_TEST_SCOPE = "ingest.lab.run_boundary.preflight"
+INGEST_LAB_RUN_BOUNDARY_PREFLIGHT_TEST_ACTORS = ("test.ingest.lab.run_boundary.preflight",)
 
 
 def _safe_real_path(path: Path) -> str:
@@ -299,6 +419,146 @@ def _test_actor_scope_policy() -> dict[str, list[str]]:
     _add_actor_scopes(policy, ATTACHMENTS_WRITE_TEST_ACTORS, ATTACHMENTS_WRITE_TEST_SCOPE)
     _add_actor_scopes(policy, FEDERATION_WRITE_TEST_ACTORS, FEDERATION_WRITE_TEST_SCOPE)
     _add_actor_scopes(policy, INDUSTRIAL_WRITE_TEST_ACTORS, INDUSTRIAL_WRITE_TEST_SCOPE)
+    _add_actor_scopes(policy, INGEST_LAB_READBACK_TEST_ACTORS, INGEST_LAB_READBACK_TEST_SCOPE)
+    _add_actor_scopes(policy, INGEST_LAB_RECEIPT_WRITE_TEST_ACTORS, INGEST_LAB_RECEIPT_WRITE_TEST_SCOPE)
+    _add_actor_scopes(
+        policy,
+        INGEST_LAB_APPROVAL_CONSUME_TEST_ACTORS,
+        INGEST_LAB_APPROVAL_CONSUME_TEST_SCOPE,
+    )
+    _add_actor_scopes(policy, INGEST_LAB_NOOP_RUNNER_TEST_ACTORS, INGEST_LAB_NOOP_RUNNER_TEST_SCOPE)
+    _add_actor_scopes(
+        policy,
+        INGEST_LAB_NOOP_RUNNER_TRANSCRIPT_TEST_ACTORS,
+        INGEST_LAB_NOOP_RUNNER_TRANSCRIPT_TEST_SCOPE,
+    )
+    _add_actor_scopes(
+        policy,
+        INGEST_LAB_NOOP_RUNNER_IDENTITY_TEST_ACTORS,
+        INGEST_LAB_NOOP_RUNNER_IDENTITY_TEST_SCOPE,
+    )
+    _add_actor_scopes(
+        policy,
+        INGEST_LAB_SOURCE_MOUNT_READINESS_TEST_ACTORS,
+        INGEST_LAB_SOURCE_MOUNT_READINESS_TEST_SCOPE,
+    )
+    _add_actor_scopes(
+        policy,
+        INGEST_LAB_SOURCE_MOUNT_CONTRACT_TEST_ACTORS,
+        INGEST_LAB_SOURCE_MOUNT_CONTRACT_TEST_SCOPE,
+    )
+    _add_actor_scopes(
+        policy,
+        INGEST_LAB_SANDBOX_PROVIDER_CONTRACT_TEST_ACTORS,
+        INGEST_LAB_SANDBOX_PROVIDER_CONTRACT_TEST_SCOPE,
+    )
+    _add_actor_scopes(
+        policy,
+        INGEST_LAB_SANDBOX_PROVIDER_BINDING_TEST_ACTORS,
+        INGEST_LAB_SANDBOX_PROVIDER_BINDING_TEST_SCOPE,
+    )
+    _add_actor_scopes(
+        policy,
+        INGEST_LAB_SANDBOX_PROVIDER_SELECTION_TEST_ACTORS,
+        INGEST_LAB_SANDBOX_PROVIDER_SELECTION_TEST_SCOPE,
+    )
+    _add_actor_scopes(
+        policy,
+        INGEST_LAB_SANDBOX_PROVIDER_VERIFIER_TEST_ACTORS,
+        INGEST_LAB_SANDBOX_PROVIDER_VERIFIER_TEST_SCOPE,
+    )
+    _add_actor_scopes(
+        policy,
+        INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_TEST_ACTORS,
+        INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_TEST_SCOPE,
+    )
+    _add_actor_scopes(
+        policy,
+        INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_HARNESS_TEST_ACTORS,
+        INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_HARNESS_TEST_SCOPE,
+    )
+    _add_actor_scopes(
+        policy,
+        INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_RUNNER_READINESS_TEST_ACTORS,
+        INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_RUNNER_READINESS_TEST_SCOPE,
+    )
+    _add_actor_scopes(
+        policy,
+        INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_RUNNER_BINDING_TEST_ACTORS,
+        INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_RUNNER_BINDING_TEST_SCOPE,
+    )
+    _add_actor_scopes(
+        policy,
+        INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_RUNNER_ENFORCEMENT_TEST_ACTORS,
+        INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_RUNNER_ENFORCEMENT_TEST_SCOPE,
+    )
+    _add_actor_scopes(
+        policy,
+        INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_EXECUTION_BOUNDARY_TEST_ACTORS,
+        INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_EXECUTION_BOUNDARY_TEST_SCOPE,
+    )
+    _add_actor_scopes(
+        policy,
+        INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_REFUSAL_TEST_ACTORS,
+        INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_REFUSAL_TEST_SCOPE,
+    )
+    _add_actor_scopes(
+        policy,
+        INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_APPROVAL_REQUEST_TEST_ACTORS,
+        INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_APPROVAL_REQUEST_TEST_SCOPE,
+    )
+    _add_actor_scopes(
+        policy,
+        INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_APPROVAL_CONSUME_TEST_ACTORS,
+        INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_APPROVAL_CONSUME_TEST_SCOPE,
+    )
+    _add_actor_scopes(
+        policy,
+        INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_INVOCATION_BOUNDARY_TEST_ACTORS,
+        INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_INVOCATION_BOUNDARY_TEST_SCOPE,
+    )
+    _add_actor_scopes(
+        policy,
+        INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_RUNNER_PRE_EXECUTION_BOUNDARY_TEST_ACTORS,
+        INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_RUNNER_PRE_EXECUTION_BOUNDARY_TEST_SCOPE,
+    )
+    _add_actor_scopes(
+        policy,
+        INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_RUNNER_CONTROL_BINDING_TEST_ACTORS,
+        INGEST_LAB_SANDBOX_PROVIDER_RUNTIME_PROBE_RUNNER_CONTROL_BINDING_TEST_SCOPE,
+    )
+    _add_actor_scopes(
+        policy,
+        INGEST_LAB_SANDBOXED_REBUILD_RUN_TEST_BOUNDARY_TEST_ACTORS,
+        INGEST_LAB_SANDBOXED_REBUILD_RUN_TEST_BOUNDARY_TEST_SCOPE,
+    )
+    _add_actor_scopes(
+        policy,
+        INGEST_LAB_SANDBOXED_REBUILD_RUN_TEST_APPROVAL_REQUEST_TEST_ACTORS,
+        INGEST_LAB_SANDBOXED_REBUILD_RUN_TEST_APPROVAL_REQUEST_TEST_SCOPE,
+    )
+    _add_actor_scopes(
+        policy,
+        INGEST_LAB_SANDBOXED_REBUILD_RUN_TEST_APPROVAL_CONSUME_TEST_ACTORS,
+        INGEST_LAB_SANDBOXED_REBUILD_RUN_TEST_APPROVAL_CONSUME_TEST_SCOPE,
+    )
+    _add_actor_scopes(
+        policy,
+        INGEST_LAB_SANDBOXED_REBUILD_RUN_TEST_RUNNER_BINDING_TEST_ACTORS,
+        INGEST_LAB_SANDBOXED_REBUILD_RUN_TEST_RUNNER_BINDING_TEST_SCOPE,
+    )
+    _add_actor_scopes(
+        policy,
+        INGEST_LAB_SANDBOXED_REBUILD_RUN_TEST_SANDBOX_POLICY_TEST_ACTORS,
+        INGEST_LAB_SANDBOXED_REBUILD_RUN_TEST_SANDBOX_POLICY_TEST_SCOPE,
+    )
+    _add_actor_scopes(
+        policy,
+        INGEST_LAB_RUN_BOUNDARY_PREFLIGHT_TEST_ACTORS,
+        INGEST_LAB_RUN_BOUNDARY_PREFLIGHT_TEST_SCOPE,
+    )
+    for scope in INGEST_FORGE_TEST_SCOPES:
+        _add_actor_scopes(policy, INGEST_FORGE_TEST_ACTORS, scope)
     return policy
 
 

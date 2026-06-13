@@ -157,6 +157,93 @@ The canonical request lifecycle remains:
 
 `P10_FEDERATION` is downstream and optional. It must never bypass the same gates.
 
+Code-born capability ingestion follows the same law. A local repository may enter
+as `P5_EVIDENCE`/provenance through the ingest source registry and produce
+capability candidates, but any build, test, run, package, or rewrite attempt must
+cross `P3_GOVERNANCE` and `P2_IDENTITY` before `P7_EXECUTION`. Until a governed
+Francis Lab exists, Francis may create a pending exact-action approval request,
+preflight approval consumption against an exact action hash, and project a runner
+contract, runner-readiness controls, a runner-binding/execution-receipt sink
+contract checklist, a runner-enforcement checklist, and an approval-consumption
+handoff contract, an execution-receipt sink reservation, and a runner command
+allowlist binding, a runner command allowlist declaration, and a runner command
+allowlist enforcement preflight, a runner sandbox readiness preflight, an
+execution receipt write readiness preflight, and an execution receipt prewrite
+binding preflight, and an execution receipt writer preflight, plus
+source-mount readiness records, source-mount contract records, sandbox provider
+contract records, sandbox provider binding preflights, sandbox provider
+selection preflights, sandbox provider verifier preflights with static
+identity/policy evidence, sandbox provider runtime-probe preflights that declare
+future probe authorization, timeout, network-blocking, workspace-isolation,
+receipt, and repository-execution separation controls without probing providers,
+runtime-probe harness preflights that declare future probe runner, sandbox,
+service-query guard, output capture, and kill-switch controls without binding or
+running a provider, sandbox provider runtime-probe runner readiness records that
+declare the missing future runner implementation, identity, policy, sandbox,
+network-block, workspace-isolation, timeout, output-capture, kill-switch, and
+receipt-contract controls without launching a process, querying services, or
+running a provider, sandbox provider runtime-probe runner binding preflights
+that declare the future probe-runner binding contract and missing live runner,
+runtime-probe binding, sandbox, network, timeout, output-capture, kill-switch,
+and receipt controls without launching a process, querying services, writing
+execution receipts, or running a provider, sandbox provider runtime-probe
+runner enforcement preflights that declare the future probe-runner enforcement
+contract and missing live enforcement, runner binding, runtime-probe binding,
+provider runtime probe, sandbox, network, timeout, output-capture, kill-switch,
+and receipt controls without enforcing a runner, launching a process, querying
+services, writing execution receipts, or running a provider,
+and run-boundary preflights that aggregate those Lab control records, including
+runtime-probe harness and runtime-probe runner enforcement evidence, without
+binding or running a provider, and sandbox provider runtime-probe execution
+boundaries that declare the future provider-probe execution gate without
+probing, launching, consuming approval, or writing execution receipts, and
+sandbox provider runtime-probe refusals that write receipts when probe
+execution is requested too early, and sandbox provider runtime-probe approval
+requests that queue pending exact-action approval without consuming approval or
+probing providers, and sandbox provider runtime-probe approval-consumption
+records that consume approved provider-probe approvals once without probing
+providers, launching processes/containers, writing execution receipts, or
+executing repository code, and sandbox provider runtime-probe invocation
+boundaries that bind consumed provider-probe approval evidence to the remaining
+future runner policy, sandbox, network, timeout, output-capture, kill-switch, and
+execution receipt writer controls without invoking a provider, and sandbox
+provider runtime-probe runner pre-execution boundaries that bind the invocation
+boundary to still-missing live runner identity, policy, sandbox, network,
+timeout, output-capture, kill-switch, and execution receipt writer controls
+without launching or probing a provider, and sandbox provider runtime-probe
+runner control bindings that record those future controls as governance evidence
+while live runner, sandbox, provider, and execution bindings remain false, and
+sandboxed rebuild/run/test boundaries that record the future governed execution
+boundary while separate execution approval, live runner, sandbox, network,
+output, receipt, build, test, validation, and promotion controls remain missing,
+and sandboxed rebuild/run/test approval-request records that queue pending
+exact-action operator approval for future governed repository execution without
+consuming approval or running install/build/test commands, and sandboxed
+rebuild/run/test approval-consumption records that consume approved exact-action
+sandboxed rebuild/run/test approvals once as governance evidence without live
+runner binding, sandbox enforcement, command execution, install/build/test
+execution, network access, repo writes, execution receipt writing, validation,
+promotion, or execution authority, and sandboxed rebuild/run/test runner-binding
+preflights that record static local provider reference and policy-manifest
+metadata after approval consumption while live runner binding, sandbox
+enforcement, provider execution, provider service queries, command execution,
+execution receipt writing, validation, promotion, and execution authority remain
+blocked, and sandboxed rebuild/run/test sandbox-policy preflights that record
+default-deny network, read-only source-reference, no repo-write, no destructive
+action, no secret storage, command execution disabled, and missing live sandbox,
+command allowlist, and execution receipt writer controls after runner-binding
+evidence. It may also
+prewrite/finalize synthetic no-op execution receipts with all execution flags
+false, and consume exact-action approvals only for finalized synthetic no-op
+receipts to block approval reuse without granting execution authority, and
+complete built-in no-op runner envelopes without repository commands, and record
+built-in no-op runner transcripts with deterministic empty stdout/stderr
+metadata without real process output capture, and bind only the Francis-owned
+built-in no-op runner identity without live runner or sandbox runner binding. API clients and the
+operator UI may read source/candidate/Lab proof state through permission-gated
+readback routes, but the correct execution result is still a receipted refusal,
+not a hidden shell call.
+
 ### 3.2 Build completion order
 
 The canonical build order is not the same as the runtime request flow. To make
@@ -258,6 +345,41 @@ Francis becomes distinct from a generic agent shell when:
 - `P5_EVIDENCE` produces provenance-rich evidence packs
 - `P6_SIMULATION` can validate high-risk plans before execution
 - `P10_FEDERATION` shares sanitized knowledge under trust and policy gates
+- code-born ingest can map local repositories into source records, repo maps,
+  risk signals, lab plans, exact-action approval requests, approval-consumption
+  preflights, runner contracts, runner-readiness control checklists,
+  runner-binding/execution-receipt sink contract checklists,
+  runner-enforcement checklists, approval-consumption handoff contracts,
+  execution-receipt sink reservations, execution receipt write readiness
+  preflights, execution receipt prewrite binding contracts, execution receipt
+  writer preflights, synthetic no-op execution receipts, synthetic no-op
+  approval-consumption records, built-in no-op runner envelopes, built-in no-op
+  runner transcripts, built-in no-op runner identity bindings, runner command
+  allowlist bindings, runner command allowlist declarations, runner command
+  allowlist enforcement preflights, runner sandbox readiness preflights,
+  source-mount readiness records, source-mount contract records, sandbox
+  provider contract records, sandbox provider binding preflights, sandbox
+  provider selection preflights, sandbox provider verifier preflights with
+  static identity/policy evidence, sandbox provider runtime-probe preflights
+  with future probe authorization, timeout, network-blocking,
+  workspace-isolation, receipt, and repository-execution separation controls,
+runtime-probe harness preflights with future probe runner, sandbox,
+service-query guard, output capture, and kill-switch controls, sandbox provider
+runtime-probe runner readiness records with future runner implementation,
+identity, policy, sandbox, network-block, workspace-isolation, timeout,
+output-capture, kill-switch, and receipt-contract controls, sandbox provider
+runtime-probe runner binding preflights with future runner/runtime-probe
+binding, sandbox, network, timeout, output-capture, kill-switch, and receipt
+controls, sandbox provider runtime-probe runner enforcement preflights with
+future runner enforcement, live runner/runtime-probe binding, provider runtime
+probe, sandbox, network, timeout, output-capture, kill-switch, and receipt
+controls,
+run-boundary preflights that include runtime-probe harness and runtime-probe
+runner enforcement evidence, sandboxed rebuild/run/test approval-consumption
+records, and
+capability candidates without granting execution authority
+- the operator UI can inspect code-born source, risk, candidate, and Lab-boundary
+  readback without creating receipts, consuming approvals, or running repo code
 - the UI lets the operator inspect cross-plane reasoning, gating, and outcomes as a
   first-class experience
 
@@ -318,6 +440,7 @@ Anchor surfaces:
 - `apps/chat_ui/src/approvals/*`
 - `apps/chat_ui/src/credential_manager/*`
 - `apps/chat_ui/src/explanation_explorer/*`
+- `apps/chat_ui/src/ingest/*`
 - `apps/chat_ui/src/trust_dashboard/*`
 
 Done when:

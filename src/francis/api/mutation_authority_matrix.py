@@ -411,6 +411,813 @@ _RULES: tuple[AuthorityRule, ...] = (
         governance_maturity="permission_gated",
     ),
     AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/approval-consumption-preflight",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.readback",
+        approval_requirement="reads approval id and checks exact-action binding; does not consume approval",
+        receipt_behavior="lab approval-consumption preflight receipt and runner-contract artifact",
+        denial_behavior="api_permission_denied via permission_gate before ingest receipt or artifact write",
+        governance_maturity="permission_gated",
+        notes="Readback proves approval/action binding and runner absence; it does not run repository code.",
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/runner-readiness",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.readback",
+        approval_requirement="optional approval id readback only; does not consume approval",
+        receipt_behavior="lab runner-readiness preflight receipt and artifact",
+        denial_behavior="api_permission_denied via permission_gate before ingest receipt or artifact write",
+        governance_maturity="permission_gated",
+        notes="Projects sandbox, runner, isolation, resource, command, environment, and receipt-sink controls without executing repository code.",
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/runner-binding",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.readback",
+        approval_requirement="optional approval id readback only; does not consume approval",
+        receipt_behavior="lab runner-binding preflight receipt and artifact",
+        denial_behavior="api_permission_denied via permission_gate before ingest receipt or artifact write",
+        governance_maturity="permission_gated",
+        notes=(
+            "Projects the governed runner binding and execution-receipt sink contracts without binding a runner, "
+            "consuming approval, or executing repository code."
+        ),
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/runner-enforcement",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.readback",
+        approval_requirement="optional approval id readback only; does not consume approval",
+        receipt_behavior="lab runner-enforcement preflight receipt and artifact",
+        denial_behavior="api_permission_denied via permission_gate before ingest receipt or artifact write",
+        governance_maturity="permission_gated",
+        notes=(
+            "Verifies projected runner binding and execution-receipt sink enforcement checks without binding a runner, "
+            "consuming approval, or executing repository code."
+        ),
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/approval-consumption-handoff",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.readback",
+        approval_requirement="approval id readback only; does not consume approval",
+        receipt_behavior="lab approval-consumption handoff preflight receipt and artifact",
+        denial_behavior="api_permission_denied via permission_gate before ingest receipt or artifact write",
+        governance_maturity="permission_gated",
+        notes=(
+            "Binds an approved exact-action record to runner-enforcement readback and still blocks approval "
+            "consumption, execution authority, and repository execution."
+        ),
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/execution-receipt-sink-reservation",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.readback",
+        approval_requirement="approval id readback only; does not consume approval",
+        receipt_behavior="lab execution-receipt sink reservation receipt and artifact",
+        denial_behavior="api_permission_denied via permission_gate before ingest receipt or artifact write",
+        governance_maturity="permission_gated",
+        notes=(
+            "Reserves a future execution-receipt id/path after approval handoff readback while still blocking "
+            "prewrite, final write, approval consumption, execution authority, and repository execution."
+        ),
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/runner-command-allowlist-binding",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.readback",
+        approval_requirement="approval id readback only; does not consume approval",
+        receipt_behavior="lab runner command allowlist binding receipt and artifact",
+        denial_behavior="api_permission_denied via permission_gate before ingest receipt or artifact write",
+        governance_maturity="permission_gated",
+        notes=(
+            "Binds the exact-action command plan to missing allowlist controls after execution-receipt sink "
+            "reservation while still blocking command execution, approval consumption, execution authority, "
+            "and repository execution."
+        ),
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/runner-command-allowlist-declaration",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.readback",
+        approval_requirement="approval id readback only; does not consume approval",
+        receipt_behavior="lab runner command allowlist declaration receipt and artifact",
+        denial_behavior="api_permission_denied via permission_gate before ingest receipt or artifact write",
+        governance_maturity="permission_gated",
+        notes=(
+            "Declares exact-action command allowlist entries after command allowlist binding readback while "
+            "still blocking live allowlist binding, command execution, approval consumption, execution "
+            "authority, and repository execution."
+        ),
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/runner-command-allowlist-enforcement",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.readback",
+        approval_requirement="approval id readback only; does not consume approval",
+        receipt_behavior="lab runner command allowlist enforcement preflight receipt and artifact",
+        denial_behavior="api_permission_denied via permission_gate before ingest receipt or artifact write",
+        governance_maturity="permission_gated",
+        notes=(
+            "Checks declared exact-action command allowlist entries against missing live runner enforcement "
+            "controls while still blocking command execution, approval consumption, execution authority, "
+            "and repository execution."
+        ),
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/runner-sandbox-readiness",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.readback",
+        approval_requirement="approval id readback only; does not consume approval",
+        receipt_behavior="lab runner sandbox readiness preflight receipt and artifact",
+        denial_behavior="api_permission_denied via permission_gate before ingest receipt or artifact write",
+        governance_maturity="permission_gated",
+        notes=(
+            "Checks workspace, sandbox, runner, allowlist, and receipt-write controls after command allowlist "
+            "enforcement readback while still blocking runner binding, command execution, approval consumption, "
+            "execution authority, and repository execution."
+        ),
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/execution-receipt-write-readiness",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.readback",
+        approval_requirement="approval id readback only; does not consume approval",
+        receipt_behavior="lab execution receipt write readiness preflight receipt and artifact",
+        denial_behavior="api_permission_denied via permission_gate before ingest receipt or artifact write",
+        governance_maturity="permission_gated",
+        notes=(
+            "Checks reserved execution receipt prewrite/final-write controls after sandbox readiness readback "
+            "while still blocking execution receipt writes, command execution, approval consumption, execution "
+            "authority, and repository execution."
+        ),
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/execution-receipt-prewrite-binding",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.readback",
+        approval_requirement="approval id readback only; does not consume approval",
+        receipt_behavior="lab execution receipt prewrite binding preflight receipt and artifact",
+        denial_behavior="api_permission_denied via permission_gate before ingest receipt or artifact write",
+        governance_maturity="permission_gated",
+        notes=(
+            "Binds future lab.execution.run receipt schema, prewrite, and final-write contracts after receipt "
+            "write readiness while still blocking execution receipt writes, writer implementations, command "
+            "execution, approval consumption, execution authority, and repository execution."
+        ),
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/execution-receipt-writer-preflight",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.readback",
+        approval_requirement="approval id readback only; does not consume approval",
+        receipt_behavior="lab execution receipt writer preflight receipt and artifact",
+        denial_behavior="api_permission_denied via permission_gate before ingest receipt or artifact write",
+        governance_maturity="permission_gated",
+        notes=(
+            "Declares future execution receipt writer path, atomic-write, and redaction boundaries after "
+            "prewrite binding while still blocking execution receipt writes, writer implementations, command "
+            "execution, approval consumption, execution authority, and repository execution."
+        ),
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/synthetic-execution-receipt-prewrite",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.receipt.write",
+        approval_requirement="approved exact-action id required as readback evidence; approval is not consumed",
+        receipt_behavior="synthetic no-op lab.execution.run receipt plus ingest receipt",
+        denial_behavior="api_permission_denied via permission_gate before execution receipt or ingest receipt write",
+        governance_maturity="permission_gated",
+        notes=(
+            "Writes only a synthetic/no-op execution receipt with all execution flags false. It does not run "
+            "repository code, consume approval, grant execution authority, or validate the candidate."
+        ),
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/synthetic-execution-receipt-finalize",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.receipt.write",
+        approval_requirement="approved exact-action id required as readback evidence; approval is not consumed",
+        receipt_behavior="finalized synthetic no-op lab.execution.run receipt plus ingest receipt",
+        denial_behavior="api_permission_denied via permission_gate before execution receipt or ingest receipt write",
+        governance_maturity="permission_gated",
+        notes=(
+            "Finalizes only an existing synthetic/no-op execution receipt as blocked with all execution flags false. "
+            "It does not run repository code, consume approval, grant execution authority, or validate the candidate."
+        ),
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/approval-consume-synthetic-noop",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.approval.consume",
+        approval_requirement="approved exact-action id and finalized synthetic no-op execution receipt required",
+        receipt_behavior="approval-consumption artifact plus ingest receipt; approved approval file is not moved",
+        denial_behavior="api_permission_denied via permission_gate before approval-consumption artifact or receipt write",
+        governance_maturity="permission_gated",
+        notes=(
+            "Consumes an exact-action approval only for an already finalized synthetic/no-op execution receipt and "
+            "records single-use evidence. It does not run repository code, grant execution authority, validate the "
+            "candidate, or implement general Lab approval consumption."
+        ),
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/noop-runner-envelope",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.runner.noop",
+        approval_requirement="consumed synthetic no-op approval record required; repository execution is not allowed",
+        receipt_behavior="built-in no-op runner envelope artifact plus ingest receipt",
+        denial_behavior="api_permission_denied via permission_gate before no-op runner artifact or receipt write",
+        governance_maturity="permission_gated",
+        notes=(
+            "Completes only a built-in no-op Lab runner envelope after synthetic no-op approval consumption. It "
+            "does not execute repository commands, grant execution authority, validate the candidate, bind a live "
+            "sandbox runner, or promote capability use."
+        ),
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/noop-runner-transcript",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.runner.noop.transcript",
+        approval_requirement="completed built-in no-op runner envelope required; repository execution is not allowed",
+        receipt_behavior="built-in no-op stdout/stderr transcript artifact plus ingest receipt",
+        denial_behavior="api_permission_denied via permission_gate before no-op transcript artifact or receipt write",
+        governance_maturity="permission_gated",
+        notes=(
+            "Records only deterministic empty stdout/stderr metadata for a completed built-in no-op envelope. It "
+            "does not capture real process output, execute repository commands, store output contents, grant "
+            "execution authority, validate the candidate, bind a live sandbox runner, or promote capability use."
+        ),
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/noop-runner-identity-binding",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.runner.noop.identity",
+        approval_requirement="completed built-in no-op transcript required; repository execution is not allowed",
+        receipt_behavior="built-in no-op runner identity-binding artifact plus ingest receipt",
+        denial_behavior="api_permission_denied via permission_gate before identity-binding artifact or receipt write",
+        governance_maturity="permission_gated",
+        notes=(
+            "Binds only the Francis-owned built-in no-op runner identity to the completed no-op proof chain. It "
+            "does not bind a live runner, bind a sandbox runner, execute repository commands, capture real process "
+            "output, grant execution authority, validate the candidate, or promote capability use."
+        ),
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/source-mount-readiness",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.source_mount.readiness",
+        approval_requirement="completed built-in no-op runner identity required; repository execution is not allowed",
+        receipt_behavior="source-mount readiness artifact plus ingest receipt",
+        denial_behavior="api_permission_denied via permission_gate before source-mount readiness artifact or receipt write",
+        governance_maturity="permission_gated",
+        notes=(
+            "Records only that the Lab workspace source reference is read-only and that no source mount has been "
+            "bound or enforced. It does not copy source contents, bind a live runner, bind a sandbox runner, execute "
+            "repository commands, grant execution authority, validate the candidate, or promote capability use."
+        ),
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/source-mount-contract",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.source_mount.contract",
+        approval_requirement=(
+            "source-mount readiness required; contract declaration only; repository execution is not allowed"
+        ),
+        receipt_behavior="source-mount contract artifact plus ingest receipt",
+        denial_behavior="api_permission_denied via permission_gate before source-mount contract artifact or receipt write",
+        governance_maturity="permission_gated",
+        notes=(
+            "Records only the future read-only source mount contract and required enforcement controls. It does "
+            "not bind or enforce a live source mount, copy source contents, bind a live runner, bind a sandbox "
+            "runner, execute repository commands, grant execution authority, validate the candidate, or promote "
+            "capability use."
+        ),
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/sandbox-provider-contract",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.sandbox.provider_contract",
+        approval_requirement=(
+            "runner sandbox readiness required; provider contract declaration only; repository execution is not allowed"
+        ),
+        receipt_behavior="sandbox provider contract artifact plus ingest receipt",
+        denial_behavior="api_permission_denied via permission_gate before sandbox provider contract artifact or receipt write",
+        governance_maturity="permission_gated",
+        notes=(
+            "Records the future Lab sandbox provider contract and required enforcement controls. It does not bind "
+            "or enforce a sandbox provider, bind a runner, execute repository commands, grant execution authority, "
+            "write execution receipts, validate the candidate, or promote capability use."
+        ),
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/sandbox-provider-binding",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.sandbox.provider_binding",
+        approval_requirement=(
+            "sandbox provider contract required; binding preflight only; repository execution is not allowed"
+        ),
+        receipt_behavior="sandbox provider binding preflight artifact plus ingest receipt",
+        denial_behavior="api_permission_denied via permission_gate before sandbox provider binding artifact or receipt write",
+        governance_maturity="permission_gated",
+        notes=(
+            "Records the future Lab sandbox provider binding checklist. It does not select or verify a provider "
+            "binary/service, bind or enforce a sandbox provider, bind a runner, execute repository commands, grant "
+            "execution authority, write execution receipts, validate the candidate, or promote capability use."
+        ),
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/sandbox-provider-selection",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.sandbox.provider_selection",
+        approval_requirement=(
+            "sandbox provider binding preflight required; selection/verification preflight only; repository execution "
+            "is not allowed"
+        ),
+        receipt_behavior="sandbox provider selection preflight artifact plus ingest receipt",
+        denial_behavior=(
+            "api_permission_denied via permission_gate before sandbox provider selection artifact or receipt write"
+        ),
+        governance_maturity="permission_gated",
+        notes=(
+            "Records requested provider kind, local provider reference metadata, and optional policy manifest "
+            "metadata for a future Lab sandbox provider. It does not execute provider binaries, query services, "
+            "launch containers, bind or enforce a sandbox provider, execute repository commands, grant execution "
+            "authority, write execution receipts, validate the candidate, or promote capability use."
+        ),
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/sandbox-provider-verifier",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.sandbox.provider_verifier",
+        approval_requirement=(
+            "sandbox provider selection preflight required; static identity/policy verifier preflight only; "
+            "repository execution is not allowed"
+        ),
+        receipt_behavior="sandbox provider verifier preflight artifact plus ingest receipt",
+        denial_behavior=(
+            "api_permission_denied via permission_gate before sandbox provider verifier artifact or receipt write"
+        ),
+        governance_maturity="permission_gated",
+        notes=(
+            "Captures static provider reference fingerprints, sanitized policy-manifest hashes, declared version "
+            "evidence, and Francis verifier identity. It does not runtime-probe providers, execute provider "
+            "binaries, query services, launch containers, bind or enforce a sandbox provider, execute repository "
+            "commands, grant execution authority, write execution receipts, validate the candidate, or promote "
+            "capability use."
+        ),
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/sandbox-provider-runtime-probe",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.sandbox.provider_runtime_probe",
+        approval_requirement=(
+            "sandbox provider verifier preflight required; runtime probe contract preflight only; repository "
+            "execution is not allowed"
+        ),
+        receipt_behavior="sandbox provider runtime probe preflight artifact plus ingest receipt",
+        denial_behavior=(
+            "api_permission_denied via permission_gate before sandbox provider runtime probe artifact or receipt write"
+        ),
+        governance_maturity="permission_gated",
+        notes=(
+            "Declares provider runtime-probe authorization, timeout, network-blocking, receipt, and repository "
+            "separation controls. It does not execute provider binaries, query provider services, launch containers, "
+            "bind or enforce a sandbox provider, execute repository commands, grant execution authority, write "
+            "execution receipts, validate the candidate, or promote capability use."
+        ),
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/sandbox-provider-runtime-probe-harness",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.sandbox.provider_runtime_probe_harness",
+        approval_requirement=(
+            "sandbox provider runtime probe preflight required; harness contract preflight only; repository "
+            "execution is not allowed"
+        ),
+        receipt_behavior="sandbox provider runtime probe harness preflight artifact plus ingest receipt",
+        denial_behavior=(
+            "api_permission_denied via permission_gate before sandbox provider runtime probe harness artifact "
+            "or receipt write"
+        ),
+        governance_maturity="permission_gated",
+        notes=(
+            "Declares future provider runtime-probe runner, sandbox, service-query guard, output capture, and "
+            "kill-switch controls. It does not perform provider runtime probes, execute provider binaries, query "
+            "provider services, launch containers, bind or enforce a sandbox provider, execute repository "
+            "commands, grant execution authority, write execution receipts, validate the candidate, or promote "
+            "capability use."
+        ),
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/sandbox-provider-runtime-probe-runner-readiness",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.sandbox.provider_runtime_probe_runner_readiness",
+        approval_requirement=(
+            "sandbox provider runtime probe harness preflight required; probe-runner readiness contract only; "
+            "repository execution is not allowed"
+        ),
+        receipt_behavior="sandbox provider runtime probe runner readiness artifact plus ingest receipt",
+        denial_behavior=(
+            "api_permission_denied via permission_gate before sandbox provider runtime probe runner readiness "
+            "artifact or receipt write"
+        ),
+        governance_maturity="permission_gated",
+        notes=(
+            "Declares the future provider runtime-probe runner interface and missing runner identity, policy, "
+            "sandbox, network-block, workspace-isolation, timeout, output-capture, kill-switch, and receipt "
+            "controls. It does not perform provider runtime probes, execute provider binaries, query provider "
+            "services, launch containers, bind or enforce a sandbox provider, execute repository commands, grant "
+            "execution authority, write execution receipts, validate the candidate, or promote capability use."
+        ),
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/sandbox-provider-runtime-probe-runner-binding",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.sandbox.provider_runtime_probe_runner_binding",
+        approval_requirement=(
+            "sandbox provider runtime probe runner readiness required; probe-runner binding preflight only; "
+            "repository execution is not allowed"
+        ),
+        receipt_behavior="sandbox provider runtime probe runner binding preflight artifact plus ingest receipt",
+        denial_behavior=(
+            "api_permission_denied via permission_gate before sandbox provider runtime probe runner binding "
+            "artifact or receipt write"
+        ),
+        governance_maturity="permission_gated",
+        notes=(
+            "Declares the future provider runtime-probe runner binding contract and missing live runner "
+            "implementation, identity, policy, sandbox, network-block, workspace-isolation, timeout, "
+            "output-capture, kill-switch, receipt, and runtime-probe binding controls. It does not perform "
+            "provider runtime probes, execute provider binaries, query provider services, launch processes or "
+            "containers, bind or enforce a sandbox provider, execute repository commands, grant execution "
+            "authority, write execution receipts, validate the candidate, or promote capability use."
+        ),
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/sandbox-provider-runtime-probe-runner-enforcement",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.sandbox.provider_runtime_probe_runner_enforcement",
+        approval_requirement=(
+            "sandbox provider runtime probe runner binding preflight required; probe-runner enforcement "
+            "preflight only; repository execution is not allowed"
+        ),
+        receipt_behavior="sandbox provider runtime probe runner enforcement preflight artifact plus ingest receipt",
+        denial_behavior=(
+            "api_permission_denied via permission_gate before sandbox provider runtime probe runner enforcement "
+            "artifact or receipt write"
+        ),
+        governance_maturity="permission_gated",
+        notes=(
+            "Declares the future provider runtime-probe runner enforcement contract and missing live runner, "
+            "runtime-probe binding, identity, policy, sandbox, network-block, workspace-isolation, timeout, "
+            "output-capture, kill-switch, and receipt enforcement controls. It does not perform provider "
+            "runtime probes, execute provider binaries, query provider services, launch processes or containers, "
+            "bind or enforce a sandbox provider, execute repository commands, grant execution authority, write "
+            "execution receipts, validate the candidate, or promote capability use."
+        ),
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/sandbox-provider-runtime-probe-execution-boundary",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.sandbox.provider_runtime_probe_execution_boundary",
+        approval_requirement=(
+            "run-boundary preflight and runtime-probe runner enforcement readback required; provider runtime "
+            "probe execution is not allowed"
+        ),
+        receipt_behavior="sandbox provider runtime probe execution-boundary artifact plus ingest receipt",
+        denial_behavior=(
+            "api_permission_denied via permission_gate before sandbox provider runtime probe execution-boundary "
+            "artifact or receipt write"
+        ),
+        governance_maturity="permission_gated",
+        notes=(
+            "Records the blocked boundary between preflight evidence and any future sandbox provider runtime "
+            "probe. It requires future live probe-runner enforcement, runtime-probe binding, sandbox, network, "
+            "workspace, timeout, output-capture, kill-switch, and execution receipt writer controls. It does not "
+            "perform provider runtime probes, execute provider binaries, query provider services, launch "
+            "processes or containers, bind or enforce a sandbox provider, execute repository commands, consume "
+            "approval, write execution receipts, validate the candidate, or promote capability use."
+        ),
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/sandbox-provider-runtime-probe-refuse",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.sandbox.provider_runtime_probe.refuse",
+        approval_requirement=(
+            "sandbox provider runtime probe execution-boundary readback required; refusal only; provider runtime "
+            "probe execution is not allowed"
+        ),
+        receipt_behavior="sandbox provider runtime probe refusal artifact plus ingest receipt",
+        denial_behavior=(
+            "api_permission_denied via permission_gate before sandbox provider runtime probe refusal artifact or "
+            "receipt write"
+        ),
+        governance_maturity="permission_gated",
+        notes=(
+            "Records an explicit refusal when an operator or client asks Francis to runtime-probe a sandbox "
+            "provider before governed probe execution exists. It depends on execution-boundary readback and does "
+            "not perform provider runtime probes, execute provider binaries, query provider services, launch "
+            "processes or containers, bind or enforce a sandbox provider, execute repository commands, consume "
+            "approval, write execution receipts, validate the candidate, or promote capability use."
+        ),
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/sandbox-provider-runtime-probe-request-approval",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.sandbox.provider_runtime_probe.request_approval",
+        approval_requirement=(
+            "sandbox provider runtime probe execution-boundary readback required; creates a pending approval "
+            "request only; provider runtime probe execution is not allowed"
+        ),
+        receipt_behavior="sandbox provider runtime probe approval-request artifact plus ingest receipt",
+        denial_behavior=(
+            "api_permission_denied via permission_gate before provider runtime probe approval-request artifact, "
+            "pending approval, or receipt write"
+        ),
+        governance_maturity="permission_gated",
+        notes=(
+            "Creates an exact-action pending approval request for future sandbox provider runtime probing. It "
+            "depends on execution-boundary readback and does not consume approval, perform provider runtime "
+            "probes, execute provider binaries, query provider services, launch processes or containers, bind or "
+            "enforce a sandbox provider, execute repository commands, write execution receipts, validate the "
+            "candidate, or promote capability use."
+        ),
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/sandbox-provider-runtime-probe-consume-approval",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.sandbox.provider_runtime_probe.consume_approval",
+        approval_requirement=(
+            "approved exact-action sandbox provider runtime probe approval required; writes a single-use "
+            "consumption record only; provider runtime probe execution is not allowed"
+        ),
+        receipt_behavior="sandbox provider runtime probe approval-consumption artifact plus ingest receipt",
+        denial_behavior=(
+            "api_permission_denied via permission_gate before provider runtime probe approval-consumption artifact "
+            "or receipt write"
+        ),
+        governance_maturity="permission_gated",
+        notes=(
+            "Consumes an approved exact-action provider runtime-probe approval as a single-use governance record. "
+            "It does not perform provider runtime probes, execute provider binaries, query provider services, "
+            "launch processes or containers, bind or enforce a sandbox provider, execute repository commands, "
+            "write execution receipts, grant execution authority, validate the candidate, or promote capability use."
+        ),
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/sandbox-provider-runtime-probe-invocation-boundary",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.sandbox.provider_runtime_probe.invocation_boundary",
+        approval_requirement=(
+            "consumed exact-action sandbox provider runtime probe approval required; writes a blocked invocation "
+            "boundary only; provider runtime probe execution is not allowed"
+        ),
+        receipt_behavior="sandbox provider runtime probe invocation-boundary artifact plus ingest receipt",
+        denial_behavior=(
+            "api_permission_denied via permission_gate before provider runtime probe invocation-boundary artifact "
+            "or receipt write"
+        ),
+        governance_maturity="permission_gated",
+        notes=(
+            "Binds a consumed provider runtime-probe approval to the existing execution-boundary readback and "
+            "records the remaining future runner controls: policy, sandbox, network block, workspace isolation, "
+            "timeout, output capture, kill switch, and execution receipt writer. It does not perform provider "
+            "runtime probes, execute provider binaries, query provider services, launch processes or containers, "
+            "bind or enforce a sandbox provider, execute repository commands, write execution receipts, grant "
+            "execution authority, validate the candidate, or promote capability use."
+        ),
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/sandbox-provider-runtime-probe-runner-pre-execution-boundary",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.sandbox.provider_runtime_probe.runner_pre_execution_boundary",
+        approval_requirement=(
+            "recorded provider runtime-probe invocation boundary required; writes a blocked runner pre-execution "
+            "boundary only; provider runtime probe execution is not allowed"
+        ),
+        receipt_behavior="sandbox provider runtime probe runner pre-execution-boundary artifact plus ingest receipt",
+        denial_behavior=(
+            "api_permission_denied via permission_gate before provider runtime probe runner pre-execution-boundary "
+            "artifact or receipt write"
+        ),
+        governance_maturity="permission_gated",
+        notes=(
+            "Binds the recorded provider runtime-probe invocation boundary to the next runner pre-execution control "
+            "set and records the still-missing live runner identity, policy, sandbox policy, network block, timeout, "
+            "output capture, kill switch, and execution receipt writer bindings. It does not perform provider "
+            "runtime probes, execute provider binaries, query provider services, launch processes or containers, "
+            "bind or enforce a live sandbox provider, execute repository commands, write execution receipts, grant "
+            "execution authority, validate the candidate, or promote capability use."
+        ),
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/sandbox-provider-runtime-probe-runner-control-binding",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.sandbox.provider_runtime_probe.runner_control_binding",
+        approval_requirement=(
+            "recorded provider runtime-probe runner pre-execution boundary required; writes a blocked runner "
+            "control-binding artifact only; provider runtime probe execution is not allowed"
+        ),
+        receipt_behavior="sandbox provider runtime probe runner control-binding artifact plus ingest receipt",
+        denial_behavior=(
+            "api_permission_denied via permission_gate before provider runtime probe runner control-binding artifact "
+            "or receipt write"
+        ),
+        governance_maturity="permission_gated",
+        notes=(
+            "Records control-binding evidence for future provider-probe runner identity, policy, sandbox policy, "
+            "network block, timeout, output capture, kill switch, and execution receipt writer preconditions while "
+            "keeping all live runner, sandbox, provider, and execution bindings false. It does not perform provider "
+            "runtime probes, execute provider binaries, query provider services, launch processes or containers, "
+            "bind or enforce a live sandbox provider, execute repository commands, write execution receipts, grant "
+            "execution authority, validate the candidate, or promote capability use."
+        ),
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/sandboxed-rebuild-run-test-boundary",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.sandboxed_rebuild_run_test.boundary",
+        approval_requirement=(
+            "recorded provider runtime-probe runner control-binding required; writes a blocked sandboxed "
+            "rebuild/run/test boundary only; repository execution is not allowed"
+        ),
+        receipt_behavior="sandboxed rebuild/run/test boundary artifact plus ingest receipt",
+        denial_behavior=(
+            "api_permission_denied via permission_gate before sandboxed rebuild/run/test boundary artifact or "
+            "receipt write"
+        ),
+        governance_maturity="permission_gated",
+        notes=(
+            "Records the future sandboxed rebuild/run/test execution boundary that depends on provider-probe "
+            "runner control-binding evidence while requiring a separate future execution approval and live runner, "
+            "sandbox, network, timeout, output, kill-switch, command-allowlist, source-mount, and receipt-writer "
+            "controls. It does not launch processes or containers, execute repository commands, run install/build/"
+            "test steps, access the network, write to the repository, write execution receipts, validate the "
+            "candidate, or promote capability use."
+        ),
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/sandboxed-rebuild-run-test-request-approval",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.sandboxed_rebuild_run_test.request_approval",
+        approval_requirement=(
+            "recorded sandboxed rebuild/run/test boundary required; creates a pending execution approval request "
+            "only; approval is not consumed and repository execution is not allowed"
+        ),
+        receipt_behavior="sandboxed rebuild/run/test approval-request artifact plus ingest receipt",
+        denial_behavior=(
+            "api_permission_denied via permission_gate before approval request, sandboxed approval artifact, or "
+            "receipt write"
+        ),
+        governance_maturity="permission_gated",
+        notes=(
+            "Creates a pending operator approval request for future sandboxed rebuild/run/test execution after the "
+            "boundary evidence exists. It does not consume approval, launch processes or containers, execute "
+            "repository commands, run install/build/test steps, access the network, write to the repository, write "
+            "execution receipts, validate the candidate, promote capability use, or grant execution authority."
+        ),
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/sandboxed-rebuild-run-test-consume-approval",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.sandboxed_rebuild_run_test.consume_approval",
+        approval_requirement=(
+            "approved exact-action sandboxed rebuild/run/test approval request required; writes a single-use "
+            "consumption record only; repository execution is not allowed"
+        ),
+        receipt_behavior="sandboxed rebuild/run/test approval-consumption artifact plus ingest receipt",
+        denial_behavior=(
+            "api_permission_denied via permission_gate before approval-consumption artifact or receipt write"
+        ),
+        governance_maturity="permission_gated",
+        notes=(
+            "Consumes an approved sandboxed rebuild/run/test approval as single-use governance evidence while "
+            "keeping execution authority absent. It does not launch processes or containers, execute repository "
+            "commands, run install/build/test steps, access the network, write to the repository, write execution "
+            "receipts, validate the candidate, or promote capability use."
+        ),
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/sandboxed-rebuild-run-test-runner-binding",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.sandboxed_rebuild_run_test.runner_binding",
+        approval_requirement=(
+            "consumed exact-action sandboxed rebuild/run/test approval required; writes a static provider-reference "
+            "runner-binding preflight only; repository execution is not allowed"
+        ),
+        receipt_behavior="sandboxed rebuild/run/test runner-binding artifact plus ingest receipt",
+        denial_behavior="api_permission_denied via permission_gate before runner-binding artifact or receipt write",
+        governance_maturity="permission_gated",
+        notes=(
+            "Records local sandbox provider reference and policy-manifest metadata as static preflight evidence after "
+            "single-use approval consumption. It does not bind a live runner or sandbox, launch processes or "
+            "containers, query provider services, execute repository commands, run install/build/test steps, access "
+            "the network, write to the repository, write execution receipts, validate the candidate, or promote "
+            "capability use."
+        ),
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/sandboxed-rebuild-run-test-sandbox-policy",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.sandboxed_rebuild_run_test.sandbox_policy",
+        approval_requirement=(
+            "consumed exact-action sandboxed rebuild/run/test approval and static runner-binding preflight required; "
+            "writes a conservative sandbox-policy preflight only; repository execution is not allowed"
+        ),
+        receipt_behavior="sandboxed rebuild/run/test sandbox-policy artifact plus ingest receipt",
+        denial_behavior="api_permission_denied via permission_gate before sandbox-policy artifact or receipt write",
+        governance_maturity="permission_gated",
+        notes=(
+            "Records default-deny network, read-only source reference, repo-write/destructive denial, secret-storage "
+            "denial, command-execution disabled state, and missing live sandbox/allowlist/receipt-writer controls. "
+            "It does not bind or enforce a live sandbox, launch processes or containers, execute repository commands, "
+            "run install/build/test steps, access the network, write to the repository, write execution receipts, "
+            "validate the candidate, or promote capability use."
+        ),
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/run-boundary-preflight",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.run_boundary.preflight",
+        approval_requirement=(
+            "source-mount contract, receipt-writer preflight, sandbox provider runtime-probe harness, and "
+            "runtime-probe runner enforcement readbacks required; repository execution is not allowed"
+        ),
+        receipt_behavior="run-boundary preflight artifact plus ingest receipt",
+        denial_behavior="api_permission_denied via permission_gate before run-boundary artifact or receipt write",
+        governance_maturity="permission_gated",
+        notes=(
+            "Aggregates source-mount, sandbox provider contract/binding/selection/verifier, sandbox provider "
+            "runtime-probe, sandbox provider runtime-probe harness, sandbox provider runtime-probe runner "
+            "enforcement, command allowlist, receipt writer, and approval-handoff controls for a future guarded "
+            "Lab run. It does not bind a live mount, bind or enforce a live runner or sandbox, runtime-probe a "
+            "provider, consume approval for repository execution, write execution receipts, execute repository "
+            "commands, validate the candidate, or promote capability use."
+        ),
+    ),
+    AuthorityRule(
+        family="ingest_readback",
+        prefixes=("/ingest/readback",),
+        required_actor="query actor",
+        required_scope="ingest.lab.readback",
+        approval_requirement="not_required_readback_only",
+        receipt_behavior="none; reads existing source registry and ingest artifacts",
+        denial_behavior="api_permission_denied via permission_gate before source/artifact readback",
+        governance_maturity="permission_gated",
+        notes=(
+            "Lists source, repo-map, candidate, preflight, approval-consumption, approval-consumption record, "
+            "no-op runner envelope, no-op runner transcript, no-op runner identity binding, runner-contract, "
+            "runner-readiness, runner-binding, runner-enforcement, approval-consumption handoff, and "
+            "execution-receipt sink reservation, runner command allowlist binding, and runner command "
+            "allowlist declaration, allowlist enforcement preflight, runner sandbox readiness, source-mount "
+            "readiness, and execution receipt write readiness, prewrite binding, writer preflight records, and synthetic execution "
+            "receipts without executing repository code."
+        ),
+    ),
+    AuthorityRule(
         family="explanation",
         prefixes=("/explanations", "/explanation"),
         required_actor="payload.request_actor, payload.api_actor, or payload.actor",

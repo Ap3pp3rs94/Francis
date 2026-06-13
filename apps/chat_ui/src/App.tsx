@@ -3,6 +3,7 @@ import { ApprenticeshipPanel } from "./apprenticeship/ApprenticeshipPanel";
 import { ArtifactInspectionPanel } from "./artifacts/ArtifactInspectionPanel";
 import { parseChatSendResponse, type ChatMessage } from "./chat";
 import { FederationHubPanel } from "./federation_hub/FederationHubPanel";
+import { IngestReadbackPanel } from "./ingest/IngestReadbackPanel";
 
 import type { ApprovalItem } from "./index";
 import { ApprovalsApiError, ApprovalsClient } from "./index";
@@ -188,7 +189,15 @@ import {
 
 const DEFAULT_API = "http://127.0.0.1:8000";
 
-type TabKey = "approvals" | "plugins" | "system" | "operations" | "federation" | "apprenticeship" | "settings";
+type TabKey =
+  | "approvals"
+  | "plugins"
+  | "system"
+  | "operations"
+  | "federation"
+  | "apprenticeship"
+  | "ingest"
+  | "settings";
 type SensingMode = "text_only" | "input_only" | "camera_mic";
 type PaletteCommand = {
   id: string;
@@ -3077,6 +3086,10 @@ export default function App() {
     setPanel("apprenticeship");
   }, []);
 
+  const openIngestPanel = useCallback(() => {
+    setPanel("ingest");
+  }, []);
+
   const openFederationPanel = useCallback(() => {
     setPanel("federation");
   }, []);
@@ -3356,6 +3369,14 @@ export default function App() {
         run: () => openApprenticeshipPanel(),
       },
       {
+        id: "nav.ingest",
+        label: "Open Code Ingest",
+        description: "Inspect code-born source records, repo maps, risk signals, and lab boundaries.",
+        group: "Navigation",
+        keywords: "ingest repo repository capability source lab readback",
+        run: () => openIngestPanel(),
+      },
+      {
         id: "nav.orb",
         label: "Open ORB",
         description: "Inspect the canonical flow, incidents, and runtime posture.",
@@ -3442,6 +3463,7 @@ export default function App() {
     openApprenticeshipPanel,
     openContinuityLedger,
     openFederationPanel,
+    openIngestPanel,
     openMissionFeed,
     openTakeoverFeed,
     openTelemetryStatus,
@@ -3632,6 +3654,7 @@ export default function App() {
                       ["operations", "Operations"],
                       ["federation", "Federation"],
                       ["apprenticeship", "Apprenticeship"],
+                      ["ingest", "Ingest"],
                       ["settings", "Settings"],
                     ] as Array<[TabKey, string]>
                   ).map(([key, label]) => (
@@ -3682,6 +3705,7 @@ export default function App() {
                 ) : null}
                 {panel === "federation" ? <FederationHubPanel baseUrl={baseUrl} /> : null}
                 {panel === "apprenticeship" ? <ApprenticeshipPanel baseUrl={baseUrl} /> : null}
+                {panel === "ingest" ? <IngestReadbackPanel baseUrl={baseUrl} /> : null}
                 {panel === "settings" ? <SettingsPanel settings={settings} onChange={setSettings} /> : null}
               </aside>
             )}
@@ -3698,6 +3722,7 @@ export default function App() {
                     ["operations", "Operations"],
                     ["federation", "Federation"],
                     ["apprenticeship", "Apprenticeship"],
+                    ["ingest", "Ingest"],
                     ["settings", "Settings"],
                   ] as Array<[TabKey, string]>
                 ).map(([key, label]) => (
@@ -3748,6 +3773,7 @@ export default function App() {
               ) : null}
               {panel === "federation" ? <FederationHubPanel baseUrl={baseUrl} /> : null}
               {panel === "apprenticeship" ? <ApprenticeshipPanel baseUrl={baseUrl} /> : null}
+              {panel === "ingest" ? <IngestReadbackPanel baseUrl={baseUrl} /> : null}
               {panel === "settings" ? <SettingsPanel settings={settings} onChange={setSettings} /> : null}
             </section>
           ) : null}

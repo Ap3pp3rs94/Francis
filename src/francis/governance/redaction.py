@@ -14,11 +14,51 @@ REDACTED_SECRET = "[REDACTED:secret]"
 SEALED_SECRET_KIND = "sealed_secret"
 
 _DEFAULT_CONTROL_KEYS = frozenset({"approval_id", "force"})
-_SENSITIVE_META_KEY_RE = re.compile(
-    r"(api[_-]?key|apikey|access[_-]?key|auth[_-]?token|bearer|client[_-]?secret|password|private[_-]?key|"
-    r"refresh[_-]?token|secret)",
-    re.IGNORECASE,
+
+# Explicit sensitive-key classification. A key is sensitive ONLY if its
+# normalized full name (lowercased, with whitespace/hyphens collapsed to "_") is
+# a member of this set. This is exact, full-key matching -- never substring,
+# regex, or heuristic matching -- so structural/configuration keys such as
+# ``secret_storage_allowed`` or ``store_sensitive_values`` are never redacted.
+SENSITIVE_KEYS: frozenset[str] = frozenset(
+    {
+        "token",
+        "api_key",
+        "apikey",
+        "access_key",
+        "secret",
+        "secret_key",
+        "client_secret",
+        "auth_token",
+        "bearer",
+        "bearer_token",
+        "password",
+        "passwd",
+        "private_key",
+        "refresh_token",
+        "session_token",
+        "id_token",
+        "credential",
+        "credentials",
+    }
 )
+
+
+def _normalize_key(key: Any) -> str:
+    return re.sub(r"[\s\-]+", "_", _safe_str(key).strip().lower())
+
+
+def is_sensitive_key(key: Any) -> bool:
+    """True only for an exact, normalized full-key match against ``SENSITIVE_KEYS``.
+
+    Substring matches (e.g. ``secret_storage_allowed`` containing ``secret``) are
+    intentionally NOT sensitive: classification is value-based and explicit-key
+    based, not pattern-based.
+    """
+
+    return _normalize_key(key) in SENSITIVE_KEYS
+
+
 _KEY_VALUE_SECRET_RE = re.compile(
     r"\b(api[_-]?key|token|secret|password)\b\s*[:=]\s*([^\s\"']{6,})",
     re.IGNORECASE,
@@ -105,16 +145,18 @@ def _sealed_secret(value: Any, *, key: str, redacted: str = REDACTED_SECRET) -> 
 def seal_governed_approval_value(value: Any, *, key: str = "") -> Any:
     if _is_sealed_secret(value):
         return value
-    normalized_key = key.strip().lower()
+    normalized_key = _normalize_key(key)
     if normalized_key == "meta" and isinstance(value, dict):
         return redact_governed_metadata(value, drop_control_keys=True)
-    if normalized_key == "token" or _SENSITIVE_META_KEY_RE.search(key):
-        return _sealed_secret(value, key=key)
+    # Booleans, None, and numbers are never sensitive payloads -- never redacted,
+    # regardless of key name.
     if value is None or isinstance(value, bool):
         return value
     if isinstance(value, (int, float)):
         return value
     if isinstance(value, str):
+        if is_sensitive_key(key):
+            return _sealed_secret(value, key=key)
         redacted = redact_secret_text(value)
         if redacted != value or _SECRET_TEXT_RE.search(value):
             return _sealed_secret(value, key=key, redacted=redacted)
@@ -140,13 +182,13 @@ def seal_governed_approval_value(value: Any, *, key: str = "") -> Any:
 
 
 def redact_governed_value(value: Any, *, key: str = "") -> Any:
-    if key.strip().lower() == "token" or _SENSITIVE_META_KEY_RE.search(key):
-        return REDACTED_SECRET
     if value is None or isinstance(value, bool):
         return value
     if isinstance(value, (int, float)):
         return value
     if isinstance(value, str):
+        if is_sensitive_key(key):
+            return REDACTED_SECRET
         return redact_secret_text(value)
     if isinstance(value, dict):
         normalized: dict[str, Any] = {}
@@ -168,13 +210,13 @@ def redact_governed_display_value(value: Any, *, key: str = "") -> Any:
     if _is_sealed_secret(value):
         redacted = _safe_str(value.get("redacted")).strip()
         return redacted or REDACTED_SECRET
-    if key.strip().lower() == "token" or _SENSITIVE_META_KEY_RE.search(key):
-        return REDACTED_SECRET
     if value is None or isinstance(value, bool):
         return value
     if isinstance(value, (int, float)):
         return value
     if isinstance(value, str):
+        if is_sensitive_key(key):
+            return REDACTED_SECRET
         return redact_secret_text(value)
     if isinstance(value, dict):
         normalized: dict[str, Any] = {}

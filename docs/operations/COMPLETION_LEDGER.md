@@ -65371,6 +65371,651 @@ Remaining truthful gap:
   managed copies, write managed-copy receipts, enforce tenant isolation, export
   safe deltas, activate SLAs, bind roles, or decommission tenant state.
 
+### 2026-06-05 - Code-born capability ingestion v0
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, Stage 17
+Capability Economy feeder, and Section 28.6 supply-chain/capability provenance.
+
+This pass added the first durable local foundation for treating repositories as
+capability DNA without granting execution authority. The implementation creates
+source records, read-only repo maps, conservative capability candidates, and
+compact receipts under `FRANCIS_DATA_DIR`.
+
+Shipped behavior:
+
+- `src/francis/ingest/` now contains serializable contracts for source records,
+  permission profiles, repo maps, risk signals, capability candidates, receipts,
+  and the explicit current Francis Lab boundary.
+- `IngestService` creates `data/ingest/` layout directories, writes
+  `_source_registry.json` and `_capability_registry.json`, writes repo-map and
+  capability artifacts under `data/artifacts/ingest/`, and writes receipts for
+  `source.add`, `repo.inspect`, and `capability.extract`.
+- Source permissions default to read-only:
+  `read: true`, `execute: false`, `network: false`, `write: false`, and
+  `destructive: false`.
+- Repo detection is local-only and uses `.git` plus strong repo markers such as
+  `package.json`, `pyproject.toml`, `Cargo.toml`, `go.mod`, lockfiles,
+  `requirements.txt`, README files, and source directories.
+- `RepoAdapter` performs bounded read-only inspection, skips heavy directories,
+  avoids reading sensitive-looking files, records sensitive-file presence without
+  contents, parses package and Python manifests, reads local git metadata without
+  network access when available, detects risk signals, and suggests validation
+  commands without running them.
+- Candidate extraction drafts descriptive records such as
+  `inspect_project_structure`, `explain_repo_architecture`, `run_project_tests`,
+  `lint_project`, `build_project`, `package_project`,
+  `inspect_container_build`, `inspect_database_migrations`, and
+  `inspect_cli_entrypoint`.
+- Execution/build/test/package candidates remain `discovered`, require explicit
+  future Francis Lab support, and are not marked buildable, runnable, validated,
+  registered, or mature.
+- CLI entrypoints now exist through the installed argparse surface:
+  `francis ingest add <path>`, `francis repo inspect <path-or-source-id>`, and
+  `francis capability candidates <source-id-or-path>`.
+- `docs/CODE_BORN_CAPABILITY_INGESTION.md` documents the v0 architecture,
+  local layout, lab boundary, receipt contract, shipped behavior, and non-goals.
+
+Latest validation for this slice:
+
+- Focused ingestion tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py -q`
+  Result: 4 tests passed.
+- Targeted CLI smoke with `FRANCIS_DATA_DIR` pointed at a temp directory:
+  `.venv\Scripts\python.exe -m francis ingest add D:\Francis --actor validation.ingest.cli`
+  Result: `ok: true`, `status: indexed`, `source_type: repo`,
+  `candidate_count: 1`, `receipt_count: 3`, `ran_repo_scripts: false`, and
+  `network_accessed: false`.
+- Ruff lint:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\__main__.py tests\unit\test_code_born_ingestion.py`
+  Result: passed.
+- Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check --no-cache src\francis\ingest src\francis\__main__.py tests\unit\test_code_born_ingestion.py`
+  Result: passed.
+- Mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\__main__.py`
+  Result: passed.
+
+Remaining truthful gap:
+
+- This does not close Stage 4, close Stage 17, implement a governed local lab,
+  clone from GitHub, access the network, run unknown repo scripts, run installs,
+  run builds, run tests, run Docker, run CI, validate candidates as buildable or
+  runnable, promote candidates into Forge, register capabilities for use, create
+  memory writes, or add UI/operator readback surfaces.
+
+### 2026-06-05 - Code-born Francis Lab boundary v0 and canonical flow registration
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, Stage 17
+Capability Economy feeder, and Section 28.6 supply-chain/capability provenance.
+
+This pass extended the code-born ingestion slice with a non-executing Francis
+Lab boundary and registered the flow in canonical docs. The implementation can
+now create lab plan records for capability candidates and write explicit
+execution-refusal receipts when asked to execute a candidate before the governed
+runner exists.
+
+Shipped behavior:
+
+- `LabPermissionRequirement`, `LabPlan`, and `LabExecutionRefusal` records now
+  model the permission, workspace, blocker, and refusal contracts for future
+  rebuild/run/test work.
+- `IngestService.plan_lab(...)` projects a candidate into a lab plan with
+  explicit permissions, suggested commands, blockers, required controls, no
+  workspace creation, and `executed: false`.
+- `IngestService.refuse_lab_execution(...)` writes a `lab.execution.refuse`
+  receipt and refusal artifact while preserving `execution_authority: false`,
+  `ran_repo_scripts: false`, `network_accessed: false`, and `wrote_to_repo:
+  false`.
+- CLI entrypoints now include `francis lab plan <source-id-or-path>
+  <candidate-id-or-name>` and `francis lab execute <source-id-or-path>
+  <candidate-id-or-name>`.
+- Canonical and repo-level docs now register code-born ingestion as an
+  evidence/provenance feeder, not a shortcut to execution:
+  `docs/canonical/BUILD_MANIFEST.md`, `docs/canonical/ROADMAP.md`,
+  `docs/canonical/CAPABILITIES.md`, `docs/BUILD_ORDER.md`, and
+  `docs/ARCHITECTURE.md`.
+
+Latest validation for this slice:
+
+- Focused ingestion/lab tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py -q`
+  Result: 7 tests passed.
+- Targeted CLI smoke with `FRANCIS_DATA_DIR` pointed at a temp directory:
+  `francis ingest add D:\Francis`, `francis lab plan <source-id>
+  inspect_project_structure`, and `francis lab execute <source-id>
+  inspect_project_structure`.
+  Result: ingest `indexed`, lab plan `planned`, lab execute `blocked`,
+  `plan_executed: false`, `refusal_executed: false`, `refusal_authority:
+  false`, `ran_repo_scripts: false`, `network_accessed: false`,
+  `lab_plan_path_exists: true`, `lab_refusal_path_exists: true`, and
+  `receipt_count: 6`.
+- Ruff lint:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\__main__.py tests\unit\test_code_born_ingestion.py`
+  Result: passed.
+- Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check --no-cache src\francis\ingest src\francis\__main__.py tests\unit\test_code_born_ingestion.py`
+  Result: passed.
+- Mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\__main__.py`
+  Result: passed.
+
+Remaining truthful gap:
+
+- This does not implement the governed runner, sandbox workspace, network
+  isolation, filesystem write boundary, resource limits, approval consumption,
+  safe source copying, build/run/test execution, validation promotion, Forge
+  promotion, API routes, UI readback, or memory writes. The current behavior is
+  plan/refusal only.
+
+### 2026-06-05 - Code-born Francis Lab workspace preparation v0
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, Stage 17
+Capability Economy feeder, and Section 28.6 supply-chain/capability provenance.
+
+This pass added the first Francis-owned lab workspace preparation surface
+without granting execution authority. The workspace is an empty controlled local
+directory plus manifest under `FRANCIS_DATA_DIR`; it references the source
+read-only and does not copy, install, build, test, or run source content.
+
+Shipped behavior:
+
+- `LabWorkspaceRecord` now models empty lab workspace identity, source
+  reference, workspace policy, preflight blockers, receipt links, and execution
+  denial posture.
+- `IngestService.prepare_lab_workspace(...)` creates
+  `data/artifacts/ingest/lab_workspaces/<workspace-id>/` with empty `work`,
+  `artifacts`, `logs`, and `tmp` subdirectories plus a
+  `workspace_manifest.json`.
+- The workspace manifest records `source_copied: false`,
+  `execution_authority: false`, `executed: false`, `execution_enabled: false`,
+  `runner_bound: false`, `network_enabled: false`, and
+  `source_write_allowed: false`.
+- The source is recorded as `reference_only_read_only`; no repository files are
+  copied into the workspace.
+- CLI entrypoint `francis lab prepare <source-id-or-path>
+  <candidate-id-or-name>` now prepares the workspace and writes a
+  `lab.workspace.prepare` receipt.
+- `docs/CODE_BORN_CAPABILITY_INGESTION.md` and
+  `docs/canonical/CAPABILITIES.md` now distinguish empty workspace preparation
+  from an enforced sandbox runner.
+
+Latest validation for this slice:
+
+- Focused ingestion/lab tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py -q`
+  Result: 9 tests passed.
+- Targeted CLI smoke with `FRANCIS_DATA_DIR` pointed at a temp directory:
+  `francis ingest add D:\Francis`, then `francis lab prepare <source-id>
+  inspect_project_structure`.
+  Result: ingest `indexed`, prepare `prepared`, `workspace_exists: true`,
+  `manifest_exists: true`, `artifact_exists: true`, `source_copied: false`,
+  `execution_enabled: false`, `runner_bound: false`, `executed: false`,
+  `ran_repo_scripts: false`, `network_accessed: false`, receipt operation
+  `lab.workspace.prepare`, and `receipt_count: 5`.
+- Ruff lint:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\__main__.py tests\unit\test_code_born_ingestion.py`
+  Result: passed.
+- Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check --no-cache src\francis\ingest src\francis\__main__.py tests\unit\test_code_born_ingestion.py`
+  Result: passed.
+- Mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\__main__.py`
+  Result: passed.
+
+Remaining truthful gap:
+
+- This still does not implement an enforced sandbox runner, source tree copying,
+  network isolation enforcement, filesystem write enforcement by a runner,
+  resource limits, approval consumption, build/run/test execution, validation
+  promotion, Forge promotion, API routes, UI readback, or memory writes.
+
+### 2026-06-05 - Code-born Francis Lab execution preflight v0
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, Stage 17
+Capability Economy feeder, and Section 28.6 supply-chain/capability provenance.
+
+This pass added the first exact-action execution preflight for code-born lab
+candidates. It prepares/readbacks the workspace, computes a stable action hash
+for the candidate/workspace/source tuple, projects approval intent, and stops
+without creating approvals, consuming approvals, granting authority, or running
+repo code.
+
+Shipped behavior:
+
+- `LabExecutionPreflight` now models the exact action, action hash, approval
+  gate projection, readiness blockers, receipt links, and execution denial
+  posture for a future governed lab runner.
+- `IngestService.preflight_lab_execution(...)` creates a `lab_preflights`
+  artifact, writes a `lab.execution.preflight` receipt, and records
+  `execution_authority: false` and `executed: false`.
+- Preflight approval projection records `action: francis.lab.execute`,
+  `gate: approvals_gate` when execution permission is required, the required
+  approval scope, `approval_created: false`, `approval_consumed: false`, and an
+  empty `approval_id`.
+- The readiness projection records `execution_ready: false`,
+  `runner_bound: false`, `network_isolation_enforced: false`,
+  `filesystem_write_boundary_enforced: false`, `resource_limits_enforced:
+  false`, and `approval_consumption_ready: false`.
+- CLI entrypoint `francis lab preflight <source-id-or-path>
+  <candidate-id-or-name>` now returns the blocked preflight readback.
+- `docs/CODE_BORN_CAPABILITY_INGESTION.md` and
+  `docs/canonical/CAPABILITIES.md` now document that preflight is not approval
+  and cannot grant execution authority.
+
+Latest validation for this slice:
+
+- Focused ingestion/lab tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py -q`
+  Result: 11 tests passed.
+- Ruff lint:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\__main__.py tests\unit\test_code_born_ingestion.py`
+  Result: passed.
+- Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check --no-cache src\francis\ingest src\francis\__main__.py tests\unit\test_code_born_ingestion.py`
+  Result: passed.
+- Mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\__main__.py`
+  Result: passed.
+
+Remaining truthful gap:
+
+- This still does not create approval artifacts, consume approvals, bind an
+  approved action to a runner, implement an enforced sandbox runner, copy source
+  trees, enforce network or filesystem isolation, set resource limits, run
+  build/test commands, validate candidates, promote capabilities, add API/UI
+  readback, or write memory.
+
+### 2026-06-05 - Code-born Francis Lab approval request v0
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, Stage 17
+Capability Economy feeder, and Section 28.6 supply-chain/capability provenance.
+
+This pass added the first exact-action approval-request boundary for code-born
+Francis Lab execution. It turns a blocked preflight into a pending
+`francis.lab.execute` approval queue item with the same action hash, then stops
+without consuming approval, granting execution authority, binding a runner, or
+running repository code.
+
+Shipped behavior:
+
+- `LabApprovalRequestRecord` now models pending lab approval request identity,
+  source/candidate/workspace/preflight links, action hash, approval payload,
+  approval path, receipt links, and explicit no-execution flags.
+- `IngestService.request_lab_execution_approval(...)` runs the existing
+  non-executing preflight, writes a pending approval through the existing
+  `francis.governance.approvals` store for action `francis.lab.execute`, writes
+  a `lab_approval_requests` artifact, and writes a
+  `lab.execution.approval_request` receipt.
+- The approval payload records `execution_authority: false`,
+  `approval_consumed: false`, `runner_bound: false`, blocked readiness, and the
+  stable exact-action hash.
+- CLI entrypoint `francis lab request-approval <source-id-or-path>
+  <candidate-id-or-name>` now creates the pending approval request and returns
+  the no-execution readback.
+- `docs/CODE_BORN_CAPABILITY_INGESTION.md`,
+  `docs/canonical/CAPABILITIES.md`, `docs/canonical/BUILD_MANIFEST.md`,
+  `docs/BUILD_ORDER.md`, and `docs/ARCHITECTURE.md` now document the
+  approval-request boundary as a governance artifact, not execution permission.
+
+Latest validation for this slice:
+
+- Focused ingestion/lab tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py -q`
+  Result: 13 tests passed.
+- Ruff lint:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\__main__.py tests\unit\test_code_born_ingestion.py`
+  Result: passed.
+- Mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\__main__.py`
+  Result: passed.
+- Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check --no-cache src\francis\ingest src\francis\__main__.py tests\unit\test_code_born_ingestion.py`
+  Result: passed.
+- Targeted CLI smoke with `FRANCIS_DATA_DIR` pointed at a temp directory:
+  `francis ingest add D:\Francis`, then `francis lab request-approval
+  <source-id> inspect_project_structure`.
+  Result: ingest `indexed`, request `needs_approval`, `approval_created:
+  true`, `approval_consumed: false`, `execution_authority: false`, `executed:
+  false`, `ran_repo_scripts: false`, `network_accessed: false`, approval
+  status `pending`, approval action `francis.lab.execute`, artifact existed,
+  receipt operation `lab.execution.approval_request`, and receipt count `7`.
+
+Remaining truthful gap:
+
+- This still does not approve requests, consume approvals, bind approval to a
+  runner, implement an enforced sandbox runner, copy source trees, enforce
+  network or filesystem isolation, set resource limits, run build/test commands,
+  validate candidates, promote capabilities, add API/UI readback, or write
+  memory.
+
+### 2026-06-05 - Code-born Francis Lab approval-consumption preflight v0
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, Stage 17
+Capability Economy feeder, and Section 28.6 supply-chain/capability provenance.
+
+This pass added the first exact-action approval-consumption preflight and runner
+contract projection for code-born Francis Lab execution. It reads a provided
+approval id, binds it to the current action hash plus source, candidate, plan,
+preflight, and workspace identity, refuses stale or mismatched approvals, and
+still stops before consuming approval or running repository code.
+
+Shipped behavior:
+
+- `LabApprovalConsumptionPreflight` now models approval id, approval status,
+  approval readback, exact-action binding results, runner contract link, blockers,
+  receipt links, and explicit no-execution flags.
+- `LabRunnerContract` now models the future Lab runner boundary: required
+  approval, sandbox, network, filesystem, resource, and receipt controls;
+  current control readback; blockers; and explicit `runner_bound: false`,
+  `execution_enabled: false`, `execution_authority: false`, and `executed:
+  false`.
+- `IngestService.preflight_lab_approval_consumption(...)` reads pending,
+  approved, rejected, and emergency approval records without mutating them,
+  checks the exact action hash and identity binding, writes a
+  `lab_approval_consumption_preflights` artifact, writes a
+  `lab_runner_contracts` artifact, and writes a
+  `lab.execution.approval_consumption_preflight` receipt.
+- Pending exact approvals return `blocked` with `approval_not_approved`.
+  Approved exact approvals still return `blocked` because approval consumption
+  and the governed runner are not implemented. Stale or mismatched approvals
+  return `refused`.
+- CLI entrypoint `francis lab approval-consumption-preflight <source-id-or-path>
+  <candidate-id-or-name> <approval-id>` now returns the no-execution binding and
+  runner-contract readback.
+- `docs/CODE_BORN_CAPABILITY_INGESTION.md`,
+  `docs/canonical/CAPABILITIES.md`, `docs/canonical/BUILD_MANIFEST.md`,
+  `docs/canonical/ROADMAP.md`, `docs/BUILD_ORDER.md`, and
+  `docs/ARCHITECTURE.md` now document approval-consumption preflight and runner
+  contracts as proof boundaries, not execution authority.
+
+Latest validation for this slice:
+
+- Focused ingestion/lab tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py -q`
+  Result: 17 tests passed.
+- Ruff lint:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\__main__.py tests\unit\test_code_born_ingestion.py`
+  Result: passed.
+- Mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\__main__.py`
+  Result: passed.
+- Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check --no-cache src\francis\ingest src\francis\__main__.py tests\unit\test_code_born_ingestion.py`
+  Result: passed.
+- Targeted CLI smoke with `FRANCIS_DATA_DIR` pointed at a temp directory:
+  `francis ingest add D:\Francis`, `francis lab request-approval <source-id>
+  inspect_project_structure`, then `francis lab approval-consumption-preflight
+  <source-id> inspect_project_structure <approval-id>`.
+  Result: ingest `indexed`, request `needs_approval`, consumption preflight
+  `blocked`, approval status `pending`, exact match `true`, approval consumed
+  `false`, execution authority `false`, runner bound `false`, execution enabled
+  `false`, executed `false`, ran repo scripts `false`, network accessed
+  `false`, pending approval still existed, artifacts existed, receipt operation
+  `lab.execution.approval_consumption_preflight`, and receipt count `11`.
+
+Remaining truthful gap:
+
+- This still does not consume approvals, bind approval to a live runner,
+  implement an enforced sandbox runner, copy source trees, enforce network or
+  filesystem isolation, set resource limits, run build/test commands, validate
+  candidates, promote capabilities, add API/UI readback, or write memory.
+
+### 2026-06-05 - Code-born Francis Lab approval-consumption API readback v0
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, Stage 17
+Capability Economy feeder, and Section 28.6 supply-chain/capability provenance.
+
+This pass exposed the approval-consumption preflight through the Francis API
+without adding approval consumption or repository execution. The route is a
+permission-gated POST because it writes proof artifacts and receipts.
+
+Shipped behavior:
+
+- New route `POST /ingest/lab/approval-consumption-preflight` accepts source,
+  candidate, approval id, and actor fields, then delegates to
+  `IngestService.preflight_lab_approval_consumption(...)`.
+- The route requires `ingest.lab.readback` through `ApiPermissionGate` before it
+  writes ingest receipts or artifacts.
+- Allowed calls return the existing no-execution binding readback:
+  approval status, exact-action match, approval-consumption flag, runner-contract
+  artifact, receipt path, and execution denial posture.
+- Denied calls return `api_permission_denied` with `executed: false`,
+  `ran_repo_scripts: false`, and `network_accessed: false`, and do not write a
+  new ingest receipt.
+- The mutation-authority matrix now records the route, actor source,
+  `ingest.lab.readback` scope, receipt behavior, and denial behavior.
+- `docs/CODE_BORN_CAPABILITY_INGESTION.md`,
+  `docs/canonical/CAPABILITIES.md`, `docs/canonical/BUILD_MANIFEST.md`,
+  `docs/canonical/ROADMAP.md`, `docs/BUILD_ORDER.md`, and
+  `docs/ARCHITECTURE.md` now document the API readback as proof exposure, not
+  execution authority.
+
+Latest validation for this slice:
+
+- Focused API + ingest tests:
+  `.venv\Scripts\python.exe -m pytest tests\test_api_ingest.py tests\unit\test_code_born_ingestion.py -q`
+  Result: 19 tests passed.
+- Ruff lint:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\api\routes\ingest.py src\francis\api\app.py src\francis\api\mutation_authority_matrix.py src\francis\ingest src\francis\__main__.py tests\test_api_ingest.py tests\unit\test_code_born_ingestion.py tests\conftest.py`
+  Result: passed.
+- Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check --no-cache src\francis\api\routes\ingest.py src\francis\api\app.py src\francis\api\mutation_authority_matrix.py src\francis\ingest src\francis\__main__.py tests\test_api_ingest.py tests\unit\test_code_born_ingestion.py tests\conftest.py`
+  Result: passed.
+- Mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\api\routes\ingest.py src\francis\api\app.py src\francis\api\mutation_authority_matrix.py src\francis\ingest src\francis\__main__.py`
+  Result: passed.
+
+Remaining truthful gap:
+
+- This still does not consume approvals, bind approval to a live runner,
+  implement an enforced sandbox runner, copy source trees, enforce network or
+  filesystem isolation, set resource limits, run build/test commands, validate
+  candidates, promote capabilities, add UI readback, or write memory.
+
+### 2026-06-05 - Code-born ingest aggregate API readback v0
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, Stage 17
+Capability Economy feeder, and Section 28.6 supply-chain/capability provenance.
+
+This pass added the first aggregate API readback for code-born source and Lab
+state. The route reads existing registries and artifacts only; it does not
+inspect sources, create receipts, consume approvals, or execute repository code.
+
+Shipped behavior:
+
+- `IngestService.readback(...)` now returns source records, repo-map artifacts,
+  capability candidate registry records, Lab preflight artifacts,
+  approval-consumption preflight artifacts, and runner-contract artifacts with
+  bounded limit and optional source-id filtering.
+- New route `GET /ingest/readback` requires `ingest.lab.readback` through
+  `ApiPermissionGate` before returning source or artifact state.
+- Allowed readbacks return `receipts_written: false`, `artifacts_written:
+  false`, and the standard no-execution posture.
+- Denied readbacks return `api_permission_denied` before source/artifact readback
+  and without writing ingest receipts.
+- The mutation-authority matrix now records the readback route, query actor,
+  `ingest.lab.readback` scope, no-receipt behavior, and denial behavior.
+- `docs/CODE_BORN_CAPABILITY_INGESTION.md`,
+  `docs/canonical/CAPABILITIES.md`, `docs/canonical/BUILD_MANIFEST.md`, and
+  `docs/BUILD_ORDER.md` now document aggregate readback as proof visibility, not
+  execution authority.
+
+Latest validation for this slice:
+
+- Focused API + ingest tests:
+  `.venv\Scripts\python.exe -m pytest tests\test_api_ingest.py tests\unit\test_code_born_ingestion.py -q`
+  Result: 21 tests passed.
+- Ruff lint:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\api\routes\ingest.py src\francis\api\app.py src\francis\api\mutation_authority_matrix.py src\francis\ingest src\francis\__main__.py tests\test_api_ingest.py tests\unit\test_code_born_ingestion.py tests\conftest.py`
+  Result: passed.
+- Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check --no-cache src\francis\api\routes\ingest.py src\francis\api\app.py src\francis\api\mutation_authority_matrix.py src\francis\ingest src\francis\__main__.py tests\test_api_ingest.py tests\unit\test_code_born_ingestion.py tests\conftest.py`
+  Result: passed.
+- Mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\api\routes\ingest.py src\francis\api\app.py src\francis\api\mutation_authority_matrix.py src\francis\ingest src\francis\__main__.py`
+  Result: passed.
+
+Remaining truthful gap:
+
+- This still does not consume approvals, bind approval to a live runner,
+  implement an enforced sandbox runner, copy source trees, enforce network or
+  filesystem isolation, set resource limits, run build/test commands, validate
+  candidates, promote capabilities, or write memory.
+
+### 2026-06-05 - Code-born ingest operator UI readback v0
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, Stage 17
+Capability Economy feeder, Section 28.6 supply-chain/capability provenance, and
+P1 operator readback for the governed capability layer.
+
+This pass exposed the aggregate code-born ingest readback in the existing chat UI
+without adding source ingestion controls, approval consumption, repository
+execution, or client-side readiness claims.
+
+Shipped behavior:
+
+- New `apps/chat_ui/src/ingest/` typed client, parser, and presenter for
+  `GET /ingest/readback`.
+- The UI client uses the bounded `chat_ui.ingest` actor, optional source-id
+  filtering, and a bounded default limit.
+- New `IngestReadbackPanel` renders backend-returned source records,
+  conservative source/candidate permissions, repo risk signals, sensitive-file
+  marker counts, capability candidate statuses, Lab blockers, readback artifact
+  paths, and explicit execution guard lines.
+- The panel reports `executed`, `execution_authority`, repo-script execution,
+  network access, receipt-write, and artifact-write posture from the backend
+  payload instead of inferring readiness locally.
+- `App.tsx` mounts the panel as an `Ingest` tab in desktop and narrow layouts
+  and exposes an `Open Code Ingest` command-palette entry.
+- The focused API ingest tests now use the real `chat_ui.ingest` readback actor,
+  with test policy scoped to `ingest.lab.readback`.
+- Canonical docs now include the operator UI readback as proof visibility, not
+  buildable/runnable capability.
+
+Latest validation for this slice:
+
+- Focused ingest UI client test:
+  `node --test --experimental-strip-types src/ingest/index.test.ts`
+  from `apps/chat_ui`.
+  Result: 4 tests passed.
+- Chat UI production build:
+  `npm run build` from `apps/chat_ui`.
+  Result: passed; Vite retained the existing large-chunk warning.
+- Focused API + ingest tests:
+  `.venv\Scripts\python.exe -m pytest tests\test_api_ingest.py tests\unit\test_code_born_ingestion.py -q`
+  Result: 21 tests passed.
+- Full chat UI test script:
+  `npm run test` from `apps/chat_ui`.
+  Result: 233 tests passed.
+- Ruff lint:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\api\routes\ingest.py src\francis\api\app.py src\francis\api\mutation_authority_matrix.py src\francis\ingest src\francis\__main__.py tests\test_api_ingest.py tests\unit\test_code_born_ingestion.py tests\conftest.py`
+  Result: passed.
+- Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check --no-cache src\francis\api\routes\ingest.py src\francis\api\app.py src\francis\api\mutation_authority_matrix.py src\francis\ingest src\francis\__main__.py tests\test_api_ingest.py tests\unit\test_code_born_ingestion.py tests\conftest.py`
+  Result: passed, 15 files already formatted.
+- Mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\api\routes\ingest.py src\francis\api\app.py src\francis\api\mutation_authority_matrix.py src\francis\ingest src\francis\__main__.py`
+  Result: passed.
+- Whitespace check:
+  `git diff --check`
+  Result: passed with Git's existing warning that
+  `docs/canonical/ROADMAP.md` CRLF will be replaced by LF the next time Git
+  touches it.
+- Chat UI dev-server smoke:
+  started `npm run dev -- --host 127.0.0.1 --port 5176` from `apps/chat_ui`.
+  Result: `Invoke-WebRequest http://127.0.0.1:5176/` returned HTTP 200;
+  launcher PID `149684`, listening PID `64436`.
+
+Remaining truthful gap:
+
+- This UI surface is readback only. It does not ingest a new source from the UI,
+  consume approvals, bind approval to a live runner, implement an enforced
+  sandbox runner, copy source trees, enforce network or filesystem isolation, set
+  resource limits, run build/test commands, validate candidates, promote
+  capabilities, write memory, or prove visual layout in a browser session.
+
+### 2026-06-05 - Code-born Francis Lab runner-readiness preflight v0
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, Stage 17
+Capability Economy feeder, Section 28.6 supply-chain/capability provenance, and
+the governed Lab boundary before any imported repository execution.
+
+This pass added the next pre-execution Lab control checklist. It projects the
+future governed runner's required sandbox, approval, command, environment,
+network, filesystem, resource, timeout, capture, and receipt-sink controls
+against the current Francis-owned workspace and optional exact-action approval
+id. It does not bind a runner, consume approvals, enforce a sandbox, copy source
+trees, or run repository commands.
+
+Shipped behavior:
+
+- New `LabRunnerReadiness` serializable record models runner-readiness status,
+  source/candidate/preflight/workspace identity, optional approval id, sandbox
+  readback, required controls, current controls, missing controls, blockers,
+  no-execution flags, and receipts.
+- `IngestService.preflight_lab_runner_readiness(...)` creates a readback-only
+  readiness artifact under `data/artifacts/ingest/lab_runner_readiness/` and a
+  `lab.runner.readiness.preflight` receipt.
+- The readiness preflight verifies only Francis-owned metadata and directories:
+  empty workspace manifest presence, expected workspace subdirectories,
+  read-only source reference, source-not-copied posture, and optional approval
+  exact-action state.
+- Missing controls remain explicit: approved exact-action record when not
+  approved, governed runner binding, command allowlist, environment scrubbing,
+  network isolation, filesystem write-boundary enforcement, resource limits,
+  timeout enforcement, stdout/stderr capture, and execution receipt sink.
+- New CLI command:
+  `francis lab runner-readiness <source-id-or-path> <candidate-id-or-name>
+  [--approval-id <approval-id>]`.
+- New permission-gated API route:
+  `POST /ingest/lab/runner-readiness`, requiring `ingest.lab.readback`.
+  Denied calls return before ingest artifacts or receipts are written.
+- Aggregate `GET /ingest/readback` now includes runner-readiness records and
+  counts. The Code Ingest UI parser/presenter includes the runner-readiness
+  count, blockers, and artifact path in the existing readback panel.
+- The mutation-authority matrix documents the new route as proof/readback only,
+  not execution authority.
+- Canonical docs now state that runner-readiness preflight is a control
+  checklist, not sandbox enforcement or runner binding.
+
+Latest validation for this slice:
+
+- Focused API + ingest tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  Result: 26 tests passed.
+- Focused ingest UI client test:
+  `node --test --experimental-strip-types src/ingest/index.test.ts`
+  from `apps/chat_ui`.
+  Result: 4 tests passed.
+- Full chat UI test script:
+  `npm run test` from `apps/chat_ui`.
+  Result: 233 tests passed.
+- Chat UI production build:
+  `npm run build` from `apps/chat_ui`.
+  Result: passed; Vite retained the existing large-chunk warning.
+- Ruff lint:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  Result: passed.
+- Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py tests\conftest.py`
+  Result: passed, 14 files already formatted.
+- Mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  Result: passed.
+- Whitespace check:
+  `git diff --check`
+  Result: passed with Git's existing warning that
+  `docs/canonical/ROADMAP.md` CRLF will be replaced by LF the next time Git
+  touches it.
+
+Remaining truthful gap:
+
+- This is still a readiness projection. It does not implement an enforced
+  sandbox, bind a runner, consume approvals, copy source trees, enforce network
+  isolation, enforce filesystem write isolation, set resource limits, run
+  build/test commands, validate candidates, promote capabilities, write memory,
+  or prove end-to-end Lab execution.
+
 ### 2026-06-05 - Stage 17 operator proposal-evidence refs record bulk migration plan pack
 
 Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
@@ -65824,6 +66469,89 @@ Remaining truthful gap:
   isolation, export safe deltas, activate SLAs, bind roles, or decommission
   tenant state.
 
+### 2026-06-05 - Code-born Francis Lab runner-binding preflight v0
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, and Stage
+17 Capability Economy supply-chain prerequisites for imported repository
+capabilities.
+
+This pass added the next no-execution Lab boundary after runner-readiness:
+runner-binding and execution-receipt sink contract projection. It creates
+receipts-backed records for the controls a future governed Lab runner and
+execution receipt sink must satisfy before imported repository code can run.
+
+What is materially true now:
+
+- `LabRunnerBindingPreflight` models a blocked contract checklist with source,
+  candidate, workspace, preflight, runner-readiness, optional approval id, action
+  hash, required controls, current controls, missing controls, blockers, and
+  explicit `approval_consumed: false`, `runner_bound: false`,
+  `receipt_sink_bound: false`, `execution_authority: false`, and
+  `executed: false`.
+- `IngestService.preflight_lab_runner_binding(...)` calls the existing
+  runner-readiness preflight, writes a `lab_runner_bindings` artifact, writes a
+  `lab.runner.binding.preflight` receipt, updates the source registry with the
+  derived artifact/receipt, and stops before execution.
+- The projected runner binding names missing runner identity, command allowlist,
+  environment scrubbing, network/filesystem/resource/timeout policy, stdout and
+  stderr capture, and approval-consumption controls.
+- The projected execution receipt sink names a future
+  `lab_execution_receipts` artifact root, schema/version posture, required
+  `lab.execution.run` receipt operation, prewrite/final-write controls,
+  exit-code/stdout/stderr/artifact/network/filesystem write summary capture
+  controls, and sensitive-value redaction posture.
+- CLI `francis lab runner-binding <source-id-or-path> <candidate-id-or-name>
+  [--approval-id <approval-id>]` returns the no-execution binding readback.
+- API `POST /ingest/lab/runner-binding` requires `ingest.lab.readback` before
+  receipt/artifact writes. Denied calls return before ingest receipts or
+  artifacts are written.
+- Aggregate `GET /ingest/readback` now includes runner-binding records and
+  counts. The Code Ingest UI parser/presenter includes the runner-binding count,
+  blockers, and artifact path in readback-only state.
+- Canonical docs now state that runner-binding preflight is a contract
+  checklist, not a live runner binding, receipt-sink binding, approval
+  consumption, or execution authority.
+
+Latest validation:
+
+- Focused ingest/API tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  passed `30` tests.
+- Focused ingest UI parser test:
+  `node --test --experimental-strip-types src/ingest/index.test.ts`
+  passed `4` tests.
+- Full chat UI test suite:
+  `npm run test`
+  passed `233` tests.
+- Chat UI production build:
+  `npm run build`
+  passed; Vite repeated the existing large chunk warning.
+- Ruff lint:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed after mechanically formatting `src/francis/ingest/models.py`.
+- Mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  passed.
+- Authority-matrix smoke:
+  the generated mutating-route matrix includes `/ingest/lab/runner-binding` as
+  `permission_gated` with `ingest.lab.readback`; the full generated matrix still
+  reports `8` unrelated existing missing entries, so this is not a full
+  matrix-green claim.
+- `git diff --check` passed with the pre-existing
+  `docs/canonical/ROADMAP.md` CRLF normalization warning.
+
+Remaining truthful gap:
+
+- This is still a contract projection. It does not implement an enforced
+  sandbox, bind a live runner, bind a live execution receipt sink, consume
+  approvals, copy source trees, enforce network isolation, enforce filesystem
+  write isolation, set resource limits, run build/test commands, validate
+  candidates, promote capabilities, write memory, or prove end-to-end Lab
+  execution.
+
 ### 2026-06-05 - Stage 17 operator proposal-evidence refs record bulk operator review pack 2
 
 Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
@@ -65896,6 +66624,90 @@ Remaining truthful gap:
   18, create managed copies, write managed-copy receipts, enforce tenant
   isolation, export safe deltas, activate SLAs, bind roles, or decommission
   tenant state.
+
+### 2026-06-05 - Code-born Francis Lab runner-enforcement preflight v0
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, and Stage
+17 Capability Economy supply-chain prerequisites for imported repository
+capabilities.
+
+This pass added the next no-execution Lab boundary after runner-binding:
+runner-enforcement preflight. It verifies whether the projected runner binding
+and execution-receipt sink controls are actually enforceable before any future
+imported repository command can run.
+
+What is materially true now:
+
+- `LabRunnerEnforcementPreflight` models a blocked enforcement checklist with
+  source, candidate, workspace, preflight, runner-readiness, runner-binding,
+  optional approval id, action hash, required checks, current checks, missing
+  checks, blockers, and explicit `approval_consumed: false`,
+  `runner_bound: false`, `receipt_sink_bound: false`,
+  `execution_authority: false`, and `executed: false`.
+- `IngestService.preflight_lab_runner_enforcement(...)` calls the existing
+  runner-binding preflight, verifies the projected binding/sink facts, writes a
+  `lab_runner_enforcement_preflights` artifact, writes a
+  `lab.runner.enforcement.preflight` receipt, updates the source registry with
+  the derived artifact/receipt, and stops before execution.
+- The enforcement preflight checks runner-binding record presence, binding and
+  readiness `ready` status, workspace/action-hash match, runner bound state,
+  runner identity verification, runner binary declaration, runner contract load,
+  command allowlist, environment scrubbing, network policy, filesystem write
+  policy, resource policy, timeout policy, stdout/stderr capture, receipt sink
+  binding/schema/prewrite/final-write controls, sensitive-value redaction
+  declaration, approval-consumption readiness, and approval consumption.
+- CLI `francis lab runner-enforcement <source-id-or-path>
+  <candidate-id-or-name> [--approval-id <approval-id>]` returns the
+  no-execution enforcement readback.
+- API `POST /ingest/lab/runner-enforcement` requires `ingest.lab.readback`
+  before receipt/artifact writes. Denied calls return before ingest receipts or
+  artifacts are written.
+- Aggregate `GET /ingest/readback` now includes runner-enforcement records and
+  counts. The Code Ingest UI parser/presenter includes the runner-enforcement
+  count, blockers, and artifact path in readback-only state.
+- Canonical docs now state that runner-enforcement preflight is an enforcement
+  checklist, not live policy enforcement, receipt-sink writes, approval
+  consumption, or execution authority.
+
+Latest validation:
+
+- Focused ingest/API tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  passed `34` tests.
+- Focused ingest UI parser test:
+  `node --test --experimental-strip-types src/ingest/index.test.ts`
+  passed `4` tests.
+- Full chat UI test suite:
+  `npm run test`
+  passed `233` tests.
+- Chat UI production build:
+  `npm run build`
+  passed; Vite repeated the existing large chunk warning.
+- Ruff lint:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed after mechanically formatting `src/francis/__main__.py`.
+- Mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  passed.
+- Authority-matrix smoke:
+  the generated mutating-route matrix includes `/ingest/lab/runner-enforcement`
+  as `permission_gated` with `ingest.lab.readback`; the full generated matrix
+  still reports `8` unrelated existing missing entries, so this is not a full
+  matrix-green claim.
+- `git diff --check` passed with the pre-existing
+  `docs/canonical/ROADMAP.md` CRLF normalization warning.
+
+Remaining truthful gap:
+
+- This is still an enforcement preflight. It does not implement an enforced
+  sandbox, bind a live runner, bind a live execution receipt sink, consume
+  approvals, copy source trees, enforce network isolation, enforce filesystem
+  write isolation, set resource limits, run build/test commands, validate
+  candidates, promote capabilities, write memory, or prove end-to-end Lab
+  execution.
 
 ### 2026-06-05 - Stage 17 operator proposal-evidence refs record capability catalog chunk 1
 
@@ -65977,6 +66789,87 @@ Remaining truthful gap:
   managed-copy receipts, enforce tenant isolation, export safe deltas, activate
   SLAs, bind roles, or decommission tenant state.
 
+### 2026-06-05 - Code-born Francis Lab approval-consumption handoff v0
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, and Stage
+17 Capability Economy supply-chain prerequisites for imported repository
+capabilities.
+
+This pass added the next no-execution Lab boundary after runner-enforcement:
+approval-consumption handoff. It binds an approval id and exact-action approval
+evidence to runner-enforcement readback so a future approval consumer has a
+receipt-backed contract to satisfy, but it still blocks approval consumption and
+execution.
+
+What is materially true now:
+
+- `LabApprovalConsumptionHandoff` records source, candidate, workspace,
+  preflight, runner-readiness, runner-binding, runner-enforcement, approval id,
+  action hash, approval binding, handoff contract, required checks, current
+  checks, missing checks, blockers, and explicit `approval_consumed: false`,
+  `execution_authority: false`, and `executed: false`.
+- `IngestService.preflight_lab_approval_consumption_handoff(...)` calls the
+  existing runner-enforcement preflight first, checks the approval record against
+  the exact action, writes a `lab_approval_consumption_handoffs` artifact, writes
+  a `lab.execution.approval_consumption_handoff` receipt, updates source
+  derived artifact/receipt metadata, and stops before approval consumption or
+  execution.
+- The handoff can recognize an approved exact-action approval id, but it remains
+  blocked until runner enforcement is ready, the runner is bound, the execution
+  receipt sink is bound, prewrite/final receipt writes are bound, and a governed
+  approval consumer exists. In v0 `approval_consumption_not_disabled` remains
+  false by design.
+- CLI `francis lab approval-consumption-handoff <source-id-or-path>
+  <candidate-id-or-name> <approval-id>` returns the no-execution handoff
+  readback.
+- API `POST /ingest/lab/approval-consumption-handoff` requires
+  `ingest.lab.readback` before receipt/artifact writes. Denied calls return
+  before ingest receipts or artifacts are written.
+- Aggregate `GET /ingest/readback` now includes approval-consumption handoff
+  records and counts. The Code Ingest UI parser/presenter includes the handoff
+  count, blockers, and artifact path in readback-only state.
+- Canonical docs now state that approval-consumption handoff is a future
+  consumer contract, not approval consumption, live runner enforcement,
+  receipt-sink binding, or execution authority.
+
+Latest validation:
+
+- Focused ingest/API tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  passed `38` tests.
+- Focused ingest UI parser test:
+  `node --test --experimental-strip-types src/ingest/index.test.ts`
+  passed `4` tests.
+- Full chat UI test suite:
+  `npm run test`
+  passed `233` tests.
+- Chat UI production build:
+  `npm run build`
+  passed; Vite repeated the existing large chunk warning.
+- Ruff lint:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed after mechanically formatting `src/francis/ingest/service.py`.
+- Mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  passed.
+- Authority-matrix smoke:
+  the generated mutating-route matrix includes
+  `/ingest/lab/approval-consumption-handoff` as `permission_gated` with
+  `ingest.lab.readback`; the full generated matrix still reports `8` unrelated
+  existing missing entries, so this is not a full matrix-green claim.
+
+Remaining truthful gap:
+
+- This is still a handoff preflight. It does not implement an enforced sandbox,
+  bind a live runner, bind a live execution receipt sink, consume approvals,
+  enforce single-use approval consumption, copy source trees, enforce network
+  isolation, enforce filesystem write isolation, set resource limits, run
+  build/test commands, validate candidates, promote capabilities, write memory,
+  or prove end-to-end Lab execution.
+
 ### 2026-06-05 - Stage 17 operator proposal-evidence refs record capability catalog chunk 2
 
 Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
@@ -66055,6 +66948,260 @@ Remaining truthful gap:
   2192 capability evidence refs, close Stage 18, create managed copies, write
   managed-copy receipts, enforce tenant isolation, export safe deltas, activate
   SLAs, bind roles, or decommission tenant state.
+
+### 2026-06-05 - Code-born Francis Lab execution-receipt sink reservation v0
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, and Stage
+17 Capability Economy supply-chain prerequisites for imported repository
+capabilities.
+
+This pass added the next no-execution Lab boundary after approval-consumption
+handoff: execution-receipt sink reservation. It reserves the future
+`lab.execution.run` receipt id/path that a governed runner would have to prewrite
+and finalize, but it still blocks receipt prewrite, final write, approval
+consumption, execution authority, and repository execution.
+
+What is materially true now:
+
+- `LabExecutionReceiptSinkReservation` records source, candidate, workspace,
+  preflight, runner-readiness, runner-binding, runner-enforcement,
+  approval-consumption handoff, approval id, action hash, receipt-sink contract,
+  reserved execution receipt id/path, required checks, current checks, missing
+  checks, blockers, and explicit `execution_receipt_written: false`,
+  `approval_consumed: false`, `execution_authority: false`, and
+  `executed: false`.
+- `IngestService.preflight_lab_execution_receipt_sink_reservation(...)` calls the
+  existing approval-consumption handoff first, derives a deterministic future
+  execution receipt id/path under `lab_execution_receipts`, writes a
+  `lab_execution_receipt_sink_reservations` artifact, writes a
+  `lab.execution.receipt_sink_reservation` ingest receipt, updates source
+  derived artifact/receipt metadata, and stops before writing any execution
+  receipt.
+- The reservation can prove that an execution receipt id/path was reserved and
+  scoped to the future Lab execution receipt directory. It remains blocked until
+  approval handoff, runner enforcement, runner binding, runner readiness,
+  receipt-sink binding, schema binding, prewrite, and final-write checks are
+  ready.
+- CLI `francis lab execution-receipt-sink-reservation <source-id-or-path>
+  <candidate-id-or-name> <approval-id>` returns the no-execution reservation
+  readback.
+- API `POST /ingest/lab/execution-receipt-sink-reservation` requires
+  `ingest.lab.readback` before receipt/artifact writes. Denied calls return
+  before ingest receipts or artifacts are written.
+- Aggregate `GET /ingest/readback` now includes execution-receipt sink
+  reservation records and counts. The Code Ingest UI parser/presenter includes
+  the reservation count, blockers, and artifact path in readback-only state.
+- Canonical docs now state that execution-receipt sink reservation is a future
+  receipt-write contract, not receipt-sink binding, execution receipt prewrite,
+  execution receipt final write, runner execution, or execution authority.
+
+Latest validation:
+
+- Focused ingest/API tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  passed `42` tests.
+- Focused ingest UI parser test:
+  `node --test --experimental-strip-types src/ingest/index.test.ts`
+  passed `4` tests.
+- Full chat UI test suite:
+  `npm run test`
+  passed `233` tests.
+- Chat UI production build:
+  `npm run build`
+  passed; Vite repeated the existing large chunk warning.
+- Ruff lint:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed after mechanically formatting `src/francis/ingest/models.py`,
+  `src/francis/ingest/service.py`, and `tests/test_api_ingest.py`.
+- Mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  passed.
+- Authority-matrix smoke:
+  the generated mutating-route matrix includes
+  `/ingest/lab/execution-receipt-sink-reservation` as `permission_gated` with
+  `ingest.lab.readback`; the full generated matrix still reports `8` unrelated
+  existing missing entries, so this is not a full matrix-green claim.
+
+Remaining truthful gap:
+
+- This is still a reservation preflight. It does not implement an enforced
+  sandbox, bind a live runner, bind a live execution receipt sink, write a
+  `lab.execution.run` receipt, prewrite or finalize execution receipts, consume
+  approvals, enforce single-use approval consumption, copy source trees, enforce
+  network isolation, enforce filesystem write isolation, set resource limits,
+  run build/test commands, validate candidates, promote capabilities, write
+  memory, or prove end-to-end Lab execution.
+
+### 2026-06-05 - Code-born Lab runner command allowlist binding
+
+Roadmap alignment: Phase 2 governed runtime spine, Stage 4 Forge feeder, and
+Stage 17 imported-capability supply-chain controls.
+
+This pass added the next no-execution Lab boundary after execution-receipt sink
+reservation: runner command allowlist binding. It projects the exact-action
+command plan from the Lab execution preflight and binds it to the missing command
+allowlist controls that a future governed runner must satisfy, while still
+blocking command execution, approval consumption, execution authority, execution
+receipt writes, network access, and repository writes.
+
+What is materially true now:
+
+- `LabRunnerCommandAllowlistBinding` records source, candidate, workspace,
+  preflight, runner-readiness, runner-binding, runner-enforcement,
+  approval-consumption handoff, execution-receipt sink reservation, approval id,
+  action hash, projected command plan, allowlist contract, required checks,
+  current checks, missing checks, blockers, and explicit
+  `allowlist_declared: false`, `allowlist_bound: false`,
+  `command_execution_enabled: false`, `approval_consumed: false`,
+  `execution_authority: false`, and `executed: false`.
+- `IngestService.preflight_lab_runner_command_allowlist_binding(...)` calls the
+  execution-receipt sink reservation boundary first, writes a
+  `lab_runner_command_allowlists` artifact, writes a
+  `lab.runner.command_allowlist.binding` ingest receipt, updates source
+  derived artifact/receipt metadata, and stops before declaring a live allowlist
+  or running any repository command.
+- CLI `francis lab runner-command-allowlist-binding <source-id-or-path>
+  <candidate-id-or-name> <approval-id>` returns the no-execution command
+  allowlist binding readback.
+- API `POST /ingest/lab/runner-command-allowlist-binding` requires
+  `ingest.lab.readback` before receipt/artifact writes. Denied calls return
+  before ingest receipts or artifacts are written.
+- Aggregate `GET /ingest/readback` now includes runner command allowlist records
+  and counts. The Code Ingest UI parser/presenter includes the count, blockers,
+  and artifact path in readback-only state.
+- Canonical docs now state that runner command allowlist binding is a future
+  command-control contract, not a live command allowlist, command execution
+  binding, approval consumption, execution receipt prewrite, or execution
+  authority.
+
+Latest validation:
+
+- Focused ingest/API tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  passed after the final type-fix state.
+- Focused ingest UI parser test:
+  `node --test --experimental-strip-types src/ingest/index.test.ts`
+  passed `4` tests.
+- Full chat UI test suite:
+  `npm run test`
+  passed `233` tests.
+- Chat UI production build:
+  `npm run build`
+  passed; Vite repeated the existing large chunk warning.
+- Ruff lint:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed after mechanically formatting `src/francis/ingest/service.py` and
+  `tests/test_api_ingest.py`.
+- Mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  passed.
+- Authority-matrix smoke:
+  the generated mutating-route matrix includes
+  `/ingest/lab/runner-command-allowlist-binding` as `permission_gated` with
+  `ingest.lab.readback`; the full generated matrix still reports `8` unrelated
+  existing missing entries, so this is not a full matrix-green claim.
+- Whitespace diff check:
+  `git diff --check` passed with the existing ROADMAP CRLF warning.
+
+Remaining truthful gap:
+
+- This is still a command-control preflight. It does not implement an enforced
+  sandbox, bind a live runner, declare or bind a live command allowlist, write a
+  `lab.execution.run` receipt, prewrite or finalize execution receipts, consume
+  approvals, enforce single-use approval consumption, copy source trees, enforce
+  network isolation, enforce filesystem write isolation, set resource limits,
+  run build/test commands, validate candidates, promote capabilities, write
+  memory, or prove end-to-end Lab execution.
+
+### 2026-06-05 - Code-born Lab runner command allowlist declaration
+
+Roadmap alignment: Phase 2 governed runtime spine, Stage 4 Forge feeder, and
+Stage 17 imported-capability supply-chain controls.
+
+This pass added the next no-execution Lab boundary after runner command allowlist
+binding: runner command allowlist declaration. It derives deterministic
+allowlist-entry records from the exact-action command plan, including command ids
+and command hashes, while still blocking live allowlist binding, command
+execution, approval consumption, execution authority, execution receipt writes,
+network access, and repository writes.
+
+What is materially true now:
+
+- `LabRunnerCommandAllowlistDeclaration` records source, candidate, workspace,
+  preflight, runner-readiness, runner-binding, runner-enforcement,
+  approval-consumption handoff, execution-receipt sink reservation, runner
+  command allowlist binding, approval id, action hash, command plan, declaration
+  entries, declaration contract, required checks, current checks, missing checks,
+  blockers, and explicit `allowlist_declared: true`, `allowlist_bound: false`,
+  `command_execution_enabled: false`, `approval_consumed: false`,
+  `execution_authority: false`, and `executed: false`.
+- `IngestService.preflight_lab_runner_command_allowlist_declaration(...)` calls
+  the runner command allowlist binding boundary first, writes a
+  `lab_runner_command_allowlist_declarations` artifact, writes a
+  `lab.runner.command_allowlist.declaration` ingest receipt, updates source
+  derived artifact/receipt metadata, and stops before binding a live allowlist or
+  running any repository command.
+- CLI `francis lab runner-command-allowlist-declaration <source-id-or-path>
+  <candidate-id-or-name> <approval-id>` returns the no-execution declaration
+  readback.
+- API `POST /ingest/lab/runner-command-allowlist-declaration` requires
+  `ingest.lab.readback` before receipt/artifact writes. Denied calls return
+  before ingest receipts or artifacts are written.
+- Aggregate `GET /ingest/readback` now includes runner command allowlist
+  declaration records and counts. The Code Ingest UI parser/presenter includes
+  the count, blockers, and artifact path in readback-only state.
+- Canonical docs now state that runner command allowlist declaration is a future
+  command-control record, not a live allowlist binding, runner binding, command
+  execution, approval consumption, execution receipt prewrite, or execution
+  authority.
+
+Latest validation:
+
+- Focused ingest/API tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  passed after the final formatted state.
+- Focused ingest UI parser test:
+  `node --test --experimental-strip-types src\ingest\index.test.ts`
+  passed `4` tests.
+- Full chat UI test suite:
+  `npm run test`
+  passed `233` tests.
+- Chat UI production build:
+  `npm run build`
+  passed; Vite repeated the existing large chunk warning.
+- Ruff lint:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed after mechanically formatting `src/francis/ingest/models.py`,
+  `src/francis/ingest/service.py`, and `tests/test_api_ingest.py`.
+- Mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  passed.
+- Authority-matrix smoke:
+  the generated mutating-route matrix includes
+  `/ingest/lab/runner-command-allowlist-declaration` as `permission_gated` with
+  `ingest.lab.readback`; the full generated matrix still reports `8` unrelated
+  existing missing entries, so this is not a full matrix-green claim.
+- Whitespace diff check:
+  `git diff --check` passed with the existing ROADMAP CRLF warning.
+
+Remaining truthful gap:
+
+- This is still a command-control declaration preflight. It does not implement an
+  enforced sandbox, bind a live runner, bind a live command allowlist, write a
+  `lab.execution.run` receipt, prewrite or finalize execution receipts, consume
+  approvals, enforce single-use approval consumption, copy source trees, enforce
+  network isolation, enforce filesystem write isolation, set resource limits,
+  run build/test commands, validate candidates, promote capabilities, write
+  memory, or prove end-to-end Lab execution.
 
 ### 2026-06-05 - Stage 17 operator proposal-evidence refs record capability catalog chunk 3
 
@@ -66214,6 +67361,94 @@ Remaining truthful gap:
   managed-copy receipts, enforce tenant isolation, export safe deltas, activate
   SLAs, bind roles, or decommission tenant state.
 
+### 2026-06-06 - Code-born Lab runner command allowlist enforcement preflight
+
+Roadmap alignment: Phase 2 governed runtime spine, Stage 4 Forge feeder, and
+Stage 17 imported-capability supply-chain controls.
+
+This pass added the next no-execution Lab boundary after runner command
+allowlist declaration: runner command allowlist enforcement preflight. It checks
+declared exact-action allowlist entries against the missing live runner,
+allowlist-binding, execution-receipt prewrite, and execution-receipt final-write
+controls that a future governed Lab runner must satisfy, while still blocking
+command execution, approval consumption, execution authority, execution receipt
+writes, network access, and repository writes.
+
+What is materially true now:
+
+- `LabRunnerCommandAllowlistEnforcementPreflight` records source, candidate,
+  workspace, preflight, runner-readiness, runner-binding, runner-enforcement,
+  approval-consumption handoff, execution-receipt sink reservation, runner
+  command allowlist binding, runner command allowlist declaration, approval id,
+  action hash, declared allowlist entries, enforcement projection, enforcement
+  contract, required checks, current checks, missing checks, blockers, and
+  explicit `allowlist_declared: true`, `allowlist_bound: false`,
+  `allowlist_enforced: false`, `command_execution_enabled: false`,
+  `approval_consumed: false`, `execution_authority: false`, and
+  `executed: false`.
+- `IngestService.preflight_lab_runner_command_allowlist_enforcement(...)` calls
+  the runner command allowlist declaration boundary first, writes a
+  `lab_cmd_allowlist_enforcements` artifact, writes a
+  `lab.runner.command_allowlist.enforcement_preflight` ingest receipt, updates
+  source derived artifact/receipt metadata, and stops before binding a live
+  runner, enforcing a live allowlist, consuming an approval, writing an
+  execution receipt, or running repository commands.
+- CLI `francis lab runner-command-allowlist-enforcement <source-id-or-path>
+  <candidate-id-or-name> <approval-id>` returns the no-execution enforcement
+  preflight readback.
+- API `POST /ingest/lab/runner-command-allowlist-enforcement` requires
+  `ingest.lab.readback` before receipt/artifact writes. Denied calls return
+  before ingest receipts or artifacts are written.
+- Aggregate `GET /ingest/readback` now includes runner command allowlist
+  enforcement preflight records and counts. The Code Ingest UI parser/presenter
+  includes the count, blockers, and artifact path in readback-only state.
+- Canonical docs now state that runner command allowlist enforcement preflight
+  is a future command-control check, not live allowlist enforcement, runner
+  binding, command execution, approval consumption, receipt-sink writes, or
+  execution authority.
+
+Latest validation:
+
+- Focused ingest/API tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  passed after the final formatted state.
+- Focused ingest UI parser test:
+  `node --test --experimental-strip-types src/ingest/index.test.ts`
+  passed `4` tests.
+- Full chat UI test suite:
+  `npm run test`
+  passed `233` tests.
+- Chat UI production build:
+  `npm run build`
+  passed; Vite repeated the existing large chunk warning.
+- Ruff lint:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed after mechanically formatting `tests/test_api_ingest.py`.
+- Mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  passed.
+- Authority-matrix smoke:
+  the generated mutating-route matrix includes
+  `/ingest/lab/runner-command-allowlist-enforcement` as `permission_gated` with
+  `ingest.lab.readback`; the full generated matrix still reports `8` unrelated
+  existing managed-copies missing entries, so this is not a full matrix-green
+  claim.
+- Whitespace diff check:
+  `git diff --check` passed with the existing ROADMAP CRLF warning.
+
+Remaining truthful gap:
+
+- This is still a command-control enforcement preflight. It does not implement
+  an enforced sandbox, bind a live runner, bind or enforce a live command
+  allowlist, write a `lab.execution.run` receipt, prewrite or finalize execution
+  receipts, consume approvals, enforce single-use approval consumption, copy
+  source trees, enforce network isolation, enforce filesystem write isolation,
+  set resource limits, run build/test commands, validate candidates, promote
+  capabilities, write memory, or prove end-to-end Lab execution.
+
 ### 2026-06-05 - Stage 17 operator proposal-evidence refs record capability catalog chunk 5
 
 Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
@@ -66292,6 +67527,93 @@ Remaining truthful gap:
   2162 capability evidence refs, close Stage 18, create managed copies, write
   managed-copy receipts, enforce tenant isolation, export safe deltas, activate
   SLAs, bind roles, or decommission tenant state.
+
+### 2026-06-06 - Code-born Lab runner sandbox readiness preflight
+
+Roadmap alignment: Phase 2 governed runtime spine, Stage 4 Forge feeder, and
+Stage 17 imported-capability supply-chain controls.
+
+This pass added the next no-execution Lab boundary after runner command
+allowlist enforcement preflight: runner sandbox readiness. It checks the empty
+Francis-owned workspace evidence and future sandbox controls that a governed Lab
+runner must satisfy, while still blocking sandbox binding, runner binding,
+command execution, approval consumption, execution authority, execution receipt
+writes, network access, and repository writes.
+
+What is materially true now:
+
+- `LabRunnerSandboxReadiness` records source, candidate, workspace, preflight,
+  runner-readiness, runner-binding, runner-enforcement, approval-consumption
+  handoff, execution-receipt sink reservation, runner command allowlist binding,
+  runner command allowlist declaration, runner command allowlist enforcement,
+  approval id, action hash, sandbox profile, sandbox contract, required checks,
+  current checks, missing checks, blockers, and explicit
+  `sandbox_bound: false`, `sandbox_enforced: false`, `runner_bound: false`,
+  `runner_identity_verified: false`, `allowlist_enforced: false`,
+  `receipt_prewrite_bound: false`, `receipt_final_write_bound: false`,
+  `approval_consumed: false`, `execution_authority: false`, and
+  `executed: false`.
+- `IngestService.preflight_lab_runner_sandbox_readiness(...)` calls the runner
+  command allowlist enforcement boundary first, writes a
+  `lab_sandbox_readiness` artifact, writes a
+  `lab.runner.sandbox_readiness.preflight` ingest receipt, updates source
+  derived artifact/receipt metadata, and stops before binding a sandbox,
+  binding a runner, enforcing a live allowlist, consuming an approval, writing
+  an execution receipt, or running repository commands.
+- CLI `francis lab runner-sandbox-readiness <source-id-or-path>
+  <candidate-id-or-name> <approval-id>` returns the no-execution sandbox
+  readiness readback.
+- API `POST /ingest/lab/runner-sandbox-readiness` requires
+  `ingest.lab.readback` before receipt/artifact writes. Denied calls return
+  before ingest receipts or artifacts are written.
+- Aggregate `GET /ingest/readback` now includes runner sandbox readiness records
+  and counts. The Code Ingest UI parser/presenter includes the count, blockers,
+  and artifact path in readback-only state.
+- Canonical docs now state that runner sandbox readiness is a future
+  sandbox-control check, not a live sandbox, live runner binding, readonly
+  source mount, command execution, approval consumption, receipt-sink writes, or
+  execution authority.
+
+Latest validation:
+
+- Focused ingest/API tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  passed after the final formatted state.
+- Focused ingest UI parser test:
+  `node --test --experimental-strip-types src/ingest/index.test.ts`
+  passed `4` tests.
+- Full chat UI test suite:
+  `npm run test`
+  passed `233` tests.
+- Chat UI production build:
+  `npm run build`
+  passed; Vite repeated the existing large chunk warning.
+- Ruff lint:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed after mechanically formatting `tests/test_api_ingest.py`.
+- Mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  passed.
+- Authority-matrix smoke:
+  the generated mutating-route matrix includes
+  `/ingest/lab/runner-sandbox-readiness` as `permission_gated` with
+  `ingest.lab.readback`; the full generated matrix still reports `8` unrelated
+  existing managed-copies missing entries, so this is not a full matrix-green
+  claim.
+
+Remaining truthful gap:
+
+- This is still a sandbox-control readiness preflight. It does not implement an
+  enforced sandbox, bind a live runner, bind or enforce a live command allowlist,
+  readonly-mount source content, write a `lab.execution.run` receipt, prewrite
+  or finalize execution receipts, consume approvals, enforce single-use approval
+  consumption, copy source trees, enforce network isolation, enforce filesystem
+  write isolation, set resource limits, run build/test commands, validate
+  candidates, promote capabilities, write memory, or prove end-to-end Lab
+  execution.
 
 ### 2026-06-05 - Stage 17 operator proposal-evidence refs record capability catalog chunk 6
 
@@ -66372,6 +67694,152 @@ Remaining truthful gap:
   managed-copy receipts, enforce tenant isolation, export safe deltas, activate
   SLAs, bind roles, or decommission tenant state.
 
+### 2026-06-06 - Code-born Lab execution receipt write readiness preflight
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, and Stage
+17 imported-capability supply-chain controls for code-born capability ingestion.
+
+This pass added the next no-execution Lab boundary after runner sandbox
+readiness: a receipt write readiness preflight for future governed Lab
+execution. The new record proves whether Francis has enough bound receipt-write
+controls to prewrite and finalize a future `lab.execution.run` receipt before
+any candidate execution authority can exist.
+
+Material truth now visible:
+
+- `LabExecutionReceiptWriteReadiness` records source/candidate identity,
+  upstream approval handoff, runner readiness, runner enforcement, command
+  allowlist enforcement, receipt sink reservation, and sandbox readiness ids.
+- The record carries the reserved execution receipt id/path, a
+  `receipt_write_contract`, required/current/missing checks, blockers, and
+  explicit false flags for receipt schema binding, prewrite binding, final write
+  binding, approval consumption, execution authority, execution, network access,
+  and repo writes.
+- `IngestService.preflight_lab_execution_receipt_write_readiness(...)` writes a
+  compact `lab_receipt_write_readiness` artifact plus a
+  `lab.execution.receipt_write_readiness.preflight` ingest receipt.
+- CLI, API, aggregate ingest readback, chat UI ingest readback, canonical docs,
+  architecture docs, roadmap notes, and focused tests now expose this boundary.
+- The denied API path still stops before the service call, so it does not write
+  readiness artifacts, reserved execution receipts, or consume approvals.
+
+Latest validation:
+
+- Focused ingest/API tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  passed.
+- Ruff lint:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  passed.
+- Full chat UI test suite:
+  `npm run test`
+  passed `233` tests.
+- Chat UI production build:
+  `npm run build`
+  passed; Vite repeated the existing large chunk warning.
+- Diff whitespace check:
+  `git diff --check`
+  exited `0`; Git warned that `docs/canonical/ROADMAP.md` will normalize CRLF
+  to LF the next time Git touches it.
+
+Remaining truthful gap:
+
+- This does not bind a receipt schema implementation, prewrite a
+  `lab.execution.run` receipt, finalize an execution receipt, consume
+  approvals, enforce single-use approval consumption, bind a live sandbox
+  runner, enforce read-only mounts, enforce network isolation, enforce
+  filesystem write isolation, run build/test commands, validate candidates,
+  promote capabilities, or grant Francis authority to execute imported code.
+
+### 2026-06-06 - Code-born Lab execution receipt prewrite binding preflight
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, and Stage
+17 imported-capability supply-chain controls for code-born capability ingestion.
+
+This pass added the next no-execution Lab boundary after execution receipt write
+readiness: a contract-binding preflight for future `lab.execution.run` receipts.
+The new record binds the future execution receipt schema plus prewrite and
+final-write contracts while keeping writer implementations, execution receipt
+writes, approval consumption, execution authority, and repository execution
+blocked.
+
+Material truth now visible:
+
+- `LabExecutionReceiptPrewriteBinding` records source/candidate identity,
+  approval id, upstream execution receipt write readiness, sandbox readiness,
+  command allowlist enforcement, receipt sink reservation, preflight, workspace,
+  and action hash ids.
+- The record carries a serializable execution receipt schema, prewrite contract,
+  final-write contract, contract-binding hashes, required/current/missing checks,
+  upstream blockers, and explicit false flags for prewrite writer binding, final
+  writer binding, execution receipt prewrite, execution receipt finalization,
+  approval consumption, execution authority, execution, network access, and repo
+  writes.
+- `IngestService.preflight_lab_execution_receipt_prewrite_binding(...)` writes a
+  compact `lab_receipt_prewrite_bindings` artifact plus a
+  `lab.execution.receipt_prewrite_binding.preflight` ingest receipt.
+- CLI `francis lab execution-receipt-prewrite-binding ...`, API
+  `POST /ingest/lab/execution-receipt-prewrite-binding`, aggregate ingest
+  readback, Code Ingest UI readback, mutation-authority matrix metadata,
+  canonical docs, architecture docs, roadmap notes, and focused tests now expose
+  this boundary.
+- The denied API path still stops before the service call, so it does not write
+  binding artifacts, ingest receipts, reserved execution receipts, or consume
+  approvals.
+
+Latest validation:
+
+- Focused ingest/API tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  passed as part of the combined Python run.
+- Combined Python/API/matrix command:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py tests\test_api_mutating_route_authority_matrix.py -q`
+  still fails only on the full mutating-route authority matrix green assertion;
+  the generated matrix continues to report `8` unrelated managed-copies missing
+  entries.
+- Targeted authority-matrix readback:
+  `/ingest/lab/execution-receipt-prewrite-binding` is present as
+  `permission_gated` with `ingest.lab.readback`, while the full matrix remains
+  `ok: false` because of the same `8` managed-copies gaps.
+- Focused ingest UI parser test:
+  `node --test --experimental-strip-types src/ingest/index.test.ts`
+  passed `4` tests.
+- Full chat UI test suite:
+  `npm run test`
+  passed `233` tests.
+- Chat UI production build:
+  `npm run build`
+  passed; Vite repeated the existing large chunk warning.
+- Ruff lint:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed after mechanically formatting `src/francis/ingest/models.py` and
+  `src/francis/ingest/service.py`.
+- Mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  passed.
+- Diff whitespace check:
+  `git diff --check`
+  exited `0`; Git warned that `docs/canonical/ROADMAP.md` will normalize CRLF
+  to LF the next time Git touches it.
+
+Remaining truthful gap:
+
+- This does not implement execution receipt writer code, prewrite a
+  `lab.execution.run` receipt, finalize an execution receipt, consume
+  approvals, enforce single-use approval consumption, bind a live sandbox
+  runner, enforce read-only mounts, enforce network isolation, enforce
+  filesystem write isolation, run build/test commands, validate candidates,
+  promote capabilities, or grant Francis authority to execute imported code.
+
 ### 2026-06-05 - Stage 17 operator proposal-evidence refs record capability catalog chunk 7
 
 Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
@@ -66450,6 +67918,107 @@ Remaining truthful gap:
   2142 capability evidence refs, close Stage 18, create managed copies, write
   managed-copy receipts, enforce tenant isolation, export safe deltas, activate
   SLAs, bind roles, or decommission tenant state.
+
+### 2026-06-06 - Code-born Lab execution receipt writer preflight
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, and Stage
+17 imported-capability supply-chain controls for code-born capability ingestion.
+
+This pass added the next no-execution Lab boundary after execution receipt
+prewrite binding: an execution receipt writer preflight for future
+`lab.execution.run` receipts. The new record declares the future writer
+boundary, reserved execution receipt sink path, temp-file/replace atomic write
+plan, and redaction policy while keeping writer implementation binding,
+execution receipt prewrite/finalization, approval consumption, execution
+authority, and repository execution blocked.
+
+Material truth now visible:
+
+- `LabExecutionReceiptWriterPreflight` records source/candidate identity,
+  approval id, upstream prewrite binding, execution receipt write readiness,
+  sandbox readiness, command allowlist enforcement, receipt sink reservation,
+  preflight, workspace, and action hash ids.
+- The record carries a serializable writer contract, declarative prewrite and
+  final-write operations, writer boundary, required/current/missing checks,
+  upstream blockers, and explicit false flags for writer implementation binding,
+  prewrite writer binding, final writer binding, execution receipt prewrite,
+  execution receipt finalization, approval consumption, execution authority,
+  execution, network access, and repo writes.
+- The writer boundary verifies that the reserved execution receipt path is
+  inside the `lab_execution_receipts` sink and that the reserved execution
+  receipt file has not been written.
+- `IngestService.preflight_lab_execution_receipt_writer(...)` writes a compact
+  `lab_receipt_writer_preflights` artifact plus a
+  `lab.execution.receipt_writer.preflight` ingest receipt. It does not write the
+  reserved execution receipt.
+- CLI `francis lab execution-receipt-writer-preflight ...`, API
+  `POST /ingest/lab/execution-receipt-writer-preflight`, aggregate ingest
+  readback, Code Ingest UI readback, mutation-authority matrix metadata,
+  canonical docs, architecture docs, roadmap notes, and focused tests now expose
+  this boundary.
+- The denied API path still stops before the service call, so it does not write
+  writer preflight artifacts, ingest receipts, reserved execution receipts, or
+  consume approvals.
+
+Latest validation:
+
+- Focused ingest/API tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  passed.
+- Focused mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  passed with no issues in `11` source files.
+- Focused Ruff check:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Focused Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed with `14` files already formatted.
+- Authority-matrix readback confirmed
+  `/ingest/lab/sandbox-provider-runtime-probe-harness` is present as
+  `permission_gated` with required scope
+  `ingest.lab.sandbox.provider_runtime_probe_harness`. The full matrix still
+  reports `missing_total: 8` for pre-existing unrelated gaps.
+- Focused ingest UI parser test:
+  `node --test --experimental-strip-types apps\chat_ui\src\ingest\index.test.ts`
+  passed `4` tests.
+- Full UI unit suite:
+  `npm run test` in `apps/chat_ui` passed `233` tests.
+- UI production build:
+  `npm run build` in `apps/chat_ui` passed; Vite emitted its existing
+  large-chunk warning.
+- Ruff lint:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check src\francis\ingest\models.py src\francis\ingest\service.py src\francis\ingest\registry.py src\francis\ingest\__init__.py src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Targeted mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  passed with no issues in `11` source files.
+- Targeted authority-matrix readback:
+  `/ingest/lab/execution-receipt-writer-preflight` is present as
+  `permission_gated` with `ingest.lab.readback`, while the full matrix remains
+  `ok: false` because of the same `8` unrelated managed-copies gaps.
+- Full chat UI test suite:
+  `npm run test`
+  passed `233` tests.
+- Chat UI production build:
+  `npm run build`
+  passed; Vite repeated the existing large chunk warning.
+- Diff whitespace check:
+  `git diff --check`
+  exited `0`; Git warned that `docs/canonical/ROADMAP.md` will normalize CRLF
+  to LF the next time Git touches it.
+
+Remaining truthful gap:
+
+- This does not implement a live execution receipt writer, prewrite a
+  `lab.execution.run` receipt, finalize an execution receipt, consume
+  approvals, enforce single-use approval consumption, bind a live sandbox
+  runner, enforce read-only mounts, enforce network isolation, enforce
+  filesystem write isolation, run build/test commands, validate candidates,
+  promote capabilities, or grant Francis authority to execute imported code.
 
 ### 2026-06-05 - Stage 17 operator proposal-evidence refs record capability catalog chunk 8
 
@@ -66530,6 +68099,89 @@ Remaining truthful gap:
   managed-copy receipts, enforce tenant isolation, export safe deltas, activate
   SLAs, bind roles, or decommission tenant state.
 
+### 2026-06-06 - Code-born Lab synthetic execution receipt writer
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, and Stage
+17 imported-capability supply-chain controls for code-born capability ingestion.
+
+This pass added the first real execution-receipt write path, limited to
+synthetic no-op `lab.execution.run` receipts. It can prewrite and finalize the
+reserved execution receipt artifact while all execution, approval consumption,
+network, and repository write flags remain false. It does not run repository
+code, bind a runner, validate a candidate, or grant execution authority.
+
+Material truth now visible:
+
+- `LabSyntheticExecutionReceipt` records the reserved execution receipt id,
+  source/candidate identity, approval id, writer preflight id, prewrite binding
+  id, receipt write readiness id, receipt sink reservation id, workspace,
+  action hash, synthetic/no-op mode, phase, status, warnings, validations, and
+  receipt handles.
+- `IngestService.prewrite_lab_synthetic_execution_receipt(...)` writes the
+  reserved `lab_execution_receipts/<receipt-id>.json` artifact only when the
+  approval evidence is approved, the reserved path is inside the execution
+  receipt sink, and the reserved receipt has not already been written.
+- `IngestService.finalize_lab_synthetic_execution_receipt(...)` finalizes only
+  an existing synthetic/no-op receipt as `blocked`; it refuses to finalize a
+  missing, mismatched, non-synthetic, or execution-claiming receipt.
+- Both service paths write compact ingest receipts
+  `lab.execution.receipt.synthetic_prewrite` and
+  `lab.execution.receipt.synthetic_finalize`; neither consumes approvals,
+  executes commands, reads secret file contents, accesses the network, or writes
+  to the source repo.
+- CLI `francis lab synthetic-execution-receipt-prewrite ...` and
+  `francis lab synthetic-execution-receipt-finalize ...` expose the local
+  operator path.
+- API routes `POST /ingest/lab/synthetic-execution-receipt-prewrite` and
+  `POST /ingest/lab/synthetic-execution-receipt-finalize` require
+  `ingest.lab.receipt.write`; denied API calls stop before execution receipt or
+  ingest receipt writes.
+- Aggregate ingest readback and the Code Ingest UI now include execution receipt
+  artifacts, preserving the synthetic/no-op and no-execution flags.
+
+Latest validation:
+
+- Focused ingest/API tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  passed.
+- Targeted mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  passed with no issues in `11` source files.
+- Ruff lint:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check src\francis\ingest\models.py src\francis\ingest\service.py src\francis\ingest\__init__.py src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Focused ingest UI parser test:
+  `node --test --experimental-strip-types apps\chat_ui\src\ingest\index.test.ts`
+  passed `4` tests.
+- Targeted authority-matrix readback:
+  `/ingest/lab/synthetic-execution-receipt-prewrite` and
+  `/ingest/lab/synthetic-execution-receipt-finalize` are present as
+  `permission_gated` with `ingest.lab.receipt.write`, while the full matrix
+  remains `ok: false` because of the same `8` unrelated managed-copies gaps.
+- Full chat UI test suite:
+  `npm run test`
+  passed `233` tests.
+- Chat UI production build:
+  `npm run build`
+  passed; Vite repeated the existing large chunk warning.
+- Diff whitespace check:
+  `git diff --check`
+  exited `0`; Git warned that `docs/canonical/ROADMAP.md` will normalize CRLF
+  to LF the next time Git touches it.
+
+Remaining truthful gap:
+
+- This does not implement live runner execution, execute repo commands, consume
+  approvals, enforce single-use approval consumption, bind a sandbox runner,
+  enforce read-only mounts, enforce network isolation, enforce filesystem write
+  isolation, capture real stdout/stderr, run build/test commands, validate
+  candidates, promote capabilities, or grant Francis authority to execute
+  imported code. The receipt writer is currently limited to synthetic no-op
+  prewrite/finalize receipts.
+
 ### 2026-06-05 - Stage 17 operator proposal-evidence refs record capability catalog chunk 9
 
 Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
@@ -66608,6 +68260,399 @@ Remaining truthful gap:
   2122 capability evidence refs, close Stage 18, create managed copies, write
   managed-copy receipts, enforce tenant isolation, export safe deltas, activate
   SLAs, bind roles, or decommission tenant state.
+
+### 2026-06-06 - Code-born Lab synthetic no-op approval consumption
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, and Stage
+17 imported-capability supply-chain controls for code-born capability ingestion.
+
+This pass added the first approval-consumption write path for code-born Lab,
+limited to finalized synthetic/no-op execution receipts. It records a separate
+approval-consumption artifact and receipt, enforces single-use reuse blocking
+through Lab approval binding readback, and still grants no execution authority.
+The approved approval file remains in the existing approval store; the new
+ingest artifact is the Lab consumption evidence.
+
+Material truth now visible:
+
+- `LabApprovalConsumptionRecord` records the approval id, source/candidate
+  identity, preflight/workspace/action hash, finalized synthetic execution
+  receipt id, approval binding snapshot, single-use enforcement flag, and all
+  no-execution flags.
+- `IngestService.consume_lab_approval_for_synthetic_execution_receipt(...)`
+  writes `lab_approval_consumptions/<id>.json` only when the approval is an
+  approved exact-action match, the reserved receipt path is inside the Lab
+  execution receipt sink, the synthetic/no-op receipt is already finalized, and
+  no previous consumption record exists for that approval id.
+- Lab approval binding now reads `lab_approval_consumptions` artifacts and
+  reports `approval_consumed: true` plus `approval_already_consumed` blockers
+  on later attempts to reuse the same approval id.
+- CLI `francis lab approval-consume-synthetic-noop ...` exposes the local
+  operator path.
+- API route `POST /ingest/lab/approval-consume-synthetic-noop` requires
+  `ingest.lab.approval.consume`; denied API calls stop before consumption
+  artifact or ingest receipt writes.
+- Aggregate ingest readback and the Code Ingest UI include approval-consumption
+  records, preserving single-use and no-execution flags.
+
+Latest validation:
+
+- Focused ingest/API tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  passed.
+- Targeted mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  passed with no issues in `11` source files.
+- Ruff lint:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check src\francis\ingest\models.py src\francis\ingest\service.py src\francis\ingest\__init__.py src\francis\ingest\registry.py src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Focused ingest UI parser test:
+  `node --test --experimental-strip-types apps\chat_ui\src\ingest\index.test.ts`
+  passed `4` tests.
+- Full chat UI test suite:
+  `npm run test`
+  passed `233` tests.
+- Chat UI production build:
+  `npm run build`
+  passed; Vite repeated the existing large chunk warning.
+- Targeted authority-matrix readback:
+  `/ingest/lab/approval-consume-synthetic-noop` is present as
+  `permission_gated` with `ingest.lab.approval.consume`, while the full matrix
+  remains `ok: false` because of the same `8` unrelated managed-copies gaps.
+
+Remaining truthful gap:
+
+- This does not implement live runner execution, execute repo commands, consume
+  approvals for repository execution, bind a sandbox runner, enforce read-only
+  mounts, enforce network isolation, enforce filesystem write isolation, capture
+  real stdout/stderr, run build/test commands, validate candidates, promote
+  capabilities, or grant Francis authority to execute imported code. Approval
+  consumption is currently limited to finalized synthetic no-op receipts and
+  exists to prove single-use reuse blocking.
+
+### 2026-06-06 - Code-born Lab built-in no-op runner envelope
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, and Stage
+17 imported-capability supply-chain controls for code-born capability ingestion.
+
+This pass added the first Lab runner envelope that can complete a Francis-owned
+built-in no-op handoff after synthetic no-op approval consumption. It records a
+separate runner-envelope artifact and ingest receipt, proves the approval was
+already consumed for the same finalized synthetic receipt, performs only the
+built-in no-op, and still grants no repository execution authority.
+
+Material truth now visible:
+
+- `LabNoopRunnerEnvelope` records the source/candidate identity, approval id,
+  approval-consumption record id, finalized synthetic execution receipt id,
+  preflight/plan/workspace/action hash ids, embedded approval-consumption and
+  synthetic-receipt snapshots, required/current checks, blockers, receipts, and
+  explicit no-execution flags.
+- `IngestService.run_lab_noop_runner_envelope(...)` writes
+  `lab_noop_runner_envelopes/<id>.json` only when the matching
+  approval-consumption evidence exists, the referenced synthetic/no-op execution
+  receipt is finalized, the source/candidate/action identities match, and no
+  completed envelope already exists for that consumption record.
+- A second call for the same consumed synthetic no-op approval blocks before
+  overwriting the completed envelope, preserving single-use evidence.
+- The returned execution payload distinguishes the built-in no-op from repo
+  execution: `builtin_noop_performed: true` only for the completed envelope,
+  while `executed`, `commands_executed`, `repo_code_executed`,
+  `ran_repo_scripts`, `ran_install`, `ran_build`, `ran_tests`,
+  `network_accessed`, and `wrote_to_repo` remain false.
+- CLI `francis lab noop-runner-envelope ...` exposes the local operator path.
+- API route `POST /ingest/lab/noop-runner-envelope` requires
+  `ingest.lab.runner.noop`; denied API calls stop before no-op runner artifact
+  or ingest receipt writes.
+- Aggregate ingest readback and the Code Ingest UI include no-op runner-envelope
+  records and counts.
+- Canonical capability, roadmap, architecture, build-order, and code-born
+  ingestion docs now register the no-op runner envelope as a proof boundary, not
+  as sandbox runner binding, repo command execution, candidate validation, or
+  promotion.
+
+Latest validation:
+
+- Focused ingest/API tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  passed.
+- Targeted mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  passed with no issues in `11` source files.
+- Ruff lint:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check src\francis\ingest\models.py src\francis\ingest\service.py src\francis\ingest\__init__.py src\francis\ingest\registry.py src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Focused ingest UI parser test:
+  `node --test --experimental-strip-types apps\chat_ui\src\ingest\index.test.ts`
+  passed `4` tests.
+- Full chat UI test suite:
+  `npm run test`
+  passed `233` tests.
+- Chat UI production build:
+  `npm run build`
+  passed; Vite repeated the existing large chunk warning.
+- Targeted authority-matrix readback:
+  `/ingest/lab/noop-runner-envelope` is present as `permission_gated` with
+  `ingest.lab.runner.noop`, while the full matrix remains `ok: false` because
+  of the same `8` unrelated managed-copies gaps.
+
+Remaining truthful gap:
+
+- This does not implement live runner execution, execute repo commands, consume
+  approvals for repository execution, bind a live sandbox runner, enforce
+  read-only mounts, enforce network isolation, enforce filesystem write
+  isolation, capture real stdout/stderr, run build/test commands, validate
+  candidates, promote capabilities, or grant Francis authority to execute
+  imported code. The runner envelope is currently limited to a Francis-owned
+  built-in no-op after finalized synthetic no-op approval consumption.
+
+### 2026-06-06 - Code-born Lab built-in no-op runner transcript
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, and Stage
+17 imported-capability supply-chain controls for code-born capability ingestion.
+
+This pass added the next proof boundary after the built-in no-op runner
+envelope: a no-op runner transcript artifact. The transcript records
+deterministic empty stdout/stderr metadata for a completed Francis-owned no-op
+envelope, writes a compact ingest receipt, and still avoids real process output
+capture, repository command execution, output-content storage, candidate
+validation, and execution authority.
+
+Material truth now visible:
+
+- `LabNoopRunnerTranscript` records source/candidate identity, approval id,
+  approval-consumption id, synthetic execution receipt id, completed no-op
+  runner envelope id/path/snapshot, empty stdout/stderr stream metadata,
+  combined output hash, required/current checks, blockers, receipts, and
+  explicit no-execution flags.
+- `IngestService.capture_lab_noop_runner_transcript(...)` writes
+  `lab_noop_runner_transcripts/<id>.json` only when a completed built-in no-op
+  runner envelope exists for the consumed synthetic approval evidence and the
+  source/candidate identity still matches.
+- Repeat transcript capture for the same completed no-op envelope blocks before
+  overwriting the completed transcript artifact.
+- The transcript stores no stdout/stderr content. It records zero-byte stream
+  metadata and hashes for the Francis-owned no-op only, with
+  `real_process_output_captured: false`.
+- CLI `francis lab noop-runner-transcript ...` exposes the local operator path.
+- API route `POST /ingest/lab/noop-runner-transcript` requires
+  `ingest.lab.runner.noop.transcript`; denied API calls stop before transcript
+  artifact or ingest receipt writes.
+- Aggregate ingest readback and the Code Ingest UI include no-op transcript
+  records and counts.
+- Canonical capability, roadmap, architecture, build-order, and code-born
+  ingestion docs now register the no-op transcript as an empty-output proof
+  boundary, not as live runner output capture or repository execution.
+
+Latest validation:
+
+- Focused ingest/API tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  passed.
+- Targeted mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  passed with no issues in `11` source files.
+- Ruff lint:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check src\francis\ingest\models.py src\francis\ingest\service.py src\francis\ingest\__init__.py src\francis\ingest\registry.py src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed after formatting `src/francis/ingest/service.py`.
+- Focused ingest UI parser test:
+  `node --test --experimental-strip-types apps\chat_ui\src\ingest\index.test.ts`
+  passed `4` tests.
+- Full chat UI test suite:
+  `npm run test`
+  passed `233` tests.
+- Chat UI production build:
+  `npm run build`
+  passed; Vite repeated the existing large chunk warning.
+- Targeted authority-matrix readback:
+  `/ingest/lab/noop-runner-transcript` is present as `permission_gated` with
+  `ingest.lab.runner.noop.transcript`, while the full matrix remains
+  `ok: false` because of the same `8` unrelated managed-copies gaps.
+
+Remaining truthful gap:
+
+- This does not implement live runner execution, execute repo commands, consume
+  approvals for repository execution, bind a live sandbox runner, enforce
+  read-only mounts, enforce network isolation, enforce filesystem write
+  isolation, capture real process stdout/stderr, run build/test commands,
+  validate candidates, promote capabilities, or grant Francis authority to
+  execute imported code. The transcript is currently limited to deterministic
+  empty stdout/stderr metadata for a Francis-owned built-in no-op envelope.
+
+### 2026-06-06 - Code-born Lab built-in no-op runner identity binding
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, and Stage
+17 imported-capability supply-chain controls for code-born capability ingestion.
+
+This pass added the next proof boundary after the built-in no-op runner
+transcript: a no-op runner identity-binding artifact. The binding records the
+Francis-owned built-in no-op runner identity and ties it to the completed
+no-op envelope/transcript proof chain, while still avoiding live runner binding,
+sandbox runner binding, repository command execution, real process output
+capture, candidate validation, and capability promotion.
+
+Material truth now visible:
+
+- `LabNoopRunnerIdentityBinding` records source/candidate identity, approval id,
+  approval-consumption id, synthetic execution receipt id, completed no-op
+  transcript id/path/snapshot, completed no-op envelope id/path/snapshot, runner
+  identity details, required/current checks, blockers, receipts, and explicit
+  no-execution/no-validation flags.
+- `IngestService.bind_lab_noop_runner_identity(...)` writes
+  `lab_noop_runner_identity_bindings/<id>.json` only when the completed
+  built-in no-op transcript and envelope exist for the consumed synthetic
+  approval evidence and source/candidate identity still matches.
+- Repeat identity binding for the same completed no-op transcript blocks before
+  overwriting the completed identity artifact.
+- The bound runner identity is limited to `francis.lab.runner.builtin_noop.v0`
+  and explicitly denies repository command execution, dependency install,
+  repository build/test execution, real process output capture, network access,
+  source writes, candidate validation, and capability promotion.
+- CLI `francis lab noop-runner-identity-binding ...` exposes the local operator
+  path.
+- API route `POST /ingest/lab/noop-runner-identity-binding` requires
+  `ingest.lab.runner.noop.identity`; denied API calls stop before
+  identity-binding artifact or ingest receipt writes.
+- Aggregate ingest readback and the Code Ingest UI include no-op runner identity
+  binding records and counts.
+- Canonical capability, roadmap, architecture, build-order, and code-born
+  ingestion docs now register the identity binding as a no-execution proof
+  boundary, not as live runner binding or sandbox runner binding.
+
+Latest validation:
+
+- Focused ingest/API tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  passed after the final service fix/format.
+- Targeted mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  passed with no issues in `11` source files.
+- Ruff lint:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check src\francis\ingest\models.py src\francis\ingest\service.py src\francis\ingest\__init__.py src\francis\ingest\registry.py src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed after formatting `src/francis/ingest/models.py`,
+  `src/francis/ingest/service.py`, and `tests/test_api_ingest.py`.
+- Focused ingest UI parser test:
+  `node --test --experimental-strip-types apps\chat_ui\src\ingest\index.test.ts`
+  passed `4` tests.
+- Full chat UI test suite:
+  `npm run test`
+  passed `233` tests.
+- Chat UI production build:
+  `npm run build`
+  passed; Vite repeated the existing large chunk warning.
+- Targeted authority-matrix readback:
+  `/ingest/lab/noop-runner-identity-binding` is present as `permission_gated`
+  with `ingest.lab.runner.noop.identity`, while the full matrix remains
+  `ok: false` because of the same `8` unrelated managed-copies gaps.
+- Diff whitespace check:
+  `git diff --check`
+  exited `0`; Git warned that `docs/canonical/ROADMAP.md` will normalize CRLF
+  to LF the next time Git touches it.
+
+Remaining truthful gap:
+
+- This does not implement live runner execution, execute repo commands, consume
+  approvals for repository execution, bind a live sandbox runner, enforce
+  read-only mounts, enforce network isolation, enforce filesystem write
+  isolation, capture real process stdout/stderr, run build/test commands,
+  validate candidates, promote capabilities, or grant Francis authority to
+  execute imported code. The identity binding is currently limited to the
+  Francis-owned built-in no-op runner identity after a completed no-op
+  envelope/transcript proof chain.
+
+### 2026-06-06 - Code-born Lab source-mount readiness preflight
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, and Stage
+17 imported-capability supply-chain controls for code-born capability ingestion.
+
+This pass added the next proof boundary after the built-in no-op runner identity
+binding: a source-mount readiness artifact. The record confirms the existing
+empty Lab workspace source reference remains `reference_only_read_only` and ties
+that source reference to the completed no-op runner identity proof chain, while
+still avoiding live readonly source mount binding, mount enforcement, source
+copying, source writes, repository command execution, candidate validation, and
+capability promotion.
+
+Material truth now visible:
+
+- `LabSourceMountReadiness` records source/candidate identity, approval id,
+  approval-consumption id, synthetic execution receipt id, Lab workspace id/path,
+  source reference snapshot, no-op runner identity binding id/path/snapshot,
+  required/current checks, missing checks, blockers, receipts, and explicit
+  no-execution/no-validation/no-mount-enforcement flags.
+- `IngestService.preflight_lab_source_mount_readiness(...)` writes
+  `lab_source_mount_readiness/<id>.json` after resolving the source/candidate,
+  preparing the empty Lab workspace, and finding the completed built-in no-op
+  identity chain for the consumed synthetic/no-op approval evidence.
+- The record can become `ready` only for the readback/precondition check. It
+  still records `read_only_mount_bound: false`, `source_mount_enforced: false`,
+  `source_copied: false`, `source_write_allowed: false`, `execution_authority:
+  false`, `executed: false`, `candidate_validated: false`, and
+  `capability_promoted: false`.
+- CLI `francis lab source-mount-readiness ...` exposes the local operator path.
+- API route `POST /ingest/lab/source-mount-readiness` requires
+  `ingest.lab.source_mount.readiness`; denied API calls stop before readiness
+  artifact or ingest receipt writes.
+- Aggregate ingest readback and the Code Ingest UI include source-mount
+  readiness records and counts.
+- Canonical capability, roadmap, architecture, build-order, build-manifest, and
+  code-born ingestion docs now register source-mount readiness as a source
+  reference proof, not as live source mount binding or enforcement.
+
+Latest validation:
+
+- Focused ingest/API tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  passed.
+- Targeted mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  passed with no issues in `11` source files.
+- Ruff lint:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check src\francis\ingest\models.py src\francis\ingest\service.py src\francis\ingest\__init__.py src\francis\ingest\registry.py src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed after formatting one touched Python file.
+- Focused ingest UI parser test:
+  `node --test --experimental-strip-types apps\chat_ui\src\ingest\index.test.ts`
+  passed `4` tests.
+- Full chat UI test suite:
+  `npm run test`
+  passed `233` tests.
+- Chat UI production build:
+  `npm run build`
+  passed; Vite repeated the existing large chunk warning.
+- Targeted authority-matrix readback:
+  `/ingest/lab/source-mount-readiness` is present as `permission_gated` with
+  `ingest.lab.source_mount.readiness`, while the full matrix remains `ok: false`
+  because of the same `8` unrelated managed-copies gaps.
+- Diff whitespace check:
+  `git diff --check`
+  exited `0`; Git warned that `docs/canonical/ROADMAP.md` will normalize CRLF
+  to LF the next time Git touches it.
+
+Remaining truthful gap:
+
+- This does not implement live runner execution, execute repo commands, consume
+  approvals for repository execution, bind or enforce a live readonly source
+  mount, copy arbitrary source trees into the Lab, bind a live sandbox runner,
+  enforce network isolation, enforce filesystem write isolation, capture real
+  process stdout/stderr, run build/test commands, validate candidates, promote
+  capabilities, or grant Francis authority to execute imported code. The
+  readiness record is currently limited to checking the existing read-only
+  source reference and the completed Francis-owned no-op identity proof chain.
 
 ### 2026-06-05 - Stage 17 operator proposal-evidence refs record capability catalog chunk 10
 
@@ -66924,6 +68969,2086 @@ Remaining truthful gap:
   2082 capability evidence refs, close Stage 18, create managed copies, write
   managed-copy receipts, enforce tenant isolation, export safe deltas, activate
   SLAs, bind roles, or decommission tenant state.
+
+### 2026-06-06 - Code-born Lab source-mount contract preflight
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, and Stage
+17 imported-capability supply-chain controls for code-born capability ingestion.
+
+This pass added the next proof boundary after source-mount readiness: a
+source-mount contract artifact. The record declares the future read-only source
+mount contract and required enforcement controls while explicitly keeping live
+mount binding, mount enforcement, source copying, source writes, repository
+command execution, candidate validation, and capability promotion false.
+
+Material truth now visible:
+
+- `LabSourceMountContract` records source/candidate identity, approval id,
+  workspace id/path, source-mount readiness id/path/snapshot, source reference
+  snapshot, contract payload, required/current checks, missing checks, blockers,
+  receipts, and explicit no-execution/no-validation/no-live-mount flags.
+- `IngestService.preflight_lab_source_mount_contract(...)` writes
+  `lab_source_mount_contracts/<id>.json` after resolving the source/candidate
+  through the existing source-mount readiness path.
+- The contract can become `ready` only as a contract declaration artifact. It
+  still records `live_mount_bound: false`, `mount_enforced: false`,
+  `read_only_mount_bound: false`, `source_copied: false`,
+  `source_write_allowed: false`, `execution_authority: false`, `executed:
+  false`, `candidate_validated: false`, and `capability_promoted: false`.
+- CLI `francis lab source-mount-contract ...` exposes the local operator path.
+- API route `POST /ingest/lab/source-mount-contract` requires
+  `ingest.lab.source_mount.contract`; denied API calls stop before contract
+  artifact or ingest receipt writes.
+- Aggregate ingest readback and the Code Ingest UI include source-mount contract
+  records and counts.
+- Canonical capability, roadmap, architecture, build-order, build-manifest, and
+  code-born ingestion docs now register source-mount contracts as future mount
+  declarations, not live source mount binding or enforcement.
+
+Latest validation:
+
+- Focused ingest/API tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  passed after fixing a service-local `_safe_list` helper gap found by the first
+  run.
+- Targeted mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  passed with no issues in `11` source files.
+- Ruff lint:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check src\francis\ingest\models.py src\francis\ingest\service.py src\francis\ingest\__init__.py src\francis\ingest\registry.py src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed after formatting one touched Python file.
+- Focused ingest UI parser test:
+  `node --test --experimental-strip-types apps\chat_ui\src\ingest\index.test.ts`
+  passed `4` tests.
+- Full chat UI test suite:
+  `npm run test`
+  passed `233` tests.
+- Chat UI production build:
+  `npm run build`
+  passed; Vite repeated the existing large chunk warning.
+- Targeted authority-matrix readback:
+  `/ingest/lab/source-mount-contract` is present as `permission_gated` with
+  `ingest.lab.source_mount.contract`, while the full matrix remains `ok: false`
+  because of the same `8` unrelated managed-copies gaps.
+- Diff whitespace check:
+  `git diff --check`
+  exited `0`; Git warned that `docs/canonical/ROADMAP.md` will normalize CRLF
+  to LF the next time Git touches it.
+
+Remaining truthful gap:
+
+- This does not implement live runner execution, execute repo commands, consume
+  approvals for repository execution, bind or enforce a live readonly source
+  mount, copy arbitrary source trees into the Lab, bind a live sandbox runner,
+  enforce network isolation, enforce filesystem write isolation, capture real
+  process stdout/stderr, run build/test commands, validate candidates, promote
+  capabilities, or grant Francis authority to execute imported code. The
+  contract record is currently limited to declaring a future read-only source
+  mount boundary and the controls still required before such a mount can be
+  trusted.
+
+### 2026-06-06 - Code-born Lab run-boundary preflight
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, and Stage
+17 imported-capability supply-chain controls for code-born capability ingestion.
+
+This pass added the first aggregate pre-run proof boundary for future governed
+Lab execution. The run-boundary preflight composes the existing source-mount
+contract, sandbox-readiness, command-allowlist enforcement, execution-receipt
+writer, and approval-handoff readbacks into one receipt-backed artifact while
+continuing to deny repository execution.
+
+Material truth now visible:
+
+- `LabRunBoundaryPreflight` records source/candidate identity, approval id,
+  workspace id/path, source-mount contract id/snapshot, execution-receipt writer
+  preflight id/snapshot, sandbox-readiness id/snapshot, command-allowlist
+  enforcement id/snapshot, approval-handoff id/snapshot, required/current
+  checks, missing checks, blockers, receipts, and explicit no-execution,
+  no-validation, and no-promotion flags.
+- `IngestService.preflight_lab_run_boundary(...)` writes
+  `lab_run_boundary_preflights/<id>.json` and an ingest receipt after resolving
+  the source/candidate through the existing proof chain.
+- The artifact remains `blocked` until live read-only source-mount enforcement,
+  path and symlink escape denial, sandbox provider binding, workspace write
+  policy, resource limits, timeout policy, stdout/stderr capture, kill switch,
+  command allowlist enforcement, execution-receipt writer binding, and approval
+  consumption controls are actually bound.
+- CLI `francis lab run-boundary-preflight ...` exposes the local operator path.
+- API route `POST /ingest/lab/run-boundary-preflight` requires
+  `ingest.lab.run_boundary.preflight`; denied API calls stop before boundary
+  artifact or receipt writes.
+- Aggregate ingest readback and the Code Ingest UI include run-boundary
+  preflight records and counts.
+- Canonical capability, roadmap, architecture, build-order, build-manifest, and
+  code-born ingestion docs now register run-boundary preflights as a future Lab
+  control aggregate, not a live runner or sandbox implementation.
+
+Latest validation:
+
+- Focused ingest/API tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  passed after fixing a service-local run-boundary payload reference found by
+  the first run.
+- Targeted mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  passed with no issues in `11` source files.
+- Ruff lint:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check src\francis\ingest\models.py src\francis\ingest\service.py src\francis\ingest\__init__.py src\francis\ingest\registry.py src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed after formatting one touched Python file.
+- Focused ingest UI parser test:
+  `node --test --experimental-strip-types apps\chat_ui\src\ingest\index.test.ts`
+  passed `4` tests.
+- Full chat UI test suite:
+  `npm run test`
+  passed `233` tests.
+- Chat UI production build:
+  `npm run build`
+  passed; Vite repeated the existing large chunk warning.
+- Targeted authority-matrix readback:
+  `/ingest/lab/run-boundary-preflight` is present as `permission_gated` with
+  `ingest.lab.run_boundary.preflight`, while the full matrix remains `ok:
+  false` because of the same `8` unrelated managed-copies gaps.
+- Diff whitespace check:
+  `git diff --check` exited `0`; Git warned that
+  `docs/canonical/ROADMAP.md` will normalize CRLF to LF the next time Git
+  touches it.
+
+Remaining truthful gap:
+
+- This does not implement live runner execution, execute repo commands, consume
+  approvals for repository execution, bind or enforce a live readonly source
+  mount, copy arbitrary source trees into the Lab, bind or enforce a live
+  sandbox runner, enforce network isolation, enforce filesystem write
+  isolation, capture real process stdout/stderr, run build/test commands, write
+  execution receipts, validate candidates, promote capabilities, or grant
+  Francis authority to execute imported code. The run-boundary record is
+  currently limited to proving which controls are still missing before a future
+  guarded rebuild/run/test loop can exist.
+
+### 2026-06-06 - Code-born Lab sandbox provider contract preflight
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, and Stage
+17 imported-capability supply-chain controls for code-born capability ingestion.
+
+This pass added the first explicit sandbox provider contract artifact for future
+governed Lab execution. The record depends on runner sandbox readiness and
+declares the provider boundary and required enforcement controls while keeping
+provider binding, sandbox enforcement, runner binding, process launch, command
+execution, approval consumption, execution receipts, validation, and promotion
+false.
+
+Material truth now visible:
+
+- `LabSandboxProviderContract` records source/candidate identity, approval id,
+  workspace id/path, sandbox-readiness id/snapshot, provider contract payload,
+  required/current checks, missing checks, blockers, receipts, and explicit
+  no-execution/no-validation/no-promotion posture.
+- `IngestService.preflight_lab_sandbox_provider_contract(...)` writes
+  `lab_sandbox_provider_contracts/<id>.json` and an ingest receipt after
+  resolving the source/candidate through runner sandbox readiness.
+- `LabRunBoundaryPreflight` now snapshots the sandbox provider contract and
+  requires `sandbox_provider_contract_present`,
+  `sandbox_provider_contract_ready`, `sandbox_provider_contract_declared`, and
+  `sandbox_provider_bound` before it can become ready.
+- CLI `francis lab sandbox-provider-contract ...` exposes the local operator
+  path.
+- API route `POST /ingest/lab/sandbox-provider-contract` requires
+  `ingest.lab.sandbox.provider_contract`; denied API calls stop before provider
+  contract artifact or receipt writes.
+- Aggregate ingest readback and the Code Ingest UI include sandbox provider
+  contract records and counts.
+- Canonical capability, roadmap, architecture, build-order, build-manifest, and
+  code-born ingestion docs now register sandbox provider contracts as future
+  provider-boundary declarations, not live sandbox binding or execution.
+
+Latest validation:
+
+- Focused ingest/API tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  passed.
+- Targeted mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  passed with no issues in `11` source files.
+- Ruff lint:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check src\francis\ingest\models.py src\francis\ingest\service.py src\francis\ingest\__init__.py src\francis\ingest\registry.py src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed after formatting two touched Python files.
+- Focused ingest UI parser test:
+  `node --test --experimental-strip-types apps\chat_ui\src\ingest\index.test.ts`
+  passed `4` tests.
+- Full chat UI test suite:
+  `npm run test`
+  passed `233` tests.
+- Chat UI production build:
+  `npm run build`
+  passed; Vite repeated the existing large chunk warning.
+- Targeted authority-matrix readback:
+  `/ingest/lab/sandbox-provider-contract` is present as `permission_gated` with
+  `ingest.lab.sandbox.provider_contract`, while the full matrix remains `ok:
+  false` because of the same `8` unrelated managed-copies gaps.
+- Diff whitespace check:
+  `git diff --check` exited `0`; Git warned that
+  `docs/canonical/ROADMAP.md` will normalize CRLF to LF the next time Git
+  touches it.
+
+Remaining truthful gap:
+
+- This does not bind or enforce a live sandbox provider, launch a process,
+  execute repo commands, consume approvals for repository execution, bind or
+  enforce a live readonly source mount, copy arbitrary source trees into the
+  Lab, enforce network isolation, enforce filesystem write isolation, capture
+  real process stdout/stderr, run build/test commands, write execution receipts,
+  validate candidates, promote capabilities, or grant Francis authority to
+  execute imported code. The provider contract record is currently limited to
+  proving which provider controls are still missing before a future governed
+  runner can exist.
+
+### 2026-06-06 - Code-born Lab sandbox provider binding preflight
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, and Stage
+17 imported-capability supply-chain controls for code-born capability ingestion.
+
+This pass added the next blocked Lab preflight after sandbox provider contracts:
+a sandbox provider binding checklist. It records the future provider-selection
+and provider-binding controls that must exist before Francis can execute
+imported repository code, while keeping provider selection, provider
+binary/service verification, provider policy binding, live provider binding,
+sandbox enforcement, process launch, command execution, approval consumption,
+execution receipts, validation, and promotion false.
+
+Material truth now visible:
+
+- `LabSandboxProviderBindingPreflight` records source/candidate identity,
+  approval id, workspace id/path, sandbox-readiness snapshot, sandbox provider
+  contract snapshot, provider-binding payload, required/current/missing checks,
+  blockers, receipts, and explicit no-execution/no-validation/no-promotion
+  posture.
+- `IngestService.preflight_lab_sandbox_provider_binding(...)` writes
+  `lab_sandbox_provider_bindings/<id>.json` and an ingest receipt after
+  resolving the source/candidate through sandbox provider contract preflight.
+- `LabRunBoundaryPreflight` now snapshots the sandbox provider binding preflight
+  and requires `sandbox_provider_binding_present` and
+  `sandbox_provider_binding_ready` before any future run boundary can be ready.
+- CLI `francis lab sandbox-provider-binding ...` exposes the local operator
+  path.
+- API route `POST /ingest/lab/sandbox-provider-binding` requires
+  `ingest.lab.sandbox.provider_binding`; denied API calls stop before provider
+  binding artifact or receipt writes.
+- Aggregate ingest readback and the Code Ingest UI include sandbox provider
+  binding preflight records and counts.
+- Canonical capability, roadmap, architecture, build-order, build-manifest, and
+  code-born ingestion docs now register sandbox provider binding preflights as
+  provider-selection/binding checklists, not live sandbox binding or execution.
+
+Latest validation:
+
+- Focused ingest/API tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  passed.
+- Targeted mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  passed with no issues in `11` source files.
+- Ruff lint:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check src\francis\ingest\models.py src\francis\ingest\service.py src\francis\ingest\__init__.py src\francis\ingest\registry.py src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Focused ingest UI parser test:
+  `node --test --experimental-strip-types apps\chat_ui\src\ingest\index.test.ts`
+  passed `4` tests.
+- Full chat UI test suite:
+  `npm run test`
+  passed.
+- Chat UI production build:
+  `npm run build`
+  passed; Vite repeated the existing large chunk warning.
+- Targeted authority-matrix readback:
+  `/ingest/lab/sandbox-provider-binding` is present as `permission_gated` with
+  `ingest.lab.sandbox.provider_binding`, while the full matrix remains `ok:
+  false` because of the same unrelated managed-copies gaps.
+- Diff whitespace check:
+  `git diff --check` exited `0`; Git warned that
+  `docs/canonical/ROADMAP.md` will normalize CRLF to LF the next time Git
+  touches it.
+
+Remaining truthful gap:
+
+- This does not select, verify, bind, or enforce a live sandbox provider, launch
+  a process, execute repo commands, consume approvals for repository execution,
+  bind or enforce a live readonly source mount, copy arbitrary source trees into
+  the Lab, enforce network isolation, enforce filesystem write isolation,
+  capture real process stdout/stderr, run build/test commands, write execution
+  receipts, validate candidates, promote capabilities, or grant Francis
+  authority to execute imported code. The provider binding preflight is
+  currently limited to proving which provider-selection and provider-binding
+  controls are still missing before a future governed runner can exist.
+
+### 2026-06-06 - Code-born Lab sandbox provider selection preflight
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, and Stage
+17 imported-capability supply-chain controls for code-born capability ingestion.
+
+This pass added the next blocked Lab preflight after sandbox provider binding:
+a sandbox provider selection and local reference metadata record. It can record
+a requested provider kind, a local provider reference path/name, and an optional
+provider policy manifest path as metadata-only evidence, while keeping provider
+binary/service verification, live provider binding, sandbox enforcement, process
+launch, service queries, container launch, command execution, approval
+consumption, execution receipts, validation, and promotion false.
+
+Material truth now visible:
+
+- `LabSandboxProviderSelectionPreflight` records source/candidate identity,
+  approval id, workspace id/path, sandbox provider binding snapshot,
+  provider-selection policy payload, local provider reference metadata,
+  provider policy manifest metadata, required/current/missing checks, blockers,
+  receipts, and explicit no-execution/no-validation/no-promotion posture.
+- `IngestService.preflight_lab_sandbox_provider_selection(...)` writes
+  `lab_sandbox_provider_selections/<id>.json` and an ingest receipt after
+  resolving the source/candidate through sandbox provider binding preflight.
+- Provider reference handling is metadata-only: it may check whether a local
+  path/name exists, but it does not execute provider binaries, query services,
+  launch containers, or read arbitrary provider contents.
+- `LabRunBoundaryPreflight` now snapshots the sandbox provider selection
+  preflight and requires `sandbox_provider_selection_present`,
+  `sandbox_provider_selection_ready`, `provider_kind_selected`,
+  `provider_reference_verified`, `provider_binary_or_service_verified`, and
+  `provider_policy_manifest_bound` before any future run boundary can be ready.
+- CLI `francis lab sandbox-provider-selection ...` exposes the local operator
+  path with `--provider-kind`, `--provider-reference`, and
+  `--provider-policy-manifest` metadata flags.
+- API route `POST /ingest/lab/sandbox-provider-selection` requires
+  `ingest.lab.sandbox.provider_selection`; denied API calls stop before
+  provider selection artifact or receipt writes.
+- Aggregate ingest readback and the Code Ingest UI include sandbox provider
+  selection preflight records and counts.
+- Canonical capability, roadmap, architecture, build-order, build-manifest, and
+  code-born ingestion docs now register sandbox provider selection preflights as
+  metadata-only provider selection/reference records, not live sandbox binding
+  or execution.
+
+Latest validation:
+
+- Focused ingest/API tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  passed.
+- Targeted mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  passed with no issues in `11` source files.
+- Ruff lint:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Focused ingest UI parser test:
+  `node --test --experimental-strip-types apps\chat_ui\src\ingest\index.test.ts`
+  passed `4` tests.
+- Full chat UI test suite:
+  `npm run test`
+  passed `233` tests.
+- Chat UI production build:
+  `npm run build`
+  passed; Vite repeated the existing large chunk warning.
+- Targeted authority-matrix readback:
+  `/ingest/lab/sandbox-provider-selection` is present as `permission_gated`
+  with `ingest.lab.sandbox.provider_selection`, while the full matrix remains
+  `ok: false` because of the same unrelated managed-copies gaps.
+
+Remaining truthful gap:
+
+- This does not verify, bind, or enforce a live sandbox provider, launch a
+  process, query a service, launch a container, execute repo commands, consume
+  approvals for repository execution, bind or enforce a live readonly source
+  mount, copy arbitrary source trees into the Lab, enforce network isolation,
+  enforce filesystem write isolation, capture real process stdout/stderr, run
+  build/test commands, write execution receipts, validate candidates, promote
+  capabilities, or grant Francis authority to execute imported code. The
+  provider selection preflight is currently limited to metadata-only provider
+  selection/reference proof and missing-control evidence.
+
+### 2026-06-06 - Code-born Lab sandbox provider verifier preflight
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, and Stage
+17 imported-capability supply-chain controls for code-born capability ingestion.
+
+This pass added the next blocked Lab preflight after sandbox provider
+selection: a sandbox provider verifier contract record. It records the selected
+provider metadata, declares the future verifier contract, and proves which
+identity, policy, receipt, runtime-probe, version, fingerprint, binding, and
+enforcement controls are still missing before Francis can trust a sandbox
+provider for repository execution.
+
+Material truth now visible:
+
+- `LabSandboxProviderVerifierPreflight` records source/candidate identity,
+  approval id, workspace id/path, sandbox provider selection snapshot, provider
+  kind/reference/manifest metadata, verifier contract payload, required/current
+  checks, missing checks, blockers, receipts, and explicit no-execution,
+  no-validation, and no-promotion posture.
+- `IngestService.preflight_lab_sandbox_provider_verifier(...)` writes
+  `lab_sandbox_provider_verifier_preflights/<id>.json` and an ingest receipt
+  after resolving the source/candidate through sandbox provider selection
+  preflight.
+- The verifier contract is declaration-only. Francis does not execute provider
+  binaries, query provider services, launch containers, bind a sandbox provider,
+  enforce a sandbox, run repository code, consume repository-execution approval,
+  or write execution receipts during this preflight.
+- `LabRunBoundaryPreflight` now snapshots the sandbox provider verifier
+  preflight and requires `sandbox_provider_verifier_present`,
+  `sandbox_provider_verifier_ready`, `verifier_contract_declared`,
+  `verifier_implementation_bound`, `verifier_identity_bound`, and
+  `provider_binary_or_service_verified` before any future run boundary can be
+  ready.
+- CLI `francis lab sandbox-provider-verifier ...` exposes the local operator
+  path with the same provider metadata flags as provider selection.
+- API route `POST /ingest/lab/sandbox-provider-verifier` requires
+  `ingest.lab.sandbox.provider_verifier`; denied API calls stop before verifier
+  artifact or receipt writes.
+- Aggregate ingest readback and the Code Ingest UI include sandbox provider
+  verifier preflight records and counts.
+- Canonical capability, roadmap, architecture, build-order, build-manifest, and
+  code-born ingestion docs now register sandbox provider verifier preflights as
+  verifier-contract records, not live provider verification, sandbox binding,
+  or execution.
+
+Latest validation:
+
+- Focused ingest/API tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  passed.
+- Targeted mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  passed with no issues in `11` source files.
+- Ruff lint:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check src\francis\ingest\models.py src\francis\ingest\service.py src\francis\ingest\__init__.py src\francis\ingest\registry.py src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed after formatting touched Python files.
+- Focused ingest UI parser test:
+  `node --test --experimental-strip-types apps\chat_ui\src\ingest\index.test.ts`
+  passed `4` tests.
+- Full chat UI test suite:
+  `npm run test`
+  passed `233` tests.
+- Chat UI production build:
+  `npm run build`
+  passed; Vite repeated the existing large chunk warning.
+- Targeted authority-matrix readback:
+  `/ingest/lab/sandbox-provider-verifier` is present as `permission_gated`
+  with `ingest.lab.sandbox.provider_verifier`, while the full matrix remains
+  `ok: false` because of the same `8` unrelated managed-copies gaps.
+- Diff whitespace check:
+  `git diff --check` exited `0`; Git warned that
+  `docs/canonical/ROADMAP.md` will normalize CRLF to LF the next time Git
+  touches it.
+
+Remaining truthful gap:
+
+- This does not implement a real sandbox provider verifier, verify provider
+  binaries or services, query provider services, launch containers, capture
+  provider version or identity fingerprints, bind or enforce a live sandbox
+  provider, launch a process, execute repo commands, consume approvals for
+  repository execution, bind or enforce a live readonly source mount, copy
+  arbitrary source trees into the Lab, enforce network isolation, enforce
+  filesystem write isolation, capture real process stdout/stderr, run build/test
+  commands, write execution receipts, validate candidates, promote
+  capabilities, or grant Francis authority to execute imported code. The
+  provider verifier preflight is currently limited to verifier-contract proof
+  and missing-control evidence.
+
+### 2026-06-06 - Code-born Lab sandbox provider static verifier evidence
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, and Stage
+17 imported-capability supply-chain controls for code-born capability ingestion.
+
+This pass advanced the sandbox provider verifier from declaration-only proof to
+bounded static evidence capture. The verifier can now hash a local provider
+reference, summarize a policy manifest without storing secret values, record a
+declared provider version, bind the Francis static verifier identity, and write
+the evidence into the existing verifier preflight artifact and receipt. It still
+does not runtime-probe providers or grant execution authority.
+
+Material truth now visible:
+
+- `LabSandboxProviderVerifierPreflight` now includes `verifier_identity`,
+  `provider_identity`, `provider_policy_manifest`, and
+  `provider_runtime_probe` readback fields.
+- `IngestService.preflight_lab_sandbox_provider_verifier(...)` now runs a
+  static identity/policy verifier in
+  `static_identity_policy_verification_no_execution` mode. For local provider
+  references it captures SHA-256 fingerprints without persisting file contents;
+  for policy manifests it captures a manifest hash, safe top-level key summary,
+  declared provider version, and network/execution-disabled booleans while
+  filtering sensitive-looking keys and never storing secret values.
+- The verifier can set `verifier_implementation_bound`,
+  `verifier_identity_bound`, `verifier_policy_bound`,
+  `verifier_receipt_contract_bound`,
+  `provider_reference_fingerprint_captured`,
+  `provider_policy_manifest_hash_captured`,
+  `provider_binary_or_service_verified`,
+  `provider_version_captured`, and
+  `provider_identity_fingerprint_captured` when the static evidence is present.
+- Runtime probing remains explicitly false:
+  `provider_runtime_probe_performed`, `service_query_performed`,
+  `process_launched`, `container_launched`, `sandbox_provider_bound`,
+  `sandbox_enforced`, `execution_authority`, `executed`,
+  `repo_code_executed`, `network_accessed`, and `wrote_to_repo` all remain
+  false.
+- Run-boundary preflight now benefits from the static verifier implementation
+  and identity evidence, but still remains blocked until runtime provider
+  probing, live provider binding, sandbox enforcement, source mount enforcement,
+  command allowlist enforcement, receipt writer binding, and approval
+  consumption are governed and proven.
+- The API authority matrix now describes
+  `/ingest/lab/sandbox-provider-verifier` as static identity/policy verifier
+  evidence, not provider runtime probing or execution.
+- Canonical capability, roadmap, architecture, build-order, build-manifest, and
+  code-born ingestion docs now distinguish static verifier evidence from live
+  sandbox provider verification/binding.
+
+Latest validation:
+
+- Focused ingest/API tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  passed.
+- Targeted mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  passed with no issues in `11` source files.
+- Ruff lint:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check src\francis\ingest\models.py src\francis\ingest\service.py src\francis\ingest\__init__.py src\francis\ingest\registry.py src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Focused ingest UI parser test:
+  `node --test --experimental-strip-types apps\chat_ui\src\ingest\index.test.ts`
+  passed `4` tests.
+- Full chat UI test suite:
+  `npm run test`
+  passed `233` tests.
+- Chat UI production build:
+  `npm run build`
+  passed; Vite repeated the existing large chunk warning.
+- Targeted authority-matrix readback:
+  `/ingest/lab/sandbox-provider-verifier` is present as `permission_gated`
+  with `ingest.lab.sandbox.provider_verifier`, while the full matrix remains
+  `ok: false` because of the same `8` unrelated managed-copies gaps.
+
+Remaining truthful gap:
+
+- This does not runtime-probe providers, execute provider binaries, query
+  provider services, launch containers, bind or enforce a live sandbox provider,
+  launch a process, execute repo commands, consume approvals for repository
+  execution, bind or enforce a live readonly source mount, copy arbitrary source
+  trees into the Lab, enforce network isolation, enforce filesystem write
+  isolation, capture real process stdout/stderr, run build/test commands, write
+  execution receipts, validate candidates, promote capabilities, or grant
+  Francis authority to execute imported code. Static provider fingerprints and
+  policy-manifest hashes are evidence only.
+
+### 2026-06-06 - Code-born Lab sandbox provider runtime-probe contract preflight
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, and Stage
+17 imported-capability supply-chain controls for code-born capability ingestion.
+
+This pass adds the next contract-only step after static sandbox provider
+verifier evidence. Francis can now create a blocked sandbox provider
+runtime-probe preflight record that declares the future provider probe
+authorization, timeout, network-blocking, workspace-isolation, receipt, and
+repository-execution separation controls. The preflight depends on static
+verifier readback but still performs no provider runtime probing.
+
+Material truth now visible:
+
+- `LabSandboxProviderRuntimeProbePreflight` records the runtime-probe contract,
+  required/current/missing checks, upstream verifier evidence, blocker list,
+  receipt refs, and explicit false execution flags.
+- `IngestService.preflight_lab_sandbox_provider_runtime_probe(...)` writes
+  `lab_sandbox_provider_runtime_probe_preflights` artifacts and
+  `lab.sandbox.provider_runtime_probe.preflight` ingest receipts while keeping
+  provider binary execution, provider service queries, container launch,
+  sandbox provider binding, approval consumption, execution authority,
+  repository execution, network access, and repo writes false.
+- Run-boundary preflight now includes sandbox provider runtime-probe readback as
+  an explicit dependency and remains blocked when the runtime probe has not
+  actually been performed.
+- The CLI exposes
+  `francis lab sandbox-provider-runtime-probe <source> <candidate> <approval-id>`
+  with provider metadata options.
+- The permission-gated API exposes
+  `POST /ingest/lab/sandbox-provider-runtime-probe` with
+  `ingest.lab.sandbox.provider_runtime_probe` scope.
+- `GET /ingest/readback` and the Code Ingest UI parser/panel expose runtime
+  probe preflight counts, artifacts, and blockers without writing receipts or
+  artifacts from readback.
+- Canonical capability, roadmap, architecture, build-order, build-manifest, and
+  code-born ingestion docs now distinguish runtime-probe contract preflight from
+  static verifier evidence and from live provider probing.
+
+Latest validation:
+
+- Focused ingest/API tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  passed.
+- Targeted mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  passed with no issues in `11` source files.
+- Ruff lint:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check src\francis\ingest\models.py src\francis\ingest\service.py src\francis\ingest\__init__.py src\francis\ingest\registry.py src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Focused ingest UI parser test:
+  `node --test --experimental-strip-types apps\chat_ui\src\ingest\index.test.ts`
+  passed `4` tests.
+- Full chat UI test suite:
+  `npm run test`
+  passed `233` tests.
+- Chat UI production build:
+  `npm run build`
+  passed; Vite repeated the existing large chunk warning.
+- Targeted authority-matrix readback:
+  `/ingest/lab/sandbox-provider-runtime-probe` is present as
+  `permission_gated` with `ingest.lab.sandbox.provider_runtime_probe`, while the
+  full matrix remains `ok: false` because of the same `8` unrelated
+  managed-copies gaps.
+
+Remaining truthful gap:
+
+- This does not runtime-probe providers, execute provider binaries, query
+  provider services, launch containers, bind or enforce a live sandbox provider,
+  launch a process, execute repo commands, consume approvals for repository
+  execution, bind or enforce a live readonly source mount, copy arbitrary source
+  trees into the Lab, enforce network isolation, enforce filesystem write
+  isolation, capture real process stdout/stderr, run build/test commands, write
+  execution receipts, validate candidates, promote capabilities, or grant
+  Francis authority to execute imported code. Runtime-probe preflight artifacts
+  are contract evidence only.
+
+### 2026-06-06 - Code-born Lab run-boundary runner-enforcement evidence
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, and Stage
+17 imported-capability supply-chain controls for code-born capability ingestion.
+
+This pass hardens the aggregate run-boundary preflight by making sandbox
+provider runtime-probe runner enforcement evidence part of the boundary record.
+The boundary still remains a blocked preflight artifact and does not enforce a
+runner, probe a provider, bind a sandbox provider, launch a process, or execute
+repository code.
+
+Material truth now visible:
+
+- `LabRunBoundaryPreflight` now records
+  `sandbox_provider_runtime_probe_runner_enforcement_id`, snapshots the
+  enforcement artifact, and exposes
+  `sandbox_provider_runtime_probe_runner_enforcement_ready`,
+  `runtime_probe_runner_enforcement_contract_declared`, and
+  `runtime_probe_runner_enforcement_bound`.
+- `IngestService.preflight_lab_run_boundary(...)` now drives the existing
+  sandbox provider runtime-probe runner enforcement preflight, loads the older
+  provider artifacts by ids recorded in that enforcement artifact, and requires
+  enforcement-present, enforcement-ready, enforcement-contract-declared, and
+  enforcement-bound checks before a future run boundary can be ready.
+- The run-boundary receipt input hashes now include the updated contract/current
+  checks, and the boundary validation list includes runtime-probe runner
+  enforcement readback/checks while keeping provider probes, process/container
+  launch, approval consumption, execution authority, repository execution,
+  network access, repo writes, execution receipt writes, validation, and
+  promotion false.
+- API/readback/UI tests now assert the enforcement id linkage, missing
+  enforcement-bound checks, and the updated visible blocker order.
+- Canonical capability, roadmap, build-order, build-manifest, and code-born
+  ingestion docs now describe runtime-probe runner enforcement evidence as part
+  of the current run-boundary aggregate.
+
+Latest validation:
+
+- Focused ingest/API tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  passed to `[100%]`.
+- Focused mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  passed with no issues in `11` source files.
+- Focused Ruff check:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Focused Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check src\francis\ingest\models.py src\francis\ingest\service.py src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed with `8` files already formatted.
+- Authority-matrix readback confirmed `/ingest/lab/run-boundary-preflight` is
+  present as `permission_gated` with required scope
+  `ingest.lab.run_boundary.preflight` and now names runtime-probe runner
+  enforcement readback in the approval requirement. The full matrix still
+  reports `missing_total: 8` for pre-existing unrelated gaps.
+- Focused ingest UI parser test:
+  `node --test --experimental-strip-types apps\chat_ui\src\ingest\index.test.ts`
+  passed `4` tests.
+- Full UI unit suite:
+  `npm run test` in `apps/chat_ui` passed `233` tests.
+- UI production build:
+  `npm run build` in `apps/chat_ui` passed; Vite emitted its existing
+  large-chunk warning.
+
+Remaining truthful gap:
+
+- This does not runtime-probe providers, execute provider binaries, query
+  provider services, launch processes or containers, bind or enforce a live
+  sandbox provider, bind or run a live probe runner, bind a runtime probe, launch
+  a repository command, consume approvals for repository execution, bind or
+  enforce a live readonly source mount, copy arbitrary source trees into the
+  Lab, enforce network isolation, enforce filesystem write isolation, capture
+  real process stdout/stderr, run build/test commands, write execution receipts,
+  validate candidates, promote capabilities, or grant Francis authority to
+  execute imported code. Run-boundary artifacts remain aggregate preflight
+  evidence only.
+
+### 2026-06-06 - Code-born Lab sandbox provider runtime-probe runner enforcement preflight
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, and Stage
+17 imported-capability supply-chain controls for code-born capability ingestion.
+
+This pass adds the next contract-only step after sandbox provider runtime-probe
+runner binding. Francis can now create a blocked sandbox provider runtime-probe
+runner enforcement preflight record that declares the future probe-runner
+enforcement contract and missing live enforcement, runner binding,
+runtime-probe binding, provider runtime probe, sandbox, network, timeout,
+output-capture, kill-switch, and receipt controls. It depends on
+runtime-probe runner binding readback but does not enforce, bind, probe, or run
+a provider runner.
+
+Material truth now visible:
+
+- `LabSandboxProviderRuntimeProbeRunnerEnforcementPreflight` records upstream
+  runner-binding, runner-readiness, harness, runtime-probe, verifier, selection,
+  provider binding, provider-contract, sandbox, command-allowlist, preflight,
+  plan, workspace, source, and candidate evidence; required/current/missing
+  checks; blocker list; receipt refs; and explicit false
+  execution/probing/write flags.
+- `IngestService.preflight_lab_sandbox_provider_runtime_probe_runner_enforcement(...)`
+  writes `lab_runtime_probe_runner_enforcements` artifacts and
+  `lab.sandbox.provider_runtime_probe_runner.enforcement_preflight` ingest
+  receipts while keeping provider runtime probes, provider binary execution,
+  provider service queries, process launch, container launch, sandbox provider
+  binding, sandbox enforcement, approval consumption, execution authority,
+  repository execution, network access, repo writes, and execution receipt writes
+  false.
+- The CLI exposes
+  `francis lab sandbox-provider-runtime-probe-runner-enforcement <source> <candidate> <approval-id>`
+  with provider metadata options.
+- The permission-gated API exposes
+  `POST /ingest/lab/sandbox-provider-runtime-probe-runner-enforcement` with
+  `ingest.lab.sandbox.provider_runtime_probe_runner_enforcement` scope, and the
+  denial path returns before enforcement artifacts or receipts are written.
+- `GET /ingest/readback` and the Code Ingest UI parser/panel expose runtime
+  probe runner enforcement preflight counts, artifacts, and blockers without
+  writing receipts or artifacts from readback.
+- Canonical capability, roadmap, architecture, build-order, build-manifest, and
+  code-born ingestion docs now distinguish runtime-probe runner enforcement
+  preflight from runner binding and from live provider probing.
+
+Latest validation:
+
+- Focused ingest/API tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  passed to `[100%]`.
+- Focused mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  passed with no issues in `11` source files.
+- Focused Ruff check:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Focused Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check src\francis\ingest\models.py src\francis\ingest\service.py src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed with `8` files already formatted.
+- Authority-matrix readback confirmed
+  `/ingest/lab/sandbox-provider-runtime-probe-runner-enforcement` is present as
+  `permission_gated` with required scope
+  `ingest.lab.sandbox.provider_runtime_probe_runner_enforcement`. The full
+  matrix still reports `missing_total: 8` for pre-existing unrelated gaps.
+- Focused ingest UI parser test:
+  `node --test --experimental-strip-types apps\chat_ui\src\ingest\index.test.ts`
+  passed `4` tests.
+- Full UI unit suite:
+  `npm run test` in `apps/chat_ui` passed `233` tests.
+- UI production build:
+  `npm run build` in `apps/chat_ui` passed; Vite emitted its existing
+  large-chunk warning.
+- Diff hygiene:
+  `git diff --check` passed with only Git's existing ROADMAP CRLF-to-LF warning.
+
+Remaining truthful gap:
+
+- This does not runtime-probe providers, execute provider binaries, query
+  provider services, launch processes or containers, bind or enforce a live
+  sandbox provider, bind or run a live probe runner, bind a runtime probe, launch
+  a repository command, consume approvals for repository execution, bind or
+  enforce a live readonly source mount, copy arbitrary source trees into the
+  Lab, enforce network isolation, enforce filesystem write isolation, capture
+  real process stdout/stderr, run build/test commands, write execution receipts,
+  validate candidates, promote capabilities, or grant Francis authority to
+  execute imported code. Runtime-probe runner enforcement preflight artifacts
+  are contract evidence only.
+
+### 2026-06-06 - Code-born Lab sandbox provider runtime-probe runner binding preflight
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, and Stage
+17 imported-capability supply-chain controls for code-born capability ingestion.
+
+This pass adds the next contract-only step after sandbox provider runtime-probe
+runner readiness. Francis can now create a blocked sandbox provider
+runtime-probe runner binding preflight record that declares the future
+probe-runner binding contract and missing live runner, runtime-probe binding,
+sandbox, network, timeout, output-capture, kill-switch, and receipt controls. It
+depends on runtime-probe runner readiness readback but does not bind or run a
+provider runner.
+
+Material truth now visible:
+
+- `LabSandboxProviderRuntimeProbeRunnerBindingPreflight` records upstream
+  runner-readiness, harness, runtime-probe, verifier, selection, binding,
+  provider-contract, sandbox, command-allowlist, preflight, plan, workspace,
+  source, and candidate evidence; required/current/missing checks; blocker list;
+  receipt refs; and explicit false execution/probing/write flags.
+- `IngestService.preflight_lab_sandbox_provider_runtime_probe_runner_binding(...)`
+  writes `lab_runtime_probe_runner_bindings` artifacts and
+  `lab.sandbox.provider_runtime_probe_runner.binding_preflight` ingest receipts
+  while keeping provider runtime probes, provider binary execution, provider
+  service queries, process launch, container launch, sandbox provider binding,
+  sandbox enforcement, approval consumption, execution authority, repository
+  execution, network access, repo writes, and execution receipt writes false.
+- The CLI exposes
+  `francis lab sandbox-provider-runtime-probe-runner-binding <source> <candidate> <approval-id>`
+  with provider metadata options.
+- The permission-gated API exposes
+  `POST /ingest/lab/sandbox-provider-runtime-probe-runner-binding` with
+  `ingest.lab.sandbox.provider_runtime_probe_runner_binding` scope, and the
+  denial path returns before binding artifacts or receipts are written.
+- `GET /ingest/readback` and the Code Ingest UI parser/panel expose runtime
+  probe runner binding preflight counts, artifacts, and blockers without writing
+  receipts or artifacts from readback.
+- Canonical capability, roadmap, architecture, build-order, build-manifest, and
+  code-born ingestion docs now distinguish runtime-probe runner binding
+  preflight from runner readiness and from live provider probing.
+
+Latest validation:
+
+- Focused ingest/API tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  passed.
+- Focused mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  passed with no issues in `11` source files.
+- Focused Ruff check:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Focused Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed with `14` files already formatted after formatting touched files.
+- Authority-matrix readback confirmed
+  `/ingest/lab/sandbox-provider-runtime-probe-runner-binding` is present as
+  `permission_gated` with required scope
+  `ingest.lab.sandbox.provider_runtime_probe_runner_binding`. The full matrix
+  still reports `missing_total: 8` for pre-existing unrelated gaps.
+- Focused ingest UI parser test:
+  `node --test --experimental-strip-types apps\chat_ui\src\ingest\index.test.ts`
+  passed `4` tests.
+- Full UI unit suite:
+  `npm run test` in `apps/chat_ui` passed `233` tests.
+- UI production build:
+  `npm run build` in `apps/chat_ui` passed; Vite emitted its existing
+  large-chunk warning.
+
+Remaining truthful gap:
+
+- This does not runtime-probe providers, execute provider binaries, query
+  provider services, launch processes or containers, bind or enforce a live
+  sandbox provider, bind or run a live probe runner, bind a runtime probe, launch
+  a repository command, consume approvals for repository execution, bind or
+  enforce a live readonly source mount, copy arbitrary source trees into the
+  Lab, enforce network isolation, enforce filesystem write isolation, capture
+  real process stdout/stderr, run build/test commands, write execution receipts,
+  validate candidates, promote capabilities, or grant Francis authority to
+  execute imported code. Runtime-probe runner binding preflight artifacts are
+  contract evidence only.
+
+### 2026-06-06 - Code-born Lab sandbox provider runtime-probe runner readiness
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, and Stage
+17 imported-capability supply-chain controls for code-born capability ingestion.
+
+This pass adds the next contract-only step after sandbox provider runtime-probe
+harness preflight. Francis can now create a blocked sandbox provider
+runtime-probe runner readiness record that declares the future provider
+probe-runner interface and the missing live runner implementation, identity,
+policy, sandbox, network-block, workspace-isolation, timeout, output-capture,
+kill-switch, and receipt-contract controls. It depends on runtime-probe harness
+readback but does not bind or run a provider runner.
+
+Material truth now visible:
+
+- `LabSandboxProviderRuntimeProbeRunnerReadiness` records upstream harness,
+  runtime-probe, verifier, selection, binding, provider-contract, sandbox,
+  command-allowlist, preflight, plan, workspace, source, and candidate evidence;
+  required/current/missing checks; blocker list; receipt refs; and explicit
+  false execution/probing/write flags.
+- `IngestService.preflight_lab_sandbox_provider_runtime_probe_runner_readiness(...)`
+  writes `lab_runtime_probe_runner_readiness` artifacts and
+  `lab.sandbox.provider_runtime_probe_runner.readiness` ingest receipts while
+  keeping provider runtime probes, provider binary execution, provider service
+  queries, process launch, container launch, sandbox provider binding, sandbox
+  enforcement, approval consumption, execution authority, repository execution,
+  network access, repo writes, and execution receipt writes false.
+- The CLI exposes
+  `francis lab sandbox-provider-runtime-probe-runner-readiness <source> <candidate> <approval-id>`
+  with provider metadata options.
+- The permission-gated API exposes
+  `POST /ingest/lab/sandbox-provider-runtime-probe-runner-readiness` with
+  `ingest.lab.sandbox.provider_runtime_probe_runner_readiness` scope, and the
+  denial path returns before readiness artifacts or receipts are written.
+- `GET /ingest/readback` and the Code Ingest UI parser/panel expose runtime
+  probe runner readiness counts, artifacts, and blockers without writing
+  receipts or artifacts from readback.
+- Canonical capability, roadmap, architecture, build-order, build-manifest, and
+  code-born ingestion docs now distinguish runtime-probe runner readiness from
+  runtime-probe harness preflight and from live provider probing.
+
+Latest validation:
+
+- Focused ingest/API tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  passed.
+- Focused mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  passed with no issues in `11` source files.
+- Focused Ruff check:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Focused Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed with `14` files already formatted after formatting touched files.
+- Authority-matrix readback confirmed
+  `/ingest/lab/sandbox-provider-runtime-probe-runner-readiness` is present as
+  `permission_gated` with required scope
+  `ingest.lab.sandbox.provider_runtime_probe_runner_readiness`. The full matrix
+  still reports `missing_total: 8` for pre-existing unrelated gaps.
+- Focused ingest UI parser test:
+  `node --test --experimental-strip-types apps\chat_ui\src\ingest\index.test.ts`
+  passed `4` tests.
+- Full UI unit suite:
+  `npm run test` in `apps/chat_ui` passed `233` tests.
+- UI production build:
+  `npm run build` in `apps/chat_ui` passed; Vite emitted its existing
+  large-chunk warning.
+
+Remaining truthful gap:
+
+- This does not runtime-probe providers, execute provider binaries, query
+  provider services, launch processes or containers, bind or enforce a live
+  sandbox provider, launch a repository command, consume approvals for
+  repository execution, bind or enforce a live readonly source mount, copy
+  arbitrary source trees into the Lab, enforce network isolation, enforce
+  filesystem write isolation, capture real process stdout/stderr, run
+  build/test commands, write execution receipts, validate candidates, promote
+  capabilities, or grant Francis authority to execute imported code. Runtime
+  probe runner readiness artifacts are interface/readiness evidence only.
+
+### 2026-06-06 - Code-born Lab run-boundary runtime-probe harness dependency
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, and Stage
+17 imported-capability supply-chain controls for code-born capability ingestion.
+
+This pass hardens the aggregate run-boundary preflight by making sandbox
+provider runtime-probe harness evidence part of the boundary record. The
+boundary still remains a blocked preflight artifact and does not probe a
+provider, bind a sandbox provider, launch a process, or execute repository code.
+
+Material truth now visible:
+
+- `LabRunBoundaryPreflight` now records
+  `sandbox_provider_runtime_probe_harness_id`, the harness snapshot, harness
+  readiness, harness contract declaration, and missing future harness controls
+  for runner binding, sandbox binding, service-query guard, output capture, and
+  kill switch.
+- `IngestService.preflight_lab_run_boundary(...)` now obtains the sandbox
+  provider runtime-probe harness preflight, includes its blockers in the
+  aggregate boundary blocker set, includes its artifact path in the boundary
+  receipt inputs, and returns the harness snapshot in the run-boundary response.
+- The run-boundary remains `blocked` because the harness declares future
+  controls but does not bind a live probe runner, sandbox, service-query guard,
+  output capture implementation, or kill switch.
+- Aggregate ingest readback and the Code Ingest UI parser preserve the new
+  boundary harness dependency fields without creating receipts or artifacts from
+  readback.
+- Canonical capability, roadmap, architecture, build-order, build-manifest, and
+  code-born ingestion docs now describe runtime-probe harness evidence as part
+  of the current run-boundary aggregate.
+
+Latest validation:
+
+- Focused ingest/API tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  passed.
+- Focused mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  passed with no issues in `11` source files.
+- Focused Ruff check:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Focused Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed with `14` files already formatted after formatting touched files.
+- Authority-matrix readback confirmed
+  `/ingest/lab/run-boundary-preflight` is present as `permission_gated` with
+  required scope `ingest.lab.run_boundary.preflight`, and the rule now names the
+  sandbox provider runtime-probe harness readback dependency. The full matrix
+  still reports `missing_total: 8` for pre-existing unrelated gaps.
+- Focused ingest UI parser test:
+  `node --test --experimental-strip-types apps\chat_ui\src\ingest\index.test.ts`
+  passed `4` tests.
+- Full UI unit suite:
+  `npm run test` in `apps/chat_ui` passed `233` tests.
+- UI production build:
+  `npm run build` in `apps/chat_ui` passed; Vite emitted its existing
+  large-chunk warning.
+
+Remaining truthful gap:
+
+- This does not runtime-probe providers, execute provider binaries, query
+  provider services, launch containers, bind or enforce a live sandbox provider,
+  launch a process, execute repo commands, consume approvals for repository
+  execution, bind or enforce a live readonly source mount, copy arbitrary source
+  trees into the Lab, enforce network isolation, enforce filesystem write
+  isolation, capture real process stdout/stderr, run build/test commands, write
+  execution receipts, validate candidates, promote capabilities, or grant
+  Francis authority to execute imported code. Runtime-probe harness evidence is
+  now part of the run-boundary aggregate, but it remains contract evidence only.
+
+### 2026-06-06 - Code-born Lab sandbox provider runtime-probe harness preflight
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, and Stage
+17 imported-capability supply-chain controls for code-born capability ingestion.
+
+This pass adds the next contract-only step after sandbox provider runtime-probe
+contract preflight. Francis can now create a blocked sandbox provider
+runtime-probe harness preflight record that declares the future probe runner,
+sandbox binding, service-query guard, output capture, and kill-switch controls.
+The harness preflight depends on runtime-probe contract readback but still does
+not bind or run a provider harness.
+
+Material truth now visible:
+
+- `LabSandboxProviderRuntimeProbeHarnessPreflight` records the future harness
+  contract, upstream runtime-probe evidence, required/current/missing checks,
+  blocker list, receipt refs, and explicit false execution flags.
+- `IngestService.preflight_lab_sandbox_provider_runtime_probe_harness(...)`
+  writes `lab_runtime_probe_harness_preflights` artifacts and
+  `lab.sandbox.provider_runtime_probe_harness.preflight` ingest receipts while
+  keeping provider binary execution, provider service queries, process launch,
+  container launch, sandbox provider binding, approval consumption, execution
+  authority, repository execution, network access, repo writes, and execution
+  receipt writes false.
+- The CLI exposes
+  `francis lab sandbox-provider-runtime-probe-harness <source> <candidate> <approval-id>`
+  with provider metadata options.
+- The permission-gated API exposes
+  `POST /ingest/lab/sandbox-provider-runtime-probe-harness` with
+  `ingest.lab.sandbox.provider_runtime_probe_harness` scope.
+- `GET /ingest/readback` and the Code Ingest UI parser/panel expose runtime
+  probe harness preflight counts, artifacts, and blockers without writing
+  receipts or artifacts from readback.
+- Canonical capability, roadmap, architecture, build-order, build-manifest, and
+  code-born ingestion docs now distinguish runtime-probe harness preflight from
+  runtime-probe contract declaration and from live provider probing.
+
+Latest validation:
+
+- Focused ingest/API tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  passed.
+- Focused ingest UI parser test:
+  `node --test --experimental-strip-types apps\chat_ui\src\ingest\index.test.ts`
+  passed `4` tests.
+
+Remaining truthful gap:
+
+- This does not runtime-probe providers, execute provider binaries, query
+  provider services, launch containers, bind or enforce a live sandbox provider,
+  launch a process, execute repo commands, consume approvals for repository
+  execution, bind or enforce a live readonly source mount, copy arbitrary source
+  trees into the Lab, enforce network isolation, enforce filesystem write
+  isolation, capture real process stdout/stderr, run build/test commands, write
+  execution receipts, validate candidates, promote capabilities, or grant
+  Francis authority to execute imported code. Runtime-probe harness preflight
+  artifacts are contract evidence only.
+
+### 2026-06-06 - Code-born Lab provider runtime-probe execution boundary
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, and Stage
+17 imported-capability supply-chain controls for code-born capability ingestion.
+
+This pass adds the next blocked boundary after the aggregate run-boundary
+preflight: a sandbox provider runtime-probe execution-boundary record. The
+boundary composes run-boundary and runtime-probe runner-enforcement readback and
+declares the controls that must exist before Francis may ever probe a sandbox
+provider at runtime. It remains a preflight-only artifact and does not execute a
+provider, query a service, launch a process or container, consume approval,
+write an execution receipt, or run repository code.
+
+Material truth now visible:
+
+- `LabSandboxProviderRuntimeProbeExecutionBoundary` records the upstream
+  run-boundary id, runtime-probe runner-enforcement id, required/current/missing
+  checks, blockers, validation labels, receipts, and explicit false execution
+  flags for provider probes, provider binaries, service queries, process
+  launch, container launch, repo code execution, network access, repo writes,
+  approval consumption, and execution receipt writes.
+- `IngestService.preflight_lab_sandbox_provider_runtime_probe_execution_boundary(...)`
+  writes `lab_runtime_probe_execution_boundaries` artifacts and
+  `lab.sandbox.provider_runtime_probe.execution_boundary` ingest receipts while
+  reusing existing run-boundary readback rather than adding a runner.
+- The CLI exposes
+  `francis lab sandbox-provider-runtime-probe-execution-boundary <source> <candidate> <approval-id>`.
+- The permission-gated API exposes
+  `POST /ingest/lab/sandbox-provider-runtime-probe-execution-boundary` with
+  `ingest.lab.sandbox.provider_runtime_probe_execution_boundary` scope.
+- `GET /ingest/readback` and the Code Ingest UI parser/panel now expose
+  provider runtime-probe execution-boundary counts, artifacts, blockers, and
+  no-execution flags without writing receipts or artifacts from readback.
+- Canonical capability, architecture, build-order, build-manifest, roadmap, and
+  code-born ingestion docs now describe this as a blocked future provider-probe
+  execution gate, not provider probing capability.
+
+Latest validation:
+
+- Focused ingest/API tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  passed.
+- Focused mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  passed with no issues in `11` source files.
+- Focused Ruff check:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Focused Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed with `14` files already formatted after formatting touched files.
+- Focused ingest UI parser test:
+  `node --test --experimental-strip-types apps\chat_ui\src\ingest\index.test.ts`
+  passed `4` tests.
+- Full UI unit suite:
+  `npm run test` in `apps/chat_ui` passed `233` tests.
+- UI production build:
+  `npm run build` in `apps/chat_ui` passed; Vite emitted its existing
+  large-chunk warning.
+- Authority-matrix readback confirmed
+  `/ingest/lab/sandbox-provider-runtime-probe-execution-boundary` is present as
+  `permission_gated` with required scope
+  `ingest.lab.sandbox.provider_runtime_probe_execution_boundary`. The full
+  matrix still reports `missing_total: 8` for pre-existing unrelated gaps.
+- `git diff --check` passed; Git still warned that
+  `docs/canonical/ROADMAP.md` will be normalized from CRLF to LF the next time
+  Git touches it.
+
+Remaining truthful gap:
+
+- This does not runtime-probe providers, execute provider binaries, query
+  provider services, launch processes or containers, bind or enforce a live
+  sandbox provider, execute repo commands, consume approvals for repository or
+  provider execution, bind or enforce a live readonly source mount, copy
+  arbitrary source trees into the Lab, enforce network isolation, enforce
+  filesystem write isolation, capture real process stdout/stderr, run
+  build/test commands, write execution receipts for real execution, validate
+  candidates, promote capabilities, or grant Francis authority to execute
+  imported code. Provider runtime-probe execution boundaries are blocked
+  contract evidence only.
+
+### 2026-06-06 - Code-born Lab provider runtime-probe refusal
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, and Stage
+17 imported-capability supply-chain controls for code-born capability ingestion.
+
+This pass adds the explicit refusal path after the sandbox provider runtime-probe
+execution boundary. When an operator or client asks Francis to runtime-probe a
+sandbox provider before governed probe execution exists, Francis now creates a
+bounded refusal artifact and ingest receipt instead of silently doing nothing or
+running a provider. The refusal depends on the execution-boundary readback and
+keeps provider probing, provider binary execution, service queries,
+process/container launch, approval consumption, execution receipt writes, and
+repository execution disabled.
+
+Material truth now visible:
+
+- `LabSandboxProviderRuntimeProbeRefusal` records the execution-boundary id,
+  run-boundary id, source/candidate ids, reason, blockers, permission scope,
+  boundary snapshot, receipt path, and explicit false flags for provider probes,
+  provider binaries, service queries, process launch, container launch, repo code
+  execution, network access, repo writes, approval consumption, execution
+  receipts, execution authority, and execution.
+- `IngestService.refuse_lab_sandbox_provider_runtime_probe(...)` writes
+  `lab_runtime_probe_refusals` artifacts and
+  `lab.sandbox.provider_runtime_probe.refuse` ingest receipts while first
+  composing the existing runtime-probe execution-boundary readback.
+- The CLI exposes
+  `francis lab sandbox-provider-runtime-probe-refuse <source> <candidate> <approval-id>`.
+- The permission-gated API exposes
+  `POST /ingest/lab/sandbox-provider-runtime-probe-refuse` with
+  `ingest.lab.sandbox.provider_runtime_probe.refuse` scope, and denies before
+  any refusal artifact or receipt write when the actor lacks that scope.
+- `GET /ingest/readback` and the Code Ingest UI parser/panel now expose provider
+  runtime-probe refusal counts, artifacts, blockers, and no-execution flags
+  without writing receipts or artifacts from readback.
+- Canonical capability, architecture, build-order, build-manifest, roadmap, and
+  code-born ingestion docs now describe provider runtime-probe refusals as
+  receipt-backed blocked probe requests, not provider probe success.
+
+Latest validation:
+
+- Focused ingest/API tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  passed.
+- Focused mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  passed with no issues in `11` source files.
+- Focused Ruff check:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Focused Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed with `14` files already formatted after formatting touched files.
+- Focused ingest UI parser test:
+  `node --test --experimental-strip-types apps\chat_ui\src\ingest\index.test.ts`
+  passed `4` tests.
+- Full UI unit suite:
+  `npm run test` in `apps/chat_ui` passed `233` tests.
+- UI production build:
+  `npm run build` in `apps/chat_ui` passed; Vite emitted its existing
+  large-chunk warning.
+- Authority-matrix readback confirmed
+  `/ingest/lab/sandbox-provider-runtime-probe-refuse` is present as
+  `permission_gated` with required scope
+  `ingest.lab.sandbox.provider_runtime_probe.refuse`. The full matrix still
+  reports `missing_total: 8` for pre-existing unrelated gaps.
+
+Remaining truthful gap:
+
+- This does not runtime-probe providers, execute provider binaries, query
+  provider services, launch processes or containers, bind or enforce a live
+  sandbox provider, execute repo commands, consume approvals for repository or
+  provider execution, bind or enforce a live readonly source mount, copy
+  arbitrary source trees into the Lab, enforce network isolation, enforce
+  filesystem write isolation, capture real process stdout/stderr, run
+  build/test commands, write execution receipts for real execution, validate
+  candidates, promote capabilities, or grant Francis authority to execute
+  imported code. Provider runtime-probe refusals are blocked request receipts,
+  not runtime probe receipts.
+
+### 2026-06-06 - Code-born Lab provider runtime-probe approval request
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, and Stage
+17 imported-capability supply-chain controls for code-born capability ingestion.
+
+This pass adds the next governance handoff after the sandbox provider
+runtime-probe execution boundary and refusal path: a pending exact-action
+approval-request record for a future sandbox provider runtime probe. Francis can
+now ask the approval subsystem for operator review of the bounded provider-probe
+action while still refusing to consume approvals, runtime-probe providers,
+execute provider binaries, query provider services, launch processes or
+containers, write execution receipts, run repository code, validate candidates,
+or promote capabilities.
+
+Material truth now visible:
+
+- `LabSandboxProviderRuntimeProbeApprovalRequest` records the upstream approval
+  id, newly created provider-probe approval id, execution-boundary id,
+  run-boundary id, source/candidate ids, action hash, approval payload,
+  permission scope, blocker list, artifact path, receipt path, and explicit
+  false flags for approval consumption, provider probes, provider binaries,
+  service queries, process launch, container launch, repo code execution,
+  network access, repo writes, execution receipts, execution authority, and
+  execution.
+- `IngestService.request_lab_sandbox_provider_runtime_probe_approval(...)`
+  writes `lab_runtime_probe_approval_requests` artifacts and
+  `lab.sandbox.provider_runtime_probe.approval_request` ingest receipts while
+  first composing the existing runtime-probe execution-boundary readback.
+- The CLI exposes
+  `francis lab sandbox-provider-runtime-probe-request-approval <source> <candidate> <approval-id>`.
+- The permission-gated API exposes
+  `POST /ingest/lab/sandbox-provider-runtime-probe-request-approval` with
+  `ingest.lab.sandbox.provider_runtime_probe.request_approval` scope, and
+  denies before any approval-request artifact, pending approval, or receipt write
+  when the actor lacks that scope.
+- `GET /ingest/readback` and the Code Ingest UI parser/panel now expose provider
+  runtime-probe approval-request counts, artifacts, blockers, approval ids, and
+  no-execution flags without writing receipts or artifacts from readback.
+- Canonical capability, architecture, build-order, build-manifest, roadmap, and
+  code-born ingestion docs now describe provider runtime-probe approval requests
+  as pending governance records, not approval decisions or provider probe
+  success.
+
+Latest validation:
+
+- Focused ingest/API tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  passed.
+- Focused mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  passed with no issues in `11` source files.
+- Focused Ruff check:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Focused Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed with `14` files already formatted after formatting touched files.
+- Authority-matrix readback confirmed
+  `/ingest/lab/sandbox-provider-runtime-probe-request-approval` is present as
+  `permission_gated` with required scope
+  `ingest.lab.sandbox.provider_runtime_probe.request_approval`. The full matrix
+  still reports `missing_total: 8` for pre-existing unrelated gaps.
+- Focused ingest UI parser test:
+  `node --test --experimental-strip-types apps\chat_ui\src\ingest\index.test.ts`
+  passed `4` tests.
+- Full UI unit suite:
+  `npm run test` in `apps/chat_ui` passed `233` tests.
+- UI production build:
+  `npm run build` in `apps/chat_ui` passed; Vite emitted its existing
+  large-chunk warning.
+
+Remaining truthful gap:
+
+- This does not decide or consume approvals, runtime-probe providers, execute
+  provider binaries, query provider services, launch processes or containers,
+  bind or enforce a live sandbox provider, execute repo commands, bind or
+  enforce a live readonly source mount, copy arbitrary source trees into the
+  Lab, enforce network isolation, enforce filesystem write isolation, capture
+  real process stdout/stderr, run build/test commands, write execution receipts
+  for real execution, validate candidates, promote capabilities, or grant
+  Francis authority to execute imported code. Provider runtime-probe approval
+  requests are pending governance records, not approval decisions, approval
+  consumption, or runtime probe receipts.
+
+### 2026-06-06 - Code-born Lab provider runtime-probe runner control binding
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, and Stage
+17 imported-capability supply-chain controls for code-born capability ingestion.
+
+This pass adds the next governance boundary after provider runtime-probe runner
+pre-execution-boundary records: a blocked runner control-binding record for
+future provider probing. Francis can now record the expected future runner
+identity, runner policy, sandbox policy, network block, timeout policy, output
+capture, kill switch, and execution receipt-writer control bindings while
+leaving every live runner, sandbox, provider, process, container, network,
+repository execution, and execution receipt path disabled.
+
+Material truth now visible:
+
+- `LabSandboxProviderRuntimeProbeRunnerControlBinding` records the provider-probe
+  approval id, approval-consumption id, invocation-boundary id,
+  pre-execution-boundary id, approval-request id, execution-boundary id,
+  run-boundary id, source/candidate ids, action hash, permission scope,
+  approval-consumption/invocation/pre-execution/execution-boundary snapshots,
+  a future control-binding contract, required/current/missing checks, blockers,
+  receipt path, and explicit false flags for live runner identity, runner
+  policy, sandbox policy, sandbox binding/enforcement, network block, timeout
+  policy, output capture, kill switch, execution receipt writer, provider
+  probes, provider binaries, service queries, process launch, container launch,
+  repo code execution, network access, repo writes, execution receipts,
+  execution authority, and execution.
+- `IngestService.preflight_lab_sandbox_provider_runtime_probe_runner_control_binding(...)`
+  requires a matching provider runtime-probe runner pre-execution-boundary
+  artifact for the same approval/source/candidate, then writes
+  `lab_runtime_probe_control_bindings` artifacts and
+  `lab.sandbox.provider_runtime_probe.runner_control_binding` ingest receipts.
+- The CLI exposes
+  `francis lab sandbox-provider-runtime-probe-runner-control-binding <source> <candidate> <approval-id>`.
+- The permission-gated API exposes
+  `POST /ingest/lab/sandbox-provider-runtime-probe-runner-control-binding` with
+  `ingest.lab.sandbox.provider_runtime_probe.runner_control_binding` scope, and
+  denies before any control-binding artifact or receipt write when the actor
+  lacks that scope.
+- `GET /ingest/readback` and the Code Ingest UI parser/panel now expose provider
+  runtime-probe runner control-binding counts, artifacts, blockers, declared
+  future control bindings, missing live bindings, and no-execution flags without
+  writing receipts or artifacts from readback.
+- Canonical capability, architecture, build-order, build-manifest, roadmap, and
+  code-born ingestion docs now describe provider runtime-probe runner control
+  bindings as post-pre-execution governance evidence, not live runner binding,
+  provider probe success, execution receipts, validation, promotion, or
+  authority to run repository code.
+
+Latest validation:
+
+- Focused ingest/API tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  passed after adding the control-binding artifact creation to the aggregate
+  readback setup.
+- Focused Ruff check:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Focused Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed with `14` files already formatted after formatting touched files.
+- Focused mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  passed with no issues in `11` source files.
+- Authority-matrix readback confirmed
+  `/ingest/lab/sandbox-provider-runtime-probe-runner-control-binding` is present
+  as `permission_gated` with required scope
+  `ingest.lab.sandbox.provider_runtime_probe.runner_control_binding`.
+- Focused ingest UI parser test:
+  `node --test --experimental-strip-types apps\chat_ui\src\ingest\index.test.ts`
+  passed `4` tests.
+- Full UI unit suite:
+  `npm run test` in `apps/chat_ui` passed `233` tests.
+- UI production build:
+  `npm run build` in `apps/chat_ui` passed; Vite emitted its existing
+  large-chunk warning.
+
+Remaining truthful gap:
+
+- This does not bind or enforce a live runner identity, live runner policy, live
+  sandbox policy, live sandbox provider, network block, timeout policy, output
+  capture, kill switch, or execution receipt writer; runtime-probe providers;
+  execute provider binaries; query provider services; launch processes or
+  containers; execute repo commands; bind or enforce a live readonly source
+  mount; copy arbitrary source trees into the Lab; enforce network isolation;
+  enforce filesystem write isolation; capture real process stdout/stderr; run
+  build/test commands; write execution receipts for real execution; validate
+  candidates; promote capabilities; or grant Francis authority to execute
+  imported code. Provider runtime-probe runner control-binding records are
+  future-control evidence only, not provider probe execution, provider
+  validation, live sandbox enforcement, or authority to run repository code.
+
+### 2026-06-06 - Code-born Lab sandboxed rebuild/run/test runner-binding preflight
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, and Stage
+17 imported-capability supply-chain controls for code-born capability ingestion.
+
+This pass adds the static runner-binding preflight after sandboxed
+rebuild/run/test approval consumption. Francis can now record local sandbox
+provider reference and policy-manifest metadata as governed evidence after a
+single-use exact-action approval was consumed, while still proving that no live
+runner, sandbox, provider process/service, repository command, build/test step,
+network access, repository write, execution receipt write, validation,
+promotion, or execution authority occurred.
+
+Material truth now visible:
+
+- `LabSandboxedRebuildRunTestRunnerBindingPreflight` records the consumed
+  sandboxed rebuild/run/test approval id, approval-consumption id,
+  approval-request id, sandboxed boundary id, control-binding id,
+  source/candidate ids, selected local provider kind, provider reference
+  metadata, provider policy-manifest metadata, runner-binding contract,
+  required/missing checks, receipts, and explicit false flags for live runner
+  binding, sandbox binding/enforcement, provider execution/service query,
+  process/container launch, command execution, repo code execution,
+  install/build/test execution, network access, repo writes, execution receipt
+  writes, validation, promotion, and execution authority.
+- `IngestService.preflight_lab_sandboxed_rebuild_run_test_runner_binding(...)`
+  requires a matching consumed sandboxed rebuild/run/test approval record for
+  the same approval/source/candidate, refuses unsafe prior execution claims,
+  reads only local provider metadata, writes
+  `lab_sandboxed_rebuild_run_test_runner_bindings` artifacts, and emits
+  `lab.sandboxed_rebuild_run_test.runner_binding` receipts.
+- The CLI exposes
+  `francis lab sandboxed-rebuild-run-test-runner-binding <source> <candidate> <approval-id> --provider-kind <kind> --provider-reference <path-or-name> --provider-policy-manifest <path>`.
+- The permission-gated API exposes
+  `POST /ingest/lab/sandboxed-rebuild-run-test-runner-binding` with
+  `ingest.lab.sandboxed_rebuild_run_test.runner_binding` scope, and denies
+  before any runner-binding artifact or receipt write when the actor lacks that
+  scope.
+- `GET /ingest/readback` and the Code Ingest UI parser/panel now expose
+  sandboxed rebuild/run/test runner-binding counts, artifacts, blockers, and
+  no-execution flags separately from approval-consumption artifacts.
+- Canonical capability, architecture, build-order, build-manifest, roadmap, and
+  code-born ingestion docs now describe sandboxed rebuild/run/test
+  runner-binding preflight as static provider-reference evidence, not live
+  runner binding, sandbox enforcement, provider execution, command execution,
+  execution receipt writing, validation, promotion, or authority to run
+  repository code.
+
+Latest validation:
+
+- Focused ingest/API tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  exited `0`.
+- Focused Ruff check:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Focused Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed with `14` files already formatted after formatting touched files.
+- Focused mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  passed with no issues in `11` source files.
+- Authority-matrix readback confirmed
+  `/ingest/lab/sandboxed-rebuild-run-test-runner-binding` is present as
+  `permission_gated` with required scope
+  `ingest.lab.sandboxed_rebuild_run_test.runner_binding`.
+- Focused ingest UI parser test:
+  `node --test --experimental-strip-types apps\chat_ui\src\ingest\index.test.ts`
+  passed `4` tests.
+- Full UI unit suite:
+  `npm run test` in `apps/chat_ui` passed `233` tests.
+- UI production build:
+  `npm run build` in `apps/chat_ui` passed; Vite emitted its existing
+  large-chunk warning.
+- Diff whitespace check:
+  `git diff --check` exited `0`; Git repeated existing CRLF warnings for
+  canonical docs touched in the worktree.
+
+Remaining truthful gap:
+
+- This does not bind or enforce a live runner identity, live runner policy, live
+  sandbox policy, live sandbox provider, command allowlist, source mount,
+  network block, timeout policy, output capture, kill switch, or execution
+  receipt writer; runtime-probe providers; execute provider binaries; query
+  provider services; launch processes or containers; execute repo commands; run
+  install/build/test steps; access the network; write to the repository; write
+  execution receipts for real execution; validate candidates; promote
+  capabilities; or grant Francis authority to execute imported code. Sandboxed
+  rebuild/run/test runner-binding preflight records are static provider
+  reference evidence only.
+
+### 2026-06-06 - Code-born Lab sandboxed rebuild/run/test approval consumption
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, and Stage
+17 imported-capability supply-chain controls for code-born capability ingestion.
+
+This pass adds the single-use approval-consumption boundary after sandboxed
+rebuild/run/test approval-request records. Francis can now consume an approved
+exact-action sandboxed rebuild/run/test approval as governance evidence while
+still proving that no repository process/container launch, command execution,
+install/build/test execution, network access, repository write, execution
+receipt write, candidate validation, capability promotion, or execution
+authority occurred.
+
+Material truth now visible:
+
+- `LabSandboxedRebuildRunTestApprovalConsumption` records the approved
+  sandboxed rebuild/run/test approval id, approval-request id, upstream
+  provider-probe approval/consumption ids, sandboxed boundary id,
+  control-binding/pre-execution/invocation/execution-boundary ids,
+  source/candidate ids, approval snapshot/path, binding evidence, permission
+  scope, receipts, and explicit false flags for execution authority,
+  process/container launch, command execution, repo code execution,
+  install/build/test execution, network access, repo writes, execution receipt
+  writes, validation, promotion, and execution.
+- `IngestService.consume_lab_sandboxed_rebuild_run_test_approval(...)` requires
+  a matching pending approval-request artifact, an approved exact-action
+  approval record, matching source/candidate/action hash/boundary binding, and
+  no prior sandboxed rebuild/run/test approval consumption before writing
+  `lab_sandboxed_rebuild_run_test_approval_consumptions` artifacts and
+  `lab.sandboxed_rebuild_run_test.approval.consume` receipts.
+- The CLI exposes
+  `francis lab sandboxed-rebuild-run-test-consume-approval <source> <candidate> <approval-id>`.
+- The permission-gated API exposes
+  `POST /ingest/lab/sandboxed-rebuild-run-test-consume-approval` with
+  `ingest.lab.sandboxed_rebuild_run_test.consume_approval` scope, and denies
+  before any consumption artifact or receipt write when the actor lacks that
+  scope.
+- `GET /ingest/readback` and the Code Ingest UI parser/panel now expose
+  sandboxed rebuild/run/test approval-consumption counts and artifacts without
+  writing receipts or artifacts from readback.
+- Canonical capability, architecture, build-order, build-manifest, roadmap, and
+  code-born ingestion docs now describe sandboxed rebuild/run/test approval
+  consumption as single-use governance evidence, not runner binding, sandbox
+  enforcement, command execution, build/test execution, validation, promotion,
+  or authority to run repository code.
+
+Latest validation:
+
+- Focused ingest/API tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  exited `0` after shortening the new deterministic consumption artifact id to
+  stay below Windows nested-test path limits.
+- Focused Ruff check:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Focused Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed with `14` files already formatted.
+- Focused mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  passed with no issues in `11` source files.
+- Authority-matrix readback confirmed
+  `/ingest/lab/sandboxed-rebuild-run-test-consume-approval` is present as
+  `permission_gated` with required scope
+  `ingest.lab.sandboxed_rebuild_run_test.consume_approval`.
+- Focused ingest UI parser test:
+  `node --test --experimental-strip-types apps\chat_ui\src\ingest\index.test.ts`
+  passed `4` tests.
+- Full UI unit suite:
+  `npm run test` in `apps/chat_ui` passed `233` tests.
+- UI production build:
+  `npm run build` in `apps/chat_ui` passed; Vite emitted its existing
+  large-chunk warning.
+
+Remaining truthful gap:
+
+- This does not bind or enforce a live runner identity, live runner policy, live
+  sandbox policy, live sandbox provider, command allowlist, source mount,
+  network block, timeout policy, output capture, kill switch, or execution
+  receipt writer; runtime-probe providers; execute provider binaries; query
+  provider services; launch processes or containers; execute repo commands; run
+  install/build/test steps; access the network; write to the repository; write
+  execution receipts for real execution; validate candidates; promote
+  capabilities; or grant Francis authority to execute imported code. Sandboxed
+  rebuild/run/test approval-consumption records are single-use governance
+  evidence only.
+
+### 2026-06-06 - Code-born Lab sandboxed rebuild/run/test approval request
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, and Stage
+17 imported-capability supply-chain controls for code-born capability ingestion.
+
+This pass adds the next approval-intake boundary after sandboxed
+rebuild/run/test boundary records. Francis can now queue a pending exact-action
+operator approval request for a future governed repository rebuild/run/test
+attempt while proving that the request does not consume approval, launch a
+process or container, execute repository commands, run install/build/test steps,
+write execution receipts, validate candidates, promote capabilities, or grant
+Francis repository-execution authority.
+
+Material truth now visible:
+
+- `LabSandboxedRebuildRunTestApprovalRequest` records the pending approval id,
+  upstream provider-probe approval id, sandboxed boundary id, control-binding
+  id, pre-execution/invocation/consumption/request/execution-boundary ids,
+  source/candidate ids, permission scope, approval payload/path, upstream
+  boundary snapshot, blockers, receipts, and explicit false flags for approval
+  consumption, upstream approval consumption, execution authority,
+  process/container launch, command execution, repo code execution,
+  install/build/test execution, network access, repo writes, execution receipt
+  writes, validation, promotion, and execution.
+- `IngestService.request_lab_sandboxed_rebuild_run_test_approval(...)` requires
+  a matching sandboxed rebuild/run/test boundary artifact for the same
+  approval/source/candidate, writes
+  `lab_sandboxed_rebuild_run_test_approval_requests` artifacts, creates a
+  pending governance approval for action `francis.lab.sandboxed_rebuild_run_test`,
+  and emits `lab.sandboxed_rebuild_run_test.approval_request` ingest receipts.
+- The CLI exposes
+  `francis lab sandboxed-rebuild-run-test-request-approval <source> <candidate> <approval-id>`.
+- The permission-gated API exposes
+  `POST /ingest/lab/sandboxed-rebuild-run-test-request-approval` with
+  `ingest.lab.sandboxed_rebuild_run_test.request_approval` scope, and denies
+  before any approval-request artifact or receipt write when the actor lacks
+  that scope.
+- `GET /ingest/readback` and the Code Ingest UI parser/panel now expose
+  sandboxed rebuild/run/test approval-request counts, artifacts, blockers, and
+  no-execution flags separately from sandboxed boundary artifacts.
+- Canonical capability, architecture, build-order, build-manifest, roadmap, and
+  code-born ingestion docs now describe sandboxed rebuild/run/test approval
+  requests as pending approval intake, not approval consumption, execution
+  authority, command execution, build/test execution, validation, or promotion.
+
+Latest validation:
+
+- Focused ingest/API tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  exited `0`.
+- Focused Ruff check:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Focused Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed with `14` files already formatted after formatting touched files.
+- Focused mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  passed with no issues in `11` source files.
+- Authority-matrix readback confirmed
+  `/ingest/lab/sandboxed-rebuild-run-test-request-approval` is present as
+  `permission_gated` with required scope
+  `ingest.lab.sandboxed_rebuild_run_test.request_approval`.
+- Focused ingest UI parser test:
+  `node --test --experimental-strip-types apps\chat_ui\src\ingest\index.test.ts`
+  passed `4` tests.
+- Full UI unit suite:
+  `npm run test` in `apps/chat_ui` passed `233` tests.
+- UI production build:
+  `npm run build` in `apps/chat_ui` passed; Vite emitted its existing
+  large-chunk warning.
+- Diff whitespace check:
+  `git diff --check` exited `0`; Git repeated existing CRLF warnings for
+  canonical docs touched in the worktree.
+
+Remaining truthful gap:
+
+- This does not decide or consume the pending sandboxed rebuild/run/test
+  approval, bind or enforce a live runner identity, live runner policy, live
+  sandbox policy, live sandbox provider, command allowlist, source mount,
+  network block, timeout policy, output capture, kill switch, or execution
+  receipt writer; runtime-probe providers; execute provider binaries; query
+  provider services; launch processes or containers; execute repo commands; run
+  install/build/test steps; access the network; write to the repository; write
+  execution receipts for real execution; validate candidates; promote
+  capabilities; or grant Francis authority to execute imported code. Sandboxed
+  rebuild/run/test approval-request records are pending approval intake only.
+
+### 2026-06-06 - Code-born Lab sandboxed rebuild/run/test boundary
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, and Stage
+17 imported-capability supply-chain controls for code-born capability ingestion.
+
+This pass adds the next governance boundary after provider runtime-probe runner
+control-binding records: a blocked sandboxed rebuild/run/test boundary. Francis
+can now record the future governed install/build/run/test/validate execution
+boundary while requiring provider-probe runner control-binding evidence, a
+separate future execution approval, and still-missing live runner identity,
+runner policy, sandbox policy, sandbox binding/enforcement, network block,
+timeout policy, output capture, kill switch, command allowlist, source-mount,
+and execution receipt-writer controls.
+
+Material truth now visible:
+
+- `LabSandboxedRebuildRunTestBoundary` records the provider-probe approval id,
+  approval-consumption id, invocation-boundary id, pre-execution-boundary id,
+  control-binding id, approval-request id, execution-boundary id,
+  run-boundary id, source/candidate ids, action hash, permission scope,
+  upstream artifact snapshots, a future sandboxed execution contract,
+  required/current/missing checks, blockers, receipt path, separate execution
+  approval requirements, and explicit false flags for live runner/sandbox
+  bindings, process/container launch, command execution, repo code execution,
+  install/build/test execution, network access, repo writes, execution receipt
+  writes, validation, promotion, execution authority, and execution.
+- `IngestService.preflight_lab_sandboxed_rebuild_run_test_boundary(...)`
+  requires a matching provider runtime-probe runner control-binding artifact for
+  the same approval/source/candidate, then writes
+  `lab_sandboxed_rebuild_run_test_boundaries` artifacts and
+  `lab.sandboxed_rebuild_run_test.boundary` ingest receipts.
+- The CLI exposes
+  `francis lab sandboxed-rebuild-run-test-boundary <source> <candidate> <approval-id>`.
+- The permission-gated API exposes
+  `POST /ingest/lab/sandboxed-rebuild-run-test-boundary` with
+  `ingest.lab.sandboxed_rebuild_run_test.boundary` scope, and denies before any
+  sandboxed rebuild/run/test boundary artifact or receipt write when the actor
+  lacks that scope.
+- `GET /ingest/readback` and the Code Ingest UI parser/panel now expose
+  sandboxed rebuild/run/test boundary counts, artifacts, blockers, missing live
+  controls, separate execution-approval requirement, and no-execution flags
+  without writing receipts or artifacts from readback.
+- Canonical capability, architecture, build-order, build-manifest, roadmap, and
+  code-born ingestion docs now describe sandboxed rebuild/run/test boundaries as
+  future governed execution-boundary evidence, not live execution approval,
+  command execution, build/test execution, validation, promotion, or authority
+  to run repository code.
+
+Latest validation:
+
+- Focused ingest/API tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  passed.
+- Focused Ruff check:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Focused Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed with `14` files already formatted after formatting touched files.
+- Focused mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  passed with no issues in `11` source files.
+- Authority-matrix readback confirmed
+  `/ingest/lab/sandboxed-rebuild-run-test-boundary` is present as
+  `permission_gated` with required scope
+  `ingest.lab.sandboxed_rebuild_run_test.boundary`.
+- Focused ingest UI parser test:
+  `node --test --experimental-strip-types apps\chat_ui\src\ingest\index.test.ts`
+  passed `4` tests.
+- Full UI unit suite:
+  `npm run test` in `apps/chat_ui` passed `233` tests.
+- UI production build:
+  `npm run build` in `apps/chat_ui` passed; Vite emitted its existing
+  large-chunk warning.
+- Diff whitespace check:
+  `git diff --check` exited `0`; Git repeated existing CRLF warnings for
+  canonical docs touched in the worktree.
+
+Remaining truthful gap:
+
+- This does not consume a repository-execution approval, bind or enforce a live
+  runner identity, live runner policy, live sandbox policy, live sandbox
+  provider, command allowlist, source mount, network block, timeout policy,
+  output capture, kill switch, or execution receipt writer; runtime-probe
+  providers; execute provider binaries; query provider services; launch
+  processes or containers; execute repo commands; run install/build/test steps;
+  access the network; write to the repository; write execution receipts for
+  real execution; validate candidates; promote capabilities; or grant Francis
+  authority to execute imported code. Sandboxed rebuild/run/test boundary
+  records are future execution-boundary evidence only.
+
+### 2026-06-06 - Code-born Lab provider runtime-probe runner pre-execution boundary
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, and Stage
+17 imported-capability supply-chain controls for code-born capability ingestion.
+
+This pass adds the next governance boundary after sandbox provider runtime-probe
+invocation-boundary records: a blocked runner pre-execution boundary for future
+provider probing. Francis can now bind a recorded invocation boundary to the
+still-missing runner identity, runner policy, sandbox policy, live sandbox
+binding/enforcement, network block, timeout, output capture, kill switch, and
+execution receipt writer controls while still refusing to runtime-probe
+providers, execute binaries, query services, launch processes or containers,
+write execution receipts, run repository code, validate candidates, or promote
+capabilities.
+
+Material truth now visible:
+
+- `LabSandboxProviderRuntimeProbeRunnerPreExecutionBoundary` records the
+  provider-probe approval id, approval-consumption id, invocation-boundary id,
+  approval-request id, execution-boundary id, run-boundary id, source/candidate
+  ids, action hash, permission scope, invocation-boundary snapshot, optional
+  approval-consumption/execution-boundary snapshots, required/current/missing
+  checks, receipt path, and explicit false flags for provider probes, provider
+  binaries, service queries, process launch, container launch, repo code
+  execution, network access, repo writes, execution receipts, execution
+  authority, and execution.
+- `IngestService.preflight_lab_sandbox_provider_runtime_probe_runner_pre_execution_boundary(...)`
+  requires a matching provider runtime-probe invocation-boundary artifact for
+  the same approval/source/candidate, then writes
+  `lab_runtime_probe_preexec_boundaries` artifacts and
+  `lab.sandbox.provider_runtime_probe.runner_pre_execution_boundary` ingest
+  receipts.
+- The CLI exposes
+  `francis lab sandbox-provider-runtime-probe-runner-pre-execution-boundary <source> <candidate> <approval-id>`.
+- The permission-gated API exposes
+  `POST /ingest/lab/sandbox-provider-runtime-probe-runner-pre-execution-boundary`
+  with `ingest.lab.sandbox.provider_runtime_probe.runner_pre_execution_boundary`
+  scope, and denies before any runner pre-execution-boundary artifact or receipt
+  write when the actor lacks that scope.
+- `GET /ingest/readback` and the Code Ingest UI parser/panel now expose provider
+  runtime-probe runner pre-execution-boundary counts, artifacts, blockers,
+  declared controls, missing live bindings, and no-execution flags without
+  writing receipts or artifacts from readback.
+- Canonical capability, architecture, build-order, build-manifest, roadmap, and
+  code-born ingestion docs now describe provider runtime-probe runner
+  pre-execution boundaries as post-invocation control evidence, not provider
+  probe success or execution authority.
+
+Latest validation:
+
+- Focused ingest/API tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  passed after shortening the new artifact directory/id to stay under deep
+  Windows pytest temp paths and moving the aggregate readback fixture write to
+  the correct setup block.
+- Focused Ruff check:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Focused Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed with `14` files already formatted after formatting touched files.
+- Focused mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  passed with no issues in `11` source files.
+- Authority-matrix readback confirmed
+  `/ingest/lab/sandbox-provider-runtime-probe-runner-pre-execution-boundary` is
+  present as `permission_gated` with required scope
+  `ingest.lab.sandbox.provider_runtime_probe.runner_pre_execution_boundary`.
+- Focused ingest UI parser test:
+  `node --test --experimental-strip-types apps\chat_ui\src\ingest\index.test.ts`
+  passed `4` tests.
+- Full UI unit suite:
+  `npm run test` in `apps/chat_ui` passed `233` tests.
+- UI production build:
+  `npm run build` in `apps/chat_ui` passed; Vite emitted its existing
+  large-chunk warning.
+- Diff whitespace check:
+  `git diff --check` exited `0`; Git repeated the existing warning that
+  `docs/canonical/ROADMAP.md` CRLF will be replaced by LF when touched.
+
+Remaining truthful gap:
+
+- This does not runtime-probe providers, execute provider binaries, query
+  provider services, launch processes or containers, bind or enforce a live
+  runner, bind or enforce a live sandbox provider, execute repo commands, bind
+  or enforce a live readonly source mount, copy arbitrary source trees into the
+  Lab, enforce network isolation, enforce filesystem write isolation, capture
+  real process stdout/stderr, run build/test commands, write execution receipts
+  for real execution, validate candidates, promote capabilities, or grant
+  Francis authority to execute imported code. Provider runtime-probe runner
+  pre-execution boundaries are post-invocation control evidence, not provider
+  probe execution, provider validation, or authority to run repository code.
+
+### 2026-06-06 - Code-born Lab provider runtime-probe invocation boundary
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, and Stage
+17 imported-capability supply-chain controls for code-born capability ingestion.
+
+This pass adds the next governance boundary after sandbox provider runtime-probe
+approval consumption: a blocked invocation-boundary record for future provider
+probing. Francis can now bind consumed provider-probe approval evidence to the
+existing execution-boundary readback, enumerate missing future runner controls,
+and write receipts while still refusing to invoke providers, execute binaries,
+query services, launch processes or containers, write execution receipts, run
+repository code, validate candidates, or promote capabilities.
+
+Material truth now visible:
+
+- `LabSandboxProviderRuntimeProbeInvocationBoundary` records the consumed
+  provider-probe approval id, approval-consumption id, approval-request id,
+  execution-boundary id, run-boundary id, source/candidate ids, action hash,
+  permission scope, execution-boundary and approval-consumption snapshots,
+  required/current/missing checks, receipt path, and explicit false flags for
+  provider probes, provider binaries, service queries, process launch, container
+  launch, repo code execution, network access, repo writes, execution receipts,
+  execution authority, and execution.
+- `IngestService.preflight_lab_sandbox_provider_runtime_probe_invocation_boundary(...)`
+  requires a matching single-use provider-probe approval-consumption artifact for
+  the same source/candidate, reads the linked execution-boundary artifact, then
+  writes `lab_runtime_probe_invocation_boundaries` artifacts and
+  `lab.sandbox.provider_runtime_probe.invocation_boundary` ingest receipts.
+- The CLI exposes
+  `francis lab sandbox-provider-runtime-probe-invocation-boundary <source> <candidate> <approval-id>`.
+- The permission-gated API exposes
+  `POST /ingest/lab/sandbox-provider-runtime-probe-invocation-boundary` with
+  `ingest.lab.sandbox.provider_runtime_probe.invocation_boundary` scope, and
+  denies before any invocation-boundary artifact or receipt write when the actor
+  lacks that scope.
+- `GET /ingest/readback` and the Code Ingest UI parser/panel now expose provider
+  runtime-probe invocation-boundary counts, artifacts, blockers, approval
+  consumption state, missing runner controls, and no-execution flags without
+  writing receipts or artifacts from readback.
+- Canonical capability, architecture, build-order, build-manifest, roadmap, and
+  code-born ingestion docs now describe provider runtime-probe invocation
+  boundaries as post-consumption control evidence, not provider probe success or
+  execution authority.
+
+Latest validation:
+
+- Focused ingest/API tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  passed after first fixing the aggregate readback fixture setup.
+- Focused Ruff check:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Focused Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed with `14` files already formatted after formatting touched files.
+- Focused mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  passed with no issues in `11` source files.
+- Authority-matrix readback confirmed
+  `/ingest/lab/sandbox-provider-runtime-probe-invocation-boundary` is present as
+  `permission_gated` with required scope
+  `ingest.lab.sandbox.provider_runtime_probe.invocation_boundary`.
+- Focused ingest UI parser test:
+  `node --test --experimental-strip-types apps\chat_ui\src\ingest\index.test.ts`
+  passed `4` tests.
+- Full UI unit suite:
+  `npm run test` in `apps/chat_ui` passed `233` tests.
+- UI production build:
+  `npm run build` in `apps/chat_ui` passed; Vite emitted its existing
+  large-chunk warning.
+- Diff whitespace check:
+  `git diff --check` exited `0`; Git repeated the existing warning that
+  `docs/canonical/ROADMAP.md` CRLF will be replaced by LF when touched.
+
+Remaining truthful gap:
+
+- This does not runtime-probe providers, execute provider binaries, query
+  provider services, launch processes or containers, bind or enforce a live
+  sandbox provider, execute repo commands, bind or enforce a live readonly
+  source mount, copy arbitrary source trees into the Lab, enforce network
+  isolation, enforce filesystem write isolation, capture real process
+  stdout/stderr, run build/test commands, write execution receipts for real
+  execution, validate candidates, promote capabilities, or grant Francis
+  authority to execute imported code. Provider runtime-probe invocation
+  boundaries are post-consumption control evidence, not provider probe
+  execution, provider validation, or authority to run repository code.
+
+### 2026-06-06 - Code-born Lab provider runtime-probe approval consumption
+
+Roadmap area: Phase 2 governed runtime spine, Stage 4 Forge feeder, and Stage
+17 imported-capability supply-chain controls for code-born capability ingestion.
+
+This pass adds the next governance boundary after sandbox provider runtime-probe
+approval requests: exact-action approval consumption for future provider probing.
+Francis can now consume an approved provider-probe approval as a single-use
+governance record while still refusing to runtime-probe providers, execute
+provider binaries, query services, launch processes or containers, write
+execution receipts, run repository code, validate candidates, or promote
+capabilities.
+
+Material truth now visible:
+
+- `LabSandboxProviderRuntimeProbeApprovalConsumption` records the approved
+  provider-probe approval id, approval-request id, upstream approval id,
+  execution-boundary id, run-boundary id, source/candidate ids, action hash,
+  approval snapshot, binding evidence, permission scope, receipt path, and
+  explicit false flags for upstream approval consumption, provider probes,
+  provider binaries, service queries, process launch, container launch, repo code
+  execution, network access, repo writes, execution receipts, execution
+  authority, and execution.
+- `IngestService.consume_lab_sandbox_provider_runtime_probe_approval(...)`
+  requires a matching local approval-request artifact plus an approved exact
+  `francis.lab.sandbox_provider_runtime_probe` approval record, rejects pending,
+  rejected, missing, stale, mismatched, and reused approvals before writing, then
+  writes `lab_runtime_probe_approval_consumptions` artifacts and
+  `lab.sandbox.provider_runtime_probe.approval.consume` ingest receipts.
+- The CLI exposes
+  `francis lab sandbox-provider-runtime-probe-consume-approval <source> <candidate> <approval-id>`.
+- The permission-gated API exposes
+  `POST /ingest/lab/sandbox-provider-runtime-probe-consume-approval` with
+  `ingest.lab.sandbox.provider_runtime_probe.consume_approval` scope, and denies
+  before any consumption artifact or receipt write when the actor lacks that
+  scope.
+- `GET /ingest/readback` and the Code Ingest UI parser/panel now expose provider
+  runtime-probe approval-consumption counts, artifacts, single-use state, and
+  no-execution flags without writing receipts or artifacts from readback.
+- Canonical capability, architecture, build-order, build-manifest, roadmap, and
+  code-born ingestion docs now describe provider runtime-probe approval
+  consumption as single-use governance evidence, not provider probe success or
+  execution authority.
+
+Latest validation:
+
+- Focused ingest/API tests:
+  `.venv\Scripts\python.exe -m pytest tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py -q`
+  passed.
+- Focused Ruff check:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed.
+- Focused Ruff format check:
+  `.venv\Scripts\python.exe -m ruff format --check src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py tests\conftest.py tests\unit\test_code_born_ingestion.py tests\test_api_ingest.py`
+  passed with `14` files already formatted after formatting touched files.
+- Focused mypy:
+  `.venv\Scripts\python.exe -m mypy src\francis\ingest src\francis\api\routes\ingest.py src\francis\api\mutation_authority_matrix.py src\francis\__main__.py`
+  passed with no issues in `11` source files.
+- Authority-matrix readback confirmed
+  `/ingest/lab/sandbox-provider-runtime-probe-consume-approval` is present as
+  `permission_gated` with required scope
+  `ingest.lab.sandbox.provider_runtime_probe.consume_approval`. The full matrix
+  still reports `missing_total: 8` for pre-existing unrelated gaps.
+- Focused ingest UI parser test:
+  `node --test --experimental-strip-types apps\chat_ui\src\ingest\index.test.ts`
+  passed `4` tests.
+- Full UI unit suite:
+  `npm run test` in `apps/chat_ui` passed `233` tests.
+- UI production build:
+  `npm run build` in `apps/chat_ui` passed; Vite emitted its existing
+  large-chunk warning.
+
+Remaining truthful gap:
+
+- This does not runtime-probe providers, execute provider binaries, query
+  provider services, launch processes or containers, bind or enforce a live
+  sandbox provider, execute repo commands, bind or enforce a live readonly
+  source mount, copy arbitrary source trees into the Lab, enforce network
+  isolation, enforce filesystem write isolation, capture real process
+  stdout/stderr, run build/test commands, write execution receipts for real
+  execution, validate candidates, promote capabilities, or grant Francis
+  authority to execute imported code. Provider runtime-probe approval consumption
+  is single-use governance evidence, not provider probe execution, provider
+  validation, or authority to run repository code.
 
 ### 2026-06-05 - Stage 17 operator proposal-evidence refs record capability catalog chunk 14
 
@@ -68873,6 +72998,48 @@ Remaining truthful gap:
   managed-copy receipts, enforce tenant isolation, export safe deltas, activate
   SLAs, bind roles, or decommission tenant state.
 
+## 5b. Francis Lab v0 runtime (opt-in sandboxed execution)
+
+As of `2026-06-10`, a Francis Lab v0 runtime was added as a separate downstream
+subsystem (`src/francis/ingest/lab/lab_runtime.py` and
+`IngestService.run_lab_capability`; the ingest package was also reorganized into
+`ingest/`, `core/`, `lab/`, and `shared/` sub-packages with back-compat
+re-exports and no behavior change). It is the first ingest-adjacent surface that
+can execute repository code, gated behind four simultaneous conditions: a consumed
+exact-action `sandboxed_rebuild_run_test` approval, a safety-gated non-destructive
+candidate, explicit operator opt-in, and a live Docker daemon. Absent any
+condition the run is simulated (a Francis-owned no-op marked
+`execution_mode: "simulated"`) and never promotes a candidate. Real runs use a
+locked-down container (`--network none`, read-only root + read-only `/src` mount,
+`--cap-drop ALL`, `no-new-privileges`, pids/memory/cpu limits, tmpfs `/work`
+scratch), fail closed to simulation if the pinned `FRANCIS_LAB_IMAGE` is not
+present locally (no network pull), and enforce a host-side timeout with
+`docker kill`. Deterministic validation returns `PARTIAL` for simulated,
+`VALID` only for real exit-0, `INVALID` for real non-zero/timeout; promotion
+advances at most one rung and only on real `VALID` evidence. Every run writes a
+`lab.execution.run` receipt plus a `lab_execution_runs` artifact surfaced in
+`GET /ingest/readback`. Surfaces: `francis lab run … [--opt-in]` and
+`POST /ingest/lab/run` (scope `ingest.lab.execute.run`).
+
+Validation evidence actually run this turn:
+
+- `ruff check` and `ruff format` clean on the changed files; `mypy` clean on
+  `lab_runtime.py`, `service.py`, and the ingest route.
+- `tests/unit/test_lab_runtime.py` (21) and `tests/unit/test_lab_run_service.py`
+  (6) pass offline with an injected fake command runner (no Docker).
+
+Truthful gap (does not move overall or phase percentages):
+
+- The real-Docker execution path is implemented and unit-tested against a
+  **mocked** daemon only. Docker Desktop is installed but stopped on this host,
+  so the path has **not** been verified against a live daemon, and no pinned
+  `FRANCIS_LAB_IMAGE` base image has been built. No candidate has been promoted
+  to `validated` from real execution. Three pre-existing failures in the
+  uncommitted ingest tree (`secret_storage_allowed` and related keys redacted by
+  the governed redaction layer in sandbox-policy / synthetic-noop / provider-probe
+  paths) are unrelated to this change and remain open. This entry records new
+  implemented surface plus targeted validation; it does not claim a closed gate.
+
 ## 5c. Francis Lab v0 real Docker substrate verification
 
 As of `2026-06-10`, the Lab v0 real Docker execution **substrate** was verified
@@ -68903,6 +73070,61 @@ This entry records an infrastructure/substrate verification plus the new
 `infra/lab/` image. It does not move overall or phase percentages, does not
 advance any roadmap stage, and does not claim full `run_lab_capability` live
 verification.
+
+## 5d. Full governed Lab path verified live (run_lab_capability wrapper)
+
+As of `2026-06-11`, the complete ingest-connected governed execution path was
+verified end-to-end against a live Docker daemon, through production service
+methods only (no forged/seeded approval artifacts).
+
+- Docker daemon: live, server `29.2.0` (linux/amd64).
+- Image: `francis-lab-base:pinned` (built from `infra/lab/Dockerfile`,
+  `alpine:3.20` pinned by digest).
+- Fixture: harmless Francis-owned git repo (README + one text file, no manifests),
+  candidate `inspect_project_structure` (drafted, low risk, read-only).
+- Throwaway `FRANCIS_DATA_DIR`; `FRANCIS_LAB_IMAGE=francis-lab-base:pinned`.
+
+Path driven through production methods: `add_source` -> `extract_candidates` ->
+`plan_lab`/`prepare_lab_workspace`/`preflight_lab_execution` ->
+`request_lab_execution_approval` (approval A, granted via `approvals.decide`) ->
+~30 governed preflight/boundary records (blocked-but-recorded by design) ->
+`request_lab_sandbox_provider_runtime_probe_approval` (approval B, granted) ->
+`consume_lab_sandbox_provider_runtime_probe_approval` -> invocation /
+pre-execution / runner-control-binding ->
+`preflight_lab_sandboxed_rebuild_run_test_boundary` ->
+`request_lab_sandboxed_rebuild_run_test_approval` (approval C, granted) ->
+`consume_lab_sandboxed_rebuild_run_test_approval` (consumed) ->
+`run_lab_capability(approval_C, opt_in=True)`.
+
+Live result (one representative run):
+
+- approvals A=`08b29821-…`, B=`9e3e3301-…`, C(consumed)=`3e28d91f-…`
+- run id `lab_run_20260611T012847-0000_82737ffe`
+- `execution_mode=real`, `exit_code=0`, image `francis-lab-base:pinned`
+- network blocked (`network_accessed=false`); host fixture byte-identical
+  (`host_mutation=false`)
+- `lab.execution.run` receipt written (artifact under
+  `data/artifacts/ingest/lab_execution_runs/`, receipt under `.../receipts/`)
+- promotion persisted `drafted -> runnable` (confirmed by reloading a fresh
+  `IngestService` from disk: candidate registry shows `runnable`)
+- readback surface shows 1 run with `execution_mode=real` and the receipt linked
+
+Bounded code fix required to make the live path succeed:
+
+- `src/francis/ingest/lab/lab_runtime.py`: container names derived from an ISO
+  timestamp contained a `+` (timezone offset), which Docker rejects in `--name`
+  (exit 125). Added `safe_container_name()` and applied it in `build_run_argv`
+  and `run_real` so the argv `--name`, kill target, and `sandbox_id` agree.
+  Regression tests added in `tests/unit/test_lab_runtime.py`.
+
+Validation: `tests/unit/test_lab_runtime.py` + `tests/unit/test_lab_run_service.py`
+(33 passed); ruff + mypy clean on the changed runtime file; plus the live run.
+
+Remaining limitations: the live path is a manual integration verification (CI does
+not run a live Docker daemon); the synthetic-noop and provider-probe sub-chains
+remain blocked-but-recorded contract evidence; the `registered` promotion state is
+still unreachable by design. This entry does not move overall or phase percentages
+and does not advance a roadmap stage.
 
 ### 2026-06-10 - Stage 17 operator proposal-evidence refs record capability rule remediation pack
 
@@ -68992,6 +73214,311 @@ Remaining truthful gap:
   1788 capability evidence refs, close Stage 18, create managed copies, write
   managed-copy receipts, enforce tenant isolation, export safe deltas, activate
   SLAs, bind roles, or decommission tenant state.
+
+## 5e. Ingest acquisition orchestrator (ingest now pushes the governed pipeline)
+
+As of `2026-06-11`, a first bounded ingest acquisition orchestrator was added so
+ingest *pushes* the existing governed pipeline instead of being hand-driven. It
+sequences the corridor and pauses at the real approval gates; it does not remove
+or auto-grant them.
+
+- New: `src/francis/ingest/core/acquisition.py`
+  (`IngestAcquisitionOrchestrator`, `IngestAcquisitionRun`,
+  `IngestAcquisitionStep`); `IngestService.acquire_source_candidate` /
+  `continue_acquisition_after_approval`; `acquisitions` artifact dir + readback.
+- New: `src/francis/ingest/ingest/runtime_requirements.py`
+  (`classify_runtime_requirements`) — read-only environment/runtime requirement
+  inference (network/docker/nested/display/browser/service/credentials),
+  `default_lab_compatible`, `recommended_lab_profile`.
+- Uses only production primitives (`request_*`/`consume_*`/`run_lab_capability`),
+  approvals via `approvals.decide` (operator), never `SandboxExecutor` directly,
+  never seeds approval artifacts.
+
+Live evidence (live Docker daemon `29.2.0`, image `francis-lab-base:pinned`):
+
+- Target A — harmless Francis fixture, candidate `inspect_project_structure`:
+  `acquire_source_candidate(opt_in=True)` paused at gate A; operator approved;
+  `continue_acquisition_after_approval` resumed to gate B, then gate C — **three
+  genuine pauses, each operator-approved, none auto-granted**. Final wrapper run:
+  `execution_mode=real`, `exit_code=0`, `VALID`, network blocked, host fixture
+  byte-identical, promotion persisted `drafted -> runnable` (verified by fresh
+  on-disk reload), acquisition + run surfaced in readback. Final state
+  `promoted`; approvals A/B/C recorded.
+- Target B — real external repo `huggingface/screenenv`, candidate
+  `run_project_tests`: ingest mapped it; classifier flagged
+  `requires_docker/nested/display/browser/network/service/credentials`,
+  `default_lab_compatible=false`, recommended
+  `specialized:container+display+browser+network+service`. Orchestrator **blocked
+  before any chain step ran** (`executed=false`, `network_accessed=false`); no
+  execution, no network, no Docker socket, no promotion. Default Lab unchanged.
+
+Validation: `tests/unit/test_ingest_acquisition.py` (6, CI-safe via fake runner)
+covers run-record creation, no-auto-grant, pause, resume-only-after-granted,
+wrapper invocation, promotion persistence, blocked-path artifact, readback, and
+ScreenEnv-like classification; ruff + mypy clean on the new modules; plus the two
+live runs above.
+
+Limitations: live runs are manual integration (CI has no live-Docker marker);
+this is orchestration only — no capability synthesis/Forge, no networked Lab, no
+specialized Lab profile (only recommended). Does not move overall or phase
+percentages and does not advance a roadmap stage.
+
+## 5d. Francis local Ollama builder adapter foundation
+
+As of `2026-06-11`, a bounded local builder foundation was added for
+`builder.local.ollama`. The new surface compiles ingest evidence into a
+Francis-native `FrancisCapabilitySpec` and sends proposal-only build tasks to a
+localhost-only Ollama coding model. It is part of Francis, but it is not Francis
+core authority: it cannot apply patches, cannot promote capabilities, cannot
+grant approvals, cannot bypass Lab, and cannot edit forbidden paths.
+
+Files changed for this slice:
+
+- `src/francis/ingest/core/local_builder.py`
+- `src/francis/ingest/core/registry.py`
+- `src/francis/ingest/core/service.py`
+- `src/francis/ingest/__init__.py`
+- `tests/unit/test_local_ollama_builder.py`
+
+Exact result (no overclaim):
+
+- `FrancisCapabilitySpec` and supporting interface/risk/validation/build-task
+  contracts exist with `copy_policy: do_not_copy_third_party_code` and
+  `conceptual_rebuild_only: true` by default.
+- `compile_capability_spec_from_candidate` deterministically translates ingest
+  `CapabilityCandidate` + `RepoMap` evidence into a Francis-native spec without
+  using an LLM or copying implementation code.
+- ScreenEnv-like runtime signals are classified as default-Lab-incompatible and
+  recommend capability study / specialized Lab profile design instead of default
+  execution.
+- `LocalOllamaBuilder` defaults to `qwen2.5-coder:7b` / localhost Ollama,
+  handles unavailable Ollama as an auditable `unavailable` record, and records
+  model output as a proposal artifact only (`patch_applied: false`).
+- Builder run artifacts are written under `data/artifacts/ingest/builder_runs/`
+  with receipts using operation `builder.local.ollama.run`; readback lists builder
+  run records.
+- A live local check ran against `qwen2.5-coder:7b`: Ollama was available,
+  returned a proposal-plan artifact, wrote a builder run artifact and receipt,
+  and did not apply a patch. A separate service-level unavailable check also
+  wrote a clean `unavailable` builder run record.
+
+Validation evidence actually run this turn:
+
+- Direct offline assertions for spec compilation, do-not-copy policy,
+  ScreenEnv-like default-Lab incompatibility, unavailable Ollama handling, prompt
+  forbidden-path omission, builder run persistence/readback, no-auto-apply,
+  model-refusal recording, and forbidden allowed-file blocking all passed.
+- `ruff check` and `ruff format --check` passed on the touched builder/service
+  files.
+- `mypy` passed on `src/francis/ingest/core/local_builder.py`.
+
+Truthful gap (does not move overall or phase percentages):
+
+- `pytest` hung in this shell even for existing unit tests, so the new tests were
+  validated by direct Python assertion execution rather than a completed pytest
+  run. This should be rerun through pytest once the local test-runner hang is
+  resolved.
+- The adapter creates proposal artifacts only. It does not validate proposed
+  code in Lab, apply patches, promote capabilities, or implement full Forge
+  synthesis.
+
+Stabilization update as of `2026-06-11` (no roadmap percentage movement):
+
+- Root cause of the local pytest hang was identified in the pytest bootstrap
+  retention hook, not in `builder.local.ollama`: `pytest_sessionstart` traversed
+  stale `data/test_runs/pytest/session_*` directories with a recursive
+  `Path.rglob("*")` byte-size walk before collection. A faulthandler diagnostic
+  captured the stack in Python `glob.py`, and the repo had 818 retained pytest
+  session directories at diagnosis time.
+- The retention hook now preserves deletion and receipt generation while
+  removing the pre-deletion recursive byte-size walk. This is test-bootstrap
+  stabilization only; it does not change builder behavior.
+- `tests/unit/test_local_ollama_builder.py` now runs through pytest and passes.
+  Collection-only for the builder tests and governance redaction tests also
+  completes normally; `tests/unit/test_governance_redaction.py` passes.
+- Required stabilization validation passed: local builder pytest, related
+  Lab+builder pytest, `ruff check`, `ruff format --check`, and `mypy` on
+  `src/francis/ingest/core/local_builder.py`.
+- A throwaway offline readback check with `FRANCIS_DATA_DIR` verified
+  capability spec artifact + receipt writes, `builder.local.ollama.run` artifact
+  + receipt writes, `IngestService.list_builder_runs()`, `readback()` counts,
+  `status: unavailable`, `ollama_available: false`, and `patch_applied: false`.
+- Unit tests inject fake builder clients or block before the client is called;
+  they do not require a live Ollama server.
+- Commit boundary remains unsafe because this builder slice is entangled with
+  untracked ingest/Lab/acquisition files and large pending tracked diffs from
+  prior work. No commit was made for this stabilization pass.
+
+## 5f. Forge synthesis corridor (governed, non-applying review → apply gate → validation plan)
+
+As of `2026-06-12`, the Forge synthesis corridor was added to pick up where the
+local Ollama builder stopped (a proposal artifact that is never applied) and drive
+it through evidence-only governance bricks toward an operator-approvable — but
+still un-applied — state. Ingest is a capability of Francis, not Francis authority:
+no brick calls `approvals.decide`, applies a patch, writes the repo, runs a
+command, validates a candidate, or promotes a capability.
+
+New files:
+
+- `src/francis/ingest/core/proposal_review.py` — deterministic unified-diff
+  parser, scope evaluator (allowed/forbidden/file-count), bounded third-party
+  copy-overlap detector (token-shingle Jaccard vs the ingested source tree),
+  secret/network/destructive token scan, and the `BuilderProposalReview` record.
+- `src/francis/ingest/core/forge_service.py` — `ForgeSynthesisIngestService`
+  mixin with the six corridor methods.
+- `tests/unit/test_forge_synthesis.py` (12 tests, CI-safe; no live Ollama/Docker).
+
+Wired (additive): six artifact dirs in `ensure_ingest_layout`, the mixin added to
+`IngestService` bases, and six readback aggregations + counts in `BaseIngestService.readback`.
+
+The six bricks (record dir / receipt op):
+
+1. `builder.proposal.review` (`review_builder_proposal`) — the deterministic gate.
+   A verdict is **only computed over the full proposal text whose sha256 matches
+   the digest recorded on the builder run**; absent/mismatched text → honest
+   `indeterminate` (no clean signal over truncated content). Checks scope,
+   diff well-formedness, secret/destructive tokens (block) + network token (flag),
+   and copy-overlap vs source (flags `possible_third_party_copy`). Reviews persist
+   only counts + digests, never raw added source lines.
+2. `forge.apply.preflight` — exact-action apply hash + apply-gate projection;
+   requires a `clean` review; creates no approval.
+3. `forge.apply.approval_request` — queues a pending exact-action approval via the
+   Francis approvals store; does not consume.
+4. `forge.apply.approval_consumption` — single-use, reuse-blocked, action-hash
+   matched consumption; apply still impossible.
+5. `forge.apply.boundary` — honest refusal surface: even with a consumed approval,
+   apply is refused until a governed applier (atomic write+rollback, apply receipt
+   sink, forbidden-path write guard, post-apply Lab validation) exists.
+6. `forge.validation.plan` — projects the future Lab v0 validation path for an
+   applied proposal; runs nothing.
+
+Validation actually run this turn:
+
+- `tests/unit/test_forge_synthesis.py` — 12/12 pass (diff parser, scope block,
+  secret/destructive scan, copy-overlap flag, review indeterminate-without-text,
+  review indeterminate-on-digest-mismatch, review clean-in-scope, review
+  forbidden-path block, preflight blocks-until-clean, full apply corridor
+  single-use + never-applies, validation plan, readback surfacing). Combined run
+  with builder + acquisition + lab-run suites (36 tests) also passes.
+- A throwaway offline `FRANCIS_DATA_DIR` driver proved the full chain end-to-end:
+  builder proposal (fake client) → review indeterminate (no text) → indeterminate
+  (wrong text) → clean (digest-verified, in scope) → apply preflight
+  `needs_approval` → approval request → consume blocked while pending →
+  `approvals.decide(approve)` → consumed → reuse blocked → apply boundary refused
+  (`patch_applied=false`, `wrote_to_repo=false`) → validation plan → readback
+  counts all 1.
+- `ruff check` and `ruff format --check` pass on the new modules + test.
+
+Truthful gaps (no roadmap percentage movement; not a roadmap-stage advance):
+
+- `mypy` could not be run in this shell (Windows Application Control policy blocks
+  a mypy DLL: `ImportError: DLL load failed while importing tvar_scope`). The new
+  modules are fully annotated; mypy should be rerun in a clean environment.
+- This is the governed forward arc only. No patch is ever applied: there is no
+  governed applier (atomic write, rollback, receipt sink, forbidden-path write
+  guard, post-apply Lab validation) yet — that is the next brick, deliberately not
+  built here. No capability is validated or promoted; the Lab validation path is
+  projected, not run.
+- Not exposed on the HTTP API or CLI yet (Python `IngestService` surface only),
+  consistent with the acquisition/builder surfaces.
+- Commit boundary remains unsafe: the whole ingest subsystem (incl. this corridor)
+  is untracked and entangled with concurrent work; no commit was made.
+
+## 5g. Forge synthesis orchestrator (ingest pushes native synthesis end-to-end)
+
+As of `2026-06-12`, a synthesis orchestrator was added so ingest *pushes* the
+Forge synthesis corridor the way the acquisition orchestrator pushes the Lab
+corridor — unifying Move 1 (orchestration) with Move 2 (native synthesis).
+
+- New: `src/francis/ingest/core/forge_orchestrator.py`
+  (`ForgeSynthesisOrchestrator`, `ForgeSynthesisRun`, `ForgeSynthesisStep`);
+  `IngestService.synthesize_capability` / `continue_synthesis_after_approval`;
+  `_run_builder_for_synthesis` helper; `forge_synthesis_runs` artifact dir +
+  readback aggregation/count.
+- New: `tests/unit/test_forge_synthesis_orchestrator.py` (5 tests, CI-safe via an
+  injected deterministic builder client; no live Ollama/Docker).
+- First call drives compile-spec → builder proposal → digest-gated review → apply
+  preflight → apply approval request, then **pauses at the real
+  `francis.forge.apply` operator gate** (minted approval never auto-granted;
+  `approvals.decide` never called). `continue_synthesis_after_approval` resumes
+  through single-use consumption → apply boundary (refusal) → validation plan,
+  terminating in the honest `refused` state. Nothing is applied, executed,
+  validated, or promoted at any point.
+
+Validation run this turn: orchestrator suite (5) + forge corridor suite (13) pass;
+the pause/resume, forbidden-proposal block, no-auto-grant resume, builder-unavailable
+honest stop, and readback surfacing are all covered. `ruff check` + `ruff format
+--check` clean. Same truthful gaps as §5f apply (mypy blocked locally by Windows
+Application Control policy; no governed applier; not exposed on API/CLI; no commit).
+
+## 5h. Governed dry-run applier (scratch-isolated; real repo never written)
+
+As of `2026-06-12`, the first of the missing applier controls enumerated by the
+`forge.apply.boundary` brick was implemented as a **dry-run** applier — turning
+"refused, nothing applied" into "applied to an isolated scratch copy, repo
+untouched", with real evidence.
+
+- New: `proposal_review.apply_unified_diff_to_tree` + `FileApplyResult` — a
+  conservative unified-diff applier (full new-file creation; context-verified hunk
+  application for existing files; **reject on any context/removed-line mismatch —
+  no fuzzy/forced apply**; forbidden-path write guard; scratch-containment guard).
+- New: `IngestService.dryrun_forge_apply` (`forge.apply.dryrun`) + `forge_apply_dryruns`
+  artifact dir + `forge_dryrun_workspaces/` scratch tree + readback aggregation/count.
+- Gating: requires a consumed `francis.forge.apply` approval for the same builder
+  run AND a `clean` review AND the full proposal text digest-matched to the review
+  (`indeterminate` otherwise — no apply attempt). Copies the source to a fresh
+  Francis-owned scratch dir (bounded: skips `.git`/`node_modules`/venvs, file/byte
+  caps) and applies the patch to the scratch tree ONLY. The real source repo is
+  never written: `wrote_to_repo=false`, `patch_applied_to_repo=false`.
+- New: `tests/unit/test_forge_dryrun_apply.py` (8 tests): applier new-file,
+  existing-file context apply, context-mismatch reject, forbidden-path guard, plus
+  service-level scratch-applied-repo-untouched, blocked-without-consumed-approval,
+  indeterminate-on-digest-mismatch, readback surfacing.
+
+Validation run this turn: full forge family (review corridor 13 + synthesis
+orchestrator 5 + dry-run 8 = 26) passes; `ruff check` + `ruff format --check`
+clean. Earlier combined run with `test_code_born_ingestion` (74) + `test_api_ingest`
+(67) + builder (9) also passed (exit 0), confirming the additive readback keys
+don't regress existing readback assertions.
+
+Truthful gaps: still NOT a real-repo apply — atomic write+rollback to the host
+repo, an apply receipt sink, and post-apply Lab validation remain (next bricks).
+No capability is validated or promoted. mypy still blocked locally by the Windows
+Application Control policy. Not on API/CLI yet. No commit (subsystem untracked +
+entangled).
+
+## 5i. Synthesized-source binding (closes the synthesis -> Lab validation loop)
+
+As of `2026-06-12`, a brick was added to route the synthesized capability back into
+the existing governed Lab corridor instead of building a new execution path — the
+sound way to reach post-apply validation without weakening any gate or calling the
+sandbox runner directly.
+
+- New: `IngestService.bind_synthesized_source` (`forge.synthesized_source.bind`) +
+  `forge_synthesized_sources` artifact dir + readback aggregation/count.
+- Requires a `dryrun_applied`/`dryrun_partial` dry-run record with ≥1 file applied.
+  Registers the dry-run scratch tree (proposal applied in isolation) as a NEW
+  first-class ingest source via `add_source`, inspects it read-only, extracts its
+  candidates, and records the origin→builder_run→dryrun→synthesized_source linkage
+  with `next_step` pointing at the standard acquisition/Lab corridor.
+- Closes the loop end-to-end: ingest a repo → synthesize a Francis-native proposal
+  → apply to scratch → re-ingest the synthesized tree as a source → (operator)
+  drive the already-verified governed Lab v0 corridor to validate it in the real
+  Docker sandbox. No execution, repo write, validation, or promotion happens in
+  this brick; the real sandbox run stays behind its existing gates.
+- New: `tests/unit/test_forge_synthesized_source.py` (3 tests): registers the
+  synthesized tree as a new source with candidates (repo untouched), blocked
+  without a dry-run, surfaces in the origin source's readback.
+
+Validation run this turn: full forge family (review 13 + orchestrator 5 + dry-run 8
++ synthesized-source 3 = 29) passes; `ruff check` + `ruff format --check` clean.
+
+Truthful gaps: the actual real-Docker validation of the synthesized source is the
+operator-driven existing Lab corridor (gated by `sandboxed_rebuild_run_test`
+approval + safe candidate + opt-in + live Docker) — this brick prepares and routes
+to it, it does not run it. Still no real-repo apply (atomic write+rollback + apply
+receipt sink remain). mypy blocked locally by the Windows Application Control policy.
+Not on API/CLI. No commit (subsystem untracked + entangled).
 
 ### 2026-06-10 - Stage 17 operator proposal-evidence refs record capability validation receipts pack
 
@@ -71467,6 +75994,86 @@ Remaining truthful gap:
   grant execution authority, grant mutation authority beyond governed
   evidence-ref recording, close the proposal-review or promotion gates,
   independently verify artifact truth, clear the remaining 1490 capability
+  evidence refs, close Stage 18, create managed copies, write managed-copy
+  receipts, enforce tenant isolation, export safe deltas, activate SLAs, bind
+  roles, or decommission tenant state.
+
+### 2026-06-11 - Stage 17 operator proposal-evidence refs record echo plugin chunk 9
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence for the capability-library promotion path.
+
+This pass continued `legacy.generated.echoplugin` by recording the ninth
+bounded 10-capability chunk through the existing governed operator
+proposal-evidence intake route. This is a partial-pack receipt entry only:
+`legacy.generated.echoplugin` remains visible in the Stage 17 queue with 124
+unresolved capability evidence refs, and no pack-completion claim is made.
+
+Capabilities recorded in this chunk:
+
+- `1777943635_echoplugin`
+- `1777943797_echoplugin`
+- `1778024922_echoplugin`
+- `1778046251_echoplugin`
+- `1778076908_echoplugin`
+- `1778113064_echoplugin`
+- `1778162944_echoplugin`
+- `1778207006_echoplugin`
+- `1778376950_echoplugin`
+- `1778415896_echoplugin`
+
+Recorded evidence ref pattern:
+
+- each capability recorded its matching proposal artifact ref
+- each capability recorded its matching validation artifact ref
+- each capability recorded shared pack metadata ref
+  `artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1780621609_legacy-generated-echoplugin.json`
+- each capability recorded shared operator-review ref
+  `artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1780632847_legacy-generated-echoplugin_106400.json`
+
+Latest validation for this live Stage 17 intake:
+
+- Artifact existence check:
+  all proposal, validation, metadata, and operator-review refs for the 10
+  chunk capabilities existed under `data/artifacts/plugins`.
+- Receipt selection:
+  the operator-review receipt exactly matched the current echo pack queue; the
+  selected metadata receipt was the latest metadata receipt covering the full
+  current echo pack.
+- Governed dry-run/apply runner:
+  the chunk walker called
+  `POST /plugins/capabilities/library/proposal-evidence/operator-intake/apply`
+  once per capability with actor `stage17.operator`,
+  `FRANCIS_API_ACTOR_SCOPES={"stage17.operator":["plugins.write"]}`,
+  `max_pack_count: 1`, `max_total_capability_count: 1`, and
+  `max_capability_count_per_pack: 1`. For every capability, dry-run returned
+  `ok: true`, `status: dry_run`, `planned_capability_count: 1`,
+  `evidence_ref_count: 4`, and a fingerprint before apply used the returned
+  fingerprint. Every apply returned `ok: true`, `status: recorded`,
+  `applied: true`, `recorded_capability_count: 1`, and `evidence_ref_count: 4`.
+- Per-capability readback:
+  after apply, `GET /plugins/get?id=<capability_id>` returned the same four
+  refs, future review required, `proposal_evidence_writes_proposals: false`,
+  `proposal_evidence_approval_claimed: false`, and unchanged plugin
+  status/enabled values.
+- Direct chunk summary:
+  the echo pack now had `recorded_capabilities: 90`, `recorded_refs: 360`, and
+  `remaining_unrecorded_in_pack: 124`; recorded capabilities required future
+  review, none wrote proposals, and none claimed proposal approval.
+- Public queue readback:
+  `GET /plugins/capabilities/library/proposal-evidence/operator-intake/checklist`
+  returned `status: ready_for_operator_evidence_refs`,
+  `candidate_pack_count: 17`, `candidate_capability_count: 1480`, first visible
+  pack `legacy.generated.echoplugin`, and
+  `echo_pack_remaining_unrecorded: 124`.
+
+Remaining truthful gap:
+
+- This records only the ninth `legacy.generated.echoplugin` chunk. It does not
+  clear the echo pack, close Stage 17, promote capabilities, approve proposals,
+  grant execution authority, grant mutation authority beyond governed
+  evidence-ref recording, close the proposal-review or promotion gates,
+  independently verify artifact truth, clear the remaining 1480 capability
   evidence refs, close Stage 18, create managed copies, write managed-copy
   receipts, enforce tenant isolation, export safe deltas, activate SLAs, bind
   roles, or decommission tenant state.
