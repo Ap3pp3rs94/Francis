@@ -43,6 +43,9 @@ web = [
   "jinja2",
   "python-multipart",
 ]
+bridge = [
+  "mcp>=1.2.0",
+]
 data = [
   "sqlalchemy",
   "alembic",
