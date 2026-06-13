@@ -11,6 +11,12 @@ from francis.developer_bridge.repo_tools import (
 )
 
 
+def _normalize_newlines(value: str) -> str:
+    return value.replace("\r\n", "\n")
+
+
+
+
 def test_read_repo_file_is_repo_bounded_and_text_only(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.setenv("FRANCIS_ROOT", str(tmp_path))
     target = tmp_path / "docs" / "note.md"
@@ -21,7 +27,7 @@ def test_read_repo_file_is_repo_bounded_and_text_only(tmp_path, monkeypatch) -> 
 
     assert result["ok"] is True
     assert result["path"] == "docs/note.md"
-    assert result["content"] == "Francis bridge note\n"
+    assert _normalize_newlines(result["content"]) == "Francis bridge note\n"
     assert result["truncated"] is False
     assert isinstance(result["sha256"], str)
 
@@ -64,7 +70,7 @@ def test_read_supervised_exec_receipt_is_bounded_to_artifact_root(tmp_path, monk
     assert result["ok"] is True
     assert result["run_id"] == "run-123"
     assert result["filename"] == "result.json"
-    assert result["content"] == '{"ok": true}\n'
+    assert _normalize_newlines(result["content"]) == '{"ok": true}\n'
 
     with pytest.raises(DeveloperBridgeError) as bad_run_id:
         read_supervised_exec_receipt("../run-123", "result.json")

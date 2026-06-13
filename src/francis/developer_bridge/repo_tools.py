@@ -5,7 +5,6 @@ import os
 import re
 import subprocess
 from pathlib import Path, PurePosixPath
-from typing import Any
 
 from francis.kernel.paths import data_dir, repo_root
 
