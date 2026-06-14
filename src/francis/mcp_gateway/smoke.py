@@ -11,6 +11,8 @@ from francis.mcp_gateway.tools import list_tools, run_tool
 REQUIRED_TOOLS = {
     "francis.health",
     "francis.repo.status",
+    "francis.screen.status",
+    "francis.screen.session",
     "francis.input.status",
     "francis.input.propose",
     "francis.input.execute_approved",
@@ -42,6 +44,18 @@ def _proposal_id(result: Mapping[str, Any]) -> str:
     return proposal_id if isinstance(proposal_id, str) else ""
 
 
+def _is_readback_safe(result: Mapping[str, Any]) -> bool:
+    governance = result.get("governance")
+    if not isinstance(governance, Mapping):
+        return False
+    return (
+        bool(governance.get("read_only"))
+        and governance.get("raw_shell") is False
+        and governance.get("screenshots") is False
+        and governance.get("pixels") is False
+    )
+
+
 def run_smoke() -> dict[str, Any]:
     old_state_dir = os.environ.get("FRANCIS_INPUT_ACTUATOR_STATE_DIR")
 
@@ -54,6 +68,8 @@ def run_smoke() -> dict[str, Any]:
             missing = sorted(REQUIRED_TOOLS - names)
 
             health = run_tool("francis.health", {})
+            screen_status = run_tool("francis.screen.status", {})
+            screen_session = run_tool("francis.screen.session", {})
             input_status = run_tool("francis.input.status", {})
             proposal = run_tool(
                 "francis.input.propose",
@@ -78,6 +94,11 @@ def run_smoke() -> dict[str, Any]:
                 not missing
                 and bool(health.get("ok"))
                 and _status(health) == "ready"
+                and bool(screen_status.get("ok"))
+                and _status(screen_status) == "ready"
+                and bool(screen_session.get("ok"))
+                and _status(screen_session) == "ready"
+                and _is_readback_safe(screen_session)
                 and bool(input_status.get("ok"))
                 and _status(input_status) == "ready"
                 and bool(proposal.get("ok"))
@@ -92,6 +113,9 @@ def run_smoke() -> dict[str, Any]:
                 "tool_count": len(tools),
                 "missing_tools": missing,
                 "health_status": _status(health),
+                "screen_status": _status(screen_status),
+                "screen_session_status": _status(screen_session),
+                "screen_readback_safe": _is_readback_safe(screen_session),
                 "input_status": _status(input_status),
                 "proposal_created": bool(proposal_id),
                 "unapproved_input_refused": (not bool(denied.get("ok")) and _status(denied) == "approval_required"),
@@ -112,6 +136,9 @@ def main() -> int:
     print(f"  tool_count: {result['tool_count']}")
     print(f"  missing_tools: {result['missing_tools']}")
     print(f"  health_status: {result['health_status']}")
+    print(f"  screen_status: {result['screen_status']}")
+    print(f"  screen_session_status: {result['screen_session_status']}")
+    print(f"  screen_readback_safe: {result['screen_readback_safe']}")
     print(f"  input_status: {result['input_status']}")
     print(f"  proposal_created: {result['proposal_created']}")
     print(f"  unapproved_input_refused: {result['unapproved_input_refused']}")
