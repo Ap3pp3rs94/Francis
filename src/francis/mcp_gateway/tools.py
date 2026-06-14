@@ -321,7 +321,6 @@ def _command_execute_approved(args: dict[str, Any]) -> ToolResult:
             },
             error="proposal not found",
         )
-
     proposal = json.loads(proposal_path.read_text(encoding="utf-8"))
     args_payload = proposal.get("args") if isinstance(proposal.get("args"), dict) else {}
     kind = _clean_text(proposal.get("kind"))
@@ -378,6 +377,48 @@ def _receipts_readback(args: dict[str, Any]) -> ToolResult:
         tool="francis.receipts.readback",
         data={"receipt": payload},
         governance={"read_only": True, "raw_shell": False, "authority": "readback"},
+    )
+
+
+def _screen_status(_args: dict[str, Any]) -> ToolResult:
+    from francis.screen_readback.tools import screen_readback_status
+
+    result = screen_readback_status()
+    return ToolResult(
+        ok=bool(result.get("ok")),
+        status=_clean_text(result.get("status"), "ready"),
+        tool="francis.screen.status",
+        data=result,
+        governance={
+            "read_only": True,
+            "raw_shell": False,
+            "raw_input": False,
+            "screenshots": False,
+            "pixels": False,
+            "authority": "screen_readback",
+        },
+        error=_clean_text(result.get("error")) or None,
+    )
+
+
+def _screen_session(args: dict[str, Any]) -> ToolResult:
+    from francis.screen_readback.tools import session_readback
+
+    result = session_readback(args)
+    return ToolResult(
+        ok=bool(result.get("ok")),
+        status=_clean_text(result.get("status"), "ready"),
+        tool="francis.screen.session",
+        data=result,
+        governance={
+            "read_only": True,
+            "raw_shell": False,
+            "raw_input": False,
+            "screenshots": False,
+            "pixels": False,
+            "authority": "screen_readback",
+        },
+        error=_clean_text(result.get("error")) or None,
     )
 
 
@@ -471,6 +512,8 @@ _TOOL_SPECS = [
         requires_approval=True,
     ),
     ToolSpec("francis.receipts.readback", "Read MCP gateway receipts.", read_only=True),
+    ToolSpec("francis.screen.status", "Read safe screen/session readback status.", read_only=True),
+    ToolSpec("francis.screen.session", "Read bounded desktop/session context without pixels or control.", read_only=True),
     ToolSpec("francis.input.status", "Read governed input actuator status.", read_only=True),
     ToolSpec(
         "francis.input.propose",
@@ -495,6 +538,8 @@ _TOOL_HANDLERS: dict[str, Callable[[dict[str, Any]], ToolResult]] = {
     "francis.command.propose": _command_propose,
     "francis.command.execute_approved": _command_execute_approved,
     "francis.receipts.readback": _receipts_readback,
+    "francis.screen.status": _screen_status,
+    "francis.screen.session": _screen_session,
     "francis.input.status": _input_status,
     "francis.input.propose": _input_propose,
     "francis.input.execute_approved": _input_execute_approved,
