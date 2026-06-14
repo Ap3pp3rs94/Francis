@@ -422,6 +422,84 @@ def _screen_session(args: dict[str, Any]) -> ToolResult:
     )
 
 
+def _takeover_status(_args: dict[str, Any]) -> ToolResult:
+    from francis.takeover_session.tools import takeover_status_snapshot
+
+    result = takeover_status_snapshot(limit=10)
+    return ToolResult(
+        ok=bool(result.get("ok")),
+        status=_clean_text(result.get("status"), "ready"),
+        tool="francis.takeover.status",
+        data=result,
+        governance={
+            "read_only": True,
+            "raw_shell": False,
+            "raw_input": False,
+            "screenshots": False,
+            "pixels": False,
+            "authority": "takeover_session_readback",
+        },
+        error=_clean_text(result.get("error")) or None,
+    )
+
+
+def _takeover_propose(args: dict[str, Any]) -> ToolResult:
+    from francis.takeover_session.tools import propose_takeover_session
+
+    result = propose_takeover_session(args)
+    return ToolResult(
+        ok=bool(result.get("ok")),
+        status=_clean_text(result.get("status"), "approval_required"),
+        tool="francis.takeover.propose",
+        data=result,
+        governance={
+            "read_only": False,
+            "raw_shell": False,
+            "raw_input": False,
+            "authority": "manual_approval_required",
+        },
+        error=_clean_text(result.get("error")) or None,
+    )
+
+
+def _takeover_start_approved(args: dict[str, Any]) -> ToolResult:
+    from francis.takeover_session.tools import start_approved_takeover_session
+
+    result = start_approved_takeover_session(args)
+    return ToolResult(
+        ok=bool(result.get("ok")),
+        status=_clean_text(result.get("status"), "blocked"),
+        tool="francis.takeover.start_approved",
+        data=result,
+        governance={
+            "read_only": False,
+            "raw_shell": False,
+            "raw_input": False,
+            "authority": "manual_approval_consumed" if result.get("ok") else "manual_approval_required",
+        },
+        error=_clean_text(result.get("error")) or None,
+    )
+
+
+def _takeover_end(args: dict[str, Any]) -> ToolResult:
+    from francis.takeover_session.tools import end_takeover_session
+
+    result = end_takeover_session(args)
+    return ToolResult(
+        ok=bool(result.get("ok")),
+        status=_clean_text(result.get("status"), "blocked"),
+        tool="francis.takeover.end",
+        data=result,
+        governance={
+            "read_only": False,
+            "raw_shell": False,
+            "raw_input": False,
+            "authority": "takeover_revocation",
+        },
+        error=_clean_text(result.get("error")) or None,
+    )
+
+
 def _input_status(_args: dict[str, Any]) -> ToolResult:
     from francis.input_actuator.tools import input_status
 
@@ -514,6 +592,20 @@ _TOOL_SPECS = [
     ToolSpec("francis.receipts.readback", "Read MCP gateway receipts.", read_only=True),
     ToolSpec("francis.screen.status", "Read safe screen/session readback status.", read_only=True),
     ToolSpec("francis.screen.session", "Read bounded desktop/session context without pixels or control.", read_only=True),
+    ToolSpec("francis.takeover.status", "Read Takeover/Pilot session binding status.", read_only=True),
+    ToolSpec(
+        "francis.takeover.propose",
+        "Create a manual-approval Takeover/Pilot session proposal.",
+        read_only=False,
+        requires_approval=True,
+    ),
+    ToolSpec(
+        "francis.takeover.start_approved",
+        "Start a previously approved Takeover/Pilot session proposal.",
+        read_only=False,
+        requires_approval=True,
+    ),
+    ToolSpec("francis.takeover.end", "End or revoke an active Takeover/Pilot session.", read_only=False),
     ToolSpec("francis.input.status", "Read governed input actuator status.", read_only=True),
     ToolSpec(
         "francis.input.propose",
@@ -540,6 +632,10 @@ _TOOL_HANDLERS: dict[str, Callable[[dict[str, Any]], ToolResult]] = {
     "francis.receipts.readback": _receipts_readback,
     "francis.screen.status": _screen_status,
     "francis.screen.session": _screen_session,
+    "francis.takeover.status": _takeover_status,
+    "francis.takeover.propose": _takeover_propose,
+    "francis.takeover.start_approved": _takeover_start_approved,
+    "francis.takeover.end": _takeover_end,
     "francis.input.status": _input_status,
     "francis.input.propose": _input_propose,
     "francis.input.execute_approved": _input_execute_approved,
