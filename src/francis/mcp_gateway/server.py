@@ -77,6 +77,14 @@ def run_stdio_server() -> None:
     def francis_receipts_readback(receipt_id: str = "") -> str:
         return _tool_payload(run_tool("francis.receipts.readback", {"receipt_id": receipt_id}))
 
+    @server.tool(name="francis_screen_status")
+    def francis_screen_status() -> str:
+        return _tool_payload(run_tool("francis.screen.status", {}))
+
+    @server.tool(name="francis_screen_session")
+    def francis_screen_session() -> str:
+        return _tool_payload(run_tool("francis.screen.session", {}))
+
     @server.tool(name="francis_input_status")
     def francis_input_status() -> str:
         return _tool_payload(run_tool("francis.input.status", {}))
