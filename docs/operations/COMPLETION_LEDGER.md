@@ -76078,6 +76078,50 @@ Remaining truthful gap:
   receipts, enforce tenant isolation, export safe deltas, activate SLAs, bind
   roles, or decommission tenant state.
 
+### 2026-06-14 - Lab/Forge growth rung closes: real Python toolchain image promotes to validated
+
+The Lab v0 sandbox previously could not validate Python capabilities: the bare
+`francis-lab-base:pinned` (alpine, no toolchain) ran the detected `python -m pytest`
+command as exit 127 (`python: not found`), so a real run was correctly INVALID and
+never promoted. This closes that growth rung **additively**, without weakening any
+isolation guarantee.
+
+Added `infra/lab/Dockerfile.python` → `francis-lab-python:pinned`: `python:3.12-alpine`
+pinned by digest, a pinned `pytest`, `TMPDIR=/work` baked in (pytest temp files land
+on the writable tmpfs scratch, not the read-only root). The bare base remains the
+minimal default; the variant is selected per-run via `FRANCIS_LAB_IMAGE`. No runtime
+code changed — `build_run_argv` and its `--network none / --read-only / --cap-drop ALL`
+flags are untouched.
+
+Verified on a live daemon (server 29.5.3), throwaway `FRANCIS_DATA_DIR`, real Python
+capability tree (pyproject + discoverable test exercising the function), through the
+production `run_lab_capability` → `SandboxExecutor.run_real` → `validate_run` →
+`decide_promotion` path:
+
+- standalone smoke under the exact `build_run_argv` flags: `1 passed`, exit `0`.
+- `run 1: real / VALID / discovered -> drafted`
+- `run 2: real / VALID / drafted -> runnable`
+- `run 3: real / VALID / runnable -> validated` (ladder cap; `registered` stays a
+  separate governance decision)
+- each run: `executed=True`, `repo_code_executed=True`, `network_accessed=False`
+  (structural, from the isolation flags), `wrote_to_repo=False`, `lab.execution.run`
+  receipt written.
+
+Honesty boundary: execution, pytest pass, validation, and promotion are REAL. Only
+the upstream approval *consumption* was seeded via the documented test seam
+(`tests/unit/test_lab_run_service.py::test_real_run_valid_promotes_one_rung`);
+`run_lab_capability` still enforced source/candidate identity, the safety gate,
+`opt_in`, and a live daemon. The live multi-gate operator approval chain remains
+exercised by its own unit tests.
+
+Remaining truthful gap:
+
+- This proves the Lab growth rung end-to-end with a Python toolchain; it does not
+  add per-language toolchain selection (the image is chosen by operator-set
+  `FRANCIS_LAB_IMAGE`, not auto-detected), drive the live operator approval chain in
+  this run, promote any capability to `registered`, or grant execution/mutation
+  authority.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

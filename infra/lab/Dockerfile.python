@@ -1,0 +1,41 @@
+# Francis Lab v0 sandbox base image — PYTHON TOOLCHAIN variant.
+#
+# Purpose: a minimal, auditable, Francis-owned base for validating Python
+# capabilities in the Lab sandbox. It is a SECOND image alongside the bare
+# `francis-lab-base:pinned` (alpine, no toolchain). The bare base stays the
+# default; this variant is selected per-run via the `FRANCIS_LAB_IMAGE`
+# environment variable when a capability's detected validation command needs a
+# Python interpreter + test runner (e.g. `python -m pytest`).
+#
+# It contains a pinned Python interpreter and a pinned pytest, and NOTHING else:
+# NO application code, NO credentials, NO external dependencies beyond the pinned
+# public base and the pinned test runner.
+#
+# Isolation is enforced by the Lab runtime at run time (see
+# `src/francis/ingest/lab/lab_runtime.py::build_run_argv`), not by this image:
+# `--network none`, `--read-only` root, `--cap-drop ALL`,
+# `--security-opt no-new-privileges`, pids/memory/cpu limits, read-only `/src`
+# mount, and a size-limited tmpfs `/work`. This image does NOT relax any of that.
+#
+# Build (tag is selected at run time via FRANCIS_LAB_IMAGE):
+#   docker build -f infra/lab/Dockerfile.python -t francis-lab-python:pinned infra/lab
+#
+# Pinned base: python:3.12-alpine, pinned by digest for supply-chain integrity.
+FROM python:3.12-alpine@sha256:dbb1970cc04ce7d381c65efe8309c0c03d463e5b35c88f14d721796ad24cfbfd
+
+# The sandbox root filesystem is mounted READ-ONLY; the only writable surface is
+# the tmpfs scratch at /work. Point all temp/cache writes there so pytest and
+# tempfile do not fail against the read-only root. This is the governance-correct
+# fix: it keeps `--read-only` intact rather than relaxing isolation.
+ENV TMPDIR=/work \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1
+
+# Pinned test runner only. No app code, no credentials.
+RUN pip install --no-cache-dir pytest==8.3.4
+
+# Working directory matches the Lab runtime's tmpfs scratch mount (`-w /work`).
+WORKDIR /work
+
+# No ENTRYPOINT/CMD: the Lab runtime always supplies `/bin/sh -lc <script>`
+# explicitly, so the image stays a passive, inspectable sandbox shell.
