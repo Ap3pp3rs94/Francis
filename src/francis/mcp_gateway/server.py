@@ -85,6 +85,65 @@ def run_stdio_server() -> None:
     def francis_screen_session() -> str:
         return _tool_payload(run_tool("francis.screen.session", {}))
 
+    @server.tool(name="francis_takeover_status")
+    def francis_takeover_status() -> str:
+        return _tool_payload(run_tool("francis.takeover.status", {}))
+
+    @server.tool(name="francis_takeover_propose")
+    def francis_takeover_propose(
+        reason: str,
+        actor: str = "mcp-client",
+        mode: str = "pilot",
+        duration_sec: int = 900,
+        scope: str = "bounded operator session",
+        mission_id: str = "",
+    ) -> str:
+        return _tool_payload(
+            run_tool(
+                "francis.takeover.propose",
+                {
+                    "actor": actor,
+                    "reason": reason,
+                    "mode": mode,
+                    "duration_sec": duration_sec,
+                    "scope": scope,
+                    "mission_id": mission_id,
+                },
+            )
+        )
+
+    @server.tool(name="francis_takeover_start_approved")
+    def francis_takeover_start_approved(proposal_id: str, approval_phrase: str) -> str:
+        return _tool_payload(
+            run_tool(
+                "francis.takeover.start_approved",
+                {"proposal_id": proposal_id, "approval_phrase": approval_phrase},
+            )
+        )
+
+    @server.tool(name="francis_takeover_end")
+    def francis_takeover_end(
+        reason: str,
+        actor: str = "mcp-client",
+        summary: str = "Takeover/Pilot session ended by operator request.",
+        validation_outcome: str = "not_run",
+        remaining_uncertainty: str = "",
+        next_recommendation: str = "",
+    ) -> str:
+        return _tool_payload(
+            run_tool(
+                "francis.takeover.end",
+                {
+                    "actor": actor,
+                    "reason": reason,
+                    "summary": summary,
+                    "validation_outcome": validation_outcome,
+                    "remaining_uncertainty": remaining_uncertainty,
+                    "next_recommendation": next_recommendation,
+                },
+            )
+        )
+
     @server.tool(name="francis_input_status")
     def francis_input_status() -> str:
         return _tool_payload(run_tool("francis.input.status", {}))
