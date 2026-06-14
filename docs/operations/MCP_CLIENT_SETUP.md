@@ -50,12 +50,15 @@ Expected shape:
 Francis MCP smoke
   ok: True
   mcp_sdk_available: True
-  tool_count: 13
+  tool_count: 18
   missing_tools: []
   health_status: ready
   screen_status: ready
   screen_session_status: ready
   screen_readback_safe: True
+  takeover_status: ready
+  takeover_proposal_created: True
+  unapproved_takeover_refused: True
   input_status: ready
   proposal_created: True
   unapproved_input_refused: True
@@ -94,7 +97,9 @@ Contract boundary:
 
 ### Governed MCP gateway
 
-The governed MCP gateway exposes health, repo, command proposal, receipt, screen/session readback, and input actuator tools through Francis-owned contracts.
+The governed MCP gateway exposes health, repo, command proposal, receipt, screen/session
+readback, Takeover/Pilot session, input actuator, and takeover->input handoff-audit tools
+through Francis-owned contracts.
 
 The tool registry is validated by:
 
@@ -102,7 +107,7 @@ The tool registry is validated by:
 python -m francis.mcp_gateway.smoke
 ```
 
-The expected tool count is currently `13`.
+The expected tool count is currently `18`.
 
 ## Client configuration template
 
