@@ -183,6 +183,12 @@ def run_stdio_server() -> None:
     def francis_input_receipts(receipt_id: str = "") -> str:
         return _tool_payload(run_tool("francis.input.receipts", {"receipt_id": receipt_id}))
 
+    @server.tool(name="francis_handoff_audit")
+    def francis_handoff_audit(input_proposal_id: str = "", limit: int = 10) -> str:
+        return _tool_payload(
+            run_tool("francis.handoff.audit", {"input_proposal_id": input_proposal_id, "limit": limit})
+        )
+
     server.run()
 
 
