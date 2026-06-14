@@ -28,15 +28,17 @@ def test_session_readback_reports_takeover_and_receipts_without_content(tmp_path
 
     monkeypatch.setenv("FRANCIS_MCP_GATEWAY_STATE_DIR", str(tmp_path / "mcp"))
     monkeypatch.setenv("FRANCIS_INPUT_ACTUATOR_STATE_DIR", str(tmp_path / "input"))
-    monkeypatch.setenv("FRANCIS_TAKEOVER_SESSION_ACTIVE", "1")
-    monkeypatch.setenv("FRANCIS_TAKEOVER_SESSION_ID", "takeover-demo")
     monkeypatch.setenv("FRANCIS_INPUT_ACTUATOR_ENABLE_REAL", "1")
 
     result = screen_tools.session_readback({})
 
     assert result["ok"] is True
-    assert result["takeover"]["active"] is True
-    assert result["takeover"]["session_id"] == "takeover-demo"
+    # No-implicit-takeover guarantee: with no approved stage9 session, the
+    # readback must report takeover as inactive/read-only. Takeover only flips
+    # active via a real manual-approval flow, never via env or readback.
+    assert result["takeover"]["active"] is False
+    assert result["takeover"]["session_id"] == ""
+    assert result["takeover"]["mode"] == "read_only"
     assert result["input_actuator"]["real_input_enabled"] is True
     assert result["last_receipts"]["content_included"] is False
     assert result["last_receipts"]["mcp_gateway_receipts"] == ["mcp-demo"]
