@@ -98,17 +98,38 @@ def _receipt_ids(root: Path) -> list[str]:
 def _last_receipt_summary() -> dict[str, Any]:
     mcp_root = _receipt_root("FRANCIS_MCP_GATEWAY_STATE_DIR", (".francis", "mcp_gateway"))
     input_root = _receipt_root("FRANCIS_INPUT_ACTUATOR_STATE_DIR", (".francis", "input_actuator"))
+    takeover_root = _receipt_root("FRANCIS_TAKEOVER_SESSION_STATE_DIR", (".francis", "takeover_session"))
     return {
         "mcp_gateway_receipts": _receipt_ids(mcp_root),
         "input_actuator_receipts": _receipt_ids(input_root),
+        "takeover_session_receipts": _receipt_ids(takeover_root),
         "content_included": False,
     }
+
+
+def _takeover_status() -> dict[str, Any]:
+    try:
+        from francis.takeover_session.tools import takeover_status_snapshot
+
+        result = takeover_status_snapshot(limit=5)
+        if isinstance(result, dict):
+            return result
+    except Exception as exc:  # pragma: no cover - defensive readback fallback
+        return {
+            "ok": False,
+            "status": "unavailable",
+            "error": type(exc).__name__,
+            "control_transfer_active": False,
+            "active_session_id": "",
+        }
+    return {"ok": False, "status": "unavailable", "control_transfer_active": False, "active_session_id": ""}
 
 
 def screen_readback_status() -> dict[str, Any]:
     """Return the safe screen/session readback contract status."""
 
     system = platform.system()
+    takeover = _takeover_status()
     return {
         "ok": True,
         "status": "ready",
@@ -117,6 +138,7 @@ def screen_readback_status() -> dict[str, Any]:
         "capabilities": {
             "active_window_title": system == "Windows",
             "session_state": True,
+            "takeover_session_state": True,
             "last_receipt_ids": True,
             "screen_capture": False,
             "pixel_access": False,
@@ -134,7 +156,8 @@ def screen_readback_status() -> dict[str, Any]:
         "env": {
             "title_redaction_enabled": _truthy(os.environ.get("FRANCIS_SCREEN_READBACK_REDACT_TITLES")),
             "real_input_enabled": _truthy(os.environ.get("FRANCIS_INPUT_ACTUATOR_ENABLE_REAL")),
-            "takeover_active": _truthy(os.environ.get("FRANCIS_TAKEOVER_SESSION_ACTIVE")),
+            "takeover_active": bool(takeover.get("control_transfer_active")),
+            "takeover_session_id": str(takeover.get("active_session_id") or ""),
         },
     }
 
@@ -142,6 +165,7 @@ def screen_readback_status() -> dict[str, Any]:
 def session_readback(_args: dict[str, Any] | None = None) -> dict[str, Any]:
     """Return bounded desktop/session context without pixels or control."""
 
+    takeover = _takeover_status()
     return {
         "ok": True,
         "status": "ready",
@@ -153,9 +177,12 @@ def session_readback(_args: dict[str, Any] | None = None) -> dict[str, Any]:
             "repo_root": str(repo_root()),
         },
         "takeover": {
-            "active": _truthy(os.environ.get("FRANCIS_TAKEOVER_SESSION_ACTIVE")),
-            "session_id": os.environ.get("FRANCIS_TAKEOVER_SESSION_ID", ""),
-            "pilot_mode": os.environ.get("FRANCIS_PILOT_MODE", ""),
+            "active": bool(takeover.get("control_transfer_active")),
+            "session_id": str(takeover.get("active_session_id") or ""),
+            "mode": str(takeover.get("mode") or "read_only"),
+            "status": str(takeover.get("status") or "unknown"),
+            "panic_stop_ready": bool(takeover.get("panic_stop_ready")),
+            "handback_required": bool(takeover.get("handback_required")),
         },
         "input_actuator": {
             "real_input_enabled": _truthy(os.environ.get("FRANCIS_INPUT_ACTUATOR_ENABLE_REAL")),
@@ -165,6 +192,12 @@ def session_readback(_args: dict[str, Any] | None = None) -> dict[str, Any]:
         "available_action_surface": [
             "francis.health",
             "francis.repo.status",
+            "francis.screen.status",
+            "francis.screen.session",
+            "francis.takeover.status",
+            "francis.takeover.propose",
+            "francis.takeover.start_approved",
+            "francis.takeover.end",
             "francis.input.status",
             "francis.input.propose",
             "francis.input.execute_approved",
