@@ -50,9 +50,12 @@ Expected shape:
 Francis MCP smoke
   ok: True
   mcp_sdk_available: True
-  tool_count: 11
+  tool_count: 13
   missing_tools: []
   health_status: ready
+  screen_status: ready
+  screen_session_status: ready
+  screen_readback_safe: True
   input_status: ready
   proposal_created: True
   unapproved_input_refused: True
@@ -91,7 +94,7 @@ Contract boundary:
 
 ### Governed MCP gateway
 
-The governed MCP gateway exposes health, repo, command proposal, receipt, and input actuator tools through Francis-owned contracts.
+The governed MCP gateway exposes health, repo, command proposal, receipt, screen/session readback, and input actuator tools through Francis-owned contracts.
 
 The tool registry is validated by:
 
@@ -99,7 +102,7 @@ The tool registry is validated by:
 python -m francis.mcp_gateway.smoke
 ```
 
-The expected tool count is currently `11`.
+The expected tool count is currently `13`.
 
 ## Client configuration template
 
@@ -136,6 +139,30 @@ Required defaults:
 - no credential typing
 - no external side effects without an explicit governed path
 - receipts are checked evidence, not authority
+
+## Screen/session readback
+
+`francis.screen.status` and `francis.screen.session` expose a safe read-only context surface.
+
+This surface may report:
+
+- screen readback contract status
+- operating platform
+- active Takeover/Pilot session indicators
+- whether real input is enabled
+- bounded active-window title readback when the host supports it
+- recent receipt ids without receipt content
+- available governed action surface
+
+This surface does **not** capture screenshots, pixels, OCR, raw screen frames, or raw input control.
+
+Title readback can be redacted with:
+
+```powershell
+$env:FRANCIS_SCREEN_READBACK_REDACT_TITLES = "1"
+```
+
+When title redaction is enabled, Francis returns title length and a short hash instead of the visible title text.
 
 ## Input actuator approval flow
 
@@ -221,6 +248,7 @@ Minimum readback questions:
 - Was a Takeover/Pilot session active?
 - Was the result a dry run, refusal, or executed action?
 - Was sensitive typed text redacted?
+- Did screen/session readback avoid screenshots and pixels?
 
 ## Operator safety rules
 
@@ -236,6 +264,7 @@ Do not expose:
 - Git commits or pushes
 - `.env`, `.npmrc`, `.pypirc`, signing material, SSH keys, or credential files
 - external account operations
+- screenshot or pixel capture authority
 
 If an MCP client asks for broader permissions, refuse the configuration and add a narrower Francis-owned tool instead.
 
@@ -248,6 +277,10 @@ The MCP Python dependency is missing from the active environment. Re-run the dep
 ### `missing_tools` is not empty
 
 The client should not connect. The local gateway registry is not matching the expected contract.
+
+### `screen_readback_safe: False`
+
+The client should not connect. The readback surface is reporting screenshots, pixels, raw shell, or another unsafe capability.
 
 ### `unapproved_input_refused: False`
 
@@ -269,9 +302,9 @@ For this setup surface, run:
 ```powershell
 cd D:\Francis
 python -m francis.mcp_gateway.smoke
-python -m pytest tests/test_developer_bridge.py tests/unit/test_input_actuator.py tests/unit/test_mcp_input_actuator.py tests/unit/test_mcp_gateway.py
-python -m ruff check docs/operations/MCP_CLIENT_SETUP.md src/francis/developer_bridge src/francis/input_actuator src/francis/mcp_gateway tests/test_developer_bridge.py tests/unit/test_input_actuator.py tests/unit/test_mcp_input_actuator.py tests/unit/test_mcp_gateway.py
-python -m mypy src/francis/developer_bridge src/francis/input_actuator src/francis/mcp_gateway
+python -m pytest tests/test_developer_bridge.py tests/unit/test_screen_readback.py tests/unit/test_input_actuator.py tests/unit/test_mcp_input_actuator.py tests/unit/test_mcp_gateway.py
+python -m ruff check docs/operations/MCP_CLIENT_SETUP.md src/francis/developer_bridge src/francis/screen_readback src/francis/input_actuator src/francis/mcp_gateway tests/test_developer_bridge.py tests/unit/test_screen_readback.py tests/unit/test_input_actuator.py tests/unit/test_mcp_input_actuator.py tests/unit/test_mcp_gateway.py
+python -m mypy src/francis/developer_bridge src/francis/screen_readback src/francis/input_actuator src/francis/mcp_gateway
 ```
 
 Full validation before merge when practical:
@@ -287,6 +320,8 @@ This setup does not add:
 - real desktop autonomy
 - raw MCP cursor control
 - raw MCP keyboard control
+- screenshot capture
+- pixel/OCR capture
 - external service side effects
 - background task authority
 - policy bypasses
