@@ -572,6 +572,26 @@ def _input_receipts(args: dict[str, Any]) -> ToolResult:
     )
 
 
+def _handoff_audit(args: dict[str, Any]) -> ToolResult:
+    from francis.handoff import handoff_audit
+
+    raw_limit = args.get("limit")
+    limit = raw_limit if isinstance(raw_limit, int) and raw_limit > 0 else 10
+    result = handoff_audit(_clean_text(args.get("input_proposal_id")), limit=limit)
+    return ToolResult(
+        ok=bool(result.get("ok")),
+        status=_clean_text(result.get("status"), "ready"),
+        tool="francis.handoff.audit",
+        data=result,
+        governance={
+            "read_only": True,
+            "raw_shell": False,
+            "authority": "handoff_readback",
+        },
+        error=_clean_text(result.get("error")) or None,
+    )
+
+
 _TOOL_SPECS = [
     ToolSpec("francis.health", "Read local Francis gateway health.", read_only=True),
     ToolSpec("francis.repo.status", "Read branch, head, and dirty state.", read_only=True),
@@ -620,6 +640,11 @@ _TOOL_SPECS = [
         requires_approval=True,
     ),
     ToolSpec("francis.input.receipts", "Read governed input actuator receipts.", read_only=True),
+    ToolSpec(
+        "francis.handoff.audit",
+        "Read receipt-backed takeover->input handoff bindings.",
+        read_only=True,
+    ),
 ]
 
 _TOOL_HANDLERS: dict[str, Callable[[dict[str, Any]], ToolResult]] = {
@@ -640,6 +665,7 @@ _TOOL_HANDLERS: dict[str, Callable[[dict[str, Any]], ToolResult]] = {
     "francis.input.propose": _input_propose,
     "francis.input.execute_approved": _input_execute_approved,
     "francis.input.receipts": _input_receipts,
+    "francis.handoff.audit": _handoff_audit,
 }
 
 

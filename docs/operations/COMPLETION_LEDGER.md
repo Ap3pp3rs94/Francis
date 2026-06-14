@@ -76196,6 +76196,46 @@ Remaining truthful gap:
   (receipt-backed handoff across Orb/Lens, MCP, takeover, input) remains. No physical
   input actuation has been exercised live.
 
+### 2026-06-14 - Embodiment #3: receipt-backed cross-organ handoff (takeover -> input)
+
+The organs now coordinate with auditable evidence: a TAKEOVER-SESSION RECEIPT is the
+authority that an INPUT action checks before it may execute. This upgrades the input
+organ's dependency on takeover from an ephemeral live-status snapshot to a
+receipt-backed binding bound to a specific evidence artifact by sha256 digest. It is
+strictly stricter -- an ADDITIONAL precondition on top of the existing approval-phrase,
+`ENABLE_REAL`, and active-takeover checks; no gate was weakened.
+
+Added `src/francis/handoff/`: `bind_input_to_takeover(input_proposal_id,
+takeover_receipt_id)` (allows only a non-read-only takeover `start` receipt; denies on
+missing / read-only / wrong-kind; writes a digest-bound handoff receipt either way),
+`verify_input_handoff` (consumed by the gate), `handoff_receipts`/`handoff_audit`.
+Wired `execute_approved_input_action` to require a valid handoff binding before any
+actuation -> else `blocked_handoff_evidence_missing` + receipt. Added a read-only MCP
+tool `francis.handoff.audit` (gateway now 18 tools), so the handoff trail is perceivable
+through the Lens<->MCP read-only bridge (ties in Orb/Lens + MCP).
+
+Proven by the load-bearing A/B (the discriminator between handoff and ceremony), live:
+
+- A) approved input proposal, NO handoff -> `blocked_handoff_evidence_missing`
+- bind to a real takeover `start` receipt -> handoff allow receipt (digest-bound);
+  `verify_input_handoff -> authorized=True`
+- B) the SAME proposal, with handoff -> `dry_run`, `ok=True`, `moves_mouse=False`
+- the handoff trail perceived through the Lens<->MCP bridge (`resident=False`), one
+  allow receipt linking input proposal <-> takeover receipt
+- A != B, so the takeover receipt genuinely gates the input action
+
+Honesty boundary: no pixel was actuated (`ENABLE_REAL` off -> dry-run; physical input
+still also requires `ENABLE_REAL` + active takeover, deliberately not enabled). The
+takeover authority is an operator-approved non-read-only session `start` receipt
+(`control_transfer_active` may be False offline; the binding is to that real start
+receipt by digest). Safe throughout.
+
+Remaining truthful gap:
+
+- This wires one cross-organ handoff (takeover -> input). It does not actuate physical
+  input, drive a multi-hop chain (e.g. Lens -> takeover -> input in one flow), or
+  re-verify takeover liveness at execute time beyond the bound start-receipt evidence.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

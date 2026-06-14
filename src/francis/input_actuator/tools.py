@@ -292,6 +292,44 @@ def execute_approved_input_action(args: dict[str, Any]) -> dict[str, Any]:
             error="real input requires an active Takeover/Pilot control-transfer session",
         ).to_dict()
 
+    # Receipt-backed cross-organ handoff: an approved input action may only execute
+    # when bound to a valid takeover-session start receipt (embodiment milestone #3).
+    # This is an ADDITIONAL precondition on top of the approval phrase, ENABLE_REAL,
+    # and active-takeover checks above -- strictly stricter, never weaker.
+    from francis.handoff import verify_input_handoff
+
+    handoff = verify_input_handoff(proposal_id)
+    if not handoff.get("authorized"):
+        receipt = _write_receipt(
+            "blocked-handoff-evidence-missing",
+            {
+                "proposal": _public_proposal(proposal),
+                "public_action": public_action,
+                "handoff": handoff,
+                "blocked_reason": "takeover_handoff_binding_required",
+            },
+        )
+        return InputActionResult(
+            ok=False,
+            status="blocked_handoff_evidence_missing",
+            data={
+                "proposal_id": proposal_id,
+                "receipt_id": receipt["receipt_id"],
+                "receipt_path": receipt["receipt_path"],
+                "public_action": public_action,
+                "handoff": handoff,
+            },
+            governance={
+                "read_only": False,
+                "moves_mouse": False,
+                "types_keyboard": False,
+                "manual_approval_consumed": True,
+                "requires_takeover_handoff_binding": True,
+                "raw_mcp_input_authority": False,
+            },
+            error="input execution requires a valid takeover-session handoff binding",
+        ).to_dict()
+
     backend_result = _perform_input_action(kind, payload, real_enabled=real_enabled)
     receipt = _write_receipt(
         "execute-approved",

@@ -2,12 +2,27 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from francis.handoff import bind_input_to_takeover
 from francis.input_actuator.tools import (
     execute_approved_input_action,
     input_receipts_readback,
     input_status,
     propose_input_action,
 )
+from francis.takeover_session.tools import (
+    propose_takeover_session,
+    start_approved_takeover_session,
+)
+
+
+def _seed_takeover_handoff(input_proposal_id: str, *, actor: str = "test") -> None:
+    """Operator approves a pilot takeover session, then binds the input proposal to it."""
+    prop = propose_takeover_session({"actor": actor, "mode": "pilot", "reason": "test", "duration_sec": 120})
+    started = start_approved_takeover_session(
+        {"proposal_id": prop["proposal_id"], "approval_phrase": prop["approval_phrase"]}
+    )
+    bound = bind_input_to_takeover(input_proposal_id, started["receipt_id"], actor=actor)
+    assert bound["ok"], bound
 
 
 def test_input_status_is_read_only_and_does_not_grant_raw_input(tmp_path: Path, monkeypatch) -> None:
@@ -61,7 +76,9 @@ def test_execute_refuses_without_exact_approval_phrase(tmp_path: Path, monkeypat
 
 
 def test_execute_approved_defaults_to_dry_run_receipt(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("FRANCIS_INPUT_ACTUATOR_STATE_DIR", str(tmp_path))
+    monkeypatch.setenv("FRANCIS_INPUT_ACTUATOR_STATE_DIR", str(tmp_path / "input"))
+    monkeypatch.setenv("FRANCIS_TAKEOVER_SESSION_STATE_DIR", str(tmp_path / "takeover"))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.delenv("FRANCIS_INPUT_ACTUATOR_ENABLE_REAL", raising=False)
     proposal = propose_input_action(
         {
@@ -71,6 +88,8 @@ def test_execute_approved_defaults_to_dry_run_receipt(tmp_path: Path, monkeypatc
             "payload": {"x": 11, "y": 22},
         }
     )
+    # #3: execution now requires a receipt-backed takeover->input handoff binding.
+    _seed_takeover_handoff(proposal["data"]["proposal_id"])
 
     result = execute_approved_input_action(
         {
