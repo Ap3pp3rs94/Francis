@@ -12,10 +12,14 @@ from .repo_tools import (
     search_repo,
 )
 
+FastMCP: Any
+
 try:  # pragma: no cover - optional dependency surface
-    from mcp.server.fastmcp import FastMCP
+    from mcp.server.fastmcp import FastMCP as _ImportedFastMCP
 except ImportError:  # pragma: no cover - exercised only when optional extra is absent
-    FastMCP = None  # type: ignore[assignment]
+    FastMCP = None
+else:
+    FastMCP = _ImportedFastMCP
 
 SERVER_INSTRUCTIONS = """
 Francis Developer Bridge v0.1 is read-only.
