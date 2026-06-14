@@ -18,6 +18,8 @@ def test_mcp_gateway_lists_expected_tools(tmp_path: Path, monkeypatch) -> None:
         "francis.command.propose",
         "francis.command.execute_approved",
         "francis.receipts.readback",
+        "francis.screen.status",
+        "francis.screen.session",
     }.issubset(names)
 
 
@@ -28,6 +30,23 @@ def test_read_only_tools_report_no_raw_shell(tmp_path: Path, monkeypatch) -> Non
     assert result["ok"] is True
     assert result["governance"]["read_only"] is True
     assert result["governance"]["raw_shell"] is False
+
+
+def test_screen_session_readback_is_read_only_without_pixels(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("FRANCIS_MCP_GATEWAY_STATE_DIR", str(tmp_path / "mcp"))
+    monkeypatch.setenv("FRANCIS_INPUT_ACTUATOR_STATE_DIR", str(tmp_path / "input"))
+
+    result = run_tool("francis.screen.session", {})
+
+    assert result["ok"] is True
+    assert result["status"] == "ready"
+    assert result["governance"]["read_only"] is True
+    assert result["governance"]["raw_shell"] is False
+    assert result["governance"]["screenshots"] is False
+    assert result["governance"]["pixels"] is False
+    assert result["data"]["active_window"]["capture"] == "not_performed"
+    assert result["data"]["active_window"]["pixels"] is False
+    assert result["data"]["active_window"]["screenshot"] is False
 
 
 def test_unknown_tool_returns_bounded_error() -> None:
@@ -111,5 +130,4 @@ def test_receipts_readback_missing_is_truthful(tmp_path: Path, monkeypatch) -> N
 def test_result_is_json_serializable(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("FRANCIS_MCP_GATEWAY_STATE_DIR", str(tmp_path))
     result = run_tool("francis.repo.status", {})
-
     json.dumps(result)
