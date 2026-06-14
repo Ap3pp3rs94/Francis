@@ -20,6 +20,10 @@ def test_mcp_gateway_lists_expected_tools(tmp_path: Path, monkeypatch) -> None:
         "francis.receipts.readback",
         "francis.screen.status",
         "francis.screen.session",
+        "francis.takeover.status",
+        "francis.takeover.propose",
+        "francis.takeover.start_approved",
+        "francis.takeover.end",
     }.issubset(names)
 
 
@@ -47,6 +51,30 @@ def test_screen_session_readback_is_read_only_without_pixels(tmp_path: Path, mon
     assert result["data"]["active_window"]["capture"] == "not_performed"
     assert result["data"]["active_window"]["pixels"] is False
     assert result["data"]["active_window"]["screenshot"] is False
+
+
+def test_takeover_session_proposal_refuses_unapproved_start(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("FRANCIS_MCP_GATEWAY_STATE_DIR", str(tmp_path / "mcp"))
+    monkeypatch.setenv("FRANCIS_TAKEOVER_SESSION_STATE_DIR", str(tmp_path / "takeover_session"))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+
+    proposal = run_tool(
+        "francis.takeover.propose",
+        {"actor": "test", "reason": "pilot mode test", "mode": "pilot", "duration_sec": 120},
+    )
+
+    assert proposal["ok"] is True
+    assert proposal["status"] == "approval_required"
+
+    denied = run_tool(
+        "francis.takeover.start_approved",
+        {"proposal_id": proposal["data"]["proposal_id"], "approval_phrase": "no"},
+    )
+
+    assert denied["ok"] is False
+    assert denied["status"] == "approval_required"
+    assert denied["governance"]["raw_input"] is False
+    assert denied["governance"]["raw_shell"] is False
 
 
 def test_unknown_tool_returns_bounded_error() -> None:
