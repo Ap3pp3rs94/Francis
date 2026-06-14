@@ -76236,6 +76236,37 @@ Remaining truthful gap:
   input, drive a multi-hop chain (e.g. Lens -> takeover -> input in one flow), or
   re-verify takeover liveness at execute time beyond the bound start-receipt evidence.
 
+### 2026-06-14 - Embodiment: the Lens body stands up (first bounded foreground activation)
+
+The Lens host-activation chain was driven LIVE to a real bounded foreground activation,
+gated by a real operator approval + authority grant -- the body standing up briefly and
+observably for the first time. This is the first rung of "Lens goes resident"; it is NOT
+persistent residency, and crosses none of the deeper denial gates.
+
+Live run (throwaway `FRANCIS_DATA_DIR`, operator granted the `system.write` scope via
+`FRANCIS_API_ACTOR_SCOPES`):
+
+- `request_lens_host_activation` -> `approval_requested`
+- operator `governance.approvals.decide(approve)` -> approved artifact present
+- `grant_lens_host_activation_authority` -> `authority_granted=True`,
+  `local_process_launch_authority=True`, no blockers
+- `execute_lens_host_activation(run_seconds=2)` -> `status=bounded_foreground_launch_observed`,
+  `executed=True`, `bounded_process_launch=True`, launched `scripts/lens-host.ps1 -Mode Launch`
+  (`launch_started`), execution receipt written to `data/lens/host_activation_executions/`
+  (verified on disk)
+
+Gates that stayed shut (verified in the same response): `resident_claim_authority=False`,
+`resident_host_process_claimed=False`, `service_install_authority=False`,
+`service_control_authority=False`, `memory_write=False`, and the full overlay / tray /
+global-hotkey / summon / persistent-supervision blocker set remained -- the bounded launch
+succeeded WITHOUT crossing any of them. No gate was weakened; no code changed (this is a
+live exercise of the existing governed chain).
+
+Honesty boundary: this is a bounded, time-limited FOREGROUND launch (~2s), not a resident
+process, not a service, not a tray/overlay/hotkey presence. "Lens is truly resident"
+(persistent supervised process behind the resident-claim gates) remains open, as do real
+physical input actuation, multi-hop chains, and the unified ORB console.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
