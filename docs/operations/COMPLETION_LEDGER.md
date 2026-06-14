@@ -76155,6 +76155,47 @@ Remaining truthful gap:
   execution path where Francis acts under explicit authority) and #3 (receipt-backed
   handoff across Orb/Lens, MCP, takeover, input) remain.
 
+### 2026-06-14 - Embodiment #2: Francis acts under explicit authority (live operator approvals)
+
+The production acquisition orchestrator (`IngestAcquisitionOrchestrator`) was driven
+LIVE through a real Docker sandbox, with every governed approval gate approved by a
+real operator `governance.approvals.decide` call -- the consent organ, distinguishable
+from the actor's own assertion. This is embodiment milestone #2 (the hands moving for
+real under approval), and it also closes the seeding shortcut used in the 2026-06-14
+Forge proof (there the upstream approval *consumption* was seeded; here it is gated by
+a real operator decision).
+
+Driven on a real Python capability (pyproject + discoverable test exercising the
+function), `candidate=run_project_tests`, throwaway `FRANCIS_DATA_DIR`,
+`FRANCIS_LAB_IMAGE=francis-lab-python:pinned`, real default command runner:
+
+- `classification.default_lab_compatible = True` (clean repo; the default Lab is never
+  weakened for incompatible repos)
+- 3 real operator approvals decided (gates A/B/C): execution, runtime-probe, sandboxed
+  rebuild/run-test -- the orchestrator never called `approvals.decide` itself; it paused
+  at each gate
+- 2 real `consume_approval` steps, each gated by the operator decision above
+- terminal `state: promoted`; result `execution_mode=real`, `exit_code=0`,
+  `validation_status=VALID`, `executed=True`, `network_accessed=False`,
+  `promotion discovered -> drafted`, real `lab.execution.run` receipt written
+
+This also satisfies the previously-open `infra/lab/README.md` note ("the full
+`IngestService.run_lab_capability` wrapper was not invoked live, no `lab.execution.run`
+receipt written by a verification run") -- the wrapper now ran live with a real
+consumed approval chain and wrote its receipt.
+
+Honesty boundary: the real *action* is sandboxed code execution (safe: network-none,
+no host mutation). The real *approval* is the operator `approvals.decide` consent organ.
+No real mouse/keyboard was actuated (input-actuator physical execution stays gated
+behind `FRANCIS_INPUT_ACTUATOR_ENABLE_REAL` + active takeover, deliberately not enabled).
+
+Remaining truthful gap:
+
+- Promotion advanced one rung (`discovered -> drafted`) because the candidate started at
+  `discovered`; reaching `validated` requires further real+VALID runs. Embodiment #3
+  (receipt-backed handoff across Orb/Lens, MCP, takeover, input) remains. No physical
+  input actuation has been exercised live.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
