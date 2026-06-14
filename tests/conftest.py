@@ -173,6 +173,11 @@ INGEST_FORGE_TEST_SCOPES = (
     "ingest.forge.bind",
     "ingest.acquire",
 )
+LENS_MCP_TEST_ACTORS = ("test.lens.mcp", "chat_ui.lens")
+LENS_MCP_TEST_SCOPES = (
+    "lens.mcp.readback",
+    "lens.mcp.perceive",
+)
 INGEST_LAB_RECEIPT_WRITE_TEST_SCOPE = "ingest.lab.receipt.write"
 INGEST_LAB_RECEIPT_WRITE_TEST_ACTORS = ("test.ingest.lab.receipt.write",)
 INGEST_LAB_APPROVAL_CONSUME_TEST_SCOPE = "ingest.lab.approval.consume"
@@ -559,6 +564,8 @@ def _test_actor_scope_policy() -> dict[str, list[str]]:
     )
     for scope in INGEST_FORGE_TEST_SCOPES:
         _add_actor_scopes(policy, INGEST_FORGE_TEST_ACTORS, scope)
+    for scope in LENS_MCP_TEST_SCOPES:
+        _add_actor_scopes(policy, LENS_MCP_TEST_ACTORS, scope)
     return policy
 
 

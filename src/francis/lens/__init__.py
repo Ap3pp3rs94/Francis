@@ -121,6 +121,11 @@ from francis.lens.preflight import (
     lens_summon_enablement_gate,
     lens_tray_enablement_gate,
 )
+from francis.lens.mcp_perception import (
+    lens_mcp_perception_contract,
+    lens_mcp_perception_receipts,
+    lens_perceive_via_mcp,
+)
 from francis.lens.status import lens_host_status, lens_resident_surface_readback, lens_status
 
 __all__ = [
@@ -180,6 +185,9 @@ __all__ = [
     "lens_host_supervision_authority_preflight",
     "lens_host_supervision_gate",
     "lens_host_status",
+    "lens_mcp_perception_contract",
+    "lens_mcp_perception_receipts",
+    "lens_perceive_via_mcp",
     "deny_lens_os_binding_execution",
     "execute_lens_os_binding",
     "execute_lens_overlay_window",

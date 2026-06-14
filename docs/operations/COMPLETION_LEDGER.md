@@ -76122,6 +76122,39 @@ Remaining truthful gap:
   this run, promote any capability to `registered`, or grant execution/mutation
   authority.
 
+### 2026-06-14 - Lens <-> MCP read-only perception bridge (body reaches a nervous system)
+
+First conduit from the Lens/Orb body to the MCP nervous system. Deliberately a
+SMALL, read-only rung toward embodiment milestone #1 — it is NOT a residency claim
+and grants no execution authority.
+
+Added `src/francis/lens/mcp_perception.py`: `lens_perceive_via_mcp(tool, args, *, actor)`,
+`lens_mcp_perception_contract()`, `lens_mcp_perception_receipts()`. The perceivable
+set is derived structurally from the MCP registry (`read_only and not
+requires_approval`), so it tracks the gateway and cannot silently widen to a mutating
+tool. Mutating / approval-gated tools are refused AT THE BRIDGE (the tool is never
+invoked) — there is no second path around an MCP approval gate. Every perception and
+every refusal writes a receipt under `data/lens/mcp_perception/` with provenance and
+honesty fields (`resident=False`, `grants_execution_authority=False`).
+
+Exposed at `GET /lens/mcp/contract`, `GET /lens/mcp/receipts`, `POST /lens/mcp/perceive`,
+all permission-gated (`lens.mcp.readback`, `lens.mcp.perceive`) via the same
+`ApiPermissionGate` pattern as ingest.
+
+Verified by unit tests (read-only perceived + receipt; mutating tool refused without
+invocation; unknown tool refused; API scope enforced) AND a live caller run: a real
+actor `orb.live.demo` perceived `francis.repo.status` (real branch/head/dirty) and
+`francis.screen.status` through the bridge, each leaving an on-disk receipt with
+`resident=False`. No MCP, takeover, screen_readback, or input gate was weakened (MCP
+smoke still 17 tools).
+
+Remaining truthful gap:
+
+- This is read-only perception only. It exercises no approval flow and does NOT make
+  Lens resident, supervised, or persistent. Embodiment milestone #2 (one approved
+  execution path where Francis acts under explicit authority) and #3 (receipt-backed
+  handoff across Orb/Lens, MCP, takeover, input) remain.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

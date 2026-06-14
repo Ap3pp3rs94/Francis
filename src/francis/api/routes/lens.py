@@ -5,7 +5,11 @@ from typing import Any
 from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, Field
 
+from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.lens import (
+    lens_mcp_perception_contract,
+    lens_mcp_perception_receipts,
+    lens_perceive_via_mcp,
     deny_lens_os_binding_execution,
     deny_lens_host_persistent_supervision_enablement,
     deny_lens_host_persistent_supervision_enablement_execution,
@@ -107,6 +111,71 @@ from francis.lens import (
 )
 
 router = APIRouter()
+
+_LENS_MCP_READBACK_SCOPE = "lens.mcp.readback"
+_LENS_MCP_PERCEIVE_SCOPE = "lens.mcp.perceive"
+
+
+def _lens_permission_denied(decision: ApiPermissionDecision, *, kind: str) -> dict[str, Any]:
+    return {
+        "kind": kind,
+        "ok": False,
+        "status": "denied",
+        "error": "api_permission_denied",
+        "governance": {
+            "gate": "permission_gate",
+            "reason": decision.reason,
+            "evidence": decision.evidence,
+            "resident": False,
+            "grants_execution_authority": False,
+        },
+    }
+
+
+class LensMcpPerceiveIn(BaseModel):
+    actor: str | None = None
+    tool: str = ""
+    args: dict[str, Any] = Field(default_factory=dict)
+
+
+@router.get("/mcp/contract")
+def mcp_contract(actor: str = "") -> dict[str, Any]:
+    permission = ApiPermissionGate.from_env().check(
+        actor_id=actor,
+        required_scopes=[_LENS_MCP_READBACK_SCOPE],
+        route="/lens/mcp/contract",
+        method="GET",
+    )
+    if not permission.allowed:
+        return _lens_permission_denied(permission, kind="francis.lens.mcp.perception.contract")
+    return lens_mcp_perception_contract()
+
+
+@router.get("/mcp/receipts")
+def mcp_receipts(actor: str = "", limit: int = Query(10, ge=1, le=100)) -> dict[str, Any]:
+    permission = ApiPermissionGate.from_env().check(
+        actor_id=actor,
+        required_scopes=[_LENS_MCP_READBACK_SCOPE],
+        route="/lens/mcp/receipts",
+        method="GET",
+    )
+    if not permission.allowed:
+        return _lens_permission_denied(permission, kind="francis.lens.mcp.perception.receipts")
+    return lens_mcp_perception_receipts(limit=limit)
+
+
+@router.post("/mcp/perceive")
+def mcp_perceive(payload: LensMcpPerceiveIn) -> dict[str, Any]:
+    actor = payload.actor or ""
+    permission = ApiPermissionGate.from_env().check(
+        actor_id=actor,
+        required_scopes=[_LENS_MCP_PERCEIVE_SCOPE],
+        route="/lens/mcp/perceive",
+        method="POST",
+    )
+    if not permission.allowed:
+        return _lens_permission_denied(permission, kind="francis.lens.mcp.perception")
+    return lens_perceive_via_mcp(payload.tool, payload.args, actor=actor or "unknown")
 
 
 class LensHostActivationRequestIn(BaseModel):
