@@ -13,6 +13,10 @@ REQUIRED_TOOLS = {
     "francis.repo.status",
     "francis.screen.status",
     "francis.screen.session",
+    "francis.takeover.status",
+    "francis.takeover.propose",
+    "francis.takeover.start_approved",
+    "francis.takeover.end",
     "francis.input.status",
     "francis.input.propose",
     "francis.input.execute_approved",
@@ -57,10 +61,14 @@ def _is_readback_safe(result: Mapping[str, Any]) -> bool:
 
 
 def run_smoke() -> dict[str, Any]:
-    old_state_dir = os.environ.get("FRANCIS_INPUT_ACTUATOR_STATE_DIR")
+    old_input_dir = os.environ.get("FRANCIS_INPUT_ACTUATOR_STATE_DIR")
+    old_takeover_dir = os.environ.get("FRANCIS_TAKEOVER_SESSION_STATE_DIR")
+    old_data_dir = os.environ.get("FRANCIS_DATA_DIR")
 
     with tempfile.TemporaryDirectory(prefix="francis-mcp-smoke-") as state_dir:
-        os.environ["FRANCIS_INPUT_ACTUATOR_STATE_DIR"] = state_dir
+        os.environ["FRANCIS_INPUT_ACTUATOR_STATE_DIR"] = os.path.join(state_dir, "input")
+        os.environ["FRANCIS_TAKEOVER_SESSION_STATE_DIR"] = os.path.join(state_dir, "takeover_session")
+        os.environ["FRANCIS_DATA_DIR"] = os.path.join(state_dir, "data")
 
         try:
             tools = list_tools()
@@ -70,6 +78,21 @@ def run_smoke() -> dict[str, Any]:
             health = run_tool("francis.health", {})
             screen_status = run_tool("francis.screen.status", {})
             screen_session = run_tool("francis.screen.session", {})
+            takeover_status = run_tool("francis.takeover.status", {})
+            takeover_proposal = run_tool(
+                "francis.takeover.propose",
+                {
+                    "actor": "mcp-smoke",
+                    "reason": "verify takeover session proposal refusal path",
+                    "mode": "pilot",
+                    "duration_sec": 120,
+                },
+            )
+            takeover_proposal_id = _proposal_id(takeover_proposal)
+            takeover_denied = run_tool(
+                "francis.takeover.start_approved",
+                {"proposal_id": takeover_proposal_id, "approval_phrase": "not-approved"},
+            )
             input_status = run_tool("francis.input.status", {})
             proposal = run_tool(
                 "francis.input.propose",
@@ -99,6 +122,11 @@ def run_smoke() -> dict[str, Any]:
                 and bool(screen_session.get("ok"))
                 and _status(screen_session) == "ready"
                 and _is_readback_safe(screen_session)
+                and bool(takeover_status.get("ok"))
+                and bool(takeover_proposal.get("ok"))
+                and bool(takeover_proposal_id)
+                and not bool(takeover_denied.get("ok"))
+                and _status(takeover_denied) == "approval_required"
                 and bool(input_status.get("ok"))
                 and _status(input_status) == "ready"
                 and bool(proposal.get("ok"))
@@ -116,15 +144,26 @@ def run_smoke() -> dict[str, Any]:
                 "screen_status": _status(screen_status),
                 "screen_session_status": _status(screen_session),
                 "screen_readback_safe": _is_readback_safe(screen_session),
+                "takeover_status": _status(takeover_status),
+                "takeover_proposal_created": bool(takeover_proposal_id),
+                "unapproved_takeover_refused": (
+                    not bool(takeover_denied.get("ok")) and _status(takeover_denied) == "approval_required"
+                ),
                 "input_status": _status(input_status),
                 "proposal_created": bool(proposal_id),
                 "unapproved_input_refused": (not bool(denied.get("ok")) and _status(denied) == "approval_required"),
             }
         finally:
-            if old_state_dir is None:
-                os.environ.pop("FRANCIS_INPUT_ACTUATOR_STATE_DIR", None)
-            else:
-                os.environ["FRANCIS_INPUT_ACTUATOR_STATE_DIR"] = old_state_dir
+            _restore_env("FRANCIS_INPUT_ACTUATOR_STATE_DIR", old_input_dir)
+            _restore_env("FRANCIS_TAKEOVER_SESSION_STATE_DIR", old_takeover_dir)
+            _restore_env("FRANCIS_DATA_DIR", old_data_dir)
+
+
+def _restore_env(name: str, previous: str | None) -> None:
+    if previous is None:
+        os.environ.pop(name, None)
+    else:
+        os.environ[name] = previous
 
 
 def main() -> int:
@@ -139,6 +178,9 @@ def main() -> int:
     print(f"  screen_status: {result['screen_status']}")
     print(f"  screen_session_status: {result['screen_session_status']}")
     print(f"  screen_readback_safe: {result['screen_readback_safe']}")
+    print(f"  takeover_status: {result['takeover_status']}")
+    print(f"  takeover_proposal_created: {result['takeover_proposal_created']}")
+    print(f"  unapproved_takeover_refused: {result['unapproved_takeover_refused']}")
     print(f"  input_status: {result['input_status']}")
     print(f"  proposal_created: {result['proposal_created']}")
     print(f"  unapproved_input_refused: {result['unapproved_input_refused']}")
