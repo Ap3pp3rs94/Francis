@@ -23,10 +23,20 @@ Run from the repository root:
 cd D:\Francis
 ```
 
-Install the local project and MCP-capable extras in the active Python environment:
+Install the local project and MCP-capable extras in the active Python environment.
+The MCP SDK lives in the `bridge` extra, so it **must** be included or
+`mcp_sdk_available` will be `False` in the smoke check:
 
 ```powershell
-uv sync --frozen --extra core --extra web --extra dev
+uv sync --extra core --extra web --extra dev --extra bridge
+```
+
+If `uv sync --frozen` reports `mcp` missing from the lock (the `bridge` extra may
+predate the current lockfile), refresh the lock once with `uv lock`, then re-run
+the sync above. As a direct fallback in any active environment:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install "mcp>=1.2.0"
 ```
 
 If `uv` is not available, use the repository bootstrap path first:
