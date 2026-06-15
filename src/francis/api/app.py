@@ -30,6 +30,7 @@ from francis.api.routes import (
     industrial,
     knowledge_fabric,
     lens,
+    lens_mcp_status,
     managed_copies,
     memory_timeline,
     missions,
@@ -92,6 +93,7 @@ def create_app() -> FastAPI:
     app.include_router(missions.router, prefix="/missions", tags=["missions"])
     app.include_router(reactor.router, prefix="/reactor", tags=["reactor"])
     app.include_router(lens.router, prefix="/lens", tags=["lens"])
+    app.include_router(lens_mcp_status.router, prefix="/lens", tags=["lens"])
     app.include_router(telemetry.router, prefix="/telemetry", tags=["telemetry"])
     app.include_router(executor_substrate.router, prefix="/executor", tags=["executor"])
     app.include_router(takeover.router, prefix="/takeover", tags=["takeover"])
