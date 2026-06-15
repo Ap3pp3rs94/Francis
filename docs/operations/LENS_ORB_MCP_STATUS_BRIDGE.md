@@ -6,6 +6,15 @@ This bridge is the smallest truthful Stage 6/Lens body-state projection from the
 
 MCP is one governed nervous system, not the whole Francis system. This bridge lets the Lens/Orb body read that nervous system and display live operator state without claiming residency or granting control authority.
 
+## Existing Lens/Orb surface integration
+
+The bridge is exposed through the existing Lens API namespace instead of creating a second Orb or overlay architecture:
+
+- `GET /lens/mcp/status`
+- `GET /lens/orb/mcp-status`
+
+Both routes call `lens_orb_mcp_status_bridge()` and return the same read-only body-state projection. These routes are for Lens/HUD/Chat UI consumers that need a stable body-state readback.
+
 ## What it reads
 
 The bridge aggregates safe MCP readbacks for:
@@ -61,14 +70,15 @@ Run:
 
 ```powershell
 python -m francis.mcp_gateway.smoke
-python -m pytest tests/unit/test_lens_orb_mcp_status_bridge.py tests/unit/test_lens_mcp_perception.py
-python -m ruff check src/francis/lens/mcp_status_bridge.py tests/unit/test_lens_orb_mcp_status_bridge.py
-python -m mypy src/francis/lens/mcp_status_bridge.py
+python -m pytest tests/unit/test_lens_orb_mcp_status_bridge.py tests/unit/test_lens_orb_mcp_status_route.py tests/unit/test_lens_mcp_perception.py
+python -m ruff check src/francis/lens/mcp_status_bridge.py src/francis/api/routes/lens_mcp_status.py tests/unit/test_lens_orb_mcp_status_bridge.py tests/unit/test_lens_orb_mcp_status_route.py
+python -m mypy src/francis/lens/mcp_status_bridge.py src/francis/api/routes/lens_mcp_status.py
 ```
 
 Expected posture:
 
 - MCP smoke remains green.
 - MCP tool count remains at least the known-good baseline of 18.
+- `/lens/mcp/status` returns the Lens-Orb bridge projection.
 - The bridge is read-only.
 - No raw input, screenshot, OCR, pixel, shell, or execution authority is introduced.
