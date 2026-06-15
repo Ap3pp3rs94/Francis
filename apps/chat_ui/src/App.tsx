@@ -152,26 +152,30 @@ export default function App() {
   const [error, setError] = useState("");
   const baseUrl = useMemo(() => apiBaseUrl(), []);
 
-  const refresh = useCallback(() => {
+  const loadStatus = useCallback(
+    (signal?: AbortSignal) => {
+      setLoading(true);
+      setError("");
+
+      void fetchLensMcpStatus({ baseUrl, actor: "chat_ui.lens", signal })
+        .then((nextStatus) => {
+          setStatus(nextStatus);
+        })
+        .catch((err: unknown) => {
+          setError(err instanceof Error ? err.message : "Lens MCP status request failed.");
+        })
+        .finally(() => {
+          setLoading(false);
+        });
+    },
+    [baseUrl],
+  );
+
+  useEffect(() => {
     const controller = new AbortController();
-    setLoading(true);
-    setError("");
-
-    void fetchLensMcpStatus({ baseUrl, actor: "chat_ui.lens", signal: controller.signal })
-      .then((nextStatus) => {
-        setStatus(nextStatus);
-      })
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : "Lens MCP status request failed.");
-      })
-      .finally(() => {
-        setLoading(false);
-      });
-
+    loadStatus(controller.signal);
     return () => controller.abort();
-  }, [baseUrl]);
-
-  useEffect(() => refresh(), [refresh]);
+  }, [loadStatus]);
 
   const shell: CSSProperties = {
     background: "radial-gradient(circle at top left, #1e3a8a 0, #020617 48%, #020617 100%)",
@@ -183,7 +187,7 @@ export default function App() {
 
   return (
     <main style={shell}>
-      <BodyStatePanel status={status} loading={loading} error={error} onRefresh={refresh} />
+      <BodyStatePanel status={status} loading={loading} error={error} onRefresh={() => loadStatus()} />
     </main>
   );
 }
