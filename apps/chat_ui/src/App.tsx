@@ -9,7 +9,7 @@ function envString(key: string, fallback = ""): string {
 }
 
 function apiBaseUrl(): string {
-  return envString("VITE_FRANCIS_API_BASE_URL", envString("VITE_API_BASE_URL", "")).trim();
+  return envString("VITE_FRANCIS_API_BASE_URL", envString("VITE_API_BASE_URL", "http://127.0.0.1:8000")).trim();
 }
 
 function statusText(value: unknown): string {
