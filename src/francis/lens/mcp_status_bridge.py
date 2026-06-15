@@ -232,6 +232,8 @@ def lens_orb_mcp_status_bridge(*, actor: str = "lens-orb", receipt_limit: int = 
             "tool_count": tool_count,
             "expected_min_tool_count": EXPECTED_MIN_TOOL_COUNT,
             "tool_count_preserved": tool_count >= EXPECTED_MIN_TOOL_COUNT,
+            # Compatibility alias for the MCP gateway smoke output and operator scripts.
+            "missing_tools": missing_required,
             "missing_required_tools": missing_required,
             "all_tools": sorted(tool_names),
         },
