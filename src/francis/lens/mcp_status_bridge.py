@@ -244,6 +244,8 @@ def lens_orb_mcp_status_bridge(*, actor: str = "lens-orb", receipt_limit: int = 
         "badges": _component_badges(components, tool_count=tool_count),
         "blockers": blockers,
         "routes": {
+            "mcp_status": "/lens/mcp/status",
+            "orb_mcp_status": "/lens/orb/mcp-status",
             "mcp_contract": "/lens/mcp/contract",
             "mcp_perceive": "/lens/mcp/perceive",
             "mcp_receipts": "/lens/mcp/receipts",
