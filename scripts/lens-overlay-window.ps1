@@ -107,6 +107,30 @@ function Get-BoolProperty {
   return $Value.ToLowerInvariant() -eq 'true'
 }
 
+function Get-CountProperty {
+  param(
+    [object]$Payload,
+    [string]$Name,
+    [int]$Default = 0
+  )
+
+  if ($null -eq $Payload) {
+    return $Default
+  }
+  $Property = $Payload.PSObject.Properties[$Name]
+  if ($null -eq $Property -or $null -eq $Property.Value) {
+    return $Default
+  }
+  if ($Property.Value -is [array]) {
+    return [int]$Property.Value.Count
+  }
+  try {
+    return [int](@($Property.Value).Count)
+  } catch {
+    return $Default
+  }
+}
+
 function New-McpBodyStateProjection {
   param(
     [string]$McpStatusRoute,
@@ -122,8 +146,106 @@ function New-McpBodyStateProjection {
     read_only = $true
     grants_execution_authority = $false
     grants_mutation_authority = $false
+    live_status = 'not_requested'
     message = 'Overlay runtime is linked to the read-only Lens-Orb MCP body-state route.'
   }
+}
+
+function Read-McpBodyStateForOverlay {
+  param(
+    [string]$McpStatusRoute,
+    [string]$OrbMcpStatusRoute
+  )
+
+  $Projection = New-McpBodyStateProjection -McpStatusRoute $McpStatusRoute -OrbMcpStatusRoute $OrbMcpStatusRoute
+  $ApiBaseUrl = [string]$env:FRANCIS_API_BASE_URL
+  if ([string]::IsNullOrWhiteSpace($ApiBaseUrl)) {
+    $ApiBaseUrl = 'http://127.0.0.1:8000'
+  }
+  $ApiBaseUrl = $ApiBaseUrl.TrimEnd('/')
+  $Uri = '{0}{1}?actor=lens.overlay' -f $ApiBaseUrl, $McpStatusRoute
+  $Projection.api_base_url = $ApiBaseUrl
+  $Projection.api_url = $Uri
+
+  try {
+    $Body = Invoke-RestMethod -Uri $Uri -Method Get -TimeoutSec 2 -ErrorAction Stop
+    $Mcp = $Body.PSObject.Properties['mcp'].Value
+    $InputComponent = $Body.PSObject.Properties['components'].Value.PSObject.Properties['francis.input.status'].Value
+    $TakeoverComponent = $Body.PSObject.Properties['components'].Value.PSObject.Properties['francis.takeover.status'].Value
+    $ExpectedToolCount = Get-IntegerProperty -Payload $Mcp -Name 'expected_tool_count' -Default 0
+    if ($ExpectedToolCount -le 0) {
+      $ExpectedToolCount = Get-IntegerProperty -Payload $Mcp -Name 'expected_min_tool_count' -Default 0
+    }
+
+    $Projection.live_status = 'ready'
+    $Projection.body_status = Get-StringProperty -Payload $Body -Name 'status' -Default 'unknown'
+    $Projection.embodied_posture = Get-StringProperty -Payload $Body -Name 'embodied_posture' -Default 'unknown'
+    $Projection.tool_count = Get-IntegerProperty -Payload $Mcp -Name 'tool_count' -Default 0
+    $Projection.expected_tool_count = $ExpectedToolCount
+    $Projection.missing_tools_count = Get-CountProperty -Payload $Mcp -Name 'missing_tools' -Default 0
+    $Projection.blockers_count = Get-CountProperty -Payload $Body -Name 'blockers' -Default 0
+    $Projection.resident = Get-BoolProperty -Payload $Body -Name 'resident' -Default $false
+    $Projection.input_status = Get-StringProperty -Payload $InputComponent -Name 'status' -Default 'unknown'
+    $Projection.takeover_status = Get-StringProperty -Payload $TakeoverComponent -Name 'status' -Default 'unknown'
+    $Projection.message = 'Overlay runtime is displaying live read-only Lens-Orb MCP body-state.'
+  } catch {
+    $Projection.live_status = 'unavailable'
+    $Projection.error = [string]$_.Exception.Message
+    $Projection.body_status = 'unavailable'
+    $Projection.embodied_posture = 'unknown'
+    $Projection.tool_count = 0
+    $Projection.expected_tool_count = 0
+    $Projection.missing_tools_count = 0
+    $Projection.blockers_count = 0
+    $Projection.resident = $false
+    $Projection.input_status = 'unknown'
+    $Projection.takeover_status = 'unknown'
+    $Projection.message = 'Overlay runtime could not read the live Lens-Orb MCP body-state API; route link remains available.'
+  }
+
+  return $Projection
+}
+
+function Format-McpBodyStateLabel {
+  param([object]$BodyState)
+
+  if ($null -eq $BodyState) {
+    return "Francis Lens`nMCP body-state: unavailable"
+  }
+
+  $LiveStatus = Get-StringProperty -Payload $BodyState -Name 'live_status' -Default 'not_requested'
+  $Route = Get-StringProperty -Payload $BodyState -Name 'route' -Default '/lens/mcp/status'
+  if ($LiveStatus -ne 'ready') {
+    return "Francis Lens`nMCP body-state: $Route`nLive readback: $LiveStatus"
+  }
+
+  $Status = Get-StringProperty -Payload $BodyState -Name 'body_status' -Default 'unknown'
+  $Posture = Get-StringProperty -Payload $BodyState -Name 'embodied_posture' -Default 'unknown'
+  $ToolCount = Get-IntegerProperty -Payload $BodyState -Name 'tool_count' -Default 0
+  $ExpectedToolCount = Get-IntegerProperty -Payload $BodyState -Name 'expected_tool_count' -Default 0
+  $Resident = Get-BoolProperty -Payload $BodyState -Name 'resident' -Default $false
+  $TakeoverStatus = Get-StringProperty -Payload $BodyState -Name 'takeover_status' -Default 'unknown'
+  $InputStatus = Get-StringProperty -Payload $BodyState -Name 'input_status' -Default 'unknown'
+  $BlockersCount = Get-IntegerProperty -Payload $BodyState -Name 'blockers_count' -Default 0
+
+  return @(
+    'Francis Lens'
+    ('Status: {0} | Posture: {1}' -f $Status, $Posture)
+    ('Tools: {0}/{1} | Resident: {2}' -f $ToolCount, $ExpectedToolCount, $Resident.ToString().ToLowerInvariant())
+    ('Takeover: {0} | Input: {1} | Blockers: {2}' -f $TakeoverStatus, $InputStatus, $BlockersCount)
+  ) -join "`n"
+}
+
+function Update-OverlayMcpBodyStateLabel {
+  param(
+    [System.Windows.Forms.Label]$Label,
+    [object]$Config,
+    [string]$Root
+  )
+
+  $BodyState = Read-McpBodyStateForOverlay -McpStatusRoute $Config.mcp_status_route -OrbMcpStatusRoute $Config.orb_mcp_status_route
+  $Label.Text = Format-McpBodyStateLabel -BodyState $BodyState
+  Write-OverlayState -Root $Root -Status 'overlay_running' -OverlayWindowVisible $true -AlwaysOnTop $true -Message 'Francis Lens overlay window is running with MCP body-state readback.' -McpBodyState $BodyState
 }
 
 function Get-ProcessAlive {
@@ -196,7 +318,8 @@ function Write-OverlayState {
     [string]$Status,
     [bool]$OverlayWindowVisible,
     [bool]$AlwaysOnTop,
-    [string]$Message = ''
+    [string]$Message = '',
+    [object]$McpBodyState = $null
   )
 
   $Config = Get-OverlayConfig
@@ -207,6 +330,9 @@ function Write-OverlayState {
   if ($Status -eq 'overlay_running') {
     Set-Content -LiteralPath $PidPath -Value ([string]$PID) -Encoding UTF8
   }
+  if ($null -eq $McpBodyState) {
+    $McpBodyState = New-McpBodyStateProjection -McpStatusRoute $Config.mcp_status_route -OrbMcpStatusRoute $Config.orb_mcp_status_route
+  }
   $Payload = [ordered]@{
     kind = 'lens.overlay.runtime_state'
     status = $Status
@@ -216,7 +342,7 @@ function Write-OverlayState {
     status_route = $Config.status_route
     mcp_status_route = $Config.mcp_status_route
     orb_mcp_status_route = $Config.orb_mcp_status_route
-    mcp_body_state = New-McpBodyStateProjection -McpStatusRoute $Config.mcp_status_route -OrbMcpStatusRoute $Config.orb_mcp_status_route
+    mcp_body_state = $McpBodyState
     overlay_window_visible = $OverlayWindowVisible
     always_on_top = $AlwaysOnTop
     updated_at = [DateTimeOffset]::UtcNow.ToString('o')
@@ -269,7 +395,8 @@ function Get-OverlayRuntimeReadback {
 
   $McpStatusRoute = Get-StringProperty -Payload $Status -Name 'mcp_status_route' -Default $Config.mcp_status_route
   $OrbMcpStatusRoute = Get-StringProperty -Payload $Status -Name 'orb_mcp_status_route' -Default $Config.orb_mcp_status_route
-  $McpBodyState = New-McpBodyStateProjection -McpStatusRoute $McpStatusRoute -OrbMcpStatusRoute $OrbMcpStatusRoute
+  $StatusMcpBodyState = if ($null -ne $Status -and $null -ne $Status.PSObject.Properties['mcp_body_state']) { $Status.PSObject.Properties['mcp_body_state'].Value } else { $null }
+  $McpBodyState = if ($null -ne $StatusMcpBodyState) { $StatusMcpBodyState } else { New-McpBodyStateProjection -McpStatusRoute $McpStatusRoute -OrbMcpStatusRoute $OrbMcpStatusRoute }
   $StatusClaimsRunningOverlay = (
     $StatusKind -eq 'lens.overlay.runtime_state' -and
     $StatusValue -eq 'overlay_running' -and
@@ -351,7 +478,7 @@ function New-StatusPayload {
     mcp_status_route = $Config.mcp_status_route
     orb_mcp_status_route = $Config.orb_mcp_status_route
     mcp_body_state_route = $Config.mcp_status_route
-    mcp_body_state = New-McpBodyStateProjection -McpStatusRoute $Config.mcp_status_route -OrbMcpStatusRoute $Config.orb_mcp_status_route
+    mcp_body_state = $Readback.mcp_body_state
     overlay_runtime = $Readback
     next_smallest_truthful_gap = if ($Ready) { 'overlay_authority_and_config' } else { 'overlay_window_runtime' }
     governance = [ordered]@{
@@ -382,6 +509,7 @@ if ($Mode -eq 'Run') {
   New-Item -ItemType Directory -Force -Path $RuntimeRoot | Out-Null
   $Form = $null
   $Timer = $null
+  $RefreshTimer = $null
   $Failed = $false
   try {
     if (-not $RunningOnWindows) {
@@ -399,8 +527,8 @@ if ($Mode -eq 'Run') {
     $Form.StartPosition = [System.Windows.Forms.FormStartPosition]::Manual
     $Form.ShowInTaskbar = $false
     $Form.TopMost = $true
-    $Form.Width = 360
-    $Form.Height = 110
+    $Form.Width = 440
+    $Form.Height = 150
     $Form.Left = [Math]::Max(0, $Screen.Right - $Form.Width - 24)
     $Form.Top = [Math]::Max(0, $Screen.Top + 24)
     $Form.BackColor = [System.Drawing.Color]::FromArgb(28, 32, 36)
@@ -411,11 +539,20 @@ if ($Mode -eq 'Run') {
     $Label.Dock = [System.Windows.Forms.DockStyle]::Fill
     $Label.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
     $Label.Font = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Regular)
-    $Label.Text = "Francis Lens`nMCP body-state: $($Config.mcp_status_route)"
+    $Label.Text = "Francis Lens`nMCP body-state: $($Config.mcp_status_route)`nLive readback: starting"
     $Form.Controls.Add($Label)
+    $script:LensOverlayLabel = $Label
+    $script:LensOverlayConfig = $Config
+    $script:LensOverlayDataRoot = $DataRoot
     $Form.Add_Shown({
-        Write-OverlayState -Root $script:DataRoot -Status 'overlay_running' -OverlayWindowVisible $true -AlwaysOnTop $true -Message 'Francis Lens overlay window is running.'
+        Update-OverlayMcpBodyStateLabel -Label $script:LensOverlayLabel -Config $script:LensOverlayConfig -Root $script:LensOverlayDataRoot
       })
+    $RefreshTimer = New-Object System.Windows.Forms.Timer
+    $RefreshTimer.Interval = 5000
+    $RefreshTimer.Add_Tick({
+        Update-OverlayMcpBodyStateLabel -Label $script:LensOverlayLabel -Config $script:LensOverlayConfig -Root $script:LensOverlayDataRoot
+      })
+    $RefreshTimer.Start()
     if ($RunSeconds -gt 0) {
       $Timer = New-Object System.Windows.Forms.Timer
       $Timer.Interval = [Math]::Max(1000, $RunSeconds * 1000)
@@ -431,6 +568,9 @@ if ($Mode -eq 'Run') {
     Write-OverlayState -Root $DataRoot -Status 'failed' -OverlayWindowVisible $false -AlwaysOnTop $false -Message ([string]$_.Exception.Message)
     exit 1
   } finally {
+    if ($null -ne $RefreshTimer) {
+      $RefreshTimer.Dispose()
+    }
     if ($null -ne $Timer) {
       $Timer.Dispose()
     }
