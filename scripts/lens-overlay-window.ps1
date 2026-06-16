@@ -151,6 +151,16 @@ function New-McpBodyStateProjection {
   }
 }
 
+function Set-McpBodyStateValue {
+  param(
+    [System.Collections.Specialized.OrderedDictionary]$Projection,
+    [string]$Name,
+    [object]$Value
+  )
+
+  $Projection[$Name] = $Value
+}
+
 function Read-McpBodyStateForOverlay {
   param(
     [string]$McpStatusRoute,
@@ -164,8 +174,8 @@ function Read-McpBodyStateForOverlay {
   }
   $ApiBaseUrl = $ApiBaseUrl.TrimEnd('/')
   $Uri = '{0}{1}?actor=lens.overlay' -f $ApiBaseUrl, $McpStatusRoute
-  $Projection.api_base_url = $ApiBaseUrl
-  $Projection.api_url = $Uri
+  Set-McpBodyStateValue -Projection $Projection -Name 'api_base_url' -Value $ApiBaseUrl
+  Set-McpBodyStateValue -Projection $Projection -Name 'api_url' -Value $Uri
 
   try {
     $Body = Invoke-RestMethod -Uri $Uri -Method Get -TimeoutSec 2 -ErrorAction Stop
@@ -177,30 +187,30 @@ function Read-McpBodyStateForOverlay {
       $ExpectedToolCount = Get-IntegerProperty -Payload $Mcp -Name 'expected_min_tool_count' -Default 0
     }
 
-    $Projection.live_status = 'ready'
-    $Projection.body_status = Get-StringProperty -Payload $Body -Name 'status' -Default 'unknown'
-    $Projection.embodied_posture = Get-StringProperty -Payload $Body -Name 'embodied_posture' -Default 'unknown'
-    $Projection.tool_count = Get-IntegerProperty -Payload $Mcp -Name 'tool_count' -Default 0
-    $Projection.expected_tool_count = $ExpectedToolCount
-    $Projection.missing_tools_count = Get-CountProperty -Payload $Mcp -Name 'missing_tools' -Default 0
-    $Projection.blockers_count = Get-CountProperty -Payload $Body -Name 'blockers' -Default 0
-    $Projection.resident = Get-BoolProperty -Payload $Body -Name 'resident' -Default $false
-    $Projection.input_status = Get-StringProperty -Payload $InputComponent -Name 'status' -Default 'unknown'
-    $Projection.takeover_status = Get-StringProperty -Payload $TakeoverComponent -Name 'status' -Default 'unknown'
-    $Projection.message = 'Overlay runtime is displaying live read-only Lens-Orb MCP body-state.'
+    Set-McpBodyStateValue -Projection $Projection -Name 'live_status' -Value 'ready'
+    Set-McpBodyStateValue -Projection $Projection -Name 'body_status' -Value (Get-StringProperty -Payload $Body -Name 'status' -Default 'unknown')
+    Set-McpBodyStateValue -Projection $Projection -Name 'embodied_posture' -Value (Get-StringProperty -Payload $Body -Name 'embodied_posture' -Default 'unknown')
+    Set-McpBodyStateValue -Projection $Projection -Name 'tool_count' -Value (Get-IntegerProperty -Payload $Mcp -Name 'tool_count' -Default 0)
+    Set-McpBodyStateValue -Projection $Projection -Name 'expected_tool_count' -Value $ExpectedToolCount
+    Set-McpBodyStateValue -Projection $Projection -Name 'missing_tools_count' -Value (Get-CountProperty -Payload $Mcp -Name 'missing_tools' -Default 0)
+    Set-McpBodyStateValue -Projection $Projection -Name 'blockers_count' -Value (Get-CountProperty -Payload $Body -Name 'blockers' -Default 0)
+    Set-McpBodyStateValue -Projection $Projection -Name 'resident' -Value (Get-BoolProperty -Payload $Body -Name 'resident' -Default $false)
+    Set-McpBodyStateValue -Projection $Projection -Name 'input_status' -Value (Get-StringProperty -Payload $InputComponent -Name 'status' -Default 'unknown')
+    Set-McpBodyStateValue -Projection $Projection -Name 'takeover_status' -Value (Get-StringProperty -Payload $TakeoverComponent -Name 'status' -Default 'unknown')
+    Set-McpBodyStateValue -Projection $Projection -Name 'message' -Value 'Overlay runtime is displaying live read-only Lens-Orb MCP body-state.'
   } catch {
-    $Projection.live_status = 'unavailable'
-    $Projection.error = [string]$_.Exception.Message
-    $Projection.body_status = 'unavailable'
-    $Projection.embodied_posture = 'unknown'
-    $Projection.tool_count = 0
-    $Projection.expected_tool_count = 0
-    $Projection.missing_tools_count = 0
-    $Projection.blockers_count = 0
-    $Projection.resident = $false
-    $Projection.input_status = 'unknown'
-    $Projection.takeover_status = 'unknown'
-    $Projection.message = 'Overlay runtime could not read the live Lens-Orb MCP body-state API; route link remains available.'
+    Set-McpBodyStateValue -Projection $Projection -Name 'live_status' -Value 'unavailable'
+    Set-McpBodyStateValue -Projection $Projection -Name 'error' -Value ([string]$_.Exception.Message)
+    Set-McpBodyStateValue -Projection $Projection -Name 'body_status' -Value 'unavailable'
+    Set-McpBodyStateValue -Projection $Projection -Name 'embodied_posture' -Value 'unknown'
+    Set-McpBodyStateValue -Projection $Projection -Name 'tool_count' -Value 0
+    Set-McpBodyStateValue -Projection $Projection -Name 'expected_tool_count' -Value 0
+    Set-McpBodyStateValue -Projection $Projection -Name 'missing_tools_count' -Value 0
+    Set-McpBodyStateValue -Projection $Projection -Name 'blockers_count' -Value 0
+    Set-McpBodyStateValue -Projection $Projection -Name 'resident' -Value $false
+    Set-McpBodyStateValue -Projection $Projection -Name 'input_status' -Value 'unknown'
+    Set-McpBodyStateValue -Projection $Projection -Name 'takeover_status' -Value 'unknown'
+    Set-McpBodyStateValue -Projection $Projection -Name 'message' -Value 'Overlay runtime could not read the live Lens-Orb MCP body-state API; route link remains available.'
   }
 
   return $Projection
@@ -238,7 +248,7 @@ function Format-McpBodyStateLabel {
 
 function Update-OverlayMcpBodyStateLabel {
   param(
-    [System.Windows.Forms.Label]$Label,
+    [object]$Label,
     [object]$Config,
     [string]$Root
   )
