@@ -71,12 +71,25 @@ test("parseLensMcpStatus preserves truthful Orb/Lens body state", () => {
   assert.equal(status.status, "ready");
   assert.equal(status.embodied_posture, "takeover_ready");
   assert.equal(status.resident, false);
+  assert.equal(status.mcp.expected_tool_count, 18);
   assert.equal(status.mcp.tool_count, 18);
   assert.deepEqual(status.mcp.missing_tools, []);
   assert.deepEqual(status.mcp.missing_required_tools, []);
   assert.equal(status.routes.mcp_status, "/lens/mcp/status");
   assert.equal(status.components["francis.screen.status"]?.safe_readback, true);
   assert.equal(status.governance["grants_execution_authority"], false);
+});
+
+test("parseLensMcpStatus aliases expected minimum tool count for UI compatibility", () => {
+  const status = parseLensMcpStatus({
+    mcp: {
+      expected_min_tool_count: "18",
+      tool_count: 18,
+      missing_tools: [],
+    },
+  });
+
+  assert.equal(status.mcp.expected_tool_count, 18);
 });
 
 test("parseLensMcpStatus aliases missing tool fields for UI compatibility", () => {
@@ -106,7 +119,7 @@ test("fetchLensMcpStatus calls the existing Lens MCP status route read-only", as
       embodied_posture: "takeover_ready",
       resident: false,
       blockers: [],
-      mcp: { tool_count: 18, missing_tools: [], missing_required_tools: [] },
+      mcp: { expected_min_tool_count: 18, tool_count: 18, missing_tools: [], missing_required_tools: [] },
       routes: { mcp_status: "/lens/mcp/status", orb_mcp_status: "/lens/orb/mcp-status" },
       governance: { read_only: true, grants_execution_authority: false },
       components: {},
@@ -117,6 +130,7 @@ test("fetchLensMcpStatus calls the existing Lens MCP status route read-only", as
     const status = await fetchLensMcpStatus({ actor: "operator.ui" });
     assert.equal(status.status, "ready");
     assert.equal(status.embodied_posture, "takeover_ready");
+    assert.equal(status.mcp.expected_tool_count, 18);
     assert.deepEqual(requests, [{ path: "/lens/mcp/status", method: "GET", actor: "operator.ui" }]);
   } finally {
     restore();
