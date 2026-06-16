@@ -15,6 +15,14 @@ The bridge is exposed through the existing Lens API namespace instead of creatin
 
 Both routes call `lens_orb_mcp_status_bridge()` and return the same read-only body-state projection. These routes are for Lens/HUD/Chat UI consumers that need a stable body-state readback.
 
+The existing overlay runtime is linked to the same projection by configuration and readback metadata:
+
+- `config/runtime/lens/overlay.json` advertises `mcp_status_route=/lens/mcp/status` and `orb_mcp_status_route=/lens/orb/mcp-status`.
+- `scripts/lens-overlay-window.ps1 -Mode Status` includes a read-only `mcp_body_state` link in both top-level overlay status and nested `overlay_runtime` readback.
+- The overlay window label displays the MCP body-state route when the overlay runtime is started.
+
+This is a wiring pass only. It does not create a second Orb, a second overlay runtime, or a resident claim.
+
 ## What it reads
 
 The bridge aggregates safe MCP readbacks for:
@@ -64,13 +72,15 @@ The bridge is read-only. It does not:
 
 The bridge intentionally reports `resident=false` and `resident_claim=not_enabled_by_mcp_status_bridge`.
 
+The overlay linkage also remains read-only. It advertises the body-state route to the existing overlay/resident path but does not grant overlay control, window management, local process launch, or mutation authority in status mode.
+
 ## Validation target
 
 Run:
 
 ```powershell
 python -m francis.mcp_gateway.smoke
-python -m pytest tests/unit/test_lens_orb_mcp_status_bridge.py tests/unit/test_lens_orb_mcp_status_route.py tests/unit/test_lens_mcp_perception.py
+python -m pytest tests/unit/test_lens_orb_mcp_status_bridge.py tests/unit/test_lens_orb_mcp_status_route.py tests/unit/test_lens_overlay_window_script.py tests/unit/test_lens_mcp_perception.py
 python -m ruff check src/francis/lens/mcp_status_bridge.py src/francis/api/routes/lens_mcp_status.py tests/unit/test_lens_orb_mcp_status_bridge.py tests/unit/test_lens_orb_mcp_status_route.py
 python -m mypy src/francis/lens/mcp_status_bridge.py src/francis/api/routes/lens_mcp_status.py
 ```
@@ -80,5 +90,6 @@ Expected posture:
 - MCP smoke remains green.
 - MCP tool count remains at least the known-good baseline of 18.
 - `/lens/mcp/status` returns the Lens-Orb bridge projection.
+- `scripts/lens-overlay-window.ps1 -Mode Status` reports `mcp_body_state.route=/lens/mcp/status`.
 - The bridge is read-only.
 - No raw input, screenshot, OCR, pixel, shell, or execution authority is introduced.
