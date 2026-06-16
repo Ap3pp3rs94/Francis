@@ -110,6 +110,10 @@ export function parseLensMcpStatus(value: unknown): LensMcpStatus {
   const routes = safeRecord(raw["routes"]);
   const missingRequiredTools = safeStringList(mcp["missing_required_tools"]);
   const missingTools = safeStringList(mcp["missing_tools"]);
+  const expectedToolCount = safeNumber(
+    mcp["expected_tool_count"],
+    safeNumber(mcp["expected_min_tool_count"], 0),
+  );
 
   return {
     ok: safeBoolean(raw["ok"], false),
@@ -119,7 +123,7 @@ export function parseLensMcpStatus(value: unknown): LensMcpStatus {
     resident: safeBoolean(raw["resident"], false),
     blockers: safeStringList(raw["blockers"]),
     mcp: {
-      expected_tool_count: safeNumber(mcp["expected_tool_count"], 0),
+      expected_tool_count: expectedToolCount,
       tool_count: safeNumber(mcp["tool_count"], 0),
       missing_tools: missingTools.length ? missingTools : missingRequiredTools,
       missing_required_tools: missingRequiredTools.length ? missingRequiredTools : missingTools,
