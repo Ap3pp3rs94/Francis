@@ -55,6 +55,7 @@ def test_lens_overlay_window_status_reports_missing_runtime(tmp_path: Path) -> N
     assert payload["mcp_body_state"]["read_only"] is True
     assert payload["mcp_body_state"]["grants_execution_authority"] is False
     assert payload["mcp_body_state"]["grants_mutation_authority"] is False
+    assert payload["mcp_body_state"]["live_status"] == "not_requested"
     assert payload["next_smallest_truthful_gap"] == "overlay_window_runtime"
     assert payload["overlay_runtime"]["requirement_state"] == "missing"
     assert payload["overlay_runtime"]["blocker"] == "overlay_window_runtime_missing"
@@ -107,6 +108,21 @@ def test_lens_overlay_window_status_reports_live_runtime_readback(tmp_path: Path
                 "overlay_scope": "user_session",
                 "mcp_status_route": "/lens/mcp/status",
                 "orb_mcp_status_route": "/lens/orb/mcp-status",
+                "mcp_body_state": {
+                    "status": "linked",
+                    "source": "lens_orb_mcp_status_bridge",
+                    "route": "/lens/mcp/status",
+                    "read_only": True,
+                    "grants_execution_authority": False,
+                    "grants_mutation_authority": False,
+                    "live_status": "ready",
+                    "body_status": "ready",
+                    "embodied_posture": "takeover_ready",
+                    "tool_count": 18,
+                    "expected_tool_count": 18,
+                    "resident": False,
+                    "blockers_count": 0,
+                },
                 "overlay_window_visible": True,
                 "always_on_top": True,
             }
@@ -125,6 +141,10 @@ def test_lens_overlay_window_status_reports_live_runtime_readback(tmp_path: Path
     assert payload["mcp_status_route"] == "/lens/mcp/status"
     assert payload["mcp_body_state"]["route"] == "/lens/mcp/status"
     assert payload["mcp_body_state"]["read_only"] is True
+    assert payload["mcp_body_state"]["live_status"] == "ready"
+    assert payload["mcp_body_state"]["tool_count"] == 18
+    assert payload["mcp_body_state"]["expected_tool_count"] == 18
+    assert payload["mcp_body_state"]["embodied_posture"] == "takeover_ready"
     assert payload["next_smallest_truthful_gap"] == "overlay_authority_and_config"
     assert payload["overlay_runtime"]["process_alive"] is True
     assert payload["overlay_runtime"]["runtime_process_alive"] is False
@@ -145,8 +165,15 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "function Test-OverlayRuntimeProcess" in script
     assert "function Stop-OverlayRuntimeProcess" in script
     assert "function New-McpBodyStateProjection" in script
-    assert "mcp_body_state = New-McpBodyStateProjection" in script
+    assert "function Read-McpBodyStateForOverlay" in script
+    assert "function Format-McpBodyStateLabel" in script
+    assert "function Update-OverlayMcpBodyStateLabel" in script
+    assert "Invoke-RestMethod -Uri $Uri -Method Get" in script
     assert "MCP body-state" in script
+    assert "Tools: {0}/{1}" in script
+    assert "Takeover: {0} | Input: {1} | Blockers: {2}" in script
+    assert "$RefreshTimer.Interval = 5000" in script
+    assert "mcp_body_state = $McpBodyState" in script
     assert "status.{0}.tmp" in script
     assert "Move-Item -LiteralPath $TempPath -Destination $StatusPath -Force" in script
     assert "runtime_process_alive = $RuntimeProcessAlive" in script
