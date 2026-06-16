@@ -11,6 +11,8 @@
   "click_through_supported": false,
   "capture_supported": false,
   "status_route": "/lens/status",
+  "mcp_status_route": "/lens/mcp/status",
+  "orb_mcp_status_route": "/lens/orb/mcp-status",
   "host_route": "/lens/host",
   "host_preflight": "scripts/lens-host-preflight.ps1",
   "host_status_runner": "scripts/lens-host.ps1",
