@@ -229,8 +229,10 @@ def lens_orb_mcp_status_bridge(*, actor: str = "lens-orb", receipt_limit: int = 
         "resident": False,
         "resident_claim": "not_enabled_by_mcp_status_bridge",
         "mcp": {
-            "tool_count": tool_count,
+            # UI/operator-friendly alias paired with the explicit minimum contract.
+            "expected_tool_count": EXPECTED_MIN_TOOL_COUNT,
             "expected_min_tool_count": EXPECTED_MIN_TOOL_COUNT,
+            "tool_count": tool_count,
             "tool_count_preserved": tool_count >= EXPECTED_MIN_TOOL_COUNT,
             # Compatibility alias for the MCP gateway smoke output and operator scripts.
             "missing_tools": missing_required,
