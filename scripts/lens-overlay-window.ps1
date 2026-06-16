@@ -107,6 +107,25 @@ function Get-BoolProperty {
   return $Value.ToLowerInvariant() -eq 'true'
 }
 
+function New-McpBodyStateProjection {
+  param(
+    [string]$McpStatusRoute,
+    [string]$OrbMcpStatusRoute
+  )
+
+  return [ordered]@{
+    status = 'linked'
+    source = 'lens_orb_mcp_status_bridge'
+    route = $McpStatusRoute
+    mcp_status_route = $McpStatusRoute
+    orb_mcp_status_route = $OrbMcpStatusRoute
+    read_only = $true
+    grants_execution_authority = $false
+    grants_mutation_authority = $false
+    message = 'Overlay runtime is linked to the read-only Lens-Orb MCP body-state route.'
+  }
+}
+
 function Get-ProcessAlive {
   param([int]$ProcessId)
 
@@ -166,6 +185,8 @@ function Get-OverlayConfig {
     overlay_name = Get-StringProperty -Payload $Config -Name 'overlay_name' -Default 'Francis Lens Overlay'
     overlay_scope = Get-StringProperty -Payload $Config -Name 'overlay_scope' -Default 'user_session'
     status_route = Get-StringProperty -Payload $Config -Name 'status_route' -Default '/lens/status'
+    mcp_status_route = Get-StringProperty -Payload $Config -Name 'mcp_status_route' -Default '/lens/mcp/status'
+    orb_mcp_status_route = Get-StringProperty -Payload $Config -Name 'orb_mcp_status_route' -Default '/lens/orb/mcp-status'
   }
 }
 
@@ -193,6 +214,9 @@ function Write-OverlayState {
     overlay_name = $Config.overlay_name
     overlay_scope = $Config.overlay_scope
     status_route = $Config.status_route
+    mcp_status_route = $Config.mcp_status_route
+    orb_mcp_status_route = $Config.orb_mcp_status_route
+    mcp_body_state = New-McpBodyStateProjection -McpStatusRoute $Config.mcp_status_route -OrbMcpStatusRoute $Config.orb_mcp_status_route
     overlay_window_visible = $OverlayWindowVisible
     always_on_top = $AlwaysOnTop
     updated_at = [DateTimeOffset]::UtcNow.ToString('o')
@@ -243,6 +267,9 @@ function Get-OverlayRuntimeReadback {
     }
   }
 
+  $McpStatusRoute = Get-StringProperty -Payload $Status -Name 'mcp_status_route' -Default $Config.mcp_status_route
+  $OrbMcpStatusRoute = Get-StringProperty -Payload $Status -Name 'orb_mcp_status_route' -Default $Config.orb_mcp_status_route
+  $McpBodyState = New-McpBodyStateProjection -McpStatusRoute $McpStatusRoute -OrbMcpStatusRoute $OrbMcpStatusRoute
   $StatusClaimsRunningOverlay = (
     $StatusKind -eq 'lens.overlay.runtime_state' -and
     $StatusValue -eq 'overlay_running' -and
@@ -292,6 +319,10 @@ function Get-OverlayRuntimeReadback {
     expected_overlay_name = $Config.overlay_name
     overlay_scope = Get-StringProperty -Payload $Status -Name 'overlay_scope' -Default ''
     expected_overlay_scope = $Config.overlay_scope
+    mcp_status_route = $McpStatusRoute
+    orb_mcp_status_route = $OrbMcpStatusRoute
+    mcp_body_state_route = $McpStatusRoute
+    mcp_body_state = $McpBodyState
     requirement_state = $RequirementState
     blocker = $Blocker
   }
@@ -304,6 +335,7 @@ function New-StatusPayload {
     [string]$StatusOverride = ''
   )
 
+  $Config = Get-OverlayConfig
   $Readback = Get-OverlayRuntimeReadback -Root $Root
   $Ready = [bool]$Readback.ready
   return [ordered]@{
@@ -316,6 +348,10 @@ function New-StatusPayload {
     data_root = $Root
     runtime_state_path = 'data/runtime/lens-overlay/status.json'
     pid_path = 'data/runtime/lens-overlay/lens-overlay.pid'
+    mcp_status_route = $Config.mcp_status_route
+    orb_mcp_status_route = $Config.orb_mcp_status_route
+    mcp_body_state_route = $Config.mcp_status_route
+    mcp_body_state = New-McpBodyStateProjection -McpStatusRoute $Config.mcp_status_route -OrbMcpStatusRoute $Config.orb_mcp_status_route
     overlay_runtime = $Readback
     next_smallest_truthful_gap = if ($Ready) { 'overlay_authority_and_config' } else { 'overlay_window_runtime' }
     governance = [ordered]@{
@@ -375,7 +411,7 @@ if ($Mode -eq 'Run') {
     $Label.Dock = [System.Windows.Forms.DockStyle]::Fill
     $Label.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
     $Label.Font = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Regular)
-    $Label.Text = 'Francis Lens'
+    $Label.Text = "Francis Lens`nMCP body-state: $($Config.mcp_status_route)"
     $Form.Controls.Add($Label)
     $Form.Add_Shown({
         Write-OverlayState -Root $script:DataRoot -Status 'overlay_running' -OverlayWindowVisible $true -AlwaysOnTop $true -Message 'Francis Lens overlay window is running.'
