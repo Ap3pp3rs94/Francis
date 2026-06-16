@@ -48,11 +48,21 @@ def test_lens_overlay_window_status_reports_missing_runtime(tmp_path: Path) -> N
     assert payload["status"] == "missing"
     assert payload["ready"] is False
     assert payload["overlay_window"] is False
+    assert payload["mcp_status_route"] == "/lens/mcp/status"
+    assert payload["orb_mcp_status_route"] == "/lens/orb/mcp-status"
+    assert payload["mcp_body_state_route"] == "/lens/mcp/status"
+    assert payload["mcp_body_state"]["status"] == "linked"
+    assert payload["mcp_body_state"]["read_only"] is True
+    assert payload["mcp_body_state"]["grants_execution_authority"] is False
+    assert payload["mcp_body_state"]["grants_mutation_authority"] is False
     assert payload["next_smallest_truthful_gap"] == "overlay_window_runtime"
     assert payload["overlay_runtime"]["requirement_state"] == "missing"
     assert payload["overlay_runtime"]["blocker"] == "overlay_window_runtime_missing"
     assert payload["overlay_runtime"]["expected_overlay_name"] == "Francis Lens Overlay"
     assert payload["overlay_runtime"]["expected_overlay_scope"] == "user_session"
+    assert payload["overlay_runtime"]["mcp_status_route"] == "/lens/mcp/status"
+    assert payload["overlay_runtime"]["orb_mcp_status_route"] == "/lens/orb/mcp-status"
+    assert payload["overlay_runtime"]["mcp_body_state"]["route"] == "/lens/mcp/status"
     assert payload["governance"]["read_only_contract"] is True
     assert payload["governance"]["overlay_control_authority"] is False
     assert payload["governance"]["window_management_authority"] is False
@@ -74,6 +84,7 @@ def test_lens_overlay_window_stop_handles_corrupt_runtime_status(tmp_path: Path)
     assert payload["status"] == "stopped"
     assert payload["ready"] is False
     assert payload["overlay_window"] is False
+    assert payload["mcp_body_state_route"] == "/lens/mcp/status"
     assert payload["overlay_runtime"]["runtime_state_exists"] is True
     assert payload["overlay_runtime"]["pid_present"] is False
     assert payload["overlay_runtime"]["runtime_status"] == "overlay_stopped"
@@ -94,6 +105,8 @@ def test_lens_overlay_window_status_reports_live_runtime_readback(tmp_path: Path
                 "pid": pid,
                 "overlay_name": "Francis Lens Overlay",
                 "overlay_scope": "user_session",
+                "mcp_status_route": "/lens/mcp/status",
+                "orb_mcp_status_route": "/lens/orb/mcp-status",
                 "overlay_window_visible": True,
                 "always_on_top": True,
             }
@@ -109,6 +122,9 @@ def test_lens_overlay_window_status_reports_live_runtime_readback(tmp_path: Path
     assert payload["status"] == "visible"
     assert payload["ready"] is True
     assert payload["overlay_window"] is True
+    assert payload["mcp_status_route"] == "/lens/mcp/status"
+    assert payload["mcp_body_state"]["route"] == "/lens/mcp/status"
+    assert payload["mcp_body_state"]["read_only"] is True
     assert payload["next_smallest_truthful_gap"] == "overlay_authority_and_config"
     assert payload["overlay_runtime"]["process_alive"] is True
     assert payload["overlay_runtime"]["runtime_process_alive"] is False
@@ -117,6 +133,7 @@ def test_lens_overlay_window_status_reports_live_runtime_readback(tmp_path: Path
     assert payload["overlay_runtime"]["requirement_state"] == "visible"
     assert payload["overlay_runtime"]["blocker"] == ""
     assert payload["overlay_runtime"]["runtime_status_pid_matches_pid_file"] is True
+    assert payload["overlay_runtime"]["mcp_body_state_route"] == "/lens/mcp/status"
     assert payload["governance"]["read_only_contract"] is True
     assert payload["governance"]["overlay_control_authority"] is False
     assert payload["governance"]["local_process_launch_authority"] is False
@@ -127,6 +144,9 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
 
     assert "function Test-OverlayRuntimeProcess" in script
     assert "function Stop-OverlayRuntimeProcess" in script
+    assert "function New-McpBodyStateProjection" in script
+    assert "mcp_body_state = New-McpBodyStateProjection" in script
+    assert "MCP body-state" in script
     assert "status.{0}.tmp" in script
     assert "Move-Item -LiteralPath $TempPath -Destination $StatusPath -Force" in script
     assert "runtime_process_alive = $RuntimeProcessAlive" in script
