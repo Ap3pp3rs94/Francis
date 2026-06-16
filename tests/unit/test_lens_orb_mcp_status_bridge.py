@@ -35,6 +35,8 @@ def test_lens_orb_mcp_status_bridge_reports_read_only_body_state(tmp_path, monke
     assert out["status"] == "ready"
     assert out["resident"] is False
     assert out["embodied_posture"] in {"read_only", "pilot_ready", "takeover_ready"}
+    assert out["mcp"]["expected_tool_count"] == 18
+    assert out["mcp"]["expected_min_tool_count"] == 18
     assert out["mcp"]["tool_count"] >= 18
     assert out["mcp"]["tool_count_preserved"] is True
     assert out["mcp"]["missing_required_tools"] == []
@@ -84,6 +86,8 @@ def test_lens_orb_mcp_status_bridge_degrades_when_required_mcp_tool_missing(monk
     assert out["embodied_posture"] == "degraded"
     assert "mcp_required_tools_missing" in out["blockers"]
     assert "mcp_tool_count_below_expected_minimum" in out["blockers"]
+    assert out["mcp"]["expected_tool_count"] == 18
+    assert out["mcp"]["expected_min_tool_count"] == 18
     assert out["mcp"]["tool_count"] == 0
     assert out["mcp"]["missing_tools"] == out["mcp"]["missing_required_tools"]
 
