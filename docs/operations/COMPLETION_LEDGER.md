@@ -77866,6 +77866,85 @@ Remaining truthful gap:
   managed-copy receipts, enforce tenant isolation, export safe deltas, activate
   SLAs, bind roles, or decommission tenant state.
 
+### 2026-06-17 - Stage 17 operator proposal-evidence refs record underready pack
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence for the capability-library promotion path.
+
+This pass recorded the four remaining `legacy.generated.underreadyplugin`
+operator proposal-evidence capabilities through the existing governed operator
+proposal-evidence intake route. Readback confirms the underready pack left the
+Stage 17 operator proposal-evidence ref queue and the public checklist reports
+zero remaining candidate capability refs; this is a queue-cleared receipt entry
+only and no Stage 17 closure claim is made.
+
+Capabilities recorded in this pack:
+
+- `1777313275_underreadyplugin`
+- `1777313499_underreadyplugin`
+- `1777313867_underreadyplugin`
+- `1777318741_underreadyplugin`
+
+Recorded evidence refs:
+
+- proposal artifact refs
+  `artifact:plugins/proposals/plugin_proposal_1780526018_1777313275-underreadyplugin.json`,
+  `artifact:plugins/proposals/plugin_proposal_1780526018_1777313499-underreadyplugin.json`,
+  `artifact:plugins/proposals/plugin_proposal_1780526018_1777313867-underreadyplugin.json`, and
+  `artifact:plugins/proposals/plugin_proposal_1780526018_1777318741-underreadyplugin.json`
+- validation artifact refs
+  `artifact:plugins/validations/plugin_validation_1780526018_1777313275-underreadyplugin.json`,
+  `artifact:plugins/validations/plugin_validation_1780526018_1777313499-underreadyplugin.json`,
+  `artifact:plugins/validations/plugin_validation_1780526018_1777313867-underreadyplugin.json`, and
+  `artifact:plugins/validations/plugin_validation_1780526018_1777318741-underreadyplugin.json`
+- pack metadata ref
+  `artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1780357006_legacy-generated-underreadyplugin.json`
+- operator-review ref
+  `artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1780632847_legacy-generated-underreadyplugin_522700.json`
+
+Latest validation for this live Stage 17 intake:
+
+- Artifact existence check:
+  every proposal, validation, metadata, and operator-review ref existed under
+  `data/artifacts/plugins`.
+- Governed dry-run/apply runner:
+  the chunk walker called
+  `POST /plugins/capabilities/library/proposal-evidence/operator-intake/apply`
+  with actor `stage17.operator`,
+  `FRANCIS_API_ACTOR_SCOPES={"stage17.operator":["plugins.write"]}`,
+  `max_pack_count: 1`, `max_total_capability_count: 1`, and
+  `max_capability_count_per_pack: 1` for each capability. Every dry-run
+  returned `ok: true`, `status: dry_run`, `planned_capability_count: 1`,
+  `evidence_ref_count: 4`, and a fingerprint before apply used the returned
+  fingerprint. Every apply returned `ok: true`, `status: recorded`,
+  `applied: true`, `recorded_capability_count: 1`, and
+  `evidence_ref_count: 4`.
+- Per-capability readback:
+  after each apply, `GET /plugins/get?id=<capability_id>` returned the same
+  four refs, future review required,
+  `proposal_evidence_writes_proposals: false`,
+  `proposal_evidence_approval_claimed: false`, and unchanged plugin
+  status/enabled values.
+- Direct pack summary:
+  the pack had `recorded_capabilities: 4`, `recorded_refs: 16`,
+  `remaining_unrecorded_in_pack: 0`, and `pack_cleared_from_queue: true`;
+  recorded capabilities required future review, none wrote proposals, and none
+  claimed proposal approval.
+- Public queue readback:
+  `GET /plugins/capabilities/library/proposal-evidence/operator-intake/checklist`
+  returned `candidate_pack_count: 0` and `candidate_capability_count: 0`.
+
+Remaining truthful gap:
+
+- This clears the `stage17_capability_library_operator_proposal_evidence_refs`
+  queue in the public operator-intake readback. It does not close Stage 17,
+  promote capabilities, approve proposals, grant execution authority, grant
+  mutation authority beyond governed evidence-ref recording, close the
+  proposal-review or promotion gates, independently verify artifact truth,
+  close Stage 18, create managed copies, write managed-copy receipts, enforce
+  tenant isolation, export safe deltas, activate SLAs, bind roles, or
+  decommission tenant state.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
