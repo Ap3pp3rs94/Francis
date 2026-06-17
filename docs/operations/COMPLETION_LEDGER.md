@@ -77514,6 +77514,76 @@ Remaining truthful gap:
   managed-copy receipts, enforce tenant isolation, export safe deltas, activate
   SLAs, bind roles, or decommission tenant state.
 
+### 2026-06-17 - Stage 17 operator proposal-evidence refs record migration plan direct pack
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence for the capability-library promotion path.
+
+This pass recorded the one remaining `legacy.generated.migrationplandirectplugin`
+operator proposal-evidence capability through the existing governed operator
+proposal-evidence intake route. Readback confirms the migration plan direct
+pack left the Stage 17 operator proposal-evidence ref queue; this is a
+pack-cleared receipt entry only and no Stage 17 closure claim is made.
+
+Capability recorded in this pack:
+
+- `1780354249_migrationplandirectplugin`
+
+Recorded evidence refs:
+
+- proposal artifact ref
+  `artifact:plugins/proposals/plugin_proposal_1780524614_1780354249-migrationplandirectplugin.json`
+- validation artifact ref
+  `artifact:plugins/validations/plugin_validation_1780524614_1780354249-migrationplandirectplugin.json`
+- pack metadata ref
+  `artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1780357006_legacy-generated-migrationplandirectplugin.json`
+- operator-review ref
+  `artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1780632847_legacy-generated-migrationplandirectplugin_175400.json`
+
+Latest validation for this live Stage 17 intake:
+
+- Artifact existence check:
+  the proposal, validation, metadata, and operator-review refs existed under
+  `data/artifacts/plugins`.
+- Governed dry-run/apply runner:
+  the chunk walker called
+  `POST /plugins/capabilities/library/proposal-evidence/operator-intake/apply`
+  with actor `stage17.operator`,
+  `FRANCIS_API_ACTOR_SCOPES={"stage17.operator":["plugins.write"]}`,
+  `max_pack_count: 1`, `max_total_capability_count: 1`, and
+  `max_capability_count_per_pack: 1`. Dry-run returned `ok: true`,
+  `status: dry_run`, `planned_capability_count: 1`, `evidence_ref_count: 4`,
+  and a fingerprint before apply used the returned fingerprint. Apply returned
+  `ok: true`, `status: recorded`, `applied: true`,
+  `recorded_capability_count: 1`, and `evidence_ref_count: 4`.
+- Per-capability readback:
+  after apply, `GET /plugins/get?id=1780354249_migrationplandirectplugin`
+  returned the same four refs, future review required,
+  `proposal_evidence_writes_proposals: false`,
+  `proposal_evidence_approval_claimed: false`, and unchanged plugin
+  status/enabled values.
+- Direct pack summary:
+  the pack had `recorded_capabilities: 1`, `recorded_refs: 4`,
+  `remaining_unrecorded_in_pack: 0`, and `pack_cleared_from_queue: true`;
+  recorded capabilities required future review, none wrote proposals, and none
+  claimed proposal approval.
+- Public queue readback:
+  `GET /plugins/capabilities/library/proposal-evidence/operator-intake/checklist`
+  returned `status: ready_for_operator_evidence_refs`,
+  `candidate_pack_count: 5`, `candidate_capability_count: 8`, and next visible
+  pack `legacy.generated.probequalityevidenceapply`.
+
+Remaining truthful gap:
+
+- This clears only the `legacy.generated.migrationplandirectplugin` operator
+  proposal-evidence ref queue. It does not close Stage 17, promote
+  capabilities, approve proposals, grant execution authority, grant mutation
+  authority beyond governed evidence-ref recording, close the proposal-review
+  or promotion gates, independently verify artifact truth, clear the remaining
+  8 capability evidence refs, close Stage 18, create managed copies, write
+  managed-copy receipts, enforce tenant isolation, export safe deltas, activate
+  SLAs, bind roles, or decommission tenant state.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
