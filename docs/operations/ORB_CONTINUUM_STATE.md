@@ -158,6 +158,9 @@ proportions.
   exported `francis_chatgpt_voice_ingress` tool name, and the validation proof
   requires fresh usable public-MCP-tool provenance instead of trusting
   `source=chatgpt.voice` alone.
+- Overlay voice-turn handback readback now formats `completed_at` through an
+  invariant UTC timestamp helper so PowerShell cannot emit culture-specific date
+  strings on Linux CI while preserving the voice-turn handback contract.
 
 ## Current Task
 
@@ -939,6 +942,19 @@ Validated for MCP-origin ChatGPT voice receipt provenance:
   and `mcp_gateway_tool=francis.chatgpt_voice.ingress`, public MCP server calls
   record `mcp_server_tool=francis_chatgpt_voice_ingress`, and the validation
   proof refuses source-only receipts as live ChatGPT MCP evidence.
+
+Validated for cross-platform overlay voice-turn handback timestamp readback:
+
+- `python -m pytest tests\test_lens_overlay_window_script.py -q` passed.
+- `python -m pytest tests\test_lens_overlay_window_script.py
+  tests\test_orb_voice_overlay_lens_validation_script.py -q` passed.
+- PowerShell parser check for `scripts\lens-overlay-window.ps1` returned
+  `parse_ok`.
+- `python -m ruff check --no-cache tests\test_lens_overlay_window_script.py
+  tests\test_orb_voice_overlay_lens_validation_script.py` passed.
+- `python -m ruff format --check --no-cache
+  tests\test_lens_overlay_window_script.py
+  tests\test_orb_voice_overlay_lens_validation_script.py` passed.
 
 ## Blockers
 

@@ -644,6 +644,7 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
         in script
     )
     assert "playback_receipt_observed = $true" in script
+    assert "Get-UtcTimestampStringProperty -Payload $Playback -Name 'updated_at' -Default ''" in script
     assert "voice_turn = Get-OverlayVoiceTurnReadback -Root $Root" in script
     assert "voice-turns" in script
     assert "Start-OverlayVoiceTurn -Root $Root -UtteranceText $BoundedUtterance" in script

@@ -132,6 +132,50 @@ function Get-StringProperty {
   return $Value
 }
 
+function Get-UtcTimestampStringProperty {
+  param(
+    [object]$Payload,
+    [string]$Name,
+    [string]$Default = ''
+  )
+
+  if ($null -eq $Payload) {
+    return $Default
+  }
+  $Value = $null
+  if ($Payload -is [System.Collections.IDictionary]) {
+    if (-not $Payload.Contains($Name) -or $null -eq $Payload[$Name]) {
+      return $Default
+    }
+    $Value = $Payload[$Name]
+  } else {
+    $Property = $Payload.PSObject.Properties[$Name]
+    if ($null -eq $Property -or $null -eq $Property.Value) {
+      return $Default
+    }
+    $Value = $Property.Value
+  }
+
+  if ($Value -is [DateTimeOffset]) {
+    return $Value.UtcDateTime.ToString('yyyy-MM-ddTHH:mm:ssZ', [System.Globalization.CultureInfo]::InvariantCulture)
+  }
+  if ($Value -is [DateTime]) {
+    $DateTimeValue = [DateTime]$Value
+    if ($DateTimeValue.Kind -eq [DateTimeKind]::Unspecified) {
+      $DateTimeValue = [DateTime]::SpecifyKind($DateTimeValue, [DateTimeKind]::Utc)
+    } else {
+      $DateTimeValue = $DateTimeValue.ToUniversalTime()
+    }
+    return $DateTimeValue.ToString('yyyy-MM-ddTHH:mm:ssZ', [System.Globalization.CultureInfo]::InvariantCulture)
+  }
+
+  $Text = [string]$Value
+  if ([string]::IsNullOrWhiteSpace($Text)) {
+    return $Default
+  }
+  return $Text
+}
+
 function Get-IntegerProperty {
   param(
     [object]$Payload,
@@ -2193,7 +2237,7 @@ function Get-OverlayVoiceTurnReadback {
   $Readback.playback_receipt_observed = $true
   $Readback.speech_process_alive = $false
   $Readback.speech_process_checked = $true
-  $Readback.completed_at = Get-StringProperty -Payload $Playback -Name 'updated_at' -Default ''
+  $Readback.completed_at = Get-UtcTimestampStringProperty -Payload $Playback -Name 'updated_at' -Default ''
   return $Readback
 }
 
