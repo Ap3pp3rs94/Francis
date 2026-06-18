@@ -91,6 +91,11 @@ proportions.
   evidence references, inferred information, confidence, unknowns, and
   failure/refusal reason into the run receipt, and replay/evaluation readbacks
   preserve that evidence without adding live desktop perception or authority.
+- Mona Lisa sandbox recognizability scoring now includes a repo-local offline
+  SVG geometry fixture. The evaluator blends the original primitive replay
+  heuristic with fixture-labeled geometry/feature evidence, reports fixture ref
+  and hash, and explicitly marks pixel evidence, reference-image use, and visual
+  similarity claims as false.
 
 ## Current Task
 
@@ -104,6 +109,11 @@ The latest completed receipt sub-slice adds structured observation receipts to
 the Mona Lisa mission/operator chain. It is receipt/schema work only: it does
 not add screenshots, pixels, OCR, live desktop perception, proposal approval,
 promotion, or execution authority.
+
+The latest completed recognizability sub-slice adds offline fixture evidence for
+the sandbox Mona Lisa artifact. It remains SVG/action replay evidence only and
+does not claim screenshot, pixel, OCR, accessibility, human recognizability, or
+live visual-similarity proof.
 
 Acceptance criteria for the completed observation sub-slice:
 
@@ -197,11 +207,23 @@ Acceptance criteria for the completed structured observation receipt sub-slice:
   control, proposal approval, promotion, execution authority, or mutation
   authority
 
+Acceptance criteria for the completed offline recognizability fixture sub-slice:
+
+- recognizability scoring keeps the primitive replay heuristic visible
+- a repo-local fixture defines required Mona Lisa feature labels and geometry
+  zones without using a reference image
+- evaluation readback reports fixture ref, fixture hash, target, source,
+  evidence mode, feature matches, zone matches, score, and pass/fail state
+- the fixture path is labeled `offline_svg_geometry`
+- pixel evidence, reference-image use, and visual-similarity claims remain false
+- the evaluator degrades truthfully to `fixture_unavailable` if the fixture file
+  is unavailable
+- proposal output no longer asks to add the offline geometry fixture that now
+  exists; future work points toward optional truth-labeled pixel evidence or
+  multi-run review scoring
+
 ## Pending Tasks
 
-- Improve Mona Lisa recognizability scoring with offline fixture or pixel
-  evidence only when that evidence path is truthfully labeled as fixture,
-  replay, sandbox, or live.
 - Add replay/evaluation review scoring that can classify repeated failures
   across multiple sandbox runs without promoting proposals automatically.
 
@@ -511,6 +533,24 @@ Validated for the structured Mona Lisa observation receipt sub-slice:
   evidence reference present, live desktop unknowns preserved, and replay
   evaluation `passed=true`.
 
+Validated for the offline Mona Lisa recognizability fixture sub-slice:
+
+- `python -m pytest
+  tests\test_api_operations.py::test_operations_run_mona_lisa_sandbox_canvas_from_chat_mission
+  tests\test_orb_phase0_contracts.py -q` passed with `5 passed`.
+- `python -m ruff check --no-cache src\francis\agent\sandbox_canvas.py
+  tests\test_api_operations.py tests\test_orb_phase0_contracts.py` passed.
+- `python -m ruff format --check --no-cache src\francis\agent\sandbox_canvas.py
+  tests\test_api_operations.py tests\test_orb_phase0_contracts.py` passed with
+  `3 files already formatted`.
+- `.venv\Scripts\python.exe -m mypy src\francis\agent\sandbox_canvas.py`
+  passed.
+- A local TestClient probe confirmed replay evaluation `passed=true`,
+  recognizability score `1.0`, basis
+  `operator_primitive_replay_plus_offline_svg_geometry_fixture_not_pixel_similarity`,
+  fixture mode `offline_svg_geometry`, fixture pass, and false
+  pixel-evidence/reference-image/visual-similarity claims.
+
 ## Blockers
 
 - The lens/overlay observation contract is metadata-only; it does not yet provide
@@ -520,8 +560,8 @@ Validated for the structured Mona Lisa observation receipt sub-slice:
 - Mission advancement now queues the sandbox canvas operation automatically, but
   operator execution is still a separate bounded operation run.
 - The sandbox artifact has no automated screenshot/pixel visual similarity score
-  yet. The current evaluator has only a deterministic primitive-contract
-  recognizability heuristic.
+  yet. The current evaluator has deterministic primitive replay plus an offline
+  SVG geometry fixture, not live pixel or human recognizability proof.
 - No live desktop painting run is verified safe.
 - Voice can produce receipts and route through chat, and a narrow Mona Lisa
   phrase can create mission state when transcribed, but the full voice ->
@@ -556,6 +596,5 @@ Validated for the structured Mona Lisa observation receipt sub-slice:
 
 ## Exact Next Action
 
-Improve Mona Lisa recognizability scoring with offline fixture or pixel evidence
-only when that evidence path is truthfully labeled as fixture, replay, sandbox,
-or live.
+Add replay/evaluation review scoring that can classify repeated failures across
+multiple sandbox runs without promoting proposals automatically.

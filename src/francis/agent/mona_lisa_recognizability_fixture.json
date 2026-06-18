@@ -1,0 +1,82 @@
+{
+  "kind": "francis.sandbox_canvas.mona_lisa.recognizability_fixture",
+  "schema_version": 1,
+  "status": "offline_fixture",
+  "target": "mona_lisa_lower_complexity_representation",
+  "source": "repo_local_svg_geometry_contract",
+  "evidence_mode": "offline_svg_geometry",
+  "pixel_evidence": false,
+  "visual_similarity_claim": false,
+  "reference_image_used": false,
+  "minimum_score": 0.78,
+  "required_feature_count": 7,
+  "required_zone_count": 5,
+  "feature_keywords": {
+    "background": ["background", "landscape", "valley"],
+    "hair": ["hair"],
+    "face": ["face", "cheek"],
+    "eyes": ["eye", "brow"],
+    "smile": ["smile"],
+    "dress": ["dress", "sleeve"],
+    "hands": ["hand"],
+    "contour": ["contour", "veil", "neckline"]
+  },
+  "geometry_zones": [
+    {
+      "id": "upper_background",
+      "keywords": ["background", "landscape", "valley"],
+      "x_min": 0,
+      "x_max": 512,
+      "y_min": 0,
+      "y_max": 315
+    },
+    {
+      "id": "hair_frame",
+      "keywords": ["hair"],
+      "x_min": 130,
+      "x_max": 385,
+      "y_min": 55,
+      "y_max": 310
+    },
+    {
+      "id": "face_core",
+      "keywords": ["face", "cheek"],
+      "x_min": 175,
+      "x_max": 340,
+      "y_min": 120,
+      "y_max": 285
+    },
+    {
+      "id": "eyes_brow_band",
+      "keywords": ["eye", "brow"],
+      "x_min": 185,
+      "x_max": 335,
+      "y_min": 150,
+      "y_max": 230
+    },
+    {
+      "id": "smile_band",
+      "keywords": ["smile"],
+      "x_min": 210,
+      "x_max": 315,
+      "y_min": 210,
+      "y_max": 270
+    },
+    {
+      "id": "torso_dress",
+      "keywords": ["dress", "sleeve", "neckline"],
+      "x_min": 100,
+      "x_max": 420,
+      "y_min": 255,
+      "y_max": 512
+    },
+    {
+      "id": "folded_hands",
+      "keywords": ["hand"],
+      "x_min": 155,
+      "x_max": 365,
+      "y_min": 340,
+      "y_max": 475
+    }
+  ]
+}

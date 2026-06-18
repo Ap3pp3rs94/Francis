@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import time
 import uuid
 from datetime import UTC, datetime
@@ -15,6 +16,8 @@ CANVAS_KIND = "francis.sandbox_canvas.mona_lisa"
 DEFAULT_CANVAS_SIZE = 512
 MIN_CANVAS_SIZE = 128
 MAX_CANVAS_SIZE = 2048
+RECOGNIZABILITY_FIXTURE_PATH = Path(__file__).with_name("mona_lisa_recognizability_fixture.json")
+_PATH_POINT_RE = re.compile(r"(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)")
 
 
 def _now_iso() -> str:
@@ -568,6 +571,131 @@ def _primitive_labels(actions: list[dict[str, Any]]) -> set[str]:
     return {_safe_str(row.get("label")).lower() for row in actions}
 
 
+def _keyword_match(label: str, keywords: list[Any]) -> bool:
+    return any(_safe_str(keyword).lower() in label for keyword in keywords)
+
+
+def _primitive_center(primitive: dict[str, Any]) -> tuple[float, float] | None:
+    cx = primitive.get("cx")
+    cy = primitive.get("cy")
+    if cx is not None and cy is not None:
+        try:
+            return float(cx), float(cy)
+        except (TypeError, ValueError):
+            return None
+
+    x = primitive.get("x")
+    y = primitive.get("y")
+    width = primitive.get("width")
+    height = primitive.get("height")
+    if x is not None and y is not None and width is not None and height is not None:
+        try:
+            return float(x) + (float(width) / 2.0), float(y) + (float(height) / 2.0)
+        except (TypeError, ValueError):
+            return None
+
+    points: list[tuple[float, float]] = []
+    for match in _PATH_POINT_RE.finditer(_safe_str(primitive.get("path"))):
+        try:
+            points.append((float(match.group(1)), float(match.group(2))))
+        except ValueError:
+            continue
+    if not points:
+        return None
+    xs = [point[0] for point in points]
+    ys = [point[1] for point in points]
+    return (min(xs) + max(xs)) / 2.0, (min(ys) + max(ys)) / 2.0
+
+
+def _inside_zone(center: tuple[float, float] | None, zone: dict[str, Any]) -> bool:
+    if center is None:
+        return False
+    x, y = center
+    return float(zone.get("x_min", 0)) <= x <= float(zone.get("x_max", 0)) and float(
+        zone.get("y_min", 0)
+    ) <= y <= float(zone.get("y_max", 0))
+
+
+def _offline_fixture_evidence(actions: list[dict[str, Any]]) -> dict[str, Any]:
+    fixture_path = RECOGNIZABILITY_FIXTURE_PATH
+    fixture = _read_json(fixture_path)
+    if not fixture:
+        return {
+            "status": "fixture_unavailable",
+            "fixture_ref": str(fixture_path),
+            "score": 0.0,
+            "passed": False,
+            "pixel_evidence": False,
+            "visual_similarity_claim": False,
+            "reference_image_used": False,
+            "limitations": ["Offline fixture file was not available; no fixture evidence was claimed."],
+        }
+
+    feature_keywords = _dict(fixture.get("feature_keywords"))
+    labels = _primitive_labels(actions)
+    feature_matches = {
+        feature: any(_keyword_match(label, list(keywords or [])) for label in labels)
+        for feature, keywords in feature_keywords.items()
+    }
+    feature_count = sum(1 for value in feature_matches.values() if value)
+    required_feature_count = max(1, _safe_int(fixture.get("required_feature_count"), 1))
+
+    zone_results: list[dict[str, Any]] = []
+    for zone in fixture.get("geometry_zones") or []:
+        if not isinstance(zone, dict):
+            continue
+        keywords = list(zone.get("keywords") or [])
+        matched_labels: list[str] = []
+        for primitive in actions:
+            label = _safe_str(primitive.get("label")).lower()
+            if not _keyword_match(label, keywords):
+                continue
+            if _inside_zone(_primitive_center(primitive), zone):
+                matched_labels.append(label)
+        zone_results.append(
+            {
+                "id": _safe_str(zone.get("id")),
+                "matched": bool(matched_labels),
+                "matched_labels": sorted(set(matched_labels)),
+            }
+        )
+    zone_count = sum(1 for item in zone_results if item["matched"])
+    required_zone_count = max(1, _safe_int(fixture.get("required_zone_count"), 1))
+
+    feature_component = min(1.0, feature_count / required_feature_count)
+    zone_component = min(1.0, zone_count / required_zone_count)
+    primitive_component = min(1.0, len(actions) / 20.0)
+    score = round((feature_component * 0.45) + (zone_component * 0.45) + (primitive_component * 0.10), 3)
+    minimum_score = float(fixture.get("minimum_score") or 0.0)
+    passed = score >= minimum_score and feature_count >= required_feature_count and zone_count >= required_zone_count
+
+    return {
+        "status": "evaluated",
+        "fixture_ref": str(fixture_path),
+        "fixture_hash": _sha256(fixture_path),
+        "fixture_kind": _safe_str(fixture.get("kind")),
+        "source": _safe_str(fixture.get("source")),
+        "target": _safe_str(fixture.get("target")),
+        "evidence_mode": _safe_str(fixture.get("evidence_mode")),
+        "score": score,
+        "minimum_score": minimum_score,
+        "passed": passed,
+        "feature_count": feature_count,
+        "required_feature_count": required_feature_count,
+        "feature_matches": feature_matches,
+        "zone_count": zone_count,
+        "required_zone_count": required_zone_count,
+        "zone_matches": zone_results,
+        "pixel_evidence": bool(fixture.get("pixel_evidence")) is True,
+        "visual_similarity_claim": bool(fixture.get("visual_similarity_claim")) is True,
+        "reference_image_used": bool(fixture.get("reference_image_used")) is True,
+        "limitations": [
+            "Offline fixture evaluates SVG/operator geometry and labels only.",
+            "No screenshot, pixel, OCR, accessibility, or human visual-similarity evidence was used.",
+        ],
+    }
+
+
 def _recognizability_evidence(actions: list[dict[str, Any]], svg_text: str) -> dict[str, Any]:
     labels = _primitive_labels(actions)
     features = {
@@ -586,19 +714,32 @@ def _recognizability_evidence(actions: list[dict[str, Any]], svg_text: str) -> d
     primitive_component = min(1.0, primitive_count / 20.0)
     feature_component = feature_count / max(1, len(features))
     svg_component = min(1.0, svg_shape_count / 20.0)
-    score = round((feature_component * 0.55) + (primitive_component * 0.30) + (svg_component * 0.15), 3)
+    primitive_score = round((feature_component * 0.55) + (primitive_component * 0.30) + (svg_component * 0.15), 3)
+    offline_fixture = _offline_fixture_evidence(actions)
+    fixture_score = float(offline_fixture.get("score") or 0.0)
+    score = (
+        round((primitive_score * 0.55) + (fixture_score * 0.45), 3)
+        if offline_fixture.get("status") == "evaluated"
+        else primitive_score
+    )
+    fixture_passed = bool(offline_fixture.get("passed"))
     return {
         "score": score,
-        "basis": "operator_primitive_replay_heuristic_not_pixel_similarity",
+        "basis": "operator_primitive_replay_plus_offline_svg_geometry_fixture_not_pixel_similarity",
+        "primitive_replay_score": primitive_score,
+        "offline_fixture_evidence": offline_fixture,
         "feature_count": feature_count,
         "expected_feature_count": len(features),
         "features": features,
         "primitive_count": primitive_count,
         "svg_shape_count": svg_shape_count,
-        "recognizable_lower_complexity_target": score >= 0.72 and feature_count >= 6 and primitive_count >= 12,
+        "recognizable_lower_complexity_target": (
+            score >= 0.72 and feature_count >= 6 and primitive_count >= 12 and fixture_passed
+        ),
         "limitations": [
-            "No screenshot, pixel, OCR, accessibility, or external visual similarity evidence was used.",
-            "Score is a deterministic primitive-contract heuristic, not proof of human recognizability.",
+            "No live screenshot, pixel, OCR, accessibility, or external visual similarity evidence was used.",
+            "Score blends deterministic primitive replay with an offline SVG geometry fixture.",
+            "This is not proof of human recognizability.",
         ],
     }
 
@@ -620,16 +761,31 @@ def _improvement_proposals(evaluation: dict[str, Any]) -> list[dict[str, Any]]:
                 ],
             }
         )
+    offline_fixture = _dict(recognizability.get("offline_fixture_evidence"))
+    if not bool(offline_fixture.get("passed")):
+        proposals.append(
+            {
+                "proposal_id": "sandbox_canvas_repair_offline_recognizability_fixture",
+                "kind": "bounded_improvement_proposal",
+                "status": "proposed_not_promoted",
+                "summary": "Repair or extend the offline SVG geometry fixture so sandbox output has labeled evidence.",
+                "requires_validation": [
+                    "fixture source is safe and recorded",
+                    "evaluation labels fixture/replay status explicitly",
+                    "no live desktop perception claim is introduced",
+                ],
+            }
+        )
     proposals.append(
         {
-            "proposal_id": "sandbox_canvas_add_visual_similarity_fixture",
+            "proposal_id": "sandbox_canvas_add_pixel_or_multi_run_review",
             "kind": "bounded_improvement_proposal",
             "status": "proposed_not_promoted",
-            "summary": "Add an offline fixture-based image comparison for sandbox SVG output.",
+            "summary": "Add optional truth-labeled pixel evidence or multi-run failure scoring for sandbox output.",
             "requires_validation": [
-                "fixture source is safe and recorded",
-                "evaluation labels fixture/replay status explicitly",
-                "no live desktop perception claim is introduced",
+                "pixel evidence is labeled fixture, replay, sandbox, or live",
+                "visual similarity is not claimed unless a real pixel path returns evidence",
+                "proposal promotion remains separate and approval-gated",
             ],
         }
     )
@@ -701,6 +857,7 @@ def evaluate_mona_lisa_sandbox_artifact(
     actions_hash = _hash_match(actions_path, receipt.get("actions_hash"))
     manifest_hash = _hash_match(manifest_path, receipt.get("manifest_hash"))
     recognizability = _recognizability_evidence(actions, svg_text)
+    offline_fixture = _dict(recognizability.get("offline_fixture_evidence"))
     checks = {
         "artifact_dir_within_sandbox_root": True,
         "actions_exist": actions_path.exists(),
@@ -721,6 +878,12 @@ def evaluate_mona_lisa_sandbox_artifact(
         == str(manifest_path),
         "structured_observation_unknowns_live_desktop_pixels": "desktop_pixels"
         in list(first_observation.get("unknowns") or []),
+        "recognizability_offline_fixture_evidence_present": offline_fixture.get("status") == "evaluated",
+        "recognizability_offline_fixture_no_pixel_claim": bool(offline_fixture.get("pixel_evidence")) is False,
+        "recognizability_offline_fixture_no_visual_similarity_claim": bool(
+            offline_fixture.get("visual_similarity_claim")
+        )
+        is False,
     }
     passed = all(checks.values()) and bool(recognizability["recognizable_lower_complexity_target"])
     evaluation = {

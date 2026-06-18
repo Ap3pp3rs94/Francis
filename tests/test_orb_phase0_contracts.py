@@ -93,4 +93,6 @@ def test_orb_continuum_state_preserves_one_path_wiring_rules() -> None:
     assert "Acceptance criteria for the completed Orb semantic-state sub-slice" in state
     assert "Structured observation receipts now carry the Mona Lisa mission/operator" in state
     assert "Acceptance criteria for the completed structured observation receipt sub-slice" in state
-    assert "Improve Mona Lisa recognizability scoring with offline fixture or pixel evidence" in state
+    assert "Mona Lisa sandbox recognizability scoring now includes a repo-local offline" in state
+    assert "Acceptance criteria for the completed offline recognizability fixture sub-slice" in state
+    assert "Add replay/evaluation review scoring that can classify repeated failures" in state

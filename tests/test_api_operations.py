@@ -439,8 +439,25 @@ def test_operations_run_mona_lisa_sandbox_canvas_from_chat_mission(monkeypatch, 
     assert evaluation_body["checks"]["structured_observation_receipt_present"] is True
     assert evaluation_body["checks"]["structured_observation_evidence_references_manifest"] is True
     assert evaluation_body["checks"]["structured_observation_unknowns_live_desktop_pixels"] is True
+    assert evaluation_body["checks"]["recognizability_offline_fixture_evidence_present"] is True
+    assert evaluation_body["checks"]["recognizability_offline_fixture_no_pixel_claim"] is True
+    assert evaluation_body["checks"]["recognizability_offline_fixture_no_visual_similarity_claim"] is True
     assert evaluation_body["structured_observation_receipts"] == [structured_receipt]
-    assert evaluation_body["recognizability"]["basis"] == "operator_primitive_replay_heuristic_not_pixel_similarity"
+    assert (
+        evaluation_body["recognizability"]["basis"]
+        == "operator_primitive_replay_plus_offline_svg_geometry_fixture_not_pixel_similarity"
+    )
+    fixture_evidence = evaluation_body["recognizability"]["offline_fixture_evidence"]
+    assert fixture_evidence["status"] == "evaluated"
+    assert fixture_evidence["evidence_mode"] == "offline_svg_geometry"
+    assert fixture_evidence["fixture_kind"] == "francis.sandbox_canvas.mona_lisa.recognizability_fixture"
+    assert fixture_evidence["passed"] is True
+    assert fixture_evidence["pixel_evidence"] is False
+    assert fixture_evidence["visual_similarity_claim"] is False
+    assert fixture_evidence["reference_image_used"] is False
+    assert fixture_evidence["zone_count"] >= fixture_evidence["required_zone_count"]
+    assert fixture_evidence["feature_count"] >= fixture_evidence["required_feature_count"]
+    assert evaluation_body["recognizability"]["score"] >= 0.85
     assert evaluation_body["recognizability"]["recognizable_lower_complexity_target"] is True
     assert evaluation_body["governance"]["read_only"] is True
     assert evaluation_body["governance"]["writes_files"] is False
