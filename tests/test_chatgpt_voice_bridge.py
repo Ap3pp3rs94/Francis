@@ -449,6 +449,7 @@ def test_chatgpt_voice_mcp_tools_expose_bounded_bridge(monkeypatch, tmp_path: Pa
     assert "francis.chatgpt_voice.receipts" in names
     tool_by_name = {tool["name"]: tool for tool in list_tools()}
     ingress_description = tool_by_name["francis.chatgpt_voice.ingress"]["description"]
+    assert "required bridge for every ChatGPT voice turn directed at Francis" in ingress_description
     assert "speak only the returned top-level `reply`" in ingress_description
     assert "Transcript Unavailable" in ingress_description
     assert "Do not answer locally" in ingress_description
@@ -456,6 +457,8 @@ def test_chatgpt_voice_mcp_tools_expose_bounded_bridge(monkeypatch, tmp_path: Pa
     contract = run_tool("francis.chatgpt_voice.contract", {"actor": _ACTOR})
     assert contract["ok"] is True
     assert contract["governance"]["read_only"] is True
+    speech_contract = contract["data"]["client_speech_contract"]
+    assert speech_contract["mcp_server_default_client_origin"] == "chatgpt_app_voice"
 
     ingress = run_tool(
         "francis.chatgpt_voice.ingress",

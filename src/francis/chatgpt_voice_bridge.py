@@ -25,12 +25,13 @@ CHATGPT_VOICE_BRIDGE_CHATGPT_APP_VOICE_CLIENT = "chatgpt_app_voice"
 CHATGPT_VOICE_BRIDGE_VIRTUAL_TURN_STATE = "data/runtime/lens-overlay/voice-turn-status.json"
 CHATGPT_VOICE_BRIDGE_VIRTUAL_TURN_RECEIPTS = "data/runtime/lens-overlay/voice-turns"
 CHATGPT_VOICE_BRIDGE_MCP_INGRESS_DESCRIPTION = (
-    "Use this when the operator wants to talk to Francis. Always pass the exact user-visible transcript text "
-    "in `transcript`, leave `forward_to_chat` true unless the operator explicitly requested receipt-only intake, "
-    "and speak only the returned top-level `reply` as Francis's answer. If ChatGPT voice reports "
-    "Transcript Unavailable, still call this tool with that marker so Francis can return the bounded transcript "
-    "guard reply. When this call is made by ChatGPT Voice, set `client_origin` to `chatgpt_app_voice`. "
-    "Do not answer locally, summarize, or invent a Francis reply."
+    "Use this as the required bridge for every ChatGPT voice turn directed at Francis, the Francis orb, "
+    "or the Francis voice/lens surface. Always pass the exact user-visible transcript text in `transcript`, "
+    "leave `forward_to_chat` true unless the operator explicitly requested receipt-only intake, and speak only "
+    "the returned top-level `reply` as Francis's answer. If ChatGPT voice reports Transcript Unavailable, "
+    "still call this tool with that marker so Francis can return the bounded transcript guard reply. When this "
+    "call is made by ChatGPT Voice, set `client_origin` to `chatgpt_app_voice`; the MCP server adapter also "
+    "defaults to that value for ChatGPT voice calls. Do not answer locally, summarize, or invent a Francis reply."
 )
 MAX_TRANSCRIPT_CHARS = 8000
 _TRANSCRIPT_UNAVAILABLE_MARKERS = {
@@ -264,6 +265,7 @@ def chatgpt_voice_bridge_contract(actor: str = "") -> dict[str, Any]:
             "speak_only_top_level_reply": True,
             "transcript_unavailable_must_be_forwarded": True,
             "chatgpt_voice_must_set_client_origin": CHATGPT_VOICE_BRIDGE_CHATGPT_APP_VOICE_CLIENT,
+            "mcp_server_default_client_origin": CHATGPT_VOICE_BRIDGE_CHATGPT_APP_VOICE_CLIENT,
             "local_fallback_answer_allowed": False,
             "description": CHATGPT_VOICE_BRIDGE_MCP_INGRESS_DESCRIPTION,
         },
