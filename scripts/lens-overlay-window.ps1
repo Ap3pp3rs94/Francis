@@ -3627,7 +3627,10 @@ function Get-OverlayRuntimeReadback {
   $StatusVoice = if ($null -ne $Status -and $null -ne $Status.PSObject.Properties['voice']) { $Status.PSObject.Properties['voice'].Value } else { $null }
   $Voice = if ($null -ne $StatusVoice) { $StatusVoice } else { Get-OverlayVoiceReadback -Root $Root }
   $StatusVoiceTurn = if ($null -ne $Status -and $null -ne $Status.PSObject.Properties['voice_turn']) { $Status.PSObject.Properties['voice_turn'].Value } else { $null }
-  $VoiceTurn = Get-OverlayVoiceTurnReadback -Root $Root -State $StatusVoiceTurn
+  $VoiceTurn = Get-OverlayVoiceTurnReadback -Root $Root
+  if ($null -eq $VoiceTurn -and $null -ne $StatusVoiceTurn) {
+    $VoiceTurn = Get-OverlayVoiceTurnReadback -Root $Root -State $StatusVoiceTurn
+  }
   $StatusOverlayVoice = if ($null -ne $Status -and $null -ne $Status.PSObject.Properties['overlay_voice']) { $Status.PSObject.Properties['overlay_voice'].Value } else { $null }
   $OverlayVoice = if ($null -ne $StatusOverlayVoice) { $StatusOverlayVoice } else { New-OverlayRuntimeVoiceProjection }
   $StatusVoiceInputReadiness = if ($null -ne $Status -and $null -ne $Status.PSObject.Properties['voice_input_readiness']) { $Status.PSObject.Properties['voice_input_readiness'].Value } else { $null }

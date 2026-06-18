@@ -391,6 +391,58 @@ def test_lens_overlay_window_status_projects_completed_voice_turn_handback(tmp_p
     assert payload["overlay_runtime"]["voice_turn"]["status"] == "spoken"
 
 
+def test_lens_overlay_window_status_prefers_voice_turn_status_file_over_runtime_snapshot(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    runtime_dir = data_dir / "runtime" / "lens-overlay"
+    runtime_dir.mkdir(parents=True)
+    pid = os.getpid()
+    (runtime_dir / "lens-overlay.pid").write_text(str(pid), encoding="utf-8")
+    (runtime_dir / "status.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.overlay.runtime_state",
+                "status": "overlay_running",
+                "pid": pid,
+                "overlay_name": "Francis Lens Overlay",
+                "overlay_scope": "user_session",
+                "overlay_window_visible": True,
+                "always_on_top": True,
+                "voice_turn": {
+                    "kind": "lens.overlay.voice.turn_state",
+                    "status": "chatgpt_voice_reply_ready",
+                    "active_turn_id": "stale-runtime-turn",
+                    "virtual_voice_turn": True,
+                    "mcp_ingress": True,
+                    "updated_at": "2026-06-18T00:00:00Z",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (runtime_dir / "voice-turn-status.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.overlay.voice.turn_state",
+                "status": "chatgpt_voice_reply_ready",
+                "active_turn_id": "fresh-voice-turn-file",
+                "virtual_voice_turn": True,
+                "mcp_ingress": True,
+                "transcript_source": "chatgpt_voice_mcp_transcript",
+                "updated_at": "2026-06-18T00:00:10Z",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    proc = _run_overlay_window("-Mode", "Status", "-DataDir", str(data_dir))
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["voice_turn"]["active_turn_id"] == "fresh-voice-turn-file"
+    assert payload["voice_turn"]["transcript_source"] == "chatgpt_voice_mcp_transcript"
+    assert payload["overlay_runtime"]["voice_turn"]["active_turn_id"] == "fresh-voice-turn-file"
+
+
 def test_lens_overlay_voice_speak_requires_explicit_bounded_text(tmp_path: Path) -> None:
     proc = _run_overlay_window("-Mode", "Speak", "-DataDir", str(tmp_path / "data"), "-VoiceText", "")
 
