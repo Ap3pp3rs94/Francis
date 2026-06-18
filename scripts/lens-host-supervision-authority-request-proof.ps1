@@ -24,6 +24,44 @@ function Get-PythonPath {
   return ''
 }
 
+function ConvertFrom-JsonScriptOutput {
+  param([object[]]$Output)
+
+  $Text = ($Output | ForEach-Object { [string]$_ }) -join "`n"
+  try {
+    return [ordered]@{
+      ok = $true
+      payload = ($Text | ConvertFrom-Json -ErrorAction Stop)
+      raw = $Text
+    }
+  } catch {
+    # Continue below: warnings from imported libraries may precede child JSON.
+  }
+
+  $Lines = @($Text -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+  for ($Index = $Lines.Count - 1; $Index -ge 0; $Index -= 1) {
+    $Candidate = ([string]$Lines[$Index]).Trim()
+    if (-not ($Candidate.StartsWith('{') -and $Candidate.EndsWith('}'))) {
+      continue
+    }
+    try {
+      return [ordered]@{
+        ok = $true
+        payload = ($Candidate | ConvertFrom-Json -ErrorAction Stop)
+        raw = $Text
+      }
+    } catch {
+      continue
+    }
+  }
+
+  return [ordered]@{
+    ok = $false
+    payload = $null
+    raw = $Text
+  }
+}
+
 if ([string]::IsNullOrWhiteSpace($DataDir)) {
   $DataDir = Join-Path ([System.IO.Path]::GetTempPath()) ("francis-lens-host-supervision-authority-request-proof\" + [guid]::NewGuid().ToString('N') + "\data")
 }
@@ -499,5 +537,21 @@ try {
   }
 }
 
-($Output | ForEach-Object { [string]$_ }) -join "`n"
-exit $ExitCode
+$ParsedOutput = ConvertFrom-JsonScriptOutput -Output $Output
+if ([bool]$ParsedOutput.ok) {
+  $ParsedOutput.payload | ConvertTo-Json -Depth 20
+  exit $ExitCode
+}
+
+[ordered]@{
+  ok = $false
+  kind = 'lens.host.supervision_authority_exact_approval_request.proof'
+  status = 'proof_failed'
+  mode = $Mode.ToLowerInvariant()
+  repo_root = $RepoRoot
+  data_root = $ProofDataRoot
+  error = 'proof_json_parse_failed'
+  child_exit_code = $ExitCode
+  child_output = [string]$ParsedOutput.raw
+} | ConvertTo-Json -Depth 5
+exit 1
