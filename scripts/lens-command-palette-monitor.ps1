@@ -27,6 +27,17 @@ param(
   [ValidateRange(1, 86400)]
   [int]$ChatGptMcpProofFreshnessSeconds = 300,
 
+  [switch]$EnableChatGptConnectorChecks,
+
+  [string]$ChatGptConnectorUrl = '',
+
+  [switch]$VerifyChatGptConnector,
+
+  [ValidateRange(1, 60)]
+  [int]$ChatGptConnectorProbeTimeoutSeconds = 5,
+
+  [switch]$RequirePersistentChatGptIngress,
+
   [ValidateRange(1, 600)]
   [int]$IntervalSeconds = 15,
 
@@ -148,6 +159,42 @@ function Get-PropertyValue {
     return $Default
   }
   return $Property.Value
+}
+
+function Get-NestedPropertyValue {
+  param(
+    [object]$Payload,
+    [string[]]$Path,
+    [object]$Default = $null
+  )
+
+  $Current = $Payload
+  foreach ($Name in $Path) {
+    $Current = Get-PropertyValue -Payload $Current -Name $Name -Default $null
+    if ($null -eq $Current) {
+      return $Default
+    }
+  }
+  return $Current
+}
+
+function ConvertTo-BoundedText {
+  param(
+    [object]$Value,
+    [int]$MaxLength = 512
+  )
+
+  if ($null -eq $Value) {
+    return ''
+  }
+  $Text = ([string]$Value).Trim()
+  if ([string]::IsNullOrWhiteSpace($Text)) {
+    return ''
+  }
+  if ($Text.Length -le $MaxLength) {
+    return $Text
+  }
+  return $Text.Substring(0, $MaxLength)
 }
 
 function Set-PropertyValue {
@@ -536,6 +583,157 @@ function New-ChatGptMcpReceiptProof {
   }
 }
 
+function Invoke-ChatGptConnectorReadback {
+  param(
+    [string]$Root,
+    [string]$ConnectorUrl,
+    [bool]$VerifyConnector,
+    [int]$ProbeTimeoutSeconds
+  )
+
+  $RuntimeRoot = Join-Path (Join-Path $Root 'runtime') 'chatgpt-voice-connector'
+  $Arguments = @(
+    '-NoProfile',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-File',
+    (Join-Path $PSScriptRoot 'chatgpt-voice-connector.ps1'),
+    '-Mode',
+    'Status',
+    '-RuntimeRoot',
+    $RuntimeRoot,
+    '-ConnectorProbeTimeoutSeconds',
+    ([string]$ProbeTimeoutSeconds),
+    '-Json'
+  )
+  if (-not [string]::IsNullOrWhiteSpace($ConnectorUrl)) {
+    $Arguments += @('-ConnectorUrl', $ConnectorUrl)
+  }
+  if ($VerifyConnector) {
+    $Arguments += '-VerifyConnector'
+  }
+
+  $PowerShell = Get-Command powershell -ErrorAction SilentlyContinue
+  if ($null -eq $PowerShell) {
+    $PowerShell = Get-Command pwsh -ErrorAction Stop
+  }
+
+  $Raw = & $PowerShell.Source @Arguments 2>&1
+  $ExitCode = $LASTEXITCODE
+  $Text = ($Raw | Out-String).Trim()
+  try {
+    return [ordered]@{
+      ok = $ExitCode -eq 0
+      exit_code = $ExitCode
+      payload = ($Text | ConvertFrom-Json -ErrorAction Stop)
+      error = ''
+      raw_length = $Text.Length
+    }
+  } catch {
+    return [ordered]@{
+      ok = $false
+      exit_code = $ExitCode
+      payload = $null
+      error = [string]$_.Exception.Message
+      raw_length = $Text.Length
+    }
+  }
+}
+
+function New-ChatGptConnectorMonitorProjection {
+  param(
+    [string]$Root,
+    [string]$ConnectorUrl,
+    [bool]$VerifyConnector,
+    [int]$ProbeTimeoutSeconds
+  )
+
+  $Readback = Invoke-ChatGptConnectorReadback -Root $Root -ConnectorUrl $ConnectorUrl -VerifyConnector $VerifyConnector -ProbeTimeoutSeconds $ProbeTimeoutSeconds
+  $Payload = Get-PropertyValue -Payload $Readback -Name 'payload'
+  $ConnectorUrlValue = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Payload -Name 'connector_url' -Default '') -MaxLength 512
+  $ConnectorUrlSource = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Payload -Name 'connector_url_source' -Default '') -MaxLength 160
+  $ConnectorShapeValid = [bool](Get-NestedPropertyValue -Payload $Payload -Path @('endpoint_status', 'chatgpt_connector', 'connector_url', 'shape_valid') -Default $false)
+  $ConnectorReachabilityVerified = [bool](Get-NestedPropertyValue -Payload $Payload -Path @('endpoint_status', 'chatgpt_connector', 'connector_url', 'reachability_verified') -Default $false)
+  $ConnectorUsable = [bool](Get-NestedPropertyValue -Payload $Payload -Path @('endpoint_status', 'chatgpt_connector', 'connector_url', 'usable_for_chatgpt') -Default $false)
+  $ConnectorReason = ConvertTo-BoundedText -Value (Get-NestedPropertyValue -Payload $Payload -Path @('endpoint_status', 'chatgpt_connector', 'connector_url', 'reason') -Default '') -MaxLength 160
+  $ExpectedToolPresent = [bool](Get-NestedPropertyValue -Payload $Payload -Path @('endpoint_status', 'chatgpt_connector', 'probe', 'expected_tool_present') -Default $false)
+  $LocalListenerReady = [bool](Get-NestedPropertyValue -Payload $Payload -Path @('endpoint_status', 'local_listener', 'ready') -Default $false)
+  $McpLauncherAlive = [bool](Get-NestedPropertyValue -Payload $Payload -Path @('processes', 'mcp_launcher', 'alive') -Default $false)
+  $TunnelAlive = [bool](Get-NestedPropertyValue -Payload $Payload -Path @('processes', 'tunnel', 'alive') -Default $false)
+  $LocalTunnelStable = [bool](Get-NestedPropertyValue -Payload $Payload -Path @('localtunnel', 'stable_for_existing_chatgpt_connector') -Default $true)
+  $LocalTunnelReason = ConvertTo-BoundedText -Value (Get-NestedPropertyValue -Payload $Payload -Path @('localtunnel', 'reason') -Default '') -MaxLength 160
+  $ConnectorHost = ''
+  if (-not [string]::IsNullOrWhiteSpace($ConnectorUrlValue)) {
+    try {
+      $ConnectorHost = ([System.Uri]$ConnectorUrlValue).Host
+    } catch {
+      $ConnectorHost = ''
+    }
+  }
+  $KnownLocalTunnel = (
+    $ConnectorUrlSource -eq 'localtunnel' -or
+    (-not [string]::IsNullOrWhiteSpace($ConnectorHost) -and $ConnectorHost.EndsWith('.loca.lt', [System.StringComparison]::OrdinalIgnoreCase))
+  )
+  $PersistentCandidate = [bool]($ConnectorShapeValid -and -not $KnownLocalTunnel)
+  $IngressStatus = if (-not $ConnectorShapeValid) {
+    if ([string]::IsNullOrWhiteSpace($ConnectorUrlValue)) { 'connector_url_missing' } else { 'connector_url_invalid' }
+  } elseif ($KnownLocalTunnel) {
+    'localtunnel_fallback_replace_needed'
+  } elseif ($ConnectorUsable -or (-not $VerifyConnector)) {
+    'persistent_ingress_candidate'
+  } else {
+    'persistent_ingress_unverified'
+  }
+  $Blockers = @()
+  if (-not $ConnectorShapeValid) {
+    $Blockers += $(if ([string]::IsNullOrWhiteSpace($ConnectorReason)) { 'connector_url_not_ready' } else { $ConnectorReason })
+  }
+  if ($KnownLocalTunnel) {
+    $Blockers += 'localtunnel_url_is_not_persistent_ingress'
+  }
+  if (-not $LocalTunnelStable) {
+    $Blockers += 'localtunnel_requested_subdomain_not_honored'
+  }
+
+  return [ordered]@{
+    enabled = $true
+    ok = [bool](Get-PropertyValue -Payload $Readback -Name 'ok' -Default $false)
+    exit_code = [int](Get-PropertyValue -Payload $Readback -Name 'exit_code' -Default 0)
+    status = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Payload -Name 'status' -Default 'status_unavailable') -MaxLength 96
+    error = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Readback -Name 'error' -Default '') -MaxLength 512
+    connector_url_present = -not [string]::IsNullOrWhiteSpace($ConnectorUrlValue)
+    connector_url_host = $ConnectorHost
+    connector_url_source = $ConnectorUrlSource
+    connector_shape_valid = [bool]$ConnectorShapeValid
+    connector_reason = $ConnectorReason
+    connector_reachability_requested = [bool]$VerifyConnector
+    connector_reachability_verified = [bool]$ConnectorReachabilityVerified
+    connector_usable_for_chatgpt = [bool]$ConnectorUsable
+    expected_tool_present = [bool]$ExpectedToolPresent
+    local_listener_ready = [bool]$LocalListenerReady
+    mcp_launcher_alive = [bool]$McpLauncherAlive
+    public_tunnel_process_alive = [bool]$TunnelAlive
+    known_localtunnel = [bool]$KnownLocalTunnel
+    localtunnel_stable_for_existing_connector = [bool]$LocalTunnelStable
+    localtunnel_reason = $LocalTunnelReason
+    persistent_candidate = [bool]$PersistentCandidate
+    persistent_ingress_status = $IngressStatus
+    blockers = @($Blockers)
+    next_operator_step = if ($PersistentCandidate) { 'verify_or_record_persistent_chatgpt_ingress' } else { 'replace_localtunnel_with_persistent_https_mcp_ingress' }
+    governance = [ordered]@{
+      read_only_contract = $true
+      starts_process = $false
+      opens_public_tunnel = $false
+      writes_repo = $false
+      writes_data = $false
+      captures_audio = $false
+      captures_screen = $false
+      execution_authority = $false
+      mutation_authority_granted = $false
+    }
+  }
+}
+
 function New-VoiceMonitorProjection {
   param(
     [string]$Root,
@@ -648,7 +846,12 @@ function New-CommandPaletteMonitorProbe {
     [string]$VoiceChecksRemoteVoiceId,
     [string]$VoiceChecksRemoteVoiceName,
     [bool]$RequireMcpProof,
-    [int]$McpProofFreshnessSeconds
+    [int]$McpProofFreshnessSeconds,
+    [bool]$ConnectorChecksEnabled,
+    [string]$ConnectorChecksUrl,
+    [bool]$ConnectorChecksVerify,
+    [int]$ConnectorChecksProbeTimeoutSeconds,
+    [bool]$RequirePersistentIngress
   )
 
   $Bridge = Invoke-CommandPaletteBridge -ApiBaseUrl $ApiBaseUrl -ChatUiBaseUrl $ChatUiBaseUrl -LensStatusPath $LensStatusPath -TimeoutSeconds $TimeoutSeconds
@@ -656,6 +859,11 @@ function New-CommandPaletteMonitorProbe {
   $Http = Invoke-CommandPaletteHttpProbe -Url $CommandPaletteUrl -TimeoutSeconds $TimeoutSeconds
   $VoiceMonitor = if ($VoiceChecksEnabled) {
     New-VoiceMonitorProjection -Root $Root -Provider $VoiceChecksProvider -RemoteVoiceId $VoiceChecksRemoteVoiceId -RemoteVoiceName $VoiceChecksRemoteVoiceName -McpProofFreshnessSeconds $McpProofFreshnessSeconds
+  } else {
+    [ordered]@{ enabled = $false }
+  }
+  $ConnectorMonitor = if ($ConnectorChecksEnabled) {
+    New-ChatGptConnectorMonitorProjection -Root $Root -ConnectorUrl $ConnectorChecksUrl -VerifyConnector $ConnectorChecksVerify -ProbeTimeoutSeconds $ConnectorChecksProbeTimeoutSeconds
   } else {
     [ordered]@{ enabled = $false }
   }
@@ -700,6 +908,21 @@ function New-CommandPaletteMonitorProbe {
     [void]$Checks.Add((New-MonitorCheck -Id 'voice_chat_bridge_denials' -Passed ((-not $VoicePermissionDenied) -and (-not $LatestReceiptDenied)) -Status $(if ((-not $VoicePermissionDenied) -and (-not $LatestReceiptDenied)) { 'latest_receipt_clean' } else { 'denial_observed' }) -Evidence ("latest_denied={0} recent_denied={1}" -f $LatestReceiptDenied, $DeniedRecentReceiptCount)))
     if ($RequireMcpProof) {
       [void]$Checks.Add((New-MonitorCheck -Id 'voice_chatgpt_mcp_tool_proof' -Passed $McpProofObserved -Status $McpProofStatus -Evidence $(if ([string]::IsNullOrWhiteSpace($McpProofReceiptId)) { 'no_fresh_usable_mcp_receipt' } else { $McpProofReceiptId })))
+    }
+  }
+  if ($ConnectorChecksEnabled) {
+    $ConnectorReadbackOk = [bool](Get-PropertyValue -Payload $ConnectorMonitor -Name 'ok' -Default $false)
+    $ConnectorStatus = [string](Get-PropertyValue -Payload $ConnectorMonitor -Name 'status' -Default 'status_unavailable')
+    $ConnectorUsable = [bool](Get-PropertyValue -Payload $ConnectorMonitor -Name 'connector_usable_for_chatgpt' -Default $false)
+    $PersistentCandidate = [bool](Get-PropertyValue -Payload $ConnectorMonitor -Name 'persistent_candidate' -Default $false)
+    $PersistentStatus = [string](Get-PropertyValue -Payload $ConnectorMonitor -Name 'persistent_ingress_status' -Default 'unknown')
+    $ConnectorHost = [string](Get-PropertyValue -Payload $ConnectorMonitor -Name 'connector_url_host' -Default '')
+    [void]$Checks.Add((New-MonitorCheck -Id 'chatgpt_voice_connector_readback' -Passed $ConnectorReadbackOk -Status $ConnectorStatus -Evidence $ConnectorHost))
+    if ($ConnectorChecksVerify) {
+      [void]$Checks.Add((New-MonitorCheck -Id 'chatgpt_voice_connector_reachability' -Passed $ConnectorUsable -Status $(if ($ConnectorUsable) { 'verified_usable' } else { 'not_usable' }) -Evidence $ConnectorHost))
+    }
+    if ($RequirePersistentIngress) {
+      [void]$Checks.Add((New-MonitorCheck -Id 'chatgpt_voice_persistent_ingress' -Passed $PersistentCandidate -Status $PersistentStatus -Evidence $(if ([string]::IsNullOrWhiteSpace($ConnectorHost)) { 'no_connector_host' } else { $ConnectorHost })))
     }
   }
 
@@ -762,6 +985,7 @@ function New-CommandPaletteMonitorProbe {
       observed_blockers = @($BridgeBlockers)
     }
     voice_monitor = $VoiceMonitor
+    chatgpt_connector_monitor = $ConnectorMonitor
     reporting = [ordered]@{
       status_path = 'data/runtime/lens-command-palette-monitor/status.json'
       anomaly_log_path = 'data/runtime/lens-command-palette-monitor/anomalies.jsonl'
@@ -858,7 +1082,26 @@ if ($Mode -eq 'Stop') {
 }
 
 if ($Mode -eq 'Probe') {
-  $Payload = New-CommandPaletteMonitorProbe -Root $DataRoot -CommandPaletteUrl $CommandPaletteUrl -ApiBaseUrl $ApiBaseUrl -ChatUiBaseUrl $ChatUiBaseUrl -LensStatusPath $LensStatusPath -TimeoutSeconds $TimeoutSeconds -VoiceChecksEnabled ([bool]$EnableVoiceChecks) -VoiceChecksProvider $VoiceProvider -VoiceChecksRemoteVoiceId $ElevenLabsVoiceId -VoiceChecksRemoteVoiceName $ElevenLabsVoiceName -RequireMcpProof ([bool]$RequireChatGptMcpProof) -McpProofFreshnessSeconds $ChatGptMcpProofFreshnessSeconds
+  $ProbeArgs = @{
+    Root = $DataRoot
+    CommandPaletteUrl = $CommandPaletteUrl
+    ApiBaseUrl = $ApiBaseUrl
+    ChatUiBaseUrl = $ChatUiBaseUrl
+    LensStatusPath = $LensStatusPath
+    TimeoutSeconds = $TimeoutSeconds
+    VoiceChecksEnabled = [bool]$EnableVoiceChecks
+    VoiceChecksProvider = $VoiceProvider
+    VoiceChecksRemoteVoiceId = $ElevenLabsVoiceId
+    VoiceChecksRemoteVoiceName = $ElevenLabsVoiceName
+    RequireMcpProof = [bool]$RequireChatGptMcpProof
+    McpProofFreshnessSeconds = $ChatGptMcpProofFreshnessSeconds
+    ConnectorChecksEnabled = [bool]$EnableChatGptConnectorChecks
+    ConnectorChecksUrl = $ChatGptConnectorUrl
+    ConnectorChecksVerify = [bool]$VerifyChatGptConnector
+    ConnectorChecksProbeTimeoutSeconds = $ChatGptConnectorProbeTimeoutSeconds
+    RequirePersistentIngress = [bool]$RequirePersistentChatGptIngress
+  }
+  $Payload = New-CommandPaletteMonitorProbe @ProbeArgs
   Write-JsonFile -Path $StatusPath -Payload $Payload
   if ([int]$Payload.anomaly_count -gt 0) {
     Add-JsonLine -Path $AnomalyPath -Payload $Payload
@@ -938,6 +1181,18 @@ if ($Mode -eq 'Start') {
       $Arguments += '-RequireChatGptMcpProof'
     }
   }
+  if ($EnableChatGptConnectorChecks) {
+    $Arguments += @('-EnableChatGptConnectorChecks', '-ChatGptConnectorProbeTimeoutSeconds', ([string]$ChatGptConnectorProbeTimeoutSeconds))
+    if (-not [string]::IsNullOrWhiteSpace($ChatGptConnectorUrl)) {
+      $Arguments += @('-ChatGptConnectorUrl', $ChatGptConnectorUrl)
+    }
+    if ($VerifyChatGptConnector) {
+      $Arguments += '-VerifyChatGptConnector'
+    }
+    if ($RequirePersistentChatGptIngress) {
+      $Arguments += '-RequirePersistentChatGptIngress'
+    }
+  }
   $Process = Start-Process -FilePath $PowerShell.Source -ArgumentList $Arguments -WindowStyle Hidden -PassThru
   Set-Content -LiteralPath $PidPath -Value ([string]$Process.Id) -Encoding UTF8
 
@@ -981,7 +1236,26 @@ if ($Mode -eq 'Run') {
   $Iteration = 0
   while ($true) {
     $Iteration += 1
-    $Payload = New-CommandPaletteMonitorProbe -Root $DataRoot -CommandPaletteUrl $CommandPaletteUrl -ApiBaseUrl $ApiBaseUrl -ChatUiBaseUrl $ChatUiBaseUrl -LensStatusPath $LensStatusPath -TimeoutSeconds $TimeoutSeconds -VoiceChecksEnabled ([bool]$EnableVoiceChecks) -VoiceChecksProvider $VoiceProvider -VoiceChecksRemoteVoiceId $ElevenLabsVoiceId -VoiceChecksRemoteVoiceName $ElevenLabsVoiceName -RequireMcpProof ([bool]$RequireChatGptMcpProof) -McpProofFreshnessSeconds $ChatGptMcpProofFreshnessSeconds
+    $ProbeArgs = @{
+      Root = $DataRoot
+      CommandPaletteUrl = $CommandPaletteUrl
+      ApiBaseUrl = $ApiBaseUrl
+      ChatUiBaseUrl = $ChatUiBaseUrl
+      LensStatusPath = $LensStatusPath
+      TimeoutSeconds = $TimeoutSeconds
+      VoiceChecksEnabled = [bool]$EnableVoiceChecks
+      VoiceChecksProvider = $VoiceProvider
+      VoiceChecksRemoteVoiceId = $ElevenLabsVoiceId
+      VoiceChecksRemoteVoiceName = $ElevenLabsVoiceName
+      RequireMcpProof = [bool]$RequireChatGptMcpProof
+      McpProofFreshnessSeconds = $ChatGptMcpProofFreshnessSeconds
+      ConnectorChecksEnabled = [bool]$EnableChatGptConnectorChecks
+      ConnectorChecksUrl = $ChatGptConnectorUrl
+      ConnectorChecksVerify = [bool]$VerifyChatGptConnector
+      ConnectorChecksProbeTimeoutSeconds = $ChatGptConnectorProbeTimeoutSeconds
+      RequirePersistentIngress = [bool]$RequirePersistentChatGptIngress
+    }
+    $Payload = New-CommandPaletteMonitorProbe @ProbeArgs
     Set-PropertyValue -Payload $Payload -Name 'mode' -Value 'run'
     Set-PropertyValue -Payload $Payload -Name 'iteration' -Value $Iteration
     Write-JsonFile -Path $StatusPath -Payload $Payload
