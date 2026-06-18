@@ -78556,6 +78556,83 @@ Remaining truthful gap:
   proposal-review gate, does not close the explicit-promotion gate, does not
   close Stage 17, and does not start Stage 18.
 
+### 2026-06-17 - Stage 17 quality-evidence remediation clears promotion receipts pack
+
+Roadmap area: Stage 17 / Capability Economy, capability-pack quality evidence
+and pack-specific artifact readiness for legacy generated packs.
+
+This pass used the existing governed quality-evidence remediation route and the
+existing governed artifact reconstruction route to clear
+`legacy.generated.capabilitypromotionreceiptsplugin` from the quality-evidence
+remediation queue.
+
+Pack remediated:
+
+- `legacy.generated.capabilitypromotionreceiptsplugin`
+
+Capability completed by reconstruction:
+
+- `1781579736_capabilitypromotionreceiptsplugin`
+
+Artifact refs recorded:
+
+- `data/artifacts/plugins/validations/plugin_validation_1781746403_1781579736-capabilitypromotionreceiptsplugin.json`
+- `data/artifacts/plugins/proposals/plugin_proposal_1781746403_1781579736-capabilitypromotionreceiptsplugin.json`
+
+Latest validation for this live Stage 17 remediation:
+
+- Initial readback showed `remediation_queue_count: 13`, 15 capabilities in
+  the pack, blockers `tests_missing`, `docs_missing`,
+  `validation_receipt_missing`, and `proposal_id_missing`, and the missing
+  artifact candidate `1781579736_capabilitypromotionreceiptsplugin`.
+- Governed quality-evidence dry-run returned `ok: true`, `status: dry_run`,
+  `planned_pack_count: 1`, `planned_capability_count: 15`,
+  `applied_evidence_blockers: ["tests_missing", "docs_missing"]`,
+  `skipped_count: 0`, `writes_registry_metadata: false`,
+  `writes_receipts: false`, `promotion_authority: false`, and
+  `execution_authority: false`.
+- Governed quality-evidence apply returned `ok: true`, `status: recorded`,
+  `applied: true`, `recorded_pack_count: 1`,
+  `recorded_capability_count: 1`, `changed_capability_count: 1`, and
+  `remaining_remediation_queue_count: 13`. The apply reported
+  `writes_registry_metadata: true`, `writes_receipts: false`,
+  `candidate_references_do_not_claim_pack_specific_coverage: true`,
+  `does_not_write_validation_receipts: true`, `does_not_write_proposals: true`,
+  `does_not_approve_proposals: true`, `does_not_promote_capabilities: true`,
+  `does_not_enable_capabilities: true`, `does_not_execute_capabilities: true`,
+  `promotion_authority: false`, `execution_authority: false`,
+  `approval_authority: false`, and `memory_write: false`.
+- Governed reconstruction dry-run returned `ok: true`, `status: dry_run`,
+  `planned_pack_count: 1`, `planned_capability_count: 1`,
+  `skipped_count: 0`, no dry-run writes, and doctrine flags preserving no
+  proposal approval, no promotion, and no execution.
+- Governed reconstruction apply returned `ok: true`, `status: recorded`,
+  `applied: true`, `recorded_pack_count: 1`,
+  `recorded_capability_count: 1`, `reconstructed_capability_count: 1`, and
+  `remaining_remediation_queue_count: 12`. The apply reported
+  `writes_registry_metadata: true`, `writes_validation_receipts: true`,
+  `writes_proposals: true`, `operator_reconstruction_decision_captured: true`,
+  `proposal_lineage_does_not_approve_proposals: true`,
+  `does_not_approve_proposals: true`, `does_not_promote_capabilities: true`,
+  `does_not_enable_capabilities: true`, `does_not_execute_capabilities: true`,
+  `promotion_authority: false`, `execution_authority: false`,
+  `approval_authority: false`, and `memory_write: false`.
+- Final readback returned `ok: true`, `status: blocked`,
+  `remediation_queue_count: 12`, cleared the pack from the queue, and showed
+  the next remaining pack as `legacy.generated.capabilityqualitydocsplugin`.
+  The two new artifact refs listed above were verified present on disk.
+
+Remaining truthful gap:
+
+- This pass clears only `legacy.generated.capabilitypromotionreceiptsplugin`
+  from the quality-evidence remediation queue. Twelve legacy generated packs
+  remain in that queue. This does not approve proposals, does not promote
+  capabilities, does not enable capabilities, does not grant execution
+  authority, does not grant mutation authority beyond governed quality metadata
+  and governed artifact reconstruction writes, does not close the
+  proposal-review gate, does not close the explicit-promotion gate, does not
+  close Stage 17, and does not start Stage 18.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
