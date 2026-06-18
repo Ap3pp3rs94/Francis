@@ -67,6 +67,59 @@ def _write_json(path: Path, payload: dict[str, object]) -> None:
     path.write_text(json.dumps(payload), encoding="utf-8")
 
 
+def _write_overlay_voice_runtime(data_dir: Path, *, selected_voice: str = "Emma", voice_label: str = "Emma") -> None:
+    runtime_dir = data_dir / "runtime" / "lens-overlay"
+    runtime_dir.mkdir(parents=True)
+    pid = os.getpid()
+    (runtime_dir / "lens-overlay.pid").write_text(str(pid), encoding="utf-8")
+    _write_json(
+        runtime_dir / "status.json",
+        {
+            "kind": "lens.overlay.runtime_state",
+            "status": "overlay_running",
+            "pid": pid,
+            "overlay_name": "Francis Lens Overlay",
+            "overlay_scope": "user_session",
+            "overlay_window_visible": True,
+            "always_on_top": True,
+            "overlay_voice": {
+                "kind": "lens.overlay.voice.runtime",
+                "status": "listening",
+                "ok": True,
+                "voice_provider": "ElevenLabs",
+                "selected_voice": selected_voice,
+                "voice_lens_orb_identity": "Francis",
+                "voice_lens_orb_are_francis_surfaces": True,
+                "voice_lens_orb_are_separate_identities": False,
+                "microphone_capture": True,
+                "wake_listening": True,
+            },
+            "voice": {
+                "kind": "lens.overlay.voice.runtime",
+                "status": "spoken",
+                "ok": True,
+                "voice_provider": "ElevenLabs",
+                "selected_voice": selected_voice,
+            },
+            "voice_provider_readiness": {
+                "kind": "lens.overlay.voice.provider_readiness",
+                "selected_provider": "ElevenLabs",
+                "active_provider_configured": True,
+                "elevenlabs": {
+                    "configured": True,
+                    "api_key_present": True,
+                    "voice_id_present": True,
+                    "voice_label": voice_label,
+                    "credential_values_redacted": True,
+                    "missing_configuration": [],
+                },
+                "stores_secret": False,
+                "logs_text_payload": False,
+            },
+        },
+    )
+
+
 def _json_stdout(stdout: str) -> dict[str, object]:
     return json.loads(stdout)
 
@@ -222,11 +275,113 @@ def test_lens_command_palette_monitor_probe_records_voice_health(tmp_path: Path)
     assert payload["voice_monitor"]["api_permission_denied_observed"] is False
     assert payload["voice_monitor"]["denied_recent_receipt_count"] == 0
     assert payload["voice_monitor"]["latest_receipt_denied"] is False
+    assert payload["voice_monitor"]["chatgpt_mcp_proof"]["status"] == "awaiting_chatgpt_mcp_tool_call"
+    assert payload["voice_monitor"]["chatgpt_mcp_proof"]["proof_observed"] is False
+    assert payload["voice_monitor"]["chatgpt_mcp_proof"]["transcript_redacted_from_summary"] is True
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["voice_overlay_readback"]["status"] == "readback_ready"
     assert checks["voice_francis_identity"]["status"] == "francis_voice_identity_ready"
     assert checks["voice_chat_bridge_denials"]["status"] == "latest_receipt_clean"
+    assert "voice_chatgpt_mcp_tool_proof" not in checks
     assert payload["governance"]["captures_audio"] is False
+
+
+def test_lens_command_palette_monitor_can_require_chatgpt_mcp_proof(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    status_path = tmp_path / "lens-status.json"
+    _write_json(status_path, _lens_status())
+    _write_overlay_voice_runtime(data_dir)
+
+    with _LocalCommandPaletteServer() as url:
+        proc = _run_monitor(
+            "-Mode",
+            "Probe",
+            "-DataDir",
+            str(data_dir),
+            "-CommandPaletteUrl",
+            url,
+            "-LensStatusPath",
+            str(status_path),
+            "-EnableVoiceChecks",
+            "-VoiceProvider",
+            "ElevenLabs",
+            "-RequireChatGptMcpProof",
+            "-TimeoutSeconds",
+            "3",
+        )
+
+    assert proc.returncode == 1
+    payload = _json_stdout(proc.stdout)
+    assert payload["status"] == "anomaly"
+    assert payload["voice_monitor"]["chatgpt_mcp_proof"]["status"] == "awaiting_chatgpt_mcp_tool_call"
+    assert payload["voice_monitor"]["chatgpt_mcp_proof"]["proof_observed"] is False
+    assert "voice_chatgpt_mcp_tool_proof" in {item["id"] for item in payload["anomalies"]}
+    checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["voice_chatgpt_mcp_tool_proof"]["status"] == "awaiting_chatgpt_mcp_tool_call"
+    assert checks["voice_chatgpt_mcp_tool_proof"]["evidence"] == "no_fresh_usable_mcp_receipt"
+
+
+def test_lens_command_palette_monitor_records_fresh_chatgpt_mcp_proof(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    status_path = tmp_path / "lens-status.json"
+    _write_json(status_path, _lens_status())
+    _write_overlay_voice_runtime(data_dir)
+    receipt_dir = data_dir / "integrations" / "chatgpt_voice" / "receipts"
+    _write_json(
+        receipt_dir / "chatgpt-voice-recorded-mcp-test.json",
+        {
+            "kind": "francis.chatgpt_voice.bridge.receipt",
+            "receipt_id": "chatgpt-voice-recorded-mcp-test",
+            "actor": "chatgpt.voice",
+            "source": "chatgpt.voice",
+            "client_origin": "chatgpt_app_voice",
+            "ingress_transport": "mcp_gateway_tool",
+            "mcp_gateway_tool": "francis.chatgpt_voice.ingress",
+            "mcp_server_tool": "francis_chatgpt_voice_ingress",
+            "decision": "recorded",
+            "chat_forward_status": "forwarded",
+            "chat_forward_error": "",
+            "chat_forwarded": True,
+            "transcript": "this proof transcript must stay out of monitor summaries",
+            "transcript_char_count": 57,
+            "reply": "I can hear you. Voice input is reaching Francis.",
+            "reply_source": "chat_forward.response",
+        },
+    )
+
+    with _LocalCommandPaletteServer() as url:
+        proc = _run_monitor(
+            "-Mode",
+            "Probe",
+            "-DataDir",
+            str(data_dir),
+            "-CommandPaletteUrl",
+            url,
+            "-LensStatusPath",
+            str(status_path),
+            "-EnableVoiceChecks",
+            "-VoiceProvider",
+            "ElevenLabs",
+            "-RequireChatGptMcpProof",
+            "-TimeoutSeconds",
+            "3",
+        )
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = _json_stdout(proc.stdout)
+    assert payload["status"] == "healthy"
+    proof = payload["voice_monitor"]["chatgpt_mcp_proof"]
+    assert proof["status"] == "fresh_usable_mcp_tool_receipt_observed"
+    assert proof["proof_observed"] is True
+    assert proof["chatgpt_source_receipt_count"] == 1
+    assert proof["mcp_server_receipt_count"] == 1
+    assert proof["fresh_usable_mcp_server_receipt_count"] == 1
+    assert proof["latest_fresh_usable_mcp_server_receipt_id"] == "chatgpt-voice-recorded-mcp-test"
+    assert proof["required_mcp_server_tool"] == "francis_chatgpt_voice_ingress"
+    checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["voice_chatgpt_mcp_tool_proof"]["status"] == "fresh_usable_mcp_tool_receipt_observed"
+    summary = json.dumps(payload["voice_monitor"]["chatgpt_mcp_proof"])
+    assert "proof transcript must stay out" not in summary
 
 
 def test_lens_command_palette_monitor_probe_writes_anomaly_receipt(tmp_path: Path) -> None:
