@@ -35,6 +35,7 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 _TASK_ID_RE = re.compile(r"^[a-zA-Z0-9_\-]{6,128}$")
+_SANDBOX_RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$")
 _TERMINAL_STATUSES = {"complete", "completed", "failed", "canceled", "cancelled"}
 _RETRYABLE_GOVERNANCE_STATUSES = {"pending", "needs_approval", "blocked", "denied"}
 _OPERATIONS_RUN_SCOPE = "operations.run"
@@ -616,6 +617,10 @@ def _validate_operation_id(operation_id: str) -> bool:
     return bool(_TASK_ID_RE.match(operation_id))
 
 
+def _validate_sandbox_run_id(run_id: str) -> bool:
+    return bool(run_id) and "/" not in run_id and "\\" not in run_id and bool(_SANDBOX_RUN_ID_RE.fullmatch(run_id))
+
+
 def _allowed_capabilities() -> list[str]:
     try:
         agent_executor._register_capabilities()
@@ -1025,6 +1030,9 @@ def evaluate_mona_lisa_sandbox_canvas(
     operation_id: str | None = None,
 ) -> dict[str, object]:
     op_id = _safe_str(operation_id).strip()
+    bounded_run_id = _safe_str(run_id).strip() or None
+    if bounded_run_id and not _validate_sandbox_run_id(bounded_run_id):
+        return {"ok": False, "status": "blocked", "error": "invalid_run_id"}
     resolved_artifact_dir = _safe_str(artifact_dir).strip() or None
     if op_id:
         if not _validate_operation_id(op_id):
@@ -1036,7 +1044,7 @@ def evaluate_mona_lisa_sandbox_canvas(
         resolved_artifact_dir = resolved_artifact_dir or _safe_str(operation.get("artifact_dir")).strip() or None
     return sandbox_canvas.evaluate_mona_lisa_sandbox_artifact(
         artifact_dir=resolved_artifact_dir,
-        run_id=run_id,
+        run_id=bounded_run_id,
         operation_id=op_id,
     )
 
@@ -1073,6 +1081,23 @@ def record_mona_lisa_sandbox_canvas_evaluation(
         }
 
     op_id = _safe_str(payload.operation_id).strip()
+    bounded_run_id = _safe_str(payload.run_id).strip() or None
+    if bounded_run_id and not _validate_sandbox_run_id(bounded_run_id):
+        return {
+            "ok": False,
+            "status": "blocked",
+            "error": "invalid_run_id",
+            "governance": {
+                "writes_files": False,
+                "writes_evaluation_record": False,
+                "writes_queue_item": False,
+                "writes_proposal_records": False,
+                "runs_operation": False,
+                "desktop_control": False,
+                "approves_proposals": False,
+                "promotes_changes": False,
+            },
+        }
     resolved_artifact_dir = _safe_str(payload.artifact_dir).strip() or None
     if op_id:
         if not _validate_operation_id(op_id):
@@ -1085,7 +1110,7 @@ def record_mona_lisa_sandbox_canvas_evaluation(
 
     return sandbox_canvas.record_mona_lisa_sandbox_evaluation(
         artifact_dir=resolved_artifact_dir,
-        run_id=payload.run_id,
+        run_id=bounded_run_id,
         operation_id=op_id,
         actor=payload.actor,
         reason=payload.reason,

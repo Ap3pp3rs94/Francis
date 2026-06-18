@@ -587,6 +587,44 @@ def test_operations_run_mona_lisa_sandbox_canvas_from_chat_mission(monkeypatch, 
     assert missing_body["status"] == "blocked"
     assert missing_body["governance"]["read_only"] is True
 
+    outside_artifact = tmp_path / "outside_sandbox_artifact"
+    outside_artifact.mkdir()
+    (outside_artifact / "receipt.json").write_text("{}", encoding="utf-8")
+    outside = client.get(
+        "/operations/sandbox-canvas/mona-lisa/evaluation",
+        params={"artifact_dir": str(outside_artifact)},
+    )
+    assert outside.status_code == 200
+    outside_body = outside.json()
+    assert outside_body["ok"] is False
+    assert outside_body["status"] == "blocked"
+    assert outside_body["error"] == "sandbox_artifact_dir_not_found_or_out_of_bounds"
+
+    invalid_run = client.get(
+        "/operations/sandbox-canvas/mona-lisa/evaluation",
+        params={"run_id": "../outside"},
+    )
+    assert invalid_run.status_code == 200
+    invalid_run_body = invalid_run.json()
+    assert invalid_run_body["ok"] is False
+    assert invalid_run_body["status"] == "blocked"
+    assert invalid_run_body["error"] == "invalid_run_id"
+
+    invalid_record = client.post(
+        "/operations/sandbox-canvas/mona-lisa/evaluation/record",
+        json={
+            "run_id": "../outside",
+            "actor": "test.operations.write",
+            "reason": "test_invalid_run_id_block",
+        },
+    )
+    assert invalid_record.status_code == 200
+    invalid_record_body = invalid_record.json()
+    assert invalid_record_body["ok"] is False
+    assert invalid_record_body["status"] == "blocked"
+    assert invalid_record_body["error"] == "invalid_run_id"
+    assert invalid_record_body["governance"]["writes_files"] is False
+
 
 def test_operations_create_is_blocked_in_observe_mode(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"

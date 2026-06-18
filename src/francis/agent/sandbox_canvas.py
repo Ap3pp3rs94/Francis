@@ -18,6 +18,7 @@ MIN_CANVAS_SIZE = 128
 MAX_CANVAS_SIZE = 2048
 RECOGNIZABILITY_FIXTURE_PATH = Path(__file__).with_name("mona_lisa_recognizability_fixture.json")
 _PATH_POINT_RE = re.compile(r"(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)")
+_RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$")
 
 
 def _now_iso() -> str:
@@ -487,19 +488,58 @@ def _sandbox_root() -> Path:
     return (data_dir() / "sandbox_canvas" / "mona_lisa").resolve()
 
 
+def _safe_run_segment(value: Any) -> str:
+    text = _safe_str(value)
+    if not text or "/" in text or "\\" in text:
+        return ""
+    return text if _RUN_ID_RE.fullmatch(text) else ""
+
+
+def _trusted_artifact_dir(path: Path, root: Path) -> Path | None:
+    try:
+        resolved = path.resolve()
+        resolved.relative_to(root)
+    except Exception:
+        return None
+    return resolved if resolved.is_dir() else None
+
+
 def _artifact_dir_candidates(root: Path) -> list[Path]:
     if not root.exists():
         return []
-    return [
-        path
-        for path in root.iterdir()
-        if path.is_dir()
-        and (
-            (path / "receipt.json").exists()
-            or (path / "manifest.json").exists()
-            or (path / "operator_actions.jsonl").exists()
-        )
-    ]
+    candidates: list[Path] = []
+    for path in root.iterdir():
+        artifact_dir = _trusted_artifact_dir(path, root)
+        if artifact_dir is None:
+            continue
+        if (
+            (artifact_dir / "receipt.json").exists()
+            or (artifact_dir / "manifest.json").exists()
+            or (artifact_dir / "operator_actions.jsonl").exists()
+        ):
+            candidates.append(artifact_dir)
+    return candidates
+
+
+def _matches_artifact_selector(candidate: Path, selector: str, root: Path) -> bool:
+    text = _safe_str(selector).rstrip("/\\")
+    if not text:
+        return False
+    normalized_text = text.replace("\\", "/")
+    options = {candidate.name, str(candidate), str(candidate).replace("\\", "/")}
+    try:
+        relative_to_root = candidate.relative_to(root)
+        options.add(str(relative_to_root))
+        options.add(str(relative_to_root).replace("\\", "/"))
+    except Exception:
+        pass
+    try:
+        relative_to_data = candidate.relative_to(data_dir().resolve())
+        options.add(str(relative_to_data))
+        options.add(str(relative_to_data).replace("\\", "/"))
+    except Exception:
+        pass
+    return normalized_text in options or text in options
 
 
 def _resolve_artifact_dir(value: str | None = None, *, run_id: str | None = None) -> Path | None:
@@ -507,24 +547,23 @@ def _resolve_artifact_dir(value: str | None = None, *, run_id: str | None = None
     candidate_text = _safe_str(value)
     run_text = _safe_str(run_id)
     if run_text:
-        candidate = root / run_text
+        run_segment = _safe_run_segment(run_text)
+        if not run_segment:
+            return None
+        for candidate in _artifact_dir_candidates(root):
+            if candidate.name == run_segment:
+                return candidate
+        return None
     elif candidate_text:
-        candidate = Path(candidate_text)
-        if not candidate.is_absolute():
-            candidate = data_dir() / candidate
+        for candidate in _artifact_dir_candidates(root):
+            if _matches_artifact_selector(candidate, candidate_text, root):
+                return candidate
+        return None
     else:
         candidates = _artifact_dir_candidates(root)
         if not candidates:
             return None
-        candidate = max(candidates, key=lambda path: path.stat().st_mtime)
-    try:
-        resolved = candidate.resolve()
-        resolved.relative_to(root)
-    except Exception:
-        return None
-    if not resolved.exists() or not resolved.is_dir():
-        return None
-    return resolved
+        return max(candidates, key=lambda path: path.stat().st_mtime)
 
 
 def _safe_segment(value: Any, fallback: str) -> str:
