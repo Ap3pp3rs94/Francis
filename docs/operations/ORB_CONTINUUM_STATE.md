@@ -131,6 +131,14 @@ proportions.
 - The persistent ingress plan now also reports local installer readiness and
   bounded install/configuration command hints. The plan remains read-only; it
   does not install providers or create public ingress.
+- ChatGPT voice connector URL resolution now has explicit source tracking.
+  Status, plan, and `RecordUrl` resolve URLs from an explicit argument, then
+  `FRANCIS_CHATGPT_VOICE_CONNECTOR_URL`, then recorded runtime state, and report
+  `connector_url_source` without starting tunnels or granting authority.
+- The Orb/voice/overlay-lens validation proof no longer treats HTTPS `/mcp` URL
+  shape as end-to-end proof. A shape-valid connector URL without a verified MCP
+  reachability probe or fresh ChatGPT tool-call evidence reports
+  `proof_partial_connector_reachability_unverified`.
 
 ## Current Task
 
@@ -163,6 +171,12 @@ the local ChatGPT voice MCP listener is ready, ChatGPT-source bridge receipts
 exist, Orb substrate readback is healthy, and the latest Mona Lisa sandbox
 replay passes the structured-observation receipt contract. The proof still
 reports that no current public HTTPS connector URL is recorded.
+
+If a stable connector URL is supplied through
+`FRANCIS_CHATGPT_VOICE_CONNECTOR_URL`, the proof now records the URL source and
+checks the shape without writing runtime state. Shape-valid but unverified URLs
+remain partial proof until reachability or a fresh ChatGPT-origin tool-call
+receipt confirms the bridge.
 
 Acceptance criteria for the completed observation sub-slice:
 
@@ -289,6 +303,10 @@ Acceptance criteria for the completed multi-run review scoring sub-slice:
   `http://127.0.0.1:8787/mcp`, then record the actual HTTPS `/mcp` URL with
   `scripts/chatgpt-voice-connector.ps1 -Mode RecordUrl`, so the proof can verify
   the connector URL instead of reporting `connector_url_not_provided`.
+- As a non-mutating handoff, a stable URL may also be supplied as
+  `FRANCIS_CHATGPT_VOICE_CONNECTOR_URL`; this only proves URL shape unless the
+  validation proof is run with connector reachability verification or a fresh
+  ChatGPT-origin tool-call receipt is observed.
 - Confirm live overlay microphone signal when the operator is present; the
   current safe readback remains `waiting_for_audio_signal`.
 
@@ -767,6 +785,33 @@ Validated for the usable ChatGPT transcript proof split:
   `mona_lisa_sandbox.passed=true`, and
   `chatgpt_voice_connector.connector_url_reason=connector_url_not_provided`.
 
+Validated for explicit ChatGPT voice connector URL source and reachability
+truth:
+
+- PowerShell parser checks for `scripts\chatgpt-voice-connector.ps1` and
+  `scripts\orb-voice-overlay-lens-validation.ps1` returned `parse_ok`.
+- `python -m pytest tests\test_chatgpt_voice_connector_script.py
+  tests\test_orb_voice_overlay_lens_validation_script.py -q` passed.
+- `python -m ruff check --no-cache tests\test_chatgpt_voice_connector_script.py
+  tests\test_orb_voice_overlay_lens_validation_script.py` passed.
+- `python -m ruff format --check --no-cache
+  tests\test_chatgpt_voice_connector_script.py
+  tests\test_orb_voice_overlay_lens_validation_script.py` passed with
+  `2 files already formatted`.
+- A live connector status readback with no current environment URL returned
+  `status=not_started`, `connector_url_source=none`,
+  `connector_url_shape_valid=false`, `connector_url_reason=connector_url_not_provided`,
+  `starts_process=false`, `opens_public_tunnel=false`, and `writes_data=false`.
+- A live process-scoped environment URL proof using
+  `FRANCIS_CHATGPT_VOICE_CONNECTOR_URL=https://francis-env.example.test/mcp`
+  returned `status=proof_partial_connector_reachability_unverified`,
+  `next_smallest_truthful_gap=verify_current_https_mcp_connector_reachability_or_trigger_fresh_chatgpt_tool_call`,
+  `connector_url_source=environment:FRANCIS_CHATGPT_VOICE_CONNECTOR_URL`,
+  `connector_url_shape_valid=true`,
+  `connector_reachability_status=verification_not_requested`,
+  `connector_usable_for_chatgpt=false`, `starts_process=false`,
+  `opens_public_tunnel=false`, and `writes_repo=false`.
+
 ## Blockers
 
 - The lens/overlay observation contract is metadata-only; it does not yet provide
@@ -783,10 +828,10 @@ Validated for the usable ChatGPT transcript proof split:
   phrase can create mission state when transcribed, but the full voice ->
   mission -> automatic operator dispatch -> Orb loop is not complete.
 - The current ChatGPT voice connector control supports persistent HTTPS URL
-  planning and URL recording, but no actual current public HTTPS MCP URL is
-  recorded; local MCP is listening, no `cloudflared`/`ngrok`/`caddy` provider is
-  available in the current shell, and current ChatGPT app reachability is not
-  proven by the status proof.
+  planning, environment URL handoff, and URL recording, but no actual current
+  public HTTPS MCP URL is recorded; local MCP is listening, no
+  `cloudflared`/`ngrok`/`caddy` provider is available in the current shell, and
+  current ChatGPT app reachability is not proven by the status proof.
 - True backend model-call cancellation is not currently supported; stale reply
   suppression is the bounded behavior.
 

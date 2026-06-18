@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import socket
 import subprocess
@@ -26,7 +27,14 @@ def _unused_local_port() -> int:
         return int(sock.getsockname()[1])
 
 
-def _run_validation_script(*args: str) -> subprocess.CompletedProcess[str]:
+def _run_validation_script(
+    *args: str,
+    env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    run_env = os.environ.copy()
+    run_env.pop("FRANCIS_CHATGPT_VOICE_CONNECTOR_URL", None)
+    if env:
+        run_env.update(env)
     return subprocess.run(
         [
             _powershell(),
@@ -42,6 +50,7 @@ def _run_validation_script(*args: str) -> subprocess.CompletedProcess[str]:
         text=True,
         capture_output=True,
         timeout=60,
+        env=run_env,
     )
 
 
@@ -142,6 +151,69 @@ def test_orb_voice_overlay_lens_validation_classifies_chatgpt_source_receipt_wit
         "record_current_https_mcp_connector_url_or_replace_tunnel_with_persistent_ingress",
         "restore_or_create_read_only_mona_lisa_sandbox_replay_artifact",
     }
+
+
+def test_orb_voice_overlay_lens_validation_uses_environment_connector_url(
+    tmp_path: Path,
+) -> None:
+    data_dir = tmp_path / "data"
+    receipt_dir = data_dir / "integrations" / "chatgpt_voice" / "receipts"
+    receipt_dir.mkdir(parents=True)
+    receipt = {
+        "kind": "francis.chatgpt_voice.bridge.receipt",
+        "receipt_id": "chatgpt-voice-recorded-env-test",
+        "actor": "chatgpt.voice",
+        "source": "chatgpt.voice",
+        "decision": "recorded",
+        "chat_forward_status": "forwarded",
+        "chat_forwarded": True,
+        "transcript": "environment URL proof should redact this transcript",
+        "transcript_char_count": 52,
+        "reply": "I can hear you. Voice input is reaching Francis.",
+        "reply_source": "chat_forward.response",
+        "governance": {
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+    }
+    (receipt_dir / "chatgpt-voice-recorded-env-test.json").write_text(json.dumps(receipt), encoding="utf-8")
+    port = _unused_local_port()
+
+    proc = _run_validation_script(
+        "-DataDir",
+        str(data_dir),
+        "-ConnectorPort",
+        str(port),
+        env={"FRANCIS_CHATGPT_VOICE_CONNECTOR_URL": "https://francis-env.example.test/mcp"},
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["status"] == "proof_partial_connector_reachability_unverified"
+    assert payload["next_smallest_truthful_gap"] == (
+        "verify_current_https_mcp_connector_reachability_or_trigger_fresh_chatgpt_tool_call"
+    )
+    assert payload["chatgpt_voice_connector"]["connector_url_provided"] is True
+    assert payload["chatgpt_voice_connector"]["connector_url_shape_valid"] is True
+    assert (
+        payload["chatgpt_voice_connector"]["connector_url_source"] == "environment:FRANCIS_CHATGPT_VOICE_CONNECTOR_URL"
+    )
+    assert payload["chatgpt_voice_connector"]["connector_url_reason"] == (
+        "connector_url_shape_valid_reachability_not_verified"
+    )
+    assert payload["chatgpt_voice_connector"]["connector_reachability_verified"] is False
+    assert payload["chatgpt_voice_connector"]["connector_usable_for_chatgpt"] is False
+    assert payload["chatgpt_voice_connector"]["connector_reachability_status"] == "verification_not_requested"
+    assert payload["chatgpt_voice_connector"]["connector_reachability_probe_requested"] is False
+    assert payload["persistent_ingress_plan"]["status"] == "connector_url_shape_valid_record_ready"
+    assert payload["persistent_ingress_plan"]["connector_url"]["source"] == (
+        "environment:FRANCIS_CHATGPT_VOICE_CONNECTOR_URL"
+    )
+    assert payload["persistent_ingress_plan"]["governance"]["starts_process"] is False
+    assert payload["persistent_ingress_plan"]["governance"]["opens_public_tunnel"] is False
+    assert payload["persistent_ingress_plan"]["governance"]["writes_data"] is False
+    summary = json.dumps(payload["chatgpt_voice_receipts"])
+    assert "environment URL proof should redact" not in summary
 
 
 def test_orb_voice_overlay_lens_validation_blocks_unavailable_chatgpt_source_receipt(

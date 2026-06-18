@@ -13,6 +13,8 @@ param(
 
   [string]$ConnectorUrl = '',
 
+  [switch]$VerifyConnector,
+
   [ValidateRange(1, 100)]
   [int]$ReceiptLimit = 10
 )
@@ -400,6 +402,9 @@ $ConnectorArgs = @(
 if (-not [string]::IsNullOrWhiteSpace($ConnectorUrl)) {
   $ConnectorArgs += @('-ConnectorUrl', $ConnectorUrl)
 }
+if ($VerifyConnector) {
+  $ConnectorArgs += '-VerifyConnector'
+}
 $ConnectorResult = Invoke-JsonScript -ScriptPath (Join-Path $PSScriptRoot 'chatgpt-voice-connector.ps1') -ScriptArgs $ConnectorArgs
 $Connector = Get-PropertyValue -Payload $ConnectorResult -Name 'payload'
 
@@ -416,6 +421,9 @@ $PlanArgs = @(
 )
 if (-not [string]::IsNullOrWhiteSpace($ConnectorUrl)) {
   $PlanArgs += @('-ConnectorUrl', $ConnectorUrl)
+}
+if ($VerifyConnector) {
+  $PlanArgs += '-VerifyConnector'
 }
 $PersistentIngressPlanResult = Invoke-JsonScript -ScriptPath (Join-Path $PSScriptRoot 'chatgpt-voice-connector.ps1') -ScriptArgs $PlanArgs
 $PersistentIngressPlan = Get-PropertyValue -Payload $PersistentIngressPlanResult -Name 'payload'
@@ -447,7 +455,21 @@ $Checks += (New-Check -Id 'chatgpt_voice_local_mcp_listener' -Status $ConnectorE
 $ConnectorUrlShapeValid = [bool](Get-NestedPropertyValue -Payload $Connector -Path @('endpoint_status', 'chatgpt_connector', 'connector_url', 'shape_valid') -Default $false)
 $ConnectorUrlProvided = [bool](Get-NestedPropertyValue -Payload $Connector -Path @('endpoint_status', 'chatgpt_connector', 'connector_url', 'provided') -Default $false)
 $ConnectorUrlReason = ConvertTo-BoundedText -Value (Get-NestedPropertyValue -Payload $Connector -Path @('endpoint_status', 'chatgpt_connector', 'connector_url', 'reason') -Default 'connector_url_not_provided') -MaxLength 160
+$ConnectorUrlSource = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Connector -Name 'connector_url_source' -Default 'none') -MaxLength 160
 $Checks += (New-Check -Id 'chatgpt_voice_public_connector_url' -Status $(if ($ConnectorUrlShapeValid) { 'shape_valid' } elseif ($ConnectorUrlProvided) { 'shape_invalid' } else { 'missing' }) -Passed $ConnectorUrlShapeValid -Evidence (ConvertTo-BoundedText -Value (Get-NestedPropertyValue -Payload $Connector -Path @('endpoint_status', 'chatgpt_connector', 'connector_url', 'url') -Default '') -MaxLength 240) -Reason $(if ($ConnectorUrlShapeValid) { '' } else { $ConnectorUrlReason }))
+
+$ConnectorReachabilityVerified = [bool](Get-NestedPropertyValue -Payload $Connector -Path @('endpoint_status', 'chatgpt_connector', 'reachability_verified') -Default $false)
+$ConnectorUsableForChatGpt = [bool](Get-NestedPropertyValue -Payload $Connector -Path @('endpoint_status', 'chatgpt_connector', 'ready') -Default $false)
+$ConnectorReachabilityStatus = if ($ConnectorUsableForChatGpt) {
+  'verified'
+} elseif ($ConnectorUrlShapeValid -and -not $VerifyConnector) {
+  'verification_not_requested'
+} elseif ($ConnectorUrlShapeValid) {
+  'not_verified'
+} else {
+  'not_ready'
+}
+$Checks += (New-Check -Id 'chatgpt_voice_connector_reachability' -Status $ConnectorReachabilityStatus -Passed $ConnectorUsableForChatGpt -Evidence (ConvertTo-BoundedText -Value (Get-NestedPropertyValue -Payload $Connector -Path @('endpoint_status', 'chatgpt_connector', 'connector_url', 'url') -Default '') -MaxLength 240) -Reason $(if ($ConnectorUsableForChatGpt) { '' } elseif ($ConnectorUrlShapeValid -and -not $VerifyConnector) { 'connector_reachability_probe_not_requested' } elseif ($ConnectorUrlShapeValid) { $ConnectorUrlReason } else { 'connector_url_not_ready' }))
 
 $PersistentIngressPlanStatus = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $PersistentIngressPlan -Name 'status' -Default '') -MaxLength 96
 $PersistentIngressPlanSafe = (
@@ -512,6 +534,8 @@ if (-not $ChatGptSourceObserved) {
   $Status = 'proof_blocked_no_usable_chatgpt_app_transcript'
 } elseif (-not $ConnectorUrlShapeValid) {
   $Status = 'proof_partial_current_connector_url_missing'
+} elseif (-not $ConnectorUsableForChatGpt) {
+  $Status = 'proof_partial_connector_reachability_unverified'
 } elseif ($CriticalPassed) {
   $Status = 'proof_passed'
 } elseif (-not ($EvaluationOk -and $EvaluationPassed)) {
@@ -524,6 +548,8 @@ $NextGap = if (-not $ChatGptSourceObserved) {
   'trigger_fresh_chatgpt_app_voice_tool_call_with_usable_transcript'
 } elseif (-not $ConnectorUrlShapeValid) {
   'record_current_https_mcp_connector_url_or_replace_tunnel_with_persistent_ingress'
+} elseif (-not $ConnectorUsableForChatGpt) {
+  'verify_current_https_mcp_connector_reachability_or_trigger_fresh_chatgpt_tool_call'
 } elseif ($VoiceInputStatus -eq 'waiting_for_audio_signal') {
   'confirm_live_microphone_signal_for_overlay_voice_input'
 } elseif (-not ($EvaluationOk -and $EvaluationPassed)) {
@@ -559,7 +585,12 @@ $NextGap = if (-not $ChatGptSourceObserved) {
     local_listener_ready = $LocalListenerReady
     connector_url_provided = $ConnectorUrlProvided
     connector_url_shape_valid = $ConnectorUrlShapeValid
+    connector_url_source = $ConnectorUrlSource
     connector_url_reason = $ConnectorUrlReason
+    connector_reachability_verified = $ConnectorReachabilityVerified
+    connector_usable_for_chatgpt = $ConnectorUsableForChatGpt
+    connector_reachability_status = $ConnectorReachabilityStatus
+    connector_reachability_probe_requested = [bool]$VerifyConnector
     opens_public_tunnel = [bool](Get-NestedPropertyValue -Payload $Connector -Path @('governance', 'opens_public_tunnel') -Default $false)
     starts_process = [bool](Get-NestedPropertyValue -Payload $Connector -Path @('governance', 'starts_process') -Default $false)
   }

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import platform
 import shutil
 import socket
@@ -27,7 +28,14 @@ def _unused_local_port() -> int:
         return int(sock.getsockname()[1])
 
 
-def _run_connector_script(*args: str) -> subprocess.CompletedProcess[str]:
+def _run_connector_script(
+    *args: str,
+    env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    run_env = os.environ.copy()
+    run_env.pop("FRANCIS_CHATGPT_VOICE_CONNECTOR_URL", None)
+    if env:
+        run_env.update(env)
     return subprocess.run(
         [
             _powershell(),
@@ -43,6 +51,7 @@ def _run_connector_script(*args: str) -> subprocess.CompletedProcess[str]:
         text=True,
         capture_output=True,
         timeout=30,
+        env=run_env,
     )
 
 
@@ -126,6 +135,36 @@ def test_chatgpt_voice_connector_status_accepts_manual_connector_url(tmp_path: P
     payload = json.loads(proc.stdout)
     assert payload["status"] == "not_started"
     assert payload["connector_url"] == "https://francis.example.test/mcp"
+    assert payload["connector_url_source"] == "argument"
+    assert payload["endpoint_status"]["chatgpt_connector"]["connector_url"]["shape_valid"] is True
+    assert payload["governance"]["read_only"] is True
+    assert payload["governance"]["starts_process"] is False
+    assert payload["governance"]["opens_public_tunnel"] is False
+    assert payload["governance"]["writes_data"] is False
+    assert not runtime_root.exists()
+
+
+@pytest.mark.skipif(platform.system() != "Windows", reason="connector control uses Windows process readback")
+def test_chatgpt_voice_connector_status_accepts_environment_connector_url(tmp_path: Path) -> None:
+    runtime_root = tmp_path / "connector-runtime"
+    port = _unused_local_port()
+
+    proc = _run_connector_script(
+        "-Mode",
+        "Status",
+        "-Json",
+        "-RuntimeRoot",
+        str(runtime_root),
+        "-Port",
+        str(port),
+        env={"FRANCIS_CHATGPT_VOICE_CONNECTOR_URL": "https://francis-env.example.test/mcp"},
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["status"] == "not_started"
+    assert payload["connector_url"] == "https://francis-env.example.test/mcp"
+    assert payload["connector_url_source"] == "environment:FRANCIS_CHATGPT_VOICE_CONNECTOR_URL"
     assert payload["endpoint_status"]["chatgpt_connector"]["connector_url"]["shape_valid"] is True
     assert payload["governance"]["read_only"] is True
     assert payload["governance"]["starts_process"] is False
@@ -157,6 +196,7 @@ def test_chatgpt_voice_connector_plan_persistent_ingress_is_read_only(tmp_path: 
     assert payload["local_endpoint"] == f"http://127.0.0.1:{port}/mcp"
     assert payload["connector_url"]["provided"] is False
     assert payload["connector_url"]["shape_valid"] is False
+    assert payload["connector_url"]["source"] == "none"
     assert payload["connector_url"]["reason"] == "connector_url_not_provided"
     assert "RecordUrl" in payload["connector_url"]["record_command"]
     assert payload["provider_readiness"]["cloudflared_named_tunnel"]["name"] == "cloudflared"
@@ -205,6 +245,7 @@ def test_chatgpt_voice_connector_plan_persistent_ingress_accepts_stable_url_shap
     assert payload["status"] == "connector_url_shape_valid_record_ready"
     assert payload["connector_url"]["provided"] is True
     assert payload["connector_url"]["shape_valid"] is True
+    assert payload["connector_url"]["source"] == "argument"
     assert payload["connector_url"]["reason"] == "connector_url_shape_valid_reachability_not_verified"
     assert payload["governance"]["read_only"] is True
     assert payload["governance"]["starts_process"] is False
@@ -236,6 +277,7 @@ def test_chatgpt_voice_connector_record_url_persists_without_tunnel(tmp_path: Pa
     assert payload["ok"] is True
     assert payload["status"] == "persistent_connector_url_recorded"
     assert payload["connector_url"] == "https://francis.example.test/mcp"
+    assert payload["connector_url_source"] == "argument"
     assert payload["ingress_mode"] == "persistent_https"
     assert payload["endpoint_status"]["chatgpt_connector"]["connector_url"]["shape_valid"] is True
     assert payload["processes"]["mcp_launcher"]["pid"] == 0
@@ -252,6 +294,7 @@ def test_chatgpt_voice_connector_record_url_persists_without_tunnel(tmp_path: Pa
     assert state["status"] == "persistent_connector_url_recorded"
     assert state["ingress_mode"] == "persistent_https"
     assert state["connector_url"] == "https://francis.example.test/mcp"
+    assert state["connector_url_source"] == "argument"
     assert state["mcp_launcher_pid"] == 0
     assert state["tunnel_pid"] == 0
     assert state["governance"]["opens_public_tunnel"] is False
@@ -271,11 +314,42 @@ def test_chatgpt_voice_connector_record_url_persists_without_tunnel(tmp_path: Pa
     status_payload = json.loads(status.stdout)
     assert status_payload["status"] == "runtime_state_observed"
     assert status_payload["connector_url"] == "https://francis.example.test/mcp"
+    assert status_payload["connector_url_source"] == "runtime_state"
     assert status_payload["ingress_mode"] == "persistent_https"
     assert status_payload["endpoint_status"]["chatgpt_connector"]["connector_url"]["shape_valid"] is True
     assert status_payload["governance"]["read_only"] is True
     assert status_payload["governance"]["starts_process"] is False
     assert status_payload["governance"]["opens_public_tunnel"] is False
+
+
+@pytest.mark.skipif(platform.system() != "Windows", reason="connector control uses Windows process readback")
+def test_chatgpt_voice_connector_record_url_accepts_environment_connector_url(tmp_path: Path) -> None:
+    runtime_root = tmp_path / "connector-runtime"
+    port = _unused_local_port()
+
+    recorded = _run_connector_script(
+        "-Mode",
+        "RecordUrl",
+        "-Json",
+        "-RuntimeRoot",
+        str(runtime_root),
+        "-Port",
+        str(port),
+        env={"FRANCIS_CHATGPT_VOICE_CONNECTOR_URL": "https://francis-env.example.test/mcp"},
+    )
+
+    assert recorded.returncode == 0, recorded.stderr
+    payload = json.loads(recorded.stdout)
+    assert payload["ok"] is True
+    assert payload["status"] == "persistent_connector_url_recorded"
+    assert payload["connector_url"] == "https://francis-env.example.test/mcp"
+    assert payload["connector_url_source"] == "environment:FRANCIS_CHATGPT_VOICE_CONNECTOR_URL"
+    assert payload["governance"]["starts_process"] is False
+    assert payload["governance"]["opens_public_tunnel"] is False
+    assert payload["governance"]["writes_data"] is True
+    state = json.loads((runtime_root / "status.json").read_text(encoding="utf-8-sig"))
+    assert state["connector_url"] == "https://francis-env.example.test/mcp"
+    assert state["connector_url_source"] == "environment:FRANCIS_CHATGPT_VOICE_CONNECTOR_URL"
 
 
 @pytest.mark.skipif(platform.system() != "Windows", reason="connector control uses Windows process readback")
@@ -300,6 +374,7 @@ def test_chatgpt_voice_connector_record_url_rejects_invalid_shape_without_writin
     assert payload["kind"] == "francis.chatgpt_voice.connector_control"
     assert payload["ok"] is False
     assert payload["status"] == "connector_url_shape_invalid"
+    assert payload["connector_url_source"] == "argument"
     assert payload["blockers"] == ["connector_url_must_be_https"]
     assert payload["endpoint_status"]["chatgpt_connector"]["connector_url"]["shape_valid"] is False
     assert payload["governance"]["starts_process"] is False

@@ -134,7 +134,10 @@ function Get-CommandReadiness {
 }
 
 function New-PersistentIngressPlan {
-  param([object]$EndpointStatus)
+  param(
+    [object]$EndpointStatus,
+    [string]$ConnectorUrlSource = 'none'
+  )
 
   $ConnectorShapeValid = [bool](Get-NestedPropertyValue -Payload $EndpointStatus -Path @('chatgpt_connector', 'connector_url', 'shape_valid') -Default $false)
   $ConnectorProvided = [bool](Get-NestedPropertyValue -Payload $EndpointStatus -Path @('chatgpt_connector', 'connector_url', 'provided') -Default $false)
@@ -151,6 +154,7 @@ function New-PersistentIngressPlan {
     connector_url = [ordered]@{
       provided = $ConnectorProvided
       shape_valid = $ConnectorShapeValid
+      source = (ConvertTo-BoundedText -Value $ConnectorUrlSource -MaxLength 160)
       reason = $ConnectorReason
       record_command = $RecordCommand
     }
@@ -206,6 +210,45 @@ function Read-State {
     return Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json -ErrorAction Stop
   } catch {
     return $null
+  }
+}
+
+function Resolve-ConnectorUrlCandidate {
+  param(
+    [string]$ExplicitConnectorUrl,
+    [object]$State,
+    [bool]$AllowState = $true
+  )
+
+  $Explicit = ConvertTo-BoundedText -Value $ExplicitConnectorUrl -MaxLength 512
+  if (-not [string]::IsNullOrWhiteSpace($Explicit)) {
+    return [ordered]@{
+      url = $Explicit
+      source = 'argument'
+    }
+  }
+
+  $EnvironmentValue = ConvertTo-BoundedText -Value $env:FRANCIS_CHATGPT_VOICE_CONNECTOR_URL -MaxLength 512
+  if (-not [string]::IsNullOrWhiteSpace($EnvironmentValue)) {
+    return [ordered]@{
+      url = $EnvironmentValue
+      source = 'environment:FRANCIS_CHATGPT_VOICE_CONNECTOR_URL'
+    }
+  }
+
+  if ($AllowState -and $State) {
+    $StateConnectorUrl = ConvertTo-BoundedText -Value $State.connector_url -MaxLength 512
+    if (-not [string]::IsNullOrWhiteSpace($StateConnectorUrl)) {
+      return [ordered]@{
+        url = $StateConnectorUrl
+        source = 'runtime_state'
+      }
+    }
+  }
+
+  return [ordered]@{
+    url = ''
+    source = 'none'
   }
 }
 
@@ -344,6 +387,7 @@ function New-StatusPayload {
   param(
     [object]$State,
     [object]$EndpointStatus,
+    [string]$ConnectorUrlSource = 'none',
     [bool]$ReadOnly = $true,
     [bool]$StartsProcess = $false,
     [bool]$OpensPublicTunnel = $false,
@@ -354,14 +398,24 @@ function New-StatusPayload {
   $McpLauncherPid = 0
   $TunnelPid = 0
   $IngressMode = ''
+  $ResolvedConnectorUrlSource = ConvertTo-BoundedText -Value $ConnectorUrlSource -MaxLength 160
+  if ([string]::IsNullOrWhiteSpace($ResolvedConnectorUrlSource)) {
+    $ResolvedConnectorUrlSource = 'none'
+  }
   if ($State) {
     $ConnectorUrl = ConvertTo-BoundedText -Value $State.connector_url -MaxLength 512
     $McpLauncherPid = [int]($State.mcp_launcher_pid)
     $TunnelPid = [int]($State.tunnel_pid)
     $IngressMode = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $State -Name 'ingress_mode') -MaxLength 96
+    if (-not [string]::IsNullOrWhiteSpace($ConnectorUrl) -and $ResolvedConnectorUrlSource -eq 'none') {
+      $ResolvedConnectorUrlSource = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $State -Name 'connector_url_source' -Default 'runtime_state') -MaxLength 160
+    }
   }
   if ([string]::IsNullOrWhiteSpace($ConnectorUrl) -and $EndpointStatus -and $EndpointStatus.chatgpt_connector) {
     $ConnectorUrl = ConvertTo-BoundedText -Value $EndpointStatus.chatgpt_connector.connector_url.url -MaxLength 512
+    if (-not [string]::IsNullOrWhiteSpace($ConnectorUrl) -and $ResolvedConnectorUrlSource -eq 'none') {
+      $ResolvedConnectorUrlSource = 'endpoint_status'
+    }
   }
   if ([string]::IsNullOrWhiteSpace($IngressMode) -and -not [string]::IsNullOrWhiteSpace($ConnectorUrl)) {
     $IngressMode = 'manual_status_url'
@@ -379,6 +433,7 @@ function New-StatusPayload {
     ok = $Ready
     status = if ($Ready) { 'ready_for_chatgpt_connector' } elseif ($State) { 'runtime_state_observed' } else { 'not_started' }
     connector_url = $ConnectorUrl
+    connector_url_source = $ResolvedConnectorUrlSource
     ingress_mode = $IngressMode
     runtime_root = $RuntimeRoot
     state_path = $statePath
@@ -393,40 +448,30 @@ function New-StatusPayload {
 
 if ($Mode -eq 'Status') {
   $State = Read-State
-  $StatusConnectorUrl = ConvertTo-BoundedText -Value $ConnectorUrl -MaxLength 512
-  if ($State) {
-    $StateConnectorUrl = ConvertTo-BoundedText -Value $State.connector_url -MaxLength 512
-    if (-not [string]::IsNullOrWhiteSpace($StateConnectorUrl)) {
-      $StatusConnectorUrl = $StateConnectorUrl
-    }
-  }
-  $EndpointStatus = Invoke-EndpointStatus -ConnectorUrl $StatusConnectorUrl
-  ConvertTo-JsonOutput -Payload (New-StatusPayload -State $State -EndpointStatus $EndpointStatus)
+  $Candidate = Resolve-ConnectorUrlCandidate -ExplicitConnectorUrl $ConnectorUrl -State $State
+  $EndpointStatus = Invoke-EndpointStatus -ConnectorUrl ([string]$Candidate.url)
+  ConvertTo-JsonOutput -Payload (New-StatusPayload -State $State -EndpointStatus $EndpointStatus -ConnectorUrlSource ([string]$Candidate.source))
   exit 0
 }
 
 if ($Mode -eq 'PlanPersistentIngress') {
-  $PlanConnectorUrl = ConvertTo-BoundedText -Value $ConnectorUrl -MaxLength 512
   $State = Read-State
-  if ([string]::IsNullOrWhiteSpace($PlanConnectorUrl) -and $State) {
-    $StateConnectorUrl = ConvertTo-BoundedText -Value $State.connector_url -MaxLength 512
-    if (-not [string]::IsNullOrWhiteSpace($StateConnectorUrl)) {
-      $PlanConnectorUrl = $StateConnectorUrl
-    }
-  }
-  $EndpointStatus = Invoke-EndpointStatus -ConnectorUrl $PlanConnectorUrl
-  ConvertTo-JsonOutput -Payload (New-PersistentIngressPlan -EndpointStatus $EndpointStatus)
+  $Candidate = Resolve-ConnectorUrlCandidate -ExplicitConnectorUrl $ConnectorUrl -State $State
+  $EndpointStatus = Invoke-EndpointStatus -ConnectorUrl ([string]$Candidate.url)
+  ConvertTo-JsonOutput -Payload (New-PersistentIngressPlan -EndpointStatus $EndpointStatus -ConnectorUrlSource ([string]$Candidate.source))
   exit 0
 }
 
 if ($Mode -eq 'RecordUrl') {
-  $RecordedConnectorUrl = ConvertTo-BoundedText -Value $ConnectorUrl -MaxLength 512
+  $Candidate = Resolve-ConnectorUrlCandidate -ExplicitConnectorUrl $ConnectorUrl -State $null -AllowState $false
+  $RecordedConnectorUrl = ConvertTo-BoundedText -Value $Candidate.url -MaxLength 512
   if ([string]::IsNullOrWhiteSpace($RecordedConnectorUrl)) {
     ConvertTo-JsonOutput -Payload ([ordered]@{
         kind = 'francis.chatgpt_voice.connector_control'
         ok = $false
         status = 'connector_url_required'
         connector_url = ''
+        connector_url_source = [string]$Candidate.source
         runtime_root = $RuntimeRoot
         state_path = $statePath
         blockers = @('connector_url_required')
@@ -444,6 +489,7 @@ if ($Mode -eq 'RecordUrl') {
         ok = $false
         status = 'connector_url_shape_invalid'
         connector_url = $RecordedConnectorUrl
+        connector_url_source = [string]$Candidate.source
         runtime_root = $RuntimeRoot
         state_path = $statePath
         endpoint_status = $EndpointStatus
@@ -459,6 +505,7 @@ if ($Mode -eq 'RecordUrl') {
     status = 'persistent_connector_url_recorded'
     ingress_mode = 'persistent_https'
     connector_url = $RecordedConnectorUrl
+    connector_url_source = [string]$Candidate.source
     connector_host = $ConnectorHost
     local_endpoint = "http://$HostAddress`:$Port$Path"
     mcp_launcher_pid = 0
@@ -468,7 +515,7 @@ if ($Mode -eq 'RecordUrl') {
   }
   Write-State -Payload $StatePayload
 
-  $Payload = New-StatusPayload -State (Read-State) -EndpointStatus $EndpointStatus -ReadOnly $false -StartsProcess $false -OpensPublicTunnel $false -WritesData $true
+  $Payload = New-StatusPayload -State (Read-State) -EndpointStatus $EndpointStatus -ConnectorUrlSource ([string]$Candidate.source) -ReadOnly $false -StartsProcess $false -OpensPublicTunnel $false -WritesData $true
   $Payload.status = 'persistent_connector_url_recorded'
   $Payload.ok = $true
   ConvertTo-JsonOutput -Payload $Payload
@@ -582,6 +629,7 @@ $StatePayload = [ordered]@{
   kind = 'francis.chatgpt_voice.connector_control.state'
   status = 'started'
   connector_url = $ConnectorUrl
+  connector_url_source = 'localtunnel'
   connector_host = $ConnectorHost
   local_endpoint = "http://$HostAddress`:$Port$Path"
   mcp_launcher_pid = $McpProcess.Id
@@ -596,7 +644,7 @@ $StatePayload = [ordered]@{
 Write-State -Payload $StatePayload
 
 $EndpointStatus = Invoke-EndpointStatus -ConnectorUrl $ConnectorUrl
-$Payload = New-StatusPayload -State (Read-State) -EndpointStatus $EndpointStatus -ReadOnly $false -StartsProcess $true -OpensPublicTunnel $true -WritesData $true
+$Payload = New-StatusPayload -State (Read-State) -EndpointStatus $EndpointStatus -ConnectorUrlSource 'localtunnel' -ReadOnly $false -StartsProcess $true -OpensPublicTunnel $true -WritesData $true
 $Payload.status = if ([string]$EndpointStatus.status -eq 'ready_for_chatgpt_connector') { 'started_ready' } else { 'started_unverified' }
 $Payload.ok = [bool]($Payload.status -eq 'started_ready')
 ConvertTo-JsonOutput -Payload $Payload
