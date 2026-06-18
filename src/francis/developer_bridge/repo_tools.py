@@ -214,14 +214,17 @@ def read_supervised_exec_receipt(
     target = _real_path(root / safe_run_id / safe_filename)
     if not _path_is_under(root, target):
         raise DeveloperBridgeError("artifact_path_denied", "receipt path escaped the supervised_exec artifact root")
-    # codeql[py/path-injection] run_id, filename, and artifact-root containment are validated above.
+    # run_id, filename, and artifact-root containment are validated above.
+    # codeql[py/path-injection]
     if not target.is_file():
         raise DeveloperBridgeError("receipt_not_found", "requested supervised_exec receipt file was not found")
 
     max_bytes = _bounded_int(max_bytes, minimum=1, maximum=_DEFAULT_MAX_BYTES)
-    # codeql[py/path-injection] run_id, filename, and artifact-root containment are validated above.
+    # run_id, filename, and artifact-root containment are validated above.
+    # codeql[py/path-injection]
     size = target.stat().st_size
-    # codeql[py/path-injection] run_id, filename, and artifact-root containment are validated above.
+    # run_id, filename, and artifact-root containment are validated above.
+    # codeql[py/path-injection]
     data = target.read_bytes()[: min(size, max_bytes)]
     truncated = size > max_bytes
     try:
