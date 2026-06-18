@@ -65,6 +65,11 @@ def test_orb_voice_overlay_lens_validation_reports_missing_chatgpt_source_receip
     assert payload["chatgpt_voice_receipts"]["clean_chatgpt_source_count"] == 0
     assert payload["chatgpt_voice_receipts"]["usable_chatgpt_source_count"] == 0
     assert payload["chatgpt_voice_receipts"]["transcript_unavailable_count"] == 0
+    assert payload["persistent_ingress_plan"]["kind"] == "francis.chatgpt_voice.persistent_ingress_plan"
+    assert payload["persistent_ingress_plan"]["status"] == "persistent_ingress_url_needed"
+    assert payload["persistent_ingress_plan"]["governance"]["read_only"] is True
+    assert payload["persistent_ingress_plan"]["governance"]["starts_process"] is False
+    assert payload["persistent_ingress_plan"]["governance"]["opens_public_tunnel"] is False
     assert payload["governance"]["read_only"] is True
     assert payload["governance"]["starts_process"] is False
     assert payload["governance"]["opens_public_tunnel"] is False
@@ -121,6 +126,9 @@ def test_orb_voice_overlay_lens_validation_classifies_chatgpt_source_receipt_wit
     assert latest["reply_present"] is True
     latest_usable = payload["chatgpt_voice_receipts"]["latest_usable_chatgpt_source"]
     assert latest_usable["receipt_id"] == "chatgpt-voice-recorded-test"
+    assert payload["persistent_ingress_plan"]["status"] == "persistent_ingress_url_needed"
+    checks = {check["id"]: check for check in payload["checks"]}
+    assert checks["persistent_ingress_plan_readback"]["passed"] is True
     summary = json.dumps(payload["chatgpt_voice_receipts"])
     assert "this text should not appear" not in summary
     assert payload["next_smallest_truthful_gap"] in {
@@ -184,5 +192,7 @@ def test_orb_voice_overlay_lens_validation_blocks_unavailable_chatgpt_source_rec
     assert checks["chatgpt_app_source_receipt_observed"]["passed"] is True
     assert checks["chatgpt_app_usable_transcript_observed"]["passed"] is False
     assert checks["chatgpt_app_usable_transcript_observed"]["status"] == "transcript_unavailable"
+    assert checks["persistent_ingress_plan_readback"]["passed"] is True
+    assert payload["persistent_ingress_plan"]["governance"]["writes_data"] is False
     summary = json.dumps(payload["chatgpt_voice_receipts"])
     assert "filler should not count" not in summary

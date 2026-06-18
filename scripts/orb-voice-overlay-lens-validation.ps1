@@ -403,6 +403,23 @@ if (-not [string]::IsNullOrWhiteSpace($ConnectorUrl)) {
 $ConnectorResult = Invoke-JsonScript -ScriptPath (Join-Path $PSScriptRoot 'chatgpt-voice-connector.ps1') -ScriptArgs $ConnectorArgs
 $Connector = Get-PropertyValue -Payload $ConnectorResult -Name 'payload'
 
+$PlanArgs = @(
+  '-Mode',
+  'PlanPersistentIngress',
+  '-Json',
+  '-RuntimeRoot',
+  $ConnectorRuntimeRoot,
+  '-HostAddress',
+  $ConnectorHostAddress,
+  '-Port',
+  [string]$ConnectorPort
+)
+if (-not [string]::IsNullOrWhiteSpace($ConnectorUrl)) {
+  $PlanArgs += @('-ConnectorUrl', $ConnectorUrl)
+}
+$PersistentIngressPlanResult = Invoke-JsonScript -ScriptPath (Join-Path $PSScriptRoot 'chatgpt-voice-connector.ps1') -ScriptArgs $PlanArgs
+$PersistentIngressPlan = Get-PropertyValue -Payload $PersistentIngressPlanResult -Name 'payload'
+
 $Receipts = Get-ChatGptVoiceReceiptSummary -Limit $ReceiptLimit
 $Readbacks = Get-OrbAndSandboxReadback
 $Orb = Get-PropertyValue -Payload $Readbacks -Name 'orb'
@@ -431,6 +448,15 @@ $ConnectorUrlShapeValid = [bool](Get-NestedPropertyValue -Payload $Connector -Pa
 $ConnectorUrlProvided = [bool](Get-NestedPropertyValue -Payload $Connector -Path @('endpoint_status', 'chatgpt_connector', 'connector_url', 'provided') -Default $false)
 $ConnectorUrlReason = ConvertTo-BoundedText -Value (Get-NestedPropertyValue -Payload $Connector -Path @('endpoint_status', 'chatgpt_connector', 'connector_url', 'reason') -Default 'connector_url_not_provided') -MaxLength 160
 $Checks += (New-Check -Id 'chatgpt_voice_public_connector_url' -Status $(if ($ConnectorUrlShapeValid) { 'shape_valid' } elseif ($ConnectorUrlProvided) { 'shape_invalid' } else { 'missing' }) -Passed $ConnectorUrlShapeValid -Evidence (ConvertTo-BoundedText -Value (Get-NestedPropertyValue -Payload $Connector -Path @('endpoint_status', 'chatgpt_connector', 'connector_url', 'url') -Default '') -MaxLength 240) -Reason $(if ($ConnectorUrlShapeValid) { '' } else { $ConnectorUrlReason }))
+
+$PersistentIngressPlanStatus = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $PersistentIngressPlan -Name 'status' -Default '') -MaxLength 96
+$PersistentIngressPlanSafe = (
+  [bool](Get-NestedPropertyValue -Payload $PersistentIngressPlan -Path @('governance', 'read_only') -Default $false) -and
+  -not [bool](Get-NestedPropertyValue -Payload $PersistentIngressPlan -Path @('governance', 'starts_process') -Default $true) -and
+  -not [bool](Get-NestedPropertyValue -Payload $PersistentIngressPlan -Path @('governance', 'opens_public_tunnel') -Default $true) -and
+  -not [bool](Get-NestedPropertyValue -Payload $PersistentIngressPlan -Path @('governance', 'writes_data') -Default $true)
+)
+$Checks += (New-Check -Id 'persistent_ingress_plan_readback' -Status $(if ([string]::IsNullOrWhiteSpace($PersistentIngressPlanStatus)) { 'missing' } else { $PersistentIngressPlanStatus }) -Passed $PersistentIngressPlanSafe -Evidence (ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $PersistentIngressPlan -Name 'local_endpoint' -Default '') -MaxLength 160) -Reason $(if ($PersistentIngressPlanSafe) { '' } else { 'persistent_ingress_plan_unavailable_or_not_read_only' }))
 
 $ReceiptObserved = [int](Get-PropertyValue -Payload $Receipts -Name 'count' -Default 0) -gt 0
 $Checks += (New-Check -Id 'chatgpt_voice_bridge_receipt_observed' -Status $(if ($ReceiptObserved) { 'observed' } else { 'missing' }) -Passed $ReceiptObserved -Evidence (ConvertTo-BoundedText -Value (Get-NestedPropertyValue -Payload $Receipts -Path @('latest', 'receipt_path') -Default '') -MaxLength 240) -Reason $(if ($ReceiptObserved) { '' } else { 'no_chatgpt_voice_bridge_receipts_found' }))
@@ -537,6 +563,7 @@ $NextGap = if (-not $ChatGptSourceObserved) {
     opens_public_tunnel = [bool](Get-NestedPropertyValue -Payload $Connector -Path @('governance', 'opens_public_tunnel') -Default $false)
     starts_process = [bool](Get-NestedPropertyValue -Payload $Connector -Path @('governance', 'starts_process') -Default $false)
   }
+  persistent_ingress_plan = $PersistentIngressPlan
   chatgpt_voice_receipts = $Receipts
   substrate_readback = [ordered]@{
     ok = [bool](Get-PropertyValue -Payload $Readbacks -Name 'ok' -Default $false)

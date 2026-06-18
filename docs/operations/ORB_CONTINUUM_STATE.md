@@ -125,6 +125,9 @@ proportions.
   receipt from a usable ChatGPT transcript receipt. `Transcript Unavailable`
   receipts are counted and surfaced separately, and they do not satisfy the
   end-to-end usable transcript check.
+- The Orb/voice/overlay-lens validation proof now embeds the read-only
+  persistent ingress plan, so a connector URL failure includes local endpoint
+  and provider-tool readiness without starting a tunnel or writing state.
 
 ## Current Task
 
@@ -752,6 +755,10 @@ Validated for the usable ChatGPT transcript proof split:
   `clean_chatgpt_source_count=6`, `usable_chatgpt_source_count=5`,
   `transcript_unavailable_count=1`,
   `latest_usable_chatgpt_source=chatgpt-voice-recorded-a0e54da9ad8646e4`,
+  `persistent_ingress_plan.status=persistent_ingress_url_needed`,
+  `persistent_ingress_plan.local_mcp_listener.ready=true`,
+  `cloudflared.available=false`, `ngrok.available=false`,
+  `caddy.available=false`, `ssh.available=true`,
   `mona_lisa_sandbox.passed=true`, and
   `chatgpt_voice_connector.connector_url_reason=connector_url_not_provided`.
 
