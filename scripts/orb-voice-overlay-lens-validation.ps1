@@ -186,6 +186,25 @@ function Read-JsonFile {
 function Get-ChatGptVoiceReceiptSummary {
   param([int]$Limit)
 
+  function Test-UnavailableTranscriptText {
+    param([string]$Value)
+
+    if ([string]::IsNullOrWhiteSpace($Value)) { return $false }
+    $Normalized = ($Value.ToLowerInvariant() -replace '[^a-z0-9]+', ' ').Trim()
+    $Normalized = ($Normalized -split '\s+' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ' '
+    $Markers = @(
+      'transcript unavailable',
+      'transcript not available',
+      'unavailable transcript'
+    )
+    foreach ($Marker in $Markers) {
+      if ($Normalized -eq $Marker -or $Normalized.StartsWith("$Marker ", [System.StringComparison]::Ordinal)) {
+        return $true
+      }
+    }
+    return $false
+  }
+
   $ReceiptRoot = Join-Path $DataRoot 'integrations\chatgpt_voice\receipts'
   $Files = @()
   if (Test-Path -LiteralPath $ReceiptRoot -PathType Container) {
@@ -196,6 +215,8 @@ function Get-ChatGptVoiceReceiptSummary {
 
   $Items = @()
   $ChatGptSourceCount = 0
+  $UsableChatGptSourceCount = 0
+  $TranscriptUnavailableCount = 0
   $ProbeSourceCount = 0
   foreach ($File in $Files) {
     $Receipt = Read-JsonFile -Path $File.FullName
@@ -208,13 +229,17 @@ function Get-ChatGptVoiceReceiptSummary {
     $Reply = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Receipt -Name 'reply') -MaxLength 512
     $Reason = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Receipt -Name 'reason') -MaxLength 96
     $TranscriptCount = [int](Get-PropertyValue -Payload $Receipt -Name 'transcript_char_count' -Default 0)
+    $TranscriptUnavailable = ($Reason -eq 'transcript_unavailable' -or (Test-UnavailableTranscriptText -Value (Get-PropertyValue -Payload $Receipt -Name 'transcript' -Default '')))
     $ReceiptId = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Receipt -Name 'receipt_id') -MaxLength 160
     if ([string]::IsNullOrWhiteSpace($ReceiptId)) {
       $ReceiptId = [System.IO.Path]::GetFileNameWithoutExtension($File.Name)
     }
     $CleanChatGptSource = ($Actor -eq 'chatgpt.voice' -and $Source -eq 'chatgpt.voice')
+    $UsableChatGptSource = ($CleanChatGptSource -and $Decision -eq 'recorded' -and $TranscriptCount -gt 0 -and -not $TranscriptUnavailable)
     $ProbeSource = ($Source -like 'codex.*' -or $Source -like '*.smoke' -or $Source -like '*probe*')
     if ($CleanChatGptSource) { $ChatGptSourceCount++ }
+    if ($UsableChatGptSource) { $UsableChatGptSourceCount++ }
+    if ($CleanChatGptSource -and $TranscriptUnavailable) { $TranscriptUnavailableCount++ }
     if ($ProbeSource) { $ProbeSourceCount++ }
 
     $Items += [ordered]@{
@@ -223,6 +248,8 @@ function Get-ChatGptVoiceReceiptSummary {
         actor = $Actor
         source = $Source
         source_claims_chatgpt_voice = [bool]$CleanChatGptSource
+        usable_chatgpt_transcript = [bool]$UsableChatGptSource
+        transcript_unavailable_detected = [bool]$TranscriptUnavailable
         source_claims_probe = [bool]$ProbeSource
         decision = $Decision
         reason = $Reason
@@ -242,9 +269,16 @@ function Get-ChatGptVoiceReceiptSummary {
     $Latest = $Items[0]
   }
   $LatestChatGpt = $null
+  $LatestUsableChatGpt = $null
   foreach ($Item in $Items) {
     if ([bool](Get-PropertyValue -Payload $Item -Name 'source_claims_chatgpt_voice' -Default $false)) {
       $LatestChatGpt = $Item
+      break
+    }
+  }
+  foreach ($Item in $Items) {
+    if ([bool](Get-PropertyValue -Payload $Item -Name 'usable_chatgpt_transcript' -Default $false)) {
+      $LatestUsableChatGpt = $Item
       break
     }
   }
@@ -252,9 +286,12 @@ function Get-ChatGptVoiceReceiptSummary {
     receipt_root = ConvertTo-RelativeRepoPath -Path $ReceiptRoot
     count = [int]$Items.Count
     clean_chatgpt_source_count = [int]$ChatGptSourceCount
+    usable_chatgpt_source_count = [int]$UsableChatGptSourceCount
+    transcript_unavailable_count = [int]$TranscriptUnavailableCount
     probe_source_count = [int]$ProbeSourceCount
     latest = $Latest
     latest_chatgpt_source = $LatestChatGpt
+    latest_usable_chatgpt_source = $LatestUsableChatGpt
     receipts = $Items
     transcript_text_redacted_from_summary = $true
   }
@@ -401,6 +438,10 @@ $Checks += (New-Check -Id 'chatgpt_voice_bridge_receipt_observed' -Status $(if (
 $ChatGptSourceObserved = [int](Get-PropertyValue -Payload $Receipts -Name 'clean_chatgpt_source_count' -Default 0) -gt 0
 $Checks += (New-Check -Id 'chatgpt_app_source_receipt_observed' -Status $(if ($ChatGptSourceObserved) { 'observed' } else { 'missing' }) -Passed $ChatGptSourceObserved -Evidence (ConvertTo-BoundedText -Value (Get-NestedPropertyValue -Payload $Receipts -Path @('latest_chatgpt_source', 'receipt_path') -Default '') -MaxLength 240) -Reason $(if ($ChatGptSourceObserved) { '' } else { 'no_recent_source_equals_chatgpt_voice_receipt_found' }))
 
+$UsableChatGptSourceObserved = [int](Get-PropertyValue -Payload $Receipts -Name 'usable_chatgpt_source_count' -Default 0) -gt 0
+$LatestChatGptUnavailable = [bool](Get-NestedPropertyValue -Payload $Receipts -Path @('latest_chatgpt_source', 'transcript_unavailable_detected') -Default $false)
+$Checks += (New-Check -Id 'chatgpt_app_usable_transcript_observed' -Status $(if ($UsableChatGptSourceObserved) { 'observed' } elseif ($LatestChatGptUnavailable) { 'transcript_unavailable' } else { 'missing' }) -Passed $UsableChatGptSourceObserved -Evidence (ConvertTo-BoundedText -Value (Get-NestedPropertyValue -Payload $Receipts -Path @('latest_usable_chatgpt_source', 'receipt_path') -Default '') -MaxLength 240) -Reason $(if ($UsableChatGptSourceObserved) { '' } elseif ($LatestChatGptUnavailable) { 'latest_chatgpt_source_receipt_has_unavailable_transcript' } else { 'no_recent_usable_chatgpt_voice_transcript_receipt_found' }))
+
 $OrbOk = [bool](Get-PropertyValue -Payload $Orb -Name 'ok' -Default $false)
 $OrbStatus = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Orb -Name 'status' -Default (Get-PropertyValue -Payload $Orb -Name 'subsystem' -Default 'unknown')) -MaxLength 96
 $Checks += (New-Check -Id 'orb_substrate_readback' -Status $OrbStatus -Passed $OrbOk -Evidence '/system/orb direct snapshot' -Reason $(if ($OrbOk) { '' } else { 'orb_snapshot_not_ok' }))
@@ -424,6 +465,7 @@ $CriticalIds = @(
   'lens_mcp_body_state_readback',
   'chatgpt_voice_bridge_receipt_observed',
   'chatgpt_app_source_receipt_observed',
+  'chatgpt_app_usable_transcript_observed',
   'orb_substrate_readback',
   'mona_lisa_sandbox_replay_evaluation',
   'doctrine_authority_bounds'
@@ -440,6 +482,8 @@ foreach ($CheckId in $CriticalIds) {
 $Status = 'proof_blocked'
 if (-not $ChatGptSourceObserved) {
   $Status = 'proof_blocked_no_chatgpt_app_source_receipt'
+} elseif (-not $UsableChatGptSourceObserved) {
+  $Status = 'proof_blocked_no_usable_chatgpt_app_transcript'
 } elseif (-not $ConnectorUrlShapeValid) {
   $Status = 'proof_partial_current_connector_url_missing'
 } elseif ($CriticalPassed) {
@@ -450,6 +494,8 @@ if (-not $ChatGptSourceObserved) {
 
 $NextGap = if (-not $ChatGptSourceObserved) {
   'trigger_fresh_chatgpt_app_voice_tool_call_and_confirm_source_receipt'
+} elseif (-not $UsableChatGptSourceObserved) {
+  'trigger_fresh_chatgpt_app_voice_tool_call_with_usable_transcript'
 } elseif (-not $ConnectorUrlShapeValid) {
   'record_current_https_mcp_connector_url_or_replace_tunnel_with_persistent_ingress'
 } elseif ($VoiceInputStatus -eq 'waiting_for_audio_signal') {

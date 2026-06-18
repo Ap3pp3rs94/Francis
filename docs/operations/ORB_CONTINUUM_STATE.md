@@ -121,6 +121,10 @@ proportions.
   turns even when ChatGPT appends filler text after the unavailable marker. The
   bridge writes a rejected-turn receipt and does not forward the filler into
   Francis chat, the mission path, or the conversation ledger.
+- The Orb/voice/overlay-lens validation proof now distinguishes a ChatGPT-source
+  receipt from a usable ChatGPT transcript receipt. `Transcript Unavailable`
+  receipts are counted and surfaced separately, and they do not satisfy the
+  end-to-end usable transcript check.
 
 ## Current Task
 
@@ -730,6 +734,26 @@ Validated for the ChatGPT voice unavailable-transcript guard:
   `reason=transcript_unavailable`, `chat_forward.forwarded=false`, receipt
   writing preserved, no raw audio, no execution authority, and no conversation
   ledger write.
+
+Validated for the usable ChatGPT transcript proof split:
+
+- PowerShell parser check for
+  `scripts\orb-voice-overlay-lens-validation.ps1` returned `parse_ok`.
+- `python -m pytest tests\test_orb_voice_overlay_lens_validation_script.py -q`
+  passed with `3 passed`.
+- `python -m ruff check --no-cache
+  tests\test_orb_voice_overlay_lens_validation_script.py` passed.
+- `python -m ruff format --check --no-cache
+  tests\test_orb_voice_overlay_lens_validation_script.py` passed with
+  `1 file already formatted`.
+- A live status-only proof run of
+  `scripts\orb-voice-overlay-lens-validation.ps1` returned
+  `status=proof_partial_current_connector_url_missing`,
+  `clean_chatgpt_source_count=6`, `usable_chatgpt_source_count=5`,
+  `transcript_unavailable_count=1`,
+  `latest_usable_chatgpt_source=chatgpt-voice-recorded-a0e54da9ad8646e4`,
+  `mona_lisa_sandbox.passed=true`, and
+  `chatgpt_voice_connector.connector_url_reason=connector_url_not_provided`.
 
 ## Blockers
 
