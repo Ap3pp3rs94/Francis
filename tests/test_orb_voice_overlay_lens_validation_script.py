@@ -73,6 +73,9 @@ def test_orb_voice_overlay_lens_validation_reports_missing_chatgpt_source_receip
     assert payload["chatgpt_voice_receipts"]["count"] == 0
     assert payload["chatgpt_voice_receipts"]["clean_chatgpt_source_count"] == 0
     assert payload["chatgpt_voice_receipts"]["usable_chatgpt_source_count"] == 0
+    assert payload["chatgpt_voice_receipts"]["fresh_chatgpt_source_count"] == 0
+    assert payload["chatgpt_voice_receipts"]["fresh_usable_chatgpt_source_count"] == 0
+    assert payload["chatgpt_voice_receipts"]["stale_chatgpt_source_count"] == 0
     assert payload["chatgpt_voice_receipts"]["transcript_unavailable_count"] == 0
     assert payload["persistent_ingress_plan"]["kind"] == "francis.chatgpt_voice.persistent_ingress_plan"
     assert payload["persistent_ingress_plan"]["status"] == "persistent_ingress_url_needed"
@@ -128,17 +131,25 @@ def test_orb_voice_overlay_lens_validation_classifies_chatgpt_source_receipt_wit
     assert payload["chatgpt_voice_receipts"]["count"] == 1
     assert payload["chatgpt_voice_receipts"]["clean_chatgpt_source_count"] == 1
     assert payload["chatgpt_voice_receipts"]["usable_chatgpt_source_count"] == 1
+    assert payload["chatgpt_voice_receipts"]["fresh_chatgpt_source_count"] == 1
+    assert payload["chatgpt_voice_receipts"]["fresh_usable_chatgpt_source_count"] == 1
+    assert payload["chatgpt_voice_receipts"]["stale_chatgpt_source_count"] == 0
     assert payload["chatgpt_voice_receipts"]["transcript_unavailable_count"] == 0
     latest = payload["chatgpt_voice_receipts"]["latest_chatgpt_source"]
     assert latest["receipt_id"] == "chatgpt-voice-recorded-test"
     assert latest["source_claims_chatgpt_voice"] is True
     assert latest["usable_chatgpt_transcript"] is True
+    assert latest["fresh_for_live_proof"] is True
+    assert latest["created_ts_present"] is False
+    assert latest["observed_ts_source"] == "file_mtime"
     assert latest["transcript_unavailable_detected"] is False
     assert latest["transcript_char_count"] == 48
     assert latest["transcript_redacted_from_summary"] is True
     assert latest["reply_present"] is True
     latest_usable = payload["chatgpt_voice_receipts"]["latest_usable_chatgpt_source"]
     assert latest_usable["receipt_id"] == "chatgpt-voice-recorded-test"
+    latest_fresh_usable = payload["chatgpt_voice_receipts"]["latest_fresh_usable_chatgpt_source"]
+    assert latest_fresh_usable["receipt_id"] == "chatgpt-voice-recorded-test"
     assert payload["persistent_ingress_plan"]["status"] == "persistent_ingress_url_needed"
     assert payload["persistent_ingress_plan"]["provider_config_hints"]["ngrok_reserved_domain"].endswith(
         "then record https://<reserved-domain>/mcp."
@@ -217,6 +228,70 @@ def test_orb_voice_overlay_lens_validation_uses_environment_connector_url(
     assert "environment URL proof should redact" not in summary
 
 
+def test_orb_voice_overlay_lens_validation_blocks_stale_chatgpt_source_receipt(
+    tmp_path: Path,
+) -> None:
+    data_dir = tmp_path / "data"
+    receipt_dir = data_dir / "integrations" / "chatgpt_voice" / "receipts"
+    receipt_dir.mkdir(parents=True)
+    receipt = {
+        "kind": "francis.chatgpt_voice.bridge.receipt",
+        "receipt_id": "chatgpt-voice-recorded-stale-test",
+        "created_ts": 1,
+        "actor": "chatgpt.voice",
+        "source": "chatgpt.voice",
+        "decision": "recorded",
+        "chat_forward_status": "forwarded",
+        "chat_forwarded": True,
+        "transcript": "stale transcript should not satisfy live proof",
+        "transcript_char_count": 46,
+        "reply": "I can hear you. Voice input is reaching Francis.",
+        "reply_source": "chat_forward.response",
+        "governance": {
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+    }
+    (receipt_dir / "chatgpt-voice-recorded-stale-test.json").write_text(json.dumps(receipt), encoding="utf-8")
+    port = _unused_local_port()
+
+    proc = _run_validation_script(
+        "-DataDir",
+        str(data_dir),
+        "-ConnectorPort",
+        str(port),
+        "-ChatGptReceiptFreshnessSeconds",
+        "60",
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["status"] == "proof_blocked_stale_chatgpt_app_source_receipt"
+    assert (
+        payload["next_smallest_truthful_gap"] == "trigger_fresh_chatgpt_app_voice_tool_call_and_confirm_source_receipt"
+    )
+    assert payload["chatgpt_voice_receipts"]["clean_chatgpt_source_count"] == 1
+    assert payload["chatgpt_voice_receipts"]["usable_chatgpt_source_count"] == 1
+    assert payload["chatgpt_voice_receipts"]["fresh_chatgpt_source_count"] == 0
+    assert payload["chatgpt_voice_receipts"]["fresh_usable_chatgpt_source_count"] == 0
+    assert payload["chatgpt_voice_receipts"]["stale_chatgpt_source_count"] == 1
+    assert payload["chatgpt_voice_receipts"]["freshness_window_seconds"] == 60
+    latest = payload["chatgpt_voice_receipts"]["latest_chatgpt_source"]
+    assert latest["receipt_id"] == "chatgpt-voice-recorded-stale-test"
+    assert latest["usable_chatgpt_transcript"] is True
+    assert latest["fresh_for_live_proof"] is False
+    assert latest["created_ts_present"] is True
+    assert latest["observed_ts_source"] == "created_ts"
+    assert latest["receipt_age_seconds"] > 60
+    assert payload["chatgpt_voice_receipts"]["latest_fresh_chatgpt_source"] is None
+    assert payload["chatgpt_voice_receipts"]["latest_fresh_usable_chatgpt_source"] is None
+    checks = {check["id"]: check for check in payload["checks"]}
+    assert checks["chatgpt_app_source_receipt_observed"]["status"] == "stale_only"
+    assert checks["chatgpt_app_source_receipt_observed"]["passed"] is False
+    summary = json.dumps(payload["chatgpt_voice_receipts"])
+    assert "stale transcript should not satisfy" not in summary
+
+
 def test_orb_voice_overlay_lens_validation_blocks_unavailable_chatgpt_source_receipt(
     tmp_path: Path,
 ) -> None:
@@ -262,6 +337,8 @@ def test_orb_voice_overlay_lens_validation_blocks_unavailable_chatgpt_source_rec
     assert payload["chatgpt_voice_receipts"]["count"] == 1
     assert payload["chatgpt_voice_receipts"]["clean_chatgpt_source_count"] == 1
     assert payload["chatgpt_voice_receipts"]["usable_chatgpt_source_count"] == 0
+    assert payload["chatgpt_voice_receipts"]["fresh_chatgpt_source_count"] == 1
+    assert payload["chatgpt_voice_receipts"]["fresh_usable_chatgpt_source_count"] == 0
     assert payload["chatgpt_voice_receipts"]["transcript_unavailable_count"] == 1
     latest = payload["chatgpt_voice_receipts"]["latest_chatgpt_source"]
     assert latest["source_claims_chatgpt_voice"] is True

@@ -144,6 +144,10 @@ proportions.
   script and connector wrapper pass the timeout through, and the Orb proof
   reports `connector_probe_timeout_seconds` without executing Francis tools,
   calling a model, opening a tunnel, or writing receipts.
+- The Orb/voice/overlay-lens validation proof now separates historical ChatGPT
+  voice receipts from fresh live-proof receipts. ChatGPT-source receipts outside
+  the freshness window remain visible for diagnosis, but they no longer satisfy
+  the live ChatGPT-origin receipt checks.
 
 ## Current Task
 
@@ -185,6 +189,10 @@ receipt confirms the bridge.
 
 If connector verification is requested, the reachability probe is bounded by
 `ConnectorProbeTimeoutSeconds` and remains read-only.
+
+ChatGPT-origin voice receipts also have a bounded live-proof freshness window.
+The default is 900 seconds. Receipts outside that window are counted as stale
+and do not satisfy the live proof.
 
 Acceptance criteria for the completed observation sub-slice:
 
@@ -318,6 +326,9 @@ Acceptance criteria for the completed multi-run review scoring sub-slice:
 - When running reachability verification, use the bounded proof path:
   `scripts\orb-voice-overlay-lens-validation.ps1 -VerifyConnector
   -ConnectorProbeTimeoutSeconds 5`.
+- When validating a live ChatGPT voice handoff, require a fresh source receipt
+  inside the configured freshness window. The default proof uses
+  `ChatGptReceiptFreshnessSeconds=900`.
 - Confirm live overlay microphone signal when the operator is present; the
   current safe readback remains `waiting_for_audio_signal`.
 
@@ -866,6 +877,31 @@ Validated for bounded ChatGPT voice connector reachability timeouts:
   `connector_probe_timeout_seconds=1`, `connector_usable_for_chatgpt=false`,
   `starts_process=false`, `opens_public_tunnel=false`, and `writes_repo=false`.
 
+Validated for fresh versus stale ChatGPT voice receipt proof:
+
+- PowerShell parser check for `scripts\orb-voice-overlay-lens-validation.ps1`
+  returned `parse_ok`.
+- `python -m pytest tests\test_orb_voice_overlay_lens_validation_script.py -q`
+  passed.
+- `python -m pytest tests\test_orb_voice_overlay_lens_validation_script.py
+  tests\test_chatgpt_voice_connector_script.py
+  tests\test_chatgpt_voice_mcp_script.py tests\test_chatgpt_voice_bridge.py -q`
+  passed.
+- `python -m ruff check --no-cache
+  tests\test_orb_voice_overlay_lens_validation_script.py` passed.
+- `python -m ruff format --check --no-cache
+  tests\test_orb_voice_overlay_lens_validation_script.py` passed with
+  `1 file already formatted`.
+- A live status-only proof run returned
+  `status=proof_blocked_stale_chatgpt_app_source_receipt`,
+  `next_smallest_truthful_gap=trigger_fresh_chatgpt_app_voice_tool_call_and_confirm_source_receipt`,
+  `fresh_chatgpt_source_count=0`,
+  `fresh_usable_chatgpt_source_count=0`, `stale_chatgpt_source_count=6`,
+  `clean_chatgpt_source_count=6`, `usable_chatgpt_source_count=5`,
+  `freshness_window_seconds=900`, latest ChatGPT receipt age `15569`,
+  `starts_process=false`, `opens_public_tunnel=false`, and
+  `writes_repo=false`.
+
 ## Blockers
 
 - The lens/overlay observation contract is metadata-only; it does not yet provide
@@ -886,6 +922,9 @@ Validated for bounded ChatGPT voice connector reachability timeouts:
   public HTTPS MCP URL is recorded; local MCP is listening, no
   `cloudflared`/`ngrok`/`caddy` provider is available in the current shell, and
   current ChatGPT app reachability is not proven by the status proof.
+- The current ChatGPT voice proof has only stale ChatGPT-origin receipts in the
+  default freshness window. A fresh ChatGPT tool-call receipt is required before
+  the proof can treat the bridge as live.
 - True backend model-call cancellation is not currently supported; stale reply
   suppression is the bounded behavior.
 
