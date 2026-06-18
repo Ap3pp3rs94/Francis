@@ -78018,6 +78018,71 @@ Remaining truthful gap:
   receipts, does not write proposal lineage, does not close the proposal-review
   gate, does not close the explicit-promotion gate, and does not start Stage 18.
 
+### 2026-06-17 - Stage 17 promotion-rule remediation records capability lineage pack metadata receipt
+
+Roadmap area: Stage 17 / Capability Economy, capability-pack promotion
+discipline for legacy generated packs.
+
+This pass used the existing governed promotion-rule remediation route to record
+metadata-rule and governance remediation for
+`legacy.generated.capabilitylineageplugin`. The route wrote one metadata
+receipt and updated local registry metadata for the 11 capabilities in that
+pack. This is a metadata-rule/governance remediation receipt only; it does not
+claim quality evidence, validation receipts, proposal lineage, proposal review,
+promotion, enablement, execution authority, or Stage 17 closure.
+
+Pack remediated:
+
+- `legacy.generated.capabilitylineageplugin`
+
+Receipt recorded:
+
+- `data/artifacts/plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781740947_legacy-generated-capabilitylineageplugin.json`
+
+Latest validation for this live Stage 17 remediation:
+
+- Governed dry-run:
+  `POST /plugins/capabilities/packs/promotion/rules/remediation/apply`
+  with actor `stage17.operator`,
+  `FRANCIS_API_ACTOR_SCOPES={"stage17.operator":["plugins.write"]}`,
+  `pack_ids: ["legacy.generated.capabilitylineageplugin"]`,
+  `max_pack_count: 1`, `max_total_capability_count: 500`, and
+  `max_capability_count_per_pack: 500` returned `ok: true`,
+  `status: dry_run`, `planned_pack_count: 1`,
+  `planned_capability_count: 11`, and no skipped items.
+- Governed apply:
+  the same route returned `ok: true`, `status: recorded`, `applied: true`,
+  `recorded_pack_count: 1`, `recorded_capability_count: 11`,
+  `failed: []`, and `skipped: []`.
+- Governance readback:
+  apply reported `writes_registry_metadata: true`, `writes_receipts: true`,
+  `metadata_rule_governance_remediation_only: true`,
+  `does_not_write_quality_evidence: true`,
+  `does_not_write_validation_receipts: true`,
+  `does_not_approve_proposals: true`,
+  `does_not_promote_capabilities: true`,
+  `does_not_enable_capabilities: true`,
+  `does_not_execute_capabilities: true`,
+  `promotion_authority: false`, `execution_authority: false`,
+  `approval_authority: false`, and `memory_write: false`.
+- Promotion-rule remediation readback:
+  the apply response showed
+  `legacy.generated.capabilitylineageplugin` no longer reported
+  `pack_metadata_receipt_missing`, `promotion_rules_missing`, or
+  `pack_governance_missing`. Its remaining blockers were `tests_missing`,
+  `docs_missing`, `validation_receipt_missing`, and `proposal_id_missing`.
+
+Remaining truthful gap:
+
+- This pass removed only metadata-rule/governance blockers for
+  `legacy.generated.capabilitylineageplugin`. It does not clear the
+  promotion-rule remediation queue, does not close Stage 17, does not approve
+  proposals, does not promote capabilities, does not grant execution authority,
+  does not grant mutation authority beyond governed metadata-rule/governance
+  remediation, does not write quality evidence, does not write validation
+  receipts, does not write proposal lineage, does not close the proposal-review
+  gate, does not close the explicit-promotion gate, and does not start Stage 18.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
