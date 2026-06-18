@@ -148,6 +148,10 @@ proportions.
   voice receipts from fresh live-proof receipts. ChatGPT-source receipts outside
   the freshness window remain visible for diagnosis, but they no longer satisfy
   the live ChatGPT-origin receipt checks.
+- ChatGPT voice bridge receipts now include both numeric `created_ts` and
+  human-readable UTC `created_at` fields derived from the same timestamp. This
+  improves receipt auditability without changing transcript forwarding,
+  authority, or freshness rules.
 
 ## Current Task
 
@@ -901,6 +905,17 @@ Validated for fresh versus stale ChatGPT voice receipt proof:
   `freshness_window_seconds=900`, latest ChatGPT receipt age `15569`,
   `starts_process=false`, `opens_public_tunnel=false`, and
   `writes_repo=false`.
+
+Validated for ChatGPT voice bridge receipt timestamps:
+
+- `python -m pytest tests\test_chatgpt_voice_bridge.py -q` passed.
+- `python -m ruff check --no-cache src\francis\chatgpt_voice_bridge.py
+  tests\test_chatgpt_voice_bridge.py` passed.
+- `python -m ruff format --check --no-cache
+  src\francis\chatgpt_voice_bridge.py tests\test_chatgpt_voice_bridge.py`
+  passed with `2 files already formatted`.
+- Focused tests verified `created_ts` and `created_at` on the ingress response
+  and persisted receipt file.
 
 ## Blockers
 

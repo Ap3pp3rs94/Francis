@@ -63,7 +63,13 @@ def test_chatgpt_voice_ingress_records_without_chat_forward(monkeypatch, tmp_pat
     assert body["receipt"]["transcript"] == "Francis can you hear me"
     assert body["receipt"]["turn_id"] == "voice-turn-1"
     assert body["receipt"]["reply_source"] == "bridge.recorded_only"
-    assert Path(body["receipt"]["receipt_path"]).exists()
+    assert isinstance(body["receipt"]["created_ts"], float)
+    assert body["receipt"]["created_at"].endswith("Z")
+    receipt_path = Path(body["receipt"]["receipt_path"])
+    assert receipt_path.exists()
+    persisted = json.loads(receipt_path.read_text(encoding="utf-8"))
+    assert persisted["created_ts"] == body["receipt"]["created_ts"]
+    assert persisted["created_at"] == body["receipt"]["created_at"]
     assert body["governance"]["writes_receipt"] is True
     assert body["governance"]["forwards_to_chat"] is False
     assert body["governance"]["raw_audio"] is False
@@ -155,6 +161,8 @@ def test_chatgpt_voice_ingress_rejects_unavailable_transcript_with_reply(monkeyp
     assert body["voice_response"]["grants_execution_authority"] is False
     assert body["receipt"]["reason"] == "transcript_unavailable"
     assert body["receipt"]["chat_forward_requested"] is True
+    assert isinstance(body["receipt"]["created_ts"], float)
+    assert body["receipt"]["created_at"].endswith("Z")
     assert body["receipt"]["governance"]["forwards_to_chat"] is False
     assert Path(body["receipt"]["receipt_path"]).exists()
     assert not (data_root / "conversations" / "ledger" / "ledger.jsonl").exists()

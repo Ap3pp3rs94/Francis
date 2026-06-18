@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +34,10 @@ _TRANSCRIPT_UNAVAILABLE_REPLY = (
 
 def _now() -> float:
     return time.time()
+
+
+def _utc_iso_from_ts(ts: float) -> str:
+    return datetime.fromtimestamp(ts, tz=UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def _safe_str(value: Any, default: str = "") -> str:
@@ -198,11 +203,13 @@ def chatgpt_voice_bridge_contract(actor: str = "") -> dict[str, Any]:
 
 def _write_receipt(payload: dict[str, Any]) -> dict[str, Any]:
     receipt_id = f"chatgpt-voice-{_safe_str(payload.get('decision'), 'recorded')}-{_digest(payload)}"
+    created_ts = _now()
     receipt = {
         "kind": f"{CHATGPT_VOICE_BRIDGE_KIND}.receipt",
         "receipt_id": receipt_id,
         "id": receipt_id,
-        "created_ts": _now(),
+        "created_ts": created_ts,
+        "created_at": _utc_iso_from_ts(created_ts),
         **payload,
         "governance": _honesty(
             read_only=False,
