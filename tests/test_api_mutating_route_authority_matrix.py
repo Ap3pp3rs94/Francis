@@ -283,6 +283,44 @@ def test_system_exposes_mutating_route_authority_matrix() -> None:
     assert "generic ledger write" in chat["denial_behavior"]
     assert "mission declaration authority" in chat["notes"]
 
+    chatgpt_voice = entries["/chatgpt-voice/ingress"]
+    assert chatgpt_voice["family"] == "chatgpt_voice_bridge"
+    assert chatgpt_voice["required_actor"] == "payload.actor or chatgpt.voice default"
+    assert "chatgpt.voice.bridge.write" in chatgpt_voice["required_scope"]
+    assert "chat.write" in chatgpt_voice["required_scope"]
+    assert chatgpt_voice["governance_maturity"] == "permission_gated"
+    assert "transcript" in chatgpt_voice["approval_requirement"]
+    assert "voice transcript ingress receipt" in chatgpt_voice["receipt_behavior"]
+    assert "permission_gate" in chatgpt_voice["denial_behavior"]
+    assert "no raw audio stream" in chatgpt_voice["notes"]
+
+    ingest_acquire = entries["/ingest/acquire/start"]
+    assert ingest_acquire["family"] == "ingest_acquire"
+    assert ingest_acquire["required_actor"] == "payload.request_actor, payload.api_actor, or payload.actor"
+    assert ingest_acquire["required_scope"] == "ingest.acquire"
+    assert ingest_acquire["governance_maturity"] == "permission_gated"
+    assert "permission_gate" in ingest_acquire["denial_behavior"]
+
+    ingest_forge = entries["/ingest/forge/synthesize"]
+    assert ingest_forge["family"] == "ingest_forge"
+    assert ingest_forge["required_actor"] == "payload.request_actor, payload.api_actor, or payload.actor"
+    assert ingest_forge["required_scope"] == "ingest.forge route-specific scope"
+    assert ingest_forge["governance_maturity"] == "permission_gated"
+    assert "does not promote capabilities" in ingest_forge["notes"]
+
+    ingest_lab_run = entries["/ingest/lab/run"]
+    assert ingest_lab_run["family"] == "ingest_lab"
+    assert ingest_lab_run["required_scope"] == "ingest.lab.execute.run"
+    assert ingest_lab_run["governance_maturity"] == "permission_and_policy_gated"
+    assert "Lab execution" in ingest_lab_run["denial_behavior"]
+
+    managed_copy = entries["/managed-copies/runtime-evidence-readback"]
+    assert managed_copy["family"] == "managed_copies"
+    assert managed_copy["required_actor"] == "payload.request_actor, payload.api_actor, or payload.actor"
+    assert managed_copy["required_scope"] == "managed_copies route-specific write scope"
+    assert managed_copy["governance_maturity"] == "permission_gated"
+    assert "no-copy/no-delete" in managed_copy["notes"]
+
     read_batch = entries["/operations/get_many"]
     assert read_batch["family"] == "operations_read_batch"
     assert read_batch["required_actor"] == "none"

@@ -308,6 +308,24 @@ _RULES: tuple[AuthorityRule, ...] = (
         notes="Generic chat ledger writes are scoped separately from mission declaration authority.",
     ),
     AuthorityRule(
+        family="chatgpt_voice_bridge",
+        prefixes=("/chatgpt-voice/ingress",),
+        required_actor="payload.actor or chatgpt.voice default",
+        required_scope="chatgpt.voice.bridge.write; chat.write is separately required for forwarding to /chat/send",
+        approval_requirement=(
+            "not_required_scope_gate_only; transcript guard must accept a usable transcript before chat forwarding"
+        ),
+        receipt_behavior=(
+            "ChatGPT voice transcript ingress receipt; optional forwarding passes through existing chat write gate"
+        ),
+        denial_behavior="api_permission_denied via permission_gate before voice ingress receipt write or chat forwarding",
+        governance_maturity="permission_gated",
+        notes=(
+            "Transcript-only bridge: no raw audio stream, no shell/input control, no screenshots, no native "
+            "ChatGPT app authority, and no execution or mutation authority beyond bounded receipt recording."
+        ),
+    ),
+    AuthorityRule(
         family="attachments",
         prefixes=("/attachments/upload",),
         required_actor="multipart request_actor, actor, or api.attachments default",
@@ -358,6 +376,44 @@ _RULES: tuple[AuthorityRule, ...] = (
         receipt_behavior="domain registry metadata",
         denial_behavior="api_permission_denied via permission_gate before mutation",
         governance_maturity="permission_gated",
+    ),
+    AuthorityRule(
+        family="ingest_acquire",
+        prefixes=("/ingest/acquire",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.acquire",
+        approval_requirement="route-specific acquisition approval/readback remains enforced by the ingest service",
+        receipt_behavior="source acquisition candidate or continuation record depending on route",
+        denial_behavior="api_permission_denied via permission_gate before acquisition mutation",
+        governance_maturity="permission_gated",
+        notes="Acquisition routes remain scoped ingest entrypoints and do not grant general Lab execution authority.",
+    ),
+    AuthorityRule(
+        family="ingest_forge",
+        prefixes=("/ingest/forge",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.forge route-specific scope",
+        approval_requirement=(
+            "route-specific synthesize/review/apply/bind approval posture remains enforced by the ingest service"
+        ),
+        receipt_behavior="Forge synthesis, review, dry-run, apply, bind, or continuation record depending on route",
+        denial_behavior="api_permission_denied via permission_gate before Forge ingest mutation",
+        governance_maturity="permission_gated",
+        notes="Forge ingest classification does not promote capabilities or bypass proposal/review governance.",
+    ),
+    AuthorityRule(
+        family="ingest_lab",
+        prefixes=("/ingest/lab/run",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="ingest.lab.execute.run",
+        approval_requirement="explicit lab run approval id and opt-in are consumed by IngestService before execution",
+        receipt_behavior="Lab capability run result and bounded execution metadata from the ingest service",
+        denial_behavior="api_permission_denied via permission_gate before Lab execution attempt",
+        governance_maturity="permission_and_policy_gated",
+        notes=(
+            "This is the narrow Lab execution route; it does not grant broader repository execution authority or "
+            "bypass source, approval, sandbox, and receipt controls enforced by the ingest service."
+        ),
     ),
     AuthorityRule(
         family="operations",
@@ -1237,6 +1293,22 @@ _RULES: tuple[AuthorityRule, ...] = (
         denial_behavior="api_permission_denied via permission_gate before registry load/save",
         governance_maturity="permission_gated",
         notes="Event actor remains provenance; request_actor/api_actor can carry the API caller identity for scoped writes.",
+    ),
+    AuthorityRule(
+        family="managed_copies",
+        prefixes=("/managed-copies",),
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="managed_copies route-specific write scope",
+        approval_requirement=(
+            "route-specific managed-copy contract/review gate; current write routes return blocked snapshots"
+        ),
+        receipt_behavior="managed-copy request, review, or runtime-evidence record depending on route",
+        denial_behavior="api_permission_denied via permission_gate before managed-copy review or evidence mutation",
+        governance_maturity="permission_gated",
+        notes=(
+            "Managed-copy routes preserve no-copy/no-delete/no-credential-revocation posture unless a future "
+            "route-specific contract explicitly enables and receipts that behavior."
+        ),
     ),
     AuthorityRule(
         family="missions",
