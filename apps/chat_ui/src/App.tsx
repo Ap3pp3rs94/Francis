@@ -859,6 +859,11 @@ function BridgeMonitorPanel(props: { baseUrl: string }) {
         <Pill label="mcp proof" value={proofReady ? "observed" : statusText(proof?.status)} tone={proofTone} />
         <Pill label="connector" value={statusText(connector?.status)} tone={connectorTone} />
         <Pill label="ingress" value={statusText(connector?.persistent_ingress_status)} tone={ingressTone} />
+        <Pill
+          label="overlay"
+          value={voice?.overlay_ready ? statusText(voice.overlay_status || "visible") : statusText(voice?.overlay_status || "missing")}
+          tone={voice?.overlay_ready ? "ready" : "blocked"}
+        />
       </div>
 
       {error ? (

@@ -41,6 +41,7 @@ export type VoiceBridgeMonitor = {
   voice_label: string;
   voice_identity_ok: boolean;
   generic_voice_label_observed: boolean;
+  overlay_status: string;
   overlay_ready: boolean;
   overlay_voice_status: string;
   voice_status: string;
@@ -226,6 +227,7 @@ function parseVoiceMonitor(value: unknown): VoiceBridgeMonitor {
     voice_label: safeString(raw["voice_label"]),
     voice_identity_ok: safeBoolean(raw["voice_identity_ok"]),
     generic_voice_label_observed: safeBoolean(raw["generic_voice_label_observed"]),
+    overlay_status: safeString(raw["overlay_status"]),
     overlay_ready: safeBoolean(raw["overlay_ready"]),
     overlay_voice_status: safeString(raw["overlay_voice_status"]),
     voice_status: safeString(raw["voice_status"]),

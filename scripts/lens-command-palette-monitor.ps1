@@ -1060,6 +1060,8 @@ function New-CommandPaletteMonitorProbe {
   [void]$Checks.Add((New-MonitorCheck -Id 'command_palette_governance' -Passed ((-not $ExecutionAuthority) -and (-not $MutationAuthority) -and (-not $OpensPaletteFromBridge)) -Status 'read_only' -Evidence 'execution=false mutation=false opens_palette=false'))
   if ($VoiceChecksEnabled) {
     $VoiceReadbackOk = [bool](Get-PropertyValue -Payload $VoiceMonitor -Name 'ok' -Default $false)
+    $VoiceOverlayStatus = [string](Get-PropertyValue -Payload $VoiceMonitor -Name 'overlay_status' -Default '')
+    $VoiceOverlayReady = [bool](Get-PropertyValue -Payload $VoiceMonitor -Name 'overlay_ready' -Default $false)
     $VoiceProviderReady = if ($VoiceChecksProvider -eq 'ElevenLabs') { [bool](Get-PropertyValue -Payload $VoiceMonitor -Name 'active_provider_configured' -Default $false) } else { $true }
     $VoiceIdentityOk = [bool](Get-PropertyValue -Payload $VoiceMonitor -Name 'voice_identity_ok' -Default $false)
     $GenericVoiceLabelObserved = [bool](Get-PropertyValue -Payload $VoiceMonitor -Name 'generic_voice_label_observed' -Default $false)
@@ -1071,6 +1073,7 @@ function New-CommandPaletteMonitorProbe {
     $McpProofStatus = [string](Get-PropertyValue -Payload $McpProof -Name 'status' -Default 'not_checked')
     $McpProofReceiptId = [string](Get-PropertyValue -Payload $McpProof -Name 'latest_fresh_usable_mcp_server_receipt_id' -Default '')
     [void]$Checks.Add((New-MonitorCheck -Id 'voice_overlay_readback' -Passed $VoiceReadbackOk -Status $(if ($VoiceReadbackOk) { 'readback_ready' } else { 'readback_failed' }) -Evidence 'scripts/lens-overlay-window.ps1 -Mode Status'))
+    [void]$Checks.Add((New-MonitorCheck -Id 'voice_overlay_runtime' -Passed ($VoiceReadbackOk -and $VoiceOverlayReady) -Status $(if ($VoiceReadbackOk -and $VoiceOverlayReady) { 'visible' } else { 'overlay_not_ready' }) -Evidence $(if ([string]::IsNullOrWhiteSpace($VoiceOverlayStatus)) { 'overlay_status_missing' } else { $VoiceOverlayStatus })))
     [void]$Checks.Add((New-MonitorCheck -Id 'voice_provider_readiness' -Passed $VoiceProviderReady -Status $(if ($VoiceProviderReady) { 'configured' } else { 'not_configured' }) -Evidence ([string](Get-PropertyValue -Payload $VoiceMonitor -Name 'selected_provider' -Default ''))))
     [void]$Checks.Add((New-MonitorCheck -Id 'voice_francis_identity' -Passed ($VoiceIdentityOk -and -not $GenericVoiceLabelObserved) -Status $(if ($VoiceIdentityOk -and -not $GenericVoiceLabelObserved) { 'francis_voice_identity_ready' } else { 'identity_drift' }) -Evidence ([string](Get-PropertyValue -Payload $VoiceMonitor -Name 'selected_voice' -Default ''))))
     [void]$Checks.Add((New-MonitorCheck -Id 'voice_chat_bridge_denials' -Passed ((-not $VoicePermissionDenied) -and (-not $LatestReceiptDenied)) -Status $(if ((-not $VoicePermissionDenied) -and (-not $LatestReceiptDenied)) { 'latest_receipt_clean' } else { 'denial_observed' }) -Evidence ("latest_denied={0} recent_denied={1}" -f $LatestReceiptDenied, $DeniedRecentReceiptCount)))

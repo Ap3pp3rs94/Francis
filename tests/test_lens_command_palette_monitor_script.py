@@ -372,6 +372,7 @@ def test_lens_command_palette_monitor_probe_records_voice_health(tmp_path: Path)
     assert payload["voice_monitor"]["chatgpt_mcp_proof"]["transcript_redacted_from_summary"] is True
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["voice_overlay_readback"]["status"] == "readback_ready"
+    assert checks["voice_overlay_runtime"]["status"] == "visible"
     assert checks["voice_francis_identity"]["status"] == "francis_voice_identity_ready"
     assert checks["voice_chat_bridge_denials"]["status"] == "latest_receipt_clean"
     assert "voice_chatgpt_mcp_tool_proof" not in checks
@@ -411,6 +412,38 @@ def test_lens_command_palette_monitor_can_require_chatgpt_mcp_proof(tmp_path: Pa
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["voice_chatgpt_mcp_tool_proof"]["status"] == "awaiting_chatgpt_mcp_tool_call"
     assert checks["voice_chatgpt_mcp_tool_proof"]["evidence"] == "no_fresh_usable_mcp_receipt"
+
+
+def test_lens_command_palette_monitor_flags_missing_overlay_runtime(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    status_path = tmp_path / "lens-status.json"
+    _write_json(status_path, _lens_status())
+
+    with _LocalCommandPaletteServer() as url:
+        proc = _run_monitor(
+            "-Mode",
+            "Probe",
+            "-DataDir",
+            str(data_dir),
+            "-CommandPaletteUrl",
+            url,
+            "-LensStatusPath",
+            str(status_path),
+            "-EnableVoiceChecks",
+            "-VoiceProvider",
+            "ElevenLabs",
+            "-TimeoutSeconds",
+            "3",
+        )
+
+    assert proc.returncode == 1
+    payload = _json_stdout(proc.stdout)
+    assert payload["status"] == "anomaly"
+    assert payload["voice_monitor"]["overlay_ready"] is False
+    assert "voice_overlay_runtime" in {item["id"] for item in payload["anomalies"]}
+    checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["voice_overlay_readback"]["status"] == "readback_ready"
+    assert checks["voice_overlay_runtime"]["status"] == "overlay_not_ready"
 
 
 def test_lens_command_palette_monitor_reports_non_chatgpt_mcp_receipt_without_proof(tmp_path: Path) -> None:

@@ -52,6 +52,7 @@ test("parseCommandPaletteMonitorStatus preserves latest receipt origin without t
       selected_voice: "Emma",
       voice_label: "Emma",
       voice_identity_ok: true,
+      overlay_status: "visible",
       overlay_ready: true,
       overlay_voice_status: "listening",
       voice_status: "listening",
@@ -105,6 +106,7 @@ test("parseCommandPaletteMonitorStatus preserves latest receipt origin without t
   assert.equal(status.monitor_process_alive, true);
   assert.equal(status.bridge.command_total, 2);
   assert.equal(status.voice_monitor.selected_voice, "Emma");
+  assert.equal(status.voice_monitor.overlay_status, "visible");
   assert.equal(status.voice_monitor.latest_receipt_actor, "chat_ui.voice");
   assert.equal(status.voice_monitor.latest_receipt_ingress_transport, "http_api");
   assert.equal(status.voice_monitor.latest_receipt_counts_as_chatgpt_mcp_proof, false);
