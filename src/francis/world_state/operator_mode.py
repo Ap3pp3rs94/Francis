@@ -221,6 +221,7 @@ def _backlog_snapshot(tasks_root: Path, approvals_root: Path) -> dict[str, int]:
         "pending_approvals": 0,
         "approval_pending_tasks": 0,
         "blocked_tasks": 0,
+        "failed_tasks": 0,
         "queued_tasks": 0,
         "running_tasks": 0,
     }
@@ -253,6 +254,9 @@ def _backlog_snapshot(tasks_root: Path, approvals_root: Path) -> dict[str, int]:
             if result_status in {"pending", "needs_approval"}:
                 backlog["approval_pending_tasks"] += 1
                 continue
+            if raw_status == "failed" or result_status in {"failed", "error"}:
+                backlog["failed_tasks"] += 1
+                continue
             if raw_status == "running":
                 backlog["running_tasks"] += 1
                 continue
@@ -268,9 +272,11 @@ def _focus_plane(backlog: dict[str, int]) -> dict[str, str]:
     pending_approvals = int(backlog.get("pending_approvals") or 0)
     approval_pending_tasks = int(backlog.get("approval_pending_tasks") or 0)
     blocked_tasks = int(backlog.get("blocked_tasks") or 0)
+    failed_tasks = int(backlog.get("failed_tasks") or 0)
     running_tasks = int(backlog.get("running_tasks") or 0)
     queued_tasks = int(backlog.get("queued_tasks") or 0)
     blocked_missions = int(backlog.get("blocked_missions") or 0)
+    failed_missions = int(backlog.get("failed_missions") or 0)
     deadlettered_missions = int(backlog.get("deadlettered_missions") or 0)
     active_missions = int(backlog.get("active_missions") or 0)
     queued_missions = int(backlog.get("queued_missions") or 0)
@@ -285,6 +291,9 @@ def _focus_plane(backlog: dict[str, int]) -> dict[str, str]:
     elif blocked_tasks > 0:
         plane_id = "P3_GOVERNANCE"
         reason = f"{blocked_tasks} {_pluralize(blocked_tasks, 'task')} blocked by policy or trust gates."
+    elif failed_tasks > 0:
+        plane_id = "P7_EXECUTION"
+        reason = f"{failed_tasks} {_pluralize(failed_tasks, 'task')} faulted and need operator review."
     elif running_tasks > 0:
         plane_id = "P7_EXECUTION"
         reason = f"{running_tasks} {_pluralize(running_tasks, 'task')} running through execution."
@@ -296,6 +305,9 @@ def _focus_plane(backlog: dict[str, int]) -> dict[str, str]:
         reason = (
             f"{blocked_missions} {_pluralize(blocked_missions, 'mission')} blocked and waiting for operator handback."
         )
+    elif failed_missions > 0:
+        plane_id = "P7_EXECUTION"
+        reason = f"{failed_missions} {_pluralize(failed_missions, 'mission')} faulted and need recovery review."
     elif deadlettered_missions > 0:
         plane_id = "P3_GOVERNANCE"
         reason = f"{deadlettered_missions} {_pluralize(deadlettered_missions, 'mission')} sitting in deadletter review."
@@ -450,6 +462,7 @@ def snapshot() -> dict[str, Any]:
         {
             "queued_missions": _safe_int(mission_counts.get("queued")),
             "blocked_missions": _safe_int(mission_counts.get("blocked")),
+            "failed_missions": _safe_int(mission_counts.get("failed")),
             "active_missions": _safe_int(mission_counts.get("active")),
             "completed_missions": _safe_int(mission_counts.get("completed")),
             "deadlettered_missions": _safe_int(mission_counts.get("deadlettered")),

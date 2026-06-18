@@ -78,14 +78,20 @@ proportions.
   exposes read-only queue/proposal readbacks at
   `GET /operations/sandbox-canvas/mona-lisa/evaluation-queue` and
   `GET /operations/sandbox-canvas/mona-lisa/improvement-proposals`.
+- Orb semantic operator state is now mapped from existing Francis substrate
+  readbacks instead of private UI state. `/system/orb` reports idle, queued,
+  acting, completed, blocked, and faulted states from mission/operation backlog
+  and handback evidence, and `/lens/mcp/status` carries that read-only semantic
+  state into the overlay body-state projection without changing the locked Orb
+  visuals or granting authority.
 
 ## Current Task
 
 The current task is the minimum truthful vertical slice plus the first durable
-improvement-channel surface. The latest completed sub-slice records sandbox
-replay/evaluation evidence into a governed, per-run follow-up queue and bounded
-improvement-proposal readback without promoting changes or claiming live desktop
-perception.
+improvement-channel surface. The latest completed sub-slice maps Orb semantic
+operator state from mission/operation substrate readbacks into `/system/orb`,
+`/lens/mcp/status`, and overlay runtime status receipts without changing the
+locked Orb visuals or claiming execution authority.
 
 Acceptance criteria for the completed observation sub-slice:
 
@@ -143,10 +149,23 @@ sub-slice:
 - recording does not run an operation, control the desktop, approve proposals,
   promote changes, claim visual similarity, or claim live desktop perception
 
+Acceptance criteria for the completed Orb semantic-state sub-slice:
+
+- Orb semantic state is derived from mission/operation substrate readbacks, not
+  private UI state
+- `/system/orb` exposes idle, queued, acting, completed, blocked, and faulted
+  semantic states with count evidence and focus references
+- failed tasks, failed missions, and deadlettered missions project as faulted
+  state without hiding the underlying receipt/focus references
+- Lens MCP body-state readback carries the Orb semantic state to
+  `/lens/mcp/status`
+- overlay runtime status JSON preserves semantic state fields for receipt and
+  status readback
+- the mapping remains read-only, preserves the visual lock, and grants no
+  execution or mutation authority
+
 ## Pending Tasks
 
-- Map Orb semantic state from existing Francis substrate state, not private UI
-  state.
 - Add structured observation receipts that include requested region, mapped
   overlay region, actual inspected region, source, status, evidence reference,
   inferred information, confidence, unknowns, and failure/refusal reason to the
@@ -428,6 +447,20 @@ Validated for the Mona Lisa sandbox durable review queue sub-slice:
   no operation run, desktop control, proposal approval, promotion, visual
   similarity claim, or live desktop perception claim.
 
+Validated for the Orb semantic-state substrate sub-slice:
+
+- `python -m pytest
+  tests\unit\test_kernel_contracts.py::test_orb_semantic_operator_state_maps_substrate_counts
+  tests\unit\test_kernel_contracts.py::test_orb_snapshot_handback_preserves_exact_mission_approval_handoff
+  tests\unit\test_lens_orb_mcp_status_bridge.py -q` passed.
+- `python -m pytest tests\test_lens_overlay_window_script.py
+  tests\test_orb_phase0_contracts.py -q` passed.
+- PowerShell parser check for `scripts\lens-overlay-window.ps1` returned
+  `parse_ok`.
+- `cd apps\chat_ui; node --test --experimental-strip-types
+  src\lens\mcpStatus.test.ts src\lens\orbGlyph.test.ts` passed with
+  `11 passed`.
+
 ## Blockers
 
 - The lens/overlay observation contract is metadata-only; it does not yet provide
@@ -473,6 +506,7 @@ Validated for the Mona Lisa sandbox durable review queue sub-slice:
 
 ## Exact Next Action
 
-Map the Orb semantic-state readback from existing Francis mission/operation
-state so the overlay body can represent queued, acting, completed, blocked, and
-faulted operator states without private UI state or visual changes.
+Add structured observation receipts to the Mona Lisa mission/operator receipt
+chain so requested, mapped, and actual inspected regions, source/status,
+evidence reference, inferred information, confidence, unknowns, and
+failure/refusal reasons are carried as governed receipt truth.

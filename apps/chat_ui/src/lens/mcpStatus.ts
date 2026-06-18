@@ -16,12 +16,28 @@ export type LensMcpToolState = {
   missing_required_tools: string[];
 };
 
+export type LensOrbSemanticState = {
+  ok: boolean;
+  status: string;
+  semantic_state: string;
+  source: string;
+  truth_source: string;
+  render_state: string;
+  activity_intensity: Record<string, unknown>;
+  semantic_operator_state: Record<string, unknown>;
+  read_only: boolean;
+  private_ui_state: boolean;
+  visual_change: boolean;
+  governance: Record<string, unknown>;
+};
+
 export type LensMcpStatus = {
   ok: boolean;
   kind: string;
   status: string;
   embodied_posture: string;
   resident: boolean;
+  orb_semantic_state: LensOrbSemanticState;
   blockers: string[];
   mcp: LensMcpToolState;
   routes: {
@@ -104,6 +120,24 @@ function parseComponents(value: unknown): Record<string, LensMcpStatusComponent>
   return out;
 }
 
+function parseOrbSemanticState(value: unknown): LensOrbSemanticState {
+  const raw = safeRecord(value);
+  return {
+    ok: safeBoolean(raw["ok"], false),
+    status: safeString(raw["status"]).trim(),
+    semantic_state: safeString(raw["semantic_state"]).trim(),
+    source: safeString(raw["source"]).trim(),
+    truth_source: safeString(raw["truth_source"]).trim(),
+    render_state: safeString(raw["render_state"]).trim(),
+    activity_intensity: safeRecord(raw["activity_intensity"]),
+    semantic_operator_state: safeRecord(raw["semantic_operator_state"]),
+    read_only: safeBoolean(raw["read_only"], true),
+    private_ui_state: safeBoolean(raw["private_ui_state"], false),
+    visual_change: safeBoolean(raw["visual_change"], false),
+    governance: safeRecord(raw["governance"]),
+  };
+}
+
 export function parseLensMcpStatus(value: unknown): LensMcpStatus {
   const raw = safeRecord(value);
   const mcp = safeRecord(raw["mcp"]);
@@ -121,6 +155,7 @@ export function parseLensMcpStatus(value: unknown): LensMcpStatus {
     status: safeString(raw["status"]).trim(),
     embodied_posture: safeString(raw["embodied_posture"]).trim(),
     resident: safeBoolean(raw["resident"], false),
+    orb_semantic_state: parseOrbSemanticState(raw["orb_semantic_state"]),
     blockers: safeStringList(raw["blockers"]),
     mcp: {
       expected_tool_count: expectedToolCount,

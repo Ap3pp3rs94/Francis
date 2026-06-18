@@ -12,6 +12,7 @@ from typing import Any
 from francis.governance.redaction import redact_governed_display_value
 from francis.mcp_gateway.tools import list_tools as _mcp_list_tools
 from francis.mcp_gateway.tools import run_tool as _mcp_run_tool
+from francis.world_state.orb import snapshot as _orb_status_snapshot
 
 EXPECTED_MIN_TOOL_COUNT = 18
 LENS_ORB_MCP_STATUS_KIND = "francis.lens_orb.mcp_status_bridge"
@@ -152,6 +153,43 @@ def _developer_bridge_status() -> dict[str, Any]:
     }
 
 
+def _orb_semantic_state() -> dict[str, Any]:
+    try:
+        payload = _orb_status_snapshot()
+    except Exception as exc:  # pragma: no cover - defensive readback fallback
+        return {
+            "ok": False,
+            "status": "unavailable",
+            "semantic_state": "unknown",
+            "source": "francis.world_state.orb",
+            "error": type(exc).__name__,
+            "read_only": True,
+            "private_ui_state": False,
+            "visual_change": False,
+            "governance": _honesty(),
+        }
+
+    state = _as_dict(payload.get("state"))
+    semantic = _as_dict(state.get("semantic_operator_state"))
+    semantic_state = _safe_str(semantic.get("state") or state.get("semantic_state"), "unknown") or "unknown"
+    return _redacted(
+        {
+            "ok": bool(payload.get("ok")) and bool(semantic),
+            "status": semantic_state if semantic else "unavailable",
+            "semantic_state": semantic_state,
+            "source": _safe_str(semantic.get("source"), "francis.world_state.orb"),
+            "truth_source": _safe_str(semantic.get("truth_source"), "mission_operation_readback"),
+            "render_state": _safe_str(state.get("render_state")),
+            "activity_intensity": _as_dict(state.get("activity_intensity")),
+            "semantic_operator_state": semantic,
+            "read_only": True,
+            "private_ui_state": False,
+            "visual_change": False,
+            "governance": _honesty(),
+        }
+    )
+
+
 def _body_posture(components: dict[str, dict[str, Any]], blockers: list[str]) -> str:
     takeover = components.get("francis.takeover.status", {})
     takeover_data = _as_dict(takeover.get("data"))
@@ -222,6 +260,7 @@ def lens_orb_mcp_status_bridge(*, actor: str = "lens-orb", receipt_limit: int = 
 
     posture = _body_posture(components, blockers)
     latest_receipt = _latest_receipt_id(optional_components.get("francis.receipts.readback", {}))
+    orb_semantic_state = _orb_semantic_state()
 
     return {
         "kind": LENS_ORB_MCP_STATUS_KIND,
@@ -232,6 +271,7 @@ def lens_orb_mcp_status_bridge(*, actor: str = "lens-orb", receipt_limit: int = 
         "embodied_posture": posture,
         "resident": False,
         "resident_claim": "not_enabled_by_mcp_status_bridge",
+        "orb_semantic_state": orb_semantic_state,
         "mcp": {
             # UI/operator-friendly alias paired with the explicit minimum contract.
             "expected_tool_count": EXPECTED_MIN_TOOL_COUNT,

@@ -64,6 +64,8 @@ def test_lens_overlay_window_status_reports_missing_runtime(tmp_path: Path) -> N
     assert payload["mcp_body_state"]["grants_execution_authority"] is False
     assert payload["mcp_body_state"]["grants_mutation_authority"] is False
     assert payload["mcp_body_state"]["live_status"] == "not_requested"
+    assert payload["mcp_body_state"]["semantic_state"] == "unknown"
+    assert payload["mcp_body_state"]["semantic_source"] == "not_requested"
     assert payload["next_smallest_truthful_gap"] == "overlay_window_runtime"
     assert payload["overlay_runtime"]["requirement_state"] == "missing"
     assert payload["overlay_runtime"]["blocker"] == "overlay_window_runtime_missing"
@@ -145,6 +147,18 @@ def test_lens_overlay_window_status_reports_live_runtime_readback(tmp_path: Path
                     "live_status": "ready",
                     "body_status": "ready",
                     "embodied_posture": "takeover_ready",
+                    "semantic_state": "blocked",
+                    "semantic_source": "francis.operator_mode.backlog_and_mission_continuity",
+                    "orb_semantic_state": {
+                        "ok": True,
+                        "status": "blocked",
+                        "semantic_state": "blocked",
+                        "source": "francis.operator_mode.backlog_and_mission_continuity",
+                        "truth_source": "mission_operation_readback",
+                        "read_only": True,
+                        "private_ui_state": False,
+                        "visual_change": False,
+                    },
                     "tool_count": 18,
                     "expected_tool_count": 18,
                     "resident": False,
@@ -221,6 +235,12 @@ def test_lens_overlay_window_status_reports_live_runtime_readback(tmp_path: Path
     assert payload["mcp_body_state"]["tool_count"] == 18
     assert payload["mcp_body_state"]["expected_tool_count"] == 18
     assert payload["mcp_body_state"]["embodied_posture"] == "takeover_ready"
+    assert payload["mcp_body_state"]["semantic_state"] == "blocked"
+    assert payload["mcp_body_state"]["semantic_source"] == "francis.operator_mode.backlog_and_mission_continuity"
+    assert payload["mcp_body_state"]["orb_semantic_state"]["semantic_state"] == "blocked"
+    assert payload["mcp_body_state"]["orb_semantic_state"]["read_only"] is True
+    assert payload["mcp_body_state"]["orb_semantic_state"]["private_ui_state"] is False
+    assert payload["mcp_body_state"]["orb_semantic_state"]["visual_change"] is False
     assert payload["next_smallest_truthful_gap"] == "lens_voice_default_microphone_signal"
     assert payload["overlay_runtime"]["process_alive"] is True
     assert payload["overlay_runtime"]["runtime_process_alive"] is False
@@ -538,6 +558,8 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "function Remove-OverlayVoiceTextFile" in script
     assert "function Test-OverlayPathWithinRoot" in script
     assert "function Test-OverlayVoiceSpeechProcess" in script
+    assert "Get-ProcessAlive -ProcessId $ProcessId" in script
+    assert "Get-Command -Name Get-CimInstance -ErrorAction SilentlyContinue" in script
     assert "function Stop-OverlayVoiceSpeechProcess" in script
     assert "function Start-OverlayVoiceSpeechProcess" in script
     assert "function New-OverlayWakeAliasList" in script
@@ -781,6 +803,9 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "playwright screenshot" not in script
     assert "$RefreshTimer.Interval = [TimeSpan]::FromSeconds(5)" in script
     assert "mcp_body_state = $McpBodyState" in script
+    assert "orb_semantic_state" in script
+    assert "semantic_state" in script
+    assert "semantic_source" in script
     assert "orb_visual = $OrbVisual" in script
     assert "status.{0}.tmp" in script
     assert "Move-OverlayRuntimeStateFile -TempPath $TempPath -DestinationPath $StatusPath" in script

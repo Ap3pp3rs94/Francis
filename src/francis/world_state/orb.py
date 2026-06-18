@@ -29,6 +29,7 @@ _PREFERRED_GATES = (
     "sandbox_execute",
 )
 _PRESSURE_LEVEL_RANK = {"clear": 0, "info": 1, "warning": 2, "error": 3, "critical": 4}
+_SEMANTIC_OPERATOR_STATES = ("idle", "queued", "acting", "completed", "blocked", "faulted")
 
 
 def _safe_str(value: Any) -> str:
@@ -263,12 +264,14 @@ def _activity_intensity(backlog: dict[str, Any]) -> dict[str, Any]:
     queued_tasks = _safe_int(backlog.get("queued_tasks"))
     queued_missions = _safe_int(backlog.get("queued_missions"))
     blocked_missions = _safe_int(backlog.get("blocked_missions"))
+    failed_tasks = _safe_int(backlog.get("failed_tasks"))
+    failed_missions = _safe_int(backlog.get("failed_missions"))
     deadlettered_missions = _safe_int(backlog.get("deadlettered_missions"))
     completed_missions = _safe_int(backlog.get("completed_missions"))
 
     if running_tasks > 0 or active_missions > 0:
         level = "active_execution"
-    elif blocked_missions > 0 or deadlettered_missions > 0:
+    elif failed_tasks > 0 or failed_missions > 0 or blocked_missions > 0 or deadlettered_missions > 0:
         level = "handoff"
     elif queued_tasks > 0 or queued_missions > 0:
         level = "staged"
@@ -284,8 +287,108 @@ def _activity_intensity(backlog: dict[str, Any]) -> dict[str, Any]:
         "queued_tasks": queued_tasks,
         "queued_missions": queued_missions,
         "blocked_missions": blocked_missions,
+        "failed_tasks": failed_tasks,
+        "failed_missions": failed_missions,
         "deadlettered_missions": deadlettered_missions,
         "completed_missions": completed_missions,
+    }
+
+
+def _semantic_focus_reference(handback_state: dict[str, Any]) -> dict[str, Any]:
+    focus = _as_dict(handback_state.get("focus"))
+    current_task = _as_dict(focus.get("current_task"))
+    latest_activity = _as_dict(focus.get("latest_activity"))
+    latest_memory_receipt = _as_dict(focus.get("latest_memory_receipt"))
+    if not latest_memory_receipt:
+        latest_memory_receipt = _as_dict(handback_state.get("latest_memory_receipt"))
+
+    payload = {
+        "source": _safe_str(handback_state.get("focus_source")).strip(),
+        "mission_id": _safe_str(focus.get("id")).strip(),
+        "mission_status": _safe_str(focus.get("status")).strip(),
+        "operation_id": (
+            _safe_str(current_task.get("operation_id")).strip()
+            or _safe_str(latest_activity.get("operation_id")).strip()
+            or _safe_str(latest_memory_receipt.get("operation_id")).strip()
+        ),
+        "operation_status": (
+            _safe_str(current_task.get("operation_status")).strip()
+            or _safe_str(latest_activity.get("operation_status")).strip()
+            or _safe_str(latest_activity.get("status")).strip()
+            or _safe_str(latest_memory_receipt.get("operation_status")).strip()
+        ),
+        "gate": _safe_str(current_task.get("gate")).strip() or _safe_str(latest_activity.get("gate")).strip(),
+        "approval_id": _safe_str(current_task.get("approval_id")).strip()
+        or _safe_str(focus.get("last_task_approval_id")).strip()
+        or _safe_str(latest_activity.get("approval_id")).strip(),
+        "trace_id": _safe_str(current_task.get("trace_id")).strip()
+        or _safe_str(latest_activity.get("trace_id")).strip()
+        or _safe_str(latest_memory_receipt.get("trace_id")).strip(),
+        "run_id": _safe_str(current_task.get("run_id")).strip()
+        or _safe_str(latest_activity.get("run_id")).strip()
+        or _safe_str(latest_memory_receipt.get("run_id")).strip(),
+    }
+    return {key: value for key, value in payload.items() if value}
+
+
+def _semantic_operator_state(
+    backlog: dict[str, Any], continuity: dict[str, Any], handback_state: dict[str, Any]
+) -> dict[str, Any]:
+    mission_counts = _as_dict(continuity.get("mission_counts"))
+    counts = {
+        "pending_approvals": _safe_int(backlog.get("pending_approvals")),
+        "approval_pending_tasks": _safe_int(backlog.get("approval_pending_tasks")),
+        "blocked_tasks": _safe_int(backlog.get("blocked_tasks")),
+        "failed_tasks": _safe_int(backlog.get("failed_tasks")),
+        "running_tasks": _safe_int(backlog.get("running_tasks")),
+        "queued_tasks": _safe_int(backlog.get("queued_tasks")),
+        "blocked_missions": _safe_int(backlog.get("blocked_missions") or mission_counts.get("blocked")),
+        "failed_missions": _safe_int(backlog.get("failed_missions") or mission_counts.get("failed")),
+        "deadlettered_missions": _safe_int(backlog.get("deadlettered_missions") or mission_counts.get("deadlettered")),
+        "active_missions": _safe_int(backlog.get("active_missions") or mission_counts.get("active")),
+        "queued_missions": _safe_int(backlog.get("queued_missions") or mission_counts.get("queued")),
+        "completed_missions": _safe_int(backlog.get("completed_missions") or mission_counts.get("completed")),
+    }
+
+    if counts["failed_tasks"] > 0 or counts["failed_missions"] > 0 or counts["deadlettered_missions"] > 0:
+        state = "faulted"
+        reason = "A failed task, failed mission, or deadlettered mission needs operator review."
+    elif (
+        counts["pending_approvals"] > 0
+        or counts["approval_pending_tasks"] > 0
+        or counts["blocked_tasks"] > 0
+        or counts["blocked_missions"] > 0
+    ):
+        state = "blocked"
+        reason = "Governance, approval, or mission handback is blocking progress."
+    elif counts["running_tasks"] > 0 or counts["active_missions"] > 0:
+        state = "acting"
+        reason = "Mission or operation substrate reports in-flight work."
+    elif counts["queued_tasks"] > 0 or counts["queued_missions"] > 0:
+        state = "queued"
+        reason = "Mission or operation substrate reports queued work."
+    elif counts["completed_missions"] > 0:
+        state = "completed"
+        reason = "Mission substrate reports completed work ready for review."
+    else:
+        state = "idle"
+        reason = "No active mission or operation backlog is reported."
+
+    return {
+        "state": state,
+        "semantic_state": state,
+        "supported_states": list(_SEMANTIC_OPERATOR_STATES),
+        "source": "francis.operator_mode.backlog_and_mission_continuity",
+        "truth_source": "mission_operation_readback",
+        "reason": reason,
+        "counts": counts,
+        "focus": _semantic_focus_reference(handback_state),
+        "private_ui_state": False,
+        "read_only": True,
+        "visual_change": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "confidence": "bounded_substrate_counts",
     }
 
 
@@ -371,6 +474,7 @@ def _orb_live_state(operator_report: dict[str, Any]) -> dict[str, Any]:
     incident_pressure = _incident_pressure(backlog, actionable_observer)
     activity_intensity = _activity_intensity(backlog)
     handback_state = _handback_state(continuity)
+    semantic_operator_state = _semantic_operator_state(backlog, continuity, handback_state)
 
     return {
         "mode": {
@@ -389,6 +493,8 @@ def _orb_live_state(operator_report: dict[str, Any]) -> dict[str, Any]:
         "observer": observer,
         "interjection_state": _interjection_state(incident_pressure, focus),
         "handback_state": handback_state,
+        "semantic_state": semantic_operator_state["state"],
+        "semantic_operator_state": semantic_operator_state,
         "render_state": _render_state(incident_pressure, activity_intensity, handback_state),
     }
 

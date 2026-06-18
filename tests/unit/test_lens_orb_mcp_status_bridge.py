@@ -35,6 +35,19 @@ def test_lens_orb_mcp_status_bridge_reports_read_only_body_state(tmp_path, monke
     assert out["status"] == "ready"
     assert out["resident"] is False
     assert out["embodied_posture"] in {"read_only", "pilot_ready", "takeover_ready"}
+    assert out["orb_semantic_state"]["read_only"] is True
+    assert out["orb_semantic_state"]["private_ui_state"] is False
+    assert out["orb_semantic_state"]["visual_change"] is False
+    assert out["orb_semantic_state"]["governance"]["grants_execution_authority"] is False
+    assert out["orb_semantic_state"]["governance"]["grants_mutation_authority"] is False
+    assert out["orb_semantic_state"]["semantic_state"] in {
+        "idle",
+        "queued",
+        "acting",
+        "completed",
+        "blocked",
+        "faulted",
+    }
     assert out["mcp"]["expected_tool_count"] == 18
     assert out["mcp"]["expected_min_tool_count"] == 18
     assert out["mcp"]["tool_count"] >= 18
@@ -75,6 +88,102 @@ def test_lens_orb_mcp_status_bridge_never_claims_implicit_takeover(tmp_path, mon
     assert takeover["control_transfer_active"] is False
     assert takeover["mode"] == "read_only"
     assert out["embodied_posture"] != "takeover_active"
+
+
+def test_lens_orb_mcp_status_bridge_surfaces_substrate_semantic_state(monkeypatch) -> None:
+    calls: list[tuple[str, dict[str, Any]]] = []
+
+    def fake_tools() -> list[dict[str, Any]]:
+        tools = [
+            "francis.health",
+            "francis.repo.status",
+            "francis.screen.status",
+            "francis.screen.session",
+            "francis.takeover.status",
+            "francis.input.status",
+            "francis.receipts.readback",
+            "francis.handoff.audit",
+        ]
+        tools.extend(f"francis.test.readback.{index}" for index in range(10))
+        return [{"name": name, "read_only": True, "requires_approval": False} for name in tools]
+
+    def fake_run(tool: str, args: dict[str, Any]) -> dict[str, Any]:
+        calls.append((tool, args))
+        data: dict[str, Any] = {}
+        if tool == "francis.takeover.status":
+            data["control_transfer_active"] = False
+        if tool == "francis.receipts.readback":
+            data["receipts"] = ["receipt_semantic"]
+        return {
+            "ok": True,
+            "status": "ready",
+            "tool": tool,
+            "data": data,
+            "governance": {
+                "read_only": True,
+                "raw_shell": False,
+                "raw_input": False,
+                "screenshots": False,
+                "pixels": False,
+                "authority": "readback",
+            },
+        }
+
+    monkeypatch.setattr(bridge, "_mcp_list_tools", fake_tools)
+    monkeypatch.setattr(bridge, "_mcp_run_tool", fake_run)
+    monkeypatch.setattr(
+        bridge,
+        "_orb_status_snapshot",
+        lambda: {
+            "ok": True,
+            "state": {
+                "render_state": "handback",
+                "activity_intensity": {"level": "handoff"},
+                "semantic_state": "blocked",
+                "semantic_operator_state": {
+                    "state": "blocked",
+                    "semantic_state": "blocked",
+                    "source": "francis.operator_mode.backlog_and_mission_continuity",
+                    "truth_source": "mission_operation_readback",
+                    "counts": {"blocked_missions": 1},
+                    "focus": {"mission_id": "msn_blocked", "operation_id": "tsk_blocked"},
+                    "read_only": True,
+                    "private_ui_state": False,
+                    "visual_change": False,
+                    "grants_execution_authority": False,
+                    "grants_mutation_authority": False,
+                },
+            },
+        },
+    )
+
+    out = bridge.lens_orb_mcp_status_bridge(actor="test.lens.orb")
+
+    assert out["ok"] is True
+    assert out["embodied_posture"] == "takeover_ready"
+    assert out["orb_semantic_state"]["semantic_state"] == "blocked"
+    assert out["orb_semantic_state"]["render_state"] == "handback"
+    assert out["orb_semantic_state"]["activity_intensity"]["level"] == "handoff"
+    semantic = out["orb_semantic_state"]["semantic_operator_state"]
+    assert semantic["truth_source"] == "mission_operation_readback"
+    assert semantic["focus"]["mission_id"] == "msn_blocked"
+    assert semantic["focus"]["operation_id"] == "tsk_blocked"
+    assert out["orb_semantic_state"]["read_only"] is True
+    assert out["orb_semantic_state"]["private_ui_state"] is False
+    assert out["orb_semantic_state"]["visual_change"] is False
+    assert out["orb_semantic_state"]["governance"]["read_only"] is True
+    assert out["orb_semantic_state"]["governance"]["grants_execution_authority"] is False
+    assert out["orb_semantic_state"]["governance"]["grants_mutation_authority"] is False
+    assert {tool for tool, _args in calls} == {
+        "francis.health",
+        "francis.repo.status",
+        "francis.screen.status",
+        "francis.screen.session",
+        "francis.takeover.status",
+        "francis.input.status",
+        "francis.receipts.readback",
+        "francis.handoff.audit",
+    }
 
 
 def test_lens_orb_mcp_status_bridge_degrades_when_required_mcp_tool_missing(monkeypatch) -> None:

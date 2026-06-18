@@ -390,6 +390,18 @@ controls:
     state = orb_module.snapshot()
 
     assert state["state"]["render_state"] == "handback"
+    assert state["state"]["semantic_state"] == "blocked"
+    semantic = state["state"]["semantic_operator_state"]
+    assert semantic["state"] == "blocked"
+    assert semantic["truth_source"] == "mission_operation_readback"
+    assert semantic["counts"]["blocked_missions"] == 1
+    assert semantic["focus"]["mission_id"] == "msn_approval_focus"
+    assert semantic["focus"]["approval_id"] == "apr_exact_321"
+    assert semantic["read_only"] is True
+    assert semantic["private_ui_state"] is False
+    assert semantic["visual_change"] is False
+    assert semantic["grants_execution_authority"] is False
+    assert semantic["grants_mutation_authority"] is False
     assert state["state"]["incident_pressure"]["source"] == "observer"
     assert state["state"]["incident_pressure"]["observer"]["score"] == 50
     assert state["state"]["interjection_state"]["reason"].startswith("Approval apr_exact_321")
@@ -400,6 +412,52 @@ controls:
     assert focus_item["last_task_previous_approval_id"] == "apr_exact_320"
     assert focus_item["last_task_approval_status"] == "pending"
     assert focus_item["latest_activity"]["name"] == "governance_hold"
+
+
+def test_orb_semantic_operator_state_maps_substrate_counts() -> None:
+    from francis.world_state.orb import _semantic_operator_state
+
+    base_continuity = {"mission_counts": {}}
+    base_handback = {"state": "none", "focus_source": "", "focus": {}}
+
+    assert _semantic_operator_state({"queued_tasks": 1}, base_continuity, base_handback)["state"] == "queued"
+    assert _semantic_operator_state({"running_tasks": 1}, base_continuity, base_handback)["state"] == "acting"
+    assert _semantic_operator_state({"completed_missions": 1}, base_continuity, base_handback)["state"] == "completed"
+    assert _semantic_operator_state({"approval_pending_tasks": 1}, base_continuity, base_handback)["state"] == "blocked"
+
+    faulted = _semantic_operator_state(
+        {"failed_tasks": 1, "queued_tasks": 4},
+        base_continuity,
+        {
+            "state": "failed_recovery",
+            "focus_source": "failed_preview",
+            "focus": {
+                "id": "msn_failed",
+                "status": "failed",
+                "current_task": {
+                    "operation_id": "tsk_failed",
+                    "operation_status": "failed",
+                    "trace_id": "trace_failed",
+                    "run_id": "run_failed",
+                },
+            },
+        },
+    )
+
+    assert faulted["state"] == "faulted"
+    assert faulted["semantic_state"] == "faulted"
+    assert faulted["supported_states"] == ["idle", "queued", "acting", "completed", "blocked", "faulted"]
+    assert faulted["source"] == "francis.operator_mode.backlog_and_mission_continuity"
+    assert faulted["focus"]["mission_id"] == "msn_failed"
+    assert faulted["focus"]["operation_id"] == "tsk_failed"
+    assert faulted["focus"]["operation_status"] == "failed"
+    assert faulted["focus"]["trace_id"] == "trace_failed"
+    assert faulted["focus"]["run_id"] == "run_failed"
+    assert faulted["private_ui_state"] is False
+    assert faulted["read_only"] is True
+    assert faulted["visual_change"] is False
+    assert faulted["grants_execution_authority"] is False
+    assert faulted["grants_mutation_authority"] is False
 
 
 def test_orb_snapshot_handback_uses_failed_preview_as_receipt_focus() -> None:

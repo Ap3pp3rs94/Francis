@@ -37,6 +37,24 @@ test("parseLensMcpStatus preserves truthful Orb/Lens body state", () => {
     status: "ready",
     embodied_posture: "takeover_ready",
     resident: false,
+    orb_semantic_state: {
+      ok: true,
+      status: "blocked",
+      semantic_state: "blocked",
+      source: "francis.operator_mode.backlog_and_mission_continuity",
+      truth_source: "mission_operation_readback",
+      render_state: "handback",
+      activity_intensity: { level: "handoff" },
+      semantic_operator_state: {
+        state: "blocked",
+        counts: { blocked_missions: 1 },
+        focus: { mission_id: "msn_blocked", operation_id: "tsk_blocked" },
+      },
+      read_only: true,
+      private_ui_state: false,
+      visual_change: false,
+      governance: { read_only: true, grants_execution_authority: false },
+    },
     blockers: [],
     mcp: {
       expected_tool_count: 18,
@@ -71,6 +89,17 @@ test("parseLensMcpStatus preserves truthful Orb/Lens body state", () => {
   assert.equal(status.status, "ready");
   assert.equal(status.embodied_posture, "takeover_ready");
   assert.equal(status.resident, false);
+  assert.equal(status.orb_semantic_state.semantic_state, "blocked");
+  assert.equal(status.orb_semantic_state.source, "francis.operator_mode.backlog_and_mission_continuity");
+  assert.equal(status.orb_semantic_state.truth_source, "mission_operation_readback");
+  assert.equal(status.orb_semantic_state.render_state, "handback");
+  assert.deepEqual(status.orb_semantic_state.activity_intensity, { level: "handoff" });
+  assert.equal(status.orb_semantic_state.semantic_operator_state["state"], "blocked");
+  assert.deepEqual(status.orb_semantic_state.semantic_operator_state["counts"], { blocked_missions: 1 });
+  assert.equal(status.orb_semantic_state.read_only, true);
+  assert.equal(status.orb_semantic_state.private_ui_state, false);
+  assert.equal(status.orb_semantic_state.visual_change, false);
+  assert.equal(status.orb_semantic_state.governance["grants_execution_authority"], false);
   assert.equal(status.mcp.expected_tool_count, 18);
   assert.equal(status.mcp.tool_count, 18);
   assert.deepEqual(status.mcp.missing_tools, []);

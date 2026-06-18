@@ -240,6 +240,8 @@ function New-McpBodyStateProjection {
     grants_execution_authority = $false
     grants_mutation_authority = $false
     live_status = 'not_requested'
+    semantic_state = 'unknown'
+    semantic_source = 'not_requested'
     message = 'Overlay runtime is linked to the read-only Lens-Orb MCP body-state route.'
   }
 }
@@ -307,6 +309,15 @@ function Read-McpBodyStateForOverlay {
     Set-McpBodyStateValue -Projection $Projection -Name 'live_status' -Value 'ready'
     Set-McpBodyStateValue -Projection $Projection -Name 'body_status' -Value (Get-StringProperty -Payload $Body -Name 'status' -Default 'unknown')
     Set-McpBodyStateValue -Projection $Projection -Name 'embodied_posture' -Value (Get-StringProperty -Payload $Body -Name 'embodied_posture' -Default 'unknown')
+    $OrbSemanticState = if ($null -ne $Body.PSObject.Properties['orb_semantic_state']) { $Body.PSObject.Properties['orb_semantic_state'].Value } else { $null }
+    if ($null -ne $OrbSemanticState) {
+      Set-McpBodyStateValue -Projection $Projection -Name 'orb_semantic_state' -Value $OrbSemanticState
+      Set-McpBodyStateValue -Projection $Projection -Name 'semantic_state' -Value (Get-StringProperty -Payload $OrbSemanticState -Name 'semantic_state' -Default 'unknown')
+      Set-McpBodyStateValue -Projection $Projection -Name 'semantic_source' -Value (Get-StringProperty -Payload $OrbSemanticState -Name 'source' -Default 'unknown')
+    } else {
+      Set-McpBodyStateValue -Projection $Projection -Name 'semantic_state' -Value 'unknown'
+      Set-McpBodyStateValue -Projection $Projection -Name 'semantic_source' -Value 'unavailable'
+    }
     Set-McpBodyStateValue -Projection $Projection -Name 'tool_count' -Value (Get-IntegerProperty -Payload $Mcp -Name 'tool_count' -Default 0)
     Set-McpBodyStateValue -Projection $Projection -Name 'expected_tool_count' -Value $ExpectedToolCount
     Set-McpBodyStateValue -Projection $Projection -Name 'missing_tools_count' -Value (Get-CountProperty -Payload $Mcp -Name 'missing_tools' -Default 0)
@@ -320,6 +331,8 @@ function Read-McpBodyStateForOverlay {
     Set-McpBodyStateValue -Projection $Projection -Name 'error' -Value ([string]$_.Exception.Message)
     Set-McpBodyStateValue -Projection $Projection -Name 'body_status' -Value 'unavailable'
     Set-McpBodyStateValue -Projection $Projection -Name 'embodied_posture' -Value 'unknown'
+    Set-McpBodyStateValue -Projection $Projection -Name 'semantic_state' -Value 'unknown'
+    Set-McpBodyStateValue -Projection $Projection -Name 'semantic_source' -Value 'unavailable'
     Set-McpBodyStateValue -Projection $Projection -Name 'tool_count' -Value 0
     Set-McpBodyStateValue -Projection $Projection -Name 'expected_tool_count' -Value 0
     Set-McpBodyStateValue -Projection $Projection -Name 'missing_tools_count' -Value 0
@@ -1751,6 +1764,15 @@ function Test-OverlayVoiceSpeechProcess {
   param([int]$ProcessId)
 
   if ($ProcessId -le 0) {
+    return $false
+  }
+  if (-not (Get-ProcessAlive -ProcessId $ProcessId)) {
+    return $false
+  }
+  if (-not ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT)) {
+    return $false
+  }
+  if ($null -eq (Get-Command -Name Get-CimInstance -ErrorAction SilentlyContinue)) {
     return $false
   }
   $Process = Get-CimInstance Win32_Process -Filter "ProcessId=$ProcessId" -ErrorAction SilentlyContinue
