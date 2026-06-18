@@ -26,8 +26,8 @@ _TRANSCRIPT_REQUIRED_REPLY = (
     "Please repeat it or send the text."
 )
 _TRANSCRIPT_UNAVAILABLE_REPLY = (
-    "I did not receive a usable transcript from ChatGPT voice, so I cannot answer that turn. "
-    "Please repeat it or send the text."
+    "ChatGPT reported that the transcript was unavailable, so I did not forward that as your message. "
+    "Please repeat the request or send the text."
 )
 
 
@@ -56,6 +56,8 @@ def _transcript_rejection_reason(text: str) -> str:
         return "transcript_required"
     normalized = " ".join("".join(char if char.isalnum() else " " for char in text.lower()).split())
     if normalized in _TRANSCRIPT_UNAVAILABLE_MARKERS:
+        return "transcript_unavailable"
+    if any(normalized.startswith(f"{marker} ") for marker in _TRANSCRIPT_UNAVAILABLE_MARKERS):
         return "transcript_unavailable"
     return ""
 
@@ -267,6 +269,13 @@ def record_chatgpt_voice_ingress(
                 requires_transcript=True,
             ),
             "receipt": receipt,
+            "chat_forward": {
+                "requested": bool(forward_to_chat),
+                "forwarded": False,
+                "status": "rejected",
+                "error": transcript_rejection_reason,
+                "response": {},
+            },
             "governance": _honesty(read_only=False, writes_receipt=True),
         }
 

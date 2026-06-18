@@ -147,12 +147,45 @@ def test_chatgpt_voice_ingress_rejects_unavailable_transcript_with_reply(monkeyp
     assert body["status"] == "rejected"
     assert body["error"] == "transcript_unavailable"
     assert body["reply"] == (
-        "I did not receive a usable transcript from ChatGPT voice, so I cannot answer that turn. "
-        "Please repeat it or send the text."
+        "ChatGPT reported that the transcript was unavailable, so I did not forward that as your message. "
+        "Please repeat the request or send the text."
     )
     assert body["voice_response"]["source"] == "bridge.transcript_guard"
     assert body["voice_response"]["requires_transcript"] is True
     assert body["voice_response"]["grants_execution_authority"] is False
+    assert body["receipt"]["reason"] == "transcript_unavailable"
+    assert body["receipt"]["chat_forward_requested"] is True
+    assert body["receipt"]["governance"]["forwards_to_chat"] is False
+    assert Path(body["receipt"]["receipt_path"]).exists()
+    assert not (data_root / "conversations" / "ledger" / "ledger.jsonl").exists()
+
+
+def test_chatgpt_voice_ingress_rejects_transcript_unavailable_prefix_with_filler(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", _scopes("chatgpt.voice.bridge.write", "chat.write"))
+
+    client = TestClient(create_app())
+
+    body = client.post(
+        "/chatgpt-voice/ingress",
+        json={
+            "actor": _ACTOR,
+            "transcript": "Transcript Unavailable\n\nAll right, I'm awaiting the next actionable step.",
+            "turn_id": "voice-turn-unavailable-prefix",
+        },
+    ).json()
+
+    assert body["ok"] is False
+    assert body["status"] == "rejected"
+    assert body["error"] == "transcript_unavailable"
+    assert body["voice_response"]["source"] == "bridge.transcript_guard"
+    assert body["voice_response"]["requires_transcript"] is True
+    assert body["chat_forward"]["requested"] is True
+    assert body["chat_forward"]["forwarded"] is False
     assert body["receipt"]["reason"] == "transcript_unavailable"
     assert body["receipt"]["chat_forward_requested"] is True
     assert body["receipt"]["governance"]["forwards_to_chat"] is False

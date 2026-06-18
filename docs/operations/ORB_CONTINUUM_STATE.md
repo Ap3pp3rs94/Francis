@@ -117,6 +117,10 @@ proportions.
   reports the local MCP endpoint, connector URL shape state, provider-tool
   readiness, and the governed `RecordUrl` handoff without writing runtime state,
   starting a process, opening a tunnel, or granting authority.
+- ChatGPT voice bridge transcript guards now reject `Transcript Unavailable`
+  turns even when ChatGPT appends filler text after the unavailable marker. The
+  bridge writes a rejected-turn receipt and does not forward the filler into
+  Francis chat, the mission path, or the conversation ledger.
 
 ## Current Task
 
@@ -711,6 +715,21 @@ Validated for the read-only persistent ingress planning path:
   `caddy.available=false`, `ssh.available=true`,
   `starts_process=false`, `opens_public_tunnel=false`, and
   `writes_data=false`.
+
+Validated for the ChatGPT voice unavailable-transcript guard:
+
+- `python -m pytest tests\test_chatgpt_voice_bridge.py -q` passed with
+  `7 passed`.
+- `python -m ruff check --no-cache src\francis\chatgpt_voice_bridge.py
+  tests\test_chatgpt_voice_bridge.py` passed.
+- `python -m ruff format --check --no-cache
+  src\francis\chatgpt_voice_bridge.py tests\test_chatgpt_voice_bridge.py`
+  passed with `2 files already formatted`.
+- The focused tests verified that exact `Transcript Unavailable` turns and
+  `Transcript Unavailable` followed by filler text are rejected with
+  `reason=transcript_unavailable`, `chat_forward.forwarded=false`, receipt
+  writing preserved, no raw audio, no execution authority, and no conversation
+  ledger write.
 
 ## Blockers
 
