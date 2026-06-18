@@ -186,6 +186,7 @@ def _receipt_optional_fields(payload: dict[str, Any]) -> dict[str, Any]:
         "observation_source",
         "observation_status",
         "observation_mode",
+        "structured_observation_receipt",
         "evidence_reference",
         "confidence",
         "unknown_information",
@@ -392,6 +393,38 @@ def _observation_unknowns(result: dict[str, Any] | None = None) -> list[str]:
     return unknowns
 
 
+def _structured_observation_receipt(
+    *,
+    decision: str,
+    status: str,
+    requested_region: dict[str, Any],
+    mapped_overlay_region: dict[str, Any],
+    actual_inspected_region: dict[str, Any],
+    source: dict[str, Any],
+    evidence_reference: dict[str, Any],
+    inferred_information: dict[str, Any],
+    confidence: float,
+    unknown_information: list[str],
+    failure_or_refusal_reason: str = "",
+) -> dict[str, Any]:
+    return {
+        "kind": "francis.lens.overlay.structured_observation_receipt",
+        "schema_version": 1,
+        "decision": _safe_str(decision),
+        "status": _safe_str(status),
+        "requested_region": requested_region,
+        "mapped_overlay_region": mapped_overlay_region,
+        "actual_inspected_region": actual_inspected_region,
+        "source": source,
+        "evidence_reference": evidence_reference,
+        "inferred_information": inferred_information,
+        "confidence": confidence,
+        "unknowns": unknown_information,
+        "failure_or_refusal_reason": _safe_str(failure_or_refusal_reason),
+        "governance": _observation_honesty(),
+    }
+
+
 def lens_observe_overlay_region(
     requested_region: dict[str, Any] | None = None,
     overlay_context: dict[str, Any] | None = None,
@@ -430,7 +463,28 @@ def lens_observe_overlay_region(
 
     if clean_source not in _OVERLAY_OBSERVATION_TOOLS:
         reason = "unsupported_overlay_observation_source"
-        receipt = _record_receipt({**base_receipt, "decision": "refused", "reason": reason})
+        structured = _structured_observation_receipt(
+            decision="refused",
+            status="refused",
+            requested_region=requested,
+            mapped_overlay_region=mapped,
+            actual_inspected_region={},
+            source={
+                "name": clean_source,
+                "status": "refused",
+                "mode": "live_readback",
+                "live_simulated_fixture_or_replay": "live",
+                "read_only": True,
+            },
+            evidence_reference={},
+            inferred_information={},
+            confidence=0.0,
+            unknown_information=_observation_unknowns(),
+            failure_or_refusal_reason=reason,
+        )
+        receipt = _record_receipt(
+            {**base_receipt, "decision": "refused", "reason": reason, "structured_observation_receipt": structured}
+        )
         return {
             "kind": "francis.lens.overlay.observation",
             "ok": False,
@@ -444,6 +498,7 @@ def lens_observe_overlay_region(
             "observation_source": {"tool": clean_source, "status": "refused"},
             "evidence_reference": {},
             "inferred_information": {},
+            "structured_observation_receipt": structured,
             "confidence": 0.0,
             "unknown_information": _observation_unknowns(),
             "failure_or_refusal_reason": reason,
@@ -453,7 +508,28 @@ def lens_observe_overlay_region(
 
     if mapped["status"] != "mapped":
         reason = _safe_str(mapped.get("reason"), "overlay_region_not_mapped")
-        receipt = _record_receipt({**base_receipt, "decision": "refused", "reason": reason})
+        structured = _structured_observation_receipt(
+            decision="refused",
+            status="blocked",
+            requested_region=requested,
+            mapped_overlay_region=mapped,
+            actual_inspected_region={},
+            source={
+                "name": clean_source,
+                "status": "not_called",
+                "mode": "live_readback",
+                "live_simulated_fixture_or_replay": "live",
+                "read_only": True,
+            },
+            evidence_reference={},
+            inferred_information={},
+            confidence=0.0,
+            unknown_information=_observation_unknowns(),
+            failure_or_refusal_reason=reason,
+        )
+        receipt = _record_receipt(
+            {**base_receipt, "decision": "refused", "reason": reason, "structured_observation_receipt": structured}
+        )
         return {
             "kind": "francis.lens.overlay.observation",
             "ok": False,
@@ -467,6 +543,7 @@ def lens_observe_overlay_region(
             "observation_source": {"tool": clean_source, "status": "not_called"},
             "evidence_reference": {},
             "inferred_information": {},
+            "structured_observation_receipt": structured,
             "confidence": 0.0,
             "unknown_information": _observation_unknowns(),
             "failure_or_refusal_reason": reason,
@@ -499,6 +576,28 @@ def lens_observe_overlay_region(
         "session": _as_dict(data.get("session")),
     }
     confidence = 0.35 if ok else 0.0
+    unknowns = _observation_unknowns(result)
+    failure_or_refusal_reason = "" if ok else _safe_str(result.get("error"), "observation_source_failed")
+    source = {
+        "name": clean_source,
+        "status": _safe_str(result.get("status")),
+        "mode": "live_readback",
+        "live_simulated_fixture_or_replay": "live",
+        "read_only": bool(governance.get("read_only")),
+    }
+    structured = _structured_observation_receipt(
+        decision="observed" if ok else "failed",
+        status="observed" if ok else "failed",
+        requested_region=requested,
+        mapped_overlay_region=mapped,
+        actual_inspected_region=actual_region,
+        source=source,
+        evidence_reference=evidence,
+        inferred_information=inferred,
+        confidence=confidence,
+        unknown_information=unknowns,
+        failure_or_refusal_reason=failure_or_refusal_reason,
+    )
     receipt = _record_receipt(
         {
             **base_receipt,
@@ -507,10 +606,11 @@ def lens_observe_overlay_region(
             "mcp_authority": governance.get("authority"),
             "actual_inspected_region": actual_region,
             "observation_status": "observed" if ok else "failed",
+            "structured_observation_receipt": structured,
             "evidence_reference": evidence,
             "confidence": confidence,
-            "unknown_information": _observation_unknowns(result),
-            "failure_or_refusal_reason": "" if ok else _safe_str(result.get("error"), "observation_source_failed"),
+            "unknown_information": unknowns,
+            "failure_or_refusal_reason": failure_or_refusal_reason,
         }
     )
     return {
@@ -531,9 +631,10 @@ def lens_observe_overlay_region(
         },
         "evidence_reference": evidence,
         "inferred_information": inferred,
+        "structured_observation_receipt": structured,
         "confidence": confidence,
-        "unknown_information": _observation_unknowns(result),
-        "failure_or_refusal_reason": "" if ok else _safe_str(result.get("error"), "observation_source_failed"),
+        "unknown_information": unknowns,
+        "failure_or_refusal_reason": failure_or_refusal_reason,
         "receipt": receipt,
         "governance": _observation_honesty(),
     }

@@ -383,6 +383,24 @@ def test_operations_run_mona_lisa_sandbox_canvas_from_chat_mission(monkeypatch, 
     assert receipt["status"] == "sandbox_completed"
     assert receipt["created_through_operator_primitives"] is True
     assert receipt["lens_overlay_observation"]["actual_inspected_region"]["width"] == 512
+    structured_receipt = receipt["structured_observation_receipts"][0]
+    assert structured_receipt == receipt["lens_overlay_observation"]["structured_observation_receipt"]
+    assert output["structured_observation_receipts"] == [structured_receipt]
+    assert structured_receipt["kind"] == "francis.lens.overlay.structured_observation_receipt"
+    assert structured_receipt["status"] == "observed"
+    assert structured_receipt["source"]["name"] == "sandbox_canvas_coordinate_model"
+    assert structured_receipt["source"]["live_simulated_fixture_or_replay"] == "sandbox"
+    assert structured_receipt["requested_region"] == receipt["lens_overlay_observation"]["requested_region"]
+    assert structured_receipt["mapped_overlay_region"] == receipt["lens_overlay_observation"]["mapped_overlay_region"]
+    assert structured_receipt["actual_inspected_region"]["width"] == 512
+    assert structured_receipt["evidence_reference"]["manifest_ref"] == str(manifest_path)
+    assert structured_receipt["evidence_reference"]["manifest_hash"] == output["manifest_hash"]
+    assert structured_receipt["evidence_reference"]["actions_hash"] == output["actions_hash"]
+    assert structured_receipt["evidence_reference"]["artifact_hash"] == output["artifact_hash"]
+    assert structured_receipt["inferred_information"]["primitive_count"] == output["operator_primitives_count"]
+    assert "desktop_pixels" in structured_receipt["unknowns"]
+    assert structured_receipt["failure_or_refusal_reason"] == ""
+    assert structured_receipt["governance"]["desktop_control"] is False
     assert receipt["orb_embodiment"]["visual_change"] is False
     assert receipt["orb_embodiment"]["visual_lock_preserved"] is True
     assert receipt["claim_completed_painting"] is True
@@ -418,6 +436,10 @@ def test_operations_run_mona_lisa_sandbox_canvas_from_chat_mission(monkeypatch, 
     assert evaluation_body["hashes"]["artifact"]["matches"] is True
     assert evaluation_body["hashes"]["actions"]["matches"] is True
     assert evaluation_body["hashes"]["manifest"]["matches"] is True
+    assert evaluation_body["checks"]["structured_observation_receipt_present"] is True
+    assert evaluation_body["checks"]["structured_observation_evidence_references_manifest"] is True
+    assert evaluation_body["checks"]["structured_observation_unknowns_live_desktop_pixels"] is True
+    assert evaluation_body["structured_observation_receipts"] == [structured_receipt]
     assert evaluation_body["recognizability"]["basis"] == "operator_primitive_replay_heuristic_not_pixel_similarity"
     assert evaluation_body["recognizability"]["recognizable_lower_complexity_target"] is True
     assert evaluation_body["governance"]["read_only"] is True
@@ -474,6 +496,7 @@ def test_operations_run_mona_lisa_sandbox_canvas_from_chat_mission(monkeypatch, 
     stored_record = json.loads(record_path.read_text(encoding="utf-8"))
     assert stored_record["evaluation"]["status"] == "evaluated"
     assert stored_record["evaluation"]["governance"]["read_only"] is True
+    assert stored_record["evaluation"]["structured_observation_receipts"] == [structured_receipt]
     assert stored_record["queue_item"]["queue_item_id"] == recorded_body["queue_item_id"]
     assert all(item["promotion"]["promoted"] is False for item in stored_record["improvement_proposals"])
 

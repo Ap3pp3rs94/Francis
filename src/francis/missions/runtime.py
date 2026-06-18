@@ -149,6 +149,10 @@ def _mona_lisa_sandbox_operation_input(
     )
     lens_observation["status"] = "sandbox_operation_queued_not_observed"
     lens_observation["live_desktop_observation"] = False
+    structured_receipts = _as_dict(lens_observation.get("structured_receipts"))
+    if structured_receipts:
+        structured_receipts["status"] = "contract_carried_to_sandbox_operation_not_recorded"
+        lens_observation["structured_receipts"] = structured_receipts
     mission_meta["lens_overlay_observation"] = lens_observation
 
     return {

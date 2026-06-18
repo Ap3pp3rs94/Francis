@@ -91,4 +91,6 @@ def test_orb_continuum_state_preserves_one_path_wiring_rules() -> None:
     assert "GET /operations/sandbox-canvas/mona-lisa/improvement-proposals" in state
     assert "Orb semantic operator state is now mapped from existing Francis substrate" in state
     assert "Acceptance criteria for the completed Orb semantic-state sub-slice" in state
-    assert "Add structured observation receipts to the Mona Lisa mission/operator receipt" in state
+    assert "Structured observation receipts now carry the Mona Lisa mission/operator" in state
+    assert "Acceptance criteria for the completed structured observation receipt sub-slice" in state
+    assert "Improve Mona Lisa recognizability scoring with offline fixture or pixel evidence" in state

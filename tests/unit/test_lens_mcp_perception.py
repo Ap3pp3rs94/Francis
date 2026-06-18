@@ -102,8 +102,17 @@ def test_overlay_observation_refuses_without_overlay_coordinate_model(tmp_path, 
     assert out["overlay_context"]["source"] == "missing"
     assert out["mapped_overlay_region"]["reason"] == "overlay_context_missing"
     assert out["observation_source"]["status"] == "not_called"
+    structured = out["structured_observation_receipt"]
+    assert structured["status"] == "blocked"
+    assert structured["requested_region"] == out["requested_region"]
+    assert structured["mapped_overlay_region"] == out["mapped_overlay_region"]
+    assert structured["actual_inspected_region"] == {}
+    assert structured["source"]["status"] == "not_called"
+    assert structured["unknowns"] == out["unknown_information"]
+    assert structured["failure_or_refusal_reason"] == "overlay_context_missing"
     assert "pixel_content" in out["unknown_information"]
     assert out["receipt"]["decision"] == "refused"
+    assert out["receipt"]["structured_observation_receipt"] == structured
     assert out["receipt"]["requested_region"]["space"] == "desktop"
     assert out["governance"]["uses_existing_overlay"] is True
     assert out["governance"]["creates_overlay"] is False
@@ -143,9 +152,21 @@ def test_overlay_observation_uses_existing_overlay_bounds_and_screen_readback(tm
     assert out["observation_source"]["live_simulated_fixture_or_replay"] == "live"
     assert out["evidence_reference"]["status"] == "metadata_readback"
     assert out["evidence_reference"]["content_included"] is False
+    structured = out["structured_observation_receipt"]
+    assert structured["kind"] == "francis.lens.overlay.structured_observation_receipt"
+    assert structured["schema_version"] == 1
+    assert structured["status"] == "observed"
+    assert structured["source"]["name"] == "francis.screen.session"
+    assert structured["source"]["live_simulated_fixture_or_replay"] == "live"
+    assert structured["evidence_reference"] == out["evidence_reference"]
+    assert structured["inferred_information"] == out["inferred_information"]
+    assert structured["confidence"] == out["confidence"]
+    assert "screenshot_pixels" in structured["unknowns"]
+    assert structured["governance"]["grants_execution_authority"] is False
     assert out["confidence"] == 0.35
     assert "screenshot_pixels" in out["unknown_information"]
     assert out["receipt"]["decision"] == "observed"
+    assert out["receipt"]["structured_observation_receipt"] == structured
     assert out["receipt"]["correlation_id"] == "corr-observe-test"
     assert out["receipt"]["mission_id"] == "mission-observe-test"
 

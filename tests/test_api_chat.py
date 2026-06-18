@@ -170,6 +170,22 @@ def test_chat_mona_lisa_voice_intent_declares_truthful_sandbox_mission(monkeypat
     assert observation["status"] == "required_not_observed"
     assert observation["route"] == "/lens/mcp/observe"
     assert observation["coordinate_model"] == "existing_overlay_required"
+    structured_contract = observation["structured_receipts"]
+    assert structured_contract["required"] is True
+    assert structured_contract["status"] == "contract_declared_not_recorded"
+    assert structured_contract["schema_version"] == 1
+    assert structured_contract["fields"] == [
+        "requested_region",
+        "mapped_overlay_region",
+        "actual_inspected_region",
+        "source",
+        "status",
+        "evidence_reference",
+        "inferred_information",
+        "confidence",
+        "unknowns",
+        "failure_or_refusal_reason",
+    ]
     assert observation["screenshots"] is False
     assert observation["pixels"] is False
     assert body["lens_overlay_observation"] == observation
@@ -234,6 +250,7 @@ def test_chat_mona_lisa_voice_intent_declares_truthful_sandbox_mission(monkeypat
     sandbox_observation = sandbox_input["lens_overlay_observation"]
     assert sandbox_observation["status"] == "sandbox_operation_queued_not_observed"
     assert sandbox_observation["live_desktop_observation"] is False
+    assert sandbox_observation["structured_receipts"]["status"] == "contract_carried_to_sandbox_operation_not_recorded"
     assert sandbox_observation["requested_region"] == {
         "coordinate_space": "sandbox.logical_pixels",
         "x": 0,

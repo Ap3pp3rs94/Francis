@@ -84,6 +84,13 @@ proportions.
   and handback evidence, and `/lens/mcp/status` carries that read-only semantic
   state into the overlay body-state projection without changing the locked Orb
   visuals or granting authority.
+- Structured observation receipts now carry the Mona Lisa mission/operator
+  receipt chain. Mission ingress declares the required receipt schema, the
+  sandbox operation carries the contract forward without claiming observation,
+  sandbox execution writes requested/mapped/actual regions, source/status,
+  evidence references, inferred information, confidence, unknowns, and
+  failure/refusal reason into the run receipt, and replay/evaluation readbacks
+  preserve that evidence without adding live desktop perception or authority.
 
 ## Current Task
 
@@ -92,6 +99,11 @@ improvement-channel surface. The latest completed sub-slice maps Orb semantic
 operator state from mission/operation substrate readbacks into `/system/orb`,
 `/lens/mcp/status`, and overlay runtime status receipts without changing the
 locked Orb visuals or claiming execution authority.
+
+The latest completed receipt sub-slice adds structured observation receipts to
+the Mona Lisa mission/operator chain. It is receipt/schema work only: it does
+not add screenshots, pixels, OCR, live desktop perception, proposal approval,
+promotion, or execution authority.
 
 Acceptance criteria for the completed observation sub-slice:
 
@@ -164,12 +176,29 @@ Acceptance criteria for the completed Orb semantic-state sub-slice:
 - the mapping remains read-only, preserves the visual lock, and grants no
   execution or mutation authority
 
+Acceptance criteria for the completed structured observation receipt sub-slice:
+
+- Mona Lisa mission ingress declares the structured observation receipt schema
+  before any observation or sandbox execution is claimed
+- the queued sandbox canvas operation carries the observation receipt contract
+  as `contract_carried_to_sandbox_operation_not_recorded`
+- sandbox execution writes `structured_observation_receipts` into the durable
+  run receipt and mirrors the first structured receipt inside
+  `lens_overlay_observation`
+- each structured receipt includes requested region, mapped overlay region,
+  actual inspected region, source, status, evidence reference, inferred
+  information, confidence, unknowns, and failure/refusal reason
+- sandbox evidence references point at local manifest/actions/artifact refs and
+  hashes without embedding raw content
+- replay/evaluation readback preserves the structured observation receipts and
+  checks that the receipt references the sandbox manifest and live desktop
+  pixels remain unknown
+- the receipt path remains sandbox/read-only evidence and grants no desktop
+  control, proposal approval, promotion, execution authority, or mutation
+  authority
+
 ## Pending Tasks
 
-- Add structured observation receipts that include requested region, mapped
-  overlay region, actual inspected region, source, status, evidence reference,
-  inferred information, confidence, unknowns, and failure/refusal reason to the
-  Mona Lisa mission/operator receipt chain.
 - Improve Mona Lisa recognizability scoring with offline fixture or pixel
   evidence only when that evidence path is truthfully labeled as fixture,
   replay, sandbox, or live.
@@ -461,6 +490,27 @@ Validated for the Orb semantic-state substrate sub-slice:
   src\lens\mcpStatus.test.ts src\lens\orbGlyph.test.ts` passed with
   `11 passed`.
 
+Validated for the structured Mona Lisa observation receipt sub-slice:
+
+- `python -m pytest tests\unit\test_lens_mcp_perception.py
+  tests\test_api_chat.py::test_chat_mona_lisa_voice_intent_declares_truthful_sandbox_mission
+  tests\test_api_operations.py::test_operations_run_mona_lisa_sandbox_canvas_from_chat_mission
+  tests\test_orb_phase0_contracts.py -q` passed with `16 passed`.
+- `python -m ruff check --no-cache src\francis\lens\mcp_perception.py
+  src\francis\chat\router.py src\francis\missions\runtime.py
+  src\francis\agent\sandbox_canvas.py tests\unit\test_lens_mcp_perception.py
+  tests\test_api_chat.py tests\test_api_operations.py
+  tests\test_orb_phase0_contracts.py` passed.
+- `python -m ruff format --check --no-cache` on the same source/test files
+  passed with `8 files already formatted`.
+- `.venv\Scripts\python.exe -m mypy src\francis\lens\mcp_perception.py
+  src\francis\chat\router.py src\francis\missions\runtime.py
+  src\francis\agent\sandbox_canvas.py` passed.
+- A local TestClient probe confirmed queued contract carry-forward, sandbox
+  structured observation receipt status `observed`, source `sandbox`, manifest
+  evidence reference present, live desktop unknowns preserved, and replay
+  evaluation `passed=true`.
+
 ## Blockers
 
 - The lens/overlay observation contract is metadata-only; it does not yet provide
@@ -506,7 +556,6 @@ Validated for the Orb semantic-state substrate sub-slice:
 
 ## Exact Next Action
 
-Add structured observation receipts to the Mona Lisa mission/operator receipt
-chain so requested, mapped, and actual inspected regions, source/status,
-evidence reference, inferred information, confidence, unknowns, and
-failure/refusal reasons are carried as governed receipt truth.
+Improve Mona Lisa recognizability scoring with offline fixture or pixel evidence
+only when that evidence path is truthfully labeled as fixture, replay, sandbox,
+or live.

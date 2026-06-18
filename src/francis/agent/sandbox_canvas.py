@@ -95,6 +95,83 @@ def _lens_overlay_observation(inputs: dict[str, Any], mission_meta: dict[str, An
     return _dict(_input_meta(inputs).get("lens_overlay_observation"))
 
 
+def _structured_observation_receipt(
+    *,
+    receipt_id: str,
+    trace_id: str,
+    run_id: str,
+    mission_id: str,
+    requested_region: dict[str, Any],
+    mapped_region: dict[str, Any],
+    actual_region: dict[str, Any],
+    manifest_path: Path,
+    manifest_hash: str,
+    action_path: Path,
+    action_hash: str,
+    svg_path: Path,
+    svg_hash: str,
+    primitive_count: int,
+    dry_run: bool,
+) -> dict[str, Any]:
+    status = "planned" if dry_run else "observed"
+    return {
+        "kind": "francis.lens.overlay.structured_observation_receipt",
+        "schema_version": 1,
+        "receipt_id": receipt_id,
+        "trace_id": trace_id,
+        "run_id": run_id,
+        "mission_id": mission_id,
+        "decision": "observed",
+        "status": status,
+        "requested_region": requested_region,
+        "mapped_overlay_region": mapped_region,
+        "actual_inspected_region": actual_region,
+        "source": {
+            "name": "sandbox_canvas_coordinate_model",
+            "status": "sandbox_model_used",
+            "mode": "sandbox_replayable_artifact",
+            "live_simulated_fixture_or_replay": "sandbox",
+            "read_only": True,
+        },
+        "evidence_reference": {
+            "status": "sandbox_artifact_manifest",
+            "manifest_ref": str(manifest_path),
+            "manifest_hash": manifest_hash,
+            "actions_ref": str(action_path),
+            "actions_hash": action_hash,
+            "artifact_ref": str(svg_path) if svg_hash else "",
+            "artifact_hash": svg_hash,
+            "content_included": False,
+        },
+        "inferred_information": {
+            "canvas_bounds": actual_region,
+            "primitive_count": primitive_count,
+            "artifact_created": not dry_run,
+            "live_desktop_action": False,
+            "image_imported": False,
+        },
+        "confidence": 1.0 if not dry_run else 0.8,
+        "unknowns": [
+            "desktop_pixels",
+            "external_app_canvas_bounds",
+            "accessibility_tree",
+            "ocr_text",
+            "visual_similarity_to_external_screenshot",
+        ],
+        "failure_or_refusal_reason": "",
+        "governance": {
+            "read_only": True,
+            "sandbox_only": True,
+            "desktop_control": False,
+            "screenshots": False,
+            "pixels": False,
+            "ocr": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+    }
+
+
 def _canvas_dimensions(inputs: dict[str, Any]) -> tuple[int, int]:
     canvas = _dict(inputs.get("canvas"))
     width = _bounded_canvas_size(canvas.get("width") or inputs.get("width"))
@@ -602,6 +679,15 @@ def evaluate_mona_lisa_sandbox_artifact(
     action_kinds = {_safe_str(row.get("kind")) for row in actions}
     action_types = sorted({_safe_str(row.get("action")) for row in actions if _safe_str(row.get("action"))})
     live_desktop_flags = [row.get("live_desktop_action") for row in actions]
+    structured_observation_receipts = [
+        item for item in receipt.get("structured_observation_receipts") or [] if isinstance(item, dict)
+    ]
+    if not structured_observation_receipts:
+        nested_observation = _dict(_dict(receipt.get("lens_overlay_observation")).get("structured_observation_receipt"))
+        if nested_observation:
+            structured_observation_receipts.append(nested_observation)
+    first_observation = structured_observation_receipts[0] if structured_observation_receipts else {}
+    observation_evidence = _dict(first_observation.get("evidence_reference"))
     no_image_import = "<image" not in svg_text.lower()
     created_through_primitives = (
         primitive_count > 0
@@ -630,6 +716,11 @@ def evaluate_mona_lisa_sandbox_artifact(
         "artifact_hash_matches_receipt": bool(artifact_hash["matches"]),
         "actions_hash_matches_receipt": bool(actions_hash["matches"]),
         "manifest_hash_matches_receipt": bool(manifest_hash["matches"]),
+        "structured_observation_receipt_present": bool(structured_observation_receipts),
+        "structured_observation_evidence_references_manifest": _safe_str(observation_evidence.get("manifest_ref"))
+        == str(manifest_path),
+        "structured_observation_unknowns_live_desktop_pixels": "desktop_pixels"
+        in list(first_observation.get("unknowns") or []),
     }
     passed = all(checks.values()) and bool(recognizability["recognizable_lower_complexity_target"])
     evaluation = {
@@ -659,6 +750,7 @@ def evaluate_mona_lisa_sandbox_artifact(
             "manifest": manifest_hash,
         },
         "recognizability": recognizability,
+        "structured_observation_receipts": structured_observation_receipts,
         "failure_classification": []
         if passed
         else [key for key, value in checks.items() if not value]
@@ -1050,16 +1142,35 @@ def paint_mona_lisa_sandbox(inputs: dict[str, Any], objective: str) -> dict[str,
     }
     _atomic_write_json(manifest_path, manifest)
     manifest_hash = _sha256(manifest_path)
+    receipt_id = f"sandbox_canvas_{uuid.uuid4().hex[:16]}"
+    mission_id = _safe_str(inputs.get("mission_id") or mission_meta.get("mission_id"))
+    structured_observation = _structured_observation_receipt(
+        receipt_id=f"{receipt_id}.observation.1",
+        trace_id=trace_id,
+        run_id=run_id,
+        mission_id=mission_id,
+        requested_region=requested_region,
+        mapped_region=mapped_region,
+        actual_region=actual_region,
+        manifest_path=manifest_path,
+        manifest_hash=manifest_hash,
+        action_path=action_path,
+        action_hash=action_hash,
+        svg_path=svg_path,
+        svg_hash=svg_hash,
+        primitive_count=len(primitives),
+        dry_run=dry_run,
+    )
 
     receipt = {
         "kind": f"{CANVAS_KIND}.receipt",
-        "receipt_id": f"sandbox_canvas_{uuid.uuid4().hex[:16]}",
+        "receipt_id": receipt_id,
         "trace_id": trace_id,
         "run_id": run_id,
         "status": "planned" if dry_run else "sandbox_completed",
         "created_at": _now_iso(),
         "execution_mode": "dry_run" if dry_run else "sandbox",
-        "mission_id": _safe_str(inputs.get("mission_id") or mission_meta.get("mission_id")),
+        "mission_id": mission_id,
         "mission_meta_present": bool(mission_meta),
         "intent_kind": _safe_str(mission_meta.get("intent_kind")),
         "operator_contract": {
@@ -1086,7 +1197,9 @@ def paint_mona_lisa_sandbox(inputs: dict[str, Any], objective: str) -> dict[str,
                 "visual similarity to external screenshot",
             ],
             "failure_or_refusal_reason": "",
+            "structured_observation_receipt": structured_observation,
         },
+        "structured_observation_receipts": [structured_observation],
         "orb_embodiment": {
             "truth_source": "operation_result",
             "semantic_state": "acting" if not dry_run else "planning",
@@ -1146,6 +1259,7 @@ def paint_mona_lisa_sandbox(inputs: dict[str, Any], objective: str) -> dict[str,
         "canvas": actual_region,
         "operator_primitives_count": len(primitives),
         "created_through_operator_primitives": True,
+        "structured_observation_receipts": [structured_observation],
         "no_pasted_image": True,
         "imports_finished_image": False,
         "live_desktop_execution": False,
