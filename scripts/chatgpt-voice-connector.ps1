@@ -149,6 +149,64 @@ function Get-CommandReadiness {
   }
 }
 
+function New-ConnectorIngressProfile {
+  param(
+    [object]$EndpointStatus,
+    [string]$ConnectorUrlSource = 'none'
+  )
+
+  $ConnectorUrl = ConvertTo-BoundedText -Value (Get-NestedPropertyValue -Payload $EndpointStatus -Path @('chatgpt_connector', 'connector_url', 'url') -Default '') -MaxLength 512
+  $ConnectorProvided = [bool](Get-NestedPropertyValue -Payload $EndpointStatus -Path @('chatgpt_connector', 'connector_url', 'provided') -Default $false)
+  $ConnectorShapeValid = [bool](Get-NestedPropertyValue -Payload $EndpointStatus -Path @('chatgpt_connector', 'connector_url', 'shape_valid') -Default $false)
+  $ConnectorReason = ConvertTo-BoundedText -Value (Get-NestedPropertyValue -Payload $EndpointStatus -Path @('chatgpt_connector', 'connector_url', 'reason') -Default 'connector_url_not_provided') -MaxLength 160
+  $Source = ConvertTo-BoundedText -Value $ConnectorUrlSource -MaxLength 160
+  if ([string]::IsNullOrWhiteSpace($Source)) {
+    $Source = 'none'
+  }
+
+  $ConnectorHostName = ''
+  if (-not [string]::IsNullOrWhiteSpace($ConnectorUrl)) {
+    try {
+      $ConnectorHostName = ([System.Uri]$ConnectorUrl).Host
+    } catch {
+      $ConnectorHostName = ''
+    }
+  }
+
+  $KnownLocalTunnel = (
+    $Source -eq 'localtunnel' -or
+    (-not [string]::IsNullOrWhiteSpace($ConnectorHostName) -and $ConnectorHostName.EndsWith('.loca.lt', [System.StringComparison]::OrdinalIgnoreCase))
+  )
+  $PersistentCandidate = [bool]($ConnectorShapeValid -and -not $KnownLocalTunnel)
+  $Profile = if (-not $ConnectorProvided) {
+    'missing'
+  } elseif (-not $ConnectorShapeValid) {
+    'invalid_https_mcp_url'
+  } elseif ($KnownLocalTunnel) {
+    'localtunnel_ephemeral'
+  } else {
+    'persistent_https_candidate'
+  }
+
+  $Blockers = @()
+  if (-not $ConnectorProvided) {
+    $Blockers += 'connector_url_required'
+  } elseif (-not $ConnectorShapeValid) {
+    $Blockers += $ConnectorReason
+  } elseif ($KnownLocalTunnel) {
+    $Blockers += 'localtunnel_url_is_not_persistent_ingress'
+  }
+
+  return [ordered]@{
+    profile = $Profile
+    source = $Source
+    host = $ConnectorHostName
+    known_localtunnel = [bool]$KnownLocalTunnel
+    persistent_candidate = [bool]$PersistentCandidate
+    blockers = $Blockers
+  }
+}
+
 function New-PersistentIngressPlan {
   param(
     [object]$EndpointStatus,
@@ -160,11 +218,22 @@ function New-PersistentIngressPlan {
   $ConnectorReason = ConvertTo-BoundedText -Value (Get-NestedPropertyValue -Payload $EndpointStatus -Path @('chatgpt_connector', 'connector_url', 'reason') -Default 'connector_url_not_provided') -MaxLength 160
   $LocalReady = [bool](Get-NestedPropertyValue -Payload $EndpointStatus -Path @('local_listener', 'ready') -Default $false)
   $RecordCommand = ".\scripts\chatgpt-voice-connector.ps1 -Mode RecordUrl -ConnectorUrl `"https://YOUR-STABLE-HOST$Path`" -Json"
+  $IngressProfile = New-ConnectorIngressProfile -EndpointStatus $EndpointStatus -ConnectorUrlSource $ConnectorUrlSource
+  $PersistentCandidate = [bool](Get-PropertyValue -Payload $IngressProfile -Name 'persistent_candidate' -Default $false)
+  $PlanStatus = if ($ConnectorShapeValid -and -not $PersistentCandidate) {
+    'localtunnel_fallback_replace_needed'
+  } elseif ($ConnectorShapeValid) {
+    'connector_url_shape_valid_record_ready'
+  } elseif ($ConnectorProvided) {
+    'connector_url_shape_invalid'
+  } else {
+    'persistent_ingress_url_needed'
+  }
 
   return [ordered]@{
     kind = 'francis.chatgpt_voice.persistent_ingress_plan'
     ok = $true
-    status = if ($ConnectorShapeValid) { 'connector_url_shape_valid_record_ready' } elseif ($ConnectorProvided) { 'connector_url_shape_invalid' } else { 'persistent_ingress_url_needed' }
+    status = $PlanStatus
     local_endpoint = "http://$HostAddress`:$Port$Path"
     mcp_path = $Path
     connector_url = [ordered]@{
@@ -172,8 +241,12 @@ function New-PersistentIngressPlan {
       shape_valid = $ConnectorShapeValid
       source = (ConvertTo-BoundedText -Value $ConnectorUrlSource -MaxLength 160)
       reason = $ConnectorReason
+      persistent_candidate = $PersistentCandidate
+      host = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $IngressProfile -Name 'host' -Default '') -MaxLength 256
+      ingress_profile = $IngressProfile
       record_command = $RecordCommand
     }
+    blockers = @($IngressProfile.blockers)
     local_mcp_listener = [ordered]@{
       ready = $LocalReady
       status = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $EndpointStatus -Name 'status' -Default '') -MaxLength 96
@@ -588,6 +661,24 @@ if ($Mode -eq 'RecordUrl') {
         state_path = $statePath
         endpoint_status = $EndpointStatus
         blockers = @($ShapeReason)
+        governance = New-GovernancePayload -ReadOnly $false -StartsProcess $false -OpensPublicTunnel $false -WritesData $false
+      })
+    exit 0
+  }
+
+  $IngressProfile = New-ConnectorIngressProfile -EndpointStatus $EndpointStatus -ConnectorUrlSource ([string]$Candidate.source)
+  if (-not [bool](Get-PropertyValue -Payload $IngressProfile -Name 'persistent_candidate' -Default $false)) {
+    ConvertTo-JsonOutput -Payload ([ordered]@{
+        kind = 'francis.chatgpt_voice.connector_control'
+        ok = $false
+        status = 'connector_url_not_persistent'
+        connector_url = $RecordedConnectorUrl
+        connector_url_source = [string]$Candidate.source
+        runtime_root = $RuntimeRoot
+        state_path = $statePath
+        endpoint_status = $EndpointStatus
+        connector_ingress_profile = $IngressProfile
+        blockers = @($IngressProfile.blockers)
         governance = New-GovernancePayload -ReadOnly $false -StartsProcess $false -OpensPublicTunnel $false -WritesData $false
       })
     exit 0

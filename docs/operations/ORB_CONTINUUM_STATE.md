@@ -161,6 +161,10 @@ proportions.
 - Overlay voice-turn handback readback now formats `completed_at` through an
   invariant UTC timestamp helper so PowerShell cannot emit culture-specific date
   strings on Linux CI while preserving the voice-turn handback contract.
+- ChatGPT voice connector persistent-ingress planning now classifies LocalTunnel
+  URLs as `localtunnel_ephemeral`. A `.loca.lt` URL can remain an explicit
+  fallback for live connector testing, but it no longer satisfies the
+  persistent `RecordUrl` path or reports as a stable ingress candidate.
 
 ## Current Task
 
@@ -187,12 +191,13 @@ promote an improvement, or approve a proposal.
 
 The latest completed validation-proof sub-slice adds the status-only proof
 script for Orb/voice/overlay-lens continuity. The current live proof result is
-`proof_partial_current_connector_url_missing`: the overlay is visible, Lens MCP
-body-state is ready, the overlay voice path is waiting for microphone signal,
-the local ChatGPT voice MCP listener is ready, ChatGPT-source bridge receipts
-exist, Orb substrate readback is healthy, and the latest Mona Lisa sandbox
-replay passes the structured-observation receipt contract. The proof still
-reports that no current public HTTPS connector URL is recorded.
+`proof_blocked_stale_chatgpt_app_source_receipt`: the overlay is visible, Lens
+MCP body-state is ready, the overlay voice path is waiting for microphone
+signal, the local ChatGPT voice MCP listener is ready, Orb substrate readback is
+healthy, and the latest Mona Lisa sandbox replay passes the structured-
+observation receipt contract. The current public HTTPS connector URL is a
+LocalTunnel fallback (`localtunnel_fallback_replace_needed`), so it is useful
+for live testing but not accepted as persistent ingress truth.
 
 If a stable connector URL is supplied through
 `FRANCIS_CHATGPT_VOICE_CONNECTOR_URL`, the proof now records the URL source and
@@ -972,8 +977,9 @@ Validated for cross-platform overlay voice-turn handback timestamp readback:
   phrase can create mission state when transcribed, but the full voice ->
   mission -> automatic operator dispatch -> Orb loop is not complete.
 - The current ChatGPT voice connector control supports persistent HTTPS URL
-  planning, environment URL handoff, and URL recording, but no actual current
-  public HTTPS MCP URL is recorded; local MCP is listening, no
+  planning, environment URL handoff, and URL recording. The current public MCP
+  URL is a LocalTunnel fallback, so the plan reports
+  `localtunnel_fallback_replace_needed`; local MCP is listening, no
   `cloudflared`/`ngrok`/`caddy` provider is available in the current shell, and
   current ChatGPT app reachability is not proven by the status proof.
 - The current ChatGPT voice proof has no fresh usable public-MCP-tool-origin
@@ -1010,5 +1016,7 @@ Validated for cross-platform overlay voice-turn handback timestamp readback:
 
 ## Exact Next Action
 
-Run an end-to-end Orb/voice/overlay-lens validation pass across the completed
-sandbox chain and current live overlay/voice surfaces where safe.
+Trigger a fresh ChatGPT app call through the public
+`francis_chatgpt_voice_ingress` MCP tool, confirm the receipt provenance, then
+replace the LocalTunnel fallback with a persistent HTTPS `/mcp` ingress URL and
+record it through the governed `RecordUrl` path.

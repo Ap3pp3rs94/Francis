@@ -257,6 +257,46 @@ def test_chatgpt_voice_connector_plan_persistent_ingress_accepts_stable_url_shap
     assert payload["connector_url"]["shape_valid"] is True
     assert payload["connector_url"]["source"] == "argument"
     assert payload["connector_url"]["reason"] == "connector_url_shape_valid_reachability_not_verified"
+    assert payload["connector_url"]["persistent_candidate"] is True
+    assert payload["connector_url"]["host"] == "francis.example.test"
+    assert payload["connector_url"]["ingress_profile"]["profile"] == "persistent_https_candidate"
+    assert payload["connector_url"]["ingress_profile"]["persistent_candidate"] is True
+    assert payload["blockers"] == []
+    assert payload["governance"]["read_only"] is True
+    assert payload["governance"]["starts_process"] is False
+    assert payload["governance"]["opens_public_tunnel"] is False
+    assert payload["governance"]["writes_data"] is False
+    assert not runtime_root.exists()
+
+
+def test_chatgpt_voice_connector_plan_persistent_ingress_flags_localtunnel_fallback(tmp_path: Path) -> None:
+    runtime_root = tmp_path / "connector-runtime"
+    port = _unused_local_port()
+
+    proc = _run_connector_script(
+        "-Mode",
+        "PlanPersistentIngress",
+        "-Json",
+        "-RuntimeRoot",
+        str(runtime_root),
+        "-Port",
+        str(port),
+        "-ConnectorUrl",
+        "https://francis-voice-178175.loca.lt/mcp",
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["kind"] == "francis.chatgpt_voice.persistent_ingress_plan"
+    assert payload["status"] == "localtunnel_fallback_replace_needed"
+    assert payload["connector_url"]["provided"] is True
+    assert payload["connector_url"]["shape_valid"] is True
+    assert payload["connector_url"]["persistent_candidate"] is False
+    assert payload["connector_url"]["host"] == "francis-voice-178175.loca.lt"
+    assert payload["connector_url"]["ingress_profile"]["profile"] == "localtunnel_ephemeral"
+    assert payload["connector_url"]["ingress_profile"]["known_localtunnel"] is True
+    assert payload["connector_url"]["ingress_profile"]["persistent_candidate"] is False
+    assert payload["blockers"] == ["localtunnel_url_is_not_persistent_ingress"]
     assert payload["governance"]["read_only"] is True
     assert payload["governance"]["starts_process"] is False
     assert payload["governance"]["opens_public_tunnel"] is False
@@ -440,6 +480,41 @@ def test_chatgpt_voice_connector_record_url_rejects_invalid_shape_without_writin
     assert payload["connector_url_source"] == "argument"
     assert payload["blockers"] == ["connector_url_must_be_https"]
     assert payload["endpoint_status"]["chatgpt_connector"]["connector_url"]["shape_valid"] is False
+    assert payload["governance"]["starts_process"] is False
+    assert payload["governance"]["opens_public_tunnel"] is False
+    assert payload["governance"]["writes_data"] is False
+    assert not runtime_root.exists()
+
+
+@pytest.mark.skipif(platform.system() != "Windows", reason="connector control uses Windows process readback")
+def test_chatgpt_voice_connector_record_url_rejects_localtunnel_as_persistent_ingress(
+    tmp_path: Path,
+) -> None:
+    runtime_root = tmp_path / "connector-runtime"
+    port = _unused_local_port()
+
+    proc = _run_connector_script(
+        "-Mode",
+        "RecordUrl",
+        "-Json",
+        "-RuntimeRoot",
+        str(runtime_root),
+        "-Port",
+        str(port),
+        "-ConnectorUrl",
+        "https://francis-voice-178175.loca.lt/mcp",
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["kind"] == "francis.chatgpt_voice.connector_control"
+    assert payload["ok"] is False
+    assert payload["status"] == "connector_url_not_persistent"
+    assert payload["connector_url"] == "https://francis-voice-178175.loca.lt/mcp"
+    assert payload["connector_ingress_profile"]["profile"] == "localtunnel_ephemeral"
+    assert payload["connector_ingress_profile"]["known_localtunnel"] is True
+    assert payload["connector_ingress_profile"]["persistent_candidate"] is False
+    assert payload["blockers"] == ["localtunnel_url_is_not_persistent_ingress"]
     assert payload["governance"]["starts_process"] is False
     assert payload["governance"]["opens_public_tunnel"] is False
     assert payload["governance"]["writes_data"] is False

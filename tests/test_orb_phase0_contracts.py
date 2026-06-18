@@ -97,4 +97,7 @@ def test_orb_continuum_state_preserves_one_path_wiring_rules() -> None:
     assert "Acceptance criteria for the completed offline recognizability fixture sub-slice" in state
     assert "Replay/evaluation review scoring now classifies sandbox evaluation history" in state
     assert "Acceptance criteria for the completed multi-run review scoring sub-slice" in state
-    assert "Run an end-to-end Orb/voice/overlay-lens validation pass" in state
+    assert "LocalTunnel fallback (`localtunnel_fallback_replace_needed`)" in state
+    assert "LocalTunnel" in state
+    assert "`localtunnel_ephemeral`" in state
+    assert "Trigger a fresh ChatGPT app call through the public" in state
