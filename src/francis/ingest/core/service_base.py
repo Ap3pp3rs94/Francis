@@ -166,6 +166,12 @@ def _no_lab_execution_payload(*, reason: str = "ingest_only") -> dict[str, Any]:
     }
 
 
+class IngestSourceLookupError(ValueError):
+    def __init__(self, code: str) -> None:
+        self.api_error_code = code
+        super().__init__(code)
+
+
 class BaseIngestService:
     def readback(
         self,
@@ -707,7 +713,25 @@ class BaseIngestService:
         actor: str = "francis/system",
         inspect_repos: bool = True,
     ) -> dict[str, Any]:
-        target = canonical_path(path)
+        try:
+            target = canonical_path(path)
+        except ValueError as exc:
+            receipt, receipt_path = self.receipts.write(
+                operation="source.add",
+                source_id="",
+                actor=actor,
+                input_paths=[display_path(path)],
+                result_status="failed",
+                errors=["source_path_invalid", str(exc)],
+                validation_performed=["path_text_validation"],
+            )
+            return {
+                "ok": False,
+                "status": "failed",
+                "error": "source_path_invalid",
+                "receipt": receipt.to_dict(),
+                "receipt_path": str(receipt_path),
+            }
         if not target.exists():
             receipt, receipt_path = self.receipts.write(
                 operation="source.add",
@@ -964,8 +988,11 @@ class BaseIngestService:
         record = self.sources.get(text)
         if record is not None:
             return record
-        target = canonical_path(value)
-        if target.exists():
+        try:
+            target = canonical_path(value)
+        except ValueError:
+            target = None
+        if target is not None and target.exists():
             source_type = classify_source(target)
             record = self.sources.get(source_id_for_path(target, source_type))
             if record is not None:
@@ -974,7 +1001,7 @@ class BaseIngestService:
         raw_source = result.get("source")
         record = SourceRecord.from_dict(raw_source)
         if record is None:
-            raise ValueError(_safe_str(result.get("error")).strip() or "source_record_unavailable")
+            raise IngestSourceLookupError(_safe_str(result.get("error")).strip() or "source_record_unavailable")
         return record
 
     def _load_repo_map(self, record: SourceRecord) -> RepoMap | None:

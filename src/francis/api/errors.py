@@ -14,12 +14,29 @@ def api_error_code(*, code: str = _ERROR_CODE) -> str:
     return code
 
 
+def _public_api_error_code(exc: BaseException) -> str:
+    code = getattr(exc, "api_error_code", "")
+    if not isinstance(code, str):
+        return ""
+    clean = code.strip()
+    if not clean or len(clean) > 80:
+        return ""
+    if not all(ch.isalnum() or ch in {"_", "-", ".", ":"} for ch in clean):
+        return ""
+    return clean
+
+
 def log_api_exception(exc: BaseException, *, route: str = "") -> None:
     route_text = f" route={route}" if route else ""
     _LOG.exception("API boundary exception%s", route_text, exc_info=True)
 
 
 def api_error_message(exc: BaseException, *, code: str = _ERROR_CODE, route: str = "") -> str:
+    public_code = _public_api_error_code(exc)
+    if public_code:
+        route_text = f" route={route}" if route else ""
+        _LOG.info("API boundary rejected%s code=%s", route_text, public_code)
+        return public_code
     log_api_exception(exc, route=route)
     return api_error_code(code=code)
 

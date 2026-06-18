@@ -56,6 +56,7 @@ SENSITIVE_FILE_NAMES = {
 SENSITIVE_SUFFIXES = {".pem", ".key", ".p12", ".pfx", ".jks", ".kdbx"}
 MAX_DEFAULT_FILE_COUNT = 2_000
 MAX_DEFAULT_FILE_BYTES = 1_048_576
+MAX_LOCAL_PATH_TEXT_CHARS = 4_096
 
 
 @dataclass(frozen=True)
@@ -75,18 +76,46 @@ class BoundedScan:
 
 
 def canonical_path(path: str | Path) -> Path:
+    path_text = safe_local_path_text(path)
     # Ingest roots are explicit local operator inputs; scan limits and sensitive-file guards run downstream.
     # codeql[py/path-injection]
-    return Path(path).expanduser().resolve()
+    return Path(path_text).expanduser().resolve()
 
 
 def display_path(path: str | Path) -> str:
     try:
         # Display-only normalization for the same governed local ingest path contract.
         # codeql[py/path-injection]
-        return str(Path(path).expanduser().resolve())
-    except OSError:
-        return str(path)
+        return str(canonical_path(path))
+    except (OSError, TypeError, ValueError):
+        return _display_path_text(path)
+
+
+def safe_local_path_text(path: str | Path, *, max_chars: int = MAX_LOCAL_PATH_TEXT_CHARS) -> str:
+    try:
+        raw = os.fspath(path)
+    except TypeError as exc:
+        raise ValueError("path_text_required") from exc
+    text = os.fsdecode(raw) if isinstance(raw, bytes) else str(raw)
+    if len(text) > max_chars:
+        raise ValueError("path_text_too_long")
+    if _contains_control_character(text):
+        raise ValueError("path_text_contains_control_character")
+    return text or "."
+
+
+def _contains_control_character(value: str) -> bool:
+    return any(ord(ch) < 32 or ord(ch) == 127 for ch in value)
+
+
+def _display_path_text(path: str | Path) -> str:
+    try:
+        raw = os.fspath(path)
+    except TypeError:
+        return ""
+    text = os.fsdecode(raw) if isinstance(raw, bytes) else str(raw)
+    bounded = text[:MAX_LOCAL_PATH_TEXT_CHARS]
+    return "".join("?" if ord(ch) < 32 or ord(ch) == 127 else ch for ch in bounded)
 
 
 def relative_posix(root: Path, path: Path) -> str:

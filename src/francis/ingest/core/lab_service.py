@@ -21,6 +21,7 @@ from ..lab.lab_runtime import (
     detect_docker,
     validate_run,
 )
+from ..ingest.source import safe_local_path_text
 from ..shared.models import (
     CapabilityCandidate,
     LabApprovalConsumptionHandoff,
@@ -4851,12 +4852,23 @@ def _lab_provider_reference_metadata(provider_reference: str) -> dict[str, Any]:
             "contents_read": False,
             "executed": False,
         }
-    # Provider references are explicit sandbox-provider preflight inputs; metadata probing never executes them.
-    # codeql[py/path-injection]
-    path_like = any(token in clean for token in ("\\", "/", ":")) or Path(clean).exists()
-    if not path_like:
+    try:
+        path_text = safe_local_path_text(clean)
+    except ValueError as exc:
         return {
             "reference": clean,
+            "reference_kind": "invalid_path_text",
+            "reference_present": False,
+            "metadata_checked": True,
+            "reference_verified": False,
+            "contents_read": False,
+            "executed": False,
+            "error": str(exc),
+        }
+    path_like = any(token in path_text for token in ("\\", "/", ":"))
+    if not path_like:
+        return {
+            "reference": path_text,
             "reference_kind": "service_or_name",
             "reference_present": True,
             "metadata_checked": True,
@@ -4867,16 +4879,17 @@ def _lab_provider_reference_metadata(provider_reference: str) -> dict[str, Any]:
         }
     try:
         # Metadata-only provider reference readback for a governed sandbox-provider preflight.
+        # safe_local_path_text rejects control characters and oversized path text before Path construction.
         # codeql[py/path-injection]
-        path = Path(clean).expanduser()
+        path = Path(path_text).expanduser()
         resolved = path.resolve(strict=False)
-        exists = path.exists()
-        is_file = path.is_file() if exists else False
-        is_dir = path.is_dir() if exists else False
-        size_bytes = path.stat().st_size if exists and is_file else None
+        exists = resolved.exists()
+        is_file = resolved.is_file() if exists else False
+        is_dir = resolved.is_dir() if exists else False
+        size_bytes = resolved.stat().st_size if exists and is_file else None
         error = ""
     except OSError as exc:
-        resolved = Path(clean)
+        resolved = Path(path_text)
         exists = False
         is_file = False
         is_dir = False
@@ -4911,16 +4924,30 @@ def _lab_provider_policy_manifest_metadata(provider_policy_manifest: str) -> dic
             "contents_read": False,
         }
     try:
+        path_text = safe_local_path_text(clean)
+    except ValueError as exc:
+        return {
+            "path": clean,
+            "present": False,
+            "metadata_checked": True,
+            "is_file": False,
+            "size_bytes": None,
+            "bound": False,
+            "contents_read": False,
+            "error": str(exc),
+        }
+    try:
         # Metadata-only policy-manifest readback for a governed sandbox-provider preflight.
+        # safe_local_path_text rejects control characters and oversized path text before Path construction.
         # codeql[py/path-injection]
-        path = Path(clean).expanduser()
+        path = Path(path_text).expanduser()
         resolved = path.resolve(strict=False)
-        exists = path.exists()
-        is_file = path.is_file() if exists else False
-        size_bytes = path.stat().st_size if exists and is_file else None
+        exists = resolved.exists()
+        is_file = resolved.is_file() if exists else False
+        size_bytes = resolved.stat().st_size if exists and is_file else None
         error = ""
     except OSError as exc:
-        resolved = Path(clean)
+        resolved = Path(path_text)
         exists = False
         is_file = False
         size_bytes = None
