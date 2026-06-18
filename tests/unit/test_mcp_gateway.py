@@ -3,7 +3,16 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from francis.mcp_gateway.server import _clean_values
 from francis.mcp_gateway.tools import list_tools, run_tool
+
+
+def test_mcp_server_allowed_host_values_are_deduped() -> None:
+    assert _clean_values([" 127.0.0.1, localhost ", "127.0.0.1", "", "example.test"]) == [
+        "127.0.0.1",
+        "localhost",
+        "example.test",
+    ]
 
 
 def test_mcp_gateway_lists_expected_tools(tmp_path: Path, monkeypatch) -> None:

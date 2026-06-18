@@ -10,12 +10,24 @@ def _tool_payload(result: dict[str, Any]) -> str:
     return json.dumps(result, indent=2, ensure_ascii=False, default=str)
 
 
+def _clean_values(values: list[str] | None) -> list[str]:
+    cleaned: list[str] = []
+    for value in values or []:
+        for item in str(value or "").split(","):
+            text = item.strip()
+            if text and text not in cleaned:
+                cleaned.append(text)
+    return cleaned
+
+
 def run_server(
     *,
     transport: str = "stdio",
     host: str = "127.0.0.1",
     port: int = 8787,
     streamable_http_path: str = "/mcp",
+    allowed_hosts: list[str] | None = None,
+    allowed_origins: list[str] | None = None,
 ) -> None:
     """Run an MCP server if the optional MCP SDK is installed.
 
@@ -24,6 +36,7 @@ def run_server(
     """
     try:
         from mcp.server.fastmcp import FastMCP  # type: ignore[import-not-found]
+        from mcp.server.transport_security import TransportSecuritySettings  # type: ignore[import-not-found]
     except Exception as exc:
         raise RuntimeError(
             "Optional MCP SDK is not installed. Install the package that provides "
@@ -32,6 +45,33 @@ def run_server(
 
     if transport not in {"stdio", "sse", "streamable-http"}:
         raise ValueError(f"unsupported MCP transport: {transport}")
+
+    transport_security = None
+    extra_hosts = _clean_values(allowed_hosts)
+    extra_origins = _clean_values(allowed_origins)
+    if extra_hosts or extra_origins:
+        transport_security = TransportSecuritySettings(
+            enable_dns_rebinding_protection=True,
+            allowed_hosts=_clean_values(
+                [
+                    "127.0.0.1",
+                    "127.0.0.1:*",
+                    "localhost",
+                    "localhost:*",
+                    "[::1]",
+                    "[::1]:*",
+                    *extra_hosts,
+                ]
+            ),
+            allowed_origins=_clean_values(
+                [
+                    "http://127.0.0.1:*",
+                    "http://localhost:*",
+                    "http://[::1]:*",
+                    *extra_origins,
+                ]
+            ),
+        )
 
     server = FastMCP(
         "francis-mcp-gateway",
@@ -43,6 +83,7 @@ def run_server(
         port=port,
         streamable_http_path=streamable_http_path,
         stateless_http=transport == "streamable-http",
+        transport_security=transport_security,
     )
 
     @server.tool(name="francis_health")
@@ -268,6 +309,18 @@ def main() -> int:
     parser.add_argument("--host", default="127.0.0.1", help="Host for HTTP transports.")
     parser.add_argument("--port", type=int, default=8787, help="Port for HTTP transports.")
     parser.add_argument("--path", default="/mcp", help="Streamable HTTP MCP path.")
+    parser.add_argument(
+        "--allowed-host",
+        action="append",
+        default=[],
+        help="Additional exact Host header value allowed by MCP transport security. May be repeated.",
+    )
+    parser.add_argument(
+        "--allowed-origin",
+        action="append",
+        default=[],
+        help="Additional exact Origin header value allowed by MCP transport security. May be repeated.",
+    )
     args = parser.parse_args()
 
     run_server(
@@ -275,6 +328,8 @@ def main() -> int:
         host=args.host,
         port=args.port,
         streamable_http_path=args.path,
+        allowed_hosts=args.allowed_host,
+        allowed_origins=args.allowed_origin,
     )
     return 0
 

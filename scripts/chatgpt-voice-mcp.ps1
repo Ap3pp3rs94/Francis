@@ -8,6 +8,8 @@ param(
   [int]$Port = 8787,
   [string]$Path = '/mcp',
   [string]$ConnectorUrl = '',
+  [string[]]$AllowedHost = @(),
+  [string[]]$AllowedOrigin = @(),
   [switch]$Json,
   [switch]$StatusOnly
 )
@@ -40,6 +42,21 @@ function ConvertTo-BoundedText {
   $Trimmed = $Text.Trim()
   if ($Trimmed.Length -le $MaxLength) { return $Trimmed }
   return $Trimmed.Substring(0, $MaxLength)
+}
+
+function Add-ArgumentValues {
+  param(
+    [System.Collections.Generic.List[string]]$Target,
+    [string]$Name,
+    [string[]]$Values
+  )
+
+  foreach ($Value in $Values) {
+    $Text = ConvertTo-BoundedText -Value $Value -MaxLength 256
+    if ([string]::IsNullOrWhiteSpace($Text)) { continue }
+    $Target.Add($Name)
+    $Target.Add($Text)
+  }
 }
 
 function Test-ConnectorUrl {
@@ -176,7 +193,20 @@ try {
 
   Push-Location $repoRoot
   try {
-    & $python -m francis.mcp_gateway.server --transport streamable-http --host $HostAddress --port $Port --path $Path
+    $ServerArgs = [System.Collections.Generic.List[string]]::new()
+    $ServerArgs.Add('-m')
+    $ServerArgs.Add('francis.mcp_gateway.server')
+    $ServerArgs.Add('--transport')
+    $ServerArgs.Add('streamable-http')
+    $ServerArgs.Add('--host')
+    $ServerArgs.Add($HostAddress)
+    $ServerArgs.Add('--port')
+    $ServerArgs.Add([string]$Port)
+    $ServerArgs.Add('--path')
+    $ServerArgs.Add($Path)
+    Add-ArgumentValues -Target $ServerArgs -Name '--allowed-host' -Values @('127.0.0.1', 'localhost', $AllowedHost)
+    Add-ArgumentValues -Target $ServerArgs -Name '--allowed-origin' -Values $AllowedOrigin
+    & $python @ServerArgs
     exit $LASTEXITCODE
   } finally {
     Pop-Location
