@@ -170,9 +170,19 @@ class ParsedDiff:
 
 
 _DIFF_GIT_RE = re.compile(r"^diff --git a/(?P<a>\S+) b/(?P<b>\S+)\s*$")
-_PLUS_FILE_RE = re.compile(r"^\+\+\+ (?:b/)?(?P<path>.+?)\s*$")
-_MINUS_FILE_RE = re.compile(r"^--- (?:a/)?(?P<path>.+?)\s*$")
 _HUNK_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@")
+
+
+def _diff_file_marker_path(line: str, marker: str) -> str | None:
+    prefix = f"{marker} "
+    if not line.startswith(prefix):
+        return None
+    value = line[len(prefix) :].strip()
+    if "\t" in value:
+        value = value.split("\t", 1)[0].strip()
+    if value.startswith(("a/", "b/")):
+        value = value[2:]
+    return value.replace("\\", "/").strip()
 
 
 def parse_unified_diff(text: str) -> ParsedDiff:
@@ -197,15 +207,15 @@ def parse_unified_diff(text: str) -> ParsedDiff:
             in_hunk = False
             saw_file_header = True
             continue
-        plus_file = _PLUS_FILE_RE.match(line)
-        if plus_file and not line.startswith("+++ +"):
-            path = _normalize_path(plus_file.group("path"))
+        plus_file = None if line.startswith("+++ +") else _diff_file_marker_path(line, "+++")
+        if plus_file is not None:
+            path = _normalize_path(plus_file)
             if path and path != "dev/null":
                 files.append(path)
             saw_file_header = True
             in_hunk = False
             continue
-        if _MINUS_FILE_RE.match(line):
+        if _diff_file_marker_path(line, "---") is not None:
             saw_file_header = True
             in_hunk = False
             continue
@@ -477,13 +487,13 @@ def _split_file_diffs(diff_text: str) -> list[tuple[str, bool, list[str]]]:
             flush()
             current_path, is_new, body, saw_minus_devnull = "", False, [], False
             continue
-        m = _MINUS_FILE_RE.match(line)
-        if m:
-            saw_minus_devnull = _normalize_path(m.group("path")) in ("dev/null", "/dev/null")
+        minus_path = _diff_file_marker_path(line, "---")
+        if minus_path is not None:
+            saw_minus_devnull = minus_path in ("dev/null", "/dev/null")
             continue
-        p = _PLUS_FILE_RE.match(line)
-        if p and not line.startswith("+++ +"):
-            current_path = _normalize_path(p.group("path"))
+        plus_path = None if line.startswith("+++ +") else _diff_file_marker_path(line, "+++")
+        if plus_path is not None:
+            current_path = plus_path
             is_new = saw_minus_devnull
             body = []
             continue
@@ -495,6 +505,31 @@ def _split_file_diffs(diff_text: str) -> list[tuple[str, bool, list[str]]]:
 
 
 _HUNK_HEADER_RE = re.compile(r"^@@ -(?P<os>\d+)(?:,(?P<oc>\d+))? \+(?P<ns>\d+)(?:,(?P<nc>\d+))? @@")
+
+
+def _scratch_relative_parts(path: str) -> tuple[str, ...] | None:
+    clean = _safe_str(path).replace("\\", "/").strip()
+    if not clean or clean in ("dev/null", "/dev/null"):
+        return None
+    if clean.startswith("/") or re.match(r"^[A-Za-z]:", clean):
+        return None
+    parts = tuple(part for part in clean.split("/") if part)
+    if not parts or any(part in (".", "..") for part in parts):
+        return None
+    return parts
+
+
+def _resolve_scratch_target(root: Path, relative_path: str) -> Path | None:
+    parts = _scratch_relative_parts(relative_path)
+    if parts is None:
+        return None
+    try:
+        resolved_root = root.resolve()
+        target = resolved_root.joinpath(*parts).resolve()
+        target.relative_to(resolved_root)
+    except Exception:
+        return None
+    return target
 
 
 def _apply_file_body(original: str, body: list[str], *, is_new_file: bool) -> tuple[str | None, str]:
@@ -569,23 +604,20 @@ def apply_unified_diff_to_tree(
     for path, is_new, body in _split_file_diffs(diff_text):
         if not path or path in ("dev/null", "/dev/null"):
             continue
-        target = root / path
         before = ""
+        if _matches_any(path, forbidden):
+            results.append(FileApplyResult(path, "rejected", is_new, "", "", "forbidden_path_write_guard"))
+            continue
+        target = _resolve_scratch_target(root, path)
+        if target is None:
+            results.append(FileApplyResult(path, "rejected", is_new, "", "", "path_escapes_scratch_tree"))
+            continue
         if target.exists() and target.is_file():
             try:
                 before = target.read_text(encoding="utf-8", errors="replace")
             except Exception:
                 before = ""
         before_digest = text_digest(before) if before else ""
-        if _matches_any(path, forbidden):
-            results.append(FileApplyResult(path, "rejected", is_new, before_digest, "", "forbidden_path_write_guard"))
-            continue
-        # Containment guard: never escape the scratch tree.
-        try:
-            target.resolve().relative_to(root.resolve())
-        except Exception:
-            results.append(FileApplyResult(path, "rejected", is_new, before_digest, "", "path_escapes_scratch_tree"))
-            continue
         new_text, reason = _apply_file_body(before, body, is_new_file=is_new)
         if new_text is None:
             results.append(FileApplyResult(path, "rejected", is_new, before_digest, "", reason))

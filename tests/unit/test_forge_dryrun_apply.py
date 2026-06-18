@@ -98,6 +98,20 @@ def test_applier_forbidden_path_guard(tmp_path: Path) -> None:
     assert not (scratch / "src/francis/governance/x.py").exists()
 
 
+def test_applier_rejects_traversal_before_read_or_write(tmp_path: Path) -> None:
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    outside = tmp_path / "escape.py"
+    diff = (
+        "diff --git a/../escape.py b/../escape.py\n--- /dev/null\n+++ b/../escape.py\n@@ -0,0 +1,1 @@\n+ESCAPE = True\n"
+    )
+    results = pr.apply_unified_diff_to_tree(diff, str(scratch))
+    assert results[0].status == "rejected"
+    assert results[0].reject_reason == "path_escapes_scratch_tree"
+    assert not outside.exists()
+    assert not (scratch / "escape.py").exists()
+
+
 # --------------------------------------------------------------------------- #
 # Service brick (end-to-end via the orchestrator)
 # --------------------------------------------------------------------------- #

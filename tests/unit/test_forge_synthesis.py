@@ -76,6 +76,21 @@ def test_diff_parser_extracts_files_and_counts() -> None:
     assert len(parsed.added_lines) == 2
 
 
+def test_diff_parser_accepts_file_header_metadata_without_backtracking_regex() -> None:
+    parsed = pr.parse_unified_diff(
+        "diff --git a/pkg/demo.py b/pkg/demo.py\n"
+        "--- a/pkg/demo.py\t2026-06-18\n"
+        "+++ b/pkg/demo.py\t2026-06-18\n"
+        "@@ -1,1 +1,1 @@\n"
+        "-OLD = 1\n"
+        "+NEW = 2\n"
+    )
+    assert parsed.is_diff is True
+    assert parsed.well_formed is True
+    assert parsed.files == ["pkg/demo.py"]
+    assert parsed.added_lines == ["NEW = 2"]
+
+
 def test_scope_blocks_forbidden_and_out_of_scope() -> None:
     parsed = pr.parse_unified_diff(
         "diff --git a/src/francis/governance/redaction.py b/src/francis/governance/redaction.py\n"
