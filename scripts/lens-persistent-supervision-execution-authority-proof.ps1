@@ -560,8 +560,9 @@ try {
   $ProofRuntimeDir = Join-Path $ProofDataRoot 'runtime\lens-persistent-supervision-execution-authority-proof'
   New-Item -ItemType Directory -Force -Path $ProofRuntimeDir | Out-Null
   $PythonScriptPath = Join-Path $ProofRuntimeDir 'proof.py'
+  $PythonStderrPath = Join-Path $ProofRuntimeDir 'python-stderr.txt'
   Set-Content -LiteralPath $PythonScriptPath -Value $Source -Encoding UTF8
-  $Output = & $PythonPath $PythonScriptPath 2>&1
+  $Output = & $PythonPath $PythonScriptPath 2> $PythonStderrPath
   $ExitCode = $LASTEXITCODE
 } finally {
   if ([string]::IsNullOrWhiteSpace($PreviousRoot)) {
@@ -601,5 +602,27 @@ try {
   }
 }
 
-($Output | ForEach-Object { [string]$_ }) -join "`n"
+$OutputText = ($Output | ForEach-Object { [string]$_ }) -join "`n"
+if ([string]::IsNullOrWhiteSpace($OutputText) -and $ExitCode -ne 0) {
+  $StderrText = ''
+  try {
+    if (Test-Path -LiteralPath $PythonStderrPath -PathType Leaf) {
+      $StderrText = Get-Content -LiteralPath $PythonStderrPath -Raw -ErrorAction Stop
+    }
+  } catch {
+    $StderrText = ''
+  }
+  [ordered]@{
+    ok = $false
+    kind = 'lens.host.persistent_supervision_execution_authority.proof'
+    status = 'proof_failed'
+    mode = $Mode.ToLowerInvariant()
+    repo_root = $RepoRoot
+    data_root = $ProofDataRoot
+    error = 'python_proof_failed_without_json'
+    stderr = $StderrText
+  } | ConvertTo-Json -Depth 5
+} else {
+  $OutputText
+}
 exit $ExitCode

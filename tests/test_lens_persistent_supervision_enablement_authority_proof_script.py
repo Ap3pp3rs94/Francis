@@ -179,3 +179,14 @@ def test_lens_persistent_supervision_enablement_authority_proof_grants_bounded_a
     assert not (data_dir / "runtime" / "lens-host-supervisor" / "status.json").exists()
     assert not (data_dir / "runtime" / "lens-host" / "status.json").exists()
     assert not (data_dir / "runtime" / "lens-host" / "lens-host.pid").exists()
+
+
+def test_lens_persistent_supervision_enablement_authority_proof_keeps_python_stderr_out_of_json_stdout() -> None:
+    script = (_repo_root() / "scripts" / "lens-persistent-supervision-enablement-authority-proof.ps1").read_text(
+        encoding="utf-8"
+    )
+
+    assert "$PythonStderrPath = Join-Path $ProofRuntimeDir 'python-stderr.txt'" in script
+    assert "$Output = & $PythonPath $PythonScriptPath 2> $PythonStderrPath" in script
+    assert "$Output = & $PythonPath $PythonScriptPath 2>&1" not in script
+    assert "python_proof_failed_without_json" in script
