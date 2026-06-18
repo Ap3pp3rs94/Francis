@@ -695,6 +695,8 @@ def test_lens_command_palette_monitor_uses_latest_voice_receipt_for_denial_healt
     assert payload["voice_monitor"]["latest_receipt_actor"] == ""
     assert payload["voice_monitor"]["latest_receipt_ingress_transport"] == ""
     assert payload["voice_monitor"]["latest_receipt_counts_as_chatgpt_mcp_proof"] is False
-    assert payload["voice_monitor"]["latest_receipt_proof_rejection_reason"] == "latest_receipt_not_chatgpt_voice_origin"
+    assert (
+        payload["voice_monitor"]["latest_receipt_proof_rejection_reason"] == "latest_receipt_not_chatgpt_voice_origin"
+    )
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["voice_chat_bridge_denials"]["status"] == "latest_receipt_clean"
