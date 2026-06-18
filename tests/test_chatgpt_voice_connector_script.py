@@ -135,6 +135,76 @@ def test_chatgpt_voice_connector_status_accepts_manual_connector_url(tmp_path: P
 
 
 @pytest.mark.skipif(platform.system() != "Windows", reason="connector control uses Windows process readback")
+def test_chatgpt_voice_connector_plan_persistent_ingress_is_read_only(tmp_path: Path) -> None:
+    runtime_root = tmp_path / "connector-runtime"
+    port = _unused_local_port()
+
+    proc = _run_connector_script(
+        "-Mode",
+        "PlanPersistentIngress",
+        "-Json",
+        "-RuntimeRoot",
+        str(runtime_root),
+        "-Port",
+        str(port),
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["kind"] == "francis.chatgpt_voice.persistent_ingress_plan"
+    assert payload["ok"] is True
+    assert payload["status"] == "persistent_ingress_url_needed"
+    assert payload["local_endpoint"] == f"http://127.0.0.1:{port}/mcp"
+    assert payload["connector_url"]["provided"] is False
+    assert payload["connector_url"]["shape_valid"] is False
+    assert payload["connector_url"]["reason"] == "connector_url_not_provided"
+    assert "RecordUrl" in payload["connector_url"]["record_command"]
+    assert payload["provider_readiness"]["cloudflared_named_tunnel"]["name"] == "cloudflared"
+    assert payload["provider_readiness"]["ngrok_reserved_domain"]["name"] == "ngrok"
+    assert payload["provider_readiness"]["caddy_reverse_proxy"]["name"] == "caddy"
+    assert payload["provider_readiness"]["ssh_reverse_tunnel"]["name"] == "ssh"
+    assert payload["recommended_provider_order"][0] == "cloudflared_named_tunnel"
+    assert payload["localtunnel_replacement"]["localtunnel_supported_only_as_explicit_fallback"] is True
+    assert payload["localtunnel_replacement"]["persistent_ingress_required_for_stable_chatgpt_connector"] is True
+    assert payload["governance"]["read_only"] is True
+    assert payload["governance"]["starts_process"] is False
+    assert payload["governance"]["opens_public_tunnel"] is False
+    assert payload["governance"]["writes_data"] is False
+    assert payload["governance"]["grants_execution_authority"] is False
+    assert not runtime_root.exists()
+
+
+@pytest.mark.skipif(platform.system() != "Windows", reason="connector control uses Windows process readback")
+def test_chatgpt_voice_connector_plan_persistent_ingress_accepts_stable_url_shape(tmp_path: Path) -> None:
+    runtime_root = tmp_path / "connector-runtime"
+    port = _unused_local_port()
+
+    proc = _run_connector_script(
+        "-Mode",
+        "PlanPersistentIngress",
+        "-Json",
+        "-RuntimeRoot",
+        str(runtime_root),
+        "-Port",
+        str(port),
+        "-ConnectorUrl",
+        "https://francis.example.test/mcp",
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["status"] == "connector_url_shape_valid_record_ready"
+    assert payload["connector_url"]["provided"] is True
+    assert payload["connector_url"]["shape_valid"] is True
+    assert payload["connector_url"]["reason"] == "connector_url_shape_valid_reachability_not_verified"
+    assert payload["governance"]["read_only"] is True
+    assert payload["governance"]["starts_process"] is False
+    assert payload["governance"]["opens_public_tunnel"] is False
+    assert payload["governance"]["writes_data"] is False
+    assert not runtime_root.exists()
+
+
+@pytest.mark.skipif(platform.system() != "Windows", reason="connector control uses Windows process readback")
 def test_chatgpt_voice_connector_record_url_persists_without_tunnel(tmp_path: Path) -> None:
     runtime_root = tmp_path / "connector-runtime"
     port = _unused_local_port()

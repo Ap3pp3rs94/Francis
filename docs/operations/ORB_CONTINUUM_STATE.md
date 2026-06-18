@@ -112,6 +112,11 @@ proportions.
   an operator-supplied HTTPS `/mcp` URL, writes only local runtime connector
   state, and does not start LocalTunnel, open a public tunnel, call ChatGPT,
   grant execution authority, or claim reachability.
+- ChatGPT voice connector control now has a read-only persistent ingress plan
+  mode. `scripts/chatgpt-voice-connector.ps1 -Mode PlanPersistentIngress`
+  reports the local MCP endpoint, connector URL shape state, provider-tool
+  readiness, and the governed `RecordUrl` handoff without writing runtime state,
+  starting a process, opening a tunnel, or granting authority.
 
 ## Current Task
 
@@ -266,10 +271,10 @@ Acceptance criteria for the completed multi-run review scoring sub-slice:
 
 ## Pending Tasks
 
-- Record the actual current ChatGPT voice HTTPS MCP ingress with
-  `scripts/chatgpt-voice-connector.ps1 -Mode RecordUrl`, or configure a
-  persistent ingress provider and then record its HTTPS `/mcp` URL, so the proof
-  can verify the connector URL instead of reporting `connector_url_not_provided`.
+- Install or configure a persistent HTTPS ingress provider for
+  `http://127.0.0.1:8787/mcp`, then record the actual HTTPS `/mcp` URL with
+  `scripts/chatgpt-voice-connector.ps1 -Mode RecordUrl`, so the proof can verify
+  the connector URL instead of reporting `connector_url_not_provided`.
 - Confirm live overlay microphone signal when the operator is present; the
   current safe readback remains `waiting_for_audio_signal`.
 
@@ -691,6 +696,22 @@ Validated for the persistent ChatGPT voice connector URL record path:
   `connector_url_shape_invalid` without writing runtime state, starting a
   process, or opening a tunnel.
 
+Validated for the read-only persistent ingress planning path:
+
+- PowerShell parser check for `scripts\chatgpt-voice-connector.ps1` returned
+  `parse_ok`.
+- `python -m pytest tests\test_chatgpt_voice_connector_script.py -q` passed
+  with `7 passed`.
+- A live read-only plan run of
+  `scripts\chatgpt-voice-connector.ps1 -Mode PlanPersistentIngress -Json`
+  returned `status=persistent_ingress_url_needed`,
+  `local_endpoint=http://127.0.0.1:8787/mcp`,
+  `connector_url.reason=connector_url_not_provided`,
+  `cloudflared.available=false`, `ngrok.available=false`,
+  `caddy.available=false`, `ssh.available=true`,
+  `starts_process=false`, `opens_public_tunnel=false`, and
+  `writes_data=false`.
+
 ## Blockers
 
 - The lens/overlay observation contract is metadata-only; it does not yet provide
@@ -707,9 +728,10 @@ Validated for the persistent ChatGPT voice connector URL record path:
   phrase can create mission state when transcribed, but the full voice ->
   mission -> automatic operator dispatch -> Orb loop is not complete.
 - The current ChatGPT voice connector control supports persistent HTTPS URL
-  recording, but no actual current public HTTPS MCP URL is recorded; local MCP
-  is listening, but current ChatGPT app reachability is not proven by the status
-  proof.
+  planning and URL recording, but no actual current public HTTPS MCP URL is
+  recorded; local MCP is listening, no `cloudflared`/`ngrok`/`caddy` provider is
+  available in the current shell, and current ChatGPT app reachability is not
+  proven by the status proof.
 - True backend model-call cancellation is not currently supported; stale reply
   suppression is the bounded behavior.
 

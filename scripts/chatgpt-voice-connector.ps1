@@ -1,12 +1,13 @@
 # Bounded operator control for the ChatGPT voice MCP connector.
 #
-# Status mode is read-only. RecordUrl stores an operator-supplied persistent
-# HTTPS MCP URL without opening a tunnel. Start mode opens a public localtunnel
-# URL only when -ExposePublicTunnel is explicitly supplied by the operator.
+# Status and PlanPersistentIngress modes are read-only. RecordUrl stores an
+# operator-supplied persistent HTTPS MCP URL without opening a tunnel. Start mode
+# opens a public localtunnel URL only when -ExposePublicTunnel is explicitly
+# supplied by the operator.
 
 [CmdletBinding(PositionalBinding = $false)]
 param(
-  [ValidateSet('Status', 'RecordUrl', 'Start', 'Stop')]
+  [ValidateSet('Status', 'PlanPersistentIngress', 'RecordUrl', 'Start', 'Stop')]
   [string]$Mode = 'Status',
   [string]$HostAddress = '127.0.0.1',
   [int]$Port = 8787,
@@ -114,6 +115,72 @@ function New-GovernancePayload {
     grants_mutation_authority = $false
     approves_proposals = $false
     promotes_capabilities = $false
+  }
+}
+
+function Get-CommandReadiness {
+  param(
+    [string]$Name,
+    [string]$Capability
+  )
+
+  $Command = Get-Command $Name -ErrorAction SilentlyContinue | Select-Object -First 1
+  return [ordered]@{
+    name = $Name
+    capability = $Capability
+    available = $null -ne $Command
+    path = if ($Command) { ConvertTo-BoundedText -Value $Command.Source -MaxLength 512 } else { '' }
+  }
+}
+
+function New-PersistentIngressPlan {
+  param([object]$EndpointStatus)
+
+  $ConnectorShapeValid = [bool](Get-NestedPropertyValue -Payload $EndpointStatus -Path @('chatgpt_connector', 'connector_url', 'shape_valid') -Default $false)
+  $ConnectorProvided = [bool](Get-NestedPropertyValue -Payload $EndpointStatus -Path @('chatgpt_connector', 'connector_url', 'provided') -Default $false)
+  $ConnectorReason = ConvertTo-BoundedText -Value (Get-NestedPropertyValue -Payload $EndpointStatus -Path @('chatgpt_connector', 'connector_url', 'reason') -Default 'connector_url_not_provided') -MaxLength 160
+  $LocalReady = [bool](Get-NestedPropertyValue -Payload $EndpointStatus -Path @('local_listener', 'ready') -Default $false)
+  $RecordCommand = ".\scripts\chatgpt-voice-connector.ps1 -Mode RecordUrl -ConnectorUrl `"https://YOUR-STABLE-HOST$Path`" -Json"
+
+  return [ordered]@{
+    kind = 'francis.chatgpt_voice.persistent_ingress_plan'
+    ok = $true
+    status = if ($ConnectorShapeValid) { 'connector_url_shape_valid_record_ready' } elseif ($ConnectorProvided) { 'connector_url_shape_invalid' } else { 'persistent_ingress_url_needed' }
+    local_endpoint = "http://$HostAddress`:$Port$Path"
+    mcp_path = $Path
+    connector_url = [ordered]@{
+      provided = $ConnectorProvided
+      shape_valid = $ConnectorShapeValid
+      reason = $ConnectorReason
+      record_command = $RecordCommand
+    }
+    local_mcp_listener = [ordered]@{
+      ready = $LocalReady
+      status = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $EndpointStatus -Name 'status' -Default '') -MaxLength 96
+    }
+    provider_readiness = [ordered]@{
+      cloudflared_named_tunnel = Get-CommandReadiness -Name 'cloudflared' -Capability 'persistent_named_https_tunnel'
+      ngrok_reserved_domain = Get-CommandReadiness -Name 'ngrok' -Capability 'reserved_domain_https_tunnel'
+      caddy_reverse_proxy = Get-CommandReadiness -Name 'caddy' -Capability 'persistent_https_reverse_proxy'
+      ssh_reverse_tunnel = Get-CommandReadiness -Name 'ssh' -Capability 'stable_remote_reverse_tunnel_requires_external_host'
+    }
+    recommended_provider_order = @(
+      'cloudflared_named_tunnel',
+      'ngrok_reserved_domain',
+      'caddy_reverse_proxy',
+      'ssh_reverse_tunnel'
+    )
+    next_operator_steps = @(
+      'choose_or_install_a_persistent_https_ingress_provider',
+      'point_provider_to_local_endpoint',
+      'record_the_stable_https_mcp_url_with_recordurl',
+      'rerun_orb_voice_overlay_lens_validation'
+    )
+    localtunnel_replacement = [ordered]@{
+      localtunnel_supported_only_as_explicit_fallback = $true
+      persistent_ingress_required_for_stable_chatgpt_connector = $true
+    }
+    governance = New-GovernancePayload -ReadOnly $true -StartsProcess $false -OpensPublicTunnel $false -WritesData $false
   }
 }
 
@@ -319,6 +386,20 @@ if ($Mode -eq 'Status') {
   }
   $EndpointStatus = Invoke-EndpointStatus -ConnectorUrl $StatusConnectorUrl
   ConvertTo-JsonOutput -Payload (New-StatusPayload -State $State -EndpointStatus $EndpointStatus)
+  exit 0
+}
+
+if ($Mode -eq 'PlanPersistentIngress') {
+  $PlanConnectorUrl = ConvertTo-BoundedText -Value $ConnectorUrl -MaxLength 512
+  $State = Read-State
+  if ([string]::IsNullOrWhiteSpace($PlanConnectorUrl) -and $State) {
+    $StateConnectorUrl = ConvertTo-BoundedText -Value $State.connector_url -MaxLength 512
+    if (-not [string]::IsNullOrWhiteSpace($StateConnectorUrl)) {
+      $PlanConnectorUrl = $StateConnectorUrl
+    }
+  }
+  $EndpointStatus = Invoke-EndpointStatus -ConnectorUrl $PlanConnectorUrl
+  ConvertTo-JsonOutput -Payload (New-PersistentIngressPlan -EndpointStatus $EndpointStatus)
   exit 0
 }
 
