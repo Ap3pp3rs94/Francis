@@ -96,6 +96,11 @@ proportions.
   heuristic with fixture-labeled geometry/feature evidence, reports fixture ref
   and hash, and explicitly marks pixel evidence, reference-image use, and visual
   similarity claims as false.
+- Replay/evaluation review scoring now classifies sandbox evaluation history
+  across multiple recorded runs. The read-only evaluation queue response reports
+  pass/fail counts, repeated failure classes, proposal counts, and next review
+  action without writing files, running operations, approving proposals, or
+  promoting changes.
 
 ## Current Task
 
@@ -114,6 +119,11 @@ The latest completed recognizability sub-slice adds offline fixture evidence for
 the sandbox Mona Lisa artifact. It remains SVG/action replay evidence only and
 does not claim screenshot, pixel, OCR, accessibility, human recognizability, or
 live visual-similarity proof.
+
+The latest completed review-scoring sub-slice adds read-only aggregate review
+evidence across recorded sandbox evaluation queue items. It identifies repeated
+failure patterns and review actions, but it does not execute another run,
+promote an improvement, or approve a proposal.
 
 Acceptance criteria for the completed observation sub-slice:
 
@@ -222,10 +232,22 @@ Acceptance criteria for the completed offline recognizability fixture sub-slice:
   exists; future work points toward optional truth-labeled pixel evidence or
   multi-run review scoring
 
+Acceptance criteria for the completed multi-run review scoring sub-slice:
+
+- evaluation queue readback includes a `review_scoring` aggregate
+- scoring is read-only and derived only from recorded queue items
+- scoring reports total records, pass/fail counts, improvement proposal count,
+  failure-class counts, repeated failure classes, thresholds, and next review
+  action
+- repeated failure classification requires at least two records with the same
+  failure class
+- scoring does not write files, run operations, control the desktop, approve
+  proposals, or promote changes
+
 ## Pending Tasks
 
-- Add replay/evaluation review scoring that can classify repeated failures
-  across multiple sandbox runs without promoting proposals automatically.
+- Run an end-to-end Orb/voice/overlay-lens validation pass across the completed
+  sandbox chain and current live overlay/voice surfaces where safe.
 
 ## Architecture Map
 
@@ -545,11 +567,28 @@ Validated for the offline Mona Lisa recognizability fixture sub-slice:
   `3 files already formatted`.
 - `.venv\Scripts\python.exe -m mypy src\francis\agent\sandbox_canvas.py`
   passed.
+- A local TestClient probe confirmed `classification=repeated_failure_pattern`,
+  `failed_count=2`, repeated class `recognizability_threshold_not_met`, next
+  action `review_repeated_failures_before_new_proposals`, and
+  `promotes_changes=false`.
 - A local TestClient probe confirmed replay evaluation `passed=true`,
   recognizability score `1.0`, basis
   `operator_primitive_replay_plus_offline_svg_geometry_fixture_not_pixel_similarity`,
   fixture mode `offline_svg_geometry`, fixture pass, and false
   pixel-evidence/reference-image/visual-similarity claims.
+
+Validated for the multi-run review scoring sub-slice:
+
+- `python -m pytest
+  tests\test_api_operations.py::test_operations_run_mona_lisa_sandbox_canvas_from_chat_mission
+  tests\test_orb_phase0_contracts.py -q` passed with `5 passed`.
+- `python -m ruff check --no-cache src\francis\agent\sandbox_canvas.py
+  tests\test_api_operations.py tests\test_orb_phase0_contracts.py` passed.
+- `python -m ruff format --check --no-cache src\francis\agent\sandbox_canvas.py
+  tests\test_api_operations.py tests\test_orb_phase0_contracts.py` passed with
+  `3 files already formatted`.
+- `.venv\Scripts\python.exe -m mypy src\francis\agent\sandbox_canvas.py`
+  passed.
 
 ## Blockers
 
@@ -596,5 +635,5 @@ Validated for the offline Mona Lisa recognizability fixture sub-slice:
 
 ## Exact Next Action
 
-Add replay/evaluation review scoring that can classify repeated failures across
-multiple sandbox runs without promoting proposals automatically.
+Run an end-to-end Orb/voice/overlay-lens validation pass across the completed
+sandbox chain and current live overlay/voice surfaces where safe.

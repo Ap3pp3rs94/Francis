@@ -525,6 +525,42 @@ def test_operations_run_mona_lisa_sandbox_canvas_from_chat_mission(monkeypatch, 
     assert queue_body["governance"]["read_only"] is True
     assert queue_body["governance"]["writes_files"] is False
     assert any(item["queue_item_id"] == recorded_body["queue_item_id"] for item in queue_body["items"])
+    review_scoring = queue_body["review_scoring"]
+    assert review_scoring["kind"] == "francis.sandbox_canvas.mona_lisa.evaluation_review_scoring"
+    assert review_scoring["classification"] == "passed_with_proposals"
+    assert review_scoring["total_records"] == 1
+    assert review_scoring["passed_count"] == 1
+    assert review_scoring["failed_count"] == 0
+    assert review_scoring["repeated_failure_classes"] == []
+    assert review_scoring["governance"]["promotes_changes"] is False
+
+    for index in range(2):
+        repeated_failure_item = {
+            **recorded_body["queue_item"],
+            "queue_item_id": f"queue_repeated_failure_{index}",
+            "evaluation_id": f"eval_repeated_failure_{index}",
+            "created_at": f"2099-01-01T00:00:0{index}Z",
+            "passed": False,
+            "failure_classification": ["recognizability_threshold_not_met"],
+            "improvement_proposal_count": 1,
+        }
+        (queue_path.parent / f"{repeated_failure_item['queue_item_id']}.json").write_text(
+            json.dumps(repeated_failure_item, indent=2),
+            encoding="utf-8",
+        )
+
+    repeated_queue = client.get("/operations/sandbox-canvas/mona-lisa/evaluation-queue")
+    repeated_body = repeated_queue.json()
+    repeated_scoring = repeated_body["review_scoring"]
+    assert repeated_scoring["classification"] == "repeated_failure_pattern"
+    assert repeated_scoring["failed_count"] == 2
+    assert repeated_scoring["failure_class_counts"] == {"recognizability_threshold_not_met": 2}
+    assert repeated_scoring["repeated_failure_classes"] == [
+        {"failure_class": "recognizability_threshold_not_met", "count": 2}
+    ]
+    assert repeated_scoring["next_recommended_action"] == "review_repeated_failures_before_new_proposals"
+    assert repeated_scoring["governance"]["writes_files"] is False
+    assert repeated_scoring["governance"]["promotes_changes"] is False
 
     proposal_list = client.get(
         "/operations/sandbox-canvas/mona-lisa/improvement-proposals",

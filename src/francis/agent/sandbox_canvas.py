@@ -1137,6 +1137,71 @@ def record_mona_lisa_sandbox_evaluation(
     }
 
 
+def _review_scoring(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    failure_counts: dict[str, int] = {}
+    passed_count = 0
+    failed_count = 0
+    proposal_count = 0
+    latest_failure_classes: list[str] = []
+    for row in rows:
+        if bool(row.get("passed")):
+            passed_count += 1
+        else:
+            failed_count += 1
+        proposal_count += _safe_int(row.get("improvement_proposal_count"), 0)
+        classes = [_safe_str(item) for item in row.get("failure_classification") or [] if _safe_str(item)]
+        if classes and not latest_failure_classes:
+            latest_failure_classes = classes
+        for failure_class in classes:
+            failure_counts[failure_class] = failure_counts.get(failure_class, 0) + 1
+
+    repeated = [
+        {"failure_class": failure_class, "count": count}
+        for failure_class, count in sorted(failure_counts.items())
+        if count >= 2
+    ]
+    if not rows:
+        classification = "no_records"
+        next_action = "record_evaluations_before_review_scoring"
+    elif repeated:
+        classification = "repeated_failure_pattern"
+        next_action = "review_repeated_failures_before_new_proposals"
+    elif failed_count:
+        classification = "single_run_failure_review"
+        next_action = "review_latest_failure_before_repeating_run"
+    elif proposal_count:
+        classification = "passed_with_proposals"
+        next_action = "review_bounded_improvement_proposals"
+    else:
+        classification = "stable_pass"
+        next_action = "retain_record_as_passed_replay_evidence"
+
+    return {
+        "kind": f"{CANVAS_KIND}.evaluation_review_scoring",
+        "status": "read_only",
+        "classification": classification,
+        "total_records": len(rows),
+        "passed_count": passed_count,
+        "failed_count": failed_count,
+        "improvement_proposal_count": proposal_count,
+        "failure_class_counts": failure_counts,
+        "repeated_failure_classes": repeated,
+        "latest_failure_classes": latest_failure_classes,
+        "next_recommended_action": next_action,
+        "thresholds": {
+            "repeated_failure_min_count": 2,
+            "source": "evaluation_queue_records",
+        },
+        "governance": {
+            "read_only": True,
+            "writes_files": False,
+            "runs_operation": False,
+            "approves_proposals": False,
+            "promotes_changes": False,
+        },
+    }
+
+
 def list_mona_lisa_sandbox_evaluation_queue(*, limit: int = 50, status: str | None = None) -> dict[str, Any]:
     bounded_limit = max(1, min(200, _safe_int(limit, 50)))
     status_filter = _safe_str(status)
@@ -1149,6 +1214,7 @@ def list_mona_lisa_sandbox_evaluation_queue(*, limit: int = 50, status: str | No
         "status": "read_only",
         "count": len(rows),
         "items": rows[:bounded_limit],
+        "review_scoring": _review_scoring(rows),
         "governance": {
             "read_only": True,
             "writes_files": False,
