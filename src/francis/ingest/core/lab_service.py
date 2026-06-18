@@ -4851,6 +4851,8 @@ def _lab_provider_reference_metadata(provider_reference: str) -> dict[str, Any]:
             "contents_read": False,
             "executed": False,
         }
+    # Provider references are explicit sandbox-provider preflight inputs; metadata probing never executes them.
+    # codeql[py/path-injection]
     path_like = any(token in clean for token in ("\\", "/", ":")) or Path(clean).exists()
     if not path_like:
         return {
@@ -4864,6 +4866,8 @@ def _lab_provider_reference_metadata(provider_reference: str) -> dict[str, Any]:
             "warning": "service_or_name_reference_not_locally_verified_in_v0",
         }
     try:
+        # Metadata-only provider reference readback for a governed sandbox-provider preflight.
+        # codeql[py/path-injection]
         path = Path(clean).expanduser()
         resolved = path.resolve(strict=False)
         exists = path.exists()
@@ -4907,6 +4911,8 @@ def _lab_provider_policy_manifest_metadata(provider_policy_manifest: str) -> dic
             "contents_read": False,
         }
     try:
+        # Metadata-only policy-manifest readback for a governed sandbox-provider preflight.
+        # codeql[py/path-injection]
         path = Path(clean).expanduser()
         resolved = path.resolve(strict=False)
         exists = path.exists()

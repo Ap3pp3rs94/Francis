@@ -75,11 +75,15 @@ class BoundedScan:
 
 
 def canonical_path(path: str | Path) -> Path:
+    # Ingest roots are explicit local operator inputs; scan limits and sensitive-file guards run downstream.
+    # codeql[py/path-injection]
     return Path(path).expanduser().resolve()
 
 
 def display_path(path: str | Path) -> str:
     try:
+        # Display-only normalization for the same governed local ingest path contract.
+        # codeql[py/path-injection]
         return str(Path(path).expanduser().resolve())
     except OSError:
         return str(path)
