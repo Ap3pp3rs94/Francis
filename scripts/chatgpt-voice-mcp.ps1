@@ -7,6 +7,8 @@ param(
   [string]$HostAddress = '127.0.0.1',
   [int]$Port = 8787,
   [string]$Path = '/mcp',
+  [string]$ConnectorUrl = '',
+  [switch]$Json,
   [switch]$StatusOnly
 )
 
@@ -26,13 +28,135 @@ function Test-VenvPython([string]$PathValue) {
 $python = if (Test-VenvPython $venvPy) { $venvPy } else { 'python' }
 $endpoint = "http://$HostAddress`:$Port$Path"
 
-Write-Host "Francis ChatGPT voice MCP endpoint: $endpoint"
-Write-Host "ChatGPT requires an HTTPS URL ending in $Path. Expose this local endpoint with a tunnel only when intended."
+function ConvertTo-BoundedText {
+  param(
+    [object]$Value,
+    [int]$MaxLength = 512
+  )
+
+  if ($null -eq $Value) { return '' }
+  $Text = [string]$Value
+  if ([string]::IsNullOrWhiteSpace($Text)) { return '' }
+  $Trimmed = $Text.Trim()
+  if ($Trimmed.Length -le $MaxLength) { return $Trimmed }
+  return $Trimmed.Substring(0, $MaxLength)
+}
+
+function Test-ConnectorUrl {
+  param(
+    [string]$Value,
+    [string]$ExpectedPath
+  )
+
+  $BoundedUrl = ConvertTo-BoundedText -Value $Value -MaxLength 512
+  $Result = [ordered]@{
+    provided = -not [string]::IsNullOrWhiteSpace($BoundedUrl)
+    url = $BoundedUrl
+    scheme = ''
+    host_present = $false
+    ends_with_mcp_path = $false
+    https = $false
+    shape_valid = $false
+    reachability_verified = $false
+    usable_for_chatgpt = $false
+    reason = 'connector_url_not_provided'
+  }
+  if (-not [bool]$Result.provided) {
+    return $Result
+  }
+
+  try {
+    $Uri = [System.Uri]$BoundedUrl
+  } catch {
+    $Result.reason = 'connector_url_parse_failed'
+    return $Result
+  }
+
+  $PathValue = $Uri.AbsolutePath.TrimEnd('/')
+  $ExpectedPathValue = if ([string]::IsNullOrWhiteSpace($ExpectedPath)) { '/mcp' } else { $ExpectedPath.TrimEnd('/') }
+  $Result.scheme = $Uri.Scheme
+  $Result.host_present = -not [string]::IsNullOrWhiteSpace($Uri.Host)
+  $Result.ends_with_mcp_path = $PathValue.EndsWith($ExpectedPathValue, [System.StringComparison]::OrdinalIgnoreCase)
+  $Result.https = ($Uri.Scheme -eq 'https')
+  $Result.shape_valid = [bool]$Result.https -and [bool]$Result.host_present -and [bool]$Result.ends_with_mcp_path
+  $Result.usable_for_chatgpt = $false
+  $Result.reason = if ([bool]$Result.shape_valid) { 'connector_url_shape_valid_reachability_not_verified' } elseif (-not [bool]$Result.https) { 'connector_url_must_be_https' } elseif (-not [bool]$Result.ends_with_mcp_path) { 'connector_url_must_end_with_mcp_path' } else { 'connector_url_missing_host' }
+  return $Result
+}
+
+function New-StatusPayload {
+  param(
+    [string]$Endpoint,
+    [string]$ConnectorUrlValue
+  )
+
+  $Listener = Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue |
+    Where-Object { $_.LocalAddress -eq $HostAddress -or $_.LocalAddress -eq '0.0.0.0' -or $_.LocalAddress -eq '::' } |
+    Select-Object -First 1 LocalAddress,LocalPort,OwningProcess
+  $ProcessInfo = $null
+  if ($Listener -and $Listener.OwningProcess) {
+    $ProcessInfo = Get-CimInstance Win32_Process -Filter ("ProcessId={0}" -f ([int]$Listener.OwningProcess)) -ErrorAction SilentlyContinue
+  }
+  $Connector = Test-ConnectorUrl -Value $ConnectorUrlValue -ExpectedPath $Path
+  $LocalReady = $null -ne $Listener
+  $ReadyToAttemptLink = [bool]$LocalReady -and [bool]$Connector.shape_valid
+  $Blockers = New-Object System.Collections.Generic.List[string]
+  if (-not [bool]$LocalReady) { [void]$Blockers.Add('local_mcp_listener_missing') }
+  if (-not [bool]$Connector.shape_valid) { [void]$Blockers.Add([string]$Connector.reason) }
+
+  return [ordered]@{
+    kind = 'francis.chatgpt_voice.mcp.status'
+    ok = [bool]$LocalReady
+    status = if ($ReadyToAttemptLink) { 'local_ready_connector_url_shape_valid' } elseif ($LocalReady) { 'local_ready_connector_url_needed' } else { 'local_listener_missing' }
+    local_endpoint = $Endpoint
+    mcp_path = $Path
+    local_listener = [ordered]@{
+      ready = [bool]$LocalReady
+      address = if ($Listener) { [string]$Listener.LocalAddress } else { '' }
+      port = if ($Listener) { [int]$Listener.LocalPort } else { $Port }
+      owning_process = if ($Listener) { [int]$Listener.OwningProcess } else { 0 }
+      command_line = if ($ProcessInfo) { ConvertTo-BoundedText -Value $ProcessInfo.CommandLine -MaxLength 512 } else { '' }
+    }
+    chatgpt_connector = [ordered]@{
+      requires_https = $true
+      requires_mcp_path = $Path
+      connector_url = $Connector
+      ready = $false
+      ready_to_attempt_link = [bool]$ReadyToAttemptLink
+      reachability_verified = $false
+      native_localhost_access_claimed = $false
+      opens_tunnel = $false
+      next_operator_step = if ($ReadyToAttemptLink) { 'link_or_refresh_chatgpt_connector_with_this_https_mcp_url_then_confirm_chatgpt_tool_list' } elseif ($LocalReady) { 'provide_https_mcp_connector_url_or_explicitly_authorize_tunnel' } else { 'start_local_chatgpt_voice_mcp_endpoint' }
+    }
+    blockers = [string[]]$Blockers.ToArray()
+    governance = [ordered]@{
+      read_only = $true
+      status_only = $true
+      writes_repo = $false
+      writes_data = $false
+      opens_public_tunnel = $false
+      starts_process = $false
+      grants_execution_authority = $false
+      grants_mutation_authority = $false
+      accepts_audio_stream = $false
+      transcript_only_bridge = $true
+    }
+  }
+}
+
+if (-not $Json) {
+  Write-Host "Francis ChatGPT voice MCP endpoint: $endpoint"
+  Write-Host "ChatGPT requires an HTTPS URL ending in $Path. Expose this local endpoint with a tunnel only when intended."
+}
 
 if ($StatusOnly) {
-  $listener = Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue |
-    Select-Object -First 1 LocalAddress,LocalPort,OwningProcess
-  if ($listener) {
+  $Payload = New-StatusPayload -Endpoint $endpoint -ConnectorUrlValue $ConnectorUrl
+  if ($Json) {
+    $Payload | ConvertTo-Json -Depth 8
+    exit 0
+  }
+  $listener = $Payload.local_listener
+  if ([bool]$listener.ready) {
     $listener | Format-List
     exit 0
   }
