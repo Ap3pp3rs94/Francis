@@ -112,6 +112,10 @@ def test_external_mcp_client_roundtrip(tmp_path) -> None:
     # ChatGPT voice transcript ingress is reachable over the same MCP transport.
     assert out["voice"]["ok"] is True
     assert out["voice"]["status"] == "recorded"
+    assert out["voice"]["reply"] == "I recorded the transcript for Francis. Chat forwarding was not requested."
+    assert out["voice"]["voice_response"]["speakable"] is True
+    assert out["voice"]["chat_forward"]["requested"] is False
+    assert out["voice"]["receipt"]["transcript"] == "can you hear me"
     assert out["voice"]["data"]["reply"] == "I recorded the transcript for Francis. Chat forwarding was not requested."
     assert out["voice"]["data"]["voice_response"]["speakable"] is True
     assert out["voice"]["data"]["chat_forward"]["requested"] is False

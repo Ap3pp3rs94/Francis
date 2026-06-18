@@ -10,6 +10,16 @@ def _tool_payload(result: dict[str, Any]) -> str:
     return json.dumps(result, indent=2, ensure_ascii=False, default=str)
 
 
+def _chatgpt_voice_tool_payload(result: dict[str, Any]) -> str:
+    payload = dict(result)
+    data = payload.get("data")
+    if isinstance(data, dict):
+        for key in ("reply", "voice_response", "chat_forward", "receipt"):
+            if key in data:
+                payload[key] = data[key]
+    return _tool_payload(payload)
+
+
 def _clean_values(values: list[str] | None) -> list[str]:
     cleaned: list[str] = []
     for value in values or []:
@@ -286,7 +296,7 @@ def run_server(
         use_llm: bool = False,
     ) -> str:
         """Send an exact operator transcript to Francis and return a speakable reply."""
-        return _tool_payload(
+        return _chatgpt_voice_tool_payload(
             run_tool(
                 "francis.chatgpt_voice.ingress",
                 {
