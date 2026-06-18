@@ -78183,6 +78183,112 @@ Remaining truthful gap:
   receipts, does not write proposal lineage, does not close the proposal-review
   gate, does not close the explicit-promotion gate, and does not start Stage 18.
 
+### 2026-06-17 - Stage 17 quality-evidence remediation clears capability catalog pack
+
+Roadmap area: Stage 17 / Capability Economy, capability-pack quality evidence
+and pack-specific artifact readiness for legacy generated packs.
+
+This pass used the existing governed quality-evidence remediation route and the
+existing governed artifact reconstruction route to clear
+`legacy.generated.capabilitycatalogplugin` from the quality-evidence remediation
+queue. The quality-evidence apply recorded candidate test/doc references for
+the remaining capability that lacked them. The reconstruction apply then wrote
+one pack-specific validation receipt and one reconstructed proposal-lineage
+artifact for that same capability. This records capability refs and artifact
+lineage evidence only; it does not approve a proposal, promote a capability,
+enable a capability, execute a capability, or close Stage 17.
+
+Pack remediated:
+
+- `legacy.generated.capabilitycatalogplugin`
+
+Capability completed by reconstruction:
+
+- `1781579632_capabilitycatalogplugin`
+
+Artifact refs recorded:
+
+- `data/artifacts/plugins/validations/plugin_validation_1781744833_1781579632-capabilitycatalogplugin.json`
+- `data/artifacts/plugins/proposals/plugin_proposal_1781744833_1781579632-capabilitycatalogplugin.json`
+
+Latest validation for this live Stage 17 remediation:
+
+- Initial quality-evidence readback:
+  `GET /plugins/capabilities/packs/quality/evidence/remediation` returned
+  `status: blocked`, `remediation_queue_count: 17`, and showed
+  `legacy.generated.capabilitycatalogplugin` with 208 capabilities and blockers
+  `tests_missing`, `docs_missing`, `validation_receipt_missing`, and
+  `proposal_id_missing`. It found 207 existing validation/proposal artifact
+  candidates and one missing artifact candidate,
+  `1781579632_capabilitycatalogplugin`.
+- Governed quality-evidence dry-run:
+  `POST /plugins/capabilities/packs/quality/evidence/remediation/apply` with
+  actor `stage17.operator`,
+  `FRANCIS_API_ACTOR_SCOPES={"stage17.operator":["plugins.write"]}`,
+  `pack_ids: ["legacy.generated.capabilitycatalogplugin"]`,
+  `max_pack_count: 1`, `max_total_capability_count: 500`,
+  `max_capability_count_per_pack: 500`, and `dry_run: true` returned
+  `ok: true`, `status: dry_run`, `planned_pack_count: 1`,
+  `planned_capability_count: 208`, and no skipped items. The route planned only
+  `tests_missing` and `docs_missing` metadata backfill because the existing
+  validation/proposal refs already present in registry metadata did not need to
+  be re-linked.
+- Governed quality-evidence apply:
+  the same route with `dry_run: false` returned `ok: true`,
+  `status: recorded`, `applied: true`, `recorded_pack_count: 1`,
+  `recorded_capability_count: 1`, `failed: []`, `skipped: []`, and
+  `remaining_remediation_queue_count: 17`. The route reported
+  `writes_registry_metadata: true`, `writes_receipts: false`,
+  `does_not_write_validation_receipts: true`, `does_not_write_proposals: true`,
+  `does_not_approve_proposals: true`, `does_not_promote_capabilities: true`,
+  `does_not_execute_capabilities: true`, `promotion_authority: false`,
+  `execution_authority: false`, `approval_authority: false`, and
+  `memory_write: false`.
+- Reconstruction readback after quality-evidence apply:
+  the same readback showed the pack still queued only for
+  `validation_receipt_missing` and `proposal_id_missing`, with a one-capability
+  reconstruction plan for `1781579632_capabilitycatalogplugin`.
+- Governed reconstruction dry-run:
+  `POST /plugins/capabilities/packs/quality/evidence/remediation/reconstruct`
+  with actor `stage17.operator`, the same write scope, the same pack id,
+  `max_pack_count: 1`, `max_total_capability_count: 1`,
+  `max_capability_count_per_pack: 1`, `dry_run: true`, and
+  `meta.operator_reconstruction_decision: approved_for_reconstruction` returned
+  `ok: true`, `status: dry_run`, `planned_pack_count: 1`,
+  `planned_capability_count: 1`, one planned validation receipt, one planned
+  proposal lineage, no skipped items, and no dry-run writes.
+- Governed reconstruction apply:
+  the same route with `dry_run: false` returned `ok: true`,
+  `status: recorded`, `applied: true`, `recorded_pack_count: 1`,
+  `recorded_capability_count: 1`, `reconstructed_capability_count: 1`,
+  `failed: []`, `skipped: []`, and `remaining_remediation_queue_count: 16`.
+  The apply reported `writes_registry_metadata: true`,
+  `writes_validation_receipts: true`, `writes_proposals: true`,
+  `operator_reconstruction_decision_captured: true`,
+  `proposal_lineage_does_not_approve_proposals: true`,
+  `does_not_approve_proposals: true`, `does_not_promote_capabilities: true`,
+  `does_not_execute_capabilities: true`, `promotion_authority: false`,
+  `execution_authority: false`, `approval_authority: false`, and
+  `memory_write: false`.
+- Artifact existence/readback:
+  the two new artifact refs listed above were verified present on disk after
+  reconstruction apply. Final readback showed
+  `legacy.generated.capabilitycatalogplugin` cleared from the
+  quality-evidence remediation queue, `remediation_queue_count: 16`, and
+  `next_smallest_truthful_gap:
+  stage17_capability_pack_quality_evidence_remediation_apply`.
+
+Remaining truthful gap:
+
+- This pass clears only `legacy.generated.capabilitycatalogplugin` from the
+  quality-evidence remediation queue. Sixteen legacy generated packs remain in
+  that queue. This does not approve proposals, does not promote capabilities,
+  does not enable capabilities, does not grant execution authority, does not
+  grant mutation authority beyond governed quality metadata and governed
+  artifact reconstruction writes, does not close the proposal-review gate, does
+  not close the explicit-promotion gate, does not close Stage 17, and does not
+  start Stage 18.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
