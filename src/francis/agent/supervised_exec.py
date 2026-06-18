@@ -230,6 +230,7 @@ def _write_redacted_text(path: Path, value: str) -> None:
 
 def _write_display_artifact_json(run_id: str, filename: str, obj: Any) -> None:
     target = _artifact_file(run_id, filename)
+    # codeql[py/path-injection] _artifact_file validates run_id, filename, and artifact-root containment.
     target.parent.mkdir(parents=True, exist_ok=True)
     display_text = _display_safe_json_text(obj)
     # codeql[py/clear-text-storage-sensitive-data]
@@ -238,6 +239,7 @@ def _write_display_artifact_json(run_id: str, filename: str, obj: Any) -> None:
 
 def _write_display_artifact_text(run_id: str, filename: str, value: str) -> None:
     target = _artifact_file(run_id, filename)
+    # codeql[py/path-injection] _artifact_file validates run_id, filename, and artifact-root containment.
     target.parent.mkdir(parents=True, exist_ok=True)
     display_text = redact_secret_text(value or "")
     target.write_text(display_text, encoding="utf-8")
