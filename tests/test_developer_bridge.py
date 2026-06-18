@@ -74,9 +74,17 @@ def test_read_supervised_exec_receipt_is_bounded_to_artifact_root(tmp_path, monk
         read_supervised_exec_receipt("../run-123", "result.json")
     assert bad_run_id.value.code == "run_id_denied"
 
+    with pytest.raises(DeveloperBridgeError) as nested_run_id:
+        read_supervised_exec_receipt("run-123/nested", "result.json")
+    assert nested_run_id.value.code == "run_id_denied"
+
     with pytest.raises(DeveloperBridgeError) as bad_filename:
         read_supervised_exec_receipt("run-123", "secrets.txt")
     assert bad_filename.value.code == "filename_denied"
+
+    with pytest.raises(DeveloperBridgeError) as traversal_filename:
+        read_supervised_exec_receipt("run-123", "../result.json")
+    assert traversal_filename.value.code == "filename_denied"
 
 
 def test_developer_bridge_routes_are_mounted() -> None:
