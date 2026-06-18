@@ -18,6 +18,7 @@ class ChatGptVoiceIngressIn(BaseModel):
     actor: str | None = None
     transcript: str = ""
     source: str = "chatgpt.voice"
+    client_origin: str = ""
     conversation_id: str = ""
     turn_id: str = ""
     locale: str = ""
@@ -36,6 +37,7 @@ def ingress(payload: ChatGptVoiceIngressIn) -> dict[str, Any]:
         actor=payload.actor or "",
         transcript=payload.transcript,
         source=payload.source,
+        client_origin=payload.client_origin,
         conversation_id=payload.conversation_id,
         turn_id=payload.turn_id,
         locale=payload.locale,

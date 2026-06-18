@@ -11,6 +11,53 @@ import {
 import { fetchLensMcpStatus, type LensMcpStatus } from "./lens/mcpStatus";
 import { bodyStateReady, presentOrbGlyph, type OrbGlyphState } from "./lens/orbGlyph";
 import { shouldOpenLensOrbOverlay } from "./lens";
+import {
+  FrancisVoiceClient,
+  classifyVoiceSound,
+  classifyVoiceTranscript,
+  createVoiceTurnId,
+  normalizeVoiceTranscript,
+} from "./voice";
+
+type SpeechRecognitionAlternative = {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onend: (() => void) | null;
+  onerror: ((event: { error?: string; message?: string }) => void) | null;
+  onnomatch: (() => void) | null;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onsoundend: (() => void) | null;
+  onsoundstart: (() => void) | null;
+  onspeechstart: (() => void) | null;
+  onstart: (() => void) | null;
+  abort: () => void;
+  start: () => void;
+  stop: () => void;
+};
+
+type SpeechRecognitionConstructor = new () => SpeechRecognitionAlternative;
+
+type SpeechRecognitionResultLike = {
+  isFinal: boolean;
+  item?: (index: number) => { transcript?: string };
+  [index: number]: { transcript?: string } | undefined;
+};
+
+type SpeechRecognitionEventLike = {
+  resultIndex: number;
+  results: {
+    length: number;
+    [index: number]: SpeechRecognitionResultLike;
+  };
+};
+
+declare global {
+  interface Window {
+    SpeechRecognition?: SpeechRecognitionConstructor;
+    webkitSpeechRecognition?: SpeechRecognitionConstructor;
+  }
+}
 
 function envString(key: string, fallback = ""): string {
   const env = (import.meta.env ?? {}) as Record<string, unknown>;
@@ -303,6 +350,326 @@ function getQueryParam(name: string): string {
   return new URLSearchParams(window.location.search).get(name)?.trim() ?? "";
 }
 
+type VoiceLogEntry = {
+  id: string;
+  role: "operator" | "francis" | "system";
+  text: string;
+  tone: "wake" | "passive" | "noise" | "error";
+  ts: number;
+};
+
+function getSpeechRecognitionConstructor(): SpeechRecognitionConstructor | null {
+  if (typeof window === "undefined") return null;
+  return window.SpeechRecognition ?? window.webkitSpeechRecognition ?? null;
+}
+
+function resultTranscript(result: SpeechRecognitionResultLike): string {
+  const first = result[0] ?? (typeof result.item === "function" ? result.item(0) : undefined);
+  return normalizeVoiceTranscript(first?.transcript ?? "");
+}
+
+function speakBrowserText(text: string, onDone: () => void): boolean {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) return false;
+  const clean = normalizeVoiceTranscript(text);
+  if (!clean) return false;
+  const utterance = new SpeechSynthesisUtterance(clean);
+  utterance.rate = 0.94;
+  utterance.pitch = 1;
+  utterance.volume = 1;
+  utterance.onend = onDone;
+  utterance.onerror = onDone;
+  window.speechSynthesis.cancel();
+  window.speechSynthesis.speak(utterance);
+  return true;
+}
+
+function VoiceTranscriptionPanel(props: { baseUrl: string }) {
+  const client = useMemo(() => new FrancisVoiceClient(props.baseUrl), [props.baseUrl]);
+  const recognitionRef = useRef<SpeechRecognitionAlternative | null>(null);
+  const shouldListenRef = useRef(false);
+  const soundHadSpeechRef = useRef(false);
+  const soundHadTranscriptRef = useRef(false);
+  const [listening, setListening] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+  const [interimTranscript, setInterimTranscript] = useState("");
+  const [awareness, setAwareness] = useState("idle");
+  const [error, setError] = useState("");
+  const [log, setLog] = useState<VoiceLogEntry[]>([]);
+
+  const appendLog = useCallback((entry: Omit<VoiceLogEntry, "id" | "ts"> & { id?: string }) => {
+    setLog((current) => [
+      {
+        id: entry.id || createVoiceTurnId("voice_log"),
+        role: entry.role,
+        text: entry.text,
+        tone: entry.tone,
+        ts: Math.floor(Date.now() / 1000),
+      },
+      ...current,
+    ].slice(0, 18));
+  }, []);
+
+  const speakReply = useCallback(
+    (text: string) => {
+      setSpeaking(true);
+      const started = speakBrowserText(text, () => setSpeaking(false));
+      if (!started) setSpeaking(false);
+    },
+    [],
+  );
+
+  const handleFinalTranscript = useCallback(
+    async (rawTranscript: string) => {
+      const transcript = normalizeVoiceTranscript(rawTranscript);
+      if (!transcript) return;
+      soundHadTranscriptRef.current = true;
+      const classification = classifyVoiceTranscript(transcript);
+      const turnId = createVoiceTurnId("chat_ui_voice");
+      setInterimTranscript("");
+      setAwareness(classification.awareness_state);
+      appendLog({
+        id: turnId,
+        role: "operator",
+        text: transcript,
+        tone: classification.kind === "wake" ? "wake" : "passive",
+      });
+
+      setBusy(true);
+      try {
+        const response = await client.recordTranscript({
+          transcript,
+          turn_id: turnId,
+          forward_to_chat: classification.forward_to_chat,
+          use_llm: classification.use_llm,
+        });
+        if (!classification.forward_to_chat) {
+          setAwareness(response.ok ? "passive_transcript_recorded" : "passive_transcript_denied");
+          return;
+        }
+
+        const reply = normalizeVoiceTranscript(response.reply || response.error || "Francis did not return a speakable reply.");
+        appendLog({
+          role: "francis",
+          text: reply,
+          tone: response.ok ? "wake" : "error",
+        });
+        if (response.ok) speakReply(reply);
+        setAwareness(response.ok ? "reply_ready" : "reply_blocked");
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Voice bridge request failed.";
+        setError(message);
+        setAwareness("voice_bridge_error");
+        appendLog({ role: "system", text: message, tone: "error" });
+      } finally {
+        setBusy(false);
+      }
+    },
+    [appendLog, client, speakReply],
+  );
+
+  const stopListening = useCallback(() => {
+    shouldListenRef.current = false;
+    setListening(false);
+    setInterimTranscript("");
+    recognitionRef.current?.stop();
+  }, []);
+
+  const startListening = useCallback(() => {
+    const Recognition = getSpeechRecognitionConstructor();
+    if (!Recognition) {
+      setError("Browser speech recognition is unavailable.");
+      setAwareness("speech_recognition_unavailable");
+      return;
+    }
+
+    setError("");
+    shouldListenRef.current = true;
+    const recognition = new Recognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+    recognition.onstart = () => {
+      setListening(true);
+      setAwareness("listening");
+    };
+    recognition.onsoundstart = () => {
+      soundHadSpeechRef.current = false;
+      soundHadTranscriptRef.current = false;
+      setAwareness("sound_observed");
+    };
+    recognition.onspeechstart = () => {
+      soundHadSpeechRef.current = true;
+      setAwareness("speech_observed");
+    };
+    recognition.onsoundend = () => {
+      const sound = classifyVoiceSound({
+        soundObserved: true,
+        speechObserved: soundHadSpeechRef.current,
+        transcript: soundHadTranscriptRef.current ? "speech" : "",
+      });
+      if (sound.kind === "noise") {
+        setAwareness(sound.awareness_state);
+        appendLog({ role: "system", text: "Ambient sound observed.", tone: "noise" });
+      }
+    };
+    recognition.onnomatch = () => {
+      setAwareness("speech_not_matched");
+    };
+    recognition.onerror = (event) => {
+      const message = event.error || event.message || "Speech recognition error.";
+      setError(message);
+      setAwareness("speech_recognition_error");
+    };
+    recognition.onresult = (event) => {
+      let interim = "";
+      const finals: string[] = [];
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const result = event.results[index];
+        const transcript = resultTranscript(result);
+        if (!transcript) continue;
+        soundHadTranscriptRef.current = true;
+        if (result.isFinal) {
+          finals.push(transcript);
+        } else {
+          interim = normalizeVoiceTranscript(`${interim} ${transcript}`);
+        }
+      }
+      setInterimTranscript(interim);
+      for (const transcript of finals) {
+        void handleFinalTranscript(transcript);
+      }
+    };
+    recognition.onend = () => {
+      if (!shouldListenRef.current) {
+        setListening(false);
+        return;
+      }
+      try {
+        recognition.start();
+      } catch {
+        setListening(false);
+      }
+    };
+    recognitionRef.current = recognition;
+    try {
+      recognition.start();
+    } catch (err) {
+      shouldListenRef.current = false;
+      setListening(false);
+      setError(err instanceof Error ? err.message : "Speech recognition could not start.");
+    }
+  }, [appendLog, handleFinalTranscript]);
+
+  useEffect(() => {
+    return () => {
+      shouldListenRef.current = false;
+      recognitionRef.current?.abort();
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
+  const statusTone = error ? "blocked" : listening ? "ready" : "neutral";
+
+  return (
+    <section
+      style={{
+        background: "rgba(9, 13, 20, 0.92)",
+        border: "1px solid rgba(148, 163, 184, 0.32)",
+        borderRadius: 18,
+        marginTop: 22,
+        padding: 22,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
+        <div>
+          <p style={{ color: "#86efac", margin: 0, textTransform: "uppercase", letterSpacing: 1.4 }}>
+            Voice / transcription
+          </p>
+          <h2 style={{ fontSize: 24, margin: "8px 0 8px" }}>Passive Listen Console</h2>
+        </div>
+        <button
+          type="button"
+          onClick={listening ? stopListening : startListening}
+          style={{
+            background: listening ? "#fecaca" : "#bbf7d0",
+            border: 0,
+            borderRadius: 12,
+            color: "#0f172a",
+            cursor: "pointer",
+            fontWeight: 800,
+            minWidth: 112,
+            padding: "10px 14px",
+          }}
+        >
+          {listening ? "Stop" : "Listen"}
+        </button>
+      </div>
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 16 }}>
+        <Pill label="listen" value={listening ? "on" : "off"} tone={statusTone} />
+        <Pill label="state" value={awareness} tone={statusTone} />
+        <Pill label="bridge" value={busy ? "recording" : "ready"} tone={busy ? "neutral" : "ready"} />
+        <Pill label="speech" value={speaking ? "speaking" : "idle"} tone={speaking ? "neutral" : "ready"} />
+      </div>
+
+      {error ? (
+        <div style={{ border: "1px solid #fca5a5", borderRadius: 12, color: "#fecaca", marginTop: 16, padding: 12 }}>
+          {error}
+        </div>
+      ) : null}
+
+      <div
+        style={{
+          background: "rgba(2, 6, 23, 0.72)",
+          border: "1px solid rgba(148, 163, 184, 0.24)",
+          borderRadius: 12,
+          color: interimTranscript ? "#e0f2fe" : "#94a3b8",
+          marginTop: 16,
+          minHeight: 56,
+          padding: 14,
+        }}
+      >
+        {interimTranscript || "No active transcript."}
+      </div>
+
+      <div style={{ display: "grid", gap: 10, marginTop: 16 }}>
+        {log.length === 0 ? (
+          <div style={{ color: "#94a3b8" }}>No voice turns recorded in this panel.</div>
+        ) : (
+          log.map((entry) => {
+            const border =
+              entry.tone === "wake"
+                ? "#67e8f9"
+                : entry.tone === "noise"
+                  ? "#fde68a"
+                  : entry.tone === "error"
+                    ? "#fca5a5"
+                    : "#64748b";
+            return (
+              <article
+                key={entry.id}
+                style={{
+                  border: `1px solid ${border}`,
+                  borderRadius: 12,
+                  padding: "10px 12px",
+                }}
+              >
+                <div style={{ color: "#94a3b8", fontSize: 12, textTransform: "uppercase" }}>
+                  {entry.role} / {entry.tone}
+                </div>
+                <div style={{ marginTop: 4 }}>{entry.text}</div>
+              </article>
+            );
+          })
+        )}
+      </div>
+    </section>
+  );
+}
+
 function OrbOverlaySurface(props: { status: LensMcpStatus | null; loading: boolean }) {
   const orb = presentOrbGlyph(props.status, props.loading);
   const dragState = useRef<{ pointerId: number; offsetX: number; offsetY: number } | null>(null);
@@ -443,6 +810,7 @@ export default function App() {
   return (
     <main style={shell}>
       <BodyStatePanel status={status} loading={loading} error={error} onRefresh={() => loadStatus()} />
+      <VoiceTranscriptionPanel baseUrl={baseUrl} />
     </main>
   );
 }

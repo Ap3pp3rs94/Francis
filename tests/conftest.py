@@ -116,8 +116,11 @@ CHAT_WRITE_TEST_SCOPE = "chat.write"
 CHAT_WRITE_TEST_ACTORS = (
     "api.chat",
     "chat_ui.chat",
+    "chat_ui.voice",
     "test.chat.write",
 )
+CHATGPT_VOICE_BRIDGE_WRITE_TEST_SCOPE = "chatgpt.voice.bridge.write"
+CHATGPT_VOICE_BRIDGE_WRITE_TEST_ACTORS = ("chat_ui.voice",)
 OPERATION_RUN_TEST_SCOPE = "operations.run"
 OPERATION_RUN_TEST_ACTORS = (
     "api.operations",
@@ -416,6 +419,11 @@ def _test_actor_scope_policy() -> dict[str, list[str]]:
     _add_actor_scopes(policy, PLUGIN_WRITE_TEST_ACTORS, PLUGIN_WRITE_TEST_SCOPE)
     _add_actor_scopes(policy, MISSION_WRITE_TEST_ACTORS, MISSION_WRITE_TEST_SCOPE)
     _add_actor_scopes(policy, CHAT_WRITE_TEST_ACTORS, CHAT_WRITE_TEST_SCOPE)
+    _add_actor_scopes(
+        policy,
+        CHATGPT_VOICE_BRIDGE_WRITE_TEST_ACTORS,
+        CHATGPT_VOICE_BRIDGE_WRITE_TEST_SCOPE,
+    )
     _add_actor_scopes(policy, OPERATION_RUN_TEST_ACTORS, OPERATION_RUN_TEST_SCOPE)
     _add_actor_scopes(policy, OPERATION_WRITE_TEST_ACTORS, OPERATION_WRITE_TEST_SCOPE)
     _add_actor_scopes(policy, MEMORY_TIMELINE_WRITE_TEST_ACTORS, MEMORY_TIMELINE_WRITE_TEST_SCOPE)

@@ -112,6 +112,38 @@ def test_chatgpt_voice_ingress_records_without_chat_forward(monkeypatch, tmp_pat
     assert not (data_root / "conversations" / "ledger" / "ledger.jsonl").exists()
 
 
+def test_chatgpt_voice_http_ingress_preserves_browser_voice_client_origin(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({"chat_ui.voice": ["chatgpt.voice.bridge.write", "chat.write"]}),
+    )
+
+    client = TestClient(create_app())
+
+    body = client.post(
+        "/chatgpt-voice/ingress",
+        json={
+            "actor": "chat_ui.voice",
+            "source": "chat_ui.voice",
+            "client_origin": "francis_chat_ui_browser_voice",
+            "transcript": "there is a sound near the desk",
+            "turn_id": "browser-voice-passive",
+            "forward_to_chat": False,
+        },
+    ).json()
+
+    assert body["ok"] is True
+    assert body["status"] == "recorded"
+    assert body["receipt"]["actor"] == "chat_ui.voice"
+    assert body["receipt"]["source"] == "chat_ui.voice"
+    assert body["receipt"]["client_origin"] == "francis_chat_ui_browser_voice"
+    assert body["orb_voice_bridge"]["client_origin"] == "francis_chat_ui_browser_voice"
+    assert body["chat_forward"]["requested"] is False
+    assert not (data_root / "conversations" / "ledger" / "ledger.jsonl").exists()
+
+
 def test_chatgpt_voice_forward_requires_existing_chat_write_gate(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
