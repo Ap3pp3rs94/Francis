@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Callable
 
+from francis.chatgpt_voice_bridge import CHATGPT_VOICE_BRIDGE_MCP_INGRESS_DESCRIPTION
 from francis.kernel.paths import repo_root
 
 from .contracts import McpGatewayError, ToolResult, ToolSpec
@@ -718,7 +719,7 @@ _TOOL_SPECS = [
     ),
     ToolSpec(
         "francis.chatgpt_voice.ingress",
-        "Record a ChatGPT voice transcript and optionally forward it to Francis chat.",
+        CHATGPT_VOICE_BRIDGE_MCP_INGRESS_DESCRIPTION,
         read_only=False,
     ),
     ToolSpec(

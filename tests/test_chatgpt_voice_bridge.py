@@ -36,6 +36,11 @@ def test_chatgpt_voice_contract_is_permission_gated(monkeypatch, tmp_path: Path)
     assert body["receipt_contract"]["mcp_gateway_tool"] == "francis.chatgpt_voice.ingress"
     assert body["receipt_contract"]["mcp_server_tool"] == "francis_chatgpt_voice_ingress"
     assert body["input_contract"]["audio_stream_accepted"] is False
+    assert body["client_speech_contract"]["call_ingress_for_every_voice_turn"] is True
+    assert body["client_speech_contract"]["speak_only_top_level_reply"] is True
+    assert body["client_speech_contract"]["transcript_unavailable_must_be_forwarded"] is True
+    assert body["client_speech_contract"]["local_fallback_answer_allowed"] is False
+    assert "Do not answer locally" in body["client_speech_contract"]["description"]
     assert body["chatgpt_app_boundary"]["native_phone_localhost_access_claimed"] is False
     assert body["governance"]["read_only"] is True
     assert body["governance"]["grants_execution_authority"] is False
@@ -217,6 +222,11 @@ def test_chatgpt_voice_mcp_tools_expose_bounded_bridge(monkeypatch, tmp_path: Pa
     assert "francis.chatgpt_voice.contract" in names
     assert "francis.chatgpt_voice.ingress" in names
     assert "francis.chatgpt_voice.receipts" in names
+    tool_by_name = {tool["name"]: tool for tool in list_tools()}
+    ingress_description = tool_by_name["francis.chatgpt_voice.ingress"]["description"]
+    assert "speak only the returned top-level `reply`" in ingress_description
+    assert "Transcript Unavailable" in ingress_description
+    assert "Do not answer locally" in ingress_description
 
     contract = run_tool("francis.chatgpt_voice.contract", {"actor": _ACTOR})
     assert contract["ok"] is True

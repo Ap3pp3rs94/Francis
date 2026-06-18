@@ -98,6 +98,9 @@ def test_external_mcp_client_roundtrip(tmp_path) -> None:
     assert len(out["names"]) >= 21
     assert out["voice_tool"]["title"] == "Send transcript to Francis"
     assert "talk to Francis" in out["voice_tool"]["description"]
+    assert "speak only the returned top-level `reply`" in out["voice_tool"]["description"]
+    assert "Do not answer locally" in out["voice_tool"]["description"]
+    assert "Transcript Unavailable" in out["voice_tool"]["description"]
     assert out["voice_tool"]["annotations"]["readOnlyHint"] is False
     assert out["voice_tool"]["annotations"]["destructiveHint"] is False
 

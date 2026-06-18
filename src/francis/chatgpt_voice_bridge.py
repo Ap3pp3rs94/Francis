@@ -20,6 +20,13 @@ CHATGPT_VOICE_BRIDGE_HTTP_TRANSPORT = "http_api"
 CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TRANSPORT = "mcp_gateway_tool"
 CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TOOL = "francis.chatgpt_voice.ingress"
 CHATGPT_VOICE_BRIDGE_MCP_SERVER_TOOL = "francis_chatgpt_voice_ingress"
+CHATGPT_VOICE_BRIDGE_MCP_INGRESS_DESCRIPTION = (
+    "Use this when the operator wants to talk to Francis. Always pass the exact user-visible transcript text "
+    "in `transcript`, leave `forward_to_chat` true unless the operator explicitly requested receipt-only intake, "
+    "and speak only the returned top-level `reply` as Francis's answer. If ChatGPT voice reports "
+    "Transcript Unavailable, still call this tool with that marker so Francis can return the bounded transcript "
+    "guard reply. Do not answer locally, summarize, or invent a Francis reply."
+)
 MAX_TRANSCRIPT_CHARS = 8000
 _TRANSCRIPT_UNAVAILABLE_MARKERS = {
     "transcript unavailable",
@@ -202,6 +209,13 @@ def chatgpt_voice_bridge_contract(actor: str = "") -> dict[str, Any]:
             "metadata_fields": ["source", "conversation_id", "turn_id", "locale"],
             "forward_to_chat_default": True,
             "use_llm_default": False,
+        },
+        "client_speech_contract": {
+            "call_ingress_for_every_voice_turn": True,
+            "speak_only_top_level_reply": True,
+            "transcript_unavailable_must_be_forwarded": True,
+            "local_fallback_answer_allowed": False,
+            "description": CHATGPT_VOICE_BRIDGE_MCP_INGRESS_DESCRIPTION,
         },
         "chatgpt_app_boundary": {
             "supported_shape": "mcp_or_https_connector_posts_transcribed_text",
@@ -395,6 +409,7 @@ def chatgpt_voice_bridge_receipts(actor: str = "", *, limit: int = 10) -> dict[s
 
 __all__ = [
     "CHATGPT_VOICE_BRIDGE_HTTP_TRANSPORT",
+    "CHATGPT_VOICE_BRIDGE_MCP_INGRESS_DESCRIPTION",
     "CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TOOL",
     "CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TRANSPORT",
     "CHATGPT_VOICE_BRIDGE_MCP_SERVER_TOOL",

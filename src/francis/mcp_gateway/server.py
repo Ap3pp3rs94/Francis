@@ -4,6 +4,7 @@ import json
 from typing import Any, Literal, cast
 
 from francis.chatgpt_voice_bridge import (
+    CHATGPT_VOICE_BRIDGE_MCP_INGRESS_DESCRIPTION,
     CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TOOL,
     CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TRANSPORT,
     CHATGPT_VOICE_BRIDGE_MCP_SERVER_TOOL,
@@ -288,12 +289,7 @@ def run_server(
     @server.tool(
         name="francis_chatgpt_voice_ingress",
         title="Send transcript to Francis",
-        description=(
-            "Use this when the operator wants to talk to Francis. Pass the exact user-visible transcript text "
-            "in `transcript`, leave `forward_to_chat` true, and speak the returned top-level `reply` as "
-            "Francis's answer. Do not invent text if ChatGPT voice reports Transcript Unavailable; pass that "
-            "marker or ask the operator to repeat."
-        ),
+        description=CHATGPT_VOICE_BRIDGE_MCP_INGRESS_DESCRIPTION,
         annotations=ToolAnnotations(
             readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False
         ),
