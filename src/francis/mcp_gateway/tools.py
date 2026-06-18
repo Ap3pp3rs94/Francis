@@ -630,6 +630,7 @@ def _chatgpt_voice_ingress(args: dict[str, Any]) -> ToolResult:
         ingress_transport=_clean_text(args.get("ingress_transport"), CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TRANSPORT),
         mcp_gateway_tool=_clean_text(args.get("mcp_gateway_tool"), CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TOOL),
         mcp_server_tool=_clean_text(args.get("mcp_server_tool")),
+        client_origin=_clean_text(args.get("client_origin")),
     )
     return ToolResult(
         ok=bool(result.get("ok")),

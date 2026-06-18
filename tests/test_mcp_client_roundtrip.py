@@ -120,20 +120,24 @@ def test_external_mcp_client_roundtrip(tmp_path) -> None:
     assert out["voice"]["chat_forward"]["requested"] is False
     assert out["voice"]["orb_voice_bridge"]["virtual_voice_turn"] is True
     assert out["voice"]["orb_voice_bridge"]["mcp_ingress"] is True
+    assert out["voice"]["orb_voice_bridge"]["client_origin"] == "mcp_client_unspecified"
     assert out["voice"]["orb_voice_bridge"]["local_overlay_speech_started"] is False
     assert out["voice"]["orb_voice_bridge"]["microphone_recognition_claimed"] is False
     assert out["voice"]["receipt"]["transcript"] == "can you hear me"
     assert out["voice"]["receipt"]["ingress_transport"] == "mcp_gateway_tool"
     assert out["voice"]["receipt"]["mcp_gateway_tool"] == "francis.chatgpt_voice.ingress"
     assert out["voice"]["receipt"]["mcp_server_tool"] == "francis_chatgpt_voice_ingress"
+    assert out["voice"]["receipt"]["client_origin"] == "mcp_client_unspecified"
     assert out["voice"]["data"]["reply"] == "I recorded the transcript for Francis. Chat forwarding was not requested."
     assert out["voice"]["data"]["voice_response"]["speakable"] is True
     assert out["voice"]["data"]["chat_forward"]["requested"] is False
     assert out["voice"]["data"]["orb_voice_bridge"]["virtual_voice_turn"] is True
     assert out["voice"]["data"]["orb_voice_bridge"]["mcp_ingress"] is True
+    assert out["voice"]["data"]["orb_voice_bridge"]["client_origin"] == "mcp_client_unspecified"
     assert out["voice"]["data"]["receipt"]["transcript"] == "can you hear me"
     assert out["voice"]["data"]["receipt"]["ingress_transport"] == "mcp_gateway_tool"
     assert out["voice"]["data"]["receipt"]["mcp_gateway_tool"] == "francis.chatgpt_voice.ingress"
     assert out["voice"]["data"]["receipt"]["mcp_server_tool"] == "francis_chatgpt_voice_ingress"
+    assert out["voice"]["data"]["receipt"]["client_origin"] == "mcp_client_unspecified"
     assert out["voice"]["governance"]["raw_audio"] is False
     assert out["voice"]["governance"]["grants_execution_authority"] is False

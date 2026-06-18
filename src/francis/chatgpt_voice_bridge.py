@@ -20,6 +20,8 @@ CHATGPT_VOICE_BRIDGE_HTTP_TRANSPORT = "http_api"
 CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TRANSPORT = "mcp_gateway_tool"
 CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TOOL = "francis.chatgpt_voice.ingress"
 CHATGPT_VOICE_BRIDGE_MCP_SERVER_TOOL = "francis_chatgpt_voice_ingress"
+CHATGPT_VOICE_BRIDGE_MCP_CLIENT_UNSPECIFIED = "mcp_client_unspecified"
+CHATGPT_VOICE_BRIDGE_CHATGPT_APP_VOICE_CLIENT = "chatgpt_app_voice"
 CHATGPT_VOICE_BRIDGE_VIRTUAL_TURN_STATE = "data/runtime/lens-overlay/voice-turn-status.json"
 CHATGPT_VOICE_BRIDGE_VIRTUAL_TURN_RECEIPTS = "data/runtime/lens-overlay/voice-turns"
 CHATGPT_VOICE_BRIDGE_MCP_INGRESS_DESCRIPTION = (
@@ -27,7 +29,8 @@ CHATGPT_VOICE_BRIDGE_MCP_INGRESS_DESCRIPTION = (
     "in `transcript`, leave `forward_to_chat` true unless the operator explicitly requested receipt-only intake, "
     "and speak only the returned top-level `reply` as Francis's answer. If ChatGPT voice reports "
     "Transcript Unavailable, still call this tool with that marker so Francis can return the bounded transcript "
-    "guard reply. Do not answer locally, summarize, or invent a Francis reply."
+    "guard reply. When this call is made by ChatGPT Voice, set `client_origin` to `chatgpt_app_voice`. "
+    "Do not answer locally, summarize, or invent a Francis reply."
 )
 MAX_TRANSCRIPT_CHARS = 8000
 _TRANSCRIPT_UNAVAILABLE_MARKERS = {
@@ -245,6 +248,8 @@ def chatgpt_voice_bridge_contract(actor: str = "") -> dict[str, Any]:
             "audio_stream_accepted": False,
             "max_transcript_chars": MAX_TRANSCRIPT_CHARS,
             "metadata_fields": ["source", "conversation_id", "turn_id", "locale"],
+            "client_origin_field": "client_origin",
+            "chatgpt_voice_client_origin_value": CHATGPT_VOICE_BRIDGE_CHATGPT_APP_VOICE_CLIENT,
             "forward_to_chat_default": True,
             "use_llm_default": False,
         },
@@ -252,6 +257,7 @@ def chatgpt_voice_bridge_contract(actor: str = "") -> dict[str, Any]:
             "call_ingress_for_every_voice_turn": True,
             "speak_only_top_level_reply": True,
             "transcript_unavailable_must_be_forwarded": True,
+            "chatgpt_voice_must_set_client_origin": CHATGPT_VOICE_BRIDGE_CHATGPT_APP_VOICE_CLIENT,
             "local_fallback_answer_allowed": False,
             "description": CHATGPT_VOICE_BRIDGE_MCP_INGRESS_DESCRIPTION,
         },
@@ -354,6 +360,7 @@ def _write_virtual_voice_turn(
         "conversation_id": _safe_str(base_payload.get("conversation_id")),
         "source": _safe_str(base_payload.get("source")),
         "actor": _safe_str(base_payload.get("actor")),
+        "client_origin": _safe_str(base_payload.get("client_origin")),
         "decision": decision,
         "reason": reason,
         "chat_bridge_route": "/chat/send",
@@ -401,6 +408,7 @@ def _virtual_voice_summary(payload: dict[str, Any]) -> dict[str, Any]:
         "status": _safe_str(payload.get("status")),
         "turn_id": _safe_str(payload.get("turn_id")),
         "virtual_voice_turn": bool(payload.get("virtual_voice_turn")),
+        "client_origin": _safe_str(payload.get("client_origin")),
         "mcp_ingress": bool(payload.get("mcp_ingress")),
         "transcript_source": _safe_str(payload.get("transcript_source")),
         "chat_bridge_status": _safe_str(payload.get("chat_bridge_status")),
@@ -451,6 +459,7 @@ def record_chatgpt_voice_ingress(
     ingress_transport: str = CHATGPT_VOICE_BRIDGE_HTTP_TRANSPORT,
     mcp_gateway_tool: str = "",
     mcp_server_tool: str = "",
+    client_origin: str = "",
 ) -> dict[str, Any]:
     route = "/chatgpt-voice/ingress"
     clean_actor = _safe_str(actor) or "chatgpt.voice"
@@ -460,12 +469,23 @@ def record_chatgpt_voice_ingress(
 
     bounded_transcript = _bounded_text(transcript, max_chars=MAX_TRANSCRIPT_CHARS)
     redacted_transcript = redact_secret_text(bounded_transcript)
+    clean_ingress_transport = _bounded_text(ingress_transport, max_chars=64) or CHATGPT_VOICE_BRIDGE_HTTP_TRANSPORT
+    clean_mcp_gateway_tool = _bounded_text(mcp_gateway_tool, max_chars=96)
+    clean_mcp_server_tool = _bounded_text(mcp_server_tool, max_chars=96)
+    clean_client_origin = _bounded_text(client_origin, max_chars=96)
+    if not clean_client_origin and (
+        clean_ingress_transport == CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TRANSPORT
+        or clean_mcp_gateway_tool
+        or clean_mcp_server_tool
+    ):
+        clean_client_origin = CHATGPT_VOICE_BRIDGE_MCP_CLIENT_UNSPECIFIED
     base_payload: dict[str, Any] = {
         "actor": clean_actor,
         "source": _bounded_text(source, max_chars=96) or "chatgpt.voice",
-        "ingress_transport": _bounded_text(ingress_transport, max_chars=64) or CHATGPT_VOICE_BRIDGE_HTTP_TRANSPORT,
-        "mcp_gateway_tool": _bounded_text(mcp_gateway_tool, max_chars=96),
-        "mcp_server_tool": _bounded_text(mcp_server_tool, max_chars=96),
+        "ingress_transport": clean_ingress_transport,
+        "mcp_gateway_tool": clean_mcp_gateway_tool,
+        "mcp_server_tool": clean_mcp_server_tool,
+        "client_origin": clean_client_origin,
         "conversation_id": _bounded_text(conversation_id, max_chars=160),
         "turn_id": _bounded_text(turn_id, max_chars=160),
         "locale": _bounded_text(locale, max_chars=32),

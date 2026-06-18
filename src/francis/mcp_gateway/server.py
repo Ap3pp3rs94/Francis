@@ -5,6 +5,7 @@ from typing import Any, Literal, cast
 
 from francis.chatgpt_voice_bridge import (
     CHATGPT_VOICE_BRIDGE_MCP_INGRESS_DESCRIPTION,
+    CHATGPT_VOICE_BRIDGE_MCP_CLIENT_UNSPECIFIED,
     CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TOOL,
     CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TRANSPORT,
     CHATGPT_VOICE_BRIDGE_MCP_SERVER_TOOL,
@@ -301,6 +302,7 @@ def run_server(
         conversation_id: str = "",
         turn_id: str = "",
         locale: str = "",
+        client_origin: str = CHATGPT_VOICE_BRIDGE_MCP_CLIENT_UNSPECIFIED,
         forward_to_chat: bool = True,
         use_llm: bool = False,
     ) -> str:
@@ -315,6 +317,7 @@ def run_server(
                     "conversation_id": conversation_id,
                     "turn_id": turn_id,
                     "locale": locale,
+                    "client_origin": client_origin,
                     "forward_to_chat": forward_to_chat,
                     "use_llm": use_llm,
                     "ingress_transport": CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TRANSPORT,
