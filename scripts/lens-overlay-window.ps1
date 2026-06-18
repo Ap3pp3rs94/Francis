@@ -655,6 +655,23 @@ function Update-OrbAutonomousMotion {
   $Window.Top = [double]$Window.Top + (($TargetTop - [double]$Window.Top) * $Ease)
 }
 
+function Set-OverlayStatusProperty {
+  param(
+    [object]$Payload,
+    [string]$Name,
+    [object]$Value
+  )
+
+  if ($null -eq $Payload) {
+    return
+  }
+  if ($null -ne $Payload.PSObject.Properties[$Name]) {
+    $Payload.PSObject.Properties[$Name].Value = $Value
+    return
+  }
+  $Payload | Add-Member -NotePropertyName $Name -NotePropertyValue $Value
+}
+
 function New-OverlayWindowPositionProjection {
   param(
     [object]$Window,
@@ -688,6 +705,63 @@ function New-OverlayWindowPositionProjection {
   }
 }
 
+function Write-OverlayPositionState {
+  param(
+    [string]$Root,
+    [object]$Window,
+    [object]$MotionState,
+    [bool]$OverlayWindowVisible
+  )
+
+  if ([string]::IsNullOrWhiteSpace($Root)) {
+    return
+  }
+
+  $RuntimeRoot = Join-Path $Root 'runtime\lens-overlay'
+  $StatusPath = Join-Path $RuntimeRoot 'status.json'
+  $Status = Read-JsonFile -Path $StatusPath
+  if ($null -eq $Status) {
+    return
+  }
+
+  $Position = New-OverlayWindowPositionProjection -Window $Window -MotionState $MotionState -OverlayWindowVisible $OverlayWindowVisible
+  Set-OverlayStatusProperty -Payload $Status -Name 'overlay_position' -Value $Position
+  Set-OverlayStatusProperty -Payload $Status -Name 'overlay_window_visible' -Value $OverlayWindowVisible
+  Set-OverlayStatusProperty -Payload $Status -Name 'always_on_top' -Value (($null -ne $Window) -and [bool]$Window.TopMost)
+  Set-OverlayStatusProperty -Payload $Status -Name 'updated_at' -Value ([DateTimeOffset]::UtcNow.ToString('o'))
+
+  $TempPath = Join-Path $RuntimeRoot ("status.{0}.tmp" -f ([Guid]::NewGuid().ToString('N')))
+  try {
+    $Status | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $TempPath -Encoding UTF8
+    Move-OverlayRuntimeStateFile -TempPath $TempPath -DestinationPath $StatusPath
+  } finally {
+    Remove-Item -LiteralPath $TempPath -Force -ErrorAction SilentlyContinue
+  }
+}
+
+function Write-OrbAutonomousMotionPositionReceipt {
+  param(
+    [object]$Window,
+    [object]$MotionState,
+    [double]$FrameSeconds = -1.0
+  )
+
+  if ($null -eq $Window -or $null -eq $MotionState -or [string]::IsNullOrWhiteSpace($script:LensOverlayDataRoot)) {
+    return
+  }
+  if ($FrameSeconds -lt 0.0) {
+    return
+  }
+
+  $LastReceiptSeconds = [double]$script:LensOverlayLastPositionReceiptSeconds
+  if ($LastReceiptSeconds -ge 0.0 -and (($FrameSeconds - $LastReceiptSeconds) -lt 1.0)) {
+    return
+  }
+
+  $script:LensOverlayLastPositionReceiptSeconds = $FrameSeconds
+  Write-OverlayPositionState -Root $script:LensOverlayDataRoot -Window $Window -MotionState $MotionState -OverlayWindowVisible $true
+}
+
 function Start-OrbFrameSyncedMotion {
   param(
     [object]$Window,
@@ -699,7 +773,9 @@ function Start-OrbFrameSyncedMotion {
   $Handler = [System.EventHandler]{
     param($Sender, $EventArgs)
 
-    Update-OrbAutonomousMotion -Window $script:LensOverlayWindow -MotionState $script:LensOverlayMotionState -FrameSeconds $script:LensOverlayRenderFrameClock.Elapsed.TotalSeconds
+    $FrameSeconds = if ($null -ne $script:LensOverlayRenderFrameClock) { $script:LensOverlayRenderFrameClock.Elapsed.TotalSeconds } else { -1.0 }
+    Update-OrbAutonomousMotion -Window $script:LensOverlayWindow -MotionState $script:LensOverlayMotionState -FrameSeconds $FrameSeconds
+    Write-OrbAutonomousMotionPositionReceipt -Window $script:LensOverlayWindow -MotionState $script:LensOverlayMotionState -FrameSeconds $FrameSeconds
   }
   [System.Windows.Media.CompositionTarget]::add_Rendering($Handler)
   return [ordered]@{
@@ -3759,6 +3835,7 @@ if ($Mode -eq 'Run') {
   $script:LensOverlayEnergyRoot = $null
   $script:LensOverlayMotionState = $null
   $script:LensOverlayRenderFrameClock = $null
+  $script:LensOverlayLastPositionReceiptSeconds = -1.0
   try {
     if (-not $RunningOnWindows) {
       Write-OverlayState -Root $DataRoot -Status 'unsupported' -OverlayWindowVisible $false -AlwaysOnTop $false -Message 'Windows overlay requires a Windows user session.'

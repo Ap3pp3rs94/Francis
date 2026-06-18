@@ -168,8 +168,9 @@ proportions.
 - The desktop overlay Orb now uses a bounded `bounded_desktop_roam` motion
   profile instead of a small right-corner idle drift. Runtime status writes
   `overlay_position` with current window coordinates, work-area roam bounds,
-  drag support, and explicit no-authority flags so Francis can show live Orb
-  location truth without changing the locked visual face.
+  drag support, and explicit no-authority flags, refreshed from the
+  frame-synced motion loop, so Francis can show live Orb location truth without
+  changing the locked visual face or claiming screen-capture authority.
 
 ## Current Task
 

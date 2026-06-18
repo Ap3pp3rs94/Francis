@@ -798,6 +798,11 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "roam_right = $MaximumLeft" in script
     assert "overlay_position = New-OverlayWindowPositionProjection" in script
     assert "overlay_position = $Readback.overlay_position" in script
+    assert "function Write-OverlayPositionState" in script
+    assert "function Write-OrbAutonomousMotionPositionReceipt" in script
+    assert "LensOverlayLastPositionReceiptSeconds" in script
+    assert "(($FrameSeconds - $LastReceiptSeconds) -lt 1.0)" in script
+    assert "Write-OrbAutonomousMotionPositionReceipt -Window $script:LensOverlayWindow" in script
     assert "$MotionSubscription = Start-OrbFrameSyncedMotion" in script
     assert "autonomous_motion = $AutonomousMotion" in script
     assert "voice = Get-OverlayVoiceReadback -Root $Root" in script
