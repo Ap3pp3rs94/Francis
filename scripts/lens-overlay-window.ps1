@@ -31,6 +31,8 @@ param(
 
   [string]$ElevenLabsVoiceId = '',
 
+  [string]$ElevenLabsVoiceName = '',
+
   [string]$ElevenLabsModelId = 'eleven_multilingual_v2',
 
   [string]$ElevenLabsOutputFormat = 'mp3_44100_128',
@@ -1222,23 +1224,37 @@ function New-OverlayVoiceProjection {
   )
 
   $UsingRemoteTts = $Provider -eq 'ElevenLabs'
+  $ResolvedSelectedVoice = if ($UsingRemoteTts) {
+    Get-ElevenLabsVoiceLabel -RequestedVoiceId $ElevenLabsVoiceId -FallbackLabel $SelectedVoiceName
+  } else {
+    $SelectedVoiceName
+  }
   return [ordered]@{
     kind = 'lens.overlay.voice.runtime'
     status = 'available'
     source = if ($UsingRemoteTts) { 'elevenlabs_text_to_speech' } else { 'windows_sapi_speech_synthesis' }
     voice_provider = $Provider
+    voice_persona = 'Francis'
+    francis_surface = 'orb_voice'
+    embodied_by = 'francis_orb'
+    orb_role = 'embodiment'
+    voice_lens_orb_identity = 'Francis'
+    voice_lens_orb_are_francis_surfaces = $true
+    voice_lens_orb_are_separate_identities = $false
+    voice_lens_orb_separate_identities = $false
     speech_output = $true
     microphone_capture = $WakeListening
     voice_input = if ($WakeListening) { 'explicit_wake_phrase_or_wake_prefixed_utterance' } else { 'disabled_requires_explicit_microphone_authority' }
     wake_listening = $WakeListening
     wake_phrase = if ($WakeListening) { $WakePhraseText } else { '' }
-    selected_voice = $SelectedVoiceName
+    selected_voice = $ResolvedSelectedVoice
     remote_processing = $UsingRemoteTts
     remote_provider = if ($UsingRemoteTts) { 'elevenlabs' } else { '' }
     sends_text_to_remote_provider = $UsingRemoteTts
     stores_audio = $false
     audio_retention = if ($UsingRemoteTts) { 'transient_deleted_after_playback' } else { 'none' }
     stores_transcript = $false
+    transcript_redacted = $true
     requires_explicit_speak_command = $true
     grants_execution_authority = $false
     grants_mutation_authority = $false
@@ -1262,7 +1278,7 @@ function New-OverlayRuntimeVoiceProjection {
     [int]$WakeAliasCount = 0
   )
 
-  $SelectedVoice = if ($Provider -eq 'ElevenLabs') { 'elevenlabs' } else { $Voice }
+  $SelectedVoice = Get-OverlaySelectedVoiceName -Provider $Provider -Voice $Voice -RequestedVoiceId $ElevenLabsVoiceId
   $Payload = New-OverlayVoiceProjection -SelectedVoiceName $SelectedVoice -Provider $Provider -WakeListening $WakeListening -WakePhraseText $WakePhraseText
   $Payload.status = if (-not [string]::IsNullOrWhiteSpace($Status)) {
     $Status
@@ -1283,6 +1299,8 @@ function New-OverlayRuntimeVoiceProjection {
   $Payload.microphone_signal_status = if ($WakeListening) { 'unknown_until_audio_signal' } else { 'not_capturing' }
   $Payload.microphone_input_effective = $false
   $Payload.needs_operator_audio_input_check = $false
+  $Payload.microphone_gate_while_speaking = 'francis_stop_only'
+  $Payload.conversation_forwarding_while_speaking = $false
   $Payload.speech_detected = $false
   $Payload.speech_detected_count = 0
   $Payload.speech_hypothesis_count = 0
@@ -1787,6 +1805,76 @@ function Get-ElevenLabsVoiceIdSource {
   return Get-ScopedEnvironmentSource -Name 'ELEVENLABS_VOICE_ID'
 }
 
+function Get-ElevenLabsVoiceLabel {
+  param(
+    [string]$RequestedVoiceId = $ElevenLabsVoiceId,
+    [string]$FallbackLabel = ''
+  )
+
+  if (-not [string]::IsNullOrWhiteSpace($ElevenLabsVoiceName)) {
+    return $ElevenLabsVoiceName.Trim()
+  }
+  $ScopedName = Get-ScopedEnvironmentValue -Name 'FRANCIS_ELEVENLABS_VOICE_NAME'
+  if (-not [string]::IsNullOrWhiteSpace($ScopedName)) {
+    return $ScopedName.Trim()
+  }
+  $ScopedLabel = Get-ScopedEnvironmentValue -Name 'FRANCIS_ELEVENLABS_VOICE_LABEL'
+  if (-not [string]::IsNullOrWhiteSpace($ScopedLabel)) {
+    return $ScopedLabel.Trim()
+  }
+  $GenericName = Get-ScopedEnvironmentValue -Name 'ELEVENLABS_VOICE_NAME'
+  if (-not [string]::IsNullOrWhiteSpace($GenericName)) {
+    return $GenericName.Trim()
+  }
+
+  $ResolvedVoiceId = Get-ElevenLabsVoiceId -RequestedVoiceId $RequestedVoiceId
+  if ($ResolvedVoiceId -eq '56bWURjYFHyYyVf490Dp') {
+    return 'Emma'
+  }
+  if (-not [string]::IsNullOrWhiteSpace($FallbackLabel) -and $FallbackLabel -ne 'elevenlabs') {
+    return $FallbackLabel.Trim()
+  }
+  return 'ElevenLabs voice'
+}
+
+function Get-ElevenLabsVoiceLabelSource {
+  param([string]$RequestedVoiceId = $ElevenLabsVoiceId)
+
+  if (-not [string]::IsNullOrWhiteSpace($ElevenLabsVoiceName)) {
+    return 'script_parameter:ElevenLabsVoiceName'
+  }
+  $ScopedName = Get-ScopedEnvironmentSource -Name 'FRANCIS_ELEVENLABS_VOICE_NAME'
+  if (-not [string]::IsNullOrWhiteSpace($ScopedName)) {
+    return $ScopedName
+  }
+  $ScopedLabel = Get-ScopedEnvironmentSource -Name 'FRANCIS_ELEVENLABS_VOICE_LABEL'
+  if (-not [string]::IsNullOrWhiteSpace($ScopedLabel)) {
+    return $ScopedLabel
+  }
+  $GenericName = Get-ScopedEnvironmentSource -Name 'ELEVENLABS_VOICE_NAME'
+  if (-not [string]::IsNullOrWhiteSpace($GenericName)) {
+    return $GenericName
+  }
+  $ResolvedVoiceId = Get-ElevenLabsVoiceId -RequestedVoiceId $RequestedVoiceId
+  if ($ResolvedVoiceId -eq '56bWURjYFHyYyVf490Dp') {
+    return 'known_voice_id:Emma'
+  }
+  return 'provider_default_label'
+}
+
+function Get-OverlaySelectedVoiceName {
+  param(
+    [string]$Provider = $VoiceProvider,
+    [string]$Voice = $VoiceName,
+    [string]$RequestedVoiceId = $ElevenLabsVoiceId
+  )
+
+  if ($Provider -eq 'ElevenLabs') {
+    return Get-ElevenLabsVoiceLabel -RequestedVoiceId $RequestedVoiceId -FallbackLabel $Voice
+  }
+  return $Voice
+}
+
 function New-OverlayVoiceProviderReadiness {
   param(
     [string]$Provider = $VoiceProvider,
@@ -1801,6 +1889,8 @@ function New-OverlayVoiceProviderReadiness {
 
   $ApiKeySource = Get-ElevenLabsApiKeySource
   $VoiceIdSource = Get-ElevenLabsVoiceIdSource -RequestedVoiceId $RequestedVoiceId
+  $VoiceLabel = Get-ElevenLabsVoiceLabel -RequestedVoiceId $RequestedVoiceId
+  $VoiceLabelSource = Get-ElevenLabsVoiceLabelSource -RequestedVoiceId $RequestedVoiceId
   $ApiKeyPresent = -not [string]::IsNullOrWhiteSpace($ApiKeySource)
   $VoiceIdPresent = -not [string]::IsNullOrWhiteSpace($VoiceIdSource)
   $Missing = @()
@@ -1826,6 +1916,9 @@ function New-OverlayVoiceProviderReadiness {
       api_key_source = $ApiKeySource
       voice_id_present = $VoiceIdPresent
       voice_id_source = $VoiceIdSource
+      voice_label = $VoiceLabel
+      voice_label_source = $VoiceLabelSource
+      voice_label_redacted = $false
       missing_configuration = [string[]]$Missing
       model_id = $ModelId
       output_format = $OutputFormat
@@ -1839,6 +1932,10 @@ function New-OverlayVoiceProviderReadiness {
       audio_retention = 'transient_deleted_after_playback'
     }
     active_provider_configured = if ($Provider -eq 'ElevenLabs') { ($ApiKeyPresent -and $VoiceIdPresent) } else { ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT) }
+    francis_identity = 'Francis'
+    orb_role = 'embodiment'
+    voice_lens_orb_are_francis_surfaces = $true
+    voice_lens_orb_are_separate_identities = $false
     remote_provider_requires_explicit_selection = $true
     stores_secret = $false
     logs_text_payload = $false
@@ -2149,8 +2246,9 @@ function Invoke-OverlayElevenLabsVoiceSpeech {
   if ([string]::IsNullOrWhiteSpace($VoiceId)) {
     $Missing += 'voice_id'
   }
+  $VoiceLabel = Get-ElevenLabsVoiceLabel -RequestedVoiceId $RequestedVoiceId
   if ($Missing.Count -gt 0) {
-    $Payload = New-OverlayVoiceProjection -SelectedVoiceName 'elevenlabs' -Provider 'ElevenLabs' -WakeListening $WakeListening -WakePhraseText $WakePhraseText
+    $Payload = New-OverlayVoiceProjection -SelectedVoiceName $VoiceLabel -Provider 'ElevenLabs' -WakeListening $WakeListening -WakePhraseText $WakePhraseText
     $Payload.status = 'refused'
     $Payload.ok = $false
     $Payload.error = 'elevenlabs_configuration_required'
@@ -2191,10 +2289,10 @@ function Invoke-OverlayElevenLabsVoiceSpeech {
     $DeletedAudio = -not (Test-Path -LiteralPath $AudioPath -PathType Leaf)
     $ElapsedMs = [int]([DateTimeOffset]::UtcNow - $StartedAt).TotalMilliseconds
 
-    $Payload = New-OverlayVoiceProjection -SelectedVoiceName 'elevenlabs' -Provider 'ElevenLabs' -WakeListening $WakeListening -WakePhraseText $WakePhraseText
+    $Payload = New-OverlayVoiceProjection -SelectedVoiceName $VoiceLabel -Provider 'ElevenLabs' -WakeListening $WakeListening -WakePhraseText $WakePhraseText
     $Payload.status = $SuccessStatus
     $Payload.ok = $true
-    $Payload.voice_name = 'elevenlabs'
+    $Payload.voice_name = $VoiceLabel
     $Payload.voice_id_present = $true
     $Payload.model_id = $ModelId
     $Payload.output_format = $OutputFormat
@@ -2221,7 +2319,7 @@ function Invoke-OverlayElevenLabsVoiceSpeech {
     }
     Remove-Item -LiteralPath $AudioPath -Force -ErrorAction SilentlyContinue
     $DeletedAudio = -not (Test-Path -LiteralPath $AudioPath -PathType Leaf)
-    $Payload = New-OverlayVoiceProjection -SelectedVoiceName 'elevenlabs' -Provider 'ElevenLabs' -WakeListening $WakeListening -WakePhraseText $WakePhraseText
+    $Payload = New-OverlayVoiceProjection -SelectedVoiceName $VoiceLabel -Provider 'ElevenLabs' -WakeListening $WakeListening -WakePhraseText $WakePhraseText
     $Payload.status = 'failed'
     $Payload.ok = $false
     $Payload.error = if ($StatusCode) { "elevenlabs_http_$StatusCode" } else { [string]$_.Exception.Message }
@@ -2734,7 +2832,7 @@ function Invoke-OverlayVoiceStopPhrase {
     Write-OverlayVoiceTurnReceipt -Root $Root -TurnId $PreviousTurnId -Payload $PreviousPayload
   }
 
-  $SelectedSpeechVoice = if ($Provider -eq 'ElevenLabs') { 'elevenlabs' } else { $Voice }
+  $SelectedSpeechVoice = Get-OverlaySelectedVoiceName -Provider $Provider -Voice $Voice
   $Payload = New-OverlayVoiceProjection -SelectedVoiceName $SelectedSpeechVoice -Provider $Provider -WakeListening $true -WakePhraseText $WakePhraseText
   $Payload.status = 'francis_stop_listening_restored'
   $Payload.ok = $true
@@ -2867,6 +2965,8 @@ function Start-OverlayVoiceSpeechProcess {
     $Voice,
     '-ElevenLabsVoiceId',
     $RemoteVoiceId,
+    '-ElevenLabsVoiceName',
+    $ElevenLabsVoiceName,
     '-ElevenLabsModelId',
     $RemoteModelId,
     '-ElevenLabsOutputFormat',
@@ -2961,6 +3061,7 @@ function Invoke-OverlayVoiceChatTurn {
 
   $BoundedUtterance = ([string]$UtteranceText).Trim()
   $VoicePayloadWakeListening = (-not [bool]$SyntheticTranscript)
+  $SelectedVoice = Get-OverlaySelectedVoiceName -Provider $Provider -Voice $Voice -RequestedVoiceId $RemoteVoiceId
   $EffectiveWakePhraseDetected = (-not [bool]$SyntheticTranscript) -and [bool]$WakePhraseDetected
   $ContinuousVoiceChat = (-not [bool]$SyntheticTranscript -and -not [bool]$EffectiveWakePhraseDetected)
   $TranscriptSource = if ($SyntheticTranscript) {
@@ -2979,7 +3080,7 @@ function Invoke-OverlayVoiceChatTurn {
   }
   if ([string]::IsNullOrWhiteSpace($BoundedUtterance)) {
     if ($SyntheticTranscript) {
-      $Payload = New-OverlayVoiceProjection -SelectedVoiceName $Voice -Provider $Provider -WakeListening $false -WakePhraseText $WakePhraseText
+      $Payload = New-OverlayVoiceProjection -SelectedVoiceName $SelectedVoice -Provider $Provider -WakeListening $false -WakePhraseText $WakePhraseText
       $Payload.status = 'synthetic_voice_turn_refused'
       $Payload.ok = $false
       $Payload.error = 'synthetic_voice_turn_text_required'
@@ -3005,7 +3106,7 @@ function Invoke-OverlayVoiceChatTurn {
     return Invoke-OverlayVoiceSpeech -Root $Root -Text $script:LensOverlayWakeResponse -Provider $Provider -Voice $Voice -Rate $Rate -Volume $Volume -RemoteVoiceId $RemoteVoiceId -RemoteModelId $RemoteModelId -RemoteOutputFormat $RemoteOutputFormat -RemoteStability $RemoteStability -RemoteSimilarityBoost $RemoteSimilarityBoost -RemoteStyle $RemoteStyle -RemoteSpeed $RemoteSpeed -RemoteUseSpeakerBoost $RemoteUseSpeakerBoost -WakeListening $true -WakePhraseText $WakePhraseText -SuccessStatus 'wake_acknowledged' -SuccessMessage 'Wake phrase detected and acknowledged through selected speech output.'
   }
   if ($BoundedUtterance.Length -gt 600) {
-    $Payload = New-OverlayVoiceProjection -SelectedVoiceName $Voice -Provider $Provider -WakeListening $VoicePayloadWakeListening -WakePhraseText $WakePhraseText
+    $Payload = New-OverlayVoiceProjection -SelectedVoiceName $SelectedVoice -Provider $Provider -WakeListening $VoicePayloadWakeListening -WakePhraseText $WakePhraseText
     $Payload.status = 'voice_chat_refused'
     $Payload.ok = $false
     $Payload.error = 'voice_utterance_too_long'
@@ -3129,7 +3230,7 @@ function Invoke-OverlayVoiceChatTurn {
   if (-not (Test-OverlayVoiceTurnCurrent -Root $Root -TurnId $VoiceTurnId)) {
     $CurrentVoiceTurn = Read-OverlayVoiceTurnState -Root $Root
     $SupersededByTurnId = if ($null -ne $CurrentVoiceTurn) { Get-StringProperty -Payload $CurrentVoiceTurn -Name 'active_turn_id' -Default '' } else { '' }
-    $SuppressedPayload = New-OverlayVoiceProjection -SelectedVoiceName $Voice -Provider $Provider -WakeListening $VoicePayloadWakeListening -WakePhraseText $WakePhraseText
+    $SuppressedPayload = New-OverlayVoiceProjection -SelectedVoiceName $SelectedVoice -Provider $Provider -WakeListening $VoicePayloadWakeListening -WakePhraseText $WakePhraseText
     $SuppressedPayload.status = 'voice_chat_reply_superseded'
     $SuppressedPayload.ok = $true
     $SuppressedPayload.message = 'Voice chat reply was suppressed because a newer wake-prefixed utterance became the active turn.'
@@ -3189,7 +3290,7 @@ function Invoke-OverlayVoiceChatTurn {
   }
 
   $SpeechProcess = Start-OverlayVoiceSpeechProcess -Root $Root -Text $SpokenText -Provider $Provider -Voice $Voice -Rate $Rate -Volume $Volume -RemoteVoiceId $RemoteVoiceId -RemoteModelId $RemoteModelId -RemoteOutputFormat $RemoteOutputFormat -RemoteStability $RemoteStability -RemoteSimilarityBoost $RemoteSimilarityBoost -RemoteStyle $RemoteStyle -RemoteSpeed $RemoteSpeed -RemoteUseSpeakerBoost $RemoteUseSpeakerBoost -WakePhraseText $WakePhraseText
-  $SelectedSpeechVoice = if ($Provider -eq 'ElevenLabs') { 'elevenlabs' } else { $Voice }
+  $SelectedSpeechVoice = $SelectedVoice
   $SpeechPayload = New-OverlayVoiceProjection -SelectedVoiceName $SelectedSpeechVoice -Provider $Provider -WakeListening $VoicePayloadWakeListening -WakePhraseText $WakePhraseText
   $SpeechPayload.status = if ([bool]$SpeechProcess.ok) { 'voice_chat_speech_started' } else { 'voice_chat_speech_start_failed' }
   $SpeechPayload.ok = [bool]$SpeechProcess.ok
@@ -3426,6 +3527,7 @@ function Start-OverlayWakeListener {
   if ($BoundedResponse.Length -gt 120) {
     $BoundedResponse = $BoundedResponse.Substring(0, 120)
   }
+  $SelectedWakeVoice = Get-OverlaySelectedVoiceName -Provider $Provider -Voice $Voice -RequestedVoiceId $RemoteVoiceId
 
   try {
     Add-Type -AssemblyName System.Speech
@@ -3565,7 +3667,7 @@ function Start-OverlayWakeListener {
           return
         }
         if ([double]$EventArgs.Result.Confidence -lt $script:LensOverlayWakeConfidenceThreshold) {
-          $Rejected = New-OverlayVoiceProjection -SelectedVoiceName 'wake-listener' -Provider $script:LensOverlayWakeVoiceProvider -WakeListening $true -WakePhraseText $script:LensOverlayWakePhrase
+          $Rejected = New-OverlayVoiceProjection -SelectedVoiceName (Get-OverlaySelectedVoiceName -Provider $script:LensOverlayWakeVoiceProvider -Voice $script:LensOverlayWakeVoice -RequestedVoiceId $script:LensOverlayWakeRemoteVoiceId) -Provider $script:LensOverlayWakeVoiceProvider -WakeListening $true -WakePhraseText $script:LensOverlayWakePhrase
           $Rejected.status = 'wake_rejected_low_confidence'
           $Rejected.ok = $false
           $Rejected.wake_phrase_detected = $false
@@ -3591,7 +3693,7 @@ function Start-OverlayWakeListener {
           return
         }
         if ($OwnedSpeechActive -or $OwnedSpeechRecentlyCompleted) {
-          $Suppressed = New-OverlayVoiceProjection -SelectedVoiceName 'wake-listener' -Provider $script:LensOverlayWakeVoiceProvider -WakeListening $true -WakePhraseText $script:LensOverlayWakePhrase
+          $Suppressed = New-OverlayVoiceProjection -SelectedVoiceName (Get-OverlaySelectedVoiceName -Provider $script:LensOverlayWakeVoiceProvider -Voice $script:LensOverlayWakeVoice -RequestedVoiceId $script:LensOverlayWakeRemoteVoiceId) -Provider $script:LensOverlayWakeVoiceProvider -WakeListening $true -WakePhraseText $script:LensOverlayWakePhrase
           $Suppressed.status = 'voice_input_suppressed_while_speaking'
           $Suppressed.ok = $true
           $Suppressed.wake_phrase_detected = (-not [string]::IsNullOrWhiteSpace($UtteranceText) -or $WakePhraseOnly)
@@ -3624,7 +3726,7 @@ function Start-OverlayWakeListener {
             [void](Invoke-OverlayVoiceChatTurn -Root $script:LensOverlayWakeRoot -UtteranceText $RecognizedText -Provider $script:LensOverlayWakeVoiceProvider -Voice $script:LensOverlayWakeVoice -Rate $script:LensOverlayWakeRate -Volume $script:LensOverlayWakeVolume -RemoteVoiceId $script:LensOverlayWakeRemoteVoiceId -RemoteModelId $script:LensOverlayWakeRemoteModelId -RemoteOutputFormat $script:LensOverlayWakeRemoteOutputFormat -RemoteStability $script:LensOverlayWakeRemoteStability -RemoteSimilarityBoost $script:LensOverlayWakeRemoteSimilarityBoost -RemoteStyle $script:LensOverlayWakeRemoteStyle -RemoteSpeed $script:LensOverlayWakeRemoteSpeed -RemoteUseSpeakerBoost $script:LensOverlayWakeRemoteUseSpeakerBoost -WakePhraseText $script:LensOverlayWakePhrase -RecognitionConfidence ([double]$EventArgs.Result.Confidence) -RecognitionThreshold $script:LensOverlayWakeConfidenceThreshold -WakeAliasCount $script:LensOverlayWakeAliasCount -WakeCount $script:LensOverlayWakeCount -WakePhraseDetected $false)
             return
           }
-          $Rejected = New-OverlayVoiceProjection -SelectedVoiceName 'wake-listener' -Provider $script:LensOverlayWakeVoiceProvider -WakeListening $true -WakePhraseText $script:LensOverlayWakePhrase
+          $Rejected = New-OverlayVoiceProjection -SelectedVoiceName (Get-OverlaySelectedVoiceName -Provider $script:LensOverlayWakeVoiceProvider -Voice $script:LensOverlayWakeVoice -RequestedVoiceId $script:LensOverlayWakeRemoteVoiceId) -Provider $script:LensOverlayWakeVoiceProvider -WakeListening $true -WakePhraseText $script:LensOverlayWakePhrase
           $Rejected.status = 'wake_rejected_no_wake_phrase'
           $Rejected.ok = $false
           $Rejected.wake_phrase_detected = $false
@@ -3656,7 +3758,7 @@ function Start-OverlayWakeListener {
         Write-OverlayVoiceState -Root $script:LensOverlayWakeRoot -Payload $Payload
       })
     $Recognizer.RecognizeAsync([System.Speech.Recognition.RecognizeMode]::Multiple)
-    $Payload = New-OverlayVoiceProjection -SelectedVoiceName $Voice -Provider $Provider -WakeListening $true -WakePhraseText $BoundedPhrase
+    $Payload = New-OverlayVoiceProjection -SelectedVoiceName $SelectedWakeVoice -Provider $Provider -WakeListening $true -WakePhraseText $BoundedPhrase
     $Payload.status = 'listening'
     $Payload.ok = $true
     $Payload.response_text_length = $BoundedResponse.Length
@@ -3673,7 +3775,7 @@ function Start-OverlayWakeListener {
     Write-OverlayVoiceState -Root $Root -Payload $Payload
     return $Recognizer
   } catch {
-    $Payload = New-OverlayVoiceProjection -SelectedVoiceName $Voice -Provider $Provider -WakeListening $false -WakePhraseText ''
+    $Payload = New-OverlayVoiceProjection -SelectedVoiceName $SelectedWakeVoice -Provider $Provider -WakeListening $false -WakePhraseText ''
     $Payload.status = 'listen_failed'
     $Payload.ok = $false
     $Payload.error = [string]$_.Exception.Message
@@ -4238,6 +4340,8 @@ $ArgumentList = @(
   $VoiceName,
   '-ElevenLabsVoiceId',
   $ElevenLabsVoiceId,
+  '-ElevenLabsVoiceName',
+  $ElevenLabsVoiceName,
   '-ElevenLabsModelId',
   $ElevenLabsModelId,
   '-ElevenLabsOutputFormat',

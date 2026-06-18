@@ -13,6 +13,15 @@ param(
 
   [string]$LensStatusPath = '',
 
+  [switch]$EnableVoiceChecks,
+
+  [ValidateSet('WindowsSapi', 'ElevenLabs')]
+  [string]$VoiceProvider = 'ElevenLabs',
+
+  [string]$ElevenLabsVoiceId = '',
+
+  [string]$ElevenLabsVoiceName = '',
+
   [ValidateRange(1, 600)]
   [int]$IntervalSeconds = 15,
 
@@ -295,6 +304,182 @@ function Invoke-CommandPaletteHttpProbe {
   }
 }
 
+function Invoke-OverlayVoiceReadback {
+  param(
+    [string]$Root,
+    [string]$Provider,
+    [string]$RemoteVoiceId,
+    [string]$RemoteVoiceName
+  )
+
+  $Arguments = @(
+    '-NoProfile',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-File',
+    (Join-Path $PSScriptRoot 'lens-overlay-window.ps1'),
+    '-Mode',
+    'Status',
+    '-DataDir',
+    $Root,
+    '-VoiceEnvironmentScope',
+    'All',
+    '-VoiceProvider',
+    $Provider
+  )
+  if (-not [string]::IsNullOrWhiteSpace($RemoteVoiceId)) {
+    $Arguments += @('-ElevenLabsVoiceId', $RemoteVoiceId)
+  }
+  if (-not [string]::IsNullOrWhiteSpace($RemoteVoiceName)) {
+    $Arguments += @('-ElevenLabsVoiceName', $RemoteVoiceName)
+  }
+
+  $PowerShell = Get-Command powershell -ErrorAction SilentlyContinue
+  if ($null -eq $PowerShell) {
+    $PowerShell = Get-Command pwsh -ErrorAction Stop
+  }
+
+  $Output = & $PowerShell.Source @Arguments 2>&1
+  $ExitCode = $LASTEXITCODE
+  $Text = ($Output | ForEach-Object { [string]$_ }) -join "`n"
+  try {
+    $Payload = $Text | ConvertFrom-Json -ErrorAction Stop
+    return [ordered]@{
+      ok = ($ExitCode -eq 0)
+      exit_code = $ExitCode
+      payload = $Payload
+      error = ''
+      raw_length = $Text.Length
+    }
+  } catch {
+    return [ordered]@{
+      ok = $false
+      exit_code = $ExitCode
+      payload = $null
+      error = [string]$_.Exception.Message
+      raw_length = $Text.Length
+    }
+  }
+}
+
+function Get-RecentChatGptVoiceReceipts {
+  param(
+    [string]$Root,
+    [int]$Limit = 5
+  )
+
+  $ReceiptRoot = Join-Path $Root 'integrations\chatgpt_voice\receipts'
+  if (-not (Test-Path -LiteralPath $ReceiptRoot -PathType Container)) {
+    return @()
+  }
+  $Items = [System.Collections.ArrayList]::new()
+  $Files = @(Get-ChildItem -LiteralPath $ReceiptRoot -Filter '*.json' -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First $Limit)
+  foreach ($File in $Files) {
+    $Payload = Read-JsonFile -Path $File.FullName
+    if ($null -ne $Payload) {
+      Set-PropertyValue -Payload $Payload -Name 'receipt_path' -Value $File.FullName
+      [void]$Items.Add($Payload)
+    }
+  }
+  return @($Items.ToArray())
+}
+
+function New-VoiceMonitorProjection {
+  param(
+    [string]$Root,
+    [string]$Provider,
+    [string]$RemoteVoiceId,
+    [string]$RemoteVoiceName
+  )
+
+  $Readback = Invoke-OverlayVoiceReadback -Root $Root -Provider $Provider -RemoteVoiceId $RemoteVoiceId -RemoteVoiceName $RemoteVoiceName
+  $Payload = Get-PropertyValue -Payload $Readback -Name 'payload'
+  $OverlayVoice = Get-PropertyValue -Payload $Payload -Name 'overlay_voice'
+  $Voice = Get-PropertyValue -Payload $Payload -Name 'voice'
+  $VoiceTurn = Get-PropertyValue -Payload $Payload -Name 'voice_turn'
+  $ProviderReadiness = Get-PropertyValue -Payload $Payload -Name 'voice_provider_readiness'
+  $ElevenLabs = Get-PropertyValue -Payload $ProviderReadiness -Name 'elevenlabs'
+  $Receipts = @(Get-RecentChatGptVoiceReceipts -Root $Root -Limit 5)
+
+  $SelectedProvider = [string](Get-PropertyValue -Payload $ProviderReadiness -Name 'selected_provider' -Default $Provider)
+  $ActiveProviderConfigured = [bool](Get-PropertyValue -Payload $ProviderReadiness -Name 'active_provider_configured' -Default $false)
+  $VoiceLabel = [string](Get-PropertyValue -Payload $ElevenLabs -Name 'voice_label' -Default '')
+  $SelectedVoice = [string](Get-PropertyValue -Payload $OverlayVoice -Name 'selected_voice' -Default '')
+  $VoiceStatus = [string](Get-PropertyValue -Payload $Voice -Name 'status' -Default '')
+  $VoiceError = [string](Get-PropertyValue -Payload $Voice -Name 'error' -Default '')
+  $VoiceChatError = [string](Get-PropertyValue -Payload $Voice -Name 'chat_error' -Default '')
+  $TurnChatError = [string](Get-PropertyValue -Payload $VoiceTurn -Name 'chat_error' -Default '')
+  $TurnBridgeStatus = [string](Get-PropertyValue -Payload $VoiceTurn -Name 'chat_bridge_status' -Default '')
+  $OverlayBridgeStatus = [string](Get-PropertyValue -Payload $OverlayVoice -Name 'chat_bridge_status' -Default '')
+  $LatestReceipt = if (@($Receipts).Count -gt 0) { $Receipts[0] } else { $null }
+  $IdentityOk = (
+    [string](Get-PropertyValue -Payload $OverlayVoice -Name 'voice_lens_orb_identity' -Default 'Francis') -eq 'Francis' -or
+    [bool](Get-PropertyValue -Payload $OverlayVoice -Name 'voice_lens_orb_are_francis_surfaces' -Default $false)
+  )
+  $GenericVoiceLabel = ($SelectedProvider -eq 'ElevenLabs' -and ($SelectedVoice -in @('elevenlabs', 'wake-listener') -or $VoiceLabel -in @('', 'elevenlabs')))
+  $PermissionDenied = (
+    $VoiceError -eq 'api_permission_denied' -or
+    $VoiceChatError -eq 'api_permission_denied' -or
+    $TurnChatError -eq 'api_permission_denied'
+  )
+  $DeniedReceipts = @(
+    $Receipts | Where-Object {
+      [string](Get-PropertyValue -Payload $_ -Name 'chat_forward_status' -Default '') -eq 'denied' -or
+      [string](Get-PropertyValue -Payload $_ -Name 'chat_forward_error' -Default '') -eq 'api_permission_denied' -or
+      [string](Get-PropertyValue -Payload $_ -Name 'error' -Default '') -eq 'api_permission_denied'
+    }
+  )
+  $LatestReceiptDenied = (
+    $null -ne $LatestReceipt -and (
+      [string](Get-PropertyValue -Payload $LatestReceipt -Name 'chat_forward_status' -Default '') -eq 'denied' -or
+      [string](Get-PropertyValue -Payload $LatestReceipt -Name 'chat_forward_error' -Default '') -eq 'api_permission_denied' -or
+      [string](Get-PropertyValue -Payload $LatestReceipt -Name 'error' -Default '') -eq 'api_permission_denied'
+    )
+  )
+
+  return [ordered]@{
+    enabled = $true
+    ok = [bool](Get-PropertyValue -Payload $Readback -Name 'ok' -Default $false)
+    exit_code = [int](Get-PropertyValue -Payload $Readback -Name 'exit_code' -Default 0)
+    error = [string](Get-PropertyValue -Payload $Readback -Name 'error' -Default '')
+    selected_provider = $SelectedProvider
+    active_provider_configured = $ActiveProviderConfigured
+    selected_voice = $SelectedVoice
+    voice_label = $VoiceLabel
+    voice_identity_ok = [bool]$IdentityOk
+    generic_voice_label_observed = [bool]$GenericVoiceLabel
+    overlay_status = [string](Get-PropertyValue -Payload $Payload -Name 'status' -Default '')
+    overlay_ready = [bool](Get-PropertyValue -Payload $Payload -Name 'ready' -Default $false)
+    overlay_voice_status = [string](Get-PropertyValue -Payload $OverlayVoice -Name 'status' -Default '')
+    voice_status = $VoiceStatus
+    voice_error = $VoiceError
+    voice_chat_error = $VoiceChatError
+    voice_turn_status = [string](Get-PropertyValue -Payload $VoiceTurn -Name 'status' -Default '')
+    voice_turn_chat_error = $TurnChatError
+    voice_turn_bridge_status = $TurnBridgeStatus
+    overlay_bridge_status = $OverlayBridgeStatus
+    api_permission_denied_observed = [bool]$PermissionDenied
+    recent_receipt_count = @($Receipts).Count
+    denied_recent_receipt_count = @($DeniedReceipts).Count
+    latest_receipt_denied = [bool]$LatestReceiptDenied
+    latest_receipt_status = if ($null -ne $LatestReceipt) { [string](Get-PropertyValue -Payload $LatestReceipt -Name 'status' -Default '') } else { '' }
+    latest_receipt_chat_forward_status = if ($null -ne $LatestReceipt) { [string](Get-PropertyValue -Payload $LatestReceipt -Name 'chat_forward_status' -Default '') } else { '' }
+    latest_receipt_chat_forward_error = if ($null -ne $LatestReceipt) { [string](Get-PropertyValue -Payload $LatestReceipt -Name 'chat_forward_error' -Default '') } else { '' }
+    status_path = 'data/runtime/lens-overlay/status.json'
+    voice_status_path = 'data/runtime/lens-overlay/voice-status.json'
+    voice_turn_status_path = 'data/runtime/lens-overlay/voice-turn-status.json'
+    receipt_root = 'data/integrations/chatgpt_voice/receipts'
+    governance = [ordered]@{
+      read_only_contract = $true
+      controls_overlay = $false
+      captures_audio = $false
+      captures_screen = $false
+      execution_authority = $false
+      mutation_authority_granted = $false
+    }
+  }
+}
+
 function New-CommandPaletteMonitorProbe {
   param(
     [string]$Root,
@@ -302,12 +487,21 @@ function New-CommandPaletteMonitorProbe {
     [string]$ApiBaseUrl,
     [string]$ChatUiBaseUrl,
     [string]$LensStatusPath,
-    [int]$TimeoutSeconds
+    [int]$TimeoutSeconds,
+    [bool]$VoiceChecksEnabled,
+    [string]$VoiceChecksProvider,
+    [string]$VoiceChecksRemoteVoiceId,
+    [string]$VoiceChecksRemoteVoiceName
   )
 
   $Bridge = Invoke-CommandPaletteBridge -ApiBaseUrl $ApiBaseUrl -ChatUiBaseUrl $ChatUiBaseUrl -LensStatusPath $LensStatusPath -TimeoutSeconds $TimeoutSeconds
   $BridgePayload = Get-PropertyValue -Payload $Bridge -Name 'payload'
   $Http = Invoke-CommandPaletteHttpProbe -Url $CommandPaletteUrl -TimeoutSeconds $TimeoutSeconds
+  $VoiceMonitor = if ($VoiceChecksEnabled) {
+    New-VoiceMonitorProjection -Root $Root -Provider $VoiceChecksProvider -RemoteVoiceId $VoiceChecksRemoteVoiceId -RemoteVoiceName $VoiceChecksRemoteVoiceName
+  } else {
+    [ordered]@{ enabled = $false }
+  }
   $CommandTotal = [int](Get-PropertyValue -Payload $BridgePayload -Name 'command_total' -Default 0)
   $UrlEntrypoint = Get-PropertyValue -Payload $BridgePayload -Name 'url_entrypoint'
   $BridgeGovernance = Get-PropertyValue -Payload $BridgePayload -Name 'governance'
@@ -331,6 +525,19 @@ function New-CommandPaletteMonitorProbe {
   [void]$Checks.Add((New-MonitorCheck -Id 'command_palette_url_entrypoint' -Passed ($LocalOpenAvailable -and $Route -eq $ExpectedRoute -and $LocalSurface -eq 'chat_ui.command_palette' -and $OpensPalette) -Status $(if ($LocalOpenAvailable) { 'ready' } else { 'not_ready' }) -Evidence $Route))
   [void]$Checks.Add((New-MonitorCheck -Id 'command_palette_commands' -Passed ($CommandTotal -gt 0) -Status $(if ($CommandTotal -gt 0) { 'commands_present' } else { 'commands_missing' }) -Evidence ([string]$CommandTotal)))
   [void]$Checks.Add((New-MonitorCheck -Id 'command_palette_governance' -Passed ((-not $ExecutionAuthority) -and (-not $MutationAuthority) -and (-not $OpensPaletteFromBridge)) -Status 'read_only' -Evidence 'execution=false mutation=false opens_palette=false'))
+  if ($VoiceChecksEnabled) {
+    $VoiceReadbackOk = [bool](Get-PropertyValue -Payload $VoiceMonitor -Name 'ok' -Default $false)
+    $VoiceProviderReady = if ($VoiceChecksProvider -eq 'ElevenLabs') { [bool](Get-PropertyValue -Payload $VoiceMonitor -Name 'active_provider_configured' -Default $false) } else { $true }
+    $VoiceIdentityOk = [bool](Get-PropertyValue -Payload $VoiceMonitor -Name 'voice_identity_ok' -Default $false)
+    $GenericVoiceLabelObserved = [bool](Get-PropertyValue -Payload $VoiceMonitor -Name 'generic_voice_label_observed' -Default $false)
+    $VoicePermissionDenied = [bool](Get-PropertyValue -Payload $VoiceMonitor -Name 'api_permission_denied_observed' -Default $false)
+    $LatestReceiptDenied = [bool](Get-PropertyValue -Payload $VoiceMonitor -Name 'latest_receipt_denied' -Default $false)
+    $DeniedRecentReceiptCount = [int](Get-PropertyValue -Payload $VoiceMonitor -Name 'denied_recent_receipt_count' -Default 0)
+    [void]$Checks.Add((New-MonitorCheck -Id 'voice_overlay_readback' -Passed $VoiceReadbackOk -Status $(if ($VoiceReadbackOk) { 'readback_ready' } else { 'readback_failed' }) -Evidence 'scripts/lens-overlay-window.ps1 -Mode Status'))
+    [void]$Checks.Add((New-MonitorCheck -Id 'voice_provider_readiness' -Passed $VoiceProviderReady -Status $(if ($VoiceProviderReady) { 'configured' } else { 'not_configured' }) -Evidence ([string](Get-PropertyValue -Payload $VoiceMonitor -Name 'selected_provider' -Default ''))))
+    [void]$Checks.Add((New-MonitorCheck -Id 'voice_francis_identity' -Passed ($VoiceIdentityOk -and -not $GenericVoiceLabelObserved) -Status $(if ($VoiceIdentityOk -and -not $GenericVoiceLabelObserved) { 'francis_voice_identity_ready' } else { 'identity_drift' }) -Evidence ([string](Get-PropertyValue -Payload $VoiceMonitor -Name 'selected_voice' -Default ''))))
+    [void]$Checks.Add((New-MonitorCheck -Id 'voice_chat_bridge_denials' -Passed ((-not $VoicePermissionDenied) -and (-not $LatestReceiptDenied)) -Status $(if ((-not $VoicePermissionDenied) -and (-not $LatestReceiptDenied)) { 'latest_receipt_clean' } else { 'denial_observed' }) -Evidence ("latest_denied={0} recent_denied={1}" -f $LatestReceiptDenied, $DeniedRecentReceiptCount)))
+  }
 
   foreach ($Check in @($Checks.ToArray())) {
     if (-not [bool](Get-PropertyValue -Payload $Check -Name 'passed' -Default $false)) {
@@ -390,6 +597,7 @@ function New-CommandPaletteMonitorProbe {
       expected_roadmap_blockers = @($KnownRoadmapBlockers)
       observed_blockers = @($BridgeBlockers)
     }
+    voice_monitor = $VoiceMonitor
     reporting = [ordered]@{
       status_path = 'data/runtime/lens-command-palette-monitor/status.json'
       anomaly_log_path = 'data/runtime/lens-command-palette-monitor/anomalies.jsonl'
@@ -404,6 +612,7 @@ function New-CommandPaletteMonitorProbe {
       mutation_authority_granted = $false
       memory_write = $false
       captures_screen = $false
+      captures_audio = $false
       hidden_sensing = $false
     }
     message = if ($Status -eq 'healthy') { 'Command palette monitor observed the local URL and Lens readback contract without anomalies.' } else { 'Command palette monitor observed anomaly evidence; inspect anomalies and the anomaly log.' }
@@ -485,7 +694,7 @@ if ($Mode -eq 'Stop') {
 }
 
 if ($Mode -eq 'Probe') {
-  $Payload = New-CommandPaletteMonitorProbe -Root $DataRoot -CommandPaletteUrl $CommandPaletteUrl -ApiBaseUrl $ApiBaseUrl -ChatUiBaseUrl $ChatUiBaseUrl -LensStatusPath $LensStatusPath -TimeoutSeconds $TimeoutSeconds
+  $Payload = New-CommandPaletteMonitorProbe -Root $DataRoot -CommandPaletteUrl $CommandPaletteUrl -ApiBaseUrl $ApiBaseUrl -ChatUiBaseUrl $ChatUiBaseUrl -LensStatusPath $LensStatusPath -TimeoutSeconds $TimeoutSeconds -VoiceChecksEnabled ([bool]$EnableVoiceChecks) -VoiceChecksProvider $VoiceProvider -VoiceChecksRemoteVoiceId $ElevenLabsVoiceId -VoiceChecksRemoteVoiceName $ElevenLabsVoiceName
   Write-JsonFile -Path $StatusPath -Payload $Payload
   if ([int]$Payload.anomaly_count -gt 0) {
     Add-JsonLine -Path $AnomalyPath -Payload $Payload
@@ -552,6 +761,15 @@ if ($Mode -eq 'Start') {
   if (-not [string]::IsNullOrWhiteSpace($LensStatusPath)) {
     $Arguments += @('-LensStatusPath', $LensStatusPath)
   }
+  if ($EnableVoiceChecks) {
+    $Arguments += @('-EnableVoiceChecks', '-VoiceProvider', $VoiceProvider)
+    if (-not [string]::IsNullOrWhiteSpace($ElevenLabsVoiceId)) {
+      $Arguments += @('-ElevenLabsVoiceId', $ElevenLabsVoiceId)
+    }
+    if (-not [string]::IsNullOrWhiteSpace($ElevenLabsVoiceName)) {
+      $Arguments += @('-ElevenLabsVoiceName', $ElevenLabsVoiceName)
+    }
+  }
   $Process = Start-Process -FilePath $PowerShell.Source -ArgumentList $Arguments -WindowStyle Hidden -PassThru
   Set-Content -LiteralPath $PidPath -Value ([string]$Process.Id) -Encoding UTF8
 
@@ -595,7 +813,7 @@ if ($Mode -eq 'Run') {
   $Iteration = 0
   while ($true) {
     $Iteration += 1
-    $Payload = New-CommandPaletteMonitorProbe -Root $DataRoot -CommandPaletteUrl $CommandPaletteUrl -ApiBaseUrl $ApiBaseUrl -ChatUiBaseUrl $ChatUiBaseUrl -LensStatusPath $LensStatusPath -TimeoutSeconds $TimeoutSeconds
+    $Payload = New-CommandPaletteMonitorProbe -Root $DataRoot -CommandPaletteUrl $CommandPaletteUrl -ApiBaseUrl $ApiBaseUrl -ChatUiBaseUrl $ChatUiBaseUrl -LensStatusPath $LensStatusPath -TimeoutSeconds $TimeoutSeconds -VoiceChecksEnabled ([bool]$EnableVoiceChecks) -VoiceChecksProvider $VoiceProvider -VoiceChecksRemoteVoiceId $ElevenLabsVoiceId -VoiceChecksRemoteVoiceName $ElevenLabsVoiceName
     Set-PropertyValue -Payload $Payload -Name 'mode' -Value 'run'
     Set-PropertyValue -Payload $Payload -Name 'iteration' -Value $Iteration
     Write-JsonFile -Path $StatusPath -Payload $Payload

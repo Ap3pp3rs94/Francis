@@ -106,6 +106,41 @@ def test_lens_overlay_window_status_reports_missing_runtime(tmp_path: Path) -> N
     assert payload["governance"]["local_process_launch_authority"] is False
 
 
+def test_lens_overlay_window_status_labels_configured_elevenlabs_voice_as_emma(tmp_path: Path) -> None:
+    env = os.environ.copy()
+    env.pop("FRANCIS_ELEVENLABS_API_KEY", None)
+    env.pop("ELEVENLABS_API_KEY", None)
+    env["FRANCIS_ELEVENLABS_VOICE_ID"] = "56bWURjYFHyYyVf490Dp"
+    env["FRANCIS_ELEVENLABS_VOICE_NAME"] = "Emma"
+
+    proc = _run_overlay_window(
+        "-Mode",
+        "Status",
+        "-VoiceEnvironmentScope",
+        "ProcessOnly",
+        "-VoiceProvider",
+        "ElevenLabs",
+        "-DataDir",
+        str(tmp_path / "data"),
+        env=env,
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["overlay_voice"]["voice_provider"] == "ElevenLabs"
+    assert payload["overlay_voice"]["selected_voice"] == "Emma"
+    assert payload["overlay_voice"]["voice_lens_orb_identity"] == "Francis"
+    assert payload["overlay_voice"]["voice_lens_orb_are_francis_surfaces"] is True
+    assert payload["overlay_voice"]["voice_lens_orb_are_separate_identities"] is False
+    readiness = payload["voice_provider_readiness"]
+    assert readiness["selected_provider"] == "ElevenLabs"
+    assert readiness["elevenlabs"]["voice_id_present"] is True
+    assert readiness["elevenlabs"]["voice_label"] == "Emma"
+    assert readiness["elevenlabs"]["voice_label_source"] == "Process:FRANCIS_ELEVENLABS_VOICE_NAME"
+    assert readiness["elevenlabs"]["credential_values_redacted"] is True
+    assert readiness["stores_secret"] is False
+
+
 def test_lens_overlay_window_stop_handles_corrupt_runtime_status(tmp_path: Path) -> None:
     data_dir = tmp_path / "data"
     runtime_dir = data_dir / "runtime" / "lens-overlay"
@@ -591,6 +626,8 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "function Get-ElevenLabsVoiceId" in script
     assert "function Get-ElevenLabsApiKeySource" in script
     assert "function Get-ElevenLabsVoiceIdSource" in script
+    assert "function Get-ElevenLabsVoiceLabel" in script
+    assert "function Get-OverlaySelectedVoiceName" in script
     assert "function Start-OverlayWakeListener" in script
     assert "function Get-OverlayVoiceReadback" in script
     assert "function Move-OverlayRuntimeStateFile" in script
@@ -628,6 +665,9 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "$Payload.speed = $Speed" in script
     assert "FRANCIS_ELEVENLABS_API_KEY" in script
     assert "FRANCIS_ELEVENLABS_VOICE_ID" in script
+    assert "FRANCIS_ELEVENLABS_VOICE_NAME" in script
+    assert "56bWURjYFHyYyVf490Dp" in script
+    assert "known_voice_id:Emma" in script
     assert "[System.EnvironmentVariableTarget]::User" in script
     assert "[System.EnvironmentVariableTarget]::Machine" in script
     assert "voice_provider_readiness = New-OverlayVoiceProviderReadiness" in script

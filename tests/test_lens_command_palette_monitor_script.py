@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -136,6 +137,98 @@ def test_lens_command_palette_monitor_probe_records_healthy_status(tmp_path: Pat
     assert not anomaly_log.exists()
 
 
+def test_lens_command_palette_monitor_probe_records_voice_health(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    status_path = tmp_path / "lens-status.json"
+    _write_json(status_path, _lens_status())
+    runtime_dir = data_dir / "runtime" / "lens-overlay"
+    runtime_dir.mkdir(parents=True)
+    pid = os.getpid()
+    (runtime_dir / "lens-overlay.pid").write_text(str(pid), encoding="utf-8")
+    _write_json(
+        runtime_dir / "status.json",
+        {
+            "kind": "lens.overlay.runtime_state",
+            "status": "overlay_running",
+            "pid": pid,
+            "overlay_name": "Francis Lens Overlay",
+            "overlay_scope": "user_session",
+            "overlay_window_visible": True,
+            "always_on_top": True,
+            "overlay_voice": {
+                "kind": "lens.overlay.voice.runtime",
+                "status": "listening",
+                "ok": True,
+                "voice_provider": "ElevenLabs",
+                "selected_voice": "Emma",
+                "voice_lens_orb_identity": "Francis",
+                "voice_lens_orb_are_francis_surfaces": True,
+                "voice_lens_orb_are_separate_identities": False,
+                "microphone_capture": True,
+                "wake_listening": True,
+            },
+            "voice": {
+                "kind": "lens.overlay.voice.runtime",
+                "status": "spoken",
+                "ok": True,
+                "voice_provider": "ElevenLabs",
+                "selected_voice": "Emma",
+            },
+            "voice_provider_readiness": {
+                "kind": "lens.overlay.voice.provider_readiness",
+                "selected_provider": "ElevenLabs",
+                "active_provider_configured": True,
+                "elevenlabs": {
+                    "configured": True,
+                    "api_key_present": True,
+                    "voice_id_present": True,
+                    "voice_label": "Emma",
+                    "credential_values_redacted": True,
+                    "missing_configuration": [],
+                },
+                "stores_secret": False,
+                "logs_text_payload": False,
+            },
+        },
+    )
+
+    with _LocalCommandPaletteServer() as url:
+        proc = _run_monitor(
+            "-Mode",
+            "Probe",
+            "-DataDir",
+            str(data_dir),
+            "-CommandPaletteUrl",
+            url,
+            "-LensStatusPath",
+            str(status_path),
+            "-EnableVoiceChecks",
+            "-VoiceProvider",
+            "ElevenLabs",
+            "-ElevenLabsVoiceId",
+            "56bWURjYFHyYyVf490Dp",
+            "-TimeoutSeconds",
+            "3",
+        )
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = _json_stdout(proc.stdout)
+    assert payload["status"] == "healthy"
+    assert payload["voice_monitor"]["enabled"] is True
+    assert payload["voice_monitor"]["selected_provider"] == "ElevenLabs"
+    assert payload["voice_monitor"]["selected_voice"] == "Emma"
+    assert payload["voice_monitor"]["voice_label"] == "Emma"
+    assert payload["voice_monitor"]["generic_voice_label_observed"] is False
+    assert payload["voice_monitor"]["api_permission_denied_observed"] is False
+    assert payload["voice_monitor"]["denied_recent_receipt_count"] == 0
+    assert payload["voice_monitor"]["latest_receipt_denied"] is False
+    checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["voice_overlay_readback"]["status"] == "readback_ready"
+    assert checks["voice_francis_identity"]["status"] == "francis_voice_identity_ready"
+    assert checks["voice_chat_bridge_denials"]["status"] == "latest_receipt_clean"
+    assert payload["governance"]["captures_audio"] is False
+
+
 def test_lens_command_palette_monitor_probe_writes_anomaly_receipt(tmp_path: Path) -> None:
     data_dir = tmp_path / "data"
     status_path = tmp_path / "lens-status.json"
@@ -166,3 +259,190 @@ def test_lens_command_palette_monitor_probe_writes_anomaly_receipt(tmp_path: Pat
     assert anomaly_log.exists()
     logged = [json.loads(line) for line in anomaly_log.read_text(encoding="utf-8").splitlines()]
     assert logged[-1]["status"] == "anomaly"
+
+
+def test_lens_command_palette_monitor_probe_flags_voice_denial(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    status_path = tmp_path / "lens-status.json"
+    _write_json(status_path, _lens_status())
+    receipt_dir = data_dir / "integrations" / "chatgpt_voice" / "receipts"
+    _write_json(
+        receipt_dir / "denied.json",
+        {
+            "kind": "francis.chatgpt_voice.bridge.receipt",
+            "status": "recorded_not_forwarded",
+            "chat_forward_status": "denied",
+            "chat_forward_error": "api_permission_denied",
+        },
+    )
+    runtime_dir = data_dir / "runtime" / "lens-overlay"
+    runtime_dir.mkdir(parents=True)
+    pid = os.getpid()
+    (runtime_dir / "lens-overlay.pid").write_text(str(pid), encoding="utf-8")
+    _write_json(
+        runtime_dir / "status.json",
+        {
+            "kind": "lens.overlay.runtime_state",
+            "status": "overlay_running",
+            "pid": pid,
+            "overlay_name": "Francis Lens Overlay",
+            "overlay_scope": "user_session",
+            "overlay_window_visible": True,
+            "always_on_top": True,
+            "overlay_voice": {
+                "kind": "lens.overlay.voice.runtime",
+                "status": "listening",
+                "ok": True,
+                "voice_provider": "ElevenLabs",
+                "selected_voice": "elevenlabs",
+                "voice_lens_orb_identity": "Francis",
+            },
+            "voice": {
+                "kind": "lens.overlay.voice.runtime",
+                "status": "failed",
+                "ok": False,
+                "voice_provider": "ElevenLabs",
+                "selected_voice": "elevenlabs",
+                "chat_error": "api_permission_denied",
+            },
+            "voice_provider_readiness": {
+                "kind": "lens.overlay.voice.provider_readiness",
+                "selected_provider": "ElevenLabs",
+                "active_provider_configured": True,
+                "elevenlabs": {
+                    "configured": True,
+                    "api_key_present": True,
+                    "voice_id_present": True,
+                    "voice_label": "elevenlabs",
+                    "credential_values_redacted": True,
+                    "missing_configuration": [],
+                },
+            },
+        },
+    )
+
+    with _LocalCommandPaletteServer() as url:
+        proc = _run_monitor(
+            "-Mode",
+            "Probe",
+            "-DataDir",
+            str(data_dir),
+            "-CommandPaletteUrl",
+            url,
+            "-LensStatusPath",
+            str(status_path),
+            "-EnableVoiceChecks",
+            "-VoiceProvider",
+            "ElevenLabs",
+            "-TimeoutSeconds",
+            "3",
+        )
+
+    assert proc.returncode == 1
+    payload = _json_stdout(proc.stdout)
+    assert payload["status"] == "anomaly"
+    assert "voice_francis_identity" in {item["id"] for item in payload["anomalies"]}
+    assert "voice_chat_bridge_denials" in {item["id"] for item in payload["anomalies"]}
+    assert payload["voice_monitor"]["api_permission_denied_observed"] is True
+    assert payload["voice_monitor"]["denied_recent_receipt_count"] == 1
+    assert payload["voice_monitor"]["latest_receipt_denied"] is True
+
+
+def test_lens_command_palette_monitor_uses_latest_voice_receipt_for_denial_health(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    status_path = tmp_path / "lens-status.json"
+    _write_json(status_path, _lens_status())
+    receipt_dir = data_dir / "integrations" / "chatgpt_voice" / "receipts"
+    denied = receipt_dir / "older-denied.json"
+    success = receipt_dir / "latest-success.json"
+    _write_json(
+        denied,
+        {
+            "kind": "francis.chatgpt_voice.bridge.receipt",
+            "status": "recorded_not_forwarded",
+            "chat_forward_status": "denied",
+            "chat_forward_error": "api_permission_denied",
+        },
+    )
+    _write_json(
+        success,
+        {
+            "kind": "francis.chatgpt_voice.bridge.receipt",
+            "status": "forwarded",
+            "chat_forward_status": "sent",
+            "chat_forward_error": "",
+        },
+    )
+    old_time = 1_781_800_000
+    new_time = old_time + 60
+    os.utime(denied, (old_time, old_time))
+    os.utime(success, (new_time, new_time))
+    runtime_dir = data_dir / "runtime" / "lens-overlay"
+    runtime_dir.mkdir(parents=True)
+    pid = os.getpid()
+    (runtime_dir / "lens-overlay.pid").write_text(str(pid), encoding="utf-8")
+    _write_json(
+        runtime_dir / "status.json",
+        {
+            "kind": "lens.overlay.runtime_state",
+            "status": "overlay_running",
+            "pid": pid,
+            "overlay_name": "Francis Lens Overlay",
+            "overlay_scope": "user_session",
+            "overlay_window_visible": True,
+            "always_on_top": True,
+            "overlay_voice": {
+                "kind": "lens.overlay.voice.runtime",
+                "status": "listening",
+                "ok": True,
+                "voice_provider": "ElevenLabs",
+                "selected_voice": "Emma",
+                "voice_lens_orb_identity": "Francis",
+            },
+            "voice": {
+                "kind": "lens.overlay.voice.runtime",
+                "status": "idle",
+                "ok": True,
+                "voice_provider": "ElevenLabs",
+                "selected_voice": "Emma",
+            },
+            "voice_provider_readiness": {
+                "kind": "lens.overlay.voice.provider_readiness",
+                "selected_provider": "ElevenLabs",
+                "active_provider_configured": True,
+                "elevenlabs": {
+                    "configured": True,
+                    "api_key_present": True,
+                    "voice_id_present": True,
+                    "voice_label": "Emma",
+                    "credential_values_redacted": True,
+                    "missing_configuration": [],
+                },
+            },
+        },
+    )
+
+    with _LocalCommandPaletteServer() as url:
+        proc = _run_monitor(
+            "-Mode",
+            "Probe",
+            "-DataDir",
+            str(data_dir),
+            "-CommandPaletteUrl",
+            url,
+            "-LensStatusPath",
+            str(status_path),
+            "-EnableVoiceChecks",
+            "-VoiceProvider",
+            "ElevenLabs",
+            "-TimeoutSeconds",
+            "3",
+        )
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = _json_stdout(proc.stdout)
+    assert payload["status"] == "healthy"
+    assert payload["voice_monitor"]["denied_recent_receipt_count"] == 1
+    assert payload["voice_monitor"]["latest_receipt_denied"] is False
+    checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["voice_chat_bridge_denials"]["status"] == "latest_receipt_clean"
