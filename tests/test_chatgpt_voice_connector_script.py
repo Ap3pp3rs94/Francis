@@ -132,3 +132,98 @@ def test_chatgpt_voice_connector_status_accepts_manual_connector_url(tmp_path: P
     assert payload["governance"]["opens_public_tunnel"] is False
     assert payload["governance"]["writes_data"] is False
     assert not runtime_root.exists()
+
+
+@pytest.mark.skipif(platform.system() != "Windows", reason="connector control uses Windows process readback")
+def test_chatgpt_voice_connector_record_url_persists_without_tunnel(tmp_path: Path) -> None:
+    runtime_root = tmp_path / "connector-runtime"
+    port = _unused_local_port()
+
+    recorded = _run_connector_script(
+        "-Mode",
+        "RecordUrl",
+        "-Json",
+        "-RuntimeRoot",
+        str(runtime_root),
+        "-Port",
+        str(port),
+        "-ConnectorUrl",
+        "https://francis.example.test/mcp",
+    )
+
+    assert recorded.returncode == 0, recorded.stderr
+    payload = json.loads(recorded.stdout)
+    assert payload["kind"] == "francis.chatgpt_voice.connector_control"
+    assert payload["ok"] is True
+    assert payload["status"] == "persistent_connector_url_recorded"
+    assert payload["connector_url"] == "https://francis.example.test/mcp"
+    assert payload["ingress_mode"] == "persistent_https"
+    assert payload["endpoint_status"]["chatgpt_connector"]["connector_url"]["shape_valid"] is True
+    assert payload["processes"]["mcp_launcher"]["pid"] == 0
+    assert payload["processes"]["tunnel"]["pid"] == 0
+    assert payload["governance"]["read_only"] is False
+    assert payload["governance"]["starts_process"] is False
+    assert payload["governance"]["opens_public_tunnel"] is False
+    assert payload["governance"]["writes_data"] is True
+    assert payload["governance"]["grants_execution_authority"] is False
+
+    state_path = runtime_root / "status.json"
+    assert state_path.exists()
+    state = json.loads(state_path.read_text(encoding="utf-8-sig"))
+    assert state["status"] == "persistent_connector_url_recorded"
+    assert state["ingress_mode"] == "persistent_https"
+    assert state["connector_url"] == "https://francis.example.test/mcp"
+    assert state["mcp_launcher_pid"] == 0
+    assert state["tunnel_pid"] == 0
+    assert state["governance"]["opens_public_tunnel"] is False
+    assert state["governance"]["starts_process"] is False
+
+    status = _run_connector_script(
+        "-Mode",
+        "Status",
+        "-Json",
+        "-RuntimeRoot",
+        str(runtime_root),
+        "-Port",
+        str(port),
+    )
+
+    assert status.returncode == 0, status.stderr
+    status_payload = json.loads(status.stdout)
+    assert status_payload["status"] == "runtime_state_observed"
+    assert status_payload["connector_url"] == "https://francis.example.test/mcp"
+    assert status_payload["ingress_mode"] == "persistent_https"
+    assert status_payload["endpoint_status"]["chatgpt_connector"]["connector_url"]["shape_valid"] is True
+    assert status_payload["governance"]["read_only"] is True
+    assert status_payload["governance"]["starts_process"] is False
+    assert status_payload["governance"]["opens_public_tunnel"] is False
+
+
+@pytest.mark.skipif(platform.system() != "Windows", reason="connector control uses Windows process readback")
+def test_chatgpt_voice_connector_record_url_rejects_invalid_shape_without_writing(tmp_path: Path) -> None:
+    runtime_root = tmp_path / "connector-runtime"
+    port = _unused_local_port()
+
+    proc = _run_connector_script(
+        "-Mode",
+        "RecordUrl",
+        "-Json",
+        "-RuntimeRoot",
+        str(runtime_root),
+        "-Port",
+        str(port),
+        "-ConnectorUrl",
+        "http://127.0.0.1:8787/mcp",
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["kind"] == "francis.chatgpt_voice.connector_control"
+    assert payload["ok"] is False
+    assert payload["status"] == "connector_url_shape_invalid"
+    assert payload["blockers"] == ["connector_url_must_be_https"]
+    assert payload["endpoint_status"]["chatgpt_connector"]["connector_url"]["shape_valid"] is False
+    assert payload["governance"]["starts_process"] is False
+    assert payload["governance"]["opens_public_tunnel"] is False
+    assert payload["governance"]["writes_data"] is False
+    assert not runtime_root.exists()

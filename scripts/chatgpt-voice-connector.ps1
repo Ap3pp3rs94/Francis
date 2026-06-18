@@ -1,11 +1,12 @@
 # Bounded operator control for the ChatGPT voice MCP connector.
 #
-# Status mode is read-only. Start mode opens a public localtunnel URL only when
-# -ExposePublicTunnel is explicitly supplied by the operator.
+# Status mode is read-only. RecordUrl stores an operator-supplied persistent
+# HTTPS MCP URL without opening a tunnel. Start mode opens a public localtunnel
+# URL only when -ExposePublicTunnel is explicitly supplied by the operator.
 
 [CmdletBinding(PositionalBinding = $false)]
 param(
-  [ValidateSet('Status', 'Start', 'Stop')]
+  [ValidateSet('Status', 'RecordUrl', 'Start', 'Stop')]
   [string]$Mode = 'Status',
   [string]$HostAddress = '127.0.0.1',
   [int]$Port = 8787,
@@ -40,6 +41,46 @@ function ConvertTo-BoundedText {
   $Trimmed = $Text.Trim()
   if ($Trimmed.Length -le $MaxLength) { return $Trimmed }
   return $Trimmed.Substring(0, $MaxLength)
+}
+
+function Get-PropertyValue {
+  param(
+    [object]$Payload,
+    [string]$Name,
+    [object]$Default = $null
+  )
+
+  if ($null -eq $Payload) {
+    return $Default
+  }
+  if ($Payload -is [System.Collections.IDictionary]) {
+    if ($Payload.Contains($Name) -and $null -ne $Payload[$Name]) {
+      return $Payload[$Name]
+    }
+    return $Default
+  }
+  $Property = $Payload.PSObject.Properties[$Name]
+  if ($null -eq $Property -or $null -eq $Property.Value) {
+    return $Default
+  }
+  return $Property.Value
+}
+
+function Get-NestedPropertyValue {
+  param(
+    [object]$Payload,
+    [string[]]$Path,
+    [object]$Default = $null
+  )
+
+  $Current = $Payload
+  foreach ($Name in $Path) {
+    $Current = Get-PropertyValue -Payload $Current -Name $Name -Default $null
+    if ($null -eq $Current) {
+      return $Default
+    }
+  }
+  return $Current
 }
 
 function ConvertTo-JsonOutput {
@@ -229,13 +270,18 @@ function New-StatusPayload {
   $ConnectorUrl = ''
   $McpLauncherPid = 0
   $TunnelPid = 0
+  $IngressMode = ''
   if ($State) {
     $ConnectorUrl = ConvertTo-BoundedText -Value $State.connector_url -MaxLength 512
     $McpLauncherPid = [int]($State.mcp_launcher_pid)
     $TunnelPid = [int]($State.tunnel_pid)
+    $IngressMode = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $State -Name 'ingress_mode') -MaxLength 96
   }
   if ([string]::IsNullOrWhiteSpace($ConnectorUrl) -and $EndpointStatus -and $EndpointStatus.chatgpt_connector) {
     $ConnectorUrl = ConvertTo-BoundedText -Value $EndpointStatus.chatgpt_connector.connector_url.url -MaxLength 512
+  }
+  if ([string]::IsNullOrWhiteSpace($IngressMode) -and -not [string]::IsNullOrWhiteSpace($ConnectorUrl)) {
+    $IngressMode = 'manual_status_url'
   }
 
   $McpReadback = Get-ProcessReadback -ProcessId $McpLauncherPid -ExpectedCommandText 'chatgpt-voice-mcp.ps1'
@@ -250,6 +296,7 @@ function New-StatusPayload {
     ok = $Ready
     status = if ($Ready) { 'ready_for_chatgpt_connector' } elseif ($State) { 'runtime_state_observed' } else { 'not_started' }
     connector_url = $ConnectorUrl
+    ingress_mode = $IngressMode
     runtime_root = $RuntimeRoot
     state_path = $statePath
     processes = [ordered]@{
@@ -272,6 +319,62 @@ if ($Mode -eq 'Status') {
   }
   $EndpointStatus = Invoke-EndpointStatus -ConnectorUrl $StatusConnectorUrl
   ConvertTo-JsonOutput -Payload (New-StatusPayload -State $State -EndpointStatus $EndpointStatus)
+  exit 0
+}
+
+if ($Mode -eq 'RecordUrl') {
+  $RecordedConnectorUrl = ConvertTo-BoundedText -Value $ConnectorUrl -MaxLength 512
+  if ([string]::IsNullOrWhiteSpace($RecordedConnectorUrl)) {
+    ConvertTo-JsonOutput -Payload ([ordered]@{
+        kind = 'francis.chatgpt_voice.connector_control'
+        ok = $false
+        status = 'connector_url_required'
+        connector_url = ''
+        runtime_root = $RuntimeRoot
+        state_path = $statePath
+        blockers = @('connector_url_required')
+        governance = New-GovernancePayload -ReadOnly $false -StartsProcess $false -OpensPublicTunnel $false -WritesData $false
+      })
+    exit 0
+  }
+
+  $EndpointStatus = Invoke-EndpointStatus -ConnectorUrl $RecordedConnectorUrl
+  $ShapeValid = [bool](Get-NestedPropertyValue -Payload $EndpointStatus -Path @('chatgpt_connector', 'connector_url', 'shape_valid') -Default $false)
+  $ShapeReason = ConvertTo-BoundedText -Value (Get-NestedPropertyValue -Payload $EndpointStatus -Path @('chatgpt_connector', 'connector_url', 'reason') -Default 'connector_url_shape_invalid') -MaxLength 160
+  if (-not $ShapeValid) {
+    ConvertTo-JsonOutput -Payload ([ordered]@{
+        kind = 'francis.chatgpt_voice.connector_control'
+        ok = $false
+        status = 'connector_url_shape_invalid'
+        connector_url = $RecordedConnectorUrl
+        runtime_root = $RuntimeRoot
+        state_path = $statePath
+        endpoint_status = $EndpointStatus
+        blockers = @($ShapeReason)
+        governance = New-GovernancePayload -ReadOnly $false -StartsProcess $false -OpensPublicTunnel $false -WritesData $false
+      })
+    exit 0
+  }
+
+  $ConnectorHost = ([System.Uri]$RecordedConnectorUrl).Host
+  $StatePayload = [ordered]@{
+    kind = 'francis.chatgpt_voice.connector_control.state'
+    status = 'persistent_connector_url_recorded'
+    ingress_mode = 'persistent_https'
+    connector_url = $RecordedConnectorUrl
+    connector_host = $ConnectorHost
+    local_endpoint = "http://$HostAddress`:$Port$Path"
+    mcp_launcher_pid = 0
+    tunnel_pid = 0
+    updated_at = (Get-Date).ToUniversalTime().ToString('o')
+    governance = New-GovernancePayload -ReadOnly $false -StartsProcess $false -OpensPublicTunnel $false -WritesData $true
+  }
+  Write-State -Payload $StatePayload
+
+  $Payload = New-StatusPayload -State (Read-State) -EndpointStatus $EndpointStatus -ReadOnly $false -StartsProcess $false -OpensPublicTunnel $false -WritesData $true
+  $Payload.status = 'persistent_connector_url_recorded'
+  $Payload.ok = $true
+  ConvertTo-JsonOutput -Payload $Payload
   exit 0
 }
 

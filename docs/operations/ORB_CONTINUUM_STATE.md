@@ -107,6 +107,11 @@ proportions.
   bridge receipts, Orb substrate status, and Mona Lisa sandbox replay status
   without starting tunnels, calling voice providers, launching desktop actions,
   changing Orb visuals, or claiming Stage 6 closure.
+- ChatGPT voice connector control now has a bounded persistent HTTPS MCP URL
+  record path. `scripts/chatgpt-voice-connector.ps1 -Mode RecordUrl` validates
+  an operator-supplied HTTPS `/mcp` URL, writes only local runtime connector
+  state, and does not start LocalTunnel, open a public tunnel, call ChatGPT,
+  grant execution authority, or claim reachability.
 
 ## Current Task
 
@@ -261,8 +266,10 @@ Acceptance criteria for the completed multi-run review scoring sub-slice:
 
 ## Pending Tasks
 
-- Record or replace the current ChatGPT voice HTTPS MCP ingress so the proof can
-  verify the connector URL instead of reporting `connector_url_not_provided`.
+- Record the actual current ChatGPT voice HTTPS MCP ingress with
+  `scripts/chatgpt-voice-connector.ps1 -Mode RecordUrl`, or configure a
+  persistent ingress provider and then record its HTTPS `/mcp` URL, so the proof
+  can verify the connector URL instead of reporting `connector_url_not_provided`.
 - Confirm live overlay microphone signal when the operator is present; the
   current safe readback remains `waiting_for_audio_signal`.
 
@@ -302,6 +309,8 @@ Current voice path:
 
 - Overlay voice runtime and wake listener: `scripts/lens-overlay-window.ps1`
 - Voice setup helper: `scripts/lens-elevenlabs-voice-setup.ps1`
+- ChatGPT voice connector control:
+  `scripts/chatgpt-voice-connector.ps1`
 - Orb/voice/overlay-lens validation proof:
   `scripts/orb-voice-overlay-lens-validation.ps1`
 - Voice/LLM routing: `src/francis/chat/router.py`, `src/francis/api/routes/chat.py`
@@ -664,6 +673,24 @@ Validated for the fresh structured Mona Lisa sandbox replay refresh:
   `orb.status=orb_status`, `mona_lisa_sandbox.passed=true`, and
   `mona_lisa_sandbox.artifact_dir=data/sandbox_canvas/mona_lisa/run_1781766886_c71910f3`.
 
+Validated for the persistent ChatGPT voice connector URL record path:
+
+- PowerShell parser check for `scripts\chatgpt-voice-connector.ps1` returned
+  `parse_ok`.
+- `python -m pytest tests\test_chatgpt_voice_connector_script.py -q` passed.
+- `python -m ruff check --no-cache tests\test_chatgpt_voice_connector_script.py`
+  passed.
+- `python -m ruff format --check --no-cache
+  tests\test_chatgpt_voice_connector_script.py` passed with
+  `1 file already formatted`.
+- The focused tests verified that `-Mode RecordUrl` persists a valid HTTPS
+  `/mcp` connector URL into runtime state with `ingress_mode=persistent_https`,
+  `starts_process=false`, `opens_public_tunnel=false`, `writes_data=true`,
+  `grants_execution_authority=false`, and zero MCP/tunnel PIDs.
+- The focused tests also verified that non-HTTPS connector URLs are rejected as
+  `connector_url_shape_invalid` without writing runtime state, starting a
+  process, or opening a tunnel.
+
 ## Blockers
 
 - The lens/overlay observation contract is metadata-only; it does not yet provide
@@ -679,9 +706,10 @@ Validated for the fresh structured Mona Lisa sandbox replay refresh:
 - Voice can produce receipts and route through chat, and a narrow Mona Lisa
   phrase can create mission state when transcribed, but the full voice ->
   mission -> automatic operator dispatch -> Orb loop is not complete.
-- The current ChatGPT voice connector control state does not record a usable
-  public HTTPS MCP URL; local MCP is listening, but current ChatGPT app
-  reachability is not proven by the status proof.
+- The current ChatGPT voice connector control supports persistent HTTPS URL
+  recording, but no actual current public HTTPS MCP URL is recorded; local MCP
+  is listening, but current ChatGPT app reachability is not proven by the status
+  proof.
 - True backend model-call cancellation is not currently supported; stale reply
   suppression is the bounded behavior.
 
