@@ -22,6 +22,28 @@ export type FrancisVoiceSoundClassification = {
   forward_to_chat: boolean;
 };
 
+export type FrancisVoiceOperatorSummary = {
+  kind: FrancisVoiceTurnKind;
+  transcript: string;
+  wake_phrase_detected: boolean;
+  forward_to_chat: boolean;
+  use_llm: boolean;
+  awareness_state: string;
+  response_expected: boolean;
+  summary: string;
+};
+
+export type FrancisVoiceNoiseSummary = {
+  kind: FrancisVoiceTurnKind;
+  sound_observed: boolean;
+  speech_observed: boolean;
+  transcript_observed: boolean;
+  awareness_state: string;
+  forward_to_chat: boolean;
+  response_expected: boolean;
+  summary: string;
+};
+
 export type FrancisVoiceIngressRequest = {
   transcript: string;
   actor?: string;
@@ -146,6 +168,65 @@ export function classifyVoiceSound(opts: {
     transcript_observed: transcriptObserved,
     awareness_state: transcriptObserved ? "speech_transcript_observed" : "listening",
     forward_to_chat: transcriptObserved ? classifyVoiceTranscript(opts.transcript).forward_to_chat : false,
+  };
+}
+
+export function summarizeVoiceTranscriptForOperator(
+  transcript: string,
+  opts?: { speaking?: boolean; wakePhrases?: string[]; useLlmForWake?: boolean },
+): FrancisVoiceOperatorSummary {
+  const cleanTranscript = normalizeVoiceTranscript(transcript);
+  const stopPhrase = isFrancisStopPhrase(cleanTranscript, { wakePhrases: opts?.wakePhrases });
+  if (opts?.speaking && stopPhrase) {
+    return {
+      kind: "wake",
+      transcript: cleanTranscript,
+      wake_phrase_detected: true,
+      forward_to_chat: false,
+      use_llm: false,
+      awareness_state: "francis_stop_listening_restored",
+      response_expected: false,
+      summary: "interrupt_only",
+    };
+  }
+  if (opts?.speaking) {
+    return {
+      kind: "passive",
+      transcript: cleanTranscript,
+      wake_phrase_detected: false,
+      forward_to_chat: false,
+      use_llm: false,
+      awareness_state: "voice_input_suppressed_while_speaking",
+      response_expected: false,
+      summary: "suppressed_while_speaking",
+    };
+  }
+  const classification = classifyVoiceTranscript(cleanTranscript, {
+    wakePhrases: opts?.wakePhrases,
+    useLlmForWake: opts?.useLlmForWake,
+  });
+  return {
+    ...classification,
+    response_expected: classification.forward_to_chat,
+    summary: classification.forward_to_chat ? "wake_forwarded_to_chat" : "passive_recorded_no_chat",
+  };
+}
+
+export function summarizeVoiceSoundForOperator(opts: {
+  soundObserved: boolean;
+  speechObserved: boolean;
+  transcript: string;
+}): FrancisVoiceNoiseSummary {
+  const classification = classifyVoiceSound(opts);
+  return {
+    ...classification,
+    response_expected: classification.forward_to_chat,
+    summary:
+      classification.kind === "noise"
+        ? "ambient_noise_no_chat"
+        : classification.forward_to_chat
+          ? "speech_wake_forwarded_to_chat"
+          : "speech_passive_no_chat",
   };
 }
 

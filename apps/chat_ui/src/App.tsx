@@ -13,11 +13,10 @@ import { bodyStateReady, presentOrbGlyph, type OrbGlyphState } from "./lens/orbG
 import { shouldOpenLensOrbOverlay } from "./lens";
 import {
   FrancisVoiceClient,
-  classifyVoiceSound,
-  classifyVoiceTranscript,
   createVoiceTurnId,
-  isFrancisStopPhrase,
   normalizeVoiceTranscript,
+  summarizeVoiceSoundForOperator,
+  summarizeVoiceTranscriptForOperator,
 } from "./voice";
 
 type SpeechRecognitionAlternative = {
@@ -357,6 +356,10 @@ type VoiceLogEntry = {
   role: "operator" | "francis" | "system";
   text: string;
   tone: "wake" | "passive" | "noise" | "error";
+  awareness?: string;
+  forwardToChat?: boolean;
+  responseExpected?: boolean;
+  summary?: string;
   ts: number;
 };
 
@@ -407,6 +410,10 @@ function VoiceTranscriptionPanel(props: { baseUrl: string }) {
         role: entry.role,
         text: entry.text,
         tone: entry.tone,
+        awareness: entry.awareness,
+        forwardToChat: entry.forwardToChat,
+        responseExpected: entry.responseExpected,
+        summary: entry.summary,
         ts: Math.floor(Date.now() / 1000),
       },
       ...current,
@@ -435,37 +442,50 @@ function VoiceTranscriptionPanel(props: { baseUrl: string }) {
       if (!transcript) return;
       soundHadTranscriptRef.current = true;
       if (speakingRef.current) {
+        const summary = summarizeVoiceTranscriptForOperator(transcript, { speaking: true });
         const turnId = createVoiceTurnId("chat_ui_voice_guard");
         setInterimTranscript("");
         appendLog({
           id: turnId,
           role: "operator",
           text: transcript,
-          tone: isFrancisStopPhrase(transcript) ? "wake" : "passive",
+          tone: summary.kind === "wake" ? "wake" : "passive",
+          awareness: summary.awareness_state,
+          forwardToChat: summary.forward_to_chat,
+          responseExpected: summary.response_expected,
+          summary: summary.summary,
         });
-        if (isFrancisStopPhrase(transcript)) {
+        if (summary.summary === "interrupt_only") {
           if (typeof window !== "undefined" && "speechSynthesis" in window) {
             window.speechSynthesis.cancel();
           }
           speakingRef.current = false;
           setSpeaking(false);
-          setAwareness("francis_stop_listening_restored");
+          setAwareness(summary.awareness_state);
           appendLog({
             role: "system",
             text: "Francis stop heard. Speech cancelled and the interrupted reply context was scrubbed.",
             tone: "wake",
+            awareness: summary.awareness_state,
+            forwardToChat: false,
+            responseExpected: false,
+            summary: "interrupt_only",
           });
           return;
         }
-        setAwareness("voice_input_suppressed_while_speaking");
+        setAwareness(summary.awareness_state);
         appendLog({
           role: "system",
           text: "Transcript held while Francis was speaking. Say Francis stop to interrupt.",
           tone: "noise",
+          awareness: summary.awareness_state,
+          forwardToChat: false,
+          responseExpected: false,
+          summary: "suppressed_while_speaking",
         });
         return;
       }
-      const classification = classifyVoiceTranscript(transcript);
+      const classification = summarizeVoiceTranscriptForOperator(transcript);
       const turnId = createVoiceTurnId("chat_ui_voice");
       setInterimTranscript("");
       setAwareness(classification.awareness_state);
@@ -474,6 +494,10 @@ function VoiceTranscriptionPanel(props: { baseUrl: string }) {
         role: "operator",
         text: transcript,
         tone: classification.kind === "wake" ? "wake" : "passive",
+        awareness: classification.awareness_state,
+        forwardToChat: classification.forward_to_chat,
+        responseExpected: classification.response_expected,
+        summary: classification.summary,
       });
 
       setBusy(true);
@@ -494,6 +518,10 @@ function VoiceTranscriptionPanel(props: { baseUrl: string }) {
           role: "francis",
           text: reply,
           tone: response.ok ? "wake" : "error",
+          awareness: response.ok ? "reply_ready" : "reply_blocked",
+          forwardToChat: false,
+          responseExpected: false,
+          summary: response.ok ? "reply_spoken" : "reply_blocked",
         });
         if (response.ok) speakReply(reply);
         setAwareness(response.ok ? "reply_ready" : "reply_blocked");
@@ -501,7 +529,15 @@ function VoiceTranscriptionPanel(props: { baseUrl: string }) {
         const message = err instanceof Error ? err.message : "Voice bridge request failed.";
         setError(message);
         setAwareness("voice_bridge_error");
-        appendLog({ role: "system", text: message, tone: "error" });
+        appendLog({
+          role: "system",
+          text: message,
+          tone: "error",
+          awareness: "voice_bridge_error",
+          forwardToChat: false,
+          responseExpected: false,
+          summary: "bridge_error",
+        });
       } finally {
         setBusy(false);
       }
@@ -544,14 +580,22 @@ function VoiceTranscriptionPanel(props: { baseUrl: string }) {
       setAwareness("speech_observed");
     };
     recognition.onsoundend = () => {
-      const sound = classifyVoiceSound({
+      const sound = summarizeVoiceSoundForOperator({
         soundObserved: true,
         speechObserved: soundHadSpeechRef.current,
         transcript: soundHadTranscriptRef.current ? "speech" : "",
       });
       if (sound.kind === "noise") {
         setAwareness(sound.awareness_state);
-        appendLog({ role: "system", text: "Ambient sound observed.", tone: "noise" });
+        appendLog({
+          role: "system",
+          text: "Ambient sound observed.",
+          tone: "noise",
+          awareness: sound.awareness_state,
+          forwardToChat: sound.forward_to_chat,
+          responseExpected: sound.response_expected,
+          summary: sound.summary,
+        });
       }
     };
     recognition.onnomatch = () => {
@@ -704,6 +748,14 @@ function VoiceTranscriptionPanel(props: { baseUrl: string }) {
                   {entry.role} / {entry.tone}
                 </div>
                 <div style={{ marginTop: 4 }}>{entry.text}</div>
+                {entry.awareness || entry.summary ? (
+                  <div style={{ color: "#94a3b8", display: "flex", flexWrap: "wrap", fontSize: 12, gap: 10, marginTop: 6 }}>
+                    {entry.awareness ? <span>state {entry.awareness}</span> : null}
+                    {entry.summary ? <span>route {entry.summary}</span> : null}
+                    {entry.forwardToChat !== undefined ? <span>chat {entry.forwardToChat ? "yes" : "no"}</span> : null}
+                    {entry.responseExpected !== undefined ? <span>reply {entry.responseExpected ? "yes" : "no"}</span> : null}
+                  </div>
+                ) : null}
               </article>
             );
           })

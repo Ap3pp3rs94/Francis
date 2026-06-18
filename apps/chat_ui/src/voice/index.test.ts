@@ -9,6 +9,8 @@ import {
   classifyVoiceSound,
   classifyVoiceTranscript,
   isFrancisStopPhrase,
+  summarizeVoiceSoundForOperator,
+  summarizeVoiceTranscriptForOperator,
 } from "./index.ts";
 
 type FetchHandler = (url: string, init?: RequestInit) => Response | Promise<Response>;
@@ -69,6 +71,48 @@ test("isFrancisStopPhrase recognizes only bounded Francis stop interrupts", () =
   assert.equal(isFrancisStopPhrase("Frances stop"), true);
   assert.equal(isFrancisStopPhrase("stop"), false);
   assert.equal(isFrancisStopPhrase("Francis please stop talking"), false);
+});
+
+test("summarizeVoiceTranscriptForOperator keeps passive speech awareness-only", () => {
+  const passive = summarizeVoiceTranscriptForOperator("there is a truck outside");
+  assert.equal(passive.kind, "passive");
+  assert.equal(passive.forward_to_chat, false);
+  assert.equal(passive.response_expected, false);
+  assert.equal(passive.summary, "passive_recorded_no_chat");
+
+  const wake = summarizeVoiceTranscriptForOperator("Francis can you hear me");
+  assert.equal(wake.kind, "wake");
+  assert.equal(wake.forward_to_chat, true);
+  assert.equal(wake.response_expected, true);
+  assert.equal(wake.summary, "wake_forwarded_to_chat");
+});
+
+test("summarizeVoiceTranscriptForOperator treats Francis stop as interrupt-only while speaking", () => {
+  const interrupt = summarizeVoiceTranscriptForOperator("Francis stop", { speaking: true });
+  assert.equal(interrupt.kind, "wake");
+  assert.equal(interrupt.forward_to_chat, false);
+  assert.equal(interrupt.response_expected, false);
+  assert.equal(interrupt.awareness_state, "francis_stop_listening_restored");
+  assert.equal(interrupt.summary, "interrupt_only");
+
+  const suppressed = summarizeVoiceTranscriptForOperator("Francis keep going", { speaking: true });
+  assert.equal(suppressed.kind, "passive");
+  assert.equal(suppressed.forward_to_chat, false);
+  assert.equal(suppressed.response_expected, false);
+  assert.equal(suppressed.awareness_state, "voice_input_suppressed_while_speaking");
+  assert.equal(suppressed.summary, "suppressed_while_speaking");
+});
+
+test("summarizeVoiceSoundForOperator records ambient noise without chat routing", () => {
+  const noise = summarizeVoiceSoundForOperator({
+    soundObserved: true,
+    speechObserved: false,
+    transcript: "",
+  });
+  assert.equal(noise.kind, "noise");
+  assert.equal(noise.forward_to_chat, false);
+  assert.equal(noise.response_expected, false);
+  assert.equal(noise.summary, "ambient_noise_no_chat");
 });
 
 test("buildVoiceIngressPayload marks browser voice origin without claiming ChatGPT app origin", () => {
