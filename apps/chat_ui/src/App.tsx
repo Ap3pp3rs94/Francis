@@ -236,10 +236,10 @@ function BodyStatePanel(props: { status: LensMcpStatus | null; loading: boolean;
         boxShadow: "0 24px 80px rgba(0,0,0,0.45)",
       }}
     >
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 18 }}>
+      <div style={{ display: "flex", alignItems: "flex-start", flexWrap: "wrap", justifyContent: "space-between", gap: 16 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", flexWrap: "wrap", gap: 18, minWidth: 0 }}>
           <OrbGlyph state={orb} />
-          <div>
+          <div style={{ minWidth: 0 }}>
           <p style={{ color: "#93c5fd", margin: 0, textTransform: "uppercase", letterSpacing: 1.8 }}>
             Lens / Orb body-state
           </p>
@@ -261,6 +261,7 @@ function BodyStatePanel(props: { status: LensMcpStatus | null; loading: boolean;
             color: "#0f172a",
             cursor: props.loading ? "wait" : "pointer",
             fontWeight: 700,
+            maxWidth: "100%",
             padding: "10px 14px",
           }}
         >
@@ -583,8 +584,8 @@ function VoiceTranscriptionPanel(props: { baseUrl: string }) {
         padding: 22,
       }}
     >
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
-        <div>
+      <div style={{ display: "flex", alignItems: "flex-start", flexWrap: "wrap", justifyContent: "space-between", gap: 16 }}>
+        <div style={{ minWidth: 0 }}>
           <p style={{ color: "#86efac", margin: 0, textTransform: "uppercase", letterSpacing: 1.4 }}>
             Voice / transcription
           </p>
@@ -600,6 +601,7 @@ function VoiceTranscriptionPanel(props: { baseUrl: string }) {
             color: "#0f172a",
             cursor: "pointer",
             fontWeight: 800,
+            maxWidth: "100%",
             minWidth: 112,
             padding: "10px 14px",
           }}
