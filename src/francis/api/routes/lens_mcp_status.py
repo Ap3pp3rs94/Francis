@@ -4,6 +4,7 @@ from typing import Any
 
 from fastapi import APIRouter, Query
 
+from francis.lens.command_palette_monitor import lens_command_palette_monitor_status
 from francis.lens import lens_orb_mcp_status_bridge
 
 router = APIRouter()
@@ -26,3 +27,10 @@ def mcp_status(
         actor=actor or "api.lens.mcp.status",
         receipt_limit=receipt_limit,
     )
+
+
+@router.get("/command-palette/monitor")
+def command_palette_monitor_status() -> dict[str, Any]:
+    """Return the read-only command-palette monitor status receipt projection."""
+
+    return lens_command_palette_monitor_status()

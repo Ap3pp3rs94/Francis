@@ -9,6 +9,10 @@ import {
 } from "react";
 
 import { fetchLensMcpStatus, type LensMcpStatus } from "./lens/mcpStatus";
+import {
+  fetchCommandPaletteMonitorStatus,
+  type CommandPaletteMonitorStatus,
+} from "./lens/commandPaletteMonitor";
 import { bodyStateReady, presentOrbGlyph, type OrbGlyphState } from "./lens/orbGlyph";
 import { shouldOpenLensOrbOverlay } from "./lens";
 import {
@@ -765,6 +769,195 @@ function VoiceTranscriptionPanel(props: { baseUrl: string }) {
   );
 }
 
+function joinStatusList(values: string[], fallback = "none"): string {
+  return values.length ? values.join(", ") : fallback;
+}
+
+function BridgeMonitorPanel(props: { baseUrl: string }) {
+  const [status, setStatus] = useState<CommandPaletteMonitorStatus | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const loadStatus = useCallback(
+    (signal?: AbortSignal) => {
+      setLoading(true);
+      setError("");
+
+      void fetchCommandPaletteMonitorStatus({ baseUrl: props.baseUrl, signal })
+        .then((nextStatus) => {
+          setStatus(nextStatus);
+        })
+        .catch((err: unknown) => {
+          if (signal?.aborted || isAbortError(err)) return;
+          setError(err instanceof Error ? err.message : "Command-palette monitor request failed.");
+        })
+        .finally(() => {
+          if (signal?.aborted) return;
+          setLoading(false);
+        });
+    },
+    [props.baseUrl],
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    loadStatus(controller.signal);
+    return () => controller.abort();
+  }, [loadStatus]);
+
+  const voice = status?.voice_monitor;
+  const proof = voice?.chatgpt_mcp_proof;
+  const connector = status?.chatgpt_connector_monitor;
+  const ingress = status?.chatgpt_persistent_ingress_plan_monitor;
+  const proofReady = Boolean(proof?.proof_observed);
+  const monitorReady = Boolean(status?.monitor_process_alive || status?.monitor_heartbeat_fresh);
+  const statusTone = error || status?.status === "anomaly" || status?.status === "missing" ? "blocked" : "ready";
+  const proofTone = proofReady ? "ready" : "blocked";
+  const connectorTone = connector?.connector_usable_for_chatgpt ? "ready" : "blocked";
+  const ingressTone = connector?.persistent_candidate ? "ready" : "blocked";
+
+  return (
+    <section
+      style={{
+        background: "rgba(9, 13, 20, 0.92)",
+        border: "1px solid rgba(148, 163, 184, 0.32)",
+        borderRadius: 18,
+        marginTop: 22,
+        padding: 22,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "flex-start", flexWrap: "wrap", justifyContent: "space-between", gap: 16 }}>
+        <div style={{ minWidth: 0 }}>
+          <p style={{ color: "#67e8f9", margin: 0, textTransform: "uppercase", letterSpacing: 1.4 }}>
+            ChatGPT / MCP bridge
+          </p>
+          <h2 style={{ fontSize: 24, margin: "8px 0 8px" }}>Bridge Monitor</h2>
+        </div>
+        <button
+          type="button"
+          onClick={() => loadStatus()}
+          disabled={loading}
+          style={{
+            background: "#e2e8f0",
+            border: 0,
+            borderRadius: 12,
+            color: "#0f172a",
+            cursor: loading ? "wait" : "pointer",
+            fontWeight: 800,
+            maxWidth: "100%",
+            minWidth: 112,
+            padding: "10px 14px",
+          }}
+        >
+          {loading ? "Refreshing…" : "Refresh"}
+        </button>
+      </div>
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 16 }}>
+        <Pill label="monitor" value={statusText(status?.status)} tone={statusTone} />
+        <Pill label="process" value={monitorReady ? "alive" : "not confirmed"} tone={monitorReady ? "ready" : "blocked"} />
+        <Pill label="mcp proof" value={proofReady ? "observed" : statusText(proof?.status)} tone={proofTone} />
+        <Pill label="connector" value={statusText(connector?.status)} tone={connectorTone} />
+        <Pill label="ingress" value={statusText(connector?.persistent_ingress_status)} tone={ingressTone} />
+      </div>
+
+      {error ? (
+        <div style={{ border: "1px solid #fca5a5", borderRadius: 12, color: "#fecaca", marginTop: 16, padding: 12 }}>
+          {error}
+        </div>
+      ) : null}
+
+      <dl
+        style={{
+          display: "grid",
+          gap: 12,
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          marginTop: 18,
+        }}
+      >
+        <div>
+          <dt style={{ color: "#94a3b8" }}>Latest receipt</dt>
+          <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{voice?.latest_receipt_id || "none"}</dd>
+        </div>
+        <div>
+          <dt style={{ color: "#94a3b8" }}>Latest origin</dt>
+          <dd style={{ margin: 0 }}>
+            {voice?.latest_receipt_actor || "none"} / {voice?.latest_receipt_ingress_transport || "none"}
+          </dd>
+        </div>
+        <div>
+          <dt style={{ color: "#94a3b8" }}>Proof rejection</dt>
+          <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
+            {voice?.latest_receipt_proof_rejection_reason || "none"}
+          </dd>
+        </div>
+        <div>
+          <dt style={{ color: "#94a3b8" }}>MCP receipt</dt>
+          <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
+            {proof?.latest_fresh_usable_mcp_server_receipt_id || proof?.latest_mcp_server_receipt_id || "none"}
+          </dd>
+        </div>
+        <div>
+          <dt style={{ color: "#94a3b8" }}>Connector host</dt>
+          <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{connector?.connector_url_host || "none"}</dd>
+        </div>
+        <div>
+          <dt style={{ color: "#94a3b8" }}>Persistent blockers</dt>
+          <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
+            {joinStatusList(connector?.blockers ?? ingress?.blockers ?? [])}
+          </dd>
+        </div>
+        <div>
+          <dt style={{ color: "#94a3b8" }}>Next bridge step</dt>
+          <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{proof?.next_operator_step || "none"}</dd>
+        </div>
+        <div>
+          <dt style={{ color: "#94a3b8" }}>Next ingress step</dt>
+          <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{joinStatusList(ingress?.next_operator_steps ?? [])}</dd>
+        </div>
+      </dl>
+
+      <pre
+        style={{
+          background: "rgba(2, 6, 23, 0.72)",
+          border: "1px solid rgba(148, 163, 184, 0.24)",
+          borderRadius: 12,
+          color: "#bfdbfe",
+          marginTop: 18,
+          maxHeight: 260,
+          overflow: "auto",
+          padding: 14,
+        }}
+      >
+        {JSON.stringify(
+          status
+            ? {
+                status: status.status,
+                anomaly_count: status.anomaly_count,
+                voice: {
+                  selected_voice: voice?.selected_voice,
+                  latest_receipt_actor: voice?.latest_receipt_actor,
+                  latest_receipt_ingress_transport: voice?.latest_receipt_ingress_transport,
+                  latest_receipt_counts_as_chatgpt_mcp_proof: voice?.latest_receipt_counts_as_chatgpt_mcp_proof,
+                },
+                chatgpt_mcp_proof: proof,
+                connector: {
+                  status: connector?.status,
+                  connector_url_host: connector?.connector_url_host,
+                  connector_usable_for_chatgpt: connector?.connector_usable_for_chatgpt,
+                  persistent_ingress_status: connector?.persistent_ingress_status,
+                  blockers: connector?.blockers,
+                },
+              }
+            : { status: loading ? "loading" : "not_loaded" },
+          null,
+          2,
+        )}
+      </pre>
+    </section>
+  );
+}
+
 function OrbOverlaySurface(props: { status: LensMcpStatus | null; loading: boolean }) {
   const orb = presentOrbGlyph(props.status, props.loading);
   const dragState = useRef<{ pointerId: number; offsetX: number; offsetY: number } | null>(null);
@@ -906,6 +1099,7 @@ export default function App() {
     <main style={shell}>
       <BodyStatePanel status={status} loading={loading} error={error} onRefresh={() => loadStatus()} />
       <VoiceTranscriptionPanel baseUrl={baseUrl} />
+      <BridgeMonitorPanel baseUrl={baseUrl} />
     </main>
   );
 }

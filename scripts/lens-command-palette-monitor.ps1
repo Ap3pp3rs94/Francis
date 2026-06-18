@@ -901,6 +901,33 @@ function New-VoiceMonitorProjection {
       [string](Get-PropertyValue -Payload $LatestReceipt -Name 'error' -Default '') -eq 'api_permission_denied'
     )
   )
+  $LatestReceiptId = if ($null -ne $LatestReceipt) { Get-ReceiptId -Receipt $LatestReceipt } else { '' }
+  $LatestReceiptActor = if ($null -ne $LatestReceipt) { [string](Get-PropertyValue -Payload $LatestReceipt -Name 'actor' -Default '') } else { '' }
+  $LatestReceiptSource = if ($null -ne $LatestReceipt) { [string](Get-PropertyValue -Payload $LatestReceipt -Name 'source' -Default '') } else { '' }
+  $LatestReceiptClientOrigin = if ($null -ne $LatestReceipt) { [string](Get-PropertyValue -Payload $LatestReceipt -Name 'client_origin' -Default '') } else { '' }
+  $LatestReceiptIngressTransport = if ($null -ne $LatestReceipt) { [string](Get-PropertyValue -Payload $LatestReceipt -Name 'ingress_transport' -Default '') } else { '' }
+  $LatestReceiptMcpGatewayTool = if ($null -ne $LatestReceipt) { [string](Get-PropertyValue -Payload $LatestReceipt -Name 'mcp_gateway_tool' -Default '') } else { '' }
+  $LatestReceiptMcpServerTool = if ($null -ne $LatestReceipt) { [string](Get-PropertyValue -Payload $LatestReceipt -Name 'mcp_server_tool' -Default '') } else { '' }
+  $LatestReceiptCountsAsMcpProof = (
+    $LatestReceiptActor -eq 'chatgpt.voice' -and
+    $LatestReceiptSource -eq 'chatgpt.voice' -and
+    $LatestReceiptIngressTransport -eq 'mcp_gateway_tool' -and
+    $LatestReceiptMcpGatewayTool -eq 'francis.chatgpt_voice.ingress' -and
+    $LatestReceiptMcpServerTool -eq 'francis_chatgpt_voice_ingress'
+  )
+  $LatestReceiptProofRejectionReason = if ($null -eq $LatestReceipt) {
+    'no_recent_receipt'
+  } elseif ($LatestReceiptCountsAsMcpProof) {
+    'counts_as_chatgpt_mcp_proof'
+  } elseif ($LatestReceiptActor -ne 'chatgpt.voice' -or $LatestReceiptSource -ne 'chatgpt.voice') {
+    'latest_receipt_not_chatgpt_voice_origin'
+  } elseif ($LatestReceiptIngressTransport -ne 'mcp_gateway_tool') {
+    'latest_receipt_not_mcp_gateway_tool_transport'
+  } elseif ($LatestReceiptMcpGatewayTool -ne 'francis.chatgpt_voice.ingress') {
+    'latest_receipt_wrong_mcp_gateway_tool'
+  } else {
+    'latest_receipt_wrong_mcp_server_tool'
+  }
 
   return [ordered]@{
     enabled = $true
@@ -930,6 +957,15 @@ function New-VoiceMonitorProjection {
     latest_receipt_status = if ($null -ne $LatestReceipt) { [string](Get-PropertyValue -Payload $LatestReceipt -Name 'status' -Default '') } else { '' }
     latest_receipt_chat_forward_status = if ($null -ne $LatestReceipt) { [string](Get-PropertyValue -Payload $LatestReceipt -Name 'chat_forward_status' -Default '') } else { '' }
     latest_receipt_chat_forward_error = if ($null -ne $LatestReceipt) { [string](Get-PropertyValue -Payload $LatestReceipt -Name 'chat_forward_error' -Default '') } else { '' }
+    latest_receipt_id = $LatestReceiptId
+    latest_receipt_actor = $LatestReceiptActor
+    latest_receipt_source = $LatestReceiptSource
+    latest_receipt_client_origin = $LatestReceiptClientOrigin
+    latest_receipt_ingress_transport = $LatestReceiptIngressTransport
+    latest_receipt_mcp_gateway_tool = $LatestReceiptMcpGatewayTool
+    latest_receipt_mcp_server_tool = $LatestReceiptMcpServerTool
+    latest_receipt_counts_as_chatgpt_mcp_proof = [bool]$LatestReceiptCountsAsMcpProof
+    latest_receipt_proof_rejection_reason = $LatestReceiptProofRejectionReason
     chatgpt_mcp_proof = $McpProof
     status_path = 'data/runtime/lens-overlay/status.json'
     voice_status_path = 'data/runtime/lens-overlay/voice-status.json'
