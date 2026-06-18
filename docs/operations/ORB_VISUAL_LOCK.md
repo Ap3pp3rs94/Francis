@@ -82,7 +82,8 @@ appearance:
 
 - substrate state readback
 - truthful semantic state mapping
-- ambient motion, if bounded and non-interfering
+- docked operator presence as the default desktop posture
+- ambient motion, only when explicitly enabled and bounded/non-interfering
 - precision or task motion, if distinct from ambient drift
 - cancellation and handback behavior
 - receipts

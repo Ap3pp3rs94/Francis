@@ -101,6 +101,7 @@ def test_orb_continuum_state_preserves_one_path_wiring_rules() -> None:
     assert "LocalTunnel fallback (`localtunnel_fallback_replace_needed`)" in state
     assert "LocalTunnel" in state
     assert "`localtunnel_ephemeral`" in state
+    assert "`manual_drag_only`" in state
     assert "`bounded_desktop_roam`" in state
     assert "`overlay_position`" in state
     assert "Trigger a fresh ChatGPT app call through the public" in state

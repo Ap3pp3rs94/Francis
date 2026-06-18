@@ -10,6 +10,8 @@ param(
 
   [string]$ChatUiBaseUrl = 'http://127.0.0.1:5173',
 
+  [switch]$EnableAutonomousMotion,
+
   [switch]$DisableAutonomousMotion,
 
   [switch]$EnableWakeListen,
@@ -548,7 +550,7 @@ function Set-OverlayHardwareRenderMode {
 }
 
 function New-OrbVisualProjection {
-  param([bool]$AutonomousMotion = $true)
+  param([bool]$AutonomousMotion = $false)
 
   return [ordered]@{
     source = 'lens_orb_mcp_status_bridge'
@@ -3526,7 +3528,7 @@ function Write-OverlayState {
     $McpBodyState = New-McpBodyStateProjection -McpStatusRoute $Config.mcp_status_route -OrbMcpStatusRoute $Config.orb_mcp_status_route
   }
   if ($null -eq $OrbVisual) {
-    $OrbVisual = New-OrbVisualProjection -AutonomousMotion $true
+    $OrbVisual = New-OrbVisualProjection -AutonomousMotion $false
   }
   if ($null -eq $OverlayVoice) {
     $OverlayVoice = New-OverlayRuntimeVoiceProjection
@@ -3615,7 +3617,7 @@ function Get-OverlayRuntimeReadback {
   $OrbVisual = if ($null -ne $StatusOrbVisual) {
     $StatusOrbVisual
   } else {
-    New-OrbVisualProjection -AutonomousMotion $true
+    New-OrbVisualProjection -AutonomousMotion $false
   }
   $StatusVoice = if ($null -ne $Status -and $null -ne $Status.PSObject.Properties['voice']) { $Status.PSObject.Properties['voice'].Value } else { $null }
   $Voice = if ($null -ne $StatusVoice) { $StatusVoice } else { Get-OverlayVoiceReadback -Root $Root }
@@ -3772,6 +3774,7 @@ $DataRoot = Get-DataRoot -Override $DataDir
 $ModeName = $Mode.ToLowerInvariant()
 $RunningOnWindows = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
 $script:LensOverlayVoiceUseLlmRequested = [bool]$EnableVoiceLlm
+$AutonomousMotionEnabled = [bool]$EnableAutonomousMotion -and -not [bool]$DisableAutonomousMotion
 
 if ($Mode -eq 'Speak') {
   $PlaybackStatusPath = if ($PlaybackStateOnly) { Get-OverlayVoicePlaybackStatusPath -Root $DataRoot } else { '' }
@@ -3831,7 +3834,7 @@ if ($Mode -eq 'Run') {
   $MotionSubscription = $null
   $WakeRecognizer = $null
   $Failed = $false
-  $script:LensOverlayOrbVisual = New-OrbVisualProjection -AutonomousMotion (-not [bool]$DisableAutonomousMotion)
+  $script:LensOverlayOrbVisual = New-OrbVisualProjection -AutonomousMotion $AutonomousMotionEnabled
   $script:LensOverlayEnergyRoot = $null
   $script:LensOverlayMotionState = $null
   $script:LensOverlayRenderFrameClock = $null
@@ -3845,7 +3848,7 @@ if ($Mode -eq 'Run') {
     Add-Type -AssemblyName PresentationCore
     Add-Type -AssemblyName WindowsBase
     Set-OverlayHardwareRenderMode
-    $script:LensOverlayOrbVisual = New-OrbVisualProjection -AutonomousMotion (-not [bool]$DisableAutonomousMotion)
+    $script:LensOverlayOrbVisual = New-OrbVisualProjection -AutonomousMotion $AutonomousMotionEnabled
     $Config = Get-OverlayConfig
     $OrbSize = 220
     $Screen = [System.Windows.SystemParameters]::WorkArea
@@ -3932,7 +3935,7 @@ if ($Mode -eq 'Run') {
         Update-OverlayMcpBodyStateLabel -Label $script:LensOverlayLabel -Config $script:LensOverlayConfig -Root $script:LensOverlayDataRoot
       })
     $RefreshTimer.Start()
-    if (-not $DisableAutonomousMotion) {
+    if ($AutonomousMotionEnabled) {
       $MotionSubscription = Start-OrbFrameSyncedMotion -Window $script:LensOverlayWindow -MotionState $script:LensOverlayMotionState
       $script:LensOverlayRenderFrameClock = $MotionSubscription['clock']
     }
@@ -4076,6 +4079,9 @@ $ArgumentList = @(
 )
 if ($DisableAutonomousMotion) {
   $ArgumentList += '-DisableAutonomousMotion'
+}
+if ($EnableAutonomousMotion) {
+  $ArgumentList += '-EnableAutonomousMotion'
 }
 if ($EnableWakeListen) {
   $ArgumentList += '-EnableWakeListen'

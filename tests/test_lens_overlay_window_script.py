@@ -73,8 +73,9 @@ def test_lens_overlay_window_status_reports_missing_runtime(tmp_path: Path) -> N
     assert payload["overlay_runtime"]["expected_overlay_scope"] == "user_session"
     assert payload["overlay_runtime"]["mcp_status_route"] == "/lens/mcp/status"
     assert payload["overlay_runtime"]["orb_mcp_status_route"] == "/lens/orb/mcp-status"
-    assert payload["orb_visual"]["motion_clock"] == "composition_target_rendering"
-    assert payload["orb_visual"]["motion_profile"] == "bounded_desktop_roam"
+    assert payload["orb_visual"]["autonomous_motion"] is False
+    assert payload["orb_visual"]["motion_clock"] == "manual_drag_only"
+    assert payload["orb_visual"]["motion_profile"] == "manual_drag_only"
     assert payload["orb_visual"]["desktop_roam_supported"] is True
     assert payload["orb_visual"]["desktop_roam_bounds"] == "work_area"
     assert payload["orb_visual"]["render_profile"]["source"] == "wpf_render_capability"
@@ -523,6 +524,7 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "function New-OrbVisualProjection" in script
     assert "function Start-OrbFrameSyncedMotion" in script
     assert "function Stop-OrbFrameSyncedMotion" in script
+    assert "[switch]$EnableAutonomousMotion" in script
     assert "function Invoke-OverlayVoiceSpeech" in script
     assert "function Invoke-OverlayElevenLabsVoiceSpeech" in script
     assert "function Invoke-OverlayAudioFilePlayback" in script
@@ -792,6 +794,7 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "$script:LensOverlayWindow.DragMove()" in script
     assert "Reset-OrbAutonomousMotionAnchor" in script
     assert "bounded_desktop_roam" in script
+    assert "$AutonomousMotionEnabled = [bool]$EnableAutonomousMotion -and -not [bool]$DisableAutonomousMotion" in script
     assert "desktop_roam_supported = $true" in script
     assert "desktop_roam_bounds = 'work_area'" in script
     assert "roam_left = $MinimumLeft" in script
@@ -804,6 +807,7 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "(($FrameSeconds - $LastReceiptSeconds) -lt 1.0)" in script
     assert "Write-OrbAutonomousMotionPositionReceipt -Window $script:LensOverlayWindow" in script
     assert "$MotionSubscription = Start-OrbFrameSyncedMotion" in script
+    assert "if ($AutonomousMotionEnabled) {" in script
     assert "autonomous_motion = $AutonomousMotion" in script
     assert "voice = Get-OverlayVoiceReadback -Root $Root" in script
     assert "overlay_voice = $Readback.overlay_voice" in script
