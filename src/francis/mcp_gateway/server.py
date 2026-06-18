@@ -37,6 +37,7 @@ def run_server(
     try:
         from mcp.server.fastmcp import FastMCP  # type: ignore[import-not-found]
         from mcp.server.transport_security import TransportSecuritySettings  # type: ignore[import-not-found]
+        from mcp.types import ToolAnnotations  # type: ignore[import-not-found]
     except Exception as exc:
         raise RuntimeError(
             "Optional MCP SDK is not installed. Install the package that provides "
@@ -249,11 +250,31 @@ def run_server(
             run_tool("francis.handoff.audit", {"input_proposal_id": input_proposal_id, "limit": limit})
         )
 
-    @server.tool(name="francis_chatgpt_voice_contract")
+    @server.tool(
+        name="francis_chatgpt_voice_contract",
+        title="Francis voice bridge contract",
+        description=(
+            "Read the Francis voice bridge contract before sending voice transcripts. "
+            "This is read-only and explains that the bridge accepts text transcripts, not raw audio."
+        ),
+        annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False),
+    )
     def francis_chatgpt_voice_contract(actor: str = "chatgpt.voice") -> str:
         return _tool_payload(run_tool("francis.chatgpt_voice.contract", {"actor": actor}))
 
-    @server.tool(name="francis_chatgpt_voice_ingress")
+    @server.tool(
+        name="francis_chatgpt_voice_ingress",
+        title="Send transcript to Francis",
+        description=(
+            "Use this when the operator wants to talk to Francis. Pass the exact user-visible transcript text "
+            "in `transcript`, leave `forward_to_chat` true, and speak the returned top-level `reply` as "
+            "Francis's answer. Do not invent text if ChatGPT voice reports Transcript Unavailable; pass that "
+            "marker or ask the operator to repeat."
+        ),
+        annotations=ToolAnnotations(
+            readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False
+        ),
+    )
     def francis_chatgpt_voice_ingress(
         transcript: str,
         actor: str = "chatgpt.voice",
@@ -264,11 +285,7 @@ def run_server(
         forward_to_chat: bool = True,
         use_llm: bool = False,
     ) -> str:
-        """Record exact transcribed text and return a top-level Francis reply.
-
-        If the voice client has no transcript, pass an empty string or the
-        unavailable marker; do not invent the operator's words.
-        """
+        """Send an exact operator transcript to Francis and return a speakable reply."""
         return _tool_payload(
             run_tool(
                 "francis.chatgpt_voice.ingress",
@@ -285,7 +302,15 @@ def run_server(
             )
         )
 
-    @server.tool(name="francis_chatgpt_voice_receipts")
+    @server.tool(
+        name="francis_chatgpt_voice_receipts",
+        title="Read Francis voice receipts",
+        description=(
+            "Read recent Francis voice bridge receipts to verify whether ChatGPT actually sent transcript text "
+            "to Francis. This is read-only and does not call a model or record a new transcript."
+        ),
+        annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False),
+    )
     def francis_chatgpt_voice_receipts(actor: str = "chatgpt.voice", limit: int = 10) -> str:
         return _tool_payload(run_tool("francis.chatgpt_voice.receipts", {"actor": actor, "limit": limit}))
 

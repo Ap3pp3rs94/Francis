@@ -46,6 +46,7 @@ async def _roundtrip(data_dir: str) -> dict:
             await session.initialize()
             tools = await session.list_tools()
             names = sorted(t.name for t in tools.tools)
+            voice_tool = next(t for t in tools.tools if t.name == "francis_chatgpt_voice_ingress")
             health = json.loads((await session.call_tool("francis_health", {})).content[0].text)
             denied = json.loads(
                 (
@@ -72,7 +73,19 @@ async def _roundtrip(data_dir: str) -> dict:
                 .content[0]
                 .text
             )
-            return {"names": names, "health": health, "denied": denied, "voice": voice}
+            return {
+                "names": names,
+                "health": health,
+                "denied": denied,
+                "voice": voice,
+                "voice_tool": {
+                    "title": getattr(voice_tool, "title", ""),
+                    "description": getattr(voice_tool, "description", ""),
+                    "annotations": (
+                        voice_tool.annotations.model_dump() if getattr(voice_tool, "annotations", None) else {}
+                    ),
+                },
+            }
 
 
 def test_external_mcp_client_roundtrip(tmp_path) -> None:
@@ -83,6 +96,10 @@ def test_external_mcp_client_roundtrip(tmp_path) -> None:
     assert "francis_handoff_audit" in out["names"]
     assert "francis_chatgpt_voice_ingress" in out["names"]
     assert len(out["names"]) >= 21
+    assert out["voice_tool"]["title"] == "Send transcript to Francis"
+    assert "talk to Francis" in out["voice_tool"]["description"]
+    assert out["voice_tool"]["annotations"]["readOnlyHint"] is False
+    assert out["voice_tool"]["annotations"]["destructiveHint"] is False
 
     # Read-only tool returns real data over the wire.
     assert out["health"]["ok"] is True
