@@ -2666,6 +2666,25 @@ function Get-OverlayVoiceReadback {
 
   $Status = Read-JsonFile -Path (Get-OverlayVoiceStatusPath -Root $Root)
   if ($null -ne $Status -and (Get-StringProperty -Payload $Status -Name 'kind' -Default '') -eq 'lens.overlay.voice.runtime') {
+    if ((Get-StringProperty -Payload $Status -Name 'status' -Default '') -eq 'voice_input_suppressed_while_speaking') {
+      $SpeechGuard = Get-OverlayOwnedSpeechGuardState -Root $Root
+      if (-not (Get-BoolProperty -Payload $SpeechGuard -Name 'owned_speech_guard_active' -Default $false)) {
+        $Provider = Get-StringProperty -Payload $Status -Name 'voice_provider' -Default $VoiceProvider
+        $SelectedVoice = Get-StringProperty -Payload $Status -Name 'selected_voice' -Default ''
+        $WakeListening = Get-BoolProperty -Payload $Status -Name 'wake_listening' -Default $false
+        $WakePhraseText = Get-StringProperty -Payload $Status -Name 'wake_phrase' -Default $WakePhrase
+        $Refreshed = New-OverlayVoiceProjection -SelectedVoiceName $SelectedVoice -Provider $Provider -WakeListening $WakeListening -WakePhraseText $WakePhraseText
+        $Refreshed.status = if ($WakeListening) { 'listening' } else { 'available' }
+        $Refreshed.ok = $true
+        $Refreshed.previous_voice_status = 'voice_input_suppressed_while_speaking'
+        $Refreshed.previous_voice_status_stale = $true
+        $Refreshed.stale_suppression_cleared = $true
+        $Refreshed.microphone_gate_while_speaking = 'francis_stop_only'
+        $Refreshed.conversation_forwarding_while_speaking = $false
+        $Refreshed.message = 'Francis owned speech guard is inactive; stale suppression status was cleared for readback.'
+        return $Refreshed
+      }
+    }
     return $Status
   }
   return New-OverlayVoiceProjection
@@ -3901,7 +3920,14 @@ function Get-OverlayRuntimeReadback {
     New-OrbVisualProjection -AutonomousMotion $false
   }
   $StatusVoice = if ($null -ne $Status -and $null -ne $Status.PSObject.Properties['voice']) { $Status.PSObject.Properties['voice'].Value } else { $null }
-  $Voice = if ($null -ne $StatusVoice) { $StatusVoice } else { Get-OverlayVoiceReadback -Root $Root }
+  $VoiceReadback = Get-OverlayVoiceReadback -Root $Root
+  $Voice = if (Test-Path -LiteralPath (Get-OverlayVoiceStatusPath -Root $Root) -PathType Leaf) {
+    $VoiceReadback
+  } elseif ($null -ne $StatusVoice) {
+    $StatusVoice
+  } else {
+    $VoiceReadback
+  }
   $StatusVoiceTurn = if ($null -ne $Status -and $null -ne $Status.PSObject.Properties['voice_turn']) { $Status.PSObject.Properties['voice_turn'].Value } else { $null }
   $VoiceTurn = Get-OverlayVoiceTurnReadback -Root $Root
   if ($null -eq $VoiceTurn -and $null -ne $StatusVoiceTurn) {

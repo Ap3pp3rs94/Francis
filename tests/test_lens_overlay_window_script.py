@@ -364,6 +364,72 @@ def test_lens_overlay_window_status_reports_live_runtime_readback(tmp_path: Path
     assert payload["governance"]["microphone_capture_active"] is True
 
 
+def test_lens_overlay_window_status_clears_stale_voice_suppression_readback(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    runtime_dir = data_dir / "runtime" / "lens-overlay"
+    runtime_dir.mkdir(parents=True)
+    pid = os.getpid()
+    (runtime_dir / "lens-overlay.pid").write_text(str(pid), encoding="utf-8")
+    (runtime_dir / "status.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.overlay.runtime_state",
+                "status": "overlay_running",
+                "pid": pid,
+                "overlay_name": "Francis Lens Overlay",
+                "overlay_scope": "user_session",
+                "overlay_window_visible": True,
+                "always_on_top": True,
+                "overlay_voice": {
+                    "kind": "lens.overlay.voice.runtime",
+                    "status": "listening",
+                    "ok": True,
+                    "voice_provider": "ElevenLabs",
+                    "selected_voice": "Emma",
+                    "microphone_capture": True,
+                    "wake_listening": True,
+                    "wake_phrase": "hey francis",
+                    "microphone_signal_status": "observed",
+                    "microphone_input_effective": True,
+                    "needs_operator_audio_input_check": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (runtime_dir / "voice-status.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.overlay.voice.runtime",
+                "status": "voice_input_suppressed_while_speaking",
+                "ok": True,
+                "voice_provider": "ElevenLabs",
+                "selected_voice": "Emma",
+                "microphone_capture": True,
+                "wake_listening": True,
+                "wake_phrase": "hey francis",
+                "continuous_voice_chat_blocker": "owned_speech_process_active",
+                "microphone_gate_while_speaking": "francis_stop_only",
+                "conversation_forwarding_while_speaking": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    proc = _run_overlay_window("-Mode", "Status", "-DataDir", str(data_dir))
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["status"] == "visible"
+    assert payload["voice"]["status"] == "listening"
+    assert payload["voice"]["selected_voice"] == "Emma"
+    assert payload["voice"]["previous_voice_status"] == "voice_input_suppressed_while_speaking"
+    assert payload["voice"]["previous_voice_status_stale"] is True
+    assert payload["voice"]["stale_suppression_cleared"] is True
+    assert payload["voice"]["microphone_gate_while_speaking"] == "francis_stop_only"
+    assert payload["voice"]["conversation_forwarding_while_speaking"] is False
+
+
 def test_lens_overlay_window_status_projects_completed_voice_turn_handback(tmp_path: Path) -> None:
     data_dir = tmp_path / "data"
     runtime_dir = data_dir / "runtime" / "lens-overlay"
