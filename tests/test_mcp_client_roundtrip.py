@@ -26,11 +26,20 @@ from francis.kernel.paths import repo_root  # noqa: E402
 
 
 async def _roundtrip(data_dir: str) -> dict:
+    actor_scopes = json.dumps(
+        {
+            "chatgpt.voice": [
+                "chatgpt.voice.bridge.read",
+                "chatgpt.voice.bridge.write",
+                "chat.write",
+            ]
+        }
+    )
     params = StdioServerParameters(
         command=sys.executable,
         args=["-m", "francis.mcp_gateway.server"],
         cwd=str(repo_root()),
-        env={**os.environ, "FRANCIS_DATA_DIR": data_dir},
+        env={**os.environ, "FRANCIS_DATA_DIR": data_dir, "FRANCIS_API_ACTOR_SCOPES": actor_scopes},
     )
     async with stdio_client(params) as (read, write):
         async with ClientSession(read, write) as session:
@@ -44,9 +53,26 @@ async def _roundtrip(data_dir: str) -> dict:
                         "francis_input_execute_approved",
                         {"proposal_id": "nope", "approval_phrase": "nope"},
                     )
-                ).content[0].text
+                )
+                .content[0]
+                .text
             )
-            return {"names": names, "health": health, "denied": denied}
+            voice = json.loads(
+                (
+                    await session.call_tool(
+                        "francis_chatgpt_voice_ingress",
+                        {
+                            "actor": "chatgpt.voice",
+                            "transcript": "can you hear me",
+                            "turn_id": "mcp-roundtrip-voice",
+                            "forward_to_chat": False,
+                        },
+                    )
+                )
+                .content[0]
+                .text
+            )
+            return {"names": names, "health": health, "denied": denied, "voice": voice}
 
 
 def test_external_mcp_client_roundtrip(tmp_path) -> None:
@@ -55,7 +81,8 @@ def test_external_mcp_client_roundtrip(tmp_path) -> None:
     # All registry tools are advertised over the wire.
     assert "francis_health" in out["names"]
     assert "francis_handoff_audit" in out["names"]
-    assert len(out["names"]) >= 18
+    assert "francis_chatgpt_voice_ingress" in out["names"]
+    assert len(out["names"]) >= 21
 
     # Read-only tool returns real data over the wire.
     assert out["health"]["ok"] is True
@@ -64,3 +91,13 @@ def test_external_mcp_client_roundtrip(tmp_path) -> None:
     # Governance holds over the wire: a mutating tool refuses without approval.
     assert out["denied"]["ok"] is False
     assert out["denied"]["status"] == "approval_required"
+
+    # ChatGPT voice transcript ingress is reachable over the same MCP transport.
+    assert out["voice"]["ok"] is True
+    assert out["voice"]["status"] == "recorded"
+    assert out["voice"]["data"]["reply"] == "I recorded the transcript for Francis. Chat forwarding was not requested."
+    assert out["voice"]["data"]["voice_response"]["speakable"] is True
+    assert out["voice"]["data"]["chat_forward"]["requested"] is False
+    assert out["voice"]["data"]["receipt"]["transcript"] == "can you hear me"
+    assert out["voice"]["governance"]["raw_audio"] is False
+    assert out["voice"]["governance"]["grants_execution_authority"] is False

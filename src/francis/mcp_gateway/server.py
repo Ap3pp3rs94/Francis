@@ -10,7 +10,13 @@ def _tool_payload(result: dict[str, Any]) -> str:
     return json.dumps(result, indent=2, ensure_ascii=False, default=str)
 
 
-def run_stdio_server() -> None:
+def run_server(
+    *,
+    transport: str = "stdio",
+    host: str = "127.0.0.1",
+    port: int = 8787,
+    streamable_http_path: str = "/mcp",
+) -> None:
     """Run an MCP server if the optional MCP SDK is installed.
 
     The contract layer is dependency-free and tested separately. This adapter is
@@ -24,7 +30,20 @@ def run_stdio_server() -> None:
             "`mcp.server.fastmcp.FastMCP`, then run this module again."
         ) from exc
 
-    server = FastMCP("francis-mcp-gateway")
+    if transport not in {"stdio", "sse", "streamable-http"}:
+        raise ValueError(f"unsupported MCP transport: {transport}")
+
+    server = FastMCP(
+        "francis-mcp-gateway",
+        instructions=(
+            "Francis is a local-first governed operator layer. Use chatgpt voice tools for "
+            "transcript-only ingress; they record receipts and do not grant execution authority."
+        ),
+        host=host,
+        port=port,
+        streamable_http_path=streamable_http_path,
+        stateless_http=transport == "streamable-http",
+    )
 
     @server.tool(name="francis_health")
     def francis_health() -> str:
@@ -189,11 +208,74 @@ def run_stdio_server() -> None:
             run_tool("francis.handoff.audit", {"input_proposal_id": input_proposal_id, "limit": limit})
         )
 
-    server.run()
+    @server.tool(name="francis_chatgpt_voice_contract")
+    def francis_chatgpt_voice_contract(actor: str = "chatgpt.voice") -> str:
+        return _tool_payload(run_tool("francis.chatgpt_voice.contract", {"actor": actor}))
+
+    @server.tool(name="francis_chatgpt_voice_ingress")
+    def francis_chatgpt_voice_ingress(
+        transcript: str,
+        actor: str = "chatgpt.voice",
+        source: str = "chatgpt.voice",
+        conversation_id: str = "",
+        turn_id: str = "",
+        locale: str = "",
+        forward_to_chat: bool = True,
+        use_llm: bool = False,
+    ) -> str:
+        """Record exact transcribed text and return a top-level Francis reply.
+
+        If the voice client has no transcript, pass an empty string or the
+        unavailable marker; do not invent the operator's words.
+        """
+        return _tool_payload(
+            run_tool(
+                "francis.chatgpt_voice.ingress",
+                {
+                    "actor": actor,
+                    "transcript": transcript,
+                    "source": source,
+                    "conversation_id": conversation_id,
+                    "turn_id": turn_id,
+                    "locale": locale,
+                    "forward_to_chat": forward_to_chat,
+                    "use_llm": use_llm,
+                },
+            )
+        )
+
+    @server.tool(name="francis_chatgpt_voice_receipts")
+    def francis_chatgpt_voice_receipts(actor: str = "chatgpt.voice", limit: int = 10) -> str:
+        return _tool_payload(run_tool("francis.chatgpt_voice.receipts", {"actor": actor, "limit": limit}))
+
+    server.run(transport=transport)
+
+
+def run_stdio_server() -> None:
+    run_server(transport="stdio")
 
 
 def main() -> int:
-    run_stdio_server()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Run the governed Francis MCP gateway.")
+    parser.add_argument(
+        "--transport",
+        choices=("stdio", "sse", "streamable-http"),
+        default="stdio",
+        help="MCP transport to expose.",
+    )
+    parser.add_argument("--host", default="127.0.0.1", help="Host for HTTP transports.")
+    parser.add_argument("--port", type=int, default=8787, help="Port for HTTP transports.")
+    parser.add_argument("--path", default="/mcp", help="Streamable HTTP MCP path.")
+    args = parser.parse_args()
+
+    run_server(
+        transport=args.transport,
+        host=args.host,
+        port=args.port,
+        streamable_http_path=args.path,
+    )
     return 0
 
 

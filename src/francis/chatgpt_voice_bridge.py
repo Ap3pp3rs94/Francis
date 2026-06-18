@@ -16,6 +16,19 @@ CHATGPT_VOICE_BRIDGE_WRITE_SCOPE = "chatgpt.voice.bridge.write"
 CHATGPT_VOICE_BRIDGE_KIND = "francis.chatgpt_voice.bridge"
 CHATGPT_VOICE_BRIDGE_VERSION = "chatgpt_voice_bridge_v0"
 MAX_TRANSCRIPT_CHARS = 8000
+_TRANSCRIPT_UNAVAILABLE_MARKERS = {
+    "transcript unavailable",
+    "transcript not available",
+    "unavailable transcript",
+}
+_TRANSCRIPT_REQUIRED_REPLY = (
+    "I did not receive a transcript from ChatGPT voice, so I cannot answer that turn. "
+    "Please repeat it or send the text."
+)
+_TRANSCRIPT_UNAVAILABLE_REPLY = (
+    "I did not receive a usable transcript from ChatGPT voice, so I cannot answer that turn. "
+    "Please repeat it or send the text."
+)
 
 
 def _now() -> float:
@@ -35,7 +48,28 @@ def _bounded_text(value: Any, *, max_chars: int) -> str:
     text = _safe_str(value)
     if not text:
         return ""
-    return text[:max(1, max_chars)]
+    return text[: max(1, max_chars)]
+
+
+def _transcript_rejection_reason(text: str) -> str:
+    if not text:
+        return "transcript_required"
+    normalized = " ".join("".join(char if char.isalnum() else " " for char in text.lower()).split())
+    if normalized in _TRANSCRIPT_UNAVAILABLE_MARKERS:
+        return "transcript_unavailable"
+    return ""
+
+
+def _voice_response(*, text: str, source: str, requires_transcript: bool = False) -> dict[str, Any]:
+    return {
+        "text": text,
+        "source": source,
+        "speakable": bool(text),
+        "requires_transcript": bool(requires_transcript),
+        "raw_audio": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+    }
 
 
 def _receipt_root() -> Path:
@@ -213,13 +247,25 @@ def record_chatgpt_voice_ingress(
         "secrets_redacted": redacted_transcript != bounded_transcript,
     }
 
-    if not redacted_transcript:
-        receipt = _write_receipt({**base_payload, "decision": "rejected", "reason": "transcript_required"})
+    transcript_rejection_reason = _transcript_rejection_reason(redacted_transcript)
+    if transcript_rejection_reason:
+        reply = (
+            _TRANSCRIPT_UNAVAILABLE_REPLY
+            if transcript_rejection_reason == "transcript_unavailable"
+            else _TRANSCRIPT_REQUIRED_REPLY
+        )
+        receipt = _write_receipt({**base_payload, "decision": "rejected", "reason": transcript_rejection_reason})
         return {
             "kind": f"{CHATGPT_VOICE_BRIDGE_KIND}.ingress",
             "ok": False,
             "status": "rejected",
-            "error": "transcript_required",
+            "error": transcript_rejection_reason,
+            "reply": reply,
+            "voice_response": _voice_response(
+                text=reply,
+                source="bridge.transcript_guard",
+                requires_transcript=True,
+            ),
             "receipt": receipt,
             "governance": _honesty(read_only=False, writes_receipt=True),
         }
@@ -242,6 +288,15 @@ def record_chatgpt_voice_ingress(
         chat_error = _safe_str(chat_response.get("error"))
         chat_forwarded = not chat_error and chat_response.get("status") != "denied"
         chat_status = "forwarded" if chat_forwarded else "denied"
+    reply = _safe_str(chat_response.get("reply")) if chat_forwarded else ""
+    reply_source = "chat_forward.response" if reply else ""
+    if not reply:
+        if forward_to_chat and not chat_forwarded:
+            reply = "I recorded the transcript, but the Francis chat write gate did not accept forwarding."
+            reply_source = "bridge.forward_denied"
+        else:
+            reply = "I recorded the transcript for Francis. Chat forwarding was not requested."
+            reply_source = "bridge.recorded_only"
 
     receipt = _write_receipt(
         {
@@ -252,6 +307,8 @@ def record_chatgpt_voice_ingress(
             "chat_forward_error": chat_error,
             "chat_response_mode": _safe_str(chat_response.get("mode")),
             "chat_response_status": _safe_str(chat_response.get("status")),
+            "reply": reply,
+            "reply_source": reply_source,
         }
     )
     status = "forwarded" if chat_forwarded else "recorded_not_forwarded" if forward_to_chat else "recorded"
@@ -259,6 +316,8 @@ def record_chatgpt_voice_ingress(
         "kind": f"{CHATGPT_VOICE_BRIDGE_KIND}.ingress",
         "ok": chat_forwarded or not forward_to_chat,
         "status": status,
+        "reply": reply,
+        "voice_response": _voice_response(text=reply, source=reply_source),
         "receipt": receipt,
         "chat_forward": {
             "requested": bool(forward_to_chat),

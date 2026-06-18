@@ -56,9 +56,13 @@ def test_chatgpt_voice_ingress_records_without_chat_forward(monkeypatch, tmp_pat
 
     assert body["ok"] is True
     assert body["status"] == "recorded"
+    assert body["reply"] == "I recorded the transcript for Francis. Chat forwarding was not requested."
+    assert body["voice_response"]["source"] == "bridge.recorded_only"
+    assert body["voice_response"]["speakable"] is True
     assert body["chat_forward"]["requested"] is False
     assert body["receipt"]["transcript"] == "Francis can you hear me"
     assert body["receipt"]["turn_id"] == "voice-turn-1"
+    assert body["receipt"]["reply_source"] == "bridge.recorded_only"
     assert Path(body["receipt"]["receipt_path"]).exists()
     assert body["governance"]["writes_receipt"] is True
     assert body["governance"]["forwards_to_chat"] is False
@@ -81,10 +85,13 @@ def test_chatgpt_voice_forward_requires_existing_chat_write_gate(monkeypatch, tm
 
     assert body["ok"] is False
     assert body["status"] == "recorded_not_forwarded"
+    assert body["reply"] == "I recorded the transcript, but the Francis chat write gate did not accept forwarding."
+    assert body["voice_response"]["source"] == "bridge.forward_denied"
     assert body["chat_forward"]["requested"] is True
     assert body["chat_forward"]["forwarded"] is False
     assert body["chat_forward"]["error"] == "api_permission_denied"
     assert body["receipt"]["chat_forward_status"] == "denied"
+    assert body["receipt"]["reply_source"] == "bridge.forward_denied"
     assert Path(body["receipt"]["receipt_path"]).exists()
     assert not (data_root / "conversations" / "ledger" / "ledger.jsonl").exists()
 
@@ -106,10 +113,14 @@ def test_chatgpt_voice_forward_reaches_chat_when_scoped(monkeypatch, tmp_path: P
 
     assert body["ok"] is True
     assert body["status"] == "forwarded"
+    assert body["reply"] == "I can hear you. Voice input is reaching Francis."
+    assert body["voice_response"]["source"] == "chat_forward.response"
+    assert body["voice_response"]["speakable"] is True
     assert body["chat_forward"]["forwarded"] is True
     assert body["chat_forward"]["response"]["reply"] == "I can hear you. Voice input is reaching Francis."
     assert body["receipt"]["chat_forward_status"] == "forwarded"
     assert body["receipt"]["chat_response_status"] == ""
+    assert body["receipt"]["reply"] == "I can hear you. Voice input is reaching Francis."
     assert body["governance"]["calls_model"] is False
     assert body["governance"]["grants_execution_authority"] is False
 
@@ -118,6 +129,35 @@ def test_chatgpt_voice_forward_reaches_chat_when_scoped(monkeypatch, tmp_path: P
     ledger_text = ledger.read_text(encoding="utf-8")
     assert "can you hear me" in ledger_text
     assert "voice-turn-forwarded" in ledger_text
+
+
+def test_chatgpt_voice_ingress_rejects_unavailable_transcript_with_reply(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", _scopes("chatgpt.voice.bridge.write", "chat.write"))
+
+    client = TestClient(create_app())
+
+    body = client.post(
+        "/chatgpt-voice/ingress",
+        json={"actor": _ACTOR, "transcript": "Transcript Unavailable", "turn_id": "voice-turn-empty"},
+    ).json()
+
+    assert body["ok"] is False
+    assert body["status"] == "rejected"
+    assert body["error"] == "transcript_unavailable"
+    assert body["reply"] == (
+        "I did not receive a usable transcript from ChatGPT voice, so I cannot answer that turn. "
+        "Please repeat it or send the text."
+    )
+    assert body["voice_response"]["source"] == "bridge.transcript_guard"
+    assert body["voice_response"]["requires_transcript"] is True
+    assert body["voice_response"]["grants_execution_authority"] is False
+    assert body["receipt"]["reason"] == "transcript_unavailable"
+    assert body["receipt"]["chat_forward_requested"] is True
+    assert body["receipt"]["governance"]["forwards_to_chat"] is False
+    assert Path(body["receipt"]["receipt_path"]).exists()
+    assert not (data_root / "conversations" / "ledger" / "ledger.jsonl").exists()
 
 
 def test_chatgpt_voice_mcp_tools_expose_bounded_bridge(monkeypatch, tmp_path: Path) -> None:
