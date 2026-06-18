@@ -3,6 +3,9 @@ from __future__ import annotations
 import tomllib
 from pathlib import Path
 
+ZEROCONF_SECURITY_FLOOR = "0.149.12"
+ZEROCONF_SECURITY_SPECIFIER = f">={ZEROCONF_SECURITY_FLOOR}"
+
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
@@ -23,19 +26,19 @@ def test_iot_extra_pins_zeroconf_security_floor() -> None:
     lock = tomllib.loads((repo_root / "uv.lock").read_text(encoding="utf-8"))
 
     iot_extra = pyproject["project"]["optional-dependencies"]["iot"]
-    assert "zeroconf>=0.149.7" in iot_extra
+    assert f"zeroconf{ZEROCONF_SECURITY_SPECIFIER}" in iot_extra
 
     zeroconf_packages = [package for package in lock["package"] if package["name"] == "zeroconf"]
-    assert [package["version"] for package in zeroconf_packages] == ["0.149.7"]
+    assert [package["version"] for package in zeroconf_packages] == [ZEROCONF_SECURITY_FLOOR]
 
     francis_package = next(package for package in lock["package"] if package["name"] == "francis")
     locked_iot_dependencies = francis_package["optional-dependencies"]["iot"]
     locked_iot_zeroconf = [dependency for dependency in locked_iot_dependencies if dependency["name"] == "zeroconf"]
-    assert locked_iot_zeroconf == [{"name": "zeroconf", "specifier": ">=0.149.7"}]
+    assert locked_iot_zeroconf == [{"name": "zeroconf"}]
 
     requires_dist = francis_package["metadata"]["requires-dist"]
     assert {
         "name": "zeroconf",
         "marker": "extra == 'iot'",
-        "specifier": ">=0.149.7",
+        "specifier": ZEROCONF_SECURITY_SPECIFIER,
     } in requires_dist
