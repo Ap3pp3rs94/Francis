@@ -411,6 +411,57 @@ function Stop-KnownProcess {
   return $true
 }
 
+function New-LocalTunnelStabilityPayload {
+  param(
+    [string]$ConnectorUrl,
+    [string]$ConnectorUrlSource,
+    [string]$RequestedSubdomain
+  )
+
+  $Source = ConvertTo-BoundedText -Value $ConnectorUrlSource -MaxLength 160
+  $Requested = ConvertTo-BoundedText -Value $RequestedSubdomain -MaxLength 160
+  $ActualHost = ''
+  if (-not [string]::IsNullOrWhiteSpace($ConnectorUrl)) {
+    try {
+      $ActualHost = ([System.Uri]$ConnectorUrl).Host
+    } catch {
+      $ActualHost = ''
+    }
+  }
+
+  $RequestedHost = ''
+  if (-not [string]::IsNullOrWhiteSpace($Requested)) {
+    $RequestedHost = if ($Requested.Contains('.')) { $Requested } else { "$Requested.loca.lt" }
+  }
+
+  $Applicable = (
+    $Source -eq 'localtunnel' -and
+    -not [string]::IsNullOrWhiteSpace($ActualHost) -and
+    -not [string]::IsNullOrWhiteSpace($RequestedHost)
+  )
+  $Honored = $false
+  $Reason = 'not_localtunnel'
+  if ($Applicable) {
+    $Honored = $ActualHost.Equals($RequestedHost, [System.StringComparison]::OrdinalIgnoreCase)
+    $Reason = if ($Honored) { 'localtunnel_requested_subdomain_honored' } else { 'localtunnel_requested_subdomain_not_honored' }
+  } elseif ($Source -eq 'localtunnel' -and [string]::IsNullOrWhiteSpace($RequestedHost)) {
+    $Reason = 'localtunnel_subdomain_not_requested'
+  } elseif ($Source -eq 'localtunnel') {
+    $Reason = 'localtunnel_connector_url_missing'
+  }
+
+  return [ordered]@{
+    connector_url_source = $Source
+    requested_subdomain = $Requested
+    requested_host = $RequestedHost
+    actual_host = $ActualHost
+    applicable = [bool]$Applicable
+    requested_subdomain_honored = [bool]($Applicable -and $Honored)
+    stable_for_existing_chatgpt_connector = [bool]((-not $Applicable) -or $Honored)
+    reason = $Reason
+  }
+}
+
 function New-StatusPayload {
   param(
     [object]$State,
@@ -426,6 +477,8 @@ function New-StatusPayload {
   $McpLauncherPid = 0
   $TunnelPid = 0
   $IngressMode = ''
+  $StateConnectorUrlSource = ''
+  $RequestedTunnelSubdomain = ''
   $ResolvedConnectorUrlSource = ConvertTo-BoundedText -Value $ConnectorUrlSource -MaxLength 160
   if ([string]::IsNullOrWhiteSpace($ResolvedConnectorUrlSource)) {
     $ResolvedConnectorUrlSource = 'none'
@@ -435,8 +488,10 @@ function New-StatusPayload {
     $McpLauncherPid = [int]($State.mcp_launcher_pid)
     $TunnelPid = [int]($State.tunnel_pid)
     $IngressMode = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $State -Name 'ingress_mode') -MaxLength 96
+    $StateConnectorUrlSource = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $State -Name 'connector_url_source' -Default '') -MaxLength 160
+    $RequestedTunnelSubdomain = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $State -Name 'requested_tunnel_subdomain' -Default '') -MaxLength 160
     if (-not [string]::IsNullOrWhiteSpace($ConnectorUrl) -and $ResolvedConnectorUrlSource -eq 'none') {
-      $ResolvedConnectorUrlSource = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $State -Name 'connector_url_source' -Default 'runtime_state') -MaxLength 160
+      $ResolvedConnectorUrlSource = if ([string]::IsNullOrWhiteSpace($StateConnectorUrlSource)) { 'runtime_state' } else { $StateConnectorUrlSource }
     }
   }
   if ([string]::IsNullOrWhiteSpace($ConnectorUrl) -and $EndpointStatus -and $EndpointStatus.chatgpt_connector) {
@@ -451,15 +506,24 @@ function New-StatusPayload {
 
   $McpReadback = Get-ProcessReadback -ProcessId $McpLauncherPid -ExpectedCommandText 'chatgpt-voice-mcp.ps1'
   $TunnelReadback = Get-ProcessReadback -ProcessId $TunnelPid -ExpectedCommandText 'localtunnel\bin\lt.js'
+  $LocalTunnel = New-LocalTunnelStabilityPayload -ConnectorUrl $ConnectorUrl -ConnectorUrlSource $StateConnectorUrlSource -RequestedSubdomain $RequestedTunnelSubdomain
+  $Blockers = @()
+  if ([bool]$LocalTunnel.applicable -and -not [bool]$LocalTunnel.requested_subdomain_honored) {
+    $Blockers += 'localtunnel_requested_subdomain_not_honored'
+  }
   $Ready = $false
   if ($EndpointStatus -and [string]$EndpointStatus.status -eq 'ready_for_chatgpt_connector') {
     $Ready = $true
+  }
+  $Status = if ($Ready) { 'ready_for_chatgpt_connector' } elseif ($State) { 'runtime_state_observed' } else { 'not_started' }
+  if ($Status -eq 'runtime_state_observed' -and $Blockers.Count -gt 0) {
+    $Status = 'runtime_state_observed_unstable_localtunnel_url'
   }
 
   return [ordered]@{
     kind = 'francis.chatgpt_voice.connector_control'
     ok = $Ready
-    status = if ($Ready) { 'ready_for_chatgpt_connector' } elseif ($State) { 'runtime_state_observed' } else { 'not_started' }
+    status = $Status
     connector_url = $ConnectorUrl
     connector_url_source = $ResolvedConnectorUrlSource
     ingress_mode = $IngressMode
@@ -469,6 +533,8 @@ function New-StatusPayload {
       mcp_launcher = $McpReadback
       tunnel = $TunnelReadback
     }
+    localtunnel = $LocalTunnel
+    blockers = $Blockers
     endpoint_status = $EndpointStatus
     governance = New-GovernancePayload -ReadOnly $ReadOnly -StartsProcess $StartsProcess -OpensPublicTunnel $OpensPublicTunnel -WritesData $WritesData
   }
@@ -635,6 +701,7 @@ if ([string]::IsNullOrWhiteSpace($ConnectorUrl)) {
 }
 
 $ConnectorHost = ([System.Uri]$ConnectorUrl).Host
+$LocalTunnelStability = New-LocalTunnelStabilityPayload -ConnectorUrl $ConnectorUrl -ConnectorUrlSource 'localtunnel' -RequestedSubdomain $TunnelSubdomain
 $McpArgs = @(
   '-NoProfile',
   '-ExecutionPolicy',
@@ -659,6 +726,9 @@ $StatePayload = [ordered]@{
   connector_url = $ConnectorUrl
   connector_url_source = 'localtunnel'
   connector_host = $ConnectorHost
+  requested_tunnel_subdomain = $TunnelSubdomain
+  requested_connector_host = [string]$LocalTunnelStability.requested_host
+  localtunnel = $LocalTunnelStability
   local_endpoint = "http://$HostAddress`:$Port$Path"
   mcp_launcher_pid = $McpProcess.Id
   tunnel_pid = $TunnelProcess.Id
@@ -673,6 +743,6 @@ Write-State -Payload $StatePayload
 
 $EndpointStatus = Invoke-EndpointStatus -ConnectorUrl $ConnectorUrl
 $Payload = New-StatusPayload -State (Read-State) -EndpointStatus $EndpointStatus -ConnectorUrlSource 'localtunnel' -ReadOnly $false -StartsProcess $true -OpensPublicTunnel $true -WritesData $true
-$Payload.status = if ([string]$EndpointStatus.status -eq 'ready_for_chatgpt_connector') { 'started_ready' } else { 'started_unverified' }
+$Payload.status = if (-not [bool]$LocalTunnelStability.stable_for_existing_chatgpt_connector) { 'started_unstable_localtunnel_url' } elseif ([string]$EndpointStatus.status -eq 'ready_for_chatgpt_connector') { 'started_ready' } else { 'started_unverified' }
 $Payload.ok = [bool]($Payload.status -eq 'started_ready')
 ConvertTo-JsonOutput -Payload $Payload

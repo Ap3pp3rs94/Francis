@@ -363,6 +363,59 @@ def test_chatgpt_voice_connector_record_url_accepts_environment_connector_url(tm
 
 
 @pytest.mark.skipif(platform.system() != "Windows", reason="connector control uses Windows process readback")
+def test_chatgpt_voice_connector_status_flags_localtunnel_subdomain_drift(tmp_path: Path) -> None:
+    runtime_root = tmp_path / "connector-runtime"
+    runtime_root.mkdir(parents=True)
+    port = _unused_local_port()
+    state_path = runtime_root / "status.json"
+    state_path.write_text(
+        json.dumps(
+            {
+                "kind": "francis.chatgpt_voice.connector_control.state",
+                "status": "started",
+                "connector_url": "https://giant-seahorse-21.loca.lt/mcp",
+                "connector_url_source": "localtunnel",
+                "connector_host": "giant-seahorse-21.loca.lt",
+                "requested_tunnel_subdomain": "francis-voice-178175",
+                "requested_connector_host": "francis-voice-178175.loca.lt",
+                "local_endpoint": f"http://127.0.0.1:{port}/mcp",
+                "mcp_launcher_pid": 0,
+                "tunnel_pid": 0,
+                "updated_at": "2026-06-18T00:00:00Z",
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+
+    proc = _run_connector_script(
+        "-Mode",
+        "Status",
+        "-Json",
+        "-RuntimeRoot",
+        str(runtime_root),
+        "-Port",
+        str(port),
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["status"] == "runtime_state_observed_unstable_localtunnel_url"
+    assert payload["connector_url"] == "https://giant-seahorse-21.loca.lt/mcp"
+    assert payload["connector_url_source"] == "runtime_state"
+    assert payload["localtunnel"]["applicable"] is True
+    assert payload["localtunnel"]["requested_subdomain"] == "francis-voice-178175"
+    assert payload["localtunnel"]["requested_host"] == "francis-voice-178175.loca.lt"
+    assert payload["localtunnel"]["actual_host"] == "giant-seahorse-21.loca.lt"
+    assert payload["localtunnel"]["requested_subdomain_honored"] is False
+    assert payload["localtunnel"]["stable_for_existing_chatgpt_connector"] is False
+    assert payload["localtunnel"]["reason"] == "localtunnel_requested_subdomain_not_honored"
+    assert payload["blockers"] == ["localtunnel_requested_subdomain_not_honored"]
+    assert payload["governance"]["read_only"] is True
+    assert payload["governance"]["opens_public_tunnel"] is False
+
+
+@pytest.mark.skipif(platform.system() != "Windows", reason="connector control uses Windows process readback")
 def test_chatgpt_voice_connector_record_url_rejects_invalid_shape_without_writing(tmp_path: Path) -> None:
     runtime_root = tmp_path / "connector-runtime"
     port = _unused_local_port()
