@@ -128,6 +128,9 @@ proportions.
 - The Orb/voice/overlay-lens validation proof now embeds the read-only
   persistent ingress plan, so a connector URL failure includes local endpoint
   and provider-tool readiness without starting a tunnel or writing state.
+- The persistent ingress plan now also reports local installer readiness and
+  bounded install/configuration command hints. The plan remains read-only; it
+  does not install providers or create public ingress.
 
 ## Current Task
 
@@ -759,6 +762,8 @@ Validated for the usable ChatGPT transcript proof split:
   `persistent_ingress_plan.local_mcp_listener.ready=true`,
   `cloudflared.available=false`, `ngrok.available=false`,
   `caddy.available=false`, `ssh.available=true`,
+  `winget.available=true`, `choco.available=false`, `scoop.available=false`,
+  and install hints for `cloudflared`, `ngrok`, and `caddy` via `winget`,
   `mona_lisa_sandbox.passed=true`, and
   `chatgpt_voice_connector.connector_url_reason=connector_url_not_provided`.
 

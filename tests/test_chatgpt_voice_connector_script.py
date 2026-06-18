@@ -163,6 +163,15 @@ def test_chatgpt_voice_connector_plan_persistent_ingress_is_read_only(tmp_path: 
     assert payload["provider_readiness"]["ngrok_reserved_domain"]["name"] == "ngrok"
     assert payload["provider_readiness"]["caddy_reverse_proxy"]["name"] == "caddy"
     assert payload["provider_readiness"]["ssh_reverse_tunnel"]["name"] == "ssh"
+    assert payload["installer_readiness"]["winget"]["name"] == "winget"
+    assert payload["installer_readiness"]["choco"]["name"] == "choco"
+    assert payload["installer_readiness"]["scoop"]["name"] == "scoop"
+    assert payload["install_command_hints"]["cloudflared_winget"] == (
+        "winget install --id Cloudflare.cloudflared --exact"
+    )
+    assert payload["install_command_hints"]["ngrok_winget"] == "winget install --id Ngrok.Ngrok --exact"
+    assert payload["install_command_hints"]["caddy_winget"] == "winget install --id CaddyServer.Caddy --exact"
+    assert "http://127.0.0.1:8787" in payload["provider_config_hints"]["cloudflared_named_tunnel"]
     assert payload["recommended_provider_order"][0] == "cloudflared_named_tunnel"
     assert payload["localtunnel_replacement"]["localtunnel_supported_only_as_explicit_fallback"] is True
     assert payload["localtunnel_replacement"]["persistent_ingress_required_for_stable_chatgpt_connector"] is True

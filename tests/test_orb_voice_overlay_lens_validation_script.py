@@ -70,6 +70,10 @@ def test_orb_voice_overlay_lens_validation_reports_missing_chatgpt_source_receip
     assert payload["persistent_ingress_plan"]["governance"]["read_only"] is True
     assert payload["persistent_ingress_plan"]["governance"]["starts_process"] is False
     assert payload["persistent_ingress_plan"]["governance"]["opens_public_tunnel"] is False
+    assert payload["persistent_ingress_plan"]["installer_readiness"]["winget"]["name"] == "winget"
+    assert payload["persistent_ingress_plan"]["install_command_hints"]["cloudflared_winget"] == (
+        "winget install --id Cloudflare.cloudflared --exact"
+    )
     assert payload["governance"]["read_only"] is True
     assert payload["governance"]["starts_process"] is False
     assert payload["governance"]["opens_public_tunnel"] is False
@@ -127,6 +131,9 @@ def test_orb_voice_overlay_lens_validation_classifies_chatgpt_source_receipt_wit
     latest_usable = payload["chatgpt_voice_receipts"]["latest_usable_chatgpt_source"]
     assert latest_usable["receipt_id"] == "chatgpt-voice-recorded-test"
     assert payload["persistent_ingress_plan"]["status"] == "persistent_ingress_url_needed"
+    assert payload["persistent_ingress_plan"]["provider_config_hints"]["ngrok_reserved_domain"].endswith(
+        "then record https://<reserved-domain>/mcp."
+    )
     checks = {check["id"]: check for check in payload["checks"]}
     assert checks["persistent_ingress_plan_readback"]["passed"] is True
     summary = json.dumps(payload["chatgpt_voice_receipts"])

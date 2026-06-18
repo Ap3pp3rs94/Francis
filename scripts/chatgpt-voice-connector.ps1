@@ -164,6 +164,22 @@ function New-PersistentIngressPlan {
       caddy_reverse_proxy = Get-CommandReadiness -Name 'caddy' -Capability 'persistent_https_reverse_proxy'
       ssh_reverse_tunnel = Get-CommandReadiness -Name 'ssh' -Capability 'stable_remote_reverse_tunnel_requires_external_host'
     }
+    installer_readiness = [ordered]@{
+      winget = Get-CommandReadiness -Name 'winget' -Capability 'windows_package_install_operator_run'
+      choco = Get-CommandReadiness -Name 'choco' -Capability 'windows_package_install_operator_run'
+      scoop = Get-CommandReadiness -Name 'scoop' -Capability 'windows_package_install_operator_run'
+    }
+    install_command_hints = [ordered]@{
+      cloudflared_winget = 'winget install --id Cloudflare.cloudflared --exact'
+      ngrok_winget = 'winget install --id Ngrok.Ngrok --exact'
+      caddy_winget = 'winget install --id CaddyServer.Caddy --exact'
+    }
+    provider_config_hints = [ordered]@{
+      cloudflared_named_tunnel = 'Create a named Cloudflare Tunnel for http://127.0.0.1:8787, route a stable hostname, then record https://<hostname>/mcp.'
+      ngrok_reserved_domain = 'Run ngrok with a reserved domain pointing to http://127.0.0.1:8787, then record https://<reserved-domain>/mcp.'
+      caddy_reverse_proxy = 'Configure a TLS hostname reverse proxy to http://127.0.0.1:8787, then record https://<hostname>/mcp.'
+      ssh_reverse_tunnel = 'Use a stable external host to reverse-tunnel port 8787 behind HTTPS, then record that host URL ending in /mcp.'
+    }
     recommended_provider_order = @(
       'cloudflared_named_tunnel',
       'ngrok_reserved_domain',
