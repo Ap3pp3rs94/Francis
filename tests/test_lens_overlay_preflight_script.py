@@ -176,10 +176,7 @@ def test_lens_overlay_preflight_surfaces_live_voice_input_blocker(tmp_path: Path
     assert overlay_runtime["next_voice_input_step"] == "select_or_unmute_default_windows_microphone"
     assert overlay_runtime["voice_input_readiness"]["needs_operator_audio_input_check"] is True
     assert overlay_runtime["voice_input_readiness"]["audio_capture_endpoints"]["read_only"] is True
-    assert (
-        overlay_runtime["voice_input_readiness"]["audio_capture_endpoints"]["source"]
-        == "windows_pnp_audio_endpoint"
-    )
+    assert overlay_runtime["voice_input_readiness"]["audio_capture_endpoints"]["source"] == "windows_pnp_audio_endpoint"
     assert overlay_runtime["voice_input_readiness"]["default_capture_endpoint"]["read_only"] is True
     assert (
         overlay_runtime["voice_input_readiness"]["default_capture_endpoint"]["source"]
@@ -195,10 +192,7 @@ def test_lens_overlay_preflight_surfaces_live_voice_input_blocker(tmp_path: Path
         overlay_runtime["voice_input_readiness"]["speech_audio_input_tokens"]["source"]
         == "windows_sapi_audio_input_registry"
     )
-    assert (
-        overlay_runtime["voice_input_readiness"]["speech_audio_input_tokens"]["token_device_ids_redacted"]
-        is True
-    )
+    assert overlay_runtime["voice_input_readiness"]["speech_audio_input_tokens"]["token_device_ids_redacted"] is True
     assert overlay_runtime["voice_input_readiness"]["transcript_redacted"] is True
     assert "microphone_no_signal" in payload["blockers"]
     checks = {item["id"]: item for item in payload["checks"]}

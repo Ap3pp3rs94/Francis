@@ -259,8 +259,7 @@ def test_lens_overlay_window_status_reports_live_runtime_readback(tmp_path: Path
     assert payload["voice_input_readiness"]["explicit_endpoint_selection_supported"] is False
     assert payload["voice_input_readiness"]["speech_audio_input_tokens"]["read_only"] is True
     assert (
-        payload["voice_input_readiness"]["speech_audio_input_tokens"]["source"]
-        == "windows_sapi_audio_input_registry"
+        payload["voice_input_readiness"]["speech_audio_input_tokens"]["source"] == "windows_sapi_audio_input_registry"
     )
     assert payload["voice_input_readiness"]["speech_audio_input_tokens"]["token_device_ids_redacted"] is True
     assert payload["voice_input_readiness"]["transcript_redacted"] is True
@@ -445,13 +444,11 @@ def test_lens_overlay_elevenlabs_speak_requires_explicit_remote_config(tmp_path:
 
 
 def test_lens_audio_config_declares_elevenlabs_remote_tts_disabled_by_default() -> None:
-    config = (_repo_root() / "config" / "models" / "specialized" / "audio.yaml").read_text(
-        encoding="utf-8"
-    )
+    config = (_repo_root() / "config" / "models" / "specialized" / "audio.yaml").read_text(encoding="utf-8")
 
-    assert 'remote_providers:' in config
+    assert "remote_providers:" in config
     assert 'id: "elevenlabs"' in config
-    assert 'enabled: false' in config
+    assert "enabled: false" in config
     assert "Hosted expressive TTS; requires network egress + credentials." in config
 
 
@@ -568,7 +565,10 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "$UseLlm = Get-OverlayVoiceUseLlm" in script
     assert "FRANCIS_LENS_VOICE_USE_LLM" in script
     assert "voice_llm_enabled = [bool]$EnableVoiceLlm" in script
-    assert "voice_llm_request_source = if ($EnableVoiceLlm) { 'EnableVoiceLlm' } else { 'FRANCIS_LENS_VOICE_USE_LLM' }" in script
+    assert (
+        "voice_llm_request_source = if ($EnableVoiceLlm) { 'EnableVoiceLlm' } else { 'FRANCIS_LENS_VOICE_USE_LLM' }"
+        in script
+    )
     assert "$ArgumentList += '-EnableVoiceLlm'" in script
     assert "transcript_hash = Get-OverlayTextDigest -Text $BoundedUtterance" in script
     assert "overlay_stores_transcript = $false" in script
@@ -583,8 +583,14 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "system_speech_continuous_dictation" in script
     assert "wake_phrase_detected = [bool]$EffectiveWakePhraseDetected" in script
     assert "continuous_voice_chat = [bool]$ContinuousVoiceChat" in script
-    assert "continuous_voice_chat_mode = if ($ContinuousVoiceChat) { 'enabled_no_wake_phrase_required' } else { 'disabled_wake_phrase_required' }" in script
-    assert "continuous_voice_chat_self_trigger_guard = 'suppress_no_wake_turns_while_owned_speech_process_active'" in script
+    assert (
+        "continuous_voice_chat_mode = if ($ContinuousVoiceChat) { 'enabled_no_wake_phrase_required' } else { 'disabled_wake_phrase_required' }"
+        in script
+    )
+    assert (
+        "continuous_voice_chat_self_trigger_guard = 'suppress_no_wake_turns_while_owned_speech_process_active'"
+        in script
+    )
     assert "continuous_voice_suppressed_while_speaking" in script
     assert "owned_speech_recently_completed" in script
     assert "self_trigger_guard_window_seconds = 4" in script
@@ -603,13 +609,18 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "'-VoiceTextPath'" in script
     assert "voice-playback-status.json" in script
     assert "lens-overlay-speech.pid" in script
-    assert "Start-Process -FilePath $PowerShell.Source -ArgumentList $ArgumentText -WindowStyle Hidden -PassThru" in script
+    assert (
+        "Start-Process -FilePath $PowerShell.Source -ArgumentList $ArgumentText -WindowStyle Hidden -PassThru" in script
+    )
     assert "Stop-OverlayVoiceSpeechProcess -Root $Root -Reason 'barge_in_replaced_owned_speech_process'" in script
     assert "Remove-OverlayVoiceTextFile -Root $DataRoot -TextPath $VoiceTextPath" in script
     assert "voice-turn-status.json" in script
     assert "voice_turn_completed = $true" in script
     assert "handback_ready = $true" in script
-    assert "handback_state = if ($PlaybackStatus -eq 'spoken') { 'speech_playback_spoken' } else { 'speech_playback_not_spoken' }" in script
+    assert (
+        "handback_state = if ($PlaybackStatus -eq 'spoken') { 'speech_playback_spoken' } else { 'speech_playback_not_spoken' }"
+        in script
+    )
     assert "playback_receipt_observed = $true" in script
     assert "voice_turn = Get-OverlayVoiceTurnReadback -Root $Root" in script
     assert "voice-turns" in script
@@ -637,8 +648,7 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "chat_trace_model_call_abort_boundary = $ChatTraceModelCallAbortBoundary" in script
     assert "chat_trace_model_call_cancellation_supported = $ChatTraceModelCallCancellationSupported" in script
     assert (
-        "chat_trace_backend_current_voice_turn_lookup_supported = "
-        "$ChatTraceBackendCurrentVoiceTurnLookupSupported"
+        "chat_trace_backend_current_voice_turn_lookup_supported = $ChatTraceBackendCurrentVoiceTurnLookupSupported"
     ) in script
     assert "chat_trace_backend_stale_reply_drop_supported = $ChatTraceBackendStaleReplyDropSupported" in script
     assert "chat_trace_thought_relevance_pruning_supported = $ChatTraceThoughtRelevancePruningSupported" in script
@@ -747,7 +757,10 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "token_device_ids_redacted = $true" in script
     assert "microphone_no_signal" in script
     assert "select_or_unmute_default_windows_microphone" in script
-    assert "microphone_capture_active = (Get-BoolProperty -Payload $Readback.overlay_voice -Name 'microphone_capture' -Default $false)" in script
+    assert (
+        "microphone_capture_active = (Get-BoolProperty -Payload $Readback.overlay_voice -Name 'microphone_capture' -Default $false)"
+        in script
+    )
     assert "$script:LensOverlayWakeRecognizer = Start-OverlayWakeListener" in script
     assert "-Provider $script:LensOverlayRequestedVoiceProvider" in script
     assert "$ArgumentList += '-EnableWakeListen'" in script

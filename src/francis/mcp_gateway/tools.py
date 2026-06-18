@@ -664,7 +664,9 @@ _TOOL_SPECS = [
     ),
     ToolSpec("francis.receipts.readback", "Read MCP gateway receipts.", read_only=True),
     ToolSpec("francis.screen.status", "Read safe screen/session readback status.", read_only=True),
-    ToolSpec("francis.screen.session", "Read bounded desktop/session context without pixels or control.", read_only=True),
+    ToolSpec(
+        "francis.screen.session", "Read bounded desktop/session context without pixels or control.", read_only=True
+    ),
     ToolSpec("francis.takeover.status", "Read Takeover/Pilot session binding status.", read_only=True),
     ToolSpec(
         "francis.takeover.propose",

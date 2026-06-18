@@ -178,9 +178,7 @@ def test_elevenlabs_voice_setup_list_voices_refuses_without_api_key(tmp_path: Pa
 
 
 def test_elevenlabs_voice_setup_script_is_confirm_gated_and_secret_safe() -> None:
-    script = (_repo_root() / "scripts" / "lens-elevenlabs-voice-setup.ps1").read_text(
-        encoding="utf-8"
-    )
+    script = (_repo_root() / "scripts" / "lens-elevenlabs-voice-setup.ps1").read_text(encoding="utf-8")
 
     assert "ValidateSet('Status', 'Configure', 'Clear', 'ListVoices')" in script
     assert "[System.Security.SecureString]$ApiKeySecret" in script

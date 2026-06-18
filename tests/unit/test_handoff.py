@@ -34,9 +34,7 @@ def _takeover_start_receipt_id(mode: str = "pilot") -> str:
 
 
 def _input_proposal() -> tuple[str, str]:
-    p = propose_input_action(
-        {"actor": "op", "objective": "move", "kind": "mouse.move", "payload": {"x": 1, "y": 2}}
-    )
+    p = propose_input_action({"actor": "op", "objective": "move", "kind": "mouse.move", "payload": {"x": 1, "y": 2}})
     return p["data"]["proposal_id"], p["data"]["approval_phrase"]
 
 
