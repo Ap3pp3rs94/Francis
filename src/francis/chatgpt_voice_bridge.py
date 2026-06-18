@@ -20,6 +20,8 @@ CHATGPT_VOICE_BRIDGE_HTTP_TRANSPORT = "http_api"
 CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TRANSPORT = "mcp_gateway_tool"
 CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TOOL = "francis.chatgpt_voice.ingress"
 CHATGPT_VOICE_BRIDGE_MCP_SERVER_TOOL = "francis_chatgpt_voice_ingress"
+CHATGPT_VOICE_BRIDGE_VIRTUAL_TURN_STATE = "data/runtime/lens-overlay/voice-turn-status.json"
+CHATGPT_VOICE_BRIDGE_VIRTUAL_TURN_RECEIPTS = "data/runtime/lens-overlay/voice-turns"
 CHATGPT_VOICE_BRIDGE_MCP_INGRESS_DESCRIPTION = (
     "Use this when the operator wants to talk to Francis. Always pass the exact user-visible transcript text "
     "in `transcript`, leave `forward_to_chat` true unless the operator explicitly requested receipt-only intake, "
@@ -94,6 +96,18 @@ def _receipt_root() -> Path:
     return data_dir() / "integrations" / "chatgpt_voice" / "receipts"
 
 
+def _virtual_voice_root() -> Path:
+    return data_dir() / "runtime" / "lens-overlay"
+
+
+def _virtual_voice_turn_state_path() -> Path:
+    return _virtual_voice_root() / "voice-turn-status.json"
+
+
+def _virtual_voice_turn_receipt_root() -> Path:
+    return _virtual_voice_root() / "voice-turns"
+
+
 def _atomic_write_json(path: Path, obj: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(f".atomic-json-{os.getpid()}-{hashlib.sha256(str(_now()).encode()).hexdigest()[:12]}.tmp")
@@ -103,6 +117,18 @@ def _atomic_write_json(path: Path, obj: dict[str, Any]) -> None:
 
 def _digest(payload: dict[str, Any]) -> str:
     return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()[:16]
+
+
+def _text_digest(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8", errors="ignore")).hexdigest()
+
+
+def _safe_voice_turn_id(turn_id: Any, *, payload: dict[str, Any]) -> str:
+    text = _bounded_text(turn_id, max_chars=96)
+    if not text:
+        text = f"chatgpt_voice_turn_{_digest(payload)}"
+    safe = "".join(char if char.isalnum() or char in "_.-" else "_" for char in text)
+    return safe.strip("._-") or "chatgpt_voice_turn_unknown"
 
 
 def _permission(
@@ -156,6 +182,8 @@ def _honesty(*, read_only: bool, writes_receipt: bool = False, forwards_to_chat:
         "accepts_audio_stream": False,
         "transcript_only": True,
         "forwards_to_chat": forwards_to_chat,
+        "writes_lens_voice_turn": writes_receipt,
+        "virtual_voice_turn_projection": writes_receipt,
         "chat_forward_requires_chat_write_scope": True,
         "calls_model": False,
         "raw_shell": False,
@@ -202,6 +230,16 @@ def chatgpt_voice_bridge_contract(actor: str = "") -> dict[str, Any]:
             "mcp_gateway_tool": CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TOOL,
             "mcp_server_tool": CHATGPT_VOICE_BRIDGE_MCP_SERVER_TOOL,
         },
+        "orb_voice_contract": {
+            "mcp_transcript_updates_voice_turn_readback": True,
+            "voice_turn_state_path": CHATGPT_VOICE_BRIDGE_VIRTUAL_TURN_STATE,
+            "voice_turn_receipt_root": CHATGPT_VOICE_BRIDGE_VIRTUAL_TURN_RECEIPTS,
+            "virtual_voice_turn": True,
+            "microphone_capture_claimed": False,
+            "raw_audio_stream_accepted": False,
+            "local_overlay_speech_started_by_bridge": False,
+            "client_speaks_top_level_reply": True,
+        },
         "input_contract": {
             "transcript_required": True,
             "audio_stream_accepted": False,
@@ -224,6 +262,157 @@ def chatgpt_voice_bridge_contract(actor: str = "") -> dict[str, Any]:
             "local_francis_requires_reachable_https_endpoint_or_tunnel_for_mobile": True,
         },
         "governance": _honesty(read_only=True),
+    }
+
+
+def _is_mcp_ingress(payload: dict[str, Any]) -> bool:
+    return (
+        _safe_str(payload.get("ingress_transport")) == CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TRANSPORT
+        or bool(_safe_str(payload.get("mcp_gateway_tool")))
+        or bool(_safe_str(payload.get("mcp_server_tool")))
+    )
+
+
+def _virtual_voice_status(
+    *,
+    decision: str,
+    chat_forward_requested: bool,
+    chat_forwarded: bool,
+) -> tuple[str, str]:
+    if decision == "rejected":
+        return "chatgpt_voice_transcript_rejected", "transcript_guard_reply_ready"
+    if chat_forwarded:
+        return "chatgpt_voice_reply_ready", "chatgpt_voice_client_speaks_reply"
+    if chat_forward_requested:
+        return "chatgpt_voice_forward_denied", "policy_denial_reply_ready"
+    return "chatgpt_voice_transcript_recorded", "recorded_only_reply_ready"
+
+
+def _write_virtual_voice_turn(
+    *,
+    base_payload: dict[str, Any],
+    decision: str,
+    reply: str,
+    reply_source: str,
+    chat_forwarded: bool,
+    chat_status: str,
+    reason: str = "",
+    chat_error: str = "",
+    chat_response: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    chat_response = chat_response or {}
+    turn_id = _safe_voice_turn_id(base_payload.get("turn_id"), payload={**base_payload, "decision": decision})
+    state_path = _virtual_voice_turn_state_path()
+    receipt_path = _virtual_voice_turn_receipt_root() / f"{turn_id}.json"
+    created_ts = _now()
+    transcript = _safe_str(base_payload.get("transcript"))
+    is_mcp = _is_mcp_ingress(base_payload)
+    status, handback_state = _virtual_voice_status(
+        decision=decision,
+        chat_forward_requested=bool(base_payload.get("chat_forward_requested")),
+        chat_forwarded=chat_forwarded,
+    )
+    transcript_source = "chatgpt_voice_mcp_transcript" if is_mcp else "chatgpt_voice_http_transcript"
+    payload = {
+        "kind": "lens.overlay.voice.turn_state",
+        "status": status,
+        "ok": decision != "rejected" and (chat_forwarded or not bool(base_payload.get("chat_forward_requested"))),
+        "active_turn_id": turn_id,
+        "turn_id": turn_id,
+        "started_at": _utc_iso_from_ts(created_ts),
+        "updated_at": _utc_iso_from_ts(created_ts),
+        "voice_turn": True,
+        "voice_turn_completed": True,
+        "handback_ready": True,
+        "handback_state": handback_state,
+        "virtual_voice_turn": True,
+        "virtual_voice_source": "chatgpt_voice_bridge",
+        "synthetic_transcript": True,
+        "synthetic_voice_turn": True,
+        "synthetic_voice_turn_command": False,
+        "transcript_source": transcript_source,
+        "explicit_operator_text": True,
+        "microphone_speech": False,
+        "microphone_recognition_claimed": False,
+        "microphone_capture": False,
+        "raw_audio": False,
+        "accepts_audio_stream": False,
+        "voice_recognition": "not_used_chatgpt_voice_mcp_transcript"
+        if is_mcp
+        else "not_used_chatgpt_voice_http_transcript",
+        "wake_phrase_detected": False,
+        "continuous_voice_chat": False,
+        "transcript_length": int(base_payload.get("transcript_char_count") or 0),
+        "transcript_hash": _text_digest(transcript) if transcript else "",
+        "transcript_redacted": True,
+        "overlay_stores_transcript": False,
+        "bridge_receipt_stores_redacted_transcript": True,
+        "mcp_ingress": is_mcp,
+        "ingress_transport": _safe_str(base_payload.get("ingress_transport")),
+        "mcp_gateway_tool": _safe_str(base_payload.get("mcp_gateway_tool")),
+        "mcp_server_tool": _safe_str(base_payload.get("mcp_server_tool")),
+        "conversation_id": _safe_str(base_payload.get("conversation_id")),
+        "source": _safe_str(base_payload.get("source")),
+        "actor": _safe_str(base_payload.get("actor")),
+        "decision": decision,
+        "reason": reason,
+        "chat_bridge_route": "/chat/send",
+        "chat_bridge_actor": _safe_str(base_payload.get("actor")),
+        "chat_bridge_status": chat_status,
+        "chat_forward_requested": bool(base_payload.get("chat_forward_requested")),
+        "chat_forwarded": chat_forwarded,
+        "chat_error": chat_error,
+        "chat_response_status": _safe_str(chat_response.get("status")),
+        "chat_response_mode": _safe_str(chat_response.get("mode")),
+        "chat_route_writes_conversation_ledger": chat_forwarded,
+        "reply_source": reply_source,
+        "chat_reply_length": len(reply),
+        "chat_reply_redacted": True,
+        "speech_output_owner": "chatgpt_voice_client",
+        "client_speaks_top_level_reply": True,
+        "local_overlay_speech_started": False,
+        "speech_started": False,
+        "speech_playback_async": False,
+        "speech_output_transport": "chatgpt_voice_client_reply",
+        "latest_voice_turn_wins": True,
+        "stale_reply_suppression_supported": True,
+        "thought_relevance_status": "current_virtual_voice_turn_recorded",
+        "thought_retention_policy": "receipt_backed_virtual_turn_readback",
+        "model_call_abort_requested": False,
+        "model_call_abort_observed": False,
+        "model_call_cancellation_supported": False,
+        "thought_cancellation_supported": False,
+        "arbitrary_audio_control": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "voice_turn_state_path": CHATGPT_VOICE_BRIDGE_VIRTUAL_TURN_STATE,
+        "voice_turn_state_full_path": str(state_path),
+        "voice_turn_receipt_path": f"{CHATGPT_VOICE_BRIDGE_VIRTUAL_TURN_RECEIPTS}/{turn_id}.json",
+        "voice_turn_receipt_full_path": str(receipt_path),
+        "next_smallest_truthful_gap": "confirm_chatgpt_client_calls_mcp_tool_for_each_voice_turn",
+    }
+    _atomic_write_json(state_path, payload)
+    _atomic_write_json(receipt_path, payload)
+    return payload
+
+
+def _virtual_voice_summary(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "status": _safe_str(payload.get("status")),
+        "turn_id": _safe_str(payload.get("turn_id")),
+        "virtual_voice_turn": bool(payload.get("virtual_voice_turn")),
+        "mcp_ingress": bool(payload.get("mcp_ingress")),
+        "transcript_source": _safe_str(payload.get("transcript_source")),
+        "chat_bridge_status": _safe_str(payload.get("chat_bridge_status")),
+        "chat_forwarded": bool(payload.get("chat_forwarded")),
+        "client_speaks_top_level_reply": bool(payload.get("client_speaks_top_level_reply")),
+        "local_overlay_speech_started": bool(payload.get("local_overlay_speech_started")),
+        "microphone_recognition_claimed": bool(payload.get("microphone_recognition_claimed")),
+        "raw_audio": bool(payload.get("raw_audio")),
+        "voice_turn_state_path": _safe_str(payload.get("voice_turn_state_path")),
+        "voice_turn_receipt_path": _safe_str(payload.get("voice_turn_receipt_path")),
+        "grants_execution_authority": bool(payload.get("grants_execution_authority")),
+        "grants_mutation_authority": bool(payload.get("grants_mutation_authority")),
     }
 
 
@@ -295,7 +484,23 @@ def record_chatgpt_voice_ingress(
             if transcript_rejection_reason == "transcript_unavailable"
             else _TRANSCRIPT_REQUIRED_REPLY
         )
-        receipt = _write_receipt({**base_payload, "decision": "rejected", "reason": transcript_rejection_reason})
+        orb_voice_bridge = _write_virtual_voice_turn(
+            base_payload=base_payload,
+            decision="rejected",
+            reason=transcript_rejection_reason,
+            reply=reply,
+            reply_source="bridge.transcript_guard",
+            chat_forwarded=False,
+            chat_status="rejected",
+        )
+        receipt = _write_receipt(
+            {
+                **base_payload,
+                "decision": "rejected",
+                "reason": transcript_rejection_reason,
+                "orb_voice_bridge": _virtual_voice_summary(orb_voice_bridge),
+            }
+        )
         return {
             "kind": f"{CHATGPT_VOICE_BRIDGE_KIND}.ingress",
             "ok": False,
@@ -315,6 +520,7 @@ def record_chatgpt_voice_ingress(
                 "error": transcript_rejection_reason,
                 "response": {},
             },
+            "orb_voice_bridge": orb_voice_bridge,
             "governance": _honesty(read_only=False, writes_receipt=True),
         }
 
@@ -346,6 +552,16 @@ def record_chatgpt_voice_ingress(
             reply = "I recorded the transcript for Francis. Chat forwarding was not requested."
             reply_source = "bridge.recorded_only"
 
+    orb_voice_bridge = _write_virtual_voice_turn(
+        base_payload=base_payload,
+        decision="recorded",
+        reply=reply,
+        reply_source=reply_source,
+        chat_forwarded=chat_forwarded,
+        chat_status=chat_status,
+        chat_error=chat_error,
+        chat_response=chat_response,
+    )
     receipt = _write_receipt(
         {
             **base_payload,
@@ -357,6 +573,7 @@ def record_chatgpt_voice_ingress(
             "chat_response_status": _safe_str(chat_response.get("status")),
             "reply": reply,
             "reply_source": reply_source,
+            "orb_voice_bridge": _virtual_voice_summary(orb_voice_bridge),
         }
     )
     status = "forwarded" if chat_forwarded else "recorded_not_forwarded" if forward_to_chat else "recorded"
@@ -374,6 +591,7 @@ def record_chatgpt_voice_ingress(
             "error": chat_error,
             "response": chat_response,
         },
+        "orb_voice_bridge": orb_voice_bridge,
         "governance": _honesty(read_only=False, writes_receipt=True, forwards_to_chat=chat_forwarded),
     }
 

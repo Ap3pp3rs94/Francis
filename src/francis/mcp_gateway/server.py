@@ -29,7 +29,7 @@ def _chatgpt_voice_tool_payload(result: dict[str, Any]) -> str:
     payload = dict(result)
     data = payload.get("data")
     if isinstance(data, dict):
-        for key in ("reply", "voice_response", "chat_forward", "receipt"):
+        for key in ("reply", "voice_response", "chat_forward", "receipt", "orb_voice_bridge"):
             if key in data:
                 payload[key] = data[key]
     return _tool_payload(payload)

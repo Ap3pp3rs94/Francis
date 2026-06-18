@@ -316,13 +316,15 @@ _RULES: tuple[AuthorityRule, ...] = (
             "not_required_scope_gate_only; transcript guard must accept a usable transcript before chat forwarding"
         ),
         receipt_behavior=(
-            "ChatGPT voice transcript ingress receipt; optional forwarding passes through existing chat write gate"
+            "ChatGPT voice transcript ingress receipt; lens overlay virtual voice-turn projection; optional "
+            "forwarding passes through existing chat write gate"
         ),
         denial_behavior="api_permission_denied via permission_gate before voice ingress receipt write or chat forwarding",
         governance_maturity="permission_gated",
         notes=(
             "Transcript-only bridge: no raw audio stream, no shell/input control, no screenshots, no native "
-            "ChatGPT app authority, and no execution or mutation authority beyond bounded receipt recording."
+            "ChatGPT app authority, and no execution or mutation authority beyond bounded receipt and virtual "
+            "voice-turn recording."
         ),
     ),
     AuthorityRule(
