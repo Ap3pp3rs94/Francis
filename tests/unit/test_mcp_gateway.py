@@ -24,6 +24,14 @@ def test_mcp_gateway_lists_expected_tools(tmp_path: Path, monkeypatch) -> None:
         "francis.takeover.propose",
         "francis.takeover.start_approved",
         "francis.takeover.end",
+        "francis.input.status",
+        "francis.input.propose",
+        "francis.input.execute_approved",
+        "francis.input.receipts",
+        "francis.handoff.audit",
+        "francis.chatgpt_voice.contract",
+        "francis.chatgpt_voice.ingress",
+        "francis.chatgpt_voice.receipts",
     }.issubset(names)
 
 

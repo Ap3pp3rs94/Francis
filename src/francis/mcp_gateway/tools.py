@@ -592,6 +592,59 @@ def _handoff_audit(args: dict[str, Any]) -> ToolResult:
     )
 
 
+def _chatgpt_voice_contract(args: dict[str, Any]) -> ToolResult:
+    from francis.chatgpt_voice_bridge import chatgpt_voice_bridge_contract
+
+    result = chatgpt_voice_bridge_contract(actor=_clean_text(args.get("actor")))
+    return ToolResult(
+        ok=bool(result.get("ok")),
+        status=_clean_text(result.get("status"), "ready"),
+        tool="francis.chatgpt_voice.contract",
+        data=result,
+        governance=result.get("governance") if isinstance(result.get("governance"), dict) else {},
+        error=_clean_text(result.get("error")) or None,
+    )
+
+
+def _chatgpt_voice_ingress(args: dict[str, Any]) -> ToolResult:
+    from francis.chatgpt_voice_bridge import record_chatgpt_voice_ingress
+
+    result = record_chatgpt_voice_ingress(
+        actor=_clean_text(args.get("actor")),
+        transcript=_clean_text(args.get("transcript")),
+        source=_clean_text(args.get("source"), "chatgpt.voice"),
+        conversation_id=_clean_text(args.get("conversation_id")),
+        turn_id=_clean_text(args.get("turn_id")),
+        locale=_clean_text(args.get("locale")),
+        forward_to_chat=bool(args.get("forward_to_chat", True)),
+        use_llm=bool(args.get("use_llm", False)),
+    )
+    return ToolResult(
+        ok=bool(result.get("ok")),
+        status=_clean_text(result.get("status"), "recorded"),
+        tool="francis.chatgpt_voice.ingress",
+        data=result,
+        governance=result.get("governance") if isinstance(result.get("governance"), dict) else {},
+        error=_clean_text(result.get("error")) or None,
+    )
+
+
+def _chatgpt_voice_receipts(args: dict[str, Any]) -> ToolResult:
+    from francis.chatgpt_voice_bridge import chatgpt_voice_bridge_receipts
+
+    raw_limit = args.get("limit")
+    limit = raw_limit if isinstance(raw_limit, int) and raw_limit > 0 else 10
+    result = chatgpt_voice_bridge_receipts(actor=_clean_text(args.get("actor")), limit=limit)
+    return ToolResult(
+        ok=bool(result.get("ok")),
+        status=_clean_text(result.get("status"), "ready"),
+        tool="francis.chatgpt_voice.receipts",
+        data=result,
+        governance=result.get("governance") if isinstance(result.get("governance"), dict) else {},
+        error=_clean_text(result.get("error")) or None,
+    )
+
+
 _TOOL_SPECS = [
     ToolSpec("francis.health", "Read local Francis gateway health.", read_only=True),
     ToolSpec("francis.repo.status", "Read branch, head, and dirty state.", read_only=True),
@@ -645,6 +698,21 @@ _TOOL_SPECS = [
         "Read receipt-backed takeover->input handoff bindings.",
         read_only=True,
     ),
+    ToolSpec(
+        "francis.chatgpt_voice.contract",
+        "Read the bounded ChatGPT voice -> Francis bridge contract.",
+        read_only=True,
+    ),
+    ToolSpec(
+        "francis.chatgpt_voice.ingress",
+        "Record a ChatGPT voice transcript and optionally forward it to Francis chat.",
+        read_only=False,
+    ),
+    ToolSpec(
+        "francis.chatgpt_voice.receipts",
+        "Read ChatGPT voice bridge ingress receipts.",
+        read_only=True,
+    ),
 ]
 
 _TOOL_HANDLERS: dict[str, Callable[[dict[str, Any]], ToolResult]] = {
@@ -666,6 +734,9 @@ _TOOL_HANDLERS: dict[str, Callable[[dict[str, Any]], ToolResult]] = {
     "francis.input.execute_approved": _input_execute_approved,
     "francis.input.receipts": _input_receipts,
     "francis.handoff.audit": _handoff_audit,
+    "francis.chatgpt_voice.contract": _chatgpt_voice_contract,
+    "francis.chatgpt_voice.ingress": _chatgpt_voice_ingress,
+    "francis.chatgpt_voice.receipts": _chatgpt_voice_receipts,
 }
 
 
