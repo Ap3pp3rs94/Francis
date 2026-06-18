@@ -55,6 +55,16 @@ def _run_connector_script(
     )
 
 
+def test_chatgpt_voice_connector_resolves_cross_platform_powershell_for_status_readback() -> None:
+    script = (_repo_root() / "scripts" / "chatgpt-voice-connector.ps1").read_text(encoding="utf-8")
+
+    assert "function Resolve-PowerShellHost" in script
+    assert "Get-Command powershell -ErrorAction SilentlyContinue" in script
+    assert "Get-Command pwsh -ErrorAction SilentlyContinue" in script
+    assert "$Raw = & $PowerShellHost @Args 2>&1" in script
+    assert "$Raw = & powershell @Args 2>&1" not in script
+
+
 @pytest.mark.skipif(platform.system() != "Windows", reason="connector control uses Windows process readback")
 def test_chatgpt_voice_connector_status_is_read_only_without_runtime_state(tmp_path: Path) -> None:
     runtime_root = tmp_path / "connector-runtime"
@@ -175,7 +185,6 @@ def test_chatgpt_voice_connector_status_accepts_environment_connector_url(tmp_pa
     assert not runtime_root.exists()
 
 
-@pytest.mark.skipif(platform.system() != "Windows", reason="connector control uses Windows process readback")
 def test_chatgpt_voice_connector_plan_persistent_ingress_is_read_only(tmp_path: Path) -> None:
     runtime_root = tmp_path / "connector-runtime"
     port = _unused_local_port()
@@ -225,7 +234,6 @@ def test_chatgpt_voice_connector_plan_persistent_ingress_is_read_only(tmp_path: 
     assert not runtime_root.exists()
 
 
-@pytest.mark.skipif(platform.system() != "Windows", reason="connector control uses Windows process readback")
 def test_chatgpt_voice_connector_plan_persistent_ingress_accepts_stable_url_shape(tmp_path: Path) -> None:
     runtime_root = tmp_path / "connector-runtime"
     port = _unused_local_port()

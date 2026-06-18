@@ -96,6 +96,20 @@ function ConvertTo-JsonOutput {
   $Payload | Format-List
 }
 
+function Resolve-PowerShellHost {
+  $WindowsPowerShell = Get-Command powershell -ErrorAction SilentlyContinue
+  if ($null -ne $WindowsPowerShell) {
+    return [string]$WindowsPowerShell.Source
+  }
+
+  $PowerShellCore = Get-Command pwsh -ErrorAction SilentlyContinue
+  if ($null -ne $PowerShellCore) {
+    return [string]$PowerShellCore.Source
+  }
+
+  return ''
+}
+
 function New-GovernancePayload {
   param(
     [bool]$ReadOnly,
@@ -318,7 +332,17 @@ function Invoke-EndpointStatus {
     $Args += '-VerifyConnector'
   }
 
-  $Raw = & powershell @Args 2>&1
+  $PowerShellHost = Resolve-PowerShellHost
+  if ([string]::IsNullOrWhiteSpace($PowerShellHost)) {
+    return [ordered]@{
+      kind = 'francis.chatgpt_voice.mcp.status'
+      ok = $false
+      status = 'powershell_host_missing'
+      error = 'powershell_host_missing'
+    }
+  }
+
+  $Raw = & $PowerShellHost @Args 2>&1
   try {
     return $Raw | ConvertFrom-Json -ErrorAction Stop
   } catch {

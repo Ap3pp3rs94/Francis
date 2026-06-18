@@ -153,21 +153,79 @@ function Invoke-ConnectorProbe {
   }
 }
 
+function Test-LocalTcpListener {
+  param(
+    [string]$Address,
+    [int]$PortValue
+  )
+
+  $TargetAddress = if ($Address -in @('0.0.0.0', '::', '')) { '127.0.0.1' } else { $Address }
+  $Client = [System.Net.Sockets.TcpClient]::new()
+  try {
+    $ConnectTask = $Client.ConnectAsync($TargetAddress, $PortValue)
+    if (-not $ConnectTask.Wait(250)) {
+      return $false
+    }
+    return [bool]$Client.Connected
+  } catch {
+    return $false
+  } finally {
+    $Client.Dispose()
+  }
+}
+
+function Get-LocalListenerReadback {
+  param(
+    [string]$Address,
+    [int]$PortValue
+  )
+
+  $Readback = [ordered]@{
+    ready = $false
+    address = ''
+    port = $PortValue
+    owning_process = 0
+    command_line = ''
+  }
+
+  $NetTcpConnection = Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue
+  if ($null -ne $NetTcpConnection) {
+    $Listener = Get-NetTCPConnection -State Listen -LocalPort $PortValue -ErrorAction SilentlyContinue |
+      Where-Object { $_.LocalAddress -eq $Address -or $_.LocalAddress -eq '0.0.0.0' -or $_.LocalAddress -eq '::' } |
+      Select-Object -First 1 LocalAddress,LocalPort,OwningProcess
+    if ($Listener) {
+      $Readback.ready = $true
+      $Readback.address = [string]$Listener.LocalAddress
+      $Readback.port = [int]$Listener.LocalPort
+      $Readback.owning_process = [int]$Listener.OwningProcess
+
+      $CimCommand = Get-Command Get-CimInstance -ErrorAction SilentlyContinue
+      if ($null -ne $CimCommand -and [int]$Listener.OwningProcess -gt 0) {
+        $ProcessInfo = Get-CimInstance Win32_Process -Filter ("ProcessId={0}" -f ([int]$Listener.OwningProcess)) -ErrorAction SilentlyContinue
+        if ($ProcessInfo) {
+          $Readback.command_line = ConvertTo-BoundedText -Value $ProcessInfo.CommandLine -MaxLength 512
+        }
+      }
+    }
+    return $Readback
+  }
+
+  if (Test-LocalTcpListener -Address $Address -PortValue $PortValue) {
+    $Readback.ready = $true
+    $Readback.address = $Address
+  }
+  return $Readback
+}
+
 function New-StatusPayload {
   param(
     [string]$Endpoint,
     [string]$ConnectorUrlValue
   )
 
-  $Listener = Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue |
-    Where-Object { $_.LocalAddress -eq $HostAddress -or $_.LocalAddress -eq '0.0.0.0' -or $_.LocalAddress -eq '::' } |
-    Select-Object -First 1 LocalAddress,LocalPort,OwningProcess
-  $ProcessInfo = $null
-  if ($Listener -and $Listener.OwningProcess) {
-    $ProcessInfo = Get-CimInstance Win32_Process -Filter ("ProcessId={0}" -f ([int]$Listener.OwningProcess)) -ErrorAction SilentlyContinue
-  }
+  $Listener = Get-LocalListenerReadback -Address $HostAddress -PortValue $Port
   $Connector = Test-ConnectorUrl -Value $ConnectorUrlValue -ExpectedPath $Path
-  $LocalReady = $null -ne $Listener
+  $LocalReady = [bool]$Listener.ready
   $ReadyToAttemptLink = [bool]$LocalReady -and [bool]$Connector.shape_valid
   $Probe = $null
   if ([bool]$VerifyConnector -and [bool]$ReadyToAttemptLink) {
@@ -192,10 +250,10 @@ function New-StatusPayload {
     mcp_path = $Path
     local_listener = [ordered]@{
       ready = [bool]$LocalReady
-      address = if ($Listener) { [string]$Listener.LocalAddress } else { '' }
-      port = if ($Listener) { [int]$Listener.LocalPort } else { $Port }
-      owning_process = if ($Listener) { [int]$Listener.OwningProcess } else { 0 }
-      command_line = if ($ProcessInfo) { ConvertTo-BoundedText -Value $ProcessInfo.CommandLine -MaxLength 512 } else { '' }
+      address = ConvertTo-BoundedText -Value $Listener.address -MaxLength 160
+      port = [int]$Listener.port
+      owning_process = [int]$Listener.owning_process
+      command_line = ConvertTo-BoundedText -Value $Listener.command_line -MaxLength 512
     }
     chatgpt_connector = [ordered]@{
       requires_https = $true

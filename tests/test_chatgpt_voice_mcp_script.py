@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import platform
 import shutil
 import socket
 import subprocess
@@ -46,7 +45,6 @@ def _run_mcp_script(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-@pytest.mark.skipif(platform.system() != "Windows", reason="Get-NetTCPConnection is Windows-specific")
 def test_chatgpt_voice_mcp_status_json_reports_local_and_connector_readiness() -> None:
     port = _unused_local_port()
 
@@ -90,7 +88,6 @@ def test_chatgpt_voice_mcp_status_json_reports_local_and_connector_readiness() -
     assert payload["governance"]["grants_mutation_authority"] is False
 
 
-@pytest.mark.skipif(platform.system() != "Windows", reason="Get-NetTCPConnection is Windows-specific")
 def test_chatgpt_voice_mcp_status_json_rejects_non_https_connector_url() -> None:
     port = _unused_local_port()
 
@@ -113,7 +110,6 @@ def test_chatgpt_voice_mcp_status_json_rejects_non_https_connector_url() -> None
     assert "connector_url_must_be_https" in payload["blockers"]
 
 
-@pytest.mark.skipif(platform.system() != "Windows", reason="Get-NetTCPConnection is Windows-specific")
 def test_chatgpt_voice_mcp_verify_connector_skips_invalid_url_shape() -> None:
     port = _unused_local_port()
 
