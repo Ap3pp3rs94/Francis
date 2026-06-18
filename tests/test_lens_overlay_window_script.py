@@ -74,8 +74,14 @@ def test_lens_overlay_window_status_reports_missing_runtime(tmp_path: Path) -> N
     assert payload["overlay_runtime"]["mcp_status_route"] == "/lens/mcp/status"
     assert payload["overlay_runtime"]["orb_mcp_status_route"] == "/lens/orb/mcp-status"
     assert payload["orb_visual"]["motion_clock"] == "composition_target_rendering"
+    assert payload["orb_visual"]["motion_profile"] == "bounded_desktop_roam"
+    assert payload["orb_visual"]["desktop_roam_supported"] is True
+    assert payload["orb_visual"]["desktop_roam_bounds"] == "work_area"
     assert payload["orb_visual"]["render_profile"]["source"] == "wpf_render_capability"
     assert payload["orb_visual"]["render_profile"]["motion_integrator"] == "elapsed_time_delta_clamped"
+    assert payload["overlay_position"]["status"] == "window_unavailable"
+    assert payload["overlay_position"]["desktop_roam_supported"] is True
+    assert payload["overlay_position"]["desktop_roam_bounds"] == "work_area"
     readiness = payload["voice_provider_readiness"]
     assert readiness["kind"] == "lens.overlay.voice.provider_readiness"
     assert readiness["selected_provider"] == "WindowsSapi"
@@ -215,6 +221,28 @@ def test_lens_overlay_window_status_reports_live_runtime_readback(tmp_path: Path
                 },
                 "overlay_window_visible": True,
                 "always_on_top": True,
+                "overlay_position": {
+                    "status": "visible_position_observed",
+                    "left": 800.0,
+                    "top": 84.0,
+                    "width": 220.0,
+                    "height": 220.0,
+                    "desktop_roam_supported": True,
+                    "desktop_roam_bounds": "work_area",
+                    "manual_drag_supported": True,
+                    "anchor_left": 640.0,
+                    "anchor_top": 360.0,
+                    "range_x": 640.0,
+                    "range_y": 360.0,
+                    "roam_left": 0.0,
+                    "roam_top": 0.0,
+                    "roam_right": 1280.0,
+                    "roam_bottom": 720.0,
+                    "startup_left": 1012.0,
+                    "startup_top": 84.0,
+                    "grants_execution_authority": False,
+                    "grants_mutation_authority": False,
+                },
             }
         ),
         encoding="utf-8",
@@ -246,6 +274,11 @@ def test_lens_overlay_window_status_reports_live_runtime_readback(tmp_path: Path
     assert payload["overlay_runtime"]["runtime_process_alive"] is False
     assert payload["overlay_runtime"]["overlay_window_visible"] is True
     assert payload["overlay_runtime"]["always_on_top"] is True
+    assert payload["overlay_position"]["status"] == "visible_position_observed"
+    assert payload["overlay_position"]["left"] == 800.0
+    assert payload["overlay_position"]["desktop_roam_supported"] is True
+    assert payload["overlay_position"]["desktop_roam_bounds"] == "work_area"
+    assert payload["overlay_runtime"]["overlay_position"]["roam_right"] == 1280.0
     assert payload["overlay_runtime"]["requirement_state"] == "visible"
     assert payload["overlay_runtime"]["blocker"] == ""
     assert payload["overlay_runtime"]["runtime_status_pid_matches_pid_file"] is True
@@ -512,7 +545,7 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "francis_lens=orb_overlay" in script
     assert "chat_ui.orbGlyph.energy_reference" in script
     assert "wpf_3d_animated_energy_orb" in script
-    assert "bounded_idle_drift" in script
+    assert "bounded_desktop_roam" in script
     assert "composition_target_rendering" in script
     assert "elapsed_time_delta_clamped" in script
     assert "render_profile = Get-OverlayWpfRenderProfile" in script
@@ -758,6 +791,13 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "$EnergyRoot.Add_MouseLeftButtonDown" in script
     assert "$script:LensOverlayWindow.DragMove()" in script
     assert "Reset-OrbAutonomousMotionAnchor" in script
+    assert "bounded_desktop_roam" in script
+    assert "desktop_roam_supported = $true" in script
+    assert "desktop_roam_bounds = 'work_area'" in script
+    assert "roam_left = $MinimumLeft" in script
+    assert "roam_right = $MaximumLeft" in script
+    assert "overlay_position = New-OverlayWindowPositionProjection" in script
+    assert "overlay_position = $Readback.overlay_position" in script
     assert "$MotionSubscription = Start-OrbFrameSyncedMotion" in script
     assert "autonomous_motion = $AutonomousMotion" in script
     assert "voice = Get-OverlayVoiceReadback -Root $Root" in script

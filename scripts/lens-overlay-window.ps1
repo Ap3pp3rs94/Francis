@@ -557,10 +557,12 @@ function New-OrbVisualProjection {
     animated = $true
     transparent_background = $true
     autonomous_motion = $AutonomousMotion
-    motion_profile = if ($AutonomousMotion) { 'bounded_idle_drift' } else { 'manual_drag_only' }
+    motion_profile = if ($AutonomousMotion) { 'bounded_desktop_roam' } else { 'manual_drag_only' }
     motion_clock = if ($AutonomousMotion) { 'composition_target_rendering' } else { 'manual_drag_only' }
     render_profile = Get-OverlayWpfRenderProfile -FrameSyncedMotion $AutonomousMotion
     manual_drag_supported = $true
+    desktop_roam_supported = $true
+    desktop_roam_bounds = 'work_area'
     route = '/?francis_lens=orb_overlay'
     grants_execution_authority = $false
     grants_mutation_authority = $false
@@ -573,16 +575,30 @@ function New-OrbAutonomousMotionState {
     [object]$WorkArea
   )
 
+  $MinimumLeft = [double]$WorkArea.Left
+  $MinimumTop = [double]$WorkArea.Top
+  $MaximumLeft = [Math]::Max($MinimumLeft, [double]$WorkArea.Right - [double]$Window.Width)
+  $MaximumTop = [Math]::Max($MinimumTop, [double]$WorkArea.Bottom - [double]$Window.Height)
+  $RangeX = [Math]::Max(0.0, ($MaximumLeft - $MinimumLeft) / 2.0)
+  $RangeY = [Math]::Max(0.0, ($MaximumTop - $MinimumTop) / 2.0)
+
   return [ordered]@{
     phase = 0.0
-    anchor_left = [double]$Window.Left
-    anchor_top = [double]$Window.Top
-    range_x = 116.0
-    range_y = 64.0
-    work_left = [double]$WorkArea.Left
-    work_top = [double]$WorkArea.Top
+    anchor_left = $MinimumLeft + $RangeX
+    anchor_top = $MinimumTop + $RangeY
+    startup_left = [double]$Window.Left
+    startup_top = [double]$Window.Top
+    range_x = $RangeX
+    range_y = $RangeY
+    work_left = $MinimumLeft
+    work_top = $MinimumTop
     work_right = [double]$WorkArea.Right
     work_bottom = [double]$WorkArea.Bottom
+    roam_left = $MinimumLeft
+    roam_top = $MinimumTop
+    roam_right = $MaximumLeft
+    roam_bottom = $MaximumTop
+    desktop_roam_bounds = 'work_area'
     last_frame_seconds = -1.0
   }
 }
@@ -637,6 +653,39 @@ function Update-OrbAutonomousMotion {
   $Ease = [Math]::Min(1.0, [Math]::Max(0.18, $DeltaSeconds * 12.0))
   $Window.Left = [double]$Window.Left + (($TargetLeft - [double]$Window.Left) * $Ease)
   $Window.Top = [double]$Window.Top + (($TargetTop - [double]$Window.Top) * $Ease)
+}
+
+function New-OverlayWindowPositionProjection {
+  param(
+    [object]$Window,
+    [object]$MotionState,
+    [bool]$OverlayWindowVisible
+  )
+
+  $HasWindow = $null -ne $Window
+  $HasMotionState = $null -ne $MotionState
+  return [ordered]@{
+    status = if ($OverlayWindowVisible -and $HasWindow) { 'visible_position_observed' } elseif ($HasWindow) { 'window_not_visible' } else { 'window_unavailable' }
+    left = if ($HasWindow) { [double]$Window.Left } else { 0.0 }
+    top = if ($HasWindow) { [double]$Window.Top } else { 0.0 }
+    width = if ($HasWindow) { [double]$Window.Width } else { 0.0 }
+    height = if ($HasWindow) { [double]$Window.Height } else { 0.0 }
+    desktop_roam_supported = $true
+    desktop_roam_bounds = 'work_area'
+    manual_drag_supported = $true
+    anchor_left = if ($HasMotionState) { [double]$MotionState['anchor_left'] } else { 0.0 }
+    anchor_top = if ($HasMotionState) { [double]$MotionState['anchor_top'] } else { 0.0 }
+    range_x = if ($HasMotionState) { [double]$MotionState['range_x'] } else { 0.0 }
+    range_y = if ($HasMotionState) { [double]$MotionState['range_y'] } else { 0.0 }
+    roam_left = if ($HasMotionState) { [double]$MotionState['roam_left'] } else { 0.0 }
+    roam_top = if ($HasMotionState) { [double]$MotionState['roam_top'] } else { 0.0 }
+    roam_right = if ($HasMotionState) { [double]$MotionState['roam_right'] } else { 0.0 }
+    roam_bottom = if ($HasMotionState) { [double]$MotionState['roam_bottom'] } else { 0.0 }
+    startup_left = if ($HasMotionState) { [double]$MotionState['startup_left'] } else { 0.0 }
+    startup_top = if ($HasMotionState) { [double]$MotionState['startup_top'] } else { 0.0 }
+    grants_execution_authority = $false
+    grants_mutation_authority = $false
+  }
 }
 
 function Start-OrbFrameSyncedMotion {
@@ -3407,6 +3456,10 @@ function Write-OverlayState {
     $OverlayVoice = New-OverlayRuntimeVoiceProjection
   }
   $VoiceInputReadiness = Get-OverlayVoiceInputReadiness -Voice $OverlayVoice
+  $OverlayWindowVariable = Get-Variable -Name LensOverlayWindow -Scope Script -ErrorAction SilentlyContinue
+  $MotionStateVariable = Get-Variable -Name LensOverlayMotionState -Scope Script -ErrorAction SilentlyContinue
+  $OverlayWindowForPosition = if ($null -ne $OverlayWindowVariable) { $OverlayWindowVariable.Value } else { $null }
+  $MotionStateForPosition = if ($null -ne $MotionStateVariable) { $MotionStateVariable.Value } else { $null }
   $Payload = [ordered]@{
     kind = 'lens.overlay.runtime_state'
     status = $Status
@@ -3429,6 +3482,7 @@ function Write-OverlayState {
     voice_provider_readiness = New-OverlayVoiceProviderReadiness
     overlay_window_visible = $OverlayWindowVisible
     always_on_top = $AlwaysOnTop
+    overlay_position = New-OverlayWindowPositionProjection -Window $OverlayWindowForPosition -MotionState $MotionStateForPosition -OverlayWindowVisible $OverlayWindowVisible
     updated_at = [DateTimeOffset]::UtcNow.ToString('o')
     message = $Message
     governance = [ordered]@{
@@ -3497,6 +3551,8 @@ function Get-OverlayRuntimeReadback {
   $VoiceInputReadiness = if ($null -ne $StatusVoiceInputReadiness) { $StatusVoiceInputReadiness } else { Get-OverlayVoiceInputReadiness -Voice $OverlayVoice }
   $StatusVoiceProviderReadiness = if ($null -ne $Status -and $null -ne $Status.PSObject.Properties['voice_provider_readiness']) { $Status.PSObject.Properties['voice_provider_readiness'].Value } else { $null }
   $VoiceProviderReadiness = if ($null -ne $StatusVoiceProviderReadiness) { $StatusVoiceProviderReadiness } else { New-OverlayVoiceProviderReadiness }
+  $StatusOverlayPosition = if ($null -ne $Status -and $null -ne $Status.PSObject.Properties['overlay_position']) { $Status.PSObject.Properties['overlay_position'].Value } else { $null }
+  $OverlayPosition = if ($null -ne $StatusOverlayPosition) { $StatusOverlayPosition } else { New-OverlayWindowPositionProjection -Window $null -MotionState $null -OverlayWindowVisible $false }
   $StatusClaimsRunningOverlay = (
     $StatusKind -eq 'lens.overlay.runtime_state' -and
     $StatusValue -eq 'overlay_running' -and
@@ -3560,6 +3616,7 @@ function Get-OverlayRuntimeReadback {
     voice_input_blocker = $VoiceInputReadiness.blocker
     next_voice_input_step = $VoiceInputReadiness.next_operator_step
     voice_provider_readiness = $VoiceProviderReadiness
+    overlay_position = $OverlayPosition
     requirement_state = $RequirementState
     blocker = $Blocker
   }
@@ -3610,6 +3667,7 @@ function New-StatusPayload {
     voice_input_blocker = $VoiceInputBlocker
     next_voice_input_step = $Readback.next_voice_input_step
     voice_provider_readiness = $Readback.voice_provider_readiness
+    overlay_position = $Readback.overlay_position
     overlay_runtime = $Readback
     next_smallest_truthful_gap = $NextSmallestTruthfulGap
     governance = [ordered]@{

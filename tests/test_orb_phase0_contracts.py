@@ -43,6 +43,7 @@ def test_overlay_orb_renderer_visual_constants_remain_locked() -> None:
 
     assert "visual_contract = 'chat_ui.orbGlyph.energy_reference'" in script
     assert "renderer = 'wpf_3d_animated_energy_orb'" in script
+    assert "motion_profile = if ($AutonomousMotion) { 'bounded_desktop_roam' }" in script
     assert "transparent_background = $true" in script
     assert "route = '/?francis_lens=orb_overlay'" in script
     assert "function New-OrbEnergySurface" in script
@@ -100,4 +101,6 @@ def test_orb_continuum_state_preserves_one_path_wiring_rules() -> None:
     assert "LocalTunnel fallback (`localtunnel_fallback_replace_needed`)" in state
     assert "LocalTunnel" in state
     assert "`localtunnel_ephemeral`" in state
+    assert "`bounded_desktop_roam`" in state
+    assert "`overlay_position`" in state
     assert "Trigger a fresh ChatGPT app call through the public" in state

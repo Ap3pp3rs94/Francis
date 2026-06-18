@@ -165,6 +165,11 @@ proportions.
   URLs as `localtunnel_ephemeral`. A `.loca.lt` URL can remain an explicit
   fallback for live connector testing, but it no longer satisfies the
   persistent `RecordUrl` path or reports as a stable ingress candidate.
+- The desktop overlay Orb now uses a bounded `bounded_desktop_roam` motion
+  profile instead of a small right-corner idle drift. Runtime status writes
+  `overlay_position` with current window coordinates, work-area roam bounds,
+  drag support, and explicit no-authority flags so Francis can show live Orb
+  location truth without changing the locked visual face.
 
 ## Current Task
 
@@ -1019,4 +1024,6 @@ Validated for cross-platform overlay voice-turn handback timestamp readback:
 Trigger a fresh ChatGPT app call through the public
 `francis_chatgpt_voice_ingress` MCP tool, confirm the receipt provenance, then
 replace the LocalTunnel fallback with a persistent HTTPS `/mcp` ingress URL and
-record it through the governed `RecordUrl` path.
+record it through the governed `RecordUrl` path. Keep the live Orb overlay
+running with bounded desktop roam and verify `overlay_position` in status
+readback after each overlay restart.
