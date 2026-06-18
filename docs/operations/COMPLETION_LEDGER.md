@@ -78083,6 +78083,106 @@ Remaining truthful gap:
   receipts, does not write proposal lineage, does not close the proposal-review
   gate, does not close the explicit-promotion gate, and does not start Stage 18.
 
+### 2026-06-17 - Stage 17 promotion-rule remediation records remaining legacy metadata receipts
+
+Roadmap area: Stage 17 / Capability Economy, capability-pack promotion
+discipline for legacy generated packs.
+
+This pass used the existing governed promotion-rule remediation route to record
+metadata-rule and governance remediation for the remaining 15 legacy generated
+packs that still had supported metadata-rule blockers. The route wrote 15
+metadata receipts and updated local registry metadata for 2,769 capabilities.
+This is a metadata-rule/governance remediation receipt only; it does not claim
+quality evidence, validation receipts, proposal lineage, proposal review,
+promotion, enablement, execution authority, or Stage 17 closure.
+
+Packs remediated:
+
+- `legacy.generated.capabilityoperatorreviewdecisionplugin`
+- `legacy.generated.capabilityoperatorreviewplugin`
+- `legacy.generated.capabilitypromotionreceiptsplugin`
+- `legacy.generated.capabilityqualitydocsplugin`
+- `legacy.generated.capabilityqualitystandardsplugin`
+- `legacy.generated.capabilityqualitytestsplugin`
+- `legacy.generated.capabilityvalidationreceiptsplugin`
+- `legacy.generated.catalogplugin`
+- `legacy.generated.forgereadbackplugin`
+- `legacy.generated.forgereviewplugin`
+- `legacy.generated.missiontraceplugin`
+- `legacy.generated.opsmemoryreceiptplugin`
+- `legacy.generated.opsplugin`
+- `legacy.generated.opstoolplugin`
+- `legacy.generated.reviewrequiredplugin`
+
+Receipts recorded:
+
+- `capability_pack_metadata_1781741141_legacy-generated-capabilityoperatorreviewdecisionplugin`
+- `capability_pack_metadata_1781741141_legacy-generated-capabilityoperatorreviewplugin`
+- `capability_pack_metadata_1781741141_legacy-generated-capabilitypromotionreceiptsplugin`
+- `capability_pack_metadata_1781741141_legacy-generated-capabilityqualitydocsplugin`
+- `capability_pack_metadata_1781741141_legacy-generated-capabilityqualitystandardsplugin`
+- `capability_pack_metadata_1781741141_legacy-generated-capabilityqualitytestsplugin`
+- `capability_pack_metadata_1781741141_legacy-generated-capabilityvalidationreceiptsplugin`
+- `capability_pack_metadata_1781741141_legacy-generated-catalogplugin`
+- `capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin`
+- `capability_pack_metadata_1781741141_legacy-generated-forgereviewplugin`
+- `capability_pack_metadata_1781741141_legacy-generated-missiontraceplugin`
+- `capability_pack_metadata_1781741141_legacy-generated-opsmemoryreceiptplugin`
+- `capability_pack_metadata_1781741141_legacy-generated-opsplugin`
+- `capability_pack_metadata_1781741141_legacy-generated-opstoolplugin`
+- `capability_pack_metadata_1781741141_legacy-generated-reviewrequiredplugin`
+
+Latest validation for this live Stage 17 remediation:
+
+- Governed dry-run:
+  `POST /plugins/capabilities/packs/promotion/rules/remediation/apply`
+  with actor `stage17.operator`,
+  `FRANCIS_API_ACTOR_SCOPES={"stage17.operator":["plugins.write"]}`,
+  `max_pack_count: 15`, `max_total_capability_count: 3000`, and
+  `max_capability_count_per_pack: 500` returned `ok: true`,
+  `status: dry_run`, `planned_pack_count: 15`,
+  `planned_capability_count: 2769`, and no skipped items. Every planned pack
+  reported only `pack_metadata_receipt_missing`, `promotion_rules_missing`, and
+  `pack_governance_missing` as metadata blockers.
+- Governed apply:
+  the same route returned `ok: true`, `status: recorded`, `applied: true`,
+  `recorded_pack_count: 15`, `recorded_capability_count: 2769`,
+  `failed: []`, and `skipped: []`.
+- Governance readback:
+  apply reported `writes_registry_metadata: true`, `writes_receipts: true`,
+  `metadata_rule_governance_remediation_only: true`,
+  `does_not_write_quality_evidence: true`,
+  `does_not_write_validation_receipts: true`,
+  `does_not_approve_proposals: true`,
+  `does_not_promote_capabilities: true`,
+  `does_not_enable_capabilities: true`,
+  `does_not_execute_capabilities: true`,
+  `promotion_authority: false`, `execution_authority: false`,
+  `approval_authority: false`, and `memory_write: false`.
+- Promotion-rule remediation readback:
+  `GET /plugins/capabilities/packs/promotion/rules/remediation` returned
+  `status: blocked`, `remediation_queue_count: 17`,
+  `missing_governance_pack_count: 0`, `missing_rule_pack_count: 0`,
+  `missing_quality_pack_count: 17`, and `missing_receipt_pack_count: 17`.
+- Promotion-discipline readback:
+  `GET /plugins/capabilities/packs/promotion/discipline` returned
+  `status: blocked`, `blocked_pack_count: 17`, `ready_pack_count: 32`, and
+  `approved_pack_operator_review_count: 29`. Readback found no pack among the
+  17 legacy generated blocked packs still missing promotion rules or pack
+  governance. The remaining blockers are quality evidence, validation receipts,
+  proposal lineage, and downstream operator-review decisions.
+
+Remaining truthful gap:
+
+- This pass clears only the supported metadata-rule/governance remediation
+  blocker across the 17 blocked legacy generated packs. It does not clear the
+  promotion-rule remediation queue, does not close Stage 17, does not approve
+  proposals, does not promote capabilities, does not grant execution authority,
+  does not grant mutation authority beyond governed metadata-rule/governance
+  remediation, does not write quality evidence, does not write validation
+  receipts, does not write proposal lineage, does not close the proposal-review
+  gate, does not close the explicit-promotion gate, and does not start Stage 18.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
