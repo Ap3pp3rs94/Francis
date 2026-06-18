@@ -1,13 +1,14 @@
 # Bounded operator control for the ChatGPT voice MCP connector.
 #
 # Status and PlanPersistentIngress modes are read-only. RecordUrl stores an
-# operator-supplied persistent HTTPS MCP URL without opening a tunnel. Start mode
-# opens a public localtunnel URL only when -ExposePublicTunnel is explicitly
+# operator-supplied persistent HTTPS MCP URL without opening a tunnel. RestartMcp
+# refreshes only the local MCP launcher behind an existing connector URL. Start
+# mode opens a public localtunnel URL only when -ExposePublicTunnel is explicitly
 # supplied by the operator.
 
 [CmdletBinding(PositionalBinding = $false)]
 param(
-  [ValidateSet('Status', 'PlanPersistentIngress', 'RecordUrl', 'Start', 'Stop')]
+  [ValidateSet('Status', 'PlanPersistentIngress', 'RecordUrl', 'RestartMcp', 'Start', 'Stop')]
   [string]$Mode = 'Status',
   [string]$HostAddress = '127.0.0.1',
   [int]$Port = 8787,
@@ -471,6 +472,39 @@ function Wait-ForTunnelUrl {
   return ''
 }
 
+function Start-McpLauncher {
+  param(
+    [string]$ConnectorHost,
+    [string]$StdoutPath,
+    [string]$StderrPath
+  )
+
+  $PowerShellHost = Resolve-PowerShellHost
+  if ([string]::IsNullOrWhiteSpace($PowerShellHost)) {
+    return $null
+  }
+
+  $McpArgs = @(
+    '-NoProfile',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-File',
+    $mcpScript,
+    '-HostAddress',
+    $HostAddress,
+    '-Port',
+    [string]$Port,
+    '-Path',
+    $Path
+  )
+  $BoundedConnectorHost = ConvertTo-BoundedText -Value $ConnectorHost -MaxLength 256
+  if (-not [string]::IsNullOrWhiteSpace($BoundedConnectorHost)) {
+    $McpArgs += @('-AllowedHost', $BoundedConnectorHost)
+  }
+
+  return Start-Process -FilePath $PowerShellHost -ArgumentList $McpArgs -PassThru -WindowStyle Hidden -RedirectStandardOutput $StdoutPath -RedirectStandardError $StderrPath
+}
+
 function Stop-KnownProcess {
   param(
     [int]$ProcessId,
@@ -482,6 +516,25 @@ function Stop-KnownProcess {
   if (-not [bool]$Readback.command_matches_expected) { return $false }
   Stop-Process -Id $ProcessId -Force -ErrorAction Stop
   return $true
+}
+
+function Wait-ForKnownProcessExit {
+  param(
+    [int]$ProcessId,
+    [string]$ExpectedCommandText,
+    [int]$TimeoutSeconds = 8
+  )
+
+  if ($ProcessId -le 0) { return $true }
+  $Deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+  while ((Get-Date) -lt $Deadline) {
+    $Readback = Get-ProcessReadback -ProcessId $ProcessId -ExpectedCommandText $ExpectedCommandText
+    if (-not [bool]$Readback.alive) { return $true }
+    if (-not [bool]$Readback.command_matches_expected) { return $true }
+    Start-Sleep -Milliseconds 250
+  }
+  $FinalReadback = Get-ProcessReadback -ProcessId $ProcessId -ExpectedCommandText $ExpectedCommandText
+  return (-not [bool]$FinalReadback.alive) -or (-not [bool]$FinalReadback.command_matches_expected)
 }
 
 function New-LocalTunnelStabilityPayload {
@@ -721,10 +774,228 @@ if ($Mode -eq 'Start' -and -not $ExposePublicTunnel) {
   exit 0
 }
 
+if ($Mode -eq 'RestartMcp') {
+  $State = Read-State
+  if (-not $State) {
+    ConvertTo-JsonOutput -Payload ([ordered]@{
+        kind = 'francis.chatgpt_voice.connector_control'
+        ok = $false
+        status = 'mcp_runtime_state_required'
+        connector_url = ''
+        runtime_root = $RuntimeRoot
+        state_path = $statePath
+        blockers = @('runtime_state_required')
+        governance = New-GovernancePayload -ReadOnly $false -StartsProcess $false -OpensPublicTunnel $false -WritesData $false
+      })
+    exit 0
+  }
+
+  $ExistingConnectorUrl = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $State -Name 'connector_url' -Default '') -MaxLength 512
+  if ([string]::IsNullOrWhiteSpace($ExistingConnectorUrl)) {
+    ConvertTo-JsonOutput -Payload ([ordered]@{
+        kind = 'francis.chatgpt_voice.connector_control'
+        ok = $false
+        status = 'mcp_connector_url_required'
+        connector_url = ''
+        runtime_root = $RuntimeRoot
+        state_path = $statePath
+        blockers = @('connector_url_required')
+        governance = New-GovernancePayload -ReadOnly $false -StartsProcess $false -OpensPublicTunnel $false -WritesData $false
+      })
+    exit 0
+  }
+
+  try {
+    $ConnectorHost = ([System.Uri]$ExistingConnectorUrl).Host
+  } catch {
+    $ConnectorHost = ''
+  }
+  if ([string]::IsNullOrWhiteSpace($ConnectorHost)) {
+    ConvertTo-JsonOutput -Payload ([ordered]@{
+        kind = 'francis.chatgpt_voice.connector_control'
+        ok = $false
+        status = 'mcp_connector_url_invalid'
+        connector_url = $ExistingConnectorUrl
+        runtime_root = $RuntimeRoot
+        state_path = $statePath
+        blockers = @('connector_url_missing_host')
+        governance = New-GovernancePayload -ReadOnly $false -StartsProcess $false -OpensPublicTunnel $false -WritesData $false
+      })
+    exit 0
+  }
+
+  $ConnectorUrlSource = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $State -Name 'connector_url_source' -Default 'runtime_state') -MaxLength 160
+  if ([string]::IsNullOrWhiteSpace($ConnectorUrlSource)) {
+    $ConnectorUrlSource = 'runtime_state'
+  }
+
+  $EndpointBefore = Invoke-EndpointStatus -ConnectorUrl $ExistingConnectorUrl
+  $PreviousListenerPid = [int](Get-NestedPropertyValue -Payload $EndpointBefore -Path @('local_listener', 'owning_process') -Default 0)
+  $PreviousLauncherPid = [int](Get-PropertyValue -Payload $State -Name 'mcp_launcher_pid' -Default 0)
+  $Stopped = @()
+
+  if ($PreviousListenerPid -gt 0) {
+    $ListenerReadback = Get-ProcessReadback -ProcessId $PreviousListenerPid -ExpectedCommandText 'francis.mcp_gateway.server'
+    if ([bool]$ListenerReadback.alive -and -not [bool]$ListenerReadback.command_matches_expected) {
+      ConvertTo-JsonOutput -Payload ([ordered]@{
+          kind = 'francis.chatgpt_voice.connector_control'
+          ok = $false
+          status = 'mcp_existing_listener_not_recognized'
+          connector_url = $ExistingConnectorUrl
+          runtime_root = $RuntimeRoot
+          state_path = $statePath
+          listener = $ListenerReadback
+          blockers = @('existing_listener_not_francis_mcp_gateway')
+          governance = New-GovernancePayload -ReadOnly $false -StartsProcess $false -OpensPublicTunnel $false -WritesData $false
+        })
+      exit 0
+    }
+
+    try {
+      if (Stop-KnownProcess -ProcessId $PreviousListenerPid -ExpectedCommandText 'francis.mcp_gateway.server') {
+        $Stopped += 'mcp_server_listener'
+      }
+    } catch {
+      ConvertTo-JsonOutput -Payload ([ordered]@{
+          kind = 'francis.chatgpt_voice.connector_control'
+          ok = $false
+          status = 'mcp_existing_listener_stop_failed'
+          connector_url = $ExistingConnectorUrl
+          runtime_root = $RuntimeRoot
+          state_path = $statePath
+          listener = $ListenerReadback
+          error = ConvertTo-BoundedText -Value $_.Exception.Message -MaxLength 512
+          blockers = @('existing_listener_stop_failed')
+          governance = New-GovernancePayload -ReadOnly $false -StartsProcess $false -OpensPublicTunnel $false -WritesData $false
+        })
+      exit 0
+    }
+
+    if (-not (Wait-ForKnownProcessExit -ProcessId $PreviousListenerPid -ExpectedCommandText 'francis.mcp_gateway.server')) {
+      ConvertTo-JsonOutput -Payload ([ordered]@{
+          kind = 'francis.chatgpt_voice.connector_control'
+          ok = $false
+          status = 'mcp_existing_listener_still_active'
+          connector_url = $ExistingConnectorUrl
+          runtime_root = $RuntimeRoot
+          state_path = $statePath
+          listener = (Get-ProcessReadback -ProcessId $PreviousListenerPid -ExpectedCommandText 'francis.mcp_gateway.server')
+          blockers = @('existing_listener_still_active')
+          governance = New-GovernancePayload -ReadOnly $false -StartsProcess $false -OpensPublicTunnel $false -WritesData $false
+        })
+      exit 0
+    }
+  }
+
+  if ($PreviousLauncherPid -gt 0) {
+    try {
+      if (Stop-KnownProcess -ProcessId $PreviousLauncherPid -ExpectedCommandText 'chatgpt-voice-mcp.ps1') {
+        $Stopped += 'mcp_launcher'
+      }
+    } catch {
+      ConvertTo-JsonOutput -Payload ([ordered]@{
+          kind = 'francis.chatgpt_voice.connector_control'
+          ok = $false
+          status = 'mcp_launcher_stop_failed'
+          connector_url = $ExistingConnectorUrl
+          runtime_root = $RuntimeRoot
+          state_path = $statePath
+          error = ConvertTo-BoundedText -Value $_.Exception.Message -MaxLength 512
+          blockers = @('mcp_launcher_stop_failed')
+          governance = New-GovernancePayload -ReadOnly $false -StartsProcess $false -OpensPublicTunnel $false -WritesData $false
+        })
+      exit 0
+    }
+    [void](Wait-ForKnownProcessExit -ProcessId $PreviousLauncherPid -ExpectedCommandText 'chatgpt-voice-mcp.ps1')
+  }
+
+  New-Item -ItemType Directory -Force -Path $RuntimeRoot | Out-Null
+  $RestartStamp = (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ')
+  $McpStdout = Join-Path $RuntimeRoot ("mcp.restart.$RestartStamp.stdout.log")
+  $McpStderr = Join-Path $RuntimeRoot ("mcp.restart.$RestartStamp.stderr.log")
+  $McpProcess = Start-McpLauncher -ConnectorHost $ConnectorHost -StdoutPath $McpStdout -StderrPath $McpStderr
+  if (-not $McpProcess) {
+    ConvertTo-JsonOutput -Payload ([ordered]@{
+        kind = 'francis.chatgpt_voice.connector_control'
+        ok = $false
+        status = 'powershell_host_missing'
+        connector_url = $ExistingConnectorUrl
+        runtime_root = $RuntimeRoot
+        state_path = $statePath
+        stopped = $Stopped
+        governance = New-GovernancePayload -ReadOnly $false -StartsProcess $false -OpensPublicTunnel $false -WritesData $false
+      })
+    exit 0
+  }
+  Start-Sleep -Seconds 4
+
+  $PreviousRestartCount = 0
+  try {
+    $PreviousRestartCount = [int](Get-PropertyValue -Payload $State -Name 'mcp_restart_count' -Default 0)
+  } catch {
+    $PreviousRestartCount = 0
+  }
+  $RestartedAt = (Get-Date).ToUniversalTime().ToString('o')
+  $StatePayload = [ordered]@{
+    kind = 'francis.chatgpt_voice.connector_control.state'
+    status = 'mcp_restarted'
+    connector_url = $ExistingConnectorUrl
+    connector_url_source = $ConnectorUrlSource
+    connector_host = $ConnectorHost
+    ingress_mode = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $State -Name 'ingress_mode' -Default '') -MaxLength 96
+    requested_tunnel_subdomain = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $State -Name 'requested_tunnel_subdomain' -Default '') -MaxLength 160
+    requested_connector_host = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $State -Name 'requested_connector_host' -Default '') -MaxLength 160
+    localtunnel = Get-PropertyValue -Payload $State -Name 'localtunnel' -Default $null
+    local_endpoint = "http://$HostAddress`:$Port$Path"
+    mcp_launcher_pid = $McpProcess.Id
+    previous_mcp_launcher_pid = $PreviousLauncherPid
+    previous_mcp_listener_pid = $PreviousListenerPid
+    tunnel_pid = [int](Get-PropertyValue -Payload $State -Name 'tunnel_pid' -Default 0)
+    mcp_stdout = $McpStdout
+    mcp_stderr = $McpStderr
+    tunnel_stdout = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $State -Name 'tunnel_stdout' -Default '') -MaxLength 512
+    tunnel_stderr = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $State -Name 'tunnel_stderr' -Default '') -MaxLength 512
+    stopped = $Stopped
+    mcp_restart_count = $PreviousRestartCount + 1
+    last_mcp_restart_at = $RestartedAt
+    updated_at = $RestartedAt
+    governance = New-GovernancePayload -ReadOnly $false -StartsProcess $true -OpensPublicTunnel $false -WritesData $true
+  }
+  Write-State -Payload $StatePayload
+
+  $EndpointStatus = Invoke-EndpointStatus -ConnectorUrl $ExistingConnectorUrl
+  $Payload = New-StatusPayload -State (Read-State) -EndpointStatus $EndpointStatus -ConnectorUrlSource $ConnectorUrlSource -ReadOnly $false -StartsProcess $true -OpensPublicTunnel $false -WritesData $true
+  $ConnectorReady = [string]$EndpointStatus.status -eq 'ready_for_chatgpt_connector'
+  $LocalReady = [bool](Get-NestedPropertyValue -Payload $EndpointStatus -Path @('local_listener', 'ready') -Default $false)
+  $Payload.status = if ($ConnectorReady) { 'mcp_restarted_ready' } elseif ($LocalReady) { 'mcp_restarted_local_ready' } else { 'mcp_restarted_unverified' }
+  $Payload.ok = [bool]$ConnectorReady
+  $Payload.restart = [ordered]@{
+    stopped = $Stopped
+    previous_mcp_launcher_pid = $PreviousLauncherPid
+    previous_mcp_listener_pid = $PreviousListenerPid
+    mcp_launcher_pid = $McpProcess.Id
+    tunnel_pid_preserved = [int](Get-PropertyValue -Payload $State -Name 'tunnel_pid' -Default 0)
+    connector_url_preserved = $ExistingConnectorUrl
+    connector_host = $ConnectorHost
+    public_tunnel_restarted = $false
+  }
+  ConvertTo-JsonOutput -Payload $Payload
+  exit 0
+}
+
 if ($Mode -eq 'Stop') {
   $State = Read-State
   $Stopped = @()
   if ($State) {
+    $ExistingConnectorUrl = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $State -Name 'connector_url' -Default '') -MaxLength 512
+    if (-not [string]::IsNullOrWhiteSpace($ExistingConnectorUrl)) {
+      $EndpointBefore = Invoke-EndpointStatus -ConnectorUrl $ExistingConnectorUrl
+      $PreviousListenerPid = [int](Get-NestedPropertyValue -Payload $EndpointBefore -Path @('local_listener', 'owning_process') -Default 0)
+      if ($PreviousListenerPid -gt 0 -and (Stop-KnownProcess -ProcessId $PreviousListenerPid -ExpectedCommandText 'francis.mcp_gateway.server')) {
+        $Stopped += 'mcp_server_listener'
+        [void](Wait-ForKnownProcessExit -ProcessId $PreviousListenerPid -ExpectedCommandText 'francis.mcp_gateway.server')
+      }
+    }
     if (Stop-KnownProcess -ProcessId ([int]$State.tunnel_pid) -ExpectedCommandText 'localtunnel\bin\lt.js') {
       $Stopped += 'tunnel'
     }
@@ -752,6 +1023,42 @@ if ($Mode -eq 'Stop') {
       governance = New-GovernancePayload -ReadOnly $false -StartsProcess $false -OpensPublicTunnel $false -WritesData $true
     })
   exit 0
+}
+
+if ($Mode -eq 'Start') {
+  $State = Read-State
+  if ($State) {
+    $ExistingConnectorUrl = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $State -Name 'connector_url' -Default '') -MaxLength 512
+    if (-not [string]::IsNullOrWhiteSpace($ExistingConnectorUrl)) {
+      $EndpointBefore = Invoke-EndpointStatus -ConnectorUrl $ExistingConnectorUrl
+      $PreviousListenerPid = [int](Get-NestedPropertyValue -Payload $EndpointBefore -Path @('local_listener', 'owning_process') -Default 0)
+      if ($PreviousListenerPid -gt 0) {
+        $ListenerReadback = Get-ProcessReadback -ProcessId $PreviousListenerPid -ExpectedCommandText 'francis.mcp_gateway.server'
+        if ([bool]$ListenerReadback.alive -and -not [bool]$ListenerReadback.command_matches_expected) {
+          ConvertTo-JsonOutput -Payload ([ordered]@{
+              kind = 'francis.chatgpt_voice.connector_control'
+              ok = $false
+              status = 'mcp_existing_listener_not_recognized'
+              connector_url = $ExistingConnectorUrl
+              runtime_root = $RuntimeRoot
+              state_path = $statePath
+              listener = $ListenerReadback
+              blockers = @('existing_listener_not_francis_mcp_gateway')
+              governance = New-GovernancePayload -ReadOnly $false -StartsProcess $false -OpensPublicTunnel $false -WritesData $false
+            })
+          exit 0
+        }
+        if (Stop-KnownProcess -ProcessId $PreviousListenerPid -ExpectedCommandText 'francis.mcp_gateway.server') {
+          [void](Wait-ForKnownProcessExit -ProcessId $PreviousListenerPid -ExpectedCommandText 'francis.mcp_gateway.server')
+        }
+      }
+    }
+
+    $PreviousLauncherPid = [int](Get-PropertyValue -Payload $State -Name 'mcp_launcher_pid' -Default 0)
+    if ($PreviousLauncherPid -gt 0 -and (Stop-KnownProcess -ProcessId $PreviousLauncherPid -ExpectedCommandText 'chatgpt-voice-mcp.ps1')) {
+      [void](Wait-ForKnownProcessExit -ProcessId $PreviousLauncherPid -ExpectedCommandText 'chatgpt-voice-mcp.ps1')
+    }
+  }
 }
 
 $LocalTunnelScript = Resolve-LocalTunnelScript
@@ -793,22 +1100,20 @@ if ([string]::IsNullOrWhiteSpace($ConnectorUrl)) {
 
 $ConnectorHost = ([System.Uri]$ConnectorUrl).Host
 $LocalTunnelStability = New-LocalTunnelStabilityPayload -ConnectorUrl $ConnectorUrl -ConnectorUrlSource 'localtunnel' -RequestedSubdomain $TunnelSubdomain
-$McpArgs = @(
-  '-NoProfile',
-  '-ExecutionPolicy',
-  'Bypass',
-  '-File',
-  $mcpScript,
-  '-HostAddress',
-  $HostAddress,
-  '-Port',
-  [string]$Port,
-  '-Path',
-  $Path,
-  '-AllowedHost',
-  $ConnectorHost
-)
-$McpProcess = Start-Process -FilePath 'powershell' -ArgumentList $McpArgs -PassThru -WindowStyle Hidden -RedirectStandardOutput $McpStdout -RedirectStandardError $McpStderr
+$McpProcess = Start-McpLauncher -ConnectorHost $ConnectorHost -StdoutPath $McpStdout -StderrPath $McpStderr
+if (-not $McpProcess) {
+  ConvertTo-JsonOutput -Payload ([ordered]@{
+      kind = 'francis.chatgpt_voice.connector_control'
+      ok = $false
+      status = 'powershell_host_missing'
+      connector_url = $ConnectorUrl
+      tunnel_pid = $TunnelProcess.Id
+      tunnel_stdout = $TunnelStdout
+      tunnel_stderr = $TunnelStderr
+      governance = New-GovernancePayload -ReadOnly $false -StartsProcess $true -OpensPublicTunnel $true -WritesData $true
+    })
+  exit 0
+}
 Start-Sleep -Seconds 4
 
 $StatePayload = [ordered]@{

@@ -65,6 +65,17 @@ def test_chatgpt_voice_connector_resolves_cross_platform_powershell_for_status_r
     assert "$Raw = & powershell @Args 2>&1" not in script
 
 
+def test_chatgpt_voice_connector_restart_mcp_preserves_public_tunnel_contract() -> None:
+    script = (_repo_root() / "scripts" / "chatgpt-voice-connector.ps1").read_text(encoding="utf-8")
+
+    assert "RestartMcp" in script
+    assert "if ($Mode -eq 'RestartMcp')" in script
+    assert "ExpectedCommandText 'francis.mcp_gateway.server'" in script
+    assert "ExpectedCommandText 'chatgpt-voice-mcp.ps1'" in script
+    assert "public_tunnel_restarted = $false" in script
+    assert "OpensPublicTunnel $false -WritesData $true" in script
+
+
 @pytest.mark.skipif(platform.system() != "Windows", reason="connector control uses Windows process readback")
 def test_chatgpt_voice_connector_status_is_read_only_without_runtime_state(tmp_path: Path) -> None:
     runtime_root = tmp_path / "connector-runtime"
@@ -88,6 +99,35 @@ def test_chatgpt_voice_connector_status_is_read_only_without_runtime_state(tmp_p
     assert payload["connector_url"] == ""
     assert payload["endpoint_status"]["status"] == "local_listener_missing"
     assert payload["governance"]["read_only"] is True
+    assert payload["governance"]["starts_process"] is False
+    assert payload["governance"]["opens_public_tunnel"] is False
+    assert payload["governance"]["writes_data"] is False
+    assert payload["governance"]["grants_execution_authority"] is False
+    assert not runtime_root.exists()
+
+
+@pytest.mark.skipif(platform.system() != "Windows", reason="connector control uses Windows process readback")
+def test_chatgpt_voice_connector_restart_mcp_requires_runtime_state(tmp_path: Path) -> None:
+    runtime_root = tmp_path / "connector-runtime"
+    port = _unused_local_port()
+
+    proc = _run_connector_script(
+        "-Mode",
+        "RestartMcp",
+        "-Json",
+        "-RuntimeRoot",
+        str(runtime_root),
+        "-Port",
+        str(port),
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["kind"] == "francis.chatgpt_voice.connector_control"
+    assert payload["ok"] is False
+    assert payload["status"] == "mcp_runtime_state_required"
+    assert payload["blockers"] == ["runtime_state_required"]
+    assert payload["governance"]["read_only"] is False
     assert payload["governance"]["starts_process"] is False
     assert payload["governance"]["opens_public_tunnel"] is False
     assert payload["governance"]["writes_data"] is False
