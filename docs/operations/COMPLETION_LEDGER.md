@@ -79249,6 +79249,55 @@ Remaining truthful gap:
   not close the explicit-promotion gate, does not close Stage 17, and does not
   start Stage 18.
 
+### 2026-06-18 - ChatGPT voice bridge ingress for Francis
+
+Roadmap area: `P1_INTERFACE` / Lens and operator ingress, with supporting
+governance and receipt truth.
+
+Francis now has a bounded local bridge for a ChatGPT app or connector to pass
+voice-transcribed text into Francis:
+
+- `GET /chatgpt-voice/contract` exposes the transcript-only bridge contract,
+  route map, MCP tool names, and explicit ChatGPT-app boundary claims.
+- `POST /chatgpt-voice/ingress` records a local receipt under
+  `data/integrations/chatgpt_voice/receipts/` and can forward the redacted
+  transcript into the existing `/chat/send` route only when the bridge actor has
+  both `chatgpt.voice.bridge.write` and the existing `chat.write` authority.
+- `GET /chatgpt-voice/receipts` reads the bridge receipts without granting write
+  authority.
+- The MCP gateway now exposes `francis.chatgpt_voice.contract`,
+  `francis.chatgpt_voice.ingress`, and `francis.chatgpt_voice.receipts` so a
+  future ChatGPT App/MCP connector has a bounded tool surface instead of an
+  arbitrary local API path.
+
+Latest validation for this bridge slice:
+
+- `python -m pytest tests/test_chatgpt_voice_bridge.py
+  tests/unit/test_mcp_gateway.py tests/unit/test_lens_orb_mcp_status_bridge.py
+  tests/unit/test_lens_orb_mcp_status_route.py -q` passed with `22 passed`.
+- `python -m pytest tests/test_api_chat.py tests/test_chatgpt_voice_bridge.py
+  -q` passed with `15 passed`.
+- `python -m ruff check src/francis/chatgpt_voice_bridge.py
+  src/francis/api/routes/chatgpt_voice_bridge.py
+  src/francis/mcp_gateway/tools.py tests/test_chatgpt_voice_bridge.py
+  tests/unit/test_mcp_gateway.py` passed.
+- `git diff --cached --check` passed for the committed bridge slice.
+- `git diff --check` passed and only repeated existing unrelated line-ending
+  warnings for dirty files outside this bridge slice.
+- Commit `0902c9ed` was pushed to `origin/main`; local `main` and
+  `origin/main` were confirmed even with `git rev-list --left-right --count
+  main...origin/main` returning `0 0`.
+
+Remaining truthful gap:
+
+- This is transcript ingress and receipt-backed forwarding, not a native
+  ChatGPT mobile voice integration by itself. The phone app still needs a
+  reachable HTTPS/MCP connector or tunnel to reach the local Francis API.
+- The bridge does not accept raw audio, does not create a native ChatGPT app,
+  does not call a model by default, does not approve proposals, does not promote
+  capabilities, does not enable execution authority, does not grant arbitrary
+  mutation authority, and does not close any Stage 17/Stage 18 milestone.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
