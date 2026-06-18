@@ -312,7 +312,7 @@ def _contains(bounds: dict[str, Any], region: dict[str, Any]) -> bool:
     ry = _safe_float(region.get("y"))
     rw = _safe_float(region.get("width"))
     rh = _safe_float(region.get("height"))
-    if None in {bw, bh, rx, ry, rw, rh}:
+    if bw is None or bh is None or rx is None or ry is None or rw is None or rh is None:
         return False
     return rx >= bx and ry >= by and (rx + rw) <= (bx + bw) and (ry + rh) <= (by + bh)
 

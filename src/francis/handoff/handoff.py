@@ -73,7 +73,8 @@ def _valid_takeover_authority(receipt: dict[str, Any]) -> tuple[bool, str]:
 
     if _safe_str(receipt.get("kind")) != _TAKEOVER_START_KIND:
         return False, "takeover_receipt_not_a_session_start"
-    payload = receipt.get("payload") if isinstance(receipt.get("payload"), dict) else {}
+    raw_payload = receipt.get("payload")
+    payload = raw_payload if isinstance(raw_payload, dict) else {}
     if bool(payload.get("read_only_session")):
         return False, "takeover_session_read_only_no_control_transfer"
     return True, ""
@@ -148,8 +149,10 @@ def bind_input_to_takeover(
         )
         return {"ok": False, "status": "denied", "decision": "deny", "reason": reason, "receipt": receipt}
 
-    payload = takeover_receipt.get("payload") if isinstance(takeover_receipt.get("payload"), dict) else {}
-    stage9 = payload.get("stage9_result") if isinstance(payload.get("stage9_result"), dict) else {}
+    raw_payload = takeover_receipt.get("payload")
+    payload = raw_payload if isinstance(raw_payload, dict) else {}
+    raw_stage9 = payload.get("stage9_result")
+    stage9 = raw_stage9 if isinstance(raw_stage9, dict) else {}
     receipt = _write_receipt(
         {
             "decision": "allow",

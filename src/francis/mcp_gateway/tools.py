@@ -51,6 +51,10 @@ def _safe_list(value: Any) -> list[str]:
     return [_clean_text(item) for item in value if _clean_text(item)]
 
 
+def _safe_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
 def _has_shell_metacharacters(value: str) -> bool:
     return any(token in value for token in (";", "&&", "||", "|", "`", "$(", "\n", "\r"))
 
@@ -601,7 +605,7 @@ def _chatgpt_voice_contract(args: dict[str, Any]) -> ToolResult:
         status=_clean_text(result.get("status"), "ready"),
         tool="francis.chatgpt_voice.contract",
         data=result,
-        governance=result.get("governance") if isinstance(result.get("governance"), dict) else {},
+        governance=_safe_dict(result.get("governance")),
         error=_clean_text(result.get("error")) or None,
     )
 
@@ -624,7 +628,7 @@ def _chatgpt_voice_ingress(args: dict[str, Any]) -> ToolResult:
         status=_clean_text(result.get("status"), "recorded"),
         tool="francis.chatgpt_voice.ingress",
         data=result,
-        governance=result.get("governance") if isinstance(result.get("governance"), dict) else {},
+        governance=_safe_dict(result.get("governance")),
         error=_clean_text(result.get("error")) or None,
     )
 
@@ -640,7 +644,7 @@ def _chatgpt_voice_receipts(args: dict[str, Any]) -> ToolResult:
         status=_clean_text(result.get("status"), "ready"),
         tool="francis.chatgpt_voice.receipts",
         data=result,
-        governance=result.get("governance") if isinstance(result.get("governance"), dict) else {},
+        governance=_safe_dict(result.get("governance")),
         error=_clean_text(result.get("error")) or None,
     )
 
