@@ -225,19 +225,48 @@ function Invoke-JsonScript {
   $Output = & $ScriptPath @ScriptParams 2>&1
   $ExitCode = if ($null -eq $global:LASTEXITCODE) { 0 } else { [int]$global:LASTEXITCODE }
   $Stdout = ($Output | Out-String).Trim()
-  $Payload = $null
-  if (-not [string]::IsNullOrWhiteSpace($Stdout)) {
-    try {
-      $Payload = $Stdout | ConvertFrom-Json
-    } catch {
-      $Payload = $null
-    }
-  }
+  $Payload = ConvertFrom-JsonScriptOutput -Stdout $Stdout
   return [ordered]@{
     exit_code = $ExitCode
     stdout = $Stdout
     payload = $Payload
   }
+}
+
+function ConvertFrom-JsonScriptOutput {
+  param([string]$Stdout)
+
+  if ([string]::IsNullOrWhiteSpace($Stdout)) {
+    return $null
+  }
+
+  try {
+    return $Stdout | ConvertFrom-Json
+  } catch {
+    # Child scripts can emit dependency warnings before their JSON receipt.
+  }
+
+  $Lines = $Stdout -split "`r?`n"
+  for ($Start = 0; $Start -lt $Lines.Count; $Start++) {
+    $StartText = ([string]$Lines[$Start]).TrimStart()
+    if (-not ($StartText.StartsWith('{') -or $StartText.StartsWith('['))) {
+      continue
+    }
+    for ($End = $Lines.Count - 1; $End -ge $Start; $End--) {
+      $EndText = ([string]$Lines[$End]).TrimEnd()
+      if (-not ($EndText.EndsWith('}') -or $EndText.EndsWith(']'))) {
+        continue
+      }
+      $Candidate = ($Lines[$Start..$End] -join [Environment]::NewLine)
+      try {
+        return $Candidate | ConvertFrom-Json
+      } catch {
+        continue
+      }
+    }
+  }
+
+  return $null
 }
 
 $EvidenceScript = Join-Path $PSScriptRoot 'federation-stage16-sleep-continuity-evidence.ps1'
