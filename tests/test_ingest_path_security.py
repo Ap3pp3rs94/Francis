@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,10 @@ from francis.ingest.ingest.source import canonical_path, display_path, safe_loca
 _INGEST_LAB_SANDBOX_PROVIDER_SELECTION_ACTOR = "test.ingest.lab.sandbox.provider_selection"
 
 
+def _outside_default_local_root(*parts: str) -> Path:
+    return Path(Path.cwd().anchor).joinpath("__francis_disallowed_ingest_path__", *parts)
+
+
 def test_canonical_path_accepts_operator_local_path(tmp_path: Path) -> None:
     source = tmp_path / "source"
     source.mkdir()
@@ -27,6 +32,30 @@ def test_canonical_path_accepts_operator_local_path(tmp_path: Path) -> None:
 def test_canonical_path_rejects_control_characters() -> None:
     with pytest.raises(ValueError, match="path_text_contains_control_character"):
         canonical_path("bad\x00path")
+
+
+def test_canonical_path_rejects_path_outside_allowed_local_roots(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("FRANCIS_ALLOWED_LOCAL_PATH_ROOTS", raising=False)
+
+    with pytest.raises(ValueError, match="path_outside_allowed_local_roots"):
+        canonical_path(_outside_default_local_root("source"))
+
+
+def test_canonical_path_allows_explicit_operator_local_root(monkeypatch: pytest.MonkeyPatch) -> None:
+    root = Path(Path.cwd().anchor) / "__francis_configured_ingest_root__"
+    source = root / "source"
+    monkeypatch.setenv("FRANCIS_ALLOWED_LOCAL_PATH_ROOTS", str(root))
+
+    assert canonical_path(source) == source.resolve(strict=False)
+
+
+def test_canonical_path_allows_multiple_explicit_operator_local_roots(monkeypatch: pytest.MonkeyPatch) -> None:
+    first_root = Path(Path.cwd().anchor) / "__francis_configured_ingest_root_a__"
+    second_root = Path(Path.cwd().anchor) / "__francis_configured_ingest_root_b__"
+    source = second_root / "source"
+    monkeypatch.setenv("FRANCIS_ALLOWED_LOCAL_PATH_ROOTS", os.pathsep.join([str(first_root), str(second_root)]))
+
+    assert canonical_path(source) == source.resolve(strict=False)
 
 
 def test_display_path_does_not_throw_on_invalid_path_text() -> None:
@@ -94,6 +123,22 @@ def test_lab_provider_reference_metadata_rejects_invalid_path_text() -> None:
     assert metadata["error"] == "path_text_contains_control_character"
 
 
+def test_lab_provider_reference_metadata_rejects_path_outside_allowed_roots(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("FRANCIS_ALLOWED_LOCAL_PATH_ROOTS", raising=False)
+
+    metadata = _lab_provider_reference_metadata(str(_outside_default_local_root("provider-bin")))
+
+    assert metadata["reference_kind"] == "path"
+    assert metadata["reference_present"] is False
+    assert metadata["metadata_checked"] is True
+    assert metadata["reference_verified"] is False
+    assert metadata["contents_read"] is False
+    assert metadata["executed"] is False
+    assert metadata["error"] == "path_outside_allowed_local_roots"
+
+
 def test_lab_provider_policy_manifest_metadata_rejects_invalid_path_text() -> None:
     metadata = _lab_provider_policy_manifest_metadata("C:\\runner\x00policy.json")
 
@@ -103,3 +148,18 @@ def test_lab_provider_policy_manifest_metadata_rejects_invalid_path_text() -> No
     assert metadata["bound"] is False
     assert metadata["contents_read"] is False
     assert metadata["error"] == "path_text_contains_control_character"
+
+
+def test_lab_provider_policy_manifest_metadata_rejects_path_outside_allowed_roots(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("FRANCIS_ALLOWED_LOCAL_PATH_ROOTS", raising=False)
+
+    metadata = _lab_provider_policy_manifest_metadata(str(_outside_default_local_root("policy.json")))
+
+    assert metadata["present"] is False
+    assert metadata["metadata_checked"] is True
+    assert metadata["is_file"] is False
+    assert metadata["bound"] is False
+    assert metadata["contents_read"] is False
+    assert metadata["error"] == "path_outside_allowed_local_roots"

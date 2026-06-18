@@ -21,7 +21,7 @@ from ..lab.lab_runtime import (
     detect_docker,
     validate_run,
 )
-from ..ingest.source import safe_local_path_text
+from ..ingest.source import canonical_path, safe_local_path_text
 from ..shared.models import (
     CapabilityCandidate,
     LabApprovalConsumptionHandoff,
@@ -4877,26 +4877,24 @@ def _lab_provider_reference_metadata(provider_reference: str) -> dict[str, Any]:
             "executed": False,
             "warning": "service_or_name_reference_not_locally_verified_in_v0",
         }
+    resolved_text = path_text
     try:
         # Metadata-only provider reference readback for a governed sandbox-provider preflight.
-        # safe_local_path_text rejects control characters and oversized path text before Path construction.
-        # codeql[py/path-injection]
-        path = Path(path_text).expanduser()
-        resolved = path.resolve(strict=False)
+        resolved = canonical_path(path_text)
+        resolved_text = str(resolved)
         exists = resolved.exists()
         is_file = resolved.is_file() if exists else False
         is_dir = resolved.is_dir() if exists else False
         size_bytes = resolved.stat().st_size if exists and is_file else None
         error = ""
-    except OSError as exc:
-        resolved = Path(path_text)
+    except (OSError, ValueError) as exc:
         exists = False
         is_file = False
         is_dir = False
         size_bytes = None
         error = str(exc)
     metadata: dict[str, Any] = {
-        "reference": str(resolved),
+        "reference": resolved_text,
         "reference_kind": "path",
         "reference_present": exists,
         "metadata_checked": True,
@@ -4936,24 +4934,22 @@ def _lab_provider_policy_manifest_metadata(provider_policy_manifest: str) -> dic
             "contents_read": False,
             "error": str(exc),
         }
+    resolved_text = path_text
     try:
         # Metadata-only policy-manifest readback for a governed sandbox-provider preflight.
-        # safe_local_path_text rejects control characters and oversized path text before Path construction.
-        # codeql[py/path-injection]
-        path = Path(path_text).expanduser()
-        resolved = path.resolve(strict=False)
+        resolved = canonical_path(path_text)
+        resolved_text = str(resolved)
         exists = resolved.exists()
         is_file = resolved.is_file() if exists else False
         size_bytes = resolved.stat().st_size if exists and is_file else None
         error = ""
-    except OSError as exc:
-        resolved = Path(path_text)
+    except (OSError, ValueError) as exc:
         exists = False
         is_file = False
         size_bytes = None
         error = str(exc)
     metadata: dict[str, Any] = {
-        "path": str(resolved),
+        "path": resolved_text,
         "present": exists,
         "metadata_checked": True,
         "is_file": is_file,

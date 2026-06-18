@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -57,6 +58,7 @@ SENSITIVE_SUFFIXES = {".pem", ".key", ".p12", ".pfx", ".jks", ".kdbx"}
 MAX_DEFAULT_FILE_COUNT = 2_000
 MAX_DEFAULT_FILE_BYTES = 1_048_576
 MAX_LOCAL_PATH_TEXT_CHARS = 4_096
+LOCAL_PATH_ROOTS_ENV = "FRANCIS_ALLOWED_LOCAL_PATH_ROOTS"
 
 
 @dataclass(frozen=True)
@@ -77,9 +79,59 @@ class BoundedScan:
 
 def canonical_path(path: str | Path) -> Path:
     path_text = safe_local_path_text(path)
-    # Ingest roots are explicit local operator inputs; scan limits and sensitive-file guards run downstream.
+    candidate = _local_operator_path_from_text(path_text)
+    lexical = candidate if candidate.is_absolute() else Path.cwd() / candidate
+    _require_allowed_local_path(lexical)
+    # Resolve only after the lexical root gate; the resolved target is checked again for symlinks and "..".
     # codeql[py/path-injection]
-    return Path(path_text).expanduser().resolve()
+    # lgtm[py/path-injection]
+    resolved = candidate.resolve(strict=False)
+    _require_allowed_local_path(resolved)
+    return resolved
+
+
+def _local_operator_path_from_text(path_text: str) -> Path:
+    # Ingest roots are explicit local operator inputs validated before filesystem use.
+    # codeql[py/path-injection]
+    # lgtm[py/path-injection]
+    return Path(path_text).expanduser()
+
+
+def _allowed_local_path_roots() -> tuple[Path, ...]:
+    roots: list[Path] = [Path.cwd(), Path.home(), Path(tempfile.gettempdir())]
+    configured = os.getenv(LOCAL_PATH_ROOTS_ENV, "")
+    if configured:
+        roots.extend(Path(item.strip()) for item in configured.split(os.pathsep) if item.strip())
+
+    allowed: list[Path] = []
+    seen: set[str] = set()
+    for root in roots:
+        try:
+            path_text = safe_local_path_text(root)
+            resolved = Path(path_text).expanduser().resolve(strict=False)
+        except (OSError, RuntimeError, ValueError):
+            continue
+        key = os.path.normcase(str(resolved))
+        if key in seen:
+            continue
+        seen.add(key)
+        allowed.append(resolved)
+    return tuple(allowed)
+
+
+def _require_allowed_local_path(path: Path) -> None:
+    for root in _allowed_local_path_roots():
+        if _is_relative_to(path, root):
+            return
+    raise ValueError("path_outside_allowed_local_roots")
+
+
+def _is_relative_to(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return False
+    return True
 
 
 def display_path(path: str | Path) -> str:
