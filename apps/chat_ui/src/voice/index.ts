@@ -76,11 +76,31 @@ export function normalizeVoiceTranscript(value: string): string {
   return value.replace(/\s+/g, " ").trim();
 }
 
+function normalizeVoiceCommand(value: string): string {
+  return normalizeVoiceTranscript(value)
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function wakePhrasePattern(phrase: string): RegExp | null {
   const normalized = phrase.trim().toLowerCase();
   if (!normalized) return null;
   const escaped = normalized.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
   return new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, "i");
+}
+
+export function isFrancisStopPhrase(transcript: string, opts?: { wakePhrases?: string[] }): boolean {
+  const cleanTranscript = normalizeVoiceCommand(transcript);
+  if (!cleanTranscript) return false;
+  const wakePhrases = opts?.wakePhrases?.length ? opts.wakePhrases : ["francis", "frances", "hey francis", "okay francis", "ok francis"];
+  const stopPhrases = new Set(["francis stop", "frances stop"]);
+  for (const phrase of wakePhrases) {
+    const cleanPhrase = normalizeVoiceCommand(phrase);
+    if (cleanPhrase) stopPhrases.add(`${cleanPhrase} stop`);
+  }
+  return stopPhrases.has(cleanTranscript);
 }
 
 export function classifyVoiceTranscript(

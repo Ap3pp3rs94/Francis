@@ -8,6 +8,7 @@ import {
   buildVoiceIngressPayload,
   classifyVoiceSound,
   classifyVoiceTranscript,
+  isFrancisStopPhrase,
 } from "./index.ts";
 
 type FetchHandler = (url: string, init?: RequestInit) => Response | Promise<Response>;
@@ -60,6 +61,14 @@ test("classifyVoiceSound treats sound without speech as awareness only", () => {
   assert.equal(noise.kind, "noise");
   assert.equal(noise.awareness_state, "ambient_noise_observed");
   assert.equal(noise.forward_to_chat, false);
+});
+
+test("isFrancisStopPhrase recognizes only bounded Francis stop interrupts", () => {
+  assert.equal(isFrancisStopPhrase("Francis stop"), true);
+  assert.equal(isFrancisStopPhrase("hey Francis stop"), true);
+  assert.equal(isFrancisStopPhrase("Frances stop"), true);
+  assert.equal(isFrancisStopPhrase("stop"), false);
+  assert.equal(isFrancisStopPhrase("Francis please stop talking"), false);
 });
 
 test("buildVoiceIngressPayload marks browser voice origin without claiming ChatGPT app origin", () => {

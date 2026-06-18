@@ -55,11 +55,34 @@ def resolve_ollama_timeout_seconds() -> int:
     return max(5, min(timeout, 300))
 
 
+def _env_int(*names: str, default: int) -> int:
+    text = _env_text(*names, default=str(default))
+    try:
+        return int(text)
+    except Exception:
+        logger.warning("Ignoring invalid integer env value for %s: %r", ", ".join(names), text)
+        return default
+
+
+def resolve_ollama_options() -> dict[str, int]:
+    num_ctx = _env_int("FRANCIS_LLM_NUM_CTX", "OLLAMA_NUM_CTX", default=8192)
+    num_predict = _env_int("FRANCIS_LLM_NUM_PREDICT", "OLLAMA_NUM_PREDICT", default=512)
+    return {
+        "num_ctx": max(2048, min(num_ctx, 32768)),
+        "num_predict": max(128, min(num_predict, 4096)),
+    }
+
+
 def generate(prompt: str) -> str:
     base, model = resolve_ollama_config()
     timeout_seconds = resolve_ollama_timeout_seconds()
     url = f"{base}/api/generate"
-    payload: dict[str, Any] = {"model": model, "prompt": prompt, "stream": False}
+    payload: dict[str, Any] = {
+        "model": model,
+        "prompt": prompt,
+        "stream": False,
+        "options": resolve_ollama_options(),
+    }
     try:
         r = httpx.post(url, json=payload, timeout=timeout_seconds)
         r.raise_for_status()

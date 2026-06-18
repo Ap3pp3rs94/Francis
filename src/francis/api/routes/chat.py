@@ -25,6 +25,18 @@ manager = ConnectionManager()
 _CHAT_MISSION_ACTOR = "chat.send"
 _CHAT_WRITE_SCOPE = "chat.write"
 _MISSION_WRITE_SCOPE = "missions.write"
+_FRANCIS_VOICE_SURFACE_ACTORS = {
+    "chatgpt.voice": "chatgpt_voice_bridge",
+    "chat_ui.voice": "chat_ui_browser_voice",
+    "lens.overlay.voice": "lens_overlay_voice",
+}
+_FRANCIS_SURFACE_PROMPT_LINES = [
+    "francis.identity: You are Francis; voice, lens, and orb are three Francis surfaces, not separate assistants.",
+    "francis.orb_embodiment: The Orb is Francis's embodiment; when speaking through voice, speak as Francis embodied by the Orb.",
+    "francis.voice_boundary: ChatGPT Voice or browser speech is a transport for Francis voice, not a separate identity.",
+    "francis.persona_boundary: Do not identify as ChatGPT, an app voice, a connector, or a detached assistant unless asked about transport.",
+    "francis.authority_boundary: This identity context grants no execution, mutation, approval, promotion, or memory-write authority.",
+]
 
 
 @router.get("/health")
@@ -231,6 +243,103 @@ def _mission_write_permission(actor: object, *, route: str, method: str) -> ApiP
 def _chat_actor(payload: ChatIn) -> str:
     actor = (payload.request_actor or payload.api_actor or payload.actor or "").strip()
     return actor or "api.chat"
+
+
+def _chat_francis_surface_identity_context(
+    telemetry_context: dict[str, Any],
+    *,
+    actor: str,
+    voice_turn_id: str = "",
+    supersedes_voice_turn_id: str = "",
+) -> dict[str, Any]:
+    normalized_actor = actor.strip().lower()
+    bounded_voice_turn_id = _bounded_trace_identifier(voice_turn_id)
+    bounded_supersedes_voice_turn_id = _bounded_trace_identifier(supersedes_voice_turn_id)
+    surface_route = _FRANCIS_VOICE_SURFACE_ACTORS.get(normalized_actor, "")
+    applies = bool(surface_route or bounded_voice_turn_id or bounded_supersedes_voice_turn_id)
+    context = dict(telemetry_context)
+    if not applies:
+        context["francis_identity_context"] = {
+            "status": "not_applied",
+            "reason": "non_voice_orb_lens_chat_surface",
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+            "grants_memory_write_authority": False,
+        }
+        return context
+
+    if not surface_route:
+        surface_route = "voice_turn_payload"
+    identity_context = {
+        "status": "applied",
+        "identity": "Francis",
+        "identity_contract": "single_francis_identity",
+        "surface_count": 3,
+        "surfaces": ["voice", "lens", "orb"],
+        "voice_role": "speech_and_transcription_channel",
+        "lens_role": "desktop_overlay_view",
+        "orb_role": "embodiment",
+        "orb_is_embodiment": True,
+        "voice_lens_orb_are_separate_identities": False,
+        "voice_lens_orb_are_francis_surfaces": True,
+        "surface_route": surface_route,
+        "actor": actor,
+        "voice_turn_id": bounded_voice_turn_id,
+        "supersedes_voice_turn_id": bounded_supersedes_voice_turn_id,
+        "prompt_line_count": len(_FRANCIS_SURFACE_PROMPT_LINES),
+        "prompt_lines": list(_FRANCIS_SURFACE_PROMPT_LINES),
+        "visible_to_operator": True,
+        "hidden_prompting": False,
+        "writes_memory": False,
+        "calls_model": False,
+        "selects_tools": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "grants_memory_write_authority": False,
+        "governance": {
+            "read_only": True,
+            "identity_context_only": True,
+            "does_not_create_new_authority_path": True,
+            "does_not_claim_screen_control": True,
+            "does_not_claim_memory_write": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+            "grants_memory_write_authority": False,
+        },
+    }
+
+    existing_lines_value = context.get("prompt_lines")
+    existing_lines = existing_lines_value if isinstance(existing_lines_value, list) else []
+    prompt_lines: list[str] = []
+    for line in [*_FRANCIS_SURFACE_PROMPT_LINES, *existing_lines]:
+        clean_line = redact_secret_text(str(line).strip()).replace("\r", " ").replace("\n", " ").strip()
+        if clean_line and clean_line not in prompt_lines:
+            prompt_lines.append(clean_line)
+
+    context["francis_identity_context"] = identity_context
+    context["prompt_lines"] = prompt_lines
+    context["max_prompt_lines"] = min(len(prompt_lines), 12)
+    return context
+
+
+def _attach_francis_identity_trace(
+    execution_trace: dict[str, object],
+    telemetry_context: dict[str, Any],
+) -> None:
+    identity_context = _safe_dict(telemetry_context.get("francis_identity_context"))
+    if identity_context.get("status") != "applied":
+        return
+    execution_trace["francis_identity_context_applied"] = True
+    execution_trace["francis_identity"] = "Francis"
+    execution_trace["francis_surface_count"] = _safe_int(identity_context.get("surface_count"))
+    execution_trace["francis_surfaces"] = identity_context.get("surfaces", [])
+    execution_trace["orb_role"] = "embodiment"
+    execution_trace["orb_is_embodiment"] = True
+    execution_trace["voice_lens_orb_are_francis_surfaces"] = True
+    execution_trace["voice_lens_orb_are_separate_identities"] = False
+    execution_trace["francis_identity_context_grants_execution_authority"] = False
+    execution_trace["francis_identity_context_grants_mutation_authority"] = False
+    execution_trace["francis_identity_context_grants_memory_write_authority"] = False
 
 
 def _chat_write_permission(actor: object, *, route: str, method: str) -> ApiPermissionDecision:
@@ -739,12 +848,19 @@ def send(payload: ChatIn) -> dict[str, object]:
             )
         telemetry_context = _chat_feedback_memory_assistance_context(telemetry_context_snapshot(surface="chat"))
         telemetry_context = _chat_continuity_prompt_context(telemetry_context, payload.message)
+        telemetry_context = _chat_francis_surface_identity_context(
+            telemetry_context,
+            actor=actor,
+            voice_turn_id=payload.voice_turn_id or "",
+            supersedes_voice_turn_id=payload.supersedes_voice_turn_id or "",
+        )
         execution_trace = _chat_route_execution_trace(
             actor=actor,
             use_llm=payload.use_llm,
             voice_turn_id=payload.voice_turn_id or "",
             supersedes_voice_turn_id=payload.supersedes_voice_turn_id or "",
         )
+        _attach_francis_identity_trace(execution_trace, telemetry_context)
         return {
             "reply": handle(
                 payload.message,

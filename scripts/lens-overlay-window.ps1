@@ -1999,6 +1999,35 @@ function Test-OverlayVoiceRecentSpeechPlayback {
   }
 }
 
+function Get-OverlayOwnedSpeechGuardState {
+  param(
+    [string]$Root,
+    [int]$CooldownSeconds = 4
+  )
+
+  $SpeechPidPath = Get-OverlayVoiceSpeechPidPath -Root $Root
+  $SpeechProcessId = 0
+  if (Test-Path -LiteralPath $SpeechPidPath -PathType Leaf) {
+    try {
+      $SpeechProcessId = [int]((Get-Content -LiteralPath $SpeechPidPath -Raw -ErrorAction Stop).Trim())
+    } catch {
+      $SpeechProcessId = 0
+    }
+  }
+
+  $OwnedSpeechActive = Test-OverlayVoiceSpeechProcess -ProcessId $SpeechProcessId
+  $OwnedSpeechRecentlyCompleted = Test-OverlayVoiceRecentSpeechPlayback -Root $Root -CooldownSeconds $CooldownSeconds
+  return [ordered]@{
+    owned_speech_active = [bool]$OwnedSpeechActive
+    owned_speech_recently_completed = [bool]$OwnedSpeechRecentlyCompleted
+    owned_speech_guard_active = ([bool]$OwnedSpeechActive -or [bool]$OwnedSpeechRecentlyCompleted)
+    owned_speech_process_id = [int]$SpeechProcessId
+    self_trigger_guard_window_seconds = [int]$CooldownSeconds
+    microphone_gate_while_speaking = 'francis_stop_only'
+    conversation_forwarding_while_speaking = $false
+  }
+}
+
 function Stop-OverlayVoiceSpeechProcess {
   param(
     [string]$Root,
@@ -2621,10 +2650,136 @@ function Test-OverlayWakePhraseRecognized {
   return $false
 }
 
+function Test-OverlayStopPhraseRecognized {
+  param(
+    [string]$RecognizedText,
+    [string[]]$WakeAliases
+  )
+
+  $Text = (([string]$RecognizedText).Trim().ToLowerInvariant() -replace '[^\p{L}\p{Nd}\s]', ' ')
+  $Text = ($Text -replace '\s+', ' ').Trim()
+  if ([string]::IsNullOrWhiteSpace($Text)) {
+    return $false
+  }
+
+  $StopPhrases = New-Object System.Collections.Generic.List[string]
+  foreach ($Candidate in @('francis stop', 'frances stop')) {
+    if (-not $StopPhrases.Contains($Candidate)) {
+      [void]$StopPhrases.Add($Candidate)
+    }
+  }
+  foreach ($Alias in $WakeAliases) {
+    $CleanAlias = (([string]$Alias).Trim().ToLowerInvariant() -replace '[^\p{L}\p{Nd}\s]', ' ')
+    $CleanAlias = ($CleanAlias -replace '\s+', ' ').Trim()
+    if (-not [string]::IsNullOrWhiteSpace($CleanAlias)) {
+      $Candidate = '{0} stop' -f $CleanAlias
+      if (-not $StopPhrases.Contains($Candidate)) {
+        [void]$StopPhrases.Add($Candidate)
+      }
+    }
+  }
+
+  return $StopPhrases.Contains($Text)
+}
+
+function Invoke-OverlayVoiceStopPhrase {
+  param(
+    [string]$Root,
+    [string]$RecognizedText,
+    [string]$Provider,
+    [string]$Voice,
+    [string]$WakePhraseText = $WakePhrase,
+    [double]$RecognitionConfidence = 0.0,
+    [double]$RecognitionThreshold = $WakeConfidenceThreshold,
+    [int]$WakeAliasCount = 0,
+    [int]$WakeCount = 0,
+    [object]$SpeechGuard = $null
+  )
+
+  if ($null -eq $SpeechGuard) {
+    $SpeechGuard = Get-OverlayOwnedSpeechGuardState -Root $Root -CooldownSeconds 4
+  }
+  $PriorSpeech = Stop-OverlayVoiceSpeechProcess -Root $Root -Reason 'francis_stop_phrase_interrupted_owned_speech'
+  $Previous = Read-OverlayVoiceTurnState -Root $Root
+  $PreviousTurnId = if ($null -ne $Previous) { Get-StringProperty -Payload $Previous -Name 'active_turn_id' -Default '' } else { '' }
+  $PreviousStatus = if ($null -ne $Previous) { Get-StringProperty -Payload $Previous -Name 'status' -Default '' } else { '' }
+  $InterruptedActiveTurn = (-not [string]::IsNullOrWhiteSpace($PreviousTurnId) -and $PreviousStatus -in @('active', 'chat_pending', 'speaking'))
+
+  if ($InterruptedActiveTurn) {
+    $PreviousPayload = [ordered]@{}
+    foreach ($Property in $Previous.PSObject.Properties) {
+      $PreviousPayload[$Property.Name] = $Property.Value
+    }
+    $PreviousPayload.status = 'interrupted_by_francis_stop_phrase'
+    $PreviousPayload.interrupted_at = [DateTimeOffset]::UtcNow.ToString('o')
+    $PreviousPayload.interrupt_phrase = 'francis_stop'
+    $PreviousPayload.speech_cancelled_at_interruption = [bool]$PriorSpeech.stopped
+    $PreviousPayload.speech_cancelled_process_id = [int]$PriorSpeech.process_id
+    $PreviousPayload.context_scrubbed = $true
+    $PreviousPayload.context_scrub_scope = 'interrupted_voice_turn_reply_context'
+    $PreviousPayload.context_expansion_allowed_on_next_turn = $true
+    $PreviousPayload.thought_relevance_status = 'interrupted_by_operator_stop_phrase'
+    $PreviousPayload.thought_retention_policy = 'scrub_interrupted_reply_context_unless_operator_reopens'
+    $PreviousPayload.chat_reply_suppressed = $true
+    $PreviousPayload.speech_output_suppressed = $true
+    $PreviousPayload.latest_voice_turn_wins = $true
+    $PreviousPayload.stale_reply_suppression_supported = $true
+    $PreviousPayload.model_call_abort_requested = $false
+    $PreviousPayload.model_call_abort_observed = $false
+    $PreviousPayload.model_call_cancellation_supported = $false
+    $PreviousPayload.thought_cancellation_supported = $false
+    $PreviousPayload.arbitrary_audio_control = $false
+    $PreviousPayload.next_smallest_truthful_gap = 'lens_voice_model_call_abort_and_thought_relevance'
+    Write-OverlayVoiceTurnFile -Path (Get-OverlayVoiceTurnStatusPath -Root $Root) -Payload $PreviousPayload
+    Write-OverlayVoiceTurnReceipt -Root $Root -TurnId $PreviousTurnId -Payload $PreviousPayload
+  }
+
+  $SelectedSpeechVoice = if ($Provider -eq 'ElevenLabs') { 'elevenlabs' } else { $Voice }
+  $Payload = New-OverlayVoiceProjection -SelectedVoiceName $SelectedSpeechVoice -Provider $Provider -WakeListening $true -WakePhraseText $WakePhraseText
+  $Payload.status = 'francis_stop_listening_restored'
+  $Payload.ok = $true
+  $Payload.message = 'Francis stop was recognized while speech was gated; owned speech was interrupted and listening returned without forwarding a new chat turn.'
+  $Payload.stop_phrase_detected = $true
+  $Payload.interrupt_phrase = 'francis_stop'
+  $Payload.interrupted_active_voice_turn = [bool]$InterruptedActiveTurn
+  $Payload.interrupted_turn_id = $PreviousTurnId
+  $Payload.interrupted_previous_status = $PreviousStatus
+  $Payload.owned_speech_active = Get-BoolProperty -Payload $SpeechGuard -Name 'owned_speech_active' -Default $false
+  $Payload.owned_speech_recently_completed = Get-BoolProperty -Payload $SpeechGuard -Name 'owned_speech_recently_completed' -Default $false
+  $Payload.speech_cancelled = [bool]$PriorSpeech.stopped
+  $Payload.speech_cancelled_process_id = [int]$PriorSpeech.process_id
+  $Payload.context_scrubbed = [bool]$InterruptedActiveTurn
+  $Payload.context_scrub_scope = if ($InterruptedActiveTurn) { 'interrupted_voice_turn_reply_context' } else { 'none_active' }
+  $Payload.context_expansion_allowed_on_next_turn = $true
+  $Payload.chat_bridge_status = 'not_called'
+  $Payload.chat_route_writes_conversation_ledger = $false
+  $Payload.conversation_forwarding_suppressed = $true
+  $Payload.speech_output_suppressed = $true
+  $Payload.wake_phrase_detected = $true
+  $Payload.wake_count = $WakeCount
+  $Payload.recognition_confidence = [Math]::Round($RecognitionConfidence, 3)
+  $Payload.recognition_threshold = $RecognitionThreshold
+  $Payload.wake_alias_count = $WakeAliasCount
+  $Payload.transcript_length = ([string]$RecognizedText).Length
+  $Payload.transcript_hash = Get-OverlayTextDigest -Text $RecognizedText
+  $Payload.transcript_redacted = $true
+  $Payload.stores_transcript = $false
+  $Payload.microphone_gate_while_speaking = 'francis_stop_only'
+  $Payload.conversation_forwarding_while_speaking = $false
+  $Payload.barge_in_scope = 'cancel_owned_speech_process_on_francis_stop_only'
+  $Payload.model_call_abort_requested = $false
+  $Payload.model_call_abort_observed = $false
+  $Payload.model_call_cancellation_supported = $false
+  $Payload.thought_cancellation_supported = $false
+  $Payload.arbitrary_audio_control = $false
+  Write-OverlayVoiceState -Root $Root -Payload $Payload
+  return $Payload
+}
+
 function Limit-OverlayVoiceReplyText {
   param(
     [string]$Text,
-    [int]$MaxLength = 240
+    [int]$MaxLength = 900
   )
 
   $Bounded = ([string]$Text).Trim()
@@ -2633,6 +2788,16 @@ function Limit-OverlayVoiceReplyText {
   }
   if ($MaxLength -le 3) {
     return $Bounded.Substring(0, $MaxLength)
+  }
+  $Candidate = $Bounded.Substring(0, $MaxLength).TrimEnd()
+  $MinimumUsefulBoundary = [Math]::Min(160, [Math]::Floor($MaxLength * 0.45))
+  $SentenceBoundary = $Candidate.LastIndexOfAny([char[]]@('.', '!', '?'))
+  if ($SentenceBoundary -ge $MinimumUsefulBoundary) {
+    return $Candidate.Substring(0, $SentenceBoundary + 1).TrimEnd()
+  }
+  $WordBoundary = $Candidate.LastIndexOf(' ')
+  if ($WordBoundary -ge $MinimumUsefulBoundary) {
+    return ($Candidate.Substring(0, $WordBoundary).TrimEnd() + '...')
   }
   return ($Bounded.Substring(0, $MaxLength - 3).TrimEnd() + '...')
 }
@@ -2959,7 +3124,7 @@ function Invoke-OverlayVoiceChatTurn {
     $SuccessStatus = 'voice_chat_unavailable'
     $SuccessMessage = if ($SyntheticTranscript) { 'Explicit synthetic voice turn was received, but /chat/send did not return a usable reply.' } elseif ($ContinuousVoiceChat) { 'Continuous voice turn was recognized, but /chat/send did not return a usable reply.' } else { 'Wake-prefixed utterance was heard, but /chat/send did not return a usable reply.' }
   }
-  $SpokenText = Limit-OverlayVoiceReplyText -Text $SpokenText -MaxLength 240
+  $SpokenText = Limit-OverlayVoiceReplyText -Text $SpokenText -MaxLength 900
 
   if (-not (Test-OverlayVoiceTurnCurrent -Root $Root -TurnId $VoiceTurnId)) {
     $CurrentVoiceTurn = Read-OverlayVoiceTurnState -Root $Root
@@ -3081,6 +3246,9 @@ function Invoke-OverlayVoiceChatTurn {
   $SpeechPayload.model_call_response_observed = $ChatModelResponseObserved
   $SpeechPayload.speech_script_provider = if ($Provider -eq 'ElevenLabs') { 'elevenlabs_text_to_speech' } else { 'windows_sapi_speech_synthesis' }
   $SpeechPayload.speech_script_length = $SpokenText.Length
+  $SpeechPayload.speech_script_max_length = 900
+  $SpeechPayload.speech_script_sentence_aware_limit = $true
+  $SpeechPayload.speech_script_truncated = ($ChatReply.Length -gt $SpokenText.Length)
   $SpeechPayload.speech_script_redacted = $true
   $SpeechPayload.speech_script_transport = Get-StringProperty -Payload $SpeechProcess -Name 'speech_script_transport' -Default 'transient_local_file'
   $SpeechPayload.speech_script_command_line_redacted = Get-BoolProperty -Payload $SpeechProcess -Name 'speech_script_command_line_redacted' -Default $true
@@ -3096,11 +3264,14 @@ function Invoke-OverlayVoiceChatTurn {
   $SpeechPayload.interrupted_prior_speech_pid = [int]$SpeechProcess.interrupted_prior_speech_pid
   $SpeechPayload.prior_speech_cancelled_at_turn_start = Get-BoolProperty -Payload $VoiceTurn -Name 'prior_speech_stopped' -Default $false
   $SpeechPayload.prior_speech_pid_at_turn_start = Get-IntegerProperty -Payload $VoiceTurn -Name 'prior_speech_pid' -Default 0
-  $SpeechPayload.wake_listener_released_before_speech_completion = [bool]$SpeechProcess.ok
-  $SpeechPayload.simultaneous_listen_while_speaking_supported = [bool]$SpeechProcess.ok
+  $SpeechPayload.wake_listener_released_before_speech_completion = $false
+  $SpeechPayload.simultaneous_listen_while_speaking_supported = $false
+  $SpeechPayload.stop_phrase_listen_while_speaking_supported = [bool]$SpeechProcess.ok
+  $SpeechPayload.microphone_gate_while_speaking = 'francis_stop_only'
+  $SpeechPayload.conversation_forwarding_while_speaking = $false
   $SpeechPayload.simultaneous_work_while_speaking_supported = $false
   $SpeechPayload.barge_in_supported = [bool]$SpeechProcess.ok
-  $SpeechPayload.barge_in_scope = 'cancel_owned_speech_process_on_next_wake_prefixed_utterance'
+  $SpeechPayload.barge_in_scope = 'cancel_owned_speech_process_on_francis_stop_only'
   $SpeechPayload.latest_voice_turn_wins = $true
   $SpeechPayload.stale_reply_suppression_supported = $true
   $SpeechPayload.chat_reply_suppressed = $false
@@ -3156,13 +3327,13 @@ function Invoke-OverlayVoiceSpeech {
     Write-OverlayVoiceState -Root $Root -Payload $Payload -StatusPath $StatusPath
     return $Payload
   }
-  if ($BoundedText.Length -gt 240) {
+  if ($BoundedText.Length -gt 900) {
     $Payload = New-OverlayVoiceProjection -SelectedVoiceName $Voice -Provider $Provider -WakeListening $WakeListening -WakePhraseText $WakePhraseText
     $Payload.status = 'refused'
     $Payload.ok = $false
     $Payload.error = 'voice_text_too_long'
     $Payload.text_length = $BoundedText.Length
-    $Payload.max_text_length = 240
+    $Payload.max_text_length = 900
     $Payload.message = 'Voice output refused text longer than the bounded speech limit.'
     Write-OverlayVoiceState -Root $Root -Payload $Payload -StatusPath $StatusPath
     return $Payload
@@ -3410,44 +3581,45 @@ function Start-OverlayWakeListener {
         $RecognizedText = [string]$EventArgs.Result.Text
         $UtteranceText = Get-OverlayWakePrefixedUtterance -RecognizedText $RecognizedText -WakeAliases $script:LensOverlayWakeAliases
         $WakePhraseOnly = Test-OverlayWakePhraseRecognized -RecognizedText $RecognizedText -WakeAliases $script:LensOverlayWakeAliases
+        $StopPhraseRecognized = Test-OverlayStopPhraseRecognized -RecognizedText $RecognizedText -WakeAliases $script:LensOverlayWakeAliases
+        $SpeechGuard = Get-OverlayOwnedSpeechGuardState -Root $script:LensOverlayWakeRoot -CooldownSeconds 4
+        $OwnedSpeechActive = Get-BoolProperty -Payload $SpeechGuard -Name 'owned_speech_active' -Default $false
+        $OwnedSpeechRecentlyCompleted = Get-BoolProperty -Payload $SpeechGuard -Name 'owned_speech_recently_completed' -Default $false
+        if ($StopPhraseRecognized) {
+          $script:LensOverlayWakeCount += 1
+          [void](Invoke-OverlayVoiceStopPhrase -Root $script:LensOverlayWakeRoot -RecognizedText $RecognizedText -Provider $script:LensOverlayWakeVoiceProvider -Voice $script:LensOverlayWakeVoice -WakePhraseText $script:LensOverlayWakePhrase -RecognitionConfidence ([double]$EventArgs.Result.Confidence) -RecognitionThreshold $script:LensOverlayWakeConfidenceThreshold -WakeAliasCount $script:LensOverlayWakeAliasCount -WakeCount $script:LensOverlayWakeCount -SpeechGuard $SpeechGuard)
+          return
+        }
+        if ($OwnedSpeechActive -or $OwnedSpeechRecentlyCompleted) {
+          $Suppressed = New-OverlayVoiceProjection -SelectedVoiceName 'wake-listener' -Provider $script:LensOverlayWakeVoiceProvider -WakeListening $true -WakePhraseText $script:LensOverlayWakePhrase
+          $Suppressed.status = 'voice_input_suppressed_while_speaking'
+          $Suppressed.ok = $true
+          $Suppressed.wake_phrase_detected = (-not [string]::IsNullOrWhiteSpace($UtteranceText) -or $WakePhraseOnly)
+          $Suppressed.stop_phrase_detected = $false
+          $Suppressed.continuous_voice_chat = [bool]$script:LensOverlayContinuousVoiceChat
+          $Suppressed.continuous_voice_chat_blocker = if ($OwnedSpeechActive) { 'owned_speech_process_active' } else { 'owned_speech_recently_completed' }
+          $Suppressed.owned_speech_recently_completed = [bool]$OwnedSpeechRecentlyCompleted
+          $Suppressed.self_trigger_guard_window_seconds = 4
+          $Suppressed.recognition_confidence = [Math]::Round([double]$EventArgs.Result.Confidence, 3)
+          $Suppressed.recognition_threshold = $script:LensOverlayWakeConfidenceThreshold
+          $Suppressed.transcript_length = $RecognizedText.Length
+          $Suppressed.transcript_hash = Get-OverlayTextDigest -Text $RecognizedText
+          $Suppressed.transcript_source = if ([string]::IsNullOrWhiteSpace($UtteranceText)) { 'microphone_continuous_dictation' } else { 'microphone_wake_listener' }
+          $Suppressed.voice_recognition = 'system_speech_suppressed_during_owned_speech'
+          $Suppressed.transcript_redacted = $true
+          $Suppressed.stores_transcript = $false
+          $Suppressed.speech_output_suppressed = $true
+          $Suppressed.conversation_forwarding_suppressed = $true
+          $Suppressed.microphone_gate_while_speaking = 'francis_stop_only'
+          $Suppressed.conversation_forwarding_while_speaking = $false
+          $Suppressed.required_interrupt_phrase = 'francis_stop'
+          $Suppressed.barge_in_scope = 'cancel_owned_speech_process_on_francis_stop_only'
+          $Suppressed.message = if ($OwnedSpeechActive) { 'Francis owned speech is active; microphone input is gated to the Francis stop phrase and this transcript was not forwarded.' } else { 'Francis owned speech just completed; microphone input remains briefly gated to avoid self-trigger loops and this transcript was not forwarded.' }
+          Write-OverlayVoiceState -Root $script:LensOverlayWakeRoot -Payload $Suppressed
+          return
+        }
         if ([string]::IsNullOrWhiteSpace($UtteranceText) -and -not $WakePhraseOnly) {
           if ([bool]$script:LensOverlayContinuousVoiceChat) {
-            $OwnedSpeechActive = $false
-            $OwnedSpeechRecentlyCompleted = $false
-            try {
-              $SpeechPidPath = Get-OverlayVoiceSpeechPidPath -Root $script:LensOverlayWakeRoot
-              $SpeechProcessId = 0
-              if (Test-Path -LiteralPath $SpeechPidPath -PathType Leaf) {
-                $SpeechProcessId = [int]((Get-Content -LiteralPath $SpeechPidPath -Raw -ErrorAction Stop).Trim())
-              }
-              $OwnedSpeechActive = Test-OverlayVoiceSpeechProcess -ProcessId $SpeechProcessId
-              $OwnedSpeechRecentlyCompleted = Test-OverlayVoiceRecentSpeechPlayback -Root $script:LensOverlayWakeRoot -CooldownSeconds 4
-            } catch {
-              $OwnedSpeechActive = $false
-              $OwnedSpeechRecentlyCompleted = $false
-            }
-            if ($OwnedSpeechActive -or $OwnedSpeechRecentlyCompleted) {
-              $Suppressed = New-OverlayVoiceProjection -SelectedVoiceName 'wake-listener' -Provider $script:LensOverlayWakeVoiceProvider -WakeListening $true -WakePhraseText $script:LensOverlayWakePhrase
-              $Suppressed.status = 'continuous_voice_suppressed_while_speaking'
-              $Suppressed.ok = $true
-              $Suppressed.wake_phrase_detected = $false
-              $Suppressed.continuous_voice_chat = $true
-              $Suppressed.continuous_voice_chat_blocker = if ($OwnedSpeechActive) { 'owned_speech_process_active' } else { 'owned_speech_recently_completed' }
-              $Suppressed.owned_speech_recently_completed = [bool]$OwnedSpeechRecentlyCompleted
-              $Suppressed.self_trigger_guard_window_seconds = 4
-              $Suppressed.recognition_confidence = [Math]::Round([double]$EventArgs.Result.Confidence, 3)
-              $Suppressed.recognition_threshold = $script:LensOverlayWakeConfidenceThreshold
-              $Suppressed.transcript_length = $RecognizedText.Length
-              $Suppressed.transcript_hash = Get-OverlayTextDigest -Text $RecognizedText
-              $Suppressed.transcript_source = 'microphone_continuous_dictation'
-              $Suppressed.voice_recognition = 'system_speech_continuous_dictation'
-              $Suppressed.transcript_redacted = $true
-              $Suppressed.stores_transcript = $false
-              $Suppressed.speech_output_suppressed = $true
-              $Suppressed.message = if ($OwnedSpeechActive) { 'Continuous voice chat recognized speech while Francis owned speech was active; no response was emitted to avoid self-trigger loops.' } else { 'Continuous voice chat recognized speech immediately after Francis owned speech completed; no response was emitted to avoid self-trigger loops.' }
-              Write-OverlayVoiceState -Root $script:LensOverlayWakeRoot -Payload $Suppressed
-              return
-            }
             $script:LensOverlayWakeCount += 1
             [void](Invoke-OverlayVoiceChatTurn -Root $script:LensOverlayWakeRoot -UtteranceText $RecognizedText -Provider $script:LensOverlayWakeVoiceProvider -Voice $script:LensOverlayWakeVoice -Rate $script:LensOverlayWakeRate -Volume $script:LensOverlayWakeVolume -RemoteVoiceId $script:LensOverlayWakeRemoteVoiceId -RemoteModelId $script:LensOverlayWakeRemoteModelId -RemoteOutputFormat $script:LensOverlayWakeRemoteOutputFormat -RemoteStability $script:LensOverlayWakeRemoteStability -RemoteSimilarityBoost $script:LensOverlayWakeRemoteSimilarityBoost -RemoteStyle $script:LensOverlayWakeRemoteStyle -RemoteSpeed $script:LensOverlayWakeRemoteSpeed -RemoteUseSpeakerBoost $script:LensOverlayWakeRemoteUseSpeakerBoost -WakePhraseText $script:LensOverlayWakePhrase -RecognitionConfidence ([double]$EventArgs.Result.Confidence) -RecognitionThreshold $script:LensOverlayWakeConfidenceThreshold -WakeAliasCount $script:LensOverlayWakeAliasCount -WakeCount $script:LensOverlayWakeCount -WakePhraseDetected $false)
             return
@@ -3493,7 +3665,9 @@ function Start-OverlayWakeListener {
     $Payload.wake_alias_count = $WakeAliases.Count
     $Payload.continuous_voice_chat = [bool]$ContinuousVoiceChat
     $Payload.continuous_voice_chat_mode = if ($ContinuousVoiceChat) { 'enabled_no_wake_phrase_required' } else { 'disabled_wake_phrase_required' }
-    $Payload.continuous_voice_chat_self_trigger_guard = 'suppress_no_wake_turns_while_owned_speech_process_active'
+    $Payload.continuous_voice_chat_self_trigger_guard = 'suppress_all_except_francis_stop_while_owned_speech_process_active'
+    $Payload.microphone_gate_while_speaking = 'francis_stop_only'
+    $Payload.conversation_forwarding_while_speaking = $false
     $Payload.transcript_redacted = $true
     $Payload.message = if ($ContinuousVoiceChat) { 'Explicit wake-phrase listening and continuous voice chat are active for Francis Lens.' } else { 'Explicit wake-phrase listening is active for Francis Lens.' }
     Write-OverlayVoiceState -Root $Root -Payload $Payload
@@ -3920,7 +4094,9 @@ if ($Mode -eq 'Run') {
     $script:LensOverlayRuntimeVoice.voice_llm_request_source = if ($EnableVoiceLlm) { 'EnableVoiceLlm' } else { 'FRANCIS_LENS_VOICE_USE_LLM' }
     $script:LensOverlayRuntimeVoice.continuous_voice_chat = [bool]$EnableContinuousVoiceChat
     $script:LensOverlayRuntimeVoice.continuous_voice_chat_mode = if ($EnableContinuousVoiceChat) { 'enabled_no_wake_phrase_required' } else { 'disabled_wake_phrase_required' }
-    $script:LensOverlayRuntimeVoice.continuous_voice_chat_self_trigger_guard = 'suppress_no_wake_turns_while_owned_speech_process_active'
+    $script:LensOverlayRuntimeVoice.continuous_voice_chat_self_trigger_guard = 'suppress_all_except_francis_stop_while_owned_speech_process_active'
+    $script:LensOverlayRuntimeVoice.microphone_gate_while_speaking = 'francis_stop_only'
+    $script:LensOverlayRuntimeVoice.conversation_forwarding_while_speaking = $false
     $Form.Add_Loaded({
         if ($script:LensOverlayEnableWakeListen -and $null -eq $script:LensOverlayWakeRecognizer) {
           $script:LensOverlayWakeRecognizer = Start-OverlayWakeListener -Root $script:LensOverlayDataRoot -Phrase $script:LensOverlayRequestedWakePhrase -Response $script:LensOverlayRequestedWakeResponse -Provider $script:LensOverlayRequestedVoiceProvider -Voice $script:LensOverlayRequestedVoiceName -Rate $script:LensOverlayRequestedVoiceRate -Volume $script:LensOverlayRequestedVoiceVolume -RemoteVoiceId $script:LensOverlayRequestedElevenLabsVoiceId -RemoteModelId $script:LensOverlayRequestedElevenLabsModelId -RemoteOutputFormat $script:LensOverlayRequestedElevenLabsOutputFormat -RemoteStability $script:LensOverlayRequestedElevenLabsStability -RemoteSimilarityBoost $script:LensOverlayRequestedElevenLabsSimilarityBoost -RemoteStyle $script:LensOverlayRequestedElevenLabsStyle -RemoteSpeed $script:LensOverlayRequestedElevenLabsSpeed -RemoteUseSpeakerBoost $script:LensOverlayRequestedElevenLabsUseSpeakerBoost -ConfidenceThreshold $script:LensOverlayRequestedWakeConfidenceThreshold -ContinuousVoiceChat $script:LensOverlayRequestedContinuousVoiceChat
@@ -3933,7 +4109,9 @@ if ($Mode -eq 'Run') {
           $script:LensOverlayRuntimeVoice.voice_llm_request_source = if ($script:LensOverlayVoiceUseLlmRequested) { 'EnableVoiceLlm' } else { 'FRANCIS_LENS_VOICE_USE_LLM' }
           $script:LensOverlayRuntimeVoice.continuous_voice_chat = [bool]$script:LensOverlayRequestedContinuousVoiceChat
           $script:LensOverlayRuntimeVoice.continuous_voice_chat_mode = if ($script:LensOverlayRequestedContinuousVoiceChat) { 'enabled_no_wake_phrase_required' } else { 'disabled_wake_phrase_required' }
-          $script:LensOverlayRuntimeVoice.continuous_voice_chat_self_trigger_guard = 'suppress_no_wake_turns_while_owned_speech_process_active'
+          $script:LensOverlayRuntimeVoice.continuous_voice_chat_self_trigger_guard = 'suppress_all_except_francis_stop_while_owned_speech_process_active'
+          $script:LensOverlayRuntimeVoice.microphone_gate_while_speaking = 'francis_stop_only'
+          $script:LensOverlayRuntimeVoice.conversation_forwarding_while_speaking = $false
         }
         Update-OverlayMcpBodyStateLabel -Label $script:LensOverlayLabel -Config $script:LensOverlayConfig -Root $script:LensOverlayDataRoot
       })

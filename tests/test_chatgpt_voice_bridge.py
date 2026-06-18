@@ -35,6 +35,12 @@ def test_chatgpt_voice_contract_is_permission_gated(monkeypatch, tmp_path: Path)
     assert body["receipt_contract"]["mcp_gateway_transport"] == "mcp_gateway_tool"
     assert body["receipt_contract"]["mcp_gateway_tool"] == "francis.chatgpt_voice.ingress"
     assert body["receipt_contract"]["mcp_server_tool"] == "francis_chatgpt_voice_ingress"
+    assert body["orb_voice_contract"]["francis_identity"] == "Francis"
+    assert body["orb_voice_contract"]["francis_surfaces"] == ["voice", "lens", "orb"]
+    assert body["orb_voice_contract"]["orb_role"] == "embodiment"
+    assert body["orb_voice_contract"]["orb_is_embodiment"] is True
+    assert body["orb_voice_contract"]["voice_lens_orb_are_separate_identities"] is False
+    assert body["orb_voice_contract"]["voice_lens_orb_are_francis_surfaces"] is True
     assert body["orb_voice_contract"]["mcp_transcript_updates_voice_turn_readback"] is True
     assert body["orb_voice_contract"]["voice_turn_state_path"] == "data/runtime/lens-overlay/voice-turn-status.json"
     assert body["orb_voice_contract"]["virtual_voice_turn"] is True
@@ -92,16 +98,25 @@ def test_chatgpt_voice_ingress_records_without_chat_forward(monkeypatch, tmp_pat
     orb_voice = body["orb_voice_bridge"]
     assert orb_voice["status"] == "chatgpt_voice_transcript_recorded"
     assert orb_voice["virtual_voice_turn"] is True
+    assert orb_voice["francis_identity"] == "Francis"
+    assert orb_voice["francis_surfaces"] == ["voice", "lens", "orb"]
+    assert orb_voice["orb_role"] == "embodiment"
+    assert orb_voice["orb_is_embodiment"] is True
+    assert orb_voice["voice_lens_orb_are_separate_identities"] is False
+    assert orb_voice["voice_lens_orb_are_francis_surfaces"] is True
     assert orb_voice["mcp_ingress"] is False
     assert orb_voice["transcript_source"] == "chatgpt_voice_http_transcript"
     assert orb_voice["microphone_recognition_claimed"] is False
     assert orb_voice["raw_audio"] is False
     assert body["receipt"]["orb_voice_bridge"]["status"] == "chatgpt_voice_transcript_recorded"
+    assert body["receipt"]["orb_voice_bridge"]["francis_identity"] == "Francis"
     voice_state = data_root / "runtime" / "lens-overlay" / "voice-turn-status.json"
     assert voice_state.exists()
     state = json.loads(voice_state.read_text(encoding="utf-8"))
     assert state["turn_id"] == "voice-turn-1"
     assert state["virtual_voice_turn"] is True
+    assert state["francis_identity"] == "Francis"
+    assert state["orb_is_embodiment"] is True
     assert state["transcript_source"] == "chatgpt_voice_http_transcript"
     assert state["local_overlay_speech_started"] is False
     assert body["governance"]["writes_receipt"] is True
@@ -335,6 +350,22 @@ def test_chatgpt_voice_forward_uses_continuity_context_for_llm(
     assert continuity["grants_mutation_authority"] is False
     assert captured_prompts
     assert "continuity.ledger.relevant[user]: Remember my orb codename is Solstice." in captured_prompts[0]
+    assert "francis.identity: You are Francis; voice, lens, and orb are three Francis surfaces" in captured_prompts[0]
+    assert "francis.orb_embodiment: The Orb is Francis's embodiment" in captured_prompts[0]
+    identity = chat_response["telemetry_context"]["francis_identity_context"]
+    assert identity["status"] == "applied"
+    assert identity["identity"] == "Francis"
+    assert identity["surfaces"] == ["voice", "lens", "orb"]
+    assert identity["surface_route"] == "chatgpt_voice_bridge"
+    assert identity["orb_role"] == "embodiment"
+    assert identity["voice_lens_orb_are_separate_identities"] is False
+    assert identity["voice_lens_orb_are_francis_surfaces"] is True
+    assert identity["grants_execution_authority"] is False
+    assert identity["grants_mutation_authority"] is False
+    trace = chat_response["execution_trace"]
+    assert trace["francis_identity_context_applied"] is True
+    assert trace["francis_identity"] == "Francis"
+    assert trace["orb_is_embodiment"] is True
     assert "voice-turn-memory-2" in body["receipt"]["turn_id"]
 
 

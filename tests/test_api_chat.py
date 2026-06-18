@@ -654,6 +654,79 @@ def test_chat_send_projects_visible_redacted_telemetry_context(monkeypatch, tmp_
     assert "[REDACTED:secret]" in combined
 
 
+def test_chat_send_applies_francis_orb_identity_context_to_voice_llm_prompt(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({"lens.overlay.voice": ["chat.write"]}),
+    )
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.chat import router as chat_router
+
+    captured_prompts: list[str] = []
+
+    def fake_generate(prompt: str) -> str:
+        captured_prompts.append(prompt)
+        return "I am Francis speaking through the Orb."
+
+    monkeypatch.setattr(chat_router, "generate", fake_generate)
+
+    client = TestClient(create_app())
+    sent = client.post(
+        "/chat/send",
+        json={
+            "message": "Francis, who are you?",
+            "use_llm": True,
+            "actor": "lens.overlay.voice",
+            "voice_turn_id": "voice_turn_identity_01",
+        },
+    )
+    assert sent.status_code == 200
+    body = sent.json()
+
+    assert body["reply"] == "I am Francis speaking through the Orb."
+    assert captured_prompts
+    prompt = captured_prompts[0]
+    assert "francis.identity: You are Francis; voice, lens, and orb are three Francis surfaces" in prompt
+    assert "francis.orb_embodiment: The Orb is Francis's embodiment" in prompt
+    assert "francis.voice_boundary: ChatGPT Voice or browser speech is a transport for Francis voice" in prompt
+    assert "francis.authority_boundary: This identity context grants no execution" in prompt
+
+    identity = body["telemetry_context"]["francis_identity_context"]
+    assert identity["status"] == "applied"
+    assert identity["identity"] == "Francis"
+    assert identity["surfaces"] == ["voice", "lens", "orb"]
+    assert identity["orb_role"] == "embodiment"
+    assert identity["orb_is_embodiment"] is True
+    assert identity["voice_lens_orb_are_separate_identities"] is False
+    assert identity["voice_lens_orb_are_francis_surfaces"] is True
+    assert identity["surface_route"] == "lens_overlay_voice"
+    assert identity["voice_turn_id"] == "voice_turn_identity_01"
+    assert identity["hidden_prompting"] is False
+    assert identity["governance"]["does_not_create_new_authority_path"] is True
+    assert identity["grants_execution_authority"] is False
+    assert identity["grants_mutation_authority"] is False
+    assert identity["grants_memory_write_authority"] is False
+
+    trace = body["execution_trace"]
+    assert trace["francis_identity_context_applied"] is True
+    assert trace["francis_identity"] == "Francis"
+    assert trace["francis_surfaces"] == ["voice", "lens", "orb"]
+    assert trace["orb_is_embodiment"] is True
+    assert trace["voice_lens_orb_are_francis_surfaces"] is True
+    assert trace["voice_lens_orb_are_separate_identities"] is False
+    assert trace["francis_identity_context_grants_execution_authority"] is False
+    assert trace["francis_identity_context_grants_mutation_authority"] is False
+    assert trace["francis_identity_context_grants_memory_write_authority"] is False
+
+
 def test_chat_send_applies_feedback_memory_assistance_context_to_llm_prompt(
     monkeypatch,
     tmp_path: Path,

@@ -18,9 +18,13 @@ def test_generate_prefers_francis_ollama_env(monkeypatch) -> None:
     monkeypatch.setenv("FRANCIS_OLLAMA_BASE_URL", "http://127.0.0.1:11434/")
     monkeypatch.setenv("FRANCIS_LLM_CHAT_MODEL", "francis-chat")
     monkeypatch.setenv("FRANCIS_LLM_REQUEST_TIMEOUT_S", "90")
+    monkeypatch.delenv("FRANCIS_LLM_NUM_CTX", raising=False)
+    monkeypatch.delenv("FRANCIS_LLM_NUM_PREDICT", raising=False)
     monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
     monkeypatch.delenv("OLLAMA_DEFAULT_MODEL", raising=False)
     monkeypatch.delenv("LLM_REQUEST_TIMEOUT_S", raising=False)
+    monkeypatch.delenv("OLLAMA_NUM_CTX", raising=False)
+    monkeypatch.delenv("OLLAMA_NUM_PREDICT", raising=False)
 
     captured: dict[str, object] = {}
 
@@ -39,6 +43,10 @@ def test_generate_prefers_francis_ollama_env(monkeypatch) -> None:
         "model": "francis-chat",
         "prompt": "say only ok",
         "stream": False,
+        "options": {
+            "num_ctx": 8192,
+            "num_predict": 512,
+        },
     }
 
 
@@ -66,6 +74,30 @@ def test_resolve_ollama_timeout_seconds_falls_back_to_legacy_env(monkeypatch) ->
     monkeypatch.setenv("LLM_REQUEST_TIMEOUT_S", "75")
 
     assert client.resolve_ollama_timeout_seconds() == 75
+
+
+def test_resolve_ollama_options_uses_bounded_francis_env(monkeypatch) -> None:
+    monkeypatch.setenv("FRANCIS_LLM_NUM_CTX", "999999")
+    monkeypatch.setenv("FRANCIS_LLM_NUM_PREDICT", "8")
+    monkeypatch.delenv("OLLAMA_NUM_CTX", raising=False)
+    monkeypatch.delenv("OLLAMA_NUM_PREDICT", raising=False)
+
+    assert client.resolve_ollama_options() == {
+        "num_ctx": 32768,
+        "num_predict": 128,
+    }
+
+
+def test_resolve_ollama_options_falls_back_to_legacy_env(monkeypatch) -> None:
+    monkeypatch.delenv("FRANCIS_LLM_NUM_CTX", raising=False)
+    monkeypatch.delenv("FRANCIS_LLM_NUM_PREDICT", raising=False)
+    monkeypatch.setenv("OLLAMA_NUM_CTX", "4096")
+    monkeypatch.setenv("OLLAMA_NUM_PREDICT", "768")
+
+    assert client.resolve_ollama_options() == {
+        "num_ctx": 4096,
+        "num_predict": 768,
+    }
 
 
 def test_resolve_ollama_config_uses_settings_defaults(monkeypatch) -> None:

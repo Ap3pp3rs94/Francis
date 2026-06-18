@@ -653,10 +653,13 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "Get-ProcessAlive -ProcessId $ProcessId" in script
     assert "Get-Command -Name Get-CimInstance -ErrorAction SilentlyContinue" in script
     assert "function Stop-OverlayVoiceSpeechProcess" in script
+    assert "function Get-OverlayOwnedSpeechGuardState" in script
     assert "function Start-OverlayVoiceSpeechProcess" in script
     assert "function New-OverlayWakeAliasList" in script
     assert "function Get-OverlayWakePrefixedUtterance" in script
     assert "function Test-OverlayWakePhraseRecognized" in script
+    assert "function Test-OverlayStopPhraseRecognized" in script
+    assert "function Invoke-OverlayVoiceStopPhrase" in script
     assert "function Get-OverlayTextDigest" in script
     assert "function Get-OverlayVoiceTurnStatusPath" in script
     assert "function Get-OverlayVoiceTurnReceiptPath" in script
@@ -702,20 +705,31 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
         in script
     )
     assert (
-        "continuous_voice_chat_self_trigger_guard = 'suppress_no_wake_turns_while_owned_speech_process_active'"
+        "continuous_voice_chat_self_trigger_guard = 'suppress_all_except_francis_stop_while_owned_speech_process_active'"
         in script
     )
-    assert "continuous_voice_suppressed_while_speaking" in script
+    assert "voice_input_suppressed_while_speaking" in script
+    assert "francis_stop_listening_restored" in script
+    assert "interrupted_by_francis_stop_phrase" in script
+    assert "context_scrub_scope = 'interrupted_voice_turn_reply_context'" in script
+    assert "conversation_forwarding_suppressed = $true" in script
+    assert "required_interrupt_phrase = 'francis_stop'" in script
+    assert "Stop-OverlayVoiceSpeechProcess -Root $Root -Reason 'francis_stop_phrase_interrupted_owned_speech'" in script
     assert "owned_speech_recently_completed" in script
     assert "self_trigger_guard_window_seconds = 4" in script
-    assert "Test-OverlayVoiceRecentSpeechPlayback -Root $script:LensOverlayWakeRoot -CooldownSeconds 4" in script
+    assert "Get-OverlayOwnedSpeechGuardState -Root $script:LensOverlayWakeRoot -CooldownSeconds 4" in script
     assert "Test-OverlayVoiceSpeechProcess -ProcessId $SpeechProcessId" in script
     assert "-ContinuousVoiceChat $script:LensOverlayRequestedContinuousVoiceChat" in script
     assert "$ArgumentList += '-EnableContinuousVoiceChat'" in script
     assert "I received the test text, but the local chat bridge is not available right now." in script
     assert "-SyntheticTranscript $true" in script
     assert "chat_reply_redacted = $true" in script
+    assert "Limit-OverlayVoiceReplyText -Text $SpokenText -MaxLength 900" in script
+    assert "$SentenceBoundary = $Candidate.LastIndexOfAny([char[]]@('.', '!', '?'))" in script
     assert "speech_script_redacted = $true" in script
+    assert "speech_script_max_length = 900" in script
+    assert "speech_script_sentence_aware_limit = $true" in script
+    assert "speech_script_truncated = ($ChatReply.Length -gt $SpokenText.Length)" in script
     assert "speech_script_transport = 'transient_local_file'" in script
     assert "speech_script_command_line_redacted = $true" in script
     assert "speech_script_retention = 'transient_deleted_after_playback'" in script
@@ -779,11 +793,14 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "speech_playback_async = [bool]$SpeechProcess.ok" in script
     assert "speech_playback_blocking = $false" in script
     assert "speech_process_pid = [int]$SpeechProcess.process_id" in script
-    assert "wake_listener_released_before_speech_completion = [bool]$SpeechProcess.ok" in script
-    assert "simultaneous_listen_while_speaking_supported = [bool]$SpeechProcess.ok" in script
+    assert "wake_listener_released_before_speech_completion = $false" in script
+    assert "simultaneous_listen_while_speaking_supported = $false" in script
+    assert "stop_phrase_listen_while_speaking_supported = [bool]$SpeechProcess.ok" in script
+    assert "microphone_gate_while_speaking = 'francis_stop_only'" in script
+    assert "conversation_forwarding_while_speaking = $false" in script
     assert "simultaneous_work_while_speaking_supported = $false" in script
     assert "barge_in_supported = [bool]$SpeechProcess.ok" in script
-    assert "barge_in_scope = 'cancel_owned_speech_process_on_next_wake_prefixed_utterance'" in script
+    assert "barge_in_scope = 'cancel_owned_speech_process_on_francis_stop_only'" in script
     assert "latest_voice_turn_wins = $true" in script
     assert "stale_reply_suppression_supported = $true" in script
     assert "chat_reply_suppressed = $false" in script

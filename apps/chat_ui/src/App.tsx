@@ -16,6 +16,7 @@ import {
   classifyVoiceSound,
   classifyVoiceTranscript,
   createVoiceTurnId,
+  isFrancisStopPhrase,
   normalizeVoiceTranscript,
 } from "./voice";
 
@@ -390,6 +391,7 @@ function VoiceTranscriptionPanel(props: { baseUrl: string }) {
   const shouldListenRef = useRef(false);
   const soundHadSpeechRef = useRef(false);
   const soundHadTranscriptRef = useRef(false);
+  const speakingRef = useRef(false);
   const [listening, setListening] = useState(false);
   const [busy, setBusy] = useState(false);
   const [speaking, setSpeaking] = useState(false);
@@ -413,9 +415,16 @@ function VoiceTranscriptionPanel(props: { baseUrl: string }) {
 
   const speakReply = useCallback(
     (text: string) => {
+      speakingRef.current = true;
       setSpeaking(true);
-      const started = speakBrowserText(text, () => setSpeaking(false));
-      if (!started) setSpeaking(false);
+      const started = speakBrowserText(text, () => {
+        speakingRef.current = false;
+        setSpeaking(false);
+      });
+      if (!started) {
+        speakingRef.current = false;
+        setSpeaking(false);
+      }
     },
     [],
   );
@@ -425,6 +434,37 @@ function VoiceTranscriptionPanel(props: { baseUrl: string }) {
       const transcript = normalizeVoiceTranscript(rawTranscript);
       if (!transcript) return;
       soundHadTranscriptRef.current = true;
+      if (speakingRef.current) {
+        const turnId = createVoiceTurnId("chat_ui_voice_guard");
+        setInterimTranscript("");
+        appendLog({
+          id: turnId,
+          role: "operator",
+          text: transcript,
+          tone: isFrancisStopPhrase(transcript) ? "wake" : "passive",
+        });
+        if (isFrancisStopPhrase(transcript)) {
+          if (typeof window !== "undefined" && "speechSynthesis" in window) {
+            window.speechSynthesis.cancel();
+          }
+          speakingRef.current = false;
+          setSpeaking(false);
+          setAwareness("francis_stop_listening_restored");
+          appendLog({
+            role: "system",
+            text: "Francis stop heard. Speech cancelled and the interrupted reply context was scrubbed.",
+            tone: "wake",
+          });
+          return;
+        }
+        setAwareness("voice_input_suppressed_while_speaking");
+        appendLog({
+          role: "system",
+          text: "Transcript held while Francis was speaking. Say Francis stop to interrupt.",
+          tone: "noise",
+        });
+        return;
+      }
       const classification = classifyVoiceTranscript(transcript);
       const turnId = createVoiceTurnId("chat_ui_voice");
       setInterimTranscript("");
@@ -569,6 +609,7 @@ function VoiceTranscriptionPanel(props: { baseUrl: string }) {
       if (typeof window !== "undefined" && "speechSynthesis" in window) {
         window.speechSynthesis.cancel();
       }
+      speakingRef.current = false;
     };
   }, []);
 
