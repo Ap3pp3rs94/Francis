@@ -110,3 +110,29 @@ def test_chatgpt_voice_mcp_status_json_rejects_non_https_connector_url() -> None
     assert connector["usable_for_chatgpt"] is False
     assert connector["reason"] == "connector_url_must_be_https"
     assert "connector_url_must_be_https" in payload["blockers"]
+
+
+@pytest.mark.skipif(platform.system() != "Windows", reason="Get-NetTCPConnection is Windows-specific")
+def test_chatgpt_voice_mcp_verify_connector_skips_invalid_url_shape() -> None:
+    port = _unused_local_port()
+
+    proc = _run_mcp_script(
+        "-StatusOnly",
+        "-Json",
+        "-VerifyConnector",
+        "-Port",
+        str(port),
+        "-ConnectorUrl",
+        "http://127.0.0.1:8787/mcp",
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    connector = payload["chatgpt_connector"]
+    assert connector["connector_url"]["shape_valid"] is False
+    assert connector["connector_url"]["reachability_verified"] is False
+    assert connector["connector_url"]["usable_for_chatgpt"] is False
+    assert connector["probe"] is None
+    assert connector["ready"] is False
+    assert payload["governance"]["read_only"] is True
+    assert payload["governance"]["writes_data"] is False

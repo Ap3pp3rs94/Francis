@@ -11,6 +11,7 @@ param(
   [string[]]$AllowedHost = @(),
   [string[]]$AllowedOrigin = @(),
   [switch]$Json,
+  [switch]$VerifyConnector,
   [switch]$StatusOnly
 )
 
@@ -101,6 +102,55 @@ function Test-ConnectorUrl {
   return $Result
 }
 
+function Invoke-ConnectorProbe {
+  param([string]$Url)
+
+  $Result = [ordered]@{
+    kind = 'francis.mcp_gateway.connector_probe'
+    ok = $false
+    status = 'not_run'
+    connector_url = $Url
+    expected_tool = 'francis_chatgpt_voice_ingress'
+    reachability_verified = $false
+    tool_list_observed = $false
+    tool_count = 0
+    expected_tool_present = $false
+    error = ''
+    governance = [ordered]@{
+      read_only = $true
+      writes_repo = $false
+      writes_data = $false
+      writes_receipts = $false
+      calls_francis_tools = $false
+      calls_model = $false
+      grants_execution_authority = $false
+      grants_mutation_authority = $false
+    }
+  }
+
+  $PrevPythonPath = $env:PYTHONPATH
+  try {
+    if ($PrevPythonPath) {
+      $env:PYTHONPATH = "$srcPath;$PrevPythonPath"
+    } else {
+      $env:PYTHONPATH = $srcPath
+    }
+    $Raw = & $python -m francis.mcp_gateway.connector_probe --connector-url $Url --expected-tool 'francis_chatgpt_voice_ingress' 2>&1
+    $ExitCode = $LASTEXITCODE
+    try {
+      $Parsed = $Raw | ConvertFrom-Json -ErrorAction Stop
+    } catch {
+      $Result.status = 'connector_probe_parse_failed'
+      $Result.error = (ConvertTo-BoundedText -Value ($Raw -join "`n") -MaxLength 512)
+      return $Result
+    }
+    $Parsed | Add-Member -NotePropertyName process_exit_code -NotePropertyValue $ExitCode -Force
+    return $Parsed
+  } finally {
+    $env:PYTHONPATH = $PrevPythonPath
+  }
+}
+
 function New-StatusPayload {
   param(
     [string]$Endpoint,
@@ -117,14 +167,25 @@ function New-StatusPayload {
   $Connector = Test-ConnectorUrl -Value $ConnectorUrlValue -ExpectedPath $Path
   $LocalReady = $null -ne $Listener
   $ReadyToAttemptLink = [bool]$LocalReady -and [bool]$Connector.shape_valid
+  $Probe = $null
+  if ([bool]$VerifyConnector -and [bool]$ReadyToAttemptLink) {
+    $Probe = Invoke-ConnectorProbe -Url ([string]$Connector.url)
+    $Connector.reachability_verified = [bool]$Probe.reachability_verified
+    $Connector.usable_for_chatgpt = [bool]$Probe.ok
+    $Connector.reason = if ([bool]$Probe.ok) { 'ready' } else { [string]$Probe.status }
+  }
   $Blockers = New-Object System.Collections.Generic.List[string]
   if (-not [bool]$LocalReady) { [void]$Blockers.Add('local_mcp_listener_missing') }
   if (-not [bool]$Connector.shape_valid) { [void]$Blockers.Add([string]$Connector.reason) }
+  if ([bool]$VerifyConnector -and [bool]$Connector.shape_valid -and -not [bool]$Connector.usable_for_chatgpt) {
+    [void]$Blockers.Add([string]$Connector.reason)
+  }
+  $ConnectorReady = [bool]$LocalReady -and [bool]$Connector.usable_for_chatgpt
 
   return [ordered]@{
     kind = 'francis.chatgpt_voice.mcp.status'
     ok = [bool]$LocalReady
-    status = if ($ReadyToAttemptLink) { 'local_ready_connector_url_shape_valid' } elseif ($LocalReady) { 'local_ready_connector_url_needed' } else { 'local_listener_missing' }
+    status = if ($ConnectorReady) { 'ready_for_chatgpt_connector' } elseif ($ReadyToAttemptLink) { 'local_ready_connector_url_shape_valid' } elseif ($LocalReady) { 'local_ready_connector_url_needed' } else { 'local_listener_missing' }
     local_endpoint = $Endpoint
     mcp_path = $Path
     local_listener = [ordered]@{
@@ -138,12 +199,13 @@ function New-StatusPayload {
       requires_https = $true
       requires_mcp_path = $Path
       connector_url = $Connector
-      ready = $false
+      ready = [bool]$ConnectorReady
       ready_to_attempt_link = [bool]$ReadyToAttemptLink
-      reachability_verified = $false
+      reachability_verified = [bool]$Connector.reachability_verified
+      probe = $Probe
       native_localhost_access_claimed = $false
       opens_tunnel = $false
-      next_operator_step = if ($ReadyToAttemptLink) { 'link_or_refresh_chatgpt_connector_with_this_https_mcp_url_then_confirm_chatgpt_tool_list' } elseif ($LocalReady) { 'provide_https_mcp_connector_url_or_explicitly_authorize_tunnel' } else { 'start_local_chatgpt_voice_mcp_endpoint' }
+      next_operator_step = if ($ConnectorReady) { 'link_or_refresh_chatgpt_connector_then_select_it_in_chatgpt_chat' } elseif ($ReadyToAttemptLink) { 'link_or_refresh_chatgpt_connector_with_this_https_mcp_url_then_confirm_chatgpt_tool_list' } elseif ($LocalReady) { 'provide_https_mcp_connector_url_or_explicitly_authorize_tunnel' } else { 'start_local_chatgpt_voice_mcp_endpoint' }
     }
     blockers = [string[]]$Blockers.ToArray()
     governance = [ordered]@{
