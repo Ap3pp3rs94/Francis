@@ -944,6 +944,10 @@ def _overlay_execution_status(
     return "overlay_window_start_failed"
 
 
+def _should_retry_overlay_start(runner: dict[str, Any], *, mode: str) -> bool:
+    return mode == "start" and _safe_str(runner.get("status")).strip() == "start_timeout"
+
+
 def _first_missing_gap(post_plan: dict[str, Any], *, fallback: str) -> str:
     handoff = _as_dict(post_plan.get("first_missing_requirement_handoff"))
     gap = _safe_str(handoff.get("next_smallest_truthful_gap")).strip()
@@ -1182,6 +1186,14 @@ def execute_lens_overlay_window(
         }
 
     runner = _run_lens_overlay_window_action(mode=safe_mode, run_seconds=safe_run_seconds)
+    runner_attempts = [runner]
+    retry_count = 0
+    if _should_retry_overlay_start(runner, mode=safe_mode):
+        stop_after_timeout = _run_lens_overlay_window_action(mode="stop", run_seconds=0)
+        runner_attempts.append(stop_after_timeout)
+        runner = _run_lens_overlay_window_action(mode=safe_mode, run_seconds=safe_run_seconds)
+        runner_attempts.append(runner)
+        retry_count = 1
     runner_ok = bool(runner.get("ok"))
     runner_payload = _as_dict(runner.get("runner"))
     post_manifest = lens_host_launch_manifest()
@@ -1218,6 +1230,8 @@ def execute_lens_overlay_window(
         "authorities": authorities,
         "permission": permission,
         "runner": runner,
+        "runner_attempts": runner_attempts,
+        "runner_retry_count": retry_count,
         "runner_payload": runner_payload,
         "overlay_runtime_readback": overlay_runtime,
         "post_persistent_supervision_plan": post_plan,

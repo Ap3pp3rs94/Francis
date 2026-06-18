@@ -164,6 +164,20 @@ function Get-PythonPath {
   return ''
 }
 
+function Resolve-PowerShellHost {
+  $WindowsPowerShell = Get-Command powershell -ErrorAction SilentlyContinue
+  if ($null -ne $WindowsPowerShell) {
+    return [string]$WindowsPowerShell.Source
+  }
+
+  $PowerShellCore = Get-Command pwsh -ErrorAction SilentlyContinue
+  if ($null -ne $PowerShellCore) {
+    return [string]$PowerShellCore.Source
+  }
+
+  return ''
+}
+
 function Invoke-JsonScript {
   param(
     [string]$ScriptPath,
@@ -180,7 +194,18 @@ function Invoke-JsonScript {
     }
   }
 
-  $Output = & powershell -NoProfile -ExecutionPolicy Bypass -File $ScriptPath @ScriptArgs 2>&1
+  $PowerShellHost = Resolve-PowerShellHost
+  if ([string]::IsNullOrWhiteSpace($PowerShellHost)) {
+    return [ordered]@{
+      ok = $false
+      exit_code = 1
+      payload = $null
+      output = ''
+      error = 'powershell_host_missing'
+    }
+  }
+
+  $Output = & $PowerShellHost -NoProfile -ExecutionPolicy Bypass -File $ScriptPath @ScriptArgs 2>&1
   $ExitCode = $LASTEXITCODE
   $Text = ($Output | ForEach-Object { [string]$_ }) -join "`n"
   $Payload = $null

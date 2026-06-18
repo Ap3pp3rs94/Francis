@@ -104,6 +104,16 @@ def test_orb_voice_overlay_lens_validation_reports_missing_chatgpt_source_receip
     assert payload["governance"]["live_desktop_action"] is False
 
 
+def test_orb_voice_overlay_lens_validation_resolves_cross_platform_powershell_host() -> None:
+    script = (_repo_root() / "scripts" / "orb-voice-overlay-lens-validation.ps1").read_text(encoding="utf-8")
+
+    assert "function Resolve-PowerShellHost" in script
+    assert "Get-Command powershell -ErrorAction SilentlyContinue" in script
+    assert "Get-Command pwsh -ErrorAction SilentlyContinue" in script
+    assert "$Output = & $PowerShellHost -NoProfile -ExecutionPolicy Bypass -File $ScriptPath @ScriptArgs 2>&1" in script
+    assert "$Output = & powershell -NoProfile -ExecutionPolicy Bypass -File $ScriptPath @ScriptArgs 2>&1" not in script
+
+
 def test_orb_voice_overlay_lens_validation_requires_mcp_tool_provenance_for_source_receipt(
     tmp_path: Path,
 ) -> None:

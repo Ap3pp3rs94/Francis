@@ -11419,8 +11419,11 @@ def test_lens_overlay_execute_starts_and_stops_governed_overlay_lease(
     _write_lens_tray_runtime_state(data_root, pid=pid)
     _write_lens_hotkey_runtime_state(data_root, pid=pid)
 
+    overlay_action_calls: list[str] = []
+
     def fake_overlay_action(*, mode: str, run_seconds: int) -> dict[str, Any]:
-        assert run_seconds == 1
+        overlay_action_calls.append(mode)
+        assert run_seconds == (0 if mode == "stop" and overlay_action_calls == ["start", "stop"] else 1)
         runtime_root = data_root / "runtime" / "lens-overlay"
         runtime_root.mkdir(parents=True, exist_ok=True)
         if mode == "stop":
@@ -11449,6 +11452,21 @@ def test_lens_overlay_execute_starts_and_stops_governed_overlay_lease(
                 "runner": {
                     "ok": True,
                     "status": "stopped",
+                    "ready": False,
+                    "overlay_window": False,
+                },
+                "blockers": ["overlay_window_runtime_missing"],
+            }
+        if overlay_action_calls == ["start"]:
+            return {
+                "ok": False,
+                "status": "start_timeout",
+                "returncode": 1,
+                "script_mode": "Start",
+                "script": "scripts/lens-overlay-window.ps1",
+                "runner": {
+                    "ok": False,
+                    "status": "start_timeout",
                     "ready": False,
                     "overlay_window": False,
                 },
@@ -11535,6 +11553,12 @@ def test_lens_overlay_execute_starts_and_stops_governed_overlay_lease(
     assert started_body["status"] == "overlay_window_started"
     assert started_body["executed"] is True
     assert started_body["mode"] == "start"
+    assert started_body["runner_retry_count"] == 1
+    assert [attempt["status"] for attempt in started_body["runner_attempts"]] == [
+        "start_timeout",
+        "stopped",
+        "started",
+    ]
     assert started_body["overlay_window"] is True
     assert started_body["overlay_runtime_ready"] is True
     assert started_body["overlay_window_visible"] is True
@@ -11597,6 +11621,7 @@ def test_lens_overlay_execute_starts_and_stops_governed_overlay_lease(
     assert stopped_body["status"] == "overlay_window_stopped"
     assert stopped_body["mode"] == "stop"
     assert stopped_body["executed"] is True
+    assert stopped_body["runner_retry_count"] == 0
     assert stopped_body["overlay_window"] is False
     assert stopped_body["overlay_runtime_ready"] is False
     assert stopped_body["governance"]["execution_authority"] is True
