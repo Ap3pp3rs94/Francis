@@ -136,9 +136,9 @@ script for Orb/voice/overlay-lens continuity. The current live proof result is
 `proof_partial_current_connector_url_missing`: the overlay is visible, Lens MCP
 body-state is ready, the overlay voice path is waiting for microphone signal,
 the local ChatGPT voice MCP listener is ready, ChatGPT-source bridge receipts
-exist, and Orb substrate readback is healthy. The proof also reports that no
-current public HTTPS connector URL is recorded and the persisted Mona Lisa
-sandbox artifact predates the latest structured-observation receipt contract.
+exist, Orb substrate readback is healthy, and the latest Mona Lisa sandbox
+replay passes the structured-observation receipt contract. The proof still
+reports that no current public HTTPS connector URL is recorded.
 
 Acceptance criteria for the completed observation sub-slice:
 
@@ -263,9 +263,6 @@ Acceptance criteria for the completed multi-run review scoring sub-slice:
 
 - Record or replace the current ChatGPT voice HTTPS MCP ingress so the proof can
   verify the connector URL instead of reporting `connector_url_not_provided`.
-- Produce a fresh governed Mona Lisa sandbox replay artifact that carries the
-  latest structured-observation receipt contract into persisted repo-local
-  runtime evidence; do not use live desktop painting for this step.
 - Confirm live overlay microphone signal when the operator is present; the
   current safe readback remains `waiting_for_audio_signal`.
 
@@ -637,6 +634,36 @@ Validated for the read-only Orb/voice/overlay-lens validation proof sub-slice:
   `no_voice_direct_to_orb_animation`, no proposal approval, no promotion, and no
   Stage 6 closure claim.
 
+Validated for the fresh structured Mona Lisa sandbox replay refresh:
+
+- A governed TestClient runtime refresh used actor scopes
+  `chat.send=["missions.write"]` and `api.operations=["operations.run"]`,
+  routed `hey Francis paint the Mona Lisa in sandbox` through `/chat/send`, then
+  ran only the queued sandbox operation through `/operations/{operation_id}/run`.
+- The refresh created mission `msn_20260618_071446_b8b5e47b`, plan operation
+  `tsk_20260618_071446_b3010a3d`, sandbox operation
+  `tsk_20260618_071446_02e79510`, and artifact directory
+  `data/sandbox_canvas/mona_lisa/run_1781766886_c71910f3`.
+- The sandbox run returned `status=succeeded`,
+  `output_status=sandbox_completed`, `structured_receipt_count=1`,
+  `live_desktop_execution=false`, and `desktop_control=false`.
+- `GET /operations/sandbox-canvas/mona-lisa/evaluation` for the sandbox
+  operation returned `ok=true`, `status=evaluated`, `passed=true`,
+  `structured_observation_receipt_present=true`,
+  `structured_observation_evidence_references_manifest=true`,
+  `structured_observation_unknowns_live_desktop_pixels=true`,
+  `no_live_desktop_actions=true`, recognizability score `1.0`, offline fixture
+  pass, `pixel_evidence=false`, and `visual_similarity_claim=false`.
+- A live status-only proof run of
+  `scripts\orb-voice-overlay-lens-validation.ps1` then returned
+  `status=proof_partial_current_connector_url_missing`,
+  `next_smallest_truthful_gap=record_current_https_mcp_connector_url_or_replace_tunnel_with_persistent_ingress`,
+  `overlay.status=visible`, `overlay.mcp_body_live_status=ready`,
+  `overlay.voice_input_status=waiting_for_audio_signal`,
+  `chatgpt_voice_connector.local_endpoint_status=local_ready_connector_url_needed`,
+  `orb.status=orb_status`, `mona_lisa_sandbox.passed=true`, and
+  `mona_lisa_sandbox.artifact_dir=data/sandbox_canvas/mona_lisa/run_1781766886_c71910f3`.
+
 ## Blockers
 
 - The lens/overlay observation contract is metadata-only; it does not yet provide
@@ -655,10 +682,6 @@ Validated for the read-only Orb/voice/overlay-lens validation proof sub-slice:
 - The current ChatGPT voice connector control state does not record a usable
   public HTTPS MCP URL; local MCP is listening, but current ChatGPT app
   reachability is not proven by the status proof.
-- The persisted Mona Lisa sandbox artifact currently under
-  `data/sandbox_canvas/mona_lisa/` predates the latest structured-observation
-  receipt contract; it evaluates read-only and remains recognizable by the
-  offline fixture, but it does not pass the latest structured receipt checks.
 - True backend model-call cancellation is not currently supported; stale reply
   suppression is the bounded behavior.
 
