@@ -1,9 +1,23 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Literal, cast
+
+from francis.chatgpt_voice_bridge import (
+    CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TOOL,
+    CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TRANSPORT,
+    CHATGPT_VOICE_BRIDGE_MCP_SERVER_TOOL,
+)
 
 from .tools import run_tool
+
+McpTransport = Literal["stdio", "sse", "streamable-http"]
+
+
+def _normalize_transport(transport: str) -> McpTransport:
+    if transport not in {"stdio", "sse", "streamable-http"}:
+        raise ValueError(f"unsupported MCP transport: {transport}")
+    return cast(McpTransport, transport)
 
 
 def _tool_payload(result: dict[str, Any]) -> str:
@@ -54,8 +68,7 @@ def run_server(
             "`mcp.server.fastmcp.FastMCP`, then run this module again."
         ) from exc
 
-    if transport not in {"stdio", "sse", "streamable-http"}:
-        raise ValueError(f"unsupported MCP transport: {transport}")
+    mcp_transport = _normalize_transport(transport)
 
     transport_security = None
     extra_hosts = _clean_values(allowed_hosts)
@@ -93,7 +106,7 @@ def run_server(
         host=host,
         port=port,
         streamable_http_path=streamable_http_path,
-        stateless_http=transport == "streamable-http",
+        stateless_http=mcp_transport == "streamable-http",
         transport_security=transport_security,
     )
 
@@ -308,6 +321,9 @@ def run_server(
                     "locale": locale,
                     "forward_to_chat": forward_to_chat,
                     "use_llm": use_llm,
+                    "ingress_transport": CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TRANSPORT,
+                    "mcp_gateway_tool": CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TOOL,
+                    "mcp_server_tool": CHATGPT_VOICE_BRIDGE_MCP_SERVER_TOOL,
                 },
             )
         )
@@ -324,7 +340,7 @@ def run_server(
     def francis_chatgpt_voice_receipts(actor: str = "chatgpt.voice", limit: int = 10) -> str:
         return _tool_payload(run_tool("francis.chatgpt_voice.receipts", {"actor": actor, "limit": limit}))
 
-    server.run(transport=transport)
+    server.run(transport=mcp_transport)
 
 
 def run_stdio_server() -> None:

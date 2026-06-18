@@ -611,7 +611,11 @@ def _chatgpt_voice_contract(args: dict[str, Any]) -> ToolResult:
 
 
 def _chatgpt_voice_ingress(args: dict[str, Any]) -> ToolResult:
-    from francis.chatgpt_voice_bridge import record_chatgpt_voice_ingress
+    from francis.chatgpt_voice_bridge import (
+        CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TOOL,
+        CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TRANSPORT,
+        record_chatgpt_voice_ingress,
+    )
 
     result = record_chatgpt_voice_ingress(
         actor=_clean_text(args.get("actor")),
@@ -622,6 +626,9 @@ def _chatgpt_voice_ingress(args: dict[str, Any]) -> ToolResult:
         locale=_clean_text(args.get("locale")),
         forward_to_chat=bool(args.get("forward_to_chat", True)),
         use_llm=bool(args.get("use_llm", False)),
+        ingress_transport=_clean_text(args.get("ingress_transport"), CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TRANSPORT),
+        mcp_gateway_tool=_clean_text(args.get("mcp_gateway_tool"), CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TOOL),
+        mcp_server_tool=_clean_text(args.get("mcp_server_tool")),
     )
     return ToolResult(
         ok=bool(result.get("ok")),

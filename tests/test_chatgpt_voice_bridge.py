@@ -30,6 +30,11 @@ def test_chatgpt_voice_contract_is_permission_gated(monkeypatch, tmp_path: Path)
     assert body["kind"] == "francis.chatgpt_voice.bridge.contract"
     assert body["routes"]["ingress"] == "/chatgpt-voice/ingress"
     assert body["mcp_tools"]["ingress"] == "francis.chatgpt_voice.ingress"
+    assert body["mcp_tools"]["server_ingress"] == "francis_chatgpt_voice_ingress"
+    assert body["receipt_contract"]["direct_http_transport"] == "http_api"
+    assert body["receipt_contract"]["mcp_gateway_transport"] == "mcp_gateway_tool"
+    assert body["receipt_contract"]["mcp_gateway_tool"] == "francis.chatgpt_voice.ingress"
+    assert body["receipt_contract"]["mcp_server_tool"] == "francis_chatgpt_voice_ingress"
     assert body["input_contract"]["audio_stream_accepted"] is False
     assert body["chatgpt_app_boundary"]["native_phone_localhost_access_claimed"] is False
     assert body["governance"]["read_only"] is True
@@ -62,6 +67,9 @@ def test_chatgpt_voice_ingress_records_without_chat_forward(monkeypatch, tmp_pat
     assert body["chat_forward"]["requested"] is False
     assert body["receipt"]["transcript"] == "Francis can you hear me"
     assert body["receipt"]["turn_id"] == "voice-turn-1"
+    assert body["receipt"]["ingress_transport"] == "http_api"
+    assert body["receipt"]["mcp_gateway_tool"] == ""
+    assert body["receipt"]["mcp_server_tool"] == ""
     assert body["receipt"]["reply_source"] == "bridge.recorded_only"
     assert isinstance(body["receipt"]["created_ts"], float)
     assert body["receipt"]["created_at"].endswith("Z")
@@ -222,6 +230,9 @@ def test_chatgpt_voice_mcp_tools_expose_bounded_bridge(monkeypatch, tmp_path: Pa
     assert ingress["status"] == "recorded"
     assert ingress["governance"]["raw_shell"] is False
     assert ingress["governance"]["raw_audio"] is False
+    assert ingress["data"]["receipt"]["ingress_transport"] == "mcp_gateway_tool"
+    assert ingress["data"]["receipt"]["mcp_gateway_tool"] == "francis.chatgpt_voice.ingress"
+    assert ingress["data"]["receipt"]["mcp_server_tool"] == ""
 
     receipts = run_tool("francis.chatgpt_voice.receipts", {"actor": _ACTOR, "limit": 5})
     assert receipts["ok"] is True

@@ -152,6 +152,12 @@ proportions.
   human-readable UTC `created_at` fields derived from the same timestamp. This
   improves receipt auditability without changing transcript forwarding,
   authority, or freshness rules.
+- ChatGPT voice bridge receipts now include bounded ingress provenance fields:
+  `ingress_transport`, `mcp_gateway_tool`, and `mcp_server_tool`. The MCP
+  gateway stamps internal tool-origin receipts, the public MCP server stamps the
+  exported `francis_chatgpt_voice_ingress` tool name, and the validation proof
+  requires fresh usable public-MCP-tool provenance instead of trusting
+  `source=chatgpt.voice` alone.
 
 ## Current Task
 
@@ -188,15 +194,17 @@ reports that no current public HTTPS connector URL is recorded.
 If a stable connector URL is supplied through
 `FRANCIS_CHATGPT_VOICE_CONNECTOR_URL`, the proof now records the URL source and
 checks the shape without writing runtime state. Shape-valid but unverified URLs
-remain partial proof until reachability or a fresh ChatGPT-origin tool-call
-receipt confirms the bridge.
+remain partial proof until reachability and a fresh usable receipt from the
+public ChatGPT voice MCP ingress tool confirm the bridge.
 
 If connector verification is requested, the reachability probe is bounded by
 `ConnectorProbeTimeoutSeconds` and remains read-only.
 
 ChatGPT-origin voice receipts also have a bounded live-proof freshness window.
 The default is 900 seconds. Receipts outside that window are counted as stale
-and do not satisfy the live proof.
+and do not satisfy the live proof; source-only receipts without
+`mcp_server_tool=francis_chatgpt_voice_ingress` remain diagnostic evidence, not
+end-to-end MCP proof.
 
 Acceptance criteria for the completed observation sub-slice:
 
@@ -917,6 +925,21 @@ Validated for ChatGPT voice bridge receipt timestamps:
 - Focused tests verified `created_ts` and `created_at` on the ingress response
   and persisted receipt file.
 
+Validated for MCP-origin ChatGPT voice receipt provenance:
+
+- `python -m pytest tests\test_chatgpt_voice_bridge.py
+  tests\test_mcp_client_roundtrip.py
+  tests\test_orb_voice_overlay_lens_validation_script.py -q` passed.
+- PowerShell parser check for
+  `scripts\orb-voice-overlay-lens-validation.ps1` returned `parse_ok`.
+- `python -m mypy src\francis\chatgpt_voice_bridge.py
+  src\francis\mcp_gateway\tools.py src\francis\mcp_gateway\server.py` passed.
+- Focused tests verified direct HTTP receipts record `ingress_transport=http_api`,
+  internal MCP gateway tool calls record `ingress_transport=mcp_gateway_tool`
+  and `mcp_gateway_tool=francis.chatgpt_voice.ingress`, public MCP server calls
+  record `mcp_server_tool=francis_chatgpt_voice_ingress`, and the validation
+  proof refuses source-only receipts as live ChatGPT MCP evidence.
+
 ## Blockers
 
 - The lens/overlay observation contract is metadata-only; it does not yet provide
@@ -937,9 +960,10 @@ Validated for ChatGPT voice bridge receipt timestamps:
   public HTTPS MCP URL is recorded; local MCP is listening, no
   `cloudflared`/`ngrok`/`caddy` provider is available in the current shell, and
   current ChatGPT app reachability is not proven by the status proof.
-- The current ChatGPT voice proof has only stale ChatGPT-origin receipts in the
-  default freshness window. A fresh ChatGPT tool-call receipt is required before
-  the proof can treat the bridge as live.
+- The current ChatGPT voice proof has no fresh usable public-MCP-tool-origin
+  receipt in the default freshness window. A fresh ChatGPT app call that reaches
+  `francis_chatgpt_voice_ingress` and writes the matching receipt provenance is
+  required before the proof can treat the bridge as live.
 - True backend model-call cancellation is not currently supported; stale reply
   suppression is the bounded behavior.
 

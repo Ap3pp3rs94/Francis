@@ -27,6 +27,14 @@ def _unused_local_port() -> int:
         return int(sock.getsockname()[1])
 
 
+def _mcp_server_voice_provenance() -> dict[str, str]:
+    return {
+        "ingress_transport": "mcp_gateway_tool",
+        "mcp_gateway_tool": "francis.chatgpt_voice.ingress",
+        "mcp_server_tool": "francis_chatgpt_voice_ingress",
+    }
+
+
 def _run_validation_script(
     *args: str,
     env: dict[str, str] | None = None,
@@ -77,6 +85,9 @@ def test_orb_voice_overlay_lens_validation_reports_missing_chatgpt_source_receip
     assert payload["chatgpt_voice_receipts"]["fresh_usable_chatgpt_source_count"] == 0
     assert payload["chatgpt_voice_receipts"]["stale_chatgpt_source_count"] == 0
     assert payload["chatgpt_voice_receipts"]["transcript_unavailable_count"] == 0
+    assert payload["chatgpt_voice_receipts"]["mcp_server_chatgpt_source_count"] == 0
+    assert payload["chatgpt_voice_receipts"]["fresh_mcp_server_chatgpt_source_count"] == 0
+    assert payload["chatgpt_voice_receipts"]["fresh_usable_mcp_server_chatgpt_source_count"] == 0
     assert payload["persistent_ingress_plan"]["kind"] == "francis.chatgpt_voice.persistent_ingress_plan"
     assert payload["persistent_ingress_plan"]["status"] == "persistent_ingress_url_needed"
     assert payload["persistent_ingress_plan"]["governance"]["read_only"] is True
@@ -93,7 +104,7 @@ def test_orb_voice_overlay_lens_validation_reports_missing_chatgpt_source_receip
     assert payload["governance"]["live_desktop_action"] is False
 
 
-def test_orb_voice_overlay_lens_validation_classifies_chatgpt_source_receipt_without_transcript(
+def test_orb_voice_overlay_lens_validation_requires_mcp_tool_provenance_for_source_receipt(
     tmp_path: Path,
 ) -> None:
     data_dir = tmp_path / "data"
@@ -128,17 +139,27 @@ def test_orb_voice_overlay_lens_validation_classifies_chatgpt_source_receipt_wit
 
     assert proc.returncode == 0, proc.stderr
     payload = json.loads(proc.stdout)
+    assert payload["status"] == "proof_blocked_no_chatgpt_app_mcp_tool_receipt"
+    assert payload["next_smallest_truthful_gap"] == (
+        "trigger_fresh_chatgpt_app_mcp_tool_call_and_confirm_server_tool_receipt"
+    )
     assert payload["chatgpt_voice_receipts"]["count"] == 1
     assert payload["chatgpt_voice_receipts"]["clean_chatgpt_source_count"] == 1
     assert payload["chatgpt_voice_receipts"]["usable_chatgpt_source_count"] == 1
     assert payload["chatgpt_voice_receipts"]["fresh_chatgpt_source_count"] == 1
     assert payload["chatgpt_voice_receipts"]["fresh_usable_chatgpt_source_count"] == 1
+    assert payload["chatgpt_voice_receipts"]["mcp_server_chatgpt_source_count"] == 0
+    assert payload["chatgpt_voice_receipts"]["fresh_mcp_server_chatgpt_source_count"] == 0
+    assert payload["chatgpt_voice_receipts"]["fresh_usable_mcp_server_chatgpt_source_count"] == 0
     assert payload["chatgpt_voice_receipts"]["stale_chatgpt_source_count"] == 0
     assert payload["chatgpt_voice_receipts"]["transcript_unavailable_count"] == 0
     latest = payload["chatgpt_voice_receipts"]["latest_chatgpt_source"]
     assert latest["receipt_id"] == "chatgpt-voice-recorded-test"
     assert latest["source_claims_chatgpt_voice"] is True
+    assert latest["source_claims_mcp_gateway_tool"] is False
+    assert latest["source_claims_mcp_server_tool"] is False
     assert latest["usable_chatgpt_transcript"] is True
+    assert latest["usable_mcp_server_chatgpt_transcript"] is False
     assert latest["fresh_for_live_proof"] is True
     assert latest["created_ts_present"] is False
     assert latest["observed_ts_source"] == "file_mtime"
@@ -156,12 +177,10 @@ def test_orb_voice_overlay_lens_validation_classifies_chatgpt_source_receipt_wit
     )
     checks = {check["id"]: check for check in payload["checks"]}
     assert checks["persistent_ingress_plan_readback"]["passed"] is True
+    assert checks["chatgpt_app_mcp_tool_receipt_observed"]["status"] == "missing"
+    assert checks["chatgpt_app_mcp_tool_receipt_observed"]["passed"] is False
     summary = json.dumps(payload["chatgpt_voice_receipts"])
     assert "this text should not appear" not in summary
-    assert payload["next_smallest_truthful_gap"] in {
-        "record_current_https_mcp_connector_url_or_replace_tunnel_with_persistent_ingress",
-        "restore_or_create_read_only_mona_lisa_sandbox_replay_artifact",
-    }
 
 
 def test_orb_voice_overlay_lens_validation_uses_environment_connector_url(
@@ -175,6 +194,7 @@ def test_orb_voice_overlay_lens_validation_uses_environment_connector_url(
         "receipt_id": "chatgpt-voice-recorded-env-test",
         "actor": "chatgpt.voice",
         "source": "chatgpt.voice",
+        **_mcp_server_voice_provenance(),
         "decision": "recorded",
         "chat_forward_status": "forwarded",
         "chat_forwarded": True,
@@ -217,6 +237,13 @@ def test_orb_voice_overlay_lens_validation_uses_environment_connector_url(
     assert payload["chatgpt_voice_connector"]["connector_reachability_status"] == "verification_not_requested"
     assert payload["chatgpt_voice_connector"]["connector_reachability_probe_requested"] is False
     assert payload["chatgpt_voice_connector"]["connector_probe_timeout_seconds"] == 5
+    assert payload["chatgpt_voice_receipts"]["mcp_server_chatgpt_source_count"] == 1
+    assert payload["chatgpt_voice_receipts"]["fresh_mcp_server_chatgpt_source_count"] == 1
+    assert payload["chatgpt_voice_receipts"]["fresh_usable_mcp_server_chatgpt_source_count"] == 1
+    latest_mcp = payload["chatgpt_voice_receipts"]["latest_fresh_mcp_server_chatgpt_source"]
+    assert latest_mcp["receipt_id"] == "chatgpt-voice-recorded-env-test"
+    assert latest_mcp["source_claims_mcp_server_tool"] is True
+    assert latest_mcp["mcp_server_tool"] == "francis_chatgpt_voice_ingress"
     assert payload["persistent_ingress_plan"]["status"] == "connector_url_shape_valid_record_ready"
     assert payload["persistent_ingress_plan"]["connector_url"]["source"] == (
         "environment:FRANCIS_CHATGPT_VOICE_CONNECTOR_URL"
@@ -303,6 +330,7 @@ def test_orb_voice_overlay_lens_validation_blocks_unavailable_chatgpt_source_rec
         "receipt_id": "chatgpt-voice-rejected-unavailable-test",
         "actor": "chatgpt.voice",
         "source": "chatgpt.voice",
+        **_mcp_server_voice_provenance(),
         "decision": "rejected",
         "reason": "transcript_unavailable",
         "chat_forward_status": "rejected",
@@ -339,16 +367,24 @@ def test_orb_voice_overlay_lens_validation_blocks_unavailable_chatgpt_source_rec
     assert payload["chatgpt_voice_receipts"]["usable_chatgpt_source_count"] == 0
     assert payload["chatgpt_voice_receipts"]["fresh_chatgpt_source_count"] == 1
     assert payload["chatgpt_voice_receipts"]["fresh_usable_chatgpt_source_count"] == 0
+    assert payload["chatgpt_voice_receipts"]["mcp_server_chatgpt_source_count"] == 1
+    assert payload["chatgpt_voice_receipts"]["fresh_mcp_server_chatgpt_source_count"] == 1
+    assert payload["chatgpt_voice_receipts"]["fresh_usable_mcp_server_chatgpt_source_count"] == 0
     assert payload["chatgpt_voice_receipts"]["transcript_unavailable_count"] == 1
     latest = payload["chatgpt_voice_receipts"]["latest_chatgpt_source"]
     assert latest["source_claims_chatgpt_voice"] is True
+    assert latest["source_claims_mcp_server_tool"] is True
     assert latest["usable_chatgpt_transcript"] is False
+    assert latest["usable_mcp_server_chatgpt_transcript"] is False
     assert latest["transcript_unavailable_detected"] is True
     assert payload["chatgpt_voice_receipts"]["latest_usable_chatgpt_source"] is None
     checks = {check["id"]: check for check in payload["checks"]}
     assert checks["chatgpt_app_source_receipt_observed"]["passed"] is True
+    assert checks["chatgpt_app_mcp_tool_receipt_observed"]["passed"] is True
     assert checks["chatgpt_app_usable_transcript_observed"]["passed"] is False
     assert checks["chatgpt_app_usable_transcript_observed"]["status"] == "transcript_unavailable"
+    assert checks["chatgpt_app_mcp_tool_usable_transcript_observed"]["passed"] is False
+    assert checks["chatgpt_app_mcp_tool_usable_transcript_observed"]["status"] == "transcript_unavailable"
     assert checks["persistent_ingress_plan_readback"]["passed"] is True
     assert payload["persistent_ingress_plan"]["governance"]["writes_data"] is False
     summary = json.dumps(payload["chatgpt_voice_receipts"])

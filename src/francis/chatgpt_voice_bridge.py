@@ -16,6 +16,10 @@ CHATGPT_VOICE_BRIDGE_READ_SCOPE = "chatgpt.voice.bridge.read"
 CHATGPT_VOICE_BRIDGE_WRITE_SCOPE = "chatgpt.voice.bridge.write"
 CHATGPT_VOICE_BRIDGE_KIND = "francis.chatgpt_voice.bridge"
 CHATGPT_VOICE_BRIDGE_VERSION = "chatgpt_voice_bridge_v0"
+CHATGPT_VOICE_BRIDGE_HTTP_TRANSPORT = "http_api"
+CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TRANSPORT = "mcp_gateway_tool"
+CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TOOL = "francis.chatgpt_voice.ingress"
+CHATGPT_VOICE_BRIDGE_MCP_SERVER_TOOL = "francis_chatgpt_voice_ingress"
 MAX_TRANSCRIPT_CHARS = 8000
 _TRANSCRIPT_UNAVAILABLE_MARKERS = {
     "transcript unavailable",
@@ -180,8 +184,16 @@ def chatgpt_voice_bridge_contract(actor: str = "") -> dict[str, Any]:
         },
         "mcp_tools": {
             "contract": "francis.chatgpt_voice.contract",
-            "ingress": "francis.chatgpt_voice.ingress",
+            "ingress": CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TOOL,
+            "server_ingress": CHATGPT_VOICE_BRIDGE_MCP_SERVER_TOOL,
             "receipts": "francis.chatgpt_voice.receipts",
+        },
+        "receipt_contract": {
+            "ingress_provenance_fields": ["ingress_transport", "mcp_gateway_tool", "mcp_server_tool"],
+            "direct_http_transport": CHATGPT_VOICE_BRIDGE_HTTP_TRANSPORT,
+            "mcp_gateway_transport": CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TRANSPORT,
+            "mcp_gateway_tool": CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TOOL,
+            "mcp_server_tool": CHATGPT_VOICE_BRIDGE_MCP_SERVER_TOOL,
         },
         "input_contract": {
             "transcript_required": True,
@@ -233,6 +245,9 @@ def record_chatgpt_voice_ingress(
     locale: str = "",
     forward_to_chat: bool = True,
     use_llm: bool = False,
+    ingress_transport: str = CHATGPT_VOICE_BRIDGE_HTTP_TRANSPORT,
+    mcp_gateway_tool: str = "",
+    mcp_server_tool: str = "",
 ) -> dict[str, Any]:
     route = "/chatgpt-voice/ingress"
     clean_actor = _safe_str(actor) or "chatgpt.voice"
@@ -245,6 +260,9 @@ def record_chatgpt_voice_ingress(
     base_payload: dict[str, Any] = {
         "actor": clean_actor,
         "source": _bounded_text(source, max_chars=96) or "chatgpt.voice",
+        "ingress_transport": _bounded_text(ingress_transport, max_chars=64) or CHATGPT_VOICE_BRIDGE_HTTP_TRANSPORT,
+        "mcp_gateway_tool": _bounded_text(mcp_gateway_tool, max_chars=96),
+        "mcp_server_tool": _bounded_text(mcp_server_tool, max_chars=96),
         "conversation_id": _bounded_text(conversation_id, max_chars=160),
         "turn_id": _bounded_text(turn_id, max_chars=160),
         "locale": _bounded_text(locale, max_chars=32),
@@ -376,6 +394,10 @@ def chatgpt_voice_bridge_receipts(actor: str = "", *, limit: int = 10) -> dict[s
 
 
 __all__ = [
+    "CHATGPT_VOICE_BRIDGE_HTTP_TRANSPORT",
+    "CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TOOL",
+    "CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TRANSPORT",
+    "CHATGPT_VOICE_BRIDGE_MCP_SERVER_TOOL",
     "CHATGPT_VOICE_BRIDGE_READ_SCOPE",
     "CHATGPT_VOICE_BRIDGE_WRITE_SCOPE",
     "chatgpt_voice_bridge_contract",
