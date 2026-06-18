@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -127,6 +128,81 @@ def test_lens_overlay_preflight_rejects_stale_runtime_pid(tmp_path: Path) -> Non
     assert "resident_host_process_missing" in payload["blockers"]
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["runtime_state"]["status"] == "stale_or_unverified"
+
+
+def test_lens_overlay_preflight_surfaces_live_voice_input_blocker(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    runtime_dir = data_dir / "runtime" / "lens-overlay"
+    runtime_dir.mkdir(parents=True)
+    pid = os.getpid()
+    (runtime_dir / "lens-overlay.pid").write_text(str(pid), encoding="utf-8")
+    (runtime_dir / "status.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.overlay.runtime_state",
+                "status": "overlay_running",
+                "pid": pid,
+                "overlay_name": "Francis Lens Overlay",
+                "overlay_scope": "user_session",
+                "overlay_window_visible": True,
+                "always_on_top": True,
+                "overlay_voice": {
+                    "kind": "lens.overlay.voice.runtime",
+                    "status": "listening",
+                    "ok": True,
+                    "microphone_capture": True,
+                    "wake_listening": True,
+                    "microphone_signal_status": "no_signal",
+                    "microphone_input_effective": False,
+                    "needs_operator_audio_input_check": True,
+                    "audio_signal_problem": "NoSignal",
+                    "audio_level": 0,
+                    "transcript_redacted": True,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    proc = _run_preflight("-Mode", "Status", "-DataDir", str(data_dir))
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    overlay_runtime = payload["overlay_runtime"]
+    assert overlay_runtime["ready"] is True
+    assert overlay_runtime["voice_input_ready"] is False
+    assert overlay_runtime["voice_input_status"] == "blocked"
+    assert overlay_runtime["voice_input_blocker"] == "microphone_no_signal"
+    assert overlay_runtime["next_voice_input_step"] == "select_or_unmute_default_windows_microphone"
+    assert overlay_runtime["voice_input_readiness"]["needs_operator_audio_input_check"] is True
+    assert overlay_runtime["voice_input_readiness"]["audio_capture_endpoints"]["read_only"] is True
+    assert (
+        overlay_runtime["voice_input_readiness"]["audio_capture_endpoints"]["source"]
+        == "windows_pnp_audio_endpoint"
+    )
+    assert overlay_runtime["voice_input_readiness"]["default_capture_endpoint"]["read_only"] is True
+    assert (
+        overlay_runtime["voice_input_readiness"]["default_capture_endpoint"]["source"]
+        == "windows_coreaudio_default_capture_endpoint"
+    )
+    assert overlay_runtime["voice_input_readiness"]["default_capture_endpoint"]["endpoint_id_redacted"] is True
+    assert "default_capture_endpoint_resolved" in overlay_runtime["voice_input_readiness"]
+    assert "default_capture_endpoint_muted" in overlay_runtime["voice_input_readiness"]
+    assert "default_capture_endpoint_volume_scalar" in overlay_runtime["voice_input_readiness"]
+    assert overlay_runtime["voice_input_readiness"]["explicit_endpoint_selection_supported"] is False
+    assert overlay_runtime["voice_input_readiness"]["speech_audio_input_tokens"]["read_only"] is True
+    assert (
+        overlay_runtime["voice_input_readiness"]["speech_audio_input_tokens"]["source"]
+        == "windows_sapi_audio_input_registry"
+    )
+    assert (
+        overlay_runtime["voice_input_readiness"]["speech_audio_input_tokens"]["token_device_ids_redacted"]
+        is True
+    )
+    assert overlay_runtime["voice_input_readiness"]["transcript_redacted"] is True
+    assert "microphone_no_signal" in payload["blockers"]
+    checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["voice_input"]["status"] == "blocked"
 
 
 def test_lens_overlay_preflight_refuses_open_actions() -> None:

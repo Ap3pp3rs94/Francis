@@ -298,6 +298,220 @@ def test_operations_run_executes_plan_create(monkeypatch, tmp_path: Path) -> Non
     assert [item["id"] for item in listed_by_trace.json()["items"]] == [operation_id]
 
 
+def test_operations_run_mona_lisa_sandbox_canvas_from_chat_mission(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    sent = client.post(
+        "/chat/send",
+        json={
+            "message": "hey Francis paint the Mona Lisa in sandbox",
+            "use_llm": False,
+            "actor": "test.chat.write",
+            "voice_turn_id": "voice_turn_mona_sandbox_operator",
+        },
+    )
+    assert sent.status_code == 200
+    mission_body = sent.json()
+    mission_id = str(mission_body["mission_id"])
+    plan_operation_id = str(mission_body["operation_id"])
+    operation_id = str(mission_body["sandbox_operation_id"])
+    assert operation_id.startswith("tsk_")
+    assert operation_id != plan_operation_id
+    assert mission_body["sandbox_operation_queued"] is True
+    assert mission_body["mission"]["linked_task_ids"] == [plan_operation_id, operation_id]
+    assert mission_body["queue_item"]["action_target_id"] == operation_id
+    assert mission_body["sandbox_operation"]["name"] == "sandbox.canvas.paint_mona_lisa"
+    assert mission_body["sandbox_operation"]["input"]["mission_id"] == mission_id
+    assert mission_body["sandbox_operation"]["input"]["plan_operation_id"] == plan_operation_id
+    assert mission_body["sandbox_operation"]["input"]["canvas"] == {"width": 512, "height": 512}
+
+    run_now = client.post(
+        f"/operations/{operation_id}/run",
+        json={"worker_id": "test.operations.sandbox_canvas", "actor": "api.operations"},
+    )
+    assert run_now.status_code == 200
+    run_body = run_now.json()
+    assert run_body["ok"] is True
+    assert run_body["status"] == "succeeded"
+    operation = run_body["operation"]
+    output = operation["output"]
+    assert output["kind"] == "sandbox.canvas.paint_mona_lisa.result"
+    assert output["status"] == "sandbox_completed"
+    assert output["execution_mode"] == "sandbox"
+    assert output["live_desktop_execution"] is False
+    assert output["no_pasted_image"] is True
+    assert output["imports_finished_image"] is False
+    assert output["created_through_operator_primitives"] is True
+    assert output["operator_primitives_count"] >= 12
+    assert output["verification"]["status"] == "passed"
+    assert output["governance"]["sandbox_only"] is True
+    assert output["governance"]["desktop_control"] is False
+    assert operation["trace_id"] == output["trace_id"]
+    assert operation["run_id"] == output["run_id"]
+    assert operation["artifact_dir"] == output["artifact_dir"]
+
+    artifact_dir = Path(output["artifact_dir"])
+    assert artifact_dir.exists()
+    assert data_root.resolve() in artifact_dir.resolve().parents
+    svg_path = Path(output["artifact_path"])
+    actions_path = Path(output["actions_path"])
+    manifest_path = Path(output["manifest_path"])
+    receipt_path = Path(output["receipt_path"])
+    for path in (svg_path, actions_path, manifest_path, receipt_path):
+        assert path.exists()
+        assert artifact_dir.resolve() in path.resolve().parents
+
+    svg_text = svg_path.read_text(encoding="utf-8")
+    assert "<image" not in svg_text
+    assert svg_text.count("<path") >= 8
+
+    action_lines = [json.loads(line) for line in actions_path.read_text(encoding="utf-8").splitlines()]
+    assert len(action_lines) == output["operator_primitives_count"]
+    assert all(line["kind"] == "sandbox.canvas.operator_primitive" for line in action_lines)
+    assert all(line["live_desktop_action"] is False for line in action_lines)
+
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    assert receipt["kind"] == "francis.sandbox_canvas.mona_lisa.receipt"
+    assert receipt["mission_id"] == mission_id
+    assert receipt["status"] == "sandbox_completed"
+    assert receipt["created_through_operator_primitives"] is True
+    assert receipt["lens_overlay_observation"]["actual_inspected_region"]["width"] == 512
+    assert receipt["orb_embodiment"]["visual_change"] is False
+    assert receipt["orb_embodiment"]["visual_lock_preserved"] is True
+    assert receipt["claim_completed_painting"] is True
+    assert receipt["governance"]["live_desktop_authority"] is False
+
+    fetched = client.get(f"/operations/{operation_id}")
+    assert fetched.status_code == 200
+    fetched_body = fetched.json()
+    assert fetched_body["operation"]["artifact_dir"] == output["artifact_dir"]
+    assert fetched_body["operation"]["meta"]["mission_id"] == mission_id
+    assert fetched_body["memory_receipt_count"] >= 1
+
+    evaluation = client.get(
+        "/operations/sandbox-canvas/mona-lisa/evaluation",
+        params={"operation_id": operation_id},
+    )
+    assert evaluation.status_code == 200
+    evaluation_body = evaluation.json()
+    assert evaluation_body["kind"] == "francis.sandbox_canvas.mona_lisa.evaluation"
+    assert evaluation_body["ok"] is True
+    assert evaluation_body["status"] == "evaluated"
+    assert evaluation_body["evaluation_mode"] == "read_only_replay"
+    assert evaluation_body["operation_id"] == operation_id
+    assert evaluation_body["mission_id"] == mission_id
+    assert evaluation_body["artifact_dir"] == output["artifact_dir"]
+    assert evaluation_body["passed"] is True
+    assert evaluation_body["created_through_operator_primitives"] is True
+    assert evaluation_body["operator_primitives_count"] == output["operator_primitives_count"]
+    assert evaluation_body["checks"]["primitive_count_matches_receipt"] is True
+    assert evaluation_body["checks"]["primitive_sequence_contiguous"] is True
+    assert evaluation_body["checks"]["no_live_desktop_actions"] is True
+    assert evaluation_body["checks"]["svg_has_no_image_import"] is True
+    assert evaluation_body["hashes"]["artifact"]["matches"] is True
+    assert evaluation_body["hashes"]["actions"]["matches"] is True
+    assert evaluation_body["hashes"]["manifest"]["matches"] is True
+    assert evaluation_body["recognizability"]["basis"] == "operator_primitive_replay_heuristic_not_pixel_similarity"
+    assert evaluation_body["recognizability"]["recognizable_lower_complexity_target"] is True
+    assert evaluation_body["governance"]["read_only"] is True
+    assert evaluation_body["governance"]["writes_files"] is False
+    assert evaluation_body["governance"]["runs_operation"] is False
+    assert evaluation_body["governance"]["desktop_control"] is False
+    assert evaluation_body["governance"]["visual_similarity_claim"] is False
+    assert evaluation_body["governance"]["live_desktop_perception_claim"] is False
+    assert evaluation_body["improvement_proposals"]
+    assert all(item["status"] == "proposed_not_promoted" for item in evaluation_body["improvement_proposals"])
+
+    recorded = client.post(
+        "/operations/sandbox-canvas/mona-lisa/evaluation/record",
+        json={
+            "operation_id": operation_id,
+            "actor": "test.operations.write",
+            "reason": "test_record_mona_lisa_sandbox_evaluation",
+            "meta": {"test": "mona_lisa_sandbox_vertical_slice"},
+        },
+    )
+    assert recorded.status_code == 200
+    recorded_body = recorded.json()
+    assert recorded_body["kind"] == "francis.sandbox_canvas.mona_lisa.evaluation_record.result"
+    assert recorded_body["ok"] is True
+    assert recorded_body["status"] == "recorded"
+    assert recorded_body["operation_id"] == operation_id
+    assert recorded_body["mission_id"] == mission_id
+    assert recorded_body["artifact_dir"] == output["artifact_dir"]
+    assert recorded_body["queue_item"]["status"] == "queued_for_review"
+    assert recorded_body["queue_item"]["failure_classification"] == []
+    assert recorded_body["queue_item"]["improvement_proposal_count"] == len(evaluation_body["improvement_proposals"])
+    assert recorded_body["governance"]["writes_files"] is True
+    assert recorded_body["governance"]["writes_evaluation_record"] is True
+    assert recorded_body["governance"]["writes_queue_item"] is True
+    assert recorded_body["governance"]["writes_proposal_records"] is True
+    assert recorded_body["governance"]["runs_operation"] is False
+    assert recorded_body["governance"]["desktop_control"] is False
+    assert recorded_body["governance"]["approves_proposals"] is False
+    assert recorded_body["governance"]["promotes_changes"] is False
+    assert recorded_body["governance"]["visual_similarity_claim"] is False
+    assert recorded_body["governance"]["live_desktop_perception_claim"] is False
+
+    record_path = Path(recorded_body["paths"]["evaluation_record"])
+    queue_path = Path(recorded_body["paths"]["queue_item"])
+    proposal_paths = [Path(path) for path in recorded_body["paths"]["improvement_proposals"]]
+    assert record_path.exists()
+    assert queue_path.exists()
+    assert proposal_paths
+    assert all(path.exists() for path in proposal_paths)
+    assert artifact_dir.resolve() in record_path.resolve().parents
+    assert artifact_dir.resolve() in queue_path.resolve().parents
+    assert all(artifact_dir.resolve() in path.resolve().parents for path in proposal_paths)
+
+    stored_record = json.loads(record_path.read_text(encoding="utf-8"))
+    assert stored_record["evaluation"]["status"] == "evaluated"
+    assert stored_record["evaluation"]["governance"]["read_only"] is True
+    assert stored_record["queue_item"]["queue_item_id"] == recorded_body["queue_item_id"]
+    assert all(item["promotion"]["promoted"] is False for item in stored_record["improvement_proposals"])
+
+    queue_list = client.get("/operations/sandbox-canvas/mona-lisa/evaluation-queue")
+    assert queue_list.status_code == 200
+    queue_body = queue_list.json()
+    assert queue_body["kind"] == "francis.sandbox_canvas.mona_lisa.evaluation_queue"
+    assert queue_body["ok"] is True
+    assert queue_body["governance"]["read_only"] is True
+    assert queue_body["governance"]["writes_files"] is False
+    assert any(item["queue_item_id"] == recorded_body["queue_item_id"] for item in queue_body["items"])
+
+    proposal_list = client.get(
+        "/operations/sandbox-canvas/mona-lisa/improvement-proposals",
+        params={"status": "proposed_not_promoted"},
+    )
+    assert proposal_list.status_code == 200
+    proposal_body = proposal_list.json()
+    assert proposal_body["kind"] == "francis.sandbox_canvas.mona_lisa.improvement_proposals"
+    assert proposal_body["ok"] is True
+    assert proposal_body["governance"]["read_only"] is True
+    assert proposal_body["governance"]["promotes_changes"] is False
+    proposal_ids = {item["proposal_record_id"] for item in proposal_body["items"]}
+    assert {item["proposal_record_id"] for item in recorded_body["improvement_proposals"]}.issubset(proposal_ids)
+    assert all(item["status"] == "proposed_not_promoted" for item in proposal_body["items"])
+    assert all(item["promotion"]["promoted"] is False for item in proposal_body["items"])
+
+    missing = client.get(
+        "/operations/sandbox-canvas/mona-lisa/evaluation",
+        params={"artifact_dir": str(data_root / "sandbox_canvas" / "mona_lisa" / "missing")},
+    )
+    assert missing.status_code == 200
+    missing_body = missing.json()
+    assert missing_body["ok"] is False
+    assert missing_body["status"] == "blocked"
+    assert missing_body["governance"]["read_only"] is True
+
+
 def test_operations_create_is_blocked_in_observe_mode(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

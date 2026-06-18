@@ -17,8 +17,10 @@ class _FakeResponse:
 def test_generate_prefers_francis_ollama_env(monkeypatch) -> None:
     monkeypatch.setenv("FRANCIS_OLLAMA_BASE_URL", "http://127.0.0.1:11434/")
     monkeypatch.setenv("FRANCIS_LLM_CHAT_MODEL", "francis-chat")
+    monkeypatch.setenv("FRANCIS_LLM_REQUEST_TIMEOUT_S", "90")
     monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
     monkeypatch.delenv("OLLAMA_DEFAULT_MODEL", raising=False)
+    monkeypatch.delenv("LLM_REQUEST_TIMEOUT_S", raising=False)
 
     captured: dict[str, object] = {}
 
@@ -32,7 +34,7 @@ def test_generate_prefers_francis_ollama_env(monkeypatch) -> None:
 
     assert client.generate("say only ok") == "ok"
     assert captured["url"] == "http://127.0.0.1:11434/api/generate"
-    assert captured["timeout"] == 45
+    assert captured["timeout"] == 90
     assert captured["json"] == {
         "model": "francis-chat",
         "prompt": "say only ok",
@@ -52,6 +54,20 @@ def test_resolve_ollama_config_falls_back_to_legacy_env(monkeypatch) -> None:
     assert model == "qwen2.5:7b-instruct"
 
 
+def test_resolve_ollama_timeout_seconds_uses_bounded_francis_env(monkeypatch) -> None:
+    monkeypatch.setenv("FRANCIS_LLM_REQUEST_TIMEOUT_S", "600")
+    monkeypatch.delenv("LLM_REQUEST_TIMEOUT_S", raising=False)
+
+    assert client.resolve_ollama_timeout_seconds() == 300
+
+
+def test_resolve_ollama_timeout_seconds_falls_back_to_legacy_env(monkeypatch) -> None:
+    monkeypatch.delenv("FRANCIS_LLM_REQUEST_TIMEOUT_S", raising=False)
+    monkeypatch.setenv("LLM_REQUEST_TIMEOUT_S", "75")
+
+    assert client.resolve_ollama_timeout_seconds() == 75
+
+
 def test_resolve_ollama_config_uses_settings_defaults(monkeypatch) -> None:
     monkeypatch.delenv("FRANCIS_OLLAMA_BASE_URL", raising=False)
     monkeypatch.delenv("FRANCIS_LLM_CHAT_MODEL", raising=False)
@@ -61,6 +77,7 @@ def test_resolve_ollama_config_uses_settings_defaults(monkeypatch) -> None:
     class _FakeSettings:
         ollama_base_url = "http://127.0.0.1:11434"
         ollama_default_model = "francis-chat"
+        llm_request_timeout_seconds = 90
 
     monkeypatch.setattr(client, "Settings", _FakeSettings)
 

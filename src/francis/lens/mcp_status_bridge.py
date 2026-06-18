@@ -174,7 +174,11 @@ def _component_badges(components: dict[str, dict[str, Any]], *, tool_count: int)
         return _safe_str(components.get(tool, {}).get("status"), "missing")
 
     return [
-        {"label": "MCP tools", "value": tool_count, "severity": "ok" if tool_count >= EXPECTED_MIN_TOOL_COUNT else "warn"},
+        {
+            "label": "MCP tools",
+            "value": tool_count,
+            "severity": "ok" if tool_count >= EXPECTED_MIN_TOOL_COUNT else "warn",
+        },
         {"label": "Screen", "value": status_for("francis.screen.session"), "severity": "ok"},
         {"label": "Takeover", "value": status_for("francis.takeover.status"), "severity": "ok"},
         {"label": "Input", "value": status_for("francis.input.status"), "severity": "ok"},
@@ -250,6 +254,7 @@ def lens_orb_mcp_status_bridge(*, actor: str = "lens-orb", receipt_limit: int = 
             "orb_mcp_status": "/lens/orb/mcp-status",
             "mcp_contract": "/lens/mcp/contract",
             "mcp_perceive": "/lens/mcp/perceive",
+            "mcp_observe": "/lens/mcp/observe",
             "mcp_receipts": "/lens/mcp/receipts",
             "developer_bridge": "/developer-bridge",
         },

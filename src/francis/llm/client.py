@@ -34,12 +34,34 @@ def resolve_ollama_config() -> tuple[str, str]:
     return base, model
 
 
+def resolve_ollama_timeout_seconds() -> int:
+    settings_timeout = 90
+    try:
+        settings = Settings()
+        settings_timeout = int(getattr(settings, "llm_request_timeout_seconds", settings_timeout) or settings_timeout)
+    except Exception as exc:
+        logger.debug("Falling back to direct env resolution for Ollama timeout: %s", exc)
+
+    timeout_text = _env_text(
+        "FRANCIS_LLM_REQUEST_TIMEOUT_S",
+        "LLM_REQUEST_TIMEOUT_S",
+        default=str(settings_timeout),
+    )
+    try:
+        timeout = int(timeout_text)
+    except Exception:
+        logger.warning("Ignoring invalid LLM request timeout: %r", timeout_text)
+        timeout = settings_timeout
+    return max(5, min(timeout, 300))
+
+
 def generate(prompt: str) -> str:
     base, model = resolve_ollama_config()
+    timeout_seconds = resolve_ollama_timeout_seconds()
     url = f"{base}/api/generate"
     payload: dict[str, Any] = {"model": model, "prompt": prompt, "stream": False}
     try:
-        r = httpx.post(url, json=payload, timeout=45)
+        r = httpx.post(url, json=payload, timeout=timeout_seconds)
         r.raise_for_status()
         j = r.json()
         return (j.get("response") or "").strip()

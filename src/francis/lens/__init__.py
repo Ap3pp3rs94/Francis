@@ -124,6 +124,7 @@ from francis.lens.preflight import (
 from francis.lens.mcp_perception import (
     lens_mcp_perception_contract,
     lens_mcp_perception_receipts,
+    lens_observe_overlay_region,
     lens_perceive_via_mcp,
 )
 from francis.lens.mcp_status_bridge import lens_orb_mcp_status_bridge
@@ -188,6 +189,7 @@ __all__ = [
     "lens_host_status",
     "lens_mcp_perception_contract",
     "lens_mcp_perception_receipts",
+    "lens_observe_overlay_region",
     "lens_orb_mcp_status_bridge",
     "lens_perceive_via_mcp",
     "deny_lens_os_binding_execution",

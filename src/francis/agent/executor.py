@@ -599,6 +599,12 @@ def _register_capabilities() -> None:
     CAPABILITY_ALLOWLIST.setdefault("chat.summarize", _cap_chat_summarize)
     CAPABILITY_ALLOWLIST.setdefault("plan.create", _cap_plan_create)
     CAPABILITY_ALLOWLIST.setdefault("plan.revise", _cap_plan_revise)
+    try:
+        from .sandbox_canvas import paint_mona_lisa_sandbox
+    except Exception:
+        _log_executor_exception(event="capability_register", capability="sandbox.canvas.paint_mona_lisa")
+    else:
+        CAPABILITY_ALLOWLIST.setdefault("sandbox.canvas.paint_mona_lisa", paint_mona_lisa_sandbox)
     CAPABILITY_ALLOWLIST.setdefault("plugin.list", _cap_plugin_list)
     CAPABILITY_ALLOWLIST.setdefault("plugin.get", _cap_plugin_get)
     CAPABILITY_ALLOWLIST.setdefault("plugin.enable", _cap_plugin_enable)

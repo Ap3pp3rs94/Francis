@@ -9,6 +9,7 @@ from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPer
 from francis.lens import (
     lens_mcp_perception_contract,
     lens_mcp_perception_receipts,
+    lens_observe_overlay_region,
     lens_perceive_via_mcp,
     deny_lens_os_binding_execution,
     deny_lens_host_persistent_supervision_enablement,
@@ -138,6 +139,17 @@ class LensMcpPerceiveIn(BaseModel):
     args: dict[str, Any] = Field(default_factory=dict)
 
 
+class LensMcpObserveIn(BaseModel):
+    actor: str | None = None
+    requested_region: dict[str, Any] = Field(default_factory=dict)
+    overlay_context: dict[str, Any] = Field(default_factory=dict)
+    observation_source: str = "francis.screen.session"
+    correlation_id: str = ""
+    parent_receipt_id: str = ""
+    session_id: str = ""
+    mission_id: str = ""
+
+
 @router.get("/mcp/contract")
 def mcp_contract(actor: str = "") -> dict[str, Any]:
     permission = ApiPermissionGate.from_env().check(
@@ -176,6 +188,29 @@ def mcp_perceive(payload: LensMcpPerceiveIn) -> dict[str, Any]:
     if not permission.allowed:
         return _lens_permission_denied(permission, kind="francis.lens.mcp.perception")
     return lens_perceive_via_mcp(payload.tool, payload.args, actor=actor or "unknown")
+
+
+@router.post("/mcp/observe")
+def mcp_observe(payload: LensMcpObserveIn) -> dict[str, Any]:
+    actor = payload.actor or ""
+    permission = ApiPermissionGate.from_env().check(
+        actor_id=actor,
+        required_scopes=[_LENS_MCP_PERCEIVE_SCOPE],
+        route="/lens/mcp/observe",
+        method="POST",
+    )
+    if not permission.allowed:
+        return _lens_permission_denied(permission, kind="francis.lens.overlay.observation")
+    return lens_observe_overlay_region(
+        payload.requested_region,
+        payload.overlay_context,
+        actor=actor or "unknown",
+        observation_source=payload.observation_source,
+        correlation_id=payload.correlation_id,
+        parent_receipt_id=payload.parent_receipt_id,
+        session_id=payload.session_id,
+        mission_id=payload.mission_id,
+    )
 
 
 class LensHostActivationRequestIn(BaseModel):

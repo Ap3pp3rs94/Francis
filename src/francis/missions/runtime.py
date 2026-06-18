@@ -85,6 +85,149 @@ def _as_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+_MISSION_PLAN_CONTEXT_KEYS = frozenset(
+    {
+        "claim_completed_painting",
+        "execution_mode",
+        "intent_kind",
+        "lens_overlay_observation",
+        "live_desktop_execution",
+        "no_pasted_image",
+        "operator_contract",
+        "operator_primitives_required",
+        "orb_embodiment",
+        "sandbox_status",
+        "truthful_limitations",
+        "voice_turn_correlation",
+    }
+)
+_MONA_LISA_INTENT_KIND = "mona_lisa_sandbox_painting"
+_MONA_LISA_SANDBOX_ACTION = "sandbox.paint.mona_lisa"
+_MONA_LISA_SANDBOX_CAPABILITY = "sandbox.canvas.paint_mona_lisa"
+_MONA_LISA_CANVAS_SIZE = 512
+
+
+def _mission_plan_context(meta: Any) -> dict[str, Any]:
+    raw = _as_dict(meta)
+    return {key: raw[key] for key in sorted(_MISSION_PLAN_CONTEXT_KEYS) if key in raw}
+
+
+def _mona_lisa_sandbox_requested_region() -> dict[str, Any]:
+    return {
+        "coordinate_space": "sandbox.logical_pixels",
+        "x": 0,
+        "y": 0,
+        "width": _MONA_LISA_CANVAS_SIZE,
+        "height": _MONA_LISA_CANVAS_SIZE,
+    }
+
+
+def _mona_lisa_sandbox_operation_input(
+    *,
+    mission_id: str,
+    plan_operation_id: str,
+    mission_plan_context: dict[str, Any],
+) -> dict[str, Any]:
+    mission_meta = dict(mission_plan_context)
+    mission_meta["mission_id"] = mission_id
+    mission_meta["plan_operation_id"] = plan_operation_id
+    mission_meta["sandbox_status"] = "queued_not_executed"
+    mission_meta["claim_completed_painting"] = False
+
+    lens_observation = dict(_as_dict(mission_meta.get("lens_overlay_observation")))
+    requested_region = _as_dict(lens_observation.get("requested_region")) or _mona_lisa_sandbox_requested_region()
+    lens_observation["requested_region"] = requested_region
+    lens_observation.setdefault(
+        "mapped_overlay_region",
+        {
+            **requested_region,
+            "status": "mapped",
+            "source": "sandbox_canvas_coordinate_model",
+            "within_overlay_bounds": True,
+            "screen_readback": False,
+        },
+    )
+    lens_observation["status"] = "sandbox_operation_queued_not_observed"
+    lens_observation["live_desktop_observation"] = False
+    mission_meta["lens_overlay_observation"] = lens_observation
+
+    return {
+        "mission_id": mission_id,
+        "plan_operation_id": plan_operation_id,
+        "mission_meta": mission_meta,
+        "operator_contract": _as_dict(mission_meta.get("operator_contract")),
+        "lens_overlay_observation": lens_observation,
+        "canvas": {"width": _MONA_LISA_CANVAS_SIZE, "height": _MONA_LISA_CANVAS_SIZE},
+        "live_desktop_execution": False,
+        "paste_image": False,
+        "import_image": False,
+    }
+
+
+def _mona_lisa_sandbox_operation_meta(
+    *,
+    mission_id: str,
+    plan_operation_id: str,
+    mission_plan_context: dict[str, Any],
+) -> dict[str, Any]:
+    meta = dict(mission_plan_context)
+    meta.update(
+        {
+            "mission_id": mission_id,
+            "plan_operation_id": plan_operation_id,
+            "intent_kind": _MONA_LISA_INTENT_KIND,
+            "execution_mode": "sandbox_required",
+            "sandbox_status": "queued_not_executed",
+            "auto_enqueued_from_plan": True,
+            "execution_deferred": True,
+            "live_desktop_execution": False,
+            "claim_completed_painting": False,
+        }
+    )
+    return meta
+
+
+def _create_mona_lisa_sandbox_operation(
+    *,
+    record: mission_store.MissionRecord,
+    mission_plan_context: dict[str, Any],
+    plan_operation_id: str,
+    actor: str,
+) -> dict[str, object]:
+    if str(mission_plan_context.get("intent_kind") or "").strip() != _MONA_LISA_INTENT_KIND:
+        return {}
+
+    mission_id = record.mission_id
+    created = operations_runtime.create_operation(
+        action=_MONA_LISA_SANDBOX_ACTION,
+        reason=f"mission.advance:{mission_id}:sandbox_canvas",
+        actor=actor,
+        mission_id=mission_id,
+        idempotency_key=f"{mission_id}:mona_lisa_sandbox_canvas",
+        objective=record.objective,
+        input=_mona_lisa_sandbox_operation_input(
+            mission_id=mission_id,
+            plan_operation_id=plan_operation_id,
+            mission_plan_context=mission_plan_context,
+        ),
+        meta=_mona_lisa_sandbox_operation_meta(
+            mission_id=mission_id,
+            plan_operation_id=plan_operation_id,
+            mission_plan_context=mission_plan_context,
+        ),
+    )
+    sandbox_operation_id = _safe_str(created.get("operation_id")).strip()
+    if bool(created.get("ok")) and sandbox_operation_id:
+        mission_store.record_linked_task_transition(
+            mission_id,
+            sandbox_operation_id,
+            task_status="accepted",
+            actor=actor,
+            note="mona_lisa_sandbox_operation_queued",
+        )
+    return created
+
+
 def _first_text(*values: Any) -> str:
     for value in values:
         text = _safe_str(value).strip()
@@ -294,6 +437,15 @@ def advance_mission(
     operator_hint = _redact_free_text(queue_item.get("operator_hint"))
 
     if action == "create_first_operation":
+        constraints: dict[str, Any] = {
+            "mission_id": mission_id,
+            "summary": record.summary,
+            "next_step": record.next_step,
+        }
+        mission_plan_context = _mission_plan_context(record.meta)
+        if mission_plan_context:
+            constraints["mission_meta"] = mission_plan_context
+
         created = operations_runtime.create_operation(
             action="plan.create",
             reason=f"mission.advance:{mission_id}",
@@ -302,35 +454,69 @@ def advance_mission(
             objective=record.objective,
             input={
                 "goal": record.objective,
-                "constraints": {
-                    "mission_id": mission_id,
-                    "summary": record.summary,
-                    "next_step": record.next_step,
-                },
+                "constraints": constraints,
             },
+            meta=mission_plan_context,
         )
         operation_id = _safe_str(created.get("operation_id")).strip()
         operation_status = _safe_str(created.get("status")).strip()
         message = _redact_free_text(created.get("message")) or "operation_created"
         operation_identity = _operation_receipt_identity(created.get("operation"))
+        receipt_operation_id = operation_id
+        receipt_operation_status = operation_status
+        sandbox_created: dict[str, object] = {}
+        if bool(created.get("ok")) and operation_id:
+            sandbox_created = _create_mona_lisa_sandbox_operation(
+                record=record,
+                mission_plan_context=mission_plan_context,
+                plan_operation_id=operation_id,
+                actor=actor,
+            )
+            if sandbox_created:
+                sandbox_operation_id = _safe_str(sandbox_created.get("operation_id")).strip()
+                sandbox_status = _safe_str(sandbox_created.get("status")).strip()
+                sandbox_operation = sandbox_created.get("operation")
+                if bool(sandbox_created.get("ok")) and sandbox_operation_id:
+                    receipt_operation_id = sandbox_operation_id
+                    receipt_operation_status = sandbox_status
+                    operation_identity = _operation_receipt_identity(sandbox_operation)
+                    message = "operation_created_and_sandbox_operation_queued"
+                else:
+                    message = (
+                        _redact_free_text(sandbox_created.get("error"))
+                        or _redact_free_text(sandbox_created.get("message"))
+                        or "sandbox_operation_create_failed"
+                    )
+        advance_ok = bool(created.get("ok")) and (not sandbox_created or bool(sandbox_created.get("ok")))
         mission_store.tick_mission(mission_id, actor=actor, note="advance_post_create")
+        if sandbox_created and bool(sandbox_created.get("ok")) and receipt_operation_id:
+            _, transition_err = mission_store.record_linked_task_transition(
+                mission_id,
+                receipt_operation_id,
+                task_status="accepted",
+                actor=actor,
+                note="mona_lisa_sandbox_operation_current_task",
+            )
+            if transition_err:
+                advance_ok = False
+                message = transition_err
         updated_record, receipt_err = mission_store.record_advance_receipt(
             mission_id,
             action=action,
-            outcome="applied" if bool(created.get("ok")) else "error",
+            outcome="applied" if advance_ok else "error",
             actor=actor,
             note=note,
-            operation_id=operation_id,
+            operation_id=receipt_operation_id,
             **operation_identity,
-            operation_status=operation_status,
+            operation_status=receipt_operation_status,
             message=message,
-            applied=bool(created.get("ok")),
+            applied=advance_ok,
         )
         if receipt_err:
             return {"ok": False, "applied": False, "error": receipt_err}
-        return {
-            "ok": bool(created.get("ok")),
-            "applied": bool(created.get("ok")),
+        response: dict[str, object] = {
+            "ok": advance_ok,
+            "applied": advance_ok,
             "action": action,
             "mission_record": updated_record,
             "operation": created.get("operation"),
@@ -339,6 +525,18 @@ def advance_mission(
             "message": message,
             **_operation_handoff(created.get("operation")),
         }
+        if sandbox_created:
+            sandbox_operation_id = _safe_str(sandbox_created.get("operation_id")).strip()
+            sandbox_operation = sandbox_created.get("operation")
+            response["linked_operation_action"] = _MONA_LISA_SANDBOX_CAPABILITY
+            response["linked_operation_id"] = sandbox_operation_id or None
+            response["linked_operation_status"] = _safe_str(sandbox_created.get("status")).strip() or None
+            response["linked_operation_queued"] = bool(sandbox_created.get("ok"))
+            if isinstance(sandbox_operation, dict):
+                response["linked_operation"] = sandbox_operation
+            if sandbox_created.get("error"):
+                response["linked_operation_error"] = _redact_free_text(sandbox_created.get("error"))
+        return response
 
     if action == "run_linked_operation" and action_target_id:
         run_result = _run_operation_for_advance(

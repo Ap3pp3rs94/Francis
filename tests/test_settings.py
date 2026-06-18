@@ -9,6 +9,7 @@ def test_settings_reads_canonical_francis_env_aliases(monkeypatch) -> None:
     monkeypatch.setenv("FRANCIS_API_PORT", "8010")
     monkeypatch.setenv("FRANCIS_OLLAMA_BASE_URL", "http://127.0.0.1:11434")
     monkeypatch.setenv("FRANCIS_LLM_CHAT_MODEL", "francis-chat")
+    monkeypatch.setenv("FRANCIS_LLM_REQUEST_TIMEOUT_S", "90")
 
     settings = Settings()
 
@@ -17,3 +18,4 @@ def test_settings_reads_canonical_francis_env_aliases(monkeypatch) -> None:
     assert settings.francis_api_port == 8010
     assert settings.ollama_base_url == "http://127.0.0.1:11434"
     assert settings.ollama_default_model == "francis-chat"
+    assert settings.llm_request_timeout_seconds == 90

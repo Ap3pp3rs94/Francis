@@ -9,6 +9,7 @@ import {
   presentStage6NextHandoff,
   presentStage6PrerequisiteBringup,
   shouldOpenLensCommandPalette,
+  shouldOpenLensOrbOverlay,
   shouldOpenLensStatusPanel,
   stage6PrerequisiteConfirmationMessage,
 } from "./index.ts";
@@ -22,6 +23,15 @@ test("shouldOpenLensCommandPalette accepts governed URL intents", () => {
   assert.equal(shouldOpenLensCommandPalette("", "#/console?lens_palette=command_palette"), true);
   assert.equal(shouldOpenLensCommandPalette("?francis_lens=status"), false);
   assert.equal(shouldOpenLensCommandPalette("?lens_palette=closed"), false);
+});
+
+test("shouldOpenLensOrbOverlay accepts Orb-only overlay URL intents", () => {
+  assert.equal(shouldOpenLensOrbOverlay("?francis_lens=orb_overlay"), true);
+  assert.equal(shouldOpenLensOrbOverlay("?lens_overlay=orb"), true);
+  assert.equal(shouldOpenLensOrbOverlay("", "#/console?francis_lens=orb_overlay"), true);
+  assert.equal(shouldOpenLensOrbOverlay("", "#/console?lens_overlay=orb"), true);
+  assert.equal(shouldOpenLensOrbOverlay("?francis_lens=command_palette"), false);
+  assert.equal(shouldOpenLensOrbOverlay("?lens_overlay=status"), false);
 });
 
 test("shouldOpenLensStatusPanel accepts read-only Lens status URL intents", () => {

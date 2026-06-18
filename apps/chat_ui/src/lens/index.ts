@@ -1258,6 +1258,21 @@ export function shouldOpenLensCommandPalette(search: string, hash = ""): boolean
   return francisLens === "command_palette" || lensPalette === "open" || lensPalette === "command_palette";
 }
 
+export function shouldOpenLensOrbOverlay(search: string, hash = ""): boolean {
+  const searchParams = paramsFromLocationPart(search);
+  const hashText = safeString(hash).trim().replace(/^#/, "");
+  const hashQuery = hashText.includes("?") ? hashText.slice(hashText.indexOf("?") + 1) : hashText;
+  const hashParams = paramsFromLocationPart(hashQuery);
+
+  const francisLens = (searchParams.get("francis_lens") || hashParams.get("francis_lens") || "")
+    .trim()
+    .toLowerCase();
+  const lensOverlay = (searchParams.get("lens_overlay") || hashParams.get("lens_overlay") || "")
+    .trim()
+    .toLowerCase();
+  return francisLens === "orb_overlay" || lensOverlay === "orb";
+}
+
 export function shouldOpenLensStatusPanel(search: string, hash = ""): boolean {
   const searchParams = paramsFromLocationPart(search);
   const hashText = safeString(hash).trim().replace(/^#/, "");

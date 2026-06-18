@@ -221,6 +221,9 @@ tts:
       - id: "openai"
         enabled: false
         notes: "Hosted TTS; requires network egress + credentials."
+      - id: "elevenlabs"
+        enabled: false
+        notes: "Hosted expressive TTS; requires network egress + credentials."
       - id: "azure"
         enabled: false
         notes: "Hosted TTS; requires network egress + credentials."

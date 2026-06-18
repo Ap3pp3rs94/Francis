@@ -24,6 +24,7 @@ if TYPE_CHECKING:
 
         ollama_base_url: str = "http://localhost:11434"
         ollama_default_model: str = "qwen2.5:7b"
+        llm_request_timeout_seconds: int = 90
 
         model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -98,6 +99,10 @@ if not TYPE_CHECKING and BaseSettings is not None:
             default="qwen2.5:7b",
             validation_alias=AliasChoices("FRANCIS_LLM_CHAT_MODEL", "OLLAMA_DEFAULT_MODEL"),
         )
+        llm_request_timeout_seconds: int = Field(
+            default=90,
+            validation_alias=AliasChoices("FRANCIS_LLM_REQUEST_TIMEOUT_S", "LLM_REQUEST_TIMEOUT_S"),
+        )
 
         model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -128,4 +133,7 @@ elif not TYPE_CHECKING:
         )
         ollama_default_model: str = field(
             default_factory=lambda: _env_text("FRANCIS_LLM_CHAT_MODEL", "OLLAMA_DEFAULT_MODEL", default="qwen2.5:7b")
+        )
+        llm_request_timeout_seconds: int = field(
+            default_factory=lambda: _env_int("FRANCIS_LLM_REQUEST_TIMEOUT_S", "LLM_REQUEST_TIMEOUT_S", default=90)
         )

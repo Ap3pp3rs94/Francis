@@ -37,6 +37,8 @@ class ChatIn(BaseModel):
     actor: str | None = None
     request_actor: str | None = None
     api_actor: str | None = None
+    voice_turn_id: str | None = None
+    supersedes_voice_turn_id: str | None = None
 
 
 def _safe_dict(value: object) -> dict[str, object]:
@@ -54,14 +56,24 @@ def _safe_int(value: object) -> int:
     return 0
 
 
+def _bounded_trace_identifier(value: object, *, max_length: int = 96) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    safe = "".join(char for char in text if char.isalnum() or char in {"_", "-", "."})
+    return safe[:max_length]
+
+
 def _chat_route_execution_trace(
     *,
     actor: str,
     route: str = "/chat/send",
     method: str = "POST",
     use_llm: bool = False,
+    voice_turn_id: str = "",
+    supersedes_voice_turn_id: str = "",
 ) -> dict[str, object]:
-    return {
+    trace: dict[str, object] = {
         "trace_kind": "chat_route_execution_trace",
         "trace_id": f"chat_trace_{uuid.uuid4().hex[:16]}",
         "run_id": f"chat_run_{uuid.uuid4().hex[:16]}",
@@ -76,6 +88,30 @@ def _chat_route_execution_trace(
         "grants_execution_authority": False,
         "grants_mutation_authority": False,
     }
+    bounded_voice_turn_id = _bounded_trace_identifier(voice_turn_id)
+    bounded_supersedes_voice_turn_id = _bounded_trace_identifier(supersedes_voice_turn_id)
+    if bounded_voice_turn_id or bounded_supersedes_voice_turn_id:
+        trace["voice_turn_correlation"] = True
+        trace["voice_turn_id"] = bounded_voice_turn_id
+        trace["supersedes_voice_turn_id"] = bounded_supersedes_voice_turn_id
+        trace["voice_turn_correlation_source"] = "chat.send.payload"
+        trace["voice_turn_correlation_read_only"] = True
+        trace["voice_turn_correlation_grants_execution_authority"] = False
+        trace["voice_turn_correlation_grants_mutation_authority"] = False
+        trace["model_call_cancellation_supported"] = False
+        trace["model_call_abort_requested"] = False
+        trace["model_call_abort_observed"] = False
+        trace["stale_reply_suppression_supported"] = True
+        trace["voice_turn_relevance_policy"] = "latest_voice_turn_wins"
+        trace["voice_turn_state_owner"] = "lens.overlay"
+        trace["stale_reply_suppression_owner"] = "lens.overlay"
+        trace["stale_reply_suppression_boundary"] = "overlay_voice_turn_current_check"
+        trace["backend_current_voice_turn_lookup_supported"] = False
+        trace["backend_stale_reply_drop_supported"] = False
+        trace["model_call_abort_boundary"] = "not_supported_request_runs_to_completion"
+        trace["thought_relevance_pruning_supported"] = False
+        trace["thought_relevance_pruning_boundary"] = "not_supported_trace_only"
+    return trace
 
 
 def _chat_text_from_wire(raw: str) -> str:
@@ -312,6 +348,64 @@ def _permission_denied(
     }
 
 
+def _mission_ingress_request_meta(payload: ChatIn, intent_meta: dict[str, Any]) -> dict[str, Any]:
+    meta = dict(intent_meta)
+    meta["source"] = _CHAT_MISSION_ACTOR
+    meta["ingress_plane"] = "P1_INTERFACE"
+
+    input_actor = _chat_actor(payload)
+    if input_actor != "api.chat" or payload.actor or payload.request_actor or payload.api_actor:
+        meta["input_actor"] = input_actor
+
+    voice_turn_id = _bounded_trace_identifier(payload.voice_turn_id or "")
+    supersedes_voice_turn_id = _bounded_trace_identifier(payload.supersedes_voice_turn_id or "")
+    if voice_turn_id or supersedes_voice_turn_id:
+        meta["voice_turn_correlation"] = {
+            "voice_turn_id": voice_turn_id,
+            "supersedes_voice_turn_id": supersedes_voice_turn_id,
+            "source": "chat.send.payload",
+            "read_only": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        }
+    return meta
+
+
+def _mission_orb_embodiment_projection(
+    *,
+    record: mission_store.MissionRecord,
+    operation_id: str,
+) -> dict[str, Any]:
+    record_meta = _safe_dict(record.meta)
+    orb_meta = _safe_dict(record_meta.get("orb_embodiment"))
+    intent_kind = str(record_meta.get("intent_kind") or "").strip()
+    return {
+        "kind": "francis.orb.embodiment_projection",
+        "source": "mission_ingress",
+        "truth_source": "mission_record",
+        "intent_kind": intent_kind,
+        "mission_id": record.mission_id,
+        "operation_id": operation_id,
+        "semantic_state": str(orb_meta.get("semantic_state") or "planning").strip(),
+        "movement_mode": str(orb_meta.get("movement_mode") or "precision_pending").strip(),
+        "visual_change": bool(orb_meta.get("visual_change")) is True,
+        "visual_lock_preserved": bool(orb_meta.get("visual_lock_preserved", True)),
+        "claims_action_completed": False,
+        "claims_painting_completed": bool(record_meta.get("claim_completed_painting")) is True,
+        "live_desktop_execution": bool(record_meta.get("live_desktop_execution")) is True,
+        "sandbox_status": str(record_meta.get("sandbox_status") or "").strip(),
+        "receipt_refs": {
+            "mission_record": f"data/missions/{record.mission_id}/record.json",
+            "operation_record": f"data/tasks/{operation_id}/record.json" if operation_id else "",
+        },
+        "governance": {
+            "read_only_projection": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+    }
+
+
 def _posture_block_governance(blocked_reason: str) -> dict[str, object]:
     reason = "operator_posture_unverified"
     next_step = "verify_operator_posture_before_declaring_chat_missions"
@@ -379,6 +473,9 @@ def _compact_mission_advance_result(outcome: dict[str, object]) -> dict[str, obj
         "status",
         "message",
         "operation_id",
+        "linked_operation_action",
+        "linked_operation_id",
+        "linked_operation_status",
         "approval_id",
         "gate",
         "next_step",
@@ -458,12 +555,12 @@ def _mission_ingress_reply(
     record, err = mission_store.create_mission(
         MissionCreateRequest(
             objective=objective,
-            summary="Mission declared from chat ingress.",
-            next_step="Declare or advance the first bounded operation for this mission.",
+            summary=intent.summary,
+            next_step=intent.next_step,
             requester_id=_CHAT_MISSION_ACTOR,
             owner_id=_CHAT_MISSION_ACTOR,
             status=mission_store.MissionStatus.QUEUED,
-            meta={"source": _CHAT_MISSION_ACTOR, "ingress_plane": "P1_INTERFACE"},
+            meta=_mission_ingress_request_meta(payload, intent.meta),
         )
     )
     if not record:
@@ -529,6 +626,20 @@ def _mission_ingress_reply(
         response["operation"] = operation
     if advance_result.get("error"):
         response["error"] = str(advance_result.get("error") or "").strip()
+    if str(projected_record.meta.get("intent_kind") or "").strip() == "mona_lisa_sandbox_painting":
+        response["orb_embodiment"] = _mission_orb_embodiment_projection(
+            record=projected_record,
+            operation_id=operation_id,
+        )
+        response["operator_contract"] = _safe_dict(projected_record.meta.get("operator_contract"))
+        response["lens_overlay_observation"] = _safe_dict(projected_record.meta.get("lens_overlay_observation"))
+        linked_operation_id = str(advance_result.get("linked_operation_id") or "").strip()
+        linked_operation = advance_result.get("linked_operation")
+        response["sandbox_operation_queued"] = bool(advance_result.get("linked_operation_queued"))
+        if linked_operation_id:
+            response["sandbox_operation_id"] = linked_operation_id
+        if isinstance(linked_operation, dict):
+            response["sandbox_operation"] = linked_operation
     response.update(detail)
     return response
 
@@ -548,7 +659,12 @@ def send(payload: ChatIn) -> dict[str, object]:
                 reply="Chat request denied by permission gate.",
             )
         telemetry_context = _chat_feedback_memory_assistance_context(telemetry_context_snapshot(surface="chat"))
-        execution_trace = _chat_route_execution_trace(actor=actor, use_llm=payload.use_llm)
+        execution_trace = _chat_route_execution_trace(
+            actor=actor,
+            use_llm=payload.use_llm,
+            voice_turn_id=payload.voice_turn_id or "",
+            supersedes_voice_turn_id=payload.supersedes_voice_turn_id or "",
+        )
         return {
             "reply": handle(
                 payload.message,

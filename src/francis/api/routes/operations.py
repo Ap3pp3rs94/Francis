@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 from francis.agent import delegation as delegation_store
 from francis.agent import executor as agent_executor
+from francis.agent import sandbox_canvas
 from francis.api.routes._operator_posture import posture_write_guard
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.governance.operation_redaction import (
@@ -44,6 +45,9 @@ _ACTION_TO_CAPABILITY: dict[str, str] = {
     "chat.summarize": "chat.summarize",
     "plan.create": "plan.create",
     "plan.revise": "plan.revise",
+    "sandbox.canvas.paint_mona_lisa": "sandbox.canvas.paint_mona_lisa",
+    "sandbox.paint.mona_lisa": "sandbox.canvas.paint_mona_lisa",
+    "mona_lisa.sandbox.paint": "sandbox.canvas.paint_mona_lisa",
     "git.push": "git.push",
     "operations.git.push": "git.push",
     "codex.supervised_exec": "codex.supervised_exec",
@@ -103,6 +107,15 @@ class OperationCancelIn(BaseModel):
 class OperationDeleteIn(BaseModel):
     reason: str = "deleted_by_operator"
     actor: str | None = _DEFAULT_OPERATION_RUN_ACTOR
+
+
+class SandboxCanvasEvaluationRecordIn(BaseModel):
+    artifact_dir: str | None = None
+    run_id: str | None = None
+    operation_id: str | None = None
+    actor: str | None = _DEFAULT_OPERATION_RUN_ACTOR
+    reason: str = "record_sandbox_canvas_evaluation"
+    meta: dict[str, Any] = Field(default_factory=dict)
 
 
 class OperationGetManyIn(BaseModel):
@@ -1003,6 +1016,97 @@ def export_operations(
 
     content = json.dumps({"items": items}, indent=2, ensure_ascii=False, default=str)
     return PlainTextResponse(content=content, media_type="application/json")
+
+
+@router.get("/sandbox-canvas/mona-lisa/evaluation")
+def evaluate_mona_lisa_sandbox_canvas(
+    artifact_dir: str | None = None,
+    run_id: str | None = None,
+    operation_id: str | None = None,
+) -> dict[str, object]:
+    op_id = _safe_str(operation_id).strip()
+    resolved_artifact_dir = _safe_str(artifact_dir).strip() or None
+    if op_id:
+        if not _validate_operation_id(op_id):
+            return {"ok": False, "status": "blocked", "error": "invalid_operation_id"}
+        task = _load_task(op_id)
+        if not isinstance(task, dict):
+            return {"ok": False, "status": "blocked", "error": "operation_not_found", "operation_id": op_id}
+        operation = _task_to_operation(task)
+        resolved_artifact_dir = resolved_artifact_dir or _safe_str(operation.get("artifact_dir")).strip() or None
+    return sandbox_canvas.evaluate_mona_lisa_sandbox_artifact(
+        artifact_dir=resolved_artifact_dir,
+        run_id=run_id,
+        operation_id=op_id,
+    )
+
+
+@router.post("/sandbox-canvas/mona-lisa/evaluation/record")
+def record_mona_lisa_sandbox_canvas_evaluation(
+    request: Request,
+    payload: SandboxCanvasEvaluationRecordIn,
+) -> dict[str, object]:
+    permission = _operation_write_permission(payload.actor, route=request.url.path, method=request.method)
+    if not permission.allowed:
+        return _permission_denied(
+            permission,
+            next_step="configure_actor_scope_before_recording_sandbox_canvas_evaluation",
+        )
+
+    blocked_reason = posture_write_guard("recording sandbox canvas evaluation")
+    if blocked_reason:
+        return {
+            "ok": False,
+            "status": "blocked",
+            "error": blocked_reason,
+            "governance": {
+                "gate": "operator_posture",
+                "writes_files": False,
+                "writes_evaluation_record": False,
+                "writes_queue_item": False,
+                "writes_proposal_records": False,
+                "runs_operation": False,
+                "desktop_control": False,
+                "approves_proposals": False,
+                "promotes_changes": False,
+            },
+        }
+
+    op_id = _safe_str(payload.operation_id).strip()
+    resolved_artifact_dir = _safe_str(payload.artifact_dir).strip() or None
+    if op_id:
+        if not _validate_operation_id(op_id):
+            return {"ok": False, "status": "blocked", "error": "invalid_operation_id"}
+        task = _load_task(op_id)
+        if not isinstance(task, dict):
+            return {"ok": False, "status": "blocked", "error": "operation_not_found", "operation_id": op_id}
+        operation = _task_to_operation(task)
+        resolved_artifact_dir = resolved_artifact_dir or _safe_str(operation.get("artifact_dir")).strip() or None
+
+    return sandbox_canvas.record_mona_lisa_sandbox_evaluation(
+        artifact_dir=resolved_artifact_dir,
+        run_id=payload.run_id,
+        operation_id=op_id,
+        actor=payload.actor,
+        reason=payload.reason,
+        meta=payload.meta,
+    )
+
+
+@router.get("/sandbox-canvas/mona-lisa/evaluation-queue")
+def list_mona_lisa_sandbox_canvas_evaluation_queue(
+    limit: int = 50,
+    status: str | None = None,
+) -> dict[str, object]:
+    return sandbox_canvas.list_mona_lisa_sandbox_evaluation_queue(limit=limit, status=status)
+
+
+@router.get("/sandbox-canvas/mona-lisa/improvement-proposals")
+def list_mona_lisa_sandbox_canvas_improvement_proposals(
+    limit: int = 50,
+    status: str | None = None,
+) -> dict[str, object]:
+    return sandbox_canvas.list_mona_lisa_sandbox_improvement_proposals(limit=limit, status=status)
 
 
 @router.get("/{operation_id}")

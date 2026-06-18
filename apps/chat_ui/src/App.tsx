@@ -1,7 +1,16 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 
 import { fetchLensMcpStatus, type LensMcpStatus } from "./lens/mcpStatus";
 import { bodyStateReady, presentOrbGlyph, type OrbGlyphState } from "./lens/orbGlyph";
+import { shouldOpenLensOrbOverlay } from "./lens";
 
 function envString(key: string, fallback = ""): string {
   const env = (import.meta.env ?? {}) as Record<string, unknown>;
@@ -19,6 +28,10 @@ function statusText(value: unknown): string {
 
 function boolText(value: boolean): string {
   return value ? "true" : "false";
+}
+
+function isAbortError(err: unknown): boolean {
+  return err instanceof Error && err.name === "AbortError";
 }
 
 function Pill(props: { label: string; value: string; tone?: "ready" | "blocked" | "neutral" }) {
@@ -51,23 +64,25 @@ function orbRand(n: number): number {
 // filament density. Generated once; deliberately irregular — varied size, tilt,
 // opacity, and small center offsets so the field is chaotic, not a clean "atom".
 const ORB_TRAILS: ReadonlyArray<{ rx: number; ry: number; rot: number; o: number; dx: number; dy: number }> =
-  Array.from({ length: 60 }, (_unused, i) => ({
-    rx: 14 + orbRand(i + 5) * 42,
-    ry: 6 + orbRand(i + 13) * 24,
-    rot: (i * 360) / 60 + (orbRand(i) - 0.5) * 46,
-    o: 0.03 + orbRand(i + 23) * 0.12,
-    dx: (orbRand(i + 41) - 0.5) * 14,
-    dy: (orbRand(i + 59) - 0.5) * 14,
+  Array.from({ length: 112 }, (_unused, i) => ({
+    rx: 18 + orbRand(i + 5) * 62,
+    ry: 7 + orbRand(i + 13) * 35,
+    rot: (i * 360) / 112 + (orbRand(i) - 0.5) * 76,
+    o: 0.035 + orbRand(i + 23) * 0.18,
+    dx: (orbRand(i + 41) - 0.5) * 22,
+    dy: (orbRand(i + 59) - 0.5) * 22,
   }));
 
 // A few crisper, slightly offset strands give the field definition over the smoke.
 const ORB_ACCENTS: ReadonlyArray<{ rx: number; ry: number; rot: number; dx: number; dy: number }> = [
-  { rx: 46, ry: 17, rot: 18, dx: -3, dy: 2 },
-  { rx: 49, ry: 26, rot: 84, dx: 4, dy: -2 },
-  { rx: 38, ry: 12, rot: 143, dx: 2, dy: 3 },
-  { rx: 30, ry: 28, rot: 52, dx: -2, dy: -3 },
-  { rx: 53, ry: 21, rot: 110, dx: 3, dy: 1 },
-  { rx: 34, ry: 18, rot: 7, dx: -1, dy: -2 },
+  { rx: 68, ry: 22, rot: 18, dx: -4, dy: 3 },
+  { rx: 72, ry: 34, rot: 84, dx: 6, dy: -3 },
+  { rx: 58, ry: 18, rot: 143, dx: 3, dy: 4 },
+  { rx: 46, ry: 42, rot: 52, dx: -3, dy: -4 },
+  { rx: 78, ry: 28, rot: 110, dx: 4, dy: 1 },
+  { rx: 52, ry: 24, rot: 7, dx: -2, dy: -3 },
+  { rx: 64, ry: 38, rot: 156, dx: 2, dy: -1 },
+  { rx: 44, ry: 17, rot: 219, dx: -5, dy: 2 },
 ];
 
 function OrbGlyph(props: { state: OrbGlyphState }) {
@@ -76,9 +91,9 @@ function OrbGlyph(props: { state: OrbGlyphState }) {
   const ringBoost = 0.6 + 0.5 * s.intensity;
   return (
     <svg
-      width={104}
-      height={104}
-      viewBox="0 0 120 120"
+      width={118}
+      height={118}
+      viewBox="0 0 160 160"
       role="img"
       aria-label={s.label}
       data-orb-glyph="true"
@@ -91,70 +106,70 @@ function OrbGlyph(props: { state: OrbGlyphState }) {
       <defs>
         {/* Soft dark field — a gentle vignette, not a hard black badge. */}
         <radialGradient id="francisOrbField" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="#0a1018" stopOpacity={0.6} />
-          <stop offset="62%" stopColor="#070b12" stopOpacity={0.3} />
-          <stop offset="100%" stopColor="#070b12" stopOpacity={0} />
+          <stop offset="0%" stopColor="#0a1018" stopOpacity={0.78} />
+          <stop offset="48%" stopColor="#05080d" stopOpacity={0.36} />
+          <stop offset="100%" stopColor="#020306" stopOpacity={0} />
         </radialGradient>
         {/* Luminous white/silver halo. */}
         <radialGradient id="francisOrbGlow" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor={s.glowColor} stopOpacity={0.85 * s.intensity} />
-          <stop offset="32%" stopColor={s.glowColor} stopOpacity={0.26 * s.intensity} />
-          <stop offset="70%" stopColor={s.glowColor} stopOpacity={0.05 * s.intensity} />
+          <stop offset="0%" stopColor={s.glowColor} stopOpacity={0.95 * s.intensity} />
+          <stop offset="23%" stopColor={s.glowColor} stopOpacity={0.34 * s.intensity} />
+          <stop offset="62%" stopColor={s.glowColor} stopOpacity={0.08 * s.intensity} />
           <stop offset="100%" stopColor={s.glowColor} stopOpacity={0} />
         </radialGradient>
         {/* Graphite core whose edge dissolves into the field — a dark dense body
             with light emerging from inside, not a hard marble. */}
         <radialGradient id="francisOrbCore" cx="48%" cy="44%" r="60%">
-          <stop offset="0%" stopColor="#dfe9f8" stopOpacity={0.85} />
-          <stop offset="22%" stopColor="#7f93ad" stopOpacity={0.45} />
-          <stop offset="46%" stopColor="#26354a" stopOpacity={0.92} />
-          <stop offset="74%" stopColor="#101824" stopOpacity={0.8} />
+          <stop offset="0%" stopColor="#ffffff" stopOpacity={0.98} />
+          <stop offset="20%" stopColor="#eef6ff" stopOpacity={0.9} />
+          <stop offset="42%" stopColor="#8298b5" stopOpacity={0.64} />
+          <stop offset="70%" stopColor="#172231" stopOpacity={0.76} />
           <stop offset="100%" stopColor={s.coreColor} stopOpacity={0} />
         </radialGradient>
         {/* Soft white luminous bloom — bright center bleeding past the core. */}
         <radialGradient id="francisOrbCenter" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="#ffffff" stopOpacity={0.95 * s.intensity} />
-          <stop offset="22%" stopColor="#ffffff" stopOpacity={0.4 * s.intensity} />
-          <stop offset="55%" stopColor="#ffffff" stopOpacity={0.1 * s.intensity} />
+          <stop offset="0%" stopColor="#ffffff" stopOpacity={1 * s.intensity} />
+          <stop offset="28%" stopColor="#ffffff" stopOpacity={0.68 * s.intensity} />
+          <stop offset="62%" stopColor="#eaf2ff" stopOpacity={0.16 * s.intensity} />
           <stop offset="100%" stopColor="#ffffff" stopOpacity={0} />
         </radialGradient>
         {/* Smoky softening for the dense trail field. */}
         <filter id="francisOrbSmoke" x="-25%" y="-25%" width="150%" height="150%">
-          <feGaussianBlur stdDeviation="0.5" />
+          <feGaussianBlur stdDeviation="0.42" />
         </filter>
       </defs>
-      <circle cx={60} cy={60} r={58} fill="url(#francisOrbField)" />
-      <circle cx={60} cy={60} r={56} fill="url(#francisOrbGlow)" />
+      <circle cx={80} cy={80} r={78} fill="url(#francisOrbField)" />
+      <circle cx={80} cy={80} r={73} fill="url(#francisOrbGlow)" />
       {/* Dense smoky trail field */}
-      <g fill="none" stroke={s.ringColor} strokeWidth={0.5} filter="url(#francisOrbSmoke)">
+      <g fill="none" stroke={s.ringColor} strokeWidth={0.58} filter="url(#francisOrbSmoke)">
         {ORB_TRAILS.map((t, i) => (
           <ellipse
             key={`trail-${i}`}
-            cx={60 + t.dx}
-            cy={60 + t.dy}
+            cx={80 + t.dx}
+            cy={80 + t.dy}
             rx={t.rx}
             ry={t.ry}
-            opacity={Math.min(0.4, t.o * ringBoost)}
-            transform={`rotate(${t.rot.toFixed(2)} ${(60 + t.dx).toFixed(2)} ${(60 + t.dy).toFixed(2)})`}
+            opacity={Math.min(0.52, t.o * ringBoost)}
+            transform={`rotate(${t.rot.toFixed(2)} ${(80 + t.dx).toFixed(2)} ${(80 + t.dy).toFixed(2)})`}
           />
         ))}
       </g>
       {/* Defining strands */}
-      <g fill="none" stroke={s.ringColor} strokeWidth={0.65}>
+      <g fill="none" stroke={s.ringColor} strokeWidth={0.78}>
         {ORB_ACCENTS.map((b, i) => (
           <ellipse
             key={`accent-${i}`}
-            cx={60 + b.dx}
-            cy={60 + b.dy}
+            cx={80 + b.dx}
+            cy={80 + b.dy}
             rx={b.rx}
             ry={b.ry}
-            opacity={Math.min(0.4, 0.12 * ringBoost)}
-            transform={`rotate(${b.rot} ${60 + b.dx} ${60 + b.dy})`}
+            opacity={Math.min(0.5, 0.18 * ringBoost)}
+            transform={`rotate(${b.rot} ${80 + b.dx} ${80 + b.dy})`}
           />
         ))}
       </g>
-      <circle cx={60} cy={60} r={26} fill="url(#francisOrbCore)" />
-      <circle cx={60} cy={60} r={32} fill="url(#francisOrbCenter)" />
+      <circle cx={80} cy={80} r={34} fill="url(#francisOrbCore)" />
+      <circle cx={80} cy={80} r={43} fill="url(#francisOrbCenter)" />
     </svg>
   );
 }
@@ -270,11 +285,121 @@ function BodyStatePanel(props: { status: LensMcpStatus | null; loading: boolean;
   );
 }
 
+const ORB_OVERLAY_SIZE = 128;
+
+function clampOrbOverlayPosition(left: number, top: number): { left: number; top: number } {
+  if (typeof window === "undefined") return { left, top };
+
+  const maxLeft = Math.max(0, window.innerWidth - ORB_OVERLAY_SIZE);
+  const maxTop = Math.max(0, window.innerHeight - ORB_OVERLAY_SIZE);
+  return {
+    left: Math.min(Math.max(0, left), maxLeft),
+    top: Math.min(Math.max(0, top), maxTop),
+  };
+}
+
+function getQueryParam(name: string): string {
+  if (typeof window === "undefined") return "";
+  return new URLSearchParams(window.location.search).get(name)?.trim() ?? "";
+}
+
+function OrbOverlaySurface(props: { status: LensMcpStatus | null; loading: boolean }) {
+  const orb = presentOrbGlyph(props.status, props.loading);
+  const dragState = useRef<{ pointerId: number; offsetX: number; offsetY: number } | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [position, setPosition] = useState(() => ({ left: 24, top: 24 }));
+  const snapshotMode = getQueryParam("lens_orb_snapshot") === "1";
+  const keyColor = getQueryParam("lens_overlay_key");
+  const background = /^#?[0-9a-fA-F]{6}$/.test(keyColor)
+    ? `#${keyColor.replace(/^#/, "")}`
+    : "transparent";
+
+  const moveToPointer = useCallback((clientX: number, clientY: number) => {
+    const drag = dragState.current;
+    if (!drag) return;
+    setPosition(clampOrbOverlayPosition(clientX - drag.offsetX, clientY - drag.offsetY));
+  }, []);
+
+  const onPointerDown = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    dragState.current = {
+      pointerId: event.pointerId,
+      offsetX: event.clientX - rect.left,
+      offsetY: event.clientY - rect.top,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setDragging(true);
+  }, []);
+
+  const onPointerMove = useCallback(
+    (event: ReactPointerEvent<HTMLButtonElement>) => {
+      if (dragState.current?.pointerId !== event.pointerId) return;
+      moveToPointer(event.clientX, event.clientY);
+    },
+    [moveToPointer],
+  );
+
+  const releasePointer = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (dragState.current?.pointerId !== event.pointerId) return;
+    dragState.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    setDragging(false);
+  }, []);
+
+  return (
+    <main
+      data-francis-lens-surface="orb_overlay"
+      style={{
+        background,
+        minHeight: "100vh",
+        overflow: "hidden",
+        width: snapshotMode ? ORB_OVERLAY_SIZE : undefined,
+      }}
+    >
+      <button
+        type="button"
+        aria-label={orb.label}
+        data-orb-overlay="true"
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={releasePointer}
+        onPointerCancel={releasePointer}
+        disabled={snapshotMode}
+        style={{
+          alignItems: "center",
+          background: "transparent",
+          border: 0,
+          boxSizing: "border-box",
+          cursor: snapshotMode ? "default" : dragging ? "grabbing" : "grab",
+          display: "flex",
+          height: ORB_OVERLAY_SIZE,
+          justifyContent: "center",
+          left: snapshotMode ? 0 : position.left,
+          padding: 4,
+          position: "fixed",
+          top: snapshotMode ? 0 : position.top,
+          touchAction: "none",
+          width: ORB_OVERLAY_SIZE,
+        }}
+      >
+        <OrbGlyph state={orb} />
+      </button>
+    </main>
+  );
+}
+
 export default function App() {
   const [status, setStatus] = useState<LensMcpStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const baseUrl = useMemo(() => apiBaseUrl(), []);
+  const orbOverlayIntent = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    return shouldOpenLensOrbOverlay(window.location.search, window.location.hash);
+  }, []);
 
   const loadStatus = useCallback(
     (signal?: AbortSignal) => {
@@ -286,9 +411,11 @@ export default function App() {
           setStatus(nextStatus);
         })
         .catch((err: unknown) => {
+          if (signal?.aborted || isAbortError(err)) return;
           setError(err instanceof Error ? err.message : "Lens MCP status request failed.");
         })
         .finally(() => {
+          if (signal?.aborted) return;
           setLoading(false);
         });
     },
@@ -308,6 +435,10 @@ export default function App() {
     minHeight: "100vh",
     padding: 32,
   };
+
+  if (orbOverlayIntent) {
+    return <OrbOverlaySurface status={status} loading={loading} />;
+  }
 
   return (
     <main style={shell}>

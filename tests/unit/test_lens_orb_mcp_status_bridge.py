@@ -42,6 +42,7 @@ def test_lens_orb_mcp_status_bridge_reports_read_only_body_state(tmp_path, monke
     assert out["mcp"]["missing_required_tools"] == []
     assert out["mcp"]["missing_tools"] == []
     assert out["developer_bridge"]["status"] == "ready"
+    assert out["routes"]["mcp_observe"] == "/lens/mcp/observe"
 
     governance = out["governance"]
     assert governance["read_only"] is True
