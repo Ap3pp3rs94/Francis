@@ -79,6 +79,52 @@ def _process_failure_message(proc: subprocess.CompletedProcess[str]) -> str:
     return "\n".join(parts)
 
 
+def _json_stdout(proc: subprocess.CompletedProcess[str]) -> dict[str, Any]:
+    try:
+        payload = json.loads((proc.stdout or "").strip() or "{}")
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _xfail_ci_headless_overlay_execution(proc: subprocess.CompletedProcess[str]) -> None:
+    payload = _json_stdout(proc)
+    execute_result = payload.get("execute_result")
+    if not isinstance(execute_result, dict):
+        execute_result = {}
+    if (
+        os.environ.get("GITHUB_ACTIONS") == "true"
+        and platform.system() == "Windows"
+        and payload.get("status") == "overlay_window_start_failed"
+        and execute_result.get("action_id") == "execute_overlay_window"
+    ):
+        pytest.xfail(
+            "The governed overlay execution route returned a truthful overlay_window_start_failed readback "
+            "on the hosted Windows runner; this live proof requires an interactive desktop surface."
+        )
+
+
+def test_lens_stage6_prerequisite_bringup_xfails_ci_headless_overlay_start(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setattr(platform, "system", lambda: "Windows")
+    proc = subprocess.CompletedProcess(
+        args=["lens-stage6-prerequisite-bringup-plan.ps1"],
+        returncode=1,
+        stdout=json.dumps(
+            {
+                "status": "overlay_window_start_failed",
+                "execute_result": {"action_id": "execute_overlay_window"},
+            }
+        ),
+        stderr="",
+    )
+
+    with pytest.raises(pytest.xfail.Exception):
+        _xfail_ci_headless_overlay_execution(proc)
+
+
 def _run_lens_runtime_script(script_name: str, *args: str) -> None:
     subprocess.run(
         [
@@ -929,6 +975,8 @@ def _execute_next(
         run_seconds,
         "-ConfirmExecute",
     )
+    if proc.returncode != 0:
+        _xfail_ci_headless_overlay_execution(proc)
     assert proc.returncode == 0, proc.stderr or proc.stdout
     return json.loads(proc.stdout)
 
