@@ -137,6 +137,7 @@ def test_chatgpt_voice_connector_status_accepts_manual_connector_url(tmp_path: P
     assert payload["connector_url"] == "https://francis.example.test/mcp"
     assert payload["connector_url_source"] == "argument"
     assert payload["endpoint_status"]["chatgpt_connector"]["connector_url"]["shape_valid"] is True
+    assert payload["endpoint_status"]["chatgpt_connector"]["connector_probe_timeout_seconds"] == 5
     assert payload["governance"]["read_only"] is True
     assert payload["governance"]["starts_process"] is False
     assert payload["governance"]["opens_public_tunnel"] is False
@@ -166,6 +167,7 @@ def test_chatgpt_voice_connector_status_accepts_environment_connector_url(tmp_pa
     assert payload["connector_url"] == "https://francis-env.example.test/mcp"
     assert payload["connector_url_source"] == "environment:FRANCIS_CHATGPT_VOICE_CONNECTOR_URL"
     assert payload["endpoint_status"]["chatgpt_connector"]["connector_url"]["shape_valid"] is True
+    assert payload["endpoint_status"]["chatgpt_connector"]["connector_probe_timeout_seconds"] == 5
     assert payload["governance"]["read_only"] is True
     assert payload["governance"]["starts_process"] is False
     assert payload["governance"]["opens_public_tunnel"] is False

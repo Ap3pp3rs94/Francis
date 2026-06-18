@@ -17,6 +17,8 @@ param(
   [string]$RuntimeRoot = '',
   [switch]$ExposePublicTunnel,
   [switch]$VerifyConnector,
+  [ValidateRange(1, 60)]
+  [int]$ConnectorProbeTimeoutSeconds = 5,
   [switch]$Json
 )
 
@@ -305,7 +307,9 @@ function Invoke-EndpointStatus {
     '-Port',
     [string]$Port,
     '-Path',
-    $Path
+    $Path,
+    '-ConnectorProbeTimeoutSeconds',
+    [string]$ConnectorProbeTimeoutSeconds
   )
   if (-not [string]::IsNullOrWhiteSpace($ConnectorUrl)) {
     $Args += @('-ConnectorUrl', $ConnectorUrl)

@@ -205,6 +205,7 @@ def test_orb_voice_overlay_lens_validation_uses_environment_connector_url(
     assert payload["chatgpt_voice_connector"]["connector_usable_for_chatgpt"] is False
     assert payload["chatgpt_voice_connector"]["connector_reachability_status"] == "verification_not_requested"
     assert payload["chatgpt_voice_connector"]["connector_reachability_probe_requested"] is False
+    assert payload["chatgpt_voice_connector"]["connector_probe_timeout_seconds"] == 5
     assert payload["persistent_ingress_plan"]["status"] == "connector_url_shape_valid_record_ready"
     assert payload["persistent_ingress_plan"]["connector_url"]["source"] == (
         "environment:FRANCIS_CHATGPT_VOICE_CONNECTOR_URL"

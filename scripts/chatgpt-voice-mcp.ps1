@@ -12,6 +12,8 @@ param(
   [string[]]$AllowedOrigin = @(),
   [switch]$Json,
   [switch]$VerifyConnector,
+  [ValidateRange(1, 60)]
+  [int]$ConnectorProbeTimeoutSeconds = 5,
   [switch]$StatusOnly
 )
 
@@ -135,7 +137,7 @@ function Invoke-ConnectorProbe {
     } else {
       $env:PYTHONPATH = $srcPath
     }
-    $Raw = & $python -m francis.mcp_gateway.connector_probe --connector-url $Url --expected-tool 'francis_chatgpt_voice_ingress' 2>&1
+    $Raw = & $python -m francis.mcp_gateway.connector_probe --connector-url $Url --expected-tool 'francis_chatgpt_voice_ingress' --timeout-seconds ([string]$ConnectorProbeTimeoutSeconds) 2>&1
     $ExitCode = $LASTEXITCODE
     try {
       $Parsed = $Raw | ConvertFrom-Json -ErrorAction Stop
@@ -202,6 +204,7 @@ function New-StatusPayload {
       ready = [bool]$ConnectorReady
       ready_to_attempt_link = [bool]$ReadyToAttemptLink
       reachability_verified = [bool]$Connector.reachability_verified
+      connector_probe_timeout_seconds = $ConnectorProbeTimeoutSeconds
       probe = $Probe
       native_localhost_access_claimed = $false
       opens_tunnel = $false

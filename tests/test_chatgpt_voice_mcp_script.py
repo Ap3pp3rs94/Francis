@@ -77,6 +77,7 @@ def test_chatgpt_voice_mcp_status_json_reports_local_and_connector_readiness() -
     assert payload["chatgpt_connector"]["ready"] is False
     assert payload["chatgpt_connector"]["ready_to_attempt_link"] is False
     assert payload["chatgpt_connector"]["reachability_verified"] is False
+    assert payload["chatgpt_connector"]["connector_probe_timeout_seconds"] == 5
     assert payload["chatgpt_connector"]["native_localhost_access_claimed"] is False
     assert payload["chatgpt_connector"]["opens_tunnel"] is False
     assert payload["blockers"] == ["local_mcp_listener_missing"]
@@ -134,5 +135,6 @@ def test_chatgpt_voice_mcp_verify_connector_skips_invalid_url_shape() -> None:
     assert connector["connector_url"]["usable_for_chatgpt"] is False
     assert connector["probe"] is None
     assert connector["ready"] is False
+    assert connector["connector_probe_timeout_seconds"] == 5
     assert payload["governance"]["read_only"] is True
     assert payload["governance"]["writes_data"] is False

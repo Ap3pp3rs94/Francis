@@ -139,6 +139,11 @@ proportions.
   shape as end-to-end proof. A shape-valid connector URL without a verified MCP
   reachability probe or fresh ChatGPT tool-call evidence reports
   `proof_partial_connector_reachability_unverified`.
+- ChatGPT voice connector reachability verification now has an explicit bounded
+  timeout. The Python connector probe defaults to five seconds, the MCP status
+  script and connector wrapper pass the timeout through, and the Orb proof
+  reports `connector_probe_timeout_seconds` without executing Francis tools,
+  calling a model, opening a tunnel, or writing receipts.
 
 ## Current Task
 
@@ -177,6 +182,9 @@ If a stable connector URL is supplied through
 checks the shape without writing runtime state. Shape-valid but unverified URLs
 remain partial proof until reachability or a fresh ChatGPT-origin tool-call
 receipt confirms the bridge.
+
+If connector verification is requested, the reachability probe is bounded by
+`ConnectorProbeTimeoutSeconds` and remains read-only.
 
 Acceptance criteria for the completed observation sub-slice:
 
@@ -307,6 +315,9 @@ Acceptance criteria for the completed multi-run review scoring sub-slice:
   `FRANCIS_CHATGPT_VOICE_CONNECTOR_URL`; this only proves URL shape unless the
   validation proof is run with connector reachability verification or a fresh
   ChatGPT-origin tool-call receipt is observed.
+- When running reachability verification, use the bounded proof path:
+  `scripts\orb-voice-overlay-lens-validation.ps1 -VerifyConnector
+  -ConnectorProbeTimeoutSeconds 5`.
 - Confirm live overlay microphone signal when the operator is present; the
   current safe readback remains `waiting_for_audio_signal`.
 
@@ -811,6 +822,49 @@ truth:
   `connector_reachability_status=verification_not_requested`,
   `connector_usable_for_chatgpt=false`, `starts_process=false`,
   `opens_public_tunnel=false`, and `writes_repo=false`.
+
+Validated for bounded ChatGPT voice connector reachability timeouts:
+
+- PowerShell parser checks for `scripts\chatgpt-voice-mcp.ps1`,
+  `scripts\chatgpt-voice-connector.ps1`, and
+  `scripts\orb-voice-overlay-lens-validation.ps1` returned `parse_ok`.
+- `python -m pytest tests\unit\test_mcp_gateway_connector_probe.py
+  tests\test_chatgpt_voice_mcp_script.py
+  tests\test_chatgpt_voice_connector_script.py
+  tests\test_orb_voice_overlay_lens_validation_script.py -q` passed.
+- `python -m ruff check --no-cache src\francis\mcp_gateway\connector_probe.py
+  tests\unit\test_mcp_gateway_connector_probe.py
+  tests\test_chatgpt_voice_mcp_script.py
+  tests\test_chatgpt_voice_connector_script.py
+  tests\test_orb_voice_overlay_lens_validation_script.py` passed.
+- `python -m ruff format --check --no-cache
+  src\francis\mcp_gateway\connector_probe.py
+  tests\unit\test_mcp_gateway_connector_probe.py
+  tests\test_chatgpt_voice_mcp_script.py
+  tests\test_chatgpt_voice_connector_script.py
+  tests\test_orb_voice_overlay_lens_validation_script.py` passed with
+  `5 files already formatted`.
+- The focused tests verified `connector_probe_timeout` behavior without network
+  dependency, default timeout propagation through MCP status and connector
+  status, and `connector_probe_timeout_seconds=5` in the Orb proof surface.
+- A live MCP status readback with
+  `-ConnectorProbeTimeoutSeconds 1` returned
+  `status=local_ready_connector_url_shape_valid`, `timeout=1`,
+  `reachability_verified=false`, `probe_present=false`, `starts_process=false`,
+  `opens_public_tunnel=false`, and `writes_data=false`.
+- A live process-scoped environment URL proof with
+  `-ConnectorProbeTimeoutSeconds 1` returned
+  `status=proof_partial_connector_reachability_unverified`,
+  `connector_reachability_status=verification_not_requested`,
+  `connector_probe_timeout_seconds=1`, `starts_process=false`,
+  `opens_public_tunnel=false`, and `writes_repo=false`.
+- A live process-scoped environment URL proof with `-VerifyConnector
+  -ConnectorProbeTimeoutSeconds 1` returned
+  `status=proof_partial_connector_reachability_unverified`,
+  `connector_reachability_status=not_verified`,
+  `connector_reachability_probe_requested=true`,
+  `connector_probe_timeout_seconds=1`, `connector_usable_for_chatgpt=false`,
+  `starts_process=false`, `opens_public_tunnel=false`, and `writes_repo=false`.
 
 ## Blockers
 

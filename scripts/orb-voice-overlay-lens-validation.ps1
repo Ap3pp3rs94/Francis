@@ -15,6 +15,9 @@ param(
 
   [switch]$VerifyConnector,
 
+  [ValidateRange(1, 60)]
+  [int]$ConnectorProbeTimeoutSeconds = 5,
+
   [ValidateRange(1, 100)]
   [int]$ReceiptLimit = 10
 )
@@ -397,7 +400,9 @@ $ConnectorArgs = @(
   '-HostAddress',
   $ConnectorHostAddress,
   '-Port',
-  [string]$ConnectorPort
+  [string]$ConnectorPort,
+  '-ConnectorProbeTimeoutSeconds',
+  [string]$ConnectorProbeTimeoutSeconds
 )
 if (-not [string]::IsNullOrWhiteSpace($ConnectorUrl)) {
   $ConnectorArgs += @('-ConnectorUrl', $ConnectorUrl)
@@ -417,7 +422,9 @@ $PlanArgs = @(
   '-HostAddress',
   $ConnectorHostAddress,
   '-Port',
-  [string]$ConnectorPort
+  [string]$ConnectorPort,
+  '-ConnectorProbeTimeoutSeconds',
+  [string]$ConnectorProbeTimeoutSeconds
 )
 if (-not [string]::IsNullOrWhiteSpace($ConnectorUrl)) {
   $PlanArgs += @('-ConnectorUrl', $ConnectorUrl)
@@ -460,6 +467,7 @@ $Checks += (New-Check -Id 'chatgpt_voice_public_connector_url' -Status $(if ($Co
 
 $ConnectorReachabilityVerified = [bool](Get-NestedPropertyValue -Payload $Connector -Path @('endpoint_status', 'chatgpt_connector', 'reachability_verified') -Default $false)
 $ConnectorUsableForChatGpt = [bool](Get-NestedPropertyValue -Payload $Connector -Path @('endpoint_status', 'chatgpt_connector', 'ready') -Default $false)
+$ObservedConnectorProbeTimeoutSeconds = [int](Get-NestedPropertyValue -Payload $Connector -Path @('endpoint_status', 'chatgpt_connector', 'connector_probe_timeout_seconds') -Default $ConnectorProbeTimeoutSeconds)
 $ConnectorReachabilityStatus = if ($ConnectorUsableForChatGpt) {
   'verified'
 } elseif ($ConnectorUrlShapeValid -and -not $VerifyConnector) {
@@ -591,6 +599,7 @@ $NextGap = if (-not $ChatGptSourceObserved) {
     connector_usable_for_chatgpt = $ConnectorUsableForChatGpt
     connector_reachability_status = $ConnectorReachabilityStatus
     connector_reachability_probe_requested = [bool]$VerifyConnector
+    connector_probe_timeout_seconds = $ObservedConnectorProbeTimeoutSeconds
     opens_public_tunnel = [bool](Get-NestedPropertyValue -Payload $Connector -Path @('governance', 'opens_public_tunnel') -Default $false)
     starts_process = [bool](Get-NestedPropertyValue -Payload $Connector -Path @('governance', 'starts_process') -Default $false)
   }

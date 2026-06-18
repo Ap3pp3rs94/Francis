@@ -6,13 +6,22 @@ import json
 from typing import Any
 
 
-def _base_result(connector_url: str, expected_tool: str) -> dict[str, Any]:
+def _bounded_timeout_seconds(value: float) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        parsed = 5.0
+    return min(max(parsed, 0.1), 60.0)
+
+
+def _base_result(connector_url: str, expected_tool: str, timeout_seconds: float) -> dict[str, Any]:
     return {
         "kind": "francis.mcp_gateway.connector_probe",
         "ok": False,
         "status": "not_run",
         "connector_url": str(connector_url or "").strip(),
         "expected_tool": str(expected_tool or "").strip(),
+        "timeout_seconds": timeout_seconds,
         "reachability_verified": False,
         "tool_list_observed": False,
         "tool_count": 0,
@@ -32,9 +41,13 @@ def _base_result(connector_url: str, expected_tool: str) -> dict[str, Any]:
 
 
 async def probe_connector(
-    connector_url: str, *, expected_tool: str = "francis_chatgpt_voice_ingress"
+    connector_url: str,
+    *,
+    expected_tool: str = "francis_chatgpt_voice_ingress",
+    timeout_seconds: float = 5.0,
 ) -> dict[str, Any]:
-    result = _base_result(connector_url, expected_tool)
+    timeout = _bounded_timeout_seconds(timeout_seconds)
+    result = _base_result(connector_url, expected_tool, timeout)
     if not result["connector_url"]:
         result["status"] = "connector_url_required"
         result["error"] = "connector_url_required"
@@ -48,11 +61,18 @@ async def probe_connector(
         result["error"] = f"{type(exc).__name__}: {exc}"
         return result
 
-    try:
+    async def _list_tools() -> Any:
         async with streamablehttp_client(result["connector_url"]) as (read, write, _):
             async with ClientSession(read, write) as session:
                 await session.initialize()
-                tools = await session.list_tools()
+                return await session.list_tools()
+
+    try:
+        tools = await asyncio.wait_for(_list_tools(), timeout=timeout)
+    except TimeoutError:
+        result["status"] = "connector_probe_timeout"
+        result["error"] = f"timeout_seconds={timeout:g}"
+        return result
     except Exception as exc:
         result["status"] = "connector_unreachable"
         result["error"] = f"{type(exc).__name__}: {exc}"
@@ -81,9 +101,21 @@ def main() -> int:
         default="francis_chatgpt_voice_ingress",
         help="Tool that must be present for this connector to be considered ready.",
     )
+    parser.add_argument(
+        "--timeout-seconds",
+        type=float,
+        default=5.0,
+        help="Maximum seconds to wait for the read-only connector probe.",
+    )
     args = parser.parse_args()
 
-    result = asyncio.run(probe_connector(args.connector_url, expected_tool=args.expected_tool))
+    result = asyncio.run(
+        probe_connector(
+            args.connector_url,
+            expected_tool=args.expected_tool,
+            timeout_seconds=args.timeout_seconds,
+        )
+    )
     print(json.dumps(result, indent=2, ensure_ascii=True))
     return 0 if result.get("ok") else 1
 
