@@ -103,3 +103,32 @@ def test_chatgpt_voice_connector_start_requires_explicit_public_tunnel_authoriza
     assert payload["governance"]["writes_data"] is False
     assert payload["governance"]["grants_execution_authority"] is False
     assert not runtime_root.exists()
+
+
+@pytest.mark.skipif(platform.system() != "Windows", reason="connector control uses Windows process readback")
+def test_chatgpt_voice_connector_status_accepts_manual_connector_url(tmp_path: Path) -> None:
+    runtime_root = tmp_path / "connector-runtime"
+    port = _unused_local_port()
+
+    proc = _run_connector_script(
+        "-Mode",
+        "Status",
+        "-Json",
+        "-RuntimeRoot",
+        str(runtime_root),
+        "-Port",
+        str(port),
+        "-ConnectorUrl",
+        "https://francis.example.test/mcp",
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["status"] == "not_started"
+    assert payload["connector_url"] == "https://francis.example.test/mcp"
+    assert payload["endpoint_status"]["chatgpt_connector"]["connector_url"]["shape_valid"] is True
+    assert payload["governance"]["read_only"] is True
+    assert payload["governance"]["starts_process"] is False
+    assert payload["governance"]["opens_public_tunnel"] is False
+    assert payload["governance"]["writes_data"] is False
+    assert not runtime_root.exists()

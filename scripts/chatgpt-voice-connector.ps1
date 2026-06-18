@@ -10,6 +10,7 @@ param(
   [string]$HostAddress = '127.0.0.1',
   [int]$Port = 8787,
   [string]$Path = '/mcp',
+  [string]$ConnectorUrl = '',
   [string]$TunnelSubdomain = 'francis-voice-178175',
   [string]$RuntimeRoot = '',
   [switch]$ExposePublicTunnel,
@@ -262,11 +263,14 @@ function New-StatusPayload {
 
 if ($Mode -eq 'Status') {
   $State = Read-State
-  $ConnectorUrl = ''
+  $StatusConnectorUrl = ConvertTo-BoundedText -Value $ConnectorUrl -MaxLength 512
   if ($State) {
-    $ConnectorUrl = ConvertTo-BoundedText -Value $State.connector_url -MaxLength 512
+    $StateConnectorUrl = ConvertTo-BoundedText -Value $State.connector_url -MaxLength 512
+    if (-not [string]::IsNullOrWhiteSpace($StateConnectorUrl)) {
+      $StatusConnectorUrl = $StateConnectorUrl
+    }
   }
-  $EndpointStatus = Invoke-EndpointStatus -ConnectorUrl $ConnectorUrl
+  $EndpointStatus = Invoke-EndpointStatus -ConnectorUrl $StatusConnectorUrl
   ConvertTo-JsonOutput -Payload (New-StatusPayload -State $State -EndpointStatus $EndpointStatus)
   exit 0
 }
