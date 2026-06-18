@@ -101,6 +101,12 @@ proportions.
   pass/fail counts, repeated failure classes, proposal counts, and next review
   action without writing files, running operations, approving proposals, or
   promoting changes.
+- A read-only Orb/voice/overlay-lens validation proof now exists at
+  `scripts/orb-voice-overlay-lens-validation.ps1`. It reads current overlay
+  status, Lens MCP body-state, ChatGPT voice connector status, ChatGPT voice
+  bridge receipts, Orb substrate status, and Mona Lisa sandbox replay status
+  without starting tunnels, calling voice providers, launching desktop actions,
+  changing Orb visuals, or claiming Stage 6 closure.
 
 ## Current Task
 
@@ -124,6 +130,15 @@ The latest completed review-scoring sub-slice adds read-only aggregate review
 evidence across recorded sandbox evaluation queue items. It identifies repeated
 failure patterns and review actions, but it does not execute another run,
 promote an improvement, or approve a proposal.
+
+The latest completed validation-proof sub-slice adds the status-only proof
+script for Orb/voice/overlay-lens continuity. The current live proof result is
+`proof_partial_current_connector_url_missing`: the overlay is visible, Lens MCP
+body-state is ready, the overlay voice path is waiting for microphone signal,
+the local ChatGPT voice MCP listener is ready, ChatGPT-source bridge receipts
+exist, and Orb substrate readback is healthy. The proof also reports that no
+current public HTTPS connector URL is recorded and the persisted Mona Lisa
+sandbox artifact predates the latest structured-observation receipt contract.
 
 Acceptance criteria for the completed observation sub-slice:
 
@@ -246,8 +261,13 @@ Acceptance criteria for the completed multi-run review scoring sub-slice:
 
 ## Pending Tasks
 
-- Run an end-to-end Orb/voice/overlay-lens validation pass across the completed
-  sandbox chain and current live overlay/voice surfaces where safe.
+- Record or replace the current ChatGPT voice HTTPS MCP ingress so the proof can
+  verify the connector URL instead of reporting `connector_url_not_provided`.
+- Produce a fresh governed Mona Lisa sandbox replay artifact that carries the
+  latest structured-observation receipt contract into persisted repo-local
+  runtime evidence; do not use live desktop painting for this step.
+- Confirm live overlay microphone signal when the operator is present; the
+  current safe readback remains `waiting_for_audio_signal`.
 
 ## Architecture Map
 
@@ -285,6 +305,8 @@ Current voice path:
 
 - Overlay voice runtime and wake listener: `scripts/lens-overlay-window.ps1`
 - Voice setup helper: `scripts/lens-elevenlabs-voice-setup.ps1`
+- Orb/voice/overlay-lens validation proof:
+  `scripts/orb-voice-overlay-lens-validation.ps1`
 - Voice/LLM routing: `src/francis/chat/router.py`, `src/francis/api/routes/chat.py`
 - Model/audio configuration: `config/models/specialized/audio.yaml`
 - Settings and LLM adapter: `src/francis/settings.py`, `src/francis/llm/client.py`
@@ -590,6 +612,31 @@ Validated for the multi-run review scoring sub-slice:
 - `.venv\Scripts\python.exe -m mypy src\francis\agent\sandbox_canvas.py`
   passed.
 
+Validated for the read-only Orb/voice/overlay-lens validation proof sub-slice:
+
+- PowerShell parser check for
+  `scripts\orb-voice-overlay-lens-validation.ps1` returned `parse_ok`.
+- `python -m pytest tests\test_orb_voice_overlay_lens_validation_script.py -q`
+  passed with `2 passed`.
+- A live status-only proof run of
+  `scripts\orb-voice-overlay-lens-validation.ps1` returned
+  `status=proof_partial_current_connector_url_missing`. It confirmed
+  `overlay_status_readback=visible`, `lens_mcp_body_state_readback=ready`,
+  `overlay_voice_input_readiness=waiting_for_audio_signal`,
+  `chatgpt_voice_local_mcp_listener=local_ready_connector_url_needed`,
+  `chatgpt_voice_bridge_receipt_observed=observed`,
+  `chatgpt_app_source_receipt_observed=observed`, and
+  `orb_substrate_readback=orb_status`.
+- The same proof reported the current blockers truthfully:
+  `chatgpt_voice_public_connector_url=missing` with
+  `connector_url_not_provided`, and the persisted Mona Lisa sandbox replay
+  evaluated read-only with recognizability score `1.0` but did not pass the
+  latest structured-observation receipt checks.
+- The proof explicitly preserved `no_orb_visual_change`,
+  `no_second_overlay_application`, `no_second_lens_application`,
+  `no_voice_direct_to_orb_animation`, no proposal approval, no promotion, and no
+  Stage 6 closure claim.
+
 ## Blockers
 
 - The lens/overlay observation contract is metadata-only; it does not yet provide
@@ -605,6 +652,13 @@ Validated for the multi-run review scoring sub-slice:
 - Voice can produce receipts and route through chat, and a narrow Mona Lisa
   phrase can create mission state when transcribed, but the full voice ->
   mission -> automatic operator dispatch -> Orb loop is not complete.
+- The current ChatGPT voice connector control state does not record a usable
+  public HTTPS MCP URL; local MCP is listening, but current ChatGPT app
+  reachability is not proven by the status proof.
+- The persisted Mona Lisa sandbox artifact currently under
+  `data/sandbox_canvas/mona_lisa/` predates the latest structured-observation
+  receipt contract; it evaluates read-only and remains recognizable by the
+  offline fixture, but it does not pass the latest structured receipt checks.
 - True backend model-call cancellation is not currently supported; stale reply
   suppression is the bounded behavior.
 
