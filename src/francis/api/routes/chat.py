@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from francis.api.routes._operator_posture import posture_write_guard
 from francis.api.websocket import ConnectionManager
 from francis.chat.continuity.ledger import append
+from francis.chat.continuity.prompt_context import continuity_prompt_context_readback
 from francis.chat.router import handle, parse_mission_ingress
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.governance.redaction import redact_secret_text
@@ -322,6 +323,84 @@ def _chat_feedback_memory_assistance_context(telemetry_context: dict[str, Any]) 
         "grants_mutation_authority": False,
         "feedback_target": feedback_target,
         "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run",
+    }
+    return context
+
+
+def _chat_continuity_prompt_context(telemetry_context: dict[str, Any], message: object) -> dict[str, Any]:
+    context = dict(telemetry_context)
+    try:
+        readback = continuity_prompt_context_readback(query=message, limit=80, max_lines=3)
+    except Exception as exc:
+        log_api_exception(exc, route="chat.continuity_prompt_context")
+        context["continuity_prompt_context"] = {
+            "status": "unavailable",
+            "applies_to_chat_now": False,
+            "line_count": 0,
+            "reason": api_error_code(),
+            "reads_memory": False,
+            "writes_memory": False,
+            "calls_model": False,
+            "selects_tools": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        }
+        return context
+
+    chat_context = _safe_dict(readback.get("chat_context"))
+    raw_lines_value = chat_context.get("lines")
+    raw_lines = raw_lines_value if isinstance(raw_lines_value, list) else []
+    continuity_lines = [
+        redact_secret_text(str(line).strip()).replace("\r", " ").replace("\n", " ").strip()
+        for line in raw_lines[:3]
+        if str(line).strip()
+    ]
+    existing_lines_value = context.get("prompt_lines")
+    existing_lines = existing_lines_value if isinstance(existing_lines_value, list) else []
+    prompt_lines = [
+        redact_secret_text(str(line).strip()).replace("\r", " ").replace("\n", " ").strip()
+        for line in existing_lines
+        if str(line).strip()
+    ]
+    for line in continuity_lines:
+        if line and line not in prompt_lines:
+            prompt_lines.append(line)
+
+    context["prompt_lines"] = prompt_lines
+    context["max_prompt_lines"] = min(len(prompt_lines), 7)
+    context["continuity_prompt_context"] = {
+        "status": "applied" if continuity_lines else "empty",
+        "source_module": "francis.chat.continuity.prompt_context",
+        "source_id": readback.get("source_id", "conversation_ledger"),
+        "target": chat_context.get("target") or "telemetry_context.prompt_lines",
+        "line_count": len(continuity_lines),
+        "max_context_lines": _safe_int(chat_context.get("max_context_lines") or 3),
+        "ledger_entry_count": _safe_int(readback.get("ledger_entry_count") or 0),
+        "matched_entry_count": _safe_int(readback.get("matched_entry_count") or 0),
+        "applies_to_chat_now": bool(continuity_lines),
+        "continuity_context_is_untrusted_input": True,
+        "redacted_context_lines": True,
+        "reads_memory": bool(readback.get("reads_memory", True)),
+        "writes_memory": False,
+        "calls_model": False,
+        "mutates_prompt": bool(continuity_lines),
+        "selects_tools": False,
+        "trains_model": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "uses_conversation_ledger": True,
+            "redacts_context_lines": True,
+            "bounded_context_lines": True,
+            "does_not_write_memory": True,
+            "does_not_call_model": True,
+            "does_not_select_tools": True,
+            "grants_memory_write_authority": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": "p8_memory_semantic_retrieval_and_operator_memory_controls",
     }
     return context
 
@@ -659,6 +738,7 @@ def send(payload: ChatIn) -> dict[str, object]:
                 reply="Chat request denied by permission gate.",
             )
         telemetry_context = _chat_feedback_memory_assistance_context(telemetry_context_snapshot(surface="chat"))
+        telemetry_context = _chat_continuity_prompt_context(telemetry_context, payload.message)
         execution_trace = _chat_route_execution_trace(
             actor=actor,
             use_llm=payload.use_llm,

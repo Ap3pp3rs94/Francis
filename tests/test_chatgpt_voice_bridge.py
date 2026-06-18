@@ -150,6 +150,69 @@ def test_chatgpt_voice_forward_reaches_chat_when_scoped(monkeypatch, tmp_path: P
     assert "voice-turn-forwarded" in ledger_text
 
 
+def test_chatgpt_voice_forward_uses_continuity_context_for_llm(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        _scopes("chatgpt.voice.bridge.write", "chat.write"),
+    )
+
+    from francis.chat import router as chat_router
+
+    captured_prompts: list[str] = []
+
+    def fake_generate(prompt: str) -> str:
+        captured_prompts.append(prompt)
+        return "Your orb codename is Solstice."
+
+    monkeypatch.setattr(chat_router, "generate", fake_generate)
+
+    client = TestClient(create_app())
+    first = client.post(
+        "/chatgpt-voice/ingress",
+        json={
+            "actor": _ACTOR,
+            "transcript": "Remember my orb codename is Solstice.",
+            "turn_id": "voice-turn-memory-1",
+        },
+    ).json()
+    assert first["ok"] is True
+    assert first["status"] == "forwarded"
+
+    body = client.post(
+        "/chatgpt-voice/ingress",
+        json={
+            "actor": _ACTOR,
+            "transcript": "What is my orb codename?",
+            "turn_id": "voice-turn-memory-2",
+            "use_llm": True,
+        },
+    ).json()
+
+    assert body["ok"] is True
+    assert body["status"] == "forwarded"
+    assert body["reply"] == "Your orb codename is Solstice."
+    assert body["voice_response"]["source"] == "chat_forward.response"
+    assert body["chat_forward"]["forwarded"] is True
+    chat_response = body["chat_forward"]["response"]
+    continuity = chat_response["telemetry_context"]["continuity_prompt_context"]
+    assert continuity["status"] == "applied"
+    assert continuity["source_id"] == "conversation_ledger"
+    assert continuity["line_count"] >= 1
+    assert continuity["matched_entry_count"] >= 1
+    assert continuity["reads_memory"] is True
+    assert continuity["writes_memory"] is False
+    assert continuity["grants_execution_authority"] is False
+    assert continuity["grants_mutation_authority"] is False
+    assert captured_prompts
+    assert "continuity.ledger.relevant[user]: Remember my orb codename is Solstice." in captured_prompts[0]
+    assert "voice-turn-memory-2" in body["receipt"]["turn_id"]
+
+
 def test_chatgpt_voice_ingress_rejects_unavailable_transcript_with_reply(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

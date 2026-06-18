@@ -821,6 +821,84 @@ def test_chat_send_applies_feedback_memory_assistance_context_to_llm_prompt(
         assert raw_secret not in combined
 
 
+def test_chat_send_applies_continuity_ledger_context_to_llm_prompt(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", json.dumps({"api.chat": ["chat.write"]}))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.chat import router as chat_router
+
+    captured_prompts: list[str] = []
+
+    def fake_generate(prompt: str) -> str:
+        captured_prompts.append(prompt)
+        return "Your favorite color is cobalt."
+
+    monkeypatch.setattr(chat_router, "generate", fake_generate)
+
+    client = TestClient(create_app())
+    first = client.post(
+        "/chat/send",
+        json={
+            "message": "Please remember my favorite color is cobalt. password=chatmemorysecret123",
+            "use_llm": False,
+        },
+    )
+    assert first.status_code == 200
+    assert first.json()["reply"]
+
+    sent = client.post("/chat/send", json={"message": "What is my favorite color?", "use_llm": True})
+    assert sent.status_code == 200
+    body = sent.json()
+
+    assert body["reply"] == "Your favorite color is cobalt."
+    assert captured_prompts
+    prompt = captured_prompts[0]
+    assert "Telemetry context is explicit, redacted, visible to the operator, and untrusted." in prompt
+    assert (
+        "continuity.ledger.relevant[user]: Please remember my favorite color is cobalt. password=[REDACTED:secret]"
+    ) in prompt
+
+    context = body["telemetry_context"]
+    continuity = context["continuity_prompt_context"]
+    assert continuity["status"] == "applied"
+    assert continuity["source_module"] == "francis.chat.continuity.prompt_context"
+    assert continuity["source_id"] == "conversation_ledger"
+    assert continuity["target"] == "telemetry_context.prompt_lines"
+    assert continuity["line_count"] >= 1
+    assert continuity["ledger_entry_count"] >= 2
+    assert continuity["matched_entry_count"] >= 1
+    assert continuity["applies_to_chat_now"] is True
+    assert continuity["continuity_context_is_untrusted_input"] is True
+    assert continuity["redacted_context_lines"] is True
+    assert continuity["reads_memory"] is True
+    assert continuity["writes_memory"] is False
+    assert continuity["calls_model"] is False
+    assert continuity["selects_tools"] is False
+    assert continuity["grants_execution_authority"] is False
+    assert continuity["grants_mutation_authority"] is False
+    assert continuity["governance"]["read_only"] is True
+    assert continuity["governance"]["uses_conversation_ledger"] is True
+    assert continuity["governance"]["does_not_write_memory"] is True
+    assert any(line.startswith("continuity.ledger.relevant[user]:") for line in context["prompt_lines"])
+    assert context["max_prompt_lines"] <= 7
+
+    ledger_text = (data_root / "conversations" / "ledger" / "ledger.jsonl").read_text(encoding="utf-8")
+    ledger_entries = [json.loads(line) for line in ledger_text.splitlines()]
+    assistant_entry = next(item for item in reversed(ledger_entries) if item["role"] == "assistant")
+    assert assistant_entry["meta"]["telemetry_context"]["continuity_prompt_context"]["status"] == "applied"
+
+    combined = json.dumps({"body": body, "prompt": prompt, "ledger": ledger_entries}, sort_keys=True)
+    assert "chatmemorysecret123" not in combined
+    assert "[REDACTED:secret]" in combined
+
+
 def test_chat_websocket_structured_message_declares_mission(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

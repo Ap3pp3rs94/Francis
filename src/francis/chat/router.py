@@ -7,6 +7,7 @@ from typing import Any
 
 from francis.agent.local_actions import try_handle
 from francis.chat.continuity.ledger import append
+from francis.governance.redaction import redact_secret_text
 from francis.llm.client import generate
 from francis.telemetry.context import telemetry_context_prompt_lines
 
@@ -163,7 +164,7 @@ def handle(
             value = str(execution_trace.get(key) or "").strip()
             if value:
                 ledger_meta[key] = value
-    append("user", text, ledger_meta)
+    append("user", _ledger_text(text), ledger_meta)
 
     action = try_handle(text)
     if action.handled:
@@ -172,7 +173,7 @@ def handle(
             execution_trace["tool_call_kind"] = "local_action"
             execution_trace["tool_call_handled"] = True
             execution_trace["model_or_tool_execution_span_captured"] = True
-        append("assistant", action.message, {"mode": "action", **ledger_meta})
+        append("assistant", _ledger_text(action.message), {"mode": "action", **ledger_meta})
         return action.message
 
     reply = ""
@@ -208,7 +209,7 @@ def handle(
                 meta[key] = value
     if telemetry_context:
         meta["telemetry_context"] = telemetry_context
-    append("assistant", reply, meta)
+    append("assistant", _ledger_text(reply), meta)
     return reply
 
 
@@ -226,6 +227,10 @@ def _llm_prompt(text: str, *, telemetry_context: dict[str, object] | None = None
         f"{context}\n\n"
         f"User: {text}\nFrancis:"
     )
+
+
+def _ledger_text(value: str) -> str:
+    return redact_secret_text(str(value or ""))
 
 
 def _fallback_reply(text: str, *, llm_requested: bool) -> str:
