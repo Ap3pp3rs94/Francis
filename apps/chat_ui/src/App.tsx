@@ -881,8 +881,9 @@ function BridgeMonitorPanel(props: { baseUrl: string }) {
         </div>
         <div>
           <dt style={{ color: "#94a3b8" }}>Latest origin</dt>
-          <dd style={{ margin: 0 }}>
-            {voice?.latest_receipt_actor || "none"} / {voice?.latest_receipt_ingress_transport || "none"}
+          <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
+            {voice?.latest_receipt_actor || "none"} / {voice?.latest_receipt_source || "none"} /{" "}
+            {voice?.latest_receipt_ingress_transport || "none"}
           </dd>
         </div>
         <div>
@@ -895,6 +896,13 @@ function BridgeMonitorPanel(props: { baseUrl: string }) {
           <dt style={{ color: "#94a3b8" }}>MCP receipt</dt>
           <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
             {proof?.latest_fresh_usable_mcp_server_receipt_id || proof?.latest_mcp_server_receipt_id || "none"}
+          </dd>
+        </div>
+        <div>
+          <dt style={{ color: "#94a3b8" }}>Any MCP receipt</dt>
+          <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
+            {proof?.latest_any_mcp_server_receipt_id || "none"}
+            {proof?.latest_any_mcp_server_receipt_source ? ` / ${proof.latest_any_mcp_server_receipt_source}` : ""}
           </dd>
         </div>
         <div>

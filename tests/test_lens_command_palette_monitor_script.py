@@ -413,6 +413,71 @@ def test_lens_command_palette_monitor_can_require_chatgpt_mcp_proof(tmp_path: Pa
     assert checks["voice_chatgpt_mcp_tool_proof"]["evidence"] == "no_fresh_usable_mcp_receipt"
 
 
+def test_lens_command_palette_monitor_reports_non_chatgpt_mcp_receipt_without_proof(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    status_path = tmp_path / "lens-status.json"
+    _write_json(status_path, _lens_status())
+    _write_overlay_voice_runtime(data_dir)
+    receipt_dir = data_dir / "integrations" / "chatgpt_voice" / "receipts"
+    _write_json(
+        receipt_dir / "chatgpt-voice-recorded-selftest.json",
+        {
+            "kind": "francis.chatgpt_voice.bridge.receipt",
+            "receipt_id": "chatgpt-voice-recorded-selftest",
+            "actor": "chatgpt.voice",
+            "source": "local.mcp.selftest",
+            "client_origin": "codex_live_mcp_selftest",
+            "ingress_transport": "mcp_gateway_tool",
+            "mcp_gateway_tool": "francis.chatgpt_voice.ingress",
+            "mcp_server_tool": "francis_chatgpt_voice_ingress",
+            "decision": "recorded",
+            "chat_forward_status": "not_requested",
+            "chat_forward_error": "",
+            "chat_forwarded": False,
+            "transcript": "this local self-test transcript must stay out of monitor summaries",
+            "transcript_char_count": 58,
+            "reply": "I recorded the transcript for Francis. Chat forwarding was not requested.",
+            "reply_source": "bridge.recorded_only",
+        },
+    )
+
+    with _LocalCommandPaletteServer() as url:
+        proc = _run_monitor(
+            "-Mode",
+            "Probe",
+            "-DataDir",
+            str(data_dir),
+            "-CommandPaletteUrl",
+            url,
+            "-LensStatusPath",
+            str(status_path),
+            "-EnableVoiceChecks",
+            "-VoiceProvider",
+            "ElevenLabs",
+            "-RequireChatGptMcpProof",
+            "-TimeoutSeconds",
+            "3",
+        )
+
+    assert proc.returncode == 1
+    payload = _json_stdout(proc.stdout)
+    assert payload["status"] == "anomaly"
+    proof = payload["voice_monitor"]["chatgpt_mcp_proof"]
+    assert proof["status"] == "awaiting_chatgpt_mcp_tool_call"
+    assert proof["proof_observed"] is False
+    assert proof["chatgpt_source_receipt_count"] == 0
+    assert proof["mcp_server_receipt_count"] == 0
+    assert proof["any_mcp_server_receipt_count"] == 1
+    assert proof["fresh_any_mcp_server_receipt_count"] == 1
+    assert proof["latest_any_mcp_server_receipt_id"] == "chatgpt-voice-recorded-selftest"
+    assert proof["latest_any_mcp_server_receipt_source"] == "local.mcp.selftest"
+    assert proof["latest_any_mcp_server_receipt_client_origin"] == "codex_live_mcp_selftest"
+    checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["voice_chatgpt_mcp_tool_proof"]["status"] == "awaiting_chatgpt_mcp_tool_call"
+    summary = json.dumps(payload["voice_monitor"]["chatgpt_mcp_proof"])
+    assert "self-test transcript must stay out" not in summary
+
+
 def test_lens_command_palette_monitor_records_fresh_chatgpt_mcp_proof(tmp_path: Path) -> None:
     data_dir = tmp_path / "data"
     status_path = tmp_path / "lens-status.json"
@@ -466,6 +531,10 @@ def test_lens_command_palette_monitor_records_fresh_chatgpt_mcp_proof(tmp_path: 
     assert proof["status"] == "fresh_usable_mcp_tool_receipt_observed"
     assert proof["proof_observed"] is True
     assert proof["chatgpt_source_receipt_count"] == 1
+    assert proof["any_mcp_server_receipt_count"] == 1
+    assert proof["fresh_any_mcp_server_receipt_count"] == 1
+    assert proof["latest_any_mcp_server_receipt_id"] == "chatgpt-voice-recorded-mcp-test"
+    assert proof["latest_any_mcp_server_receipt_source"] == "chatgpt.voice"
     assert proof["mcp_server_receipt_count"] == 1
     assert proof["fresh_usable_mcp_server_receipt_count"] == 1
     assert proof["latest_fresh_usable_mcp_server_receipt_id"] == "chatgpt-voice-recorded-mcp-test"

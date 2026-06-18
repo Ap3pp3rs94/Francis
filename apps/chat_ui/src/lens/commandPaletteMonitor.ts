@@ -9,6 +9,11 @@ export type ChatGptMcpProof = {
   status: string;
   proof_observed: boolean;
   chatgpt_source_receipt_count: number;
+  any_mcp_server_receipt_count: number;
+  fresh_any_mcp_server_receipt_count: number;
+  latest_any_mcp_server_receipt_id: string;
+  latest_any_mcp_server_receipt_source: string;
+  latest_any_mcp_server_receipt_client_origin: string;
   mcp_server_receipt_count: number;
   usable_mcp_server_receipt_count: number;
   fresh_usable_mcp_server_receipt_count: number;
@@ -186,6 +191,11 @@ function parseMcpProof(value: unknown): ChatGptMcpProof {
     status: safeString(raw["status"]) || "not_checked",
     proof_observed: safeBoolean(raw["proof_observed"]),
     chatgpt_source_receipt_count: safeNumber(raw["chatgpt_source_receipt_count"]),
+    any_mcp_server_receipt_count: safeNumber(raw["any_mcp_server_receipt_count"]),
+    fresh_any_mcp_server_receipt_count: safeNumber(raw["fresh_any_mcp_server_receipt_count"]),
+    latest_any_mcp_server_receipt_id: safeString(raw["latest_any_mcp_server_receipt_id"]),
+    latest_any_mcp_server_receipt_source: safeString(raw["latest_any_mcp_server_receipt_source"]),
+    latest_any_mcp_server_receipt_client_origin: safeString(raw["latest_any_mcp_server_receipt_client_origin"]),
     mcp_server_receipt_count: safeNumber(raw["mcp_server_receipt_count"]),
     usable_mcp_server_receipt_count: safeNumber(raw["usable_mcp_server_receipt_count"]),
     fresh_usable_mcp_server_receipt_count: safeNumber(raw["fresh_usable_mcp_server_receipt_count"]),

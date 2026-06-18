@@ -104,6 +104,11 @@ def test_lens_command_palette_monitor_route_projects_voice_bridge_proof(monkeypa
                         "status": "awaiting_chatgpt_mcp_tool_call",
                         "proof_observed": False,
                         "chatgpt_source_receipt_count": 0,
+                        "any_mcp_server_receipt_count": 1,
+                        "fresh_any_mcp_server_receipt_count": 1,
+                        "latest_any_mcp_server_receipt_id": "chatgpt-voice-recorded-selftest",
+                        "latest_any_mcp_server_receipt_source": "local.mcp.selftest",
+                        "latest_any_mcp_server_receipt_client_origin": "codex_live_mcp_selftest",
                         "mcp_server_receipt_count": 0,
                         "latest_fresh_usable_mcp_server_receipt_id": "",
                         "next_operator_step": "trigger_chatgpt_voice_app_turn_and_confirm_mcp_tool_receipt",
@@ -157,6 +162,13 @@ def test_lens_command_palette_monitor_route_projects_voice_bridge_proof(monkeypa
     assert body["voice_monitor"]["latest_receipt_ingress_transport"] == "http_api"
     assert body["voice_monitor"]["latest_receipt_counts_as_chatgpt_mcp_proof"] is False
     assert body["voice_monitor"]["chatgpt_mcp_proof"]["status"] == "awaiting_chatgpt_mcp_tool_call"
+    assert body["voice_monitor"]["chatgpt_mcp_proof"]["any_mcp_server_receipt_count"] == 1
+    assert body["voice_monitor"]["chatgpt_mcp_proof"]["fresh_any_mcp_server_receipt_count"] == 1
+    assert (
+        body["voice_monitor"]["chatgpt_mcp_proof"]["latest_any_mcp_server_receipt_id"]
+        == "chatgpt-voice-recorded-selftest"
+    )
+    assert body["voice_monitor"]["chatgpt_mcp_proof"]["latest_any_mcp_server_receipt_source"] == "local.mcp.selftest"
     assert body["chatgpt_connector_monitor"]["known_localtunnel"] is True
     assert body["chatgpt_persistent_ingress_plan_monitor"]["governance_safe"] is True
     assert body["governance"]["execution_authority"] is False

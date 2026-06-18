@@ -499,6 +499,15 @@ function New-ChatGptMcpReceiptProof {
     [int]$FreshnessSeconds
   )
 
+  $AnyMcpServerReceipts = @(
+    $Receipts | Where-Object {
+      [string](Get-PropertyValue -Payload $_ -Name 'ingress_transport' -Default '') -eq 'mcp_gateway_tool' -and
+      [string](Get-PropertyValue -Payload $_ -Name 'mcp_gateway_tool' -Default '') -eq 'francis.chatgpt_voice.ingress' -and
+      [string](Get-PropertyValue -Payload $_ -Name 'mcp_server_tool' -Default '') -eq 'francis_chatgpt_voice_ingress'
+    }
+  )
+  $FreshAnyMcpServerReceipts = @($AnyMcpServerReceipts | Where-Object { (Get-ReceiptAgeSeconds -Receipt $_) -le $FreshnessSeconds })
+  $LatestAnyMcp = if (@($AnyMcpServerReceipts).Count -gt 0) { $AnyMcpServerReceipts[0] } else { $null }
   $ChatGptSourceReceipts = @(
     $Receipts | Where-Object {
       [string](Get-PropertyValue -Payload $_ -Name 'actor' -Default '') -eq 'chatgpt.voice' -and
@@ -561,6 +570,11 @@ function New-ChatGptMcpReceiptProof {
     proof_observed = ($null -ne $LatestFreshUsableMcp)
     freshness_window_seconds = $FreshnessSeconds
     chatgpt_source_receipt_count = @($ChatGptSourceReceipts).Count
+    any_mcp_server_receipt_count = @($AnyMcpServerReceipts).Count
+    fresh_any_mcp_server_receipt_count = @($FreshAnyMcpServerReceipts).Count
+    latest_any_mcp_server_receipt_id = Get-ReceiptId -Receipt $LatestAnyMcp
+    latest_any_mcp_server_receipt_source = if ($null -ne $LatestAnyMcp) { [string](Get-PropertyValue -Payload $LatestAnyMcp -Name 'source' -Default '') } else { '' }
+    latest_any_mcp_server_receipt_client_origin = if ($null -ne $LatestAnyMcp) { [string](Get-PropertyValue -Payload $LatestAnyMcp -Name 'client_origin' -Default '') } else { '' }
     mcp_server_receipt_count = @($McpServerReceipts).Count
     usable_mcp_server_receipt_count = @($UsableMcpServerReceipts).Count
     fresh_mcp_server_receipt_count = @($FreshMcpServerReceipts).Count

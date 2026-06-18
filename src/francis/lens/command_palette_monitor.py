@@ -133,6 +133,20 @@ def _mcp_proof(value: Any) -> dict[str, Any]:
         "proof_observed": _safe_bool(raw.get("proof_observed")),
         "freshness_window_seconds": _safe_int(raw.get("freshness_window_seconds")),
         "chatgpt_source_receipt_count": _safe_int(raw.get("chatgpt_source_receipt_count")),
+        "any_mcp_server_receipt_count": _safe_int(raw.get("any_mcp_server_receipt_count")),
+        "fresh_any_mcp_server_receipt_count": _safe_int(raw.get("fresh_any_mcp_server_receipt_count")),
+        "latest_any_mcp_server_receipt_id": _safe_str(
+            raw.get("latest_any_mcp_server_receipt_id"),
+            max_length=160,
+        ),
+        "latest_any_mcp_server_receipt_source": _safe_str(
+            raw.get("latest_any_mcp_server_receipt_source"),
+            max_length=120,
+        ),
+        "latest_any_mcp_server_receipt_client_origin": _safe_str(
+            raw.get("latest_any_mcp_server_receipt_client_origin"),
+            max_length=160,
+        ),
         "mcp_server_receipt_count": _safe_int(raw.get("mcp_server_receipt_count")),
         "usable_mcp_server_receipt_count": _safe_int(raw.get("usable_mcp_server_receipt_count")),
         "fresh_usable_mcp_server_receipt_count": _safe_int(raw.get("fresh_usable_mcp_server_receipt_count")),
