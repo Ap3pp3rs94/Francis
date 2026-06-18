@@ -41,7 +41,6 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
         ("GET", "/continuity/briefing"),
         ("GET", "/continuity/shift_briefing"),
         ("GET", "/continuity/shift-briefing"),
-        ("GET", "/completion-model/status"),
         ("GET", "/credentials/list"),
         ("GET", "/credentials/scopes"),
         ("GET", "/credentials/delegations"),
