@@ -67,6 +67,9 @@ param(
   [ValidateRange(1, 30)]
   [int]$StartupTimeoutSeconds = 15,
 
+  [ValidateRange(2, 30)]
+  [int]$McpBodyStateTimeoutSeconds = 8,
+
   [ValidateRange(0, 3600)]
   [int]$RunSeconds = 0
 )
@@ -333,7 +336,8 @@ function Get-OverlayVoiceUseLlm {
 function Read-McpBodyStateForOverlay {
   param(
     [string]$McpStatusRoute,
-    [string]$OrbMcpStatusRoute
+    [string]$OrbMcpStatusRoute,
+    [int]$TimeoutSeconds = 8
   )
 
   $Projection = New-McpBodyStateProjection -McpStatusRoute $McpStatusRoute -OrbMcpStatusRoute $OrbMcpStatusRoute
@@ -341,9 +345,10 @@ function Read-McpBodyStateForOverlay {
   $Uri = '{0}{1}?actor=lens.overlay' -f $ApiBaseUrl, $McpStatusRoute
   Set-McpBodyStateValue -Projection $Projection -Name 'api_base_url' -Value $ApiBaseUrl
   Set-McpBodyStateValue -Projection $Projection -Name 'api_url' -Value $Uri
+  Set-McpBodyStateValue -Projection $Projection -Name 'read_timeout_seconds' -Value $TimeoutSeconds
 
   try {
-    $Body = Invoke-RestMethod -Uri $Uri -Method Get -TimeoutSec 2 -ErrorAction Stop
+    $Body = Invoke-RestMethod -Uri $Uri -Method Get -TimeoutSec $TimeoutSeconds -ErrorAction Stop
     $Mcp = $Body.PSObject.Properties['mcp'].Value
     $InputComponent = $Body.PSObject.Properties['components'].Value.PSObject.Properties['francis.input.status'].Value
     $TakeoverComponent = $Body.PSObject.Properties['components'].Value.PSObject.Properties['francis.takeover.status'].Value
@@ -1136,7 +1141,7 @@ function Update-OverlayMcpBodyStateLabel {
     [string]$Root
   )
 
-  $BodyState = Read-McpBodyStateForOverlay -McpStatusRoute $Config.mcp_status_route -OrbMcpStatusRoute $Config.orb_mcp_status_route
+  $BodyState = Read-McpBodyStateForOverlay -McpStatusRoute $Config.mcp_status_route -OrbMcpStatusRoute $Config.orb_mcp_status_route -TimeoutSeconds $McpBodyStateTimeoutSeconds
   Set-OverlayLabelText -Label $Label -Text (Format-McpBodyStateLabel -BodyState $BodyState)
   if ($null -ne $script:LensOverlayEnergyRoot) {
     $script:LensOverlayEnergyRoot.Opacity = if (Get-OrbEnergyReady -BodyState $BodyState) { 1.0 } else { 0.72 }

@@ -525,6 +525,7 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "function Start-OrbFrameSyncedMotion" in script
     assert "function Stop-OrbFrameSyncedMotion" in script
     assert "[switch]$EnableAutonomousMotion" in script
+    assert "[int]$McpBodyStateTimeoutSeconds = 8" in script
     assert "function Invoke-OverlayVoiceSpeech" in script
     assert "function Invoke-OverlayElevenLabsVoiceSpeech" in script
     assert "function Invoke-OverlayAudioFilePlayback" in script
@@ -544,6 +545,10 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "function Join-OverlayProcessArguments" in script
     assert "function Update-OverlayMcpBodyStateLabel" in script
     assert "Invoke-RestMethod -Uri $Uri -Method Get" in script
+    assert "read_timeout_seconds" in script
+    assert "Invoke-RestMethod -Uri $Uri -Method Get -TimeoutSec $TimeoutSeconds" in script
+    assert "Read-McpBodyStateForOverlay -McpStatusRoute $Config.mcp_status_route" in script
+    assert "-TimeoutSeconds $McpBodyStateTimeoutSeconds" in script
     assert "francis_lens=orb_overlay" in script
     assert "chat_ui.orbGlyph.energy_reference" in script
     assert "wpf_3d_animated_energy_orb" in script
