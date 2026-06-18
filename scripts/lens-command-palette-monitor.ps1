@@ -640,6 +640,119 @@ function Invoke-ChatGptConnectorReadback {
   }
 }
 
+function Invoke-ChatGptPersistentIngressPlanReadback {
+  param(
+    [string]$Root,
+    [string]$ConnectorUrl,
+    [bool]$VerifyConnector,
+    [int]$ProbeTimeoutSeconds
+  )
+
+  $RuntimeRoot = Join-Path (Join-Path $Root 'runtime') 'chatgpt-voice-connector'
+  $Arguments = @(
+    '-NoProfile',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-File',
+    (Join-Path $PSScriptRoot 'chatgpt-voice-connector.ps1'),
+    '-Mode',
+    'PlanPersistentIngress',
+    '-RuntimeRoot',
+    $RuntimeRoot,
+    '-ConnectorProbeTimeoutSeconds',
+    ([string]$ProbeTimeoutSeconds),
+    '-Json'
+  )
+  if (-not [string]::IsNullOrWhiteSpace($ConnectorUrl)) {
+    $Arguments += @('-ConnectorUrl', $ConnectorUrl)
+  }
+  if ($VerifyConnector) {
+    $Arguments += '-VerifyConnector'
+  }
+
+  $PowerShell = Get-Command powershell -ErrorAction SilentlyContinue
+  if ($null -eq $PowerShell) {
+    $PowerShell = Get-Command pwsh -ErrorAction Stop
+  }
+
+  $Raw = & $PowerShell.Source @Arguments 2>&1
+  $ExitCode = $LASTEXITCODE
+  $Text = ($Raw | Out-String).Trim()
+  try {
+    return [ordered]@{
+      ok = $ExitCode -eq 0
+      exit_code = $ExitCode
+      payload = ($Text | ConvertFrom-Json -ErrorAction Stop)
+      error = ''
+      raw_length = $Text.Length
+    }
+  } catch {
+    return [ordered]@{
+      ok = $false
+      exit_code = $ExitCode
+      payload = $null
+      error = [string]$_.Exception.Message
+      raw_length = $Text.Length
+    }
+  }
+}
+
+function New-ChatGptPersistentIngressPlanMonitorProjection {
+  param(
+    [string]$Root,
+    [string]$ConnectorUrl,
+    [bool]$VerifyConnector,
+    [int]$ProbeTimeoutSeconds
+  )
+
+  $Readback = Invoke-ChatGptPersistentIngressPlanReadback -Root $Root -ConnectorUrl $ConnectorUrl -VerifyConnector $VerifyConnector -ProbeTimeoutSeconds $ProbeTimeoutSeconds
+  $Payload = Get-PropertyValue -Payload $Readback -Name 'payload'
+  $Governance = Get-PropertyValue -Payload $Payload -Name 'governance'
+  $ProviderReadiness = Get-PropertyValue -Payload $Payload -Name 'provider_readiness'
+  $InstallerReadiness = Get-PropertyValue -Payload $Payload -Name 'installer_readiness'
+  $Cloudflared = Get-PropertyValue -Payload $ProviderReadiness -Name 'cloudflared_named_tunnel'
+  $Ngrok = Get-PropertyValue -Payload $ProviderReadiness -Name 'ngrok_reserved_domain'
+  $Caddy = Get-PropertyValue -Payload $ProviderReadiness -Name 'caddy_reverse_proxy'
+  $Ssh = Get-PropertyValue -Payload $ProviderReadiness -Name 'ssh_reverse_tunnel'
+  $Winget = Get-PropertyValue -Payload $InstallerReadiness -Name 'winget'
+  $ReadOnly = [bool](Get-PropertyValue -Payload $Governance -Name 'read_only' -Default $false)
+  $StartsProcess = [bool](Get-PropertyValue -Payload $Governance -Name 'starts_process' -Default $true)
+  $OpensPublicTunnel = [bool](Get-PropertyValue -Payload $Governance -Name 'opens_public_tunnel' -Default $true)
+  $WritesData = [bool](Get-PropertyValue -Payload $Governance -Name 'writes_data' -Default $true)
+
+  return [ordered]@{
+    enabled = $true
+    ok = [bool](Get-PropertyValue -Payload $Readback -Name 'ok' -Default $false)
+    exit_code = [int](Get-PropertyValue -Payload $Readback -Name 'exit_code' -Default 0)
+    status = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Payload -Name 'status' -Default 'plan_unavailable') -MaxLength 96
+    error = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Readback -Name 'error' -Default '') -MaxLength 512
+    local_endpoint = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Payload -Name 'local_endpoint' -Default '') -MaxLength 160
+    blockers = @(Get-PropertyValue -Payload $Payload -Name 'blockers' -Default @())
+    recommended_provider_order = @(Get-PropertyValue -Payload $Payload -Name 'recommended_provider_order' -Default @())
+    next_operator_steps = @(Get-PropertyValue -Payload $Payload -Name 'next_operator_steps' -Default @())
+    providers = [ordered]@{
+      cloudflared_named_tunnel_available = [bool](Get-PropertyValue -Payload $Cloudflared -Name 'available' -Default $false)
+      ngrok_reserved_domain_available = [bool](Get-PropertyValue -Payload $Ngrok -Name 'available' -Default $false)
+      caddy_reverse_proxy_available = [bool](Get-PropertyValue -Payload $Caddy -Name 'available' -Default $false)
+      ssh_reverse_tunnel_available = [bool](Get-PropertyValue -Payload $Ssh -Name 'available' -Default $false)
+      winget_available = [bool](Get-PropertyValue -Payload $Winget -Name 'available' -Default $false)
+    }
+    localtunnel_replacement = Get-PropertyValue -Payload $Payload -Name 'localtunnel_replacement' -Default $null
+    governance = [ordered]@{
+      read_only_contract = [bool]$ReadOnly
+      starts_process = [bool]$StartsProcess
+      opens_public_tunnel = [bool]$OpensPublicTunnel
+      writes_repo = $false
+      writes_data = [bool]$WritesData
+      captures_audio = $false
+      captures_screen = $false
+      execution_authority = $false
+      mutation_authority_granted = $false
+    }
+    governance_safe = [bool]($ReadOnly -and -not $StartsProcess -and -not $OpensPublicTunnel -and -not $WritesData)
+  }
+}
+
 function New-ChatGptConnectorMonitorProjection {
   param(
     [string]$Root,
@@ -867,6 +980,11 @@ function New-CommandPaletteMonitorProbe {
   } else {
     [ordered]@{ enabled = $false }
   }
+  $PersistentIngressPlanMonitor = if ($ConnectorChecksEnabled) {
+    New-ChatGptPersistentIngressPlanMonitorProjection -Root $Root -ConnectorUrl $ConnectorChecksUrl -VerifyConnector $ConnectorChecksVerify -ProbeTimeoutSeconds $ConnectorChecksProbeTimeoutSeconds
+  } else {
+    [ordered]@{ enabled = $false }
+  }
   $CommandTotal = [int](Get-PropertyValue -Payload $BridgePayload -Name 'command_total' -Default 0)
   $UrlEntrypoint = Get-PropertyValue -Payload $BridgePayload -Name 'url_entrypoint'
   $BridgeGovernance = Get-PropertyValue -Payload $BridgePayload -Name 'governance'
@@ -917,7 +1035,10 @@ function New-CommandPaletteMonitorProbe {
     $PersistentCandidate = [bool](Get-PropertyValue -Payload $ConnectorMonitor -Name 'persistent_candidate' -Default $false)
     $PersistentStatus = [string](Get-PropertyValue -Payload $ConnectorMonitor -Name 'persistent_ingress_status' -Default 'unknown')
     $ConnectorHost = [string](Get-PropertyValue -Payload $ConnectorMonitor -Name 'connector_url_host' -Default '')
+    $PlanGovernanceSafe = [bool](Get-PropertyValue -Payload $PersistentIngressPlanMonitor -Name 'governance_safe' -Default $false)
+    $PlanStatus = [string](Get-PropertyValue -Payload $PersistentIngressPlanMonitor -Name 'status' -Default 'plan_unavailable')
     [void]$Checks.Add((New-MonitorCheck -Id 'chatgpt_voice_connector_readback' -Passed $ConnectorReadbackOk -Status $ConnectorStatus -Evidence $ConnectorHost))
+    [void]$Checks.Add((New-MonitorCheck -Id 'chatgpt_voice_persistent_ingress_plan' -Passed $PlanGovernanceSafe -Status $PlanStatus -Evidence 'read_only_no_process_no_tunnel'))
     if ($ConnectorChecksVerify) {
       [void]$Checks.Add((New-MonitorCheck -Id 'chatgpt_voice_connector_reachability' -Passed $ConnectorUsable -Status $(if ($ConnectorUsable) { 'verified_usable' } else { 'not_usable' }) -Evidence $ConnectorHost))
     }
@@ -986,6 +1107,7 @@ function New-CommandPaletteMonitorProbe {
     }
     voice_monitor = $VoiceMonitor
     chatgpt_connector_monitor = $ConnectorMonitor
+    chatgpt_persistent_ingress_plan_monitor = $PersistentIngressPlanMonitor
     reporting = [ordered]@{
       status_path = 'data/runtime/lens-command-palette-monitor/status.json'
       anomaly_log_path = 'data/runtime/lens-command-palette-monitor/anomalies.jsonl'

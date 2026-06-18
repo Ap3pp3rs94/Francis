@@ -220,7 +220,26 @@ def test_lens_command_palette_monitor_reports_chatgpt_connector_localtunnel_fall
     assert connector["persistent_candidate"] is False
     assert connector["persistent_ingress_status"] == "localtunnel_fallback_replace_needed"
     assert connector["next_operator_step"] == "replace_localtunnel_with_persistent_https_mcp_ingress"
+    plan = payload["chatgpt_persistent_ingress_plan_monitor"]
+    assert plan["enabled"] is True
+    assert plan["status"] == "localtunnel_fallback_replace_needed"
+    assert plan["blockers"] == ["localtunnel_url_is_not_persistent_ingress"]
+    assert plan["recommended_provider_order"][0] == "cloudflared_named_tunnel"
+    assert plan["next_operator_steps"] == [
+        "choose_or_install_a_persistent_https_ingress_provider",
+        "point_provider_to_local_endpoint",
+        "record_the_stable_https_mcp_url_with_recordurl",
+        "rerun_orb_voice_overlay_lens_validation",
+    ]
+    assert isinstance(plan["providers"]["winget_available"], bool)
+    assert plan["localtunnel_replacement"]["persistent_ingress_required_for_stable_chatgpt_connector"] is True
+    assert plan["governance_safe"] is True
+    assert plan["governance"]["read_only_contract"] is True
+    assert plan["governance"]["starts_process"] is False
+    assert plan["governance"]["opens_public_tunnel"] is False
+    assert plan["governance"]["writes_data"] is False
     checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["chatgpt_voice_persistent_ingress_plan"]["passed"] is True
     assert "chatgpt_voice_persistent_ingress" not in checks
 
 
@@ -253,7 +272,11 @@ def test_lens_command_palette_monitor_can_require_persistent_chatgpt_ingress(tmp
     connector = payload["chatgpt_connector_monitor"]
     assert connector["persistent_ingress_status"] == "localtunnel_fallback_replace_needed"
     assert connector["blockers"] == ["localtunnel_url_is_not_persistent_ingress"]
+    plan = payload["chatgpt_persistent_ingress_plan_monitor"]
+    assert plan["status"] == "localtunnel_fallback_replace_needed"
+    assert plan["governance_safe"] is True
     checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["chatgpt_voice_persistent_ingress_plan"]["passed"] is True
     assert checks["chatgpt_voice_persistent_ingress"]["passed"] is False
     assert checks["chatgpt_voice_persistent_ingress"]["status"] == "localtunnel_fallback_replace_needed"
     assert "chatgpt_voice_persistent_ingress" in {item["id"] for item in payload["anomalies"]}
