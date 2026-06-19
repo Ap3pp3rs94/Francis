@@ -10,12 +10,14 @@ param(
   [ValidateSet('read-only', 'workspace-write', 'danger-full-access')]
   [string]$Sandbox = 'workspace-write',
 
-  [ValidateSet('Visible', 'Background')]
+  [ValidateSet('Visible', 'Minimized', 'Background')]
   [string]$LaunchMode = 'Visible',
 
   [string]$StdoutLogPath = '',
 
-  [string]$StderrLogPath = ''
+  [string]$StderrLogPath = '',
+
+  [string]$TranscriptLogPath = ''
 )
 
 Set-StrictMode -Version 2
@@ -65,12 +67,27 @@ $SessionPayload = [ordered]@{
   launch_mode = $LaunchMode
   stdout_log_path = $StdoutLogPath
   stderr_log_path = $StderrLogPath
+  transcript_log_path = $TranscriptLogPath
   codex_cli = 'codex'
-  visible_terminal_requested = ($LaunchMode -eq 'Visible')
+  visible_terminal_requested = ($LaunchMode -in @('Visible', 'Minimized'))
   continuum_started = $false
   uncontrolled_recursion_allowed = $false
 }
 $SessionPayload | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $SessionPath -Encoding UTF8
+
+$TranscriptStarted = $false
+if (-not [string]::IsNullOrWhiteSpace($TranscriptLogPath)) {
+  try {
+    $TranscriptDir = Split-Path -Parent $TranscriptLogPath
+    if (-not [string]::IsNullOrWhiteSpace($TranscriptDir)) {
+      New-Item -ItemType Directory -Force -Path $TranscriptDir | Out-Null
+    }
+    Start-Transcript -LiteralPath $TranscriptLogPath -Force | Out-Null
+    $TranscriptStarted = $true
+  } catch {
+    Write-Warning ("Failed to start transcript for {0}: {1}" -f $WorkerId, $_.Exception.Message)
+  }
+}
 
 $Host.UI.RawUI.WindowTitle = "Francis $WorkerId"
 Set-Location -LiteralPath $RepoRoot
@@ -98,7 +115,15 @@ $SessionPayload.completed_at = [DateTimeOffset]::UtcNow.ToString('o')
 $SessionPayload.exit_code = $ExitCode
 $SessionPayload | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $SessionPath -Encoding UTF8
 
-if ($LaunchMode -eq 'Visible') {
+if ($TranscriptStarted) {
+  try {
+    Stop-Transcript | Out-Null
+  } catch {
+    Write-Warning ("Failed to stop transcript for {0}: {1}" -f $WorkerId, $_.Exception.Message)
+  }
+}
+
+if ($LaunchMode -in @('Visible', 'Minimized')) {
   Write-Host ""
   Write-Host ("Francis worker {0} exited with code {1}." -f $WorkerId, $ExitCode)
   Read-Host "Press Enter to close this worker terminal"

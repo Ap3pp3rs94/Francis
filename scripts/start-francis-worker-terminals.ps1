@@ -12,7 +12,7 @@ param(
   [ValidateSet('read-only', 'workspace-write', 'danger-full-access')]
   [string]$Sandbox = 'workspace-write',
 
-  [ValidateSet('Visible', 'Background')]
+  [ValidateSet('Visible', 'Minimized', 'Background')]
   [string]$LaunchMode = 'Visible'
 )
 
@@ -129,6 +129,11 @@ function Get-WorkerStatusRows {
     } else {
       ''
     }
+    $TranscriptLogPath = if ($null -ne $Session -and $Session.PSObject.Properties['transcript_log_path']) {
+      [string]$Session.transcript_log_path
+    } else {
+      ''
+    }
     $VisibleTerminalRequested = if ($null -ne $Session -and $Session.PSObject.Properties['visible_terminal_requested']) {
       [bool]$Session.visible_terminal_requested
     } else {
@@ -161,6 +166,7 @@ function Get-WorkerStatusRows {
       visible_terminal_requested = $VisibleTerminalRequested
       stdout_log_path = $StdoutLogPath
       stderr_log_path = $StderrLogPath
+      transcript_log_path = $TranscriptLogPath
       started_at = $StartedAt
       completed_at = $CompletedAt
       exit_code = $ExitCode
@@ -207,10 +213,14 @@ foreach ($Worker in @($Workers | Where-Object { $WorkerId -eq 'All' -or [string]
   }
   $StdoutLogPath = ''
   $StderrLogPath = ''
+  $TranscriptLogPath = ''
   if ($LaunchMode -eq 'Background') {
     $Stamp = [DateTimeOffset]::UtcNow.ToString('yyyyMMddTHHmmssfffffffZ')
     $StdoutLogPath = Join-Path $LogRoot ('{0}-{1}.stdout.log' -f $Worker.id, $Stamp)
     $StderrLogPath = Join-Path $LogRoot ('{0}-{1}.stderr.log' -f $Worker.id, $Stamp)
+  } elseif ($LaunchMode -eq 'Minimized') {
+    $Stamp = [DateTimeOffset]::UtcNow.ToString('yyyyMMddTHHmmssfffffffZ')
+    $TranscriptLogPath = Join-Path $LogRoot ('{0}-{1}.transcript.log' -f $Worker.id, $Stamp)
   }
   $ArgumentList = @(
     '-ExecutionPolicy',
@@ -233,8 +243,13 @@ foreach ($Worker in @($Workers | Where-Object { $WorkerId -eq 'All' -or [string]
       '-StderrLogPath',
       $StderrLogPath
     )
+  } elseif ($LaunchMode -eq 'Minimized') {
+    $ArgumentList += @(
+      '-TranscriptLogPath',
+      $TranscriptLogPath
+    )
   }
-  if ($LaunchMode -eq 'Visible') {
+  if ($LaunchMode -in @('Visible', 'Minimized')) {
     $ArgumentList = @('-NoExit') + $ArgumentList
   }
   if (-not [string]::IsNullOrWhiteSpace($Model)) {
@@ -249,6 +264,8 @@ foreach ($Worker in @($Workers | Where-Object { $WorkerId -eq 'All' -or [string]
     $StartProcessArgs.WindowStyle = 'Hidden'
     $StartProcessArgs.RedirectStandardOutput = $StdoutLogPath
     $StartProcessArgs.RedirectStandardError = $StderrLogPath
+  } elseif ($LaunchMode -eq 'Minimized') {
+    $StartProcessArgs.WindowStyle = 'Minimized'
   }
   $Process = Start-Process @StartProcessArgs
   $Launches += [ordered]@{
@@ -258,9 +275,10 @@ foreach ($Worker in @($Workers | Where-Object { $WorkerId -eq 'All' -or [string]
     prompt_sha256 = Get-WorkerFileSha256 -Path $EffectivePromptPath
     launcher_process_id = $Process.Id
     launch_mode = $LaunchMode
-    visible_terminal_requested = ($LaunchMode -eq 'Visible')
+    visible_terminal_requested = ($LaunchMode -in @('Visible', 'Minimized'))
     stdout_log_path = $StdoutLogPath
     stderr_log_path = $StderrLogPath
+    transcript_log_path = $TranscriptLogPath
   }
 }
 
@@ -273,7 +291,7 @@ Start-Sleep -Seconds 2
   sandbox = $Sandbox
   model = $Model
   launch_mode = $LaunchMode
-  visible_terminal_requested = ($LaunchMode -eq 'Visible')
+  visible_terminal_requested = ($LaunchMode -in @('Visible', 'Minimized'))
   worker_count = $Launches.Count
   worker_filter = $WorkerId
   launches = $Launches

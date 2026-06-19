@@ -26,8 +26,8 @@ Each coordinator pass should keep all four lanes active at the same time:
 - Worker 4 advances Stage 17 and completion-model truth.
 
 Manual launches default to physical visible terminals. Add
-`-LaunchMode Background` when a worker should run hidden but still keep the same
-session and receipt status contract.
+`-LaunchMode Minimized` when a worker should run out of the way while still
+keeping the real terminal/TTY that Codex needs.
 
 The coordinator should use
 `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-francis-worker-terminals.ps1 -Mode Status`
@@ -43,11 +43,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\francis-worker-coo
 The coordinator keeps one active Codex child per lane. When a lane finishes and
 its Codex child exits, the coordinator records a receipt and relaunches that
 lane with an individualized project-manager dispatch prompt. Coordinator
-relaunches default to `-WorkerLaunchMode Background`, so future passes do not
-need four physical terminals open. Background launches write per-lane stdout and
-stderr logs under `.francis/worker-terminal-logs/` and expose those paths through
-worker status. It does not spawn nested coordinators and it records
-`uncontrolled_recursion_allowed=false`.
+relaunches default to `-WorkerLaunchMode Minimized`, so future passes keep real
+PowerShell 7 terminals available to Codex without forcing four foreground
+windows. Minimized launches write transcript paths under
+`.francis/worker-terminal-logs/` and expose those paths through worker status.
+Hidden `Background` launches can record stdout/stderr, but the Codex TUI may
+refuse to run without a TTY; do not use that mode for the continuous PM loop. It
+does not spawn nested coordinators and it records `uncontrolled_recursion_allowed=false`.
 
 Each relaunch uses an individual project-manager dispatch prompt under
 `.francis/worker-terminal-coordinator/dispatches/`. The dispatch prompt includes

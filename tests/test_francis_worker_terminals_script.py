@@ -96,6 +96,7 @@ def test_francis_worker_terminal_launcher_status_is_read_only() -> None:
         assert "visible_terminal_requested" in worker
         assert "stdout_log_path" in worker
         assert "stderr_log_path" in worker
+        assert "transcript_log_path" in worker
         assert isinstance(worker["codex_child_process_ids"], list)
 
 
@@ -133,7 +134,7 @@ def test_francis_worker_coordinator_supports_bounded_no_launch_iteration(tmp_pat
     assert status["uncontrolled_recursion_allowed"] is False
     assert status["one_codex_child_per_lane"] is True
     assert status["project_manager_dispatch"] is True
-    assert status["worker_launch_mode"] == "Background"
+    assert status["worker_launch_mode"] == "Minimized"
     assert "readback_root" in status
     assert (state_root / "dispatches").is_dir() or status["no_launch"] is True
     receipts = (state_root / "receipts.jsonl").read_text(encoding="utf-8-sig").splitlines()
