@@ -266,6 +266,12 @@ def test_lens_command_palette_monitor_reports_chatgpt_connector_localtunnel_fall
     assert isinstance(plan["providers"]["cloudflared_named_tunnel_origin_cert_present"], bool)
     assert plan["providers"]["cloudflared_named_tunnel_origin_cert_content_read"] is False
     assert isinstance(plan["providers"]["cloudflared_named_tunnel_login_required"], bool)
+    assert plan["providers"]["cloudflared_named_tunnel_requested"] is False
+    assert plan["providers"]["cloudflared_named_tunnel_requested_name"] == ""
+    assert plan["providers"]["cloudflared_named_tunnel_requested_hostname"] == ""
+    assert plan["providers"]["cloudflared_named_tunnel_preflight_checked"] is False
+    assert plan["providers"]["cloudflared_named_tunnel_preflight_output_discarded"] is True
+    assert isinstance(plan["providers"]["cloudflared_named_tunnel_operator_provider_setup_commands"], list)
     assert plan["providers"]["cloudflared_named_tunnel_next_operator_step"] in {
         "run_cloudflared_tunnel_login",
         "create_or_start_cloudflared_named_tunnel",
@@ -329,6 +335,12 @@ def test_lens_command_palette_monitor_reports_chatgpt_connector_cloudflared_quic
     assert isinstance(providers["cloudflared_named_tunnel_origin_cert_present"], bool)
     assert providers["cloudflared_named_tunnel_origin_cert_content_read"] is False
     assert isinstance(providers["cloudflared_named_tunnel_login_required"], bool)
+    assert providers["cloudflared_named_tunnel_requested"] is False
+    assert providers["cloudflared_named_tunnel_requested_name"] == ""
+    assert providers["cloudflared_named_tunnel_requested_hostname"] == ""
+    assert providers["cloudflared_named_tunnel_preflight_checked"] is False
+    assert providers["cloudflared_named_tunnel_preflight_output_discarded"] is True
+    assert isinstance(providers["cloudflared_named_tunnel_operator_provider_setup_commands"], list)
     assert providers["cloudflared_named_tunnel_next_operator_step"] in {
         "run_cloudflared_tunnel_login",
         "create_or_start_cloudflared_named_tunnel",
@@ -337,6 +349,55 @@ def test_lens_command_palette_monitor_reports_chatgpt_connector_cloudflared_quic
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["chatgpt_voice_persistent_ingress_plan"]["passed"] is True
     assert "chatgpt_voice_persistent_ingress" not in checks
+
+
+def test_lens_command_palette_monitor_passes_cloudflared_named_request_to_plan(
+    tmp_path: Path,
+) -> None:
+    data_dir = tmp_path / "data"
+    status_path = tmp_path / "lens-status.json"
+    _write_json(status_path, _lens_status())
+
+    with _LocalCommandPaletteServer() as url:
+        proc = _run_monitor(
+            "-Mode",
+            "Probe",
+            "-DataDir",
+            str(data_dir),
+            "-CommandPaletteUrl",
+            url,
+            "-LensStatusPath",
+            str(status_path),
+            "-EnableChatGptConnectorChecks",
+            "-ChatGptConnectorUrl",
+            "https://example.trycloudflare.com/mcp",
+            "-CloudflaredTunnelName",
+            "francis",
+            "-CloudflaredHostname",
+            "francis.example.test",
+            "-TimeoutSeconds",
+            "3",
+        )
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = _json_stdout(proc.stdout)
+    plan = payload["chatgpt_persistent_ingress_plan_monitor"]
+    assert plan["enabled"] is True
+    assert plan["governance_safe"] is True
+    providers = plan["providers"]
+    assert providers["cloudflared_named_tunnel_requested"] is True
+    assert providers["cloudflared_named_tunnel_requested_name"] == "francis"
+    assert providers["cloudflared_named_tunnel_requested_hostname"] == "francis.example.test"
+    assert isinstance(providers["cloudflared_named_tunnel_exists"], bool)
+    assert isinstance(providers["cloudflared_named_tunnel_preflight_checked"], bool)
+    assert isinstance(providers["cloudflared_named_tunnel_preflight_exists"], bool)
+    assert providers["cloudflared_named_tunnel_preflight_output_discarded"] is True
+    assert isinstance(providers["cloudflared_named_tunnel_operator_provider_setup_commands"], list)
+    assert providers["cloudflared_named_tunnel_next_operator_step"] in {
+        "run_cloudflared_tunnel_login",
+        "create_cloudflared_named_tunnel_and_route_hostname",
+        "start_cloudflared_named_tunnel",
+    }
 
 
 def test_lens_command_palette_monitor_can_require_persistent_chatgpt_ingress(tmp_path: Path) -> None:

@@ -381,6 +381,34 @@ def _persistent_ingress_plan(value: Any) -> dict[str, Any]:
             "cloudflared_named_tunnel_login_required": _safe_bool(
                 providers.get("cloudflared_named_tunnel_login_required"),
             ),
+            "cloudflared_named_tunnel_requested": _safe_bool(
+                providers.get("cloudflared_named_tunnel_requested"),
+            ),
+            "cloudflared_named_tunnel_requested_name": _safe_str(
+                providers.get("cloudflared_named_tunnel_requested_name"),
+                max_length=160,
+            ),
+            "cloudflared_named_tunnel_requested_hostname": _safe_str(
+                providers.get("cloudflared_named_tunnel_requested_hostname"),
+                max_length=240,
+            ),
+            "cloudflared_named_tunnel_exists": _safe_bool(
+                providers.get("cloudflared_named_tunnel_exists"),
+            ),
+            "cloudflared_named_tunnel_preflight_checked": _safe_bool(
+                providers.get("cloudflared_named_tunnel_preflight_checked"),
+            ),
+            "cloudflared_named_tunnel_preflight_exists": _safe_bool(
+                providers.get("cloudflared_named_tunnel_preflight_exists"),
+            ),
+            "cloudflared_named_tunnel_preflight_output_discarded": _safe_bool(
+                providers.get("cloudflared_named_tunnel_preflight_output_discarded"),
+            ),
+            "cloudflared_named_tunnel_operator_provider_setup_commands": _safe_string_list(
+                providers.get("cloudflared_named_tunnel_operator_provider_setup_commands"),
+                limit=4,
+                max_length=260,
+            ),
             "cloudflared_named_tunnel_next_operator_step": _safe_str(
                 providers.get("cloudflared_named_tunnel_next_operator_step"),
                 max_length=160,

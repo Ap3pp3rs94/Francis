@@ -201,6 +201,17 @@ def test_lens_command_palette_monitor_route_projects_voice_bridge_proof(monkeypa
                         "cloudflared_named_tunnel_origin_cert_present": False,
                         "cloudflared_named_tunnel_origin_cert_content_read": False,
                         "cloudflared_named_tunnel_login_required": True,
+                        "cloudflared_named_tunnel_requested": True,
+                        "cloudflared_named_tunnel_requested_name": "francis",
+                        "cloudflared_named_tunnel_requested_hostname": "francis.example.test",
+                        "cloudflared_named_tunnel_exists": False,
+                        "cloudflared_named_tunnel_preflight_checked": False,
+                        "cloudflared_named_tunnel_preflight_exists": False,
+                        "cloudflared_named_tunnel_preflight_output_discarded": True,
+                        "cloudflared_named_tunnel_operator_provider_setup_commands": [
+                            "cloudflared tunnel create francis",
+                            "cloudflared tunnel route dns francis francis.example.test",
+                        ],
                         "cloudflared_named_tunnel_next_operator_step": "run_cloudflared_tunnel_login",
                     },
                 },
@@ -260,6 +271,17 @@ def test_lens_command_palette_monitor_route_projects_voice_bridge_proof(monkeypa
     providers = body["chatgpt_persistent_ingress_plan_monitor"]["providers"]
     assert providers["cloudflared_named_tunnel_available"] is True
     assert providers["cloudflared_named_tunnel_login_required"] is True
+    assert providers["cloudflared_named_tunnel_requested"] is True
+    assert providers["cloudflared_named_tunnel_requested_name"] == "francis"
+    assert providers["cloudflared_named_tunnel_requested_hostname"] == "francis.example.test"
+    assert providers["cloudflared_named_tunnel_exists"] is False
+    assert providers["cloudflared_named_tunnel_preflight_checked"] is False
+    assert providers["cloudflared_named_tunnel_preflight_exists"] is False
+    assert providers["cloudflared_named_tunnel_preflight_output_discarded"] is True
+    assert providers["cloudflared_named_tunnel_operator_provider_setup_commands"] == [
+        "cloudflared tunnel create francis",
+        "cloudflared tunnel route dns francis francis.example.test",
+    ]
     assert providers["cloudflared_named_tunnel_next_operator_step"] == "run_cloudflared_tunnel_login"
     assert providers["cloudflared_named_tunnel_origin_cert_content_read"] is False
     handoff = body["chatgpt_persistent_ingress_plan_monitor"]["operator_handoff"]
