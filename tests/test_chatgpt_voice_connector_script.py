@@ -118,6 +118,11 @@ def test_chatgpt_voice_connector_cloudflared_named_mode_is_bounded_persistent_in
     assert "cloudflared_named_hostname_mismatch" in script
     assert "$TunnelArgs += @('run', $BoundedTunnelName)" in script
     assert "public_tunnel_started = $TunnelAlive" in script
+    assert "connector_url_recorded = $true" in script
+    assert "public_connector_verified = $ConnectorReady" in script
+    assert "cloudflared_named_connector_unverified" in script
+    assert "verify_cloudflared_hostname_route_and_chatgpt_connector_url" in script
+    assert "inspect_cloudflared_named_tunnel_logs" in script
     assert "persistent_candidate = $true" in script
     assert "OpensPublicTunnel $false -WritesData $true" in script
     assert "OpensPublicTunnel $true -WritesData $true" in script

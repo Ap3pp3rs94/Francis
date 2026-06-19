@@ -2065,6 +2065,18 @@ if ($Mode -eq 'StartCloudflaredNamed') {
   $LocalReady = [bool](Get-NestedPropertyValue -Payload $EndpointAfter -Path @('local_listener', 'ready') -Default $false)
   $TunnelReadback = Get-ProcessReadback -ProcessId $TunnelProcess.Id -ExpectedCommandText 'cloudflared'
   $TunnelAlive = [bool]$TunnelReadback.alive
+  $NamedStartBlockers = @()
+  $NamedStartNextStep = 'call_francis_chatgpt_voice_mcp_probe_from_chatgpt_connector'
+  if (-not $TunnelAlive) {
+    $NamedStartBlockers += 'cloudflared_named_tunnel_process_not_alive'
+    $NamedStartNextStep = 'inspect_cloudflared_named_tunnel_logs'
+  } elseif (-not $LocalReady) {
+    $NamedStartBlockers += 'mcp_local_listener_not_ready'
+    $NamedStartNextStep = 'inspect_chatgpt_voice_mcp_launcher'
+  } elseif (-not $ConnectorReady) {
+    $NamedStartBlockers += 'cloudflared_named_connector_unverified'
+    $NamedStartNextStep = 'verify_cloudflared_hostname_route_and_chatgpt_connector_url'
+  }
   $Payload.status = if ($ConnectorReady -and $TunnelAlive) {
     'cloudflared_named_started_ready'
   } elseif ($LocalReady -and $TunnelAlive -and -not $VerifyConnector) {
@@ -2075,6 +2087,8 @@ if ($Mode -eq 'StartCloudflaredNamed') {
     'cloudflared_named_started_failed'
   }
   $Payload.ok = [bool](($ConnectorReady -and $TunnelAlive) -or ($LocalReady -and $TunnelAlive -and -not $VerifyConnector))
+  $Payload.blockers = $NamedStartBlockers
+  $Payload.next_operator_step = $NamedStartNextStep
   $Payload.cloudflared_named_start = [ordered]@{
     stopped = $Stopped
     cloudflared_path = $CloudflaredPath
@@ -2088,6 +2102,11 @@ if ($Mode -eq 'StartCloudflaredNamed') {
     connector_host = $ConnectorHost
     ingress_mode = 'cloudflared_named_tunnel'
     public_tunnel_started = $TunnelAlive
+    connector_url_recorded = $true
+    local_listener_ready = $LocalReady
+    public_connector_verified = $ConnectorReady
+    verify_connector_requested = [bool]$VerifyConnector
+    next_operator_step = $NamedStartNextStep
     persistent_candidate = $true
   }
   ConvertTo-JsonOutput -Payload $Payload
