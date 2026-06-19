@@ -74,15 +74,21 @@ def test_lens_overlay_window_status_reports_missing_runtime(tmp_path: Path) -> N
     assert payload["overlay_runtime"]["mcp_status_route"] == "/lens/mcp/status"
     assert payload["overlay_runtime"]["orb_mcp_status_route"] == "/lens/orb/mcp-status"
     assert payload["orb_visual"]["autonomous_motion"] is False
-    assert payload["orb_visual"]["motion_clock"] == "manual_drag_only"
-    assert payload["orb_visual"]["motion_profile"] == "manual_drag_only"
-    assert payload["orb_visual"]["desktop_roam_supported"] is True
+    assert payload["orb_visual"]["right_corner_locked"] is True
+    assert payload["orb_visual"]["default_anchor"] == "bottom_right"
+    assert payload["orb_visual"]["motion_clock"] == "anchored_static"
+    assert payload["orb_visual"]["motion_profile"] == "right_corner_locked"
+    assert payload["orb_visual"]["manual_drag_supported"] is False
+    assert payload["orb_visual"]["desktop_roam_supported"] is False
     assert payload["orb_visual"]["desktop_roam_bounds"] == "work_area"
     assert payload["orb_visual"]["render_profile"]["source"] == "wpf_render_capability"
     assert payload["orb_visual"]["render_profile"]["motion_integrator"] == "elapsed_time_delta_clamped"
     assert payload["overlay_position"]["status"] == "window_unavailable"
-    assert payload["overlay_position"]["desktop_roam_supported"] is True
+    assert payload["overlay_position"]["right_corner_locked"] is True
+    assert payload["overlay_position"]["default_anchor"] == "bottom_right"
+    assert payload["overlay_position"]["desktop_roam_supported"] is False
     assert payload["overlay_position"]["desktop_roam_bounds"] == "work_area"
+    assert payload["overlay_position"]["manual_drag_supported"] is False
     readiness = payload["voice_provider_readiness"]
     assert readiness["kind"] == "lens.overlay.voice.provider_readiness"
     assert readiness["selected_provider"] == "WindowsSapi"
@@ -260,12 +266,14 @@ def test_lens_overlay_window_status_reports_live_runtime_readback(tmp_path: Path
                 "overlay_position": {
                     "status": "visible_position_observed",
                     "left": 800.0,
-                    "top": 84.0,
+                    "top": 452.0,
                     "width": 220.0,
                     "height": 220.0,
-                    "desktop_roam_supported": True,
+                    "right_corner_locked": True,
+                    "default_anchor": "bottom_right",
+                    "desktop_roam_supported": False,
                     "desktop_roam_bounds": "work_area",
-                    "manual_drag_supported": True,
+                    "manual_drag_supported": False,
                     "anchor_left": 640.0,
                     "anchor_top": 360.0,
                     "range_x": 640.0,
@@ -312,8 +320,11 @@ def test_lens_overlay_window_status_reports_live_runtime_readback(tmp_path: Path
     assert payload["overlay_runtime"]["always_on_top"] is True
     assert payload["overlay_position"]["status"] == "visible_position_observed"
     assert payload["overlay_position"]["left"] == 800.0
-    assert payload["overlay_position"]["desktop_roam_supported"] is True
+    assert payload["overlay_position"]["right_corner_locked"] is True
+    assert payload["overlay_position"]["default_anchor"] == "bottom_right"
+    assert payload["overlay_position"]["desktop_roam_supported"] is False
     assert payload["overlay_position"]["desktop_roam_bounds"] == "work_area"
+    assert payload["overlay_position"]["manual_drag_supported"] is False
     assert payload["overlay_runtime"]["overlay_position"]["roam_right"] == 1280.0
     assert payload["overlay_runtime"]["requirement_state"] == "visible"
     assert payload["overlay_runtime"]["blocker"] == ""
@@ -979,12 +990,19 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "$Form.Background = [System.Windows.Media.Brushes]::Transparent" in script
     assert "$Form.ShowInTaskbar = $true" in script
     assert "$Form.TopMost = $true" in script
+    assert "[switch]$EnableManualOrbDrag" in script
+    assert "Set-OrbWindowDockPosition -Window $Form -WorkArea $Screen -Margin 48" in script
+    assert "$EnergyRoot.Cursor = if ($ManualOrbDragEnabled)" in script
+    assert "if ($ManualOrbDragEnabled) {" in script
     assert "$EnergyRoot.Add_MouseLeftButtonDown" in script
     assert "$script:LensOverlayWindow.DragMove()" in script
     assert "Reset-OrbAutonomousMotionAnchor" in script
     assert "bounded_desktop_roam" in script
+    assert "right_corner_locked" in script
+    assert "default_anchor = if ($AutonomousMotion) { 'bounded_work_area' }" in script
     assert "$AutonomousMotionEnabled = [bool]$EnableAutonomousMotion -and -not [bool]$DisableAutonomousMotion" in script
-    assert "desktop_roam_supported = $true" in script
+    assert "desktop_roam_supported = $AutonomousMotion" in script
+    assert "manual_drag_supported = $ManualDrag" in script
     assert "desktop_roam_bounds = 'work_area'" in script
     assert "roam_left = $MinimumLeft" in script
     assert "roam_right = $MaximumLeft" in script

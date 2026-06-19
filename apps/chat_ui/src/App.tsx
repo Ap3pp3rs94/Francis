@@ -341,6 +341,7 @@ function BodyStatePanel(props: { status: LensMcpStatus | null; loading: boolean;
 }
 
 const ORB_OVERLAY_SIZE = 128;
+const ORB_OVERLAY_DOCK_MARGIN = 24;
 
 function clampOrbOverlayPosition(left: number, top: number): { left: number; top: number } {
   if (typeof window === "undefined") return { left, top };
@@ -351,6 +352,17 @@ function clampOrbOverlayPosition(left: number, top: number): { left: number; top
     left: Math.min(Math.max(0, left), maxLeft),
     top: Math.min(Math.max(0, top), maxTop),
   };
+}
+
+function dockedOrbOverlayPosition(): { left: number; top: number } {
+  if (typeof window === "undefined") {
+    return { left: ORB_OVERLAY_DOCK_MARGIN, top: ORB_OVERLAY_DOCK_MARGIN };
+  }
+
+  return clampOrbOverlayPosition(
+    window.innerWidth - ORB_OVERLAY_SIZE - ORB_OVERLAY_DOCK_MARGIN,
+    window.innerHeight - ORB_OVERLAY_SIZE - ORB_OVERLAY_DOCK_MARGIN,
+  );
 }
 
 function getQueryParam(name: string): string {
@@ -1041,8 +1053,9 @@ function OrbOverlaySurface(props: { status: LensMcpStatus | null; loading: boole
   const orb = presentOrbGlyph(props.status, props.loading);
   const dragState = useRef<{ pointerId: number; offsetX: number; offsetY: number } | null>(null);
   const [dragging, setDragging] = useState(false);
-  const [position, setPosition] = useState(() => ({ left: 24, top: 24 }));
+  const [position, setPosition] = useState(dockedOrbOverlayPosition);
   const snapshotMode = getQueryParam("lens_orb_snapshot") === "1";
+  const manualDragEnabled = getQueryParam("lens_orb_unlock") === "1";
   const keyColor = getQueryParam("lens_overlay_key");
   const background = /^#?[0-9a-fA-F]{6}$/.test(keyColor)
     ? `#${keyColor.replace(/^#/, "")}`
@@ -1055,6 +1068,7 @@ function OrbOverlaySurface(props: { status: LensMcpStatus | null; loading: boole
   }, []);
 
   const onPointerDown = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (!manualDragEnabled || snapshotMode) return;
     if (event.button !== 0) return;
     const rect = event.currentTarget.getBoundingClientRect();
     dragState.current = {
@@ -1064,7 +1078,7 @@ function OrbOverlaySurface(props: { status: LensMcpStatus | null; loading: boole
     };
     event.currentTarget.setPointerCapture(event.pointerId);
     setDragging(true);
-  }, []);
+  }, [manualDragEnabled, snapshotMode]);
 
   const onPointerMove = useCallback(
     (event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -1086,10 +1100,13 @@ function OrbOverlaySurface(props: { status: LensMcpStatus | null; loading: boole
   return (
     <main
       data-francis-lens-surface="orb_overlay"
+      data-orb-dock="bottom-right"
+      data-orb-drag-mode={manualDragEnabled ? "manual_debug" : "locked"}
       style={{
         background,
         minHeight: "100vh",
         overflow: "hidden",
+        pointerEvents: "none",
         width: snapshotMode ? ORB_OVERLAY_SIZE : undefined,
       }}
     >
@@ -1107,15 +1124,18 @@ function OrbOverlaySurface(props: { status: LensMcpStatus | null; loading: boole
           background: "transparent",
           border: 0,
           boxSizing: "border-box",
-          cursor: snapshotMode ? "default" : dragging ? "grabbing" : "grab",
+          bottom: snapshotMode || manualDragEnabled ? undefined : ORB_OVERLAY_DOCK_MARGIN,
+          cursor: snapshotMode ? "default" : manualDragEnabled ? (dragging ? "grabbing" : "grab") : "default",
           display: "flex",
           height: ORB_OVERLAY_SIZE,
           justifyContent: "center",
-          left: snapshotMode ? 0 : position.left,
+          left: snapshotMode ? 0 : manualDragEnabled ? position.left : undefined,
           padding: 4,
+          pointerEvents: "auto",
           position: "fixed",
-          top: snapshotMode ? 0 : position.top,
-          touchAction: "none",
+          right: snapshotMode || manualDragEnabled ? undefined : ORB_OVERLAY_DOCK_MARGIN,
+          top: snapshotMode ? 0 : manualDragEnabled ? position.top : undefined,
+          touchAction: manualDragEnabled ? "none" : "auto",
           width: ORB_OVERLAY_SIZE,
         }}
       >

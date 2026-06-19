@@ -14,6 +14,8 @@ param(
 
   [switch]$DisableAutonomousMotion,
 
+  [switch]$EnableManualOrbDrag,
+
   [switch]$EnableWakeListen,
 
   [switch]$EnableContinuousVoiceChat,
@@ -557,7 +559,10 @@ function Set-OverlayHardwareRenderMode {
 }
 
 function New-OrbVisualProjection {
-  param([bool]$AutonomousMotion = $false)
+  param(
+    [bool]$AutonomousMotion = $false,
+    [bool]$ManualDrag = $false
+  )
 
   return [ordered]@{
     source = 'lens_orb_mcp_status_bridge'
@@ -566,11 +571,13 @@ function New-OrbVisualProjection {
     animated = $true
     transparent_background = $true
     autonomous_motion = $AutonomousMotion
-    motion_profile = if ($AutonomousMotion) { 'bounded_desktop_roam' } else { 'manual_drag_only' }
-    motion_clock = if ($AutonomousMotion) { 'composition_target_rendering' } else { 'manual_drag_only' }
+    right_corner_locked = (-not $AutonomousMotion -and -not $ManualDrag)
+    default_anchor = if ($AutonomousMotion) { 'bounded_work_area' } elseif ($ManualDrag) { 'operator_manual' } else { 'bottom_right' }
+    motion_profile = if ($AutonomousMotion) { 'bounded_desktop_roam' } elseif ($ManualDrag) { 'manual_drag_only' } else { 'right_corner_locked' }
+    motion_clock = if ($AutonomousMotion) { 'composition_target_rendering' } elseif ($ManualDrag) { 'manual_drag_only' } else { 'anchored_static' }
     render_profile = Get-OverlayWpfRenderProfile -FrameSyncedMotion $AutonomousMotion
-    manual_drag_supported = $true
-    desktop_roam_supported = $true
+    manual_drag_supported = $ManualDrag
+    desktop_roam_supported = $AutonomousMotion
     desktop_roam_bounds = 'work_area'
     route = '/?francis_lens=orb_overlay'
     grants_execution_authority = $false
@@ -610,6 +617,21 @@ function New-OrbAutonomousMotionState {
     desktop_roam_bounds = 'work_area'
     last_frame_seconds = -1.0
   }
+}
+
+function Set-OrbWindowDockPosition {
+  param(
+    [object]$Window,
+    [object]$WorkArea,
+    [double]$Margin = 48.0
+  )
+
+  if ($null -eq $Window -or $null -eq $WorkArea) {
+    return
+  }
+
+  $Window.Left = [Math]::Max([double]$WorkArea.Left, [double]$WorkArea.Right - [double]$Window.Width - $Margin)
+  $Window.Top = [Math]::Max([double]$WorkArea.Top, [double]$WorkArea.Bottom - [double]$Window.Height - $Margin)
 }
 
 function Reset-OrbAutonomousMotionAnchor {
@@ -685,20 +707,33 @@ function New-OverlayWindowPositionProjection {
   param(
     [object]$Window,
     [object]$MotionState,
-    [bool]$OverlayWindowVisible
+    [bool]$OverlayWindowVisible,
+    [AllowNull()]
+    [object]$OrbVisual = $null
   )
 
   $HasWindow = $null -ne $Window
   $HasMotionState = $null -ne $MotionState
+  if ($null -eq $OrbVisual) {
+    $OrbVisualVariable = Get-Variable -Name LensOverlayOrbVisual -Scope Script -ErrorAction SilentlyContinue
+    if ($null -ne $OrbVisualVariable) {
+      $OrbVisual = $OrbVisualVariable.Value
+    }
+  }
+  $AutonomousMotion = if ($null -ne $OrbVisual -and $null -ne $OrbVisual.PSObject.Properties['autonomous_motion']) { [bool]$OrbVisual.autonomous_motion } else { $false }
+  $ManualDrag = if ($null -ne $OrbVisual -and $null -ne $OrbVisual.PSObject.Properties['manual_drag_supported']) { [bool]$OrbVisual.manual_drag_supported } else { $false }
+  $RightCornerLocked = if ($null -ne $OrbVisual -and $null -ne $OrbVisual.PSObject.Properties['right_corner_locked']) { [bool]$OrbVisual.right_corner_locked } else { (-not $AutonomousMotion -and -not $ManualDrag) }
   return [ordered]@{
     status = if ($OverlayWindowVisible -and $HasWindow) { 'visible_position_observed' } elseif ($HasWindow) { 'window_not_visible' } else { 'window_unavailable' }
     left = if ($HasWindow) { [double]$Window.Left } else { 0.0 }
     top = if ($HasWindow) { [double]$Window.Top } else { 0.0 }
     width = if ($HasWindow) { [double]$Window.Width } else { 0.0 }
     height = if ($HasWindow) { [double]$Window.Height } else { 0.0 }
-    desktop_roam_supported = $true
+    right_corner_locked = $RightCornerLocked
+    default_anchor = if ($AutonomousMotion) { 'bounded_work_area' } elseif ($ManualDrag) { 'operator_manual' } else { 'bottom_right' }
+    desktop_roam_supported = $AutonomousMotion
     desktop_roam_bounds = 'work_area'
-    manual_drag_supported = $true
+    manual_drag_supported = $ManualDrag
     anchor_left = if ($HasMotionState) { [double]$MotionState['anchor_left'] } else { 0.0 }
     anchor_top = if ($HasMotionState) { [double]$MotionState['anchor_top'] } else { 0.0 }
     range_x = if ($HasMotionState) { [double]$MotionState['range_x'] } else { 0.0 }
@@ -4114,6 +4149,7 @@ $ModeName = $Mode.ToLowerInvariant()
 $RunningOnWindows = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
 $script:LensOverlayVoiceUseLlmRequested = [bool]$EnableVoiceLlm
 $AutonomousMotionEnabled = [bool]$EnableAutonomousMotion -and -not [bool]$DisableAutonomousMotion
+$ManualOrbDragEnabled = [bool]$EnableManualOrbDrag
 
 if ($Mode -eq 'Speak') {
   $PlaybackStatusPath = if ($PlaybackStateOnly) { Get-OverlayVoicePlaybackStatusPath -Root $DataRoot } else { '' }
@@ -4173,7 +4209,7 @@ if ($Mode -eq 'Run') {
   $MotionSubscription = $null
   $WakeRecognizer = $null
   $Failed = $false
-  $script:LensOverlayOrbVisual = New-OrbVisualProjection -AutonomousMotion $AutonomousMotionEnabled
+  $script:LensOverlayOrbVisual = New-OrbVisualProjection -AutonomousMotion $AutonomousMotionEnabled -ManualDrag $ManualOrbDragEnabled
   $script:LensOverlayEnergyRoot = $null
   $script:LensOverlayMotionState = $null
   $script:LensOverlayRenderFrameClock = $null
@@ -4187,7 +4223,7 @@ if ($Mode -eq 'Run') {
     Add-Type -AssemblyName PresentationCore
     Add-Type -AssemblyName WindowsBase
     Set-OverlayHardwareRenderMode
-    $script:LensOverlayOrbVisual = New-OrbVisualProjection -AutonomousMotion $AutonomousMotionEnabled
+    $script:LensOverlayOrbVisual = New-OrbVisualProjection -AutonomousMotion $AutonomousMotionEnabled -ManualDrag $ManualOrbDragEnabled
     $Config = Get-OverlayConfig
     $OrbSize = 220
     $Screen = [System.Windows.SystemParameters]::WorkArea
@@ -4201,12 +4237,12 @@ if ($Mode -eq 'Run') {
     $Form.TopMost = $true
     $Form.Width = $OrbSize
     $Form.Height = $OrbSize
-    $Form.Left = [Math]::Max(0, $Screen.Right - $Form.Width - 48)
-    $Form.Top = [Math]::Max(0, $Screen.Top + 84)
+    Set-OrbWindowDockPosition -Window $Form -WorkArea $Screen -Margin 48
 
     $EnergyRoot = New-OrbEnergySurface -Size $OrbSize
-    $EnergyRoot.Cursor = [System.Windows.Input.Cursors]::SizeAll
-    $EnergyRoot.Add_MouseLeftButtonDown({
+    $EnergyRoot.Cursor = if ($ManualOrbDragEnabled) { [System.Windows.Input.Cursors]::SizeAll } else { [System.Windows.Input.Cursors]::Arrow }
+    if ($ManualOrbDragEnabled) {
+      $EnergyRoot.Add_MouseLeftButtonDown({
         param($Sender, $EventArgs)
 
         try {
@@ -4216,6 +4252,7 @@ if ($Mode -eq 'Run') {
         } catch {
         }
       })
+    }
     $Form.Content = $EnergyRoot
 
     $Label = New-Object System.Windows.Controls.Label
@@ -4440,6 +4477,9 @@ if ($DisableAutonomousMotion) {
 }
 if ($EnableAutonomousMotion) {
   $ArgumentList += '-EnableAutonomousMotion'
+}
+if ($EnableManualOrbDrag) {
+  $ArgumentList += '-EnableManualOrbDrag'
 }
 if ($EnableWakeListen) {
   $ArgumentList += '-EnableWakeListen'

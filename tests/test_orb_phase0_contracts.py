@@ -38,6 +38,20 @@ def test_chat_ui_orb_glyph_visual_tokens_remain_locked() -> None:
     assert "grantsMutationAuthority" in glyph
 
 
+def test_chat_ui_orb_overlay_defaults_to_right_corner_lock() -> None:
+    app = _read("apps/chat_ui/src/App.tsx")
+
+    assert "const ORB_OVERLAY_DOCK_MARGIN = 24;" in app
+    assert "function dockedOrbOverlayPosition()" in app
+    assert 'getQueryParam("lens_orb_unlock") === "1"' in app
+    assert 'data-orb-dock="bottom-right"' in app
+    assert 'data-orb-drag-mode={manualDragEnabled ? "manual_debug" : "locked"}' in app
+    assert "bottom: snapshotMode || manualDragEnabled ? undefined : ORB_OVERLAY_DOCK_MARGIN" in app
+    assert "right: snapshotMode || manualDragEnabled ? undefined : ORB_OVERLAY_DOCK_MARGIN" in app
+    assert 'pointerEvents: "none"' in app
+    assert 'pointerEvents: "auto"' in app
+
+
 def test_overlay_orb_renderer_visual_constants_remain_locked() -> None:
     script = _read("scripts/lens-overlay-window.ps1")
 
@@ -54,6 +68,9 @@ def test_overlay_orb_renderer_visual_constants_remain_locked() -> None:
     assert "$Form.Background = [System.Windows.Media.Brushes]::Transparent" in script
     assert "$Form.ShowInTaskbar = $true" in script
     assert "$Form.TopMost = $true" in script
+    assert "Set-OrbWindowDockPosition -Window $Form -WorkArea $Screen -Margin 48" in script
+    assert "right_corner_locked" in script
+    assert "default_anchor = if ($AutonomousMotion) { 'bounded_work_area' }" in script
     assert "$Viewport = New-Object System.Windows.Controls.Viewport3D" in script
     assert "$Camera.Position = New-Object System.Windows.Media.Media3D.Point3D -ArgumentList 0, 0, 3.2" in script
     assert "$Camera.FieldOfView = 56" in script
@@ -101,7 +118,7 @@ def test_orb_continuum_state_preserves_one_path_wiring_rules() -> None:
     assert "LocalTunnel fallback (`localtunnel_fallback_replace_needed`)" in state
     assert "LocalTunnel" in state
     assert "`localtunnel_ephemeral`" in state
-    assert "`manual_drag_only`" in state
+    assert "`right_corner_locked`" in state
     assert "`bounded_desktop_roam`" in state
     assert "`overlay_position`" in state
     assert "Trigger a fresh ChatGPT app call through the public" in state
