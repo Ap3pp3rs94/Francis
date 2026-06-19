@@ -10,14 +10,16 @@ param(
   [ValidateSet('read-only', 'workspace-write', 'danger-full-access')]
   [string]$Sandbox = 'workspace-write',
 
-  [ValidateSet('Visible', 'Minimized', 'Background')]
+  [ValidateSet('Visible', 'Minimized', 'Background', 'Exec')]
   [string]$LaunchMode = 'Visible',
 
   [string]$StdoutLogPath = '',
 
   [string]$StderrLogPath = '',
 
-  [string]$TranscriptLogPath = ''
+  [string]$TranscriptLogPath = '',
+
+  [string]$LastMessagePath = ''
 )
 
 Set-StrictMode -Version 2
@@ -68,6 +70,7 @@ $SessionPayload = [ordered]@{
   stdout_log_path = $StdoutLogPath
   stderr_log_path = $StderrLogPath
   transcript_log_path = $TranscriptLogPath
+  last_message_path = $LastMessagePath
   codex_cli = 'codex'
   visible_terminal_requested = ($LaunchMode -in @('Visible', 'Minimized'))
   continuum_started = $false
@@ -92,19 +95,42 @@ if (-not [string]::IsNullOrWhiteSpace($TranscriptLogPath)) {
 $Host.UI.RawUI.WindowTitle = "Francis $WorkerId"
 Set-Location -LiteralPath $RepoRoot
 
-$CodexArgs = @(
-  '--cd', $RepoRoot,
-  '--sandbox', $Sandbox,
-  '--ask-for-approval', 'never',
-  '--no-alt-screen'
-)
-if (-not [string]::IsNullOrWhiteSpace($Model)) {
-  $CodexArgs += @('--model', $Model)
-}
-$CodexArgs += $Prompt
-
 try {
-  & codex @CodexArgs
+  if ($LaunchMode -eq 'Exec') {
+    if (-not [string]::IsNullOrWhiteSpace($LastMessagePath)) {
+      $LastMessageDir = Split-Path -Parent $LastMessagePath
+      if (-not [string]::IsNullOrWhiteSpace($LastMessageDir)) {
+        New-Item -ItemType Directory -Force -Path $LastMessageDir | Out-Null
+      }
+    }
+    $CodexArgs = @(
+      'exec',
+      '--cd', $RepoRoot,
+      '--sandbox', $Sandbox,
+      '--ask-for-approval', 'never',
+      '--json'
+    )
+    if (-not [string]::IsNullOrWhiteSpace($LastMessagePath)) {
+      $CodexArgs += @('--output-last-message', $LastMessagePath)
+    }
+    if (-not [string]::IsNullOrWhiteSpace($Model)) {
+      $CodexArgs += @('--model', $Model)
+    }
+    $CodexArgs += '-'
+    $Prompt | & codex @CodexArgs
+  } else {
+    $CodexArgs = @(
+      '--cd', $RepoRoot,
+      '--sandbox', $Sandbox,
+      '--ask-for-approval', 'never',
+      '--no-alt-screen'
+    )
+    if (-not [string]::IsNullOrWhiteSpace($Model)) {
+      $CodexArgs += @('--model', $Model)
+    }
+    $CodexArgs += $Prompt
+    & codex @CodexArgs
+  }
   $ExitCode = $LASTEXITCODE
 } catch {
   Write-Host ("Francis worker {0} failed to start Codex: {1}" -f $WorkerId, $_.Exception.Message)

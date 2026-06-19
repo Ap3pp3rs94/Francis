@@ -13,8 +13,8 @@ param(
   [ValidateSet('read-only', 'workspace-write', 'danger-full-access')]
   [string]$Sandbox = 'workspace-write',
 
-  [ValidateSet('Visible', 'Minimized', 'Background')]
-  [string]$WorkerLaunchMode = 'Minimized',
+  [ValidateSet('Visible', 'Minimized', 'Background', 'Exec')]
+  [string]$WorkerLaunchMode = 'Exec',
 
   [string]$StateRoot = '',
 

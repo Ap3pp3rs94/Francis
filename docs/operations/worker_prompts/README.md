@@ -25,9 +25,10 @@ Each coordinator pass should keep all four lanes active at the same time:
 - Worker 3 advances voice receipts and provider boundaries.
 - Worker 4 advances Stage 17 and completion-model truth.
 
-Manual launches default to physical visible terminals. Add
-`-LaunchMode Minimized` when a worker should run out of the way while still
-keeping the real terminal/TTY that Codex needs.
+Manual launches default to physical visible terminals. Add `-LaunchMode Exec`
+when a worker should run as a true background Codex execution with JSONL logs
+and a last-message file. Add `-LaunchMode Minimized` only when an operator wants
+a real terminal kept available in the taskbar.
 
 The coordinator should use
 `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-francis-worker-terminals.ps1 -Mode Status`
@@ -43,13 +44,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\francis-worker-coo
 The coordinator keeps one active Codex child per lane. When a lane finishes and
 its Codex child exits, the coordinator records a receipt and relaunches that
 lane with an individualized project-manager dispatch prompt. Coordinator
-relaunches default to `-WorkerLaunchMode Minimized`, so future passes keep real
-PowerShell 7 terminals available to Codex without forcing four foreground
-windows. Minimized launches write transcript paths under
-`.francis/worker-terminal-logs/` and expose those paths through worker status.
-Hidden `Background` launches can record stdout/stderr, but the Codex TUI may
-refuse to run without a TTY; do not use that mode for the continuous PM loop. It
-does not spawn nested coordinators and it records `uncontrolled_recursion_allowed=false`.
+relaunches default to `-WorkerLaunchMode Exec`, so future passes run through
+`codex exec` instead of the interactive TUI. Exec launches write per-lane JSONL
+stdout, stderr, and last-message paths under `.francis/worker-terminal-logs/`
+and expose those paths through worker status. Hidden `Background` launches use
+the interactive TUI without a TTY and may fail; do not use that mode for the
+continuous PM loop. Minimized launches remain available as an operator fallback.
+The coordinator does not spawn nested coordinators and it records
+`uncontrolled_recursion_allowed=false`.
 
 Each relaunch uses an individual project-manager dispatch prompt under
 `.francis/worker-terminal-coordinator/dispatches/`. The dispatch prompt includes

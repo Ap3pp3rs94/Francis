@@ -12,7 +12,7 @@ param(
   [ValidateSet('read-only', 'workspace-write', 'danger-full-access')]
   [string]$Sandbox = 'workspace-write',
 
-  [ValidateSet('Visible', 'Minimized', 'Background')]
+  [ValidateSet('Visible', 'Minimized', 'Background', 'Exec')]
   [string]$LaunchMode = 'Visible'
 )
 
@@ -134,6 +134,11 @@ function Get-WorkerStatusRows {
     } else {
       ''
     }
+    $LastMessagePath = if ($null -ne $Session -and $Session.PSObject.Properties['last_message_path']) {
+      [string]$Session.last_message_path
+    } else {
+      ''
+    }
     $VisibleTerminalRequested = if ($null -ne $Session -and $Session.PSObject.Properties['visible_terminal_requested']) {
       [bool]$Session.visible_terminal_requested
     } else {
@@ -167,6 +172,7 @@ function Get-WorkerStatusRows {
       stdout_log_path = $StdoutLogPath
       stderr_log_path = $StderrLogPath
       transcript_log_path = $TranscriptLogPath
+      last_message_path = $LastMessagePath
       started_at = $StartedAt
       completed_at = $CompletedAt
       exit_code = $ExitCode
@@ -214,10 +220,14 @@ foreach ($Worker in @($Workers | Where-Object { $WorkerId -eq 'All' -or [string]
   $StdoutLogPath = ''
   $StderrLogPath = ''
   $TranscriptLogPath = ''
-  if ($LaunchMode -eq 'Background') {
+  $LastMessagePath = ''
+  if ($LaunchMode -in @('Background', 'Exec')) {
     $Stamp = [DateTimeOffset]::UtcNow.ToString('yyyyMMddTHHmmssfffffffZ')
     $StdoutLogPath = Join-Path $LogRoot ('{0}-{1}.stdout.log' -f $Worker.id, $Stamp)
     $StderrLogPath = Join-Path $LogRoot ('{0}-{1}.stderr.log' -f $Worker.id, $Stamp)
+    if ($LaunchMode -eq 'Exec') {
+      $LastMessagePath = Join-Path $LogRoot ('{0}-{1}.last-message.md' -f $Worker.id, $Stamp)
+    }
   } elseif ($LaunchMode -eq 'Minimized') {
     $Stamp = [DateTimeOffset]::UtcNow.ToString('yyyyMMddTHHmmssfffffffZ')
     $TranscriptLogPath = Join-Path $LogRoot ('{0}-{1}.transcript.log' -f $Worker.id, $Stamp)
@@ -243,6 +253,15 @@ foreach ($Worker in @($Workers | Where-Object { $WorkerId -eq 'All' -or [string]
       '-StderrLogPath',
       $StderrLogPath
     )
+  } elseif ($LaunchMode -eq 'Exec') {
+    $ArgumentList += @(
+      '-StdoutLogPath',
+      $StdoutLogPath,
+      '-StderrLogPath',
+      $StderrLogPath,
+      '-LastMessagePath',
+      $LastMessagePath
+    )
   } elseif ($LaunchMode -eq 'Minimized') {
     $ArgumentList += @(
       '-TranscriptLogPath',
@@ -260,7 +279,7 @@ foreach ($Worker in @($Workers | Where-Object { $WorkerId -eq 'All' -or [string]
     ArgumentList = $ArgumentList
     PassThru = $true
   }
-  if ($LaunchMode -eq 'Background') {
+  if ($LaunchMode -in @('Background', 'Exec')) {
     $StartProcessArgs.WindowStyle = 'Hidden'
     $StartProcessArgs.RedirectStandardOutput = $StdoutLogPath
     $StartProcessArgs.RedirectStandardError = $StderrLogPath
@@ -279,6 +298,7 @@ foreach ($Worker in @($Workers | Where-Object { $WorkerId -eq 'All' -or [string]
     stdout_log_path = $StdoutLogPath
     stderr_log_path = $StderrLogPath
     transcript_log_path = $TranscriptLogPath
+    last_message_path = $LastMessagePath
   }
 }
 
