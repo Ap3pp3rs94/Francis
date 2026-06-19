@@ -92,6 +92,18 @@ def test_chatgpt_voice_connector_start_persistent_never_opens_localtunnel() -> N
     assert "OpensPublicTunnel $false -WritesData $true" in script
 
 
+def test_chatgpt_voice_connector_cloudflared_quick_mode_is_truthfully_ephemeral() -> None:
+    script = (_repo_root() / "scripts" / "chatgpt-voice-connector.ps1").read_text(encoding="utf-8")
+
+    assert "StartCloudflaredQuick" in script
+    assert "cloudflared_quick_ephemeral" in script
+    assert "known_cloudflared_quick_tunnel" in script
+    assert "cloudflared_quick_url_is_not_persistent_ingress" in script
+    assert "cloudflared_quick_started_ready" in script
+    assert "persistent_candidate = $false" in script
+    assert "OpensPublicTunnel $true -WritesData $true" in script
+
+
 def test_chatgpt_voice_connector_localtunnel_fallback_detaches_tunnel_process() -> None:
     script = (_repo_root() / "scripts" / "chatgpt-voice-connector.ps1").read_text(encoding="utf-8")
 
@@ -387,6 +399,41 @@ def test_chatgpt_voice_connector_plan_persistent_ingress_flags_localtunnel_fallb
     assert not runtime_root.exists()
 
 
+def test_chatgpt_voice_connector_plan_persistent_ingress_flags_cloudflared_quick_tunnel(tmp_path: Path) -> None:
+    runtime_root = tmp_path / "connector-runtime"
+    port = _unused_local_port()
+
+    proc = _run_connector_script(
+        "-Mode",
+        "PlanPersistentIngress",
+        "-Json",
+        "-RuntimeRoot",
+        str(runtime_root),
+        "-Port",
+        str(port),
+        "-ConnectorUrl",
+        "https://example.trycloudflare.com/mcp",
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["kind"] == "francis.chatgpt_voice.persistent_ingress_plan"
+    assert payload["status"] == "cloudflared_quick_tunnel_replace_needed"
+    assert payload["connector_url"]["provided"] is True
+    assert payload["connector_url"]["shape_valid"] is True
+    assert payload["connector_url"]["persistent_candidate"] is False
+    assert payload["connector_url"]["host"] == "example.trycloudflare.com"
+    assert payload["connector_url"]["ingress_profile"]["profile"] == "cloudflared_quick_ephemeral"
+    assert payload["connector_url"]["ingress_profile"]["known_cloudflared_quick_tunnel"] is True
+    assert payload["connector_url"]["ingress_profile"]["persistent_candidate"] is False
+    assert payload["blockers"] == ["cloudflared_quick_url_is_not_persistent_ingress"]
+    assert payload["governance"]["read_only"] is True
+    assert payload["governance"]["starts_process"] is False
+    assert payload["governance"]["opens_public_tunnel"] is False
+    assert payload["governance"]["writes_data"] is False
+    assert not runtime_root.exists()
+
+
 @pytest.mark.skipif(platform.system() != "Windows", reason="connector control uses Windows process readback")
 def test_chatgpt_voice_connector_record_url_persists_without_tunnel(tmp_path: Path) -> None:
     runtime_root = tmp_path / "connector-runtime"
@@ -479,6 +526,38 @@ def test_chatgpt_voice_connector_start_persistent_rejects_localtunnel(tmp_path: 
     assert payload["status"] == "connector_url_not_persistent"
     assert payload["connector_ingress_profile"]["profile"] == "localtunnel_ephemeral"
     assert payload["blockers"] == ["localtunnel_url_is_not_persistent_ingress"]
+    assert payload["governance"]["starts_process"] is False
+    assert payload["governance"]["opens_public_tunnel"] is False
+    assert payload["governance"]["writes_data"] is False
+    assert not runtime_root.exists()
+
+
+@pytest.mark.skipif(platform.system() != "Windows", reason="connector control uses Windows process readback")
+def test_chatgpt_voice_connector_start_persistent_rejects_cloudflared_quick_tunnel(tmp_path: Path) -> None:
+    runtime_root = tmp_path / "connector-runtime"
+    port = _unused_local_port()
+
+    proc = _run_connector_script(
+        "-Mode",
+        "StartPersistent",
+        "-Json",
+        "-RuntimeRoot",
+        str(runtime_root),
+        "-Port",
+        str(port),
+        "-ConnectorUrl",
+        "https://example.trycloudflare.com/mcp",
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["kind"] == "francis.chatgpt_voice.connector_control"
+    assert payload["ok"] is False
+    assert payload["status"] == "connector_url_not_persistent"
+    assert payload["connector_ingress_profile"]["profile"] == "cloudflared_quick_ephemeral"
+    assert payload["connector_ingress_profile"]["known_cloudflared_quick_tunnel"] is True
+    assert payload["connector_ingress_profile"]["persistent_candidate"] is False
+    assert payload["blockers"] == ["cloudflared_quick_url_is_not_persistent_ingress"]
     assert payload["governance"]["starts_process"] is False
     assert payload["governance"]["opens_public_tunnel"] is False
     assert payload["governance"]["writes_data"] is False

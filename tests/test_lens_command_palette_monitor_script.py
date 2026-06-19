@@ -250,6 +250,50 @@ def test_lens_command_palette_monitor_reports_chatgpt_connector_localtunnel_fall
     assert "chatgpt_voice_persistent_ingress" not in checks
 
 
+def test_lens_command_palette_monitor_reports_chatgpt_connector_cloudflared_quick_fallback(
+    tmp_path: Path,
+) -> None:
+    data_dir = tmp_path / "data"
+    status_path = tmp_path / "lens-status.json"
+    _write_json(status_path, _lens_status())
+
+    with _LocalCommandPaletteServer() as url:
+        proc = _run_monitor(
+            "-Mode",
+            "Probe",
+            "-DataDir",
+            str(data_dir),
+            "-CommandPaletteUrl",
+            url,
+            "-LensStatusPath",
+            str(status_path),
+            "-EnableChatGptConnectorChecks",
+            "-ChatGptConnectorUrl",
+            "https://example.trycloudflare.com/mcp",
+            "-TimeoutSeconds",
+            "3",
+        )
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = _json_stdout(proc.stdout)
+    connector = payload["chatgpt_connector_monitor"]
+    assert connector["enabled"] is True
+    assert connector["known_localtunnel"] is False
+    assert connector["known_cloudflared_quick_tunnel"] is True
+    assert connector["persistent_candidate"] is False
+    assert connector["persistent_ingress_status"] == "cloudflared_quick_tunnel_replace_needed"
+    assert connector["next_operator_step"] == "replace_cloudflared_quick_tunnel_with_persistent_https_mcp_ingress"
+    assert connector["blockers"] == ["cloudflared_quick_url_is_not_persistent_ingress"]
+    plan = payload["chatgpt_persistent_ingress_plan_monitor"]
+    assert plan["enabled"] is True
+    assert plan["status"] == "cloudflared_quick_tunnel_replace_needed"
+    assert plan["blockers"] == ["cloudflared_quick_url_is_not_persistent_ingress"]
+    assert plan["governance_safe"] is True
+    checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["chatgpt_voice_persistent_ingress_plan"]["passed"] is True
+    assert "chatgpt_voice_persistent_ingress" not in checks
+
+
 def test_lens_command_palette_monitor_can_require_persistent_chatgpt_ingress(tmp_path: Path) -> None:
     data_dir = tmp_path / "data"
     status_path = tmp_path / "lens-status.json"
@@ -286,6 +330,47 @@ def test_lens_command_palette_monitor_can_require_persistent_chatgpt_ingress(tmp
     assert checks["chatgpt_voice_persistent_ingress_plan"]["passed"] is True
     assert checks["chatgpt_voice_persistent_ingress"]["passed"] is False
     assert checks["chatgpt_voice_persistent_ingress"]["status"] == "localtunnel_fallback_replace_needed"
+    assert "chatgpt_voice_persistent_ingress" in {item["id"] for item in payload["anomalies"]}
+
+
+def test_lens_command_palette_monitor_can_require_persistent_chatgpt_ingress_for_cloudflared_quick(
+    tmp_path: Path,
+) -> None:
+    data_dir = tmp_path / "data"
+    status_path = tmp_path / "lens-status.json"
+    _write_json(status_path, _lens_status())
+
+    with _LocalCommandPaletteServer() as url:
+        proc = _run_monitor(
+            "-Mode",
+            "Probe",
+            "-DataDir",
+            str(data_dir),
+            "-CommandPaletteUrl",
+            url,
+            "-LensStatusPath",
+            str(status_path),
+            "-EnableChatGptConnectorChecks",
+            "-ChatGptConnectorUrl",
+            "https://example.trycloudflare.com/mcp",
+            "-RequirePersistentChatGptIngress",
+            "-TimeoutSeconds",
+            "3",
+        )
+
+    assert proc.returncode == 1
+    payload = _json_stdout(proc.stdout)
+    assert payload["status"] == "anomaly"
+    connector = payload["chatgpt_connector_monitor"]
+    assert connector["persistent_ingress_status"] == "cloudflared_quick_tunnel_replace_needed"
+    assert connector["blockers"] == ["cloudflared_quick_url_is_not_persistent_ingress"]
+    plan = payload["chatgpt_persistent_ingress_plan_monitor"]
+    assert plan["status"] == "cloudflared_quick_tunnel_replace_needed"
+    assert plan["governance_safe"] is True
+    checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["chatgpt_voice_persistent_ingress_plan"]["passed"] is True
+    assert checks["chatgpt_voice_persistent_ingress"]["passed"] is False
+    assert checks["chatgpt_voice_persistent_ingress"]["status"] == "cloudflared_quick_tunnel_replace_needed"
     assert "chatgpt_voice_persistent_ingress" in {item["id"] for item in payload["anomalies"]}
 
 

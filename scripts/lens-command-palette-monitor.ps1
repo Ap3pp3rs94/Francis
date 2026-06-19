@@ -835,6 +835,8 @@ function New-ChatGptConnectorMonitorProjection {
   $TunnelAlive = [bool](Get-NestedPropertyValue -Payload $Payload -Path @('processes', 'tunnel', 'alive') -Default $false)
   $LocalTunnelStable = [bool](Get-NestedPropertyValue -Payload $Payload -Path @('localtunnel', 'stable_for_existing_chatgpt_connector') -Default $true)
   $LocalTunnelReason = ConvertTo-BoundedText -Value (Get-NestedPropertyValue -Payload $Payload -Path @('localtunnel', 'reason') -Default '') -MaxLength 160
+  $CloudflaredQuickStable = [bool](Get-NestedPropertyValue -Payload $Payload -Path @('cloudflared_quick_tunnel', 'stable_for_existing_chatgpt_connector') -Default $true)
+  $CloudflaredQuickReason = ConvertTo-BoundedText -Value (Get-NestedPropertyValue -Payload $Payload -Path @('cloudflared_quick_tunnel', 'reason') -Default '') -MaxLength 160
   $ConnectorHost = ''
   if (-not [string]::IsNullOrWhiteSpace($ConnectorUrlValue)) {
     try {
@@ -847,11 +849,17 @@ function New-ChatGptConnectorMonitorProjection {
     $ConnectorUrlSource -eq 'localtunnel' -or
     (-not [string]::IsNullOrWhiteSpace($ConnectorHost) -and $ConnectorHost.EndsWith('.loca.lt', [System.StringComparison]::OrdinalIgnoreCase))
   )
-  $PersistentCandidate = [bool]($ConnectorShapeValid -and -not $KnownLocalTunnel)
+  $KnownCloudflaredQuickTunnel = (
+    $ConnectorUrlSource -eq 'cloudflared_quick' -or
+    (-not [string]::IsNullOrWhiteSpace($ConnectorHost) -and $ConnectorHost.EndsWith('.trycloudflare.com', [System.StringComparison]::OrdinalIgnoreCase))
+  )
+  $PersistentCandidate = [bool]($ConnectorShapeValid -and -not $KnownLocalTunnel -and -not $KnownCloudflaredQuickTunnel)
   $IngressStatus = if (-not $ConnectorShapeValid) {
     if ([string]::IsNullOrWhiteSpace($ConnectorUrlValue)) { 'connector_url_missing' } else { 'connector_url_invalid' }
   } elseif ($KnownLocalTunnel) {
     'localtunnel_fallback_replace_needed'
+  } elseif ($KnownCloudflaredQuickTunnel) {
+    'cloudflared_quick_tunnel_replace_needed'
   } elseif ($ConnectorUsable -or (-not $VerifyConnector)) {
     'persistent_ingress_candidate'
   } else {
@@ -863,6 +871,9 @@ function New-ChatGptConnectorMonitorProjection {
   }
   if ($KnownLocalTunnel) {
     $Blockers += 'localtunnel_url_is_not_persistent_ingress'
+  }
+  if ($KnownCloudflaredQuickTunnel) {
+    $Blockers += 'cloudflared_quick_url_is_not_persistent_ingress'
   }
   if (-not $LocalTunnelStable) {
     $Blockers += 'localtunnel_requested_subdomain_not_honored'
@@ -889,10 +900,21 @@ function New-ChatGptConnectorMonitorProjection {
     known_localtunnel = [bool]$KnownLocalTunnel
     localtunnel_stable_for_existing_connector = [bool]$LocalTunnelStable
     localtunnel_reason = $LocalTunnelReason
+    known_cloudflared_quick_tunnel = [bool]$KnownCloudflaredQuickTunnel
+    cloudflared_quick_stable_for_existing_connector = [bool]$CloudflaredQuickStable
+    cloudflared_quick_reason = $CloudflaredQuickReason
     persistent_candidate = [bool]$PersistentCandidate
     persistent_ingress_status = $IngressStatus
     blockers = @($Blockers)
-    next_operator_step = if ($PersistentCandidate) { 'verify_or_record_persistent_chatgpt_ingress' } else { 'replace_localtunnel_with_persistent_https_mcp_ingress' }
+    next_operator_step = if ($PersistentCandidate) {
+      'verify_or_record_persistent_chatgpt_ingress'
+    } elseif ($KnownLocalTunnel) {
+      'replace_localtunnel_with_persistent_https_mcp_ingress'
+    } elseif ($KnownCloudflaredQuickTunnel) {
+      'replace_cloudflared_quick_tunnel_with_persistent_https_mcp_ingress'
+    } else {
+      'replace_ephemeral_tunnel_with_persistent_https_mcp_ingress'
+    }
     governance = [ordered]@{
       read_only_contract = $true
       starts_process = $false
