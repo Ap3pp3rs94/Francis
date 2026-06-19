@@ -300,6 +300,13 @@ def _voice_monitor(value: Any) -> dict[str, Any]:
             max_length=120,
         ),
         "latest_orb_position_command_applied": _safe_bool(raw.get("latest_orb_position_command_applied")),
+        "latest_orb_position_command_receipt_id": _safe_str(
+            raw.get("latest_orb_position_command_receipt_id"),
+            max_length=120,
+        ),
+        "latest_orb_position_command_receipt_observed": _safe_bool(
+            raw.get("latest_orb_position_command_receipt_observed")
+        ),
         "api_permission_denied_observed": _safe_bool(raw.get("api_permission_denied_observed")),
         "recent_receipt_count": _safe_int(raw.get("recent_receipt_count")),
         "denied_recent_receipt_count": _safe_int(raw.get("denied_recent_receipt_count")),

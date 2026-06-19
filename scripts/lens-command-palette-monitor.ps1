@@ -560,6 +560,28 @@ function Get-RecentChatGptVoiceReceipts {
   return @($Items.ToArray())
 }
 
+function Get-LatestOverlayOrbPositionCommandReceipt {
+  param([string]$Root)
+
+  $ReceiptRoot = Join-Path $Root 'runtime\lens-overlay\orb-position-commands'
+  if (-not (Test-Path -LiteralPath $ReceiptRoot -PathType Container)) {
+    return $null
+  }
+  $File = Get-ChildItem -LiteralPath $ReceiptRoot -Filter '*.json' -File -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTimeUtc -Descending |
+    Select-Object -First 1
+  if ($null -eq $File) {
+    return $null
+  }
+  $Payload = Read-JsonFile -Path $File.FullName
+  if ($null -eq $Payload) {
+    return $null
+  }
+  Set-PropertyValue -Payload $Payload -Name 'receipt_path' -Value $File.FullName
+  Set-PropertyValue -Payload $Payload -Name 'receipt_file_last_write_utc' -Value $File.LastWriteTimeUtc.ToString('o')
+  return $Payload
+}
+
 function Test-ChatGptTranscriptUnavailableText {
   param([object]$Value)
 
@@ -1071,6 +1093,7 @@ function New-VoiceMonitorProjection {
   $ElevenLabs = Get-PropertyValue -Payload $ProviderReadiness -Name 'elevenlabs'
   $Receipts = @(Get-RecentChatGptVoiceReceipts -Root $Root -Limit 5)
   $McpProof = New-ChatGptMcpReceiptProof -Receipts $Receipts -FreshnessSeconds $McpProofFreshnessSeconds
+  $LatestOrbPositionCommandReceipt = Get-LatestOverlayOrbPositionCommandReceipt -Root $Root
 
   $SelectedProvider = [string](Get-PropertyValue -Payload $ProviderReadiness -Name 'selected_provider' -Default $Provider)
   $ActiveProviderConfigured = [bool](Get-PropertyValue -Payload $ProviderReadiness -Name 'active_provider_configured' -Default $false)
@@ -1098,12 +1121,19 @@ function New-VoiceMonitorProjection {
   $VoiceOrbCommand = [bool](Get-PropertyValue -Payload $Voice -Name 'voice_orb_command' -Default $false)
   $LocalOverlayCommand = [bool](Get-PropertyValue -Payload $Voice -Name 'local_overlay_command' -Default $false)
   $LatestOrbCommandName = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Voice -Name 'orb_command' -Default '') -MaxLength 120
+  $LatestOrbReceiptCommandName = if ($null -ne $LatestOrbPositionCommandReceipt) { ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $LatestOrbPositionCommandReceipt -Name 'command' -Default '') -MaxLength 120 } else { '' }
+  $LatestOrbReceiptStatus = if ($null -ne $LatestOrbPositionCommandReceipt) { ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $LatestOrbPositionCommandReceipt -Name 'status' -Default '') -MaxLength 120 } else { '' }
+  $LatestOrbReceiptApplied = if ($null -ne $LatestOrbPositionCommandReceipt) { [bool](Get-PropertyValue -Payload $LatestOrbPositionCommandReceipt -Name 'applied' -Default $false) } else { $false }
+  $LatestOrbReceiptId = if ($null -ne $LatestOrbPositionCommandReceipt) { ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $LatestOrbPositionCommandReceipt -Name 'request_id' -Default '') -MaxLength 120 } else { '' }
   if ([string]::IsNullOrWhiteSpace($LatestOrbCommandName) -and $OverlayPositionAnchor.StartsWith('voice_command_', [System.StringComparison]::OrdinalIgnoreCase)) {
     $LatestOrbCommandName = $OverlayPositionAnchor -replace '^voice_command_', 'move_orb_'
   }
-  $LatestOrbCommandStatus = if ($VoiceOrbCommand -or $LocalOverlayCommand) { $VoiceStatus } elseif ($VoicePositionCommandActive) { 'position_anchor_active' } else { '' }
-  $LatestOrbCommandApplied = ($VoiceStatus -eq 'orb_voice_command_applied' -or $VoicePositionCommandActive)
-  $OrbPositionCommandReady = ([bool]$VoiceInputReady -and [bool]$WakeListening -and [bool]$ContinuousVoiceChat)
+  if ([string]::IsNullOrWhiteSpace($LatestOrbCommandName) -and -not [string]::IsNullOrWhiteSpace($LatestOrbReceiptCommandName)) {
+    $LatestOrbCommandName = $LatestOrbReceiptCommandName
+  }
+  $LatestOrbCommandStatus = if ($VoiceOrbCommand -or $LocalOverlayCommand) { $VoiceStatus } elseif (-not [string]::IsNullOrWhiteSpace($LatestOrbReceiptStatus)) { $LatestOrbReceiptStatus } elseif ($VoicePositionCommandActive) { 'position_anchor_active' } else { '' }
+  $LatestOrbCommandApplied = ($VoiceStatus -eq 'orb_voice_command_applied' -or $VoicePositionCommandActive -or $LatestOrbReceiptApplied)
+  $OrbPositionCommandReady = ([bool]$VoiceInputReady -and [bool]$WakeListening)
   $PassiveListenContract = 'passive_transcript_awareness_only_until_wake_phrase'
   $InterruptPhrase = 'francis stop'
   $LatestReceipt = if (@($Receipts).Count -gt 0) { $Receipts[0] } else { $null }
@@ -1206,6 +1236,8 @@ function New-VoiceMonitorProjection {
     latest_orb_position_command = $LatestOrbCommandName
     latest_orb_position_command_status = $LatestOrbCommandStatus
     latest_orb_position_command_applied = [bool]$LatestOrbCommandApplied
+    latest_orb_position_command_receipt_id = $LatestOrbReceiptId
+    latest_orb_position_command_receipt_observed = ($null -ne $LatestOrbPositionCommandReceipt)
     api_permission_denied_observed = [bool]$PermissionDenied
     recent_receipt_count = @($Receipts).Count
     denied_recent_receipt_count = @($DeniedReceipts).Count

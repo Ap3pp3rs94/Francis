@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   FRANCIS_BROWSER_VOICE_ACTOR,
+  FRANCIS_BROWSER_TTS_DEFAULT_ENABLED,
   FRANCIS_BROWSER_VOICE_CLIENT_ORIGIN,
   FrancisVoiceClient,
   buildVoiceIngressPayload,
@@ -12,6 +13,7 @@ import {
   summarizeVoiceRecognitionErrorForOperator,
   summarizeVoiceSoundForOperator,
   summarizeVoiceTranscriptForOperator,
+  shouldSpeakVoiceReplyWithBrowserTts,
 } from "./index.ts";
 
 type FetchHandler = (url: string, init?: RequestInit) => Response | Promise<Response>;
@@ -146,6 +148,34 @@ test("buildVoiceIngressPayload marks browser voice origin without claiming ChatG
   assert.equal(payload.turn_id, "turn_ui_voice");
   assert.equal(payload.forward_to_chat, true);
   assert.equal(payload.use_llm, true);
+});
+
+test("browser TTS is disabled by default so it cannot compete with Francis voice", () => {
+  assert.equal(FRANCIS_BROWSER_TTS_DEFAULT_ENABLED, false);
+  const response = {
+    ok: true,
+    status: "forwarded",
+    reply: "I can hear you.",
+    error: "",
+    voice_response: { speakable: true, raw_audio: false },
+  };
+
+  assert.equal(shouldSpeakVoiceReplyWithBrowserTts(response), false);
+  assert.equal(shouldSpeakVoiceReplyWithBrowserTts(response, { browserTtsEnabled: false }), false);
+  assert.equal(shouldSpeakVoiceReplyWithBrowserTts(response, { browserTtsEnabled: true }), true);
+});
+
+test("browser TTS opt-in still refuses ChatGPT voice owned replies", () => {
+  const response = {
+    ok: true,
+    status: "forwarded",
+    reply: "I can hear you.",
+    error: "",
+    voice_response: { speakable: true, raw_audio: false },
+    orb_voice_bridge: { speech_output_owner: "chatgpt_voice_client" },
+  };
+
+  assert.equal(shouldSpeakVoiceReplyWithBrowserTts(response, { browserTtsEnabled: true }), false);
 });
 
 test("FrancisVoiceClient posts passive transcripts without chat forwarding", async () => {

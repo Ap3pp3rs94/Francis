@@ -17,8 +17,10 @@ import { bodyStateReady, presentOrbGlyph, type OrbGlyphState } from "./lens/orbG
 import { shouldOpenLensOrbOverlay } from "./lens";
 import {
   FrancisVoiceClient,
+  type FrancisVoiceIngressResponse,
   createVoiceTurnId,
   normalizeVoiceTranscript,
+  shouldSpeakVoiceReplyWithBrowserTts,
   summarizeVoiceRecognitionErrorForOperator,
   summarizeVoiceSoundForOperator,
   summarizeVoiceTranscriptForOperator,
@@ -392,6 +394,12 @@ function resultTranscript(result: SpeechRecognitionResultLike): string {
   return normalizeVoiceTranscript(first?.transcript ?? "");
 }
 
+function browserTtsOptInEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  const value = new URLSearchParams(window.location.search).get("francis_browser_tts")?.trim().toLowerCase() ?? "";
+  return value === "1" || value === "true" || value === "yes";
+}
+
 function speakBrowserText(text: string, onDone: () => void): boolean {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return false;
   const clean = normalizeVoiceTranscript(text);
@@ -409,6 +417,7 @@ function speakBrowserText(text: string, onDone: () => void): boolean {
 
 function VoiceTranscriptionPanel(props: { baseUrl: string }) {
   const client = useMemo(() => new FrancisVoiceClient(props.baseUrl), [props.baseUrl]);
+  const browserTtsEnabled = useMemo(() => browserTtsOptInEnabled(), []);
   const recognitionRef = useRef<SpeechRecognitionAlternative | null>(null);
   const shouldListenRef = useRef(false);
   const soundHadSpeechRef = useRef(false);
@@ -439,8 +448,22 @@ function VoiceTranscriptionPanel(props: { baseUrl: string }) {
     ].slice(0, 18));
   }, []);
 
+  useEffect(() => {
+    if (!browserTtsEnabled && typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+  }, [browserTtsEnabled]);
+
   const speakReply = useCallback(
-    (text: string) => {
+    (text: string, response: FrancisVoiceIngressResponse): boolean => {
+      if (!shouldSpeakVoiceReplyWithBrowserTts(response, { browserTtsEnabled })) {
+        if (typeof window !== "undefined" && "speechSynthesis" in window) {
+          window.speechSynthesis.cancel();
+        }
+        speakingRef.current = false;
+        setSpeaking(false);
+        return false;
+      }
       speakingRef.current = true;
       setSpeaking(true);
       const started = speakBrowserText(text, () => {
@@ -451,8 +474,9 @@ function VoiceTranscriptionPanel(props: { baseUrl: string }) {
         speakingRef.current = false;
         setSpeaking(false);
       }
+      return started;
     },
-    [],
+    [browserTtsEnabled],
   );
 
   const handleFinalTranscript = useCallback(
@@ -533,6 +557,7 @@ function VoiceTranscriptionPanel(props: { baseUrl: string }) {
         }
 
         const reply = normalizeVoiceTranscript(response.reply || response.error || "Francis did not return a speakable reply.");
+        const browserSpeechStarted = response.ok ? speakReply(reply, response) : false;
         appendLog({
           role: "francis",
           text: reply,
@@ -540,9 +565,12 @@ function VoiceTranscriptionPanel(props: { baseUrl: string }) {
           awareness: response.ok ? "reply_ready" : "reply_blocked",
           forwardToChat: false,
           responseExpected: false,
-          summary: response.ok ? "reply_spoken" : "reply_blocked",
+          summary: response.ok
+            ? browserSpeechStarted
+              ? "reply_spoken_browser_tts_opt_in"
+              : "reply_text_ready_browser_tts_suppressed"
+            : "reply_blocked",
         });
-        if (response.ok) speakReply(reply);
         setAwareness(response.ok ? "reply_ready" : "reply_blocked");
       } catch (err) {
         const message = err instanceof Error ? err.message : "Voice bridge request failed.";

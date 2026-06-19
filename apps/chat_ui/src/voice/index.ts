@@ -1,6 +1,7 @@
 export const FRANCIS_BROWSER_VOICE_ACTOR = "chat_ui.voice";
 export const FRANCIS_BROWSER_VOICE_SOURCE = "chat_ui.voice";
 export const FRANCIS_BROWSER_VOICE_CLIENT_ORIGIN = "francis_chat_ui_browser_voice";
+export const FRANCIS_BROWSER_TTS_DEFAULT_ENABLED = false;
 
 export type FrancisVoiceTurnKind = "wake" | "passive" | "noise";
 
@@ -77,6 +78,21 @@ export type FrancisVoiceIngressResponse = {
   receipt?: Record<string, unknown>;
   orb_voice_bridge?: Record<string, unknown>;
 };
+
+export function shouldSpeakVoiceReplyWithBrowserTts(
+  response: FrancisVoiceIngressResponse,
+  opts: { browserTtsEnabled?: boolean } = {},
+): boolean {
+  if (!opts.browserTtsEnabled) return false;
+  if (!response.ok) return false;
+  if (!normalizeVoiceTranscript(response.reply)) return false;
+  const bridge = isRecord(response.orb_voice_bridge) ? response.orb_voice_bridge : {};
+  const voiceResponse = isRecord(response.voice_response) ? response.voice_response : {};
+  const speechOwner = safeString(bridge["speech_output_owner"]);
+  if (speechOwner === "chatgpt_voice_client") return false;
+  if (voiceResponse["raw_audio"] === true) return false;
+  return voiceResponse["speakable"] !== false;
+}
 
 export class FrancisVoiceClientError extends Error {
   readonly status?: number;

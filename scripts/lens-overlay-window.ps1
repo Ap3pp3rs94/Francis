@@ -2186,14 +2186,40 @@ function Get-OverlayOwnedSpeechGuardState {
 
   $OwnedSpeechActive = Test-OverlayVoiceSpeechProcess -ProcessId $SpeechProcessId
   $OwnedSpeechRecentlyCompleted = Test-OverlayVoiceRecentSpeechPlayback -Root $Root -CooldownSeconds $CooldownSeconds
+  $VoiceTurn = Read-OverlayVoiceTurnState -Root $Root
+  $ExternalVoiceSpeechActive = $false
+  $ExternalVoiceSpeechAgeSeconds = -1
+  $ExternalVoiceTurnId = ''
+  if ($null -ne $VoiceTurn) {
+    $SpeechOutputOwner = Get-StringProperty -Payload $VoiceTurn -Name 'speech_output_owner' -Default ''
+    $ClientSpeaksTopLevelReply = Get-BoolProperty -Payload $VoiceTurn -Name 'client_speaks_top_level_reply' -Default $false
+    $ExternalVoiceTurnId = Get-StringProperty -Payload $VoiceTurn -Name 'turn_id' -Default ''
+    $UpdatedAt = Get-StringProperty -Payload $VoiceTurn -Name 'updated_at' -Default ''
+    if ($SpeechOutputOwner -eq 'chatgpt_voice_client' -and $ClientSpeaksTopLevelReply -and -not [string]::IsNullOrWhiteSpace($UpdatedAt)) {
+      try {
+        $UpdatedAtOffset = [DateTimeOffset]::Parse($UpdatedAt)
+        $ExternalVoiceSpeechAgeSeconds = [int][Math]::Floor(([DateTimeOffset]::UtcNow - $UpdatedAtOffset).TotalSeconds)
+        $ExternalVoiceSpeechActive = ($ExternalVoiceSpeechAgeSeconds -ge -1 -and $ExternalVoiceSpeechAgeSeconds -le [int]$CooldownSeconds)
+      } catch {
+        $ExternalVoiceSpeechActive = $false
+        $ExternalVoiceSpeechAgeSeconds = -1
+      }
+    }
+  }
+  $GuardActive = ([bool]$OwnedSpeechActive -or [bool]$OwnedSpeechRecentlyCompleted -or [bool]$ExternalVoiceSpeechActive)
   return [ordered]@{
     owned_speech_active = [bool]$OwnedSpeechActive
     owned_speech_recently_completed = [bool]$OwnedSpeechRecentlyCompleted
-    owned_speech_guard_active = ([bool]$OwnedSpeechActive -or [bool]$OwnedSpeechRecentlyCompleted)
+    external_voice_speech_active = [bool]$ExternalVoiceSpeechActive
+    external_voice_speech_age_seconds = [int]$ExternalVoiceSpeechAgeSeconds
+    external_voice_turn_id = $ExternalVoiceTurnId
+    external_voice_speech_owner = 'chatgpt_voice_client'
+    owned_speech_guard_active = [bool]$GuardActive
     owned_speech_process_id = [int]$SpeechProcessId
     self_trigger_guard_window_seconds = [int]$CooldownSeconds
     microphone_gate_while_speaking = 'francis_stop_only'
     conversation_forwarding_while_speaking = $false
+    single_voice_owner_guard = 'owned_or_external_client_voice'
   }
 }
 
@@ -4105,24 +4131,28 @@ function Start-OverlayWakeListener {
         $UtteranceText = Get-OverlayWakePrefixedUtterance -RecognizedText $RecognizedText -WakeAliases $script:LensOverlayWakeAliases
         $WakePhraseOnly = Test-OverlayWakePhraseRecognized -RecognizedText $RecognizedText -WakeAliases $script:LensOverlayWakeAliases
         $StopPhraseRecognized = Test-OverlayStopPhraseRecognized -RecognizedText $RecognizedText -WakeAliases $script:LensOverlayWakeAliases
-        $SpeechGuard = Get-OverlayOwnedSpeechGuardState -Root $script:LensOverlayWakeRoot -CooldownSeconds 4
+        $SpeechGuard = Get-OverlayOwnedSpeechGuardState -Root $script:LensOverlayWakeRoot -CooldownSeconds 12
         $OwnedSpeechActive = Get-BoolProperty -Payload $SpeechGuard -Name 'owned_speech_active' -Default $false
         $OwnedSpeechRecentlyCompleted = Get-BoolProperty -Payload $SpeechGuard -Name 'owned_speech_recently_completed' -Default $false
+        $ExternalVoiceSpeechActive = Get-BoolProperty -Payload $SpeechGuard -Name 'external_voice_speech_active' -Default $false
         if ($StopPhraseRecognized) {
           $script:LensOverlayWakeCount += 1
           [void](Invoke-OverlayVoiceStopPhrase -Root $script:LensOverlayWakeRoot -RecognizedText $RecognizedText -Provider $script:LensOverlayWakeVoiceProvider -Voice $script:LensOverlayWakeVoice -WakePhraseText $script:LensOverlayWakePhrase -RecognitionConfidence ([double]$EventArgs.Result.Confidence) -RecognitionThreshold $script:LensOverlayWakeConfidenceThreshold -WakeAliasCount $script:LensOverlayWakeAliasCount -WakeCount $script:LensOverlayWakeCount -SpeechGuard $SpeechGuard)
           return
         }
-        if ($OwnedSpeechActive -or $OwnedSpeechRecentlyCompleted) {
+        if ($OwnedSpeechActive -or $OwnedSpeechRecentlyCompleted -or $ExternalVoiceSpeechActive) {
           $Suppressed = New-OverlayVoiceProjection -SelectedVoiceName (Get-OverlaySelectedVoiceName -Provider $script:LensOverlayWakeVoiceProvider -Voice $script:LensOverlayWakeVoice -RequestedVoiceId $script:LensOverlayWakeRemoteVoiceId) -Provider $script:LensOverlayWakeVoiceProvider -WakeListening $true -WakePhraseText $script:LensOverlayWakePhrase
           $Suppressed.status = 'voice_input_suppressed_while_speaking'
           $Suppressed.ok = $true
           $Suppressed.wake_phrase_detected = (-not [string]::IsNullOrWhiteSpace($UtteranceText) -or $WakePhraseOnly)
           $Suppressed.stop_phrase_detected = $false
           $Suppressed.continuous_voice_chat = [bool]$script:LensOverlayContinuousVoiceChat
-          $Suppressed.continuous_voice_chat_blocker = if ($OwnedSpeechActive) { 'owned_speech_process_active' } else { 'owned_speech_recently_completed' }
+          $Suppressed.continuous_voice_chat_blocker = if ($OwnedSpeechActive) { 'owned_speech_process_active' } elseif ($OwnedSpeechRecentlyCompleted) { 'owned_speech_recently_completed' } else { 'external_voice_transport_speaking' }
           $Suppressed.owned_speech_recently_completed = [bool]$OwnedSpeechRecentlyCompleted
-          $Suppressed.self_trigger_guard_window_seconds = 4
+          $Suppressed.external_voice_speech_active = [bool]$ExternalVoiceSpeechActive
+          $Suppressed.external_voice_turn_id = Get-StringProperty -Payload $SpeechGuard -Name 'external_voice_turn_id' -Default ''
+          $Suppressed.single_voice_owner_guard = Get-StringProperty -Payload $SpeechGuard -Name 'single_voice_owner_guard' -Default ''
+          $Suppressed.self_trigger_guard_window_seconds = Get-IntegerProperty -Payload $SpeechGuard -Name 'self_trigger_guard_window_seconds' -Default 12
           $Suppressed.recognition_confidence = [Math]::Round([double]$EventArgs.Result.Confidence, 3)
           $Suppressed.recognition_threshold = $script:LensOverlayWakeConfidenceThreshold
           $Suppressed.transcript_length = $RecognizedText.Length
@@ -4136,8 +4166,8 @@ function Start-OverlayWakeListener {
           $Suppressed.microphone_gate_while_speaking = 'francis_stop_only'
           $Suppressed.conversation_forwarding_while_speaking = $false
           $Suppressed.required_interrupt_phrase = 'francis_stop'
-          $Suppressed.barge_in_scope = 'cancel_owned_speech_process_on_francis_stop_only'
-          $Suppressed.message = if ($OwnedSpeechActive) { 'Francis owned speech is active; microphone input is gated to the Francis stop phrase and this transcript was not forwarded.' } else { 'Francis owned speech just completed; microphone input remains briefly gated to avoid self-trigger loops and this transcript was not forwarded.' }
+          $Suppressed.barge_in_scope = if ($ExternalVoiceSpeechActive) { 'suppress_external_voice_transport_echo_on_francis_stop_only' } else { 'cancel_owned_speech_process_on_francis_stop_only' }
+          $Suppressed.message = if ($OwnedSpeechActive) { 'Francis owned speech is active; microphone input is gated to the Francis stop phrase and this transcript was not forwarded.' } elseif ($OwnedSpeechRecentlyCompleted) { 'Francis owned speech just completed; microphone input remains briefly gated to avoid self-trigger loops and this transcript was not forwarded.' } else { 'Francis is speaking through the browser or ChatGPT voice transport; overlay microphone input is gated to the Francis stop phrase and this transcript was not forwarded.' }
           Write-OverlayVoiceState -Root $script:LensOverlayWakeRoot -Payload $Suppressed
           return
         }
