@@ -28,40 +28,60 @@ If you are interested in trustworthy local AI systems, governed automation, audi
 
 ## Current Build Posture
 
-Francis should be read from current repo truth, not from a hard-coded phase label. The strongest shipped posture is a governed runtime spine, not a finished operator product. The active roadmap work is currently Stage 17 / Capability Economy: turning generated and promoted capabilities into versioned, tested, documented, governed internal assets rather than a pile of scripts.
+Francis should be read from current repo truth, not from a hard-coded phase label. The repo is in the Phase 2 / ORB Build Manifest posture: a partial local operator runtime whose strongest shipped value is the governed control spine, not a finished product surface. This README is a public digest of the build; the completion ledger remains the source of shipped truth.
 
 - `P9_OBSERVABILITY` is the strongest plane today.
 - `P3_GOVERNANCE` is materially real.
-- `P1_INTERFACE`, `P7_EXECUTION`, and `P8_MEMORY` are partial and actively being connected into a truthful loop.
-- Stage 3 / Missions and Stage 5 / Reactor are closed for the current repo posture by ledger-backed audits.
-- Stage 6 / Lens has backend and chat-UI readback for Lens primitives, host readiness contracts, activation-denial receipts, preflight diagnostics, and bounded proof scripts. Do not read later roadmap work as proof of finished OS-wide summon, always-on resident presence, tray/hotkey/overlay runtime, or live Pilot takeover.
-- Stage 17 / Capability Economy now has read-only pack readiness, migration-plan, metadata-receipt, quality-standards, promotion-rules, quality-test, quality-doc, validation-receipt, proposal-lineage, promotion-receipt, operator-review evidence surfaces, GitHub-confirmed operator-review decision receipts, a GitHub-confirmed chat-UI decision surface for capability-pack reviews, a GitHub-confirmed promotion-discipline pack gate, a GitHub-confirmed chat-UI promotion-discipline readback, a GitHub-confirmed promotion-rule remediation queue, a GitHub-confirmed quality-evidence remediation readback, a GitHub-confirmed quality-reference remediation apply path, a GitHub-confirmed existing-artifact validation/proposal link path, a GitHub-confirmed governed missing-artifact reconstruction writer, and a GitHub-confirmed partial chunk follow-on for truncated reconstruction plans. The current gap is still capability-library maturity: legacy packs need operator-reviewed application of actual or reconstructed pack-specific validation/proposal artifacts before Stage 17 can be called complete.
+- `P1_INTERFACE`, `P2_IDENTITY`, `P4_COGNITION`, `P7_EXECUTION`, and `P8_MEMORY` are partial and actively being connected into a truthful `plan -> gate -> execute -> trace -> memory` loop.
+- `P5_EVIDENCE` and `P6_SIMULATION` are early. `P10_FEDERATION` remains roadmap-stage.
+- Stage 3 / Missions and Stage 5 / Reactor are closed for the current local repo posture by ledger-backed audits. They provide mission continuity, approval/denial paths, trace/artifact handles, operator readback, and recovery foundations; they are not blanket autonomy.
+- Stage 4 / Forge and Capability Economy surfaces include staged plugin builds, proposal artifacts, validation receipts, proposal-review decisions, promotion-readiness gates, promotion receipts, catalog lineage, plugin-browser readbacks, and governed decision/action surfaces. These inspect and gate capability lifecycle; they do not auto-promote, execute, or grant proposal authority.
+- Stage 6 / Lens has backend and chat-UI readback for Lens primitives, host readiness contracts, activation-denial receipts, preflight diagnostics, bounded proof scripts, visible orb/overlay runtime, passive voice/transcription controls, ElevenLabs voice configuration, command-palette monitoring, and ChatGPT MCP connector readiness surfaces. Do not read this as finished OS-wide summon, fully reliable always-on resident presence, complete desktop-control authority, or proven end-to-end ChatGPT voice control.
+- Stage 17 / Capability Economy hardening remains open. The ledger records many governed proposal-evidence and review chunks, including selected-scope recovery work for route timing, but recorded evidence refs are not proposal approval, capability promotion, execution authority, or Stage 17 closure.
+- Memory, execution, and Lab/sandbox work are real but still bounded by the governance model. Where live controls are missing, the truthful result is a preflight, queued exact-action approval, synthetic no-op receipt, or receipted refusal rather than hidden repository execution.
 
 ## Latest Progress Snapshot
 
 This block is intentionally overwritten as the build moves. The append-only
 history stays in [docs/operations/COMPLETION_LEDGER.md](docs/operations/COMPLETION_LEDGER.md).
 
-- Last updated: 2026-06-03, 16:03 America/Chicago.
-- Latest confirmed capability-code GitHub gate: `main` commit `9ff3d240` passed CI on Ubuntu
-  3.12, Ubuntu 3.13, Windows 3.12, and Windows 3.13; CodeQL passed for Actions,
-  JavaScript/TypeScript, and Python.
-- Current slice: Stage 17 has a GitHub-confirmed governed reconstruction writer
-  at `POST /plugins/capabilities/packs/quality/evidence/remediation/reconstruct`
-  for packs that still lack pack-specific validation receipts or proposal
-  lineage after the existing-artifact link scan. The writer now supports
-  truncated-plan reconstruction as explicitly partial bounded chunks.
-- GitHub gate: CI run `26910397976` passed across Ubuntu/Windows and Python
-  3.12/3.13; CodeQL run `26910399889` passed for Actions,
-  JavaScript/TypeScript, and Python.
-- Guardrails: the writer supports dry-run without mutation, requires an operator
-  reconstruction decision before non-dry writes, writes only bounded registry
-  metadata plus validation/proposal artifact records, does not approve proposals,
-  does not promote or execute capabilities, and does not claim new test
-  execution. Partial chunk responses report that they do not claim pack
-  completion.
-- Next truthful gap: operator-reviewed repeated application or closure of the
-  remaining legacy pack artifact backlog.
+- Last updated: 2026-06-19.
+- Source of truth: this block summarizes the ledger and canonical build docs for
+  readers. It does not replace the append-only ledger or create a milestone
+  claim by itself.
+- Current project posture: Phase 2 governed ORB runtime spine. The active build
+  spans observability/governance hardening, mission and recovery readbacks,
+  Forge/capability lifecycle governance, Lens/orb/voice embodiment, MCP ingress,
+  memory continuity, and bounded execution/Lab controls.
+- Recent pushed implementation work includes local tool policy relay enforcement,
+  persistent connector ingress readiness, Cloudflare login/token ingress support,
+  and public-MCP transport provenance for the ChatGPT voice bridge. The latest
+  implementation commit before this README refresh is `f456e3c9`.
+- Materially real today: API and chat-UI readbacks, mission continuity/recovery
+  flows, Forge proposal/review/promotion-readiness receipts, plugin and
+  capability catalog projections, governed evidence-ref intake surfaces, the
+  command-palette monitor, a visible Lens/orb overlay, passive transcription
+  controls, ElevenLabs voice configuration, local MCP listener surfaces, and
+  ChatGPT connector readiness readbacks.
+- Still partial: the complete ORB console, stable ChatGPT-origin MCP proof,
+  voice-to-action reliability, persistent Cloudflare hostname/token operations,
+  OS-wide desktop control, full memory retrieval/write UX, live governed Lab
+  execution, and Stage 17 backlog closure.
+- Latest validation actually checked for recent implementation work: local parser
+  checks, focused pytest coverage for voice/MCP/monitor contracts, the Vite UI
+  test suite, `npm run build`, and diff checks. GitHub CodeQL for `f456e3c9` is
+  passing; the GitHub CI run for that commit is still in progress at this update.
+- GitHub alert readback at this update: open Dependabot alerts `0`, open code
+  scanning alerts `0`, and open secret scanning alerts `0`.
+- Guardrails: current work does not grant execution authority, does not grant
+  mutation authority beyond governed runtime state, does not approve proposals,
+  does not promote capabilities, does not close Stage 6/Lens, and does not close
+  Stage 17.
+- Next truthful gaps: obtain a fresh ChatGPT-origin MCP tool-call receipt through
+  the stable connector path, keep wiring orb voice commands to bounded actions,
+  harden memory/execution readbacks into the end-to-end ORB loop, and continue
+  Stage 17 through governed evidence/review chunks or projection-timing
+  hardening.
 
 Use [docs/operations/COMPLETION_LEDGER.md](docs/operations/COMPLETION_LEDGER.md) for shipped truth. Use [docs/canonical/ROADMAP.md](docs/canonical/ROADMAP.md) and [docs/canonical/BUILD_MANIFEST.md](docs/canonical/BUILD_MANIFEST.md) for target state and build order. Phase and stage names are orientation markers only; each build pass should derive the active priority from the ledger and canonical roadmap instead of locking Francis into one fixed phase.
 
