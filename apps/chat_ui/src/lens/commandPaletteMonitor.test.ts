@@ -56,6 +56,19 @@ test("parseCommandPaletteMonitorStatus preserves latest receipt origin without t
       overlay_ready: true,
       overlay_voice_status: "listening",
       voice_status: "listening",
+      wake_listening: true,
+      wake_phrase: "hey francis",
+      passive_listen_contract: "passive_transcript_awareness_only_until_wake_phrase",
+      continuous_voice_chat: true,
+      continuous_voice_chat_mode: "enabled_no_wake_phrase_required",
+      continuous_voice_chat_self_trigger_guard: "suppress_all_except_francis_stop_while_owned_speech_process_active",
+      microphone_gate_while_speaking: "francis_stop_only",
+      conversation_forwarding_while_speaking: false,
+      interrupt_phrase: "francis stop",
+      voice_input_ready: false,
+      voice_input_status: "waiting_for_audio_signal",
+      voice_input_blocker: "audio_signal_not_confirmed",
+      next_voice_input_step: "say_hey_francis_to_confirm_default_microphone_signal",
       recent_receipt_count: "1",
       latest_receipt_id: "chatgpt-voice-recorded-ui",
       latest_receipt_actor: "chat_ui.voice",
@@ -145,6 +158,14 @@ test("parseCommandPaletteMonitorStatus preserves latest receipt origin without t
   assert.equal(status.bridge.command_total, 2);
   assert.equal(status.voice_monitor.selected_voice, "Emma");
   assert.equal(status.voice_monitor.overlay_status, "visible");
+  assert.equal(status.voice_monitor.wake_listening, true);
+  assert.equal(status.voice_monitor.wake_phrase, "hey francis");
+  assert.equal(status.voice_monitor.passive_listen_contract, "passive_transcript_awareness_only_until_wake_phrase");
+  assert.equal(status.voice_monitor.microphone_gate_while_speaking, "francis_stop_only");
+  assert.equal(status.voice_monitor.conversation_forwarding_while_speaking, false);
+  assert.equal(status.voice_monitor.interrupt_phrase, "francis stop");
+  assert.equal(status.voice_monitor.voice_input_status, "waiting_for_audio_signal");
+  assert.equal(status.voice_monitor.voice_input_blocker, "audio_signal_not_confirmed");
   assert.equal(status.voice_monitor.latest_receipt_actor, "chat_ui.voice");
   assert.equal(status.voice_monitor.latest_receipt_ingress_transport, "http_api");
   assert.equal(status.voice_monitor.latest_receipt_counts_as_chatgpt_mcp_proof, false);

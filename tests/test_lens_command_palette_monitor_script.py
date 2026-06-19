@@ -93,6 +93,14 @@ def _write_overlay_voice_runtime(data_dir: Path, *, selected_voice: str = "Emma"
                 "voice_lens_orb_are_separate_identities": False,
                 "microphone_capture": True,
                 "wake_listening": True,
+                "wake_phrase": "hey francis",
+                "continuous_voice_chat": True,
+                "continuous_voice_chat_mode": "enabled_no_wake_phrase_required",
+                "continuous_voice_chat_self_trigger_guard": (
+                    "suppress_all_except_francis_stop_while_owned_speech_process_active"
+                ),
+                "microphone_gate_while_speaking": "francis_stop_only",
+                "conversation_forwarding_while_speaking": False,
             },
             "voice": {
                 "kind": "lens.overlay.voice.runtime",
@@ -403,6 +411,14 @@ def test_lens_command_palette_monitor_probe_records_voice_health(tmp_path: Path)
                 "voice_lens_orb_are_separate_identities": False,
                 "microphone_capture": True,
                 "wake_listening": True,
+                "wake_phrase": "hey francis",
+                "continuous_voice_chat": True,
+                "continuous_voice_chat_mode": "enabled_no_wake_phrase_required",
+                "continuous_voice_chat_self_trigger_guard": (
+                    "suppress_all_except_francis_stop_while_owned_speech_process_active"
+                ),
+                "microphone_gate_while_speaking": "francis_stop_only",
+                "conversation_forwarding_while_speaking": False,
             },
             "voice": {
                 "kind": "lens.overlay.voice.runtime",
@@ -456,6 +472,12 @@ def test_lens_command_palette_monitor_probe_records_voice_health(tmp_path: Path)
     assert payload["voice_monitor"]["selected_voice"] == "Emma"
     assert payload["voice_monitor"]["voice_label"] == "Emma"
     assert payload["voice_monitor"]["generic_voice_label_observed"] is False
+    assert payload["voice_monitor"]["wake_listening"] is True
+    assert payload["voice_monitor"]["wake_phrase"] == "hey francis"
+    assert payload["voice_monitor"]["passive_listen_contract"] == "passive_transcript_awareness_only_until_wake_phrase"
+    assert payload["voice_monitor"]["microphone_gate_while_speaking"] == "francis_stop_only"
+    assert payload["voice_monitor"]["conversation_forwarding_while_speaking"] is False
+    assert payload["voice_monitor"]["interrupt_phrase"] == "francis stop"
     assert payload["voice_monitor"]["api_permission_denied_observed"] is False
     assert payload["voice_monitor"]["denied_recent_receipt_count"] == 0
     assert payload["voice_monitor"]["latest_receipt_denied"] is False
@@ -466,6 +488,8 @@ def test_lens_command_palette_monitor_probe_records_voice_health(tmp_path: Path)
     assert checks["voice_overlay_readback"]["status"] == "readback_ready"
     assert checks["voice_overlay_runtime"]["status"] == "visible"
     assert checks["voice_francis_identity"]["status"] == "francis_voice_identity_ready"
+    assert checks["voice_passive_listen_contract"]["status"] == "passive_until_wake"
+    assert checks["voice_mic_gate_while_speaking"]["status"] == "francis_stop_only"
     assert checks["voice_chat_bridge_denials"]["status"] == "latest_receipt_clean"
     assert "voice_chatgpt_mcp_tool_proof" not in checks
     assert payload["governance"]["captures_audio"] is False
@@ -907,6 +931,15 @@ def test_lens_command_palette_monitor_uses_latest_voice_receipt_for_denial_healt
                 "voice_provider": "ElevenLabs",
                 "selected_voice": "Emma",
                 "voice_lens_orb_identity": "Francis",
+                "wake_listening": True,
+                "wake_phrase": "hey francis",
+                "continuous_voice_chat": True,
+                "continuous_voice_chat_mode": "enabled_no_wake_phrase_required",
+                "continuous_voice_chat_self_trigger_guard": (
+                    "suppress_all_except_francis_stop_while_owned_speech_process_active"
+                ),
+                "microphone_gate_while_speaking": "francis_stop_only",
+                "conversation_forwarding_while_speaking": False,
             },
             "voice": {
                 "kind": "lens.overlay.voice.runtime",

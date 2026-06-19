@@ -848,6 +848,10 @@ function BridgeMonitorPanel(props: { baseUrl: string }) {
   const transcriptProofReady = Boolean(proof?.proof_observed);
   const connectionProofReady = Boolean(proof?.mcp_connection_proof_observed);
   const monitorReady = Boolean(status?.monitor_process_alive || status?.monitor_heartbeat_fresh);
+  const passiveListenReady = voice?.passive_listen_contract === "passive_transcript_awareness_only_until_wake_phrase";
+  const micGateReady =
+    voice?.microphone_gate_while_speaking === "francis_stop_only" && !voice.conversation_forwarding_while_speaking;
+  const voiceInputObserved = Boolean(voice?.voice_input_ready || voice?.wake_listening);
   const statusTone = error || status?.status === "anomaly" || status?.status === "missing" ? "blocked" : "ready";
   const connectionProofTone = connectionProofReady ? "ready" : "blocked";
   const transcriptProofTone = transcriptProofReady ? "ready" : "blocked";
@@ -907,6 +911,9 @@ function BridgeMonitorPanel(props: { baseUrl: string }) {
         />
         <Pill label="connector" value={statusText(connector?.status)} tone={connectorTone} />
         <Pill label="ingress" value={statusText(connector?.persistent_ingress_status)} tone={ingressTone} />
+        <Pill label="listen" value={passiveListenReady ? "passive" : "unconfirmed"} tone={passiveListenReady ? "ready" : "blocked"} />
+        <Pill label="wake" value={voice?.wake_listening ? "armed" : "off"} tone={voice?.wake_listening ? "ready" : "blocked"} />
+        <Pill label="mic gate" value={micGateReady ? "guarded" : "open"} tone={micGateReady ? "ready" : "blocked"} />
         <Pill
           label="overlay"
           value={voice?.overlay_ready ? statusText(voice.overlay_status || "visible") : statusText(voice?.overlay_status || "missing")}
@@ -947,6 +954,29 @@ function BridgeMonitorPanel(props: { baseUrl: string }) {
           <dt style={{ color: "#94a3b8" }}>Proof rejection</dt>
           <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
             {voice?.latest_receipt_proof_rejection_reason || "none"}
+          </dd>
+        </div>
+        <div>
+          <dt style={{ color: "#94a3b8" }}>Voice input</dt>
+          <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
+            {voice?.voice_input_status || (voiceInputObserved ? "wake_listening" : "none")}
+            {voice?.voice_input_blocker ? ` / ${voice.voice_input_blocker}` : ""}
+          </dd>
+        </div>
+        <div>
+          <dt style={{ color: "#94a3b8" }}>Wake phrase</dt>
+          <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{voice?.wake_phrase || "none"}</dd>
+        </div>
+        <div>
+          <dt style={{ color: "#94a3b8" }}>Listen contract</dt>
+          <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
+            {voice?.passive_listen_contract || "none"}
+          </dd>
+        </div>
+        <div>
+          <dt style={{ color: "#94a3b8" }}>Speaking gate</dt>
+          <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
+            {voice?.microphone_gate_while_speaking || "none"} / forwarding {boolText(Boolean(voice?.conversation_forwarding_while_speaking))}
           </dd>
         </div>
         <div>
@@ -1018,6 +1048,12 @@ function BridgeMonitorPanel(props: { baseUrl: string }) {
                 anomaly_count: status.anomaly_count,
                 voice: {
                   selected_voice: voice?.selected_voice,
+                  passive_listen_contract: voice?.passive_listen_contract,
+                  wake_listening: voice?.wake_listening,
+                  wake_phrase: voice?.wake_phrase,
+                  microphone_gate_while_speaking: voice?.microphone_gate_while_speaking,
+                  conversation_forwarding_while_speaking: voice?.conversation_forwarding_while_speaking,
+                  voice_input_status: voice?.voice_input_status,
                   latest_receipt_actor: voice?.latest_receipt_actor,
                   latest_receipt_ingress_transport: voice?.latest_receipt_ingress_transport,
                   latest_receipt_counts_as_chatgpt_mcp_proof: voice?.latest_receipt_counts_as_chatgpt_mcp_proof,

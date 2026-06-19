@@ -62,6 +62,19 @@ export type VoiceBridgeMonitor = {
   overlay_voice_status: string;
   voice_status: string;
   voice_turn_status: string;
+  wake_listening: boolean;
+  wake_phrase: string;
+  passive_listen_contract: string;
+  continuous_voice_chat: boolean;
+  continuous_voice_chat_mode: string;
+  continuous_voice_chat_self_trigger_guard: string;
+  microphone_gate_while_speaking: string;
+  conversation_forwarding_while_speaking: boolean;
+  interrupt_phrase: string;
+  voice_input_ready: boolean;
+  voice_input_status: string;
+  voice_input_blocker: string;
+  next_voice_input_step: string;
   api_permission_denied_observed: boolean;
   recent_receipt_count: number;
   denied_recent_receipt_count: number;
@@ -291,6 +304,19 @@ function parseVoiceMonitor(value: unknown): VoiceBridgeMonitor {
     overlay_voice_status: safeString(raw["overlay_voice_status"]),
     voice_status: safeString(raw["voice_status"]),
     voice_turn_status: safeString(raw["voice_turn_status"]),
+    wake_listening: safeBoolean(raw["wake_listening"]),
+    wake_phrase: safeString(raw["wake_phrase"]),
+    passive_listen_contract: safeString(raw["passive_listen_contract"]),
+    continuous_voice_chat: safeBoolean(raw["continuous_voice_chat"]),
+    continuous_voice_chat_mode: safeString(raw["continuous_voice_chat_mode"]),
+    continuous_voice_chat_self_trigger_guard: safeString(raw["continuous_voice_chat_self_trigger_guard"]),
+    microphone_gate_while_speaking: safeString(raw["microphone_gate_while_speaking"]),
+    conversation_forwarding_while_speaking: safeBoolean(raw["conversation_forwarding_while_speaking"]),
+    interrupt_phrase: safeString(raw["interrupt_phrase"]),
+    voice_input_ready: safeBoolean(raw["voice_input_ready"]),
+    voice_input_status: safeString(raw["voice_input_status"]),
+    voice_input_blocker: safeString(raw["voice_input_blocker"]),
+    next_voice_input_step: safeString(raw["next_voice_input_step"]),
     api_permission_denied_observed: safeBoolean(raw["api_permission_denied_observed"]),
     recent_receipt_count: safeNumber(raw["recent_receipt_count"]),
     denied_recent_receipt_count: safeNumber(raw["denied_recent_receipt_count"]),

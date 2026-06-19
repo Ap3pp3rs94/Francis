@@ -958,6 +958,19 @@ function New-VoiceMonitorProjection {
   $TurnChatError = [string](Get-PropertyValue -Payload $VoiceTurn -Name 'chat_error' -Default '')
   $TurnBridgeStatus = [string](Get-PropertyValue -Payload $VoiceTurn -Name 'chat_bridge_status' -Default '')
   $OverlayBridgeStatus = [string](Get-PropertyValue -Payload $OverlayVoice -Name 'chat_bridge_status' -Default '')
+  $WakeListening = [bool](Get-PropertyValue -Payload $OverlayVoice -Name 'wake_listening' -Default $false)
+  $WakePhrase = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $OverlayVoice -Name 'wake_phrase' -Default '') -MaxLength 80
+  $ContinuousVoiceChat = [bool](Get-PropertyValue -Payload $OverlayVoice -Name 'continuous_voice_chat' -Default $false)
+  $ContinuousVoiceChatMode = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $OverlayVoice -Name 'continuous_voice_chat_mode' -Default '') -MaxLength 120
+  $SelfTriggerGuard = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $OverlayVoice -Name 'continuous_voice_chat_self_trigger_guard' -Default '') -MaxLength 160
+  $MicrophoneGateWhileSpeaking = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $OverlayVoice -Name 'microphone_gate_while_speaking' -Default '') -MaxLength 120
+  $ConversationForwardingWhileSpeaking = [bool](Get-PropertyValue -Payload $OverlayVoice -Name 'conversation_forwarding_while_speaking' -Default $true)
+  $VoiceInputReady = [bool](Get-PropertyValue -Payload $Payload -Name 'voice_input_ready' -Default $false)
+  $VoiceInputStatus = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Payload -Name 'voice_input_status' -Default '') -MaxLength 120
+  $VoiceInputBlocker = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Payload -Name 'voice_input_blocker' -Default '') -MaxLength 160
+  $NextVoiceInputStep = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Payload -Name 'next_voice_input_step' -Default '') -MaxLength 200
+  $PassiveListenContract = 'passive_transcript_awareness_only_until_wake_phrase'
+  $InterruptPhrase = 'francis stop'
   $LatestReceipt = if (@($Receipts).Count -gt 0) { $Receipts[0] } else { $null }
   $IdentityOk = (
     [string](Get-PropertyValue -Payload $OverlayVoice -Name 'voice_lens_orb_identity' -Default 'Francis') -eq 'Francis' -or
@@ -1032,6 +1045,19 @@ function New-VoiceMonitorProjection {
     voice_turn_chat_error = $TurnChatError
     voice_turn_bridge_status = $TurnBridgeStatus
     overlay_bridge_status = $OverlayBridgeStatus
+    wake_listening = [bool]$WakeListening
+    wake_phrase = $WakePhrase
+    passive_listen_contract = $PassiveListenContract
+    continuous_voice_chat = [bool]$ContinuousVoiceChat
+    continuous_voice_chat_mode = $ContinuousVoiceChatMode
+    continuous_voice_chat_self_trigger_guard = $SelfTriggerGuard
+    microphone_gate_while_speaking = $MicrophoneGateWhileSpeaking
+    conversation_forwarding_while_speaking = [bool]$ConversationForwardingWhileSpeaking
+    interrupt_phrase = $InterruptPhrase
+    voice_input_ready = [bool]$VoiceInputReady
+    voice_input_status = $VoiceInputStatus
+    voice_input_blocker = $VoiceInputBlocker
+    next_voice_input_step = $NextVoiceInputStep
     api_permission_denied_observed = [bool]$PermissionDenied
     recent_receipt_count = @($Receipts).Count
     denied_recent_receipt_count = @($DeniedReceipts).Count
@@ -1136,6 +1162,10 @@ function New-CommandPaletteMonitorProbe {
     $VoicePermissionDenied = [bool](Get-PropertyValue -Payload $VoiceMonitor -Name 'api_permission_denied_observed' -Default $false)
     $LatestReceiptDenied = [bool](Get-PropertyValue -Payload $VoiceMonitor -Name 'latest_receipt_denied' -Default $false)
     $DeniedRecentReceiptCount = [int](Get-PropertyValue -Payload $VoiceMonitor -Name 'denied_recent_receipt_count' -Default 0)
+    $WakeListening = [bool](Get-PropertyValue -Payload $VoiceMonitor -Name 'wake_listening' -Default $false)
+    $PassiveListenContract = [string](Get-PropertyValue -Payload $VoiceMonitor -Name 'passive_listen_contract' -Default '')
+    $MicrophoneGateWhileSpeaking = [string](Get-PropertyValue -Payload $VoiceMonitor -Name 'microphone_gate_while_speaking' -Default '')
+    $ConversationForwardingWhileSpeaking = [bool](Get-PropertyValue -Payload $VoiceMonitor -Name 'conversation_forwarding_while_speaking' -Default $true)
     $McpProof = Get-PropertyValue -Payload $VoiceMonitor -Name 'chatgpt_mcp_proof'
     $McpConnectionProofObserved = [bool](Get-PropertyValue -Payload $McpProof -Name 'mcp_connection_proof_observed' -Default $false)
     $McpConnectionProofStatus = [string](Get-PropertyValue -Payload $McpProof -Name 'mcp_connection_proof_status' -Default (Get-PropertyValue -Payload $McpProof -Name 'status' -Default 'not_checked'))
@@ -1144,6 +1174,8 @@ function New-CommandPaletteMonitorProbe {
     [void]$Checks.Add((New-MonitorCheck -Id 'voice_overlay_runtime' -Passed ($VoiceReadbackOk -and $VoiceOverlayReady) -Status $(if ($VoiceReadbackOk -and $VoiceOverlayReady) { 'visible' } else { 'overlay_not_ready' }) -Evidence $(if ([string]::IsNullOrWhiteSpace($VoiceOverlayStatus)) { 'overlay_status_missing' } else { $VoiceOverlayStatus })))
     [void]$Checks.Add((New-MonitorCheck -Id 'voice_provider_readiness' -Passed $VoiceProviderReady -Status $(if ($VoiceProviderReady) { 'configured' } else { 'not_configured' }) -Evidence ([string](Get-PropertyValue -Payload $VoiceMonitor -Name 'selected_provider' -Default ''))))
     [void]$Checks.Add((New-MonitorCheck -Id 'voice_francis_identity' -Passed ($VoiceIdentityOk -and -not $GenericVoiceLabelObserved) -Status $(if ($VoiceIdentityOk -and -not $GenericVoiceLabelObserved) { 'francis_voice_identity_ready' } else { 'identity_drift' }) -Evidence ([string](Get-PropertyValue -Payload $VoiceMonitor -Name 'selected_voice' -Default ''))))
+    [void]$Checks.Add((New-MonitorCheck -Id 'voice_passive_listen_contract' -Passed ($WakeListening -and $PassiveListenContract -eq 'passive_transcript_awareness_only_until_wake_phrase') -Status $(if ($WakeListening -and $PassiveListenContract -eq 'passive_transcript_awareness_only_until_wake_phrase') { 'passive_until_wake' } else { 'wake_gate_not_confirmed' }) -Evidence $PassiveListenContract))
+    [void]$Checks.Add((New-MonitorCheck -Id 'voice_mic_gate_while_speaking' -Passed ($MicrophoneGateWhileSpeaking -eq 'francis_stop_only' -and -not $ConversationForwardingWhileSpeaking) -Status $(if ($MicrophoneGateWhileSpeaking -eq 'francis_stop_only' -and -not $ConversationForwardingWhileSpeaking) { 'francis_stop_only' } else { 'mic_gate_not_confirmed' }) -Evidence ("gate={0} forwarding_while_speaking={1}" -f $MicrophoneGateWhileSpeaking, $ConversationForwardingWhileSpeaking)))
     [void]$Checks.Add((New-MonitorCheck -Id 'voice_chat_bridge_denials' -Passed ((-not $VoicePermissionDenied) -and (-not $LatestReceiptDenied)) -Status $(if ((-not $VoicePermissionDenied) -and (-not $LatestReceiptDenied)) { 'latest_receipt_clean' } else { 'denial_observed' }) -Evidence ("latest_denied={0} recent_denied={1}" -f $LatestReceiptDenied, $DeniedRecentReceiptCount)))
     if ($RequireMcpProof) {
       [void]$Checks.Add((New-MonitorCheck -Id 'voice_chatgpt_mcp_tool_proof' -Passed $McpConnectionProofObserved -Status $McpConnectionProofStatus -Evidence $(if ([string]::IsNullOrWhiteSpace($McpConnectionProofReceiptId)) { 'no_fresh_mcp_connection_receipt' } else { $McpConnectionProofReceiptId })))
