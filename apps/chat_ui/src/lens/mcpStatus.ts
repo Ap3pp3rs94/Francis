@@ -9,6 +9,8 @@ export type LensMcpStatusComponent = {
   tool: string;
 };
 
+export type LensMcpStatusOptionalReadbacks = Record<string, LensMcpStatusComponent>;
+
 export type LensMcpToolState = {
   expected_tool_count: number;
   tool_count: number;
@@ -46,6 +48,7 @@ export type LensMcpStatus = {
   };
   governance: Record<string, unknown>;
   components: Record<string, LensMcpStatusComponent>;
+  optional_readbacks: LensMcpStatusOptionalReadbacks;
   error?: string;
 };
 
@@ -169,6 +172,7 @@ export function parseLensMcpStatus(value: unknown): LensMcpStatus {
     },
     governance: safeRecord(raw["governance"]),
     components: parseComponents(raw["components"]),
+    optional_readbacks: parseComponents(raw["optional_readbacks"]),
     error: safeString(raw["error"]).trim() || undefined,
   };
 }

@@ -86,6 +86,82 @@ function boolText(value: boolean): string {
   return value ? "true" : "false";
 }
 
+type PolicyRelayReceiptView = {
+  receiptId: string;
+  decision: string;
+  policyId: string;
+  riskClass: string;
+  toolName: string;
+  requestedAuthority: string;
+  grantsExecutionAuthority: boolean;
+  grantsMutationAuthority: boolean;
+  remoteEgress: boolean;
+};
+
+type PolicyRelayView = {
+  available: boolean;
+  ok: boolean;
+  status: string;
+  safeReadback: boolean;
+  receiptCount: number;
+  returnedCount: number;
+  latest: PolicyRelayReceiptView | null;
+};
+
+function recordValue(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
+}
+
+function recordList(value: unknown): Array<Record<string, unknown>> {
+  return Array.isArray(value) ? value.map(recordValue) : [];
+}
+
+function numberValue(value: unknown, fallback = 0): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return fallback;
+}
+
+function stringValue(value: unknown, fallback = ""): string {
+  return typeof value === "string" && value.trim() ? value.trim() : fallback;
+}
+
+function booleanValue(value: unknown, fallback = false): boolean {
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function policyRelayView(status: LensMcpStatus | null): PolicyRelayView {
+  const readback = status?.optional_readbacks["francis.policy.receipts"];
+  const data = recordValue(readback?.data);
+  const latestRaw = recordList(data["items"])[0];
+  const latest = latestRaw
+    ? {
+        receiptId: stringValue(latestRaw["receipt_id"], "none"),
+        decision: stringValue(latestRaw["decision"], "none"),
+        policyId: stringValue(latestRaw["policy_id"], "none"),
+        riskClass: stringValue(latestRaw["risk_class"], "none"),
+        toolName: stringValue(latestRaw["tool_name"], "none"),
+        requestedAuthority: stringValue(latestRaw["requested_authority"], "none"),
+        grantsExecutionAuthority: booleanValue(latestRaw["grants_execution_authority"]),
+        grantsMutationAuthority: booleanValue(latestRaw["grants_mutation_authority"]),
+        remoteEgress: booleanValue(latestRaw["remote_egress"]),
+      }
+    : null;
+
+  return {
+    available: Boolean(readback),
+    ok: Boolean(readback?.ok),
+    status: statusText(readback?.status),
+    safeReadback: Boolean(readback?.safe_readback),
+    receiptCount: numberValue(data["receipt_count"]),
+    returnedCount: numberValue(data["returned_count"]),
+    latest,
+  };
+}
+
 function isAbortError(err: unknown): boolean {
   return err instanceof Error && err.name === "AbortError";
 }
@@ -234,6 +310,8 @@ function BodyStatePanel(props: { status: LensMcpStatus | null; loading: boolean;
   const status = props.status;
   const ready = bodyStateReady(status);
   const orb = presentOrbGlyph(status, props.loading);
+  const policyRelay = policyRelayView(status);
+  const policyRelayReady = policyRelay.available && policyRelay.ok && policyRelay.safeReadback;
 
   return (
     <section
@@ -291,6 +369,8 @@ function BodyStatePanel(props: { status: LensMcpStatus | null; loading: boolean;
         <Pill label="missing" value={String(status?.mcp.missing_tools.length ?? 0)} tone={ready ? "ready" : "blocked"} />
         <Pill label="resident" value={boolText(status?.resident ?? false)} tone="neutral" />
         <Pill label="blockers" value={String(status?.blockers.length ?? 0)} tone={ready ? "ready" : "blocked"} />
+        <Pill label="policy relay" value={policyRelay.status} tone={policyRelayReady ? "ready" : "blocked"} />
+        <Pill label="policy receipts" value={String(policyRelay.receiptCount)} tone="neutral" />
       </div>
 
       <dl style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", marginTop: 24 }}>
@@ -312,6 +392,60 @@ function BodyStatePanel(props: { status: LensMcpStatus | null; loading: boolean;
         </div>
       </dl>
 
+      <section
+        style={{
+          borderTop: "1px solid rgba(148, 163, 184, 0.26)",
+          marginTop: 18,
+          paddingTop: 14,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "flex-start", flexWrap: "wrap", justifyContent: "space-between", gap: 12 }}>
+          <div style={{ minWidth: 0 }}>
+            <p style={{ color: "#93c5fd", fontSize: 12, margin: 0, textTransform: "uppercase" }}>Tool policy relay</p>
+            <h2 style={{ fontSize: 18, margin: "4px 0 0" }}>{policyRelay.latest?.decision ?? "no receipts"}</h2>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            <Pill label="readback" value={policyRelay.safeReadback ? "safe" : "missing"} tone={policyRelayReady ? "ready" : "blocked"} />
+            <Pill label="execution" value={boolText(Boolean(policyRelay.latest?.grantsExecutionAuthority))} tone="neutral" />
+            <Pill label="mutation" value={boolText(Boolean(policyRelay.latest?.grantsMutationAuthority))} tone="neutral" />
+            <Pill label="egress" value={boolText(Boolean(policyRelay.latest?.remoteEgress))} tone="neutral" />
+          </div>
+        </div>
+        <dl
+          style={{
+            display: "grid",
+            gap: 10,
+            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+            margin: "14px 0 0",
+          }}
+        >
+          <div>
+            <dt style={{ color: "#94a3b8" }}>Latest receipt</dt>
+            <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{policyRelay.latest?.receiptId ?? "none"}</dd>
+          </div>
+          <div>
+            <dt style={{ color: "#94a3b8" }}>Policy</dt>
+            <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{policyRelay.latest?.policyId ?? "none"}</dd>
+          </div>
+          <div>
+            <dt style={{ color: "#94a3b8" }}>Risk</dt>
+            <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{policyRelay.latest?.riskClass ?? "none"}</dd>
+          </div>
+          <div>
+            <dt style={{ color: "#94a3b8" }}>Tool</dt>
+            <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{policyRelay.latest?.toolName ?? "none"}</dd>
+          </div>
+          <div>
+            <dt style={{ color: "#94a3b8" }}>Authority requested</dt>
+            <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{policyRelay.latest?.requestedAuthority ?? "none"}</dd>
+          </div>
+          <div>
+            <dt style={{ color: "#94a3b8" }}>Returned</dt>
+            <dd style={{ margin: 0 }}>{policyRelay.returnedCount}</dd>
+          </div>
+        </dl>
+      </section>
+
       <pre
         style={{
           background: "rgba(2, 6, 23, 0.86)",
@@ -331,6 +465,7 @@ function BodyStatePanel(props: { status: LensMcpStatus | null; loading: boolean;
                 resident: status.resident,
                 blockers: status.blockers,
                 mcp: status.mcp,
+                policy_relay: policyRelay,
                 routes: status.routes,
               }
             : { status: props.loading ? "loading" : "not_loaded" },

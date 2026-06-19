@@ -83,6 +83,34 @@ test("parseLensMcpStatus preserves truthful Orb/Lens body state", () => {
         tool: "francis.screen.status",
       },
     },
+    optional_readbacks: {
+      "francis.policy.receipts": {
+        authority: "policy_receipt_readback",
+        data: {
+          receipt_count: "2",
+          returned_count: "1",
+          items: [
+            {
+              receipt_id: "tool-call-policy-alpha",
+              decision: "blocked",
+              policy_id: "policy.shell.destructive_command.block",
+              risk_class: "destructive_shell",
+              tool_name: "francis.command.propose",
+              requested_authority: "manual_approval_required",
+              grants_execution_authority: false,
+              grants_mutation_authority: false,
+              remote_egress: false,
+            },
+          ],
+        },
+        error: "",
+        label: "Tool policy receipts",
+        ok: true,
+        safe_readback: true,
+        status: "ready",
+        tool: "francis.policy.receipts",
+      },
+    },
   });
 
   assert.equal(status.ok, true);
@@ -106,6 +134,12 @@ test("parseLensMcpStatus preserves truthful Orb/Lens body state", () => {
   assert.deepEqual(status.mcp.missing_required_tools, []);
   assert.equal(status.routes.mcp_status, "/lens/mcp/status");
   assert.equal(status.components["francis.screen.status"]?.safe_readback, true);
+  const policyReadback = status.optional_readbacks["francis.policy.receipts"];
+  assert.equal(policyReadback?.status, "ready");
+  assert.equal(policyReadback?.data["receipt_count"], "2");
+  const items = policyReadback?.data["items"] as Array<Record<string, unknown>>;
+  assert.equal(items[0]?.["decision"], "blocked");
+  assert.equal(items[0]?.["grants_execution_authority"], false);
   assert.equal(status.governance["grants_execution_authority"], false);
 });
 
