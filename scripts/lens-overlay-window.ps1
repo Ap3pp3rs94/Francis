@@ -722,7 +722,13 @@ function New-OverlayWindowPositionProjection {
   }
   $AutonomousMotion = if ($null -ne $OrbVisual -and $null -ne $OrbVisual.PSObject.Properties['autonomous_motion']) { [bool]$OrbVisual.autonomous_motion } else { $false }
   $ManualDrag = if ($null -ne $OrbVisual -and $null -ne $OrbVisual.PSObject.Properties['manual_drag_supported']) { [bool]$OrbVisual.manual_drag_supported } else { $false }
-  $RightCornerLocked = if ($null -ne $OrbVisual -and $null -ne $OrbVisual.PSObject.Properties['right_corner_locked']) { [bool]$OrbVisual.right_corner_locked } else { (-not $AutonomousMotion -and -not $ManualDrag) }
+  $OperatorPositionAnchor = ''
+  $OperatorPositionAnchorVariable = Get-Variable -Name LensOverlayOperatorPositionAnchor -Scope Script -ErrorAction SilentlyContinue
+  if ($null -ne $OperatorPositionAnchorVariable) {
+    $OperatorPositionAnchor = ([string]$OperatorPositionAnchorVariable.Value).Trim()
+  }
+  $OperatorPositionAnchored = -not [string]::IsNullOrWhiteSpace($OperatorPositionAnchor)
+  $RightCornerLocked = if ($OperatorPositionAnchored) { $false } elseif ($null -ne $OrbVisual -and $null -ne $OrbVisual.PSObject.Properties['right_corner_locked']) { [bool]$OrbVisual.right_corner_locked } else { (-not $AutonomousMotion -and -not $ManualDrag) }
   return [ordered]@{
     status = if ($OverlayWindowVisible -and $HasWindow) { 'visible_position_observed' } elseif ($HasWindow) { 'window_not_visible' } else { 'window_unavailable' }
     left = if ($HasWindow) { [double]$Window.Left } else { 0.0 }
@@ -730,7 +736,9 @@ function New-OverlayWindowPositionProjection {
     width = if ($HasWindow) { [double]$Window.Width } else { 0.0 }
     height = if ($HasWindow) { [double]$Window.Height } else { 0.0 }
     right_corner_locked = $RightCornerLocked
-    default_anchor = if ($AutonomousMotion) { 'bounded_work_area' } elseif ($ManualDrag) { 'operator_manual' } else { 'bottom_right' }
+    default_anchor = if ($OperatorPositionAnchored) { $OperatorPositionAnchor } elseif ($AutonomousMotion) { 'bounded_work_area' } elseif ($ManualDrag) { 'operator_manual' } else { 'bottom_right' }
+    operator_position_anchor = $OperatorPositionAnchor
+    voice_position_command_active = $OperatorPositionAnchor.StartsWith('voice_command_', [System.StringComparison]::OrdinalIgnoreCase)
     desktop_roam_supported = $AutonomousMotion
     desktop_roam_bounds = 'work_area'
     manual_drag_supported = $ManualDrag
@@ -2957,6 +2965,182 @@ function Invoke-OverlayVoiceStopPhrase {
   return $Payload
 }
 
+function Resolve-OverlayVoiceOrbCommand {
+  param([string]$Text)
+
+  $Normalized = (([string]$Text).Trim().ToLowerInvariant() -replace '[^\p{L}\p{Nd}\s]', ' ')
+  $Normalized = ($Normalized -replace '\s+', ' ').Trim()
+  $Result = [ordered]@{
+    recognized = $false
+    intent = ''
+    command = ''
+    target_side = ''
+    target_anchor = ''
+    normalized_text_length = $Normalized.Length
+    requires_explicit_orb_reference = $true
+    requires_direction = $true
+    conversation_forwarding_suppressed = $true
+    grants_execution_authority = $false
+    grants_mutation_authority = $false
+  }
+  if ([string]::IsNullOrWhiteSpace($Normalized)) {
+    return $Result
+  }
+
+  $Words = @($Normalized.Split([char[]]@(' '), [System.StringSplitOptions]::RemoveEmptyEntries))
+  $HasOrbReference = $Words -contains 'orb' -or $Words -contains 'orbs'
+  $HasMoveVerb = $Words -contains 'move' -or $Words -contains 'put' -or $Words -contains 'place' -or $Words -contains 'dock' -or $Words -contains 'shift' -or $Words -contains 'send'
+  $MoveLeft = $Words -contains 'left'
+  $MoveRight = $Words -contains 'right'
+
+  if (-not $HasOrbReference -or -not $HasMoveVerb -or ($MoveLeft -eq $MoveRight)) {
+    return $Result
+  }
+
+  $TargetSide = if ($MoveLeft) { 'left' } else { 'right' }
+  $Result.recognized = $true
+  $Result.intent = 'move_orb'
+  $Result.command = 'move_orb_{0}_side' -f $TargetSide
+  $Result.target_side = $TargetSide
+  $Result.target_anchor = 'voice_command_{0}_side' -f $TargetSide
+  return $Result
+}
+
+function Set-OrbWindowSidePosition {
+  param(
+    [object]$Window,
+    [object]$WorkArea,
+    [ValidateSet('left', 'right')]
+    [string]$Side,
+    [double]$Margin = 48.0
+  )
+
+  if ($null -eq $Window -or $null -eq $WorkArea) {
+    return [ordered]@{
+      applied = $false
+      error = 'overlay_window_or_work_area_unavailable'
+    }
+  }
+
+  $MinimumLeft = [double]$WorkArea.Left
+  $MinimumTop = [double]$WorkArea.Top
+  $MaximumLeft = [Math]::Max($MinimumLeft, [double]$WorkArea.Right - [double]$Window.Width)
+  $MaximumTop = [Math]::Max($MinimumTop, [double]$WorkArea.Bottom - [double]$Window.Height)
+  $TargetLeft = if ($Side -eq 'left') {
+    Clamp-OverlayDouble -Value ($MinimumLeft + $Margin) -Minimum $MinimumLeft -Maximum $MaximumLeft
+  } else {
+    Clamp-OverlayDouble -Value ($MaximumLeft - $Margin) -Minimum $MinimumLeft -Maximum $MaximumLeft
+  }
+  $TargetTop = Clamp-OverlayDouble -Value ([double]$Window.Top) -Minimum $MinimumTop -Maximum $MaximumTop
+
+  $Window.Left = $TargetLeft
+  $Window.Top = $TargetTop
+  return [ordered]@{
+    applied = $true
+    left = [double]$Window.Left
+    top = [double]$Window.Top
+    target_side = $Side
+    margin = $Margin
+  }
+}
+
+function Invoke-OverlayVoiceOrbCommand {
+  param(
+    [string]$Root,
+    [object]$Command,
+    [string]$RecognizedText,
+    [string]$Provider,
+    [string]$Voice,
+    [string]$RemoteVoiceId = '',
+    [string]$WakePhraseText = $WakePhrase,
+    [double]$RecognitionConfidence = 0.0,
+    [double]$RecognitionThreshold = $WakeConfidenceThreshold,
+    [int]$WakeAliasCount = 0,
+    [int]$WakeCount = 0,
+    [bool]$WakePhraseDetected = $true,
+    [bool]$ContinuousVoiceChat = $false
+  )
+
+  $TargetSide = Get-StringProperty -Payload $Command -Name 'target_side' -Default ''
+  $TargetAnchor = Get-StringProperty -Payload $Command -Name 'target_anchor' -Default ''
+  $CommandName = Get-StringProperty -Payload $Command -Name 'command' -Default ''
+  $SelectedVoice = Get-OverlaySelectedVoiceName -Provider $Provider -Voice $Voice -RequestedVoiceId $RemoteVoiceId
+  $Payload = New-OverlayVoiceProjection -SelectedVoiceName $SelectedVoice -Provider $Provider -WakeListening $true -WakePhraseText $WakePhraseText
+  $Payload.local_overlay_command = $true
+  $Payload.voice_orb_command = $true
+  $Payload.voice_command_recognized = $true
+  $Payload.orb_command = $CommandName
+  $Payload.overlay_position_command = $CommandName
+  $Payload.target_side = $TargetSide
+  $Payload.target_anchor = $TargetAnchor
+  $Payload.wake_phrase_detected = [bool]$WakePhraseDetected
+  $Payload.wake_count = $WakeCount
+  $Payload.recognition_confidence = [Math]::Round($RecognitionConfidence, 3)
+  $Payload.recognition_threshold = $RecognitionThreshold
+  $Payload.wake_alias_count = $WakeAliasCount
+  $Payload.continuous_voice_chat = [bool]$ContinuousVoiceChat
+  $Payload.transcript_source = if ($WakePhraseDetected) { 'microphone_wake_listener' } else { 'microphone_continuous_dictation' }
+  $Payload.voice_recognition = 'system_speech_local_orb_command'
+  $Payload.transcript_length = ([string]$RecognizedText).Length
+  $Payload.transcript_hash = Get-OverlayTextDigest -Text $RecognizedText
+  $Payload.transcript_redacted = $true
+  $Payload.stores_transcript = $false
+  $Payload.chat_bridge_status = 'not_called'
+  $Payload.chat_route_writes_conversation_ledger = $false
+  $Payload.conversation_forwarding_suppressed = $true
+  $Payload.speech_output_suppressed = $true
+  $Payload.bounded_overlay_position_mutation = $true
+  $Payload.mutation_authority_scope = 'runtime_overlay_position_only'
+  $Payload.grants_execution_authority = $false
+  $Payload.grants_mutation_authority = $false
+
+  if ($TargetSide -notin @('left', 'right')) {
+    $Payload.status = 'orb_voice_command_refused'
+    $Payload.ok = $false
+    $Payload.error = 'unsupported_orb_position_target'
+    $Payload.runtime_overlay_position_changed = $false
+    $Payload.message = 'Orb voice command was recognized but refused because the requested side is unsupported.'
+    Write-OverlayVoiceState -Root $Root -Payload $Payload
+    return $Payload
+  }
+
+  $Window = $script:LensOverlayWindow
+  $MotionState = $script:LensOverlayMotionState
+  $WorkArea = $script:LensOverlayWorkArea
+  if ($null -eq $WorkArea -and [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT) {
+    try {
+      $WorkArea = [System.Windows.SystemParameters]::WorkArea
+    } catch {
+      $WorkArea = $null
+    }
+  }
+
+  $Position = Set-OrbWindowSidePosition -Window $Window -WorkArea $WorkArea -Side $TargetSide -Margin 48
+  if (-not [bool]$Position['applied']) {
+    $Payload.status = 'orb_voice_command_unavailable'
+    $Payload.ok = $false
+    $Payload.error = Get-StringProperty -Payload $Position -Name 'error' -Default 'overlay_window_position_unavailable'
+    $Payload.runtime_overlay_position_changed = $false
+    $Payload.position_receipt_written = $false
+    $Payload.message = 'Orb voice command was recognized but the live overlay window was unavailable.'
+    Write-OverlayVoiceState -Root $Root -Payload $Payload
+    return $Payload
+  }
+
+  $script:LensOverlayOperatorPositionAnchor = $TargetAnchor
+  Reset-OrbAutonomousMotionAnchor -Window $Window -MotionState $MotionState
+  Write-OverlayPositionState -Root $Root -Window $Window -MotionState $MotionState -OverlayWindowVisible $true
+  $Payload.status = 'orb_voice_command_applied'
+  $Payload.ok = $true
+  $Payload.runtime_overlay_position_changed = $true
+  $Payload.position_receipt_written = $true
+  $Payload.overlay_left = [double]$Position['left']
+  $Payload.overlay_top = [double]$Position['top']
+  $Payload.message = 'Orb position voice command applied locally and not forwarded to chat.'
+  Write-OverlayVoiceState -Root $Root -Payload $Payload
+  return $Payload
+}
+
 function Limit-OverlayVoiceReplyText {
   param(
     [string]$Text,
@@ -3803,6 +3987,14 @@ function Start-OverlayWakeListener {
           Write-OverlayVoiceState -Root $script:LensOverlayWakeRoot -Payload $Suppressed
           return
         }
+        $CommandWakePhraseDetected = (-not [string]::IsNullOrWhiteSpace($UtteranceText) -or $WakePhraseOnly)
+        $CommandText = if (-not [string]::IsNullOrWhiteSpace($UtteranceText)) { $UtteranceText } else { $RecognizedText }
+        $OrbCommand = Resolve-OverlayVoiceOrbCommand -Text $CommandText
+        if ([bool]$OrbCommand['recognized'] -and ($CommandWakePhraseDetected -or [bool]$script:LensOverlayContinuousVoiceChat)) {
+          $script:LensOverlayWakeCount += 1
+          [void](Invoke-OverlayVoiceOrbCommand -Root $script:LensOverlayWakeRoot -Command $OrbCommand -RecognizedText $RecognizedText -Provider $script:LensOverlayWakeVoiceProvider -Voice $script:LensOverlayWakeVoice -RemoteVoiceId $script:LensOverlayWakeRemoteVoiceId -WakePhraseText $script:LensOverlayWakePhrase -RecognitionConfidence ([double]$EventArgs.Result.Confidence) -RecognitionThreshold $script:LensOverlayWakeConfidenceThreshold -WakeAliasCount $script:LensOverlayWakeAliasCount -WakeCount $script:LensOverlayWakeCount -WakePhraseDetected $CommandWakePhraseDetected -ContinuousVoiceChat ([bool]$script:LensOverlayContinuousVoiceChat))
+          return
+        }
         if ([string]::IsNullOrWhiteSpace($UtteranceText) -and -not $WakePhraseOnly) {
           if ([bool]$script:LensOverlayContinuousVoiceChat) {
             $script:LensOverlayWakeCount += 1
@@ -4248,6 +4440,7 @@ if ($Mode -eq 'Run') {
         try {
           $EventArgs.Handled = $true
           $script:LensOverlayWindow.DragMove()
+          $script:LensOverlayOperatorPositionAnchor = 'operator_manual'
           Reset-OrbAutonomousMotionAnchor -Window $script:LensOverlayWindow -MotionState $script:LensOverlayMotionState
         } catch {
         }
@@ -4262,6 +4455,8 @@ if ($Mode -eq 'Run') {
     $script:LensOverlayWindow = $Form
     $script:LensOverlayEnergyRoot = $EnergyRoot
     $script:LensOverlayMotionState = New-OrbAutonomousMotionState -Window $Form -WorkArea $Screen
+    $script:LensOverlayWorkArea = $Screen
+    $script:LensOverlayOperatorPositionAnchor = ''
     $script:LensOverlayConfig = $Config
     $script:LensOverlayDataRoot = $DataRoot
     $script:LensOverlayEnableWakeListen = [bool]$EnableWakeListen

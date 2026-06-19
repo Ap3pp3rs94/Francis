@@ -670,6 +670,34 @@ def test_lens_audio_config_declares_elevenlabs_remote_tts_disabled_by_default() 
     assert "Hosted expressive TTS; requires network egress + credentials." in config
 
 
+def test_lens_overlay_voice_orb_position_command_is_local_and_bounded() -> None:
+    script = (_repo_root() / "scripts" / "lens-overlay-window.ps1").read_text(encoding="utf-8")
+
+    assert "function Resolve-OverlayVoiceOrbCommand" in script
+    assert "$HasOrbReference = $Words -contains 'orb' -or $Words -contains 'orbs'" in script
+    assert "$HasMoveVerb = $Words -contains 'move'" in script
+    assert "$Result.command = 'move_orb_{0}_side' -f $TargetSide" in script
+    assert "function Set-OrbWindowSidePosition" in script
+    assert "Clamp-OverlayDouble -Value ($MinimumLeft + $Margin)" in script
+    assert "Clamp-OverlayDouble -Value ($MaximumLeft - $Margin)" in script
+    assert "function Invoke-OverlayVoiceOrbCommand" in script
+    assert "$Payload.status = 'orb_voice_command_applied'" in script
+    assert "$Payload.chat_bridge_status = 'not_called'" in script
+    assert "$Payload.chat_route_writes_conversation_ledger = $false" in script
+    assert "$Payload.conversation_forwarding_suppressed = $true" in script
+    assert "$Payload.speech_output_suppressed = $true" in script
+    assert "$Payload.bounded_overlay_position_mutation = $true" in script
+    assert "$Payload.mutation_authority_scope = 'runtime_overlay_position_only'" in script
+    assert "$Payload.grants_execution_authority = $false" in script
+    assert "$Payload.grants_mutation_authority = $false" in script
+    assert "$script:LensOverlayOperatorPositionAnchor = $TargetAnchor" in script
+    assert "Reset-OrbAutonomousMotionAnchor -Window $Window -MotionState $MotionState" in script
+    assert "Write-OverlayPositionState -Root $Root -Window $Window -MotionState $MotionState" in script
+    assert "$OrbCommand = Resolve-OverlayVoiceOrbCommand -Text $CommandText" in script
+    assert "Invoke-OverlayVoiceOrbCommand -Root $script:LensOverlayWakeRoot" in script
+    assert "voice_position_command_active" in script
+
+
 def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -> None:
     script = (_repo_root() / "scripts" / "lens-overlay-window.ps1").read_text(encoding="utf-8")
 
