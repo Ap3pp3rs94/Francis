@@ -37,6 +37,17 @@ def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def test_lens_resident_runtime_authority_blockers_extracts_child_json_after_noise() -> None:
+    script = (_repo_root() / "scripts" / "lens-resident-runtime-authority-blockers-proof.ps1").read_text(
+        encoding="utf-8"
+    )
+
+    assert "function ConvertFrom-JsonScriptOutput" in script
+    assert "$BoundaryPayload = ConvertFrom-JsonScriptOutput -Text $BoundaryText" in script
+    assert "Child proof scripts can emit dependency warnings before their JSON receipt." in script
+    assert "$Candidate = ($Lines[$Start..$End] -join [Environment]::NewLine)" in script
+
+
 def test_lens_resident_runtime_authority_blockers_proof_splits_combined_gap(
     tmp_path: Path,
 ) -> None:

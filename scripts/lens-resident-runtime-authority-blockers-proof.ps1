@@ -17,8 +17,21 @@ function ConvertTo-StringArray {
     return @()
   }
 
+  if ($Value -is [string]) {
+    if ([string]::IsNullOrWhiteSpace($Value)) {
+      return @()
+    }
+    return @($Value)
+  }
+
   if ($Value -is [System.Array]) {
-    return @($Value | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    $Items = foreach ($Item in @($Value)) {
+      $Text = [string]$Item
+      if (-not [string]::IsNullOrWhiteSpace($Text)) {
+        $Text
+      }
+    }
+    return @($Items)
   }
 
   $Single = [string]$Value
@@ -30,12 +43,14 @@ function ConvertTo-StringArray {
 
 function Select-Blockers {
   param(
-    [string[]]$Blockers,
+    [AllowNull()]
+    [object]$Blockers,
     [string[]]$Patterns
   )
 
+  $CleanBlockers = ConvertTo-StringArray -Value $Blockers
   return [string[]]@(
-    $Blockers | Where-Object {
+    $CleanBlockers | Where-Object {
       $Blocker = [string]$_
       foreach ($Pattern in $Patterns) {
         if ($Blocker -match $Pattern) {
@@ -57,18 +72,60 @@ function New-AuthorityGroup {
     [string[]]$RequiredBefore = @()
   )
 
+  $CleanEvidence = ConvertTo-StringArray -Value $Evidence
+  $CleanRequiredBefore = ConvertTo-StringArray -Value $RequiredBefore
+  $CleanBlockers = ConvertTo-StringArray -Value $Blockers
   return [ordered]@{
     id = $Id
     label = $Label
-    status = if ($Blockers.Count -gt 0) { 'blocked' } else { 'clear' }
+    status = if ($CleanBlockers.Count -gt 0) { 'blocked' } else { 'clear' }
     ready = $false
     authority_granted = $false
     would_execute = $false
     route = $Route
-    evidence = [string[]]@($Evidence)
-    required_before = [string[]]@($RequiredBefore)
-    blockers = [string[]]@($Blockers)
+    evidence = [string[]]@($CleanEvidence)
+    required_before = [string[]]@($CleanRequiredBefore)
+    blockers = [string[]]@($CleanBlockers)
   }
+}
+
+function ConvertFrom-JsonScriptOutput {
+  param(
+    [AllowNull()]
+    [string]$Text
+  )
+
+  if ([string]::IsNullOrWhiteSpace($Text)) {
+    return $null
+  }
+
+  try {
+    return $Text | ConvertFrom-Json -ErrorAction Stop
+  } catch {
+    # Child proof scripts can emit dependency warnings before their JSON receipt.
+  }
+
+  $Lines = $Text -split "`r?`n"
+  for ($Start = 0; $Start -lt $Lines.Count; $Start += 1) {
+    $StartText = ([string]$Lines[$Start]).TrimStart()
+    if (-not ($StartText.StartsWith('{') -or $StartText.StartsWith('['))) {
+      continue
+    }
+    for ($End = $Lines.Count - 1; $End -ge $Start; $End -= 1) {
+      $EndText = ([string]$Lines[$End]).TrimEnd()
+      if (-not ($EndText.EndsWith('}') -or $EndText.EndsWith(']'))) {
+        continue
+      }
+      $Candidate = ($Lines[$Start..$End] -join [Environment]::NewLine)
+      try {
+        return $Candidate | ConvertFrom-Json -ErrorAction Stop
+      } catch {
+        continue
+      }
+    }
+  }
+
+  return $null
 }
 
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
@@ -93,12 +150,7 @@ if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
 $BoundaryOutput = & $PowerShell.Source -NoProfile -ExecutionPolicy Bypass -File $BoundaryProofScript @BoundaryArgs 2>&1
 $BoundaryExitCode = $LASTEXITCODE
 $BoundaryText = ($BoundaryOutput | ForEach-Object { [string]$_ }) -join "`n"
-$BoundaryPayload = $null
-try {
-  $BoundaryPayload = $BoundaryText | ConvertFrom-Json -ErrorAction Stop
-} catch {
-  $BoundaryPayload = $null
-}
+$BoundaryPayload = ConvertFrom-JsonScriptOutput -Text $BoundaryText
 
 $Blockers = ConvertTo-StringArray -Value $BoundaryPayload.blockers
 $ProcessBlockers = Select-Blockers -Blockers $Blockers -Patterns @(
