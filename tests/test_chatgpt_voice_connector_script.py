@@ -585,6 +585,50 @@ def test_chatgpt_voice_connector_plan_persistent_ingress_is_read_only(tmp_path: 
     assert not runtime_root.exists()
 
 
+def test_chatgpt_voice_connector_plan_persistent_ingress_tolerates_missing_windows_install_roots(
+    tmp_path: Path,
+) -> None:
+    runtime_root = tmp_path / "connector-runtime"
+    empty_path = tmp_path / "empty-path"
+    fake_profile = tmp_path / "profile"
+    empty_path.mkdir()
+    fake_profile.mkdir()
+    port = _unused_local_port()
+
+    proc = _run_connector_script(
+        "-Mode",
+        "PlanPersistentIngress",
+        "-Json",
+        "-RuntimeRoot",
+        str(runtime_root),
+        "-Port",
+        str(port),
+        env={
+            "PATH": str(empty_path),
+            "Path": str(empty_path),
+            "ProgramFiles": "",
+            "ProgramFiles(x86)": "",
+            "TUNNEL_ORIGIN_CERT": "",
+            "USERPROFILE": str(fake_profile),
+        },
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    cloudflared = payload["provider_readiness"]["cloudflared_named_tunnel"]
+    assert cloudflared["available"] is False
+    assert cloudflared["path"] == ""
+    assert cloudflared["origin_cert_present"] is False
+    assert cloudflared["login_required"] is True
+    assert cloudflared["named_tunnel_preflight"]["checked"] is False
+    assert cloudflared["operator_provider_setup_commands"] == []
+    assert payload["governance"]["read_only"] is True
+    assert payload["governance"]["starts_process"] is False
+    assert payload["governance"]["opens_public_tunnel"] is False
+    assert payload["governance"]["writes_data"] is False
+    assert not runtime_root.exists()
+
+
 def test_chatgpt_voice_connector_plan_persistent_ingress_preflights_named_tunnel_request(
     tmp_path: Path,
 ) -> None:

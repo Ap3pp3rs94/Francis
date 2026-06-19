@@ -686,10 +686,13 @@ function Resolve-CloudflaredPath {
     return [string]$Command.Source
   }
 
-  $KnownPaths = @(
-    (Join-Path ${env:ProgramFiles(x86)} 'cloudflared\cloudflared.exe'),
-    (Join-Path $env:ProgramFiles 'cloudflared\cloudflared.exe')
-  )
+  $KnownPaths = [System.Collections.Generic.List[string]]::new()
+  foreach ($Root in @(${env:ProgramFiles(x86)}, $env:ProgramFiles)) {
+    $BoundedRoot = ConvertTo-BoundedText -Value $Root -MaxLength 512
+    if (-not [string]::IsNullOrWhiteSpace($BoundedRoot)) {
+      [void]$KnownPaths.Add((Join-Path $BoundedRoot 'cloudflared\cloudflared.exe'))
+    }
+  }
   foreach ($KnownPath in $KnownPaths) {
     if (-not [string]::IsNullOrWhiteSpace($KnownPath) -and (Test-Path -LiteralPath $KnownPath -PathType Leaf)) {
       return $KnownPath
