@@ -132,6 +132,17 @@ def _json_stdout(stdout: str) -> dict[str, object]:
     return json.loads(stdout)
 
 
+def test_lens_command_palette_monitor_bounds_connector_child_readbacks() -> None:
+    script = SCRIPT.read_text(encoding="utf-8")
+
+    assert "function Invoke-PowerShellJsonChild" in script
+    assert "$Process.WaitForExit($BoundedTimeoutSeconds * 1000)" in script
+    assert "Stop-Process -Id $Process.Id -Force" in script
+    assert "connector_status_readback_timeout" in script
+    assert "persistent_ingress_plan_readback_timeout" in script
+    assert "timed_out = [bool](Get-PropertyValue -Payload $Readback -Name 'timed_out'" in script
+
+
 class _CommandPaletteHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         body = b'<!doctype html><html><body><div id="root"></div></body></html>'
@@ -225,11 +236,15 @@ def test_lens_command_palette_monitor_reports_chatgpt_connector_localtunnel_fall
     connector = payload["chatgpt_connector_monitor"]
     assert connector["enabled"] is True
     assert connector["known_localtunnel"] is True
+    assert connector["timed_out"] is False
+    assert connector["timeout_seconds"] >= 8
     assert connector["persistent_candidate"] is False
     assert connector["persistent_ingress_status"] == "localtunnel_fallback_replace_needed"
     assert connector["next_operator_step"] == "replace_localtunnel_with_persistent_https_mcp_ingress"
     plan = payload["chatgpt_persistent_ingress_plan_monitor"]
     assert plan["enabled"] is True
+    assert plan["timed_out"] is False
+    assert plan["timeout_seconds"] >= 8
     assert plan["status"] == "localtunnel_fallback_replace_needed"
     assert plan["blockers"] == ["localtunnel_url_is_not_persistent_ingress"]
     assert plan["recommended_provider_order"][0] == "cloudflared_named_tunnel"
@@ -288,12 +303,16 @@ def test_lens_command_palette_monitor_reports_chatgpt_connector_cloudflared_quic
     assert connector["enabled"] is True
     assert connector["known_localtunnel"] is False
     assert connector["known_cloudflared_quick_tunnel"] is True
+    assert connector["timed_out"] is False
+    assert connector["timeout_seconds"] >= 8
     assert connector["persistent_candidate"] is False
     assert connector["persistent_ingress_status"] == "cloudflared_quick_tunnel_replace_needed"
     assert connector["next_operator_step"] == "replace_cloudflared_quick_tunnel_with_persistent_https_mcp_ingress"
     assert connector["blockers"] == ["cloudflared_quick_url_is_not_persistent_ingress"]
     plan = payload["chatgpt_persistent_ingress_plan_monitor"]
     assert plan["enabled"] is True
+    assert plan["timed_out"] is False
+    assert plan["timeout_seconds"] >= 8
     assert plan["status"] == "cloudflared_quick_tunnel_replace_needed"
     assert plan["blockers"] == ["cloudflared_quick_url_is_not_persistent_ingress"]
     assert plan["governance_safe"] is True

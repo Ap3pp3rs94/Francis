@@ -414,6 +414,125 @@ function Invoke-OverlayVoiceReadback {
   }
 }
 
+function Quote-ProcessArgument {
+  param([string]$Value)
+
+  if ($null -eq $Value) {
+    return '""'
+  }
+  return '"' + ($Value -replace '"', '\"') + '"'
+}
+
+function Invoke-PowerShellJsonChild {
+  param(
+    [string[]]$Arguments,
+    [int]$TimeoutSeconds,
+    [string]$TimeoutStatus,
+    [string]$TimeoutError
+  )
+
+  $PowerShell = Get-Command powershell -ErrorAction SilentlyContinue
+  if ($null -eq $PowerShell) {
+    $PowerShell = Get-Command pwsh -ErrorAction Stop
+  }
+
+  $BoundedTimeoutSeconds = [Math]::Max(1, $TimeoutSeconds)
+  $Process = $null
+  $Text = ''
+  $ErrorText = ''
+
+  try {
+    $StartInfo = [System.Diagnostics.ProcessStartInfo]::new()
+    $StartInfo.FileName = [string]$PowerShell.Source
+    $StartInfo.Arguments = (@($Arguments) | ForEach-Object { Quote-ProcessArgument -Value $_ }) -join ' '
+    $StartInfo.WorkingDirectory = $RepoRoot
+    $StartInfo.UseShellExecute = $false
+    $StartInfo.CreateNoWindow = $true
+    $StartInfo.RedirectStandardOutput = $true
+    $StartInfo.RedirectStandardError = $true
+
+    $Process = [System.Diagnostics.Process]::new()
+    $Process.StartInfo = $StartInfo
+    $Started = $Process.Start()
+    if (-not $Started) {
+      return [ordered]@{
+        ok = $false
+        status = 'child_start_failed'
+        exit_code = -1
+        payload = $null
+        error = 'process_not_started'
+        raw_length = 0
+        stderr_length = 0
+        timed_out = $false
+        timeout_seconds = $BoundedTimeoutSeconds
+      }
+    }
+
+    $StdoutTask = $Process.StandardOutput.ReadToEndAsync()
+    $StderrTask = $Process.StandardError.ReadToEndAsync()
+    $Exited = $Process.WaitForExit($BoundedTimeoutSeconds * 1000)
+    if (-not $Exited) {
+      Stop-Process -Id $Process.Id -Force -ErrorAction SilentlyContinue
+      [void]$Process.WaitForExit(5000)
+      return [ordered]@{
+        ok = $false
+        status = $TimeoutStatus
+        exit_code = -1
+        payload = $null
+        error = $TimeoutError
+        raw_length = 0
+        stderr_length = 0
+        timed_out = $true
+        timeout_seconds = $BoundedTimeoutSeconds
+      }
+    }
+    $ExitCode = [int]$Process.ExitCode
+    $Text = ([string]$StdoutTask.GetAwaiter().GetResult()).Trim()
+    $ErrorText = ([string]$StderrTask.GetAwaiter().GetResult()).Trim()
+    try {
+      return [ordered]@{
+        ok = $ExitCode -eq 0
+        status = if ($ExitCode -eq 0) { 'completed' } else { 'child_exit_nonzero' }
+        exit_code = $ExitCode
+        payload = ($Text | ConvertFrom-Json -ErrorAction Stop)
+        error = ConvertTo-BoundedText -Value $ErrorText -MaxLength 512
+        raw_length = $Text.Length
+        stderr_length = $ErrorText.Length
+        timed_out = $false
+        timeout_seconds = $BoundedTimeoutSeconds
+      }
+    } catch {
+      return [ordered]@{
+        ok = $false
+        status = 'child_json_parse_failed'
+        exit_code = $ExitCode
+        payload = $null
+        error = ConvertTo-BoundedText -Value $_.Exception.Message -MaxLength 512
+        raw_length = $Text.Length
+        stderr_length = $ErrorText.Length
+        timed_out = $false
+        timeout_seconds = $BoundedTimeoutSeconds
+      }
+    }
+  } catch {
+    return [ordered]@{
+      ok = $false
+      status = 'child_start_failed'
+      exit_code = -1
+      payload = $null
+      error = ConvertTo-BoundedText -Value $_.Exception.Message -MaxLength 512
+      raw_length = 0
+      stderr_length = 0
+      timed_out = $false
+      timeout_seconds = $BoundedTimeoutSeconds
+    }
+  } finally {
+    if ($null -ne $Process) {
+      $Process.Dispose()
+    }
+  }
+}
+
 function Get-RecentChatGptVoiceReceipts {
   param(
     [string]$Root,
@@ -672,31 +791,12 @@ function Invoke-ChatGptConnectorReadback {
     $Arguments += '-VerifyConnector'
   }
 
-  $PowerShell = Get-Command powershell -ErrorAction SilentlyContinue
-  if ($null -eq $PowerShell) {
-    $PowerShell = Get-Command pwsh -ErrorAction Stop
-  }
-
-  $Raw = & $PowerShell.Source @Arguments 2>&1
-  $ExitCode = $LASTEXITCODE
-  $Text = ($Raw | Out-String).Trim()
-  try {
-    return [ordered]@{
-      ok = $ExitCode -eq 0
-      exit_code = $ExitCode
-      payload = ($Text | ConvertFrom-Json -ErrorAction Stop)
-      error = ''
-      raw_length = $Text.Length
-    }
-  } catch {
-    return [ordered]@{
-      ok = $false
-      exit_code = $ExitCode
-      payload = $null
-      error = [string]$_.Exception.Message
-      raw_length = $Text.Length
-    }
-  }
+  $ChildTimeoutSeconds = [Math]::Max(8, [Math]::Min(120, $ProbeTimeoutSeconds + 18))
+  return Invoke-PowerShellJsonChild `
+    -Arguments $Arguments `
+    -TimeoutSeconds $ChildTimeoutSeconds `
+    -TimeoutStatus 'connector_status_readback_timeout' `
+    -TimeoutError 'chatgpt_connector_status_readback_timeout'
 }
 
 function Invoke-ChatGptPersistentIngressPlanReadback {
@@ -729,31 +829,12 @@ function Invoke-ChatGptPersistentIngressPlanReadback {
     $Arguments += '-VerifyConnector'
   }
 
-  $PowerShell = Get-Command powershell -ErrorAction SilentlyContinue
-  if ($null -eq $PowerShell) {
-    $PowerShell = Get-Command pwsh -ErrorAction Stop
-  }
-
-  $Raw = & $PowerShell.Source @Arguments 2>&1
-  $ExitCode = $LASTEXITCODE
-  $Text = ($Raw | Out-String).Trim()
-  try {
-    return [ordered]@{
-      ok = $ExitCode -eq 0
-      exit_code = $ExitCode
-      payload = ($Text | ConvertFrom-Json -ErrorAction Stop)
-      error = ''
-      raw_length = $Text.Length
-    }
-  } catch {
-    return [ordered]@{
-      ok = $false
-      exit_code = $ExitCode
-      payload = $null
-      error = [string]$_.Exception.Message
-      raw_length = $Text.Length
-    }
-  }
+  $ChildTimeoutSeconds = [Math]::Max(8, [Math]::Min(120, $ProbeTimeoutSeconds + 18))
+  return Invoke-PowerShellJsonChild `
+    -Arguments $Arguments `
+    -TimeoutSeconds $ChildTimeoutSeconds `
+    -TimeoutStatus 'persistent_ingress_plan_readback_timeout' `
+    -TimeoutError 'chatgpt_persistent_ingress_plan_readback_timeout'
 }
 
 function New-ChatGptPersistentIngressPlanMonitorProjection {
@@ -766,6 +847,7 @@ function New-ChatGptPersistentIngressPlanMonitorProjection {
 
   $Readback = Invoke-ChatGptPersistentIngressPlanReadback -Root $Root -ConnectorUrl $ConnectorUrl -VerifyConnector $VerifyConnector -ProbeTimeoutSeconds $ProbeTimeoutSeconds
   $Payload = Get-PropertyValue -Payload $Readback -Name 'payload'
+  $ReadbackStatus = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Readback -Name 'status' -Default '') -MaxLength 120
   $Governance = Get-PropertyValue -Payload $Payload -Name 'governance'
   $ProviderReadiness = Get-PropertyValue -Payload $Payload -Name 'provider_readiness'
   $InstallerReadiness = Get-PropertyValue -Payload $Payload -Name 'installer_readiness'
@@ -783,8 +865,10 @@ function New-ChatGptPersistentIngressPlanMonitorProjection {
     enabled = $true
     ok = [bool](Get-PropertyValue -Payload $Readback -Name 'ok' -Default $false)
     exit_code = [int](Get-PropertyValue -Payload $Readback -Name 'exit_code' -Default 0)
-    status = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Payload -Name 'status' -Default 'plan_unavailable') -MaxLength 96
+    status = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Payload -Name 'status' -Default $(if ([string]::IsNullOrWhiteSpace($ReadbackStatus)) { 'plan_unavailable' } else { $ReadbackStatus })) -MaxLength 96
     error = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Readback -Name 'error' -Default '') -MaxLength 512
+    timed_out = [bool](Get-PropertyValue -Payload $Readback -Name 'timed_out' -Default $false)
+    timeout_seconds = [int](Get-PropertyValue -Payload $Readback -Name 'timeout_seconds' -Default 0)
     local_endpoint = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Payload -Name 'local_endpoint' -Default '') -MaxLength 160
     blockers = @(Get-PropertyValue -Payload $Payload -Name 'blockers' -Default @())
     recommended_provider_order = @(Get-PropertyValue -Payload $Payload -Name 'recommended_provider_order' -Default @())
@@ -823,6 +907,7 @@ function New-ChatGptConnectorMonitorProjection {
 
   $Readback = Invoke-ChatGptConnectorReadback -Root $Root -ConnectorUrl $ConnectorUrl -VerifyConnector $VerifyConnector -ProbeTimeoutSeconds $ProbeTimeoutSeconds
   $Payload = Get-PropertyValue -Payload $Readback -Name 'payload'
+  $ReadbackStatus = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Readback -Name 'status' -Default '') -MaxLength 120
   $ConnectorUrlValue = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Payload -Name 'connector_url' -Default '') -MaxLength 512
   $ConnectorUrlSource = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Payload -Name 'connector_url_source' -Default '') -MaxLength 160
   $ConnectorShapeValid = [bool](Get-NestedPropertyValue -Payload $Payload -Path @('endpoint_status', 'chatgpt_connector', 'connector_url', 'shape_valid') -Default $false)
@@ -883,8 +968,10 @@ function New-ChatGptConnectorMonitorProjection {
     enabled = $true
     ok = [bool](Get-PropertyValue -Payload $Readback -Name 'ok' -Default $false)
     exit_code = [int](Get-PropertyValue -Payload $Readback -Name 'exit_code' -Default 0)
-    status = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Payload -Name 'status' -Default 'status_unavailable') -MaxLength 96
+    status = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Payload -Name 'status' -Default $(if ([string]::IsNullOrWhiteSpace($ReadbackStatus)) { 'status_unavailable' } else { $ReadbackStatus })) -MaxLength 96
     error = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Readback -Name 'error' -Default '') -MaxLength 512
+    timed_out = [bool](Get-PropertyValue -Payload $Readback -Name 'timed_out' -Default $false)
+    timeout_seconds = [int](Get-PropertyValue -Payload $Readback -Name 'timeout_seconds' -Default 0)
     connector_url_present = -not [string]::IsNullOrWhiteSpace($ConnectorUrlValue)
     connector_url_host = $ConnectorHost
     connector_url_source = $ConnectorUrlSource
