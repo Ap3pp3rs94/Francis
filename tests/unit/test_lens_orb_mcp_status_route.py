@@ -195,6 +195,14 @@ def test_lens_command_palette_monitor_route_projects_voice_bridge_proof(monkeypa
                         },
                     },
                     "governance_safe": True,
+                    "providers": {
+                        "cloudflared_named_tunnel_available": True,
+                        "cloudflared_named_tunnel_path": "C:\\Program Files (x86)\\cloudflared\\cloudflared.exe",
+                        "cloudflared_named_tunnel_origin_cert_present": False,
+                        "cloudflared_named_tunnel_origin_cert_content_read": False,
+                        "cloudflared_named_tunnel_login_required": True,
+                        "cloudflared_named_tunnel_next_operator_step": "run_cloudflared_tunnel_login",
+                    },
                 },
             }
         ),
@@ -249,6 +257,11 @@ def test_lens_command_palette_monitor_route_projects_voice_bridge_proof(monkeypa
     )
     assert body["chatgpt_connector_monitor"]["known_localtunnel"] is True
     assert body["chatgpt_persistent_ingress_plan_monitor"]["governance_safe"] is True
+    providers = body["chatgpt_persistent_ingress_plan_monitor"]["providers"]
+    assert providers["cloudflared_named_tunnel_available"] is True
+    assert providers["cloudflared_named_tunnel_login_required"] is True
+    assert providers["cloudflared_named_tunnel_next_operator_step"] == "run_cloudflared_tunnel_login"
+    assert providers["cloudflared_named_tunnel_origin_cert_content_read"] is False
     handoff = body["chatgpt_persistent_ingress_plan_monitor"]["operator_handoff"]
     assert handoff["preferred_provider"] == "cloudflared_named_tunnel"
     assert handoff["read_only_plan"] is True

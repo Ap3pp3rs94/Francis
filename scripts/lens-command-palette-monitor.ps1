@@ -876,6 +876,11 @@ function New-ChatGptPersistentIngressPlanMonitorProjection {
     operator_handoff = Get-PropertyValue -Payload $Payload -Name 'operator_handoff' -Default $null
     providers = [ordered]@{
       cloudflared_named_tunnel_available = [bool](Get-PropertyValue -Payload $Cloudflared -Name 'available' -Default $false)
+      cloudflared_named_tunnel_path = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Cloudflared -Name 'path' -Default '') -MaxLength 512
+      cloudflared_named_tunnel_origin_cert_present = [bool](Get-PropertyValue -Payload $Cloudflared -Name 'origin_cert_present' -Default $false)
+      cloudflared_named_tunnel_origin_cert_content_read = [bool](Get-PropertyValue -Payload $Cloudflared -Name 'origin_cert_content_read' -Default $false)
+      cloudflared_named_tunnel_login_required = [bool](Get-PropertyValue -Payload $Cloudflared -Name 'login_required' -Default $true)
+      cloudflared_named_tunnel_next_operator_step = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Cloudflared -Name 'next_operator_step' -Default '') -MaxLength 160
       ngrok_reserved_domain_available = [bool](Get-PropertyValue -Payload $Ngrok -Name 'available' -Default $false)
       caddy_reverse_proxy_available = [bool](Get-PropertyValue -Payload $Caddy -Name 'available' -Default $false)
       ssh_reverse_tunnel_available = [bool](Get-PropertyValue -Payload $Ssh -Name 'available' -Default $false)

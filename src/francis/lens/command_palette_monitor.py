@@ -368,6 +368,23 @@ def _persistent_ingress_plan(value: Any) -> dict[str, Any]:
         "operator_handoff": _persistent_ingress_operator_handoff(raw.get("operator_handoff")),
         "providers": {
             "cloudflared_named_tunnel_available": _safe_bool(providers.get("cloudflared_named_tunnel_available")),
+            "cloudflared_named_tunnel_path": _safe_str(
+                providers.get("cloudflared_named_tunnel_path"),
+                max_length=512,
+            ),
+            "cloudflared_named_tunnel_origin_cert_present": _safe_bool(
+                providers.get("cloudflared_named_tunnel_origin_cert_present"),
+            ),
+            "cloudflared_named_tunnel_origin_cert_content_read": _safe_bool(
+                providers.get("cloudflared_named_tunnel_origin_cert_content_read"),
+            ),
+            "cloudflared_named_tunnel_login_required": _safe_bool(
+                providers.get("cloudflared_named_tunnel_login_required"),
+            ),
+            "cloudflared_named_tunnel_next_operator_step": _safe_str(
+                providers.get("cloudflared_named_tunnel_next_operator_step"),
+                max_length=160,
+            ),
             "ngrok_reserved_domain_available": _safe_bool(providers.get("ngrok_reserved_domain_available")),
             "caddy_reverse_proxy_available": _safe_bool(providers.get("caddy_reverse_proxy_available")),
             "ssh_reverse_tunnel_available": _safe_bool(providers.get("ssh_reverse_tunnel_available")),

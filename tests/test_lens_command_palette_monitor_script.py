@@ -262,6 +262,14 @@ def test_lens_command_palette_monitor_reports_chatgpt_connector_localtunnel_fall
     )
     assert "StartPersistent" in handoff["governed_handoff_commands"]["start_persistent_mcp"]
     assert isinstance(plan["providers"]["winget_available"], bool)
+    assert isinstance(plan["providers"]["cloudflared_named_tunnel_path"], str)
+    assert isinstance(plan["providers"]["cloudflared_named_tunnel_origin_cert_present"], bool)
+    assert plan["providers"]["cloudflared_named_tunnel_origin_cert_content_read"] is False
+    assert isinstance(plan["providers"]["cloudflared_named_tunnel_login_required"], bool)
+    assert plan["providers"]["cloudflared_named_tunnel_next_operator_step"] in {
+        "run_cloudflared_tunnel_login",
+        "create_or_start_cloudflared_named_tunnel",
+    }
     assert plan["localtunnel_replacement"]["persistent_ingress_required_for_stable_chatgpt_connector"] is True
     assert plan["governance_safe"] is True
     assert plan["governance"]["read_only_contract"] is True
@@ -315,6 +323,16 @@ def test_lens_command_palette_monitor_reports_chatgpt_connector_cloudflared_quic
     assert plan["timeout_seconds"] >= 8
     assert plan["status"] == "cloudflared_quick_tunnel_replace_needed"
     assert plan["blockers"] == ["cloudflared_quick_url_is_not_persistent_ingress"]
+    providers = plan["providers"]
+    assert isinstance(providers["cloudflared_named_tunnel_available"], bool)
+    assert isinstance(providers["cloudflared_named_tunnel_path"], str)
+    assert isinstance(providers["cloudflared_named_tunnel_origin_cert_present"], bool)
+    assert providers["cloudflared_named_tunnel_origin_cert_content_read"] is False
+    assert isinstance(providers["cloudflared_named_tunnel_login_required"], bool)
+    assert providers["cloudflared_named_tunnel_next_operator_step"] in {
+        "run_cloudflared_tunnel_login",
+        "create_or_start_cloudflared_named_tunnel",
+    }
     assert plan["governance_safe"] is True
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["chatgpt_voice_persistent_ingress_plan"]["passed"] is True
