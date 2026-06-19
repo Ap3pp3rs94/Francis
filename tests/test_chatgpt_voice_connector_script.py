@@ -120,6 +120,15 @@ def test_chatgpt_voice_connector_cloudflared_named_mode_is_bounded_persistent_in
     assert "start_cloudflared_named" in script
 
 
+def test_chatgpt_voice_connector_plan_reuses_cloudflared_resolver_for_readiness() -> None:
+    script = (_repo_root() / "scripts" / "chatgpt-voice-connector.ps1").read_text(encoding="utf-8")
+
+    assert "function Resolve-CloudflaredPath" in script
+    assert "[string]$ResolvedPath = ''" in script
+    assert "-ResolvedPath (Resolve-CloudflaredPath)" in script
+    assert "standard install location" in script
+
+
 def test_chatgpt_voice_connector_localtunnel_fallback_detaches_tunnel_process() -> None:
     script = (_repo_root() / "scripts" / "chatgpt-voice-connector.ps1").read_text(encoding="utf-8")
 

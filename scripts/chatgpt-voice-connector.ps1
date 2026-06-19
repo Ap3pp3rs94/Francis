@@ -143,15 +143,19 @@ function New-GovernancePayload {
 function Get-CommandReadiness {
   param(
     [string]$Name,
-    [string]$Capability
+    [string]$Capability,
+    [string]$ResolvedPath = ''
   )
 
   $Command = Get-Command $Name -ErrorAction SilentlyContinue | Select-Object -First 1
+  $Resolved = ConvertTo-BoundedText -Value $ResolvedPath -MaxLength 512
+  $Path = if ($Command) { ConvertTo-BoundedText -Value $Command.Source -MaxLength 512 } else { $Resolved }
+  $Available = [bool]($Command -or (-not [string]::IsNullOrWhiteSpace($Resolved) -and (Test-Path -LiteralPath $Resolved -PathType Leaf)))
   return [ordered]@{
     name = $Name
     capability = $Capability
-    available = $null -ne $Command
-    path = if ($Command) { ConvertTo-BoundedText -Value $Command.Source -MaxLength 512 } else { '' }
+    available = $Available
+    path = if ($Available) { $Path } else { '' }
   }
 }
 
@@ -248,7 +252,7 @@ function New-PersistentIngressOperatorHandoff {
       caddy_winget = 'winget install --id CaddyServer.Caddy --exact --accept-source-agreements --accept-package-agreements'
     }
     cloudflared_named_tunnel_steps = @(
-      'Install cloudflared or confirm it is already available on PATH.',
+      'Install cloudflared or confirm it is already available on PATH or in a standard install location.',
       'Run cloudflared tunnel login and complete the provider login in the browser.',
       'Create a named tunnel for Francis and route a stable hostname to the local MCP endpoint.',
       "Point the ingress service at $LocalEndpoint.",
@@ -328,7 +332,7 @@ function New-PersistentIngressPlan {
       status = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $EndpointStatus -Name 'status' -Default '') -MaxLength 96
     }
     provider_readiness = [ordered]@{
-      cloudflared_named_tunnel = Get-CommandReadiness -Name 'cloudflared' -Capability 'persistent_named_https_tunnel'
+      cloudflared_named_tunnel = Get-CommandReadiness -Name 'cloudflared' -Capability 'persistent_named_https_tunnel' -ResolvedPath (Resolve-CloudflaredPath)
       ngrok_reserved_domain = Get-CommandReadiness -Name 'ngrok' -Capability 'reserved_domain_https_tunnel'
       caddy_reverse_proxy = Get-CommandReadiness -Name 'caddy' -Capability 'persistent_https_reverse_proxy'
       ssh_reverse_tunnel = Get-CommandReadiness -Name 'ssh' -Capability 'stable_remote_reverse_tunnel_requires_external_host'
