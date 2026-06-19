@@ -1,0 +1,226 @@
+from __future__ import annotations
+
+import json
+import shutil
+import subprocess
+from pathlib import Path
+
+import pytest
+
+from powershell_script_runner import run_powershell_script
+
+
+def _powershell() -> str:
+    exe = shutil.which("powershell") or shutil.which("pwsh")
+    if not exe:
+        pytest.skip("PowerShell is not available")
+    return exe
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def _run_completion_model(*args: str) -> subprocess.CompletedProcess[str]:
+    return run_powershell_script(
+        _powershell(),
+        _repo_root() / "scripts" / "francis-completion-model.ps1",
+        args,
+        cwd=_repo_root(),
+        timeout_seconds=30,
+    )
+
+
+def test_francis_completion_model_status_projects_ledger_backed_loop_guard() -> None:
+    result = _run_completion_model("-Mode", "Status")
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is True
+    assert payload["kind"] == "francis.completion_model.status"
+    assert payload["status"] == "ready"
+    assert payload["read_only_contract"] is True
+    assert payload["writes_repo"] is False
+    assert payload["writes_data"] is False
+    assert payload["grants_execution_authority"] is False
+    assert payload["grants_mutation_authority"] is False
+    assert payload["source_documents"]["completion_ledger"] == "docs/operations/COMPLETION_LEDGER.md"
+    assert payload["source_documents"]["build_manifest"] == "docs/canonical/BUILD_MANIFEST.md"
+    assert payload["current_phase"] == "Phase 2"
+    assert payload["latest_ledger_entry"]["found"] is True
+    assert payload["stage17_status"]["found"] is True
+    assert payload["stage17_status"]["status"] == "open"
+    assert payload["stage17_status"]["read_only_contract"] is True
+    assert payload["stage17_status"]["writes_repo"] is False
+    assert payload["stage17_status"]["writes_data"] is False
+    assert payload["stage17_status"]["grants_execution_authority"] is False
+    assert payload["stage17_status"]["grants_mutation_authority"] is False
+    assert payload["continue_loop_guard"]["status"] == "ready"
+    assert payload["next_continue_decision"]["status"] == "bounded_slice_required"
+    assert payload["next_continue_decision"]["selected_gap_source"] == "stage17_latest_ledger_entry"
+    assert payload["next_continue_decision"]["stage17_gap_preferred"] is True
+
+    checklist_ids = {item["id"] for item in payload["continue_loop_guard"]["checklist"]}
+    assert "ledger_read" in checklist_ids
+    assert "build_manifest_read" in checklist_ids
+    assert "latest_validated_slice_identified" in checklist_ids
+    assert "remaining_gap_named" in checklist_ids
+    assert "percentage_movement_guard" in checklist_ids
+    assert "single_bounded_slice_guard" in checklist_ids
+
+
+def test_francis_completion_model_percentages_are_evidence_gated_not_invented() -> None:
+    payload = json.loads(_run_completion_model("-Mode", "Status").stdout)
+    percentage_model = payload["completion_percentage_model"]
+
+    assert percentage_model["status"] == "evidence_gated"
+    assert percentage_model["numeric_baseline_declared_here"] is False
+    assert percentage_model["overall_project_percent"] is None
+    assert percentage_model["current_build_phase_percent"] is None
+    assert percentage_model["current_task_percent"] is None
+    assert percentage_model["movement_allowed_by_this_readback"] is False
+    assert "known_baseline_source" in percentage_model["required_to_move"]
+    assert "validated_repo_evidence" in percentage_model["required_to_move"]
+    assert "ledger_backed_gate_or_milestone_change" in percentage_model["required_to_move"]
+    assert "explicit_remaining_blockers" in percentage_model["required_to_move"]
+
+
+def test_francis_completion_model_script_reads_wrapped_roadmap_area(tmp_path: Path) -> None:
+    ledger = tmp_path / "ledger.md"
+    ledger.write_text(
+        "\n".join(
+            [
+                "# Ledger",
+                "",
+                "### 2026-06-19 - Wrapped script ledger slice",
+                "",
+                "Roadmap area: Stage 6 / Lens MVP, Orb embodiment,",
+                "voice-to-substrate routing, overlay command receipts,",
+                "and P9 observability.",
+                "",
+                "Remaining truthful gap:",
+                "",
+                "- Keep going.",
+                "",
+                "## 6. Update rule",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    manifest = tmp_path / "manifest.md"
+    manifest.write_text("# Manifest (Phase 2)\n", encoding="utf-8")
+
+    result = _run_completion_model(
+        "-Mode",
+        "Status",
+        "-LedgerPath",
+        str(ledger),
+        "-BuildManifestPath",
+        str(manifest),
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["latest_ledger_entry"]["roadmap_area"] == (
+        "Stage 6 / Lens MVP, Orb embodiment, voice-to-substrate routing, "
+        "overlay command receipts, and P9 observability."
+    )
+
+
+def test_francis_completion_model_script_keeps_stage17_gap_when_latest_entry_is_other_lane(
+    tmp_path: Path,
+) -> None:
+    ledger = tmp_path / "ledger.md"
+    ledger.write_text(
+        "\n".join(
+            [
+                "# Ledger",
+                "",
+                "Francis is in `Phase 2` per `docs/canonical/BUILD_MANIFEST.md`.",
+                "",
+                "### 2026-06-19 - Stage 17 selected-scope proposal evidence/review chunk 52",
+                "",
+                "Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal",
+                "evidence and proposal-review queue reduction.",
+                "",
+                "Remaining truthful gap:",
+                "",
+                "- Stage 17 remains open. Continue the selected-scope queue.",
+                "",
+                "### 2026-06-19 - Manual acoustic Orb proof becomes an enforceable monitor gate",
+                "",
+                "Roadmap area: Stage 6 / Lens MVP, Orb embodiment, voice-to-substrate",
+                "routing, overlay command receipts, and P9 observability.",
+                "",
+                "Remaining truthful gap:",
+                "",
+                "- A real operator-spoken proof is still needed.",
+                "- Stage 17 remains open, but this entry is not the Stage 17 lane.",
+                "",
+                "### 2026-06-19 - Completion model preserves Stage 17 readback across lane drift",
+                "",
+                "Roadmap area: Stage 17-adjacent Capability Economy, completion-model",
+                "truth, and P9 observability readback.",
+                "",
+                "Remaining truthful gap:",
+                "",
+                "- Stage 17 remains open, but this is readback support work.",
+                "",
+                "## 6. Update rule",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    manifest = tmp_path / "manifest.md"
+    manifest.write_text("# Manifest (Phase 2)\n", encoding="utf-8")
+
+    result = _run_completion_model(
+        "-Mode",
+        "Status",
+        "-LedgerPath",
+        str(ledger),
+        "-BuildManifestPath",
+        str(manifest),
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["latest_ledger_entry"]["title"] == (
+        "2026-06-19 - Completion model preserves Stage 17 readback across lane drift"
+    )
+    assert payload["stage17_status"]["status"] == "open"
+    assert payload["stage17_status"]["readback_scope"] == "latest_stage17_ledger_entry"
+    assert payload["stage17_status"]["latest_ledger_entry"]["title"] == (
+        "2026-06-19 - Stage 17 selected-scope proposal evidence/review chunk 52"
+    )
+    assert payload["stage17_status"]["latest_ledger_entry"]["roadmap_area"] == (
+        "Stage 17 / Capability Economy, operator-supplied proposal evidence and proposal-review queue reduction."
+    )
+    assert payload["stage17_status"]["next_smallest_truthful_gap"] == (
+        "select_from_latest_stage17_remaining_truthful_gap"
+    )
+    assert payload["next_continue_decision"]["selected_gap_source"] == "stage17_latest_ledger_entry"
+    assert payload["next_continue_decision"]["selected_ledger_title"] == (
+        "2026-06-19 - Stage 17 selected-scope proposal evidence/review chunk 52"
+    )
+    assert payload["next_continue_decision"]["selected_roadmap_area"] == (
+        "Stage 17 / Capability Economy, operator-supplied proposal evidence and proposal-review queue reduction."
+    )
+    assert payload["next_continue_decision"]["stage17_gap_preferred"] is True
+    assert payload["next_continue_decision"]["next_smallest_truthful_gap"] == (
+        "- Stage 17 remains open. Continue the selected-scope queue."
+    )
+
+
+def test_francis_completion_model_script_is_status_only() -> None:
+    script = (_repo_root() / "scripts" / "francis-completion-model.ps1").read_text(encoding="utf-8")
+
+    assert "[ValidateSet('Status')]" in script
+    assert "read_only_contract = $true" in script
+    assert "writes_repo = $false" in script
+    assert "writes_data = $false" in script
+    assert "grants_execution_authority = $false" in script
+    assert "grants_mutation_authority = $false" in script
+    assert "Set-Content" not in script
+    assert "Out-File" not in script
+    assert "Add-Content" not in script

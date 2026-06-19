@@ -16,6 +16,7 @@ from francis.api.routes import (
     away,
     chat,
     chatgpt_voice_bridge,
+    completion_model,
     continuity,
     credentials,
     developer_bridge,
@@ -65,6 +66,7 @@ def create_app() -> FastAPI:
     app.include_router(system.router, prefix="/system", tags=["system"])
     app.include_router(chat.router, prefix="/chat", tags=["chat"])
     app.include_router(chatgpt_voice_bridge.router, prefix="/chatgpt-voice", tags=["chatgpt_voice_bridge"])
+    app.include_router(completion_model.router, prefix="/completion-model", tags=["completion_model"])
     app.include_router(attachments.router, prefix="/attachments", tags=["attachments"])
     app.include_router(continuity.router, prefix="/continuity", tags=["continuity"])
     app.include_router(artifacts.router, prefix="/artifacts", tags=["artifacts"])
