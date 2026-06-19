@@ -681,9 +681,11 @@ function Resolve-LocalTunnelScript {
 }
 
 function Resolve-CloudflaredPath {
-  $Command = Get-Command cloudflared -ErrorAction SilentlyContinue | Select-Object -First 1
-  if ($Command) {
-    return [string]$Command.Source
+  foreach ($CommandName in @('cloudflared', 'cloudflared.cmd', 'cloudflared.exe')) {
+    $Command = Get-Command $CommandName -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($Command) {
+      return [string]$Command.Source
+    }
   }
 
   $KnownPaths = [System.Collections.Generic.List[string]]::new()
