@@ -97,10 +97,12 @@ Set-Location -LiteralPath $RepoRoot
 
 try {
   if ($LaunchMode -eq 'Exec') {
-    if (-not [string]::IsNullOrWhiteSpace($LastMessagePath)) {
-      $LastMessageDir = Split-Path -Parent $LastMessagePath
-      if (-not [string]::IsNullOrWhiteSpace($LastMessageDir)) {
-        New-Item -ItemType Directory -Force -Path $LastMessageDir | Out-Null
+    foreach ($LogPath in @($StdoutLogPath, $StderrLogPath, $LastMessagePath)) {
+      if (-not [string]::IsNullOrWhiteSpace($LogPath)) {
+        $LogDir = Split-Path -Parent $LogPath
+        if (-not [string]::IsNullOrWhiteSpace($LogDir)) {
+          New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
+        }
       }
     }
     $CodexArgs = @(
@@ -116,7 +118,11 @@ try {
       $CodexArgs += @('--model', $Model)
     }
     $CodexArgs += '-'
-    $Prompt | & codex @CodexArgs
+    if (-not [string]::IsNullOrWhiteSpace($StdoutLogPath) -and -not [string]::IsNullOrWhiteSpace($StderrLogPath)) {
+      $Prompt | & codex @CodexArgs 1>> $StdoutLogPath 2>> $StderrLogPath
+    } else {
+      $Prompt | & codex @CodexArgs
+    }
   } else {
     $CodexArgs = @(
       '--cd', $RepoRoot,
@@ -153,6 +159,10 @@ if ($LaunchMode -in @('Visible', 'Minimized')) {
   Write-Host ("Francis worker {0} exited with code {1}." -f $WorkerId, $ExitCode)
   Read-Host "Press Enter to close this worker terminal"
 } else {
-  Write-Output ("Francis worker {0} exited with code {1}." -f $WorkerId, $ExitCode)
+  $ExitMessage = "Francis worker {0} exited with code {1}." -f $WorkerId, $ExitCode
+  Write-Output $ExitMessage
+  if (-not [string]::IsNullOrWhiteSpace($StdoutLogPath)) {
+    Add-Content -LiteralPath $StdoutLogPath -Value $ExitMessage -Encoding UTF8
+  }
 }
 exit $ExitCode

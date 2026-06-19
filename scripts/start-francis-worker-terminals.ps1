@@ -279,10 +279,12 @@ foreach ($Worker in @($Workers | Where-Object { $WorkerId -eq 'All' -or [string]
     ArgumentList = $ArgumentList
     PassThru = $true
   }
-  if ($LaunchMode -in @('Background', 'Exec')) {
+  if ($LaunchMode -eq 'Background') {
     $StartProcessArgs.WindowStyle = 'Hidden'
     $StartProcessArgs.RedirectStandardOutput = $StdoutLogPath
     $StartProcessArgs.RedirectStandardError = $StderrLogPath
+  } elseif ($LaunchMode -eq 'Exec') {
+    $StartProcessArgs.WindowStyle = 'Hidden'
   } elseif ($LaunchMode -eq 'Minimized') {
     $StartProcessArgs.WindowStyle = 'Minimized'
   }
