@@ -55,6 +55,9 @@ def test_mcp_server_voice_ingress_defaults_to_chatgpt_app_origin() -> None:
     assert args["mcp_server_tool"] == "francis_chatgpt_voice_ingress"
     assert args["forward_to_chat"] is True
 
+    none_origin_args = _chatgpt_voice_ingress_args(transcript="hello Francis", client_origin=None)
+    assert none_origin_args["client_origin"] == "chatgpt_app_voice"
+
 
 def test_read_only_tools_report_no_raw_shell(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("FRANCIS_MCP_GATEWAY_STATE_DIR", str(tmp_path))

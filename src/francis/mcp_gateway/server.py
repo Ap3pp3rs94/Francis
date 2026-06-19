@@ -54,7 +54,7 @@ def _chatgpt_voice_ingress_args(
     conversation_id: str = "",
     turn_id: str = "",
     locale: str = "",
-    client_origin: str = CHATGPT_VOICE_BRIDGE_CHATGPT_APP_VOICE_CLIENT,
+    client_origin: str | None = CHATGPT_VOICE_BRIDGE_CHATGPT_APP_VOICE_CLIENT,
     forward_to_chat: bool = True,
     use_llm: bool = False,
 ) -> dict[str, Any]:
@@ -65,7 +65,7 @@ def _chatgpt_voice_ingress_args(
         "conversation_id": conversation_id,
         "turn_id": turn_id,
         "locale": locale,
-        "client_origin": client_origin,
+        "client_origin": client_origin or CHATGPT_VOICE_BRIDGE_CHATGPT_APP_VOICE_CLIENT,
         "forward_to_chat": forward_to_chat,
         "use_llm": use_llm,
         "ingress_transport": CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TRANSPORT,

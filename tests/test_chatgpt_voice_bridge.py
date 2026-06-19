@@ -255,7 +255,7 @@ def test_chatgpt_voice_mcp_ingress_updates_orb_virtual_voice_turn(monkeypatch, t
     assert orb_voice["status"] == "chatgpt_voice_reply_ready"
     assert orb_voice["turn_id"] == "chatgpt-mcp-voice-turn"
     assert orb_voice["virtual_voice_turn"] is True
-    assert orb_voice["client_origin"] == "mcp_client_unspecified"
+    assert orb_voice["client_origin"] == "chatgpt_app_voice"
     assert orb_voice["mcp_ingress"] is True
     assert orb_voice["transcript_source"] == "chatgpt_voice_mcp_transcript"
     assert orb_voice["chat_bridge_status"] == "forwarded"
@@ -265,7 +265,7 @@ def test_chatgpt_voice_mcp_ingress_updates_orb_virtual_voice_turn(monkeypatch, t
     assert orb_voice["microphone_recognition_claimed"] is False
     assert orb_voice["raw_audio"] is False
     assert body["receipt"]["orb_voice_bridge"]["mcp_ingress"] is True
-    assert body["receipt"]["client_origin"] == "mcp_client_unspecified"
+    assert body["receipt"]["client_origin"] == "chatgpt_app_voice"
     assert body["receipt"]["mcp_server_tool"] == "francis_chatgpt_voice_ingress"
 
     voice_state = data_root / "runtime" / "lens-overlay" / "voice-turn-status.json"
@@ -277,7 +277,7 @@ def test_chatgpt_voice_mcp_ingress_updates_orb_virtual_voice_turn(monkeypatch, t
     assert state["virtual_voice_turn"] is True
     assert state["mcp_ingress"] is True
     assert state["mcp_server_tool"] == "francis_chatgpt_voice_ingress"
-    assert state["client_origin"] == "mcp_client_unspecified"
+    assert state["client_origin"] == "chatgpt_app_voice"
     assert state["microphone_speech"] is False
     assert state["microphone_recognition_claimed"] is False
     assert state["raw_audio"] is False
@@ -288,6 +288,34 @@ def test_chatgpt_voice_mcp_ingress_updates_orb_virtual_voice_turn(monkeypatch, t
 
     voice_receipt = data_root / "runtime" / "lens-overlay" / "voice-turns" / "chatgpt-mcp-voice-turn.json"
     assert voice_receipt.exists()
+
+
+def test_chatgpt_voice_mcp_ingress_keeps_local_selftest_origin_unspecified(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        _scopes("chatgpt.voice.bridge.write", "chat.write"),
+    )
+
+    result = run_tool(
+        "francis.chatgpt_voice.ingress",
+        {
+            "actor": _ACTOR,
+            "source": "local.mcp.selftest",
+            "transcript": "can you hear me",
+            "turn_id": "local-mcp-selftest-turn",
+            "ingress_transport": "mcp_gateway_tool",
+            "mcp_gateway_tool": "francis.chatgpt_voice.ingress",
+            "mcp_server_tool": "francis_chatgpt_voice_ingress",
+        },
+    )
+
+    assert result["ok"] is True
+    body = result["data"]
+    assert body["receipt"]["source"] == "local.mcp.selftest"
+    assert body["receipt"]["client_origin"] == "mcp_client_unspecified"
+    assert body["orb_voice_bridge"]["client_origin"] == "mcp_client_unspecified"
 
 
 def test_chatgpt_voice_forward_uses_continuity_context_for_llm(
