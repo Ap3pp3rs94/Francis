@@ -1679,6 +1679,7 @@ if ($Mode -eq 'RestartMcp') {
     previous_mcp_launcher_pid = $PreviousLauncherPid
     previous_mcp_listener_pid = $PreviousListenerPid
     tunnel_pid = [int](Get-PropertyValue -Payload $State -Name 'tunnel_pid' -Default 0)
+    cloudflared_login = Get-PropertyValue -Payload $State -Name 'cloudflared_login' -Default $null
     mcp_stdout = ''
     mcp_stderr = ''
     mcp_log_capture = 'not_captured_detached_start'

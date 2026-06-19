@@ -75,6 +75,7 @@ def test_chatgpt_voice_connector_restart_mcp_preserves_public_tunnel_contract() 
     assert "ExpectedCommandText 'francis.mcp_gateway.server'" in script
     assert "ExpectedCommandText 'chatgpt-voice-mcp.ps1'" in script
     assert "public_tunnel_restarted = $false" in script
+    assert "cloudflared_login = Get-PropertyValue -Payload $State -Name 'cloudflared_login' -Default $null" in script
     assert "OpensPublicTunnel $false -WritesData $true" in script
 
 
