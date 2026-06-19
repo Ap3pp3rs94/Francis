@@ -166,6 +166,16 @@ test("parseCommandPaletteMonitorStatus preserves latest receipt origin without t
           "cloudflared tunnel route dns francis francis.example.test",
         ],
         cloudflared_named_tunnel_next_operator_step: "run_cloudflared_tunnel_login",
+        cloudflared_login_status: "cloudflared_login_started",
+        cloudflared_login_process_id: "191876",
+        cloudflared_login_process_alive: true,
+        cloudflared_login_provider_started: true,
+        cloudflared_login_browser_may_open: true,
+        cloudflared_login_writes_origin_cert: true,
+        cloudflared_login_origin_cert_present: false,
+        cloudflared_login_origin_cert_content_read: false,
+        cloudflared_login_public_tunnel_started: false,
+        cloudflared_login_connector_url_recorded: false,
         ngrok_reserved_domain_available: false,
         caddy_reverse_proxy_available: false,
         ssh_reverse_tunnel_available: true,
@@ -251,6 +261,17 @@ test("parseCommandPaletteMonitorStatus preserves latest receipt origin without t
     status.chatgpt_persistent_ingress_plan_monitor.providers.cloudflared_named_tunnel_operator_provider_setup_commands,
     ["cloudflared tunnel create francis", "cloudflared tunnel route dns francis francis.example.test"],
   );
+  assert.equal(
+    status.chatgpt_persistent_ingress_plan_monitor.providers.cloudflared_login_status,
+    "cloudflared_login_started",
+  );
+  assert.equal(status.chatgpt_persistent_ingress_plan_monitor.providers.cloudflared_login_process_id, 191876);
+  assert.equal(status.chatgpt_persistent_ingress_plan_monitor.providers.cloudflared_login_process_alive, true);
+  assert.equal(status.chatgpt_persistent_ingress_plan_monitor.providers.cloudflared_login_provider_started, true);
+  assert.equal(status.chatgpt_persistent_ingress_plan_monitor.providers.cloudflared_login_browser_may_open, true);
+  assert.equal(status.chatgpt_persistent_ingress_plan_monitor.providers.cloudflared_login_writes_origin_cert, true);
+  assert.equal(status.chatgpt_persistent_ingress_plan_monitor.providers.cloudflared_login_public_tunnel_started, false);
+  assert.equal(status.chatgpt_persistent_ingress_plan_monitor.providers.cloudflared_login_connector_url_recorded, false);
   assert.equal(JSON.stringify(status).includes("this transcript must not be parsed"), false);
 });
 

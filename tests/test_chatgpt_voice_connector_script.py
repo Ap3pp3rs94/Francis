@@ -367,6 +367,119 @@ def test_chatgpt_voice_connector_start_cloudflared_login_requires_authorization(
 
 
 @pytest.mark.skipif(platform.system() != "Windows", reason="connector control uses Windows process readback")
+def test_chatgpt_voice_connector_start_cloudflared_login_persists_provider_login_state(
+    tmp_path: Path,
+) -> None:
+    runtime_root = tmp_path / "connector-runtime"
+    fake_profile = tmp_path / "profile"
+    fake_bin = tmp_path / "bin"
+    fake_profile.mkdir()
+    fake_bin.mkdir()
+    fake_cloudflared = fake_bin / "cloudflared.cmd"
+    fake_cloudflared.write_text("@echo off\r\nexit /b 0\r\n", encoding="utf-8")
+    port = _unused_local_port()
+
+    proc = _run_connector_script(
+        "-Mode",
+        "StartCloudflaredLogin",
+        "-Json",
+        "-RuntimeRoot",
+        str(runtime_root),
+        "-Port",
+        str(port),
+        "-AuthorizeCloudflaredLogin",
+        env={
+            "PATH": f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}",
+            "USERPROFILE": str(fake_profile),
+            "TUNNEL_ORIGIN_CERT": "",
+        },
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["kind"] == "francis.chatgpt_voice.connector_control"
+    assert payload["ok"] is True
+    assert payload["status"] in {"cloudflared_login_started", "cloudflared_login_started_process_not_alive"}
+    assert payload["cloudflared_login"]["status"] == payload["status"]
+    assert payload["cloudflared_login"]["provider_login_started"] is True
+    assert payload["cloudflared_login"]["provider_login_browser_may_open"] is True
+    assert payload["cloudflared_login"]["provider_login_writes_origin_cert"] is True
+    assert payload["cloudflared_login"]["public_tunnel_started"] is False
+    assert payload["cloudflared_login"]["connector_url_recorded"] is False
+    assert payload["cloudflared_login"]["origin_cert_present"] is False
+    assert payload["cloudflared_login"]["origin_cert_content_read"] is False
+    assert payload["governance"]["starts_process"] is True
+    assert payload["governance"]["opens_public_tunnel"] is False
+    assert payload["governance"]["writes_data"] is True
+
+    state_path = runtime_root / "status.json"
+    assert state_path.exists()
+    state = json.loads(state_path.read_text(encoding="utf-8-sig"))
+    assert state["status"] == payload["status"]
+    assert state["cloudflared_login"]["status"] == payload["status"]
+    assert state["cloudflared_login"]["provider_login_started"] is True
+    assert state["cloudflared_login"]["public_tunnel_started"] is False
+    assert state["cloudflared_login"]["connector_url_recorded"] is False
+    assert state["cloudflared_login"]["origin_cert_content_read"] is False
+    assert state["governance"]["starts_process"] is True
+    assert state["governance"]["opens_public_tunnel"] is False
+    assert state["governance"]["writes_data"] is True
+
+    status = _run_connector_script(
+        "-Mode",
+        "Status",
+        "-Json",
+        "-RuntimeRoot",
+        str(runtime_root),
+        "-Port",
+        str(port),
+        env={
+            "PATH": f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}",
+            "USERPROFILE": str(fake_profile),
+            "TUNNEL_ORIGIN_CERT": "",
+        },
+    )
+
+    assert status.returncode == 0, status.stderr
+    status_payload = json.loads(status.stdout)
+    assert status_payload["status"] == payload["status"]
+    assert status_payload["cloudflared_login"]["status"] == payload["status"]
+    assert status_payload["cloudflared_login"]["provider_login_started"] is True
+    assert status_payload["cloudflared_login"]["public_tunnel_started"] is False
+    assert status_payload["cloudflared_login"]["connector_url_recorded"] is False
+    assert status_payload["cloudflared_login"]["origin_cert_content_read"] is False
+    assert status_payload["governance"]["read_only"] is True
+
+    plan = _run_connector_script(
+        "-Mode",
+        "PlanPersistentIngress",
+        "-Json",
+        "-RuntimeRoot",
+        str(runtime_root),
+        "-Port",
+        str(port),
+        env={
+            "PATH": f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}",
+            "USERPROFILE": str(fake_profile),
+            "TUNNEL_ORIGIN_CERT": "",
+        },
+    )
+
+    assert plan.returncode == 0, plan.stderr
+    plan_payload = json.loads(plan.stdout)
+    assert plan_payload["kind"] == "francis.chatgpt_voice.persistent_ingress_plan"
+    assert plan_payload["cloudflared_login"]["status"] == payload["status"]
+    assert plan_payload["cloudflared_login"]["provider_login_started"] is True
+    assert plan_payload["cloudflared_login"]["public_tunnel_started"] is False
+    assert plan_payload["cloudflared_login"]["connector_url_recorded"] is False
+    assert plan_payload["cloudflared_login"]["origin_cert_content_read"] is False
+    assert plan_payload["governance"]["read_only"] is True
+    assert plan_payload["governance"]["starts_process"] is False
+    assert plan_payload["governance"]["opens_public_tunnel"] is False
+    assert plan_payload["governance"]["writes_data"] is False
+
+
+@pytest.mark.skipif(platform.system() != "Windows", reason="connector control uses Windows process readback")
 def test_chatgpt_voice_connector_start_cloudflared_named_requires_tunnel_name(tmp_path: Path) -> None:
     runtime_root = tmp_path / "connector-runtime"
     port = _unused_local_port()

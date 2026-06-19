@@ -141,6 +141,16 @@ export type PersistentIngressProviders = {
   cloudflared_named_tunnel_preflight_output_discarded: boolean;
   cloudflared_named_tunnel_operator_provider_setup_commands: string[];
   cloudflared_named_tunnel_next_operator_step: string;
+  cloudflared_login_status: string;
+  cloudflared_login_process_id: number;
+  cloudflared_login_process_alive: boolean;
+  cloudflared_login_provider_started: boolean;
+  cloudflared_login_browser_may_open: boolean;
+  cloudflared_login_writes_origin_cert: boolean;
+  cloudflared_login_origin_cert_present: boolean;
+  cloudflared_login_origin_cert_content_read: boolean;
+  cloudflared_login_public_tunnel_started: boolean;
+  cloudflared_login_connector_url_recorded: boolean;
   ngrok_reserved_domain_available: boolean;
   caddy_reverse_proxy_available: boolean;
   ssh_reverse_tunnel_available: boolean;
@@ -441,6 +451,20 @@ function parsePersistentIngressPlan(value: unknown): PersistentIngressPlanMonito
       cloudflared_named_tunnel_next_operator_step: safeString(
         providers["cloudflared_named_tunnel_next_operator_step"],
       ),
+      cloudflared_login_status: safeString(providers["cloudflared_login_status"]),
+      cloudflared_login_process_id: safeNumber(providers["cloudflared_login_process_id"]),
+      cloudflared_login_process_alive: safeBoolean(providers["cloudflared_login_process_alive"]),
+      cloudflared_login_provider_started: safeBoolean(providers["cloudflared_login_provider_started"]),
+      cloudflared_login_browser_may_open: safeBoolean(providers["cloudflared_login_browser_may_open"]),
+      cloudflared_login_writes_origin_cert: safeBoolean(providers["cloudflared_login_writes_origin_cert"]),
+      cloudflared_login_origin_cert_present: safeBoolean(providers["cloudflared_login_origin_cert_present"]),
+      cloudflared_login_origin_cert_content_read: safeBoolean(
+        providers["cloudflared_login_origin_cert_content_read"],
+      ),
+      cloudflared_login_public_tunnel_started: safeBoolean(
+        providers["cloudflared_login_public_tunnel_started"],
+      ),
+      cloudflared_login_connector_url_recorded: safeBoolean(providers["cloudflared_login_connector_url_recorded"]),
       ngrok_reserved_domain_available: safeBoolean(providers["ngrok_reserved_domain_available"]),
       caddy_reverse_proxy_available: safeBoolean(providers["caddy_reverse_proxy_available"]),
       ssh_reverse_tunnel_available: safeBoolean(providers["ssh_reverse_tunnel_available"]),

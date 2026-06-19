@@ -1021,6 +1021,18 @@ function BridgeMonitorPanel(props: { baseUrl: string }) {
   const transcriptProofTone = transcriptProofReady ? "ready" : "blocked";
   const connectorTone = connector?.connector_usable_for_chatgpt ? "ready" : "blocked";
   const ingressTone = connector?.persistent_candidate ? "ready" : "blocked";
+  const cloudflareLoginStatus = ingressProviders?.cloudflared_login_status || "";
+  const cloudflareLoginProcess =
+    ingressProviders?.cloudflared_login_process_id && ingressProviders.cloudflared_login_process_id > 0
+      ? `pid ${ingressProviders.cloudflared_login_process_id} ${
+          ingressProviders.cloudflared_login_process_alive ? "alive" : "not alive"
+        }`
+      : "no login process";
+  const cloudflareLoginReceipt = cloudflareLoginStatus
+    ? `${statusText(cloudflareLoginStatus)} / ${cloudflareLoginProcess}`
+    : ingressProviders?.cloudflared_named_tunnel_login_required
+      ? "required / no login process"
+      : "ready / no login process";
 
   return (
     <section
@@ -1206,6 +1218,15 @@ function BridgeMonitorPanel(props: { baseUrl: string }) {
             {ingressProviders?.cloudflared_named_tunnel_login_required ? "required" : "ready"}
             {" / origin cert "}
             {boolText(Boolean(ingressProviders?.cloudflared_named_tunnel_origin_cert_present))}
+          </dd>
+        </div>
+        <div>
+          <dt style={{ color: "#94a3b8" }}>Cloudflare login receipt</dt>
+          <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
+            {cloudflareLoginReceipt}
+            {ingressProviders?.cloudflared_login_provider_started ? " / provider browser opened" : ""}
+            {ingressProviders?.cloudflared_login_public_tunnel_started ? " / public tunnel started" : ""}
+            {ingressProviders?.cloudflared_login_connector_url_recorded ? " / connector URL recorded" : ""}
           </dd>
         </div>
         <div>

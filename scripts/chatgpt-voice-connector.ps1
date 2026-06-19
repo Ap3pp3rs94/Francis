@@ -94,6 +94,25 @@ function Get-NestedPropertyValue {
   return $Current
 }
 
+function Set-PropertyValue {
+  param(
+    [object]$Payload,
+    [string]$Name,
+    [object]$Value
+  )
+
+  if ($Payload -is [System.Collections.IDictionary]) {
+    $Payload[$Name] = $Value
+    return
+  }
+  $Property = $Payload.PSObject.Properties[$Name]
+  if ($null -eq $Property) {
+    $Payload | Add-Member -NotePropertyName $Name -NotePropertyValue $Value -Force
+    return
+  }
+  $Property.Value = $Value
+}
+
 function ConvertTo-JsonOutput {
   param([object]$Payload)
 
@@ -380,7 +399,8 @@ function New-PersistentIngressPlan {
     [object]$EndpointStatus,
     [string]$ConnectorUrlSource = 'none',
     [string]$CloudflaredTunnelName = '',
-    [string]$CloudflaredHostname = ''
+    [string]$CloudflaredHostname = '',
+    [object]$State = $null
   )
 
   $ConnectorShapeValid = [bool](Get-NestedPropertyValue -Payload $EndpointStatus -Path @('chatgpt_connector', 'connector_url', 'shape_valid') -Default $false)
@@ -392,6 +412,18 @@ function New-PersistentIngressPlan {
   $OperatorHandoff = New-PersistentIngressOperatorHandoff -HostAddress $HostAddress -Port $Port -Path $Path
   $PersistentCandidate = [bool](Get-PropertyValue -Payload $IngressProfile -Name 'persistent_candidate' -Default $false)
   $IngressProfileName = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $IngressProfile -Name 'profile' -Default '') -MaxLength 96
+  $CloudflaredLogin = Get-PropertyValue -Payload $State -Name 'cloudflared_login' -Default $null
+  if ($null -ne $CloudflaredLogin) {
+    $StateStatus = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $State -Name 'status' -Default '') -MaxLength 96
+    if ([string]::IsNullOrWhiteSpace((ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $CloudflaredLogin -Name 'status' -Default '') -MaxLength 96)) -and -not [string]::IsNullOrWhiteSpace($StateStatus)) {
+      Set-PropertyValue -Payload $CloudflaredLogin -Name 'status' -Value $StateStatus
+    }
+    $LoginProcessId = [int](Get-PropertyValue -Payload $CloudflaredLogin -Name 'process_id' -Default 0)
+    if ($LoginProcessId -gt 0) {
+      Set-PropertyValue -Payload $CloudflaredLogin -Name 'process' -Value (Get-ProcessReadback -ProcessId $LoginProcessId -ExpectedCommandText 'cloudflared')
+      Set-PropertyValue -Payload $CloudflaredLogin -Name 'process_alive' -Value ([bool](Get-NestedPropertyValue -Payload $CloudflaredLogin -Path @('process', 'alive') -Default $false))
+    }
+  }
   $PlanStatus = if ($ConnectorShapeValid -and $IngressProfileName -eq 'localtunnel_ephemeral') {
     'localtunnel_fallback_replace_needed'
   } elseif ($ConnectorShapeValid -and $IngressProfileName -eq 'cloudflared_quick_ephemeral') {
@@ -433,6 +465,7 @@ function New-PersistentIngressPlan {
       caddy_reverse_proxy = Get-CommandReadiness -Name 'caddy' -Capability 'persistent_https_reverse_proxy'
       ssh_reverse_tunnel = Get-CommandReadiness -Name 'ssh' -Capability 'stable_remote_reverse_tunnel_requires_external_host'
     }
+    cloudflared_login = $CloudflaredLogin
     installer_readiness = [ordered]@{
       winget = Get-CommandReadiness -Name 'winget' -Capability 'windows_package_install_operator_run'
       choco = Get-CommandReadiness -Name 'choco' -Capability 'windows_package_install_operator_run'
@@ -1039,6 +1072,7 @@ function New-StatusPayload {
   $StateConnectorUrlSource = ''
   $RequestedTunnelSubdomain = ''
   $CloudflaredNamedTunnel = $null
+  $CloudflaredLogin = $null
   $ResolvedConnectorUrlSource = ConvertTo-BoundedText -Value $ConnectorUrlSource -MaxLength 160
   if ([string]::IsNullOrWhiteSpace($ResolvedConnectorUrlSource)) {
     $ResolvedConnectorUrlSource = 'none'
@@ -1051,6 +1085,7 @@ function New-StatusPayload {
     $StateConnectorUrlSource = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $State -Name 'connector_url_source' -Default '') -MaxLength 160
     $RequestedTunnelSubdomain = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $State -Name 'requested_tunnel_subdomain' -Default '') -MaxLength 160
     $CloudflaredNamedTunnel = Get-PropertyValue -Payload $State -Name 'cloudflared_named_tunnel' -Default $null
+    $CloudflaredLogin = Get-PropertyValue -Payload $State -Name 'cloudflared_login' -Default $null
     if (-not [string]::IsNullOrWhiteSpace($ConnectorUrl) -and $ResolvedConnectorUrlSource -eq 'none') {
       $ResolvedConnectorUrlSource = if ([string]::IsNullOrWhiteSpace($StateConnectorUrlSource)) { 'runtime_state' } else { $StateConnectorUrlSource }
     }
@@ -1073,6 +1108,18 @@ function New-StatusPayload {
   if ($null -eq $CloudflaredNamedTunnel) {
     $CloudflaredNamedTunnel = New-CloudflaredNamedTunnelPayload -ConnectorUrl $ConnectorUrl -ConnectorUrlSource $StateConnectorUrlSource -TunnelName '' -Hostname '' -ConfigPath ''
   }
+  if ($null -ne $CloudflaredLogin) {
+    $LoginStatus = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $CloudflaredLogin -Name 'status' -Default '') -MaxLength 96
+    $StateLoginStatus = if ($State) { ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $State -Name 'status' -Default '') -MaxLength 96 } else { '' }
+    if ([string]::IsNullOrWhiteSpace($LoginStatus) -and -not [string]::IsNullOrWhiteSpace($StateLoginStatus)) {
+      Set-PropertyValue -Payload $CloudflaredLogin -Name 'status' -Value $StateLoginStatus
+    }
+    $LoginProcessId = [int](Get-PropertyValue -Payload $CloudflaredLogin -Name 'process_id' -Default 0)
+    if ($LoginProcessId -gt 0) {
+      Set-PropertyValue -Payload $CloudflaredLogin -Name 'process' -Value (Get-ProcessReadback -ProcessId $LoginProcessId -ExpectedCommandText 'cloudflared')
+      Set-PropertyValue -Payload $CloudflaredLogin -Name 'process_alive' -Value ([bool](Get-NestedPropertyValue -Payload $CloudflaredLogin -Path @('process', 'alive') -Default $false))
+    }
+  }
   $Blockers = @()
   if ([bool]$LocalTunnel.applicable -and -not [bool]$LocalTunnel.requested_subdomain_honored) {
     $Blockers += 'localtunnel_requested_subdomain_not_honored'
@@ -1081,7 +1128,16 @@ function New-StatusPayload {
   if ($EndpointStatus -and [string]$EndpointStatus.status -eq 'ready_for_chatgpt_connector') {
     $Ready = $true
   }
-  $Status = if ($Ready) { 'ready_for_chatgpt_connector' } elseif ($State) { 'runtime_state_observed' } else { 'not_started' }
+  $StateStatus = if ($State) { ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $State -Name 'status' -Default '') -MaxLength 96 } else { '' }
+  $Status = if ($Ready) {
+    'ready_for_chatgpt_connector'
+  } elseif ($StateStatus -in @('cloudflared_login_started', 'cloudflared_login_started_process_not_alive', 'cloudflared_login_already_ready')) {
+    $StateStatus
+  } elseif ($State) {
+    'runtime_state_observed'
+  } else {
+    'not_started'
+  }
   if ($Status -eq 'runtime_state_observed' -and $Blockers.Count -gt 0) {
     $Status = 'runtime_state_observed_unstable_localtunnel_url'
   }
@@ -1102,6 +1158,7 @@ function New-StatusPayload {
     localtunnel = $LocalTunnel
     cloudflared_quick_tunnel = $CloudflaredQuickTunnel
     cloudflared_named_tunnel = $CloudflaredNamedTunnel
+    cloudflared_login = $CloudflaredLogin
     blockers = $Blockers
     endpoint_status = $EndpointStatus
     governance = New-GovernancePayload -ReadOnly $ReadOnly -StartsProcess $StartsProcess -OpensPublicTunnel $OpensPublicTunnel -WritesData $WritesData
@@ -1120,7 +1177,7 @@ if ($Mode -eq 'PlanPersistentIngress') {
   $State = Read-State
   $Candidate = Resolve-ConnectorUrlCandidate -ExplicitConnectorUrl $ConnectorUrl -State $State
   $EndpointStatus = Invoke-EndpointStatus -ConnectorUrl ([string]$Candidate.url)
-  ConvertTo-JsonOutput -Payload (New-PersistentIngressPlan -EndpointStatus $EndpointStatus -ConnectorUrlSource ([string]$Candidate.source) -CloudflaredTunnelName $CloudflaredTunnelName -CloudflaredHostname $CloudflaredHostname)
+  ConvertTo-JsonOutput -Payload (New-PersistentIngressPlan -EndpointStatus $EndpointStatus -ConnectorUrlSource ([string]$Candidate.source) -CloudflaredTunnelName $CloudflaredTunnelName -CloudflaredHostname $CloudflaredHostname -State $State)
   exit 0
 }
 
@@ -1657,6 +1714,7 @@ if ($Mode -eq 'RestartMcp') {
 }
 
 if ($Mode -eq 'StartCloudflaredLogin') {
+  $PreviousState = Read-State
   if (-not $AuthorizeCloudflaredLogin) {
     ConvertTo-JsonOutput -Payload ([ordered]@{
         kind = 'francis.chatgpt_voice.connector_control'
@@ -1696,6 +1754,32 @@ if ($Mode -eq 'StartCloudflaredLogin') {
 
   $OriginCertBefore = Get-CloudflaredOriginCertReadiness
   if ([bool](Get-PropertyValue -Payload $OriginCertBefore -Name 'present' -Default $false)) {
+    $StatePayload = [ordered]@{
+      kind = 'francis.chatgpt_voice.connector_control.state'
+      status = 'cloudflared_login_already_ready'
+      ingress_mode = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $PreviousState -Name 'ingress_mode' -Default 'cloudflared_named_login') -MaxLength 96
+      connector_url = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $PreviousState -Name 'connector_url' -Default '') -MaxLength 512
+      connector_url_source = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $PreviousState -Name 'connector_url_source' -Default '') -MaxLength 160
+      connector_host = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $PreviousState -Name 'connector_host' -Default '') -MaxLength 256
+      local_endpoint = "http://$HostAddress`:$Port$Path"
+      mcp_launcher_pid = [int](Get-PropertyValue -Payload $PreviousState -Name 'mcp_launcher_pid' -Default 0)
+      tunnel_pid = [int](Get-PropertyValue -Payload $PreviousState -Name 'tunnel_pid' -Default 0)
+      cloudflared_login = [ordered]@{
+        status = 'cloudflared_login_already_ready'
+        process_id = 0
+        process_alive = $false
+        public_tunnel_started = $false
+        connector_url_recorded = $false
+        provider_login_started = $false
+        provider_login_browser_may_open = $false
+        provider_login_writes_origin_cert = $true
+        origin_cert_present = $true
+        origin_cert_content_read = $false
+      }
+      updated_at = (Get-Date).ToUniversalTime().ToString('o')
+      governance = New-GovernancePayload -ReadOnly $false -StartsProcess $false -OpensPublicTunnel $false -WritesData $true
+    }
+    Write-State -Payload $StatePayload
     ConvertTo-JsonOutput -Payload ([ordered]@{
         kind = 'francis.chatgpt_voice.connector_control'
         ok = $true
@@ -1706,13 +1790,8 @@ if ($Mode -eq 'StartCloudflaredLogin') {
         cloudflared_origin_cert = $OriginCertBefore
         blockers = @()
         next_operator_step = 'create_or_start_cloudflared_named_tunnel'
-        cloudflared_login = [ordered]@{
-          public_tunnel_started = $false
-          connector_url_recorded = $false
-          provider_login_started = $false
-          provider_login_browser_may_open = $false
-        }
-        governance = New-GovernancePayload -ReadOnly $false -StartsProcess $false -OpensPublicTunnel $false -WritesData $false
+        cloudflared_login = $StatePayload.cloudflared_login
+        governance = New-GovernancePayload -ReadOnly $false -StartsProcess $false -OpensPublicTunnel $false -WritesData $true
       })
     exit 0
   }
@@ -1723,10 +1802,38 @@ if ($Mode -eq 'StartCloudflaredLogin') {
     $LoginReadback = Get-ProcessReadback -ProcessId $LoginProcess.Id -ExpectedCommandText 'cloudflared'
     $OriginCertAfter = Get-CloudflaredOriginCertReadiness
     $LoginProcessAlive = [bool](Get-PropertyValue -Payload $LoginReadback -Name 'alive' -Default $false)
+    $LoginStatus = if ($LoginProcessAlive) { 'cloudflared_login_started' } else { 'cloudflared_login_started_process_not_alive' }
+    $StatePayload = [ordered]@{
+      kind = 'francis.chatgpt_voice.connector_control.state'
+      status = $LoginStatus
+      ingress_mode = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $PreviousState -Name 'ingress_mode' -Default 'cloudflared_named_login') -MaxLength 96
+      connector_url = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $PreviousState -Name 'connector_url' -Default '') -MaxLength 512
+      connector_url_source = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $PreviousState -Name 'connector_url_source' -Default '') -MaxLength 160
+      connector_host = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $PreviousState -Name 'connector_host' -Default '') -MaxLength 256
+      local_endpoint = "http://$HostAddress`:$Port$Path"
+      mcp_launcher_pid = [int](Get-PropertyValue -Payload $PreviousState -Name 'mcp_launcher_pid' -Default 0)
+      tunnel_pid = [int](Get-PropertyValue -Payload $PreviousState -Name 'tunnel_pid' -Default 0)
+      cloudflared_login = [ordered]@{
+        status = $LoginStatus
+        process_id = $LoginProcess.Id
+        process_alive = $LoginProcessAlive
+        process = $LoginReadback
+        public_tunnel_started = $false
+        connector_url_recorded = $false
+        provider_login_started = $true
+        provider_login_browser_may_open = $true
+        provider_login_writes_origin_cert = $true
+        origin_cert_present = [bool](Get-PropertyValue -Payload $OriginCertAfter -Name 'present' -Default $false)
+        origin_cert_content_read = $false
+      }
+      updated_at = (Get-Date).ToUniversalTime().ToString('o')
+      governance = New-GovernancePayload -ReadOnly $false -StartsProcess $true -OpensPublicTunnel $false -WritesData $true
+    }
+    Write-State -Payload $StatePayload
     ConvertTo-JsonOutput -Payload ([ordered]@{
         kind = 'francis.chatgpt_voice.connector_control'
         ok = $true
-        status = if ($LoginProcessAlive) { 'cloudflared_login_started' } else { 'cloudflared_login_started_process_not_alive' }
+        status = $LoginStatus
         runtime_root = $RuntimeRoot
         state_path = $statePath
         cloudflared_path = $CloudflaredPath
@@ -1734,17 +1841,7 @@ if ($Mode -eq 'StartCloudflaredLogin') {
         cloudflared_origin_cert_after = $OriginCertAfter
         blockers = @()
         next_operator_step = 'complete_cloudflared_browser_login_then_rerun_plan_persistent_ingress'
-        cloudflared_login = [ordered]@{
-          process_id = $LoginProcess.Id
-          process_alive = $LoginProcessAlive
-          process = $LoginReadback
-          public_tunnel_started = $false
-          connector_url_recorded = $false
-          provider_login_started = $true
-          provider_login_browser_may_open = $true
-          provider_login_writes_origin_cert = $true
-          origin_cert_content_read = $false
-        }
+        cloudflared_login = $StatePayload.cloudflared_login
         governance = New-GovernancePayload -ReadOnly $false -StartsProcess $true -OpensPublicTunnel $false -WritesData $true
       })
     exit 0

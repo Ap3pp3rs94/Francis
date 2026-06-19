@@ -888,6 +888,7 @@ function New-ChatGptPersistentIngressPlanMonitorProjection {
   $ProviderReadiness = Get-PropertyValue -Payload $Payload -Name 'provider_readiness'
   $InstallerReadiness = Get-PropertyValue -Payload $Payload -Name 'installer_readiness'
   $Cloudflared = Get-PropertyValue -Payload $ProviderReadiness -Name 'cloudflared_named_tunnel'
+  $CloudflaredLogin = Get-PropertyValue -Payload $Payload -Name 'cloudflared_login'
   $CloudflaredPreflight = Get-PropertyValue -Payload $Cloudflared -Name 'named_tunnel_preflight'
   $Ngrok = Get-PropertyValue -Payload $ProviderReadiness -Name 'ngrok_reserved_domain'
   $Caddy = Get-PropertyValue -Payload $ProviderReadiness -Name 'caddy_reverse_proxy'
@@ -934,6 +935,16 @@ function New-ChatGptPersistentIngressPlanMonitorProjection {
       cloudflared_named_tunnel_preflight_output_discarded = [bool](Get-PropertyValue -Payload $CloudflaredPreflight -Name 'output_discarded' -Default $true)
       cloudflared_named_tunnel_operator_provider_setup_commands = $CloudflaredSetupCommands
       cloudflared_named_tunnel_next_operator_step = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Cloudflared -Name 'next_operator_step' -Default '') -MaxLength 160
+      cloudflared_login_status = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $CloudflaredLogin -Name 'status' -Default '') -MaxLength 96
+      cloudflared_login_process_id = [int](Get-PropertyValue -Payload $CloudflaredLogin -Name 'process_id' -Default 0)
+      cloudflared_login_process_alive = [bool](Get-PropertyValue -Payload $CloudflaredLogin -Name 'process_alive' -Default $false)
+      cloudflared_login_provider_started = [bool](Get-PropertyValue -Payload $CloudflaredLogin -Name 'provider_login_started' -Default $false)
+      cloudflared_login_browser_may_open = [bool](Get-PropertyValue -Payload $CloudflaredLogin -Name 'provider_login_browser_may_open' -Default $false)
+      cloudflared_login_writes_origin_cert = [bool](Get-PropertyValue -Payload $CloudflaredLogin -Name 'provider_login_writes_origin_cert' -Default $false)
+      cloudflared_login_origin_cert_present = [bool](Get-PropertyValue -Payload $CloudflaredLogin -Name 'origin_cert_present' -Default $false)
+      cloudflared_login_origin_cert_content_read = [bool](Get-PropertyValue -Payload $CloudflaredLogin -Name 'origin_cert_content_read' -Default $false)
+      cloudflared_login_public_tunnel_started = [bool](Get-PropertyValue -Payload $CloudflaredLogin -Name 'public_tunnel_started' -Default $false)
+      cloudflared_login_connector_url_recorded = [bool](Get-PropertyValue -Payload $CloudflaredLogin -Name 'connector_url_recorded' -Default $false)
       ngrok_reserved_domain_available = [bool](Get-PropertyValue -Payload $Ngrok -Name 'available' -Default $false)
       caddy_reverse_proxy_available = [bool](Get-PropertyValue -Payload $Caddy -Name 'available' -Default $false)
       ssh_reverse_tunnel_available = [bool](Get-PropertyValue -Payload $Ssh -Name 'available' -Default $false)

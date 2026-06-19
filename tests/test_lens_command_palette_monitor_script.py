@@ -304,6 +304,32 @@ def test_lens_command_palette_monitor_reports_chatgpt_connector_cloudflared_quic
     data_dir = tmp_path / "data"
     status_path = tmp_path / "lens-status.json"
     _write_json(status_path, _lens_status())
+    _write_json(
+        data_dir / "runtime" / "chatgpt-voice-connector" / "status.json",
+        {
+            "kind": "francis.chatgpt_voice.connector_control.state",
+            "status": "cloudflared_login_started",
+            "connector_url": "https://example.trycloudflare.com/mcp",
+            "connector_url_source": "cloudflared_quick",
+            "connector_host": "example.trycloudflare.com",
+            "local_endpoint": "http://127.0.0.1:8787/mcp",
+            "mcp_launcher_pid": 0,
+            "tunnel_pid": 0,
+            "cloudflared_login": {
+                "status": "cloudflared_login_started",
+                "process_id": 0,
+                "process_alive": False,
+                "provider_login_started": True,
+                "provider_login_browser_may_open": True,
+                "provider_login_writes_origin_cert": True,
+                "origin_cert_present": False,
+                "origin_cert_content_read": False,
+                "public_tunnel_started": False,
+                "connector_url_recorded": False,
+            },
+            "updated_at": "2026-06-19T00:00:00Z",
+        },
+    )
 
     with _LocalCommandPaletteServer() as url:
         proc = _run_monitor(
@@ -356,6 +382,16 @@ def test_lens_command_palette_monitor_reports_chatgpt_connector_cloudflared_quic
         "run_cloudflared_tunnel_login",
         "create_or_start_cloudflared_named_tunnel",
     }
+    assert providers["cloudflared_login_status"] == "cloudflared_login_started"
+    assert providers["cloudflared_login_process_id"] == 0
+    assert providers["cloudflared_login_process_alive"] is False
+    assert providers["cloudflared_login_provider_started"] is True
+    assert providers["cloudflared_login_browser_may_open"] is True
+    assert providers["cloudflared_login_writes_origin_cert"] is True
+    assert providers["cloudflared_login_origin_cert_present"] is False
+    assert providers["cloudflared_login_origin_cert_content_read"] is False
+    assert providers["cloudflared_login_public_tunnel_started"] is False
+    assert providers["cloudflared_login_connector_url_recorded"] is False
     assert plan["governance_safe"] is True
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["chatgpt_voice_persistent_ingress_plan"]["passed"] is True
