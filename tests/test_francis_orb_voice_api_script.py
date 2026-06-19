@@ -119,6 +119,11 @@ def test_francis_orb_voice_api_script_uses_process_environment_without_global_po
     assert "Add-ActorScopes -Policy $Policy -Actor 'chat_ui.voice'" in script
     assert "FRANCIS_API_ACTOR_SCOPES" in script
     assert "actor_scope_source = 'process_environment_for_spawned_api_only'" in script
+    assert "Get-Command Get-NetTCPConnection" in script
+    assert "Get-Command lsof" in script
+    assert "Get-Command ss" in script
+    assert "Get-Command Get-CimInstance" in script
+    assert '"/proc/$ProcessId/cmdline"' in script
     assert "$Pid" not in script
     assert "grants_execution_authority = $false" in script
     assert "grants_mutation_authority = $false" in script

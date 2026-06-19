@@ -178,16 +178,83 @@ function New-OrbVoiceActorScopePolicy {
   }
 }
 
+function Add-ProcessIdIfValid {
+  param(
+    [System.Collections.Generic.List[int]]$Ids,
+    [object]$Value
+  )
+
+  $Text = ConvertTo-BoundedText -Value $Value -MaxLength 32
+  if ([string]::IsNullOrWhiteSpace($Text)) { return }
+  $ProcessIdentifier = 0
+  if ([int]::TryParse($Text, [ref]$ProcessIdentifier)) {
+    if ($ProcessIdentifier -gt 0 -and -not $Ids.Contains($ProcessIdentifier)) {
+      [void]$Ids.Add($ProcessIdentifier)
+    }
+  }
+}
+
 function Get-ListeningProcessIds {
-  $Connections = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
   $Ids = New-Object 'System.Collections.Generic.List[int]'
-  foreach ($Connection in $Connections) {
-    $ListenerPid = [int]$Connection.OwningProcess
-    if ($ListenerPid -gt 0 -and -not $Ids.Contains($ListenerPid)) {
-      [void]$Ids.Add($ListenerPid)
+  $NetTcpConnectionCommand = Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue
+  if ($null -ne $NetTcpConnectionCommand) {
+    $Connections = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
+    foreach ($Connection in $Connections) {
+      Add-ProcessIdIfValid -Ids $Ids -Value $Connection.OwningProcess
+    }
+    return @($Ids)
+  }
+
+  $LsofCommand = Get-Command lsof -ErrorAction SilentlyContinue
+  if ($null -ne $LsofCommand) {
+    $Rows = @(& $LsofCommand.Source -nP "-iTCP:$Port" '-sTCP:LISTEN' -t 2>$null)
+    foreach ($Row in $Rows) {
+      Add-ProcessIdIfValid -Ids $Ids -Value $Row
+    }
+    if ($Ids.Count -gt 0) {
+      return @($Ids)
+    }
+  }
+
+  $SocketStatsCommand = Get-Command ss -ErrorAction SilentlyContinue
+  if ($null -ne $SocketStatsCommand) {
+    $Rows = @(& $SocketStatsCommand.Source -H -ltnp "sport = :$Port" 2>$null)
+    foreach ($Row in $Rows) {
+      foreach ($Match in [regex]::Matches([string]$Row, 'pid=(\d+)')) {
+        Add-ProcessIdIfValid -Ids $Ids -Value $Match.Groups[1].Value
+      }
     }
   }
   return @($Ids)
+}
+
+function Get-ProcessCommandLine {
+  param([int]$ProcessId)
+
+  $CimCommand = Get-Command Get-CimInstance -ErrorAction SilentlyContinue
+  if ($null -ne $CimCommand) {
+    try {
+      $ProcessInfo = Get-CimInstance Win32_Process -Filter ("ProcessId={0}" -f $ProcessId) -ErrorAction SilentlyContinue
+      if ($ProcessInfo) {
+        return ConvertTo-BoundedText -Value $ProcessInfo.CommandLine -MaxLength 1200
+      }
+    } catch {
+      return ''
+    }
+  }
+
+  $ProcCommandLinePath = "/proc/$ProcessId/cmdline"
+  if ([System.IO.File]::Exists($ProcCommandLinePath)) {
+    try {
+      $Bytes = [System.IO.File]::ReadAllBytes($ProcCommandLinePath)
+      $CommandLine = ([System.Text.Encoding]::UTF8.GetString($Bytes) -replace "`0", ' ').Trim()
+      return ConvertTo-BoundedText -Value $CommandLine -MaxLength 1200
+    } catch {
+      return ''
+    }
+  }
+
+  return ''
 }
 
 function Get-ProcessReadback {
@@ -201,10 +268,10 @@ function Get-ProcessReadback {
   }
   if ($ProcessId -le 0) { return $Payload }
 
-  $ProcessInfo = Get-CimInstance Win32_Process -Filter ("ProcessId={0}" -f $ProcessId) -ErrorAction SilentlyContinue
+  $ProcessInfo = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
   if ($ProcessInfo) {
-    $CommandLine = ConvertTo-BoundedText -Value $ProcessInfo.CommandLine -MaxLength 1200
     $Payload.alive = $true
+    $CommandLine = Get-ProcessCommandLine -ProcessId $ProcessId
     $Payload.command_line = $CommandLine
     $Payload.command_mentions_francis_api = (
       $CommandLine -like '*francis*' -and
