@@ -309,15 +309,16 @@ _RULES: tuple[AuthorityRule, ...] = (
     ),
     AuthorityRule(
         family="chatgpt_voice_bridge",
-        prefixes=("/chatgpt-voice/ingress",),
+        prefixes=("/chatgpt-voice/ingress", "/chatgpt-voice/mcp-proof"),
         required_actor="payload.actor or chatgpt.voice default",
         required_scope="chatgpt.voice.bridge.write; chat.write is separately required for forwarding to /chat/send",
         approval_requirement=(
-            "not_required_scope_gate_only; transcript guard must accept a usable transcript before chat forwarding"
+            "not_required_scope_gate_only; transcript guard must accept a usable transcript before chat forwarding; "
+            "MCP proof route records connector evidence only"
         ),
         receipt_behavior=(
-            "ChatGPT voice transcript ingress receipt; lens overlay virtual voice-turn projection; optional "
-            "forwarding passes through existing chat write gate"
+            "ChatGPT voice transcript ingress receipt or MCP connection proof receipt; lens overlay virtual "
+            "voice-turn projection for transcripts only; optional forwarding passes through existing chat write gate"
         ),
         denial_behavior="api_permission_denied via permission_gate before voice ingress receipt write or chat forwarding",
         governance_maturity="permission_gated",

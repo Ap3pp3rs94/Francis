@@ -294,6 +294,15 @@ def test_system_exposes_mutating_route_authority_matrix() -> None:
     assert "permission_gate" in chatgpt_voice["denial_behavior"]
     assert "no raw audio stream" in chatgpt_voice["notes"]
 
+    chatgpt_voice_mcp_proof = entries["/chatgpt-voice/mcp-proof"]
+    assert chatgpt_voice_mcp_proof["family"] == "chatgpt_voice_bridge"
+    assert chatgpt_voice_mcp_proof["required_actor"] == "payload.actor or chatgpt.voice default"
+    assert "chatgpt.voice.bridge.write" in chatgpt_voice_mcp_proof["required_scope"]
+    assert "MCP proof route records connector evidence only" in chatgpt_voice_mcp_proof["approval_requirement"]
+    assert "MCP connection proof receipt" in chatgpt_voice_mcp_proof["receipt_behavior"]
+    assert "permission_gate" in chatgpt_voice_mcp_proof["denial_behavior"]
+    assert "no execution or mutation authority" in chatgpt_voice_mcp_proof["notes"]
+
     ingest_acquire = entries["/ingest/acquire/start"]
     assert ingest_acquire["family"] == "ingest_acquire"
     assert ingest_acquire["required_actor"] == "payload.request_actor, payload.api_actor, or payload.actor"
