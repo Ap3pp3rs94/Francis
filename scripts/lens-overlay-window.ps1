@@ -3012,7 +3012,10 @@ function Set-OrbWindowSidePosition {
     [object]$WorkArea,
     [ValidateSet('left', 'right')]
     [string]$Side,
-    [double]$Margin = 48.0
+    [double]$Margin = 48.0,
+    [object]$MotionState = $null,
+    [string]$TargetAnchor = '',
+    [string]$Root = ''
   )
 
   if ($null -eq $Window -or $null -eq $WorkArea) {
@@ -3022,26 +3025,43 @@ function Set-OrbWindowSidePosition {
     }
   }
 
-  $MinimumLeft = [double]$WorkArea.Left
-  $MinimumTop = [double]$WorkArea.Top
-  $MaximumLeft = [Math]::Max($MinimumLeft, [double]$WorkArea.Right - [double]$Window.Width)
-  $MaximumTop = [Math]::Max($MinimumTop, [double]$WorkArea.Bottom - [double]$Window.Height)
-  $TargetLeft = if ($Side -eq 'left') {
-    Clamp-OverlayDouble -Value ($MinimumLeft + $Margin) -Minimum $MinimumLeft -Maximum $MaximumLeft
-  } else {
-    Clamp-OverlayDouble -Value ($MaximumLeft - $Margin) -Minimum $MinimumLeft -Maximum $MaximumLeft
-  }
-  $TargetTop = Clamp-OverlayDouble -Value ([double]$Window.Top) -Minimum $MinimumTop -Maximum $MaximumTop
+  $ApplyPosition = [System.Func[object]]{
+    $MinimumLeft = [double]$WorkArea.Left
+    $MinimumTop = [double]$WorkArea.Top
+    $MaximumLeft = [Math]::Max($MinimumLeft, [double]$WorkArea.Right - [double]$Window.Width)
+    $MaximumTop = [Math]::Max($MinimumTop, [double]$WorkArea.Bottom - [double]$Window.Height)
+    $TargetLeft = if ($Side -eq 'left') {
+      Clamp-OverlayDouble -Value ($MinimumLeft + $Margin) -Minimum $MinimumLeft -Maximum $MaximumLeft
+    } else {
+      Clamp-OverlayDouble -Value ($MaximumLeft - $Margin) -Minimum $MinimumLeft -Maximum $MaximumLeft
+    }
+    $TargetTop = Clamp-OverlayDouble -Value ([double]$Window.Top) -Minimum $MinimumTop -Maximum $MaximumTop
 
-  $Window.Left = $TargetLeft
-  $Window.Top = $TargetTop
-  return [ordered]@{
-    applied = $true
-    left = [double]$Window.Left
-    top = [double]$Window.Top
-    target_side = $Side
-    margin = $Margin
+    $Window.Left = $TargetLeft
+    $Window.Top = $TargetTop
+    if (-not [string]::IsNullOrWhiteSpace($TargetAnchor)) {
+      $script:LensOverlayOperatorPositionAnchor = $TargetAnchor
+    }
+    Reset-OrbAutonomousMotionAnchor -Window $Window -MotionState $MotionState
+    $PositionReceiptWritten = $false
+    if (-not [string]::IsNullOrWhiteSpace($Root)) {
+      Write-OverlayPositionState -Root $Root -Window $Window -MotionState $MotionState -OverlayWindowVisible $true
+      $PositionReceiptWritten = $true
+    }
+    return [ordered]@{
+      applied = $true
+      left = [double]$Window.Left
+      top = [double]$Window.Top
+      target_side = $Side
+      margin = $Margin
+      position_receipt_written = $PositionReceiptWritten
+    }
   }
+
+  if ($null -ne $Window.Dispatcher -and -not [bool]$Window.Dispatcher.CheckAccess()) {
+    return $Window.Dispatcher.Invoke($ApplyPosition)
+  }
+  return $ApplyPosition.Invoke()
 }
 
 function Invoke-OverlayVoiceOrbCommand {
@@ -3115,7 +3135,7 @@ function Invoke-OverlayVoiceOrbCommand {
     }
   }
 
-  $Position = Set-OrbWindowSidePosition -Window $Window -WorkArea $WorkArea -Side $TargetSide -Margin 48
+  $Position = Set-OrbWindowSidePosition -Window $Window -WorkArea $WorkArea -Side $TargetSide -Margin 48 -MotionState $MotionState -TargetAnchor $TargetAnchor -Root $Root
   if (-not [bool]$Position['applied']) {
     $Payload.status = 'orb_voice_command_unavailable'
     $Payload.ok = $false
@@ -3127,13 +3147,10 @@ function Invoke-OverlayVoiceOrbCommand {
     return $Payload
   }
 
-  $script:LensOverlayOperatorPositionAnchor = $TargetAnchor
-  Reset-OrbAutonomousMotionAnchor -Window $Window -MotionState $MotionState
-  Write-OverlayPositionState -Root $Root -Window $Window -MotionState $MotionState -OverlayWindowVisible $true
   $Payload.status = 'orb_voice_command_applied'
   $Payload.ok = $true
   $Payload.runtime_overlay_position_changed = $true
-  $Payload.position_receipt_written = $true
+  $Payload.position_receipt_written = Get-BoolProperty -Payload $Position -Name 'position_receipt_written' -Default $false
   $Payload.overlay_left = [double]$Position['left']
   $Payload.overlay_top = [double]$Position['top']
   $Payload.message = 'Orb position voice command applied locally and not forwarded to chat.'
