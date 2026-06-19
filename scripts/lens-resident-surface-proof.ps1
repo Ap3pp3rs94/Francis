@@ -228,6 +228,9 @@ function Invoke-ResidentSurfaceReadback {
 
   $Source = @'
 import json
+import warnings
+
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 from fastapi.testclient import TestClient
 
@@ -243,9 +246,15 @@ print(json.dumps({"ok": response.status_code == 200, "status_code": response.sta
   $PreviousPythonPath = [string]$env:PYTHONPATH
   $HadPreviousDataDir = Test-Path Env:\FRANCIS_DATA_DIR
   $PreviousDataDir = [string]$env:FRANCIS_DATA_DIR
+  $HadPreviousPythonWarnings = Test-Path Env:\PYTHONWARNINGS
+  $PreviousPythonWarnings = [string]$env:PYTHONWARNINGS
   $TempScriptPath = Join-Path ([System.IO.Path]::GetTempPath()) ("francis-lens-resident-surface-readback-{0}.py" -f $PID)
-  $Output = @()
+  $PythonStdoutPath = Join-Path ([System.IO.Path]::GetTempPath()) ("francis-lens-resident-surface-readback-stdout-{0}.json" -f $PID)
+  $PythonStderrPath = Join-Path ([System.IO.Path]::GetTempPath()) ("francis-lens-resident-surface-readback-stderr-{0}.log" -f $PID)
+  $Text = ''
+  $StderrText = ''
   $ExitCode = 1
+  $PreviousErrorActionPreference = $ErrorActionPreference
   try {
     if ([string]::IsNullOrWhiteSpace($PreviousPythonPath)) {
       $env:PYTHONPATH = $SrcPath
@@ -255,10 +264,23 @@ print(json.dumps({"ok": response.status_code == 200, "status_code": response.sta
     if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
       $env:FRANCIS_DATA_DIR = $DataDir
     }
+    if ([string]::IsNullOrWhiteSpace($PreviousPythonWarnings)) {
+      $env:PYTHONWARNINGS = 'ignore::DeprecationWarning'
+    } else {
+      $env:PYTHONWARNINGS = "ignore::DeprecationWarning,$PreviousPythonWarnings"
+    }
     Set-Content -LiteralPath $TempScriptPath -Value $Source -Encoding UTF8
-    $Output = & $Python.Source $TempScriptPath 2>&1
+    $ErrorActionPreference = 'Continue'
+    & $Python.Source $TempScriptPath > $PythonStdoutPath 2> $PythonStderrPath
     $ExitCode = $LASTEXITCODE
+    if (Test-Path -LiteralPath $PythonStdoutPath -PathType Leaf) {
+      $Text = Get-Content -LiteralPath $PythonStdoutPath -Raw -ErrorAction SilentlyContinue
+    }
+    if (Test-Path -LiteralPath $PythonStderrPath -PathType Leaf) {
+      $StderrText = Get-Content -LiteralPath $PythonStderrPath -Raw -ErrorAction SilentlyContinue
+    }
   } finally {
+    $ErrorActionPreference = $PreviousErrorActionPreference
     if ([string]::IsNullOrWhiteSpace($PreviousPythonPath)) {
       Remove-Item Env:\PYTHONPATH -ErrorAction SilentlyContinue
     } else {
@@ -269,10 +291,16 @@ print(json.dumps({"ok": response.status_code == 200, "status_code": response.sta
     } else {
       Remove-Item Env:\FRANCIS_DATA_DIR -ErrorAction SilentlyContinue
     }
+    if ($HadPreviousPythonWarnings) {
+      $env:PYTHONWARNINGS = $PreviousPythonWarnings
+    } else {
+      Remove-Item Env:\PYTHONWARNINGS -ErrorAction SilentlyContinue
+    }
     Remove-Item -LiteralPath $TempScriptPath -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $PythonStdoutPath -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $PythonStderrPath -Force -ErrorAction SilentlyContinue
   }
 
-  $Text = ($Output | ForEach-Object { [string]$_ }) -join "`n"
   if ($ExitCode -ne 0) {
     return [ordered]@{
       ok = $false
@@ -281,6 +309,7 @@ print(json.dumps({"ok": response.status_code == 200, "status_code": response.sta
       error = 'resident_surface_readback_failed'
       exit_code = $ExitCode
       output = $Text
+      stderr = $StderrText
     }
   }
 
@@ -294,6 +323,7 @@ print(json.dumps({"ok": response.status_code == 200, "status_code": response.sta
       error = 'resident_surface_readback_json_invalid'
       message = [string]$_.Exception.Message
       output = $Text
+      stderr = $StderrText
     }
   }
 }

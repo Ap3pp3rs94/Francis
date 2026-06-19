@@ -294,8 +294,12 @@ def _write_active_authority_receipts(data_root: Path) -> None:
 
 def test_lens_process_supervision_boundary_blocks_supervision_and_service_activation(tmp_path: Path) -> None:
     data_root = tmp_path / "data"
+    cached_resident_surface = tmp_path / "resident-surface-proof.json"
+    cached_host_supervision = tmp_path / "host-supervision-proof.json"
     host_launch_run_seconds = "8"
-    resident_surface_foreground_run_seconds = "8"
+    _write_cached_resident_surface_proof(cached_resident_surface)
+    _write_cached_host_supervision_proof(cached_host_supervision)
+
     proc = _run_proof(
         "-Mode",
         "Status",
@@ -307,8 +311,10 @@ def test_lens_process_supervision_boundary_blocks_supervision_and_service_activa
         host_launch_run_seconds,
         "-SupervisorRunSeconds",
         "3",
-        "-ResidentSurfaceForegroundRunSeconds",
-        resident_surface_foreground_run_seconds,
+        "-CachedResidentSurfaceProofPath",
+        str(cached_resident_surface),
+        "-CachedHostSupervisionProofPath",
+        str(cached_host_supervision),
         env={"FRANCIS_DATA_DIR": str(data_root)},
     )
 
@@ -319,16 +325,12 @@ def test_lens_process_supervision_boundary_blocks_supervision_and_service_activa
     assert payload["ok"] is True
     assert payload["mode"] == "status"
     assert payload["activation_boundary_mode"] == "direct_resident_surface_activation_boundary"
-    assert payload["effective_resident_surface_foreground_run_seconds"] in {
-        int(resident_surface_foreground_run_seconds),
-        20,
-    }
-    assert payload["effective_resident_surface_foreground_run_seconds"] >= int(resident_surface_foreground_run_seconds)
-    assert payload["resident_surface_foreground_retry_run_seconds"] in {0, 20}
+    assert payload["effective_resident_surface_foreground_run_seconds"] == 0
+    assert payload["resident_surface_foreground_retry_run_seconds"] == 0
     assert payload["child_proof_timeout_seconds"] == 360
     assert payload["child_proof_timeouts"] == []
-    assert payload["cached_resident_surface_proof"] is False
-    assert payload["cached_host_supervision_proof"] is False
+    assert payload["cached_resident_surface_proof"] is True
+    assert payload["cached_host_supervision_proof"] is True
     child_proof_runs = {item["name"]: item for item in payload["child_proof_runs"]}
     assert set(child_proof_runs) == {
         "resident_surface_activation_boundary",
@@ -346,7 +348,9 @@ def test_lens_process_supervision_boundary_blocks_supervision_and_service_activa
     assert child_proof_runs["resident_surface_activation_boundary"]["timeout_seconds"] == 60
     assert child_proof_runs["resident_runtime_activation_plan"]["timeout_seconds"] == 60
     assert child_proof_runs["resident_surface_foreground_runtime"]["timeout_seconds"] == 360
+    assert child_proof_runs["resident_surface_foreground_runtime"]["duration_ms"] == 0
     assert child_proof_runs["host_supervision"]["timeout_seconds"] == 360
+    assert child_proof_runs["host_supervision"]["duration_ms"] == 0
     assert payload["authority_required"] == "process_supervision_and_service_control"
     assert payload["authority_granted"] is False
     assert payload["resident_runtime_activation_plan_readback_observed"] is True
@@ -495,8 +499,8 @@ def test_lens_process_supervision_boundary_blocks_supervision_and_service_activa
     assert governance["resident_overlay_activation_boundary_readback"] is True
     assert governance["resident_runtime_activation_plan_readback"] is True
     assert governance["resident_runtime_activation_plan_authority_readback"] is False
-    assert governance["cached_resident_surface_proof"] is False
-    assert governance["cached_host_supervision_proof"] is False
+    assert governance["cached_resident_surface_proof"] is True
+    assert governance["cached_host_supervision_proof"] is True
     assert governance["live_http_readback"] is False
     assert governance["temporary_api_process"] is False
     assert governance["bounded_host_launch"] is True

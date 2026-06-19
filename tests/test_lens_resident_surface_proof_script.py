@@ -46,6 +46,15 @@ def test_lens_resident_surface_proof_accepts_isolated_data_dir_contract() -> Non
     assert "Invoke-ResidentSurfaceReadback -DataDir $ReadbackDataRoot" in script
 
 
+def test_lens_resident_surface_readback_keeps_python_stderr_out_of_json_stdout() -> None:
+    script = (_repo_root() / "scripts" / "lens-resident-surface-proof.ps1").read_text(encoding="utf-8")
+
+    assert "$PythonStdoutPath" in script
+    assert "$PythonStderrPath" in script
+    assert "PYTHONWARNINGS" in script
+    assert "$Output = & $Python.Source $TempScriptPath 2>&1" not in script
+
+
 def test_lens_resident_surface_proof_composes_blocked_surface_without_authority() -> None:
     proc = _run_proof("-Mode", "Status")
 
