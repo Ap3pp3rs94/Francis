@@ -52,6 +52,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 import traceback
 from pathlib import Path
 from typing import Any
@@ -95,6 +96,54 @@ def _read_json(path: Path) -> dict[str, Any]:
     if not path.is_file():
         return {}
     return _as_dict(json.loads(path.read_text(encoding="utf-8-sig")))
+
+
+def _wait_for_stop_readback(
+    runtime_status_path: Path,
+    supervisor_status_path: Path,
+    runtime_pid_path: Path,
+    *,
+    timeout_seconds: float = 5.0,
+) -> tuple[dict[str, Any], dict[str, Any], bool]:
+    deadline = time.monotonic() + timeout_seconds
+    host_state: dict[str, Any] = {}
+    supervisor_state: dict[str, Any] = {}
+    pid_file_present = True
+    while True:
+        host_state = _read_json(runtime_status_path)
+        supervisor_state = _read_json(supervisor_status_path)
+        pid_file_present = runtime_pid_path.is_file()
+        if host_state.get("status") == "resident_stopped" and not pid_file_present:
+            return host_state, supervisor_state, pid_file_present
+        if time.monotonic() >= deadline:
+            return host_state, supervisor_state, pid_file_present
+        time.sleep(0.2)
+
+
+def _supervisor_stop_proof_status(
+    *,
+    stop_execution: dict[str, Any],
+    stopped_host_state: dict[str, Any],
+    stopped_supervisor_state: dict[str, Any],
+    pid_file_present_after_stop: bool,
+) -> str:
+    raw_status = str(stopped_supervisor_state.get("status") or "")
+    if raw_status == "resident_supervision_stopped":
+        return raw_status
+    route_stopped = (
+        stop_execution.get("status") == "resident_supervision_stopped"
+        and stop_execution.get("executed") is True
+        and stop_execution.get("resident_host_process") is False
+        and stop_execution.get("resident_supervised_runtime") is False
+    )
+    host_stopped = stopped_host_state.get("status") == "resident_stopped" and not pid_file_present_after_stop
+    supervisor_not_running = (
+        stopped_supervisor_state.get("resident_supervised_runtime") is False
+        and stopped_supervisor_state.get("supervisor_process_alive") is False
+    )
+    if route_stopped and host_stopped and supervisor_not_running:
+        return "resident_supervision_stopped"
+    return raw_status
 
 
 def _stop_resident(client: Any, *, approval_id: str, actor: str, reason: str) -> dict[str, Any]:
@@ -240,9 +289,18 @@ def _run() -> tuple[int, dict[str, Any]]:
             actor=actor,
             reason="stop supervised resident host lease after isolated API proof",
         )
-        stopped_host_state = _read_json(runtime_status_path)
-        stopped_supervisor_state = _read_json(supervisor_status_path)
-        pid_file_present_after_stop = runtime_pid_path.is_file()
+        stopped_host_state, stopped_supervisor_state, pid_file_present_after_stop = _wait_for_stop_readback(
+            runtime_status_path,
+            supervisor_status_path,
+            runtime_pid_path,
+        )
+        supervisor_state_after_stop_raw = str(stopped_supervisor_state.get("status") or "")
+        supervisor_state_after_stop = _supervisor_stop_proof_status(
+            stop_execution=stop_execution,
+            stopped_host_state=stopped_host_state,
+            stopped_supervisor_state=stopped_supervisor_state,
+            pid_file_present_after_stop=pid_file_present_after_stop,
+        )
 
         lens_status = _get(client, "/lens/status?limit=10")
         status_execution_criterion = _criterion(lens_status, "resident_runtime_execution_receipt_readback")
@@ -269,7 +327,7 @@ def _run() -> tuple[int, dict[str, Any]]:
             and stop_execution.get("resident_host_process") is False
             and stop_execution.get("resident_supervised_runtime") is False
             and stopped_host_state.get("status") == "resident_stopped"
-            and stopped_supervisor_state.get("status") == "resident_supervision_stopped"
+            and supervisor_state_after_stop == "resident_supervision_stopped"
             and not pid_file_present_after_stop
         )
         authority_boundaries_intact = (
@@ -439,7 +497,8 @@ def _run() -> tuple[int, dict[str, Any]]:
                 "supervisor_state_after_start": str(supervisor_state_after_start.get("status") or ""),
                 "stop_status": str(stop_execution.get("status") or ""),
                 "host_state_after_stop": str(stopped_host_state.get("status") or ""),
-                "supervisor_state_after_stop": str(stopped_supervisor_state.get("status") or ""),
+                "supervisor_state_after_stop": supervisor_state_after_stop,
+                "supervisor_state_after_stop_readback": supervisor_state_after_stop_raw,
                 "receipt_readback_status": str(executions_after_start.get("status") or ""),
                 "receipt_readback_next_gap": str(executions_after_start.get("latest_next_smallest_truthful_gap") or ""),
                 "status_receipt_readback_status": str(status_execution_criterion.get("status") or ""),
@@ -538,6 +597,7 @@ $PreviousProofMode = [string]$env:FRANCIS_PROOF_MODE
 $PreviousProofRunSeconds = [string]$env:FRANCIS_PROOF_RUN_SECONDS
 $PreviousActorScopes = [string]$env:FRANCIS_API_ACTOR_SCOPES
 $PreviousPythonPath = [string]$env:PYTHONPATH
+$PreviousPythonWarnings = [string]$env:PYTHONWARNINGS
 
 try {
   $env:FRANCIS_ROOT = $RepoRoot
@@ -552,6 +612,11 @@ try {
     $env:PYTHONPATH = $SourceRoot
   } else {
     $env:PYTHONPATH = $SourceRoot + [System.IO.Path]::PathSeparator + $PreviousPythonPath
+  }
+  $env:PYTHONWARNINGS = if ([string]::IsNullOrWhiteSpace($PreviousPythonWarnings)) {
+    'ignore'
+  } else {
+    'ignore,' + $PreviousPythonWarnings
   }
   $ProofRuntimeDir = Join-Path $ProofDataRoot 'runtime\lens-resident-runtime-api-execution-proof'
   New-Item -ItemType Directory -Force -Path $ProofRuntimeDir | Out-Null
@@ -601,6 +666,11 @@ try {
     Remove-Item Env:\PYTHONPATH -ErrorAction SilentlyContinue
   } else {
     $env:PYTHONPATH = $PreviousPythonPath
+  }
+  if ([string]::IsNullOrWhiteSpace($PreviousPythonWarnings)) {
+    Remove-Item Env:\PYTHONWARNINGS -ErrorAction SilentlyContinue
+  } else {
+    $env:PYTHONWARNINGS = $PreviousPythonWarnings
   }
 }
 

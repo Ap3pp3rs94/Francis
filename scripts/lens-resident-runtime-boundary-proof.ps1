@@ -379,6 +379,7 @@ $PreviousRunMode = [string]$env:FRANCIS_RUN_MODE
 $PreviousProofMode = [string]$env:FRANCIS_PROOF_MODE
 $PreviousActorScopes = [string]$env:FRANCIS_API_ACTOR_SCOPES
 $PreviousPythonPath = [string]$env:PYTHONPATH
+$PreviousPythonWarnings = [string]$env:PYTHONWARNINGS
 
 try {
   $env:FRANCIS_ROOT = $RepoRoot
@@ -392,6 +393,11 @@ try {
     $env:PYTHONPATH = $SourceRoot
   } else {
     $env:PYTHONPATH = $SourceRoot + [System.IO.Path]::PathSeparator + $PreviousPythonPath
+  }
+  $env:PYTHONWARNINGS = if ([string]::IsNullOrWhiteSpace($PreviousPythonWarnings)) {
+    'ignore'
+  } else {
+    'ignore,' + $PreviousPythonWarnings
   }
   $ProofRuntimeDir = Join-Path $ProofDataRoot 'runtime\lens-resident-runtime-boundary-proof'
   New-Item -ItemType Directory -Force -Path $ProofRuntimeDir | Out-Null
@@ -434,6 +440,11 @@ try {
     Remove-Item Env:\PYTHONPATH -ErrorAction SilentlyContinue
   } else {
     $env:PYTHONPATH = $PreviousPythonPath
+  }
+  if ([string]::IsNullOrWhiteSpace($PreviousPythonWarnings)) {
+    Remove-Item Env:\PYTHONWARNINGS -ErrorAction SilentlyContinue
+  } else {
+    $env:PYTHONWARNINGS = $PreviousPythonWarnings
   }
 }
 
