@@ -271,7 +271,7 @@ def test_lens_command_palette_monitor_reports_chatgpt_connector_localtunnel_fall
     assert plan["providers"]["cloudflared_named_tunnel_requested_hostname"] == ""
     assert plan["providers"]["cloudflared_named_tunnel_preflight_checked"] is False
     assert plan["providers"]["cloudflared_named_tunnel_preflight_output_discarded"] is True
-    assert isinstance(plan["providers"]["cloudflared_named_tunnel_operator_provider_setup_commands"], list)
+    assert plan["providers"]["cloudflared_named_tunnel_operator_provider_setup_commands"] == []
     assert plan["providers"]["cloudflared_named_tunnel_next_operator_step"] in {
         "run_cloudflared_tunnel_login",
         "create_or_start_cloudflared_named_tunnel",
@@ -340,7 +340,7 @@ def test_lens_command_palette_monitor_reports_chatgpt_connector_cloudflared_quic
     assert providers["cloudflared_named_tunnel_requested_hostname"] == ""
     assert providers["cloudflared_named_tunnel_preflight_checked"] is False
     assert providers["cloudflared_named_tunnel_preflight_output_discarded"] is True
-    assert isinstance(providers["cloudflared_named_tunnel_operator_provider_setup_commands"], list)
+    assert providers["cloudflared_named_tunnel_operator_provider_setup_commands"] == []
     assert providers["cloudflared_named_tunnel_next_operator_step"] in {
         "run_cloudflared_tunnel_login",
         "create_or_start_cloudflared_named_tunnel",

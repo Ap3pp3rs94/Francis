@@ -234,7 +234,7 @@ function ConvertTo-StringArray {
       [void]$Items.Add($Text)
     }
   }
-  return @($Items.ToArray())
+  return [string[]]($Items.ToArray([string]))
 }
 
 function New-MonitorCheck {
@@ -875,6 +875,14 @@ function New-ChatGptPersistentIngressPlanMonitorProjection {
   $StartsProcess = [bool](Get-PropertyValue -Payload $Governance -Name 'starts_process' -Default $true)
   $OpensPublicTunnel = [bool](Get-PropertyValue -Payload $Governance -Name 'opens_public_tunnel' -Default $true)
   $WritesData = [bool](Get-PropertyValue -Payload $Governance -Name 'writes_data' -Default $true)
+  $CloudflaredSetupCommandItems = [System.Collections.Generic.List[string]]::new()
+  foreach ($Command in @(Get-PropertyValue -Payload $Cloudflared -Name 'operator_provider_setup_commands' -Default @())) {
+    $CommandText = ConvertTo-BoundedText -Value $Command -MaxLength 260
+    if (-not [string]::IsNullOrWhiteSpace($CommandText)) {
+      $CloudflaredSetupCommandItems.Add($CommandText)
+    }
+  }
+  $CloudflaredSetupCommands = [string[]]$CloudflaredSetupCommandItems.ToArray()
 
   return [ordered]@{
     enabled = $true
@@ -902,7 +910,7 @@ function New-ChatGptPersistentIngressPlanMonitorProjection {
       cloudflared_named_tunnel_preflight_checked = [bool](Get-PropertyValue -Payload $CloudflaredPreflight -Name 'checked' -Default $false)
       cloudflared_named_tunnel_preflight_exists = [bool](Get-PropertyValue -Payload $CloudflaredPreflight -Name 'exists' -Default $false)
       cloudflared_named_tunnel_preflight_output_discarded = [bool](Get-PropertyValue -Payload $CloudflaredPreflight -Name 'output_discarded' -Default $true)
-      cloudflared_named_tunnel_operator_provider_setup_commands = @(Get-PropertyValue -Payload $Cloudflared -Name 'operator_provider_setup_commands' -Default @())
+      cloudflared_named_tunnel_operator_provider_setup_commands = $CloudflaredSetupCommands
       cloudflared_named_tunnel_next_operator_step = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Cloudflared -Name 'next_operator_step' -Default '') -MaxLength 160
       ngrok_reserved_domain_available = [bool](Get-PropertyValue -Payload $Ngrok -Name 'available' -Default $false)
       caddy_reverse_proxy_available = [bool](Get-PropertyValue -Payload $Caddy -Name 'available' -Default $false)
