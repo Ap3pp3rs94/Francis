@@ -122,7 +122,7 @@ test("parseCommandPaletteMonitorStatus preserves latest receipt origin without t
       enabled: true,
       ok: true,
       status: "localtunnel_fallback_replace_needed",
-      recommended_provider_order: ["cloudflared_named_tunnel"],
+      recommended_provider_order: ["cloudflared_token_tunnel", "cloudflared_named_tunnel"],
       next_operator_steps: ["choose_or_install_a_persistent_https_ingress_provider"],
       operator_handoff: {
         kind: "francis.chatgpt_voice.persistent_ingress_operator_handoff",
@@ -146,6 +146,8 @@ test("parseCommandPaletteMonitorStatus preserves latest receipt origin without t
             '.\\scripts\\chatgpt-voice-connector.ps1 -Mode StartPersistent -ConnectorUrl "https://YOUR-STABLE-HOST/mcp" -VerifyConnector -Json',
           start_cloudflared_named:
             '.\\scripts\\chatgpt-voice-connector.ps1 -Mode StartCloudflaredNamed -CloudflaredTunnelName "francis" -CloudflaredHostname "YOUR-STABLE-HOST" -ExposePublicTunnel -VerifyConnector -Json',
+          start_cloudflared_token:
+            '.\\scripts\\chatgpt-voice-connector.ps1 -Mode StartCloudflaredToken -CloudflaredTokenFile "data\\runtime\\chatgpt-voice-connector\\cloudflared-token.txt" -CloudflaredHostname "YOUR-STABLE-HOST" -ExposePublicTunnel -VerifyConnector -Json',
         },
       },
       providers: {
@@ -166,6 +168,14 @@ test("parseCommandPaletteMonitorStatus preserves latest receipt origin without t
           "cloudflared tunnel route dns francis francis.example.test",
         ],
         cloudflared_named_tunnel_next_operator_step: "run_cloudflared_tunnel_login",
+        cloudflared_token_tunnel_available: true,
+        cloudflared_token_tunnel_path: "C:\\Program Files (x86)\\cloudflared\\cloudflared.exe",
+        cloudflared_token_tunnel_token_file_requested: true,
+        cloudflared_token_tunnel_token_file_present: false,
+        cloudflared_token_tunnel_token_file_content_read: false,
+        cloudflared_token_tunnel_requested_hostname: "francis.example.test",
+        cloudflared_token_tunnel_hostname_requested: true,
+        cloudflared_token_tunnel_next_operator_step: "create_cloudflared_dashboard_token_file",
         cloudflared_login_status: "cloudflared_login_started",
         cloudflared_login_process_id: "191876",
         cloudflared_login_process_alive: true,
@@ -248,6 +258,12 @@ test("parseCommandPaletteMonitorStatus preserves latest receipt origin without t
     ),
     true,
   );
+  assert.equal(
+    status.chatgpt_persistent_ingress_plan_monitor.operator_handoff.governed_handoff_commands.start_cloudflared_token.includes(
+      "StartCloudflaredToken",
+    ),
+    true,
+  );
   assert.equal(status.chatgpt_persistent_ingress_plan_monitor.providers.cloudflared_named_tunnel_available, true);
   assert.equal(
     status.chatgpt_persistent_ingress_plan_monitor.providers.cloudflared_named_tunnel_login_required,
@@ -256,6 +272,26 @@ test("parseCommandPaletteMonitorStatus preserves latest receipt origin without t
   assert.equal(
     status.chatgpt_persistent_ingress_plan_monitor.providers.cloudflared_named_tunnel_next_operator_step,
     "run_cloudflared_tunnel_login",
+  );
+  assert.equal(
+    status.chatgpt_persistent_ingress_plan_monitor.providers.cloudflared_token_tunnel_token_file_requested,
+    true,
+  );
+  assert.equal(
+    status.chatgpt_persistent_ingress_plan_monitor.providers.cloudflared_token_tunnel_token_file_present,
+    false,
+  );
+  assert.equal(
+    status.chatgpt_persistent_ingress_plan_monitor.providers.cloudflared_token_tunnel_token_file_content_read,
+    false,
+  );
+  assert.equal(
+    status.chatgpt_persistent_ingress_plan_monitor.providers.cloudflared_token_tunnel_requested_hostname,
+    "francis.example.test",
+  );
+  assert.equal(
+    status.chatgpt_persistent_ingress_plan_monitor.providers.cloudflared_token_tunnel_next_operator_step,
+    "create_cloudflared_dashboard_token_file",
   );
   assert.deepEqual(
     status.chatgpt_persistent_ingress_plan_monitor.providers.cloudflared_named_tunnel_operator_provider_setup_commands,

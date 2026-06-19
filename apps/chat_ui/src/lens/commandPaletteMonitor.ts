@@ -141,6 +141,14 @@ export type PersistentIngressProviders = {
   cloudflared_named_tunnel_preflight_output_discarded: boolean;
   cloudflared_named_tunnel_operator_provider_setup_commands: string[];
   cloudflared_named_tunnel_next_operator_step: string;
+  cloudflared_token_tunnel_available: boolean;
+  cloudflared_token_tunnel_path: string;
+  cloudflared_token_tunnel_token_file_requested: boolean;
+  cloudflared_token_tunnel_token_file_present: boolean;
+  cloudflared_token_tunnel_token_file_content_read: boolean;
+  cloudflared_token_tunnel_requested_hostname: string;
+  cloudflared_token_tunnel_hostname_requested: boolean;
+  cloudflared_token_tunnel_next_operator_step: string;
   cloudflared_login_status: string;
   cloudflared_login_process_id: number;
   cloudflared_login_process_alive: boolean;
@@ -450,6 +458,26 @@ function parsePersistentIngressPlan(value: unknown): PersistentIngressPlanMonito
       ),
       cloudflared_named_tunnel_next_operator_step: safeString(
         providers["cloudflared_named_tunnel_next_operator_step"],
+      ),
+      cloudflared_token_tunnel_available: safeBoolean(providers["cloudflared_token_tunnel_available"]),
+      cloudflared_token_tunnel_path: safeString(providers["cloudflared_token_tunnel_path"]),
+      cloudflared_token_tunnel_token_file_requested: safeBoolean(
+        providers["cloudflared_token_tunnel_token_file_requested"],
+      ),
+      cloudflared_token_tunnel_token_file_present: safeBoolean(
+        providers["cloudflared_token_tunnel_token_file_present"],
+      ),
+      cloudflared_token_tunnel_token_file_content_read: safeBoolean(
+        providers["cloudflared_token_tunnel_token_file_content_read"],
+      ),
+      cloudflared_token_tunnel_requested_hostname: safeString(
+        providers["cloudflared_token_tunnel_requested_hostname"],
+      ),
+      cloudflared_token_tunnel_hostname_requested: safeBoolean(
+        providers["cloudflared_token_tunnel_hostname_requested"],
+      ),
+      cloudflared_token_tunnel_next_operator_step: safeString(
+        providers["cloudflared_token_tunnel_next_operator_step"],
       ),
       cloudflared_login_status: safeString(providers["cloudflared_login_status"]),
       cloudflared_login_process_id: safeNumber(providers["cloudflared_login_process_id"]),

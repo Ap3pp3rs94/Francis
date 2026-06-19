@@ -130,15 +130,33 @@ def test_chatgpt_voice_connector_cloudflared_named_mode_is_bounded_persistent_in
     assert "start_cloudflared_named" in script
 
 
+def test_chatgpt_voice_connector_cloudflared_token_mode_uses_secret_file_contract() -> None:
+    script = (_repo_root() / "scripts" / "chatgpt-voice-connector.ps1").read_text(encoding="utf-8")
+
+    assert "StartCloudflaredToken" in script
+    assert "CloudflaredTokenFile" in script
+    assert "Get-CloudflaredTokenTunnelReadiness" in script
+    assert "dashboard_managed_https_tunnel_token_file" in script
+    assert "token_file_content_read = $false" in script
+    assert "cloudflared_token_tunnel" in script
+    assert "'--token-file', $BoundedTokenFile" in script
+    assert "'--url', \"http://$HostAddress`:$Port\"" in script
+    assert "cloudflared_token_started_ready" in script
+    assert "start_cloudflared_token" in script
+    assert "do not paste token contents into chat" in script
+
+
 def test_chatgpt_voice_connector_plan_reuses_cloudflared_resolver_for_readiness() -> None:
     script = (_repo_root() / "scripts" / "chatgpt-voice-connector.ps1").read_text(encoding="utf-8")
 
     assert "function Resolve-CloudflaredPath" in script
     assert "function Get-CloudflaredOriginCertReadiness" in script
     assert "function Get-CloudflaredNamedTunnelReadiness" in script
+    assert "function Get-CloudflaredTokenTunnelReadiness" in script
     assert "[string]$ResolvedPath = ''" in script
     assert "Get-CommandReadiness -Name 'cloudflared'" in script
     assert "named_tunnel_preflight" in script
+    assert "choose_cloudflared_dashboard_token_file" in script
     assert "create_cloudflared_named_tunnel_and_route_hostname" in script
     assert "choose_cloudflared_named_hostname" in script
     assert "origin_cert_content_read" in script
@@ -330,6 +348,80 @@ def test_chatgpt_voice_connector_start_cloudflared_named_requires_public_tunnel_
     assert payload["ok"] is False
     assert payload["status"] == "operator_public_tunnel_authorization_required"
     assert payload["blockers"] == ["expose_public_tunnel_flag_required"]
+    assert payload["governance"]["starts_process"] is False
+    assert payload["governance"]["opens_public_tunnel"] is False
+    assert payload["governance"]["writes_data"] is False
+    assert not runtime_root.exists()
+
+
+@pytest.mark.skipif(platform.system() != "Windows", reason="connector control uses Windows process readback")
+def test_chatgpt_voice_connector_start_cloudflared_token_requires_public_tunnel_flag(tmp_path: Path) -> None:
+    runtime_root = tmp_path / "connector-runtime"
+    token_file = tmp_path / "cloudflared-token.txt"
+    token_file.write_text("test-token", encoding="utf-8")
+    port = _unused_local_port()
+
+    proc = _run_connector_script(
+        "-Mode",
+        "StartCloudflaredToken",
+        "-Json",
+        "-RuntimeRoot",
+        str(runtime_root),
+        "-Port",
+        str(port),
+        "-CloudflaredTokenFile",
+        str(token_file),
+        "-CloudflaredHostname",
+        "francis.example.test",
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["kind"] == "francis.chatgpt_voice.connector_control"
+    assert payload["ok"] is False
+    assert payload["status"] == "operator_public_tunnel_authorization_required"
+    assert payload["blockers"] == ["expose_public_tunnel_flag_required"]
+    assert payload["cloudflared_token_start"]["public_tunnel_started"] is False
+    assert payload["cloudflared_token_start"]["connector_url_recorded"] is False
+    assert payload["cloudflared_token_start"]["token_file_content_read"] is False
+    assert payload["governance"]["starts_process"] is False
+    assert payload["governance"]["opens_public_tunnel"] is False
+    assert payload["governance"]["writes_data"] is False
+    assert not runtime_root.exists()
+
+
+@pytest.mark.skipif(platform.system() != "Windows", reason="connector control uses Windows process readback")
+def test_chatgpt_voice_connector_start_cloudflared_token_requires_token_file_before_state_writes(
+    tmp_path: Path,
+) -> None:
+    runtime_root = tmp_path / "connector-runtime"
+    missing_token_file = tmp_path / "missing-cloudflared-token.txt"
+    port = _unused_local_port()
+
+    proc = _run_connector_script(
+        "-Mode",
+        "StartCloudflaredToken",
+        "-Json",
+        "-RuntimeRoot",
+        str(runtime_root),
+        "-Port",
+        str(port),
+        "-CloudflaredTokenFile",
+        str(missing_token_file),
+        "-CloudflaredHostname",
+        "francis.example.test",
+        "-ExposePublicTunnel",
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["kind"] == "francis.chatgpt_voice.connector_control"
+    assert payload["ok"] is False
+    assert payload["status"] == "cloudflared_token_file_missing"
+    assert payload["blockers"] == ["cloudflared_token_file_missing"]
+    assert payload["cloudflared_token_start"]["public_tunnel_started"] is False
+    assert payload["cloudflared_token_start"]["connector_url_recorded"] is False
+    assert payload["cloudflared_token_start"]["token_file_content_read"] is False
     assert payload["governance"]["starts_process"] is False
     assert payload["governance"]["opens_public_tunnel"] is False
     assert payload["governance"]["writes_data"] is False
@@ -653,6 +745,13 @@ def test_chatgpt_voice_connector_plan_persistent_ingress_is_read_only(tmp_path: 
     assert payload["provider_readiness"]["cloudflared_named_tunnel"]["name"] == "cloudflared"
     assert payload["provider_readiness"]["cloudflared_named_tunnel"]["named_tunnel_requested"] is False
     assert payload["provider_readiness"]["cloudflared_named_tunnel"]["named_tunnel_preflight"]["checked"] is False
+    assert payload["provider_readiness"]["cloudflared_token_tunnel"]["name"] == "cloudflared"
+    assert payload["provider_readiness"]["cloudflared_token_tunnel"]["token_file_requested"] is False
+    assert payload["provider_readiness"]["cloudflared_token_tunnel"]["token_file_present"] is False
+    assert payload["provider_readiness"]["cloudflared_token_tunnel"]["token_file_content_read"] is False
+    assert payload["provider_readiness"]["cloudflared_token_tunnel"]["next_operator_step"] == (
+        "choose_cloudflared_dashboard_token_file"
+    )
     assert payload["provider_readiness"]["ngrok_reserved_domain"]["name"] == "ngrok"
     assert payload["provider_readiness"]["caddy_reverse_proxy"]["name"] == "caddy"
     assert payload["provider_readiness"]["ssh_reverse_tunnel"]["name"] == "ssh"
@@ -677,6 +776,8 @@ def test_chatgpt_voice_connector_plan_persistent_ingress_is_read_only(tmp_path: 
         "winget install --id Cloudflare.cloudflared --exact --accept-source-agreements --accept-package-agreements"
     )
     assert "cloudflared tunnel login" in handoff["cloudflared_named_tunnel_steps"][1]
+    assert "Cloudflare Tunnel in the Zero Trust dashboard" in handoff["cloudflared_token_tunnel_steps"][0]
+    assert "do not paste token contents into chat" in handoff["cloudflared_token_tunnel_steps"][2]
     assert "StartCloudflaredLogin" in handoff["governed_handoff_commands"]["start_cloudflared_login"]
     assert "-AuthorizeCloudflaredLogin" in handoff["governed_handoff_commands"]["start_cloudflared_login"]
     assert "PlanPersistentIngress" in handoff["governed_handoff_commands"]["plan_cloudflared_named"]
@@ -685,10 +786,16 @@ def test_chatgpt_voice_connector_plan_persistent_ingress_is_read_only(tmp_path: 
     assert "StartPersistent" in handoff["governed_handoff_commands"]["start_persistent_mcp"]
     assert "StartCloudflaredNamed" in handoff["governed_handoff_commands"]["start_cloudflared_named"]
     assert "-ExposePublicTunnel" in handoff["governed_handoff_commands"]["start_cloudflared_named"]
+    assert "StartCloudflaredToken" in handoff["governed_handoff_commands"]["start_cloudflared_token"]
+    assert "CloudflaredTokenFile" in handoff["governed_handoff_commands"]["start_cloudflared_token"]
     assert "orb-voice-overlay-lens-validation.ps1" in handoff["governed_handoff_commands"]["validate_bridge"]
     assert "lens-command-palette-monitor.ps1" in handoff["governed_handoff_commands"]["monitor_command_palette"]
     assert "http://127.0.0.1:8787" in payload["provider_config_hints"]["cloudflared_named_tunnel"]
-    assert payload["recommended_provider_order"][0] == "cloudflared_named_tunnel"
+    assert "http://127.0.0.1:8787" in payload["provider_config_hints"]["cloudflared_token_tunnel"]
+    assert payload["recommended_provider_order"][:2] == [
+        "cloudflared_token_tunnel",
+        "cloudflared_named_tunnel",
+    ]
     assert payload["localtunnel_replacement"]["localtunnel_supported_only_as_explicit_fallback"] is True
     assert payload["localtunnel_replacement"]["persistent_ingress_required_for_stable_chatgpt_connector"] is True
     assert payload["governance"]["read_only"] is True
@@ -799,6 +906,57 @@ def test_chatgpt_voice_connector_plan_persistent_ingress_preflights_named_tunnel
         "cloudflared tunnel route dns francis francis.example.test",
     ]
     assert cloudflared["next_operator_step"] == "create_cloudflared_named_tunnel_and_route_hostname"
+    assert payload["governance"]["read_only"] is True
+    assert payload["governance"]["starts_process"] is False
+    assert payload["governance"]["opens_public_tunnel"] is False
+    assert payload["governance"]["writes_data"] is False
+    assert not runtime_root.exists()
+
+
+def test_chatgpt_voice_connector_plan_persistent_ingress_preflights_token_file_request(
+    tmp_path: Path,
+) -> None:
+    runtime_root = tmp_path / "connector-runtime"
+    fake_profile = tmp_path / "profile"
+    fake_bin = tmp_path / "bin"
+    token_file = tmp_path / "cloudflared-token.txt"
+    fake_profile.mkdir()
+    fake_bin.mkdir()
+    token_file.write_text("test-token", encoding="utf-8")
+    fake_cloudflared = fake_bin / "cloudflared.cmd"
+    fake_cloudflared.write_text("@echo off\r\nexit /b 0\r\n", encoding="utf-8")
+    port = _unused_local_port()
+
+    proc = _run_connector_script(
+        "-Mode",
+        "PlanPersistentIngress",
+        "-Json",
+        "-RuntimeRoot",
+        str(runtime_root),
+        "-Port",
+        str(port),
+        "-CloudflaredTokenFile",
+        str(token_file),
+        "-CloudflaredHostname",
+        "francis.example.test",
+        env={
+            "PATH": f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}",
+            "USERPROFILE": str(fake_profile),
+            "TUNNEL_ORIGIN_CERT": "",
+        },
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["kind"] == "francis.chatgpt_voice.persistent_ingress_plan"
+    cloudflared_token = payload["provider_readiness"]["cloudflared_token_tunnel"]
+    assert cloudflared_token["available"] is True
+    assert cloudflared_token["token_file_requested"] is True
+    assert cloudflared_token["token_file_present"] is True
+    assert cloudflared_token["token_file_content_read"] is False
+    assert cloudflared_token["requested_hostname"] == "francis.example.test"
+    assert cloudflared_token["hostname_requested"] is True
+    assert cloudflared_token["next_operator_step"] == "start_cloudflared_token_tunnel"
     assert payload["governance"]["read_only"] is True
     assert payload["governance"]["starts_process"] is False
     assert payload["governance"]["opens_public_tunnel"] is False

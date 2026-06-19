@@ -258,7 +258,10 @@ def test_lens_command_palette_monitor_reports_chatgpt_connector_localtunnel_fall
     assert plan["timeout_seconds"] >= 8
     assert plan["status"] == "localtunnel_fallback_replace_needed"
     assert plan["blockers"] == ["localtunnel_url_is_not_persistent_ingress"]
-    assert plan["recommended_provider_order"][0] == "cloudflared_named_tunnel"
+    assert plan["recommended_provider_order"][:2] == [
+        "cloudflared_token_tunnel",
+        "cloudflared_named_tunnel",
+    ]
     assert plan["next_operator_steps"] == [
         "choose_or_install_a_persistent_https_ingress_provider",
         "point_provider_to_local_endpoint",
@@ -272,6 +275,7 @@ def test_lens_command_palette_monitor_reports_chatgpt_connector_localtunnel_fall
         "--accept-source-agreements --accept-package-agreements"
     )
     assert "StartPersistent" in handoff["governed_handoff_commands"]["start_persistent_mcp"]
+    assert "StartCloudflaredToken" in handoff["governed_handoff_commands"]["start_cloudflared_token"]
     assert isinstance(plan["providers"]["winget_available"], bool)
     assert isinstance(plan["providers"]["cloudflared_named_tunnel_path"], str)
     assert isinstance(plan["providers"]["cloudflared_named_tunnel_origin_cert_present"], bool)
@@ -286,6 +290,17 @@ def test_lens_command_palette_monitor_reports_chatgpt_connector_localtunnel_fall
     assert plan["providers"]["cloudflared_named_tunnel_next_operator_step"] in {
         "run_cloudflared_tunnel_login",
         "create_or_start_cloudflared_named_tunnel",
+    }
+    assert isinstance(plan["providers"]["cloudflared_token_tunnel_available"], bool)
+    assert isinstance(plan["providers"]["cloudflared_token_tunnel_path"], str)
+    assert plan["providers"]["cloudflared_token_tunnel_token_file_requested"] is False
+    assert plan["providers"]["cloudflared_token_tunnel_token_file_present"] is False
+    assert plan["providers"]["cloudflared_token_tunnel_token_file_content_read"] is False
+    assert plan["providers"]["cloudflared_token_tunnel_requested_hostname"] == ""
+    assert plan["providers"]["cloudflared_token_tunnel_hostname_requested"] is False
+    assert plan["providers"]["cloudflared_token_tunnel_next_operator_step"] in {
+        "choose_cloudflared_dashboard_token_file",
+        "create_cloudflared_dashboard_token_file",
     }
     assert plan["localtunnel_replacement"]["persistent_ingress_required_for_stable_chatgpt_connector"] is True
     assert plan["governance_safe"] is True
@@ -382,6 +397,17 @@ def test_lens_command_palette_monitor_reports_chatgpt_connector_cloudflared_quic
         "run_cloudflared_tunnel_login",
         "create_or_start_cloudflared_named_tunnel",
     }
+    assert isinstance(providers["cloudflared_token_tunnel_available"], bool)
+    assert isinstance(providers["cloudflared_token_tunnel_path"], str)
+    assert providers["cloudflared_token_tunnel_token_file_requested"] is False
+    assert providers["cloudflared_token_tunnel_token_file_present"] is False
+    assert providers["cloudflared_token_tunnel_token_file_content_read"] is False
+    assert providers["cloudflared_token_tunnel_requested_hostname"] == ""
+    assert providers["cloudflared_token_tunnel_hostname_requested"] is False
+    assert providers["cloudflared_token_tunnel_next_operator_step"] in {
+        "choose_cloudflared_dashboard_token_file",
+        "create_cloudflared_dashboard_token_file",
+    }
     assert providers["cloudflared_login_status"] == "cloudflared_login_started"
     assert providers["cloudflared_login_process_id"] == 0
     assert providers["cloudflared_login_process_alive"] is False
@@ -445,6 +471,50 @@ def test_lens_command_palette_monitor_passes_cloudflared_named_request_to_plan(
         "create_cloudflared_named_tunnel_and_route_hostname",
         "start_cloudflared_named_tunnel",
     }
+
+
+def test_lens_command_palette_monitor_passes_cloudflared_token_file_request_to_plan(
+    tmp_path: Path,
+) -> None:
+    data_dir = tmp_path / "data"
+    status_path = tmp_path / "lens-status.json"
+    token_file = tmp_path / "cloudflared-token.txt"
+    token_file.write_text("test-token", encoding="utf-8")
+    _write_json(status_path, _lens_status())
+
+    with _LocalCommandPaletteServer() as url:
+        proc = _run_monitor(
+            "-Mode",
+            "Probe",
+            "-DataDir",
+            str(data_dir),
+            "-CommandPaletteUrl",
+            url,
+            "-LensStatusPath",
+            str(status_path),
+            "-EnableChatGptConnectorChecks",
+            "-ChatGptConnectorUrl",
+            "https://francis.example.test/mcp",
+            "-CloudflaredTokenFile",
+            str(token_file),
+            "-CloudflaredHostname",
+            "francis.example.test",
+            "-TimeoutSeconds",
+            "3",
+        )
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = _json_stdout(proc.stdout)
+    plan = payload["chatgpt_persistent_ingress_plan_monitor"]
+    assert plan["enabled"] is True
+    assert plan["governance_safe"] is True
+    providers = plan["providers"]
+    assert providers["cloudflared_token_tunnel_token_file_requested"] is True
+    assert providers["cloudflared_token_tunnel_token_file_present"] is True
+    assert providers["cloudflared_token_tunnel_token_file_content_read"] is False
+    assert providers["cloudflared_token_tunnel_requested_hostname"] == "francis.example.test"
+    assert providers["cloudflared_token_tunnel_hostname_requested"] is True
+    assert providers["cloudflared_token_tunnel_next_operator_step"] == "start_cloudflared_token_tunnel"
 
 
 def test_lens_command_palette_monitor_can_require_persistent_chatgpt_ingress(tmp_path: Path) -> None:

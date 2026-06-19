@@ -177,7 +177,7 @@ def test_lens_command_palette_monitor_route_projects_voice_bridge_proof(monkeypa
                     "ok": True,
                     "status": "localtunnel_fallback_replace_needed",
                     "blockers": ["localtunnel_url_is_not_persistent_ingress"],
-                    "recommended_provider_order": ["cloudflared_named_tunnel"],
+                    "recommended_provider_order": ["cloudflared_token_tunnel", "cloudflared_named_tunnel"],
                     "next_operator_steps": ["choose_or_install_a_persistent_https_ingress_provider"],
                     "operator_handoff": {
                         "kind": "francis.chatgpt_voice.persistent_ingress_operator_handoff",
@@ -205,6 +205,11 @@ def test_lens_command_palette_monitor_route_projects_voice_bridge_proof(monkeypa
                                 ".\\scripts\\chatgpt-voice-connector.ps1 -Mode StartPersistent "
                                 '-ConnectorUrl "https://YOUR-STABLE-HOST/mcp" -VerifyConnector -Json'
                             ),
+                            "start_cloudflared_token": (
+                                ".\\scripts\\chatgpt-voice-connector.ps1 -Mode StartCloudflaredToken "
+                                '-CloudflaredTokenFile "data\\runtime\\chatgpt-voice-connector\\cloudflared-token.txt" '
+                                '-CloudflaredHostname "YOUR-STABLE-HOST" -ExposePublicTunnel -VerifyConnector -Json'
+                            ),
                         },
                     },
                     "governance_safe": True,
@@ -226,6 +231,14 @@ def test_lens_command_palette_monitor_route_projects_voice_bridge_proof(monkeypa
                             "cloudflared tunnel route dns francis francis.example.test",
                         ],
                         "cloudflared_named_tunnel_next_operator_step": "run_cloudflared_tunnel_login",
+                        "cloudflared_token_tunnel_available": True,
+                        "cloudflared_token_tunnel_path": "C:\\Program Files (x86)\\cloudflared\\cloudflared.exe",
+                        "cloudflared_token_tunnel_token_file_requested": True,
+                        "cloudflared_token_tunnel_token_file_present": False,
+                        "cloudflared_token_tunnel_token_file_content_read": False,
+                        "cloudflared_token_tunnel_requested_hostname": "francis.example.test",
+                        "cloudflared_token_tunnel_hostname_requested": True,
+                        "cloudflared_token_tunnel_next_operator_step": "create_cloudflared_dashboard_token_file",
                         "cloudflared_login_status": "cloudflared_login_started",
                         "cloudflared_login_process_id": 201620,
                         "cloudflared_login_process_alive": True,
@@ -317,6 +330,13 @@ def test_lens_command_palette_monitor_route_projects_voice_bridge_proof(monkeypa
     ]
     assert providers["cloudflared_named_tunnel_next_operator_step"] == "run_cloudflared_tunnel_login"
     assert providers["cloudflared_named_tunnel_origin_cert_content_read"] is False
+    assert providers["cloudflared_token_tunnel_available"] is True
+    assert providers["cloudflared_token_tunnel_token_file_requested"] is True
+    assert providers["cloudflared_token_tunnel_token_file_present"] is False
+    assert providers["cloudflared_token_tunnel_token_file_content_read"] is False
+    assert providers["cloudflared_token_tunnel_requested_hostname"] == "francis.example.test"
+    assert providers["cloudflared_token_tunnel_hostname_requested"] is True
+    assert providers["cloudflared_token_tunnel_next_operator_step"] == "create_cloudflared_dashboard_token_file"
     assert providers["cloudflared_login_status"] == "cloudflared_login_started"
     assert providers["cloudflared_login_process_id"] == 201620
     assert providers["cloudflared_login_process_alive"] is True
@@ -338,6 +358,7 @@ def test_lens_command_palette_monitor_route_projects_voice_bridge_proof(monkeypa
         "--accept-source-agreements --accept-package-agreements",
     )
     assert "RecordUrl" in handoff["governed_handoff_commands"]["record_url"]
+    assert "StartCloudflaredToken" in handoff["governed_handoff_commands"]["start_cloudflared_token"]
     assert body["governance"]["execution_authority"] is False
     assert body["governance"]["captures_audio"] is False
     assert "do not expose this transcript" not in json.dumps(body, sort_keys=True)

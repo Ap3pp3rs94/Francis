@@ -35,6 +35,8 @@ param(
 
   [string]$CloudflaredHostname = '',
 
+  [string]$CloudflaredTokenFile = '',
+
   [switch]$VerifyChatGptConnector,
 
   [ValidateRange(1, 60)]
@@ -831,6 +833,7 @@ function Invoke-ChatGptPersistentIngressPlanReadback {
     [string]$ConnectorUrl,
     [string]$CloudflaredTunnelName,
     [string]$CloudflaredHostname,
+    [string]$CloudflaredTokenFile,
     [bool]$VerifyConnector,
     [int]$ProbeTimeoutSeconds
   )
@@ -859,6 +862,9 @@ function Invoke-ChatGptPersistentIngressPlanReadback {
   if (-not [string]::IsNullOrWhiteSpace($CloudflaredHostname)) {
     $Arguments += @('-CloudflaredHostname', $CloudflaredHostname)
   }
+  if (-not [string]::IsNullOrWhiteSpace($CloudflaredTokenFile)) {
+    $Arguments += @('-CloudflaredTokenFile', $CloudflaredTokenFile)
+  }
   if ($VerifyConnector) {
     $Arguments += '-VerifyConnector'
   }
@@ -877,17 +883,19 @@ function New-ChatGptPersistentIngressPlanMonitorProjection {
     [string]$ConnectorUrl,
     [string]$CloudflaredTunnelName,
     [string]$CloudflaredHostname,
+    [string]$CloudflaredTokenFile,
     [bool]$VerifyConnector,
     [int]$ProbeTimeoutSeconds
   )
 
-  $Readback = Invoke-ChatGptPersistentIngressPlanReadback -Root $Root -ConnectorUrl $ConnectorUrl -CloudflaredTunnelName $CloudflaredTunnelName -CloudflaredHostname $CloudflaredHostname -VerifyConnector $VerifyConnector -ProbeTimeoutSeconds $ProbeTimeoutSeconds
+  $Readback = Invoke-ChatGptPersistentIngressPlanReadback -Root $Root -ConnectorUrl $ConnectorUrl -CloudflaredTunnelName $CloudflaredTunnelName -CloudflaredHostname $CloudflaredHostname -CloudflaredTokenFile $CloudflaredTokenFile -VerifyConnector $VerifyConnector -ProbeTimeoutSeconds $ProbeTimeoutSeconds
   $Payload = Get-PropertyValue -Payload $Readback -Name 'payload'
   $ReadbackStatus = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Readback -Name 'status' -Default '') -MaxLength 120
   $Governance = Get-PropertyValue -Payload $Payload -Name 'governance'
   $ProviderReadiness = Get-PropertyValue -Payload $Payload -Name 'provider_readiness'
   $InstallerReadiness = Get-PropertyValue -Payload $Payload -Name 'installer_readiness'
   $Cloudflared = Get-PropertyValue -Payload $ProviderReadiness -Name 'cloudflared_named_tunnel'
+  $CloudflaredToken = Get-PropertyValue -Payload $ProviderReadiness -Name 'cloudflared_token_tunnel'
   $CloudflaredLogin = Get-PropertyValue -Payload $Payload -Name 'cloudflared_login'
   $CloudflaredPreflight = Get-PropertyValue -Payload $Cloudflared -Name 'named_tunnel_preflight'
   $Ngrok = Get-PropertyValue -Payload $ProviderReadiness -Name 'ngrok_reserved_domain'
@@ -935,6 +943,14 @@ function New-ChatGptPersistentIngressPlanMonitorProjection {
       cloudflared_named_tunnel_preflight_output_discarded = [bool](Get-PropertyValue -Payload $CloudflaredPreflight -Name 'output_discarded' -Default $true)
       cloudflared_named_tunnel_operator_provider_setup_commands = $CloudflaredSetupCommands
       cloudflared_named_tunnel_next_operator_step = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Cloudflared -Name 'next_operator_step' -Default '') -MaxLength 160
+      cloudflared_token_tunnel_available = [bool](Get-PropertyValue -Payload $CloudflaredToken -Name 'available' -Default $false)
+      cloudflared_token_tunnel_path = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $CloudflaredToken -Name 'path' -Default '') -MaxLength 512
+      cloudflared_token_tunnel_token_file_requested = [bool](Get-PropertyValue -Payload $CloudflaredToken -Name 'token_file_requested' -Default $false)
+      cloudflared_token_tunnel_token_file_present = [bool](Get-PropertyValue -Payload $CloudflaredToken -Name 'token_file_present' -Default $false)
+      cloudflared_token_tunnel_token_file_content_read = [bool](Get-PropertyValue -Payload $CloudflaredToken -Name 'token_file_content_read' -Default $false)
+      cloudflared_token_tunnel_requested_hostname = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $CloudflaredToken -Name 'requested_hostname' -Default '') -MaxLength 240
+      cloudflared_token_tunnel_hostname_requested = [bool](Get-PropertyValue -Payload $CloudflaredToken -Name 'hostname_requested' -Default $false)
+      cloudflared_token_tunnel_next_operator_step = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $CloudflaredToken -Name 'next_operator_step' -Default '') -MaxLength 160
       cloudflared_login_status = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $CloudflaredLogin -Name 'status' -Default '') -MaxLength 96
       cloudflared_login_process_id = [int](Get-PropertyValue -Payload $CloudflaredLogin -Name 'process_id' -Default 0)
       cloudflared_login_process_alive = [bool](Get-PropertyValue -Payload $CloudflaredLogin -Name 'process_alive' -Default $false)
@@ -1299,6 +1315,7 @@ function New-CommandPaletteMonitorProbe {
     [string]$ConnectorChecksUrl,
     [string]$ConnectorChecksCloudflaredTunnelName,
     [string]$ConnectorChecksCloudflaredHostname,
+    [string]$ConnectorChecksCloudflaredTokenFile,
     [bool]$ConnectorChecksVerify,
     [int]$ConnectorChecksProbeTimeoutSeconds,
     [bool]$RequirePersistentIngress
@@ -1318,7 +1335,7 @@ function New-CommandPaletteMonitorProbe {
     [ordered]@{ enabled = $false }
   }
   $PersistentIngressPlanMonitor = if ($ConnectorChecksEnabled) {
-    New-ChatGptPersistentIngressPlanMonitorProjection -Root $Root -ConnectorUrl $ConnectorChecksUrl -CloudflaredTunnelName $ConnectorChecksCloudflaredTunnelName -CloudflaredHostname $ConnectorChecksCloudflaredHostname -VerifyConnector $ConnectorChecksVerify -ProbeTimeoutSeconds $ConnectorChecksProbeTimeoutSeconds
+    New-ChatGptPersistentIngressPlanMonitorProjection -Root $Root -ConnectorUrl $ConnectorChecksUrl -CloudflaredTunnelName $ConnectorChecksCloudflaredTunnelName -CloudflaredHostname $ConnectorChecksCloudflaredHostname -CloudflaredTokenFile $ConnectorChecksCloudflaredTokenFile -VerifyConnector $ConnectorChecksVerify -ProbeTimeoutSeconds $ConnectorChecksProbeTimeoutSeconds
   } else {
     [ordered]@{ enabled = $false }
   }
@@ -1567,6 +1584,7 @@ if ($Mode -eq 'Probe') {
     ConnectorChecksUrl = $ChatGptConnectorUrl
     ConnectorChecksCloudflaredTunnelName = $CloudflaredTunnelName
     ConnectorChecksCloudflaredHostname = $CloudflaredHostname
+    ConnectorChecksCloudflaredTokenFile = $CloudflaredTokenFile
     ConnectorChecksVerify = [bool]$VerifyChatGptConnector
     ConnectorChecksProbeTimeoutSeconds = $ChatGptConnectorProbeTimeoutSeconds
     RequirePersistentIngress = [bool]$RequirePersistentChatGptIngress
@@ -1662,6 +1680,9 @@ if ($Mode -eq 'Start') {
     if (-not [string]::IsNullOrWhiteSpace($CloudflaredHostname)) {
       $Arguments += @('-CloudflaredHostname', $CloudflaredHostname)
     }
+    if (-not [string]::IsNullOrWhiteSpace($CloudflaredTokenFile)) {
+      $Arguments += @('-CloudflaredTokenFile', $CloudflaredTokenFile)
+    }
     if ($VerifyChatGptConnector) {
       $Arguments += '-VerifyChatGptConnector'
     }
@@ -1729,6 +1750,7 @@ if ($Mode -eq 'Run') {
       ConnectorChecksUrl = $ChatGptConnectorUrl
       ConnectorChecksCloudflaredTunnelName = $CloudflaredTunnelName
       ConnectorChecksCloudflaredHostname = $CloudflaredHostname
+      ConnectorChecksCloudflaredTokenFile = $CloudflaredTokenFile
       ConnectorChecksVerify = [bool]$VerifyChatGptConnector
       ConnectorChecksProbeTimeoutSeconds = $ChatGptConnectorProbeTimeoutSeconds
       RequirePersistentIngress = [bool]$RequirePersistentChatGptIngress

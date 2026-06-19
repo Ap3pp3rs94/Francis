@@ -448,6 +448,33 @@ def _persistent_ingress_plan(value: Any) -> dict[str, Any]:
                 providers.get("cloudflared_named_tunnel_next_operator_step"),
                 max_length=160,
             ),
+            "cloudflared_token_tunnel_available": _safe_bool(
+                providers.get("cloudflared_token_tunnel_available"),
+            ),
+            "cloudflared_token_tunnel_path": _safe_str(
+                providers.get("cloudflared_token_tunnel_path"),
+                max_length=512,
+            ),
+            "cloudflared_token_tunnel_token_file_requested": _safe_bool(
+                providers.get("cloudflared_token_tunnel_token_file_requested"),
+            ),
+            "cloudflared_token_tunnel_token_file_present": _safe_bool(
+                providers.get("cloudflared_token_tunnel_token_file_present"),
+            ),
+            "cloudflared_token_tunnel_token_file_content_read": _safe_bool(
+                providers.get("cloudflared_token_tunnel_token_file_content_read"),
+            ),
+            "cloudflared_token_tunnel_requested_hostname": _safe_str(
+                providers.get("cloudflared_token_tunnel_requested_hostname"),
+                max_length=240,
+            ),
+            "cloudflared_token_tunnel_hostname_requested": _safe_bool(
+                providers.get("cloudflared_token_tunnel_hostname_requested"),
+            ),
+            "cloudflared_token_tunnel_next_operator_step": _safe_str(
+                providers.get("cloudflared_token_tunnel_next_operator_step"),
+                max_length=160,
+            ),
             "cloudflared_login_status": _safe_str(
                 providers.get("cloudflared_login_status"),
                 max_length=120,
