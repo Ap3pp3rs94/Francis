@@ -56,6 +56,8 @@ type SpeechRecognitionEventLike = {
   };
 };
 
+const BRIDGE_MONITOR_POLL_MS = 15000;
+
 declare global {
   interface Window {
     SpeechRecognition?: SpeechRecognitionConstructor;
@@ -777,10 +779,14 @@ function BridgeMonitorPanel(props: { baseUrl: string }) {
   const [status, setStatus] = useState<CommandPaletteMonitorStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const statusRequestInFlight = useRef(false);
 
   const loadStatus = useCallback(
-    (signal?: AbortSignal) => {
-      setLoading(true);
+    (signal?: AbortSignal, opts?: { showLoading?: boolean }) => {
+      if (statusRequestInFlight.current) return;
+      statusRequestInFlight.current = true;
+      const showLoading = opts?.showLoading !== false;
+      if (showLoading) setLoading(true);
       setError("");
 
       void fetchCommandPaletteMonitorStatus({ baseUrl: props.baseUrl, signal })
@@ -792,8 +798,9 @@ function BridgeMonitorPanel(props: { baseUrl: string }) {
           setError(err instanceof Error ? err.message : "Command-palette monitor request failed.");
         })
         .finally(() => {
+          statusRequestInFlight.current = false;
           if (signal?.aborted) return;
-          setLoading(false);
+          if (showLoading) setLoading(false);
         });
     },
     [props.baseUrl],
@@ -802,7 +809,13 @@ function BridgeMonitorPanel(props: { baseUrl: string }) {
   useEffect(() => {
     const controller = new AbortController();
     loadStatus(controller.signal);
-    return () => controller.abort();
+    const pollId = window.setInterval(() => {
+      loadStatus(controller.signal, { showLoading: false });
+    }, BRIDGE_MONITOR_POLL_MS);
+    return () => {
+      controller.abort();
+      window.clearInterval(pollId);
+    };
   }, [loadStatus]);
 
   const voice = status?.voice_monitor;
@@ -859,6 +872,7 @@ function BridgeMonitorPanel(props: { baseUrl: string }) {
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 16 }}>
         <Pill label="monitor" value={statusText(status?.status)} tone={statusTone} />
         <Pill label="process" value={monitorReady ? "alive" : "not confirmed"} tone={monitorReady ? "ready" : "blocked"} />
+        <Pill label="poll" value={`${Math.round(BRIDGE_MONITOR_POLL_MS / 1000)}s`} tone="ready" />
         <Pill
           label="mcp link"
           value={connectionProofReady ? "observed" : statusText(proof?.mcp_connection_proof_status)}
@@ -892,6 +906,10 @@ function BridgeMonitorPanel(props: { baseUrl: string }) {
           marginTop: 18,
         }}
       >
+        <div>
+          <dt style={{ color: "#94a3b8" }}>Checked at</dt>
+          <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{status?.checked_at || "none"}</dd>
+        </div>
         <div>
           <dt style={{ color: "#94a3b8" }}>Latest receipt</dt>
           <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{voice?.latest_receipt_id || "none"}</dd>
