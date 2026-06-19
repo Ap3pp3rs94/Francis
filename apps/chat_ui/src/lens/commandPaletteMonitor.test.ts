@@ -97,6 +97,28 @@ test("parseCommandPaletteMonitorStatus preserves latest receipt origin without t
       status: "localtunnel_fallback_replace_needed",
       recommended_provider_order: ["cloudflared_named_tunnel"],
       next_operator_steps: ["choose_or_install_a_persistent_https_ingress_provider"],
+      operator_handoff: {
+        kind: "francis.chatgpt_voice.persistent_ingress_operator_handoff",
+        safe_to_display: true,
+        read_only_plan: true,
+        installs_provider: false,
+        opens_tunnel: false,
+        writes_state: false,
+        requires_operator_provider_account_or_hostname: true,
+        preferred_provider: "cloudflared_named_tunnel",
+        local_endpoint: "http://127.0.0.1:8787/mcp",
+        stable_url_placeholder: "https://YOUR-STABLE-HOST/mcp",
+        install_commands: {
+          cloudflared_winget:
+            "winget install --id Cloudflare.cloudflared --exact --accept-source-agreements --accept-package-agreements",
+        },
+        governed_handoff_commands: {
+          record_url:
+            '.\\scripts\\chatgpt-voice-connector.ps1 -Mode RecordUrl -ConnectorUrl "https://YOUR-STABLE-HOST/mcp" -Json',
+          start_persistent_mcp:
+            '.\\scripts\\chatgpt-voice-connector.ps1 -Mode StartPersistent -ConnectorUrl "https://YOUR-STABLE-HOST/mcp" -VerifyConnector -Json',
+        },
+      },
       governance_safe: true,
     },
     governance: { execution_authority: false, captures_audio: false },
@@ -121,6 +143,22 @@ test("parseCommandPaletteMonitorStatus preserves latest receipt origin without t
   assert.equal(status.chatgpt_connector_monitor.known_localtunnel, true);
   assert.deepEqual(status.chatgpt_connector_monitor.blockers, ["localtunnel_url_is_not_persistent_ingress"]);
   assert.equal(status.chatgpt_persistent_ingress_plan_monitor.governance_safe, true);
+  assert.equal(
+    status.chatgpt_persistent_ingress_plan_monitor.operator_handoff.preferred_provider,
+    "cloudflared_named_tunnel",
+  );
+  assert.equal(
+    status.chatgpt_persistent_ingress_plan_monitor.operator_handoff.install_commands.cloudflared_winget.endsWith(
+      "--accept-source-agreements --accept-package-agreements",
+    ),
+    true,
+  );
+  assert.equal(
+    status.chatgpt_persistent_ingress_plan_monitor.operator_handoff.governed_handoff_commands.record_url.includes(
+      "RecordUrl",
+    ),
+    true,
+  );
   assert.equal(JSON.stringify(status).includes("this transcript must not be parsed"), false);
 });
 

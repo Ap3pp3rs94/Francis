@@ -92,8 +92,24 @@ export type PersistentIngressPlanMonitor = {
   blockers: string[];
   recommended_provider_order: string[];
   next_operator_steps: string[];
+  operator_handoff: PersistentIngressOperatorHandoff;
   providers: Record<string, boolean>;
   governance_safe: boolean;
+};
+
+export type PersistentIngressOperatorHandoff = {
+  kind: string;
+  safe_to_display: boolean;
+  read_only_plan: boolean;
+  installs_provider: boolean;
+  opens_tunnel: boolean;
+  writes_state: boolean;
+  requires_operator_provider_account_or_hostname: boolean;
+  preferred_provider: string;
+  local_endpoint: string;
+  stable_url_placeholder: string;
+  install_commands: Record<string, string>;
+  governed_handoff_commands: Record<string, string>;
 };
 
 export type CommandPaletteMonitorStatus = {
@@ -166,6 +182,15 @@ function safeNumber(value: unknown, fallback = 0): number {
 
 function safeStringList(value: unknown): string[] {
   return Array.isArray(value) ? value.map((item) => safeString(item)).filter(Boolean) : [];
+}
+
+function safeStringRecord(value: unknown): Record<string, string> {
+  const raw = safeRecord(value);
+  const parsed: Record<string, string> = {};
+  for (const [key, item] of Object.entries(raw)) {
+    parsed[key] = safeString(item);
+  }
+  return parsed;
 }
 
 function normalizeBaseUrl(value: string | undefined): string {
@@ -278,6 +303,7 @@ function parseConnectorMonitor(value: unknown): ChatGptConnectorMonitor {
 function parsePersistentIngressPlan(value: unknown): PersistentIngressPlanMonitor {
   const raw = safeRecord(value);
   const providers = safeRecord(raw["providers"]);
+  const handoff = safeRecord(raw["operator_handoff"]);
   const parsedProviders: Record<string, boolean> = {};
   for (const [key, ready] of Object.entries(providers)) {
     parsedProviders[key] = safeBoolean(ready);
@@ -289,6 +315,22 @@ function parsePersistentIngressPlan(value: unknown): PersistentIngressPlanMonito
     blockers: safeStringList(raw["blockers"]),
     recommended_provider_order: safeStringList(raw["recommended_provider_order"]),
     next_operator_steps: safeStringList(raw["next_operator_steps"]),
+    operator_handoff: {
+      kind: safeString(handoff["kind"]),
+      safe_to_display: safeBoolean(handoff["safe_to_display"]),
+      read_only_plan: safeBoolean(handoff["read_only_plan"]),
+      installs_provider: safeBoolean(handoff["installs_provider"]),
+      opens_tunnel: safeBoolean(handoff["opens_tunnel"]),
+      writes_state: safeBoolean(handoff["writes_state"]),
+      requires_operator_provider_account_or_hostname: safeBoolean(
+        handoff["requires_operator_provider_account_or_hostname"],
+      ),
+      preferred_provider: safeString(handoff["preferred_provider"]),
+      local_endpoint: safeString(handoff["local_endpoint"]),
+      stable_url_placeholder: safeString(handoff["stable_url_placeholder"]),
+      install_commands: safeStringRecord(handoff["install_commands"]),
+      governed_handoff_commands: safeStringRecord(handoff["governed_handoff_commands"]),
+    },
     providers: parsedProviders,
     governance_safe: safeBoolean(raw["governance_safe"]),
   };

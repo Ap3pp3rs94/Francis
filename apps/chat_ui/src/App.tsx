@@ -809,6 +809,7 @@ function BridgeMonitorPanel(props: { baseUrl: string }) {
   const proof = voice?.chatgpt_mcp_proof;
   const connector = status?.chatgpt_connector_monitor;
   const ingress = status?.chatgpt_persistent_ingress_plan_monitor;
+  const ingressHandoff = ingress?.operator_handoff;
   const proofReady = Boolean(proof?.proof_observed);
   const monitorReady = Boolean(status?.monitor_process_alive || status?.monitor_heartbeat_fresh);
   const statusTone = error || status?.status === "anomaly" || status?.status === "missing" ? "blocked" : "ready";
@@ -928,6 +929,16 @@ function BridgeMonitorPanel(props: { baseUrl: string }) {
           <dt style={{ color: "#94a3b8" }}>Next ingress step</dt>
           <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{joinStatusList(ingress?.next_operator_steps ?? [])}</dd>
         </div>
+        <div>
+          <dt style={{ color: "#94a3b8" }}>Preferred ingress</dt>
+          <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{ingressHandoff?.preferred_provider || "none"}</dd>
+        </div>
+        <div>
+          <dt style={{ color: "#94a3b8" }}>Stable URL</dt>
+          <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
+            {ingressHandoff?.stable_url_placeholder || "none"}
+          </dd>
+        </div>
       </dl>
 
       <pre
@@ -960,6 +971,15 @@ function BridgeMonitorPanel(props: { baseUrl: string }) {
                   connector_usable_for_chatgpt: connector?.connector_usable_for_chatgpt,
                   persistent_ingress_status: connector?.persistent_ingress_status,
                   blockers: connector?.blockers,
+                },
+                ingress_handoff: {
+                  preferred_provider: ingressHandoff?.preferred_provider,
+                  stable_url_placeholder: ingressHandoff?.stable_url_placeholder,
+                  read_only_plan: ingressHandoff?.read_only_plan,
+                  installs_provider: ingressHandoff?.installs_provider,
+                  opens_tunnel: ingressHandoff?.opens_tunnel,
+                  record_url: ingressHandoff?.governed_handoff_commands.record_url,
+                  start_persistent_mcp: ingressHandoff?.governed_handoff_commands.start_persistent_mcp,
                 },
               }
             : { status: loading ? "loading" : "not_loaded" },
