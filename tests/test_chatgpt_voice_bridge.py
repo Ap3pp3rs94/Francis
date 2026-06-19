@@ -40,6 +40,11 @@ def test_chatgpt_voice_contract_is_permission_gated(monkeypatch, tmp_path: Path)
     assert body["receipt_contract"]["mcp_server_tool"] == "francis_chatgpt_voice_ingress"
     assert body["receipt_contract"]["mcp_connection_proof_gateway_tool"] == "francis.chatgpt_voice.mcp_probe"
     assert body["receipt_contract"]["mcp_connection_proof_server_tool"] == "francis_chatgpt_voice_mcp_probe"
+    assert body["receipt_contract"]["metadata_secrets_redacted_field"] == "metadata_secrets_redacted"
+    assert body["receipt_contract"]["redacted_metadata_fields_field"] == "redacted_metadata_fields"
+    assert body["receipt_contract"]["receipt_readback_redacts_secret_patterns"] is True
+    assert body["receipt_contract"]["voice_output_provider_field"] == "voice_output_provider"
+    assert body["receipt_contract"]["voice_output_provider_status_field"] == "voice_output_provider_status"
     assert body["orb_voice_contract"]["francis_identity"] == "Francis"
     assert body["orb_voice_contract"]["francis_surfaces"] == ["voice", "lens", "orb"]
     assert body["orb_voice_contract"]["orb_role"] == "embodiment"
@@ -59,10 +64,24 @@ def test_chatgpt_voice_contract_is_permission_gated(monkeypatch, tmp_path: Path)
     assert body["client_speech_contract"]["call_ingress_for_every_voice_turn"] is True
     assert body["client_speech_contract"]["call_mcp_probe_to_validate_connector"] is True
     assert body["client_speech_contract"]["speak_only_top_level_reply"] is True
+    assert body["client_speech_contract"]["voice_output_provider"] == "chatgpt_voice_client"
+    assert body["client_speech_contract"]["voice_output_mode"] == "client_text_reply"
+    assert body["client_speech_contract"]["voice_output_provider_status"] == "client_speaks_top_level_reply"
     assert body["client_speech_contract"]["transcript_unavailable_must_be_forwarded"] is True
     assert body["client_speech_contract"]["local_fallback_answer_allowed"] is False
     assert "Do not answer locally" in body["client_speech_contract"]["description"]
     assert body["chatgpt_app_boundary"]["native_phone_localhost_access_claimed"] is False
+    provider_boundary = body["output_provider_boundary"]
+    assert provider_boundary["voice_output_provider"] == "chatgpt_voice_client"
+    assert provider_boundary["voice_output_mode"] == "client_text_reply"
+    assert provider_boundary["live_voice_provider_call"] is False
+    assert provider_boundary["mock_voice_provider_call"] is False
+    assert provider_boundary["fixture_voice_provider_call"] is False
+    assert provider_boundary["replay_voice_provider_call"] is False
+    assert provider_boundary["voice_provider_unavailable"] is False
+    assert provider_boundary["voice_provider_unconfigured"] is False
+    assert provider_boundary["elevenlabs_provider_invoked"] is False
+    assert provider_boundary["elevenlabs_audio_claimed"] is False
     assert body["governance"]["read_only"] is True
     assert body["governance"]["grants_execution_authority"] is False
     assert body["governance"]["grants_mutation_authority"] is False
@@ -90,6 +109,15 @@ def test_chatgpt_voice_ingress_records_without_chat_forward(monkeypatch, tmp_pat
     assert body["reply"] == "I recorded the transcript for Francis. Chat forwarding was not requested."
     assert body["voice_response"]["source"] == "bridge.recorded_only"
     assert body["voice_response"]["speakable"] is True
+    assert body["voice_response"]["voice_output_provider"] == "chatgpt_voice_client"
+    assert body["voice_response"]["voice_output_mode"] == "client_text_reply"
+    assert body["voice_response"]["live_voice_provider_call"] is False
+    assert body["voice_response"]["mock_voice_provider_call"] is False
+    assert body["voice_response"]["fixture_voice_provider_call"] is False
+    assert body["voice_response"]["replay_voice_provider_call"] is False
+    assert body["voice_response"]["voice_provider_unavailable"] is False
+    assert body["voice_response"]["voice_provider_unconfigured"] is False
+    assert body["voice_response"]["elevenlabs_provider_invoked"] is False
     assert body["chat_forward"]["requested"] is False
     assert body["receipt"]["transcript"] == "Francis can you hear me"
     assert body["receipt"]["turn_id"] == "voice-turn-1"
@@ -97,6 +125,18 @@ def test_chatgpt_voice_ingress_records_without_chat_forward(monkeypatch, tmp_pat
     assert body["receipt"]["mcp_gateway_tool"] == ""
     assert body["receipt"]["mcp_server_tool"] == ""
     assert body["receipt"]["mcp_server_transport"] == ""
+    assert body["receipt"]["voice_output_provider"] == "chatgpt_voice_client"
+    assert body["receipt"]["voice_output_mode"] == "client_text_reply"
+    assert body["receipt"]["voice_output_provider_status"] == "client_speaks_top_level_reply"
+    assert body["receipt"]["live_voice_provider_call"] is False
+    assert body["receipt"]["mock_voice_provider_call"] is False
+    assert body["receipt"]["fixture_voice_provider_call"] is False
+    assert body["receipt"]["replay_voice_provider_call"] is False
+    assert body["receipt"]["voice_provider_unavailable"] is False
+    assert body["receipt"]["voice_provider_unconfigured"] is False
+    assert body["receipt"]["elevenlabs_provider_invoked"] is False
+    assert body["receipt"]["elevenlabs_audio_claimed"] is False
+    assert body["receipt"]["provider_boundary"]["elevenlabs_called_by_bridge"] is False
     assert body["receipt"]["reply_source"] == "bridge.recorded_only"
     assert isinstance(body["receipt"]["created_ts"], float)
     assert body["receipt"]["created_at"].endswith("Z")
@@ -128,6 +168,17 @@ def test_chatgpt_voice_ingress_records_without_chat_forward(monkeypatch, tmp_pat
     assert state["francis_identity"] == "Francis"
     assert state["orb_is_embodiment"] is True
     assert state["transcript_source"] == "chatgpt_voice_http_transcript"
+    assert state["voice_output_provider"] == "chatgpt_voice_client"
+    assert state["voice_output_mode"] == "client_text_reply"
+    assert state["voice_output_provider_status"] == "client_speaks_top_level_reply"
+    assert state["live_voice_provider_call"] is False
+    assert state["mock_voice_provider_call"] is False
+    assert state["fixture_voice_provider_call"] is False
+    assert state["replay_voice_provider_call"] is False
+    assert state["voice_provider_unavailable"] is False
+    assert state["voice_provider_unconfigured"] is False
+    assert state["elevenlabs_provider_invoked"] is False
+    assert state["elevenlabs_audio_claimed"] is False
     assert state["local_overlay_speech_started"] is False
     assert body["governance"]["writes_receipt"] is True
     assert body["governance"]["writes_lens_voice_turn"] is True
@@ -135,6 +186,62 @@ def test_chatgpt_voice_ingress_records_without_chat_forward(monkeypatch, tmp_pat
     assert body["governance"]["raw_audio"] is False
     assert body["governance"]["grants_execution_authority"] is False
     assert not (data_root / "conversations" / "ledger" / "ledger.jsonl").exists()
+
+
+def test_chatgpt_voice_ingress_redacts_secret_metadata_in_receipts(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        _scopes("chatgpt.voice.bridge.read", "chatgpt.voice.bridge.write"),
+    )
+    secret = "sk-" + ("a" * 24)
+
+    client = TestClient(create_app())
+
+    body = client.post(
+        "/chatgpt-voice/ingress",
+        json={
+            "actor": _ACTOR,
+            "source": f"chatgpt.voice token={secret}",
+            "client_origin": f"chatgpt_app_voice token={secret}",
+            "conversation_id": f"conversation-{secret}",
+            "turn_id": f"turn-{secret}",
+            "locale": f"en-US token={secret}",
+            "transcript": f"Francis record api_key={secret}",
+            "forward_to_chat": False,
+        },
+    ).json()
+
+    assert body["ok"] is True
+    assert body["status"] == "recorded"
+    serialized = json.dumps(body)
+    assert secret not in serialized
+    assert "[REDACTED:secret]" in serialized
+    receipt = body["receipt"]
+    assert receipt["secrets_redacted"] is True
+    assert receipt["metadata_secrets_redacted"] is True
+    assert set(receipt["redacted_metadata_fields"]) >= {
+        "client_origin",
+        "conversation_id",
+        "locale",
+        "source",
+        "turn_id",
+    }
+
+    receipt_path = Path(receipt["receipt_path"])
+    persisted_text = receipt_path.read_text(encoding="utf-8")
+    assert secret not in persisted_text
+    assert "[REDACTED:secret]" in persisted_text
+
+    voice_state = data_root / "runtime" / "lens-overlay" / "voice-turn-status.json"
+    state_text = voice_state.read_text(encoding="utf-8")
+    assert secret not in state_text
+    assert "[REDACTED:secret]" in state_text
+
+    readback = client.get("/chatgpt-voice/receipts", params={"actor": _ACTOR, "limit": 5}).json()
+    assert readback["ok"] is True
+    assert secret not in json.dumps(readback)
 
 
 def test_chatgpt_voice_mcp_proof_records_connection_without_transcript_or_voice_turn(
@@ -156,6 +263,10 @@ def test_chatgpt_voice_mcp_proof_records_connection_without_transcript_or_voice_
     assert body["status"] == "recorded"
     assert body["reply"] == "Francis MCP voice bridge is reachable. No transcript was recorded."
     assert body["voice_response"]["source"] == "bridge.mcp_connection_proof"
+    assert body["voice_response"]["voice_output_provider"] == "chatgpt_voice_client"
+    assert body["voice_response"]["live_voice_provider_call"] is False
+    assert body["voice_response"]["replay_voice_provider_call"] is False
+    assert body["voice_response"]["elevenlabs_provider_invoked"] is False
     assert body["chat_forward"]["requested"] is False
     assert body["chat_forward"]["forwarded"] is False
     assert body["orb_voice_bridge"]["status"] == "mcp_connection_proof_recorded"
@@ -169,6 +280,16 @@ def test_chatgpt_voice_mcp_proof_records_connection_without_transcript_or_voice_
     assert body["receipt"]["mcp_gateway_tool"] == "francis.chatgpt_voice.mcp_probe"
     assert body["receipt"]["mcp_server_tool"] == "francis_chatgpt_voice_mcp_probe"
     assert body["receipt"]["mcp_server_transport"] == ""
+    assert body["receipt"]["voice_output_provider"] == "chatgpt_voice_client"
+    assert body["receipt"]["voice_output_mode"] == "client_text_reply"
+    assert body["receipt"]["live_voice_provider_call"] is False
+    assert body["receipt"]["mock_voice_provider_call"] is False
+    assert body["receipt"]["fixture_voice_provider_call"] is False
+    assert body["receipt"]["replay_voice_provider_call"] is False
+    assert body["receipt"]["voice_provider_unavailable"] is False
+    assert body["receipt"]["voice_provider_unconfigured"] is False
+    assert body["receipt"]["elevenlabs_provider_invoked"] is False
+    assert body["receipt"]["elevenlabs_audio_claimed"] is False
     assert body["orb_voice_bridge"]["mcp_server_transport"] == ""
     assert body["orb_voice_bridge"]["mcp_server_transport_verified"] is False
     assert body["orb_voice_bridge"]["public_mcp_connector_transport"] is False
@@ -179,6 +300,41 @@ def test_chatgpt_voice_mcp_proof_records_connection_without_transcript_or_voice_
     assert Path(body["receipt"]["receipt_path"]).exists()
     assert not (data_root / "runtime" / "lens-overlay" / "voice-turn-status.json").exists()
     assert not (data_root / "conversations" / "ledger" / "ledger.jsonl").exists()
+
+
+def test_chatgpt_voice_mcp_probe_redacts_secret_metadata_in_receipts(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", _scopes("chatgpt.voice.bridge.read", "chatgpt.voice.bridge.write"))
+    secret = "sk-" + ("b" * 24)
+
+    proof = run_tool(
+        "francis.chatgpt_voice.mcp_probe",
+        {
+            "actor": _ACTOR,
+            "source": f"chatgpt.voice token={secret}",
+            "client_origin": f"chatgpt_app_voice token={secret}",
+            "reason": f"connector proof api_key={secret}",
+            "mcp_server_transport": f"streamable-http token={secret}",
+        },
+    )
+
+    assert proof["ok"] is True
+    assert secret not in json.dumps(proof)
+    receipt = proof["data"]["receipt"]
+    assert receipt["secrets_redacted"] is True
+    assert receipt["metadata_secrets_redacted"] is True
+    assert set(receipt["redacted_metadata_fields"]) >= {
+        "client_origin",
+        "mcp_server_transport",
+        "reason",
+        "source",
+    }
+    receipt_path = Path(receipt["receipt_path"])
+    assert secret not in receipt_path.read_text(encoding="utf-8")
+
+    receipts = run_tool("francis.chatgpt_voice.receipts", {"actor": _ACTOR, "limit": 5})
+    assert receipts["ok"] is True
+    assert secret not in json.dumps(receipts)
 
 
 def test_chatgpt_voice_http_ingress_preserves_browser_voice_client_origin(monkeypatch, tmp_path: Path) -> None:
@@ -521,6 +677,15 @@ def test_chatgpt_voice_mcp_ingress_updates_orb_virtual_voice_turn(monkeypatch, t
     assert state["raw_audio"] is False
     assert state["chat_route_writes_conversation_ledger"] is True
     assert state["speech_output_owner"] == "chatgpt_voice_client"
+    assert state["voice_output_provider"] == "chatgpt_voice_client"
+    assert state["voice_output_mode"] == "client_text_reply"
+    assert state["live_voice_provider_call"] is False
+    assert state["mock_voice_provider_call"] is False
+    assert state["fixture_voice_provider_call"] is False
+    assert state["replay_voice_provider_call"] is False
+    assert state["voice_provider_unavailable"] is False
+    assert state["voice_provider_unconfigured"] is False
+    assert state["elevenlabs_provider_invoked"] is False
     assert state["local_overlay_speech_started"] is False
     assert "can you hear me" not in json.dumps(state)
 

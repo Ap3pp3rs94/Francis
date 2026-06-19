@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
-from francis.governance.redaction import redact_secret_text
+from francis.governance.redaction import redact_governed_display_value, redact_secret_text
 from francis.kernel.paths import data_dir
 
 CHATGPT_VOICE_BRIDGE_READ_SCOPE = "chatgpt.voice.bridge.read"
@@ -26,6 +26,9 @@ CHATGPT_VOICE_BRIDGE_MCP_CLIENT_UNSPECIFIED = "mcp_client_unspecified"
 CHATGPT_VOICE_BRIDGE_MCP_SERVER_TRANSPORT_UNSPECIFIED = "mcp_server_transport_unspecified"
 CHATGPT_VOICE_BRIDGE_PUBLIC_CONNECTOR_TRANSPORT = "streamable-http"
 CHATGPT_VOICE_BRIDGE_CHATGPT_APP_VOICE_CLIENT = "chatgpt_app_voice"
+CHATGPT_VOICE_BRIDGE_OUTPUT_PROVIDER = "chatgpt_voice_client"
+CHATGPT_VOICE_BRIDGE_OUTPUT_MODE = "client_text_reply"
+CHATGPT_VOICE_BRIDGE_OUTPUT_PROVIDER_STATUS = "client_speaks_top_level_reply"
 CHATGPT_VOICE_BRIDGE_VIRTUAL_TURN_STATE = "data/runtime/lens-overlay/voice-turn-status.json"
 CHATGPT_VOICE_BRIDGE_VIRTUAL_TURN_RECEIPTS = "data/runtime/lens-overlay/voice-turns"
 CHATGPT_VOICE_BRIDGE_ORB_POSITION_COMMAND_REQUEST = "data/runtime/lens-overlay/orb-position-command-request.json"
@@ -86,6 +89,19 @@ def _bounded_text(value: Any, *, max_chars: int) -> str:
     return text[: max(1, max_chars)]
 
 
+def _bounded_redacted_text(value: Any, *, max_chars: int) -> str:
+    return redact_secret_text(_bounded_text(value, max_chars=max_chars))
+
+
+def _redacted_field_names(fields: dict[str, tuple[Any, str, int]]) -> list[str]:
+    names: list[str] = []
+    for name, (raw_value, clean_value, max_chars) in fields.items():
+        bounded = _bounded_text(raw_value, max_chars=max_chars)
+        if bounded and clean_value != bounded:
+            names.append(name)
+    return sorted(names)
+
+
 def _transcript_rejection_reason(text: str) -> str:
     if not text:
         return "transcript_required"
@@ -132,9 +148,51 @@ def _voice_response(
         "max_text_chars": MAX_SPEAKABLE_REPLY_CHARS,
         "text_truncated": bool(text_truncated),
         "sentence_aware_limit": True,
+        "voice_output_provider": CHATGPT_VOICE_BRIDGE_OUTPUT_PROVIDER,
+        "voice_output_mode": CHATGPT_VOICE_BRIDGE_OUTPUT_MODE,
+        "voice_output_provider_status": CHATGPT_VOICE_BRIDGE_OUTPUT_PROVIDER_STATUS,
+        "live_voice_provider_call": False,
+        "mock_voice_provider_call": False,
+        "fixture_voice_provider_call": False,
+        "replay_voice_provider_call": False,
+        "voice_provider_unavailable": False,
+        "voice_provider_unconfigured": False,
+        "elevenlabs_provider_invoked": False,
+        "elevenlabs_audio_claimed": False,
         "raw_audio": False,
         "grants_execution_authority": False,
         "grants_mutation_authority": False,
+    }
+
+
+def _voice_output_boundary() -> dict[str, Any]:
+    return {
+        "voice_output_provider": CHATGPT_VOICE_BRIDGE_OUTPUT_PROVIDER,
+        "voice_output_mode": CHATGPT_VOICE_BRIDGE_OUTPUT_MODE,
+        "voice_output_provider_status": CHATGPT_VOICE_BRIDGE_OUTPUT_PROVIDER_STATUS,
+        "voice_output_transport": "chatgpt_voice_client_reply",
+        "client_speaks_top_level_reply": True,
+        "live_voice_provider_call": False,
+        "mock_voice_provider_call": False,
+        "fixture_voice_provider_call": False,
+        "replay_voice_provider_call": False,
+        "voice_provider_unavailable": False,
+        "voice_provider_unconfigured": False,
+        "voice_provider_unavailable_status_claimed": False,
+        "voice_provider_unconfigured_status_claimed": False,
+        "elevenlabs_provider_invoked": False,
+        "elevenlabs_audio_claimed": False,
+        "overlay_audio_claimed": False,
+        "provider_boundary": {
+            "bridge_calls_live_voice_provider": False,
+            "bridge_calls_mock_voice_provider": False,
+            "bridge_uses_fixture_voice_provider": False,
+            "bridge_replays_voice_provider_output": False,
+            "bridge_claims_provider_unavailable": False,
+            "bridge_claims_provider_unconfigured": False,
+            "elevenlabs_called_by_bridge": False,
+            "chatgpt_client_speaks_top_level_reply": True,
+        },
     }
 
 
@@ -462,6 +520,11 @@ def chatgpt_voice_bridge_contract(actor: str = "") -> dict[str, Any]:
             "mcp_server_transport_field": "mcp_server_transport",
             "mcp_server_transport_unspecified": CHATGPT_VOICE_BRIDGE_MCP_SERVER_TRANSPORT_UNSPECIFIED,
             "public_connector_transport": CHATGPT_VOICE_BRIDGE_PUBLIC_CONNECTOR_TRANSPORT,
+            "metadata_secrets_redacted_field": "metadata_secrets_redacted",
+            "redacted_metadata_fields_field": "redacted_metadata_fields",
+            "receipt_readback_redacts_secret_patterns": True,
+            "voice_output_provider_field": "voice_output_provider",
+            "voice_output_provider_status_field": "voice_output_provider_status",
         },
         "orb_voice_contract": {
             "francis_identity": "Francis",
@@ -518,6 +581,9 @@ def chatgpt_voice_bridge_contract(actor: str = "") -> dict[str, Any]:
             "call_mcp_probe_to_validate_connector": True,
             "call_ingress_for_every_voice_turn": True,
             "speak_only_top_level_reply": True,
+            "voice_output_provider": CHATGPT_VOICE_BRIDGE_OUTPUT_PROVIDER,
+            "voice_output_mode": CHATGPT_VOICE_BRIDGE_OUTPUT_MODE,
+            "voice_output_provider_status": CHATGPT_VOICE_BRIDGE_OUTPUT_PROVIDER_STATUS,
             "max_reply_chars": MAX_SPEAKABLE_REPLY_CHARS,
             "sentence_aware_reply_limit": True,
             "transcript_unavailable_must_be_forwarded": True,
@@ -532,6 +598,10 @@ def chatgpt_voice_bridge_contract(actor: str = "") -> dict[str, Any]:
             "native_phone_localhost_access_claimed": False,
             "mobile_client_requires_linked_chatgpt_app_or_connector": True,
             "local_francis_requires_reachable_https_endpoint_or_tunnel_for_mobile": True,
+        },
+        "output_provider_boundary": {
+            **_voice_output_boundary(),
+            "note": "ChatGPT voice bridge returns text for the client to speak; it does not invoke ElevenLabs or overlay audio.",
         },
         "governance": _honesty(read_only=True),
     }
@@ -664,12 +734,11 @@ def _write_virtual_voice_turn(
         "chat_reply_truncated_for_voice": bool(base_payload.get("chat_reply_truncated_for_voice")),
         "chat_reply_sentence_aware_limit": bool(base_payload.get("chat_reply_sentence_aware_limit")),
         "chat_reply_redacted": True,
-        "speech_output_owner": "chatgpt_voice_client",
-        "client_speaks_top_level_reply": True,
+        "speech_output_owner": CHATGPT_VOICE_BRIDGE_OUTPUT_PROVIDER,
+        **_voice_output_boundary(),
         "local_overlay_speech_started": False,
         "speech_started": False,
         "speech_playback_async": False,
-        "speech_output_transport": "chatgpt_voice_client_reply",
         "latest_voice_turn_wins": True,
         "stale_reply_suppression_supported": True,
         "thought_relevance_status": "current_virtual_voice_turn_recorded",
@@ -713,6 +782,17 @@ def _virtual_voice_summary(payload: dict[str, Any]) -> dict[str, Any]:
         "voice_lens_orb_are_francis_surfaces": bool(payload.get("voice_lens_orb_are_francis_surfaces")),
         "microphone_recognition_claimed": bool(payload.get("microphone_recognition_claimed")),
         "raw_audio": bool(payload.get("raw_audio")),
+        "voice_output_provider": _safe_str(payload.get("voice_output_provider")),
+        "voice_output_mode": _safe_str(payload.get("voice_output_mode")),
+        "voice_output_provider_status": _safe_str(payload.get("voice_output_provider_status")),
+        "live_voice_provider_call": bool(payload.get("live_voice_provider_call")),
+        "mock_voice_provider_call": bool(payload.get("mock_voice_provider_call")),
+        "fixture_voice_provider_call": bool(payload.get("fixture_voice_provider_call")),
+        "replay_voice_provider_call": bool(payload.get("replay_voice_provider_call")),
+        "voice_provider_unavailable": bool(payload.get("voice_provider_unavailable")),
+        "voice_provider_unconfigured": bool(payload.get("voice_provider_unconfigured")),
+        "elevenlabs_provider_invoked": bool(payload.get("elevenlabs_provider_invoked")),
+        "elevenlabs_audio_claimed": bool(payload.get("elevenlabs_audio_claimed")),
         "voice_turn_state_path": _safe_str(payload.get("voice_turn_state_path")),
         "voice_turn_receipt_path": _safe_str(payload.get("voice_turn_receipt_path")),
         "orb_position_command_detected": bool(payload.get("orb_position_command_detected")),
@@ -784,12 +864,14 @@ def record_chatgpt_voice_ingress(
 
     bounded_transcript = _bounded_text(transcript, max_chars=MAX_TRANSCRIPT_CHARS)
     redacted_transcript = redact_secret_text(bounded_transcript)
-    clean_ingress_transport = _bounded_text(ingress_transport, max_chars=64) or CHATGPT_VOICE_BRIDGE_HTTP_TRANSPORT
-    clean_mcp_gateway_tool = _bounded_text(mcp_gateway_tool, max_chars=96)
-    clean_mcp_server_tool = _bounded_text(mcp_server_tool, max_chars=96)
-    clean_mcp_server_transport = _bounded_text(mcp_server_transport, max_chars=64)
-    clean_client_origin = _bounded_text(client_origin, max_chars=96)
-    clean_source = _bounded_text(source, max_chars=96) or "chatgpt.voice"
+    clean_ingress_transport = (
+        _bounded_redacted_text(ingress_transport, max_chars=64) or CHATGPT_VOICE_BRIDGE_HTTP_TRANSPORT
+    )
+    clean_mcp_gateway_tool = _bounded_redacted_text(mcp_gateway_tool, max_chars=96)
+    clean_mcp_server_tool = _bounded_redacted_text(mcp_server_tool, max_chars=96)
+    clean_mcp_server_transport = _bounded_redacted_text(mcp_server_transport, max_chars=64)
+    clean_client_origin = _bounded_redacted_text(client_origin, max_chars=96)
+    clean_source = _bounded_redacted_text(source, max_chars=96) or "chatgpt.voice"
     if not clean_client_origin:
         if clean_source == "chatgpt.voice" and clean_mcp_server_tool == CHATGPT_VOICE_BRIDGE_MCP_SERVER_TOOL:
             clean_client_origin = CHATGPT_VOICE_BRIDGE_CHATGPT_APP_VOICE_CLIENT
@@ -799,6 +881,22 @@ def record_chatgpt_voice_ingress(
             or clean_mcp_server_tool
         ):
             clean_client_origin = CHATGPT_VOICE_BRIDGE_MCP_CLIENT_UNSPECIFIED
+    clean_conversation_id = _bounded_redacted_text(conversation_id, max_chars=160)
+    clean_turn_id = _bounded_redacted_text(turn_id, max_chars=160)
+    clean_locale = _bounded_redacted_text(locale, max_chars=32)
+    redacted_metadata_fields = _redacted_field_names(
+        {
+            "source": (source, clean_source, 96),
+            "ingress_transport": (ingress_transport, clean_ingress_transport, 64),
+            "mcp_gateway_tool": (mcp_gateway_tool, clean_mcp_gateway_tool, 96),
+            "mcp_server_tool": (mcp_server_tool, clean_mcp_server_tool, 96),
+            "mcp_server_transport": (mcp_server_transport, clean_mcp_server_transport, 64),
+            "client_origin": (client_origin, clean_client_origin, 96),
+            "conversation_id": (conversation_id, clean_conversation_id, 160),
+            "turn_id": (turn_id, clean_turn_id, 160),
+            "locale": (locale, clean_locale, 32),
+        }
+    )
     base_payload: dict[str, Any] = {
         "actor": clean_actor,
         "source": clean_source,
@@ -807,15 +905,18 @@ def record_chatgpt_voice_ingress(
         "mcp_server_tool": clean_mcp_server_tool,
         "mcp_server_transport": clean_mcp_server_transport,
         "client_origin": clean_client_origin,
-        "conversation_id": _bounded_text(conversation_id, max_chars=160),
-        "turn_id": _bounded_text(turn_id, max_chars=160),
-        "locale": _bounded_text(locale, max_chars=32),
+        "conversation_id": clean_conversation_id,
+        "turn_id": clean_turn_id,
+        "locale": clean_locale,
         "transcript": redacted_transcript,
         "transcript_char_count": len(redacted_transcript),
         "transcript_truncated": len(_safe_str(transcript)) > MAX_TRANSCRIPT_CHARS,
         "chat_forward_requested": bool(forward_to_chat),
         "use_llm_requested": bool(use_llm),
-        "secrets_redacted": redacted_transcript != bounded_transcript,
+        "secrets_redacted": redacted_transcript != bounded_transcript or bool(redacted_metadata_fields),
+        "metadata_secrets_redacted": bool(redacted_metadata_fields),
+        "redacted_metadata_fields": redacted_metadata_fields,
+        **_voice_output_boundary(),
     }
 
     transcript_rejection_reason = _transcript_rejection_reason(redacted_transcript)
@@ -947,7 +1048,7 @@ def record_chatgpt_voice_ingress(
                 message=redacted_transcript,
                 use_llm=bool(use_llm),
                 actor=clean_actor,
-                voice_turn_id=_bounded_text(turn_id, max_chars=96),
+                voice_turn_id=_bounded_text(clean_turn_id, max_chars=96),
             )
         )
         chat_error = _safe_str(chat_response.get("error"))
@@ -1031,22 +1132,36 @@ def record_chatgpt_voice_mcp_probe(
     if not decision.allowed:
         return _permission_denied(decision, kind=f"{CHATGPT_VOICE_BRIDGE_KIND}.mcp_proof")
 
-    clean_source = _bounded_text(source, max_chars=96) or "chatgpt.voice"
+    clean_source = _bounded_redacted_text(source, max_chars=96) or "chatgpt.voice"
     clean_ingress_transport = (
-        _bounded_text(ingress_transport, max_chars=64) or CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TRANSPORT
+        _bounded_redacted_text(ingress_transport, max_chars=64) or CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TRANSPORT
     )
     clean_mcp_gateway_tool = (
-        _bounded_text(mcp_gateway_tool, max_chars=96) or CHATGPT_VOICE_BRIDGE_MCP_PROOF_GATEWAY_TOOL
+        _bounded_redacted_text(mcp_gateway_tool, max_chars=96) or CHATGPT_VOICE_BRIDGE_MCP_PROOF_GATEWAY_TOOL
     )
-    clean_mcp_server_tool = _bounded_text(mcp_server_tool, max_chars=96) or CHATGPT_VOICE_BRIDGE_MCP_PROOF_SERVER_TOOL
-    clean_mcp_server_transport = _bounded_text(mcp_server_transport, max_chars=64)
-    clean_client_origin = _bounded_text(client_origin, max_chars=96)
+    clean_mcp_server_tool = (
+        _bounded_redacted_text(mcp_server_tool, max_chars=96) or CHATGPT_VOICE_BRIDGE_MCP_PROOF_SERVER_TOOL
+    )
+    clean_mcp_server_transport = _bounded_redacted_text(mcp_server_transport, max_chars=64)
+    clean_client_origin = _bounded_redacted_text(client_origin, max_chars=96)
     if not clean_client_origin:
         if clean_source == "chatgpt.voice" and clean_mcp_server_tool == CHATGPT_VOICE_BRIDGE_MCP_PROOF_SERVER_TOOL:
             clean_client_origin = CHATGPT_VOICE_BRIDGE_CHATGPT_APP_VOICE_CLIENT
         elif clean_ingress_transport == CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TRANSPORT or clean_mcp_gateway_tool:
             clean_client_origin = CHATGPT_VOICE_BRIDGE_MCP_CLIENT_UNSPECIFIED
 
+    clean_reason = _bounded_redacted_text(reason, max_chars=160)
+    redacted_metadata_fields = _redacted_field_names(
+        {
+            "source": (source, clean_source, 96),
+            "ingress_transport": (ingress_transport, clean_ingress_transport, 64),
+            "mcp_gateway_tool": (mcp_gateway_tool, clean_mcp_gateway_tool, 96),
+            "mcp_server_tool": (mcp_server_tool, clean_mcp_server_tool, 96),
+            "mcp_server_transport": (mcp_server_transport, clean_mcp_server_transport, 64),
+            "client_origin": (client_origin, clean_client_origin, 96),
+            "reason": (reason, clean_reason, 160),
+        }
+    )
     reply = "Francis MCP voice bridge is reachable. No transcript was recorded."
     orb_voice_bridge = {
         "status": "mcp_connection_proof_recorded",
@@ -1080,7 +1195,10 @@ def record_chatgpt_voice_mcp_probe(
             "mcp_server_transport": clean_mcp_server_transport,
             "decision": "recorded",
             "proof_kind": "mcp_connection",
-            "reason": _bounded_text(reason, max_chars=160),
+            "reason": clean_reason,
+            "secrets_redacted": bool(redacted_metadata_fields),
+            "metadata_secrets_redacted": bool(redacted_metadata_fields),
+            "redacted_metadata_fields": redacted_metadata_fields,
             "transcript": "",
             "transcript_char_count": 0,
             "transcript_truncated": False,
@@ -1090,6 +1208,7 @@ def record_chatgpt_voice_mcp_probe(
             "chat_forward_error": "",
             "reply": reply,
             "reply_source": "bridge.mcp_connection_proof",
+            **_voice_output_boundary(),
             "orb_voice_bridge": orb_voice_bridge,
         }
     )
@@ -1129,8 +1248,10 @@ def chatgpt_voice_bridge_receipts(actor: str = "", *, limit: int = 10) -> dict[s
             except Exception:
                 continue
             if isinstance(item, dict):
-                item["receipt_path"] = str(path)
-                receipts.append(item)
+                redacted_item = redact_governed_display_value(item)
+                if isinstance(redacted_item, dict):
+                    redacted_item["receipt_path"] = str(path)
+                    receipts.append(redacted_item)
     return {
         "kind": f"{CHATGPT_VOICE_BRIDGE_KIND}.receipts",
         "ok": True,
