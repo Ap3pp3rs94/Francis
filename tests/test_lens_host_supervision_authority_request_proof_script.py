@@ -167,3 +167,15 @@ def test_lens_host_supervision_authority_request_proof_consumes_exact_request(
     assert not (data_dir / "runtime" / "lens-host-supervisor" / "status.json").exists()
     assert not (data_dir / "runtime" / "lens-host" / "status.json").exists()
     assert not (data_dir / "runtime" / "lens-host" / "lens-host.pid").exists()
+
+
+def test_lens_host_supervision_authority_request_proof_uses_python_exit_code_as_authority() -> None:
+    script = (_repo_root() / "scripts" / "lens-host-supervision-authority-request-proof.ps1").read_text(
+        encoding="utf-8"
+    )
+
+    assert "$PreviousNativeErrorActionPreference = $ErrorActionPreference" in script
+    assert "$ErrorActionPreference = 'Continue'" in script
+    assert "The Python exit code and parsed JSON remain the proof authority." in script
+    assert "$Output = & $PythonPath $PythonScriptPath 2>&1" in script
+    assert "$ErrorActionPreference = $PreviousNativeErrorActionPreference" in script

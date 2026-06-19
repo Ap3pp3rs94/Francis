@@ -497,8 +497,16 @@ try {
   New-Item -ItemType Directory -Force -Path $ProofRuntimeDir | Out-Null
   $PythonScriptPath = Join-Path $ProofRuntimeDir 'proof.py'
   Set-Content -LiteralPath $PythonScriptPath -Value $Source -Encoding UTF8
-  $Output = & $PythonPath $PythonScriptPath 2>&1
-  $ExitCode = $LASTEXITCODE
+  $PreviousNativeErrorActionPreference = $ErrorActionPreference
+  try {
+    # Windows PowerShell can promote native stderr warnings into terminating
+    # errors. The Python exit code and parsed JSON remain the proof authority.
+    $ErrorActionPreference = 'Continue'
+    $Output = & $PythonPath $PythonScriptPath 2>&1
+    $ExitCode = $LASTEXITCODE
+  } finally {
+    $ErrorActionPreference = $PreviousNativeErrorActionPreference
+  }
 } finally {
   if ([string]::IsNullOrWhiteSpace($PreviousRoot)) {
     Remove-Item Env:\FRANCIS_ROOT -ErrorAction SilentlyContinue
