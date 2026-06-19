@@ -107,7 +107,6 @@ try {
       'exec',
       '--cd', $RepoRoot,
       '--sandbox', $Sandbox,
-      '--ask-for-approval', 'never',
       '--json'
     )
     if (-not [string]::IsNullOrWhiteSpace($LastMessagePath)) {
