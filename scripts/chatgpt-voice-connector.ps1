@@ -159,6 +159,53 @@ function Get-CommandReadiness {
   }
 }
 
+function Get-CloudflaredOriginCertReadiness {
+  $Candidates = [System.Collections.ArrayList]::new()
+  $EnvCert = ConvertTo-BoundedText -Value $env:TUNNEL_ORIGIN_CERT -MaxLength 512
+  if (-not [string]::IsNullOrWhiteSpace($EnvCert)) {
+    [void]$Candidates.Add([ordered]@{
+        source = 'environment:TUNNEL_ORIGIN_CERT'
+        path = $EnvCert
+        exists = [bool](Test-Path -LiteralPath $EnvCert -PathType Leaf)
+      })
+  }
+
+  $UserProfile = ConvertTo-BoundedText -Value $env:USERPROFILE -MaxLength 512
+  if (-not [string]::IsNullOrWhiteSpace($UserProfile)) {
+    foreach ($Root in @('.cloudflared', '.cloudflare-warp', 'cloudflare-warp')) {
+      $Path = Join-Path (Join-Path $UserProfile $Root) 'cert.pem'
+      [void]$Candidates.Add([ordered]@{
+          source = "default:$Root"
+          path = $Path
+          exists = [bool](Test-Path -LiteralPath $Path -PathType Leaf)
+        })
+    }
+  }
+
+  $Present = $Candidates | Where-Object { [bool](Get-PropertyValue -Payload $_ -Name 'exists' -Default $false) } | Select-Object -First 1
+  return [ordered]@{
+    present = [bool]$Present
+    source = if ($Present) { ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Present -Name 'source' -Default '') -MaxLength 160 } else { '' }
+    path = if ($Present) { ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Present -Name 'path' -Default '') -MaxLength 512 } else { '' }
+    checked_path_count = @($Candidates).Count
+    content_read = $false
+  }
+}
+
+function Get-CloudflaredNamedTunnelReadiness {
+  $CloudflaredPath = Resolve-CloudflaredPath
+  $Readiness = Get-CommandReadiness -Name 'cloudflared' -Capability 'persistent_named_https_tunnel' -ResolvedPath $CloudflaredPath
+  $OriginCert = Get-CloudflaredOriginCertReadiness
+  $OriginCertPresent = [bool](Get-PropertyValue -Payload $OriginCert -Name 'present' -Default $false)
+  $Readiness['origin_cert_present'] = $OriginCertPresent
+  $Readiness['origin_cert_source'] = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $OriginCert -Name 'source' -Default '') -MaxLength 160
+  $Readiness['origin_cert_path'] = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $OriginCert -Name 'path' -Default '') -MaxLength 512
+  $Readiness['origin_cert_content_read'] = $false
+  $Readiness['login_required'] = -not $OriginCertPresent
+  $Readiness['next_operator_step'] = if ($OriginCertPresent) { 'create_or_start_cloudflared_named_tunnel' } else { 'run_cloudflared_tunnel_login' }
+  return $Readiness
+}
+
 function New-ConnectorIngressProfile {
   param(
     [object]$EndpointStatus,
@@ -332,7 +379,7 @@ function New-PersistentIngressPlan {
       status = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $EndpointStatus -Name 'status' -Default '') -MaxLength 96
     }
     provider_readiness = [ordered]@{
-      cloudflared_named_tunnel = Get-CommandReadiness -Name 'cloudflared' -Capability 'persistent_named_https_tunnel' -ResolvedPath (Resolve-CloudflaredPath)
+      cloudflared_named_tunnel = Get-CloudflaredNamedTunnelReadiness
       ngrok_reserved_domain = Get-CommandReadiness -Name 'ngrok' -Capability 'reserved_domain_https_tunnel'
       caddy_reverse_proxy = Get-CommandReadiness -Name 'caddy' -Capability 'persistent_https_reverse_proxy'
       ssh_reverse_tunnel = Get-CommandReadiness -Name 'ssh' -Capability 'stable_remote_reverse_tunnel_requires_external_host'

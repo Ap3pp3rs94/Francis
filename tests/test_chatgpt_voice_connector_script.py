@@ -124,8 +124,12 @@ def test_chatgpt_voice_connector_plan_reuses_cloudflared_resolver_for_readiness(
     script = (_repo_root() / "scripts" / "chatgpt-voice-connector.ps1").read_text(encoding="utf-8")
 
     assert "function Resolve-CloudflaredPath" in script
+    assert "function Get-CloudflaredOriginCertReadiness" in script
+    assert "function Get-CloudflaredNamedTunnelReadiness" in script
     assert "[string]$ResolvedPath = ''" in script
-    assert "-ResolvedPath (Resolve-CloudflaredPath)" in script
+    assert "Get-CommandReadiness -Name 'cloudflared'" in script
+    assert "origin_cert_content_read" in script
+    assert "run_cloudflared_tunnel_login" in script
     assert "standard install location" in script
 
 
