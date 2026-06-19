@@ -2,19 +2,23 @@
 #
 # Status and PlanPersistentIngress modes are read-only. RecordUrl stores an
 # operator-supplied persistent HTTPS MCP URL without opening a tunnel.
-# StartPersistent starts only the local MCP launcher for a persistent HTTPS
-# connector URL. RestartMcp refreshes only the local MCP launcher behind an
-# existing connector URL. Start mode opens a public localtunnel URL only when
+# connector URL. StartCloudflaredNamed starts a configured Cloudflare named
+# tunnel only when the operator supplies a stable hostname, tunnel name, and
+# -ExposePublicTunnel. RestartMcp refreshes only the local MCP launcher behind
+# an existing connector URL. Start mode opens a public localtunnel URL only when
 # -ExposePublicTunnel is explicitly supplied by the operator.
 
 [CmdletBinding(PositionalBinding = $false)]
 param(
-  [ValidateSet('Status', 'PlanPersistentIngress', 'RecordUrl', 'StartPersistent', 'RestartMcp', 'StartCloudflaredQuick', 'Start', 'Stop')]
+  [ValidateSet('Status', 'PlanPersistentIngress', 'RecordUrl', 'StartPersistent', 'RestartMcp', 'StartCloudflaredNamed', 'StartCloudflaredQuick', 'Start', 'Stop')]
   [string]$Mode = 'Status',
   [string]$HostAddress = '127.0.0.1',
   [int]$Port = 8787,
   [string]$Path = '/mcp',
   [string]$ConnectorUrl = '',
+  [string]$CloudflaredTunnelName = '',
+  [string]$CloudflaredHostname = '',
+  [string]$CloudflaredConfigPath = '',
   [string]$TunnelSubdomain = 'francis-voice-178175',
   [string]$RuntimeRoot = '',
   [switch]$ExposePublicTunnel,
@@ -266,6 +270,7 @@ function New-PersistentIngressOperatorHandoff {
     governed_handoff_commands = [ordered]@{
       record_url = ".\scripts\chatgpt-voice-connector.ps1 -Mode RecordUrl -ConnectorUrl `"$StableUrl`" -Json"
       start_persistent_mcp = ".\scripts\chatgpt-voice-connector.ps1 -Mode StartPersistent -ConnectorUrl `"$StableUrl`" -VerifyConnector -Json"
+      start_cloudflared_named = ".\scripts\chatgpt-voice-connector.ps1 -Mode StartCloudflaredNamed -CloudflaredTunnelName `"francis`" -CloudflaredHostname `"YOUR-STABLE-HOST`" -ExposePublicTunnel -VerifyConnector -Json"
       validate_bridge = ".\scripts\orb-voice-overlay-lens-validation.ps1 -ConnectorUrl `"$StableUrl`" -VerifyConnector"
       monitor_command_palette = ".\scripts\lens-command-palette-monitor.ps1 -Mode Probe -EnableChatGptConnectorChecks -ChatGptConnectorUrl `"$StableUrl`" -VerifyChatGptConnector -RequirePersistentChatGptIngress"
     }
@@ -784,6 +789,100 @@ function New-CloudflaredQuickTunnelPayload {
   }
 }
 
+function New-CloudflaredNamedTunnelPayload {
+  param(
+    [string]$ConnectorUrl,
+    [string]$ConnectorUrlSource,
+    [string]$TunnelName,
+    [string]$Hostname,
+    [string]$ConfigPath = ''
+  )
+
+  $Source = ConvertTo-BoundedText -Value $ConnectorUrlSource -MaxLength 160
+  $BoundedTunnelName = ConvertTo-BoundedText -Value $TunnelName -MaxLength 160
+  $BoundedHostname = ConvertTo-BoundedText -Value $Hostname -MaxLength 256
+  $ActualHost = ''
+  if (-not [string]::IsNullOrWhiteSpace($ConnectorUrl)) {
+    try {
+      $ActualHost = ([System.Uri]$ConnectorUrl).Host
+    } catch {
+      $ActualHost = ''
+    }
+  }
+
+  $Applicable = (
+    $Source -eq 'cloudflared_named' -or
+    (-not [string]::IsNullOrWhiteSpace($BoundedTunnelName) -and -not [string]::IsNullOrWhiteSpace($BoundedHostname))
+  )
+
+  return [ordered]@{
+    connector_url_source = $Source
+    tunnel_name = $BoundedTunnelName
+    hostname = $BoundedHostname
+    actual_host = $ActualHost
+    config_path = ConvertTo-BoundedText -Value $ConfigPath -MaxLength 512
+    applicable = [bool]$Applicable
+    quick_tunnel = $false
+    persistent_candidate = [bool]$Applicable
+    stable_for_existing_chatgpt_connector = [bool]$Applicable
+    reason = if ($Applicable) { 'cloudflared_named_tunnel' } else { 'not_cloudflared_named_tunnel' }
+  }
+}
+
+function Get-TunnelExpectedCommandText {
+  param(
+    [string]$ConnectorUrlSource,
+    [string]$IngressMode
+  )
+
+  if (
+    $ConnectorUrlSource -eq 'cloudflared_quick' -or
+    $ConnectorUrlSource -eq 'cloudflared_named' -or
+    $IngressMode -eq 'cloudflared_quick_ephemeral' -or
+    $IngressMode -eq 'cloudflared_named_tunnel'
+  ) {
+    return 'cloudflared'
+  }
+
+  return 'localtunnel\bin\lt.js'
+}
+
+function Get-TunnelStopLabel {
+  param(
+    [string]$ConnectorUrlSource,
+    [string]$IngressMode,
+    [string]$Fallback = 'tunnel'
+  )
+
+  if ($ConnectorUrlSource -eq 'cloudflared_named' -or $IngressMode -eq 'cloudflared_named_tunnel') {
+    return 'cloudflared_named_tunnel'
+  }
+  if ($ConnectorUrlSource -eq 'cloudflared_quick' -or $IngressMode -eq 'cloudflared_quick_ephemeral') {
+    return 'cloudflared_quick_tunnel'
+  }
+  if ($Fallback -eq 'localtunnel_fallback') {
+    return 'localtunnel_fallback'
+  }
+  return 'tunnel'
+}
+
+function ConvertTo-CloudflaredHost {
+  param([string]$Value)
+
+  $Bounded = ConvertTo-BoundedText -Value $Value -MaxLength 512
+  if ([string]::IsNullOrWhiteSpace($Bounded)) {
+    return ''
+  }
+  if ($Bounded -match '^https?://') {
+    try {
+      return ([System.Uri]$Bounded).Host
+    } catch {
+      return ''
+    }
+  }
+  return $Bounded.Trim().TrimEnd('/').Split('/')[0]
+}
+
 function New-StatusPayload {
   param(
     [object]$State,
@@ -801,6 +900,7 @@ function New-StatusPayload {
   $IngressMode = ''
   $StateConnectorUrlSource = ''
   $RequestedTunnelSubdomain = ''
+  $CloudflaredNamedTunnel = $null
   $ResolvedConnectorUrlSource = ConvertTo-BoundedText -Value $ConnectorUrlSource -MaxLength 160
   if ([string]::IsNullOrWhiteSpace($ResolvedConnectorUrlSource)) {
     $ResolvedConnectorUrlSource = 'none'
@@ -812,6 +912,7 @@ function New-StatusPayload {
     $IngressMode = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $State -Name 'ingress_mode') -MaxLength 96
     $StateConnectorUrlSource = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $State -Name 'connector_url_source' -Default '') -MaxLength 160
     $RequestedTunnelSubdomain = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $State -Name 'requested_tunnel_subdomain' -Default '') -MaxLength 160
+    $CloudflaredNamedTunnel = Get-PropertyValue -Payload $State -Name 'cloudflared_named_tunnel' -Default $null
     if (-not [string]::IsNullOrWhiteSpace($ConnectorUrl) -and $ResolvedConnectorUrlSource -eq 'none') {
       $ResolvedConnectorUrlSource = if ([string]::IsNullOrWhiteSpace($StateConnectorUrlSource)) { 'runtime_state' } else { $StateConnectorUrlSource }
     }
@@ -827,10 +928,13 @@ function New-StatusPayload {
   }
 
   $McpReadback = Get-ProcessReadback -ProcessId $McpLauncherPid -ExpectedCommandText 'chatgpt-voice-mcp.ps1'
-  $TunnelExpectedCommandText = if ($StateConnectorUrlSource -eq 'cloudflared_quick' -or $IngressMode -eq 'cloudflared_quick_ephemeral') { 'cloudflared' } else { 'localtunnel\bin\lt.js' }
+  $TunnelExpectedCommandText = Get-TunnelExpectedCommandText -ConnectorUrlSource $StateConnectorUrlSource -IngressMode $IngressMode
   $TunnelReadback = Get-ProcessReadback -ProcessId $TunnelPid -ExpectedCommandText $TunnelExpectedCommandText
   $LocalTunnel = New-LocalTunnelStabilityPayload -ConnectorUrl $ConnectorUrl -ConnectorUrlSource $StateConnectorUrlSource -RequestedSubdomain $RequestedTunnelSubdomain
   $CloudflaredQuickTunnel = New-CloudflaredQuickTunnelPayload -ConnectorUrl $ConnectorUrl -ConnectorUrlSource $StateConnectorUrlSource
+  if ($null -eq $CloudflaredNamedTunnel) {
+    $CloudflaredNamedTunnel = New-CloudflaredNamedTunnelPayload -ConnectorUrl $ConnectorUrl -ConnectorUrlSource $StateConnectorUrlSource -TunnelName '' -Hostname '' -ConfigPath ''
+  }
   $Blockers = @()
   if ([bool]$LocalTunnel.applicable -and -not [bool]$LocalTunnel.requested_subdomain_honored) {
     $Blockers += 'localtunnel_requested_subdomain_not_honored'
@@ -859,6 +963,7 @@ function New-StatusPayload {
     }
     localtunnel = $LocalTunnel
     cloudflared_quick_tunnel = $CloudflaredQuickTunnel
+    cloudflared_named_tunnel = $CloudflaredNamedTunnel
     blockers = $Blockers
     endpoint_status = $EndpointStatus
     governance = New-GovernancePayload -ReadOnly $ReadOnly -StartsProcess $StartsProcess -OpensPublicTunnel $OpensPublicTunnel -WritesData $WritesData
@@ -1021,7 +1126,7 @@ if ($Mode -eq 'StartPersistent') {
   $PreviousTunnelPid = if ($State) { [int](Get-PropertyValue -Payload $State -Name 'tunnel_pid' -Default 0) } else { 0 }
   $PreviousConnectorUrlSource = if ($State) { ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $State -Name 'connector_url_source' -Default '') -MaxLength 160 } else { '' }
   $PreviousIngressMode = if ($State) { ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $State -Name 'ingress_mode' -Default '') -MaxLength 96 } else { '' }
-  $PreviousTunnelExpectedCommandText = if ($PreviousConnectorUrlSource -eq 'cloudflared_quick' -or $PreviousIngressMode -eq 'cloudflared_quick_ephemeral') { 'cloudflared' } else { 'localtunnel\bin\lt.js' }
+  $PreviousTunnelExpectedCommandText = Get-TunnelExpectedCommandText -ConnectorUrlSource $PreviousConnectorUrlSource -IngressMode $PreviousIngressMode
   $Stopped = @()
 
   if ($PreviousListenerPid -gt 0) {
@@ -1102,7 +1207,7 @@ if ($Mode -eq 'StartPersistent') {
   if ($PreviousTunnelPid -gt 0) {
     try {
       if (Stop-KnownProcess -ProcessId $PreviousTunnelPid -ExpectedCommandText $PreviousTunnelExpectedCommandText) {
-        $Stopped += if ($PreviousConnectorUrlSource -eq 'cloudflared_quick' -or $PreviousIngressMode -eq 'cloudflared_quick_ephemeral') { 'cloudflared_quick_tunnel' } else { 'localtunnel_fallback' }
+        $Stopped += Get-TunnelStopLabel -ConnectorUrlSource $PreviousConnectorUrlSource -IngressMode $PreviousIngressMode -Fallback 'localtunnel_fallback'
       }
     } catch {
       ConvertTo-JsonOutput -Payload ([ordered]@{
@@ -1413,6 +1518,326 @@ if ($Mode -eq 'RestartMcp') {
   exit 0
 }
 
+if ($Mode -eq 'StartCloudflaredNamed') {
+  if (-not $ExposePublicTunnel) {
+    ConvertTo-JsonOutput -Payload ([ordered]@{
+        kind = 'francis.chatgpt_voice.connector_control'
+        ok = $false
+        status = 'operator_public_tunnel_authorization_required'
+        connector_url = ''
+        runtime_root = $RuntimeRoot
+        state_path = $statePath
+        blockers = @('expose_public_tunnel_flag_required')
+        governance = New-GovernancePayload -ReadOnly $false -StartsProcess $false -OpensPublicTunnel $false -WritesData $false
+      })
+    exit 0
+  }
+
+  $BoundedTunnelName = ConvertTo-BoundedText -Value $CloudflaredTunnelName -MaxLength 160
+  if ([string]::IsNullOrWhiteSpace($BoundedTunnelName)) {
+    ConvertTo-JsonOutput -Payload ([ordered]@{
+        kind = 'francis.chatgpt_voice.connector_control'
+        ok = $false
+        status = 'cloudflared_named_tunnel_name_required'
+        connector_url = ''
+        runtime_root = $RuntimeRoot
+        state_path = $statePath
+        blockers = @('cloudflared_tunnel_name_required')
+        governance = New-GovernancePayload -ReadOnly $false -StartsProcess $false -OpensPublicTunnel $false -WritesData $false
+      })
+    exit 0
+  }
+
+  $Candidate = Resolve-ConnectorUrlCandidate -ExplicitConnectorUrl $ConnectorUrl -State $null -AllowState $false
+  $NamedConnectorUrl = ConvertTo-BoundedText -Value ([string]$Candidate.url) -MaxLength 512
+  $BoundedHostname = ConvertTo-CloudflaredHost -Value $CloudflaredHostname
+  $ConnectorUrlSource = ConvertTo-BoundedText -Value ([string]$Candidate.source) -MaxLength 160
+  if ([string]::IsNullOrWhiteSpace($NamedConnectorUrl) -and -not [string]::IsNullOrWhiteSpace($BoundedHostname)) {
+    $NamedConnectorUrl = "https://$BoundedHostname$Path"
+    $ConnectorUrlSource = 'cloudflared_named'
+  }
+  if ([string]::IsNullOrWhiteSpace($BoundedHostname) -and -not [string]::IsNullOrWhiteSpace($NamedConnectorUrl)) {
+    $BoundedHostname = ConvertTo-CloudflaredHost -Value $NamedConnectorUrl
+  }
+  if ([string]::IsNullOrWhiteSpace($NamedConnectorUrl) -or [string]::IsNullOrWhiteSpace($BoundedHostname)) {
+    ConvertTo-JsonOutput -Payload ([ordered]@{
+        kind = 'francis.chatgpt_voice.connector_control'
+        ok = $false
+        status = 'cloudflared_named_hostname_required'
+        connector_url = $NamedConnectorUrl
+        connector_url_source = $ConnectorUrlSource
+        runtime_root = $RuntimeRoot
+        state_path = $statePath
+        blockers = @('cloudflared_hostname_or_connector_url_required')
+        governance = New-GovernancePayload -ReadOnly $false -StartsProcess $false -OpensPublicTunnel $false -WritesData $false
+      })
+    exit 0
+  }
+
+  try {
+    $ConnectorHost = ([System.Uri]$NamedConnectorUrl).Host
+  } catch {
+    $ConnectorHost = ''
+  }
+  if ([string]::IsNullOrWhiteSpace($ConnectorHost)) {
+    ConvertTo-JsonOutput -Payload ([ordered]@{
+        kind = 'francis.chatgpt_voice.connector_control'
+        ok = $false
+        status = 'connector_url_shape_invalid'
+        connector_url = $NamedConnectorUrl
+        connector_url_source = $ConnectorUrlSource
+        runtime_root = $RuntimeRoot
+        state_path = $statePath
+        blockers = @('connector_url_missing_host')
+        governance = New-GovernancePayload -ReadOnly $false -StartsProcess $false -OpensPublicTunnel $false -WritesData $false
+      })
+    exit 0
+  }
+  if (-not $ConnectorHost.Equals($BoundedHostname, [System.StringComparison]::OrdinalIgnoreCase)) {
+    ConvertTo-JsonOutput -Payload ([ordered]@{
+        kind = 'francis.chatgpt_voice.connector_control'
+        ok = $false
+        status = 'cloudflared_named_hostname_mismatch'
+        connector_url = $NamedConnectorUrl
+        connector_url_source = $ConnectorUrlSource
+        cloudflared_hostname = $BoundedHostname
+        connector_host = $ConnectorHost
+        runtime_root = $RuntimeRoot
+        state_path = $statePath
+        blockers = @('cloudflared_hostname_mismatch')
+        governance = New-GovernancePayload -ReadOnly $false -StartsProcess $false -OpensPublicTunnel $false -WritesData $false
+      })
+    exit 0
+  }
+
+  $EndpointStatus = Invoke-EndpointStatus -ConnectorUrl $NamedConnectorUrl
+  $ShapeValid = [bool](Get-NestedPropertyValue -Payload $EndpointStatus -Path @('chatgpt_connector', 'connector_url', 'shape_valid') -Default $false)
+  $ShapeReason = ConvertTo-BoundedText -Value (Get-NestedPropertyValue -Payload $EndpointStatus -Path @('chatgpt_connector', 'connector_url', 'reason') -Default 'connector_url_shape_invalid') -MaxLength 160
+  if (-not $ShapeValid) {
+    ConvertTo-JsonOutput -Payload ([ordered]@{
+        kind = 'francis.chatgpt_voice.connector_control'
+        ok = $false
+        status = 'connector_url_shape_invalid'
+        connector_url = $NamedConnectorUrl
+        connector_url_source = $ConnectorUrlSource
+        runtime_root = $RuntimeRoot
+        state_path = $statePath
+        endpoint_status = $EndpointStatus
+        blockers = @($ShapeReason)
+        governance = New-GovernancePayload -ReadOnly $false -StartsProcess $false -OpensPublicTunnel $false -WritesData $false
+      })
+    exit 0
+  }
+
+  $IngressProfile = New-ConnectorIngressProfile -EndpointStatus $EndpointStatus -ConnectorUrlSource $ConnectorUrlSource
+  if (-not [bool](Get-PropertyValue -Payload $IngressProfile -Name 'persistent_candidate' -Default $false)) {
+    ConvertTo-JsonOutput -Payload ([ordered]@{
+        kind = 'francis.chatgpt_voice.connector_control'
+        ok = $false
+        status = 'connector_url_not_persistent'
+        connector_url = $NamedConnectorUrl
+        connector_url_source = $ConnectorUrlSource
+        runtime_root = $RuntimeRoot
+        state_path = $statePath
+        endpoint_status = $EndpointStatus
+        connector_ingress_profile = $IngressProfile
+        blockers = @($IngressProfile.blockers)
+        governance = New-GovernancePayload -ReadOnly $false -StartsProcess $false -OpensPublicTunnel $false -WritesData $false
+      })
+    exit 0
+  }
+
+  $CloudflaredPath = Resolve-CloudflaredPath
+  if ([string]::IsNullOrWhiteSpace($CloudflaredPath) -or -not (Test-Path -LiteralPath $CloudflaredPath -PathType Leaf)) {
+    ConvertTo-JsonOutput -Payload ([ordered]@{
+        kind = 'francis.chatgpt_voice.connector_control'
+        ok = $false
+        status = 'cloudflared_unavailable'
+        error = 'cloudflared_executable_not_found'
+        connector_url = $NamedConnectorUrl
+        runtime_root = $RuntimeRoot
+        state_path = $statePath
+        blockers = @('cloudflared_unavailable')
+        governance = New-GovernancePayload -ReadOnly $false -StartsProcess $false -OpensPublicTunnel $false -WritesData $false
+      })
+    exit 0
+  }
+
+  $BoundedConfigPath = ConvertTo-BoundedText -Value $CloudflaredConfigPath -MaxLength 512
+  if (-not [string]::IsNullOrWhiteSpace($BoundedConfigPath) -and -not (Test-Path -LiteralPath $BoundedConfigPath -PathType Leaf)) {
+    ConvertTo-JsonOutput -Payload ([ordered]@{
+        kind = 'francis.chatgpt_voice.connector_control'
+        ok = $false
+        status = 'cloudflared_config_missing'
+        connector_url = $NamedConnectorUrl
+        runtime_root = $RuntimeRoot
+        state_path = $statePath
+        cloudflared_config_path = $BoundedConfigPath
+        blockers = @('cloudflared_config_missing')
+        governance = New-GovernancePayload -ReadOnly $false -StartsProcess $false -OpensPublicTunnel $false -WritesData $false
+      })
+    exit 0
+  }
+
+  $State = Read-State
+  $PreviousConnectorUrl = if ($State) { ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $State -Name 'connector_url' -Default '') -MaxLength 512 } else { '' }
+  $PreviousListenerPid = 0
+  if (-not [string]::IsNullOrWhiteSpace($PreviousConnectorUrl)) {
+    $EndpointBefore = Invoke-EndpointStatus -ConnectorUrl $PreviousConnectorUrl
+    $PreviousListenerPid = [int](Get-NestedPropertyValue -Payload $EndpointBefore -Path @('local_listener', 'owning_process') -Default 0)
+  } else {
+    $PreviousListenerPid = [int](Get-NestedPropertyValue -Payload $EndpointStatus -Path @('local_listener', 'owning_process') -Default 0)
+  }
+  $PreviousLauncherPid = if ($State) { [int](Get-PropertyValue -Payload $State -Name 'mcp_launcher_pid' -Default 0) } else { 0 }
+  $PreviousTunnelPid = if ($State) { [int](Get-PropertyValue -Payload $State -Name 'tunnel_pid' -Default 0) } else { 0 }
+  $PreviousConnectorUrlSource = if ($State) { ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $State -Name 'connector_url_source' -Default '') -MaxLength 160 } else { '' }
+  $PreviousIngressMode = if ($State) { ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $State -Name 'ingress_mode' -Default '') -MaxLength 96 } else { '' }
+  $PreviousTunnelExpectedCommandText = Get-TunnelExpectedCommandText -ConnectorUrlSource $PreviousConnectorUrlSource -IngressMode $PreviousIngressMode
+  $Stopped = @()
+
+  if ($PreviousListenerPid -gt 0) {
+    $ListenerReadback = Get-ProcessReadback -ProcessId $PreviousListenerPid -ExpectedCommandText 'francis.mcp_gateway.server'
+    if ([bool]$ListenerReadback.alive -and -not [bool]$ListenerReadback.command_matches_expected) {
+      ConvertTo-JsonOutput -Payload ([ordered]@{
+          kind = 'francis.chatgpt_voice.connector_control'
+          ok = $false
+          status = 'mcp_existing_listener_not_recognized'
+          connector_url = $NamedConnectorUrl
+          runtime_root = $RuntimeRoot
+          state_path = $statePath
+          listener = $ListenerReadback
+          blockers = @('existing_listener_not_francis_mcp_gateway')
+          governance = New-GovernancePayload -ReadOnly $false -StartsProcess $false -OpensPublicTunnel $false -WritesData $false
+        })
+      exit 0
+    }
+    if (Stop-KnownProcess -ProcessId $PreviousListenerPid -ExpectedCommandText 'francis.mcp_gateway.server') {
+      $Stopped += 'mcp_server_listener'
+      [void](Wait-ForKnownProcessExit -ProcessId $PreviousListenerPid -ExpectedCommandText 'francis.mcp_gateway.server')
+    }
+  }
+  if ($PreviousLauncherPid -gt 0 -and (Stop-KnownProcess -ProcessId $PreviousLauncherPid -ExpectedCommandText 'chatgpt-voice-mcp.ps1')) {
+    $Stopped += 'mcp_launcher'
+    [void](Wait-ForKnownProcessExit -ProcessId $PreviousLauncherPid -ExpectedCommandText 'chatgpt-voice-mcp.ps1')
+  }
+  if ($PreviousTunnelPid -gt 0 -and (Stop-KnownProcess -ProcessId $PreviousTunnelPid -ExpectedCommandText $PreviousTunnelExpectedCommandText)) {
+    $Stopped += Get-TunnelStopLabel -ConnectorUrlSource $PreviousConnectorUrlSource -IngressMode $PreviousIngressMode -Fallback 'localtunnel_fallback'
+    [void](Wait-ForKnownProcessExit -ProcessId $PreviousTunnelPid -ExpectedCommandText $PreviousTunnelExpectedCommandText)
+  }
+
+  New-Item -ItemType Directory -Force -Path $RuntimeRoot | Out-Null
+  $McpProcess = Start-McpLauncher -ConnectorHost $ConnectorHost
+  if (-not $McpProcess) {
+    ConvertTo-JsonOutput -Payload ([ordered]@{
+        kind = 'francis.chatgpt_voice.connector_control'
+        ok = $false
+        status = 'powershell_host_missing'
+        connector_url = $NamedConnectorUrl
+        runtime_root = $RuntimeRoot
+        state_path = $statePath
+        stopped = $Stopped
+        governance = New-GovernancePayload -ReadOnly $false -StartsProcess $false -OpensPublicTunnel $false -WritesData $false
+      })
+    exit 0
+  }
+
+  $TunnelStdout = Join-Path $RuntimeRoot 'cloudflared-named-stdout.log'
+  $TunnelStderr = Join-Path $RuntimeRoot 'cloudflared-named-stderr.log'
+  Remove-Item -LiteralPath $TunnelStdout, $TunnelStderr -Force -ErrorAction SilentlyContinue
+  $TunnelArgs = @('tunnel')
+  if (-not [string]::IsNullOrWhiteSpace($BoundedConfigPath)) {
+    $TunnelArgs += @('--config', $BoundedConfigPath)
+  }
+  $TunnelArgs += @('run', $BoundedTunnelName)
+  try {
+    $TunnelProcess = Start-Process -FilePath $CloudflaredPath -ArgumentList $TunnelArgs -RedirectStandardOutput $TunnelStdout -RedirectStandardError $TunnelStderr -PassThru -WindowStyle Hidden
+  } catch {
+    if (Stop-KnownProcess -ProcessId $McpProcess.Id -ExpectedCommandText 'chatgpt-voice-mcp.ps1') {
+      [void](Wait-ForKnownProcessExit -ProcessId $McpProcess.Id -ExpectedCommandText 'chatgpt-voice-mcp.ps1')
+    }
+    ConvertTo-JsonOutput -Payload ([ordered]@{
+        kind = 'francis.chatgpt_voice.connector_control'
+        ok = $false
+        status = 'cloudflared_named_start_failed'
+        connector_url = $NamedConnectorUrl
+        runtime_root = $RuntimeRoot
+        state_path = $statePath
+        error = ConvertTo-BoundedText -Value $_.Exception.Message -MaxLength 512
+        stopped = $Stopped
+        blockers = @('cloudflared_named_start_failed')
+        governance = New-GovernancePayload -ReadOnly $false -StartsProcess $true -OpensPublicTunnel $false -WritesData $false
+      })
+    exit 0
+  }
+  Start-Sleep -Seconds 4
+
+  $StartedAt = (Get-Date).ToUniversalTime().ToString('o')
+  $CloudflaredNamed = New-CloudflaredNamedTunnelPayload -ConnectorUrl $NamedConnectorUrl -ConnectorUrlSource 'cloudflared_named' -TunnelName $BoundedTunnelName -Hostname $BoundedHostname -ConfigPath $BoundedConfigPath
+  $StatePayload = [ordered]@{
+    kind = 'francis.chatgpt_voice.connector_control.state'
+    status = 'cloudflared_named_started'
+    ingress_mode = 'cloudflared_named_tunnel'
+    connector_url = $NamedConnectorUrl
+    connector_url_source = 'cloudflared_named'
+    connector_host = $ConnectorHost
+    cloudflared_named_tunnel = $CloudflaredNamed
+    cloudflared_named_tunnel_name = $BoundedTunnelName
+    cloudflared_named_hostname = $BoundedHostname
+    cloudflared_config_path = $BoundedConfigPath
+    local_endpoint = "http://$HostAddress`:$Port$Path"
+    mcp_launcher_pid = $McpProcess.Id
+    previous_mcp_launcher_pid = $PreviousLauncherPid
+    previous_mcp_listener_pid = $PreviousListenerPid
+    previous_tunnel_pid = $PreviousTunnelPid
+    tunnel_pid = $TunnelProcess.Id
+    mcp_stdout = ''
+    mcp_stderr = ''
+    mcp_log_capture = 'not_captured_detached_start'
+    tunnel_stdout = $TunnelStdout
+    tunnel_stderr = $TunnelStderr
+    tunnel_log_capture = 'captured_to_runtime_logs'
+    stopped = $Stopped
+    started_at = $StartedAt
+    updated_at = $StartedAt
+    governance = New-GovernancePayload -ReadOnly $false -StartsProcess $true -OpensPublicTunnel $true -WritesData $true
+  }
+  Write-State -Payload $StatePayload
+
+  $EndpointAfter = Invoke-EndpointStatus -ConnectorUrl $NamedConnectorUrl
+  $Payload = New-StatusPayload -State (Read-State) -EndpointStatus $EndpointAfter -ConnectorUrlSource 'cloudflared_named' -ReadOnly $false -StartsProcess $true -OpensPublicTunnel $true -WritesData $true
+  $ConnectorReady = [string]$EndpointAfter.status -eq 'ready_for_chatgpt_connector'
+  $LocalReady = [bool](Get-NestedPropertyValue -Payload $EndpointAfter -Path @('local_listener', 'ready') -Default $false)
+  $TunnelReadback = Get-ProcessReadback -ProcessId $TunnelProcess.Id -ExpectedCommandText 'cloudflared'
+  $TunnelAlive = [bool]$TunnelReadback.alive
+  $Payload.status = if ($ConnectorReady -and $TunnelAlive) {
+    'cloudflared_named_started_ready'
+  } elseif ($LocalReady -and $TunnelAlive -and -not $VerifyConnector) {
+    'cloudflared_named_started_local_ready'
+  } elseif ($TunnelAlive) {
+    'cloudflared_named_started_unverified'
+  } else {
+    'cloudflared_named_started_failed'
+  }
+  $Payload.ok = [bool](($ConnectorReady -and $TunnelAlive) -or ($LocalReady -and $TunnelAlive -and -not $VerifyConnector))
+  $Payload.cloudflared_named_start = [ordered]@{
+    stopped = $Stopped
+    cloudflared_path = $CloudflaredPath
+    cloudflared_config_path = $BoundedConfigPath
+    cloudflared_tunnel_name = $BoundedTunnelName
+    cloudflared_hostname = $BoundedHostname
+    mcp_launcher_pid = $McpProcess.Id
+    tunnel_pid = $TunnelProcess.Id
+    tunnel_alive = $TunnelAlive
+    connector_url = $NamedConnectorUrl
+    connector_host = $ConnectorHost
+    ingress_mode = 'cloudflared_named_tunnel'
+    public_tunnel_started = $TunnelAlive
+    persistent_candidate = $true
+  }
+  ConvertTo-JsonOutput -Payload $Payload
+  exit 0
+}
+
 if ($Mode -eq 'StartCloudflaredQuick') {
   if (-not $ExposePublicTunnel) {
     ConvertTo-JsonOutput -Payload ([ordered]@{
@@ -1454,7 +1879,7 @@ if ($Mode -eq 'StartCloudflaredQuick') {
   $PreviousTunnelPid = if ($State) { [int](Get-PropertyValue -Payload $State -Name 'tunnel_pid' -Default 0) } else { 0 }
   $PreviousConnectorUrlSource = if ($State) { ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $State -Name 'connector_url_source' -Default '') -MaxLength 160 } else { '' }
   $PreviousIngressMode = if ($State) { ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $State -Name 'ingress_mode' -Default '') -MaxLength 96 } else { '' }
-  $PreviousTunnelExpectedCommandText = if ($PreviousConnectorUrlSource -eq 'cloudflared_quick' -or $PreviousIngressMode -eq 'cloudflared_quick_ephemeral') { 'cloudflared' } else { 'localtunnel\bin\lt.js' }
+  $PreviousTunnelExpectedCommandText = Get-TunnelExpectedCommandText -ConnectorUrlSource $PreviousConnectorUrlSource -IngressMode $PreviousIngressMode
   $Stopped = @()
 
   if ($PreviousListenerPid -gt 0 -and (Stop-KnownProcess -ProcessId $PreviousListenerPid -ExpectedCommandText 'francis.mcp_gateway.server')) {
@@ -1466,7 +1891,7 @@ if ($Mode -eq 'StartCloudflaredQuick') {
     [void](Wait-ForKnownProcessExit -ProcessId $PreviousLauncherPid -ExpectedCommandText 'chatgpt-voice-mcp.ps1')
   }
   if ($PreviousTunnelPid -gt 0 -and (Stop-KnownProcess -ProcessId $PreviousTunnelPid -ExpectedCommandText $PreviousTunnelExpectedCommandText)) {
-    $Stopped += if ($PreviousConnectorUrlSource -eq 'cloudflared_quick' -or $PreviousIngressMode -eq 'cloudflared_quick_ephemeral') { 'cloudflared_quick_tunnel' } else { 'localtunnel_fallback' }
+    $Stopped += Get-TunnelStopLabel -ConnectorUrlSource $PreviousConnectorUrlSource -IngressMode $PreviousIngressMode -Fallback 'localtunnel_fallback'
     [void](Wait-ForKnownProcessExit -ProcessId $PreviousTunnelPid -ExpectedCommandText $PreviousTunnelExpectedCommandText)
   }
 
@@ -1593,9 +2018,9 @@ if ($Mode -eq 'Stop') {
     }
     $StateConnectorUrlSource = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $State -Name 'connector_url_source' -Default '') -MaxLength 160
     $StateIngressMode = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $State -Name 'ingress_mode' -Default '') -MaxLength 96
-    $TunnelExpectedCommandText = if ($StateConnectorUrlSource -eq 'cloudflared_quick' -or $StateIngressMode -eq 'cloudflared_quick_ephemeral') { 'cloudflared' } else { 'localtunnel\bin\lt.js' }
+    $TunnelExpectedCommandText = Get-TunnelExpectedCommandText -ConnectorUrlSource $StateConnectorUrlSource -IngressMode $StateIngressMode
     if (Stop-KnownProcess -ProcessId ([int]$State.tunnel_pid) -ExpectedCommandText $TunnelExpectedCommandText) {
-      $Stopped += if ($StateConnectorUrlSource -eq 'cloudflared_quick' -or $StateIngressMode -eq 'cloudflared_quick_ephemeral') { 'cloudflared_quick_tunnel' } else { 'tunnel' }
+      $Stopped += Get-TunnelStopLabel -ConnectorUrlSource $StateConnectorUrlSource -IngressMode $StateIngressMode
     }
     if (Stop-KnownProcess -ProcessId ([int]$State.mcp_launcher_pid) -ExpectedCommandText 'chatgpt-voice-mcp.ps1') {
       $Stopped += 'mcp_launcher'

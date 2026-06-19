@@ -1038,6 +1038,7 @@ function BridgeMonitorPanel(props: { baseUrl: string }) {
                   opens_tunnel: ingressHandoff?.opens_tunnel,
                   record_url: ingressHandoff?.governed_handoff_commands.record_url,
                   start_persistent_mcp: ingressHandoff?.governed_handoff_commands.start_persistent_mcp,
+                  start_cloudflared_named: ingressHandoff?.governed_handoff_commands.start_cloudflared_named,
                 },
               }
             : { status: loading ? "loading" : "not_loaded" },

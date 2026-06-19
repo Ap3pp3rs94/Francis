@@ -104,6 +104,22 @@ def test_chatgpt_voice_connector_cloudflared_quick_mode_is_truthfully_ephemeral(
     assert "OpensPublicTunnel $true -WritesData $true" in script
 
 
+def test_chatgpt_voice_connector_cloudflared_named_mode_is_bounded_persistent_ingress() -> None:
+    script = (_repo_root() / "scripts" / "chatgpt-voice-connector.ps1").read_text(encoding="utf-8")
+
+    assert "StartCloudflaredNamed" in script
+    assert "CloudflaredTunnelName" in script
+    assert "CloudflaredHostname" in script
+    assert "cloudflared_named_tunnel" in script
+    assert "cloudflared_named_started_ready" in script
+    assert "cloudflared_named_hostname_mismatch" in script
+    assert "$TunnelArgs += @('run', $BoundedTunnelName)" in script
+    assert "public_tunnel_started = $TunnelAlive" in script
+    assert "persistent_candidate = $true" in script
+    assert "OpensPublicTunnel $true -WritesData $true" in script
+    assert "start_cloudflared_named" in script
+
+
 def test_chatgpt_voice_connector_localtunnel_fallback_detaches_tunnel_process() -> None:
     script = (_repo_root() / "scripts" / "chatgpt-voice-connector.ps1").read_text(encoding="utf-8")
 
@@ -263,6 +279,67 @@ def test_chatgpt_voice_connector_status_accepts_environment_connector_url(tmp_pa
     assert not runtime_root.exists()
 
 
+@pytest.mark.skipif(platform.system() != "Windows", reason="connector control uses Windows process readback")
+def test_chatgpt_voice_connector_start_cloudflared_named_requires_public_tunnel_flag(tmp_path: Path) -> None:
+    runtime_root = tmp_path / "connector-runtime"
+    port = _unused_local_port()
+
+    proc = _run_connector_script(
+        "-Mode",
+        "StartCloudflaredNamed",
+        "-Json",
+        "-RuntimeRoot",
+        str(runtime_root),
+        "-Port",
+        str(port),
+        "-CloudflaredTunnelName",
+        "francis",
+        "-CloudflaredHostname",
+        "francis.example.test",
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["kind"] == "francis.chatgpt_voice.connector_control"
+    assert payload["ok"] is False
+    assert payload["status"] == "operator_public_tunnel_authorization_required"
+    assert payload["blockers"] == ["expose_public_tunnel_flag_required"]
+    assert payload["governance"]["starts_process"] is False
+    assert payload["governance"]["opens_public_tunnel"] is False
+    assert payload["governance"]["writes_data"] is False
+    assert not runtime_root.exists()
+
+
+@pytest.mark.skipif(platform.system() != "Windows", reason="connector control uses Windows process readback")
+def test_chatgpt_voice_connector_start_cloudflared_named_requires_tunnel_name(tmp_path: Path) -> None:
+    runtime_root = tmp_path / "connector-runtime"
+    port = _unused_local_port()
+
+    proc = _run_connector_script(
+        "-Mode",
+        "StartCloudflaredNamed",
+        "-Json",
+        "-RuntimeRoot",
+        str(runtime_root),
+        "-Port",
+        str(port),
+        "-CloudflaredHostname",
+        "francis.example.test",
+        "-ExposePublicTunnel",
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["kind"] == "francis.chatgpt_voice.connector_control"
+    assert payload["ok"] is False
+    assert payload["status"] == "cloudflared_named_tunnel_name_required"
+    assert payload["blockers"] == ["cloudflared_tunnel_name_required"]
+    assert payload["governance"]["starts_process"] is False
+    assert payload["governance"]["opens_public_tunnel"] is False
+    assert payload["governance"]["writes_data"] is False
+    assert not runtime_root.exists()
+
+
 def test_chatgpt_voice_connector_plan_persistent_ingress_is_read_only(tmp_path: Path) -> None:
     runtime_root = tmp_path / "connector-runtime"
     port = _unused_local_port()
@@ -315,6 +392,8 @@ def test_chatgpt_voice_connector_plan_persistent_ingress_is_read_only(tmp_path: 
     assert "cloudflared tunnel login" in handoff["cloudflared_named_tunnel_steps"][1]
     assert "RecordUrl" in handoff["governed_handoff_commands"]["record_url"]
     assert "StartPersistent" in handoff["governed_handoff_commands"]["start_persistent_mcp"]
+    assert "StartCloudflaredNamed" in handoff["governed_handoff_commands"]["start_cloudflared_named"]
+    assert "-ExposePublicTunnel" in handoff["governed_handoff_commands"]["start_cloudflared_named"]
     assert "orb-voice-overlay-lens-validation.ps1" in handoff["governed_handoff_commands"]["validate_bridge"]
     assert "lens-command-palette-monitor.ps1" in handoff["governed_handoff_commands"]["monitor_command_palette"]
     assert "http://127.0.0.1:8787" in payload["provider_config_hints"]["cloudflared_named_tunnel"]

@@ -131,6 +131,8 @@ test("parseCommandPaletteMonitorStatus preserves latest receipt origin without t
             '.\\scripts\\chatgpt-voice-connector.ps1 -Mode RecordUrl -ConnectorUrl "https://YOUR-STABLE-HOST/mcp" -Json',
           start_persistent_mcp:
             '.\\scripts\\chatgpt-voice-connector.ps1 -Mode StartPersistent -ConnectorUrl "https://YOUR-STABLE-HOST/mcp" -VerifyConnector -Json',
+          start_cloudflared_named:
+            '.\\scripts\\chatgpt-voice-connector.ps1 -Mode StartCloudflaredNamed -CloudflaredTunnelName "francis" -CloudflaredHostname "YOUR-STABLE-HOST" -ExposePublicTunnel -VerifyConnector -Json',
         },
       },
       governance_safe: true,
@@ -183,6 +185,12 @@ test("parseCommandPaletteMonitorStatus preserves latest receipt origin without t
   assert.equal(
     status.chatgpt_persistent_ingress_plan_monitor.operator_handoff.governed_handoff_commands.record_url.includes(
       "RecordUrl",
+    ),
+    true,
+  );
+  assert.equal(
+    status.chatgpt_persistent_ingress_plan_monitor.operator_handoff.governed_handoff_commands.start_cloudflared_named.includes(
+      "StartCloudflaredNamed",
     ),
     true,
   );

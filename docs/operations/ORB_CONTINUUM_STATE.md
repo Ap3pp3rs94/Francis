@@ -117,6 +117,13 @@ proportions.
   reports the local MCP endpoint, connector URL shape state, provider-tool
   readiness, and the governed `RecordUrl` handoff without writing runtime state,
   starting a process, opening a tunnel, or granting authority.
+- ChatGPT voice connector control now has a bounded Cloudflare named-tunnel
+  start path. `scripts/chatgpt-voice-connector.ps1 -Mode StartCloudflaredNamed`
+  requires an explicit tunnel name, stable hostname, and `-ExposePublicTunnel`,
+  records `ingress_mode=cloudflared_named_tunnel`, starts only recognized
+  Francis connector processes, and reports the named tunnel separately from
+  quick Cloudflare tunnels or LocalTunnel fallbacks without granting execution
+  or mutation authority beyond connector runtime state.
 - ChatGPT voice bridge transcript guards now reject `Transcript Unavailable`
   turns even when ChatGPT appends filler text after the unavailable marker. The
   bridge writes a rejected-turn receipt and does not forward the filler into
@@ -986,11 +993,11 @@ Validated for cross-platform overlay voice-turn handback timestamp readback:
   phrase can create mission state when transcribed, but the full voice ->
   mission -> automatic operator dispatch -> Orb loop is not complete.
 - The current ChatGPT voice connector control supports persistent HTTPS URL
-  planning, environment URL handoff, and URL recording. The current public MCP
-  URL is a LocalTunnel fallback, so the plan reports
-  `localtunnel_fallback_replace_needed`; local MCP is listening, no
-  `cloudflared`/`ngrok`/`caddy` provider is available in the current shell, and
-  current ChatGPT app reachability is not proven by the status proof.
+  planning, environment URL handoff, URL recording, and a bounded Cloudflare
+  named-tunnel start path. The current public MCP URL may still be an ephemeral
+  LocalTunnel or quick Cloudflare fallback until an operator-owned stable
+  hostname/config is supplied; local MCP can be listening while current ChatGPT
+  app reachability still remains unproven by the status proof.
 - The current ChatGPT voice proof has no fresh usable public-MCP-tool-origin
   receipt in the default freshness window. A fresh ChatGPT app call that reaches
   `francis_chatgpt_voice_ingress` and writes the matching receipt provenance is
