@@ -207,6 +207,7 @@ function Get-CloudflaredNamedTunnelReadiness {
   $BoundedTunnelName = ConvertTo-BoundedText -Value $TunnelName -MaxLength 160
   $BoundedHostname = ConvertTo-CloudflaredHost -Value $Hostname
   $TunnelRequested = -not [string]::IsNullOrWhiteSpace($BoundedTunnelName)
+  $HostnameRequested = -not [string]::IsNullOrWhiteSpace($BoundedHostname)
   $TunnelPreflight = [ordered]@{
     checked = $false
     exists = $false
@@ -217,6 +218,14 @@ function Get-CloudflaredNamedTunnelReadiness {
     $TunnelPreflight = Test-CloudflaredNamedTunnelExists -CloudflaredPath $CloudflaredPath -TunnelName $BoundedTunnelName
   }
   $TunnelExists = [bool](Get-PropertyValue -Payload $TunnelPreflight -Name 'exists' -Default $false)
+  $OperatorProviderSetupCommandItems = [System.Collections.Generic.List[string]]::new()
+  if ($TunnelRequested -and -not $TunnelExists) {
+    [void]$OperatorProviderSetupCommandItems.Add("cloudflared tunnel create $BoundedTunnelName")
+    if ($HostnameRequested) {
+      [void]$OperatorProviderSetupCommandItems.Add("cloudflared tunnel route dns $BoundedTunnelName $BoundedHostname")
+    }
+  }
+  $OperatorProviderSetupCommands = [string[]]$OperatorProviderSetupCommandItems.ToArray()
   $Readiness['origin_cert_present'] = $OriginCertPresent
   $Readiness['origin_cert_source'] = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $OriginCert -Name 'source' -Default '') -MaxLength 160
   $Readiness['origin_cert_path'] = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $OriginCert -Name 'path' -Default '') -MaxLength 512
@@ -227,16 +236,11 @@ function Get-CloudflaredNamedTunnelReadiness {
   $Readiness['named_tunnel_requested'] = $TunnelRequested
   $Readiness['named_tunnel_exists'] = $TunnelExists
   $Readiness['named_tunnel_preflight'] = $TunnelPreflight
-  $Readiness['operator_provider_setup_commands'] = if ($TunnelRequested -and -not $TunnelExists) {
-    @(
-      "cloudflared tunnel create $BoundedTunnelName",
-      "cloudflared tunnel route dns $BoundedTunnelName $BoundedHostname"
-    )
-  } else {
-    @()
-  }
+  $Readiness['operator_provider_setup_commands'] = $OperatorProviderSetupCommands
   $Readiness['next_operator_step'] = if (-not $OriginCertPresent) {
     'run_cloudflared_tunnel_login'
+  } elseif ($TunnelRequested -and -not $TunnelExists -and -not $HostnameRequested) {
+    'choose_cloudflared_named_hostname'
   } elseif ($TunnelRequested -and -not $TunnelExists) {
     'create_cloudflared_named_tunnel_and_route_hostname'
   } elseif ($TunnelRequested -and $TunnelExists) {

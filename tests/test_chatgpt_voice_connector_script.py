@@ -139,6 +139,7 @@ def test_chatgpt_voice_connector_plan_reuses_cloudflared_resolver_for_readiness(
     assert "Get-CommandReadiness -Name 'cloudflared'" in script
     assert "named_tunnel_preflight" in script
     assert "create_cloudflared_named_tunnel_and_route_hostname" in script
+    assert "choose_cloudflared_named_hostname" in script
     assert "origin_cert_content_read" in script
     assert "run_cloudflared_tunnel_login" in script
     assert "standard install location" in script
@@ -640,6 +641,58 @@ def test_chatgpt_voice_connector_plan_persistent_ingress_preflights_named_tunnel
         "cloudflared tunnel route dns francis francis.example.test",
     ]
     assert cloudflared["next_operator_step"] == "create_cloudflared_named_tunnel_and_route_hostname"
+    assert payload["governance"]["read_only"] is True
+    assert payload["governance"]["starts_process"] is False
+    assert payload["governance"]["opens_public_tunnel"] is False
+    assert payload["governance"]["writes_data"] is False
+    assert not runtime_root.exists()
+
+
+def test_chatgpt_voice_connector_plan_persistent_ingress_does_not_emit_blank_dns_route(
+    tmp_path: Path,
+) -> None:
+    runtime_root = tmp_path / "connector-runtime"
+    fake_profile = tmp_path / "profile"
+    fake_bin = tmp_path / "bin"
+    fake_profile.mkdir()
+    fake_bin.mkdir()
+    fake_origin_cert = fake_profile / "cert.pem"
+    fake_origin_cert.write_text("fake test cert", encoding="utf-8")
+    fake_cloudflared = fake_bin / "cloudflared.cmd"
+    fake_cloudflared.write_text(
+        '@echo off\r\nif "%1"=="tunnel" if "%2"=="info" exit /b 1\r\nexit /b 0\r\n',
+        encoding="utf-8",
+    )
+    port = _unused_local_port()
+
+    proc = _run_connector_script(
+        "-Mode",
+        "PlanPersistentIngress",
+        "-Json",
+        "-RuntimeRoot",
+        str(runtime_root),
+        "-Port",
+        str(port),
+        "-CloudflaredTunnelName",
+        "francis",
+        env={
+            "PATH": f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}",
+            "USERPROFILE": str(fake_profile),
+            "TUNNEL_ORIGIN_CERT": str(fake_origin_cert),
+        },
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    cloudflared = payload["provider_readiness"]["cloudflared_named_tunnel"]
+    assert cloudflared["requested_tunnel_name"] == "francis"
+    assert cloudflared["requested_hostname"] == ""
+    assert cloudflared["named_tunnel_requested"] is True
+    assert cloudflared["named_tunnel_exists"] is False
+    assert cloudflared["operator_provider_setup_commands"] == [
+        "cloudflared tunnel create francis",
+    ]
+    assert cloudflared["next_operator_step"] == "choose_cloudflared_named_hostname"
     assert payload["governance"]["read_only"] is True
     assert payload["governance"]["starts_process"] is False
     assert payload["governance"]["opens_public_tunnel"] is False
