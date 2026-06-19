@@ -137,6 +137,34 @@ def test_lens_command_palette_monitor_route_projects_voice_bridge_proof(monkeypa
                     "blockers": ["localtunnel_url_is_not_persistent_ingress"],
                     "recommended_provider_order": ["cloudflared_named_tunnel"],
                     "next_operator_steps": ["choose_or_install_a_persistent_https_ingress_provider"],
+                    "operator_handoff": {
+                        "kind": "francis.chatgpt_voice.persistent_ingress_operator_handoff",
+                        "safe_to_display": True,
+                        "read_only_plan": True,
+                        "installs_provider": False,
+                        "opens_tunnel": False,
+                        "writes_state": False,
+                        "requires_operator_provider_account_or_hostname": True,
+                        "preferred_provider": "cloudflared_named_tunnel",
+                        "local_endpoint": "http://127.0.0.1:8787/mcp",
+                        "stable_url_placeholder": "https://YOUR-STABLE-HOST/mcp",
+                        "install_commands": {
+                            "cloudflared_winget": (
+                                "winget install --id Cloudflare.cloudflared --exact "
+                                "--accept-source-agreements --accept-package-agreements"
+                            ),
+                        },
+                        "governed_handoff_commands": {
+                            "record_url": (
+                                ".\\scripts\\chatgpt-voice-connector.ps1 -Mode RecordUrl "
+                                '-ConnectorUrl "https://YOUR-STABLE-HOST/mcp" -Json'
+                            ),
+                            "start_persistent_mcp": (
+                                ".\\scripts\\chatgpt-voice-connector.ps1 -Mode StartPersistent "
+                                '-ConnectorUrl "https://YOUR-STABLE-HOST/mcp" -VerifyConnector -Json'
+                            ),
+                        },
+                    },
                     "governance_safe": True,
                 },
             }
@@ -171,6 +199,17 @@ def test_lens_command_palette_monitor_route_projects_voice_bridge_proof(monkeypa
     assert body["voice_monitor"]["chatgpt_mcp_proof"]["latest_any_mcp_server_receipt_source"] == "local.mcp.selftest"
     assert body["chatgpt_connector_monitor"]["known_localtunnel"] is True
     assert body["chatgpt_persistent_ingress_plan_monitor"]["governance_safe"] is True
+    handoff = body["chatgpt_persistent_ingress_plan_monitor"]["operator_handoff"]
+    assert handoff["preferred_provider"] == "cloudflared_named_tunnel"
+    assert handoff["read_only_plan"] is True
+    assert handoff["installs_provider"] is False
+    assert handoff["opens_tunnel"] is False
+    assert handoff["writes_state"] is False
+    assert handoff["stable_url_placeholder"] == "https://YOUR-STABLE-HOST/mcp"
+    assert handoff["install_commands"]["cloudflared_winget"].endswith(
+        "--accept-source-agreements --accept-package-agreements",
+    )
+    assert "RecordUrl" in handoff["governed_handoff_commands"]["record_url"]
     assert body["governance"]["execution_authority"] is False
     assert body["governance"]["captures_audio"] is False
     assert "do not expose this transcript" not in json.dumps(body, sort_keys=True)

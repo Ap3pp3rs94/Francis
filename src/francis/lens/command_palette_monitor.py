@@ -64,6 +64,17 @@ def _safe_string_list(value: Any, *, limit: int = _MAX_ITEMS, max_length: int = 
     return out
 
 
+def _safe_string_dict(value: Any, *, limit: int = _MAX_ITEMS, max_length: int = _MAX_TEXT) -> dict[str, str]:
+    raw = _as_dict(value)
+    out: dict[str, str] = {}
+    for key, item in list(raw.items())[:limit]:
+        safe_key = _safe_str(key, max_length=120)
+        safe_value = _safe_str(item, max_length=max_length)
+        if safe_key and safe_value:
+            out[safe_key] = safe_value
+    return out
+
+
 def _read_json(path: Path) -> dict[str, Any] | None:
     try:
         if not path.is_file():
@@ -290,6 +301,7 @@ def _persistent_ingress_plan(value: Any) -> dict[str, Any]:
         "blockers": _safe_string_list(raw.get("blockers")),
         "recommended_provider_order": _safe_string_list(raw.get("recommended_provider_order")),
         "next_operator_steps": _safe_string_list(raw.get("next_operator_steps")),
+        "operator_handoff": _persistent_ingress_operator_handoff(raw.get("operator_handoff")),
         "providers": {
             "cloudflared_named_tunnel_available": _safe_bool(providers.get("cloudflared_named_tunnel_available")),
             "ngrok_reserved_domain_available": _safe_bool(providers.get("ngrok_reserved_domain_available")),
@@ -309,6 +321,26 @@ def _persistent_ingress_plan(value: Any) -> dict[str, Any]:
             "execution_authority": False,
             "mutation_authority_granted": False,
         },
+    }
+
+
+def _persistent_ingress_operator_handoff(value: Any) -> dict[str, Any]:
+    raw = _as_dict(value)
+    return {
+        "kind": _safe_str(raw.get("kind"), max_length=160),
+        "safe_to_display": _safe_bool(raw.get("safe_to_display")),
+        "read_only_plan": _safe_bool(raw.get("read_only_plan")),
+        "installs_provider": _safe_bool(raw.get("installs_provider")),
+        "opens_tunnel": _safe_bool(raw.get("opens_tunnel")),
+        "writes_state": _safe_bool(raw.get("writes_state")),
+        "requires_operator_provider_account_or_hostname": _safe_bool(
+            raw.get("requires_operator_provider_account_or_hostname"),
+        ),
+        "preferred_provider": _safe_str(raw.get("preferred_provider"), max_length=160),
+        "local_endpoint": _safe_str(raw.get("local_endpoint"), max_length=180),
+        "stable_url_placeholder": _safe_str(raw.get("stable_url_placeholder"), max_length=240),
+        "install_commands": _safe_string_dict(raw.get("install_commands"), max_length=260),
+        "governed_handoff_commands": _safe_string_dict(raw.get("governed_handoff_commands"), max_length=512),
     }
 
 
