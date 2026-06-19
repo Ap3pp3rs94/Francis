@@ -53,6 +53,8 @@ def test_chatgpt_voice_contract_is_permission_gated(monkeypatch, tmp_path: Path)
     assert body["orb_voice_contract"]["raw_audio_stream_accepted"] is False
     assert body["orb_voice_contract"]["client_speaks_top_level_reply"] is True
     assert body["orb_voice_contract"]["orb_position_command_accepts_francis_identity_reference"] is True
+    assert "go" in body["orb_voice_contract"]["orb_position_command_move_verbs"]
+    assert "slide" in body["orb_voice_contract"]["orb_position_command_move_verbs"]
     assert body["input_contract"]["audio_stream_accepted"] is False
     assert body["client_speech_contract"]["call_ingress_for_every_voice_turn"] is True
     assert body["client_speech_contract"]["call_mcp_probe_to_validate_connector"] is True
@@ -321,6 +323,46 @@ def test_chatgpt_voice_browser_ingress_queues_francis_identity_orb_move(
     assert request["reference_type"] == "francis_identity"
     assert request["stores_transcript"] is False
     assert "Francis move left" not in json.dumps(request)
+
+
+def test_chatgpt_voice_browser_ingress_queues_natural_francis_identity_orb_move(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({"chat_ui.voice": ["chatgpt.voice.bridge.write", "chat.write"]}),
+    )
+
+    client = TestClient(create_app())
+
+    body = client.post(
+        "/chatgpt-voice/ingress",
+        json={
+            "actor": "chat_ui.voice",
+            "source": "chat_ui.voice",
+            "client_origin": "francis_chat_ui_browser_voice",
+            "transcript": "Francis go right",
+            "turn_id": "browser-francis-natural-right-command",
+            "forward_to_chat": True,
+        },
+    ).json()
+
+    assert body["ok"] is True
+    assert body["status"] == "orb_position_command_queued"
+    assert body["chat_forward"]["status"] == "suppressed_orb_position_command"
+    command = body["orb_position_command"]
+    assert command["command"] == "move_orb_right_side"
+    assert command["reference_type"] == "francis_identity"
+    assert command["target_side"] == "right"
+    request_path = data_root / "runtime" / "lens-overlay" / "orb-position-command-request.json"
+    request = json.loads(request_path.read_text(encoding="utf-8"))
+    assert request["command"] == "move_orb_right_side"
+    assert request["reference_type"] == "francis_identity"
+    assert request["stores_transcript"] is False
+    assert "Francis go right" not in json.dumps(request)
 
 
 def test_chatgpt_voice_browser_ingress_does_not_queue_bare_move_left(

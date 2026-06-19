@@ -679,15 +679,29 @@ def test_lens_overlay_voice_orb_position_command_is_local_and_bounded() -> None:
     assert "function Invoke-OverlayQueuedOrbPositionCommand" in script
     assert "chatgpt_voice_bridge_file_request" in script
     assert "$HasOrbReference = $Words -contains 'orb' -or $Words -contains 'orbs'" in script
+    assert "$HasFrancisReference = $Words -contains 'francis' -or $Words -contains 'frances'" in script
+    assert "$HasEmbodimentReference = $HasOrbReference -or $HasFrancisReference -or [bool]$WakePhraseDetected" in script
     assert "$HasMoveVerb = $Words -contains 'move'" in script
+    assert "$Words -contains 'go'" in script
+    assert "$Words -contains 'slide'" in script
     assert "$Result.command = 'move_orb_{0}_side' -f $TargetSide" in script
+    assert "$Result.reference_type = $ReferenceType" in script
     assert "function Set-OrbWindowSidePosition" in script
     assert "Clamp-OverlayDouble -Value ($MinimumLeft + $Margin)" in script
     assert "Clamp-OverlayDouble -Value ($MaximumLeft - $Margin)" in script
     assert "function Invoke-OverlayVoiceOrbCommand" in script
     assert "$Payload.status = 'orb_voice_command_applied'" in script
     assert "$Payload.overlay_position_command_source = $CommandSource" in script
-    assert "$Payload.overlay_position_command_request_id = $CommandRequestId" in script
+    assert (
+        "$Payload.orb_command_reference_type = Get-StringProperty -Payload $Command -Name 'reference_type' -Default ''"
+        in script
+    )
+    assert "$Payload.overlay_position_command_request_id = $EffectiveCommandRequestId" in script
+    assert "$Payload.direct_francis_address_detected = [bool]$IsDirectFrancisAddressCommand" in script
+    assert "microphone_direct_francis_address" in script
+    assert "$Payload.microphone_speech = (-not [bool]$IsBridgeFileCommand)" in script
+    assert "$Payload.microphone_recognition_claimed = (-not [bool]$IsBridgeFileCommand)" in script
+    assert "$Payload.synthetic_transcript = [bool]$IsBridgeFileCommand" in script
     assert "$Payload.chat_bridge_status = 'not_called'" in script
     assert "$Payload.chat_route_writes_conversation_ledger = $false" in script
     assert "$Payload.conversation_forwarding_suppressed = $true" in script
@@ -699,8 +713,24 @@ def test_lens_overlay_voice_orb_position_command_is_local_and_bounded() -> None:
     assert "$script:LensOverlayOperatorPositionAnchor = $TargetAnchor" in script
     assert "Reset-OrbAutonomousMotionAnchor -Window $Window -MotionState $MotionState" in script
     assert "Write-OverlayPositionState -Root $Root -Window $Window -MotionState $MotionState" in script
-    assert "$OrbCommand = Resolve-OverlayVoiceOrbCommand -Text $CommandText" in script
+    assert (
+        "$OrbCommand = Resolve-OverlayVoiceOrbCommand -Text $CommandText -WakePhraseDetected:$CommandWakePhraseDetected"
+        in script
+    )
+    assert "$DirectFrancisAddressDetected = Test-OverlayDirectFrancisAddressRecognized -RecognizedText $RecognizedText" in script
+    assert "$CommandWakePhraseDetected = (-not [string]::IsNullOrWhiteSpace($UtteranceText) -or $WakePhraseOnly -or $DirectFrancisAddressDetected)" in script
+    assert "local_overlay_direct_francis_address" in script
+    assert "-and -not $DirectFrancisAddressDetected" in script
+    assert "$AddressedUtteranceText = if (-not [string]::IsNullOrWhiteSpace($UtteranceText))" in script
     assert "Invoke-OverlayVoiceOrbCommand -Root $script:LensOverlayWakeRoot" in script
+    assert "$ReferenceType = Get-StringProperty -Payload $Request -Name 'reference_type' -Default ''" in script
+    assert "reference_type = $ReferenceType" in script
+    assert "command_source = $CommandSource" in script
+    assert (
+        "microphone_recognition_claimed = Get-BoolProperty -Payload $Result -Name 'microphone_recognition_claimed'"
+        in script
+    )
+    assert "client_origin = 'local_overlay_speech_recognition'" in script
     assert "Write-OverlayOrbPositionCommandReceipt -Root $Root -RequestId $RequestId" in script
     assert "Remove-OverlayOrbPositionCommandRequest -Root $Root -Path $RequestPath" in script
     assert "$CommandTimer = New-Object System.Windows.Threading.DispatcherTimer" in script
@@ -796,7 +826,7 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "transient_deleted_after_playback" in script
     assert "remote_text_sent = $true" in script
     assert "temp_audio_deleted" in script
-    assert "explicit_wake_phrase_or_wake_prefixed_utterance" in script
+    assert "explicit_wake_phrase_or_direct_francis_address" in script
     assert "disabled_requires_explicit_microphone_authority" in script
     assert "function Get-OverlayApiBaseUrl" in script
     assert "function Get-OverlayVoiceUseLlm" in script
@@ -822,6 +852,8 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "function Start-OverlayVoiceSpeechProcess" in script
     assert "function New-OverlayWakeAliasList" in script
     assert "function Get-OverlayWakePrefixedUtterance" in script
+    assert "function Test-OverlayDirectFrancisAddressRecognized" in script
+    assert "function Get-OverlayDirectFrancisAddressedUtterance" in script
     assert "function Test-OverlayWakePhraseRecognized" in script
     assert "function Test-OverlayStopPhraseRecognized" in script
     assert "function Invoke-OverlayVoiceStopPhrase" in script

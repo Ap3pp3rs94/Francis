@@ -1316,7 +1316,7 @@ function New-OverlayVoiceProjection {
     voice_lens_orb_separate_identities = $false
     speech_output = $true
     microphone_capture = $WakeListening
-    voice_input = if ($WakeListening) { 'explicit_wake_phrase_or_wake_prefixed_utterance' } else { 'disabled_requires_explicit_microphone_authority' }
+    voice_input = if ($WakeListening) { 'explicit_wake_phrase_or_direct_francis_address' } else { 'disabled_requires_explicit_microphone_authority' }
     wake_listening = $WakeListening
     wake_phrase = if ($WakeListening) { $WakePhraseText } else { '' }
     selected_voice = $ResolvedSelectedVoice
@@ -1736,12 +1736,12 @@ function Get-OverlayVoiceInputReadiness {
       $Ready = $true
       $Status = 'ready'
       $Blocker = ''
-      $NextOperatorStep = 'say_hey_francis_with_a_wake_prefixed_request'
-      $Message = 'Wake listener has observed microphone signal.'
+      $NextOperatorStep = 'say_francis_or_hey_francis_with_a_bounded_request'
+      $Message = 'Wake listener has observed microphone signal; direct Francis address and the configured wake phrase are both accepted for bounded voice turns.'
     } else {
       $Status = 'waiting_for_audio_signal'
       $Blocker = ''
-      $NextOperatorStep = 'say_hey_francis_to_confirm_default_microphone_signal'
+      $NextOperatorStep = 'say_francis_or_hey_francis_to_confirm_default_microphone_signal'
       $Message = 'Wake listener is attached and waiting to observe microphone signal.'
     }
   }
@@ -2644,12 +2644,16 @@ function Write-OverlayOrbPositionCommandReceipt {
   $CommandName = Get-StringProperty -Payload $Request -Name 'command' -Default ''
   $TargetSide = Get-StringProperty -Payload $Request -Name 'target_side' -Default ''
   $TargetAnchor = Get-StringProperty -Payload $Request -Name 'target_anchor' -Default ''
+  $ReferenceType = Get-StringProperty -Payload $Request -Name 'reference_type' -Default ''
+  $CommandSource = Get-StringProperty -Payload $Request -Name 'command_source' -Default (Get-StringProperty -Payload $Result -Name 'overlay_position_command_source' -Default '')
   $Receipt = [ordered]@{
     kind = 'lens.overlay.orb_position_command.receipt'
     status = Get-StringProperty -Payload $Result -Name 'status' -Default 'orb_position_command_result_unknown'
     ok = Get-BoolProperty -Payload $Result -Name 'ok' -Default $false
     request_id = $RequestId
     command = $CommandName
+    reference_type = $ReferenceType
+    command_source = $CommandSource
     target_side = $TargetSide
     target_anchor = $TargetAnchor
     applied = Get-BoolProperty -Payload $Result -Name 'runtime_overlay_position_changed' -Default $false
@@ -2658,6 +2662,10 @@ function Write-OverlayOrbPositionCommandReceipt {
     source = Get-StringProperty -Payload $Request -Name 'source' -Default ''
     actor = Get-StringProperty -Payload $Request -Name 'actor' -Default ''
     client_origin = Get-StringProperty -Payload $Request -Name 'client_origin' -Default ''
+    microphone_recognition_claimed = Get-BoolProperty -Payload $Result -Name 'microphone_recognition_claimed' -Default (Get-BoolProperty -Payload $Request -Name 'microphone_recognition_claimed' -Default $false)
+    microphone_speech = Get-BoolProperty -Payload $Result -Name 'microphone_speech' -Default (Get-BoolProperty -Payload $Request -Name 'microphone_speech' -Default $false)
+    wake_phrase_detected = Get-BoolProperty -Payload $Result -Name 'wake_phrase_detected' -Default (Get-BoolProperty -Payload $Request -Name 'wake_phrase_detected' -Default $false)
+    transcript_source = Get-StringProperty -Payload $Result -Name 'transcript_source' -Default (Get-StringProperty -Payload $Request -Name 'transcript_source' -Default '')
     transcript_hash = Get-StringProperty -Payload $Request -Name 'transcript_hash' -Default ''
     transcript_redacted = $true
     stores_transcript = $false
@@ -2709,12 +2717,14 @@ function Invoke-OverlayQueuedOrbPositionCommand {
   $CommandName = Get-StringProperty -Payload $Request -Name 'command' -Default ''
   $TargetSide = Get-StringProperty -Payload $Request -Name 'target_side' -Default ''
   $TargetAnchor = Get-StringProperty -Payload $Request -Name 'target_anchor' -Default ''
+  $ReferenceType = Get-StringProperty -Payload $Request -Name 'reference_type' -Default ''
   $Command = [ordered]@{
     recognized = $true
     intent = 'move_orb'
     command = $CommandName
     target_side = $TargetSide
     target_anchor = $TargetAnchor
+    reference_type = $ReferenceType
   }
   $Result = Invoke-OverlayVoiceOrbCommand `
     -Root $Root `
@@ -2977,6 +2987,32 @@ function Get-OverlayWakePrefixedUtterance {
   return ''
 }
 
+function Test-OverlayDirectFrancisAddressRecognized {
+  param([string]$RecognizedText)
+
+  $Text = (([string]$RecognizedText).Trim().ToLowerInvariant() -replace '[^\p{L}\p{Nd}\s]', ' ')
+  $Text = ($Text -replace '\s+', ' ').Trim()
+  if ([string]::IsNullOrWhiteSpace($Text)) {
+    return $false
+  }
+  return ($Text -eq 'francis' -or $Text -eq 'frances' -or $Text.StartsWith('francis ') -or $Text.StartsWith('frances '))
+}
+
+function Get-OverlayDirectFrancisAddressedUtterance {
+  param([string]$RecognizedText)
+
+  $Text = ([string]$RecognizedText).Trim()
+  if ([string]::IsNullOrWhiteSpace($Text)) {
+    return ''
+  }
+
+  $Match = [regex]::Match($Text, '^\s*(francis|frances)\b[\s,;:\-]*(?<utterance>.*)$', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+  if (-not $Match.Success) {
+    return ''
+  }
+  return ([string]$Match.Groups['utterance'].Value).Trim()
+}
+
 function Test-OverlayWakePhraseRecognized {
   param(
     [string]$RecognizedText,
@@ -3123,7 +3159,10 @@ function Invoke-OverlayVoiceStopPhrase {
 }
 
 function Resolve-OverlayVoiceOrbCommand {
-  param([string]$Text)
+  param(
+    [string]$Text,
+    [bool]$WakePhraseDetected = $false
+  )
 
   $Normalized = (([string]$Text).Trim().ToLowerInvariant() -replace '[^\p{L}\p{Nd}\s]', ' ')
   $Normalized = ($Normalized -replace '\s+', ' ').Trim()
@@ -3135,6 +3174,8 @@ function Resolve-OverlayVoiceOrbCommand {
     target_anchor = ''
     normalized_text_length = $Normalized.Length
     requires_explicit_orb_reference = $true
+    wake_phrase_satisfies_orb_reference = $true
+    reference_type = ''
     requires_direction = $true
     conversation_forwarding_suppressed = $true
     grants_execution_authority = $false
@@ -3146,20 +3187,24 @@ function Resolve-OverlayVoiceOrbCommand {
 
   $Words = @($Normalized.Split([char[]]@(' '), [System.StringSplitOptions]::RemoveEmptyEntries))
   $HasOrbReference = $Words -contains 'orb' -or $Words -contains 'orbs'
-  $HasMoveVerb = $Words -contains 'move' -or $Words -contains 'put' -or $Words -contains 'place' -or $Words -contains 'dock' -or $Words -contains 'shift' -or $Words -contains 'send'
+  $HasFrancisReference = $Words -contains 'francis' -or $Words -contains 'frances'
+  $HasEmbodimentReference = $HasOrbReference -or $HasFrancisReference -or [bool]$WakePhraseDetected
+  $HasMoveVerb = $Words -contains 'move' -or $Words -contains 'put' -or $Words -contains 'place' -or $Words -contains 'dock' -or $Words -contains 'shift' -or $Words -contains 'send' -or $Words -contains 'go' -or $Words -contains 'come' -or $Words -contains 'slide' -or $Words -contains 'park' -or $Words -contains 'anchor' -or $Words -contains 'snap' -or $Words -contains 'bring' -or $Words -contains 'set'
   $MoveLeft = $Words -contains 'left'
   $MoveRight = $Words -contains 'right'
 
-  if (-not $HasOrbReference -or -not $HasMoveVerb -or ($MoveLeft -eq $MoveRight)) {
+  if (-not $HasEmbodimentReference -or -not $HasMoveVerb -or ($MoveLeft -eq $MoveRight)) {
     return $Result
   }
 
   $TargetSide = if ($MoveLeft) { 'left' } else { 'right' }
+  $ReferenceType = if ($HasOrbReference) { 'orb' } elseif ($HasFrancisReference) { 'francis_identity' } else { 'wake_phrase' }
   $Result.recognized = $true
   $Result.intent = 'move_orb'
   $Result.command = 'move_orb_{0}_side' -f $TargetSide
   $Result.target_side = $TargetSide
   $Result.target_anchor = 'voice_command_{0}_side' -f $TargetSide
+  $Result.reference_type = $ReferenceType
   return $Result
 }
 
@@ -3245,6 +3290,12 @@ function Invoke-OverlayVoiceOrbCommand {
   $TargetSide = Get-StringProperty -Payload $Command -Name 'target_side' -Default ''
   $TargetAnchor = Get-StringProperty -Payload $Command -Name 'target_anchor' -Default ''
   $CommandName = Get-StringProperty -Payload $Command -Name 'command' -Default ''
+  $IsBridgeFileCommand = ($CommandSource -eq 'chatgpt_voice_bridge_file_request')
+  $IsDirectFrancisAddressCommand = ($CommandSource -eq 'local_overlay_direct_francis_address')
+  $EffectiveCommandRequestId = $CommandRequestId
+  if ([string]::IsNullOrWhiteSpace($EffectiveCommandRequestId) -and -not $IsBridgeFileCommand) {
+    $EffectiveCommandRequestId = 'local-orb-{0}-{1}' -f $TargetSide, ([Guid]::NewGuid().ToString('N'))
+  }
   $SelectedVoice = Get-OverlaySelectedVoiceName -Provider $Provider -Voice $Voice -RequestedVoiceId $RemoteVoiceId
   $Payload = New-OverlayVoiceProjection -SelectedVoiceName $SelectedVoice -Provider $Provider -WakeListening $true -WakePhraseText $WakePhraseText
   $Payload.local_overlay_command = $true
@@ -3252,8 +3303,9 @@ function Invoke-OverlayVoiceOrbCommand {
   $Payload.voice_command_recognized = $true
   $Payload.orb_command = $CommandName
   $Payload.overlay_position_command = $CommandName
+  $Payload.orb_command_reference_type = Get-StringProperty -Payload $Command -Name 'reference_type' -Default ''
   $Payload.overlay_position_command_source = $CommandSource
-  $Payload.overlay_position_command_request_id = $CommandRequestId
+  $Payload.overlay_position_command_request_id = $EffectiveCommandRequestId
   $Payload.target_side = $TargetSide
   $Payload.target_anchor = $TargetAnchor
   $Payload.wake_phrase_detected = [bool]$WakePhraseDetected
@@ -3262,8 +3314,12 @@ function Invoke-OverlayVoiceOrbCommand {
   $Payload.recognition_threshold = $RecognitionThreshold
   $Payload.wake_alias_count = $WakeAliasCount
   $Payload.continuous_voice_chat = [bool]$ContinuousVoiceChat
-  $Payload.transcript_source = if ($CommandSource -eq 'chatgpt_voice_bridge_file_request') { 'chatgpt_voice_bridge_command_request' } elseif ($WakePhraseDetected) { 'microphone_wake_listener' } else { 'microphone_continuous_dictation' }
+  $Payload.direct_francis_address_detected = [bool]$IsDirectFrancisAddressCommand
+  $Payload.transcript_source = if ($CommandSource -eq 'chatgpt_voice_bridge_file_request') { 'chatgpt_voice_bridge_command_request' } elseif ($IsDirectFrancisAddressCommand) { 'microphone_direct_francis_address' } elseif ($WakePhraseDetected) { 'microphone_wake_listener' } else { 'microphone_continuous_dictation' }
   $Payload.voice_recognition = 'system_speech_local_orb_command'
+  $Payload.microphone_speech = (-not [bool]$IsBridgeFileCommand)
+  $Payload.microphone_recognition_claimed = (-not [bool]$IsBridgeFileCommand)
+  $Payload.synthetic_transcript = [bool]$IsBridgeFileCommand
   $Payload.transcript_length = if ($TranscriptLengthOverride -ge 0) { $TranscriptLengthOverride } else { ([string]$RecognizedText).Length }
   $Payload.transcript_hash = if (-not [string]::IsNullOrWhiteSpace($TranscriptHashOverride)) { $TranscriptHashOverride } else { Get-OverlayTextDigest -Text $RecognizedText }
   $Payload.transcript_redacted = $true
@@ -3317,6 +3373,25 @@ function Invoke-OverlayVoiceOrbCommand {
   $Payload.overlay_left = [double]$Position['left']
   $Payload.overlay_top = [double]$Position['top']
   $Payload.message = 'Orb position voice command applied locally and not forwarded to chat.'
+  if (-not [bool]$IsBridgeFileCommand) {
+    $LocalCommandReceiptRequest = [ordered]@{
+      command = $CommandName
+      target_side = $TargetSide
+      target_anchor = $TargetAnchor
+      reference_type = Get-StringProperty -Payload $Command -Name 'reference_type' -Default ''
+      command_source = $CommandSource
+      source = 'lens.overlay.voice'
+      actor = 'lens.overlay.voice'
+      client_origin = 'local_overlay_speech_recognition'
+      microphone_recognition_claimed = $true
+      microphone_speech = $true
+      wake_phrase_detected = [bool]$WakePhraseDetected
+      transcript_source = $Payload.transcript_source
+      transcript_hash = $Payload.transcript_hash
+    }
+    Write-OverlayOrbPositionCommandReceipt -Root $Root -RequestId $EffectiveCommandRequestId -Request $LocalCommandReceiptRequest -Result $Payload
+    $Payload.position_command_receipt_path = 'data/runtime/lens-overlay/orb-position-commands/{0}.json' -f $EffectiveCommandRequestId
+  }
   Write-OverlayVoiceState -Root $Root -Payload $Payload
   return $Payload
 }
@@ -4129,6 +4204,8 @@ function Start-OverlayWakeListener {
         }
         $RecognizedText = [string]$EventArgs.Result.Text
         $UtteranceText = Get-OverlayWakePrefixedUtterance -RecognizedText $RecognizedText -WakeAliases $script:LensOverlayWakeAliases
+        $DirectFrancisAddressDetected = Test-OverlayDirectFrancisAddressRecognized -RecognizedText $RecognizedText
+        $DirectFrancisUtteranceText = if ($DirectFrancisAddressDetected) { Get-OverlayDirectFrancisAddressedUtterance -RecognizedText $RecognizedText } else { '' }
         $WakePhraseOnly = Test-OverlayWakePhraseRecognized -RecognizedText $RecognizedText -WakeAliases $script:LensOverlayWakeAliases
         $StopPhraseRecognized = Test-OverlayStopPhraseRecognized -RecognizedText $RecognizedText -WakeAliases $script:LensOverlayWakeAliases
         $SpeechGuard = Get-OverlayOwnedSpeechGuardState -Root $script:LensOverlayWakeRoot -CooldownSeconds 12
@@ -4144,7 +4221,8 @@ function Start-OverlayWakeListener {
           $Suppressed = New-OverlayVoiceProjection -SelectedVoiceName (Get-OverlaySelectedVoiceName -Provider $script:LensOverlayWakeVoiceProvider -Voice $script:LensOverlayWakeVoice -RequestedVoiceId $script:LensOverlayWakeRemoteVoiceId) -Provider $script:LensOverlayWakeVoiceProvider -WakeListening $true -WakePhraseText $script:LensOverlayWakePhrase
           $Suppressed.status = 'voice_input_suppressed_while_speaking'
           $Suppressed.ok = $true
-          $Suppressed.wake_phrase_detected = (-not [string]::IsNullOrWhiteSpace($UtteranceText) -or $WakePhraseOnly)
+          $Suppressed.wake_phrase_detected = (-not [string]::IsNullOrWhiteSpace($UtteranceText) -or $WakePhraseOnly -or $DirectFrancisAddressDetected)
+          $Suppressed.direct_francis_address_detected = [bool]$DirectFrancisAddressDetected
           $Suppressed.stop_phrase_detected = $false
           $Suppressed.continuous_voice_chat = [bool]$script:LensOverlayContinuousVoiceChat
           $Suppressed.continuous_voice_chat_blocker = if ($OwnedSpeechActive) { 'owned_speech_process_active' } elseif ($OwnedSpeechRecentlyCompleted) { 'owned_speech_recently_completed' } else { 'external_voice_transport_speaking' }
@@ -4157,7 +4235,7 @@ function Start-OverlayWakeListener {
           $Suppressed.recognition_threshold = $script:LensOverlayWakeConfidenceThreshold
           $Suppressed.transcript_length = $RecognizedText.Length
           $Suppressed.transcript_hash = Get-OverlayTextDigest -Text $RecognizedText
-          $Suppressed.transcript_source = if ([string]::IsNullOrWhiteSpace($UtteranceText)) { 'microphone_continuous_dictation' } else { 'microphone_wake_listener' }
+          $Suppressed.transcript_source = if (-not [string]::IsNullOrWhiteSpace($UtteranceText)) { 'microphone_wake_listener' } elseif ($DirectFrancisAddressDetected) { 'microphone_direct_francis_address' } else { 'microphone_continuous_dictation' }
           $Suppressed.voice_recognition = 'system_speech_suppressed_during_owned_speech'
           $Suppressed.transcript_redacted = $true
           $Suppressed.stores_transcript = $false
@@ -4171,15 +4249,16 @@ function Start-OverlayWakeListener {
           Write-OverlayVoiceState -Root $script:LensOverlayWakeRoot -Payload $Suppressed
           return
         }
-        $CommandWakePhraseDetected = (-not [string]::IsNullOrWhiteSpace($UtteranceText) -or $WakePhraseOnly)
-        $CommandText = if (-not [string]::IsNullOrWhiteSpace($UtteranceText)) { $UtteranceText } else { $RecognizedText }
-        $OrbCommand = Resolve-OverlayVoiceOrbCommand -Text $CommandText
+        $CommandWakePhraseDetected = (-not [string]::IsNullOrWhiteSpace($UtteranceText) -or $WakePhraseOnly -or $DirectFrancisAddressDetected)
+        $CommandText = if (-not [string]::IsNullOrWhiteSpace($UtteranceText)) { $UtteranceText } elseif ($DirectFrancisAddressDetected) { $RecognizedText } else { $RecognizedText }
+        $OrbCommand = Resolve-OverlayVoiceOrbCommand -Text $CommandText -WakePhraseDetected:$CommandWakePhraseDetected
         if ([bool]$OrbCommand['recognized'] -and ($CommandWakePhraseDetected -or [bool]$script:LensOverlayContinuousVoiceChat)) {
           $script:LensOverlayWakeCount += 1
-          [void](Invoke-OverlayVoiceOrbCommand -Root $script:LensOverlayWakeRoot -Command $OrbCommand -RecognizedText $RecognizedText -Provider $script:LensOverlayWakeVoiceProvider -Voice $script:LensOverlayWakeVoice -RemoteVoiceId $script:LensOverlayWakeRemoteVoiceId -WakePhraseText $script:LensOverlayWakePhrase -RecognitionConfidence ([double]$EventArgs.Result.Confidence) -RecognitionThreshold $script:LensOverlayWakeConfidenceThreshold -WakeAliasCount $script:LensOverlayWakeAliasCount -WakeCount $script:LensOverlayWakeCount -WakePhraseDetected $CommandWakePhraseDetected -ContinuousVoiceChat ([bool]$script:LensOverlayContinuousVoiceChat))
+          $LocalOrbCommandSource = if ($DirectFrancisAddressDetected -and [string]::IsNullOrWhiteSpace($UtteranceText)) { 'local_overlay_direct_francis_address' } else { 'local_overlay_speech_recognition' }
+          [void](Invoke-OverlayVoiceOrbCommand -Root $script:LensOverlayWakeRoot -Command $OrbCommand -RecognizedText $RecognizedText -Provider $script:LensOverlayWakeVoiceProvider -Voice $script:LensOverlayWakeVoice -RemoteVoiceId $script:LensOverlayWakeRemoteVoiceId -WakePhraseText $script:LensOverlayWakePhrase -RecognitionConfidence ([double]$EventArgs.Result.Confidence) -RecognitionThreshold $script:LensOverlayWakeConfidenceThreshold -WakeAliasCount $script:LensOverlayWakeAliasCount -WakeCount $script:LensOverlayWakeCount -WakePhraseDetected $CommandWakePhraseDetected -ContinuousVoiceChat ([bool]$script:LensOverlayContinuousVoiceChat) -CommandSource $LocalOrbCommandSource)
           return
         }
-        if ([string]::IsNullOrWhiteSpace($UtteranceText) -and -not $WakePhraseOnly) {
+        if ([string]::IsNullOrWhiteSpace($UtteranceText) -and -not $WakePhraseOnly -and -not $DirectFrancisAddressDetected) {
           if ([bool]$script:LensOverlayContinuousVoiceChat) {
             $script:LensOverlayWakeCount += 1
             [void](Invoke-OverlayVoiceChatTurn -Root $script:LensOverlayWakeRoot -UtteranceText $RecognizedText -Provider $script:LensOverlayWakeVoiceProvider -Voice $script:LensOverlayWakeVoice -Rate $script:LensOverlayWakeRate -Volume $script:LensOverlayWakeVolume -RemoteVoiceId $script:LensOverlayWakeRemoteVoiceId -RemoteModelId $script:LensOverlayWakeRemoteModelId -RemoteOutputFormat $script:LensOverlayWakeRemoteOutputFormat -RemoteStability $script:LensOverlayWakeRemoteStability -RemoteSimilarityBoost $script:LensOverlayWakeRemoteSimilarityBoost -RemoteStyle $script:LensOverlayWakeRemoteStyle -RemoteSpeed $script:LensOverlayWakeRemoteSpeed -RemoteUseSpeakerBoost $script:LensOverlayWakeRemoteUseSpeakerBoost -WakePhraseText $script:LensOverlayWakePhrase -RecognitionConfidence ([double]$EventArgs.Result.Confidence) -RecognitionThreshold $script:LensOverlayWakeConfidenceThreshold -WakeAliasCount $script:LensOverlayWakeAliasCount -WakeCount $script:LensOverlayWakeCount -WakePhraseDetected $false)
@@ -4203,8 +4282,9 @@ function Start-OverlayWakeListener {
           return
         }
         $script:LensOverlayWakeCount += 1
-        if (-not [string]::IsNullOrWhiteSpace($UtteranceText)) {
-          [void](Invoke-OverlayVoiceChatTurn -Root $script:LensOverlayWakeRoot -UtteranceText $UtteranceText -Provider $script:LensOverlayWakeVoiceProvider -Voice $script:LensOverlayWakeVoice -Rate $script:LensOverlayWakeRate -Volume $script:LensOverlayWakeVolume -RemoteVoiceId $script:LensOverlayWakeRemoteVoiceId -RemoteModelId $script:LensOverlayWakeRemoteModelId -RemoteOutputFormat $script:LensOverlayWakeRemoteOutputFormat -RemoteStability $script:LensOverlayWakeRemoteStability -RemoteSimilarityBoost $script:LensOverlayWakeRemoteSimilarityBoost -RemoteStyle $script:LensOverlayWakeRemoteStyle -RemoteSpeed $script:LensOverlayWakeRemoteSpeed -RemoteUseSpeakerBoost $script:LensOverlayWakeRemoteUseSpeakerBoost -WakePhraseText $script:LensOverlayWakePhrase -RecognitionConfidence ([double]$EventArgs.Result.Confidence) -RecognitionThreshold $script:LensOverlayWakeConfidenceThreshold -WakeAliasCount $script:LensOverlayWakeAliasCount -WakeCount $script:LensOverlayWakeCount)
+        $AddressedUtteranceText = if (-not [string]::IsNullOrWhiteSpace($UtteranceText)) { $UtteranceText } elseif ($DirectFrancisAddressDetected) { $DirectFrancisUtteranceText } else { '' }
+        if (-not [string]::IsNullOrWhiteSpace($AddressedUtteranceText)) {
+          [void](Invoke-OverlayVoiceChatTurn -Root $script:LensOverlayWakeRoot -UtteranceText $AddressedUtteranceText -Provider $script:LensOverlayWakeVoiceProvider -Voice $script:LensOverlayWakeVoice -Rate $script:LensOverlayWakeRate -Volume $script:LensOverlayWakeVolume -RemoteVoiceId $script:LensOverlayWakeRemoteVoiceId -RemoteModelId $script:LensOverlayWakeRemoteModelId -RemoteOutputFormat $script:LensOverlayWakeRemoteOutputFormat -RemoteStability $script:LensOverlayWakeRemoteStability -RemoteSimilarityBoost $script:LensOverlayWakeRemoteSimilarityBoost -RemoteStyle $script:LensOverlayWakeRemoteStyle -RemoteSpeed $script:LensOverlayWakeRemoteSpeed -RemoteUseSpeakerBoost $script:LensOverlayWakeRemoteUseSpeakerBoost -WakePhraseText $script:LensOverlayWakePhrase -RecognitionConfidence ([double]$EventArgs.Result.Confidence) -RecognitionThreshold $script:LensOverlayWakeConfidenceThreshold -WakeAliasCount $script:LensOverlayWakeAliasCount -WakeCount $script:LensOverlayWakeCount -WakePhraseDetected $CommandWakePhraseDetected)
           return
         }
         $Payload = Invoke-OverlayVoiceSpeech -Root $script:LensOverlayWakeRoot -Text $script:LensOverlayWakeResponse -Provider $script:LensOverlayWakeVoiceProvider -Voice $script:LensOverlayWakeVoice -Rate $script:LensOverlayWakeRate -Volume $script:LensOverlayWakeVolume -RemoteVoiceId $script:LensOverlayWakeRemoteVoiceId -RemoteModelId $script:LensOverlayWakeRemoteModelId -RemoteOutputFormat $script:LensOverlayWakeRemoteOutputFormat -RemoteStability $script:LensOverlayWakeRemoteStability -RemoteSimilarityBoost $script:LensOverlayWakeRemoteSimilarityBoost -RemoteStyle $script:LensOverlayWakeRemoteStyle -RemoteSpeed $script:LensOverlayWakeRemoteSpeed -RemoteUseSpeakerBoost $script:LensOverlayWakeRemoteUseSpeakerBoost -WakeListening $true -WakePhraseText $script:LensOverlayWakePhrase -SuccessStatus 'wake_acknowledged' -SuccessMessage 'Wake phrase detected and acknowledged through selected speech output.'

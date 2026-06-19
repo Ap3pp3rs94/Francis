@@ -215,7 +215,25 @@ def _resolve_orb_position_command(text: str) -> dict[str, Any]:
     words = normalized.split()
     has_orb_reference = "orb" in words or "orbs" in words
     has_francis_reference = "francis" in words or "frances" in words
-    has_move_verb = any(word in words for word in ("move", "put", "place", "dock", "shift", "send"))
+    has_move_verb = any(
+        word in words
+        for word in (
+            "move",
+            "put",
+            "place",
+            "dock",
+            "shift",
+            "send",
+            "go",
+            "come",
+            "slide",
+            "park",
+            "anchor",
+            "snap",
+            "bring",
+            "set",
+        )
+    )
     move_left = "left" in words
     move_right = "right" in words
     has_embodiment_reference = has_orb_reference or has_francis_reference
@@ -462,6 +480,22 @@ def chatgpt_voice_bridge_contract(actor: str = "") -> dict[str, Any]:
             "client_speaks_top_level_reply": True,
             "orb_position_voice_commands": True,
             "orb_position_command_targets": ["left", "right"],
+            "orb_position_command_move_verbs": [
+                "move",
+                "put",
+                "place",
+                "dock",
+                "shift",
+                "send",
+                "go",
+                "come",
+                "slide",
+                "park",
+                "anchor",
+                "snap",
+                "bring",
+                "set",
+            ],
             "orb_position_command_requires_orb_reference": True,
             "orb_position_command_accepts_francis_identity_reference": True,
             "orb_position_command_requires_direction": True,
