@@ -479,11 +479,11 @@ def test_chatgpt_voice_forward_sentence_bounds_long_model_reply(monkeypatch, tmp
     assert body["ok"] is True
     assert body["status"] == "forwarded"
     assert body["reply"] == f"{first_sentence}."
-    assert len(body["reply"]) <= 700
+    assert len(body["reply"]) <= 420
     assert body["voice_response"]["text"] == body["reply"]
     assert body["voice_response"]["text_truncated"] is True
     assert body["voice_response"]["sentence_aware_limit"] is True
-    assert body["receipt"]["chat_reply_max_speakable_chars"] == 700
+    assert body["receipt"]["chat_reply_max_speakable_chars"] == 420
     assert body["receipt"]["chat_reply_truncated_for_voice"] is True
     assert body["receipt"]["chat_reply_sentence_aware_limit"] is True
     assert body["chat_forward"]["response"]["reply"].startswith(first_sentence)
@@ -492,7 +492,7 @@ def test_chatgpt_voice_forward_sentence_bounds_long_model_reply(monkeypatch, tmp
 
     voice_state = data_root / "runtime" / "lens-overlay" / "voice-turn-status.json"
     state = json.loads(voice_state.read_text(encoding="utf-8"))
-    assert state["chat_reply_max_speakable_chars"] == 700
+    assert state["chat_reply_max_speakable_chars"] == 420
     assert state["chat_reply_truncated_for_voice"] is True
     assert state["chat_reply_sentence_aware_limit"] is True
     assert state["chat_reply_length"] == len(body["reply"])
@@ -592,7 +592,7 @@ def test_chatgpt_voice_mcp_tools_expose_bounded_bridge(monkeypatch, tmp_path: Pa
     assert contract["governance"]["read_only"] is True
     speech_contract = contract["data"]["client_speech_contract"]
     assert speech_contract["mcp_server_default_client_origin"] == "chatgpt_app_voice"
-    assert speech_contract["max_reply_chars"] == 700
+    assert speech_contract["max_reply_chars"] == 420
     assert speech_contract["sentence_aware_reply_limit"] is True
 
     proof = run_tool("francis.chatgpt_voice.mcp_probe", {"actor": _ACTOR, "source": "chatgpt.voice"})

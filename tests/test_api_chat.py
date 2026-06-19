@@ -697,6 +697,7 @@ def test_chat_send_applies_francis_orb_identity_context_to_voice_llm_prompt(
     assert "francis.identity: You are Francis; voice, lens, and orb are three Francis surfaces" in prompt
     assert "francis.orb_embodiment: The Orb is Francis's embodiment" in prompt
     assert "francis.voice_boundary: ChatGPT Voice or browser speech is a transport for Francis voice" in prompt
+    assert "francis.voice_reply_style: For voice turns, default to one or two short conversational sentences" in prompt
     assert "francis.authority_boundary: This identity context grants no execution" in prompt
 
     identity = body["telemetry_context"]["francis_identity_context"]

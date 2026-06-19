@@ -42,7 +42,7 @@ CHATGPT_VOICE_BRIDGE_MCP_PROOF_DESCRIPTION = (
     "a user transcript, does not call the model, does not update a voice turn, and does not grant execution authority."
 )
 MAX_TRANSCRIPT_CHARS = 8000
-MAX_SPEAKABLE_REPLY_CHARS = 700
+MAX_SPEAKABLE_REPLY_CHARS = 420
 _TRANSCRIPT_UNAVAILABLE_MARKERS = {
     "transcript unavailable",
     "transcript not available",
