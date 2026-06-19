@@ -881,7 +881,10 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "required_interrupt_phrase = 'francis_stop'" in script
     assert "Stop-OverlayVoiceSpeechProcess -Root $Root -Reason 'francis_stop_phrase_interrupted_owned_speech'" in script
     assert "owned_speech_recently_completed" in script
-    assert "self_trigger_guard_window_seconds = Get-IntegerProperty -Payload $SpeechGuard -Name 'self_trigger_guard_window_seconds' -Default 12" in script
+    assert (
+        "self_trigger_guard_window_seconds = Get-IntegerProperty -Payload $SpeechGuard -Name 'self_trigger_guard_window_seconds' -Default 12"
+        in script
+    )
     assert "Get-OverlayOwnedSpeechGuardState -Root $script:LensOverlayWakeRoot -CooldownSeconds 12" in script
     assert "Test-OverlayVoiceSpeechProcess -ProcessId $SpeechProcessId" in script
     assert "-ContinuousVoiceChat $script:LensOverlayRequestedContinuousVoiceChat" in script

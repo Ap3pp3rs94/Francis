@@ -26,9 +26,7 @@ CHATGPT_VOICE_BRIDGE_MCP_CLIENT_UNSPECIFIED = "mcp_client_unspecified"
 CHATGPT_VOICE_BRIDGE_CHATGPT_APP_VOICE_CLIENT = "chatgpt_app_voice"
 CHATGPT_VOICE_BRIDGE_VIRTUAL_TURN_STATE = "data/runtime/lens-overlay/voice-turn-status.json"
 CHATGPT_VOICE_BRIDGE_VIRTUAL_TURN_RECEIPTS = "data/runtime/lens-overlay/voice-turns"
-CHATGPT_VOICE_BRIDGE_ORB_POSITION_COMMAND_REQUEST = (
-    "data/runtime/lens-overlay/orb-position-command-request.json"
-)
+CHATGPT_VOICE_BRIDGE_ORB_POSITION_COMMAND_REQUEST = "data/runtime/lens-overlay/orb-position-command-request.json"
 CHATGPT_VOICE_BRIDGE_ORB_POSITION_COMMAND_RECEIPTS = "data/runtime/lens-overlay/orb-position-commands"
 CHATGPT_VOICE_BRIDGE_MCP_INGRESS_DESCRIPTION = (
     "Use this as the required bridge for every ChatGPT voice turn directed at Francis, the Francis orb, "
