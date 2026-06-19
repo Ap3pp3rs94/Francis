@@ -26,6 +26,10 @@ CHATGPT_VOICE_BRIDGE_MCP_CLIENT_UNSPECIFIED = "mcp_client_unspecified"
 CHATGPT_VOICE_BRIDGE_CHATGPT_APP_VOICE_CLIENT = "chatgpt_app_voice"
 CHATGPT_VOICE_BRIDGE_VIRTUAL_TURN_STATE = "data/runtime/lens-overlay/voice-turn-status.json"
 CHATGPT_VOICE_BRIDGE_VIRTUAL_TURN_RECEIPTS = "data/runtime/lens-overlay/voice-turns"
+CHATGPT_VOICE_BRIDGE_ORB_POSITION_COMMAND_REQUEST = (
+    "data/runtime/lens-overlay/orb-position-command-request.json"
+)
+CHATGPT_VOICE_BRIDGE_ORB_POSITION_COMMAND_RECEIPTS = "data/runtime/lens-overlay/orb-position-commands"
 CHATGPT_VOICE_BRIDGE_MCP_INGRESS_DESCRIPTION = (
     "Use this as the required bridge for every ChatGPT voice turn directed at Francis, the Francis orb, "
     "or the Francis voice/lens surface. When the operator is trying to talk to Francis, always pass the exact "
@@ -150,6 +154,14 @@ def _virtual_voice_turn_receipt_root() -> Path:
     return _virtual_voice_root() / "voice-turns"
 
 
+def _orb_position_command_request_path() -> Path:
+    return _virtual_voice_root() / "orb-position-command-request.json"
+
+
+def _orb_position_command_receipt_root() -> Path:
+    return _virtual_voice_root() / "orb-position-commands"
+
+
 def _atomic_write_json(path: Path, obj: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(f".atomic-json-{os.getpid()}-{hashlib.sha256(str(_now()).encode()).hexdigest()[:12]}.tmp")
@@ -171,6 +183,145 @@ def _safe_voice_turn_id(turn_id: Any, *, payload: dict[str, Any]) -> str:
         text = f"chatgpt_voice_turn_{_digest(payload)}"
     safe = "".join(char if char.isalnum() or char in "_.-" else "_" for char in text)
     return safe.strip("._-") or "chatgpt_voice_turn_unknown"
+
+
+def _safe_file_id(value: Any, *, default: str) -> str:
+    text = _bounded_text(value, max_chars=128)
+    safe = "".join(char if char.isalnum() or char in "_.-" else "_" for char in text)
+    return safe.strip("._-") or default
+
+
+def _resolve_orb_position_command(text: str) -> dict[str, Any]:
+    normalized = " ".join("".join(char if char.isalnum() else " " for char in text.lower()).split())
+    result: dict[str, Any] = {
+        "recognized": False,
+        "intent": "",
+        "command": "",
+        "target_side": "",
+        "target_anchor": "",
+        "normalized_text_length": len(normalized),
+        "requires_explicit_orb_reference": True,
+        "requires_direction": True,
+        "conversation_forwarding_suppressed": True,
+        "authority_scope": "runtime_overlay_position_only",
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+    }
+    if not normalized:
+        return result
+
+    words = normalized.split()
+    has_orb_reference = "orb" in words or "orbs" in words
+    has_move_verb = any(word in words for word in ("move", "put", "place", "dock", "shift", "send"))
+    move_left = "left" in words
+    move_right = "right" in words
+    if not has_orb_reference or not has_move_verb or move_left == move_right:
+        return result
+
+    target_side = "left" if move_left else "right"
+    result.update(
+        {
+            "recognized": True,
+            "intent": "move_orb",
+            "command": f"move_orb_{target_side}_side",
+            "target_side": target_side,
+            "target_anchor": f"voice_command_{target_side}_side",
+        }
+    )
+    return result
+
+
+def _write_orb_position_command_request(
+    *,
+    base_payload: dict[str, Any],
+    command: dict[str, Any],
+    transcript_text: str,
+    chat_forward_requested: bool,
+) -> dict[str, Any]:
+    created_ts = _now()
+    request_id = _safe_file_id(
+        base_payload.get("turn_id"),
+        default=f"orb-position-command-{_digest({**base_payload, **command, 'created_ts': created_ts})}",
+    )
+    request_path = _orb_position_command_request_path()
+    receipt_path = _orb_position_command_receipt_root() / f"{request_id}.json"
+    payload = {
+        "kind": "lens.overlay.orb_position_command.request",
+        "status": "queued",
+        "ok": True,
+        "request_id": request_id,
+        "created_ts": created_ts,
+        "created_at": _utc_iso_from_ts(created_ts),
+        "source": _safe_str(base_payload.get("source")),
+        "actor": _safe_str(base_payload.get("actor")),
+        "client_origin": _safe_str(base_payload.get("client_origin")),
+        "conversation_id": _safe_str(base_payload.get("conversation_id")),
+        "turn_id": _safe_str(base_payload.get("turn_id")),
+        "ingress_transport": _safe_str(base_payload.get("ingress_transport")),
+        "mcp_gateway_tool": _safe_str(base_payload.get("mcp_gateway_tool")),
+        "mcp_server_tool": _safe_str(base_payload.get("mcp_server_tool")),
+        "intent": _safe_str(command.get("intent")),
+        "command": _safe_str(command.get("command")),
+        "target_side": _safe_str(command.get("target_side")),
+        "target_anchor": _safe_str(command.get("target_anchor")),
+        "transcript_length": len(transcript_text),
+        "transcript_hash": _text_digest(transcript_text) if transcript_text else "",
+        "transcript_redacted": True,
+        "stores_transcript": False,
+        "chat_forward_requested_before_command": bool(chat_forward_requested),
+        "conversation_forwarding_suppressed": True,
+        "speech_output_suppressed": False,
+        "bounded_overlay_position_mutation": True,
+        "mutation_authority_scope": "runtime_overlay_position_only",
+        "overlay_runtime_owns_execution": True,
+        "request_path": CHATGPT_VOICE_BRIDGE_ORB_POSITION_COMMAND_REQUEST,
+        "request_full_path": str(request_path),
+        "request_receipt_path": f"{CHATGPT_VOICE_BRIDGE_ORB_POSITION_COMMAND_RECEIPTS}/{request_id}.json",
+        "request_receipt_full_path": str(receipt_path),
+        "applied": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "bridge": CHATGPT_VOICE_BRIDGE_VERSION,
+            "gate": "chatgpt_voice_orb_position_command_request",
+            "writes_receipt": True,
+            "writes_overlay_position_command_request": True,
+            "forwards_to_chat": False,
+            "calls_model": False,
+            "raw_audio": False,
+            "raw_shell": False,
+            "raw_input": False,
+            "screenshots": False,
+            "pixels": False,
+            "overlay_runtime_owns_execution": True,
+            "bounded_overlay_position_mutation": True,
+            "mutation_authority_scope": "runtime_overlay_position_only",
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+    }
+    _atomic_write_json(request_path, payload)
+    _atomic_write_json(receipt_path, payload)
+    return payload
+
+
+def _orb_position_command_summary(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "status": _safe_str(payload.get("status")),
+        "request_id": _safe_str(payload.get("request_id")),
+        "command": _safe_str(payload.get("command")),
+        "target_side": _safe_str(payload.get("target_side")),
+        "target_anchor": _safe_str(payload.get("target_anchor")),
+        "queued": _safe_str(payload.get("status")) == "queued",
+        "applied": bool(payload.get("applied")),
+        "conversation_forwarding_suppressed": bool(payload.get("conversation_forwarding_suppressed")),
+        "overlay_runtime_owns_execution": bool(payload.get("overlay_runtime_owns_execution")),
+        "authority_scope": _safe_str(payload.get("mutation_authority_scope")),
+        "request_path": _safe_str(payload.get("request_path")),
+        "request_receipt_path": _safe_str(payload.get("request_receipt_path")),
+        "grants_execution_authority": bool(payload.get("grants_execution_authority")),
+        "grants_mutation_authority": bool(payload.get("grants_mutation_authority")),
+    }
 
 
 def _permission(
@@ -292,6 +443,14 @@ def chatgpt_voice_bridge_contract(actor: str = "") -> dict[str, Any]:
             "raw_audio_stream_accepted": False,
             "local_overlay_speech_started_by_bridge": False,
             "client_speaks_top_level_reply": True,
+            "orb_position_voice_commands": True,
+            "orb_position_command_targets": ["left", "right"],
+            "orb_position_command_requires_orb_reference": True,
+            "orb_position_command_requires_direction": True,
+            "orb_position_command_request_path": CHATGPT_VOICE_BRIDGE_ORB_POSITION_COMMAND_REQUEST,
+            "orb_position_command_receipt_root": CHATGPT_VOICE_BRIDGE_ORB_POSITION_COMMAND_RECEIPTS,
+            "orb_position_command_overlay_runtime_owns_execution": True,
+            "orb_position_command_authority_scope": "runtime_overlay_position_only",
         },
         "input_contract": {
             "transcript_required": True,
@@ -437,6 +596,15 @@ def _write_virtual_voice_turn(
         "chat_response_status": _safe_str(chat_response.get("status")),
         "chat_response_mode": _safe_str(chat_response.get("mode")),
         "chat_route_writes_conversation_ledger": chat_forwarded,
+        "orb_position_command_detected": bool(base_payload.get("orb_position_command_detected")),
+        "orb_position_command_request": base_payload.get("orb_position_command_request") or {},
+        "orb_position_command": _safe_str(base_payload.get("orb_position_command")),
+        "orb_position_command_target_side": _safe_str(base_payload.get("orb_position_command_target_side")),
+        "orb_position_command_status": _safe_str(base_payload.get("orb_position_command_status")),
+        "orb_position_command_authority_scope": _safe_str(base_payload.get("orb_position_command_authority_scope")),
+        "orb_position_command_overlay_runtime_owns_execution": bool(
+            base_payload.get("orb_position_command_overlay_runtime_owns_execution")
+        ),
         "reply_source": reply_source,
         "chat_reply_length": len(reply),
         "chat_reply_max_speakable_chars": int(base_payload.get("chat_reply_max_speakable_chars") or 0),
@@ -493,6 +661,14 @@ def _virtual_voice_summary(payload: dict[str, Any]) -> dict[str, Any]:
         "raw_audio": bool(payload.get("raw_audio")),
         "voice_turn_state_path": _safe_str(payload.get("voice_turn_state_path")),
         "voice_turn_receipt_path": _safe_str(payload.get("voice_turn_receipt_path")),
+        "orb_position_command_detected": bool(payload.get("orb_position_command_detected")),
+        "orb_position_command": _safe_str(payload.get("orb_position_command")),
+        "orb_position_command_target_side": _safe_str(payload.get("orb_position_command_target_side")),
+        "orb_position_command_status": _safe_str(payload.get("orb_position_command_status")),
+        "orb_position_command_request": payload.get("orb_position_command_request") or {},
+        "orb_position_command_overlay_runtime_owns_execution": bool(
+            payload.get("orb_position_command_overlay_runtime_owns_execution")
+        ),
         "grants_execution_authority": bool(payload.get("grants_execution_authority")),
         "grants_mutation_authority": bool(payload.get("grants_mutation_authority")),
     }
@@ -501,6 +677,20 @@ def _virtual_voice_summary(payload: dict[str, Any]) -> dict[str, Any]:
 def _write_receipt(payload: dict[str, Any]) -> dict[str, Any]:
     receipt_id = f"chatgpt-voice-{_safe_str(payload.get('decision'), 'recorded')}-{_digest(payload)}"
     created_ts = _now()
+    governance = _honesty(
+        read_only=False,
+        writes_receipt=True,
+        forwards_to_chat=bool(payload.get("chat_forward_requested")) and bool(payload.get("chat_forwarded")),
+    )
+    if bool(payload.get("orb_position_command_detected")):
+        governance.update(
+            {
+                "writes_overlay_position_command_request": True,
+                "bounded_overlay_position_mutation": True,
+                "mutation_authority_scope": "runtime_overlay_position_only",
+                "overlay_runtime_owns_execution": True,
+            }
+        )
     receipt = {
         "kind": f"{CHATGPT_VOICE_BRIDGE_KIND}.receipt",
         "receipt_id": receipt_id,
@@ -508,11 +698,7 @@ def _write_receipt(payload: dict[str, Any]) -> dict[str, Any]:
         "created_ts": created_ts,
         "created_at": _utc_iso_from_ts(created_ts),
         **payload,
-        "governance": _honesty(
-            read_only=False,
-            writes_receipt=True,
-            forwards_to_chat=bool(payload.get("chat_forward_requested")) and bool(payload.get("chat_forwarded")),
-        ),
+        "governance": governance,
     }
     path = _receipt_root() / f"{receipt_id}.json"
     _atomic_write_json(path, receipt)
@@ -620,6 +806,76 @@ def record_chatgpt_voice_ingress(
             },
             "orb_voice_bridge": orb_voice_bridge,
             "governance": _honesty(read_only=False, writes_receipt=True),
+        }
+
+    orb_position_command = _resolve_orb_position_command(redacted_transcript)
+    if bool(orb_position_command.get("recognized")):
+        command_request = _write_orb_position_command_request(
+            base_payload=base_payload,
+            command=orb_position_command,
+            transcript_text=redacted_transcript,
+            chat_forward_requested=bool(forward_to_chat),
+        )
+        command_summary = _orb_position_command_summary(command_request)
+        command_payload = {
+            **base_payload,
+            "chat_forward_requested": False,
+            "orb_position_command_detected": True,
+            "orb_position_command_request": command_summary,
+            "orb_position_command": _safe_str(orb_position_command.get("command")),
+            "orb_position_command_target_side": _safe_str(orb_position_command.get("target_side")),
+            "orb_position_command_status": "queued_for_overlay_runtime",
+            "orb_position_command_authority_scope": "runtime_overlay_position_only",
+            "orb_position_command_overlay_runtime_owns_execution": True,
+        }
+        target_side = _safe_str(orb_position_command.get("target_side"))
+        reply = f"I queued the orb move to the {target_side} side."
+        reply_source = "bridge.orb_position_command_queued"
+        orb_voice_bridge = _write_virtual_voice_turn(
+            base_payload=command_payload,
+            decision="recorded",
+            reply=reply,
+            reply_source=reply_source,
+            chat_forwarded=False,
+            chat_status="suppressed_orb_position_command",
+        )
+        governance = {
+            **_honesty(read_only=False, writes_receipt=True),
+            "writes_overlay_position_command_request": True,
+            "bounded_overlay_position_mutation": True,
+            "mutation_authority_scope": "runtime_overlay_position_only",
+            "overlay_runtime_owns_execution": True,
+        }
+        receipt = _write_receipt(
+            {
+                **command_payload,
+                "decision": "recorded",
+                "chat_forwarded": False,
+                "chat_forward_status": "suppressed_orb_position_command",
+                "chat_forward_error": "",
+                "reply": reply,
+                "reply_source": reply_source,
+                "orb_position_command_request": command_summary,
+                "orb_voice_bridge": _virtual_voice_summary(orb_voice_bridge),
+            }
+        )
+        return {
+            "kind": f"{CHATGPT_VOICE_BRIDGE_KIND}.ingress",
+            "ok": True,
+            "status": "orb_position_command_queued",
+            "reply": reply,
+            "voice_response": _voice_response(text=reply, source=reply_source),
+            "receipt": receipt,
+            "chat_forward": {
+                "requested": bool(forward_to_chat),
+                "forwarded": False,
+                "status": "suppressed_orb_position_command",
+                "error": "",
+                "response": {},
+            },
+            "orb_position_command": command_summary,
+            "orb_voice_bridge": orb_voice_bridge,
+            "governance": governance,
         }
 
     chat_response: dict[str, Any] = {}
@@ -827,6 +1083,8 @@ __all__ = [
     "CHATGPT_VOICE_BRIDGE_MCP_INGRESS_DESCRIPTION",
     "CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TOOL",
     "CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TRANSPORT",
+    "CHATGPT_VOICE_BRIDGE_ORB_POSITION_COMMAND_RECEIPTS",
+    "CHATGPT_VOICE_BRIDGE_ORB_POSITION_COMMAND_REQUEST",
     "CHATGPT_VOICE_BRIDGE_MCP_PROOF_DESCRIPTION",
     "CHATGPT_VOICE_BRIDGE_MCP_PROOF_GATEWAY_TOOL",
     "CHATGPT_VOICE_BRIDGE_MCP_PROOF_SERVER_TOOL",

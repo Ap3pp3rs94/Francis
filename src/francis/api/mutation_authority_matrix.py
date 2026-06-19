@@ -318,14 +318,15 @@ _RULES: tuple[AuthorityRule, ...] = (
         ),
         receipt_behavior=(
             "ChatGPT voice transcript ingress receipt or MCP connection proof receipt; lens overlay virtual "
-            "voice-turn projection for transcripts only; optional forwarding passes through existing chat write gate"
+            "voice-turn projection for transcripts; explicit orb left/right commands can write a bounded overlay "
+            "position command request; optional forwarding passes through existing chat write gate"
         ),
         denial_behavior="api_permission_denied via permission_gate before voice ingress receipt write or chat forwarding",
         governance_maturity="permission_gated",
         notes=(
             "Transcript-only bridge: no raw audio stream, no shell/input control, no screenshots, no native "
-            "ChatGPT app authority, and no execution or mutation authority beyond bounded receipt and virtual "
-            "voice-turn recording."
+            "ChatGPT app authority, and no execution or mutation authority beyond bounded receipt, virtual "
+            "voice-turn recording, and runtime_overlay_position_only orb position command requests."
         ),
     ),
     AuthorityRule(

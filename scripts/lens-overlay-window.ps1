@@ -2582,6 +2582,137 @@ function Write-OverlayVoiceTurnReceipt {
   Write-OverlayVoiceTurnFile -Path (Get-OverlayVoiceTurnReceiptPath -Root $Root -TurnId $TurnId) -Payload $Payload
 }
 
+function Get-OverlayOrbPositionCommandRequestPath {
+  param([string]$Root)
+
+  return Join-Path (Join-Path $Root 'runtime\lens-overlay') 'orb-position-command-request.json'
+}
+
+function Get-OverlayOrbPositionCommandReceiptRoot {
+  param([string]$Root)
+
+  return Join-Path (Join-Path $Root 'runtime\lens-overlay') 'orb-position-commands'
+}
+
+function Get-OverlayOrbPositionCommandReceiptPath {
+  param(
+    [string]$Root,
+    [string]$RequestId
+  )
+
+  $CleanRequestId = ([string]$RequestId) -replace '[^A-Za-z0-9_.-]', '_'
+  if ([string]::IsNullOrWhiteSpace($CleanRequestId)) {
+    $CleanRequestId = 'unknown_request'
+  }
+  return Join-Path (Get-OverlayOrbPositionCommandReceiptRoot -Root $Root) ('{0}.json' -f $CleanRequestId)
+}
+
+function Write-OverlayOrbPositionCommandReceipt {
+  param(
+    [string]$Root,
+    [string]$RequestId,
+    [object]$Request,
+    [object]$Result
+  )
+
+  $CommandName = Get-StringProperty -Payload $Request -Name 'command' -Default ''
+  $TargetSide = Get-StringProperty -Payload $Request -Name 'target_side' -Default ''
+  $TargetAnchor = Get-StringProperty -Payload $Request -Name 'target_anchor' -Default ''
+  $Receipt = [ordered]@{
+    kind = 'lens.overlay.orb_position_command.receipt'
+    status = Get-StringProperty -Payload $Result -Name 'status' -Default 'orb_position_command_result_unknown'
+    ok = Get-BoolProperty -Payload $Result -Name 'ok' -Default $false
+    request_id = $RequestId
+    command = $CommandName
+    target_side = $TargetSide
+    target_anchor = $TargetAnchor
+    applied = Get-BoolProperty -Payload $Result -Name 'runtime_overlay_position_changed' -Default $false
+    overlay_left = Get-StringProperty -Payload $Result -Name 'overlay_left' -Default ''
+    overlay_top = Get-StringProperty -Payload $Result -Name 'overlay_top' -Default ''
+    source = Get-StringProperty -Payload $Request -Name 'source' -Default ''
+    actor = Get-StringProperty -Payload $Request -Name 'actor' -Default ''
+    client_origin = Get-StringProperty -Payload $Request -Name 'client_origin' -Default ''
+    transcript_hash = Get-StringProperty -Payload $Request -Name 'transcript_hash' -Default ''
+    transcript_redacted = $true
+    stores_transcript = $false
+    request_path = 'data/runtime/lens-overlay/orb-position-command-request.json'
+    receipt_path = 'data/runtime/lens-overlay/orb-position-commands'
+    overlay_runtime_owns_execution = $true
+    bounded_overlay_position_mutation = $true
+    mutation_authority_scope = 'runtime_overlay_position_only'
+    chat_route_writes_conversation_ledger = $false
+    conversation_forwarding_suppressed = $true
+    grants_execution_authority = $false
+    grants_mutation_authority = $false
+    updated_at = [DateTimeOffset]::UtcNow.ToString('o')
+  }
+  Write-OverlayVoiceTurnFile -Path (Get-OverlayOrbPositionCommandReceiptPath -Root $Root -RequestId $RequestId) -Payload $Receipt
+}
+
+function Remove-OverlayOrbPositionCommandRequest {
+  param(
+    [string]$Root,
+    [string]$Path
+  )
+
+  $RequestPath = if ([string]::IsNullOrWhiteSpace($Path)) {
+    Get-OverlayOrbPositionCommandRequestPath -Root $Root
+  } else {
+    $Path
+  }
+  Remove-Item -LiteralPath $RequestPath -Force -ErrorAction SilentlyContinue
+}
+
+function Invoke-OverlayQueuedOrbPositionCommand {
+  param([string]$Root)
+
+  if ([string]::IsNullOrWhiteSpace($Root)) {
+    return $null
+  }
+
+  $RequestPath = Get-OverlayOrbPositionCommandRequestPath -Root $Root
+  $Request = Read-JsonFile -Path $RequestPath
+  if ($null -eq $Request) {
+    return $null
+  }
+
+  $RequestId = Get-StringProperty -Payload $Request -Name 'request_id' -Default ''
+  if ([string]::IsNullOrWhiteSpace($RequestId)) {
+    $RequestId = 'unknown_request'
+  }
+  $CommandName = Get-StringProperty -Payload $Request -Name 'command' -Default ''
+  $TargetSide = Get-StringProperty -Payload $Request -Name 'target_side' -Default ''
+  $TargetAnchor = Get-StringProperty -Payload $Request -Name 'target_anchor' -Default ''
+  $Command = [ordered]@{
+    recognized = $true
+    intent = 'move_orb'
+    command = $CommandName
+    target_side = $TargetSide
+    target_anchor = $TargetAnchor
+  }
+  $Result = Invoke-OverlayVoiceOrbCommand `
+    -Root $Root `
+    -Command $Command `
+    -RecognizedText ('orb position command request {0}' -f $RequestId) `
+    -Provider $script:LensOverlayRequestedVoiceProvider `
+    -Voice $script:LensOverlayRequestedVoiceName `
+    -RemoteVoiceId $script:LensOverlayRequestedElevenLabsVoiceId `
+    -WakePhraseText $script:LensOverlayRequestedWakePhrase `
+    -RecognitionConfidence 1.0 `
+    -RecognitionThreshold $script:LensOverlayRequestedWakeConfidenceThreshold `
+    -WakeAliasCount 0 `
+    -WakeCount 0 `
+    -WakePhraseDetected $true `
+    -ContinuousVoiceChat $false `
+    -CommandSource 'chatgpt_voice_bridge_file_request' `
+    -CommandRequestId $RequestId `
+    -TranscriptHashOverride (Get-StringProperty -Payload $Request -Name 'transcript_hash' -Default '') `
+    -TranscriptLengthOverride (Get-IntegerProperty -Payload $Request -Name 'transcript_length' -Default 0)
+  Write-OverlayOrbPositionCommandReceipt -Root $Root -RequestId $RequestId -Request $Request -Result $Result
+  Remove-OverlayOrbPositionCommandRequest -Root $Root -Path $RequestPath
+  return $Result
+}
+
 function Test-OverlayVoiceTurnCurrent {
   param(
     [string]$Root,
@@ -3078,7 +3209,11 @@ function Invoke-OverlayVoiceOrbCommand {
     [int]$WakeAliasCount = 0,
     [int]$WakeCount = 0,
     [bool]$WakePhraseDetected = $true,
-    [bool]$ContinuousVoiceChat = $false
+    [bool]$ContinuousVoiceChat = $false,
+    [string]$CommandSource = 'local_overlay_speech_recognition',
+    [string]$CommandRequestId = '',
+    [string]$TranscriptHashOverride = '',
+    [int]$TranscriptLengthOverride = -1
   )
 
   $TargetSide = Get-StringProperty -Payload $Command -Name 'target_side' -Default ''
@@ -3091,6 +3226,8 @@ function Invoke-OverlayVoiceOrbCommand {
   $Payload.voice_command_recognized = $true
   $Payload.orb_command = $CommandName
   $Payload.overlay_position_command = $CommandName
+  $Payload.overlay_position_command_source = $CommandSource
+  $Payload.overlay_position_command_request_id = $CommandRequestId
   $Payload.target_side = $TargetSide
   $Payload.target_anchor = $TargetAnchor
   $Payload.wake_phrase_detected = [bool]$WakePhraseDetected
@@ -3099,10 +3236,10 @@ function Invoke-OverlayVoiceOrbCommand {
   $Payload.recognition_threshold = $RecognitionThreshold
   $Payload.wake_alias_count = $WakeAliasCount
   $Payload.continuous_voice_chat = [bool]$ContinuousVoiceChat
-  $Payload.transcript_source = if ($WakePhraseDetected) { 'microphone_wake_listener' } else { 'microphone_continuous_dictation' }
+  $Payload.transcript_source = if ($CommandSource -eq 'chatgpt_voice_bridge_file_request') { 'chatgpt_voice_bridge_command_request' } elseif ($WakePhraseDetected) { 'microphone_wake_listener' } else { 'microphone_continuous_dictation' }
   $Payload.voice_recognition = 'system_speech_local_orb_command'
-  $Payload.transcript_length = ([string]$RecognizedText).Length
-  $Payload.transcript_hash = Get-OverlayTextDigest -Text $RecognizedText
+  $Payload.transcript_length = if ($TranscriptLengthOverride -ge 0) { $TranscriptLengthOverride } else { ([string]$RecognizedText).Length }
+  $Payload.transcript_hash = if (-not [string]::IsNullOrWhiteSpace($TranscriptHashOverride)) { $TranscriptHashOverride } else { Get-OverlayTextDigest -Text $RecognizedText }
   $Payload.transcript_redacted = $true
   $Payload.stores_transcript = $false
   $Payload.chat_bridge_status = 'not_called'
@@ -4415,6 +4552,7 @@ if ($Mode -eq 'Run') {
   $Form = $null
   $Timer = $null
   $RefreshTimer = $null
+  $CommandTimer = $null
   $MotionSubscription = $null
   $WakeRecognizer = $null
   $Failed = $false
@@ -4540,6 +4678,12 @@ if ($Mode -eq 'Run') {
         Update-OverlayMcpBodyStateLabelSafely -Label $script:LensOverlayLabel -Config $script:LensOverlayConfig -Root $script:LensOverlayDataRoot
       })
     $RefreshTimer.Start()
+    $CommandTimer = New-Object System.Windows.Threading.DispatcherTimer
+    $CommandTimer.Interval = [TimeSpan]::FromMilliseconds(500)
+    $CommandTimer.Add_Tick({
+        [void](Invoke-OverlayQueuedOrbPositionCommand -Root $script:LensOverlayDataRoot)
+      })
+    $CommandTimer.Start()
     if ($AutonomousMotionEnabled) {
       $MotionSubscription = Start-OrbFrameSyncedMotion -Window $script:LensOverlayWindow -MotionState $script:LensOverlayMotionState
       $script:LensOverlayRenderFrameClock = $MotionSubscription['clock']
@@ -4565,6 +4709,9 @@ if ($Mode -eq 'Run') {
     }
     if ($null -ne $Timer) {
       $Timer.Stop()
+    }
+    if ($null -ne $CommandTimer) {
+      $CommandTimer.Stop()
     }
     if ($null -ne $MotionSubscription) {
       Stop-OrbFrameSyncedMotion -Subscription $MotionSubscription

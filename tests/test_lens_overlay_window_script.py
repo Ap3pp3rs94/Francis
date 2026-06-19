@@ -674,6 +674,10 @@ def test_lens_overlay_voice_orb_position_command_is_local_and_bounded() -> None:
     script = (_repo_root() / "scripts" / "lens-overlay-window.ps1").read_text(encoding="utf-8")
 
     assert "function Resolve-OverlayVoiceOrbCommand" in script
+    assert "function Get-OverlayOrbPositionCommandRequestPath" in script
+    assert "orb-position-command-request.json" in script
+    assert "function Invoke-OverlayQueuedOrbPositionCommand" in script
+    assert "chatgpt_voice_bridge_file_request" in script
     assert "$HasOrbReference = $Words -contains 'orb' -or $Words -contains 'orbs'" in script
     assert "$HasMoveVerb = $Words -contains 'move'" in script
     assert "$Result.command = 'move_orb_{0}_side' -f $TargetSide" in script
@@ -682,6 +686,8 @@ def test_lens_overlay_voice_orb_position_command_is_local_and_bounded() -> None:
     assert "Clamp-OverlayDouble -Value ($MaximumLeft - $Margin)" in script
     assert "function Invoke-OverlayVoiceOrbCommand" in script
     assert "$Payload.status = 'orb_voice_command_applied'" in script
+    assert "$Payload.overlay_position_command_source = $CommandSource" in script
+    assert "$Payload.overlay_position_command_request_id = $CommandRequestId" in script
     assert "$Payload.chat_bridge_status = 'not_called'" in script
     assert "$Payload.chat_route_writes_conversation_ledger = $false" in script
     assert "$Payload.conversation_forwarding_suppressed = $true" in script
@@ -695,6 +701,10 @@ def test_lens_overlay_voice_orb_position_command_is_local_and_bounded() -> None:
     assert "Write-OverlayPositionState -Root $Root -Window $Window -MotionState $MotionState" in script
     assert "$OrbCommand = Resolve-OverlayVoiceOrbCommand -Text $CommandText" in script
     assert "Invoke-OverlayVoiceOrbCommand -Root $script:LensOverlayWakeRoot" in script
+    assert "Write-OverlayOrbPositionCommandReceipt -Root $Root -RequestId $RequestId" in script
+    assert "Remove-OverlayOrbPositionCommandRequest -Root $Root -Path $RequestPath" in script
+    assert "$CommandTimer = New-Object System.Windows.Threading.DispatcherTimer" in script
+    assert "Invoke-OverlayQueuedOrbPositionCommand -Root $script:LensOverlayDataRoot" in script
     assert "voice_position_command_active" in script
 
 

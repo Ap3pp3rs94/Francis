@@ -205,6 +205,76 @@ def test_chatgpt_voice_http_ingress_preserves_browser_voice_client_origin(monkey
     assert not (data_root / "conversations" / "ledger" / "ledger.jsonl").exists()
 
 
+def test_chatgpt_voice_browser_ingress_queues_orb_position_command_without_chat_forward(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({"chat_ui.voice": ["chatgpt.voice.bridge.write", "chat.write"]}),
+    )
+
+    client = TestClient(create_app())
+
+    body = client.post(
+        "/chatgpt-voice/ingress",
+        json={
+            "actor": "chat_ui.voice",
+            "source": "chat_ui.voice",
+            "client_origin": "francis_chat_ui_browser_voice",
+            "transcript": "Francis move the orb to the left side please",
+            "turn_id": "browser-orb-left-command",
+            "forward_to_chat": True,
+        },
+    ).json()
+
+    assert body["ok"] is True
+    assert body["status"] == "orb_position_command_queued"
+    assert body["reply"] == "I queued the orb move to the left side."
+    assert body["voice_response"]["source"] == "bridge.orb_position_command_queued"
+    assert body["chat_forward"]["requested"] is True
+    assert body["chat_forward"]["forwarded"] is False
+    assert body["chat_forward"]["status"] == "suppressed_orb_position_command"
+    command = body["orb_position_command"]
+    assert command["status"] == "queued"
+    assert command["request_id"] == "browser-orb-left-command"
+    assert command["command"] == "move_orb_left_side"
+    assert command["target_side"] == "left"
+    assert command["target_anchor"] == "voice_command_left_side"
+    assert command["conversation_forwarding_suppressed"] is True
+    assert command["overlay_runtime_owns_execution"] is True
+    assert command["authority_scope"] == "runtime_overlay_position_only"
+    assert command["grants_execution_authority"] is False
+    assert command["grants_mutation_authority"] is False
+
+    request_path = data_root / "runtime" / "lens-overlay" / "orb-position-command-request.json"
+    assert request_path.exists()
+    request = json.loads(request_path.read_text(encoding="utf-8"))
+    assert request["kind"] == "lens.overlay.orb_position_command.request"
+    assert request["status"] == "queued"
+    assert request["command"] == "move_orb_left_side"
+    assert request["target_side"] == "left"
+    assert request["stores_transcript"] is False
+    assert request["chat_forward_requested_before_command"] is True
+    assert "Francis move the orb" not in json.dumps(request)
+
+    command_receipt = data_root / "runtime" / "lens-overlay" / "orb-position-commands" / "browser-orb-left-command.json"
+    assert command_receipt.exists()
+    assert body["receipt"]["chat_forward_status"] == "suppressed_orb_position_command"
+    assert body["receipt"]["orb_position_command_request"]["command"] == "move_orb_left_side"
+    assert body["receipt"]["governance"]["forwards_to_chat"] is False
+    assert body["receipt"]["governance"]["writes_overlay_position_command_request"] is True
+    assert body["receipt"]["governance"]["mutation_authority_scope"] == "runtime_overlay_position_only"
+    assert body["receipt"]["governance"]["grants_execution_authority"] is False
+    assert body["receipt"]["governance"]["grants_mutation_authority"] is False
+    assert body["orb_voice_bridge"]["orb_position_command_detected"] is True
+    assert body["orb_voice_bridge"]["orb_position_command"] == "move_orb_left_side"
+    assert body["orb_voice_bridge"]["orb_position_command_overlay_runtime_owns_execution"] is True
+    assert not (data_root / "conversations" / "ledger" / "ledger.jsonl").exists()
+
+
 def test_chatgpt_voice_forward_requires_existing_chat_write_gate(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
