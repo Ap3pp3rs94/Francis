@@ -109,6 +109,8 @@ def test_lens_command_palette_monitor_route_projects_voice_bridge_proof(monkeypa
                     "orb_position_command_ready": False,
                     "orb_position_command_targets": ["left", "right"],
                     "orb_position_command_requires_orb_reference": True,
+                    "orb_position_command_accepts_francis_identity_reference": True,
+                    "orb_position_command_accepts_wake_phrase_reference": True,
                     "orb_position_command_requires_direction": True,
                     "orb_position_command_conversation_forwarding_suppressed": True,
                     "orb_position_command_authority_scope": "runtime_overlay_position_only",
@@ -120,6 +122,72 @@ def test_lens_command_palette_monitor_route_projects_voice_bridge_proof(monkeypa
                     "latest_orb_position_command_status": "orb_voice_command_applied",
                     "latest_orb_position_command_applied": True,
                     "recent_receipt_count": 1,
+                    "manual_acoustic_orb_position_proof": {
+                        "status": "fresh_acoustic_orb_position_command_observed",
+                        "proof_observed": True,
+                        "proof_blocker": "none",
+                        "requirement_checks": {
+                            "voice_input_ready": True,
+                            "wake_listener_ready": True,
+                            "microphone_signal_observed": True,
+                            "local_overlay_speech_command_observed": True,
+                            "voice_command_microphone_origin": True,
+                            "voice_command_wake_phrase_observed": True,
+                            "orb_receipt_observed": True,
+                            "orb_receipt_applied": True,
+                            "orb_receipt_microphone_origin": True,
+                            "orb_receipt_wake_phrase_observed": True,
+                            "orb_receipt_command_matches_voice": True,
+                            "orb_receipt_request_matches_voice": True,
+                            "orb_receipt_fresh": True,
+                            "api_injected_text_rejected": True,
+                            "transcript_redacted": True,
+                            "stores_transcript": False,
+                            "transcript": True,
+                        },
+                        "freshness_window_seconds": 300,
+                        "voice_input_ready": True,
+                        "wake_listening": True,
+                        "microphone_signal_observed": True,
+                        "required_phrase": "hey francis move left or hey francis move right",
+                        "requires_local_overlay_speech_recognition": True,
+                        "api_injected_text_counts_as_proof": False,
+                        "transcript_redacted_from_summary": True,
+                        "diagnostic_paths": {
+                            "overlay_status": "data/runtime/lens-overlay/status.json",
+                            "overlay_voice_status": "data/runtime/lens-overlay/voice-status.json",
+                            "orb_position_receipt_root": "data/runtime/lens-overlay/orb-position-commands",
+                            "latest_orb_receipt": (
+                                "data/runtime/lens-overlay/orb-position-commands/local-orb-left-proof.json"
+                            ),
+                            "transcript": "do not expose this acoustic transcript",
+                        },
+                        "latest_voice_status": "orb_voice_command_applied",
+                        "latest_voice_command": "move_orb_left_side",
+                        "latest_voice_command_request_id": "local-orb-left-proof",
+                        "latest_voice_command_source": "local_overlay_speech_recognition",
+                        "latest_voice_transcript_source": "microphone_wake_listener",
+                        "latest_voice_microphone_recognition_claimed": True,
+                        "latest_voice_wake_phrase_detected": True,
+                        "latest_voice_command_counts_as_acoustic_proof": True,
+                        "latest_orb_receipt_id": "local-orb-left-proof",
+                        "latest_orb_receipt_command": "move_orb_left_side",
+                        "latest_orb_receipt_request_id": "local-orb-left-proof",
+                        "latest_orb_receipt_command_source": "local_overlay_speech_recognition",
+                        "latest_orb_receipt_transcript_source": "microphone_wake_listener",
+                        "latest_orb_receipt_microphone_recognition_claimed": True,
+                        "latest_orb_receipt_wake_phrase_detected": True,
+                        "latest_orb_receipt_applied": True,
+                        "latest_orb_receipt_age_seconds": 2,
+                        "latest_orb_receipt_fresh": True,
+                        "latest_orb_receipt_matches_latest_voice_command": True,
+                        "latest_orb_receipt_matches_latest_voice_request": True,
+                        "latest_orb_receipt_counts_as_acoustic_proof": True,
+                        "next_operator_step": "keep_monitoring_or_repeat_for_next_acoustic_orb_move",
+                        "grants_execution_authority": False,
+                        "grants_mutation_authority": False,
+                        "transcript": "do not expose this acoustic transcript",
+                    },
                     "latest_receipt_id": "chatgpt-voice-recorded-ui",
                     "latest_receipt_actor": "chat_ui.voice",
                     "latest_receipt_source": "chat_ui.voice",
@@ -280,6 +348,8 @@ def test_lens_command_palette_monitor_route_projects_voice_bridge_proof(monkeypa
     assert body["voice_monitor"]["voice_input_blocker"] == "audio_signal_not_confirmed"
     assert body["voice_monitor"]["orb_position_command_targets"] == ["left", "right"]
     assert body["voice_monitor"]["orb_position_command_requires_orb_reference"] is True
+    assert body["voice_monitor"]["orb_position_command_accepts_francis_identity_reference"] is True
+    assert body["voice_monitor"]["orb_position_command_accepts_wake_phrase_reference"] is True
     assert body["voice_monitor"]["orb_position_command_requires_direction"] is True
     assert body["voice_monitor"]["orb_position_command_conversation_forwarding_suppressed"] is True
     assert body["voice_monitor"]["orb_position_command_authority_scope"] == "runtime_overlay_position_only"
@@ -288,6 +358,49 @@ def test_lens_command_palette_monitor_route_projects_voice_bridge_proof(monkeypa
     assert body["voice_monitor"]["latest_orb_position_command"] == "move_orb_left_side"
     assert body["voice_monitor"]["latest_orb_position_command_status"] == "orb_voice_command_applied"
     assert body["voice_monitor"]["latest_orb_position_command_applied"] is True
+    acoustic_proof = body["voice_monitor"]["manual_acoustic_orb_position_proof"]
+    assert acoustic_proof["status"] == "fresh_acoustic_orb_position_command_observed"
+    assert acoustic_proof["proof_observed"] is True
+    assert acoustic_proof["proof_blocker"] == "none"
+    requirement_checks = acoustic_proof["requirement_checks"]
+    assert requirement_checks["voice_input_ready"] is True
+    assert requirement_checks["wake_listener_ready"] is True
+    assert requirement_checks["microphone_signal_observed"] is True
+    assert requirement_checks["local_overlay_speech_command_observed"] is True
+    assert requirement_checks["voice_command_microphone_origin"] is True
+    assert requirement_checks["voice_command_wake_phrase_observed"] is True
+    assert requirement_checks["orb_receipt_observed"] is True
+    assert requirement_checks["orb_receipt_applied"] is True
+    assert requirement_checks["orb_receipt_microphone_origin"] is True
+    assert requirement_checks["orb_receipt_wake_phrase_observed"] is True
+    assert requirement_checks["orb_receipt_command_matches_voice"] is True
+    assert requirement_checks["orb_receipt_request_matches_voice"] is True
+    assert requirement_checks["orb_receipt_fresh"] is True
+    assert requirement_checks["api_injected_text_rejected"] is True
+    assert requirement_checks["transcript_redacted"] is True
+    assert requirement_checks["stores_transcript"] is False
+    assert "transcript" not in requirement_checks
+    assert acoustic_proof["latest_voice_command"] == "move_orb_left_side"
+    assert acoustic_proof["latest_voice_command_source"] == "local_overlay_speech_recognition"
+    assert acoustic_proof["latest_voice_transcript_source"] == "microphone_wake_listener"
+    assert acoustic_proof["latest_voice_microphone_recognition_claimed"] is True
+    assert acoustic_proof["latest_voice_command_counts_as_acoustic_proof"] is True
+    assert acoustic_proof["latest_orb_receipt_id"] == "local-orb-left-proof"
+    assert acoustic_proof["diagnostic_paths"] == {
+        "overlay_status": "data/runtime/lens-overlay/status.json",
+        "overlay_voice_status": "data/runtime/lens-overlay/voice-status.json",
+        "orb_position_receipt_root": "data/runtime/lens-overlay/orb-position-commands",
+        "latest_orb_receipt": "data/runtime/lens-overlay/orb-position-commands/local-orb-left-proof.json",
+    }
+    assert "transcript" not in acoustic_proof["diagnostic_paths"]
+    assert acoustic_proof["latest_orb_receipt_microphone_recognition_claimed"] is True
+    assert acoustic_proof["latest_orb_receipt_fresh"] is True
+    assert acoustic_proof["latest_orb_receipt_matches_latest_voice_command"] is True
+    assert acoustic_proof["latest_orb_receipt_matches_latest_voice_request"] is True
+    assert acoustic_proof["latest_orb_receipt_counts_as_acoustic_proof"] is True
+    assert acoustic_proof["api_injected_text_counts_as_proof"] is False
+    assert acoustic_proof["grants_execution_authority"] is False
+    assert acoustic_proof["grants_mutation_authority"] is False
     assert body["voice_monitor"]["latest_receipt_actor"] == "chat_ui.voice"
     assert body["voice_monitor"]["latest_receipt_ingress_transport"] == "http_api"
     assert body["voice_monitor"]["latest_receipt_counts_as_chatgpt_mcp_proof"] is False
@@ -362,6 +475,7 @@ def test_lens_command_palette_monitor_route_projects_voice_bridge_proof(monkeypa
     assert body["governance"]["execution_authority"] is False
     assert body["governance"]["captures_audio"] is False
     assert "do not expose this transcript" not in json.dumps(body, sort_keys=True)
+    assert "do not expose this acoustic transcript" not in json.dumps(body, sort_keys=True)
 
 
 def test_lens_command_palette_monitor_route_reports_missing_state(monkeypatch, tmp_path: Path) -> None:

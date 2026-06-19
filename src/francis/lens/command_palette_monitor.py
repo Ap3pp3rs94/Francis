@@ -13,6 +13,24 @@ LENS_COMMAND_PALETTE_MONITOR_STATUS_KIND = "francis.lens.command_palette.monitor
 _MAX_TEXT = 512
 _MAX_ITEMS = 12
 _MONITOR_HEARTBEAT_FRESH_SECONDS = 120
+_MANUAL_ACOUSTIC_REQUIREMENT_KEYS = (
+    "voice_input_ready",
+    "wake_listener_ready",
+    "microphone_signal_observed",
+    "local_overlay_speech_command_observed",
+    "voice_command_microphone_origin",
+    "voice_command_wake_phrase_observed",
+    "orb_receipt_observed",
+    "orb_receipt_applied",
+    "orb_receipt_microphone_origin",
+    "orb_receipt_wake_phrase_observed",
+    "orb_receipt_command_matches_voice",
+    "orb_receipt_request_matches_voice",
+    "orb_receipt_fresh",
+    "api_injected_text_rejected",
+    "transcript_redacted",
+    "stores_transcript",
+)
 
 
 def _as_dict(value: Any) -> dict[str, Any]:
@@ -73,6 +91,11 @@ def _safe_string_dict(value: Any, *, limit: int = _MAX_ITEMS, max_length: int = 
         if safe_key and safe_value:
             out[safe_key] = safe_value
     return out
+
+
+def _safe_bool_dict(value: Any, *, allowed_keys: tuple[str, ...]) -> dict[str, bool]:
+    raw = _as_dict(value)
+    return {key: _safe_bool(raw.get(key)) for key in allowed_keys}
 
 
 def _read_json(path: Path) -> dict[str, Any] | None:
@@ -237,6 +260,81 @@ def _mcp_proof(value: Any) -> dict[str, Any]:
     }
 
 
+def _manual_acoustic_orb_position_proof(value: Any) -> dict[str, Any]:
+    raw = _as_dict(value)
+    diagnostic_paths = _as_dict(raw.get("diagnostic_paths"))
+    return {
+        "status": _safe_str(raw.get("status"), "not_checked", max_length=120),
+        "proof_observed": _safe_bool(raw.get("proof_observed")),
+        "proof_blocker": _safe_str(raw.get("proof_blocker"), max_length=160),
+        "requirement_checks": _safe_bool_dict(
+            raw.get("requirement_checks"),
+            allowed_keys=_MANUAL_ACOUSTIC_REQUIREMENT_KEYS,
+        ),
+        "freshness_window_seconds": _safe_int(raw.get("freshness_window_seconds")),
+        "voice_input_ready": _safe_bool(raw.get("voice_input_ready")),
+        "wake_listening": _safe_bool(raw.get("wake_listening")),
+        "microphone_signal_observed": _safe_bool(raw.get("microphone_signal_observed")),
+        "required_phrase": _safe_str(raw.get("required_phrase"), max_length=120),
+        "requires_local_overlay_speech_recognition": _safe_bool(
+            raw.get("requires_local_overlay_speech_recognition"),
+            True,
+        ),
+        "api_injected_text_counts_as_proof": _safe_bool(raw.get("api_injected_text_counts_as_proof")),
+        "transcript_redacted_from_summary": True,
+        "diagnostic_paths": {
+            "overlay_status": _safe_str(diagnostic_paths.get("overlay_status"), max_length=240),
+            "overlay_voice_status": _safe_str(diagnostic_paths.get("overlay_voice_status"), max_length=240),
+            "orb_position_receipt_root": _safe_str(
+                diagnostic_paths.get("orb_position_receipt_root"),
+                max_length=240,
+            ),
+            "latest_orb_receipt": _safe_str(diagnostic_paths.get("latest_orb_receipt"), max_length=240),
+        },
+        "latest_voice_status": _safe_str(raw.get("latest_voice_status"), max_length=120),
+        "latest_voice_command": _safe_str(raw.get("latest_voice_command"), max_length=120),
+        "latest_voice_command_request_id": _safe_str(raw.get("latest_voice_command_request_id"), max_length=160),
+        "latest_voice_command_source": _safe_str(raw.get("latest_voice_command_source"), max_length=120),
+        "latest_voice_transcript_source": _safe_str(raw.get("latest_voice_transcript_source"), max_length=120),
+        "latest_voice_microphone_recognition_claimed": _safe_bool(
+            raw.get("latest_voice_microphone_recognition_claimed"),
+        ),
+        "latest_voice_wake_phrase_detected": _safe_bool(raw.get("latest_voice_wake_phrase_detected")),
+        "latest_voice_command_counts_as_acoustic_proof": _safe_bool(
+            raw.get("latest_voice_command_counts_as_acoustic_proof"),
+        ),
+        "latest_orb_receipt_id": _safe_str(raw.get("latest_orb_receipt_id"), max_length=160),
+        "latest_orb_receipt_command": _safe_str(raw.get("latest_orb_receipt_command"), max_length=120),
+        "latest_orb_receipt_request_id": _safe_str(raw.get("latest_orb_receipt_request_id"), max_length=160),
+        "latest_orb_receipt_command_source": _safe_str(raw.get("latest_orb_receipt_command_source"), max_length=120),
+        "latest_orb_receipt_transcript_source": _safe_str(
+            raw.get("latest_orb_receipt_transcript_source"),
+            max_length=120,
+        ),
+        "latest_orb_receipt_microphone_recognition_claimed": _safe_bool(
+            raw.get("latest_orb_receipt_microphone_recognition_claimed"),
+        ),
+        "latest_orb_receipt_wake_phrase_detected": _safe_bool(
+            raw.get("latest_orb_receipt_wake_phrase_detected"),
+        ),
+        "latest_orb_receipt_applied": _safe_bool(raw.get("latest_orb_receipt_applied")),
+        "latest_orb_receipt_age_seconds": _safe_int(raw.get("latest_orb_receipt_age_seconds")),
+        "latest_orb_receipt_fresh": _safe_bool(raw.get("latest_orb_receipt_fresh")),
+        "latest_orb_receipt_matches_latest_voice_command": _safe_bool(
+            raw.get("latest_orb_receipt_matches_latest_voice_command"),
+        ),
+        "latest_orb_receipt_matches_latest_voice_request": _safe_bool(
+            raw.get("latest_orb_receipt_matches_latest_voice_request"),
+        ),
+        "latest_orb_receipt_counts_as_acoustic_proof": _safe_bool(
+            raw.get("latest_orb_receipt_counts_as_acoustic_proof"),
+        ),
+        "next_operator_step": _safe_str(raw.get("next_operator_step"), max_length=200),
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+    }
+
+
 def _voice_monitor(value: Any) -> dict[str, Any]:
     raw = _as_dict(value)
     return {
@@ -278,6 +376,14 @@ def _voice_monitor(value: Any) -> dict[str, Any]:
             raw.get("orb_position_command_requires_orb_reference"),
             True,
         ),
+        "orb_position_command_accepts_francis_identity_reference": _safe_bool(
+            raw.get("orb_position_command_accepts_francis_identity_reference"),
+            True,
+        ),
+        "orb_position_command_accepts_wake_phrase_reference": _safe_bool(
+            raw.get("orb_position_command_accepts_wake_phrase_reference"),
+            True,
+        ),
         "orb_position_command_requires_direction": _safe_bool(
             raw.get("orb_position_command_requires_direction"),
             True,
@@ -306,6 +412,9 @@ def _voice_monitor(value: Any) -> dict[str, Any]:
         ),
         "latest_orb_position_command_receipt_observed": _safe_bool(
             raw.get("latest_orb_position_command_receipt_observed")
+        ),
+        "manual_acoustic_orb_position_proof": _manual_acoustic_orb_position_proof(
+            raw.get("manual_acoustic_orb_position_proof"),
         ),
         "api_permission_denied_observed": _safe_bool(raw.get("api_permission_denied_observed")),
         "recent_receipt_count": _safe_int(raw.get("recent_receipt_count")),

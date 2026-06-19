@@ -24,6 +24,8 @@ param(
 
   [switch]$RequireChatGptMcpProof,
 
+  [switch]$RequireManualAcousticOrbProof,
+
   [ValidateRange(1, 86400)]
   [int]$ChatGptMcpProofFreshnessSeconds = 300,
 
@@ -789,6 +791,205 @@ function New-ChatGptMcpReceiptProof {
   }
 }
 
+function New-ManualAcousticOrbPositionProof {
+  param(
+    [object]$Voice,
+    [object]$OverlayVoice,
+    [object]$LatestOrbPositionCommandReceipt,
+    [bool]$VoiceInputReady,
+    [bool]$WakeListening,
+    [int]$FreshnessSeconds
+  )
+
+  $VoiceStatus = [string](Get-PropertyValue -Payload $Voice -Name 'status' -Default '')
+  $VoiceCommand = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Voice -Name 'orb_command' -Default '') -MaxLength 120
+  $VoiceRequestId = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Voice -Name 'overlay_position_command_request_id' -Default '') -MaxLength 120
+  $VoiceCommandSource = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Voice -Name 'overlay_position_command_source' -Default '') -MaxLength 120
+  $VoiceTranscriptSource = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Voice -Name 'transcript_source' -Default '') -MaxLength 120
+  $VoiceMicClaimed = [bool](Get-PropertyValue -Payload $Voice -Name 'microphone_recognition_claimed' -Default $false)
+  $VoiceWakeDetected = [bool](Get-PropertyValue -Payload $Voice -Name 'wake_phrase_detected' -Default $false)
+  $VoiceLocalOrbCommand = (
+    [bool](Get-PropertyValue -Payload $Voice -Name 'local_overlay_command' -Default $false) -and
+    [bool](Get-PropertyValue -Payload $Voice -Name 'voice_orb_command' -Default $false) -and
+    $VoiceStatus -eq 'orb_voice_command_applied'
+  )
+  $SignalObserved = (
+    [bool](Get-PropertyValue -Payload $OverlayVoice -Name 'has_observed_microphone_signal' -Default $false) -or
+    [bool](Get-PropertyValue -Payload $OverlayVoice -Name 'microphone_input_effective' -Default $false) -or
+    [string](Get-PropertyValue -Payload $OverlayVoice -Name 'microphone_signal_status' -Default '') -eq 'signal_observed'
+  )
+
+  $ReceiptId = Get-ReceiptId -Receipt $LatestOrbPositionCommandReceipt
+  $ReceiptRootPath = 'data/runtime/lens-overlay/orb-position-commands'
+  $ReceiptFileName = if (-not [string]::IsNullOrWhiteSpace($ReceiptId)) {
+    ([string]$ReceiptId) -replace '[^A-Za-z0-9_.-]', '_'
+  } else {
+    ''
+  }
+  $LatestReceiptPath = if (-not [string]::IsNullOrWhiteSpace($ReceiptFileName)) {
+    '{0}/{1}.json' -f $ReceiptRootPath, $ReceiptFileName
+  } else {
+    ''
+  }
+  $ReceiptCommand = if ($null -ne $LatestOrbPositionCommandReceipt) { ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $LatestOrbPositionCommandReceipt -Name 'command' -Default '') -MaxLength 120 } else { '' }
+  $ReceiptRequestId = if ($null -ne $LatestOrbPositionCommandReceipt) { ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $LatestOrbPositionCommandReceipt -Name 'request_id' -Default '') -MaxLength 120 } else { '' }
+  $ReceiptCommandSource = if ($null -ne $LatestOrbPositionCommandReceipt) { ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $LatestOrbPositionCommandReceipt -Name 'command_source' -Default '') -MaxLength 120 } else { '' }
+  $ReceiptTranscriptSource = if ($null -ne $LatestOrbPositionCommandReceipt) { ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $LatestOrbPositionCommandReceipt -Name 'transcript_source' -Default '') -MaxLength 120 } else { '' }
+  $ReceiptMicClaimed = if ($null -ne $LatestOrbPositionCommandReceipt) { [bool](Get-PropertyValue -Payload $LatestOrbPositionCommandReceipt -Name 'microphone_recognition_claimed' -Default $false) } else { $false }
+  $ReceiptWakeDetected = if ($null -ne $LatestOrbPositionCommandReceipt) { [bool](Get-PropertyValue -Payload $LatestOrbPositionCommandReceipt -Name 'wake_phrase_detected' -Default $false) } else { $false }
+  $ReceiptApplied = if ($null -ne $LatestOrbPositionCommandReceipt) {
+    [bool](Get-PropertyValue -Payload $LatestOrbPositionCommandReceipt -Name 'applied' -Default $false) -and
+    [string](Get-PropertyValue -Payload $LatestOrbPositionCommandReceipt -Name 'status' -Default '') -eq 'orb_voice_command_applied'
+  } else {
+    $false
+  }
+  $ReceiptAgeSeconds = if ($null -ne $LatestOrbPositionCommandReceipt) { Get-ReceiptAgeSeconds -Receipt $LatestOrbPositionCommandReceipt } else { $null }
+  $ReceiptFresh = ($null -ne $ReceiptAgeSeconds -and [int]$ReceiptAgeSeconds -le $FreshnessSeconds)
+  $ReceiptCommandMatchesVoice = (
+    -not [string]::IsNullOrWhiteSpace($VoiceCommand) -and
+    $ReceiptCommand -eq $VoiceCommand
+  )
+  $ReceiptRequestMatchesVoice = (
+    -not [string]::IsNullOrWhiteSpace($ReceiptId) -and
+    $VoiceLocalOrbCommand -and
+    (
+      [string]::IsNullOrWhiteSpace($VoiceRequestId) -or
+      $ReceiptRequestId -eq $VoiceRequestId -or
+      $ReceiptId -eq $VoiceRequestId
+    )
+  )
+  $ReceiptMatchesVoice = (
+    -not [string]::IsNullOrWhiteSpace($ReceiptId) -and
+    $ReceiptApplied -and
+    $ReceiptMicClaimed -and
+    $ReceiptWakeDetected -and
+    $ReceiptCommandMatchesVoice -and
+    $ReceiptRequestMatchesVoice
+  )
+  $VoiceCommandCountsAsAcousticProof = ($VoiceLocalOrbCommand -and $VoiceMicClaimed -and $VoiceWakeDetected)
+  $ReceiptCountsAsAcousticProof = ($ReceiptMatchesVoice -and $ReceiptFresh)
+  $ProofObserved = ($VoiceLocalOrbCommand -and $VoiceMicClaimed -and $VoiceWakeDetected -and $ReceiptMatchesVoice -and $ReceiptFresh)
+  $Status = if ($ProofObserved) {
+    'fresh_acoustic_orb_position_command_observed'
+  } elseif ($VoiceLocalOrbCommand -and $VoiceMicClaimed -and $VoiceWakeDetected -and $ReceiptMatchesVoice) {
+    'stale_acoustic_orb_position_command_observed'
+  } elseif ($VoiceLocalOrbCommand -and -not $VoiceMicClaimed) {
+    'latest_orb_position_command_not_microphone_origin'
+  } elseif ($VoiceInputReady -and $WakeListening -and $SignalObserved) {
+    'ready_for_operator_acoustic_test'
+  } elseif (-not $VoiceInputReady) {
+    'voice_input_not_ready'
+  } else {
+    'missing_acoustic_orb_position_command'
+  }
+  $ProofBlocker = if ($ProofObserved) {
+    'none'
+  } elseif (-not $VoiceInputReady) {
+    'voice_input_not_ready'
+  } elseif (-not $WakeListening) {
+    'wake_listener_not_ready'
+  } elseif (-not $SignalObserved) {
+    'microphone_signal_not_observed'
+  } elseif (-not $VoiceLocalOrbCommand) {
+    'awaiting_operator_spoken_orb_command'
+  } elseif (-not $VoiceMicClaimed) {
+    'latest_voice_command_not_microphone_origin'
+  } elseif (-not $VoiceWakeDetected) {
+    'latest_voice_command_missing_wake_phrase'
+  } elseif ([string]::IsNullOrWhiteSpace($ReceiptId)) {
+    'no_orb_position_receipt'
+  } elseif (-not $ReceiptApplied) {
+    'latest_orb_receipt_not_applied'
+  } elseif (-not $ReceiptMicClaimed) {
+    'latest_orb_receipt_not_microphone_origin'
+  } elseif (-not $ReceiptWakeDetected) {
+    'latest_orb_receipt_missing_wake_phrase'
+  } elseif (-not $ReceiptCommandMatchesVoice) {
+    'orb_receipt_command_mismatch'
+  } elseif (-not $ReceiptRequestMatchesVoice) {
+    'orb_receipt_request_mismatch'
+  } elseif (-not $ReceiptFresh) {
+    'orb_receipt_stale'
+  } else {
+    'unknown_manual_acoustic_proof_gap'
+  }
+  $NextStep = if ($ProofObserved) {
+    'keep_monitoring_or_repeat_for_next_acoustic_orb_move'
+  } elseif ($Status -eq 'stale_acoustic_orb_position_command_observed') {
+    'repeat_hey_francis_move_left_or_right'
+  } elseif ($Status -eq 'latest_orb_position_command_not_microphone_origin') {
+    'say_hey_francis_move_left_or_right_to_create_microphone_origin_receipt'
+  } elseif ($Status -eq 'ready_for_operator_acoustic_test') {
+    'say_hey_francis_move_left_or_right'
+  } elseif ($Status -eq 'voice_input_not_ready') {
+    'restore_overlay_voice_input_readiness'
+  } else {
+    'confirm_wake_listener_then_say_hey_francis_move_left_or_right'
+  }
+
+  return [ordered]@{
+    status = $Status
+    proof_observed = [bool]$ProofObserved
+    proof_blocker = $ProofBlocker
+    requirement_checks = [ordered]@{
+      voice_input_ready = [bool]$VoiceInputReady
+      wake_listener_ready = [bool]$WakeListening
+      microphone_signal_observed = [bool]$SignalObserved
+      local_overlay_speech_command_observed = [bool]$VoiceLocalOrbCommand
+      voice_command_microphone_origin = [bool]$VoiceMicClaimed
+      voice_command_wake_phrase_observed = [bool]$VoiceWakeDetected
+      orb_receipt_observed = -not [string]::IsNullOrWhiteSpace($ReceiptId)
+      orb_receipt_applied = [bool]$ReceiptApplied
+      orb_receipt_microphone_origin = [bool]$ReceiptMicClaimed
+      orb_receipt_wake_phrase_observed = [bool]$ReceiptWakeDetected
+      orb_receipt_command_matches_voice = [bool]$ReceiptCommandMatchesVoice
+      orb_receipt_request_matches_voice = [bool]$ReceiptRequestMatchesVoice
+      orb_receipt_fresh = [bool]$ReceiptFresh
+      api_injected_text_rejected = $true
+      transcript_redacted = $true
+      stores_transcript = $false
+    }
+    freshness_window_seconds = $FreshnessSeconds
+    voice_input_ready = [bool]$VoiceInputReady
+    wake_listening = [bool]$WakeListening
+    microphone_signal_observed = [bool]$SignalObserved
+    required_phrase = 'hey francis move left or hey francis move right'
+    requires_local_overlay_speech_recognition = $true
+    api_injected_text_counts_as_proof = $false
+    transcript_redacted_from_summary = $true
+    diagnostic_paths = [ordered]@{
+      overlay_status = 'data/runtime/lens-overlay/status.json'
+      overlay_voice_status = 'data/runtime/lens-overlay/voice-status.json'
+      orb_position_receipt_root = $ReceiptRootPath
+      latest_orb_receipt = $LatestReceiptPath
+    }
+    latest_voice_status = $VoiceStatus
+    latest_voice_command = $VoiceCommand
+    latest_voice_command_request_id = $VoiceRequestId
+    latest_voice_command_source = $VoiceCommandSource
+    latest_voice_transcript_source = $VoiceTranscriptSource
+    latest_voice_microphone_recognition_claimed = [bool]$VoiceMicClaimed
+    latest_voice_wake_phrase_detected = [bool]$VoiceWakeDetected
+    latest_voice_command_counts_as_acoustic_proof = [bool]$VoiceCommandCountsAsAcousticProof
+    latest_orb_receipt_id = $ReceiptId
+    latest_orb_receipt_command = $ReceiptCommand
+    latest_orb_receipt_request_id = $ReceiptRequestId
+    latest_orb_receipt_command_source = $ReceiptCommandSource
+    latest_orb_receipt_transcript_source = $ReceiptTranscriptSource
+    latest_orb_receipt_microphone_recognition_claimed = [bool]$ReceiptMicClaimed
+    latest_orb_receipt_wake_phrase_detected = [bool]$ReceiptWakeDetected
+    latest_orb_receipt_applied = [bool]$ReceiptApplied
+    latest_orb_receipt_age_seconds = $ReceiptAgeSeconds
+    latest_orb_receipt_fresh = [bool]$ReceiptFresh
+    latest_orb_receipt_matches_latest_voice_command = [bool]$ReceiptCommandMatchesVoice
+    latest_orb_receipt_matches_latest_voice_request = [bool]$ReceiptRequestMatchesVoice
+    latest_orb_receipt_counts_as_acoustic_proof = [bool]$ReceiptCountsAsAcousticProof
+    next_operator_step = $NextStep
+    grants_execution_authority = $false
+    grants_mutation_authority = $false
+  }
+}
+
 function Invoke-ChatGptConnectorReadback {
   param(
     [string]$Root,
@@ -1161,6 +1362,7 @@ function New-VoiceMonitorProjection {
   $LatestOrbCommandStatus = if ($VoiceOrbCommand -or $LocalOverlayCommand) { $VoiceStatus } elseif (-not [string]::IsNullOrWhiteSpace($LatestOrbReceiptStatus)) { $LatestOrbReceiptStatus } elseif ($VoicePositionCommandActive) { 'position_anchor_active' } else { '' }
   $LatestOrbCommandApplied = ($VoiceStatus -eq 'orb_voice_command_applied' -or $VoicePositionCommandActive -or $LatestOrbReceiptApplied)
   $OrbPositionCommandReady = ([bool]$VoiceInputReady -and [bool]$WakeListening)
+  $ManualAcousticOrbProof = New-ManualAcousticOrbPositionProof -Voice $Voice -OverlayVoice $OverlayVoice -LatestOrbPositionCommandReceipt $LatestOrbPositionCommandReceipt -VoiceInputReady ([bool]$VoiceInputReady) -WakeListening ([bool]$WakeListening) -FreshnessSeconds $McpProofFreshnessSeconds
   $PassiveListenContract = 'passive_transcript_awareness_only_until_wake_phrase'
   $InterruptPhrase = 'francis stop'
   $LatestReceipt = if (@($Receipts).Count -gt 0) { $Receipts[0] } else { $null }
@@ -1253,6 +1455,8 @@ function New-VoiceMonitorProjection {
     orb_position_command_ready = [bool]$OrbPositionCommandReady
     orb_position_command_targets = @('left', 'right')
     orb_position_command_requires_orb_reference = $true
+    orb_position_command_accepts_francis_identity_reference = $true
+    orb_position_command_accepts_wake_phrase_reference = $true
     orb_position_command_requires_direction = $true
     orb_position_command_conversation_forwarding_suppressed = $true
     orb_position_command_authority_scope = 'runtime_overlay_position_only'
@@ -1265,6 +1469,7 @@ function New-VoiceMonitorProjection {
     latest_orb_position_command_applied = [bool]$LatestOrbCommandApplied
     latest_orb_position_command_receipt_id = $LatestOrbReceiptId
     latest_orb_position_command_receipt_observed = ($null -ne $LatestOrbPositionCommandReceipt)
+    manual_acoustic_orb_position_proof = $ManualAcousticOrbProof
     api_permission_denied_observed = [bool]$PermissionDenied
     recent_receipt_count = @($Receipts).Count
     denied_recent_receipt_count = @($DeniedReceipts).Count
@@ -1310,6 +1515,7 @@ function New-CommandPaletteMonitorProbe {
     [string]$VoiceChecksRemoteVoiceId,
     [string]$VoiceChecksRemoteVoiceName,
     [bool]$RequireMcpProof,
+    [bool]$RequireManualAcousticOrbProof,
     [int]$McpProofFreshnessSeconds,
     [bool]$ConnectorChecksEnabled,
     [string]$ConnectorChecksUrl,
@@ -1380,6 +1586,11 @@ function New-CommandPaletteMonitorProbe {
     $McpConnectionProofObserved = [bool](Get-PropertyValue -Payload $McpProof -Name 'mcp_connection_proof_observed' -Default $false)
     $McpConnectionProofStatus = [string](Get-PropertyValue -Payload $McpProof -Name 'mcp_connection_proof_status' -Default (Get-PropertyValue -Payload $McpProof -Name 'status' -Default 'not_checked'))
     $McpConnectionProofReceiptId = [string](Get-PropertyValue -Payload $McpProof -Name 'latest_mcp_connection_proof_receipt_id' -Default '')
+    $ManualAcousticProof = Get-PropertyValue -Payload $VoiceMonitor -Name 'manual_acoustic_orb_position_proof'
+    $ManualAcousticProofObserved = [bool](Get-PropertyValue -Payload $ManualAcousticProof -Name 'proof_observed' -Default $false)
+    $ManualAcousticProofStatus = [string](Get-PropertyValue -Payload $ManualAcousticProof -Name 'status' -Default 'not_checked')
+    $ManualAcousticProofReceiptId = [string](Get-PropertyValue -Payload $ManualAcousticProof -Name 'latest_orb_receipt_id' -Default '')
+    $ManualAcousticProofBlocker = [string](Get-PropertyValue -Payload $ManualAcousticProof -Name 'proof_blocker' -Default 'no_fresh_acoustic_orb_position_receipt')
     [void]$Checks.Add((New-MonitorCheck -Id 'voice_overlay_readback' -Passed $VoiceReadbackOk -Status $(if ($VoiceReadbackOk) { 'readback_ready' } else { 'readback_failed' }) -Evidence 'scripts/lens-overlay-window.ps1 -Mode Status'))
     [void]$Checks.Add((New-MonitorCheck -Id 'voice_overlay_runtime' -Passed ($VoiceReadbackOk -and $VoiceOverlayReady) -Status $(if ($VoiceReadbackOk -and $VoiceOverlayReady) { 'visible' } else { 'overlay_not_ready' }) -Evidence $(if ([string]::IsNullOrWhiteSpace($VoiceOverlayStatus)) { 'overlay_status_missing' } else { $VoiceOverlayStatus })))
     [void]$Checks.Add((New-MonitorCheck -Id 'voice_provider_readiness' -Passed $VoiceProviderReady -Status $(if ($VoiceProviderReady) { 'configured' } else { 'not_configured' }) -Evidence ([string](Get-PropertyValue -Payload $VoiceMonitor -Name 'selected_provider' -Default ''))))
@@ -1389,6 +1600,9 @@ function New-CommandPaletteMonitorProbe {
     [void]$Checks.Add((New-MonitorCheck -Id 'voice_chat_bridge_denials' -Passed ((-not $VoicePermissionDenied) -and (-not $LatestReceiptDenied)) -Status $(if ((-not $VoicePermissionDenied) -and (-not $LatestReceiptDenied)) { 'latest_receipt_clean' } else { 'denial_observed' }) -Evidence ("latest_denied={0} recent_denied={1}" -f $LatestReceiptDenied, $DeniedRecentReceiptCount)))
     if ($RequireMcpProof) {
       [void]$Checks.Add((New-MonitorCheck -Id 'voice_chatgpt_mcp_tool_proof' -Passed $McpConnectionProofObserved -Status $McpConnectionProofStatus -Evidence $(if ([string]::IsNullOrWhiteSpace($McpConnectionProofReceiptId)) { 'no_fresh_mcp_connection_receipt' } else { $McpConnectionProofReceiptId })))
+    }
+    if ($RequireManualAcousticOrbProof) {
+      [void]$Checks.Add((New-MonitorCheck -Id 'voice_manual_acoustic_orb_position_proof' -Passed $ManualAcousticProofObserved -Status $ManualAcousticProofStatus -Evidence $(if ($ManualAcousticProofObserved -and -not [string]::IsNullOrWhiteSpace($ManualAcousticProofReceiptId)) { $ManualAcousticProofReceiptId } elseif (-not [string]::IsNullOrWhiteSpace($ManualAcousticProofBlocker)) { $ManualAcousticProofBlocker } else { 'no_fresh_acoustic_orb_position_receipt' })))
     }
   }
   if ($ConnectorChecksEnabled) {
@@ -1579,6 +1793,7 @@ if ($Mode -eq 'Probe') {
     VoiceChecksRemoteVoiceId = $ElevenLabsVoiceId
     VoiceChecksRemoteVoiceName = $ElevenLabsVoiceName
     RequireMcpProof = [bool]$RequireChatGptMcpProof
+    RequireManualAcousticOrbProof = [bool]$RequireManualAcousticOrbProof
     McpProofFreshnessSeconds = $ChatGptMcpProofFreshnessSeconds
     ConnectorChecksEnabled = [bool]$EnableChatGptConnectorChecks
     ConnectorChecksUrl = $ChatGptConnectorUrl
@@ -1668,6 +1883,9 @@ if ($Mode -eq 'Start') {
     if ($RequireChatGptMcpProof) {
       $Arguments += '-RequireChatGptMcpProof'
     }
+    if ($RequireManualAcousticOrbProof) {
+      $Arguments += '-RequireManualAcousticOrbProof'
+    }
   }
   if ($EnableChatGptConnectorChecks) {
     $Arguments += @('-EnableChatGptConnectorChecks', '-ChatGptConnectorProbeTimeoutSeconds', ([string]$ChatGptConnectorProbeTimeoutSeconds))
@@ -1745,6 +1963,7 @@ if ($Mode -eq 'Run') {
       VoiceChecksRemoteVoiceId = $ElevenLabsVoiceId
       VoiceChecksRemoteVoiceName = $ElevenLabsVoiceName
       RequireMcpProof = [bool]$RequireChatGptMcpProof
+      RequireManualAcousticOrbProof = [bool]$RequireManualAcousticOrbProof
       McpProofFreshnessSeconds = $ChatGptMcpProofFreshnessSeconds
       ConnectorChecksEnabled = [bool]$EnableChatGptConnectorChecks
       ConnectorChecksUrl = $ChatGptConnectorUrl
