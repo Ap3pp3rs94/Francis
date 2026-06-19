@@ -439,6 +439,70 @@ def test_chatgpt_voice_connector_start_cloudflared_named_requires_login_before_s
     assert not runtime_root.exists()
 
 
+@pytest.mark.skipif(platform.system() != "Windows", reason="connector control uses Windows process readback")
+def test_chatgpt_voice_connector_start_cloudflared_named_requires_existing_named_tunnel(
+    tmp_path: Path,
+) -> None:
+    runtime_root = tmp_path / "connector-runtime"
+    fake_profile = tmp_path / "profile"
+    fake_bin = tmp_path / "bin"
+    fake_profile.mkdir()
+    fake_bin.mkdir()
+    fake_origin_cert = fake_profile / "cert.pem"
+    fake_origin_cert.write_text("fake test cert", encoding="utf-8")
+    fake_cloudflared = fake_bin / "cloudflared.cmd"
+    fake_cloudflared.write_text(
+        '@echo off\r\nif "%1"=="tunnel" if "%2"=="info" exit /b 1\r\nexit /b 0\r\n',
+        encoding="utf-8",
+    )
+    port = _unused_local_port()
+
+    proc = _run_connector_script(
+        "-Mode",
+        "StartCloudflaredNamed",
+        "-Json",
+        "-RuntimeRoot",
+        str(runtime_root),
+        "-Port",
+        str(port),
+        "-CloudflaredTunnelName",
+        "francis",
+        "-CloudflaredHostname",
+        "francis.example.test",
+        "-ExposePublicTunnel",
+        env={
+            "PATH": f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}",
+            "USERPROFILE": str(fake_profile),
+            "TUNNEL_ORIGIN_CERT": str(fake_origin_cert),
+        },
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["kind"] == "francis.chatgpt_voice.connector_control"
+    assert payload["ok"] is False
+    assert payload["status"] == "cloudflared_named_tunnel_missing"
+    assert payload["blockers"] == ["cloudflared_named_tunnel_missing"]
+    assert payload["next_operator_step"] == "create_cloudflared_named_tunnel_and_route_hostname"
+    assert payload["cloudflared_named_tunnel_preflight"]["checked"] is True
+    assert payload["cloudflared_named_tunnel_preflight"]["exists"] is False
+    assert payload["cloudflared_named_tunnel_preflight"]["output_discarded"] is True
+    assert payload["operator_provider_setup_commands"] == [
+        "cloudflared tunnel create francis",
+        "cloudflared tunnel route dns francis francis.example.test",
+    ]
+    assert payload["cloudflared_named_start"]["existing_bridge_stopped"] is False
+    assert payload["cloudflared_named_start"]["public_tunnel_started"] is False
+    assert payload["cloudflared_named_start"]["connector_url_recorded"] is False
+    assert payload["cloudflared_named_start"]["provider_tunnel_created"] is False
+    assert payload["cloudflared_named_start"]["provider_route_created"] is False
+    assert payload["cloudflared_named_start"]["preflight_output_discarded"] is True
+    assert payload["governance"]["starts_process"] is False
+    assert payload["governance"]["opens_public_tunnel"] is False
+    assert payload["governance"]["writes_data"] is False
+    assert not runtime_root.exists()
+
+
 def test_chatgpt_voice_connector_plan_persistent_ingress_is_read_only(tmp_path: Path) -> None:
     runtime_root = tmp_path / "connector-runtime"
     port = _unused_local_port()

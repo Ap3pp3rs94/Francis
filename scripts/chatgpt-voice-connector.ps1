@@ -652,6 +652,39 @@ function Resolve-CloudflaredPath {
   return ''
 }
 
+function Test-CloudflaredNamedTunnelExists {
+  param(
+    [string]$CloudflaredPath,
+    [string]$TunnelName
+  )
+
+  $Result = [ordered]@{
+    checked = $false
+    exists = $false
+    exit_code = $null
+    output_discarded = $true
+    content_read = $false
+    error = ''
+  }
+
+  if ([string]::IsNullOrWhiteSpace($CloudflaredPath) -or [string]::IsNullOrWhiteSpace($TunnelName)) {
+    return $Result
+  }
+
+  try {
+    $Result.checked = $true
+    & $CloudflaredPath tunnel info $TunnelName *> $null
+    $ExitCode = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } else { 0 }
+    $Result.exit_code = $ExitCode
+    $Result.exists = [bool]($ExitCode -eq 0)
+  } catch {
+    $Result.exit_code = -1
+    $Result.error = ConvertTo-BoundedText -Value $_.Exception.Message -MaxLength 512
+  }
+
+  return $Result
+}
+
 function Wait-ForTunnelUrl {
   param(
     [string]$StdoutPath,
@@ -1847,6 +1880,39 @@ if ($Mode -eq 'StartCloudflaredNamed') {
           connector_url_recorded = $false
           existing_bridge_stopped = $false
           origin_cert_content_read = $false
+        }
+        governance = New-GovernancePayload -ReadOnly $false -StartsProcess $false -OpensPublicTunnel $false -WritesData $false
+      })
+    exit 0
+  }
+
+  $NamedTunnelPreflight = Test-CloudflaredNamedTunnelExists -CloudflaredPath $CloudflaredPath -TunnelName $BoundedTunnelName
+  if (-not [bool](Get-PropertyValue -Payload $NamedTunnelPreflight -Name 'exists' -Default $false)) {
+    ConvertTo-JsonOutput -Payload ([ordered]@{
+        kind = 'francis.chatgpt_voice.connector_control'
+        ok = $false
+        status = 'cloudflared_named_tunnel_missing'
+        connector_url = $NamedConnectorUrl
+        connector_url_source = $ConnectorUrlSource
+        runtime_root = $RuntimeRoot
+        state_path = $statePath
+        cloudflared_path = $CloudflaredPath
+        cloudflared_tunnel_name = $BoundedTunnelName
+        cloudflared_hostname = $BoundedHostname
+        cloudflared_named_tunnel_preflight = $NamedTunnelPreflight
+        blockers = @('cloudflared_named_tunnel_missing')
+        next_operator_step = 'create_cloudflared_named_tunnel_and_route_hostname'
+        operator_provider_setup_commands = @(
+          "cloudflared tunnel create $BoundedTunnelName",
+          "cloudflared tunnel route dns $BoundedTunnelName $BoundedHostname"
+        )
+        cloudflared_named_start = [ordered]@{
+          public_tunnel_started = $false
+          connector_url_recorded = $false
+          existing_bridge_stopped = $false
+          provider_tunnel_created = $false
+          provider_route_created = $false
+          preflight_output_discarded = [bool](Get-PropertyValue -Payload $NamedTunnelPreflight -Name 'output_discarded' -Default $true)
         }
         governance = New-GovernancePayload -ReadOnly $false -StartsProcess $false -OpensPublicTunnel $false -WritesData $false
       })
