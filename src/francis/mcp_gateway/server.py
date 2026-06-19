@@ -60,6 +60,7 @@ def _chatgpt_voice_ingress_args(
     client_origin: str | None = CHATGPT_VOICE_BRIDGE_CHATGPT_APP_VOICE_CLIENT,
     forward_to_chat: bool = True,
     use_llm: bool = False,
+    mcp_server_transport: str = "",
 ) -> dict[str, Any]:
     return {
         "actor": actor,
@@ -74,6 +75,7 @@ def _chatgpt_voice_ingress_args(
         "ingress_transport": CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TRANSPORT,
         "mcp_gateway_tool": CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TOOL,
         "mcp_server_tool": CHATGPT_VOICE_BRIDGE_MCP_SERVER_TOOL,
+        "mcp_server_transport": mcp_server_transport,
     }
 
 
@@ -83,6 +85,7 @@ def _chatgpt_voice_mcp_probe_args(
     source: str = "chatgpt.voice",
     client_origin: str | None = CHATGPT_VOICE_BRIDGE_CHATGPT_APP_VOICE_CLIENT,
     reason: str = "chatgpt_voice_mcp_connector_validation",
+    mcp_server_transport: str = "",
 ) -> dict[str, Any]:
     return {
         "actor": actor,
@@ -92,6 +95,7 @@ def _chatgpt_voice_mcp_probe_args(
         "ingress_transport": CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TRANSPORT,
         "mcp_gateway_tool": CHATGPT_VOICE_BRIDGE_MCP_PROOF_GATEWAY_TOOL,
         "mcp_server_tool": CHATGPT_VOICE_BRIDGE_MCP_PROOF_SERVER_TOOL,
+        "mcp_server_transport": mcp_server_transport,
     }
 
 
@@ -373,6 +377,7 @@ def run_server(
                     client_origin=client_origin,
                     forward_to_chat=forward_to_chat,
                     use_llm=use_llm,
+                    mcp_server_transport=mcp_transport,
                 ),
             )
         )
@@ -400,6 +405,7 @@ def run_server(
                     source=source,
                     client_origin=client_origin,
                     reason=reason,
+                    mcp_server_transport=mcp_transport,
                 ),
             )
         )

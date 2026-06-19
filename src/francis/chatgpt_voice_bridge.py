@@ -23,6 +23,8 @@ CHATGPT_VOICE_BRIDGE_MCP_SERVER_TOOL = "francis_chatgpt_voice_ingress"
 CHATGPT_VOICE_BRIDGE_MCP_PROOF_GATEWAY_TOOL = "francis.chatgpt_voice.mcp_probe"
 CHATGPT_VOICE_BRIDGE_MCP_PROOF_SERVER_TOOL = "francis_chatgpt_voice_mcp_probe"
 CHATGPT_VOICE_BRIDGE_MCP_CLIENT_UNSPECIFIED = "mcp_client_unspecified"
+CHATGPT_VOICE_BRIDGE_MCP_SERVER_TRANSPORT_UNSPECIFIED = "mcp_server_transport_unspecified"
+CHATGPT_VOICE_BRIDGE_PUBLIC_CONNECTOR_TRANSPORT = "streamable-http"
 CHATGPT_VOICE_BRIDGE_CHATGPT_APP_VOICE_CLIENT = "chatgpt_app_voice"
 CHATGPT_VOICE_BRIDGE_VIRTUAL_TURN_STATE = "data/runtime/lens-overlay/voice-turn-status.json"
 CHATGPT_VOICE_BRIDGE_VIRTUAL_TURN_RECEIPTS = "data/runtime/lens-overlay/voice-turns"
@@ -199,6 +201,8 @@ def _resolve_orb_position_command(text: str) -> dict[str, Any]:
         "target_anchor": "",
         "normalized_text_length": len(normalized),
         "requires_explicit_orb_reference": True,
+        "francis_reference_satisfies_orb_reference": True,
+        "reference_type": "",
         "requires_direction": True,
         "conversation_forwarding_suppressed": True,
         "authority_scope": "runtime_overlay_position_only",
@@ -210,13 +214,16 @@ def _resolve_orb_position_command(text: str) -> dict[str, Any]:
 
     words = normalized.split()
     has_orb_reference = "orb" in words or "orbs" in words
+    has_francis_reference = "francis" in words or "frances" in words
     has_move_verb = any(word in words for word in ("move", "put", "place", "dock", "shift", "send"))
     move_left = "left" in words
     move_right = "right" in words
-    if not has_orb_reference or not has_move_verb or move_left == move_right:
+    has_embodiment_reference = has_orb_reference or has_francis_reference
+    if not has_embodiment_reference or not has_move_verb or move_left == move_right:
         return result
 
     target_side = "left" if move_left else "right"
+    reference_type = "orb" if has_orb_reference else "francis_identity"
     result.update(
         {
             "recognized": True,
@@ -224,6 +231,7 @@ def _resolve_orb_position_command(text: str) -> dict[str, Any]:
             "command": f"move_orb_{target_side}_side",
             "target_side": target_side,
             "target_anchor": f"voice_command_{target_side}_side",
+            "reference_type": reference_type,
         }
     )
     return result
@@ -258,8 +266,10 @@ def _write_orb_position_command_request(
         "ingress_transport": _safe_str(base_payload.get("ingress_transport")),
         "mcp_gateway_tool": _safe_str(base_payload.get("mcp_gateway_tool")),
         "mcp_server_tool": _safe_str(base_payload.get("mcp_server_tool")),
+        "mcp_server_transport": _safe_str(base_payload.get("mcp_server_transport")),
         "intent": _safe_str(command.get("intent")),
         "command": _safe_str(command.get("command")),
+        "reference_type": _safe_str(command.get("reference_type")),
         "target_side": _safe_str(command.get("target_side")),
         "target_anchor": _safe_str(command.get("target_anchor")),
         "transcript_length": len(transcript_text),
@@ -315,6 +325,7 @@ def _orb_position_command_summary(payload: dict[str, Any]) -> dict[str, Any]:
         "conversation_forwarding_suppressed": bool(payload.get("conversation_forwarding_suppressed")),
         "overlay_runtime_owns_execution": bool(payload.get("overlay_runtime_owns_execution")),
         "authority_scope": _safe_str(payload.get("mutation_authority_scope")),
+        "reference_type": _safe_str(payload.get("reference_type")),
         "request_path": _safe_str(payload.get("request_path")),
         "request_receipt_path": _safe_str(payload.get("request_receipt_path")),
         "grants_execution_authority": bool(payload.get("grants_execution_authority")),
@@ -418,13 +429,21 @@ def chatgpt_voice_bridge_contract(actor: str = "") -> dict[str, Any]:
             "receipts": "francis.chatgpt_voice.receipts",
         },
         "receipt_contract": {
-            "ingress_provenance_fields": ["ingress_transport", "mcp_gateway_tool", "mcp_server_tool"],
+            "ingress_provenance_fields": [
+                "ingress_transport",
+                "mcp_gateway_tool",
+                "mcp_server_tool",
+                "mcp_server_transport",
+            ],
             "direct_http_transport": CHATGPT_VOICE_BRIDGE_HTTP_TRANSPORT,
             "mcp_gateway_transport": CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TRANSPORT,
             "mcp_gateway_tool": CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TOOL,
             "mcp_server_tool": CHATGPT_VOICE_BRIDGE_MCP_SERVER_TOOL,
             "mcp_connection_proof_gateway_tool": CHATGPT_VOICE_BRIDGE_MCP_PROOF_GATEWAY_TOOL,
             "mcp_connection_proof_server_tool": CHATGPT_VOICE_BRIDGE_MCP_PROOF_SERVER_TOOL,
+            "mcp_server_transport_field": "mcp_server_transport",
+            "mcp_server_transport_unspecified": CHATGPT_VOICE_BRIDGE_MCP_SERVER_TRANSPORT_UNSPECIFIED,
+            "public_connector_transport": CHATGPT_VOICE_BRIDGE_PUBLIC_CONNECTOR_TRANSPORT,
         },
         "orb_voice_contract": {
             "francis_identity": "Francis",
@@ -444,6 +463,7 @@ def chatgpt_voice_bridge_contract(actor: str = "") -> dict[str, Any]:
             "orb_position_voice_commands": True,
             "orb_position_command_targets": ["left", "right"],
             "orb_position_command_requires_orb_reference": True,
+            "orb_position_command_accepts_francis_identity_reference": True,
             "orb_position_command_requires_direction": True,
             "orb_position_command_request_path": CHATGPT_VOICE_BRIDGE_ORB_POSITION_COMMAND_REQUEST,
             "orb_position_command_receipt_root": CHATGPT_VOICE_BRIDGE_ORB_POSITION_COMMAND_RECEIPTS,
@@ -579,6 +599,7 @@ def _write_virtual_voice_turn(
         "ingress_transport": _safe_str(base_payload.get("ingress_transport")),
         "mcp_gateway_tool": _safe_str(base_payload.get("mcp_gateway_tool")),
         "mcp_server_tool": _safe_str(base_payload.get("mcp_server_tool")),
+        "mcp_server_transport": _safe_str(base_payload.get("mcp_server_transport")),
         "conversation_id": _safe_str(base_payload.get("conversation_id")),
         "source": _safe_str(base_payload.get("source")),
         "actor": _safe_str(base_payload.get("actor")),
@@ -644,6 +665,7 @@ def _virtual_voice_summary(payload: dict[str, Any]) -> dict[str, Any]:
         "virtual_voice_turn": bool(payload.get("virtual_voice_turn")),
         "client_origin": _safe_str(payload.get("client_origin")),
         "mcp_ingress": bool(payload.get("mcp_ingress")),
+        "mcp_server_transport": _safe_str(payload.get("mcp_server_transport")),
         "transcript_source": _safe_str(payload.get("transcript_source")),
         "chat_bridge_status": _safe_str(payload.get("chat_bridge_status")),
         "chat_forwarded": bool(payload.get("chat_forwarded")),
@@ -717,6 +739,7 @@ def record_chatgpt_voice_ingress(
     ingress_transport: str = CHATGPT_VOICE_BRIDGE_HTTP_TRANSPORT,
     mcp_gateway_tool: str = "",
     mcp_server_tool: str = "",
+    mcp_server_transport: str = "",
     client_origin: str = "",
 ) -> dict[str, Any]:
     route = "/chatgpt-voice/ingress"
@@ -730,6 +753,7 @@ def record_chatgpt_voice_ingress(
     clean_ingress_transport = _bounded_text(ingress_transport, max_chars=64) or CHATGPT_VOICE_BRIDGE_HTTP_TRANSPORT
     clean_mcp_gateway_tool = _bounded_text(mcp_gateway_tool, max_chars=96)
     clean_mcp_server_tool = _bounded_text(mcp_server_tool, max_chars=96)
+    clean_mcp_server_transport = _bounded_text(mcp_server_transport, max_chars=64)
     clean_client_origin = _bounded_text(client_origin, max_chars=96)
     clean_source = _bounded_text(source, max_chars=96) or "chatgpt.voice"
     if not clean_client_origin:
@@ -747,6 +771,7 @@ def record_chatgpt_voice_ingress(
         "ingress_transport": clean_ingress_transport,
         "mcp_gateway_tool": clean_mcp_gateway_tool,
         "mcp_server_tool": clean_mcp_server_tool,
+        "mcp_server_transport": clean_mcp_server_transport,
         "client_origin": clean_client_origin,
         "conversation_id": _bounded_text(conversation_id, max_chars=160),
         "turn_id": _bounded_text(turn_id, max_chars=160),
@@ -964,6 +989,7 @@ def record_chatgpt_voice_mcp_probe(
     ingress_transport: str = CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TRANSPORT,
     mcp_gateway_tool: str = CHATGPT_VOICE_BRIDGE_MCP_PROOF_GATEWAY_TOOL,
     mcp_server_tool: str = CHATGPT_VOICE_BRIDGE_MCP_PROOF_SERVER_TOOL,
+    mcp_server_transport: str = "",
 ) -> dict[str, Any]:
     route = "/chatgpt-voice/mcp-proof"
     clean_actor = _safe_str(actor) or "chatgpt.voice"
@@ -979,6 +1005,7 @@ def record_chatgpt_voice_mcp_probe(
         _bounded_text(mcp_gateway_tool, max_chars=96) or CHATGPT_VOICE_BRIDGE_MCP_PROOF_GATEWAY_TOOL
     )
     clean_mcp_server_tool = _bounded_text(mcp_server_tool, max_chars=96) or CHATGPT_VOICE_BRIDGE_MCP_PROOF_SERVER_TOOL
+    clean_mcp_server_transport = _bounded_text(mcp_server_transport, max_chars=64)
     clean_client_origin = _bounded_text(client_origin, max_chars=96)
     if not clean_client_origin:
         if clean_source == "chatgpt.voice" and clean_mcp_server_tool == CHATGPT_VOICE_BRIDGE_MCP_PROOF_SERVER_TOOL:
@@ -999,6 +1026,9 @@ def record_chatgpt_voice_mcp_probe(
         "client_origin": clean_client_origin,
         "mcp_ingress": True,
         "mcp_connection_proof": True,
+        "mcp_server_transport": clean_mcp_server_transport,
+        "mcp_server_transport_verified": bool(clean_mcp_server_transport),
+        "public_mcp_connector_transport": clean_mcp_server_transport == CHATGPT_VOICE_BRIDGE_PUBLIC_CONNECTOR_TRANSPORT,
         "local_overlay_speech_started": False,
         "microphone_recognition_claimed": False,
         "raw_audio": False,
@@ -1013,6 +1043,7 @@ def record_chatgpt_voice_mcp_probe(
             "ingress_transport": clean_ingress_transport,
             "mcp_gateway_tool": clean_mcp_gateway_tool,
             "mcp_server_tool": clean_mcp_server_tool,
+            "mcp_server_transport": clean_mcp_server_transport,
             "decision": "recorded",
             "proof_kind": "mcp_connection",
             "reason": _bounded_text(reason, max_chars=160),

@@ -52,6 +52,7 @@ def test_chatgpt_voice_contract_is_permission_gated(monkeypatch, tmp_path: Path)
     assert body["orb_voice_contract"]["microphone_capture_claimed"] is False
     assert body["orb_voice_contract"]["raw_audio_stream_accepted"] is False
     assert body["orb_voice_contract"]["client_speaks_top_level_reply"] is True
+    assert body["orb_voice_contract"]["orb_position_command_accepts_francis_identity_reference"] is True
     assert body["input_contract"]["audio_stream_accepted"] is False
     assert body["client_speech_contract"]["call_ingress_for_every_voice_turn"] is True
     assert body["client_speech_contract"]["call_mcp_probe_to_validate_connector"] is True
@@ -93,6 +94,7 @@ def test_chatgpt_voice_ingress_records_without_chat_forward(monkeypatch, tmp_pat
     assert body["receipt"]["ingress_transport"] == "http_api"
     assert body["receipt"]["mcp_gateway_tool"] == ""
     assert body["receipt"]["mcp_server_tool"] == ""
+    assert body["receipt"]["mcp_server_transport"] == ""
     assert body["receipt"]["reply_source"] == "bridge.recorded_only"
     assert isinstance(body["receipt"]["created_ts"], float)
     assert body["receipt"]["created_at"].endswith("Z")
@@ -164,6 +166,10 @@ def test_chatgpt_voice_mcp_proof_records_connection_without_transcript_or_voice_
     assert body["receipt"]["client_origin"] == "chatgpt_app_voice"
     assert body["receipt"]["mcp_gateway_tool"] == "francis.chatgpt_voice.mcp_probe"
     assert body["receipt"]["mcp_server_tool"] == "francis_chatgpt_voice_mcp_probe"
+    assert body["receipt"]["mcp_server_transport"] == ""
+    assert body["orb_voice_bridge"]["mcp_server_transport"] == ""
+    assert body["orb_voice_bridge"]["mcp_server_transport_verified"] is False
+    assert body["orb_voice_bridge"]["public_mcp_connector_transport"] is False
     assert body["receipt"]["transcript"] == ""
     assert body["receipt"]["transcript_char_count"] == 0
     assert body["receipt"]["governance"]["writes_receipt"] is True
@@ -241,6 +247,7 @@ def test_chatgpt_voice_browser_ingress_queues_orb_position_command_without_chat_
     assert command["status"] == "queued"
     assert command["request_id"] == "browser-orb-left-command"
     assert command["command"] == "move_orb_left_side"
+    assert command["reference_type"] == "orb"
     assert command["target_side"] == "left"
     assert command["target_anchor"] == "voice_command_left_side"
     assert command["conversation_forwarding_suppressed"] is True
@@ -255,6 +262,7 @@ def test_chatgpt_voice_browser_ingress_queues_orb_position_command_without_chat_
     assert request["kind"] == "lens.overlay.orb_position_command.request"
     assert request["status"] == "queued"
     assert request["command"] == "move_orb_left_side"
+    assert request["reference_type"] == "orb"
     assert request["target_side"] == "left"
     assert request["stores_transcript"] is False
     assert request["chat_forward_requested_before_command"] is True
@@ -273,6 +281,76 @@ def test_chatgpt_voice_browser_ingress_queues_orb_position_command_without_chat_
     assert body["orb_voice_bridge"]["orb_position_command"] == "move_orb_left_side"
     assert body["orb_voice_bridge"]["orb_position_command_overlay_runtime_owns_execution"] is True
     assert not (data_root / "conversations" / "ledger" / "ledger.jsonl").exists()
+
+
+def test_chatgpt_voice_browser_ingress_queues_francis_identity_orb_move(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({"chat_ui.voice": ["chatgpt.voice.bridge.write", "chat.write"]}),
+    )
+
+    client = TestClient(create_app())
+
+    body = client.post(
+        "/chatgpt-voice/ingress",
+        json={
+            "actor": "chat_ui.voice",
+            "source": "chat_ui.voice",
+            "client_origin": "francis_chat_ui_browser_voice",
+            "transcript": "Francis move left",
+            "turn_id": "browser-francis-left-command",
+            "forward_to_chat": True,
+        },
+    ).json()
+
+    assert body["ok"] is True
+    assert body["status"] == "orb_position_command_queued"
+    assert body["chat_forward"]["status"] == "suppressed_orb_position_command"
+    command = body["orb_position_command"]
+    assert command["command"] == "move_orb_left_side"
+    assert command["reference_type"] == "francis_identity"
+    assert command["target_side"] == "left"
+    request_path = data_root / "runtime" / "lens-overlay" / "orb-position-command-request.json"
+    request = json.loads(request_path.read_text(encoding="utf-8"))
+    assert request["command"] == "move_orb_left_side"
+    assert request["reference_type"] == "francis_identity"
+    assert request["stores_transcript"] is False
+    assert "Francis move left" not in json.dumps(request)
+
+
+def test_chatgpt_voice_browser_ingress_does_not_queue_bare_move_left(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({"chat_ui.voice": ["chatgpt.voice.bridge.write", "chat.write"]}),
+    )
+
+    client = TestClient(create_app())
+
+    body = client.post(
+        "/chatgpt-voice/ingress",
+        json={
+            "actor": "chat_ui.voice",
+            "source": "chat_ui.voice",
+            "client_origin": "francis_chat_ui_browser_voice",
+            "transcript": "move left",
+            "turn_id": "browser-bare-left-command",
+            "forward_to_chat": False,
+        },
+    ).json()
+
+    assert body["ok"] is True
+    assert body["status"] == "recorded"
+    assert not (data_root / "runtime" / "lens-overlay" / "orb-position-command-request.json").exists()
 
 
 def test_chatgpt_voice_forward_requires_existing_chat_write_gate(monkeypatch, tmp_path: Path) -> None:
@@ -383,6 +461,7 @@ def test_chatgpt_voice_mcp_ingress_updates_orb_virtual_voice_turn(monkeypatch, t
     assert body["receipt"]["orb_voice_bridge"]["mcp_ingress"] is True
     assert body["receipt"]["client_origin"] == "chatgpt_app_voice"
     assert body["receipt"]["mcp_server_tool"] == "francis_chatgpt_voice_ingress"
+    assert body["receipt"]["mcp_server_transport"] == ""
 
     voice_state = data_root / "runtime" / "lens-overlay" / "voice-turn-status.json"
     assert voice_state.exists()
@@ -393,6 +472,7 @@ def test_chatgpt_voice_mcp_ingress_updates_orb_virtual_voice_turn(monkeypatch, t
     assert state["virtual_voice_turn"] is True
     assert state["mcp_ingress"] is True
     assert state["mcp_server_tool"] == "francis_chatgpt_voice_ingress"
+    assert state["mcp_server_transport"] == ""
     assert state["client_origin"] == "chatgpt_app_voice"
     assert state["microphone_speech"] is False
     assert state["microphone_recognition_claimed"] is False
@@ -673,6 +753,7 @@ def test_chatgpt_voice_mcp_tools_expose_bounded_bridge(monkeypatch, tmp_path: Pa
     assert proof["data"]["receipt"]["proof_kind"] == "mcp_connection"
     assert proof["data"]["receipt"]["mcp_gateway_tool"] == "francis.chatgpt_voice.mcp_probe"
     assert proof["data"]["receipt"]["mcp_server_tool"] == "francis_chatgpt_voice_mcp_probe"
+    assert proof["data"]["receipt"]["mcp_server_transport"] == ""
     assert proof["data"]["receipt"]["client_origin"] == "chatgpt_app_voice"
     assert proof["data"]["receipt"]["transcript"] == ""
     assert proof["data"]["orb_voice_bridge"]["virtual_voice_turn"] is False
@@ -693,6 +774,7 @@ def test_chatgpt_voice_mcp_tools_expose_bounded_bridge(monkeypatch, tmp_path: Pa
     assert ingress["data"]["receipt"]["ingress_transport"] == "mcp_gateway_tool"
     assert ingress["data"]["receipt"]["mcp_gateway_tool"] == "francis.chatgpt_voice.ingress"
     assert ingress["data"]["receipt"]["mcp_server_tool"] == ""
+    assert ingress["data"]["receipt"]["mcp_server_transport"] == ""
     assert ingress["data"]["receipt"]["client_origin"] == "chatgpt_app_voice"
     assert ingress["data"]["orb_voice_bridge"]["virtual_voice_turn"] is True
     assert ingress["data"]["orb_voice_bridge"]["mcp_ingress"] is True

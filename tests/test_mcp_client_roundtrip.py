@@ -153,6 +153,7 @@ def test_external_mcp_client_roundtrip(tmp_path) -> None:
     assert out["voice"]["receipt"]["ingress_transport"] == "mcp_gateway_tool"
     assert out["voice"]["receipt"]["mcp_gateway_tool"] == "francis.chatgpt_voice.ingress"
     assert out["voice"]["receipt"]["mcp_server_tool"] == "francis_chatgpt_voice_ingress"
+    assert out["voice"]["receipt"]["mcp_server_transport"] == "stdio"
     assert out["voice"]["receipt"]["client_origin"] == "chatgpt_app_voice"
     assert out["voice"]["data"]["reply"] == "I recorded the transcript for Francis. Chat forwarding was not requested."
     assert out["voice"]["data"]["voice_response"]["speakable"] is True
@@ -164,6 +165,7 @@ def test_external_mcp_client_roundtrip(tmp_path) -> None:
     assert out["voice"]["data"]["receipt"]["ingress_transport"] == "mcp_gateway_tool"
     assert out["voice"]["data"]["receipt"]["mcp_gateway_tool"] == "francis.chatgpt_voice.ingress"
     assert out["voice"]["data"]["receipt"]["mcp_server_tool"] == "francis_chatgpt_voice_ingress"
+    assert out["voice"]["data"]["receipt"]["mcp_server_transport"] == "stdio"
     assert out["voice"]["data"]["receipt"]["client_origin"] == "chatgpt_app_voice"
     assert out["voice"]["governance"]["raw_audio"] is False
     assert out["voice"]["governance"]["grants_execution_authority"] is False
@@ -172,6 +174,7 @@ def test_external_mcp_client_roundtrip(tmp_path) -> None:
     assert out["probe"]["receipt"]["proof_kind"] == "mcp_connection"
     assert out["probe"]["receipt"]["mcp_gateway_tool"] == "francis.chatgpt_voice.mcp_probe"
     assert out["probe"]["receipt"]["mcp_server_tool"] == "francis_chatgpt_voice_mcp_probe"
+    assert out["probe"]["receipt"]["mcp_server_transport"] == "stdio"
     assert out["probe"]["receipt"]["transcript"] == ""
     assert out["probe"]["orb_voice_bridge"]["virtual_voice_turn"] is False
     assert out["probe"]["governance"]["grants_execution_authority"] is False

@@ -55,10 +55,17 @@ def test_mcp_server_voice_ingress_defaults_to_chatgpt_app_origin() -> None:
     assert args["ingress_transport"] == "mcp_gateway_tool"
     assert args["mcp_gateway_tool"] == "francis.chatgpt_voice.ingress"
     assert args["mcp_server_tool"] == "francis_chatgpt_voice_ingress"
+    assert args["mcp_server_transport"] == ""
     assert args["forward_to_chat"] is True
 
     none_origin_args = _chatgpt_voice_ingress_args(transcript="hello Francis", client_origin=None)
     assert none_origin_args["client_origin"] == "chatgpt_app_voice"
+
+    streamable_args = _chatgpt_voice_ingress_args(
+        transcript="hello Francis",
+        mcp_server_transport="streamable-http",
+    )
+    assert streamable_args["mcp_server_transport"] == "streamable-http"
 
 
 def test_mcp_server_voice_probe_defaults_to_chatgpt_app_origin() -> None:
@@ -70,6 +77,10 @@ def test_mcp_server_voice_probe_defaults_to_chatgpt_app_origin() -> None:
     assert args["ingress_transport"] == "mcp_gateway_tool"
     assert args["mcp_gateway_tool"] == "francis.chatgpt_voice.mcp_probe"
     assert args["mcp_server_tool"] == "francis_chatgpt_voice_mcp_probe"
+    assert args["mcp_server_transport"] == ""
+
+    streamable_args = _chatgpt_voice_mcp_probe_args(mcp_server_transport="streamable-http")
+    assert streamable_args["mcp_server_transport"] == "streamable-http"
 
 
 def test_read_only_tools_report_no_raw_shell(tmp_path: Path, monkeypatch) -> None:

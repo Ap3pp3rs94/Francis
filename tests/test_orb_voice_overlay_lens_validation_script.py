@@ -32,6 +32,7 @@ def _mcp_server_voice_provenance() -> dict[str, str]:
         "ingress_transport": "mcp_gateway_tool",
         "mcp_gateway_tool": "francis.chatgpt_voice.ingress",
         "mcp_server_tool": "francis_chatgpt_voice_ingress",
+        "mcp_server_transport": "streamable-http",
     }
 
 
@@ -88,6 +89,8 @@ def test_orb_voice_overlay_lens_validation_reports_missing_chatgpt_source_receip
     assert payload["chatgpt_voice_receipts"]["mcp_server_chatgpt_source_count"] == 0
     assert payload["chatgpt_voice_receipts"]["fresh_mcp_server_chatgpt_source_count"] == 0
     assert payload["chatgpt_voice_receipts"]["fresh_usable_mcp_server_chatgpt_source_count"] == 0
+    assert payload["chatgpt_voice_receipts"]["fresh_streamable_http_mcp_server_chatgpt_source_count"] == 0
+    assert payload["chatgpt_voice_receipts"]["fresh_usable_streamable_http_mcp_server_chatgpt_source_count"] == 0
     assert payload["persistent_ingress_plan"]["kind"] == "francis.chatgpt_voice.persistent_ingress_plan"
     assert payload["persistent_ingress_plan"]["status"] == "persistent_ingress_url_needed"
     assert payload["persistent_ingress_plan"]["governance"]["read_only"] is True
@@ -178,8 +181,11 @@ def test_orb_voice_overlay_lens_validation_requires_mcp_tool_provenance_for_sour
     assert latest["source_claims_chatgpt_voice"] is True
     assert latest["source_claims_mcp_gateway_tool"] is False
     assert latest["source_claims_mcp_server_tool"] is False
+    assert latest["source_claims_mcp_server_transport"] is False
+    assert latest["source_claims_streamable_http_mcp_server"] is False
     assert latest["usable_chatgpt_transcript"] is True
     assert latest["usable_mcp_server_chatgpt_transcript"] is False
+    assert latest["usable_streamable_http_mcp_server_chatgpt_transcript"] is False
     assert latest["fresh_for_live_proof"] is True
     assert latest["created_ts_present"] is False
     assert latest["observed_ts_source"] == "file_mtime"
@@ -199,8 +205,75 @@ def test_orb_voice_overlay_lens_validation_requires_mcp_tool_provenance_for_sour
     assert checks["persistent_ingress_plan_readback"]["passed"] is True
     assert checks["chatgpt_app_mcp_tool_receipt_observed"]["status"] == "missing"
     assert checks["chatgpt_app_mcp_tool_receipt_observed"]["passed"] is False
+    assert checks["chatgpt_app_public_mcp_transport_observed"]["status"] == "missing"
+    assert checks["chatgpt_app_public_mcp_transport_observed"]["passed"] is False
     summary = json.dumps(payload["chatgpt_voice_receipts"])
     assert "this text should not appear" not in summary
+
+
+def test_orb_voice_overlay_lens_validation_blocks_mcp_server_receipt_without_public_transport(
+    tmp_path: Path,
+) -> None:
+    data_dir = tmp_path / "data"
+    receipt_dir = data_dir / "integrations" / "chatgpt_voice" / "receipts"
+    receipt_dir.mkdir(parents=True)
+    receipt = {
+        "kind": "francis.chatgpt_voice.bridge.receipt",
+        "receipt_id": "chatgpt-voice-recorded-internal-mcp-test",
+        "actor": "chatgpt.voice",
+        "source": "chatgpt.voice",
+        "ingress_transport": "mcp_gateway_tool",
+        "mcp_gateway_tool": "francis.chatgpt_voice.ingress",
+        "mcp_server_tool": "francis_chatgpt_voice_ingress",
+        "decision": "recorded",
+        "chat_forward_status": "forwarded",
+        "chat_forwarded": True,
+        "transcript": "internal MCP transport proof should redact this transcript",
+        "transcript_char_count": 57,
+        "reply": "I can hear you. Voice input is reaching Francis.",
+        "reply_source": "chat_forward.response",
+        "governance": {
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+    }
+    (receipt_dir / "chatgpt-voice-recorded-internal-mcp-test.json").write_text(
+        json.dumps(receipt),
+        encoding="utf-8",
+    )
+    port = _unused_local_port()
+
+    proc = _run_validation_script(
+        "-DataDir",
+        str(data_dir),
+        "-ConnectorPort",
+        str(port),
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["status"] == "proof_blocked_chatgpt_app_public_mcp_transport_unverified"
+    assert payload["next_smallest_truthful_gap"] == (
+        "trigger_fresh_chatgpt_app_public_mcp_tool_call_and_confirm_streamable_http_transport"
+    )
+    assert payload["chatgpt_voice_receipts"]["fresh_mcp_server_chatgpt_source_count"] == 1
+    assert payload["chatgpt_voice_receipts"]["fresh_mcp_server_transport_verified_count"] == 0
+    assert payload["chatgpt_voice_receipts"]["fresh_streamable_http_mcp_server_chatgpt_source_count"] == 0
+    assert payload["chatgpt_voice_receipts"]["fresh_usable_streamable_http_mcp_server_chatgpt_source_count"] == 0
+    latest_mcp = payload["chatgpt_voice_receipts"]["latest_fresh_mcp_server_chatgpt_source"]
+    assert latest_mcp["receipt_id"] == "chatgpt-voice-recorded-internal-mcp-test"
+    assert latest_mcp["source_claims_mcp_server_tool"] is True
+    assert latest_mcp["mcp_server_transport"] == ""
+    assert latest_mcp["source_claims_mcp_server_transport"] is False
+    assert latest_mcp["source_claims_streamable_http_mcp_server"] is False
+    assert latest_mcp["usable_mcp_server_chatgpt_transcript"] is True
+    assert latest_mcp["usable_streamable_http_mcp_server_chatgpt_transcript"] is False
+    checks = {check["id"]: check for check in payload["checks"]}
+    assert checks["chatgpt_app_mcp_tool_receipt_observed"]["passed"] is True
+    assert checks["chatgpt_app_public_mcp_transport_observed"]["status"] == "transport_unverified"
+    assert checks["chatgpt_app_public_mcp_transport_observed"]["passed"] is False
+    summary = json.dumps(payload["chatgpt_voice_receipts"])
+    assert "internal MCP transport proof should redact" not in summary
 
 
 def test_orb_voice_overlay_lens_validation_uses_environment_connector_url(
@@ -260,10 +333,22 @@ def test_orb_voice_overlay_lens_validation_uses_environment_connector_url(
     assert payload["chatgpt_voice_receipts"]["mcp_server_chatgpt_source_count"] == 1
     assert payload["chatgpt_voice_receipts"]["fresh_mcp_server_chatgpt_source_count"] == 1
     assert payload["chatgpt_voice_receipts"]["fresh_usable_mcp_server_chatgpt_source_count"] == 1
+    assert payload["chatgpt_voice_receipts"]["fresh_mcp_server_transport_verified_count"] == 1
+    assert payload["chatgpt_voice_receipts"]["fresh_streamable_http_mcp_server_chatgpt_source_count"] == 1
+    assert payload["chatgpt_voice_receipts"]["fresh_usable_streamable_http_mcp_server_chatgpt_source_count"] == 1
     latest_mcp = payload["chatgpt_voice_receipts"]["latest_fresh_mcp_server_chatgpt_source"]
     assert latest_mcp["receipt_id"] == "chatgpt-voice-recorded-env-test"
     assert latest_mcp["source_claims_mcp_server_tool"] is True
     assert latest_mcp["mcp_server_tool"] == "francis_chatgpt_voice_ingress"
+    assert latest_mcp["mcp_server_transport"] == "streamable-http"
+    assert latest_mcp["source_claims_mcp_server_transport"] is True
+    assert latest_mcp["source_claims_streamable_http_mcp_server"] is True
+    assert latest_mcp["usable_streamable_http_mcp_server_chatgpt_transcript"] is True
+    latest_public_mcp = payload["chatgpt_voice_receipts"]["latest_fresh_streamable_http_mcp_server_chatgpt_source"]
+    assert latest_public_mcp["receipt_id"] == "chatgpt-voice-recorded-env-test"
+    checks = {check["id"]: check for check in payload["checks"]}
+    assert checks["chatgpt_app_public_mcp_transport_observed"]["passed"] is True
+    assert checks["chatgpt_app_public_mcp_transport_observed"]["status"] == "fresh_observed"
     assert payload["persistent_ingress_plan"]["status"] == "connector_url_shape_valid_record_ready"
     assert payload["persistent_ingress_plan"]["connector_url"]["source"] == (
         "environment:FRANCIS_CHATGPT_VOICE_CONNECTOR_URL"
