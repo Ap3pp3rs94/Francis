@@ -39,6 +39,7 @@ $StopFlagPath = Join-Path $StateRoot 'stop.flag'
 $PidPath = Join-Path $StateRoot 'coordinator.pid'
 $DispatchRoot = Join-Path $StateRoot 'dispatches'
 $ReadbackRoot = Join-Path $StateRoot 'readbacks'
+$PublicationRoot = Join-Path $StateRoot 'publications'
 $Launcher = Join-Path $PSScriptRoot 'start-francis-worker-terminals.ps1'
 $CompletionModelScript = Join-Path $PSScriptRoot 'francis-completion-model.ps1'
 $PromptRoot = Join-Path $RepoRoot 'docs\operations\worker_prompts'
@@ -76,6 +77,19 @@ function Read-CoordinatorStatusFile {
   }
   try {
     return Get-Content -LiteralPath $StatusPath -Raw -Encoding UTF8 | ConvertFrom-Json -ErrorAction Stop
+  } catch {
+    return $null
+  }
+}
+
+function Read-CoordinatorJsonFile {
+  param([string]$Path)
+
+  if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+    return $null
+  }
+  try {
+    return Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json -ErrorAction Stop
   } catch {
     return $null
   }
@@ -147,6 +161,99 @@ function Get-LaneProjectManagerInstruction {
   }
 }
 
+function Get-LaneReadbackPath {
+  param([string]$WorkerId)
+
+  return (Join-Path $ReadbackRoot ('{0}.md' -f $WorkerId))
+}
+
+function Get-LanePublicationPath {
+  param([string]$WorkerId)
+
+  return (Join-Path $PublicationRoot ('{0}.json' -f $WorkerId))
+}
+
+function Test-LaneRePromptPublicationGate {
+  param(
+    [string]$WorkerId,
+    [object]$Worker
+  )
+
+  New-Item -ItemType Directory -Force -Path $ReadbackRoot | Out-Null
+  New-Item -ItemType Directory -Force -Path $PublicationRoot | Out-Null
+
+  $ReadbackPath = Get-LaneReadbackPath -WorkerId $WorkerId
+  $PublicationPath = Get-LanePublicationPath -WorkerId $WorkerId
+  $PromptSha256 = if ($null -ne $Worker -and $Worker.PSObject.Properties['prompt_sha256']) {
+    [string]$Worker.prompt_sha256
+  } else {
+    ''
+  }
+  $SessionExists = if ($null -ne $Worker -and $Worker.PSObject.Properties['session_exists']) {
+    [bool]$Worker.session_exists
+  } else {
+    $false
+  }
+  if (-not $SessionExists) {
+    return [ordered]@{
+      allowed = $true
+      status = 'first_prompt_allowed'
+      prompt_sha256 = $PromptSha256
+      readback_path = $ReadbackPath
+      readback_exists = $false
+      publication_path = $PublicationPath
+      publication_exists = $false
+      publication_status = ''
+    }
+  }
+
+  $ReadbackExists = Test-Path -LiteralPath $ReadbackPath -PathType Leaf
+  $Publication = Read-CoordinatorJsonFile -Path $PublicationPath
+  $PublicationExists = $null -ne $Publication
+  $PublicationPromptSha256 = if ($PublicationExists -and $Publication.PSObject.Properties['prompt_sha256']) {
+    [string]$Publication.prompt_sha256
+  } else {
+    ''
+  }
+  $PublicationStatus = if ($PublicationExists -and $Publication.PSObject.Properties['status']) {
+    [string]$Publication.status
+  } else {
+    ''
+  }
+  $AllowedStatuses = @('github_pushed', 'no_changes', 'blocked_with_receipt')
+  $PublicationMatchesPrompt = (
+    $PublicationExists -and
+    -not [string]::IsNullOrWhiteSpace($PromptSha256) -and
+    $PublicationPromptSha256 -eq $PromptSha256 -and
+    $AllowedStatuses -contains $PublicationStatus
+  )
+
+  $Allowed = $ReadbackExists -and $PublicationMatchesPrompt
+  $Status = if ($Allowed) {
+    'publication_gate_satisfied'
+  } elseif (-not $ReadbackExists) {
+    'awaiting_lane_readback'
+  } elseif (-not $PublicationExists) {
+    'awaiting_publication_marker'
+  } elseif (-not ($AllowedStatuses -contains $PublicationStatus)) {
+    'publication_marker_status_not_allowed'
+  } else {
+    'publication_marker_prompt_mismatch'
+  }
+
+  return [ordered]@{
+    allowed = [bool]$Allowed
+    status = $Status
+    prompt_sha256 = $PromptSha256
+    readback_path = $ReadbackPath
+    readback_exists = [bool]$ReadbackExists
+    publication_path = $PublicationPath
+    publication_exists = [bool]$PublicationExists
+    publication_status = $PublicationStatus
+    publication_prompt_sha256 = $PublicationPromptSha256
+  }
+}
+
 function New-ProjectManagerDispatchPrompt {
   param(
     [string]$WorkerId,
@@ -158,10 +265,12 @@ function New-ProjectManagerDispatchPrompt {
 
   New-Item -ItemType Directory -Force -Path $DispatchRoot | Out-Null
   New-Item -ItemType Directory -Force -Path $ReadbackRoot | Out-Null
+  New-Item -ItemType Directory -Force -Path $PublicationRoot | Out-Null
   $BasePromptPath = Join-Path $PromptRoot ('{0}.md' -f $WorkerId)
   $BasePrompt = Get-Content -LiteralPath $BasePromptPath -Raw -Encoding UTF8
   $DispatchPath = Join-Path $DispatchRoot ('{0}-iteration-{1}.md' -f $WorkerId, $Iteration)
-  $ReadbackPath = Join-Path $ReadbackRoot ('{0}.md' -f $WorkerId)
+  $ReadbackPath = Get-LaneReadbackPath -WorkerId $WorkerId
+  $PublicationPath = Get-LanePublicationPath -WorkerId $WorkerId
   $PreviousWorkerJson = if ($null -ne $PreviousWorker) {
     $PreviousWorker | ConvertTo-Json -Depth 8
   } else {
@@ -210,6 +319,7 @@ $PreviousWorkerJson
 - Validate the touched path.
 - Update durable state only when repo truth materially changed.
 - Write a concise lane readback to `$ReadbackPath` before ending. Include files touched, validation, blockers, proposed Git commit scope, and the next highest-value prompt for this lane.
+- The next prompt for this lane is gated on that readback plus a PM-owned publication marker at `$PublicationPath`. The marker must reference this pass prompt hash and represent a GitHub push, an explicit no-change receipt, or a blocked-with-evidence receipt.
 - Final answer must include exact files changed, validation, and remaining risks.
 - Do not commit, push, restart Continuum, or spawn new workers. The project-manager session owns GitHub publication after lane review and validation.
 
@@ -332,9 +442,32 @@ function Invoke-CoordinatorIteration {
       previous_codex_child_alive = if ($null -ne $Worker) { [bool]$Worker.codex_child_alive } else { $false }
       stale_stop = $null
       launch = $null
+      publication_gate = $null
+      launch_blocked = $false
     }
 
     if ($NeedsPrompt) {
+      $PublicationGate = if ($NoLaunch) {
+        [ordered]@{
+          allowed = $true
+          status = 'no_launch_preview_allowed'
+          prompt_sha256 = if ($null -ne $Worker -and $Worker.PSObject.Properties['prompt_sha256']) { [string]$Worker.prompt_sha256 } else { '' }
+          readback_path = Get-LaneReadbackPath -WorkerId $WorkerId
+          readback_exists = Test-Path -LiteralPath (Get-LaneReadbackPath -WorkerId $WorkerId) -PathType Leaf
+          publication_path = Get-LanePublicationPath -WorkerId $WorkerId
+          publication_exists = Test-Path -LiteralPath (Get-LanePublicationPath -WorkerId $WorkerId) -PathType Leaf
+          publication_status = ''
+        }
+      } else {
+        Test-LaneRePromptPublicationGate -WorkerId $WorkerId -Worker $Worker
+      }
+      $Action.publication_gate = $PublicationGate
+      if (-not [bool]$PublicationGate.allowed) {
+        $Action.launch_blocked = $true
+        $Action.reason = [string]$PublicationGate.status
+        $Actions += $Action
+        continue
+      }
       if ($null -ne $Worker -and [bool]$Worker.process_alive -and -not [bool]$Worker.codex_child_alive) {
         $Action.stale_stop = Stop-StaleWorkerRunner -Worker $Worker
       }
@@ -361,6 +494,8 @@ function Invoke-CoordinatorIteration {
     project_manager_dispatch = $true
     dispatch_root = $DispatchRoot
     readback_root = $ReadbackRoot
+    publication_root = $PublicationRoot
+    re_prompt_publication_gate_required = $true
     build_snapshot = $BuildSnapshot
     workers = $After.workers
     stop_flag_path = $StopFlagPath
@@ -387,6 +522,8 @@ function Invoke-CoordinatorIteration {
       project_manager_dispatch = $true
       dispatch_root = $DispatchRoot
       readback_root = $ReadbackRoot
+      publication_root = $PublicationRoot
+      re_prompt_publication_gate_required = $true
       uncontrolled_recursion_allowed = $false
       one_codex_child_per_lane = $true
     })
@@ -497,6 +634,7 @@ if ($Mode -eq 'Start') {
     stop_flag_path = $StopFlagPath
     receipt_path = $ReceiptPath
     readback_root = $ReadbackRoot
+    publication_root = $PublicationRoot
     poll_seconds = $PollSeconds
     max_iterations = $MaxIterations
     no_launch = [bool]$NoLaunch
@@ -559,6 +697,8 @@ Write-CoordinatorJson -Path $StatusPath -Payload ([ordered]@{
     project_manager_dispatch = $true
     dispatch_root = $DispatchRoot
     readback_root = $ReadbackRoot
+    publication_root = $PublicationRoot
+    re_prompt_publication_gate_required = $true
     uncontrolled_recursion_allowed = $false
     one_codex_child_per_lane = $true
   })

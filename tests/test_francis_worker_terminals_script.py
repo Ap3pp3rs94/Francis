@@ -137,6 +137,8 @@ def test_francis_worker_coordinator_supports_bounded_no_launch_iteration(tmp_pat
     assert status["project_manager_dispatch"] is True
     assert status["worker_launch_mode"] == "Exec"
     assert "readback_root" in status
+    assert "publication_root" in status
+    assert status["re_prompt_publication_gate_required"] is True
     assert (state_root / "dispatches").is_dir() or status["no_launch"] is True
     receipts = (state_root / "receipts.jsonl").read_text(encoding="utf-8-sig").splitlines()
     assert any("francis.worker_terminal.coordinator.iteration" in line for line in receipts)
@@ -178,6 +180,7 @@ def test_francis_worker_coordinator_generates_individual_pm_dispatches(tmp_path:
         assert "Dirty Worktree" in text
         assert "Previous Worker Readback" in text
         assert "Write a concise lane readback" in text
+        assert "publication marker" in text
         assert "Do not change the Orb appearance" in text or "Do not touch Orb visual files" in text
 
 

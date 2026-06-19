@@ -65,6 +65,26 @@ scope there, but the project-manager session owns validation, staging, commit,
 and push so GitHub receives reviewable lane-sized updates instead of mixed
 terminal output.
 
+## Publication Gate
+
+The coordinator may launch the first prompt for a lane without prior evidence.
+After that, a lane is not eligible for a new prompt until the prior pass has:
+
+- a lane readback under `.francis/worker-terminal-coordinator/readbacks/`
+- a PM-owned publication marker under
+  `.francis/worker-terminal-coordinator/publications/`
+
+Publication markers are keyed by worker ID and the prior prompt SHA-256. Valid
+marker statuses are:
+
+- `github_pushed`
+- `no_changes`
+- `blocked_with_receipt`
+
+This prevents silent prompt loops: every re-prompt must be preceded by either a
+GitHub-backed update, an explicit no-change receipt, or a blocked receipt with
+evidence.
+
 Preview the next four dispatch prompts without launching duplicate workers:
 
 ```powershell
