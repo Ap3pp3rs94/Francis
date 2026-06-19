@@ -699,11 +699,14 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "function Move-OverlayRuntimeStateFile" in script
     assert "function Join-OverlayProcessArguments" in script
     assert "function Update-OverlayMcpBodyStateLabel" in script
+    assert "function Update-OverlayMcpBodyStateLabelSafely" in script
     assert "Invoke-RestMethod -Uri $Uri -Method Get" in script
     assert "read_timeout_seconds" in script
     assert "Invoke-RestMethod -Uri $Uri -Method Get -TimeoutSec $TimeoutSeconds" in script
     assert "Read-McpBodyStateForOverlay -McpStatusRoute $Config.mcp_status_route" in script
     assert "-TimeoutSeconds $McpBodyStateTimeoutSeconds" in script
+    assert "live_status' -Value 'refresh_failed'" in script
+    assert "Overlay runtime stayed visible after MCP body-state refresh failed." in script
     assert "francis_lens=orb_overlay" in script
     assert "chat_ui.orbGlyph.energy_reference" in script
     assert "wpf_3d_animated_energy_orb" in script
@@ -826,6 +829,12 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "Get-OverlayOwnedSpeechGuardState -Root $script:LensOverlayWakeRoot -CooldownSeconds 4" in script
     assert "Test-OverlayVoiceSpeechProcess -ProcessId $SpeechProcessId" in script
     assert "-ContinuousVoiceChat $script:LensOverlayRequestedContinuousVoiceChat" in script
+    assert "wake_listener_start_failed" in script
+    assert "the Orb remains visible without claiming microphone capture" in script
+    assert (
+        "Write-OverlayVoiceState -Root $script:LensOverlayDataRoot -Payload $script:LensOverlayRuntimeVoice" in script
+    )
+    assert "Update-OverlayMcpBodyStateLabelSafely -Label $script:LensOverlayLabel" in script
     assert "$ArgumentList += '-EnableContinuousVoiceChat'" in script
     assert "I received the test text, but the local chat bridge is not available right now." in script
     assert "-SyntheticTranscript $true" in script

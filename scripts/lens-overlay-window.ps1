@@ -1151,6 +1151,35 @@ function Update-OverlayMcpBodyStateLabel {
   Write-OverlayState -Root $Root -Status 'overlay_running' -OverlayWindowVisible $true -AlwaysOnTop $true -Message 'Francis Lens overlay window is running with MCP body-state readback.' -McpBodyState $BodyState -OrbVisual $script:LensOverlayOrbVisual -OverlayVoice $script:LensOverlayRuntimeVoice
 }
 
+function Update-OverlayMcpBodyStateLabelSafely {
+  param(
+    [object]$Label,
+    [object]$Config,
+    [string]$Root
+  )
+
+  try {
+    Update-OverlayMcpBodyStateLabel -Label $Label -Config $Config -Root $Root
+  } catch {
+    $ErrorMessage = [string]$_.Exception.Message
+    if ($ErrorMessage.Length -gt 300) {
+      $ErrorMessage = $ErrorMessage.Substring(0, 300)
+    }
+    $BodyState = New-McpBodyStateProjection -McpStatusRoute $Config.mcp_status_route -OrbMcpStatusRoute $Config.orb_mcp_status_route
+    Set-McpBodyStateValue -Projection $BodyState -Name 'live_status' -Value 'refresh_failed'
+    Set-McpBodyStateValue -Projection $BodyState -Name 'error' -Value $ErrorMessage
+    Set-McpBodyStateValue -Projection $BodyState -Name 'message' -Value 'Overlay runtime stayed visible after MCP body-state refresh failed.'
+    try {
+      Set-OverlayLabelText -Label $Label -Text (Format-McpBodyStateLabel -BodyState $BodyState)
+    } catch {
+    }
+    try {
+      Write-OverlayState -Root $Root -Status 'overlay_running' -OverlayWindowVisible $true -AlwaysOnTop $true -Message 'Francis Lens overlay window is running; MCP body-state readback refresh failed.' -McpBodyState $BodyState -OrbVisual $script:LensOverlayOrbVisual -OverlayVoice $script:LensOverlayRuntimeVoice
+    } catch {
+    }
+  }
+}
+
 function Get-ProcessAlive {
   param([int]$ProcessId)
 
@@ -4227,11 +4256,24 @@ if ($Mode -eq 'Run') {
     $script:LensOverlayRuntimeVoice.conversation_forwarding_while_speaking = $false
     $Form.Add_Loaded({
         if ($script:LensOverlayEnableWakeListen -and $null -eq $script:LensOverlayWakeRecognizer) {
-          $script:LensOverlayWakeRecognizer = Start-OverlayWakeListener -Root $script:LensOverlayDataRoot -Phrase $script:LensOverlayRequestedWakePhrase -Response $script:LensOverlayRequestedWakeResponse -Provider $script:LensOverlayRequestedVoiceProvider -Voice $script:LensOverlayRequestedVoiceName -Rate $script:LensOverlayRequestedVoiceRate -Volume $script:LensOverlayRequestedVoiceVolume -RemoteVoiceId $script:LensOverlayRequestedElevenLabsVoiceId -RemoteModelId $script:LensOverlayRequestedElevenLabsModelId -RemoteOutputFormat $script:LensOverlayRequestedElevenLabsOutputFormat -RemoteStability $script:LensOverlayRequestedElevenLabsStability -RemoteSimilarityBoost $script:LensOverlayRequestedElevenLabsSimilarityBoost -RemoteStyle $script:LensOverlayRequestedElevenLabsStyle -RemoteSpeed $script:LensOverlayRequestedElevenLabsSpeed -RemoteUseSpeakerBoost $script:LensOverlayRequestedElevenLabsUseSpeakerBoost -ConfidenceThreshold $script:LensOverlayRequestedWakeConfidenceThreshold -ContinuousVoiceChat $script:LensOverlayRequestedContinuousVoiceChat
-          $script:LensOverlayRuntimeVoice = if ($null -ne $script:LensOverlayWakeRecognizer) {
-            New-OverlayRuntimeVoiceProjection -Provider $script:LensOverlayRequestedVoiceProvider -Voice $script:LensOverlayRequestedVoiceName -WakeListening $true -WakePhraseText $script:LensOverlayRequestedWakePhrase -Status 'listening' -ConfidenceThreshold $script:LensOverlayRequestedWakeConfidenceThreshold -WakeAliasCount $script:LensOverlayWakeAliasCount
-          } else {
-            New-OverlayRuntimeVoiceProjection -Provider $script:LensOverlayRequestedVoiceProvider -Voice $script:LensOverlayRequestedVoiceName -WakeListening $false -WakePhraseText '' -Status 'listen_failed' -ConfidenceThreshold $script:LensOverlayRequestedWakeConfidenceThreshold
+          try {
+            $script:LensOverlayWakeRecognizer = Start-OverlayWakeListener -Root $script:LensOverlayDataRoot -Phrase $script:LensOverlayRequestedWakePhrase -Response $script:LensOverlayRequestedWakeResponse -Provider $script:LensOverlayRequestedVoiceProvider -Voice $script:LensOverlayRequestedVoiceName -Rate $script:LensOverlayRequestedVoiceRate -Volume $script:LensOverlayRequestedVoiceVolume -RemoteVoiceId $script:LensOverlayRequestedElevenLabsVoiceId -RemoteModelId $script:LensOverlayRequestedElevenLabsModelId -RemoteOutputFormat $script:LensOverlayRequestedElevenLabsOutputFormat -RemoteStability $script:LensOverlayRequestedElevenLabsStability -RemoteSimilarityBoost $script:LensOverlayRequestedElevenLabsSimilarityBoost -RemoteStyle $script:LensOverlayRequestedElevenLabsStyle -RemoteSpeed $script:LensOverlayRequestedElevenLabsSpeed -RemoteUseSpeakerBoost $script:LensOverlayRequestedElevenLabsUseSpeakerBoost -ConfidenceThreshold $script:LensOverlayRequestedWakeConfidenceThreshold -ContinuousVoiceChat $script:LensOverlayRequestedContinuousVoiceChat
+            $script:LensOverlayRuntimeVoice = if ($null -ne $script:LensOverlayWakeRecognizer) {
+              New-OverlayRuntimeVoiceProjection -Provider $script:LensOverlayRequestedVoiceProvider -Voice $script:LensOverlayRequestedVoiceName -WakeListening $true -WakePhraseText $script:LensOverlayRequestedWakePhrase -Status 'listening' -ConfidenceThreshold $script:LensOverlayRequestedWakeConfidenceThreshold -WakeAliasCount $script:LensOverlayWakeAliasCount
+            } else {
+              New-OverlayRuntimeVoiceProjection -Provider $script:LensOverlayRequestedVoiceProvider -Voice $script:LensOverlayRequestedVoiceName -WakeListening $false -WakePhraseText '' -Status 'listen_failed' -ConfidenceThreshold $script:LensOverlayRequestedWakeConfidenceThreshold
+            }
+          } catch {
+            $ErrorMessage = [string]$_.Exception.Message
+            if ($ErrorMessage.Length -gt 300) {
+              $ErrorMessage = $ErrorMessage.Substring(0, 300)
+            }
+            $script:LensOverlayWakeRecognizer = $null
+            $script:LensOverlayRuntimeVoice = New-OverlayRuntimeVoiceProjection -Provider $script:LensOverlayRequestedVoiceProvider -Voice $script:LensOverlayRequestedVoiceName -WakeListening $false -WakePhraseText '' -Status 'listen_failed' -ConfidenceThreshold $script:LensOverlayRequestedWakeConfidenceThreshold
+            $script:LensOverlayRuntimeVoice.error = 'wake_listener_start_failed'
+            $script:LensOverlayRuntimeVoice.error_detail = $ErrorMessage
+            $script:LensOverlayRuntimeVoice.message = 'Wake listener failed during overlay startup; the Orb remains visible without claiming microphone capture.'
+            Write-OverlayVoiceState -Root $script:LensOverlayDataRoot -Payload $script:LensOverlayRuntimeVoice
           }
           $script:LensOverlayRuntimeVoice.voice_llm_enabled = [bool]$script:LensOverlayVoiceUseLlmRequested
           $script:LensOverlayRuntimeVoice.voice_llm_request_source = if ($script:LensOverlayVoiceUseLlmRequested) { 'EnableVoiceLlm' } else { 'FRANCIS_LENS_VOICE_USE_LLM' }
@@ -4241,12 +4283,12 @@ if ($Mode -eq 'Run') {
           $script:LensOverlayRuntimeVoice.microphone_gate_while_speaking = 'francis_stop_only'
           $script:LensOverlayRuntimeVoice.conversation_forwarding_while_speaking = $false
         }
-        Update-OverlayMcpBodyStateLabel -Label $script:LensOverlayLabel -Config $script:LensOverlayConfig -Root $script:LensOverlayDataRoot
+        Update-OverlayMcpBodyStateLabelSafely -Label $script:LensOverlayLabel -Config $script:LensOverlayConfig -Root $script:LensOverlayDataRoot
       })
     $RefreshTimer = New-Object System.Windows.Threading.DispatcherTimer
     $RefreshTimer.Interval = [TimeSpan]::FromSeconds(5)
     $RefreshTimer.Add_Tick({
-        Update-OverlayMcpBodyStateLabel -Label $script:LensOverlayLabel -Config $script:LensOverlayConfig -Root $script:LensOverlayDataRoot
+        Update-OverlayMcpBodyStateLabelSafely -Label $script:LensOverlayLabel -Config $script:LensOverlayConfig -Root $script:LensOverlayDataRoot
       })
     $RefreshTimer.Start()
     if ($AutonomousMotionEnabled) {
