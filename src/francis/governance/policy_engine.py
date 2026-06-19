@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from francis.governance.redaction import redact_governed_value
+from francis.governance.redaction import redact_governed_display_value, redact_governed_value
 from francis.kernel.paths import data_dir
 
 DECISION_ALLOWED = "allowed"
@@ -298,3 +298,99 @@ def write_tool_call_policy_receipt(
     receipt_payload["receipt_id"] = receipt_id
     path.write_text(json.dumps(receipt_payload, indent=2, sort_keys=True, ensure_ascii=False), encoding="utf-8")
     return {"receipt_id": receipt_id, "receipt_path": str(path)}
+
+
+def _receipt_id_path(receipt_id: str, *, receipt_root: Path) -> Path:
+    clean_id = Path(_clean_token(receipt_id)).name
+    if clean_id.endswith(".json"):
+        clean_id = clean_id[:-5]
+    return receipt_root / f"{clean_id}.json"
+
+
+def _read_receipt(path: Path) -> dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    display = redact_governed_display_value(payload)
+    return display if isinstance(display, dict) else {}
+
+
+def _receipt_summary(path: Path) -> dict[str, Any]:
+    payload = _read_receipt(path)
+    decision = _as_dict(payload.get("decision"))
+    return {
+        "receipt_id": _clean_token(payload.get("receipt_id") or path.stem),
+        "receipt_path": str(path),
+        "created_at": _clean_token(payload.get("created_at")),
+        "decision": _clean_token(decision.get("decision")),
+        "policy_id": _clean_token(decision.get("policy_id")),
+        "risk_class": _clean_token(decision.get("risk_class")),
+        "tool_name": _clean_token(decision.get("tool_name")),
+        "surface": _clean_token(decision.get("surface")),
+        "actor": _clean_token(decision.get("actor")),
+        "requested_authority": _clean_token(decision.get("requested_authority")),
+        "grants_execution_authority": bool(decision.get("grants_execution_authority")),
+        "grants_mutation_authority": bool(decision.get("grants_mutation_authority")),
+        "remote_egress": bool(decision.get("remote_egress")),
+    }
+
+
+def tool_call_policy_receipts_readback(
+    *,
+    limit: int = 20,
+    receipt_id: str = "",
+    receipt_root: Path | None = None,
+) -> dict[str, Any]:
+    root = receipt_root if receipt_root is not None else data_dir() / "governance" / "tool_call_policy_receipts"
+    root.mkdir(parents=True, exist_ok=True)
+    clean_receipt_id = _clean_token(receipt_id)
+    if clean_receipt_id:
+        path = _receipt_id_path(clean_receipt_id, receipt_root=root)
+        if not path.exists():
+            return {
+                "ok": False,
+                "kind": "francis.governance.tool_call_policy.receipts_readback",
+                "status": "not_found",
+                "receipt_id": clean_receipt_id,
+                "receipt": {},
+                "governance": {
+                    "read_only": True,
+                    "remote_egress": False,
+                    "execution_authority": False,
+                    "mutation_authority_granted": False,
+                },
+                "error": "policy receipt not found",
+            }
+        return {
+            "ok": True,
+            "kind": "francis.governance.tool_call_policy.receipts_readback",
+            "status": "ready",
+            "receipt_id": path.stem,
+            "receipt": _read_receipt(path),
+            "governance": {
+                "read_only": True,
+                "remote_egress": False,
+                "execution_authority": False,
+                "mutation_authority_granted": False,
+            },
+        }
+
+    receipt_paths = sorted(root.glob("tool-call-policy-*.json"), key=lambda path: path.stat().st_mtime, reverse=True)
+    bounded_limit = max(1, min(int(limit or 20), 100))
+    items = [_receipt_summary(path) for path in receipt_paths[:bounded_limit]]
+    return {
+        "ok": True,
+        "kind": "francis.governance.tool_call_policy.receipts_readback",
+        "status": "ready",
+        "receipt_count": len(receipt_paths),
+        "returned_count": len(items),
+        "items": items,
+        "receipt_root": str(root),
+        "governance": {
+            "read_only": True,
+            "remote_egress": False,
+            "execution_authority": False,
+            "mutation_authority_granted": False,
+        },
+    }

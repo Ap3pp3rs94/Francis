@@ -13,6 +13,13 @@ from francis.chatgpt_voice_bridge import (
     CHATGPT_VOICE_BRIDGE_MCP_INGRESS_DESCRIPTION,
     CHATGPT_VOICE_BRIDGE_MCP_PROOF_DESCRIPTION,
 )
+from francis.governance.policy_engine import (
+    DECISION_ALLOWED,
+    DECISION_BLOCKED,
+    ToolCallPolicyDecision,
+    evaluate_tool_call_policy,
+    tool_call_policy_receipts_readback,
+)
 from francis.kernel.paths import repo_root
 
 from .contracts import McpGatewayError, ToolResult, ToolSpec
@@ -40,6 +47,12 @@ def _proposal_dir() -> Path:
 
 def _receipt_dir() -> Path:
     path = _gateway_root() / "receipts"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _policy_receipt_dir() -> Path:
+    path = _gateway_root() / "policy_receipts"
     path.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -388,6 +401,31 @@ def _receipts_readback(args: dict[str, Any]) -> ToolResult:
     )
 
 
+def _policy_receipts(args: dict[str, Any]) -> ToolResult:
+    raw_limit = args.get("limit")
+    limit = raw_limit if isinstance(raw_limit, int) and raw_limit > 0 else 20
+    result = tool_call_policy_receipts_readback(
+        limit=limit,
+        receipt_id=_clean_text(args.get("receipt_id")),
+        receipt_root=_policy_receipt_dir(),
+    )
+    return ToolResult(
+        ok=bool(result.get("ok")),
+        status=_clean_text(result.get("status"), "ready"),
+        tool="francis.policy.receipts",
+        data=result,
+        governance={
+            "read_only": True,
+            "raw_shell": False,
+            "authority": "policy_receipt_readback",
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+            "remote_egress": False,
+        },
+        error=_clean_text(result.get("error")) or None,
+    )
+
+
 def _screen_status(_args: dict[str, Any]) -> ToolResult:
     from francis.screen_readback.tools import screen_readback_status
 
@@ -706,6 +744,7 @@ _TOOL_SPECS = [
         requires_approval=True,
     ),
     ToolSpec("francis.receipts.readback", "Read MCP gateway receipts.", read_only=True),
+    ToolSpec("francis.policy.receipts", "Read local tool-call policy relay receipts.", read_only=True),
     ToolSpec("francis.screen.status", "Read safe screen/session readback status.", read_only=True),
     ToolSpec(
         "francis.screen.session", "Read bounded desktop/session context without pixels or control.", read_only=True
@@ -773,6 +812,7 @@ _TOOL_HANDLERS: dict[str, Callable[[dict[str, Any]], ToolResult]] = {
     "francis.command.propose": _command_propose,
     "francis.command.execute_approved": _command_execute_approved,
     "francis.receipts.readback": _receipts_readback,
+    "francis.policy.receipts": _policy_receipts,
     "francis.screen.status": _screen_status,
     "francis.screen.session": _screen_session,
     "francis.takeover.status": _takeover_status,
@@ -803,7 +843,78 @@ def list_tools() -> list[dict[str, Any]]:
     ]
 
 
+def _spec_by_name() -> dict[str, ToolSpec]:
+    return {spec.name: spec for spec in _TOOL_SPECS}
+
+
+def _requested_policy_authority(name: str, spec: ToolSpec) -> str:
+    if spec.read_only:
+        return "readback"
+    if name == "francis.tests.run_targeted":
+        return "bounded_pytest"
+    if name in {"francis.command.propose", "francis.takeover.propose", "francis.input.propose"}:
+        return "manual_approval_required"
+    if name in {
+        "francis.command.execute_approved",
+        "francis.takeover.start_approved",
+        "francis.input.execute_approved",
+    }:
+        return "manual_approval_consumed"
+    if name == "francis.takeover.end":
+        return "takeover_revocation"
+    if name in {"francis.chatgpt_voice.ingress", "francis.chatgpt_voice.mcp_probe"}:
+        return "bridge_receipt_write"
+    return "write"
+
+
+def _policy_summary(decision: ToolCallPolicyDecision) -> dict[str, Any]:
+    return {
+        "relay": "local_tool_call_policy",
+        "decision": decision.decision,
+        "policy_id": decision.policy_id,
+        "risk_class": decision.risk_class,
+        "status": decision.status,
+        "reason": decision.reason,
+        "requested_authority": decision.requested_authority,
+        "receipt_written": decision.receipt_written,
+        "receipt_id": decision.receipt_id,
+        "receipt_path": decision.receipt_path,
+        "grants_execution_authority": decision.grants_execution_authority,
+        "grants_mutation_authority": decision.grants_mutation_authority,
+        "remote_egress": decision.remote_egress,
+        "read_only_decision": decision.read_only_decision,
+    }
+
+
+def _policy_request(name: str, args: dict[str, Any], spec: ToolSpec) -> dict[str, Any]:
+    return {
+        "actor": _clean_text(args.get("actor"), "mcp-client"),
+        "surface": "mcp_gateway",
+        "tool_name": name,
+        "arguments": args,
+        "requested_authority": _requested_policy_authority(name, spec),
+        "reason": _clean_text(args.get("objective") or args.get("reason")),
+        "trace_id": _clean_text(args.get("trace_id") or args.get("turn_id") or args.get("proposal_id")),
+    }
+
+
+def _evaluate_gateway_policy(name: str, args: dict[str, Any], spec: ToolSpec) -> ToolCallPolicyDecision:
+    request = _policy_request(name, args, spec)
+    decision = evaluate_tool_call_policy(request)
+    if spec.read_only and decision.decision == DECISION_ALLOWED:
+        return decision
+    return evaluate_tool_call_policy(request, write_receipt=True, receipt_root=_policy_receipt_dir())
+
+
+def _attach_policy(result: dict[str, Any], decision: ToolCallPolicyDecision) -> dict[str, Any]:
+    governance = _safe_dict(result.get("governance"))
+    governance["tool_policy"] = _policy_summary(decision)
+    result["governance"] = governance
+    return result
+
+
 def run_tool(name: str, args: dict[str, Any] | None = None) -> dict[str, Any]:
+    safe_args = args or {}
     handler = _TOOL_HANDLERS.get(name)
     if handler is None:
         return ToolResult(
@@ -814,21 +925,48 @@ def run_tool(name: str, args: dict[str, Any] | None = None) -> dict[str, Any]:
             governance={"raw_shell": False, "authority": "none"},
         ).to_dict()
 
+    spec = _spec_by_name().get(name, ToolSpec(name, "unknown registered tool", read_only=False))
+    policy_decision = _evaluate_gateway_policy(name, safe_args, spec)
+    if policy_decision.decision == DECISION_BLOCKED:
+        return _attach_policy(
+            ToolResult(
+                ok=False,
+                status="policy_blocked",
+                tool=name,
+                data={"policy": _policy_summary(policy_decision)},
+                governance={
+                    "read_only": False,
+                    "raw_shell": False,
+                    "authority": "policy_blocked",
+                    "grants_execution_authority": False,
+                    "grants_mutation_authority": False,
+                },
+                error=policy_decision.reason,
+            ).to_dict(),
+            policy_decision,
+        )
+
     try:
-        return handler(args or {}).to_dict()
+        return _attach_policy(handler(safe_args).to_dict(), policy_decision)
     except McpGatewayError as exc:
-        return ToolResult(
-            ok=False,
-            status="bad_request",
-            tool=name,
-            error=str(exc),
-            governance={"raw_shell": False, "authority": "bounded_error"},
-        ).to_dict()
+        return _attach_policy(
+            ToolResult(
+                ok=False,
+                status="bad_request",
+                tool=name,
+                error=str(exc),
+                governance={"raw_shell": False, "authority": "bounded_error"},
+            ).to_dict(),
+            policy_decision,
+        )
     except subprocess.TimeoutExpired:
-        return ToolResult(
-            ok=False,
-            status="timeout",
-            tool=name,
-            error="tool execution timed out",
-            governance={"raw_shell": False, "authority": "bounded_timeout"},
-        ).to_dict()
+        return _attach_policy(
+            ToolResult(
+                ok=False,
+                status="timeout",
+                tool=name,
+                error="tool execution timed out",
+                governance={"raw_shell": False, "authority": "bounded_timeout"},
+            ).to_dict(),
+            policy_decision,
+        )

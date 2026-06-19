@@ -28,6 +28,7 @@ _REQUIRED_STATUS_TOOLS = {
 
 _OPTIONAL_READBACK_TOOLS = {
     "francis.receipts.readback": {},
+    "francis.policy.receipts": {"limit": 5},
     "francis.handoff.audit": {"limit": 5},
 }
 
@@ -40,6 +41,7 @@ _KIND_TO_LABEL = {
     "francis.takeover.status": "Takeover/session",
     "francis.input.status": "Input actuator",
     "francis.receipts.readback": "MCP receipts",
+    "francis.policy.receipts": "Tool policy receipts",
     "francis.handoff.audit": "Takeover/input handoff",
 }
 

@@ -212,6 +212,10 @@ def run_server(
     def francis_receipts_readback(receipt_id: str = "") -> str:
         return _tool_payload(run_tool("francis.receipts.readback", {"receipt_id": receipt_id}))
 
+    @server.tool(name="francis_policy_receipts")
+    def francis_policy_receipts(receipt_id: str = "", limit: int = 20) -> str:
+        return _tool_payload(run_tool("francis.policy.receipts", {"receipt_id": receipt_id, "limit": limit}))
+
     @server.tool(name="francis_screen_status")
     def francis_screen_status() -> str:
         return _tool_payload(run_tool("francis.screen.status", {}))

@@ -102,6 +102,7 @@ def test_lens_orb_mcp_status_bridge_surfaces_substrate_semantic_state(monkeypatc
             "francis.takeover.status",
             "francis.input.status",
             "francis.receipts.readback",
+            "francis.policy.receipts",
             "francis.handoff.audit",
         ]
         tools.extend(f"francis.test.readback.{index}" for index in range(10))
@@ -114,6 +115,9 @@ def test_lens_orb_mcp_status_bridge_surfaces_substrate_semantic_state(monkeypatc
             data["control_transfer_active"] = False
         if tool == "francis.receipts.readback":
             data["receipts"] = ["receipt_semantic"]
+        if tool == "francis.policy.receipts":
+            data["items"] = []
+            data["receipt_count"] = 0
         return {
             "ok": True,
             "status": "ready",
@@ -182,6 +186,7 @@ def test_lens_orb_mcp_status_bridge_surfaces_substrate_semantic_state(monkeypatc
         "francis.takeover.status",
         "francis.input.status",
         "francis.receipts.readback",
+        "francis.policy.receipts",
         "francis.handoff.audit",
     }
 

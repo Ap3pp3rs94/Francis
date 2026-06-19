@@ -27,6 +27,7 @@ def test_mcp_gateway_lists_expected_tools(tmp_path: Path, monkeypatch) -> None:
         "francis.command.propose",
         "francis.command.execute_approved",
         "francis.receipts.readback",
+        "francis.policy.receipts",
         "francis.screen.status",
         "francis.screen.session",
         "francis.takeover.status",
@@ -78,6 +79,9 @@ def test_read_only_tools_report_no_raw_shell(tmp_path: Path, monkeypatch) -> Non
     assert result["ok"] is True
     assert result["governance"]["read_only"] is True
     assert result["governance"]["raw_shell"] is False
+    assert result["governance"]["tool_policy"]["relay"] == "local_tool_call_policy"
+    assert result["governance"]["tool_policy"]["decision"] == "allowed"
+    assert result["governance"]["tool_policy"]["receipt_written"] is False
 
 
 def test_screen_session_readback_is_read_only_without_pixels(tmp_path: Path, monkeypatch) -> None:
@@ -148,6 +152,59 @@ def test_command_propose_requires_allowlisted_kind(tmp_path: Path, monkeypatch) 
     assert result["ok"] is False
     assert result["status"] == "bad_request"
     assert result["governance"]["raw_shell"] is False
+    assert result["governance"]["tool_policy"]["relay"] == "local_tool_call_policy"
+
+
+def test_mcp_gateway_blocks_policy_denied_call_before_handler(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("FRANCIS_MCP_GATEWAY_STATE_DIR", str(tmp_path))
+
+    result = run_tool(
+        "francis.command.propose",
+        {
+            "actor": "test",
+            "objective": "attempt unsafe command text",
+            "kind": "git_status",
+            "command": "rm -rf /tmp/francis",
+        },
+    )
+
+    assert result["ok"] is False
+    assert result["status"] == "policy_blocked"
+    policy = result["governance"]["tool_policy"]
+    assert policy["decision"] == "blocked"
+    assert policy["policy_id"] == "policy.shell.destructive_command.block"
+    assert policy["receipt_written"] is True
+    assert policy["grants_execution_authority"] is False
+    assert Path(policy["receipt_path"]).exists()
+    assert not (tmp_path / "proposals").exists()
+
+
+def test_mcp_gateway_policy_receipts_readback_tracks_non_read_tools(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("FRANCIS_MCP_GATEWAY_STATE_DIR", str(tmp_path))
+    proposal = run_tool(
+        "francis.command.propose",
+        {"actor": "test", "objective": "read git status", "kind": "git_status", "targets": []},
+    )
+
+    assert proposal["ok"] is True
+    policy = proposal["governance"]["tool_policy"]
+    assert policy["decision"] == "allowed"
+    assert policy["receipt_written"] is True
+    assert Path(policy["receipt_path"]).exists()
+
+    readback = run_tool("francis.policy.receipts", {"limit": 5})
+    assert readback["ok"] is True
+    assert readback["status"] == "ready"
+    assert readback["governance"]["read_only"] is True
+    assert readback["governance"]["tool_policy"]["decision"] == "allowed"
+    assert readback["data"]["receipt_count"] == 1
+    assert readback["data"]["items"][0]["receipt_id"] == policy["receipt_id"]
+    assert readback["data"]["items"][0]["tool_name"] == "francis.command.propose"
+
+    single = run_tool("francis.policy.receipts", {"receipt_id": policy["receipt_id"]})
+    assert single["ok"] is True
+    assert single["data"]["receipt"]["decision"]["tool_name"] == "francis.command.propose"
+    assert single["data"]["receipt"]["governance"]["decision_only"] is True
 
 
 def test_execute_approved_refuses_without_manual_phrase(tmp_path: Path, monkeypatch) -> None:

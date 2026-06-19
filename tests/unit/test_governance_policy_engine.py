@@ -111,7 +111,11 @@ def test_tool_call_policy_redacts_sensitive_arguments() -> None:
 
 
 def test_tool_call_policy_writes_local_receipt_without_authority(tmp_path: Path) -> None:
-    from francis.governance.policy_engine import DECISION_ALLOWED, evaluate_tool_call_policy
+    from francis.governance.policy_engine import (
+        DECISION_ALLOWED,
+        evaluate_tool_call_policy,
+        tool_call_policy_receipts_readback,
+    )
 
     receipt_root = tmp_path / "receipts"
     decision = evaluate_tool_call_policy(
@@ -147,3 +151,20 @@ def test_tool_call_policy_writes_local_receipt_without_authority(tmp_path: Path)
         "mutation_authority_granted": False,
         "remote_egress": False,
     }
+
+    readback = tool_call_policy_receipts_readback(limit=5, receipt_root=receipt_root)
+    assert readback["ok"] is True
+    assert readback["status"] == "ready"
+    assert readback["receipt_count"] == 1
+    assert readback["items"][0]["receipt_id"] == decision.receipt_id
+    assert readback["items"][0]["tool_name"] == "read_status"
+    assert readback["items"][0]["grants_execution_authority"] is False
+
+    single = tool_call_policy_receipts_readback(receipt_id=decision.receipt_id, receipt_root=receipt_root)
+    assert single["ok"] is True
+    assert single["receipt"]["decision"]["tool_name"] == "read_status"
+    assert single["receipt"]["governance"]["decision_only"] is True
+
+    missing = tool_call_policy_receipts_readback(receipt_id="missing", receipt_root=receipt_root)
+    assert missing["ok"] is False
+    assert missing["status"] == "not_found"
