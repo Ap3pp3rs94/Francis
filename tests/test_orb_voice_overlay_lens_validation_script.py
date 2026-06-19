@@ -97,6 +97,16 @@ def test_orb_voice_overlay_lens_validation_reports_missing_chatgpt_source_receip
     assert payload["persistent_ingress_plan"]["install_command_hints"]["cloudflared_winget"] == (
         "winget install --id Cloudflare.cloudflared --exact"
     )
+    handoff = payload["persistent_ingress_plan"]["operator_handoff"]
+    assert handoff["read_only_plan"] is True
+    assert handoff["installs_provider"] is False
+    assert handoff["opens_tunnel"] is False
+    assert handoff["writes_state"] is False
+    assert handoff["stable_url_placeholder"] == "https://YOUR-STABLE-HOST/mcp"
+    assert handoff["install_commands"]["cloudflared_winget"].endswith(
+        "--accept-source-agreements --accept-package-agreements"
+    )
+    assert "RecordUrl" in handoff["governed_handoff_commands"]["record_url"]
     assert payload["governance"]["read_only"] is True
     assert payload["governance"]["starts_process"] is False
     assert payload["governance"]["opens_public_tunnel"] is False

@@ -288,6 +288,23 @@ def test_chatgpt_voice_connector_plan_persistent_ingress_is_read_only(tmp_path: 
     )
     assert payload["install_command_hints"]["ngrok_winget"] == "winget install --id Ngrok.Ngrok --exact"
     assert payload["install_command_hints"]["caddy_winget"] == "winget install --id CaddyServer.Caddy --exact"
+    handoff = payload["operator_handoff"]
+    assert handoff["kind"] == "francis.chatgpt_voice.persistent_ingress_operator_handoff"
+    assert handoff["read_only_plan"] is True
+    assert handoff["installs_provider"] is False
+    assert handoff["opens_tunnel"] is False
+    assert handoff["writes_state"] is False
+    assert handoff["preferred_provider"] == "cloudflared_named_tunnel"
+    assert handoff["local_endpoint"] == f"http://127.0.0.1:{port}/mcp"
+    assert handoff["stable_url_placeholder"] == "https://YOUR-STABLE-HOST/mcp"
+    assert handoff["install_commands"]["cloudflared_winget"] == (
+        "winget install --id Cloudflare.cloudflared --exact --accept-source-agreements --accept-package-agreements"
+    )
+    assert "cloudflared tunnel login" in handoff["cloudflared_named_tunnel_steps"][1]
+    assert "RecordUrl" in handoff["governed_handoff_commands"]["record_url"]
+    assert "StartPersistent" in handoff["governed_handoff_commands"]["start_persistent_mcp"]
+    assert "orb-voice-overlay-lens-validation.ps1" in handoff["governed_handoff_commands"]["validate_bridge"]
+    assert "lens-command-palette-monitor.ps1" in handoff["governed_handoff_commands"]["monitor_command_palette"]
     assert "http://127.0.0.1:8787" in payload["provider_config_hints"]["cloudflared_named_tunnel"]
     assert payload["recommended_provider_order"][0] == "cloudflared_named_tunnel"
     assert payload["localtunnel_replacement"]["localtunnel_supported_only_as_explicit_fallback"] is True

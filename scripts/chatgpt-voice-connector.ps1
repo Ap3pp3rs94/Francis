@@ -209,6 +209,60 @@ function New-ConnectorIngressProfile {
   }
 }
 
+function New-PersistentIngressOperatorHandoff {
+  param(
+    [string]$HostAddress,
+    [int]$Port,
+    [string]$Path
+  )
+
+  $LocalEndpoint = "http://$HostAddress`:$Port$Path"
+  $StableUrl = "https://YOUR-STABLE-HOST$Path"
+  return [ordered]@{
+    kind = 'francis.chatgpt_voice.persistent_ingress_operator_handoff'
+    safe_to_display = $true
+    read_only_plan = $true
+    installs_provider = $false
+    opens_tunnel = $false
+    writes_state = $false
+    requires_operator_provider_account_or_hostname = $true
+    preferred_provider = 'cloudflared_named_tunnel'
+    local_endpoint = $LocalEndpoint
+    stable_url_placeholder = $StableUrl
+    install_commands = [ordered]@{
+      cloudflared_winget = 'winget install --id Cloudflare.cloudflared --exact --accept-source-agreements --accept-package-agreements'
+      ngrok_winget = 'winget install --id Ngrok.Ngrok --exact --accept-source-agreements --accept-package-agreements'
+      caddy_winget = 'winget install --id CaddyServer.Caddy --exact --accept-source-agreements --accept-package-agreements'
+    }
+    cloudflared_named_tunnel_steps = @(
+      'Install cloudflared or confirm it is already available on PATH.',
+      'Run cloudflared tunnel login and complete the provider login in the browser.',
+      'Create a named tunnel for Francis and route a stable hostname to the local MCP endpoint.',
+      "Point the ingress service at $LocalEndpoint.",
+      "Record the resulting stable connector URL as $StableUrl."
+    )
+    ngrok_reserved_domain_steps = @(
+      'Install ngrok or confirm it is already available on PATH.',
+      'Authenticate ngrok with an operator-owned account token outside Francis.',
+      'Reserve a stable HTTPS domain in ngrok.',
+      "Forward the reserved domain to $LocalEndpoint.",
+      "Record the resulting stable connector URL as $StableUrl."
+    )
+    caddy_reverse_proxy_steps = @(
+      'Install caddy or confirm it is already available on PATH.',
+      'Configure a stable operator-owned HTTPS hostname.',
+      "Reverse proxy that hostname to $LocalEndpoint.",
+      "Record the resulting stable connector URL as $StableUrl."
+    )
+    governed_handoff_commands = [ordered]@{
+      record_url = ".\scripts\chatgpt-voice-connector.ps1 -Mode RecordUrl -ConnectorUrl `"$StableUrl`" -Json"
+      start_persistent_mcp = ".\scripts\chatgpt-voice-connector.ps1 -Mode StartPersistent -ConnectorUrl `"$StableUrl`" -VerifyConnector -Json"
+      validate_bridge = ".\scripts\orb-voice-overlay-lens-validation.ps1 -ConnectorUrl `"$StableUrl`" -VerifyConnector"
+      monitor_command_palette = ".\scripts\lens-command-palette-monitor.ps1 -Mode Probe -EnableChatGptConnectorChecks -ChatGptConnectorUrl `"$StableUrl`" -VerifyChatGptConnector -RequirePersistentChatGptIngress"
+    }
+  }
+}
+
 function New-PersistentIngressPlan {
   param(
     [object]$EndpointStatus,
@@ -221,6 +275,7 @@ function New-PersistentIngressPlan {
   $LocalReady = [bool](Get-NestedPropertyValue -Payload $EndpointStatus -Path @('local_listener', 'ready') -Default $false)
   $RecordCommand = ".\scripts\chatgpt-voice-connector.ps1 -Mode RecordUrl -ConnectorUrl `"https://YOUR-STABLE-HOST$Path`" -Json"
   $IngressProfile = New-ConnectorIngressProfile -EndpointStatus $EndpointStatus -ConnectorUrlSource $ConnectorUrlSource
+  $OperatorHandoff = New-PersistentIngressOperatorHandoff -HostAddress $HostAddress -Port $Port -Path $Path
   $PersistentCandidate = [bool](Get-PropertyValue -Payload $IngressProfile -Name 'persistent_candidate' -Default $false)
   $PlanStatus = if ($ConnectorShapeValid -and -not $PersistentCandidate) {
     'localtunnel_fallback_replace_needed'
@@ -269,6 +324,7 @@ function New-PersistentIngressPlan {
       ngrok_winget = 'winget install --id Ngrok.Ngrok --exact'
       caddy_winget = 'winget install --id CaddyServer.Caddy --exact'
     }
+    operator_handoff = $OperatorHandoff
     provider_config_hints = [ordered]@{
       cloudflared_named_tunnel = 'Create a named Cloudflare Tunnel for http://127.0.0.1:8787, route a stable hostname, then record https://<hostname>/mcp.'
       ngrok_reserved_domain = 'Run ngrok with a reserved domain pointing to http://127.0.0.1:8787, then record https://<reserved-domain>/mcp.'

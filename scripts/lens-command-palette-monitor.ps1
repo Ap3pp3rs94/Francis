@@ -744,6 +744,7 @@ function New-ChatGptPersistentIngressPlanMonitorProjection {
     blockers = @(Get-PropertyValue -Payload $Payload -Name 'blockers' -Default @())
     recommended_provider_order = @(Get-PropertyValue -Payload $Payload -Name 'recommended_provider_order' -Default @())
     next_operator_steps = @(Get-PropertyValue -Payload $Payload -Name 'next_operator_steps' -Default @())
+    operator_handoff = Get-PropertyValue -Payload $Payload -Name 'operator_handoff' -Default $null
     providers = [ordered]@{
       cloudflared_named_tunnel_available = [bool](Get-PropertyValue -Payload $Cloudflared -Name 'available' -Default $false)
       ngrok_reserved_domain_available = [bool](Get-PropertyValue -Payload $Ngrok -Name 'available' -Default $false)

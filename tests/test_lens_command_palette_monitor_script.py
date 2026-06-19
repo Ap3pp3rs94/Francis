@@ -231,6 +231,13 @@ def test_lens_command_palette_monitor_reports_chatgpt_connector_localtunnel_fall
         "record_the_stable_https_mcp_url_with_recordurl",
         "rerun_orb_voice_overlay_lens_validation",
     ]
+    handoff = plan["operator_handoff"]
+    assert handoff["preferred_provider"] == "cloudflared_named_tunnel"
+    assert handoff["stable_url_placeholder"] == "https://YOUR-STABLE-HOST/mcp"
+    assert handoff["install_commands"]["cloudflared_winget"].endswith(
+        "--accept-source-agreements --accept-package-agreements"
+    )
+    assert "StartPersistent" in handoff["governed_handoff_commands"]["start_persistent_mcp"]
     assert isinstance(plan["providers"]["winget_available"], bool)
     assert plan["localtunnel_replacement"]["persistent_ingress_required_for_stable_chatgpt_connector"] is True
     assert plan["governance_safe"] is True
