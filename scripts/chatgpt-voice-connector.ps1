@@ -1827,6 +1827,32 @@ if ($Mode -eq 'StartCloudflaredNamed') {
     exit 0
   }
 
+  $OriginCert = Get-CloudflaredOriginCertReadiness
+  if (-not [bool](Get-PropertyValue -Payload $OriginCert -Name 'present' -Default $false)) {
+    ConvertTo-JsonOutput -Payload ([ordered]@{
+        kind = 'francis.chatgpt_voice.connector_control'
+        ok = $false
+        status = 'cloudflared_login_required'
+        connector_url = $NamedConnectorUrl
+        connector_url_source = $ConnectorUrlSource
+        runtime_root = $RuntimeRoot
+        state_path = $statePath
+        cloudflared_path = $CloudflaredPath
+        cloudflared_origin_cert = $OriginCert
+        blockers = @('cloudflared_login_required')
+        next_operator_step = 'run_start_cloudflared_login'
+        governed_handoff_command = '.\scripts\chatgpt-voice-connector.ps1 -Mode StartCloudflaredLogin -AuthorizeCloudflaredLogin -Json'
+        cloudflared_named_start = [ordered]@{
+          public_tunnel_started = $false
+          connector_url_recorded = $false
+          existing_bridge_stopped = $false
+          origin_cert_content_read = $false
+        }
+        governance = New-GovernancePayload -ReadOnly $false -StartsProcess $false -OpensPublicTunnel $false -WritesData $false
+      })
+    exit 0
+  }
+
   $BoundedConfigPath = ConvertTo-BoundedText -Value $CloudflaredConfigPath -MaxLength 512
   if (-not [string]::IsNullOrWhiteSpace($BoundedConfigPath) -and -not (Test-Path -LiteralPath $BoundedConfigPath -PathType Leaf)) {
     ConvertTo-JsonOutput -Payload ([ordered]@{
