@@ -199,4 +199,6 @@ def test_lens_persistent_supervision_execution_authority_proof_keeps_python_stde
     assert "$PythonStderrPath = Join-Path $ProofRuntimeDir 'python-stderr.txt'" in script
     assert "$Output = & $PythonPath $PythonScriptPath 2> $PythonStderrPath" in script
     assert "$Output = & $PythonPath $PythonScriptPath 2>&1" not in script
+    assert "warnings.filterwarnings(" in script
+    assert "Using `httpx` with `starlette\\.testclient` is deprecated" in script
     assert "python_proof_failed_without_json" in script

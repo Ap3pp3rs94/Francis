@@ -50,8 +50,15 @@ import json
 import os
 import sys
 import traceback
+import warnings
 from pathlib import Path
 from typing import Any
+
+warnings.filterwarnings(
+    "ignore",
+    message=r"Using `httpx` with `starlette\.testclient` is deprecated; install `httpx2` instead\.",
+    category=Warning,
+)
 
 
 def _as_dict(value: Any) -> dict[str, Any]:
