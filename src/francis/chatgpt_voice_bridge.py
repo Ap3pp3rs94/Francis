@@ -34,7 +34,7 @@ CHATGPT_VOICE_BRIDGE_MCP_INGRESS_DESCRIPTION = (
     "voice reports Transcript Unavailable, still call this tool with that marker so Francis can return the bounded "
     "transcript guard reply. When this call is made by ChatGPT Voice, set `client_origin` to `chatgpt_app_voice`; "
     "the MCP server adapter also defaults to that value for ChatGPT voice calls. Do not answer locally, summarize, "
-    "or invent a Francis reply."
+    "or invent a Francis reply. The returned voice reply is sentence-aware and bounded for spoken playback."
 )
 CHATGPT_VOICE_BRIDGE_MCP_PROOF_DESCRIPTION = (
     "Call this first when validating that ChatGPT can reach Francis over the MCP connector, especially when "
@@ -42,6 +42,7 @@ CHATGPT_VOICE_BRIDGE_MCP_PROOF_DESCRIPTION = (
     "a user transcript, does not call the model, does not update a voice turn, and does not grant execution authority."
 )
 MAX_TRANSCRIPT_CHARS = 8000
+MAX_SPEAKABLE_REPLY_CHARS = 700
 _TRANSCRIPT_UNAVAILABLE_MARKERS = {
     "transcript unavailable",
     "transcript not available",
@@ -92,12 +93,41 @@ def _transcript_rejection_reason(text: str) -> str:
     return ""
 
 
-def _voice_response(*, text: str, source: str, requires_transcript: bool = False) -> dict[str, Any]:
+def _limit_speakable_reply(text: str, *, max_chars: int = MAX_SPEAKABLE_REPLY_CHARS) -> tuple[str, bool]:
+    bounded = _safe_str(text).replace("\r", " ").replace("\n", " ")
+    bounded = " ".join(bounded.split())
+    if len(bounded) <= max_chars:
+        return bounded, False
+    if max_chars <= 3:
+        return bounded[:max_chars], True
+
+    candidate = bounded[:max_chars].rstrip()
+    minimum_useful_boundary = min(160, int(max_chars * 0.45))
+    sentence_boundary = max(candidate.rfind("."), candidate.rfind("!"), candidate.rfind("?"))
+    if sentence_boundary >= minimum_useful_boundary:
+        return candidate[: sentence_boundary + 1].rstrip(), True
+
+    word_boundary = candidate.rfind(" ")
+    if word_boundary >= minimum_useful_boundary:
+        return f"{candidate[:word_boundary].rstrip()}...", True
+    return f"{bounded[: max_chars - 3].rstrip()}...", True
+
+
+def _voice_response(
+    *,
+    text: str,
+    source: str,
+    requires_transcript: bool = False,
+    text_truncated: bool = False,
+) -> dict[str, Any]:
     return {
         "text": text,
         "source": source,
         "speakable": bool(text),
         "requires_transcript": bool(requires_transcript),
+        "max_text_chars": MAX_SPEAKABLE_REPLY_CHARS,
+        "text_truncated": bool(text_truncated),
+        "sentence_aware_limit": True,
         "raw_audio": False,
         "grants_execution_authority": False,
         "grants_mutation_authority": False,
@@ -277,6 +307,8 @@ def chatgpt_voice_bridge_contract(actor: str = "") -> dict[str, Any]:
             "call_mcp_probe_to_validate_connector": True,
             "call_ingress_for_every_voice_turn": True,
             "speak_only_top_level_reply": True,
+            "max_reply_chars": MAX_SPEAKABLE_REPLY_CHARS,
+            "sentence_aware_reply_limit": True,
             "transcript_unavailable_must_be_forwarded": True,
             "chatgpt_voice_must_set_client_origin": CHATGPT_VOICE_BRIDGE_CHATGPT_APP_VOICE_CLIENT,
             "mcp_server_default_client_origin": CHATGPT_VOICE_BRIDGE_CHATGPT_APP_VOICE_CLIENT,
@@ -407,6 +439,9 @@ def _write_virtual_voice_turn(
         "chat_route_writes_conversation_ledger": chat_forwarded,
         "reply_source": reply_source,
         "chat_reply_length": len(reply),
+        "chat_reply_max_speakable_chars": int(base_payload.get("chat_reply_max_speakable_chars") or 0),
+        "chat_reply_truncated_for_voice": bool(base_payload.get("chat_reply_truncated_for_voice")),
+        "chat_reply_sentence_aware_limit": bool(base_payload.get("chat_reply_sentence_aware_limit")),
         "chat_reply_redacted": True,
         "speech_output_owner": "chatgpt_voice_client",
         "client_speaks_top_level_reply": True,
@@ -614,6 +649,10 @@ def record_chatgpt_voice_ingress(
         else:
             reply = "I recorded the transcript for Francis. Chat forwarding was not requested."
             reply_source = "bridge.recorded_only"
+    reply, reply_truncated = _limit_speakable_reply(reply)
+    base_payload["chat_reply_max_speakable_chars"] = MAX_SPEAKABLE_REPLY_CHARS
+    base_payload["chat_reply_truncated_for_voice"] = bool(reply_truncated)
+    base_payload["chat_reply_sentence_aware_limit"] = True
 
     orb_voice_bridge = _write_virtual_voice_turn(
         base_payload=base_payload,
@@ -636,6 +675,9 @@ def record_chatgpt_voice_ingress(
             "chat_response_status": _safe_str(chat_response.get("status")),
             "reply": reply,
             "reply_source": reply_source,
+            "chat_reply_max_speakable_chars": MAX_SPEAKABLE_REPLY_CHARS,
+            "chat_reply_truncated_for_voice": bool(reply_truncated),
+            "chat_reply_sentence_aware_limit": True,
             "orb_voice_bridge": _virtual_voice_summary(orb_voice_bridge),
         }
     )
@@ -645,7 +687,7 @@ def record_chatgpt_voice_ingress(
         "ok": chat_forwarded or not forward_to_chat,
         "status": status,
         "reply": reply,
-        "voice_response": _voice_response(text=reply, source=reply_source),
+        "voice_response": _voice_response(text=reply, source=reply_source, text_truncated=reply_truncated),
         "receipt": receipt,
         "chat_forward": {
             "requested": bool(forward_to_chat),

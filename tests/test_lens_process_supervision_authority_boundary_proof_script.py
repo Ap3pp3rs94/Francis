@@ -312,14 +312,19 @@ def test_lens_process_supervision_boundary_blocks_supervision_and_service_activa
         env={"FRANCIS_DATA_DIR": str(data_root)},
     )
 
-    assert proc.returncode == 0, proc.stderr
+    assert proc.returncode == 0, proc.stderr or proc.stdout
     payload = json.loads(proc.stdout)
     assert payload["kind"] == "lens.process_supervision_authority_boundary.proof"
     assert payload["status"] == "proof_passed"
     assert payload["ok"] is True
     assert payload["mode"] == "status"
     assert payload["activation_boundary_mode"] == "direct_resident_surface_activation_boundary"
-    assert payload["effective_resident_surface_foreground_run_seconds"] == int(resident_surface_foreground_run_seconds)
+    assert payload["effective_resident_surface_foreground_run_seconds"] in {
+        int(resident_surface_foreground_run_seconds),
+        20,
+    }
+    assert payload["effective_resident_surface_foreground_run_seconds"] >= int(resident_surface_foreground_run_seconds)
+    assert payload["resident_surface_foreground_retry_run_seconds"] in {0, 20}
     assert payload["child_proof_timeout_seconds"] == 360
     assert payload["child_proof_timeouts"] == []
     assert payload["cached_resident_surface_proof"] is False
@@ -335,6 +340,9 @@ def test_lens_process_supervision_boundary_blocks_supervision_and_service_activa
         assert run["timed_out"] is False
         assert isinstance(run["duration_ms"], int)
         assert run["duration_ms"] >= 0
+        assert isinstance(run["payload_kind"], str)
+        assert isinstance(run["payload_status"], str)
+        assert isinstance(run["failed_check_ids"], list)
     assert child_proof_runs["resident_surface_activation_boundary"]["timeout_seconds"] == 60
     assert child_proof_runs["resident_runtime_activation_plan"]["timeout_seconds"] == 60
     assert child_proof_runs["resident_surface_foreground_runtime"]["timeout_seconds"] == 360

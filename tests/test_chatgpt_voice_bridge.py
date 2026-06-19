@@ -443,6 +443,63 @@ def test_chatgpt_voice_forward_uses_continuity_context_for_llm(
     assert "voice-turn-memory-2" in body["receipt"]["turn_id"]
 
 
+def test_chatgpt_voice_forward_sentence_bounds_long_model_reply(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        _scopes("chatgpt.voice.bridge.write", "chat.write"),
+    )
+
+    from francis.chat import router as chat_router
+
+    first_sentence = (
+        "Francis received the voice turn and is keeping the answer short for spoken playback while preserving "
+        "the operator-facing receipt and bridge state with no extra execution authority."
+    )
+    long_tail = " This extra material should stay in the chat response object but not in the top-level voice reply" * 20
+
+    def fake_generate(prompt: str) -> str:
+        assert "francis.identity: You are Francis; voice, lens, and orb are three Francis surfaces" in prompt
+        return f"{first_sentence}.{long_tail}"
+
+    monkeypatch.setattr(chat_router, "generate", fake_generate)
+
+    client = TestClient(create_app())
+    body = client.post(
+        "/chatgpt-voice/ingress",
+        json={
+            "actor": _ACTOR,
+            "transcript": "Francis explain the bridge state",
+            "turn_id": "voice-turn-long-reply",
+            "use_llm": True,
+        },
+    ).json()
+
+    assert body["ok"] is True
+    assert body["status"] == "forwarded"
+    assert body["reply"] == f"{first_sentence}."
+    assert len(body["reply"]) <= 700
+    assert body["voice_response"]["text"] == body["reply"]
+    assert body["voice_response"]["text_truncated"] is True
+    assert body["voice_response"]["sentence_aware_limit"] is True
+    assert body["receipt"]["chat_reply_max_speakable_chars"] == 700
+    assert body["receipt"]["chat_reply_truncated_for_voice"] is True
+    assert body["receipt"]["chat_reply_sentence_aware_limit"] is True
+    assert body["chat_forward"]["response"]["reply"].startswith(first_sentence)
+    assert "This extra material" in body["chat_forward"]["response"]["reply"]
+    assert "This extra material" not in body["reply"]
+
+    voice_state = data_root / "runtime" / "lens-overlay" / "voice-turn-status.json"
+    state = json.loads(voice_state.read_text(encoding="utf-8"))
+    assert state["chat_reply_max_speakable_chars"] == 700
+    assert state["chat_reply_truncated_for_voice"] is True
+    assert state["chat_reply_sentence_aware_limit"] is True
+    assert state["chat_reply_length"] == len(body["reply"])
+    assert state["client_speaks_top_level_reply"] is True
+    assert state["grants_execution_authority"] is False
+
+
 def test_chatgpt_voice_ingress_rejects_unavailable_transcript_with_reply(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
@@ -526,6 +583,7 @@ def test_chatgpt_voice_mcp_tools_expose_bounded_bridge(monkeypatch, tmp_path: Pa
     ingress_description = tool_by_name["francis.chatgpt_voice.ingress"]["description"]
     assert "required bridge for every ChatGPT voice turn directed at Francis" in ingress_description
     assert "speak only the returned top-level `reply`" in ingress_description
+    assert "sentence-aware and bounded for spoken playback" in ingress_description
     assert "Transcript Unavailable" in ingress_description
     assert "Do not answer locally" in ingress_description
 
@@ -534,6 +592,8 @@ def test_chatgpt_voice_mcp_tools_expose_bounded_bridge(monkeypatch, tmp_path: Pa
     assert contract["governance"]["read_only"] is True
     speech_contract = contract["data"]["client_speech_contract"]
     assert speech_contract["mcp_server_default_client_origin"] == "chatgpt_app_voice"
+    assert speech_contract["max_reply_chars"] == 700
+    assert speech_contract["sentence_aware_reply_limit"] is True
 
     proof = run_tool("francis.chatgpt_voice.mcp_probe", {"actor": _ACTOR, "source": "chatgpt.voice"})
     assert proof["ok"] is True

@@ -305,6 +305,20 @@ function Invoke-JsonScriptWithProofRetry {
   return $LastProof
 }
 
+function Test-JsonScriptProofPassed {
+  param(
+    [object]$Result,
+    [string]$ExpectedKind
+  )
+
+  $Payload = Get-PropertyValue -Payload $Result -Name 'payload'
+  return (
+    [int](Get-PropertyValue -Payload $Result -Name 'exit_code' -Default -1) -eq 0 -and
+    [string](Get-PropertyValue -Payload $Payload -Name 'kind' -Default '') -eq $ExpectedKind -and
+    [string](Get-PropertyValue -Payload $Payload -Name 'status' -Default '') -eq 'proof_passed'
+  )
+}
+
 function Read-CachedJsonScriptResult {
   param([string]$Path)
 
@@ -506,12 +520,26 @@ function New-ChildProofRunSummary {
     [object]$Result
   )
 
+  $Payload = Get-PropertyValue -Payload $Result -Name 'payload'
+  $Checks = @(Get-PropertyValue -Payload $Payload -Name 'checks' -Default @())
+  $FailedCheckIds = @($Checks | Where-Object {
+      -not [bool](Get-PropertyValue -Payload $_ -Name 'passed' -Default $false)
+    } | ForEach-Object {
+      [string](Get-PropertyValue -Payload $_ -Name 'id' -Default '')
+    } | Where-Object {
+      -not [string]::IsNullOrWhiteSpace($_)
+    })
+
   return [ordered]@{
     name = $Name
     exit_code = [int](Get-PropertyValue -Payload $Result -Name 'exit_code' -Default -1)
     timed_out = [bool](Get-PropertyValue -Payload $Result -Name 'timed_out' -Default $false)
     timeout_seconds = [int](Get-PropertyValue -Payload $Result -Name 'timeout_seconds' -Default $ChildProofTimeoutSeconds)
     duration_ms = [int](Get-PropertyValue -Payload $Result -Name 'duration_ms' -Default 0)
+    payload_kind = [string](Get-PropertyValue -Payload $Payload -Name 'kind' -Default '')
+    payload_status = [string](Get-PropertyValue -Payload $Payload -Name 'status' -Default '')
+    payload_ok = [bool](Get-PropertyValue -Payload $Payload -Name 'ok' -Default $false)
+    failed_check_ids = [string[]]@($FailedCheckIds)
     error = [string](Get-PropertyValue -Payload $Result -Name 'error' -Default '')
   }
 }
@@ -560,6 +588,7 @@ $EffectiveResidentSurfaceForegroundRunSeconds = 0
 $ActivationBoundaryResult = Invoke-ActivationBoundary -PythonPath $PythonPath -ProofDataRoot $ActivationBoundaryDataRoot
 $ActivationPlanResult = Invoke-ActivationPlan -PythonPath $PythonPath
 $CachedResidentSurfaceResult = Read-CachedJsonScriptResult -Path $CachedResidentSurfaceProofPath
+$ResidentSurfaceForegroundRetryRunSeconds = 0
 if ($null -ne $CachedResidentSurfaceResult) {
   $ResidentSurfaceResult = $CachedResidentSurfaceResult
 } else {
@@ -568,6 +597,17 @@ if ($null -ne $CachedResidentSurfaceResult) {
     '-ForegroundRunSeconds', [string]$ResidentSurfaceForegroundRunSeconds
   ) -ExpectedKind 'lens.resident_surface.readiness_proof'
   $EffectiveResidentSurfaceForegroundRunSeconds = $ResidentSurfaceForegroundRunSeconds
+  if (
+    -not (Test-JsonScriptProofPassed -Result $ResidentSurfaceResult -ExpectedKind 'lens.resident_surface.readiness_proof') -and
+    $ResidentSurfaceForegroundRunSeconds -lt 20
+  ) {
+    $ResidentSurfaceForegroundRetryRunSeconds = 20
+    $ResidentSurfaceResult = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $ResidentSurfaceProofPath -ScriptArgs @(
+      '-Mode', 'Status',
+      '-ForegroundRunSeconds', [string]$ResidentSurfaceForegroundRetryRunSeconds
+    ) -ExpectedKind 'lens.resident_surface.readiness_proof'
+    $EffectiveResidentSurfaceForegroundRunSeconds = $ResidentSurfaceForegroundRetryRunSeconds
+  }
 }
 $CachedHostSupervisionResult = Read-CachedJsonScriptResult -Path $CachedHostSupervisionProofPath
 if ($null -ne $CachedHostSupervisionResult) {
@@ -848,6 +888,7 @@ $Payload = [ordered]@{
   supervisor_run_seconds = $SupervisorRunSeconds
   resident_surface_foreground_run_seconds = $ResidentSurfaceForegroundRunSeconds
   effective_resident_surface_foreground_run_seconds = $EffectiveResidentSurfaceForegroundRunSeconds
+  resident_surface_foreground_retry_run_seconds = $ResidentSurfaceForegroundRetryRunSeconds
   activation_boundary_mode = 'direct_resident_surface_activation_boundary'
   child_proof_timeout_seconds = $ChildProofTimeoutSeconds
   child_proof_timeouts = [string[]]@($ChildProofTimeouts)
@@ -940,6 +981,7 @@ $Payload = [ordered]@{
     resident_surface_runtime_proof_observed = $ResidentSurfaceRuntimeProofObserved
     resident_surface_foreground_runtime_proof_observed = $ResidentSurfaceForegroundRuntimeProofObserved
     resident_surface_resident_runtime_proof_observed = $ResidentSurfaceResidentRuntimeProofObserved
+    resident_surface_foreground_retry_run_seconds = $ResidentSurfaceForegroundRetryRunSeconds
     resident_surface_runtime_supervision_handoff_observed = $ResidentSurfaceRuntimeSupervisionHandoffObserved
     resident_surface_operator_experience_handoff_observed = $ResidentSurfaceOperatorExperienceHandoffObserved
     resident_surface_next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'next_smallest_truthful_gap' -Default '')
