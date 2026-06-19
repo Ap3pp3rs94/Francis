@@ -69,8 +69,9 @@ history stays in [docs/operations/COMPLETION_LEDGER.md](docs/operations/COMPLETI
   execution, and Stage 17 backlog closure.
 - Latest validation actually checked for recent implementation work: local parser
   checks, focused pytest coverage for voice/MCP/monitor contracts, the Vite UI
-  test suite, `npm run build`, and diff checks. GitHub CodeQL for `f456e3c9` is
-  passing; the GitHub CI run for that commit is still in progress at this update.
+  test suite, `npm run build`, and diff checks. Use the GitHub Actions badge
+  above for live CI status; this snapshot does not claim a passing GitHub gate
+  unless a specific completed run is named in the ledger.
 - GitHub alert readback at this update: open Dependabot alerts `0`, open code
   scanning alerts `0`, and open secret scanning alerts `0`.
 - Guardrails: current work does not grant execution authority, does not grant
