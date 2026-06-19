@@ -61,7 +61,8 @@ def test_chatgpt_voice_connector_resolves_cross_platform_powershell_for_status_r
     assert "function Resolve-PowerShellHost" in script
     assert "Get-Command powershell -ErrorAction SilentlyContinue" in script
     assert "Get-Command pwsh -ErrorAction SilentlyContinue" in script
-    assert "$Raw = & $PowerShellHost @Args 2>&1" in script
+    assert "Start-Process -FilePath $PowerShellHost -ArgumentList $Args" in script
+    assert "status = 'status_timeout'" in script
     assert "$Raw = & powershell @Args 2>&1" not in script
 
 
@@ -74,6 +75,30 @@ def test_chatgpt_voice_connector_restart_mcp_preserves_public_tunnel_contract() 
     assert "ExpectedCommandText 'chatgpt-voice-mcp.ps1'" in script
     assert "public_tunnel_restarted = $false" in script
     assert "OpensPublicTunnel $false -WritesData $true" in script
+
+
+def test_chatgpt_voice_connector_start_persistent_never_opens_localtunnel() -> None:
+    script = (_repo_root() / "scripts" / "chatgpt-voice-connector.ps1").read_text(encoding="utf-8")
+
+    assert "StartPersistent" in script
+    assert "if ($Mode -eq 'StartPersistent')" in script
+    assert "status = 'connector_url_not_persistent'" in script
+    assert "public_tunnel_started = $false" in script
+    assert "localtunnel_fallback" in script
+    assert "$McpProcess = Start-McpLauncher -ConnectorHost $ConnectorHost" in script
+    assert "mcp_log_capture = 'not_captured_detached_start'" in script
+    assert "$Payload.status = if ($ConnectorReady)" in script
+    assert "OpensPublicTunnel $false -WritesData $true" in script
+
+
+def test_chatgpt_voice_connector_localtunnel_fallback_detaches_tunnel_process() -> None:
+    script = (_repo_root() / "scripts" / "chatgpt-voice-connector.ps1").read_text(encoding="utf-8")
+
+    assert "status = 'localtunnel_subdomain_required'" in script
+    assert "$TunnelLogCapture = 'not_captured_detached_start'" in script
+    assert "Start-Process -FilePath 'node' -ArgumentList $TunnelArgs -PassThru -WindowStyle Hidden" in script
+    assert "Wait-ForTunnelUrl -StdoutPath $TunnelStdout" not in script
+    assert "tunnel_log_capture = $TunnelLogCapture" in script
 
 
 @pytest.mark.skipif(platform.system() != "Windows", reason="connector control uses Windows process readback")
@@ -410,6 +435,36 @@ def test_chatgpt_voice_connector_record_url_persists_without_tunnel(tmp_path: Pa
     assert status_payload["governance"]["read_only"] is True
     assert status_payload["governance"]["starts_process"] is False
     assert status_payload["governance"]["opens_public_tunnel"] is False
+
+
+@pytest.mark.skipif(platform.system() != "Windows", reason="connector control uses Windows process readback")
+def test_chatgpt_voice_connector_start_persistent_rejects_localtunnel(tmp_path: Path) -> None:
+    runtime_root = tmp_path / "connector-runtime"
+    port = _unused_local_port()
+
+    proc = _run_connector_script(
+        "-Mode",
+        "StartPersistent",
+        "-Json",
+        "-RuntimeRoot",
+        str(runtime_root),
+        "-Port",
+        str(port),
+        "-ConnectorUrl",
+        "https://francis-voice-178175.loca.lt/mcp",
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["kind"] == "francis.chatgpt_voice.connector_control"
+    assert payload["ok"] is False
+    assert payload["status"] == "connector_url_not_persistent"
+    assert payload["connector_ingress_profile"]["profile"] == "localtunnel_ephemeral"
+    assert payload["blockers"] == ["localtunnel_url_is_not_persistent_ingress"]
+    assert payload["governance"]["starts_process"] is False
+    assert payload["governance"]["opens_public_tunnel"] is False
+    assert payload["governance"]["writes_data"] is False
+    assert not runtime_root.exists()
 
 
 @pytest.mark.skipif(platform.system() != "Windows", reason="connector control uses Windows process readback")
