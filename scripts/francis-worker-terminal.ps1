@@ -11,7 +11,11 @@ param(
   [string]$Sandbox = 'workspace-write',
 
   [ValidateSet('Visible', 'Background')]
-  [string]$LaunchMode = 'Visible'
+  [string]$LaunchMode = 'Visible',
+
+  [string]$StdoutLogPath = '',
+
+  [string]$StderrLogPath = ''
 )
 
 Set-StrictMode -Version 2
@@ -59,6 +63,8 @@ $SessionPayload = [ordered]@{
   sandbox = $Sandbox
   model = $Model
   launch_mode = $LaunchMode
+  stdout_log_path = $StdoutLogPath
+  stderr_log_path = $StderrLogPath
   codex_cli = 'codex'
   visible_terminal_requested = ($LaunchMode -eq 'Visible')
   continuum_started = $false

@@ -31,7 +31,9 @@ $Workers = @(
 
 $PromptRoot = Join-Path $RepoRoot 'docs\operations\worker_prompts'
 $SessionRoot = Join-Path $RepoRoot '.francis\worker-terminal-sessions'
+$LogRoot = Join-Path $RepoRoot '.francis\worker-terminal-logs'
 New-Item -ItemType Directory -Force -Path $SessionRoot | Out-Null
+New-Item -ItemType Directory -Force -Path $LogRoot | Out-Null
 
 function Get-WorkerFileSha256 {
   param([string]$Path)
@@ -117,6 +119,16 @@ function Get-WorkerStatusRows {
     } else {
       'Visible'
     }
+    $StdoutLogPath = if ($null -ne $Session -and $Session.PSObject.Properties['stdout_log_path']) {
+      [string]$Session.stdout_log_path
+    } else {
+      ''
+    }
+    $StderrLogPath = if ($null -ne $Session -and $Session.PSObject.Properties['stderr_log_path']) {
+      [string]$Session.stderr_log_path
+    } else {
+      ''
+    }
     $VisibleTerminalRequested = if ($null -ne $Session -and $Session.PSObject.Properties['visible_terminal_requested']) {
       [bool]$Session.visible_terminal_requested
     } else {
@@ -147,6 +159,8 @@ function Get-WorkerStatusRows {
       prompt_sha256 = $PromptSha256
       launch_mode = $LaunchModeText
       visible_terminal_requested = $VisibleTerminalRequested
+      stdout_log_path = $StdoutLogPath
+      stderr_log_path = $StderrLogPath
       started_at = $StartedAt
       completed_at = $CompletedAt
       exit_code = $ExitCode
@@ -191,6 +205,13 @@ foreach ($Worker in @($Workers | Where-Object { $WorkerId -eq 'All' -or [string]
   if (-not (Test-Path -LiteralPath $EffectivePromptPath -PathType Leaf)) {
     throw "Missing worker prompt: $EffectivePromptPath"
   }
+  $StdoutLogPath = ''
+  $StderrLogPath = ''
+  if ($LaunchMode -eq 'Background') {
+    $Stamp = [DateTimeOffset]::UtcNow.ToString('yyyyMMddTHHmmssfffffffZ')
+    $StdoutLogPath = Join-Path $LogRoot ('{0}-{1}.stdout.log' -f $Worker.id, $Stamp)
+    $StderrLogPath = Join-Path $LogRoot ('{0}-{1}.stderr.log' -f $Worker.id, $Stamp)
+  }
   $ArgumentList = @(
     '-ExecutionPolicy',
     'Bypass',
@@ -205,6 +226,14 @@ foreach ($Worker in @($Workers | Where-Object { $WorkerId -eq 'All' -or [string]
     '-LaunchMode',
     $LaunchMode
   )
+  if ($LaunchMode -eq 'Background') {
+    $ArgumentList += @(
+      '-StdoutLogPath',
+      $StdoutLogPath,
+      '-StderrLogPath',
+      $StderrLogPath
+    )
+  }
   if ($LaunchMode -eq 'Visible') {
     $ArgumentList = @('-NoExit') + $ArgumentList
   }
@@ -218,6 +247,8 @@ foreach ($Worker in @($Workers | Where-Object { $WorkerId -eq 'All' -or [string]
   }
   if ($LaunchMode -eq 'Background') {
     $StartProcessArgs.WindowStyle = 'Hidden'
+    $StartProcessArgs.RedirectStandardOutput = $StdoutLogPath
+    $StartProcessArgs.RedirectStandardError = $StderrLogPath
   }
   $Process = Start-Process @StartProcessArgs
   $Launches += [ordered]@{
@@ -228,6 +259,8 @@ foreach ($Worker in @($Workers | Where-Object { $WorkerId -eq 'All' -or [string]
     launcher_process_id = $Process.Id
     launch_mode = $LaunchMode
     visible_terminal_requested = ($LaunchMode -eq 'Visible')
+    stdout_log_path = $StdoutLogPath
+    stderr_log_path = $StderrLogPath
   }
 }
 

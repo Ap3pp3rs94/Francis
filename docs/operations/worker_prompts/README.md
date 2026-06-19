@@ -44,8 +44,10 @@ The coordinator keeps one active Codex child per lane. When a lane finishes and
 its Codex child exits, the coordinator records a receipt and relaunches that
 lane with an individualized project-manager dispatch prompt. Coordinator
 relaunches default to `-WorkerLaunchMode Background`, so future passes do not
-need four physical terminals open. It does not spawn nested coordinators and it
-records `uncontrolled_recursion_allowed=false`.
+need four physical terminals open. Background launches write per-lane stdout and
+stderr logs under `.francis/worker-terminal-logs/` and expose those paths through
+worker status. It does not spawn nested coordinators and it records
+`uncontrolled_recursion_allowed=false`.
 
 Each relaunch uses an individual project-manager dispatch prompt under
 `.francis/worker-terminal-coordinator/dispatches/`. The dispatch prompt includes

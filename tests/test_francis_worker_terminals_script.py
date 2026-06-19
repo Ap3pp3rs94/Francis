@@ -94,6 +94,8 @@ def test_francis_worker_terminal_launcher_status_is_read_only() -> None:
         assert "prompt_sha256" in worker
         assert "launch_mode" in worker
         assert "visible_terminal_requested" in worker
+        assert "stdout_log_path" in worker
+        assert "stderr_log_path" in worker
         assert isinstance(worker["codex_child_process_ids"], list)
 
 
