@@ -448,6 +448,35 @@ def _persistent_ingress_plan(value: Any) -> dict[str, Any]:
                 providers.get("cloudflared_named_tunnel_next_operator_step"),
                 max_length=160,
             ),
+            "cloudflared_login_status": _safe_str(
+                providers.get("cloudflared_login_status"),
+                max_length=120,
+            ),
+            "cloudflared_login_process_id": _safe_int(providers.get("cloudflared_login_process_id")),
+            "cloudflared_login_process_alive": _safe_bool(
+                providers.get("cloudflared_login_process_alive"),
+            ),
+            "cloudflared_login_provider_started": _safe_bool(
+                providers.get("cloudflared_login_provider_started"),
+            ),
+            "cloudflared_login_browser_may_open": _safe_bool(
+                providers.get("cloudflared_login_browser_may_open"),
+            ),
+            "cloudflared_login_writes_origin_cert": _safe_bool(
+                providers.get("cloudflared_login_writes_origin_cert"),
+            ),
+            "cloudflared_login_origin_cert_present": _safe_bool(
+                providers.get("cloudflared_login_origin_cert_present"),
+            ),
+            "cloudflared_login_origin_cert_content_read": _safe_bool(
+                providers.get("cloudflared_login_origin_cert_content_read"),
+            ),
+            "cloudflared_login_public_tunnel_started": _safe_bool(
+                providers.get("cloudflared_login_public_tunnel_started"),
+            ),
+            "cloudflared_login_connector_url_recorded": _safe_bool(
+                providers.get("cloudflared_login_connector_url_recorded"),
+            ),
             "ngrok_reserved_domain_available": _safe_bool(providers.get("ngrok_reserved_domain_available")),
             "caddy_reverse_proxy_available": _safe_bool(providers.get("caddy_reverse_proxy_available")),
             "ssh_reverse_tunnel_available": _safe_bool(providers.get("ssh_reverse_tunnel_available")),

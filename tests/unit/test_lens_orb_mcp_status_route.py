@@ -226,6 +226,16 @@ def test_lens_command_palette_monitor_route_projects_voice_bridge_proof(monkeypa
                             "cloudflared tunnel route dns francis francis.example.test",
                         ],
                         "cloudflared_named_tunnel_next_operator_step": "run_cloudflared_tunnel_login",
+                        "cloudflared_login_status": "cloudflared_login_started",
+                        "cloudflared_login_process_id": 201620,
+                        "cloudflared_login_process_alive": True,
+                        "cloudflared_login_provider_started": True,
+                        "cloudflared_login_browser_may_open": True,
+                        "cloudflared_login_writes_origin_cert": True,
+                        "cloudflared_login_origin_cert_present": False,
+                        "cloudflared_login_origin_cert_content_read": False,
+                        "cloudflared_login_public_tunnel_started": False,
+                        "cloudflared_login_connector_url_recorded": False,
                     },
                 },
             }
@@ -307,6 +317,16 @@ def test_lens_command_palette_monitor_route_projects_voice_bridge_proof(monkeypa
     ]
     assert providers["cloudflared_named_tunnel_next_operator_step"] == "run_cloudflared_tunnel_login"
     assert providers["cloudflared_named_tunnel_origin_cert_content_read"] is False
+    assert providers["cloudflared_login_status"] == "cloudflared_login_started"
+    assert providers["cloudflared_login_process_id"] == 201620
+    assert providers["cloudflared_login_process_alive"] is True
+    assert providers["cloudflared_login_provider_started"] is True
+    assert providers["cloudflared_login_browser_may_open"] is True
+    assert providers["cloudflared_login_writes_origin_cert"] is True
+    assert providers["cloudflared_login_origin_cert_present"] is False
+    assert providers["cloudflared_login_origin_cert_content_read"] is False
+    assert providers["cloudflared_login_public_tunnel_started"] is False
+    assert providers["cloudflared_login_connector_url_recorded"] is False
     handoff = body["chatgpt_persistent_ingress_plan_monitor"]["operator_handoff"]
     assert handoff["preferred_provider"] == "cloudflared_named_tunnel"
     assert handoff["read_only_plan"] is True
