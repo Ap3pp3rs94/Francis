@@ -1008,6 +1008,7 @@ function BridgeMonitorPanel(props: { baseUrl: string }) {
   const connector = status?.chatgpt_connector_monitor;
   const ingress = status?.chatgpt_persistent_ingress_plan_monitor;
   const ingressHandoff = ingress?.operator_handoff;
+  const ingressProviders = ingress?.providers;
   const transcriptProofReady = Boolean(proof?.proof_observed);
   const connectionProofReady = Boolean(proof?.mcp_connection_proof_observed);
   const monitorReady = Boolean(status?.monitor_process_alive || status?.monitor_heartbeat_fresh);
@@ -1190,6 +1191,47 @@ function BridgeMonitorPanel(props: { baseUrl: string }) {
             {ingressHandoff?.stable_url_placeholder || "none"}
           </dd>
         </div>
+        <div>
+          <dt style={{ color: "#94a3b8" }}>Cloudflared</dt>
+          <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
+            {ingressProviders?.cloudflared_named_tunnel_available ? "available" : "missing"}
+            {ingressProviders?.cloudflared_named_tunnel_path
+              ? ` / ${ingressProviders.cloudflared_named_tunnel_path}`
+              : ""}
+          </dd>
+        </div>
+        <div>
+          <dt style={{ color: "#94a3b8" }}>Cloudflare login</dt>
+          <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
+            {ingressProviders?.cloudflared_named_tunnel_login_required ? "required" : "ready"}
+            {" / origin cert "}
+            {boolText(Boolean(ingressProviders?.cloudflared_named_tunnel_origin_cert_present))}
+          </dd>
+        </div>
+        <div>
+          <dt style={{ color: "#94a3b8" }}>Named tunnel</dt>
+          <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
+            {ingressProviders?.cloudflared_named_tunnel_requested
+              ? `${ingressProviders.cloudflared_named_tunnel_requested_name || "unnamed"} / ${
+                  ingressProviders.cloudflared_named_tunnel_requested_hostname || "host missing"
+                }`
+              : "not requested"}
+            {" / exists "}
+            {boolText(Boolean(ingressProviders?.cloudflared_named_tunnel_exists))}
+          </dd>
+        </div>
+        <div>
+          <dt style={{ color: "#94a3b8" }}>Provider next step</dt>
+          <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
+            {ingressProviders?.cloudflared_named_tunnel_next_operator_step || "none"}
+          </dd>
+        </div>
+        <div>
+          <dt style={{ color: "#94a3b8" }}>Provider setup</dt>
+          <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
+            {joinStatusList(ingressProviders?.cloudflared_named_tunnel_operator_provider_setup_commands ?? [])}
+          </dd>
+        </div>
       </dl>
 
       <pre
@@ -1239,6 +1281,7 @@ function BridgeMonitorPanel(props: { baseUrl: string }) {
                   start_persistent_mcp: ingressHandoff?.governed_handoff_commands.start_persistent_mcp,
                   start_cloudflared_named: ingressHandoff?.governed_handoff_commands.start_cloudflared_named,
                 },
+                ingress_providers: ingressProviders,
               }
             : { status: loading ? "loading" : "not_loaded" },
           null,

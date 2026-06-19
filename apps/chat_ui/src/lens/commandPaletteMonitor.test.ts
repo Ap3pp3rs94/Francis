@@ -148,6 +148,29 @@ test("parseCommandPaletteMonitorStatus preserves latest receipt origin without t
             '.\\scripts\\chatgpt-voice-connector.ps1 -Mode StartCloudflaredNamed -CloudflaredTunnelName "francis" -CloudflaredHostname "YOUR-STABLE-HOST" -ExposePublicTunnel -VerifyConnector -Json',
         },
       },
+      providers: {
+        cloudflared_named_tunnel_available: true,
+        cloudflared_named_tunnel_path: "C:\\Program Files (x86)\\cloudflared\\cloudflared.exe",
+        cloudflared_named_tunnel_origin_cert_present: false,
+        cloudflared_named_tunnel_origin_cert_content_read: false,
+        cloudflared_named_tunnel_login_required: true,
+        cloudflared_named_tunnel_requested: true,
+        cloudflared_named_tunnel_requested_name: "francis",
+        cloudflared_named_tunnel_requested_hostname: "francis.example.test",
+        cloudflared_named_tunnel_exists: false,
+        cloudflared_named_tunnel_preflight_checked: false,
+        cloudflared_named_tunnel_preflight_exists: false,
+        cloudflared_named_tunnel_preflight_output_discarded: true,
+        cloudflared_named_tunnel_operator_provider_setup_commands: [
+          "cloudflared tunnel create francis",
+          "cloudflared tunnel route dns francis francis.example.test",
+        ],
+        cloudflared_named_tunnel_next_operator_step: "run_cloudflared_tunnel_login",
+        ngrok_reserved_domain_available: false,
+        caddy_reverse_proxy_available: false,
+        ssh_reverse_tunnel_available: true,
+        winget_available: true,
+      },
       governance_safe: true,
     },
     governance: { execution_authority: false, captures_audio: false },
@@ -214,6 +237,19 @@ test("parseCommandPaletteMonitorStatus preserves latest receipt origin without t
       "StartCloudflaredNamed",
     ),
     true,
+  );
+  assert.equal(status.chatgpt_persistent_ingress_plan_monitor.providers.cloudflared_named_tunnel_available, true);
+  assert.equal(
+    status.chatgpt_persistent_ingress_plan_monitor.providers.cloudflared_named_tunnel_login_required,
+    true,
+  );
+  assert.equal(
+    status.chatgpt_persistent_ingress_plan_monitor.providers.cloudflared_named_tunnel_next_operator_step,
+    "run_cloudflared_tunnel_login",
+  );
+  assert.deepEqual(
+    status.chatgpt_persistent_ingress_plan_monitor.providers.cloudflared_named_tunnel_operator_provider_setup_commands,
+    ["cloudflared tunnel create francis", "cloudflared tunnel route dns francis francis.example.test"],
   );
   assert.equal(JSON.stringify(status).includes("this transcript must not be parsed"), false);
 });

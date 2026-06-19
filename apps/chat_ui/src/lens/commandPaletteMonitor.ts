@@ -122,8 +122,29 @@ export type PersistentIngressPlanMonitor = {
   recommended_provider_order: string[];
   next_operator_steps: string[];
   operator_handoff: PersistentIngressOperatorHandoff;
-  providers: Record<string, boolean>;
+  providers: PersistentIngressProviders;
   governance_safe: boolean;
+};
+
+export type PersistentIngressProviders = {
+  cloudflared_named_tunnel_available: boolean;
+  cloudflared_named_tunnel_path: string;
+  cloudflared_named_tunnel_origin_cert_present: boolean;
+  cloudflared_named_tunnel_origin_cert_content_read: boolean;
+  cloudflared_named_tunnel_login_required: boolean;
+  cloudflared_named_tunnel_requested: boolean;
+  cloudflared_named_tunnel_requested_name: string;
+  cloudflared_named_tunnel_requested_hostname: string;
+  cloudflared_named_tunnel_exists: boolean;
+  cloudflared_named_tunnel_preflight_checked: boolean;
+  cloudflared_named_tunnel_preflight_exists: boolean;
+  cloudflared_named_tunnel_preflight_output_discarded: boolean;
+  cloudflared_named_tunnel_operator_provider_setup_commands: string[];
+  cloudflared_named_tunnel_next_operator_step: string;
+  ngrok_reserved_domain_available: boolean;
+  caddy_reverse_proxy_available: boolean;
+  ssh_reverse_tunnel_available: boolean;
+  winget_available: boolean;
 };
 
 export type PersistentIngressOperatorHandoff = {
@@ -364,10 +385,6 @@ function parsePersistentIngressPlan(value: unknown): PersistentIngressPlanMonito
   const raw = safeRecord(value);
   const providers = safeRecord(raw["providers"]);
   const handoff = safeRecord(raw["operator_handoff"]);
-  const parsedProviders: Record<string, boolean> = {};
-  for (const [key, ready] of Object.entries(providers)) {
-    parsedProviders[key] = safeBoolean(ready);
-  }
   return {
     enabled: safeBoolean(raw["enabled"]),
     ok: safeBoolean(raw["ok"]),
@@ -391,7 +408,44 @@ function parsePersistentIngressPlan(value: unknown): PersistentIngressPlanMonito
       install_commands: safeStringRecord(handoff["install_commands"]),
       governed_handoff_commands: safeStringRecord(handoff["governed_handoff_commands"]),
     },
-    providers: parsedProviders,
+    providers: {
+      cloudflared_named_tunnel_available: safeBoolean(providers["cloudflared_named_tunnel_available"]),
+      cloudflared_named_tunnel_path: safeString(providers["cloudflared_named_tunnel_path"]),
+      cloudflared_named_tunnel_origin_cert_present: safeBoolean(
+        providers["cloudflared_named_tunnel_origin_cert_present"],
+      ),
+      cloudflared_named_tunnel_origin_cert_content_read: safeBoolean(
+        providers["cloudflared_named_tunnel_origin_cert_content_read"],
+      ),
+      cloudflared_named_tunnel_login_required: safeBoolean(
+        providers["cloudflared_named_tunnel_login_required"],
+      ),
+      cloudflared_named_tunnel_requested: safeBoolean(providers["cloudflared_named_tunnel_requested"]),
+      cloudflared_named_tunnel_requested_name: safeString(providers["cloudflared_named_tunnel_requested_name"]),
+      cloudflared_named_tunnel_requested_hostname: safeString(
+        providers["cloudflared_named_tunnel_requested_hostname"],
+      ),
+      cloudflared_named_tunnel_exists: safeBoolean(providers["cloudflared_named_tunnel_exists"]),
+      cloudflared_named_tunnel_preflight_checked: safeBoolean(
+        providers["cloudflared_named_tunnel_preflight_checked"],
+      ),
+      cloudflared_named_tunnel_preflight_exists: safeBoolean(
+        providers["cloudflared_named_tunnel_preflight_exists"],
+      ),
+      cloudflared_named_tunnel_preflight_output_discarded: safeBoolean(
+        providers["cloudflared_named_tunnel_preflight_output_discarded"],
+      ),
+      cloudflared_named_tunnel_operator_provider_setup_commands: safeStringList(
+        providers["cloudflared_named_tunnel_operator_provider_setup_commands"],
+      ),
+      cloudflared_named_tunnel_next_operator_step: safeString(
+        providers["cloudflared_named_tunnel_next_operator_step"],
+      ),
+      ngrok_reserved_domain_available: safeBoolean(providers["ngrok_reserved_domain_available"]),
+      caddy_reverse_proxy_available: safeBoolean(providers["caddy_reverse_proxy_available"]),
+      ssh_reverse_tunnel_available: safeBoolean(providers["ssh_reverse_tunnel_available"]),
+      winget_available: safeBoolean(providers["winget_available"]),
+    },
     governance_safe: safeBoolean(raw["governance_safe"]),
   };
 }
