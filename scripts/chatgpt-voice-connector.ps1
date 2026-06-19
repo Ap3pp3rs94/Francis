@@ -195,16 +195,55 @@ function Get-CloudflaredOriginCertReadiness {
 }
 
 function Get-CloudflaredNamedTunnelReadiness {
+  param(
+    [string]$TunnelName = '',
+    [string]$Hostname = ''
+  )
+
   $CloudflaredPath = Resolve-CloudflaredPath
   $Readiness = Get-CommandReadiness -Name 'cloudflared' -Capability 'persistent_named_https_tunnel' -ResolvedPath $CloudflaredPath
   $OriginCert = Get-CloudflaredOriginCertReadiness
   $OriginCertPresent = [bool](Get-PropertyValue -Payload $OriginCert -Name 'present' -Default $false)
+  $BoundedTunnelName = ConvertTo-BoundedText -Value $TunnelName -MaxLength 160
+  $BoundedHostname = ConvertTo-CloudflaredHost -Value $Hostname
+  $TunnelRequested = -not [string]::IsNullOrWhiteSpace($BoundedTunnelName)
+  $TunnelPreflight = [ordered]@{
+    checked = $false
+    exists = $false
+    output_discarded = $true
+    content_read = $false
+  }
+  if ($OriginCertPresent -and $TunnelRequested -and [bool](Get-PropertyValue -Payload $Readiness -Name 'available' -Default $false)) {
+    $TunnelPreflight = Test-CloudflaredNamedTunnelExists -CloudflaredPath $CloudflaredPath -TunnelName $BoundedTunnelName
+  }
+  $TunnelExists = [bool](Get-PropertyValue -Payload $TunnelPreflight -Name 'exists' -Default $false)
   $Readiness['origin_cert_present'] = $OriginCertPresent
   $Readiness['origin_cert_source'] = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $OriginCert -Name 'source' -Default '') -MaxLength 160
   $Readiness['origin_cert_path'] = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $OriginCert -Name 'path' -Default '') -MaxLength 512
   $Readiness['origin_cert_content_read'] = $false
   $Readiness['login_required'] = -not $OriginCertPresent
-  $Readiness['next_operator_step'] = if ($OriginCertPresent) { 'create_or_start_cloudflared_named_tunnel' } else { 'run_cloudflared_tunnel_login' }
+  $Readiness['requested_tunnel_name'] = $BoundedTunnelName
+  $Readiness['requested_hostname'] = $BoundedHostname
+  $Readiness['named_tunnel_requested'] = $TunnelRequested
+  $Readiness['named_tunnel_exists'] = $TunnelExists
+  $Readiness['named_tunnel_preflight'] = $TunnelPreflight
+  $Readiness['operator_provider_setup_commands'] = if ($TunnelRequested -and -not $TunnelExists) {
+    @(
+      "cloudflared tunnel create $BoundedTunnelName",
+      "cloudflared tunnel route dns $BoundedTunnelName $BoundedHostname"
+    )
+  } else {
+    @()
+  }
+  $Readiness['next_operator_step'] = if (-not $OriginCertPresent) {
+    'run_cloudflared_tunnel_login'
+  } elseif ($TunnelRequested -and -not $TunnelExists) {
+    'create_cloudflared_named_tunnel_and_route_hostname'
+  } elseif ($TunnelRequested -and $TunnelExists) {
+    'start_cloudflared_named_tunnel'
+  } else {
+    'create_or_start_cloudflared_named_tunnel'
+  }
   return $Readiness
 }
 
@@ -322,6 +361,7 @@ function New-PersistentIngressOperatorHandoff {
     )
     governed_handoff_commands = [ordered]@{
       start_cloudflared_login = ".\scripts\chatgpt-voice-connector.ps1 -Mode StartCloudflaredLogin -AuthorizeCloudflaredLogin -Json"
+      plan_cloudflared_named = ".\scripts\chatgpt-voice-connector.ps1 -Mode PlanPersistentIngress -CloudflaredTunnelName `"francis`" -CloudflaredHostname `"YOUR-STABLE-HOST`" -Json"
       record_url = ".\scripts\chatgpt-voice-connector.ps1 -Mode RecordUrl -ConnectorUrl `"$StableUrl`" -Json"
       start_persistent_mcp = ".\scripts\chatgpt-voice-connector.ps1 -Mode StartPersistent -ConnectorUrl `"$StableUrl`" -VerifyConnector -Json"
       start_cloudflared_named = ".\scripts\chatgpt-voice-connector.ps1 -Mode StartCloudflaredNamed -CloudflaredTunnelName `"francis`" -CloudflaredHostname `"YOUR-STABLE-HOST`" -ExposePublicTunnel -VerifyConnector -Json"
@@ -334,7 +374,9 @@ function New-PersistentIngressOperatorHandoff {
 function New-PersistentIngressPlan {
   param(
     [object]$EndpointStatus,
-    [string]$ConnectorUrlSource = 'none'
+    [string]$ConnectorUrlSource = 'none',
+    [string]$CloudflaredTunnelName = '',
+    [string]$CloudflaredHostname = ''
   )
 
   $ConnectorShapeValid = [bool](Get-NestedPropertyValue -Payload $EndpointStatus -Path @('chatgpt_connector', 'connector_url', 'shape_valid') -Default $false)
@@ -382,7 +424,7 @@ function New-PersistentIngressPlan {
       status = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $EndpointStatus -Name 'status' -Default '') -MaxLength 96
     }
     provider_readiness = [ordered]@{
-      cloudflared_named_tunnel = Get-CloudflaredNamedTunnelReadiness
+      cloudflared_named_tunnel = Get-CloudflaredNamedTunnelReadiness -TunnelName $CloudflaredTunnelName -Hostname $CloudflaredHostname
       ngrok_reserved_domain = Get-CommandReadiness -Name 'ngrok' -Capability 'reserved_domain_https_tunnel'
       caddy_reverse_proxy = Get-CommandReadiness -Name 'caddy' -Capability 'persistent_https_reverse_proxy'
       ssh_reverse_tunnel = Get-CommandReadiness -Name 'ssh' -Capability 'stable_remote_reverse_tunnel_requires_external_host'
@@ -1069,7 +1111,7 @@ if ($Mode -eq 'PlanPersistentIngress') {
   $State = Read-State
   $Candidate = Resolve-ConnectorUrlCandidate -ExplicitConnectorUrl $ConnectorUrl -State $State
   $EndpointStatus = Invoke-EndpointStatus -ConnectorUrl ([string]$Candidate.url)
-  ConvertTo-JsonOutput -Payload (New-PersistentIngressPlan -EndpointStatus $EndpointStatus -ConnectorUrlSource ([string]$Candidate.source))
+  ConvertTo-JsonOutput -Payload (New-PersistentIngressPlan -EndpointStatus $EndpointStatus -ConnectorUrlSource ([string]$Candidate.source) -CloudflaredTunnelName $CloudflaredTunnelName -CloudflaredHostname $CloudflaredHostname)
   exit 0
 }
 

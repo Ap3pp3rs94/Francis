@@ -137,6 +137,8 @@ def test_chatgpt_voice_connector_plan_reuses_cloudflared_resolver_for_readiness(
     assert "function Get-CloudflaredNamedTunnelReadiness" in script
     assert "[string]$ResolvedPath = ''" in script
     assert "Get-CommandReadiness -Name 'cloudflared'" in script
+    assert "named_tunnel_preflight" in script
+    assert "create_cloudflared_named_tunnel_and_route_hostname" in script
     assert "origin_cert_content_read" in script
     assert "run_cloudflared_tunnel_login" in script
     assert "standard install location" in script
@@ -534,6 +536,8 @@ def test_chatgpt_voice_connector_plan_persistent_ingress_is_read_only(tmp_path: 
     assert payload["connector_url"]["reason"] == "connector_url_not_provided"
     assert "RecordUrl" in payload["connector_url"]["record_command"]
     assert payload["provider_readiness"]["cloudflared_named_tunnel"]["name"] == "cloudflared"
+    assert payload["provider_readiness"]["cloudflared_named_tunnel"]["named_tunnel_requested"] is False
+    assert payload["provider_readiness"]["cloudflared_named_tunnel"]["named_tunnel_preflight"]["checked"] is False
     assert payload["provider_readiness"]["ngrok_reserved_domain"]["name"] == "ngrok"
     assert payload["provider_readiness"]["caddy_reverse_proxy"]["name"] == "caddy"
     assert payload["provider_readiness"]["ssh_reverse_tunnel"]["name"] == "ssh"
@@ -560,6 +564,8 @@ def test_chatgpt_voice_connector_plan_persistent_ingress_is_read_only(tmp_path: 
     assert "cloudflared tunnel login" in handoff["cloudflared_named_tunnel_steps"][1]
     assert "StartCloudflaredLogin" in handoff["governed_handoff_commands"]["start_cloudflared_login"]
     assert "-AuthorizeCloudflaredLogin" in handoff["governed_handoff_commands"]["start_cloudflared_login"]
+    assert "PlanPersistentIngress" in handoff["governed_handoff_commands"]["plan_cloudflared_named"]
+    assert "CloudflaredTunnelName" in handoff["governed_handoff_commands"]["plan_cloudflared_named"]
     assert "RecordUrl" in handoff["governed_handoff_commands"]["record_url"]
     assert "StartPersistent" in handoff["governed_handoff_commands"]["start_persistent_mcp"]
     assert "StartCloudflaredNamed" in handoff["governed_handoff_commands"]["start_cloudflared_named"]
@@ -575,6 +581,69 @@ def test_chatgpt_voice_connector_plan_persistent_ingress_is_read_only(tmp_path: 
     assert payload["governance"]["opens_public_tunnel"] is False
     assert payload["governance"]["writes_data"] is False
     assert payload["governance"]["grants_execution_authority"] is False
+    assert not runtime_root.exists()
+
+
+def test_chatgpt_voice_connector_plan_persistent_ingress_preflights_named_tunnel_request(
+    tmp_path: Path,
+) -> None:
+    runtime_root = tmp_path / "connector-runtime"
+    fake_profile = tmp_path / "profile"
+    fake_bin = tmp_path / "bin"
+    fake_profile.mkdir()
+    fake_bin.mkdir()
+    fake_origin_cert = fake_profile / "cert.pem"
+    fake_origin_cert.write_text("fake test cert", encoding="utf-8")
+    fake_cloudflared = fake_bin / "cloudflared.cmd"
+    fake_cloudflared.write_text(
+        '@echo off\r\nif "%1"=="tunnel" if "%2"=="info" exit /b 1\r\nexit /b 0\r\n',
+        encoding="utf-8",
+    )
+    port = _unused_local_port()
+
+    proc = _run_connector_script(
+        "-Mode",
+        "PlanPersistentIngress",
+        "-Json",
+        "-RuntimeRoot",
+        str(runtime_root),
+        "-Port",
+        str(port),
+        "-CloudflaredTunnelName",
+        "francis",
+        "-CloudflaredHostname",
+        "francis.example.test",
+        env={
+            "PATH": f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}",
+            "USERPROFILE": str(fake_profile),
+            "TUNNEL_ORIGIN_CERT": str(fake_origin_cert),
+        },
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["kind"] == "francis.chatgpt_voice.persistent_ingress_plan"
+    cloudflared = payload["provider_readiness"]["cloudflared_named_tunnel"]
+    assert cloudflared["available"] is True
+    assert cloudflared["origin_cert_present"] is True
+    assert cloudflared["origin_cert_content_read"] is False
+    assert cloudflared["login_required"] is False
+    assert cloudflared["requested_tunnel_name"] == "francis"
+    assert cloudflared["requested_hostname"] == "francis.example.test"
+    assert cloudflared["named_tunnel_requested"] is True
+    assert cloudflared["named_tunnel_exists"] is False
+    assert cloudflared["named_tunnel_preflight"]["checked"] is True
+    assert cloudflared["named_tunnel_preflight"]["exists"] is False
+    assert cloudflared["named_tunnel_preflight"]["output_discarded"] is True
+    assert cloudflared["operator_provider_setup_commands"] == [
+        "cloudflared tunnel create francis",
+        "cloudflared tunnel route dns francis francis.example.test",
+    ]
+    assert cloudflared["next_operator_step"] == "create_cloudflared_named_tunnel_and_route_hostname"
+    assert payload["governance"]["read_only"] is True
+    assert payload["governance"]["starts_process"] is False
+    assert payload["governance"]["opens_public_tunnel"] is False
+    assert payload["governance"]["writes_data"] is False
     assert not runtime_root.exists()
 
 
