@@ -20,6 +20,8 @@ CHATGPT_VOICE_BRIDGE_HTTP_TRANSPORT = "http_api"
 CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TRANSPORT = "mcp_gateway_tool"
 CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TOOL = "francis.chatgpt_voice.ingress"
 CHATGPT_VOICE_BRIDGE_MCP_SERVER_TOOL = "francis_chatgpt_voice_ingress"
+CHATGPT_VOICE_BRIDGE_MCP_PROOF_GATEWAY_TOOL = "francis.chatgpt_voice.mcp_probe"
+CHATGPT_VOICE_BRIDGE_MCP_PROOF_SERVER_TOOL = "francis_chatgpt_voice_mcp_probe"
 CHATGPT_VOICE_BRIDGE_MCP_CLIENT_UNSPECIFIED = "mcp_client_unspecified"
 CHATGPT_VOICE_BRIDGE_CHATGPT_APP_VOICE_CLIENT = "chatgpt_app_voice"
 CHATGPT_VOICE_BRIDGE_VIRTUAL_TURN_STATE = "data/runtime/lens-overlay/voice-turn-status.json"
@@ -33,6 +35,11 @@ CHATGPT_VOICE_BRIDGE_MCP_INGRESS_DESCRIPTION = (
     "transcript guard reply. When this call is made by ChatGPT Voice, set `client_origin` to `chatgpt_app_voice`; "
     "the MCP server adapter also defaults to that value for ChatGPT voice calls. Do not answer locally, summarize, "
     "or invent a Francis reply."
+)
+CHATGPT_VOICE_BRIDGE_MCP_PROOF_DESCRIPTION = (
+    "Call this first when validating that ChatGPT can reach Francis over the MCP connector, especially when "
+    "ChatGPT Voice shows Transcript Unavailable. This records a connection-proof receipt only; it does not record "
+    "a user transcript, does not call the model, does not update a voice turn, and does not grant execution authority."
 )
 MAX_TRANSCRIPT_CHARS = 8000
 _TRANSCRIPT_UNAVAILABLE_MARKERS = {
@@ -218,12 +225,15 @@ def chatgpt_voice_bridge_contract(actor: str = "") -> dict[str, Any]:
         "surface": CHATGPT_VOICE_BRIDGE_VERSION,
         "routes": {
             "contract": route,
+            "mcp_proof": "/chatgpt-voice/mcp-proof",
             "ingress": "/chatgpt-voice/ingress",
             "receipts": "/chatgpt-voice/receipts",
             "chat_forward_target": "/chat/send",
         },
         "mcp_tools": {
             "contract": "francis.chatgpt_voice.contract",
+            "mcp_probe": CHATGPT_VOICE_BRIDGE_MCP_PROOF_GATEWAY_TOOL,
+            "server_mcp_probe": CHATGPT_VOICE_BRIDGE_MCP_PROOF_SERVER_TOOL,
             "ingress": CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TOOL,
             "server_ingress": CHATGPT_VOICE_BRIDGE_MCP_SERVER_TOOL,
             "receipts": "francis.chatgpt_voice.receipts",
@@ -234,6 +244,8 @@ def chatgpt_voice_bridge_contract(actor: str = "") -> dict[str, Any]:
             "mcp_gateway_transport": CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TRANSPORT,
             "mcp_gateway_tool": CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TOOL,
             "mcp_server_tool": CHATGPT_VOICE_BRIDGE_MCP_SERVER_TOOL,
+            "mcp_connection_proof_gateway_tool": CHATGPT_VOICE_BRIDGE_MCP_PROOF_GATEWAY_TOOL,
+            "mcp_connection_proof_server_tool": CHATGPT_VOICE_BRIDGE_MCP_PROOF_SERVER_TOOL,
         },
         "orb_voice_contract": {
             "francis_identity": "Francis",
@@ -262,12 +274,14 @@ def chatgpt_voice_bridge_contract(actor: str = "") -> dict[str, Any]:
             "use_llm_default": False,
         },
         "client_speech_contract": {
+            "call_mcp_probe_to_validate_connector": True,
             "call_ingress_for_every_voice_turn": True,
             "speak_only_top_level_reply": True,
             "transcript_unavailable_must_be_forwarded": True,
             "chatgpt_voice_must_set_client_origin": CHATGPT_VOICE_BRIDGE_CHATGPT_APP_VOICE_CLIENT,
             "mcp_server_default_client_origin": CHATGPT_VOICE_BRIDGE_CHATGPT_APP_VOICE_CLIENT,
             "local_fallback_answer_allowed": False,
+            "mcp_probe_description": CHATGPT_VOICE_BRIDGE_MCP_PROOF_DESCRIPTION,
             "description": CHATGPT_VOICE_BRIDGE_MCP_INGRESS_DESCRIPTION,
         },
         "chatgpt_app_boundary": {
@@ -645,6 +659,98 @@ def record_chatgpt_voice_ingress(
     }
 
 
+def record_chatgpt_voice_mcp_probe(
+    *,
+    actor: str = "",
+    source: str = "chatgpt.voice",
+    client_origin: str = "",
+    reason: str = "",
+    ingress_transport: str = CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TRANSPORT,
+    mcp_gateway_tool: str = CHATGPT_VOICE_BRIDGE_MCP_PROOF_GATEWAY_TOOL,
+    mcp_server_tool: str = CHATGPT_VOICE_BRIDGE_MCP_PROOF_SERVER_TOOL,
+) -> dict[str, Any]:
+    route = "/chatgpt-voice/mcp-proof"
+    clean_actor = _safe_str(actor) or "chatgpt.voice"
+    decision = _permission(clean_actor, required_scope=CHATGPT_VOICE_BRIDGE_WRITE_SCOPE, route=route, method="POST")
+    if not decision.allowed:
+        return _permission_denied(decision, kind=f"{CHATGPT_VOICE_BRIDGE_KIND}.mcp_proof")
+
+    clean_source = _bounded_text(source, max_chars=96) or "chatgpt.voice"
+    clean_ingress_transport = (
+        _bounded_text(ingress_transport, max_chars=64) or CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TRANSPORT
+    )
+    clean_mcp_gateway_tool = (
+        _bounded_text(mcp_gateway_tool, max_chars=96) or CHATGPT_VOICE_BRIDGE_MCP_PROOF_GATEWAY_TOOL
+    )
+    clean_mcp_server_tool = _bounded_text(mcp_server_tool, max_chars=96) or CHATGPT_VOICE_BRIDGE_MCP_PROOF_SERVER_TOOL
+    clean_client_origin = _bounded_text(client_origin, max_chars=96)
+    if not clean_client_origin:
+        if clean_source == "chatgpt.voice" and clean_mcp_server_tool == CHATGPT_VOICE_BRIDGE_MCP_PROOF_SERVER_TOOL:
+            clean_client_origin = CHATGPT_VOICE_BRIDGE_CHATGPT_APP_VOICE_CLIENT
+        elif clean_ingress_transport == CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TRANSPORT or clean_mcp_gateway_tool:
+            clean_client_origin = CHATGPT_VOICE_BRIDGE_MCP_CLIENT_UNSPECIFIED
+
+    reply = "Francis MCP voice bridge is reachable. No transcript was recorded."
+    orb_voice_bridge = {
+        "status": "mcp_connection_proof_recorded",
+        "virtual_voice_turn": False,
+        "francis_identity": "Francis",
+        "francis_surfaces": ["voice", "lens", "orb"],
+        "orb_role": "embodiment",
+        "orb_is_embodiment": True,
+        "voice_lens_orb_are_separate_identities": False,
+        "voice_lens_orb_are_francis_surfaces": True,
+        "client_origin": clean_client_origin,
+        "mcp_ingress": True,
+        "mcp_connection_proof": True,
+        "local_overlay_speech_started": False,
+        "microphone_recognition_claimed": False,
+        "raw_audio": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+    }
+    receipt = _write_receipt(
+        {
+            "actor": clean_actor,
+            "source": clean_source,
+            "client_origin": clean_client_origin,
+            "ingress_transport": clean_ingress_transport,
+            "mcp_gateway_tool": clean_mcp_gateway_tool,
+            "mcp_server_tool": clean_mcp_server_tool,
+            "decision": "recorded",
+            "proof_kind": "mcp_connection",
+            "reason": _bounded_text(reason, max_chars=160),
+            "transcript": "",
+            "transcript_char_count": 0,
+            "transcript_truncated": False,
+            "chat_forward_requested": False,
+            "chat_forwarded": False,
+            "chat_forward_status": "not_requested",
+            "chat_forward_error": "",
+            "reply": reply,
+            "reply_source": "bridge.mcp_connection_proof",
+            "orb_voice_bridge": orb_voice_bridge,
+        }
+    )
+    return {
+        "kind": f"{CHATGPT_VOICE_BRIDGE_KIND}.mcp_proof",
+        "ok": True,
+        "status": "recorded",
+        "reply": reply,
+        "voice_response": _voice_response(text=reply, source="bridge.mcp_connection_proof"),
+        "receipt": receipt,
+        "chat_forward": {
+            "requested": False,
+            "forwarded": False,
+            "status": "not_requested",
+            "error": "",
+            "response": {},
+        },
+        "orb_voice_bridge": orb_voice_bridge,
+        "governance": _honesty(read_only=False, writes_receipt=True),
+    }
+
+
 def chatgpt_voice_bridge_receipts(actor: str = "", *, limit: int = 10) -> dict[str, Any]:
     route = "/chatgpt-voice/receipts"
     clean_actor = _safe_str(actor)
@@ -679,10 +785,14 @@ __all__ = [
     "CHATGPT_VOICE_BRIDGE_MCP_INGRESS_DESCRIPTION",
     "CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TOOL",
     "CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TRANSPORT",
+    "CHATGPT_VOICE_BRIDGE_MCP_PROOF_DESCRIPTION",
+    "CHATGPT_VOICE_BRIDGE_MCP_PROOF_GATEWAY_TOOL",
+    "CHATGPT_VOICE_BRIDGE_MCP_PROOF_SERVER_TOOL",
     "CHATGPT_VOICE_BRIDGE_MCP_SERVER_TOOL",
     "CHATGPT_VOICE_BRIDGE_READ_SCOPE",
     "CHATGPT_VOICE_BRIDGE_WRITE_SCOPE",
     "chatgpt_voice_bridge_contract",
     "chatgpt_voice_bridge_receipts",
     "record_chatgpt_voice_ingress",
+    "record_chatgpt_voice_mcp_probe",
 ]

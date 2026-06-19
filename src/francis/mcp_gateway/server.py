@@ -8,6 +8,9 @@ from francis.chatgpt_voice_bridge import (
     CHATGPT_VOICE_BRIDGE_MCP_INGRESS_DESCRIPTION,
     CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TOOL,
     CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TRANSPORT,
+    CHATGPT_VOICE_BRIDGE_MCP_PROOF_DESCRIPTION,
+    CHATGPT_VOICE_BRIDGE_MCP_PROOF_GATEWAY_TOOL,
+    CHATGPT_VOICE_BRIDGE_MCP_PROOF_SERVER_TOOL,
     CHATGPT_VOICE_BRIDGE_MCP_SERVER_TOOL,
 )
 
@@ -71,6 +74,24 @@ def _chatgpt_voice_ingress_args(
         "ingress_transport": CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TRANSPORT,
         "mcp_gateway_tool": CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TOOL,
         "mcp_server_tool": CHATGPT_VOICE_BRIDGE_MCP_SERVER_TOOL,
+    }
+
+
+def _chatgpt_voice_mcp_probe_args(
+    *,
+    actor: str = "chatgpt.voice",
+    source: str = "chatgpt.voice",
+    client_origin: str | None = CHATGPT_VOICE_BRIDGE_CHATGPT_APP_VOICE_CLIENT,
+    reason: str = "chatgpt_voice_mcp_connector_validation",
+) -> dict[str, Any]:
+    return {
+        "actor": actor,
+        "source": source,
+        "client_origin": client_origin or CHATGPT_VOICE_BRIDGE_CHATGPT_APP_VOICE_CLIENT,
+        "reason": reason,
+        "ingress_transport": CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TRANSPORT,
+        "mcp_gateway_tool": CHATGPT_VOICE_BRIDGE_MCP_PROOF_GATEWAY_TOOL,
+        "mcp_server_tool": CHATGPT_VOICE_BRIDGE_MCP_PROOF_SERVER_TOOL,
     }
 
 
@@ -348,6 +369,33 @@ def run_server(
                     client_origin=client_origin,
                     forward_to_chat=forward_to_chat,
                     use_llm=use_llm,
+                ),
+            )
+        )
+
+    @server.tool(
+        name="francis_chatgpt_voice_mcp_probe",
+        title="Validate Francis voice MCP connection",
+        description=CHATGPT_VOICE_BRIDGE_MCP_PROOF_DESCRIPTION,
+        annotations=ToolAnnotations(
+            readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False
+        ),
+    )
+    def francis_chatgpt_voice_mcp_probe(
+        actor: str = "chatgpt.voice",
+        source: str = "chatgpt.voice",
+        client_origin: str = CHATGPT_VOICE_BRIDGE_CHATGPT_APP_VOICE_CLIENT,
+        reason: str = "chatgpt_voice_mcp_connector_validation",
+    ) -> str:
+        """Record that the ChatGPT MCP connector reached Francis without recording transcript text."""
+        return _chatgpt_voice_tool_payload(
+            run_tool(
+                "francis.chatgpt_voice.mcp_probe",
+                _chatgpt_voice_mcp_probe_args(
+                    actor=actor,
+                    source=source,
+                    client_origin=client_origin,
+                    reason=reason,
                 ),
             )
         )

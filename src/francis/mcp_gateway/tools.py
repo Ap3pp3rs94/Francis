@@ -9,7 +9,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Callable
 
-from francis.chatgpt_voice_bridge import CHATGPT_VOICE_BRIDGE_MCP_INGRESS_DESCRIPTION
+from francis.chatgpt_voice_bridge import (
+    CHATGPT_VOICE_BRIDGE_MCP_INGRESS_DESCRIPTION,
+    CHATGPT_VOICE_BRIDGE_MCP_PROOF_DESCRIPTION,
+)
 from francis.kernel.paths import repo_root
 
 from .contracts import McpGatewayError, ToolResult, ToolSpec
@@ -642,6 +645,33 @@ def _chatgpt_voice_ingress(args: dict[str, Any]) -> ToolResult:
     )
 
 
+def _chatgpt_voice_mcp_probe(args: dict[str, Any]) -> ToolResult:
+    from francis.chatgpt_voice_bridge import (
+        CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TRANSPORT,
+        CHATGPT_VOICE_BRIDGE_MCP_PROOF_GATEWAY_TOOL,
+        CHATGPT_VOICE_BRIDGE_MCP_PROOF_SERVER_TOOL,
+        record_chatgpt_voice_mcp_probe,
+    )
+
+    result = record_chatgpt_voice_mcp_probe(
+        actor=_clean_text(args.get("actor"), "chatgpt.voice"),
+        source=_clean_text(args.get("source"), "chatgpt.voice"),
+        client_origin=_clean_text(args.get("client_origin")),
+        reason=_clean_text(args.get("reason")),
+        ingress_transport=_clean_text(args.get("ingress_transport"), CHATGPT_VOICE_BRIDGE_MCP_GATEWAY_TRANSPORT),
+        mcp_gateway_tool=_clean_text(args.get("mcp_gateway_tool"), CHATGPT_VOICE_BRIDGE_MCP_PROOF_GATEWAY_TOOL),
+        mcp_server_tool=_clean_text(args.get("mcp_server_tool"), CHATGPT_VOICE_BRIDGE_MCP_PROOF_SERVER_TOOL),
+    )
+    return ToolResult(
+        ok=bool(result.get("ok")),
+        status=_clean_text(result.get("status"), "recorded"),
+        tool="francis.chatgpt_voice.mcp_probe",
+        data=result,
+        governance=_safe_dict(result.get("governance")),
+        error=_clean_text(result.get("error")) or None,
+    )
+
+
 def _chatgpt_voice_receipts(args: dict[str, Any]) -> ToolResult:
     from francis.chatgpt_voice_bridge import chatgpt_voice_bridge_receipts
 
@@ -724,6 +754,11 @@ _TOOL_SPECS = [
         read_only=False,
     ),
     ToolSpec(
+        "francis.chatgpt_voice.mcp_probe",
+        CHATGPT_VOICE_BRIDGE_MCP_PROOF_DESCRIPTION,
+        read_only=False,
+    ),
+    ToolSpec(
         "francis.chatgpt_voice.receipts",
         "Read ChatGPT voice bridge ingress receipts.",
         read_only=True,
@@ -751,6 +786,7 @@ _TOOL_HANDLERS: dict[str, Callable[[dict[str, Any]], ToolResult]] = {
     "francis.handoff.audit": _handoff_audit,
     "francis.chatgpt_voice.contract": _chatgpt_voice_contract,
     "francis.chatgpt_voice.ingress": _chatgpt_voice_ingress,
+    "francis.chatgpt_voice.mcp_probe": _chatgpt_voice_mcp_probe,
     "francis.chatgpt_voice.receipts": _chatgpt_voice_receipts,
 }
 

@@ -506,8 +506,17 @@ function New-ChatGptMcpReceiptProof {
       [string](Get-PropertyValue -Payload $_ -Name 'mcp_server_tool' -Default '') -eq 'francis_chatgpt_voice_ingress'
     }
   )
+  $AnyMcpProbeReceipts = @(
+    $Receipts | Where-Object {
+      [string](Get-PropertyValue -Payload $_ -Name 'ingress_transport' -Default '') -eq 'mcp_gateway_tool' -and
+      [string](Get-PropertyValue -Payload $_ -Name 'mcp_gateway_tool' -Default '') -eq 'francis.chatgpt_voice.mcp_probe' -and
+      [string](Get-PropertyValue -Payload $_ -Name 'mcp_server_tool' -Default '') -eq 'francis_chatgpt_voice_mcp_probe'
+    }
+  )
   $FreshAnyMcpServerReceipts = @($AnyMcpServerReceipts | Where-Object { (Get-ReceiptAgeSeconds -Receipt $_) -le $FreshnessSeconds })
+  $FreshAnyMcpProbeReceipts = @($AnyMcpProbeReceipts | Where-Object { (Get-ReceiptAgeSeconds -Receipt $_) -le $FreshnessSeconds })
   $LatestAnyMcp = if (@($AnyMcpServerReceipts).Count -gt 0) { $AnyMcpServerReceipts[0] } else { $null }
+  $LatestAnyMcpProbe = if (@($AnyMcpProbeReceipts).Count -gt 0) { $AnyMcpProbeReceipts[0] } else { $null }
   $ChatGptSourceReceipts = @(
     $Receipts | Where-Object {
       [string](Get-PropertyValue -Payload $_ -Name 'actor' -Default '') -eq 'chatgpt.voice' -and
@@ -521,6 +530,13 @@ function New-ChatGptMcpReceiptProof {
       [string](Get-PropertyValue -Payload $_ -Name 'mcp_server_tool' -Default '') -eq 'francis_chatgpt_voice_ingress'
     }
   )
+  $McpProbeReceipts = @(
+    $ChatGptSourceReceipts | Where-Object {
+      [string](Get-PropertyValue -Payload $_ -Name 'ingress_transport' -Default '') -eq 'mcp_gateway_tool' -and
+      [string](Get-PropertyValue -Payload $_ -Name 'mcp_gateway_tool' -Default '') -eq 'francis.chatgpt_voice.mcp_probe' -and
+      [string](Get-PropertyValue -Payload $_ -Name 'mcp_server_tool' -Default '') -eq 'francis_chatgpt_voice_mcp_probe'
+    }
+  )
   $UsableMcpServerReceipts = @(
     $McpServerReceipts | Where-Object {
       [string](Get-PropertyValue -Payload $_ -Name 'decision' -Default '') -eq 'recorded' -and
@@ -530,9 +546,14 @@ function New-ChatGptMcpReceiptProof {
     }
   )
   $FreshMcpServerReceipts = @($McpServerReceipts | Where-Object { (Get-ReceiptAgeSeconds -Receipt $_) -le $FreshnessSeconds })
+  $FreshMcpProbeReceipts = @($McpProbeReceipts | Where-Object { (Get-ReceiptAgeSeconds -Receipt $_) -le $FreshnessSeconds })
+  $McpConnectionProofReceipts = @($McpServerReceipts + $McpProbeReceipts)
+  $FreshMcpConnectionProofReceipts = @($McpConnectionProofReceipts | Where-Object { (Get-ReceiptAgeSeconds -Receipt $_) -le $FreshnessSeconds })
   $FreshUsableMcpServerReceipts = @($UsableMcpServerReceipts | Where-Object { (Get-ReceiptAgeSeconds -Receipt $_) -le $FreshnessSeconds })
   $LatestChatGpt = if (@($ChatGptSourceReceipts).Count -gt 0) { $ChatGptSourceReceipts[0] } else { $null }
   $LatestMcp = if (@($McpServerReceipts).Count -gt 0) { $McpServerReceipts[0] } else { $null }
+  $LatestMcpProbe = if (@($McpProbeReceipts).Count -gt 0) { $McpProbeReceipts[0] } else { $null }
+  $LatestFreshMcpConnectionProof = if (@($FreshMcpConnectionProofReceipts).Count -gt 0) { $FreshMcpConnectionProofReceipts[0] } else { $null }
   $LatestFreshUsableMcp = if (@($FreshUsableMcpServerReceipts).Count -gt 0) { $FreshUsableMcpServerReceipts[0] } else { $null }
   $LatestMcpTranscriptUnavailable = (
     $null -ne $LatestMcp -and (
@@ -542,10 +563,14 @@ function New-ChatGptMcpReceiptProof {
   )
   $Status = if ($null -ne $LatestFreshUsableMcp) {
     'fresh_usable_mcp_tool_receipt_observed'
-  } elseif (@($UsableMcpServerReceipts).Count -gt 0) {
-    'stale_mcp_tool_receipt_only'
   } elseif ($LatestMcpTranscriptUnavailable) {
     'latest_mcp_tool_receipt_transcript_unavailable'
+  } elseif ($null -ne $LatestFreshMcpConnectionProof) {
+    'fresh_mcp_connection_proof_observed'
+  } elseif (@($UsableMcpServerReceipts).Count -gt 0) {
+    'stale_mcp_tool_receipt_only'
+  } elseif (@($McpConnectionProofReceipts).Count -gt 0) {
+    'stale_mcp_connection_proof_only'
   } elseif (@($McpServerReceipts).Count -gt 0) {
     'mcp_tool_receipt_not_usable'
   } elseif (@($ChatGptSourceReceipts).Count -gt 0) {
@@ -559,15 +584,21 @@ function New-ChatGptMcpReceiptProof {
     'trigger_fresh_chatgpt_app_mcp_tool_call'
   } elseif ($Status -eq 'latest_mcp_tool_receipt_transcript_unavailable') {
     'repeat_chatgpt_voice_turn_until_transcript_is_available'
+  } elseif ($Status -eq 'fresh_mcp_connection_proof_observed') {
+    'trigger_chatgpt_voice_app_turn_with_usable_transcript'
+  } elseif ($Status -eq 'stale_mcp_connection_proof_only') {
+    'trigger_fresh_chatgpt_mcp_connection_probe_or_voice_turn'
   } elseif ($Status -eq 'chatgpt_source_without_mcp_tool_receipt') {
     'select_francis_mcp_connector_in_chatgpt_and_trigger_voice_turn'
   } else {
-    'trigger_chatgpt_voice_app_turn_and_confirm_mcp_tool_receipt'
+    'call_francis_chatgpt_voice_mcp_probe_from_chatgpt_connector'
   }
 
   return [ordered]@{
     status = $Status
     proof_observed = ($null -ne $LatestFreshUsableMcp)
+    mcp_connection_proof_observed = ($null -ne $LatestFreshMcpConnectionProof)
+    mcp_connection_proof_status = if ($null -ne $LatestFreshMcpConnectionProof) { 'fresh_observed' } elseif (@($McpConnectionProofReceipts).Count -gt 0) { 'stale_only' } else { 'missing' }
     freshness_window_seconds = $FreshnessSeconds
     chatgpt_source_receipt_count = @($ChatGptSourceReceipts).Count
     any_mcp_server_receipt_count = @($AnyMcpServerReceipts).Count
@@ -575,12 +606,24 @@ function New-ChatGptMcpReceiptProof {
     latest_any_mcp_server_receipt_id = Get-ReceiptId -Receipt $LatestAnyMcp
     latest_any_mcp_server_receipt_source = if ($null -ne $LatestAnyMcp) { [string](Get-PropertyValue -Payload $LatestAnyMcp -Name 'source' -Default '') } else { '' }
     latest_any_mcp_server_receipt_client_origin = if ($null -ne $LatestAnyMcp) { [string](Get-PropertyValue -Payload $LatestAnyMcp -Name 'client_origin' -Default '') } else { '' }
+    any_mcp_probe_receipt_count = @($AnyMcpProbeReceipts).Count
+    fresh_any_mcp_probe_receipt_count = @($FreshAnyMcpProbeReceipts).Count
+    latest_any_mcp_probe_receipt_id = Get-ReceiptId -Receipt $LatestAnyMcpProbe
+    latest_any_mcp_probe_receipt_source = if ($null -ne $LatestAnyMcpProbe) { [string](Get-PropertyValue -Payload $LatestAnyMcpProbe -Name 'source' -Default '') } else { '' }
+    latest_any_mcp_probe_receipt_client_origin = if ($null -ne $LatestAnyMcpProbe) { [string](Get-PropertyValue -Payload $LatestAnyMcpProbe -Name 'client_origin' -Default '') } else { '' }
     mcp_server_receipt_count = @($McpServerReceipts).Count
+    mcp_probe_receipt_count = @($McpProbeReceipts).Count
+    fresh_mcp_probe_receipt_count = @($FreshMcpProbeReceipts).Count
+    mcp_connection_proof_receipt_count = @($McpConnectionProofReceipts).Count
+    fresh_mcp_connection_proof_receipt_count = @($FreshMcpConnectionProofReceipts).Count
     usable_mcp_server_receipt_count = @($UsableMcpServerReceipts).Count
     fresh_mcp_server_receipt_count = @($FreshMcpServerReceipts).Count
     fresh_usable_mcp_server_receipt_count = @($FreshUsableMcpServerReceipts).Count
     latest_chatgpt_source_receipt_id = Get-ReceiptId -Receipt $LatestChatGpt
     latest_mcp_server_receipt_id = Get-ReceiptId -Receipt $LatestMcp
+    latest_mcp_probe_receipt_id = Get-ReceiptId -Receipt $LatestMcpProbe
+    latest_mcp_connection_proof_receipt_id = Get-ReceiptId -Receipt $LatestFreshMcpConnectionProof
+    latest_mcp_connection_proof_tool = if ($null -ne $LatestFreshMcpConnectionProof) { [string](Get-PropertyValue -Payload $LatestFreshMcpConnectionProof -Name 'mcp_server_tool' -Default '') } else { '' }
     latest_fresh_usable_mcp_server_receipt_id = Get-ReceiptId -Receipt $LatestFreshUsableMcp
     latest_mcp_server_receipt_age_seconds = if ($null -ne $LatestMcp) { Get-ReceiptAgeSeconds -Receipt $LatestMcp } else { $null }
     latest_mcp_transcript_unavailable = [bool]$LatestMcpTranscriptUnavailable
@@ -591,6 +634,8 @@ function New-ChatGptMcpReceiptProof {
     required_ingress_transport = 'mcp_gateway_tool'
     required_mcp_gateway_tool = 'francis.chatgpt_voice.ingress'
     required_mcp_server_tool = 'francis_chatgpt_voice_ingress'
+    required_mcp_probe_gateway_tool = 'francis.chatgpt_voice.mcp_probe'
+    required_mcp_probe_server_tool = 'francis_chatgpt_voice_mcp_probe'
     next_operator_step = $NextStep
     grants_execution_authority = $false
     grants_mutation_authority = $false
@@ -1070,16 +1115,16 @@ function New-CommandPaletteMonitorProbe {
     $LatestReceiptDenied = [bool](Get-PropertyValue -Payload $VoiceMonitor -Name 'latest_receipt_denied' -Default $false)
     $DeniedRecentReceiptCount = [int](Get-PropertyValue -Payload $VoiceMonitor -Name 'denied_recent_receipt_count' -Default 0)
     $McpProof = Get-PropertyValue -Payload $VoiceMonitor -Name 'chatgpt_mcp_proof'
-    $McpProofObserved = [bool](Get-PropertyValue -Payload $McpProof -Name 'proof_observed' -Default $false)
-    $McpProofStatus = [string](Get-PropertyValue -Payload $McpProof -Name 'status' -Default 'not_checked')
-    $McpProofReceiptId = [string](Get-PropertyValue -Payload $McpProof -Name 'latest_fresh_usable_mcp_server_receipt_id' -Default '')
+    $McpConnectionProofObserved = [bool](Get-PropertyValue -Payload $McpProof -Name 'mcp_connection_proof_observed' -Default $false)
+    $McpConnectionProofStatus = [string](Get-PropertyValue -Payload $McpProof -Name 'mcp_connection_proof_status' -Default (Get-PropertyValue -Payload $McpProof -Name 'status' -Default 'not_checked'))
+    $McpConnectionProofReceiptId = [string](Get-PropertyValue -Payload $McpProof -Name 'latest_mcp_connection_proof_receipt_id' -Default '')
     [void]$Checks.Add((New-MonitorCheck -Id 'voice_overlay_readback' -Passed $VoiceReadbackOk -Status $(if ($VoiceReadbackOk) { 'readback_ready' } else { 'readback_failed' }) -Evidence 'scripts/lens-overlay-window.ps1 -Mode Status'))
     [void]$Checks.Add((New-MonitorCheck -Id 'voice_overlay_runtime' -Passed ($VoiceReadbackOk -and $VoiceOverlayReady) -Status $(if ($VoiceReadbackOk -and $VoiceOverlayReady) { 'visible' } else { 'overlay_not_ready' }) -Evidence $(if ([string]::IsNullOrWhiteSpace($VoiceOverlayStatus)) { 'overlay_status_missing' } else { $VoiceOverlayStatus })))
     [void]$Checks.Add((New-MonitorCheck -Id 'voice_provider_readiness' -Passed $VoiceProviderReady -Status $(if ($VoiceProviderReady) { 'configured' } else { 'not_configured' }) -Evidence ([string](Get-PropertyValue -Payload $VoiceMonitor -Name 'selected_provider' -Default ''))))
     [void]$Checks.Add((New-MonitorCheck -Id 'voice_francis_identity' -Passed ($VoiceIdentityOk -and -not $GenericVoiceLabelObserved) -Status $(if ($VoiceIdentityOk -and -not $GenericVoiceLabelObserved) { 'francis_voice_identity_ready' } else { 'identity_drift' }) -Evidence ([string](Get-PropertyValue -Payload $VoiceMonitor -Name 'selected_voice' -Default ''))))
     [void]$Checks.Add((New-MonitorCheck -Id 'voice_chat_bridge_denials' -Passed ((-not $VoicePermissionDenied) -and (-not $LatestReceiptDenied)) -Status $(if ((-not $VoicePermissionDenied) -and (-not $LatestReceiptDenied)) { 'latest_receipt_clean' } else { 'denial_observed' }) -Evidence ("latest_denied={0} recent_denied={1}" -f $LatestReceiptDenied, $DeniedRecentReceiptCount)))
     if ($RequireMcpProof) {
-      [void]$Checks.Add((New-MonitorCheck -Id 'voice_chatgpt_mcp_tool_proof' -Passed $McpProofObserved -Status $McpProofStatus -Evidence $(if ([string]::IsNullOrWhiteSpace($McpProofReceiptId)) { 'no_fresh_usable_mcp_receipt' } else { $McpProofReceiptId })))
+      [void]$Checks.Add((New-MonitorCheck -Id 'voice_chatgpt_mcp_tool_proof' -Passed $McpConnectionProofObserved -Status $McpConnectionProofStatus -Evidence $(if ([string]::IsNullOrWhiteSpace($McpConnectionProofReceiptId)) { 'no_fresh_mcp_connection_receipt' } else { $McpConnectionProofReceiptId })))
     }
   }
   if ($ConnectorChecksEnabled) {

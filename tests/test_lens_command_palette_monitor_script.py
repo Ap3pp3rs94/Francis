@@ -415,10 +415,76 @@ def test_lens_command_palette_monitor_can_require_chatgpt_mcp_proof(tmp_path: Pa
     assert payload["status"] == "anomaly"
     assert payload["voice_monitor"]["chatgpt_mcp_proof"]["status"] == "awaiting_chatgpt_mcp_tool_call"
     assert payload["voice_monitor"]["chatgpt_mcp_proof"]["proof_observed"] is False
+    assert payload["voice_monitor"]["chatgpt_mcp_proof"]["mcp_connection_proof_observed"] is False
     assert "voice_chatgpt_mcp_tool_proof" in {item["id"] for item in payload["anomalies"]}
     checks = {item["id"]: item for item in payload["checks"]}
-    assert checks["voice_chatgpt_mcp_tool_proof"]["status"] == "awaiting_chatgpt_mcp_tool_call"
-    assert checks["voice_chatgpt_mcp_tool_proof"]["evidence"] == "no_fresh_usable_mcp_receipt"
+    assert checks["voice_chatgpt_mcp_tool_proof"]["status"] == "missing"
+    assert checks["voice_chatgpt_mcp_tool_proof"]["evidence"] == "no_fresh_mcp_connection_receipt"
+
+
+def test_lens_command_palette_monitor_counts_chatgpt_mcp_probe_as_connection_proof(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    status_path = tmp_path / "lens-status.json"
+    _write_json(status_path, _lens_status())
+    _write_overlay_voice_runtime(data_dir)
+    receipt_dir = data_dir / "integrations" / "chatgpt_voice" / "receipts"
+    _write_json(
+        receipt_dir / "chatgpt-voice-recorded-probe.json",
+        {
+            "kind": "francis.chatgpt_voice.bridge.receipt",
+            "receipt_id": "chatgpt-voice-recorded-probe",
+            "actor": "chatgpt.voice",
+            "source": "chatgpt.voice",
+            "client_origin": "chatgpt_app_voice",
+            "ingress_transport": "mcp_gateway_tool",
+            "mcp_gateway_tool": "francis.chatgpt_voice.mcp_probe",
+            "mcp_server_tool": "francis_chatgpt_voice_mcp_probe",
+            "proof_kind": "mcp_connection",
+            "decision": "recorded",
+            "chat_forward_status": "not_requested",
+            "chat_forward_error": "",
+            "chat_forwarded": False,
+            "transcript": "",
+            "transcript_char_count": 0,
+            "reply": "Francis MCP voice bridge is reachable. No transcript was recorded.",
+            "reply_source": "bridge.mcp_connection_proof",
+        },
+    )
+
+    with _LocalCommandPaletteServer() as url:
+        proc = _run_monitor(
+            "-Mode",
+            "Probe",
+            "-DataDir",
+            str(data_dir),
+            "-CommandPaletteUrl",
+            url,
+            "-LensStatusPath",
+            str(status_path),
+            "-EnableVoiceChecks",
+            "-VoiceProvider",
+            "ElevenLabs",
+            "-RequireChatGptMcpProof",
+            "-TimeoutSeconds",
+            "3",
+        )
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = _json_stdout(proc.stdout)
+    assert payload["status"] == "healthy"
+    proof = payload["voice_monitor"]["chatgpt_mcp_proof"]
+    assert proof["status"] == "fresh_mcp_connection_proof_observed"
+    assert proof["proof_observed"] is False
+    assert proof["mcp_connection_proof_observed"] is True
+    assert proof["mcp_probe_receipt_count"] == 1
+    assert proof["fresh_mcp_probe_receipt_count"] == 1
+    assert proof["latest_mcp_connection_proof_receipt_id"] == "chatgpt-voice-recorded-probe"
+    assert proof["latest_mcp_connection_proof_tool"] == "francis_chatgpt_voice_mcp_probe"
+    checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["voice_chatgpt_mcp_tool_proof"]["passed"] is True
+    assert checks["voice_chatgpt_mcp_tool_proof"]["status"] == "fresh_observed"
+    summary = json.dumps(proof)
+    assert "No transcript was recorded" not in summary
 
 
 def test_lens_command_palette_monitor_flags_missing_overlay_runtime(tmp_path: Path) -> None:
@@ -505,6 +571,7 @@ def test_lens_command_palette_monitor_reports_non_chatgpt_mcp_receipt_without_pr
     proof = payload["voice_monitor"]["chatgpt_mcp_proof"]
     assert proof["status"] == "awaiting_chatgpt_mcp_tool_call"
     assert proof["proof_observed"] is False
+    assert proof["mcp_connection_proof_observed"] is False
     assert proof["chatgpt_source_receipt_count"] == 0
     assert proof["mcp_server_receipt_count"] == 0
     assert proof["any_mcp_server_receipt_count"] == 1
@@ -513,7 +580,8 @@ def test_lens_command_palette_monitor_reports_non_chatgpt_mcp_receipt_without_pr
     assert proof["latest_any_mcp_server_receipt_source"] == "local.mcp.selftest"
     assert proof["latest_any_mcp_server_receipt_client_origin"] == "codex_live_mcp_selftest"
     checks = {item["id"]: item for item in payload["checks"]}
-    assert checks["voice_chatgpt_mcp_tool_proof"]["status"] == "awaiting_chatgpt_mcp_tool_call"
+    assert checks["voice_chatgpt_mcp_tool_proof"]["status"] == "missing"
+    assert checks["voice_chatgpt_mcp_tool_proof"]["evidence"] == "no_fresh_mcp_connection_receipt"
     summary = json.dumps(payload["voice_monitor"]["chatgpt_mcp_proof"])
     assert "self-test transcript must stay out" not in summary
 
@@ -580,7 +648,7 @@ def test_lens_command_palette_monitor_records_fresh_chatgpt_mcp_proof(tmp_path: 
     assert proof["latest_fresh_usable_mcp_server_receipt_id"] == "chatgpt-voice-recorded-mcp-test"
     assert proof["required_mcp_server_tool"] == "francis_chatgpt_voice_ingress"
     checks = {item["id"]: item for item in payload["checks"]}
-    assert checks["voice_chatgpt_mcp_tool_proof"]["status"] == "fresh_usable_mcp_tool_receipt_observed"
+    assert checks["voice_chatgpt_mcp_tool_proof"]["status"] == "fresh_observed"
     summary = json.dumps(payload["voice_monitor"]["chatgpt_mcp_proof"])
     assert "proof transcript must stay out" not in summary
 

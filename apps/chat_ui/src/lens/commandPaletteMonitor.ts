@@ -8,17 +8,31 @@ export type CommandPaletteMonitorCheck = {
 export type ChatGptMcpProof = {
   status: string;
   proof_observed: boolean;
+  mcp_connection_proof_observed: boolean;
+  mcp_connection_proof_status: string;
   chatgpt_source_receipt_count: number;
   any_mcp_server_receipt_count: number;
   fresh_any_mcp_server_receipt_count: number;
   latest_any_mcp_server_receipt_id: string;
   latest_any_mcp_server_receipt_source: string;
   latest_any_mcp_server_receipt_client_origin: string;
+  any_mcp_probe_receipt_count: number;
+  fresh_any_mcp_probe_receipt_count: number;
+  latest_any_mcp_probe_receipt_id: string;
+  latest_any_mcp_probe_receipt_source: string;
+  latest_any_mcp_probe_receipt_client_origin: string;
   mcp_server_receipt_count: number;
+  mcp_probe_receipt_count: number;
+  fresh_mcp_probe_receipt_count: number;
+  mcp_connection_proof_receipt_count: number;
+  fresh_mcp_connection_proof_receipt_count: number;
   usable_mcp_server_receipt_count: number;
   fresh_usable_mcp_server_receipt_count: number;
   latest_chatgpt_source_receipt_id: string;
   latest_mcp_server_receipt_id: string;
+  latest_mcp_probe_receipt_id: string;
+  latest_mcp_connection_proof_receipt_id: string;
+  latest_mcp_connection_proof_tool: string;
   latest_fresh_usable_mcp_server_receipt_id: string;
   latest_mcp_transcript_unavailable: boolean;
   transcript_redacted_from_summary: boolean;
@@ -27,6 +41,8 @@ export type ChatGptMcpProof = {
   required_ingress_transport: string;
   required_mcp_gateway_tool: string;
   required_mcp_server_tool: string;
+  required_mcp_probe_gateway_tool: string;
+  required_mcp_probe_server_tool: string;
   next_operator_step: string;
   grants_execution_authority: boolean;
   grants_mutation_authority: boolean;
@@ -216,17 +232,31 @@ function parseMcpProof(value: unknown): ChatGptMcpProof {
   return {
     status: safeString(raw["status"]) || "not_checked",
     proof_observed: safeBoolean(raw["proof_observed"]),
+    mcp_connection_proof_observed: safeBoolean(raw["mcp_connection_proof_observed"]),
+    mcp_connection_proof_status: safeString(raw["mcp_connection_proof_status"]) || "missing",
     chatgpt_source_receipt_count: safeNumber(raw["chatgpt_source_receipt_count"]),
     any_mcp_server_receipt_count: safeNumber(raw["any_mcp_server_receipt_count"]),
     fresh_any_mcp_server_receipt_count: safeNumber(raw["fresh_any_mcp_server_receipt_count"]),
     latest_any_mcp_server_receipt_id: safeString(raw["latest_any_mcp_server_receipt_id"]),
     latest_any_mcp_server_receipt_source: safeString(raw["latest_any_mcp_server_receipt_source"]),
     latest_any_mcp_server_receipt_client_origin: safeString(raw["latest_any_mcp_server_receipt_client_origin"]),
+    any_mcp_probe_receipt_count: safeNumber(raw["any_mcp_probe_receipt_count"]),
+    fresh_any_mcp_probe_receipt_count: safeNumber(raw["fresh_any_mcp_probe_receipt_count"]),
+    latest_any_mcp_probe_receipt_id: safeString(raw["latest_any_mcp_probe_receipt_id"]),
+    latest_any_mcp_probe_receipt_source: safeString(raw["latest_any_mcp_probe_receipt_source"]),
+    latest_any_mcp_probe_receipt_client_origin: safeString(raw["latest_any_mcp_probe_receipt_client_origin"]),
     mcp_server_receipt_count: safeNumber(raw["mcp_server_receipt_count"]),
+    mcp_probe_receipt_count: safeNumber(raw["mcp_probe_receipt_count"]),
+    fresh_mcp_probe_receipt_count: safeNumber(raw["fresh_mcp_probe_receipt_count"]),
+    mcp_connection_proof_receipt_count: safeNumber(raw["mcp_connection_proof_receipt_count"]),
+    fresh_mcp_connection_proof_receipt_count: safeNumber(raw["fresh_mcp_connection_proof_receipt_count"]),
     usable_mcp_server_receipt_count: safeNumber(raw["usable_mcp_server_receipt_count"]),
     fresh_usable_mcp_server_receipt_count: safeNumber(raw["fresh_usable_mcp_server_receipt_count"]),
     latest_chatgpt_source_receipt_id: safeString(raw["latest_chatgpt_source_receipt_id"]),
     latest_mcp_server_receipt_id: safeString(raw["latest_mcp_server_receipt_id"]),
+    latest_mcp_probe_receipt_id: safeString(raw["latest_mcp_probe_receipt_id"]),
+    latest_mcp_connection_proof_receipt_id: safeString(raw["latest_mcp_connection_proof_receipt_id"]),
+    latest_mcp_connection_proof_tool: safeString(raw["latest_mcp_connection_proof_tool"]),
     latest_fresh_usable_mcp_server_receipt_id: safeString(raw["latest_fresh_usable_mcp_server_receipt_id"]),
     latest_mcp_transcript_unavailable: safeBoolean(raw["latest_mcp_transcript_unavailable"]),
     transcript_redacted_from_summary: safeBoolean(raw["transcript_redacted_from_summary"], true),
@@ -235,6 +265,10 @@ function parseMcpProof(value: unknown): ChatGptMcpProof {
     required_ingress_transport: safeString(raw["required_ingress_transport"]) || "mcp_gateway_tool",
     required_mcp_gateway_tool: safeString(raw["required_mcp_gateway_tool"]) || "francis.chatgpt_voice.ingress",
     required_mcp_server_tool: safeString(raw["required_mcp_server_tool"]) || "francis_chatgpt_voice_ingress",
+    required_mcp_probe_gateway_tool:
+      safeString(raw["required_mcp_probe_gateway_tool"]) || "francis.chatgpt_voice.mcp_probe",
+    required_mcp_probe_server_tool:
+      safeString(raw["required_mcp_probe_server_tool"]) || "francis_chatgpt_voice_mcp_probe",
     next_operator_step: safeString(raw["next_operator_step"]),
     grants_execution_authority: safeBoolean(raw["grants_execution_authority"]),
     grants_mutation_authority: safeBoolean(raw["grants_mutation_authority"]),

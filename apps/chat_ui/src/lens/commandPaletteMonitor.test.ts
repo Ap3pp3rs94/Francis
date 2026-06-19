@@ -66,17 +66,31 @@ test("parseCommandPaletteMonitorStatus preserves latest receipt origin without t
       latest_receipt_proof_rejection_reason: "latest_receipt_not_chatgpt_voice_origin",
       transcript: "this transcript must not be parsed",
       chatgpt_mcp_proof: {
-        status: "awaiting_chatgpt_mcp_tool_call",
+        status: "fresh_mcp_connection_proof_observed",
         proof_observed: false,
+        mcp_connection_proof_observed: true,
+        mcp_connection_proof_status: "fresh_observed",
         chatgpt_source_receipt_count: 0,
         any_mcp_server_receipt_count: "1",
         fresh_any_mcp_server_receipt_count: "1",
         latest_any_mcp_server_receipt_id: "chatgpt-voice-recorded-selftest",
         latest_any_mcp_server_receipt_source: "local.mcp.selftest",
         latest_any_mcp_server_receipt_client_origin: "codex_live_mcp_selftest",
+        any_mcp_probe_receipt_count: "1",
+        fresh_any_mcp_probe_receipt_count: "1",
+        latest_any_mcp_probe_receipt_id: "chatgpt-voice-recorded-probe",
+        latest_any_mcp_probe_receipt_source: "chatgpt.voice",
+        latest_any_mcp_probe_receipt_client_origin: "chatgpt_app_voice",
         mcp_server_receipt_count: 0,
+        mcp_probe_receipt_count: "1",
+        fresh_mcp_probe_receipt_count: "1",
+        mcp_connection_proof_receipt_count: "1",
+        fresh_mcp_connection_proof_receipt_count: "1",
+        latest_mcp_probe_receipt_id: "chatgpt-voice-recorded-probe",
+        latest_mcp_connection_proof_receipt_id: "chatgpt-voice-recorded-probe",
+        latest_mcp_connection_proof_tool: "francis_chatgpt_voice_mcp_probe",
         latest_fresh_usable_mcp_server_receipt_id: "",
-        next_operator_step: "trigger_chatgpt_voice_app_turn_and_confirm_mcp_tool_receipt",
+        next_operator_step: "call_francis_chatgpt_voice_mcp_probe_from_chatgpt_connector",
         transcript: "this proof transcript must not be parsed",
       },
     },
@@ -132,7 +146,10 @@ test("parseCommandPaletteMonitorStatus preserves latest receipt origin without t
   assert.equal(status.voice_monitor.latest_receipt_actor, "chat_ui.voice");
   assert.equal(status.voice_monitor.latest_receipt_ingress_transport, "http_api");
   assert.equal(status.voice_monitor.latest_receipt_counts_as_chatgpt_mcp_proof, false);
-  assert.equal(status.voice_monitor.chatgpt_mcp_proof.status, "awaiting_chatgpt_mcp_tool_call");
+  assert.equal(status.voice_monitor.chatgpt_mcp_proof.status, "fresh_mcp_connection_proof_observed");
+  assert.equal(status.voice_monitor.chatgpt_mcp_proof.proof_observed, false);
+  assert.equal(status.voice_monitor.chatgpt_mcp_proof.mcp_connection_proof_observed, true);
+  assert.equal(status.voice_monitor.chatgpt_mcp_proof.mcp_connection_proof_status, "fresh_observed");
   assert.equal(status.voice_monitor.chatgpt_mcp_proof.any_mcp_server_receipt_count, 1);
   assert.equal(status.voice_monitor.chatgpt_mcp_proof.fresh_any_mcp_server_receipt_count, 1);
   assert.equal(
@@ -140,6 +157,16 @@ test("parseCommandPaletteMonitorStatus preserves latest receipt origin without t
     "chatgpt-voice-recorded-selftest",
   );
   assert.equal(status.voice_monitor.chatgpt_mcp_proof.latest_any_mcp_server_receipt_source, "local.mcp.selftest");
+  assert.equal(status.voice_monitor.chatgpt_mcp_proof.mcp_probe_receipt_count, 1);
+  assert.equal(status.voice_monitor.chatgpt_mcp_proof.fresh_mcp_probe_receipt_count, 1);
+  assert.equal(
+    status.voice_monitor.chatgpt_mcp_proof.latest_mcp_connection_proof_receipt_id,
+    "chatgpt-voice-recorded-probe",
+  );
+  assert.equal(
+    status.voice_monitor.chatgpt_mcp_proof.latest_mcp_connection_proof_tool,
+    "francis_chatgpt_voice_mcp_probe",
+  );
   assert.equal(status.chatgpt_connector_monitor.known_localtunnel, true);
   assert.deepEqual(status.chatgpt_connector_monitor.blockers, ["localtunnel_url_is_not_persistent_ingress"]);
   assert.equal(status.chatgpt_persistent_ingress_plan_monitor.governance_safe, true);

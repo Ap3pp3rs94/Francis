@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from francis.mcp_gateway.server import _chatgpt_voice_ingress_args, _clean_values
+from francis.mcp_gateway.server import _chatgpt_voice_ingress_args, _chatgpt_voice_mcp_probe_args, _clean_values
 from francis.mcp_gateway.tools import list_tools, run_tool
 
 
@@ -40,6 +40,7 @@ def test_mcp_gateway_lists_expected_tools(tmp_path: Path, monkeypatch) -> None:
         "francis.handoff.audit",
         "francis.chatgpt_voice.contract",
         "francis.chatgpt_voice.ingress",
+        "francis.chatgpt_voice.mcp_probe",
         "francis.chatgpt_voice.receipts",
     }.issubset(names)
 
@@ -57,6 +58,17 @@ def test_mcp_server_voice_ingress_defaults_to_chatgpt_app_origin() -> None:
 
     none_origin_args = _chatgpt_voice_ingress_args(transcript="hello Francis", client_origin=None)
     assert none_origin_args["client_origin"] == "chatgpt_app_voice"
+
+
+def test_mcp_server_voice_probe_defaults_to_chatgpt_app_origin() -> None:
+    args = _chatgpt_voice_mcp_probe_args()
+
+    assert args["actor"] == "chatgpt.voice"
+    assert args["source"] == "chatgpt.voice"
+    assert args["client_origin"] == "chatgpt_app_voice"
+    assert args["ingress_transport"] == "mcp_gateway_tool"
+    assert args["mcp_gateway_tool"] == "francis.chatgpt_voice.mcp_probe"
+    assert args["mcp_server_tool"] == "francis_chatgpt_voice_mcp_probe"
 
 
 def test_read_only_tools_report_no_raw_shell(tmp_path: Path, monkeypatch) -> None:

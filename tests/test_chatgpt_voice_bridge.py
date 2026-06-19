@@ -29,12 +29,17 @@ def test_chatgpt_voice_contract_is_permission_gated(monkeypatch, tmp_path: Path)
     assert body["ok"] is True
     assert body["kind"] == "francis.chatgpt_voice.bridge.contract"
     assert body["routes"]["ingress"] == "/chatgpt-voice/ingress"
+    assert body["routes"]["mcp_proof"] == "/chatgpt-voice/mcp-proof"
     assert body["mcp_tools"]["ingress"] == "francis.chatgpt_voice.ingress"
     assert body["mcp_tools"]["server_ingress"] == "francis_chatgpt_voice_ingress"
+    assert body["mcp_tools"]["mcp_probe"] == "francis.chatgpt_voice.mcp_probe"
+    assert body["mcp_tools"]["server_mcp_probe"] == "francis_chatgpt_voice_mcp_probe"
     assert body["receipt_contract"]["direct_http_transport"] == "http_api"
     assert body["receipt_contract"]["mcp_gateway_transport"] == "mcp_gateway_tool"
     assert body["receipt_contract"]["mcp_gateway_tool"] == "francis.chatgpt_voice.ingress"
     assert body["receipt_contract"]["mcp_server_tool"] == "francis_chatgpt_voice_ingress"
+    assert body["receipt_contract"]["mcp_connection_proof_gateway_tool"] == "francis.chatgpt_voice.mcp_probe"
+    assert body["receipt_contract"]["mcp_connection_proof_server_tool"] == "francis_chatgpt_voice_mcp_probe"
     assert body["orb_voice_contract"]["francis_identity"] == "Francis"
     assert body["orb_voice_contract"]["francis_surfaces"] == ["voice", "lens", "orb"]
     assert body["orb_voice_contract"]["orb_role"] == "embodiment"
@@ -49,6 +54,7 @@ def test_chatgpt_voice_contract_is_permission_gated(monkeypatch, tmp_path: Path)
     assert body["orb_voice_contract"]["client_speaks_top_level_reply"] is True
     assert body["input_contract"]["audio_stream_accepted"] is False
     assert body["client_speech_contract"]["call_ingress_for_every_voice_turn"] is True
+    assert body["client_speech_contract"]["call_mcp_probe_to_validate_connector"] is True
     assert body["client_speech_contract"]["speak_only_top_level_reply"] is True
     assert body["client_speech_contract"]["transcript_unavailable_must_be_forwarded"] is True
     assert body["client_speech_contract"]["local_fallback_answer_allowed"] is False
@@ -124,6 +130,46 @@ def test_chatgpt_voice_ingress_records_without_chat_forward(monkeypatch, tmp_pat
     assert body["governance"]["forwards_to_chat"] is False
     assert body["governance"]["raw_audio"] is False
     assert body["governance"]["grants_execution_authority"] is False
+    assert not (data_root / "conversations" / "ledger" / "ledger.jsonl").exists()
+
+
+def test_chatgpt_voice_mcp_proof_records_connection_without_transcript_or_voice_turn(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", _scopes("chatgpt.voice.bridge.write"))
+
+    client = TestClient(create_app())
+
+    body = client.post(
+        "/chatgpt-voice/mcp-proof",
+        json={"actor": _ACTOR, "reason": "connector proof from ChatGPT"},
+    ).json()
+
+    assert body["ok"] is True
+    assert body["status"] == "recorded"
+    assert body["reply"] == "Francis MCP voice bridge is reachable. No transcript was recorded."
+    assert body["voice_response"]["source"] == "bridge.mcp_connection_proof"
+    assert body["chat_forward"]["requested"] is False
+    assert body["chat_forward"]["forwarded"] is False
+    assert body["orb_voice_bridge"]["status"] == "mcp_connection_proof_recorded"
+    assert body["orb_voice_bridge"]["virtual_voice_turn"] is False
+    assert body["orb_voice_bridge"]["orb_is_embodiment"] is True
+    assert body["orb_voice_bridge"]["client_origin"] == "chatgpt_app_voice"
+    assert body["receipt"]["proof_kind"] == "mcp_connection"
+    assert body["receipt"]["actor"] == _ACTOR
+    assert body["receipt"]["source"] == "chatgpt.voice"
+    assert body["receipt"]["client_origin"] == "chatgpt_app_voice"
+    assert body["receipt"]["mcp_gateway_tool"] == "francis.chatgpt_voice.mcp_probe"
+    assert body["receipt"]["mcp_server_tool"] == "francis_chatgpt_voice_mcp_probe"
+    assert body["receipt"]["transcript"] == ""
+    assert body["receipt"]["transcript_char_count"] == 0
+    assert body["receipt"]["governance"]["writes_receipt"] is True
+    assert body["receipt"]["governance"]["forwards_to_chat"] is False
+    assert Path(body["receipt"]["receipt_path"]).exists()
+    assert not (data_root / "runtime" / "lens-overlay" / "voice-turn-status.json").exists()
     assert not (data_root / "conversations" / "ledger" / "ledger.jsonl").exists()
 
 
@@ -474,6 +520,7 @@ def test_chatgpt_voice_mcp_tools_expose_bounded_bridge(monkeypatch, tmp_path: Pa
     names = {tool["name"] for tool in list_tools()}
     assert "francis.chatgpt_voice.contract" in names
     assert "francis.chatgpt_voice.ingress" in names
+    assert "francis.chatgpt_voice.mcp_probe" in names
     assert "francis.chatgpt_voice.receipts" in names
     tool_by_name = {tool["name"]: tool for tool in list_tools()}
     ingress_description = tool_by_name["francis.chatgpt_voice.ingress"]["description"]
@@ -487,6 +534,18 @@ def test_chatgpt_voice_mcp_tools_expose_bounded_bridge(monkeypatch, tmp_path: Pa
     assert contract["governance"]["read_only"] is True
     speech_contract = contract["data"]["client_speech_contract"]
     assert speech_contract["mcp_server_default_client_origin"] == "chatgpt_app_voice"
+
+    proof = run_tool("francis.chatgpt_voice.mcp_probe", {"actor": _ACTOR, "source": "chatgpt.voice"})
+    assert proof["ok"] is True
+    assert proof["status"] == "recorded"
+    assert proof["governance"]["raw_audio"] is False
+    assert proof["governance"]["grants_execution_authority"] is False
+    assert proof["data"]["receipt"]["proof_kind"] == "mcp_connection"
+    assert proof["data"]["receipt"]["mcp_gateway_tool"] == "francis.chatgpt_voice.mcp_probe"
+    assert proof["data"]["receipt"]["mcp_server_tool"] == "francis_chatgpt_voice_mcp_probe"
+    assert proof["data"]["receipt"]["client_origin"] == "chatgpt_app_voice"
+    assert proof["data"]["receipt"]["transcript"] == ""
+    assert proof["data"]["orb_voice_bridge"]["virtual_voice_turn"] is False
 
     ingress = run_tool(
         "francis.chatgpt_voice.ingress",
@@ -512,4 +571,4 @@ def test_chatgpt_voice_mcp_tools_expose_bounded_bridge(monkeypatch, tmp_path: Pa
 
     receipts = run_tool("francis.chatgpt_voice.receipts", {"actor": _ACTOR, "limit": 5})
     assert receipts["ok"] is True
-    assert receipts["data"]["count"] == 1
+    assert receipts["data"]["count"] == 2

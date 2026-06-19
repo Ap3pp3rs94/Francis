@@ -9,6 +9,7 @@ from francis.chatgpt_voice_bridge import (
     chatgpt_voice_bridge_contract,
     chatgpt_voice_bridge_receipts,
     record_chatgpt_voice_ingress,
+    record_chatgpt_voice_mcp_probe,
 )
 
 router = APIRouter()
@@ -26,9 +27,26 @@ class ChatGptVoiceIngressIn(BaseModel):
     use_llm: bool = False
 
 
+class ChatGptVoiceMcpProofIn(BaseModel):
+    actor: str | None = None
+    source: str = "chatgpt.voice"
+    client_origin: str = ""
+    reason: str = ""
+
+
 @router.get("/contract")
 def contract(actor: str = "") -> dict[str, Any]:
     return chatgpt_voice_bridge_contract(actor=actor)
+
+
+@router.post("/mcp-proof")
+def mcp_proof(payload: ChatGptVoiceMcpProofIn) -> dict[str, Any]:
+    return record_chatgpt_voice_mcp_probe(
+        actor=payload.actor or "",
+        source=payload.source,
+        client_origin=payload.client_origin,
+        reason=payload.reason,
+    )
 
 
 @router.post("/ingress")

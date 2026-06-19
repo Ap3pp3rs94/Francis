@@ -47,6 +47,7 @@ async def _roundtrip(data_dir: str) -> dict:
             tools = await session.list_tools()
             names = sorted(t.name for t in tools.tools)
             voice_tool = next(t for t in tools.tools if t.name == "francis_chatgpt_voice_ingress")
+            probe_tool = next(t for t in tools.tools if t.name == "francis_chatgpt_voice_mcp_probe")
             health = json.loads((await session.call_tool("francis_health", {})).content[0].text)
             denied = json.loads(
                 (
@@ -73,16 +74,38 @@ async def _roundtrip(data_dir: str) -> dict:
                 .content[0]
                 .text
             )
+            probe = json.loads(
+                (
+                    await session.call_tool(
+                        "francis_chatgpt_voice_mcp_probe",
+                        {
+                            "actor": "chatgpt.voice",
+                            "source": "chatgpt.voice",
+                            "reason": "mcp roundtrip proof",
+                        },
+                    )
+                )
+                .content[0]
+                .text
+            )
             return {
                 "names": names,
                 "health": health,
                 "denied": denied,
                 "voice": voice,
+                "probe": probe,
                 "voice_tool": {
                     "title": getattr(voice_tool, "title", ""),
                     "description": getattr(voice_tool, "description", ""),
                     "annotations": (
                         voice_tool.annotations.model_dump() if getattr(voice_tool, "annotations", None) else {}
+                    ),
+                },
+                "probe_tool": {
+                    "title": getattr(probe_tool, "title", ""),
+                    "description": getattr(probe_tool, "description", ""),
+                    "annotations": (
+                        probe_tool.annotations.model_dump() if getattr(probe_tool, "annotations", None) else {}
                     ),
                 },
             }
@@ -95,6 +118,7 @@ def test_external_mcp_client_roundtrip(tmp_path) -> None:
     assert "francis_health" in out["names"]
     assert "francis_handoff_audit" in out["names"]
     assert "francis_chatgpt_voice_ingress" in out["names"]
+    assert "francis_chatgpt_voice_mcp_probe" in out["names"]
     assert len(out["names"]) >= 21
     assert out["voice_tool"]["title"] == "Send transcript to Francis"
     assert "talk to Francis" in out["voice_tool"]["description"]
@@ -103,6 +127,8 @@ def test_external_mcp_client_roundtrip(tmp_path) -> None:
     assert "Transcript Unavailable" in out["voice_tool"]["description"]
     assert out["voice_tool"]["annotations"]["readOnlyHint"] is False
     assert out["voice_tool"]["annotations"]["destructiveHint"] is False
+    assert out["probe_tool"]["title"] == "Validate Francis voice MCP connection"
+    assert "connection-proof receipt" in out["probe_tool"]["description"]
 
     # Read-only tool returns real data over the wire.
     assert out["health"]["ok"] is True
@@ -141,3 +167,11 @@ def test_external_mcp_client_roundtrip(tmp_path) -> None:
     assert out["voice"]["data"]["receipt"]["client_origin"] == "chatgpt_app_voice"
     assert out["voice"]["governance"]["raw_audio"] is False
     assert out["voice"]["governance"]["grants_execution_authority"] is False
+    assert out["probe"]["ok"] is True
+    assert out["probe"]["status"] == "recorded"
+    assert out["probe"]["receipt"]["proof_kind"] == "mcp_connection"
+    assert out["probe"]["receipt"]["mcp_gateway_tool"] == "francis.chatgpt_voice.mcp_probe"
+    assert out["probe"]["receipt"]["mcp_server_tool"] == "francis_chatgpt_voice_mcp_probe"
+    assert out["probe"]["receipt"]["transcript"] == ""
+    assert out["probe"]["orb_voice_bridge"]["virtual_voice_turn"] is False
+    assert out["probe"]["governance"]["grants_execution_authority"] is False

@@ -142,6 +142,12 @@ def _mcp_proof(value: Any) -> dict[str, Any]:
     return {
         "status": _safe_str(raw.get("status"), "not_checked", max_length=120),
         "proof_observed": _safe_bool(raw.get("proof_observed")),
+        "mcp_connection_proof_observed": _safe_bool(raw.get("mcp_connection_proof_observed")),
+        "mcp_connection_proof_status": _safe_str(
+            raw.get("mcp_connection_proof_status"),
+            "missing",
+            max_length=120,
+        ),
         "freshness_window_seconds": _safe_int(raw.get("freshness_window_seconds")),
         "chatgpt_source_receipt_count": _safe_int(raw.get("chatgpt_source_receipt_count")),
         "any_mcp_server_receipt_count": _safe_int(raw.get("any_mcp_server_receipt_count")),
@@ -158,11 +164,40 @@ def _mcp_proof(value: Any) -> dict[str, Any]:
             raw.get("latest_any_mcp_server_receipt_client_origin"),
             max_length=160,
         ),
+        "any_mcp_probe_receipt_count": _safe_int(raw.get("any_mcp_probe_receipt_count")),
+        "fresh_any_mcp_probe_receipt_count": _safe_int(raw.get("fresh_any_mcp_probe_receipt_count")),
+        "latest_any_mcp_probe_receipt_id": _safe_str(
+            raw.get("latest_any_mcp_probe_receipt_id"),
+            max_length=160,
+        ),
+        "latest_any_mcp_probe_receipt_source": _safe_str(
+            raw.get("latest_any_mcp_probe_receipt_source"),
+            max_length=120,
+        ),
+        "latest_any_mcp_probe_receipt_client_origin": _safe_str(
+            raw.get("latest_any_mcp_probe_receipt_client_origin"),
+            max_length=160,
+        ),
         "mcp_server_receipt_count": _safe_int(raw.get("mcp_server_receipt_count")),
+        "mcp_probe_receipt_count": _safe_int(raw.get("mcp_probe_receipt_count")),
+        "fresh_mcp_probe_receipt_count": _safe_int(raw.get("fresh_mcp_probe_receipt_count")),
+        "mcp_connection_proof_receipt_count": _safe_int(raw.get("mcp_connection_proof_receipt_count")),
+        "fresh_mcp_connection_proof_receipt_count": _safe_int(
+            raw.get("fresh_mcp_connection_proof_receipt_count"),
+        ),
         "usable_mcp_server_receipt_count": _safe_int(raw.get("usable_mcp_server_receipt_count")),
         "fresh_usable_mcp_server_receipt_count": _safe_int(raw.get("fresh_usable_mcp_server_receipt_count")),
         "latest_chatgpt_source_receipt_id": _safe_str(raw.get("latest_chatgpt_source_receipt_id"), max_length=160),
         "latest_mcp_server_receipt_id": _safe_str(raw.get("latest_mcp_server_receipt_id"), max_length=160),
+        "latest_mcp_probe_receipt_id": _safe_str(raw.get("latest_mcp_probe_receipt_id"), max_length=160),
+        "latest_mcp_connection_proof_receipt_id": _safe_str(
+            raw.get("latest_mcp_connection_proof_receipt_id"),
+            max_length=160,
+        ),
+        "latest_mcp_connection_proof_tool": _safe_str(
+            raw.get("latest_mcp_connection_proof_tool"),
+            max_length=160,
+        ),
         "latest_fresh_usable_mcp_server_receipt_id": _safe_str(
             raw.get("latest_fresh_usable_mcp_server_receipt_id"),
             max_length=160,
@@ -184,6 +219,16 @@ def _mcp_proof(value: Any) -> dict[str, Any]:
         "required_mcp_server_tool": _safe_str(
             raw.get("required_mcp_server_tool"),
             "francis_chatgpt_voice_ingress",
+            max_length=160,
+        ),
+        "required_mcp_probe_gateway_tool": _safe_str(
+            raw.get("required_mcp_probe_gateway_tool"),
+            "francis.chatgpt_voice.mcp_probe",
+            max_length=160,
+        ),
+        "required_mcp_probe_server_tool": _safe_str(
+            raw.get("required_mcp_probe_server_tool"),
+            "francis_chatgpt_voice_mcp_probe",
             max_length=160,
         ),
         "next_operator_step": _safe_str(raw.get("next_operator_step"), max_length=200),

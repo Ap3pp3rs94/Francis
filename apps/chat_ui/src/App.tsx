@@ -810,10 +810,12 @@ function BridgeMonitorPanel(props: { baseUrl: string }) {
   const connector = status?.chatgpt_connector_monitor;
   const ingress = status?.chatgpt_persistent_ingress_plan_monitor;
   const ingressHandoff = ingress?.operator_handoff;
-  const proofReady = Boolean(proof?.proof_observed);
+  const transcriptProofReady = Boolean(proof?.proof_observed);
+  const connectionProofReady = Boolean(proof?.mcp_connection_proof_observed);
   const monitorReady = Boolean(status?.monitor_process_alive || status?.monitor_heartbeat_fresh);
   const statusTone = error || status?.status === "anomaly" || status?.status === "missing" ? "blocked" : "ready";
-  const proofTone = proofReady ? "ready" : "blocked";
+  const connectionProofTone = connectionProofReady ? "ready" : "blocked";
+  const transcriptProofTone = transcriptProofReady ? "ready" : "blocked";
   const connectorTone = connector?.connector_usable_for_chatgpt ? "ready" : "blocked";
   const ingressTone = connector?.persistent_candidate ? "ready" : "blocked";
 
@@ -857,7 +859,16 @@ function BridgeMonitorPanel(props: { baseUrl: string }) {
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 16 }}>
         <Pill label="monitor" value={statusText(status?.status)} tone={statusTone} />
         <Pill label="process" value={monitorReady ? "alive" : "not confirmed"} tone={monitorReady ? "ready" : "blocked"} />
-        <Pill label="mcp proof" value={proofReady ? "observed" : statusText(proof?.status)} tone={proofTone} />
+        <Pill
+          label="mcp link"
+          value={connectionProofReady ? "observed" : statusText(proof?.mcp_connection_proof_status)}
+          tone={connectionProofTone}
+        />
+        <Pill
+          label="transcript"
+          value={transcriptProofReady ? "observed" : statusText(proof?.status)}
+          tone={transcriptProofTone}
+        />
         <Pill label="connector" value={statusText(connector?.status)} tone={connectorTone} />
         <Pill label="ingress" value={statusText(connector?.persistent_ingress_status)} tone={ingressTone} />
         <Pill
@@ -899,7 +910,14 @@ function BridgeMonitorPanel(props: { baseUrl: string }) {
           </dd>
         </div>
         <div>
-          <dt style={{ color: "#94a3b8" }}>MCP receipt</dt>
+          <dt style={{ color: "#94a3b8" }}>MCP link receipt</dt>
+          <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
+            {proof?.latest_mcp_connection_proof_receipt_id || "none"}
+            {proof?.latest_mcp_connection_proof_tool ? ` / ${proof.latest_mcp_connection_proof_tool}` : ""}
+          </dd>
+        </div>
+        <div>
+          <dt style={{ color: "#94a3b8" }}>Transcript receipt</dt>
           <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
             {proof?.latest_fresh_usable_mcp_server_receipt_id || proof?.latest_mcp_server_receipt_id || "none"}
           </dd>

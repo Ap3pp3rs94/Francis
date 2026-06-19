@@ -101,17 +101,31 @@ def test_lens_command_palette_monitor_route_projects_voice_bridge_proof(monkeypa
                     "latest_receipt_proof_rejection_reason": "latest_receipt_not_chatgpt_voice_origin",
                     "transcript": "do not expose this transcript",
                     "chatgpt_mcp_proof": {
-                        "status": "awaiting_chatgpt_mcp_tool_call",
+                        "status": "fresh_mcp_connection_proof_observed",
                         "proof_observed": False,
+                        "mcp_connection_proof_observed": True,
+                        "mcp_connection_proof_status": "fresh_observed",
                         "chatgpt_source_receipt_count": 0,
                         "any_mcp_server_receipt_count": 1,
                         "fresh_any_mcp_server_receipt_count": 1,
                         "latest_any_mcp_server_receipt_id": "chatgpt-voice-recorded-selftest",
                         "latest_any_mcp_server_receipt_source": "local.mcp.selftest",
                         "latest_any_mcp_server_receipt_client_origin": "codex_live_mcp_selftest",
+                        "any_mcp_probe_receipt_count": 1,
+                        "fresh_any_mcp_probe_receipt_count": 1,
+                        "latest_any_mcp_probe_receipt_id": "chatgpt-voice-recorded-probe",
+                        "latest_any_mcp_probe_receipt_source": "chatgpt.voice",
+                        "latest_any_mcp_probe_receipt_client_origin": "chatgpt_app_voice",
                         "mcp_server_receipt_count": 0,
+                        "mcp_probe_receipt_count": 1,
+                        "fresh_mcp_probe_receipt_count": 1,
+                        "mcp_connection_proof_receipt_count": 1,
+                        "fresh_mcp_connection_proof_receipt_count": 1,
+                        "latest_mcp_probe_receipt_id": "chatgpt-voice-recorded-probe",
+                        "latest_mcp_connection_proof_receipt_id": "chatgpt-voice-recorded-probe",
+                        "latest_mcp_connection_proof_tool": "francis_chatgpt_voice_mcp_probe",
                         "latest_fresh_usable_mcp_server_receipt_id": "",
-                        "next_operator_step": "trigger_chatgpt_voice_app_turn_and_confirm_mcp_tool_receipt",
+                        "next_operator_step": "call_francis_chatgpt_voice_mcp_probe_from_chatgpt_connector",
                         "transcript": "do not expose this proof transcript",
                     },
                 },
@@ -189,7 +203,10 @@ def test_lens_command_palette_monitor_route_projects_voice_bridge_proof(monkeypa
     assert body["voice_monitor"]["latest_receipt_actor"] == "chat_ui.voice"
     assert body["voice_monitor"]["latest_receipt_ingress_transport"] == "http_api"
     assert body["voice_monitor"]["latest_receipt_counts_as_chatgpt_mcp_proof"] is False
-    assert body["voice_monitor"]["chatgpt_mcp_proof"]["status"] == "awaiting_chatgpt_mcp_tool_call"
+    assert body["voice_monitor"]["chatgpt_mcp_proof"]["status"] == "fresh_mcp_connection_proof_observed"
+    assert body["voice_monitor"]["chatgpt_mcp_proof"]["proof_observed"] is False
+    assert body["voice_monitor"]["chatgpt_mcp_proof"]["mcp_connection_proof_observed"] is True
+    assert body["voice_monitor"]["chatgpt_mcp_proof"]["mcp_connection_proof_status"] == "fresh_observed"
     assert body["voice_monitor"]["chatgpt_mcp_proof"]["any_mcp_server_receipt_count"] == 1
     assert body["voice_monitor"]["chatgpt_mcp_proof"]["fresh_any_mcp_server_receipt_count"] == 1
     assert (
@@ -197,6 +214,16 @@ def test_lens_command_palette_monitor_route_projects_voice_bridge_proof(monkeypa
         == "chatgpt-voice-recorded-selftest"
     )
     assert body["voice_monitor"]["chatgpt_mcp_proof"]["latest_any_mcp_server_receipt_source"] == "local.mcp.selftest"
+    assert body["voice_monitor"]["chatgpt_mcp_proof"]["mcp_probe_receipt_count"] == 1
+    assert body["voice_monitor"]["chatgpt_mcp_proof"]["fresh_mcp_probe_receipt_count"] == 1
+    assert (
+        body["voice_monitor"]["chatgpt_mcp_proof"]["latest_mcp_connection_proof_receipt_id"]
+        == "chatgpt-voice-recorded-probe"
+    )
+    assert (
+        body["voice_monitor"]["chatgpt_mcp_proof"]["latest_mcp_connection_proof_tool"]
+        == "francis_chatgpt_voice_mcp_probe"
+    )
     assert body["chatgpt_connector_monitor"]["known_localtunnel"] is True
     assert body["chatgpt_persistent_ingress_plan_monitor"]["governance_safe"] is True
     handoff = body["chatgpt_persistent_ingress_plan_monitor"]["operator_handoff"]

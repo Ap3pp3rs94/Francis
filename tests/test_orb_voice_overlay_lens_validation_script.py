@@ -275,6 +275,64 @@ def test_orb_voice_overlay_lens_validation_uses_environment_connector_url(
     assert "environment URL proof should redact" not in summary
 
 
+def test_orb_voice_overlay_lens_validation_reports_mcp_probe_connection_proof(
+    tmp_path: Path,
+) -> None:
+    data_dir = tmp_path / "data"
+    receipt_dir = data_dir / "integrations" / "chatgpt_voice" / "receipts"
+    receipt_dir.mkdir(parents=True)
+    receipt = {
+        "kind": "francis.chatgpt_voice.bridge.receipt",
+        "receipt_id": "chatgpt-voice-recorded-probe-test",
+        "actor": "chatgpt.voice",
+        "source": "chatgpt.voice",
+        "client_origin": "chatgpt_app_voice",
+        "ingress_transport": "mcp_gateway_tool",
+        "mcp_gateway_tool": "francis.chatgpt_voice.mcp_probe",
+        "mcp_server_tool": "francis_chatgpt_voice_mcp_probe",
+        "proof_kind": "mcp_connection",
+        "decision": "recorded",
+        "chat_forward_status": "not_requested",
+        "chat_forwarded": False,
+        "transcript": "",
+        "transcript_char_count": 0,
+        "reply": "Francis MCP voice bridge is reachable. No transcript was recorded.",
+        "reply_source": "bridge.mcp_connection_proof",
+        "governance": {
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+    }
+    (receipt_dir / "chatgpt-voice-recorded-probe-test.json").write_text(json.dumps(receipt), encoding="utf-8")
+    port = _unused_local_port()
+
+    proc = _run_validation_script(
+        "-DataDir",
+        str(data_dir),
+        "-ConnectorPort",
+        str(port),
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["status"] == "proof_blocked_no_usable_chatgpt_app_transcript"
+    assert payload["next_smallest_truthful_gap"] == "trigger_fresh_chatgpt_app_voice_tool_call_with_usable_transcript"
+    assert payload["chatgpt_voice_receipts"]["fresh_mcp_probe_chatgpt_source_count"] == 1
+    assert payload["chatgpt_voice_receipts"]["fresh_mcp_connection_proof_chatgpt_source_count"] == 1
+    assert payload["chatgpt_voice_receipts"]["fresh_usable_mcp_server_chatgpt_source_count"] == 0
+    latest_probe = payload["chatgpt_voice_receipts"]["latest_mcp_probe_chatgpt_source"]
+    assert latest_probe["receipt_id"] == "chatgpt-voice-recorded-probe-test"
+    assert latest_probe["source_claims_mcp_probe_tool"] is True
+    assert latest_probe["source_claims_mcp_connection_proof"] is True
+    checks = {check["id"]: check for check in payload["checks"]}
+    assert checks["chatgpt_app_mcp_connection_proof_observed"]["passed"] is True
+    assert checks["chatgpt_app_mcp_connection_proof_observed"]["status"] == "fresh_observed"
+    assert checks["chatgpt_app_usable_transcript_observed"]["passed"] is False
+    assert payload["chatgpt_app_origin"]["connector_mcp_connection_proof_observed"] is True
+    summary = json.dumps(payload["chatgpt_voice_receipts"])
+    assert "No transcript was recorded" not in summary
+
+
 def test_orb_voice_overlay_lens_validation_blocks_stale_chatgpt_source_receipt(
     tmp_path: Path,
 ) -> None:
