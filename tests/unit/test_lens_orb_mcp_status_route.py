@@ -106,6 +106,19 @@ def test_lens_command_palette_monitor_route_projects_voice_bridge_proof(monkeypa
                     "voice_input_status": "waiting_for_audio_signal",
                     "voice_input_blocker": "audio_signal_not_confirmed",
                     "next_voice_input_step": "say_hey_francis_to_confirm_default_microphone_signal",
+                    "orb_position_command_ready": False,
+                    "orb_position_command_targets": ["left", "right"],
+                    "orb_position_command_requires_orb_reference": True,
+                    "orb_position_command_requires_direction": True,
+                    "orb_position_command_conversation_forwarding_suppressed": True,
+                    "orb_position_command_authority_scope": "runtime_overlay_position_only",
+                    "overlay_position_anchor": "voice_command_left_side",
+                    "overlay_left": 48,
+                    "overlay_top": 644,
+                    "voice_position_command_active": True,
+                    "latest_orb_position_command": "move_orb_left_side",
+                    "latest_orb_position_command_status": "orb_voice_command_applied",
+                    "latest_orb_position_command_applied": True,
                     "recent_receipt_count": 1,
                     "latest_receipt_id": "chatgpt-voice-recorded-ui",
                     "latest_receipt_actor": "chat_ui.voice",
@@ -242,6 +255,16 @@ def test_lens_command_palette_monitor_route_projects_voice_bridge_proof(monkeypa
     assert body["voice_monitor"]["interrupt_phrase"] == "francis stop"
     assert body["voice_monitor"]["voice_input_status"] == "waiting_for_audio_signal"
     assert body["voice_monitor"]["voice_input_blocker"] == "audio_signal_not_confirmed"
+    assert body["voice_monitor"]["orb_position_command_targets"] == ["left", "right"]
+    assert body["voice_monitor"]["orb_position_command_requires_orb_reference"] is True
+    assert body["voice_monitor"]["orb_position_command_requires_direction"] is True
+    assert body["voice_monitor"]["orb_position_command_conversation_forwarding_suppressed"] is True
+    assert body["voice_monitor"]["orb_position_command_authority_scope"] == "runtime_overlay_position_only"
+    assert body["voice_monitor"]["voice_position_command_active"] is True
+    assert body["voice_monitor"]["overlay_position_anchor"] == "voice_command_left_side"
+    assert body["voice_monitor"]["latest_orb_position_command"] == "move_orb_left_side"
+    assert body["voice_monitor"]["latest_orb_position_command_status"] == "orb_voice_command_applied"
+    assert body["voice_monitor"]["latest_orb_position_command_applied"] is True
     assert body["voice_monitor"]["latest_receipt_actor"] == "chat_ui.voice"
     assert body["voice_monitor"]["latest_receipt_ingress_transport"] == "http_api"
     assert body["voice_monitor"]["latest_receipt_counts_as_chatgpt_mcp_proof"] is False

@@ -1066,6 +1066,7 @@ function New-VoiceMonitorProjection {
   $OverlayVoice = Get-PropertyValue -Payload $Payload -Name 'overlay_voice'
   $Voice = Get-PropertyValue -Payload $Payload -Name 'voice'
   $VoiceTurn = Get-PropertyValue -Payload $Payload -Name 'voice_turn'
+  $OverlayPosition = Get-PropertyValue -Payload $Payload -Name 'overlay_position'
   $ProviderReadiness = Get-PropertyValue -Payload $Payload -Name 'voice_provider_readiness'
   $ElevenLabs = Get-PropertyValue -Payload $ProviderReadiness -Name 'elevenlabs'
   $Receipts = @(Get-RecentChatGptVoiceReceipts -Root $Root -Limit 5)
@@ -1092,6 +1093,17 @@ function New-VoiceMonitorProjection {
   $VoiceInputStatus = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Payload -Name 'voice_input_status' -Default '') -MaxLength 120
   $VoiceInputBlocker = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Payload -Name 'voice_input_blocker' -Default '') -MaxLength 160
   $NextVoiceInputStep = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Payload -Name 'next_voice_input_step' -Default '') -MaxLength 200
+  $OverlayPositionAnchor = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $OverlayPosition -Name 'operator_position_anchor' -Default '') -MaxLength 120
+  $VoicePositionCommandActive = [bool](Get-PropertyValue -Payload $OverlayPosition -Name 'voice_position_command_active' -Default $false)
+  $VoiceOrbCommand = [bool](Get-PropertyValue -Payload $Voice -Name 'voice_orb_command' -Default $false)
+  $LocalOverlayCommand = [bool](Get-PropertyValue -Payload $Voice -Name 'local_overlay_command' -Default $false)
+  $LatestOrbCommandName = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Voice -Name 'orb_command' -Default '') -MaxLength 120
+  if ([string]::IsNullOrWhiteSpace($LatestOrbCommandName) -and $OverlayPositionAnchor.StartsWith('voice_command_', [System.StringComparison]::OrdinalIgnoreCase)) {
+    $LatestOrbCommandName = $OverlayPositionAnchor -replace '^voice_command_', 'move_orb_'
+  }
+  $LatestOrbCommandStatus = if ($VoiceOrbCommand -or $LocalOverlayCommand) { $VoiceStatus } elseif ($VoicePositionCommandActive) { 'position_anchor_active' } else { '' }
+  $LatestOrbCommandApplied = ($VoiceStatus -eq 'orb_voice_command_applied' -or $VoicePositionCommandActive)
+  $OrbPositionCommandReady = ([bool]$VoiceInputReady -and [bool]$WakeListening -and [bool]$ContinuousVoiceChat)
   $PassiveListenContract = 'passive_transcript_awareness_only_until_wake_phrase'
   $InterruptPhrase = 'francis stop'
   $LatestReceipt = if (@($Receipts).Count -gt 0) { $Receipts[0] } else { $null }
@@ -1181,6 +1193,19 @@ function New-VoiceMonitorProjection {
     voice_input_status = $VoiceInputStatus
     voice_input_blocker = $VoiceInputBlocker
     next_voice_input_step = $NextVoiceInputStep
+    orb_position_command_ready = [bool]$OrbPositionCommandReady
+    orb_position_command_targets = @('left', 'right')
+    orb_position_command_requires_orb_reference = $true
+    orb_position_command_requires_direction = $true
+    orb_position_command_conversation_forwarding_suppressed = $true
+    orb_position_command_authority_scope = 'runtime_overlay_position_only'
+    overlay_position_anchor = $OverlayPositionAnchor
+    overlay_left = [double](Get-PropertyValue -Payload $OverlayPosition -Name 'left' -Default 0.0)
+    overlay_top = [double](Get-PropertyValue -Payload $OverlayPosition -Name 'top' -Default 0.0)
+    voice_position_command_active = [bool]$VoicePositionCommandActive
+    latest_orb_position_command = $LatestOrbCommandName
+    latest_orb_position_command_status = $LatestOrbCommandStatus
+    latest_orb_position_command_applied = [bool]$LatestOrbCommandApplied
     api_permission_denied_observed = [bool]$PermissionDenied
     recent_receipt_count = @($Receipts).Count
     denied_recent_receipt_count = @($DeniedReceipts).Count

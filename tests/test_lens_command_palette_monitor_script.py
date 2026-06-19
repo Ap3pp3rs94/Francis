@@ -92,6 +92,8 @@ def _write_overlay_voice_runtime(data_dir: Path, *, selected_voice: str = "Emma"
                 "voice_lens_orb_are_francis_surfaces": True,
                 "voice_lens_orb_are_separate_identities": False,
                 "microphone_capture": True,
+                "microphone_input_effective": True,
+                "microphone_signal_status": "signal_observed",
                 "wake_listening": True,
                 "wake_phrase": "hey francis",
                 "continuous_voice_chat": True,
@@ -123,6 +125,15 @@ def _write_overlay_voice_runtime(data_dir: Path, *, selected_voice: str = "Emma"
                 },
                 "stores_secret": False,
                 "logs_text_payload": False,
+            },
+            "overlay_position": {
+                "status": "visible_position_observed",
+                "left": 1268.0,
+                "top": 644.0,
+                "operator_position_anchor": "",
+                "voice_position_command_active": False,
+                "grants_execution_authority": False,
+                "grants_mutation_authority": False,
             },
         },
     )
@@ -508,6 +519,8 @@ def test_lens_command_palette_monitor_probe_records_voice_health(tmp_path: Path)
                 "voice_lens_orb_are_francis_surfaces": True,
                 "voice_lens_orb_are_separate_identities": False,
                 "microphone_capture": True,
+                "microphone_input_effective": True,
+                "microphone_signal_status": "signal_observed",
                 "wake_listening": True,
                 "wake_phrase": "hey francis",
                 "continuous_voice_chat": True,
@@ -540,6 +553,15 @@ def test_lens_command_palette_monitor_probe_records_voice_health(tmp_path: Path)
                 "stores_secret": False,
                 "logs_text_payload": False,
             },
+            "overlay_position": {
+                "status": "visible_position_observed",
+                "left": 1268.0,
+                "top": 644.0,
+                "operator_position_anchor": "",
+                "voice_position_command_active": False,
+                "grants_execution_authority": False,
+                "grants_mutation_authority": False,
+            },
         },
     )
 
@@ -570,6 +592,17 @@ def test_lens_command_palette_monitor_probe_records_voice_health(tmp_path: Path)
     assert payload["voice_monitor"]["selected_voice"] == "Emma"
     assert payload["voice_monitor"]["voice_label"] == "Emma"
     assert payload["voice_monitor"]["generic_voice_label_observed"] is False
+    assert payload["voice_monitor"]["orb_position_command_ready"] is True
+    assert payload["voice_monitor"]["orb_position_command_targets"] == ["left", "right"]
+    assert payload["voice_monitor"]["orb_position_command_requires_orb_reference"] is True
+    assert payload["voice_monitor"]["orb_position_command_requires_direction"] is True
+    assert payload["voice_monitor"]["orb_position_command_conversation_forwarding_suppressed"] is True
+    assert payload["voice_monitor"]["orb_position_command_authority_scope"] == "runtime_overlay_position_only"
+    assert payload["voice_monitor"]["overlay_position_anchor"] == ""
+    assert payload["voice_monitor"]["overlay_left"] == 1268
+    assert payload["voice_monitor"]["overlay_top"] == 644
+    assert payload["voice_monitor"]["voice_position_command_active"] is False
+    assert payload["voice_monitor"]["latest_orb_position_command_applied"] is False
     assert payload["voice_monitor"]["wake_listening"] is True
     assert payload["voice_monitor"]["wake_phrase"] == "hey francis"
     assert payload["voice_monitor"]["passive_listen_contract"] == "passive_transcript_awareness_only_until_wake_phrase"
@@ -591,6 +624,63 @@ def test_lens_command_palette_monitor_probe_records_voice_health(tmp_path: Path)
     assert checks["voice_chat_bridge_denials"]["status"] == "latest_receipt_clean"
     assert "voice_chatgpt_mcp_tool_proof" not in checks
     assert payload["governance"]["captures_audio"] is False
+
+
+def test_lens_command_palette_monitor_reports_applied_orb_voice_command(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    status_path = tmp_path / "lens-status.json"
+    _write_json(status_path, _lens_status())
+    _write_overlay_voice_runtime(data_dir)
+    runtime_dir = data_dir / "runtime" / "lens-overlay"
+    status_payload = json.loads((runtime_dir / "status.json").read_text(encoding="utf-8"))
+    status_payload["voice"] = {
+        "kind": "lens.overlay.voice.runtime",
+        "status": "orb_voice_command_applied",
+        "ok": True,
+        "local_overlay_command": True,
+        "voice_orb_command": True,
+        "orb_command": "move_orb_left_side",
+        "chat_bridge_status": "not_called",
+        "conversation_forwarding_suppressed": True,
+        "speech_output_suppressed": True,
+        "bounded_overlay_position_mutation": True,
+        "mutation_authority_scope": "runtime_overlay_position_only",
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+    }
+    status_payload["overlay_position"]["left"] = 48.0
+    status_payload["overlay_position"]["operator_position_anchor"] = "voice_command_left_side"
+    status_payload["overlay_position"]["voice_position_command_active"] = True
+    _write_json(runtime_dir / "status.json", status_payload)
+
+    with _LocalCommandPaletteServer() as url:
+        proc = _run_monitor(
+            "-Mode",
+            "Probe",
+            "-DataDir",
+            str(data_dir),
+            "-CommandPaletteUrl",
+            url,
+            "-LensStatusPath",
+            str(status_path),
+            "-EnableVoiceChecks",
+            "-VoiceProvider",
+            "ElevenLabs",
+            "-ElevenLabsVoiceId",
+            "56bWURjYFHyYyVf490Dp",
+            "-TimeoutSeconds",
+            "3",
+        )
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = _json_stdout(proc.stdout)
+    voice_monitor = payload["voice_monitor"]
+    assert voice_monitor["voice_position_command_active"] is True
+    assert voice_monitor["overlay_position_anchor"] == "voice_command_left_side"
+    assert voice_monitor["latest_orb_position_command"] == "move_orb_left_side"
+    assert voice_monitor["latest_orb_position_command_status"] == "orb_voice_command_applied"
+    assert voice_monitor["latest_orb_position_command_applied"] is True
+    assert voice_monitor["overlay_left"] == 48
 
 
 def test_lens_command_palette_monitor_can_require_chatgpt_mcp_proof(tmp_path: Path) -> None:
