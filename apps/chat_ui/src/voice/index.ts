@@ -44,6 +44,17 @@ export type FrancisVoiceNoiseSummary = {
   summary: string;
 };
 
+export type FrancisVoiceRecognitionErrorSummary = {
+  error: string;
+  tone: FrancisVoiceTurnKind | "error";
+  awareness_state: string;
+  forward_to_chat: boolean;
+  response_expected: boolean;
+  summary: string;
+  operator_text: string;
+  is_error: boolean;
+};
+
 export type FrancisVoiceIngressRequest = {
   transcript: string;
   actor?: string;
@@ -227,6 +238,44 @@ export function summarizeVoiceSoundForOperator(opts: {
         : classification.forward_to_chat
           ? "speech_wake_forwarded_to_chat"
           : "speech_passive_no_chat",
+  };
+}
+
+export function summarizeVoiceRecognitionErrorForOperator(error: string): FrancisVoiceRecognitionErrorSummary {
+  const normalized = normalizeVoiceCommand(error);
+  if (normalized === "no speech" || normalized === "no speech detected" || normalized === "nospeech") {
+    return {
+      error: "no-speech",
+      tone: "noise",
+      awareness_state: "no_speech_observed",
+      forward_to_chat: false,
+      response_expected: false,
+      summary: "no_speech_no_chat",
+      operator_text: "No speech detected.",
+      is_error: false,
+    };
+  }
+  if (normalized === "aborted" || normalized === "abort") {
+    return {
+      error: "aborted",
+      tone: "noise",
+      awareness_state: "speech_recognition_aborted",
+      forward_to_chat: false,
+      response_expected: false,
+      summary: "recognition_aborted_no_chat",
+      operator_text: "Speech recognition cycle ended.",
+      is_error: false,
+    };
+  }
+  return {
+    error: error.trim() || "Speech recognition error.",
+    tone: "error",
+    awareness_state: "speech_recognition_error",
+    forward_to_chat: false,
+    response_expected: false,
+    summary: "speech_recognition_error",
+    operator_text: error.trim() || "Speech recognition error.",
+    is_error: true,
   };
 }
 

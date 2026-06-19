@@ -9,6 +9,7 @@ import {
   classifyVoiceSound,
   classifyVoiceTranscript,
   isFrancisStopPhrase,
+  summarizeVoiceRecognitionErrorForOperator,
   summarizeVoiceSoundForOperator,
   summarizeVoiceTranscriptForOperator,
 } from "./index.ts";
@@ -113,6 +114,22 @@ test("summarizeVoiceSoundForOperator records ambient noise without chat routing"
   assert.equal(noise.forward_to_chat, false);
   assert.equal(noise.response_expected, false);
   assert.equal(noise.summary, "ambient_noise_no_chat");
+});
+
+test("summarizeVoiceRecognitionErrorForOperator treats no-speech as awareness-only", () => {
+  const noSpeech = summarizeVoiceRecognitionErrorForOperator("no-speech");
+  assert.equal(noSpeech.is_error, false);
+  assert.equal(noSpeech.tone, "noise");
+  assert.equal(noSpeech.awareness_state, "no_speech_observed");
+  assert.equal(noSpeech.forward_to_chat, false);
+  assert.equal(noSpeech.response_expected, false);
+  assert.equal(noSpeech.summary, "no_speech_no_chat");
+
+  const realError = summarizeVoiceRecognitionErrorForOperator("network");
+  assert.equal(realError.is_error, true);
+  assert.equal(realError.tone, "error");
+  assert.equal(realError.awareness_state, "speech_recognition_error");
+  assert.equal(realError.summary, "speech_recognition_error");
 });
 
 test("buildVoiceIngressPayload marks browser voice origin without claiming ChatGPT app origin", () => {

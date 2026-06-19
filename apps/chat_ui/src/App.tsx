@@ -19,6 +19,7 @@ import {
   FrancisVoiceClient,
   createVoiceTurnId,
   normalizeVoiceTranscript,
+  summarizeVoiceRecognitionErrorForOperator,
   summarizeVoiceSoundForOperator,
   summarizeVoiceTranscriptForOperator,
 } from "./voice";
@@ -608,9 +609,18 @@ function VoiceTranscriptionPanel(props: { baseUrl: string }) {
       setAwareness("speech_not_matched");
     };
     recognition.onerror = (event) => {
-      const message = event.error || event.message || "Speech recognition error.";
-      setError(message);
-      setAwareness("speech_recognition_error");
+      const summary = summarizeVoiceRecognitionErrorForOperator(event.error || event.message || "Speech recognition error.");
+      setError(summary.is_error ? summary.operator_text : "");
+      setAwareness(summary.awareness_state);
+      appendLog({
+        role: "system",
+        text: summary.operator_text,
+        tone: summary.tone,
+        awareness: summary.awareness_state,
+        forwardToChat: summary.forward_to_chat,
+        responseExpected: summary.response_expected,
+        summary: summary.summary,
+      });
     };
     recognition.onresult = (event) => {
       let interim = "";
