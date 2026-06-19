@@ -2,15 +2,16 @@
 #
 # Status and PlanPersistentIngress modes are read-only. RecordUrl stores an
 # operator-supplied persistent HTTPS MCP URL without opening a tunnel.
-# connector URL. StartCloudflaredNamed starts a configured Cloudflare named
-# tunnel only when the operator supplies a stable hostname, tunnel name, and
-# -ExposePublicTunnel. RestartMcp refreshes only the local MCP launcher behind
-# an existing connector URL. Start mode opens a public localtunnel URL only when
-# -ExposePublicTunnel is explicitly supplied by the operator.
+# StartCloudflaredLogin opens only the Cloudflare provider login flow when
+# explicitly authorized. StartCloudflaredNamed starts a configured Cloudflare
+# named tunnel only when the operator supplies a stable hostname, tunnel name,
+# and -ExposePublicTunnel. RestartMcp refreshes only the local MCP launcher
+# behind an existing connector URL. Start mode opens a public localtunnel URL
+# only when -ExposePublicTunnel is explicitly supplied by the operator.
 
 [CmdletBinding(PositionalBinding = $false)]
 param(
-  [ValidateSet('Status', 'PlanPersistentIngress', 'RecordUrl', 'StartPersistent', 'RestartMcp', 'StartCloudflaredNamed', 'StartCloudflaredQuick', 'Start', 'Stop')]
+  [ValidateSet('Status', 'PlanPersistentIngress', 'RecordUrl', 'StartPersistent', 'RestartMcp', 'StartCloudflaredLogin', 'StartCloudflaredNamed', 'StartCloudflaredQuick', 'Start', 'Stop')]
   [string]$Mode = 'Status',
   [string]$HostAddress = '127.0.0.1',
   [int]$Port = 8787,
@@ -22,6 +23,7 @@ param(
   [string]$TunnelSubdomain = 'francis-voice-178175',
   [string]$RuntimeRoot = '',
   [switch]$ExposePublicTunnel,
+  [switch]$AuthorizeCloudflaredLogin,
   [switch]$VerifyConnector,
   [ValidateRange(1, 60)]
   [int]$ConnectorProbeTimeoutSeconds = 5,
@@ -319,6 +321,7 @@ function New-PersistentIngressOperatorHandoff {
       "Record the resulting stable connector URL as $StableUrl."
     )
     governed_handoff_commands = [ordered]@{
+      start_cloudflared_login = ".\scripts\chatgpt-voice-connector.ps1 -Mode StartCloudflaredLogin -AuthorizeCloudflaredLogin -Json"
       record_url = ".\scripts\chatgpt-voice-connector.ps1 -Mode RecordUrl -ConnectorUrl `"$StableUrl`" -Json"
       start_persistent_mcp = ".\scripts\chatgpt-voice-connector.ps1 -Mode StartPersistent -ConnectorUrl `"$StableUrl`" -VerifyConnector -Json"
       start_cloudflared_named = ".\scripts\chatgpt-voice-connector.ps1 -Mode StartCloudflaredNamed -CloudflaredTunnelName `"francis`" -CloudflaredHostname `"YOUR-STABLE-HOST`" -ExposePublicTunnel -VerifyConnector -Json"
@@ -1567,6 +1570,116 @@ if ($Mode -eq 'RestartMcp') {
   }
   ConvertTo-JsonOutput -Payload $Payload
   exit 0
+}
+
+if ($Mode -eq 'StartCloudflaredLogin') {
+  if (-not $AuthorizeCloudflaredLogin) {
+    ConvertTo-JsonOutput -Payload ([ordered]@{
+        kind = 'francis.chatgpt_voice.connector_control'
+        ok = $false
+        status = 'operator_cloudflared_login_authorization_required'
+        connector_url = ''
+        runtime_root = $RuntimeRoot
+        state_path = $statePath
+        blockers = @('authorize_cloudflared_login_flag_required')
+        next_operator_step = 'rerun_with_authorize_cloudflared_login'
+        cloudflared_login = [ordered]@{
+          public_tunnel_started = $false
+          connector_url_recorded = $false
+          provider_login_started = $false
+          provider_login_browser_may_open = $false
+        }
+        governance = New-GovernancePayload -ReadOnly $false -StartsProcess $false -OpensPublicTunnel $false -WritesData $false
+      })
+    exit 0
+  }
+
+  $CloudflaredPath = Resolve-CloudflaredPath
+  if ([string]::IsNullOrWhiteSpace($CloudflaredPath) -or -not (Test-Path -LiteralPath $CloudflaredPath -PathType Leaf)) {
+    ConvertTo-JsonOutput -Payload ([ordered]@{
+        kind = 'francis.chatgpt_voice.connector_control'
+        ok = $false
+        status = 'cloudflared_unavailable'
+        error = 'cloudflared_executable_not_found'
+        runtime_root = $RuntimeRoot
+        state_path = $statePath
+        blockers = @('cloudflared_unavailable')
+        next_operator_step = 'install_cloudflared'
+        governance = New-GovernancePayload -ReadOnly $false -StartsProcess $false -OpensPublicTunnel $false -WritesData $false
+      })
+    exit 0
+  }
+
+  $OriginCertBefore = Get-CloudflaredOriginCertReadiness
+  if ([bool](Get-PropertyValue -Payload $OriginCertBefore -Name 'present' -Default $false)) {
+    ConvertTo-JsonOutput -Payload ([ordered]@{
+        kind = 'francis.chatgpt_voice.connector_control'
+        ok = $true
+        status = 'cloudflared_login_already_ready'
+        runtime_root = $RuntimeRoot
+        state_path = $statePath
+        cloudflared_path = $CloudflaredPath
+        cloudflared_origin_cert = $OriginCertBefore
+        blockers = @()
+        next_operator_step = 'create_or_start_cloudflared_named_tunnel'
+        cloudflared_login = [ordered]@{
+          public_tunnel_started = $false
+          connector_url_recorded = $false
+          provider_login_started = $false
+          provider_login_browser_may_open = $false
+        }
+        governance = New-GovernancePayload -ReadOnly $false -StartsProcess $false -OpensPublicTunnel $false -WritesData $false
+      })
+    exit 0
+  }
+
+  try {
+    $LoginProcess = Start-Process -FilePath $CloudflaredPath -ArgumentList @('tunnel', 'login') -WindowStyle Normal -PassThru
+    Start-Sleep -Milliseconds 750
+    $LoginReadback = Get-ProcessReadback -ProcessId $LoginProcess.Id -ExpectedCommandText 'cloudflared'
+    $OriginCertAfter = Get-CloudflaredOriginCertReadiness
+    $LoginProcessAlive = [bool](Get-PropertyValue -Payload $LoginReadback -Name 'alive' -Default $false)
+    ConvertTo-JsonOutput -Payload ([ordered]@{
+        kind = 'francis.chatgpt_voice.connector_control'
+        ok = $true
+        status = if ($LoginProcessAlive) { 'cloudflared_login_started' } else { 'cloudflared_login_started_process_not_alive' }
+        runtime_root = $RuntimeRoot
+        state_path = $statePath
+        cloudflared_path = $CloudflaredPath
+        cloudflared_origin_cert_before = $OriginCertBefore
+        cloudflared_origin_cert_after = $OriginCertAfter
+        blockers = @()
+        next_operator_step = 'complete_cloudflared_browser_login_then_rerun_plan_persistent_ingress'
+        cloudflared_login = [ordered]@{
+          process_id = $LoginProcess.Id
+          process_alive = $LoginProcessAlive
+          process = $LoginReadback
+          public_tunnel_started = $false
+          connector_url_recorded = $false
+          provider_login_started = $true
+          provider_login_browser_may_open = $true
+          provider_login_writes_origin_cert = $true
+          origin_cert_content_read = $false
+        }
+        governance = New-GovernancePayload -ReadOnly $false -StartsProcess $true -OpensPublicTunnel $false -WritesData $true
+      })
+    exit 0
+  } catch {
+    ConvertTo-JsonOutput -Payload ([ordered]@{
+        kind = 'francis.chatgpt_voice.connector_control'
+        ok = $false
+        status = 'cloudflared_login_start_failed'
+        error = ConvertTo-BoundedText -Value $_.Exception.Message -MaxLength 512
+        runtime_root = $RuntimeRoot
+        state_path = $statePath
+        cloudflared_path = $CloudflaredPath
+        cloudflared_origin_cert_before = $OriginCertBefore
+        blockers = @('cloudflared_login_start_failed')
+        next_operator_step = 'inspect_cloudflared_installation_or_run_cloudflared_tunnel_login_manually'
+        governance = New-GovernancePayload -ReadOnly $false -StartsProcess $false -OpensPublicTunnel $false -WritesData $false
+      })
+    exit 0
+  }
 }
 
 if ($Mode -eq 'StartCloudflaredNamed') {
