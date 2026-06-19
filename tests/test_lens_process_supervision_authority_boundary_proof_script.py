@@ -294,6 +294,8 @@ def _write_active_authority_receipts(data_root: Path) -> None:
 
 def test_lens_process_supervision_boundary_blocks_supervision_and_service_activation(tmp_path: Path) -> None:
     data_root = tmp_path / "data"
+    host_launch_run_seconds = "8"
+    resident_surface_foreground_run_seconds = "8"
     proc = _run_proof(
         "-Mode",
         "Status",
@@ -302,11 +304,11 @@ def test_lens_process_supervision_boundary_blocks_supervision_and_service_activa
         "-ForegroundRunSeconds",
         "2",
         "-HostLaunchRunSeconds",
-        "3",
+        host_launch_run_seconds,
         "-SupervisorRunSeconds",
         "3",
         "-ResidentSurfaceForegroundRunSeconds",
-        "3",
+        resident_surface_foreground_run_seconds,
         env={"FRANCIS_DATA_DIR": str(data_root)},
     )
 
@@ -317,7 +319,7 @@ def test_lens_process_supervision_boundary_blocks_supervision_and_service_activa
     assert payload["ok"] is True
     assert payload["mode"] == "status"
     assert payload["activation_boundary_mode"] == "direct_resident_surface_activation_boundary"
-    assert payload["effective_resident_surface_foreground_run_seconds"] == 3
+    assert payload["effective_resident_surface_foreground_run_seconds"] == int(resident_surface_foreground_run_seconds)
     assert payload["child_proof_timeout_seconds"] == 360
     assert payload["child_proof_timeouts"] == []
     assert payload["cached_resident_surface_proof"] is False
