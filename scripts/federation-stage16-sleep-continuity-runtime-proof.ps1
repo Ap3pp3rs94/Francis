@@ -514,8 +514,16 @@ try {
   $env:FRANCIS_PROOF_MODE = $Mode.ToLowerInvariant()
   $env:FRANCIS_STAGE16_PRE_SLEEP_EVIDENCE = $PreEvidenceFullPath
   $env:FRANCIS_STAGE16_POST_RESUME_EVIDENCE = $PostEvidenceFullPath
-  $Output = $Source | & $PythonPath -
-  $ExitCode = $LASTEXITCODE
+  $PreviousNativeErrorActionPreference = $ErrorActionPreference
+  try {
+    # Windows PowerShell can promote native stderr warnings into terminating
+    # errors. The Python exit code remains the proof authority.
+    $ErrorActionPreference = 'Continue'
+    $Output = $Source | & $PythonPath -
+    $ExitCode = $LASTEXITCODE
+  } finally {
+    $ErrorActionPreference = $PreviousNativeErrorActionPreference
+  }
   if (-not [string]::IsNullOrWhiteSpace($Output)) {
     $Output
   }

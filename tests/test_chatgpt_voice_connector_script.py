@@ -61,7 +61,8 @@ def test_chatgpt_voice_connector_resolves_cross_platform_powershell_for_status_r
     assert "function Resolve-PowerShellHost" in script
     assert "Get-Command powershell -ErrorAction SilentlyContinue" in script
     assert "Get-Command pwsh -ErrorAction SilentlyContinue" in script
-    assert "Start-Process -FilePath $PowerShellHost -ArgumentList $Args" in script
+    assert "$StartProcessArgs.WindowStyle = 'Hidden'" in script
+    assert "$Process = Start-Process @StartProcessArgs" in script
     assert "status = 'status_timeout'" in script
     assert "$Raw = & powershell @Args 2>&1" not in script
 

@@ -423,7 +423,17 @@ function Invoke-EndpointStatus {
   $StderrPath = "$TempBase.stderr.log"
   $Process = $null
   try {
-    $Process = Start-Process -FilePath $PowerShellHost -ArgumentList $Args -PassThru -WindowStyle Hidden -RedirectStandardOutput $StdoutPath -RedirectStandardError $StderrPath
+    $StartProcessArgs = @{
+      FilePath = $PowerShellHost
+      ArgumentList = $Args
+      PassThru = $true
+      RedirectStandardOutput = $StdoutPath
+      RedirectStandardError = $StderrPath
+    }
+    if ($PSVersionTable.PSEdition -eq 'Desktop' -or $IsWindows) {
+      $StartProcessArgs.WindowStyle = 'Hidden'
+    }
+    $Process = Start-Process @StartProcessArgs
     Wait-Process -Id $Process.Id -Timeout $StatusTimeoutSeconds -ErrorAction SilentlyContinue
     $StillRunning = Get-Process -Id $Process.Id -ErrorAction SilentlyContinue
     if ($StillRunning) {
