@@ -791,7 +791,6 @@ $AuthorityBoundary = (
   -not [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'approval_decision_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'memory_write' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'activation_authority' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'local_process_launch_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'service_install_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'service_control_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'tray_registration_authority' -Default $true) -and
