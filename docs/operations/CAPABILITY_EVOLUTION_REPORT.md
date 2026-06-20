@@ -48,18 +48,18 @@ Baseline: report initialized after the four-worker pass completed on
 | Lens | 2 | Lens observation contracts gained unmapped-coordinate refusal coverage and command-palette proof readbacks. |
 | Voice | 2 | Voice receipts now separate acoustic proof source and ChatGPT provider receipt modes. |
 | Memory | 0 | No memory contract advancement in this cycle. |
-| Governance | 3 | Refusal/no-authority boundaries strengthened for acoustic proof, provider receipts, and Stage 17 worker-readback claims. |
-| Receipts | 3 | New receipt/readback fields for acoustic proof rejection, provider mode state, and worker-readback evidence requirements. |
+| Governance | 4 | Refusal/no-authority boundaries strengthened for acoustic proof, provider receipts, Stage 17 worker-readback claims, and activity-vs-progress reporting. |
+| Receipts | 4 | New receipt/readback fields for acoustic proof rejection, provider mode state, worker-readback evidence requirements, and capability-evolution worker packets. |
 | Missions | 0 | No mission-routing advancement in this cycle. |
 | Overlay | 2 | Overlay-related proof now requires local overlay speech source and blocked coordinate cases stay before screen/session readback. |
-| Observability | 3 | Added diagnostics for acoustic proof, provider mode disambiguation, and Stage 17 worker-readback guard state. |
+| Observability | 4 | Added diagnostics for acoustic proof, provider mode disambiguation, Stage 17 worker-readback guard state, and build capability evolution. |
 | Completion Model | 1 | Completion model now rejects selected Stage 17 gaps as worker-readback proof. |
 | Capability Registry | 0 | No capability registry advancement in this cycle. |
-| Swarm Infrastructure | 1 | Completion model now requires worker readback evidence before worker-packet claims. |
+| Swarm Infrastructure | 2 | Completion model now requires worker readback evidence before worker-packet claims, and coordinator prompts require capability-evolution packet fields. |
 | Operator Controls | 1 | Manual acoustic Orb movement proof now has source-specific next-step diagnostics. |
 | API Surface | 2 | Monitor route sanitizer and ChatGPT voice contract expose stricter readback fields. |
-| Documentation | 2 | Completion model docs and this evolution report record durable operating rules. |
-| Testing | 4 | Added or expanded focused tests across all four worker lanes. |
+| Documentation | 3 | Completion model docs, worker prompt docs, and this evolution report record durable operating rules. |
+| Testing | 5 | Added or expanded focused tests across all four worker lanes and the coordinator prompt contract. |
 
 ## Cycle Log
 
@@ -278,3 +278,40 @@ NEXT HIGHEST LEVERAGE ACTION
 - Run the next worker cycle against live-evidence bottlenecks: local microphone
   Orb proof, public ChatGPT ingress or clearly marked fixture proof, and a
   single governed Stage 17 plugin API slice with focused validation.
+
+## PM Follow-Up - 2026-06-20T02:20Z
+
+Commit:
+
+- `dc5acac9` - `feat(operations): require capability evolution worker packets`
+
+Capability classes advanced:
+
+- Governance
+- Receipts
+- Observability
+- Swarm Infrastructure
+- Documentation
+- Testing
+
+What changed:
+
+- Coordinator dispatch prompts now require a `CAPABILITY EVOLUTION` section in
+  worker readbacks.
+- Worker prompt documentation now lists the capability categories and requires
+  workers to distinguish activity from progress.
+- Coordinator tests now assert future dispatch prompts include capability
+  evolution requirements.
+
+Validation:
+
+- `.\.venv\Scripts\python.exe -m pytest tests\test_francis_worker_terminals_script.py -q` passed.
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache tests\test_francis_worker_terminals_script.py` passed.
+- `.\.venv\Scripts\python.exe -m ruff format --check --no-cache tests\test_francis_worker_terminals_script.py` passed.
+- PowerShell parser check for `scripts\francis-worker-coordinator.ps1` returned `parse_ok`.
+- `git diff --check -- scripts/francis-worker-coordinator.ps1 docs/operations/worker_prompts/README.md tests/test_francis_worker_terminals_script.py` passed with the existing CRLF warning for the PowerShell script.
+
+Effect:
+
+- Future worker packets should be easier to classify into the running
+  capability ledger without reconstructing intent from diffs alone.
