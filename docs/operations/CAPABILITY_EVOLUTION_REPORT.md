@@ -44,22 +44,22 @@ Baseline: report initialized after the four-worker pass completed on
 
 | Category | Accepted Changes | Current Advancement |
 | --- | ---: | --- |
-| Presence | 1 | Orb voice proof diagnostics now distinguish local acoustic proof from bridge-file receipts. |
-| Lens | 2 | Lens observation contracts gained unmapped-coordinate refusal coverage and command-palette proof readbacks. |
-| Voice | 2 | Voice receipts now separate acoustic proof source and ChatGPT provider receipt modes. |
+| Presence | 2 | Orb voice proof diagnostics now distinguish local acoustic proof from bridge-file receipts and expose whether manual proof is required. |
+| Lens | 4 | Lens observation contracts gained unmapped-coordinate refusal coverage, invalid-dimension refusal, and command-palette proof readbacks. |
+| Voice | 4 | Voice receipts now separate acoustic proof source, gate mode, provider receipt modes, and embedded provider-boundary evidence. |
 | Memory | 0 | No memory contract advancement in this cycle. |
-| Governance | 4 | Refusal/no-authority boundaries strengthened for acoustic proof, provider receipts, Stage 17 worker-readback claims, and activity-vs-progress reporting. |
-| Receipts | 4 | New receipt/readback fields for acoustic proof rejection, provider mode state, worker-readback evidence requirements, and capability-evolution worker packets. |
+| Governance | 8 | Refusal/no-authority boundaries strengthened for acoustic proof, provider receipts, Stage 17 worker-readback/publication handoff claims, invalid coordinates, activity-vs-progress reporting, and worker liveness truth. |
+| Receipts | 8 | New receipt/readback fields for acoustic proof rejection, provider mode state/linkage, worker-readback and worker/publication handoff requirements, capability-evolution worker packets, and worker execution liveness. |
 | Missions | 0 | No mission-routing advancement in this cycle. |
-| Overlay | 2 | Overlay-related proof now requires local overlay speech source and blocked coordinate cases stay before screen/session readback. |
-| Observability | 4 | Added diagnostics for acoustic proof, provider mode disambiguation, Stage 17 worker-readback guard state, and build capability evolution. |
-| Completion Model | 1 | Completion model now rejects selected Stage 17 gaps as worker-readback proof. |
+| Overlay | 4 | Overlay-related proof now requires local overlay speech source, exposes manual proof mode, and blocked/invalid coordinate cases stay before screen/session readback. |
+| Observability | 9 | Added diagnostics for acoustic proof, provider mode/linkage disambiguation, Stage 17 readback and handoff guard state, build capability evolution, and Exec worker liveness. |
+| Completion Model | 2 | Completion model now rejects selected Stage 17 gaps as worker-readback proof and worker/publication handoff proof. |
 | Capability Registry | 0 | No capability registry advancement in this cycle. |
-| Swarm Infrastructure | 2 | Completion model now requires worker readback evidence before worker-packet claims, and coordinator prompts require capability-evolution packet fields. |
-| Operator Controls | 1 | Manual acoustic Orb movement proof now has source-specific next-step diagnostics. |
-| API Surface | 2 | Monitor route sanitizer and ChatGPT voice contract expose stricter readback fields. |
-| Documentation | 3 | Completion model docs, worker prompt docs, and this evolution report record durable operating rules. |
-| Testing | 5 | Added or expanded focused tests across all four worker lanes and the coordinator prompt contract. |
+| Swarm Infrastructure | 4 | Completion model now requires worker readback/handoff evidence, coordinator prompts require capability-evolution packet fields, and active Exec workers are no longer treated as stale. |
+| Operator Controls | 2 | Manual acoustic Orb movement proof now has source-specific next-step diagnostics and explicit manual-proof-required state. |
+| API Surface | 3 | Monitor route sanitizer and ChatGPT voice contract/receipt surfaces expose stricter readback fields. |
+| Documentation | 4 | Completion model docs, worker prompt docs, and this evolution report record durable operating rules. |
+| Testing | 10 | Added or expanded focused tests across worker lanes, coordinator prompt contracts, and worker liveness status. |
 
 ## Cycle Log
 
@@ -315,3 +315,147 @@ Effect:
 
 - Future worker packets should be easier to classify into the running
   capability ledger without reconstructing intent from diffs alone.
+
+## PM Follow-Up - 2026-06-20T12:35Z
+
+Commit:
+
+- `815b66b4` - `fix(operations): keep active exec workers from stale churn`
+
+Capability classes advanced:
+
+- Governance
+- Receipts
+- Observability
+- Swarm Infrastructure
+- Testing
+
+What changed:
+
+- Launcher status now reports `exec_runner_alive` and
+  `worker_execution_alive`.
+- Coordinator stale-runner detection now uses truthful worker execution
+  liveness instead of treating every Exec runner without a direct Codex child as
+  stale.
+- Coordinator receipts now distinguish `worker_execution_missing` from process
+  absence.
+
+Validation:
+
+- `.\.venv\Scripts\python.exe -m pytest tests\test_francis_worker_terminals_script.py -q` passed.
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache tests\test_francis_worker_terminals_script.py` passed.
+- `.\.venv\Scripts\python.exe -m ruff format --check --no-cache tests\test_francis_worker_terminals_script.py` passed.
+- PowerShell parser checks for `scripts/start-francis-worker-terminals.ps1` and
+  `scripts/francis-worker-coordinator.ps1` returned `parse_ok`.
+- `git diff --check -- scripts/start-francis-worker-terminals.ps1 scripts/francis-worker-coordinator.ps1 tests/test_francis_worker_terminals_script.py` passed with existing CRLF warnings for the PowerShell scripts.
+
+Effect:
+
+- Removed a swarm bottleneck where active `codex exec` workers could be
+  misclassified as stale because the launcher only looked for direct Codex child
+  processes.
+
+### Cycle 2026-06-20T12:20Z to 2026-06-20T12:34Z
+
+Scope: four-worker pass launched by the old in-memory coordinator before the
+Exec-liveness fix was restarted. All four workers finished once with exit code
+0. The PM reviewed all four packets before opening the next gate.
+
+Active workers:
+
+- `worker-1-orb-voice-proof`
+- `worker-2-lens-overlay-spatial`
+- `worker-3-voice-receipts`
+- `worker-4-stage17-completion`
+
+Active drones: 0 reported by all worker packets.
+
+Commits produced:
+
+- `d43b7827` - `feat(observability): expose manual acoustic proof gate mode`
+- `ffc5fe99` - `fix(lens): reject invalid overlay observation dimensions`
+- `ec91ad41` - `feat(voice): clarify ChatGPT provider receipt linkage`
+- `f5cc2adf` - `fix(completion-model): require worker publication handoff evidence`
+
+Commits accepted: 4.
+
+Commits rejected: 0 complete worker packets rejected.
+
+Artifacts rejected or deferred:
+
+- `docs/operations/COMPLETION_LEDGER.md` from Worker 4 was again excluded from
+  the accepted commit because it remained a mixed multi-entry dirty append.
+
+Validations passed:
+
+- Worker 1 parser, py_compile, focused pytest selection, route sanitizer test,
+  Ruff check, Ruff format check, and diff check.
+- Worker 2 pytest, Ruff check, Ruff format check, mypy, and diff check.
+- Worker 3 pytest, supplemental proof-surface pytest, Ruff check, Ruff format
+  check, mypy, and diff check.
+- Worker 4 pytest, Ruff check, Ruff format check, mypy, PowerShell parser
+  check, and non-ledger diff check.
+
+Validations failed:
+
+- No accepted validation failed in PM review.
+- Worker 1 disclosed intermittent combined PowerShell-backed pytest timeouts
+  during worker-side validation; isolated cases passed and the PM accepted the
+  focused validated slice.
+
+Receipts generated:
+
+- `.francis/worker-terminal-coordinator/readbacks/worker-1-orb-voice-proof.md`
+- `.francis/worker-terminal-coordinator/readbacks/worker-2-lens-overlay-spatial.md`
+- `.francis/worker-terminal-coordinator/readbacks/worker-3-voice-receipts.md`
+- `.francis/worker-terminal-coordinator/readbacks/worker-4-stage17-completion.md`
+
+Roadmap items advanced:
+
+- Phase 2 / Stage 6 Lens MVP truthfulness.
+- Voice-to-Orb proof receipt integrity.
+- Lens-to-overlay invalid coordinate refusal truth.
+- Stage 17 completion-model handoff guardrails.
+- P1 interface truthfulness.
+- P9 observability and receipt-backed readback.
+
+Capability classes advanced:
+
+- Presence
+- Lens
+- Voice
+- Governance
+- Receipts
+- Overlay
+- Observability
+- Completion Model
+- Swarm Infrastructure
+- Operator Controls
+- API Surface
+- Documentation
+- Testing
+
+Velocity metrics:
+
+- Worker pass duration: about 13 minutes from first active prompt start to last
+  worker completion.
+- Accepted lane commits per hour: about 18.5.
+- Validated capability classes per hour: about 60.0 based on 13 distinct
+  classes advanced in this pass.
+- Roadmap closures per day: 0. No roadmap gate closed.
+- Worker efficiency: 4 accepted packets from 4 completed workers.
+- Drone efficiency: not applicable; no drones used.
+- Integration efficiency: 4 accepted lane commits from 4 reviewed packets, with
+  one partial artifact rejected.
+
+Most important change:
+
+- Francis gained stronger proof gates around manual acoustic Orb proof, invalid
+  lens observation regions, embedded voice provider-boundary evidence, and
+  worker/publication handoff claims.
+
+Next bottleneck:
+
+- Live evidence remains the major blocker: microphone-origin Orb movement,
+  public ChatGPT ingress or marked fixture proof, live ElevenLabs provider
+  receipts, and clean Stage 17 queue-reduction artifacts.
