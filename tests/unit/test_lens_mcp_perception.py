@@ -41,6 +41,10 @@ def test_contract_lists_only_read_only_tools_and_claims_not_resident(tmp_path, m
     assert out["overlay_observation"]["uses_existing_overlay"] is True
     assert out["overlay_observation"]["creates_overlay"] is False
     assert out["overlay_observation"]["requires_overlay_coordinate_model"] is True
+    assert out["overlay_observation"]["spatial_contract_schema_version"] == 1
+    assert out["overlay_observation"]["reports_requested_region"] is True
+    assert out["overlay_observation"]["reports_mapped_overlay_region"] is True
+    assert out["overlay_observation"]["reports_actual_inspected_observed_and_captured_regions"] is True
     assert out["overlay_observation"]["screenshots"] is False
     assert out["overlay_observation"]["pixels"] is False
     assert out["governance"]["resident"] is False
@@ -142,9 +146,37 @@ def test_overlay_observation_refuses_without_overlay_coordinate_model(tmp_path, 
     assert structured["source"]["status"] == "not_called"
     assert structured["unknowns"] == out["unknown_information"]
     assert structured["failure_or_refusal_reason"] == "overlay_context_missing"
+    spatial = out["spatial_contract"]
+    assert spatial == structured["spatial_contract"]
+    assert spatial["contract"] == "lens_overlay_spatial_metadata_v1"
+    assert spatial["status"] == "blocked"
+    assert spatial["coordinate_space"] == "desktop_logical_pixels"
+    assert spatial["mapped_overlay_region_status"] == "blocked"
+    assert spatial["actual_inspected_region_status"] == "not_inspected"
+    assert spatial["actual_observed_region_status"] == "not_observed"
+    assert spatial["actual_captured_region_status"] == "not_captured"
+    assert spatial["coordinate_boundary_status"] == "unavailable"
+    assert spatial["coordinate_transform_status"] == "unavailable"
+    assert spatial["bounds_checked"] is False
+    assert spatial["source"]["status"] == "not_called"
+    assert spatial["region_presence"] == {
+        "requested_region": True,
+        "mapped_region": False,
+        "actual_inspection_region": False,
+        "actual_observation_region": False,
+        "actual_capture_region": False,
+    }
+    assert spatial["confidence"] == 0.0
+    assert spatial["confidence_basis"] == "capture_not_performed"
+    assert spatial["capture_performed"] is False
+    assert spatial["unsupported_perception"]["screenshots"] is False
+    assert spatial["unsupported_perception"]["pixels"] is False
+    assert "requested_region" in spatial["replay_keys"]
+    assert spatial["failure_or_refusal_reason"] == "overlay_context_missing"
     assert "pixel_content" in out["unknown_information"]
     assert out["receipt"]["decision"] == "refused"
     assert out["receipt"]["structured_observation_receipt"] == structured
+    assert out["receipt"]["spatial_contract"] == spatial
     assert out["receipt"]["requested_region"]["space"] == "desktop"
     assert out["governance"]["uses_existing_overlay"] is True
     assert out["governance"]["creates_overlay"] is False
@@ -276,6 +308,46 @@ def test_overlay_observation_uses_existing_overlay_bounds_and_screen_readback(tm
     assert structured["evidence_reference"] == out["evidence_reference"]
     assert structured["inferred_information"] == out["inferred_information"]
     assert structured["confidence"] == out["confidence"]
+    spatial = out["spatial_contract"]
+    assert spatial == structured["spatial_contract"]
+    assert spatial["schema_version"] == 1
+    assert spatial["status"] == "observed"
+    assert spatial["coordinate_space"] == "desktop_logical_pixels"
+    assert spatial["mapped_overlay_region_status"] == "mapped"
+    assert spatial["actual_inspected_region_status"] == "inspected_metadata_only"
+    assert spatial["actual_observed_region_status"] == "observed_metadata_only"
+    assert spatial["actual_captured_region_status"] == "not_captured"
+    assert spatial["coordinate_boundary_status"] == "within_bounds"
+    assert spatial["coordinate_transform_status"] == "mapped"
+    assert spatial["bounds_checked"] is True
+    assert spatial["within_overlay_bounds"] is True
+    assert spatial["clipped_by_overlay"] is False
+    assert spatial["source"]["name"] == "francis.screen.session"
+    assert spatial["source"]["status"] == "ready"
+    assert spatial["source"]["read_only"] is True
+    assert spatial["evidence_reference_status"] == "metadata_readback"
+    assert spatial["evidence_content_included"] is False
+    assert spatial["region_presence"] == {
+        "requested_region": True,
+        "mapped_region": True,
+        "actual_inspection_region": True,
+        "actual_observation_region": True,
+        "actual_capture_region": False,
+    }
+    assert spatial["confidence"] == out["confidence"]
+    assert spatial["confidence_basis"] == "mcp_metadata_readback_not_visual_perception"
+    assert spatial["capture_performed"] is False
+    assert spatial["unsupported_perception"] == {
+        "screenshots": False,
+        "pixels": False,
+        "ocr": False,
+        "accessibility_tree": False,
+        "visual_similarity": False,
+    }
+    assert spatial["unknowns"] == out["unknown_information"]
+    assert spatial["limitations"] == out["limitations"]
+    assert spatial["failure_or_refusal_reason"] == ""
+    assert "actual_captured_region" in spatial["replay_keys"]
     assert "screenshot_pixels" in structured["unknowns"]
     assert "metadata_only_screen_session_readback" in structured["limitations"]
     assert "pixel_capture_unsupported" in structured["limitations"]
@@ -289,6 +361,7 @@ def test_overlay_observation_uses_existing_overlay_bounds_and_screen_readback(tm
     assert out["receipt"]["actual_observed_region"] == out["actual_observed_region"]
     assert out["receipt"]["actual_captured_region"] == out["actual_captured_region"]
     assert out["receipt"]["limitations"] == out["limitations"]
+    assert out["receipt"]["spatial_contract"] == spatial
     assert out["receipt"]["correlation_id"] == "corr-observe-test"
     assert out["receipt"]["mission_id"] == "mission-observe-test"
 
@@ -397,9 +470,26 @@ def test_overlay_observation_blocks_out_of_bounds_region_without_screen_readback
     assert structured["actual_observed_region"] == out["actual_observed_region"]
     assert structured["actual_captured_region"] == out["actual_captured_region"]
     assert structured["limitations"] == out["limitations"]
+    spatial = out["spatial_contract"]
+    assert spatial == structured["spatial_contract"]
+    assert spatial["status"] == "blocked"
+    assert spatial["mapped_overlay_region_status"] == "blocked"
+    assert spatial["actual_observed_region_status"] == "not_observed"
+    assert spatial["coordinate_boundary_status"] == "outside_bounds"
+    assert spatial["coordinate_transform_status"] == "blocked_after_mapping"
+    assert spatial["bounds_checked"] is True
+    assert spatial["within_overlay_bounds"] is False
+    assert spatial["clipped_by_overlay"] is True
+    assert spatial["source"]["status"] == "not_called"
+    assert spatial["region_presence"]["mapped_region"] is True
+    assert spatial["region_presence"]["actual_observation_region"] is False
+    assert spatial["confidence"] == 0.0
+    assert spatial["capture_performed"] is False
+    assert spatial["failure_or_refusal_reason"] == "requested_region_outside_overlay_bounds"
     assert out["receipt"]["actual_observed_region"] == out["actual_observed_region"]
     assert out["receipt"]["actual_captured_region"] == out["actual_captured_region"]
     assert out["receipt"]["limitations"] == out["limitations"]
+    assert out["receipt"]["spatial_contract"] == spatial
 
 
 def test_overlay_observation_reports_overlay_local_transform_for_offset_bounds(tmp_path, monkeypatch) -> None:
@@ -517,11 +607,15 @@ def test_api_observe_requires_scope_and_overlay_context(tmp_path, monkeypatch) -
     assert body["mapped_overlay_region"]["status"] == "mapped"
     assert body["actual_captured_region"]["mapped_overlay_region_status"] == "mapped"
     assert body["actual_captured_region"]["coordinate_transform"]["status"] == "mapped"
+    assert body["spatial_contract"]["coordinate_boundary_status"] == "within_bounds"
+    assert body["spatial_contract"]["actual_captured_region_status"] == "not_captured"
+    assert body["spatial_contract"]["capture_performed"] is False
     assert body["governance"]["uses_existing_overlay"] is True
 
     receipts = client.get("/lens/mcp/receipts", params={"actor": _ACTOR, "limit": 1}).json()
     receipt = receipts["receipts"][0]
     assert receipt["decision"] == "observed"
+    assert receipt["spatial_contract"] == body["spatial_contract"]
     assert receipt["actual_captured_region"]["mapped_overlay_region_status"] == "mapped"
     assert receipt["actual_captured_region"]["coordinate_boundary"]["status"] == "within_bounds"
     assert receipt["actual_captured_region"]["coordinate_transform"]["status"] == "mapped"

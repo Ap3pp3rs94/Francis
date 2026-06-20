@@ -164,6 +164,10 @@ def lens_mcp_perception_contract() -> dict[str, Any]:
             "uses_existing_overlay": True,
             "creates_overlay": False,
             "creates_lens_app": False,
+            "spatial_contract_schema_version": 1,
+            "reports_requested_region": True,
+            "reports_mapped_overlay_region": True,
+            "reports_actual_inspected_observed_and_captured_regions": True,
             "observation_sources": sorted(_OVERLAY_OBSERVATION_TOOLS),
             "screenshots": False,
             "pixels": False,
@@ -204,6 +208,7 @@ def _receipt_optional_fields(payload: dict[str, Any]) -> dict[str, Any]:
         "structured_observation_receipt",
         "evidence_reference",
         "confidence",
+        "spatial_contract",
         "unknown_information",
         "limitations",
         "failure_or_refusal_reason",
@@ -875,6 +880,103 @@ def _metadata_inspected_region(
     }
 
 
+def _region_present(region: dict[str, Any]) -> bool:
+    return bool(_region_edges(_as_dict(region)))
+
+
+def _spatial_contract_readback(
+    *,
+    status: str,
+    requested_region: dict[str, Any],
+    mapped_overlay_region: dict[str, Any],
+    actual_inspected_region: dict[str, Any],
+    actual_observed_region: dict[str, Any],
+    actual_captured_region: dict[str, Any],
+    source: dict[str, Any],
+    evidence_reference: dict[str, Any],
+    confidence: float,
+    unknown_information: list[str],
+    limitations: list[str],
+    failure_or_refusal_reason: str = "",
+) -> dict[str, Any]:
+    boundary = _as_dict(mapped_overlay_region.get("coordinate_boundary"))
+    transform = _as_dict(mapped_overlay_region.get("coordinate_transform"))
+    coordinate_space = (
+        _safe_str(boundary.get("coordinate_space"))
+        or _safe_str(transform.get("target_space"))
+        or _safe_str(requested_region.get("space"), "unknown")
+    )
+    source_name = _safe_str(source.get("name")) or _safe_str(source.get("tool")) or "none"
+    source_status = _safe_str(source.get("status"), "unknown")
+    observed_confidence_basis = _safe_str(
+        actual_observed_region.get("confidence_basis"),
+        "mcp_metadata_readback_not_visual_perception",
+    )
+    captured_confidence_basis = _safe_str(
+        actual_captured_region.get("confidence_basis"),
+        "capture_not_performed",
+    )
+    capture_state = _safe_str(actual_captured_region.get("capture"))
+    return {
+        "schema_version": 1,
+        "contract": "lens_overlay_spatial_metadata_v1",
+        "status": _safe_str(status),
+        "coordinate_space": coordinate_space,
+        "requested_region_status": _safe_str(requested_region.get("status")),
+        "mapped_overlay_region_status": _safe_str(mapped_overlay_region.get("status")),
+        "actual_inspected_region_status": _safe_str(actual_inspected_region.get("status"), "not_inspected"),
+        "actual_observed_region_status": _safe_str(actual_observed_region.get("status"), "not_observed"),
+        "actual_captured_region_status": _safe_str(actual_captured_region.get("status"), "not_captured"),
+        "coordinate_boundary_status": _safe_str(boundary.get("status"), "unavailable"),
+        "coordinate_transform_status": _safe_str(transform.get("status"), "unavailable"),
+        "bounds_checked": bool(boundary.get("bounds_checked")) or bool(transform.get("bounds_checked")),
+        "within_overlay_bounds": bool(boundary.get("within_overlay_bounds")),
+        "clipped_by_overlay": bool(boundary.get("clipped_by_overlay")),
+        "source": {
+            "name": source_name,
+            "status": source_status,
+            "mode": _safe_str(source.get("mode")),
+            "read_only": bool(source.get("read_only")),
+            "live_simulated_fixture_or_replay": _safe_str(source.get("live_simulated_fixture_or_replay")),
+        },
+        "evidence_reference_status": _safe_str(evidence_reference.get("status")),
+        "evidence_content_included": bool(evidence_reference.get("content_included")),
+        "region_presence": {
+            "requested_region": _region_present(requested_region),
+            "mapped_region": _region_present(_as_dict(mapped_overlay_region.get("region"))),
+            "actual_inspection_region": _region_present(
+                _as_dict(actual_inspected_region.get("actual_inspection_region"))
+            ),
+            "actual_observation_region": _region_present(
+                _as_dict(actual_observed_region.get("actual_observation_region"))
+            ),
+            "actual_capture_region": _region_present(_as_dict(actual_captured_region.get("actual_capture_region"))),
+        },
+        "confidence": confidence,
+        "confidence_basis": observed_confidence_basis if confidence > 0 else captured_confidence_basis,
+        "capture_performed": bool(capture_state and capture_state != "not_performed"),
+        "unsupported_perception": {
+            "screenshots": False,
+            "pixels": False,
+            "ocr": False,
+            "accessibility_tree": False,
+            "visual_similarity": False,
+        },
+        "unknowns": unknown_information,
+        "limitations": limitations,
+        "failure_or_refusal_reason": _safe_str(failure_or_refusal_reason),
+        "replay_keys": [
+            "requested_region",
+            "mapped_overlay_region",
+            "actual_inspected_region",
+            "actual_observed_region",
+            "actual_captured_region",
+            "source",
+            "evidence_reference",
+        ],
+    }
+
+
 def _structured_observation_receipt(
     *,
     decision: str,
@@ -892,6 +994,20 @@ def _structured_observation_receipt(
     limitations: list[str],
     failure_or_refusal_reason: str = "",
 ) -> dict[str, Any]:
+    spatial_contract = _spatial_contract_readback(
+        status=status,
+        requested_region=requested_region,
+        mapped_overlay_region=mapped_overlay_region,
+        actual_inspected_region=actual_inspected_region,
+        actual_observed_region=actual_observed_region,
+        actual_captured_region=actual_captured_region,
+        source=source,
+        evidence_reference=evidence_reference,
+        confidence=confidence,
+        unknown_information=unknown_information,
+        limitations=limitations,
+        failure_or_refusal_reason=failure_or_refusal_reason,
+    )
     return {
         "kind": "francis.lens.overlay.structured_observation_receipt",
         "schema_version": 1,
@@ -906,6 +1022,7 @@ def _structured_observation_receipt(
         "evidence_reference": evidence_reference,
         "inferred_information": inferred_information,
         "confidence": confidence,
+        "spatial_contract": spatial_contract,
         "unknowns": unknown_information,
         "limitations": limitations,
         "failure_or_refusal_reason": _safe_str(failure_or_refusal_reason),
@@ -1000,6 +1117,7 @@ def lens_observe_overlay_region(
                 "actual_observed_region": actual_observed_region,
                 "actual_captured_region": actual_captured_region,
                 "limitations": limitations,
+                "spatial_contract": structured["spatial_contract"],
                 "structured_observation_receipt": structured,
             }
         )
@@ -1019,6 +1137,7 @@ def lens_observe_overlay_region(
             "evidence_reference": {},
             "inferred_information": {},
             "structured_observation_receipt": structured,
+            "spatial_contract": structured["spatial_contract"],
             "confidence": 0.0,
             "unknown_information": unknowns,
             "limitations": limitations,
@@ -1078,6 +1197,7 @@ def lens_observe_overlay_region(
                 "actual_observed_region": actual_observed_region,
                 "actual_captured_region": actual_captured_region,
                 "limitations": limitations,
+                "spatial_contract": structured["spatial_contract"],
                 "structured_observation_receipt": structured,
             }
         )
@@ -1097,6 +1217,7 @@ def lens_observe_overlay_region(
             "evidence_reference": {},
             "inferred_information": {},
             "structured_observation_receipt": structured,
+            "spatial_contract": structured["spatial_contract"],
             "confidence": 0.0,
             "unknown_information": unknowns,
             "limitations": limitations,
@@ -1234,6 +1355,7 @@ def lens_observe_overlay_region(
             "confidence": confidence,
             "unknown_information": unknowns,
             "limitations": limitations,
+            "spatial_contract": structured["spatial_contract"],
             "failure_or_refusal_reason": failure_or_refusal_reason,
         }
     )
@@ -1258,6 +1380,7 @@ def lens_observe_overlay_region(
         "evidence_reference": evidence,
         "inferred_information": inferred,
         "structured_observation_receipt": structured,
+        "spatial_contract": structured["spatial_contract"],
         "confidence": confidence,
         "unknown_information": unknowns,
         "limitations": limitations,
