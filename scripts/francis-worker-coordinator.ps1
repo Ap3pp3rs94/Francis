@@ -153,7 +153,7 @@ function Get-LaneProjectManagerInstruction {
       return 'Project-manager direction: advance Stage 17 reusable invocation proof. Prioritize governed invocation, pack reuse across multiple Francis contexts or mission shapes, receipt linkage, and focused validation.'
     }
     'worker-4-stage17-completion' {
-      return 'Project-manager direction: advance Stage 17 catalog coherence and closure audit. Build or update the closure matrix, find the weakest criterion, then directly fix one executable blocker with evidence.'
+      return 'Project-manager direction: run the project-wide CI and wiring audit lane. Prioritize .\scripts\check.ps1 or the narrowest honest substitute, route-mount verification, completion-model truth, worker publication-gate wiring, and CURRENT_BUILD_WIRING_DIAGRAM.md accuracy.'
     }
     default {
       return 'Project-manager direction: inspect repo truth, choose one bounded roadmap-aligned slice, validate it, and leave a precise handoff.'

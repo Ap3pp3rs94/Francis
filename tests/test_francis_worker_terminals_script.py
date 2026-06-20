@@ -201,7 +201,7 @@ def test_francis_worker_coordinator_generates_individual_pm_dispatches(tmp_path:
         in by_name["worker-3-voice-receipts-iteration-1.md"]
     )
     assert (
-        "Project-manager direction: advance Stage 17 catalog coherence and closure audit."
+        "Project-manager direction: run the project-wide CI and wiring audit lane."
         in by_name["worker-4-stage17-completion-iteration-1.md"]
     )
     for text in by_name.values():
