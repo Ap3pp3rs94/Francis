@@ -1041,6 +1041,172 @@ def test_plugins_lifecycle_repair_denies_unscoped_and_refuses_ambiguous_noop(
     assert len(list(lifecycle_dir.glob("*.json"))) == receipt_count_before_denied
 
 
+def test_plugins_lifecycle_repair_history_is_read_only_without_authority(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", "{}")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    readback = client.get("/plugins/lifecycle/repair/history?id=missing.lifecycle")
+    assert readback.status_code == 200
+    body = readback.json()
+    assert body["ok"] is False
+    assert body["applied"] is False
+    assert body["status"] == "not_found"
+    assert body["error"] == "not_found"
+    assert body["history_count"] == 0
+    assert body["repair_restore_history_count"] == 0
+    assert body["apply_readiness"]["safe_to_apply"] is False
+    assert body["apply_readiness"]["writes_registry_metadata_if_applied"] is False
+    assert body["apply_readiness"]["writes_lifecycle_receipt_if_applied"] is False
+    assert body["governance"]["read_only"] is True
+    assert body["governance"]["apply_requires_plugins_write_scope"] is True
+    assert body["governance"]["writes_registry_metadata"] is False
+    assert body["governance"]["writes_lifecycle_receipt"] is False
+    assert body["governance"]["writes_data"] is False
+    assert body["governance"]["promotion_authority"] is False
+    assert body["governance"]["execution_authority"] is False
+    assert body["governance"]["memory_write"] is False
+    assert not (data_root / "plugins" / "_registry.json").exists()
+    assert not (data_root / "artifacts" / "plugins" / "lifecycle").exists()
+
+
+def test_plugins_lifecycle_repair_history_reads_receipts_and_apply_safety(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    installed = client.post(
+        "/plugins/install",
+        json={
+            "source_kind": "registry",
+            "source_ref": "acme/lifecycle-history",
+            "reason": "install lifecycle history fixture",
+            "actor": _PLUGIN_ACTOR,
+        },
+    )
+    assert installed.status_code == 200
+    installed_body = installed.json()
+    assert installed_body["ok"] is True
+    plugin_id = str(installed_body["plugin_id"])
+
+    quarantined = client.post(
+        "/plugins/disable",
+        json={
+            "id": plugin_id,
+            "actor": _PLUGIN_ACTOR,
+            "reason": "quarantine before lifecycle history readback",
+            "meta": {"lifecycle_action": "quarantine"},
+        },
+    )
+    assert quarantined.status_code == 200
+    assert quarantined.json()["ok"] is True
+
+    registry_path = data_root / "plugins" / "_registry.json"
+    lifecycle_dir = data_root / "artifacts" / "plugins" / "lifecycle"
+    registry_before_history = registry_path.read_text(encoding="utf-8")
+    receipt_names_before_history = sorted(path.name for path in lifecycle_dir.glob("*.json"))
+
+    history_before = client.get(f"/plugins/lifecycle/repair/history?id={plugin_id}")
+    assert history_before.status_code == 200
+    before_body = history_before.json()
+    assert before_body["ok"] is True
+    assert before_body["applied"] is False
+    assert before_body["status"] == "repair_available"
+    assert before_body["history_count"] == 1
+    assert before_body["repair_restore_history_count"] == 0
+    assert before_body["current_lifecycle"]["status"] == "quarantined"
+    assert before_body["current_lifecycle"]["blocks_promotion"] is True
+    assert before_body["last_non_blocking_lifecycle_metadata"]["status"] == "enabled"
+    assert before_body["last_non_blocking_lifecycle_metadata"]["safe_registry_status"] == "disabled"
+    assert before_body["history"][0]["action"] == "quarantine"
+    assert before_body["latest_receipt"]["receipt_id"] == quarantined.json()["lifecycle_receipt_id"]
+    assert before_body["apply_readiness"]["safe_to_apply"] is True
+    assert before_body["apply_readiness"]["reason"] == (
+        "blocking_lifecycle_state_detected_with_non_enabled_restore_target"
+    )
+    assert before_body["apply_readiness"]["dry_run_fingerprint_available"] is False
+    assert before_body["apply_readiness"]["dry_run_confirmation"]["required_for_apply"] is True
+    assert before_body["apply_readiness"]["dry_run_confirmation"]["fingerprint_available_from_apply_dry_run"] is True
+    assert before_body["apply_readiness"]["planned_lifecycle_repair"]["target"]["status"] == "disabled"
+    assert before_body["apply_readiness"]["planned_lifecycle_repair"]["target"]["enabled"] is False
+    assert before_body["apply_readiness"]["writes_registry_metadata_if_applied"] is True
+    assert before_body["apply_readiness"]["writes_lifecycle_receipt_if_applied"] is True
+    assert before_body["governance"]["read_only"] is True
+    assert before_body["governance"]["writes_registry_metadata"] is False
+    assert before_body["governance"]["writes_lifecycle_receipt"] is False
+    assert registry_path.read_text(encoding="utf-8") == registry_before_history
+    assert sorted(path.name for path in lifecycle_dir.glob("*.json")) == receipt_names_before_history
+
+    repair_payload = {
+        "id": plugin_id,
+        "actor": _PLUGIN_ACTOR,
+        "reason": "restore after lifecycle history review",
+        "meta": {"lifecycle_action": "restore"},
+    }
+    repair_dry_run = client.post("/plugins/lifecycle/repair", json=repair_payload)
+    assert repair_dry_run.status_code == 200
+    dry_run_body = repair_dry_run.json()
+    assert dry_run_body["ok"] is True
+    repaired = client.post(
+        "/plugins/lifecycle/repair",
+        json={
+            **repair_payload,
+            "dry_run": False,
+            "dry_run_fingerprint": dry_run_body["dry_run_fingerprint"],
+        },
+    )
+    assert repaired.status_code == 200
+    repaired_body = repaired.json()
+    assert repaired_body["ok"] is True
+    assert repaired_body["applied"] is True
+
+    registry_before_second_history = registry_path.read_text(encoding="utf-8")
+    receipt_names_before_second_history = sorted(path.name for path in lifecycle_dir.glob("*.json"))
+
+    history_after = client.get(f"/plugins/lifecycle/repair/history?id={plugin_id}&limit=10")
+    assert history_after.status_code == 200
+    after_body = history_after.json()
+    assert after_body["ok"] is True
+    assert after_body["applied"] is False
+    assert after_body["status"] == "not_required"
+    assert after_body["current_lifecycle"]["status"] == "active"
+    assert after_body["current_lifecycle"]["blocks_promotion"] is False
+    assert after_body["history_count"] == 2
+    assert after_body["repair_restore_history_count"] == 1
+    assert after_body["latest_receipt"]["receipt_id"] == repaired_body["lifecycle_receipt_id"]
+    assert after_body["latest_repair_restore"]["action"] == "restore"
+    assert after_body["latest_repair_restore"]["receipt_id"] == repaired_body["lifecycle_receipt_id"]
+    assert after_body["last_non_blocking_lifecycle_metadata"]["status"] == "disabled"
+    assert after_body["last_non_blocking_lifecycle_metadata"]["source"] == (
+        "registry.meta.lifecycle_repair_restored_status"
+    )
+    assert after_body["apply_readiness"]["safe_to_apply"] is False
+    assert after_body["apply_readiness"]["reason"] == "lifecycle_repair_not_required"
+    assert after_body["apply_readiness"]["planned_lifecycle_repair"] == {}
+    assert after_body["apply_readiness"]["writes_registry_metadata_if_applied"] is False
+    assert after_body["apply_readiness"]["writes_lifecycle_receipt_if_applied"] is False
+    assert after_body["governance"]["read_only"] is True
+    assert after_body["governance"]["lifecycle_authority"] is False
+    assert registry_path.read_text(encoding="utf-8") == registry_before_second_history
+    assert sorted(path.name for path in lifecycle_dir.glob("*.json")) == receipt_names_before_second_history
+
+
 def test_plugins_build_requires_forge_staging_quality(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

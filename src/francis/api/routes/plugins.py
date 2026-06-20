@@ -193,6 +193,7 @@ _CAPABILITY_LIBRARY_PROPOSAL_REVIEW_APPLY_READINESS_ROUTE = (
 _CAPABILITY_LIBRARY_PROPOSAL_REVIEW_APPLY_ROUTE = "/plugins/capabilities/library/proposal-review/apply"
 _CAPABILITY_LIBRARY_EXPLICIT_PROMOTION_APPLY_ROUTE = "/plugins/capabilities/library/promotion/apply"
 _PLUGIN_LIFECYCLE_REPAIR_ROUTE = "/plugins/lifecycle/repair"
+_PLUGIN_LIFECYCLE_REPAIR_HISTORY_ROUTE = "/plugins/lifecycle/repair/history"
 _CAPABILITY_LIBRARY_PROPOSAL_REVIEW_DECISIONS = {
     "approve": "approved",
     "approved": "approved",
@@ -2089,6 +2090,290 @@ def _plugin_lifecycle_repair_fingerprint(*, plan: dict[str, Any]) -> str:
     }
     raw = json.dumps(body, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(raw).hexdigest()
+
+
+def _read_plugin_lifecycle_receipts(*, plugin_id: str = "", limit: int = 20) -> list[dict[str, Any]]:
+    safe_limit = max(1, min(int(limit or 20), 200))
+    folder = _art_dir() / "lifecycle"
+    folder_fs_path = _filesystem_path(folder)
+    if not os.path.isdir(folder_fs_path):
+        return []
+
+    receipt_files: list[tuple[float, str]] = []
+    try:
+        for entry in os.scandir(folder_fs_path):
+            if not entry.name.endswith(".json") or not entry.is_file():
+                continue
+            try:
+                receipt_files.append((entry.stat().st_mtime, entry.path))
+            except OSError:
+                continue
+    except OSError:
+        return []
+
+    safe_plugin_id = _safe_str(plugin_id).strip()
+    items: list[dict[str, Any]] = []
+    for _, path in sorted(receipt_files, key=lambda item: item[0], reverse=True)[:1000]:
+        try:
+            with open(path, encoding="utf-8", errors="replace") as handle:
+                payload = json.load(handle)
+        except Exception:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        if _safe_str(payload.get("kind")).strip() != "plugin.lifecycle.receipt":
+            continue
+        if safe_plugin_id and _safe_str(payload.get("plugin_id")).strip() != safe_plugin_id:
+            continue
+        items.append(payload)
+        if len(items) >= safe_limit:
+            break
+
+    return sorted(
+        items,
+        key=lambda receipt: (
+            int(receipt.get("recorded_ts") or 0),
+            _safe_str(receipt.get("receipt_id")).strip(),
+        ),
+        reverse=True,
+    )
+
+
+def _plugin_lifecycle_receipt_summary(receipt: dict[str, Any]) -> dict[str, Any]:
+    previous = receipt.get("previous") if isinstance(receipt.get("previous"), dict) else {}
+    current = receipt.get("current") if isinstance(receipt.get("current"), dict) else {}
+    governance = receipt.get("governance") if isinstance(receipt.get("governance"), dict) else {}
+    action = _safe_str(receipt.get("action")).strip()
+    summary = {
+        "kind": _safe_str(receipt.get("kind")).strip(),
+        "receipt_id": _safe_str(receipt.get("receipt_id")).strip(),
+        "plugin_id": _safe_str(receipt.get("plugin_id")).strip(),
+        "action": action,
+        "repair_restore_action": action in {"repair", "restore"},
+        "lifecycle_status": _safe_str(receipt.get("lifecycle_status")).strip(),
+        "registry_status": _safe_str(receipt.get("registry_status")).strip(),
+        "enabled": bool(receipt.get("enabled", False)),
+        "recorded_ts": int(receipt.get("recorded_ts") or 0),
+        "actor": _safe_str(receipt.get("actor")).strip(),
+        "reason": _safe_str(receipt.get("reason")).strip(),
+        "path": _safe_str(receipt.get("path")).strip(),
+        "previous": {
+            "status": _safe_str(previous.get("status")).strip(),
+            "enabled": bool(previous.get("enabled", False)),
+            "promotion_status": _safe_str(previous.get("promotion_status")).strip(),
+            "lifecycle_status": _safe_str(previous.get("lifecycle_status")).strip(),
+        },
+        "current": {
+            "status": _safe_str(current.get("status")).strip(),
+            "enabled": bool(current.get("enabled", False)),
+            "promotion_status": _safe_str(current.get("promotion_status")).strip(),
+            "lifecycle_status": _safe_str(current.get("lifecycle_status")).strip(),
+        },
+        "governance": {
+            "gate": _safe_str(governance.get("gate")).strip(),
+            "scope": _safe_str(governance.get("scope")).strip(),
+            "route": _safe_str(governance.get("route")).strip(),
+            "promotion_authority": bool(governance.get("promotion_authority", False)),
+            "execution_authority": bool(governance.get("execution_authority", False)),
+            "approval_authority": bool(governance.get("approval_authority", False)),
+            "memory_write": bool(governance.get("memory_write", False)),
+        },
+    }
+    redacted = redact_governed_display_value(summary)
+    return redacted if isinstance(redacted, dict) else {}
+
+
+def _plugin_lifecycle_current_non_blocking_metadata(
+    current: dict[str, Any],
+    meta: dict[str, Any],
+    lifecycle: dict[str, Any],
+) -> dict[str, Any]:
+    candidates: list[tuple[str, Any]] = [
+        ("registry.meta.lifecycle_repair_restored_status", meta.get("lifecycle_repair_restored_status")),
+        (
+            "registry.meta.lifecycle_repair_restored_promotion_status",
+            meta.get("lifecycle_repair_restored_promotion_status"),
+        ),
+        ("registry.meta.disabled_from_status", meta.get("disabled_from_status")),
+        ("registry.meta.disabled_from_promotion_status", meta.get("disabled_from_promotion_status")),
+    ]
+    observed = lifecycle.get("observed_states") if isinstance(lifecycle.get("observed_states"), list) else []
+    for item in observed:
+        if not isinstance(item, dict):
+            continue
+        candidates.append((_safe_str(item.get("source")).strip(), item.get("raw")))
+
+    selected = {"source": "", "raw": "", "status": ""}
+    for source, value in candidates:
+        normalized = _normalize_lifecycle_state(value)
+        if normalized in _PLUGIN_LIFECYCLE_NON_BLOCKING_STATES:
+            selected = {
+                "source": source,
+                "raw": _safe_str(value).strip(),
+                "status": normalized,
+            }
+            break
+
+    return {
+        **selected,
+        "safe_registry_status": _safe_str(current.get("status")).strip(),
+        "safe_promotion_status": _safe_str(meta.get("promotion_status")).strip(),
+        "target_lifecycle_status": _safe_str(lifecycle.get("status")).strip() or "active",
+        "safe_enabled": bool(current.get("enabled", False)),
+    }
+
+
+def _plugin_lifecycle_repair_history_governance() -> dict[str, Any]:
+    return {
+        "plane": "P3_GOVERNANCE",
+        "route": _PLUGIN_LIFECYCLE_REPAIR_HISTORY_ROUTE,
+        "read_only": True,
+        "source_receipt_contract": "plugin.lifecycle.receipt",
+        "source_routes": ["/plugins/disable", _PLUGIN_LIFECYCLE_REPAIR_ROUTE],
+        "apply_route": _PLUGIN_LIFECYCLE_REPAIR_ROUTE,
+        "apply_requires_plugins_write_scope": True,
+        "dry_run_fingerprint_does_not_authorize_without_plugins_write": True,
+        "writes_registry_metadata": False,
+        "writes_lifecycle_receipt": False,
+        "writes_data": False,
+        "does_not_promote_capabilities": True,
+        "does_not_enable_capabilities": True,
+        "does_not_execute_capabilities": True,
+        "does_not_approve_proposals": True,
+        "promotion_authority": False,
+        "execution_authority": False,
+        "approval_authority": False,
+        "memory_write": False,
+        "lifecycle_authority": False,
+    }
+
+
+def _plugin_lifecycle_repair_history_projection(
+    *,
+    plugin_id: str,
+    current: dict[str, Any] | None,
+    receipts: list[dict[str, Any]],
+) -> dict[str, Any]:
+    receipt_history = [_plugin_lifecycle_receipt_summary(receipt) for receipt in receipts]
+    repair_restore_history = [
+        item for item in receipt_history if _safe_str(item.get("action")).strip() in {"repair", "restore"}
+    ]
+    latest_receipt = receipt_history[0] if receipt_history else {}
+    latest_repair_restore = repair_restore_history[0] if repair_restore_history else {}
+    governance = _plugin_lifecycle_repair_history_governance()
+    if current is None:
+        return {
+            "ok": False,
+            "applied": False,
+            "kind": "plugin.lifecycle.repair_history_readback",
+            "stage": "Stage 17 / Capability Economy",
+            "status": "not_found",
+            "error": "not_found",
+            "id": plugin_id,
+            "history_count": len(receipt_history),
+            "repair_restore_history_count": len(repair_restore_history),
+            "history": receipt_history,
+            "repair_restore_history": repair_restore_history,
+            "latest_receipt": latest_receipt,
+            "latest_repair_restore": latest_repair_restore,
+            "apply_readiness": {
+                "safe_to_apply": False,
+                "status": "blocked",
+                "reason": "plugin_not_found",
+                "apply_route": _PLUGIN_LIFECYCLE_REPAIR_ROUTE,
+                "requires_dry_run_confirmation": True,
+                "writes_registry_metadata_if_applied": False,
+                "writes_lifecycle_receipt_if_applied": False,
+                "promotion_authority": False,
+                "execution_authority": False,
+                "memory_write": False,
+            },
+            "governance": governance,
+        }
+
+    meta = dict(current.get("meta") or {}) if isinstance(current.get("meta"), dict) else {}
+    lifecycle = _plugin_lifecycle_state(current, {})
+    repair_required = bool(lifecycle.get("blocks_promotion")) or bool(lifecycle.get("blocks_execution"))
+    repair_plan: dict[str, Any] = {}
+    dry_run_confirmation: dict[str, Any] = {
+        "required_for_apply": True,
+        "fingerprint_contract": "stage17_plugin_lifecycle_repair_dry_run_v1",
+        "apply_route": _PLUGIN_LIFECYCLE_REPAIR_ROUTE,
+        "fingerprint_available_from_apply_dry_run": True,
+    }
+    last_non_blocking = _plugin_lifecycle_current_non_blocking_metadata(current, meta, lifecycle)
+    safe_to_apply = False
+    readiness_status = "not_required"
+    readiness_reason = "lifecycle_repair_not_required"
+
+    if repair_required:
+        repair_plan = _plugin_lifecycle_repair_plan(
+            plugin_id=plugin_id,
+            current=current,
+            meta=meta,
+            lifecycle_before=lifecycle,
+            lifecycle_action="restore",
+        )
+        target = repair_plan.get("target") if isinstance(repair_plan.get("target"), dict) else {}
+        target_status = _normalize_lifecycle_state(target.get("status"))
+        target_lifecycle = _normalize_lifecycle_state(target.get("lifecycle_status"))
+        target_enabled = bool(target.get("enabled", False))
+        safe_to_apply = (
+            target_status in _PLUGIN_LIFECYCLE_NON_BLOCKING_STATES
+            and target_lifecycle in _PLUGIN_LIFECYCLE_NON_BLOCKING_STATES
+            and not target_enabled
+        )
+        readiness_status = "repair_available" if safe_to_apply else "blocked"
+        readiness_reason = (
+            "blocking_lifecycle_state_detected_with_non_enabled_restore_target"
+            if safe_to_apply
+            else "repair_plan_target_not_safe"
+        )
+        if isinstance(repair_plan.get("last_non_blocking_lifecycle_metadata"), dict):
+            last_non_blocking = repair_plan["last_non_blocking_lifecycle_metadata"]
+
+    return {
+        "ok": True,
+        "applied": False,
+        "kind": "plugin.lifecycle.repair_history_readback",
+        "stage": "Stage 17 / Capability Economy",
+        "status": readiness_status,
+        "id": plugin_id,
+        "plugin": {
+            "id": plugin_id,
+            "status": _safe_str(current.get("status")).strip(),
+            "enabled": bool(current.get("enabled", False)),
+            "updated_ts": int(current.get("updated_ts") or 0),
+        },
+        "current_lifecycle": redact_governed_display_value(lifecycle),
+        "last_non_blocking_lifecycle_metadata": redact_governed_display_value(last_non_blocking),
+        "history_count": len(receipt_history),
+        "repair_restore_history_count": len(repair_restore_history),
+        "history": receipt_history,
+        "repair_restore_history": repair_restore_history,
+        "latest_receipt": latest_receipt,
+        "latest_repair_restore": latest_repair_restore,
+        "apply_readiness": {
+            "safe_to_apply": safe_to_apply,
+            "status": readiness_status,
+            "reason": readiness_reason,
+            "apply_route": _PLUGIN_LIFECYCLE_REPAIR_ROUTE,
+            "recommended_lifecycle_action": "restore",
+            "requires_dry_run_confirmation": True,
+            "dry_run_fingerprint_available": False,
+            "dry_run_confirmation": dry_run_confirmation,
+            "planned_lifecycle_repair": repair_plan,
+            "writes_registry_metadata_if_applied": safe_to_apply,
+            "writes_lifecycle_receipt_if_applied": safe_to_apply,
+            "does_not_promote_capabilities": True,
+            "does_not_enable_capabilities": True,
+            "does_not_execute_capabilities": True,
+            "promotion_authority": False,
+            "execution_authority": False,
+            "memory_write": False,
+        },
+        "governance": governance,
+    }
 
 
 def _plugin_lifecycle_governance(
@@ -16698,6 +16983,30 @@ def disable_plugin(payload: PluginToggleIn, request: Request) -> dict[str, objec
         }
     except Exception as exc:
         return {"ok": False, "error": api_error_message(exc)}
+
+
+@router.get("/lifecycle/repair/history")
+def plugin_lifecycle_repair_history(id: str, limit: int = 20) -> dict[str, object]:
+    try:
+        plugin_id = _validate_plugin_id(id)
+        safe_limit = max(1, min(int(limit or 20), 200))
+        registry = _load_registry()
+        current = _read_plugin(registry, plugin_id)
+        receipts = _read_plugin_lifecycle_receipts(plugin_id=plugin_id, limit=safe_limit)
+        return _plugin_lifecycle_repair_history_projection(
+            plugin_id=plugin_id,
+            current=current,
+            receipts=receipts,
+        )
+    except Exception as exc:
+        return {
+            "ok": False,
+            "applied": False,
+            "kind": "plugin.lifecycle.repair_history_readback",
+            "status": "error",
+            "error": api_error_message(exc),
+            "governance": _plugin_lifecycle_repair_history_governance(),
+        }
 
 
 @router.post("/lifecycle/repair")

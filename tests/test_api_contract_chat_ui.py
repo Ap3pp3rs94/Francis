@@ -199,6 +199,7 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
         ("POST", "/plugins/capabilities/packs/metadata/receipts/bulk-from-plan"),
         ("POST", "/plugins/enable"),
         ("POST", "/plugins/disable"),
+        ("GET", "/plugins/lifecycle/repair/history"),
         ("POST", "/plugins/lifecycle/repair"),
         ("POST", "/plugins/install"),
         ("POST", "/plugins/uninstall"),
