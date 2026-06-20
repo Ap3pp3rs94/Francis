@@ -96,6 +96,8 @@ def test_francis_worker_terminal_launcher_status_is_read_only() -> None:
         assert "visible_terminal_evidence" in worker
         assert "codex_child_alive" in worker
         assert "prompt_sha256" in worker
+        assert "exec_runner_alive" in worker
+        assert "worker_execution_alive" in worker
         assert "launch_mode" in worker
         assert "visible_terminal_requested" in worker
         assert "stdout_log_path" in worker
@@ -162,6 +164,9 @@ def test_francis_worker_coordinator_publication_gate_uses_unwrapped_worker_statu
     assert "if ($Worker -is [array])" in script
     assert "first_prompt_allowed" in script
     assert "publication_marker_prompt_mismatch" in script
+    assert "worker_execution_alive" in script
+    assert "stale_runner_without_worker_execution" in script
+    assert "worker_execution_missing" in script
 
 
 def test_francis_worker_coordinator_generates_individual_pm_dispatches(tmp_path: Path) -> None:

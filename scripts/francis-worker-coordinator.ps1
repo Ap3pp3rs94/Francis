@@ -467,12 +467,17 @@ function Stop-StaleWorkerRunner {
   if ($PidValue -le 0 -or -not [bool]$Worker.process_alive) {
     return [ordered]@{ stopped = $false; reason = 'process_not_alive'; pid = $PidValue }
   }
-  if ([bool]$Worker.codex_child_alive) {
-    return [ordered]@{ stopped = $false; reason = 'codex_child_still_alive'; pid = $PidValue }
+  $WorkerExecutionAlive = if ($Worker.PSObject.Properties['worker_execution_alive']) {
+    [bool]$Worker.worker_execution_alive
+  } else {
+    [bool]$Worker.codex_child_alive
+  }
+  if ($WorkerExecutionAlive) {
+    return [ordered]@{ stopped = $false; reason = 'worker_execution_still_alive'; pid = $PidValue }
   }
   try {
     Stop-Process -Id $PidValue -Force -ErrorAction Stop
-    return [ordered]@{ stopped = $true; reason = 'stale_runner_without_codex_child'; pid = $PidValue }
+    return [ordered]@{ stopped = $true; reason = 'stale_runner_without_worker_execution'; pid = $PidValue }
   } catch {
     return [ordered]@{ stopped = $false; reason = 'stop_failed'; pid = $PidValue; error = [string]$_.Exception.Message }
   }
@@ -484,7 +489,12 @@ function Test-WorkerNeedsPrompt {
   if (-not [bool]$Worker.process_alive) {
     return $true
   }
-  if (-not [bool]$Worker.codex_child_alive) {
+  $WorkerExecutionAlive = if ($Worker.PSObject.Properties['worker_execution_alive']) {
+    [bool]$Worker.worker_execution_alive
+  } else {
+    [bool]$Worker.codex_child_alive
+  }
+  if (-not $WorkerExecutionAlive) {
     return $true
   }
   return $false
@@ -506,7 +516,7 @@ function Invoke-CoordinatorIteration {
       $Reason = 'project_manager_force_prompt'
     } elseif (Test-WorkerNeedsPrompt -Worker $Worker) {
       $NeedsPrompt = $true
-      $Reason = if (-not [bool]$Worker.process_alive) { 'worker_process_missing' } else { 'worker_codex_child_missing' }
+      $Reason = if (-not [bool]$Worker.process_alive) { 'worker_process_missing' } else { 'worker_execution_missing' }
     } else {
       $NeedsPrompt = $false
       $Reason = 'worker_active'
@@ -518,6 +528,7 @@ function Invoke-CoordinatorIteration {
       reason = $Reason
       previous_pid = if ($null -ne $Worker) { [int]$Worker.pid } else { 0 }
       previous_codex_child_alive = if ($null -ne $Worker) { [bool]$Worker.codex_child_alive } else { $false }
+      previous_worker_execution_alive = if ($null -ne $Worker -and $Worker.PSObject.Properties['worker_execution_alive']) { [bool]$Worker.worker_execution_alive } else { $false }
       stale_stop = $null
       launch = $null
       publication_gate = $null

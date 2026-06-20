@@ -151,6 +151,16 @@ function Get-WorkerStatusRows {
     } else {
       ''
     }
+    $CodexChildAlive = @($CodexChildren).Count -gt 0
+    $ExecRunnerAlive = (
+      [bool]$ProcessAlive -and
+      $LaunchModeText -eq 'Exec' -and
+      [string]::IsNullOrWhiteSpace($CompletedAt)
+    )
+    $WorkerExecutionAlive = (
+      [bool]$ProcessAlive -and
+      ([bool]$CodexChildAlive -or [bool]$ExecRunnerAlive)
+    )
     $Rows += [ordered]@{
       worker_id = $Worker.id
       title = $Worker.title
@@ -161,8 +171,10 @@ function Get-WorkerStatusRows {
       main_window_handle = $MainWindowHandle
       physical_console_observed = [bool]$PhysicalConsoleObserved
       visible_terminal_evidence = $VisibleTerminalEvidence
-      codex_child_alive = @($CodexChildren).Count -gt 0
+      codex_child_alive = [bool]$CodexChildAlive
       codex_child_process_ids = @($CodexChildren | ForEach-Object { [int]$_.ProcessId })
+      exec_runner_alive = [bool]$ExecRunnerAlive
+      worker_execution_alive = [bool]$WorkerExecutionAlive
       console_host_child_alive = @($ConsoleChildren).Count -gt 0
       console_host_process_ids = @($ConsoleChildren | ForEach-Object { [int]$_.ProcessId })
       prompt_path = $StatusPromptPath
