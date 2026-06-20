@@ -159,6 +159,38 @@ def test_operations_readback_derives_stage17_invocation_caller_context(
     assert plugin_context["governance"]["grants_execution_authority"] is False
     assert plugin_context["governance"]["memory_write"] is False
 
+    def assert_surface_carries_plugin_context(operation: dict[str, object]) -> None:
+        meta = operation.get("meta")
+        assert isinstance(meta, dict)
+        context = meta.get("invocation_caller_context")
+        assert context == plugin_context
+        assert context["governance"]["read_only"] is True
+        assert context["governance"]["writes_data"] is False
+        assert context["governance"]["executes_capabilities"] is False
+        assert context["governance"]["grants_execution_authority"] is False
+        assert context["governance"]["memory_write"] is False
+
+    listed = client.get("/operations/list", params={"mission_id": mission_id})
+    assert listed.status_code == 200
+    listed_operation = next(item for item in listed.json()["items"] if item["id"] == plugin_operation_id)
+    assert_surface_carries_plugin_context(listed_operation)
+
+    searched = client.get("/operations/list", params={"search": "mission plugin caller-context readback"})
+    assert searched.status_code == 200
+    searched_operation = next(item for item in searched.json()["items"] if item["id"] == plugin_operation_id)
+    assert_surface_carries_plugin_context(searched_operation)
+
+    exported_json = client.get("/operations/export", params={"format": "json", "mission_id": mission_id})
+    assert exported_json.status_code == 200
+    exported_operation = next(item for item in exported_json.json()["items"] if item["id"] == plugin_operation_id)
+    assert_surface_carries_plugin_context(exported_operation)
+
+    exported_jsonl = client.get("/operations/export", params={"format": "jsonl", "mission_id": mission_id})
+    assert exported_jsonl.status_code == 200
+    exported_jsonl_items = [json.loads(line) for line in exported_jsonl.text.splitlines() if line.strip()]
+    exported_jsonl_operation = next(item for item in exported_jsonl_items if item["id"] == plugin_operation_id)
+    assert_surface_carries_plugin_context(exported_jsonl_operation)
+
     tool_operation_id = create_operation(
         {
             "action": "tool.run",
