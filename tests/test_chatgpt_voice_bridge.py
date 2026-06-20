@@ -267,6 +267,12 @@ def test_chatgpt_voice_ingress_records_without_chat_forward(monkeypatch, tmp_pat
     assert receipt_proof["provider_receipt_mode"] == "client_text_reply_no_provider_call"
     assert receipt_proof["provider_mode_disambiguation"]["active_modes"] == ["client_text_reply_no_provider_call"]
     assert receipt_proof["provider_mode_disambiguation"]["provider_receipt_mode_is_provider_call"] is False
+    assert receipt_proof["provider_boundary_receipt_embedded"] is True
+    assert receipt_proof["provider_boundary_evidence_location"] == "embedded_bridge_receipt"
+    assert receipt_proof["external_provider_receipt_present"] is False
+    assert receipt_proof["external_provider_receipt_path"] == ""
+    assert receipt_proof["external_provider_receipt_required"] is False
+    assert receipt_proof["external_provider_receipt_required_for_provider_call_modes"] is True
     assert receipt_proof["provider_mode_disambiguation"]["provider_unavailable"] is False
     assert receipt_proof["provider_mode_disambiguation"]["provider_unconfigured"] is False
     assert receipt_proof["provider_mode_disambiguation"]["provider_state_inferred_from_transcript"] is False
@@ -294,6 +300,14 @@ def test_chatgpt_voice_ingress_records_without_chat_forward(monkeypatch, tmp_pat
     assert linkage["virtual_voice_turn_receipt"]["present"] is True
     assert linkage["virtual_voice_turn_receipt"]["path"] == "data/runtime/lens-overlay/voice-turns/voice-turn-1.json"
     assert linkage["provider_boundary_receipt"]["present"] is True
+    assert linkage["provider_boundary_receipt"]["embedded"] is True
+    assert linkage["provider_boundary_receipt"]["evidence_location"] == "embedded_bridge_receipt"
+    assert linkage["provider_boundary_receipt"]["path"].endswith(f"{body['receipt']['id']}.json")
+    assert linkage["provider_boundary_receipt"]["external_provider_receipt_present"] is False
+    assert linkage["provider_boundary_receipt"]["external_provider_receipt_path"] == ""
+    assert linkage["provider_boundary_receipt"]["external_provider_receipt_required"] is False
+    assert linkage["provider_boundary_receipt"]["external_provider_receipt_required_for_provider_call_modes"] is True
+    assert linkage["provider_boundary_receipt"]["provider_status_observed"] is False
     assert linkage["provider_boundary_receipt"]["mode"] == "client_text_reply_no_provider_call"
     assert linkage["provider_boundary_receipt"]["mode_is_provider_call"] is False
     assert linkage["provider_boundary_receipt"]["live_provider_call"] is False
@@ -501,6 +515,13 @@ def test_chatgpt_voice_mcp_proof_records_connection_without_transcript_or_voice_
     proof_linkage = body["receipt"]["receipt_linkage"]
     assert proof_linkage["bridge_receipt"]["present"] is True
     assert proof_linkage["virtual_voice_turn_receipt"]["present"] is False
+    assert proof_linkage["provider_boundary_receipt"]["embedded"] is True
+    assert proof_linkage["provider_boundary_receipt"]["external_provider_receipt_present"] is False
+    assert proof_linkage["provider_boundary_receipt"]["external_provider_receipt_path"] == ""
+    assert proof_linkage["provider_boundary_receipt"]["external_provider_receipt_required"] is False
+    assert (
+        proof_linkage["provider_boundary_receipt"]["external_provider_receipt_required_for_provider_call_modes"] is True
+    )
     assert proof_linkage["provider_boundary_receipt"]["mode"] == "client_text_reply_no_provider_call"
     assert proof_linkage["provider_boundary_receipt"]["live_provider_call"] is False
     assert proof_linkage["provider_boundary_receipt"]["replay_provider_call"] is False
@@ -1144,6 +1165,10 @@ def test_chatgpt_voice_ingress_rejects_unavailable_transcript_with_reply(monkeyp
         unavailable_proof["provider_mode_disambiguation"]["transcript_unavailable_is_not_provider_unavailable"] is True
     )
     assert unavailable_proof["provider_mode_disambiguation"]["provider_state_inferred_from_transcript"] is False
+    assert unavailable_proof["provider_boundary_receipt_embedded"] is True
+    assert unavailable_proof["external_provider_receipt_present"] is False
+    assert unavailable_proof["external_provider_receipt_required"] is False
+    assert unavailable_proof["external_provider_receipt_required_for_provider_call_modes"] is True
     assert unavailable_proof["output_provider_call_claimed"] is False
     assert unavailable_proof["voice_provider_unavailable"] is False
     assert unavailable_proof["voice_provider_unconfigured"] is False
@@ -1153,6 +1178,12 @@ def test_chatgpt_voice_ingress_rejects_unavailable_transcript_with_reply(monkeyp
     assert unavailable_linkage["virtual_voice_turn_receipt"]["present"] is True
     assert unavailable_linkage["provider_boundary_receipt"]["provider_unavailable"] is False
     assert unavailable_linkage["provider_boundary_receipt"]["provider_unconfigured"] is False
+    assert unavailable_linkage["provider_boundary_receipt"]["external_provider_receipt_present"] is False
+    assert unavailable_linkage["provider_boundary_receipt"]["external_provider_receipt_required"] is False
+    assert (
+        unavailable_linkage["provider_boundary_receipt"]["external_provider_receipt_required_for_provider_call_modes"]
+        is True
+    )
     assert unavailable_linkage["provider_boundary_receipt"]["mode_disambiguation"]["transcript_state"] == (
         "transcript_unavailable_rejected"
     )

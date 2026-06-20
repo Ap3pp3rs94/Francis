@@ -206,6 +206,10 @@ def _voice_provider_receipt() -> dict[str, Any]:
         "client_text_reply": True,
         "provider_status_observed": False,
         "provider_status_observation_source": "not_observed_bridge_did_not_call_provider",
+        "provider_boundary_evidence_location": "embedded_bridge_receipt",
+        "external_provider_receipt_present": False,
+        "external_provider_receipt_path": "",
+        "external_provider_receipt_required_for_provider_call_modes": True,
         "live_provider_call": False,
         "mock_provider_call": False,
         "fixture_provider_call": False,
@@ -243,6 +247,9 @@ def _voice_provider_mode_state(
     replay_provider_call = clean_mode == "replay_provider_receipt"
     provider_unavailable = clean_mode == "provider_unavailable"
     provider_unconfigured = clean_mode == "provider_unconfigured"
+    external_provider_receipt_required = clean_mode in (
+        CHATGPT_VOICE_BRIDGE_PROVIDER_CALL_MODES + CHATGPT_VOICE_BRIDGE_PROVIDER_STATUS_MODES
+    )
     provider_call_count = sum(
         [
             live_provider_call,
@@ -276,6 +283,8 @@ def _voice_provider_mode_state(
         "provider_unavailable_and_unconfigured_mutually_exclusive": not (
             provider_unavailable and provider_unconfigured
         ),
+        "external_provider_receipt_required": external_provider_receipt_required,
+        "external_provider_receipt_present": False,
         "transcript_state": transcript_state,
         "transcript_unavailable_is_not_provider_unavailable": True,
         "provider_state_inferred_from_transcript": False,
@@ -400,6 +409,12 @@ def _voice_substrate_proof(
         "provider_taxonomy_enforced": True,
         "provider_receipt_mode_is_provider_call": mode_state["provider_receipt_mode_is_provider_call"],
         "provider_mode_disambiguation": mode_state,
+        "provider_boundary_receipt_embedded": True,
+        "provider_boundary_evidence_location": "embedded_bridge_receipt",
+        "external_provider_receipt_present": False,
+        "external_provider_receipt_path": "",
+        "external_provider_receipt_required": bool(mode_state["external_provider_receipt_required"]),
+        "external_provider_receipt_required_for_provider_call_modes": True,
         "output_provider_call_claimed": False,
         "live_voice_provider_call": False,
         "mock_voice_provider_call": False,
@@ -460,10 +475,17 @@ def _receipt_linkage(
         "provider_boundary_receipt": {
             "present": True,
             "embedded": True,
+            "evidence_location": "embedded_bridge_receipt",
+            "path": bridge_receipt_path,
+            "external_provider_receipt_present": False,
+            "external_provider_receipt_path": "",
+            "external_provider_receipt_required": bool(mode_state["external_provider_receipt_required"]),
+            "external_provider_receipt_required_for_provider_call_modes": True,
             "mode": provider_receipt_mode,
             "mode_is_provider_call": mode_state["provider_receipt_mode_is_provider_call"],
             "mode_taxonomy": CHATGPT_VOICE_BRIDGE_PROVIDER_STATE_TAXONOMY,
             "mode_disambiguation": mode_state,
+            "provider_status_observed": False,
             "live_provider_call": False,
             "mock_provider_call": False,
             "fixture_provider_call": False,
