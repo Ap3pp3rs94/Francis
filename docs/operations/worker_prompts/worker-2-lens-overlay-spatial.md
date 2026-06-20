@@ -1,77 +1,60 @@
-# Francis Worker 2 - Lens Overlay Spatial Contract
+# Francis Worker 2 - Stage 17 Lifecycle And Promotion
 
 You are Worker 2 in a four-terminal Francis build run.
 
-Primary lane: lens-to-overlay desktop-space contract.
+Primary lane: implement executable Stage 17 lifecycle behavior: versioning, migration, compatibility, promotion/apply, quarantine, deprecation, and repair.
+
+The worker ID is retained for script compatibility. The active lane is Stage 17 construction.
 
 Recursive swarm rule:
 
 - You may use up to four short-lived drones in this cycle if that helps.
-- Each drone gets one narrow task, inspects only relevant files, reports
-  evidence, and terminates.
-- Drones do not own architecture, decide roadmap, claim completion, commit,
-  push, restart Continuum, or write publication markers.
-- You must verify drone claims independently, reject weak or duplicate output,
-  keep only compressed useful context, and deliver one worker packet to the
-  Lead Builder.
+- Each drone gets one narrow task, inspects only relevant files, reports evidence, and terminates.
+- Drones do not own architecture, decide roadmap, claim completion, commit, push, restart Continuum, or write publication markers.
+- You must verify drone claims independently, reject weak or duplicate output, keep only compressed useful context, and deliver one worker packet to the Lead Builder.
 
 Read first:
 
 1. `AGENTS.md`
 2. `docs/operations/COMPLETION_LEDGER.md`
-3. `docs/operations/ORB_CONTINUUM_STATE.md`
-4. `docs/operations/COMPLETION_MODEL.md`
-5. `docs/canonical/BUILD_MANIFEST.md`
-
-Non-negotiable lock:
-
-- Do not change the Orb appearance.
-- Do not create a second overlay or separate lens app.
-- The overlay is the desktop-space host; the lens is the substrate-backed
-  observation interface through that overlay.
+3. `docs/operations/COMPLETION_MODEL.md`
+4. `docs/canonical/BUILD_MANIFEST.md`
+5. Existing Stage 17 API/governance/tests around plugin readback/apply, managed copies, proposal evidence, and completion-model claims.
 
 Current repo truth to preserve:
 
-- The lens/overlay observation contract is currently metadata-only.
-- It does not yet claim screenshots, pixels, OCR, accessibility tree, or visual
-  similarity evidence.
-- The current blocker is that the lens/overlay path needs stronger coordinate,
-  region, evidence, and limitation contracts without claiming unsupported
-  perception.
+- Readback routes must remain authority-denying.
+- Apply/promotion routes must stay tightly governance-bounded and auditable.
+- Artifact existence alone is not approval.
+- Compatibility, migration, quarantine, and deprecation must be executable behavior, not only documentation.
 
 Bounded task:
 
-Strengthen the smallest truthful lens/overlay spatial contract or test coverage
-available now. Good slices include coordinate transform readback, mapped versus
-captured region fields, limitation fields, failure reasons, or replayable
-receipt shape. Do not add fake perception.
-
-Allowed primary files:
-
-- `src/francis/lens/**`
-- `src/francis/api/routes/**` only where existing lens routes live
-- `tests/unit/test_lens_*.py`
-- `tests/test_api_lens*.py`
-- `docs/operations/ORB_CONTINUUM_STATE.md`
-- `docs/operations/COMPLETION_LEDGER.md`
-
-Avoid `scripts/lens-overlay-window.ps1` unless absolutely required. If you must
-touch it, do not change visuals.
+Advance one lifecycle blocker with code plus focused validation. Prefer the smallest executable behavior that makes packs safer to promote or maintain, such as compatibility refusal, migration dry-run evidence, quarantine/deprecation receipt fields, rollback/repair metadata, or policy-aware apply guards.
 
 Acceptance criteria:
 
-- Lens and overlay remain one coherent path.
-- Observations distinguish requested region, mapped overlay region, actual
-  observed/captured region, source, status, confidence, limitations, and
-  unknowns where applicable.
-- Unsupported perception remains explicitly unsupported.
-- Coordinate/boundary behavior has focused tests.
+- Names the exact lifecycle behavior made executable.
+- Preserves or strengthens governance and authority boundaries.
+- Adds receipt/readback evidence for before/after state where applicable.
+- Adds focused tests for allowed, denied, and ambiguous cases.
+- Does not claim Stage 17 closure.
+
+Allowed primary files:
+
+- `src/francis/api/routes/plugins.py`
+- `src/francis/capabilities/**`
+- `src/francis/governance/**`
+- `tests/test_api_plugins.py`
+- `tests/test_api_managed_copies.py`
+- `docs/operations/COMPLETION_LEDGER.md`
+- `docs/operations/COMPLETION_MODEL.md`
 
 Do not:
 
-- Claim Francis can see desktop pixels unless evidence exists.
-- Add a standalone lens app.
+- Do not touch Orb visual files.
 - Restart Continuum.
+- Create ungoverned apply or promotion paths.
 - Commit or push.
 
 Final worker packet format:
@@ -84,9 +67,8 @@ REJECTED OUTPUTS
 FILES CHANGED
 VALIDATION
 EVIDENCE / RECEIPTS
+CAPABILITY EVOLUTION
 RISKS
 NEXT RECOMMENDED ACTION
 
-Also include completion percentages only as evidence claims. Overall Francis and
-current build-phase percentages do not move unless a ledger-backed gate actually
-closed.
+Also state the Stage 17 criterion advanced, blocker removed, before/after evidence, and proposed Git commit scope.

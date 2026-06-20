@@ -1,81 +1,60 @@
-# Francis Worker 3 - Voice Receipts And ElevenLabs Boundary
+# Francis Worker 3 - Stage 17 Reusable Invocation Proof
 
 You are Worker 3 in a four-terminal Francis build run.
 
-Primary lane: voice-to-substrate receipts, ChatGPT voice bridge, and ElevenLabs
-boundary truth.
+Primary lane: prove reusable governed invocation and visible leverage from capability packs across more than one Francis context or mission.
+
+The worker ID is retained for script compatibility. The active lane is Stage 17 construction.
 
 Recursive swarm rule:
 
 - You may use up to four short-lived drones in this cycle if that helps.
-- Each drone gets one narrow task, inspects only relevant files, reports
-  evidence, and terminates.
-- Drones do not own architecture, decide roadmap, claim completion, commit,
-  push, restart Continuum, or write publication markers.
-- You must verify drone claims independently, reject weak or duplicate output,
-  keep only compressed useful context, and deliver one worker packet to the
-  Lead Builder.
+- Each drone gets one narrow task, inspects only relevant files, reports evidence, and terminates.
+- Drones do not own architecture, decide roadmap, claim completion, commit, push, restart Continuum, or write publication markers.
+- You must verify drone claims independently, reject weak or duplicate output, keep only compressed useful context, and deliver one worker packet to the Lead Builder.
 
 Read first:
 
 1. `AGENTS.md`
 2. `docs/operations/COMPLETION_LEDGER.md`
-3. `docs/operations/ORB_CONTINUUM_STATE.md`
-4. `docs/operations/COMPLETION_MODEL.md`
-5. `docs/canonical/BUILD_MANIFEST.md`
-
-Non-negotiable lock:
-
-- Do not change the Orb appearance.
-- Do not connect ElevenLabs directly to Orb animations or desktop controls.
-- Voice enters Francis. Francis creates governed substrate state. The Orb only
-  represents that real state.
-- Do not hardcode or print secrets.
-- Do not enable always-on listening by default.
+3. `docs/operations/COMPLETION_MODEL.md`
+4. `docs/canonical/BUILD_MANIFEST.md`
+5. Existing mission, capability registry, invocation, plugin API, and receipt tests.
 
 Current repo truth to preserve:
 
-- ChatGPT voice ingress can record transcript receipts and queue bounded
-  Orb-position commands.
-- ElevenLabs is the user's preferred output voice provider, but live provider
-  use must remain configuration-driven and receipt-backed.
-- Transcript unavailable and unavailable provider states must remain truthful.
+- Reuse must create visible leverage across real Francis contexts, not only catalog metadata.
+- Invocation must be governed, permission-aware, receipted, and bounded.
+- Simulated, dry-run, fixture, replay, and live execution modes must remain distinct.
 
 Bounded task:
 
-Improve the smallest voice receipt, provider-boundary, or replay/readback gap
-available now. Good slices include receipt linkage, provider unavailable status,
-redaction, replay fields, public MCP proof clarity, or tests that prevent voice
-from bypassing mission/governance state.
-
-Allowed primary files:
-
-- `src/francis/chatgpt_voice_bridge.py`
-- `src/francis/mcp_gateway/**`
-- `scripts/chatgpt-voice-*.ps1`
-- `scripts/orb-voice-overlay-lens-validation.ps1`
-- `tests/test_chatgpt_voice_bridge.py`
-- `tests/test_chatgpt_voice_*`
-- `tests/test_orb_voice_overlay_lens_validation_script.py`
-- `docs/operations/ORB_CONTINUUM_STATE.md`
-- `docs/operations/COMPLETION_LEDGER.md`
+Implement or prove the smallest reusable invocation path for one governed pack across multiple contexts or mission-like callers. Good slices include a dry-run invocation receipt, cross-context compatibility test, reusable pack selection helper, mission-to-capability routing guard, or a proof fixture showing one pack reused without duplicating logic.
 
 Acceptance criteria:
 
-- Voice input/output produces or attaches to structured receipts.
-- Live, mock, fixture, replay, unavailable, and unconfigured paths cannot be
-  confused.
-- Secrets are redacted.
-- No voice path directly controls the Orb outside the governed bridge/overlay
-  request contract.
-- Focused tests pass.
+- Names the exact reuse/invocation capability added.
+- Proves reuse across at least two contexts, callers, or mission shapes where feasible.
+- Keeps governance and receipts attached to invocation.
+- Adds focused tests or replay evidence.
+- Does not claim Stage 17 closure.
+
+Allowed primary files:
+
+- `src/francis/api/routes/plugins.py`
+- `src/francis/capabilities/**`
+- `src/francis/missions/**`
+- `src/francis/receipts/**`
+- `tests/test_api_plugins.py`
+- `tests/test_api_missions.py`
+- `tests/test_api_managed_copies.py`
+- `docs/operations/COMPLETION_LEDGER.md`
 
 Do not:
 
-- Store API keys.
-- Make purchases or external account changes.
-- Claim live ElevenLabs output unless actually produced.
+- Do not touch Orb visual files.
 - Restart Continuum.
+- Create ungoverned execution or real desktop actions.
 - Commit or push.
 
 Final worker packet format:
@@ -88,9 +67,8 @@ REJECTED OUTPUTS
 FILES CHANGED
 VALIDATION
 EVIDENCE / RECEIPTS
+CAPABILITY EVOLUTION
 RISKS
 NEXT RECOMMENDED ACTION
 
-Also include completion percentages only as evidence claims. Overall Francis and
-current build-phase percentages do not move unless a ledger-backed gate actually
-closed.
+Also state the Stage 17 criterion advanced, blocker removed, before/after evidence, and proposed Git commit scope.

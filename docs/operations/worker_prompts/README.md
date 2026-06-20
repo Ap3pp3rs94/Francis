@@ -75,10 +75,15 @@ roadmap-aligned capability survives.
 
 Each coordinator pass should keep all four lanes active at the same time:
 
-- Worker 1 advances Orb voice proof and monitor truth.
-- Worker 2 advances lens-to-overlay spatial contracts.
-- Worker 3 advances voice receipts and provider boundaries.
-- Worker 4 advances Stage 17 and completion-model truth.
+- Worker 1 advances Stage 17 backlog class reduction through bounded pack/batch mechanisms.
+- Worker 2 advances Stage 17 lifecycle, versioning, migration, compatibility, promotion/apply, quarantine, and deprecation.
+- Worker 3 advances Stage 17 governed reusable invocation and visible cross-context reuse.
+- Worker 4 advances Stage 17 catalog coherence, integration, closure audit, and direct blocker removal.
+
+The worker IDs are retained for script compatibility, but the active priority is
+truthful Stage 17 closure. At least three active workers must remain on direct
+Stage 17 construction. CI, receipts, governance, docs, and observability support
+construction; they do not replace it.
 
 Manual launches default to physical visible terminals. Add `-LaunchMode Exec`
 when a worker should run as a true background Codex execution with JSONL logs

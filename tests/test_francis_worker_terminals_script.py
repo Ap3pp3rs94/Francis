@@ -189,19 +189,19 @@ def test_francis_worker_coordinator_generates_individual_pm_dispatches(tmp_path:
     assert len(dispatches) == 4
     by_name = {path.name: path.read_text(encoding="utf-8-sig") for path in dispatches}
     assert (
-        "Project-manager direction: advance the next smallest Orb voice proof slice."
+        "Project-manager direction: advance Stage 17 backlog class reduction."
         in by_name["worker-1-orb-voice-proof-iteration-1.md"]
     )
     assert (
-        "Project-manager direction: advance the next smallest lens-to-overlay spatial contract slice."
+        "Project-manager direction: advance Stage 17 executable lifecycle behavior."
         in by_name["worker-2-lens-overlay-spatial-iteration-1.md"]
     )
     assert (
-        "Project-manager direction: advance the next smallest voice receipt or provider-boundary slice."
+        "Project-manager direction: advance Stage 17 reusable invocation proof."
         in by_name["worker-3-voice-receipts-iteration-1.md"]
     )
     assert (
-        "Project-manager direction: advance the next smallest Stage 17 or completion-model truth slice."
+        "Project-manager direction: advance Stage 17 catalog coherence and closure audit."
         in by_name["worker-4-stage17-completion-iteration-1.md"]
     )
     for text in by_name.values():

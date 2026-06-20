@@ -144,16 +144,16 @@ function Get-LaneProjectManagerInstruction {
 
   switch ($WorkerId) {
     'worker-1-orb-voice-proof' {
-      return 'Project-manager direction: advance the next smallest Orb voice proof slice. Prioritize truthful manual-acoustic proof diagnostics, monitor evidence, receipt completeness, and visual-lock preservation. Do not fake microphone evidence.'
+      return 'Project-manager direction: advance Stage 17 backlog class reduction. Prioritize bounded pack/batch mechanisms that remove repeated live blockers with receipts, before/after counts, focused tests, and no closure claim.'
     }
     'worker-2-lens-overlay-spatial' {
-      return 'Project-manager direction: advance the next smallest lens-to-overlay spatial contract slice. Prioritize requested/mapped/actual region truth, coordinate boundaries, confidence, limitations, and tests. Do not claim unsupported perception.'
+      return 'Project-manager direction: advance Stage 17 executable lifecycle behavior. Prioritize versioning, migration, compatibility, promotion/apply, quarantine, deprecation, rollback, and governance-preserving tests.'
     }
     'worker-3-voice-receipts' {
-      return 'Project-manager direction: advance the next smallest voice receipt or provider-boundary slice. Prioritize ElevenLabs/ChatGPT voice receipts, redaction, unavailable/live/replay distinctions, and preventing voice from bypassing substrate governance.'
+      return 'Project-manager direction: advance Stage 17 reusable invocation proof. Prioritize governed invocation, pack reuse across multiple Francis contexts or mission shapes, receipt linkage, and focused validation.'
     }
     'worker-4-stage17-completion' {
-      return 'Project-manager direction: advance the next smallest Stage 17 or completion-model truth slice. Prioritize bounded readback/apply boundaries, proposal evidence references, completion-loop guards, and focused validation. Do not claim Stage 17 closure without proof.'
+      return 'Project-manager direction: advance Stage 17 catalog coherence and closure audit. Build or update the closure matrix, find the weakest criterion, then directly fix one executable blocker with evidence.'
     }
     default {
       return 'Project-manager direction: inspect repo truth, choose one bounded roadmap-aligned slice, validate it, and leave a precise handoff.'
