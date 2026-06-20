@@ -217,7 +217,11 @@ _PLUGIN_REPAIR_LIFECYCLE_ACTIONS = {
     "repaired": "repair",
     "restore": "restore",
     "restored": "restore",
+    "rollback": "rollback",
+    "rolled_back": "rollback",
+    "roll_back": "rollback",
 }
+_PLUGIN_LIFECYCLE_REPAIR_HISTORY_ACTIONS = {"repair", "restore", "rollback"}
 
 
 def _safe_str(value: Any) -> str:
@@ -2093,12 +2097,46 @@ def _plugin_lifecycle_repair_fingerprint(*, plan: dict[str, Any]) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
-def _read_plugin_lifecycle_receipts(*, plugin_id: str = "", limit: int = 20) -> list[dict[str, Any]]:
+def _read_plugin_lifecycle_receipts(*, plugin_id: str = "", limit: int = 20) -> dict[str, Any]:
     safe_limit = max(1, min(int(limit or 20), 200))
     folder = _art_dir() / "lifecycle"
     folder_fs_path = _filesystem_path(folder)
+    skipped_by_reason: dict[str, int] = {}
+    ignored_by_reason: dict[str, int] = {}
+
+    def skip(reason: str) -> None:
+        skipped_by_reason[reason] = skipped_by_reason.get(reason, 0) + 1
+
+    def ignore(reason: str) -> None:
+        ignored_by_reason[reason] = ignored_by_reason.get(reason, 0) + 1
+
+    def readback(items: list[dict[str, Any]], *, candidate_file_count: int = 0) -> dict[str, Any]:
+        ordered = sorted(
+            items,
+            key=lambda receipt: (
+                int(receipt.get("recorded_ts") or 0),
+                _safe_str(receipt.get("receipt_id")).strip(),
+            ),
+            reverse=True,
+        )
+        limited = ordered[:safe_limit]
+        return {
+            "limit": safe_limit,
+            "candidate_file_count": candidate_file_count,
+            "scanned_file_count": min(candidate_file_count, 1000),
+            "matched_count": len(ordered),
+            "count": len(limited),
+            "truncated_scan": candidate_file_count > 1000,
+            "truncated_result": len(ordered) > safe_limit,
+            "skipped_count": sum(skipped_by_reason.values()),
+            "skipped_by_reason": dict(sorted(skipped_by_reason.items())),
+            "ignored_count": sum(ignored_by_reason.values()),
+            "ignored_by_reason": dict(sorted(ignored_by_reason.items())),
+            "items": limited,
+        }
+
     if not os.path.isdir(folder_fs_path):
-        return []
+        return readback([])
 
     receipt_files: list[tuple[float, str]] = []
     try:
@@ -2108,9 +2146,11 @@ def _read_plugin_lifecycle_receipts(*, plugin_id: str = "", limit: int = 20) -> 
             try:
                 receipt_files.append((entry.stat().st_mtime, entry.path))
             except OSError:
+                skip("stat_error")
                 continue
     except OSError:
-        return []
+        skip("scan_error")
+        return readback([])
 
     safe_plugin_id = _safe_str(plugin_id).strip()
     items: list[dict[str, Any]] = []
@@ -2119,25 +2159,38 @@ def _read_plugin_lifecycle_receipts(*, plugin_id: str = "", limit: int = 20) -> 
             with open(path, encoding="utf-8", errors="replace") as handle:
                 payload = json.load(handle)
         except Exception:
+            skip("read_error")
             continue
         if not isinstance(payload, dict):
+            skip("invalid_payload")
             continue
         if _safe_str(payload.get("kind")).strip() != "plugin.lifecycle.receipt":
+            skip("invalid_kind")
             continue
         if safe_plugin_id and _safe_str(payload.get("plugin_id")).strip() != safe_plugin_id:
+            ignore("plugin_mismatch")
             continue
         items.append(payload)
-        if len(items) >= safe_limit:
-            break
 
-    return sorted(
-        items,
-        key=lambda receipt: (
-            int(receipt.get("recorded_ts") or 0),
-            _safe_str(receipt.get("receipt_id")).strip(),
-        ),
-        reverse=True,
-    )
+    return readback(items, candidate_file_count=len(receipt_files))
+
+
+def _plugin_lifecycle_receipt_scan_summary(receipt_scan: dict[str, Any]) -> dict[str, Any]:
+    skipped_by_reason = receipt_scan.get("skipped_by_reason")
+    ignored_by_reason = receipt_scan.get("ignored_by_reason")
+    return {
+        "limit": int(receipt_scan.get("limit") or 0),
+        "candidate_file_count": int(receipt_scan.get("candidate_file_count") or 0),
+        "scanned_file_count": int(receipt_scan.get("scanned_file_count") or 0),
+        "matched_count": int(receipt_scan.get("matched_count") or 0),
+        "count": int(receipt_scan.get("count") or 0),
+        "truncated_scan": bool(receipt_scan.get("truncated_scan", False)),
+        "truncated_result": bool(receipt_scan.get("truncated_result", False)),
+        "skipped_count": int(receipt_scan.get("skipped_count") or 0),
+        "skipped_by_reason": skipped_by_reason if isinstance(skipped_by_reason, dict) else {},
+        "ignored_count": int(receipt_scan.get("ignored_count") or 0),
+        "ignored_by_reason": ignored_by_reason if isinstance(ignored_by_reason, dict) else {},
+    }
 
 
 def _plugin_lifecycle_receipt_summary(receipt: dict[str, Any]) -> dict[str, Any]:
@@ -2150,7 +2203,8 @@ def _plugin_lifecycle_receipt_summary(receipt: dict[str, Any]) -> dict[str, Any]
         "receipt_id": _safe_str(receipt.get("receipt_id")).strip(),
         "plugin_id": _safe_str(receipt.get("plugin_id")).strip(),
         "action": action,
-        "repair_restore_action": action in {"repair", "restore"},
+        "repair_restore_action": action in _PLUGIN_LIFECYCLE_REPAIR_HISTORY_ACTIONS,
+        "rollback_action": action == "rollback",
         "lifecycle_status": _safe_str(receipt.get("lifecycle_status")).strip(),
         "registry_status": _safe_str(receipt.get("registry_status")).strip(),
         "enabled": bool(receipt.get("enabled", False)),
@@ -2254,13 +2308,19 @@ def _plugin_lifecycle_repair_history_projection(
     plugin_id: str,
     current: dict[str, Any] | None,
     receipts: list[dict[str, Any]],
+    receipt_scan: dict[str, Any],
 ) -> dict[str, Any]:
     receipt_history = [_plugin_lifecycle_receipt_summary(receipt) for receipt in receipts]
+    receipt_scan_summary = _plugin_lifecycle_receipt_scan_summary(receipt_scan)
     repair_restore_history = [
-        item for item in receipt_history if _safe_str(item.get("action")).strip() in {"repair", "restore"}
+        item
+        for item in receipt_history
+        if _safe_str(item.get("action")).strip() in _PLUGIN_LIFECYCLE_REPAIR_HISTORY_ACTIONS
     ]
+    rollback_history = [item for item in receipt_history if _safe_str(item.get("action")).strip() == "rollback"]
     latest_receipt = receipt_history[0] if receipt_history else {}
     latest_repair_restore = repair_restore_history[0] if repair_restore_history else {}
+    latest_rollback = rollback_history[0] if rollback_history else {}
     governance = _plugin_lifecycle_repair_history_governance()
     if current is None:
         return {
@@ -2273,10 +2333,16 @@ def _plugin_lifecycle_repair_history_projection(
             "id": plugin_id,
             "history_count": len(receipt_history),
             "repair_restore_history_count": len(repair_restore_history),
+            "rollback_history_count": len(rollback_history),
+            "skipped_receipt_count": int(receipt_scan_summary.get("skipped_count") or 0),
+            "ignored_receipt_count": int(receipt_scan_summary.get("ignored_count") or 0),
+            "receipt_scan": receipt_scan_summary,
             "history": receipt_history,
             "repair_restore_history": repair_restore_history,
+            "rollback_history": rollback_history,
             "latest_receipt": latest_receipt,
             "latest_repair_restore": latest_repair_restore,
+            "latest_rollback": latest_rollback,
             "apply_readiness": {
                 "safe_to_apply": False,
                 "status": "blocked",
@@ -2350,10 +2416,16 @@ def _plugin_lifecycle_repair_history_projection(
         "last_non_blocking_lifecycle_metadata": redact_governed_display_value(last_non_blocking),
         "history_count": len(receipt_history),
         "repair_restore_history_count": len(repair_restore_history),
+        "rollback_history_count": len(rollback_history),
+        "skipped_receipt_count": int(receipt_scan_summary.get("skipped_count") or 0),
+        "ignored_receipt_count": int(receipt_scan_summary.get("ignored_count") or 0),
+        "receipt_scan": receipt_scan_summary,
         "history": receipt_history,
         "repair_restore_history": repair_restore_history,
+        "rollback_history": rollback_history,
         "latest_receipt": latest_receipt,
         "latest_repair_restore": latest_repair_restore,
+        "latest_rollback": latest_rollback,
         "apply_readiness": {
             "safe_to_apply": safe_to_apply,
             "status": readiness_status,
@@ -17286,11 +17358,13 @@ def plugin_lifecycle_repair_history(id: str, limit: int = 20) -> dict[str, objec
         safe_limit = max(1, min(int(limit or 20), 200))
         registry = _load_registry()
         current = _read_plugin(registry, plugin_id)
-        receipts = _read_plugin_lifecycle_receipts(plugin_id=plugin_id, limit=safe_limit)
+        receipt_scan = _read_plugin_lifecycle_receipts(plugin_id=plugin_id, limit=safe_limit)
+        receipts = receipt_scan.get("items") if isinstance(receipt_scan.get("items"), list) else []
         return _plugin_lifecycle_repair_history_projection(
             plugin_id=plugin_id,
             current=current,
             receipts=receipts,
+            receipt_scan=receipt_scan,
         )
     except Exception as exc:
         return {
@@ -17326,7 +17400,7 @@ def repair_plugin_lifecycle(payload: PluginLifecycleRepairIn, request: Request) 
                 requested_action=requested_lifecycle_action,
                 route=request.url.path,
                 gate="plugin_lifecycle_repair",
-                supported_actions=["repair", "restore"],
+                supported_actions=["repair", "restore", "rollback"],
                 dry_run_required_before_apply=True,
             )
 
@@ -17458,6 +17532,18 @@ def repair_plugin_lifecycle(payload: PluginLifecycleRepairIn, request: Request) 
         meta["lifecycle_repair_restored_promotion_status"] = restored_promotion_status
         meta["lifecycle_repair_receipt_id"] = lifecycle_receipt_id
         meta["lifecycle_repair_receipt_path"] = str(lifecycle_receipt_path)
+        if lifecycle_action == "rollback":
+            meta["lifecycle_rollback_status"] = "rolled_back"
+            meta["lifecycle_rollback_ts"] = repaired_ts
+            meta["lifecycle_rollback_by"] = actor
+            meta["lifecycle_rollback_reason"] = redact_governed_value(_safe_str(payload.reason).strip() or "requested")
+            meta["lifecycle_rollback_previous_status"] = previous_lifecycle_status
+            meta["lifecycle_rollback_previous_source"] = previous_lifecycle_source
+            meta["lifecycle_rollback_previous_error"] = previous_lifecycle_error
+            meta["lifecycle_rollback_restored_status"] = restored_status
+            meta["lifecycle_rollback_restored_promotion_status"] = restored_promotion_status
+            meta["lifecycle_rollback_receipt_id"] = lifecycle_receipt_id
+            meta["lifecycle_rollback_receipt_path"] = str(lifecycle_receipt_path)
         meta["lifecycle_receipt_id"] = lifecycle_receipt_id
         meta["lifecycle_receipt_path"] = str(lifecycle_receipt_path)
         meta["lifecycle_receipt_kind"] = "plugin.lifecycle.receipt"
@@ -17495,6 +17581,7 @@ def repair_plugin_lifecycle(payload: PluginLifecycleRepairIn, request: Request) 
             "lifecycle_action": lifecycle_action,
             "lifecycle_status": "active",
             "lifecycle_repair_status": "repaired",
+            "lifecycle_rollback_status": "rolled_back" if lifecycle_action == "rollback" else "",
             "lifecycle_before": redact_governed_display_value(lifecycle_before),
             "lifecycle_after": redact_governed_display_value(lifecycle_after),
             "planned_lifecycle_repair": repair_plan,
