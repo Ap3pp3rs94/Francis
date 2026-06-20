@@ -40,13 +40,16 @@ def test_chatgpt_voice_contract_is_permission_gated(monkeypatch, tmp_path: Path)
     assert body["receipt_contract"]["mcp_server_tool"] == "francis_chatgpt_voice_ingress"
     assert body["receipt_contract"]["mcp_connection_proof_gateway_tool"] == "francis.chatgpt_voice.mcp_probe"
     assert body["receipt_contract"]["mcp_connection_proof_server_tool"] == "francis_chatgpt_voice_mcp_probe"
+    assert body["receipt_contract"]["bridge_receipt_root"] == "data/integrations/chatgpt_voice/receipts"
     assert body["receipt_contract"]["metadata_secrets_redacted_field"] == "metadata_secrets_redacted"
     assert body["receipt_contract"]["redacted_metadata_fields_field"] == "redacted_metadata_fields"
     assert body["receipt_contract"]["receipt_readback_redacts_secret_patterns"] is True
+    assert body["receipt_contract"]["voice_substrate_proof_field"] == "voice_substrate_proof"
     assert body["receipt_contract"]["voice_output_provider_field"] == "voice_output_provider"
     assert body["receipt_contract"]["voice_output_provider_status_field"] == "voice_output_provider_status"
     assert body["receipt_contract"]["voice_provider_state_field"] == "voice_provider_state"
     assert body["receipt_contract"]["voice_provider_receipt_field"] == "voice_provider_receipt"
+    assert body["receipt_contract"]["voice_provider_receipt_mode_field"] == "voice_provider_receipt_mode"
     assert body["receipt_contract"]["voice_provider_state_taxonomy"] == [
         "client_text_reply_no_provider_call",
         "live_provider_receipt",
@@ -56,6 +59,16 @@ def test_chatgpt_voice_contract_is_permission_gated(monkeypatch, tmp_path: Path)
         "provider_unavailable",
         "provider_unconfigured",
     ]
+    assert body["receipt_contract"]["voice_provider_receipt_mode_taxonomy"] == [
+        "client_text_reply_no_provider_call",
+        "live_provider_receipt",
+        "mock_provider_receipt",
+        "fixture_provider_receipt",
+        "replay_provider_receipt",
+        "provider_unavailable",
+        "provider_unconfigured",
+    ]
+    assert body["receipt_contract"]["voice_provider_receipt_modes_are_mutually_exclusive"] is True
     assert body["orb_voice_contract"]["francis_identity"] == "Francis"
     assert body["orb_voice_contract"]["francis_surfaces"] == ["voice", "lens", "orb"]
     assert body["orb_voice_contract"]["orb_role"] == "embodiment"
@@ -69,6 +82,13 @@ def test_chatgpt_voice_contract_is_permission_gated(monkeypatch, tmp_path: Path)
     assert body["orb_voice_contract"]["raw_audio_stream_accepted"] is False
     assert body["orb_voice_contract"]["client_speaks_top_level_reply"] is True
     assert body["orb_voice_contract"]["orb_position_command_accepts_francis_identity_reference"] is True
+    substrate_boundary = body["orb_voice_contract"]["orb_position_command_substrate_boundary"]
+    assert substrate_boundary["voice_controls_orb_directly"] is False
+    assert substrate_boundary["overlay_runtime_owns_position_mutation"] is True
+    assert substrate_boundary["applied_state_requires_overlay_receipt"] is True
+    assert substrate_boundary["orb_applied_state_claimed_by_bridge"] is False
+    assert substrate_boundary["orb_visual_lock_preserved"] is True
+    assert substrate_boundary["substrate_governance_bypass"] is False
     assert "go" in body["orb_voice_contract"]["orb_position_command_move_verbs"]
     assert "slide" in body["orb_voice_contract"]["orb_position_command_move_verbs"]
     assert body["input_contract"]["audio_stream_accepted"] is False
@@ -86,6 +106,15 @@ def test_chatgpt_voice_contract_is_permission_gated(monkeypatch, tmp_path: Path)
     assert provider_boundary["voice_output_provider"] == "chatgpt_voice_client"
     assert provider_boundary["voice_output_mode"] == "client_text_reply"
     assert provider_boundary["voice_provider_state"] == "client_text_reply_no_provider_call"
+    assert provider_boundary["voice_provider_receipt_mode"] == "client_text_reply_no_provider_call"
+    assert provider_boundary["voice_provider_receipt_mode_is_provider_call"] is False
+    substrate_proof = provider_boundary["voice_substrate_proof"]
+    assert substrate_proof["provider_receipt_mode"] == "client_text_reply_no_provider_call"
+    assert substrate_proof["provider_taxonomy_enforced"] is True
+    assert substrate_proof["output_provider_call_claimed"] is False
+    assert substrate_proof["elevenlabs_live_use_requires_provider_receipt"] is True
+    assert substrate_proof["voice_controls_orb_directly"] is False
+    assert substrate_proof["substrate_governance_bypass"] is False
     assert provider_boundary["live_voice_provider_call"] is False
     assert provider_boundary["mock_voice_provider_call"] is False
     assert provider_boundary["fixture_voice_provider_call"] is False
@@ -96,6 +125,8 @@ def test_chatgpt_voice_contract_is_permission_gated(monkeypatch, tmp_path: Path)
     assert provider_boundary["elevenlabs_audio_claimed"] is False
     provider_receipt = provider_boundary["voice_provider_receipt"]
     assert provider_receipt["state"] == "client_text_reply_no_provider_call"
+    assert provider_receipt["receipt_mode"] == "client_text_reply_no_provider_call"
+    assert provider_receipt["receipt_mode_is_provider_call"] is False
     assert provider_receipt["client_text_reply"] is True
     assert provider_receipt["provider_unavailable_and_unconfigured_distinct"] is True
     assert provider_receipt["live_mock_fixture_replay_are_mutually_exclusive"] is True
@@ -105,6 +136,10 @@ def test_chatgpt_voice_contract_is_permission_gated(monkeypatch, tmp_path: Path)
     assert provider_receipt["elevenlabs"]["live_use_requires_provider_receipt"] is True
     assert provider_boundary["provider_boundary"]["elevenlabs_live_use_requires_provider_receipt"] is True
     assert provider_boundary["provider_boundary"]["provider_unavailable_and_unconfigured_distinct"] is True
+    assert (
+        provider_boundary["provider_boundary"]["bridge_provider_receipt_mode"] == "client_text_reply_no_provider_call"
+    )
+    assert provider_boundary["provider_boundary"]["bridge_provider_receipt_mode_is_provider_call"] is False
     assert body["governance"]["read_only"] is True
     assert body["governance"]["grants_execution_authority"] is False
     assert body["governance"]["grants_mutation_authority"] is False
@@ -135,6 +170,9 @@ def test_chatgpt_voice_ingress_records_without_chat_forward(monkeypatch, tmp_pat
     assert body["voice_response"]["voice_output_provider"] == "chatgpt_voice_client"
     assert body["voice_response"]["voice_output_mode"] == "client_text_reply"
     assert body["voice_response"]["voice_provider_state"] == "client_text_reply_no_provider_call"
+    assert body["voice_response"]["voice_provider_receipt_mode"] == "client_text_reply_no_provider_call"
+    assert body["voice_response"]["voice_provider_receipt_mode_is_provider_call"] is False
+    assert body["voice_response"]["voice_substrate_proof"]["output_provider_call_claimed"] is False
     assert body["voice_response"]["live_voice_provider_call"] is False
     assert body["voice_response"]["mock_voice_provider_call"] is False
     assert body["voice_response"]["fixture_voice_provider_call"] is False
@@ -143,6 +181,7 @@ def test_chatgpt_voice_ingress_records_without_chat_forward(monkeypatch, tmp_pat
     assert body["voice_response"]["voice_provider_unconfigured"] is False
     assert body["voice_response"]["elevenlabs_provider_invoked"] is False
     assert body["voice_response"]["voice_provider_receipt"]["state"] == "client_text_reply_no_provider_call"
+    assert body["voice_response"]["voice_provider_receipt"]["receipt_mode"] == "client_text_reply_no_provider_call"
     assert body["voice_response"]["voice_provider_receipt"]["provider_status_observed"] is False
     assert body["chat_forward"]["requested"] is False
     assert body["receipt"]["transcript"] == "Francis can you hear me"
@@ -155,6 +194,8 @@ def test_chatgpt_voice_ingress_records_without_chat_forward(monkeypatch, tmp_pat
     assert body["receipt"]["voice_output_mode"] == "client_text_reply"
     assert body["receipt"]["voice_output_provider_status"] == "client_speaks_top_level_reply"
     assert body["receipt"]["voice_provider_state"] == "client_text_reply_no_provider_call"
+    assert body["receipt"]["voice_provider_receipt_mode"] == "client_text_reply_no_provider_call"
+    assert body["receipt"]["voice_provider_receipt_mode_is_provider_call"] is False
     assert body["receipt"]["live_voice_provider_call"] is False
     assert body["receipt"]["mock_voice_provider_call"] is False
     assert body["receipt"]["fixture_voice_provider_call"] is False
@@ -164,6 +205,21 @@ def test_chatgpt_voice_ingress_records_without_chat_forward(monkeypatch, tmp_pat
     assert body["receipt"]["elevenlabs_provider_invoked"] is False
     assert body["receipt"]["elevenlabs_audio_claimed"] is False
     assert body["receipt"]["voice_provider_receipt"]["state"] == "client_text_reply_no_provider_call"
+    assert body["receipt"]["voice_provider_receipt"]["receipt_mode"] == "client_text_reply_no_provider_call"
+    assert body["receipt"]["voice_provider_receipt"]["receipt_mode_is_provider_call"] is False
+    receipt_proof = body["receipt"]["voice_substrate_proof"]
+    assert receipt_proof["kind"] == "francis.voice.substrate_proof.v1"
+    assert receipt_proof["bridge_receipt_id"] == body["receipt"]["id"]
+    assert receipt_proof["bridge_receipt_path"].endswith(f"{body['receipt']['id']}.json")
+    assert receipt_proof["voice_turn_receipt_path"] == "data/runtime/lens-overlay/voice-turns/voice-turn-1.json"
+    assert receipt_proof["transcript_state"] == "redacted_transcript_recorded"
+    assert receipt_proof["structured_receipts"]["bridge_ingress_receipt"] is True
+    assert receipt_proof["structured_receipts"]["virtual_voice_turn_receipt"] is True
+    assert receipt_proof["structured_receipts"]["provider_boundary_receipt"] is True
+    assert receipt_proof["structured_receipts"]["orb_position_command_request_receipt"] is False
+    assert receipt_proof["provider_receipt_mode"] == "client_text_reply_no_provider_call"
+    assert receipt_proof["output_provider_call_claimed"] is False
+    assert receipt_proof["voice_controls_orb_directly"] is False
     assert body["receipt"]["voice_provider_receipt"]["provider_status_observed"] is False
     assert body["receipt"]["voice_provider_receipt"]["provider_unavailable_and_unconfigured_distinct"] is True
     assert body["receipt"]["voice_provider_receipt"]["elevenlabs"]["bridge_invokes_provider"] is False
@@ -177,6 +233,7 @@ def test_chatgpt_voice_ingress_records_without_chat_forward(monkeypatch, tmp_pat
     persisted = json.loads(receipt_path.read_text(encoding="utf-8"))
     assert persisted["created_ts"] == body["receipt"]["created_ts"]
     assert persisted["created_at"] == body["receipt"]["created_at"]
+    assert persisted["voice_substrate_proof"]["bridge_receipt_id"] == body["receipt"]["id"]
     orb_voice = body["orb_voice_bridge"]
     assert orb_voice["status"] == "chatgpt_voice_transcript_recorded"
     assert orb_voice["virtual_voice_turn"] is True
@@ -204,6 +261,13 @@ def test_chatgpt_voice_ingress_records_without_chat_forward(monkeypatch, tmp_pat
     assert state["voice_output_mode"] == "client_text_reply"
     assert state["voice_output_provider_status"] == "client_speaks_top_level_reply"
     assert state["voice_provider_state"] == "client_text_reply_no_provider_call"
+    assert state["voice_provider_receipt_mode"] == "client_text_reply_no_provider_call"
+    assert state["voice_provider_receipt_mode_is_provider_call"] is False
+    assert state["voice_substrate_proof"]["voice_turn_receipt_path"] == (
+        "data/runtime/lens-overlay/voice-turns/voice-turn-1.json"
+    )
+    assert state["voice_substrate_proof"]["structured_receipts"]["virtual_voice_turn_receipt"] is True
+    assert state["voice_substrate_proof"]["structured_receipts"]["bridge_ingress_receipt"] is False
     assert state["live_voice_provider_call"] is False
     assert state["mock_voice_provider_call"] is False
     assert state["fixture_voice_provider_call"] is False
@@ -213,6 +277,7 @@ def test_chatgpt_voice_ingress_records_without_chat_forward(monkeypatch, tmp_pat
     assert state["elevenlabs_provider_invoked"] is False
     assert state["elevenlabs_audio_claimed"] is False
     assert state["voice_provider_receipt"]["state"] == "client_text_reply_no_provider_call"
+    assert state["voice_provider_receipt"]["receipt_mode"] == "client_text_reply_no_provider_call"
     assert state["voice_provider_receipt"]["elevenlabs"]["configuration_driven"] is True
     assert state["voice_provider_receipt"]["elevenlabs"]["direct_orb_control"] is False
     assert state["local_overlay_speech_started"] is False
@@ -301,6 +366,8 @@ def test_chatgpt_voice_mcp_proof_records_connection_without_transcript_or_voice_
     assert body["voice_response"]["source"] == "bridge.mcp_connection_proof"
     assert body["voice_response"]["voice_output_provider"] == "chatgpt_voice_client"
     assert body["voice_response"]["voice_provider_state"] == "client_text_reply_no_provider_call"
+    assert body["voice_response"]["voice_provider_receipt_mode"] == "client_text_reply_no_provider_call"
+    assert body["voice_response"]["voice_provider_receipt_mode_is_provider_call"] is False
     assert body["voice_response"]["live_voice_provider_call"] is False
     assert body["voice_response"]["replay_voice_provider_call"] is False
     assert body["voice_response"]["elevenlabs_provider_invoked"] is False
@@ -320,6 +387,8 @@ def test_chatgpt_voice_mcp_proof_records_connection_without_transcript_or_voice_
     assert body["receipt"]["voice_output_provider"] == "chatgpt_voice_client"
     assert body["receipt"]["voice_output_mode"] == "client_text_reply"
     assert body["receipt"]["voice_provider_state"] == "client_text_reply_no_provider_call"
+    assert body["receipt"]["voice_provider_receipt_mode"] == "client_text_reply_no_provider_call"
+    assert body["receipt"]["voice_provider_receipt_mode_is_provider_call"] is False
     assert body["receipt"]["live_voice_provider_call"] is False
     assert body["receipt"]["mock_voice_provider_call"] is False
     assert body["receipt"]["fixture_voice_provider_call"] is False
@@ -329,6 +398,8 @@ def test_chatgpt_voice_mcp_proof_records_connection_without_transcript_or_voice_
     assert body["receipt"]["elevenlabs_provider_invoked"] is False
     assert body["receipt"]["elevenlabs_audio_claimed"] is False
     assert body["receipt"]["voice_provider_receipt"]["provider_status_observed"] is False
+    assert body["receipt"]["voice_provider_receipt"]["receipt_mode"] == "client_text_reply_no_provider_call"
+    assert body["receipt"]["voice_provider_receipt"]["receipt_mode_is_provider_call"] is False
     assert body["receipt"]["voice_provider_receipt"]["elevenlabs"]["bridge_invokes_provider"] is False
     assert body["orb_voice_bridge"]["mcp_server_transport"] == ""
     assert body["orb_voice_bridge"]["mcp_server_transport_verified"] is False
@@ -451,6 +522,13 @@ def test_chatgpt_voice_browser_ingress_queues_orb_position_command_without_chat_
     assert command["conversation_forwarding_suppressed"] is True
     assert command["overlay_runtime_owns_execution"] is True
     assert command["authority_scope"] == "runtime_overlay_position_only"
+    assert command["substrate_boundary"]["voice_controls_orb_directly"] is False
+    assert command["substrate_boundary"]["bridge_writes_overlay_command_request"] is True
+    assert command["substrate_boundary"]["overlay_runtime_owns_position_mutation"] is True
+    assert command["substrate_boundary"]["applied_state_requires_overlay_receipt"] is True
+    assert command["substrate_boundary"]["orb_applied_state_claimed_by_bridge"] is False
+    assert command["substrate_boundary"]["orb_visual_lock_preserved"] is True
+    assert command["substrate_boundary"]["substrate_governance_bypass"] is False
     assert command["grants_execution_authority"] is False
     assert command["grants_mutation_authority"] is False
 
@@ -464,12 +542,32 @@ def test_chatgpt_voice_browser_ingress_queues_orb_position_command_without_chat_
     assert request["target_side"] == "left"
     assert request["stores_transcript"] is False
     assert request["chat_forward_requested_before_command"] is True
+    assert request["substrate_boundary"]["voice_controls_orb_directly"] is False
+    assert request["substrate_boundary"]["overlay_runtime_owns_position_mutation"] is True
+    assert request["substrate_boundary"]["applied_state_requires_overlay_receipt"] is True
+    assert request["substrate_boundary"]["orb_applied_state_claimed_by_bridge"] is False
+    assert request["substrate_boundary"]["orb_visual_lock_preserved"] is True
+    assert request["governance"]["substrate_governance_bypass"] is False
     assert "Francis move the orb" not in json.dumps(request)
 
     command_receipt = data_root / "runtime" / "lens-overlay" / "orb-position-commands" / "browser-orb-left-command.json"
     assert command_receipt.exists()
     assert body["receipt"]["chat_forward_status"] == "suppressed_orb_position_command"
     assert body["receipt"]["orb_position_command_request"]["command"] == "move_orb_left_side"
+    assert body["receipt"]["orb_position_command_request"]["substrate_boundary"]["voice_controls_orb_directly"] is False
+    assert (
+        body["receipt"]["orb_position_command_request"]["substrate_boundary"]["applied_state_requires_overlay_receipt"]
+        is True
+    )
+    command_proof = body["receipt"]["voice_substrate_proof"]
+    assert command_proof["structured_receipts"]["orb_position_command_request_receipt"] is True
+    assert command_proof["orb_position_command_receipt_path"] == (
+        "data/runtime/lens-overlay/orb-position-commands/browser-orb-left-command.json"
+    )
+    assert command_proof["bridge_queues_overlay_request"] is True
+    assert command_proof["overlay_receipt_required_for_applied_state"] is True
+    assert command_proof["orb_applied_state_claimed_by_bridge"] is False
+    assert command_proof["voice_controls_orb_directly"] is False
     assert body["receipt"]["governance"]["forwards_to_chat"] is False
     assert body["receipt"]["governance"]["writes_overlay_position_command_request"] is True
     assert body["receipt"]["governance"]["mutation_authority_scope"] == "runtime_overlay_position_only"
@@ -921,6 +1019,15 @@ def test_chatgpt_voice_ingress_rejects_unavailable_transcript_with_reply(monkeyp
     assert body["voice_response"]["grants_execution_authority"] is False
     assert body["receipt"]["reason"] == "transcript_unavailable"
     assert body["receipt"]["chat_forward_requested"] is True
+    unavailable_proof = body["receipt"]["voice_substrate_proof"]
+    assert unavailable_proof["transcript_state"] == "transcript_unavailable_rejected"
+    assert unavailable_proof["structured_receipts"]["bridge_ingress_receipt"] is True
+    assert unavailable_proof["structured_receipts"]["virtual_voice_turn_receipt"] is True
+    assert unavailable_proof["provider_receipt_mode"] == "client_text_reply_no_provider_call"
+    assert unavailable_proof["output_provider_call_claimed"] is False
+    assert unavailable_proof["voice_provider_unavailable"] is False
+    assert unavailable_proof["voice_provider_unconfigured"] is False
+    assert unavailable_proof["voice_controls_orb_directly"] is False
     assert body["receipt"]["orb_voice_bridge"]["status"] == "chatgpt_voice_transcript_rejected"
     assert body["orb_voice_bridge"]["status"] == "chatgpt_voice_transcript_rejected"
     assert body["orb_voice_bridge"]["virtual_voice_turn"] is True

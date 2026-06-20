@@ -30,6 +30,16 @@ CHATGPT_VOICE_BRIDGE_OUTPUT_PROVIDER = "chatgpt_voice_client"
 CHATGPT_VOICE_BRIDGE_OUTPUT_MODE = "client_text_reply"
 CHATGPT_VOICE_BRIDGE_OUTPUT_PROVIDER_STATUS = "client_speaks_top_level_reply"
 CHATGPT_VOICE_BRIDGE_PROVIDER_STATE = "client_text_reply_no_provider_call"
+CHATGPT_VOICE_BRIDGE_RECEIPTS = "data/integrations/chatgpt_voice/receipts"
+CHATGPT_VOICE_BRIDGE_PROVIDER_STATE_TAXONOMY = [
+    CHATGPT_VOICE_BRIDGE_PROVIDER_STATE,
+    "live_provider_receipt",
+    "mock_provider_receipt",
+    "fixture_provider_receipt",
+    "replay_provider_receipt",
+    "provider_unavailable",
+    "provider_unconfigured",
+]
 CHATGPT_VOICE_BRIDGE_VIRTUAL_TURN_STATE = "data/runtime/lens-overlay/voice-turn-status.json"
 CHATGPT_VOICE_BRIDGE_VIRTUAL_TURN_RECEIPTS = "data/runtime/lens-overlay/voice-turns"
 CHATGPT_VOICE_BRIDGE_ORB_POSITION_COMMAND_REQUEST = "data/runtime/lens-overlay/orb-position-command-request.json"
@@ -154,6 +164,9 @@ def _voice_response(
         "voice_output_provider_status": CHATGPT_VOICE_BRIDGE_OUTPUT_PROVIDER_STATUS,
         "voice_provider_state": CHATGPT_VOICE_BRIDGE_PROVIDER_STATE,
         "voice_provider_state_source": "chatgpt_voice_bridge_static_boundary",
+        "voice_provider_receipt_mode": CHATGPT_VOICE_BRIDGE_PROVIDER_STATE,
+        "voice_provider_receipt_mode_source": "chatgpt_voice_bridge_static_boundary",
+        "voice_provider_receipt_mode_is_provider_call": False,
         "live_voice_provider_call": False,
         "mock_voice_provider_call": False,
         "fixture_voice_provider_call": False,
@@ -163,6 +176,7 @@ def _voice_response(
         "elevenlabs_provider_invoked": False,
         "elevenlabs_audio_claimed": False,
         "voice_provider_receipt": _voice_provider_receipt(),
+        "voice_substrate_proof": _voice_substrate_proof(),
         "raw_audio": False,
         "grants_execution_authority": False,
         "grants_mutation_authority": False,
@@ -174,6 +188,10 @@ def _voice_provider_receipt() -> dict[str, Any]:
         "state": CHATGPT_VOICE_BRIDGE_PROVIDER_STATE,
         "state_source": "chatgpt_voice_bridge_static_boundary",
         "state_basis": "bridge_returns_text_for_client_speech",
+        "receipt_mode": CHATGPT_VOICE_BRIDGE_PROVIDER_STATE,
+        "receipt_mode_source": "chatgpt_voice_bridge_static_boundary",
+        "receipt_mode_taxonomy": CHATGPT_VOICE_BRIDGE_PROVIDER_STATE_TAXONOMY,
+        "receipt_mode_is_provider_call": False,
         "client_text_reply": True,
         "provider_status_observed": False,
         "provider_status_observation_source": "not_observed_bridge_did_not_call_provider",
@@ -206,6 +224,9 @@ def _voice_output_boundary() -> dict[str, Any]:
         "voice_output_provider_status": CHATGPT_VOICE_BRIDGE_OUTPUT_PROVIDER_STATUS,
         "voice_provider_state": CHATGPT_VOICE_BRIDGE_PROVIDER_STATE,
         "voice_provider_state_source": "chatgpt_voice_bridge_static_boundary",
+        "voice_provider_receipt_mode": CHATGPT_VOICE_BRIDGE_PROVIDER_STATE,
+        "voice_provider_receipt_mode_source": "chatgpt_voice_bridge_static_boundary",
+        "voice_provider_receipt_mode_is_provider_call": False,
         "voice_output_transport": "chatgpt_voice_client_reply",
         "client_speaks_top_level_reply": True,
         "live_voice_provider_call": False,
@@ -220,6 +241,7 @@ def _voice_output_boundary() -> dict[str, Any]:
         "elevenlabs_audio_claimed": False,
         "overlay_audio_claimed": False,
         "voice_provider_receipt": _voice_provider_receipt(),
+        "voice_substrate_proof": _voice_substrate_proof(),
         "provider_boundary": {
             "bridge_calls_live_voice_provider": False,
             "bridge_calls_mock_voice_provider": False,
@@ -232,7 +254,94 @@ def _voice_output_boundary() -> dict[str, Any]:
             "provider_unavailable_and_unconfigured_distinct": True,
             "live_mock_fixture_replay_are_mutually_exclusive": True,
             "chatgpt_client_speaks_top_level_reply": True,
+            "bridge_provider_receipt_mode": CHATGPT_VOICE_BRIDGE_PROVIDER_STATE,
+            "bridge_provider_receipt_mode_is_provider_call": False,
+            "bridge_provider_receipt_mode_taxonomy": CHATGPT_VOICE_BRIDGE_PROVIDER_STATE_TAXONOMY,
         },
+    }
+
+
+def _transcript_state(*, decision: str, reason: str, transcript: str) -> str:
+    if reason == "transcript_unavailable":
+        return "transcript_unavailable_rejected"
+    if reason == "transcript_required":
+        return "transcript_required_rejected"
+    if decision == "recorded" and transcript:
+        return "redacted_transcript_recorded"
+    if decision:
+        return "no_transcript_recorded"
+    return "not_applicable"
+
+
+def _voice_substrate_proof(
+    payload: dict[str, Any] | None = None,
+    *,
+    bridge_receipt_id: str = "",
+    bridge_receipt_path: str = "",
+) -> dict[str, Any]:
+    payload = payload or {}
+    raw_orb_voice_bridge = payload.get("orb_voice_bridge")
+    orb_voice_bridge: dict[str, Any] = raw_orb_voice_bridge if isinstance(raw_orb_voice_bridge, dict) else {}
+    raw_command_request = payload.get("orb_position_command_request")
+    command_request: dict[str, Any] = raw_command_request if isinstance(raw_command_request, dict) else {}
+    provider_receipt_mode = _safe_str(
+        payload.get("voice_provider_receipt_mode"),
+        CHATGPT_VOICE_BRIDGE_PROVIDER_STATE,
+    )
+    voice_turn_receipt_path = _safe_str(
+        payload.get("voice_turn_receipt_path") or orb_voice_bridge.get("voice_turn_receipt_path")
+    )
+    orb_position_command_receipt_path = _safe_str(command_request.get("request_receipt_path"))
+    transcript = _safe_str(payload.get("transcript"))
+    decision = _safe_str(payload.get("decision"))
+    reason = _safe_str(payload.get("reason"))
+    bridge_receipt_present = bool(bridge_receipt_id or bridge_receipt_path)
+    virtual_voice_turn_present = bool(voice_turn_receipt_path)
+    orb_command_present = bool(command_request)
+    return {
+        "kind": "francis.voice.substrate_proof.v1",
+        "bridge": CHATGPT_VOICE_BRIDGE_VERSION,
+        "decision": decision,
+        "reason": reason,
+        "transcript_state": _transcript_state(decision=decision, reason=reason, transcript=transcript),
+        "transcript_redacted": True,
+        "raw_audio": False,
+        "accepts_audio_stream": False,
+        "voice_enters_francis": True,
+        "voice_turn_is_virtual": True,
+        "bridge_receipt_id": bridge_receipt_id,
+        "bridge_receipt_path": bridge_receipt_path,
+        "voice_turn_receipt_path": voice_turn_receipt_path,
+        "orb_position_command_receipt_path": orb_position_command_receipt_path,
+        "structured_receipts": {
+            "bridge_ingress_receipt": bridge_receipt_present,
+            "virtual_voice_turn_receipt": virtual_voice_turn_present,
+            "provider_boundary_receipt": True,
+            "orb_position_command_request_receipt": orb_command_present,
+        },
+        "provider_receipt_mode": provider_receipt_mode,
+        "provider_receipt_mode_taxonomy": CHATGPT_VOICE_BRIDGE_PROVIDER_STATE_TAXONOMY,
+        "provider_taxonomy_enforced": True,
+        "provider_receipt_mode_is_provider_call": provider_receipt_mode != CHATGPT_VOICE_BRIDGE_PROVIDER_STATE,
+        "output_provider_call_claimed": False,
+        "live_voice_provider_call": False,
+        "mock_voice_provider_call": False,
+        "fixture_voice_provider_call": False,
+        "replay_voice_provider_call": False,
+        "voice_provider_unavailable": False,
+        "voice_provider_unconfigured": False,
+        "provider_unavailable_and_unconfigured_distinct": True,
+        "elevenlabs_provider_invoked": False,
+        "elevenlabs_audio_claimed": False,
+        "elevenlabs_live_use_requires_provider_receipt": True,
+        "voice_controls_orb_directly": False,
+        "bridge_queues_overlay_request": orb_command_present,
+        "overlay_receipt_required_for_applied_state": orb_command_present,
+        "orb_applied_state_claimed_by_bridge": False,
+        "substrate_governance_bypass": False,
+        "mission_governance_bypass": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
     }
 
 
@@ -353,6 +462,27 @@ def _resolve_orb_position_command(text: str) -> dict[str, Any]:
     return result
 
 
+def _orb_position_substrate_boundary() -> dict[str, Any]:
+    return {
+        "governed_bridge_contract": "chatgpt_voice_orb_position_command_request",
+        "voice_controls_orb_directly": False,
+        "bridge_writes_overlay_command_request": True,
+        "overlay_runtime_owns_position_mutation": True,
+        "applied_state_requires_overlay_receipt": True,
+        "orb_applied_state_claimed_by_bridge": False,
+        "direct_desktop_control": False,
+        "raw_shell": False,
+        "raw_input": False,
+        "orb_visual_change_allowed": False,
+        "orb_visual_lock_preserved": True,
+        "substrate_governance_bypass": False,
+        "mission_governance_bypass": False,
+        "mutation_authority_scope": "runtime_overlay_position_only",
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+    }
+
+
 def _write_orb_position_command_request(
     *,
     base_payload: dict[str, Any],
@@ -398,6 +528,7 @@ def _write_orb_position_command_request(
         "bounded_overlay_position_mutation": True,
         "mutation_authority_scope": "runtime_overlay_position_only",
         "overlay_runtime_owns_execution": True,
+        "substrate_boundary": _orb_position_substrate_boundary(),
         "request_path": CHATGPT_VOICE_BRIDGE_ORB_POSITION_COMMAND_REQUEST,
         "request_full_path": str(request_path),
         "request_receipt_path": f"{CHATGPT_VOICE_BRIDGE_ORB_POSITION_COMMAND_RECEIPTS}/{request_id}.json",
@@ -422,6 +553,7 @@ def _write_orb_position_command_request(
             "mutation_authority_scope": "runtime_overlay_position_only",
             "grants_execution_authority": False,
             "grants_mutation_authority": False,
+            "substrate_governance_bypass": False,
         },
     }
     _atomic_write_json(request_path, payload)
@@ -444,6 +576,7 @@ def _orb_position_command_summary(payload: dict[str, Any]) -> dict[str, Any]:
         "reference_type": _safe_str(payload.get("reference_type")),
         "request_path": _safe_str(payload.get("request_path")),
         "request_receipt_path": _safe_str(payload.get("request_receipt_path")),
+        "substrate_boundary": payload.get("substrate_boundary") or {},
         "grants_execution_authority": bool(payload.get("grants_execution_authority")),
         "grants_mutation_authority": bool(payload.get("grants_mutation_authority")),
     }
@@ -560,22 +693,19 @@ def chatgpt_voice_bridge_contract(actor: str = "") -> dict[str, Any]:
             "mcp_server_transport_field": "mcp_server_transport",
             "mcp_server_transport_unspecified": CHATGPT_VOICE_BRIDGE_MCP_SERVER_TRANSPORT_UNSPECIFIED,
             "public_connector_transport": CHATGPT_VOICE_BRIDGE_PUBLIC_CONNECTOR_TRANSPORT,
+            "bridge_receipt_root": CHATGPT_VOICE_BRIDGE_RECEIPTS,
             "metadata_secrets_redacted_field": "metadata_secrets_redacted",
             "redacted_metadata_fields_field": "redacted_metadata_fields",
             "receipt_readback_redacts_secret_patterns": True,
+            "voice_substrate_proof_field": "voice_substrate_proof",
             "voice_output_provider_field": "voice_output_provider",
             "voice_output_provider_status_field": "voice_output_provider_status",
             "voice_provider_state_field": "voice_provider_state",
             "voice_provider_receipt_field": "voice_provider_receipt",
-            "voice_provider_state_taxonomy": [
-                CHATGPT_VOICE_BRIDGE_PROVIDER_STATE,
-                "live_provider_receipt",
-                "mock_provider_receipt",
-                "fixture_provider_receipt",
-                "replay_provider_receipt",
-                "provider_unavailable",
-                "provider_unconfigured",
-            ],
+            "voice_provider_receipt_mode_field": "voice_provider_receipt_mode",
+            "voice_provider_state_taxonomy": CHATGPT_VOICE_BRIDGE_PROVIDER_STATE_TAXONOMY,
+            "voice_provider_receipt_mode_taxonomy": CHATGPT_VOICE_BRIDGE_PROVIDER_STATE_TAXONOMY,
+            "voice_provider_receipt_modes_are_mutually_exclusive": True,
         },
         "orb_voice_contract": {
             "francis_identity": "Francis",
@@ -617,6 +747,7 @@ def chatgpt_voice_bridge_contract(actor: str = "") -> dict[str, Any]:
             "orb_position_command_receipt_root": CHATGPT_VOICE_BRIDGE_ORB_POSITION_COMMAND_RECEIPTS,
             "orb_position_command_overlay_runtime_owns_execution": True,
             "orb_position_command_authority_scope": "runtime_overlay_position_only",
+            "orb_position_command_substrate_boundary": _orb_position_substrate_boundary(),
         },
         "input_contract": {
             "transcript_required": True,
@@ -805,6 +936,15 @@ def _write_virtual_voice_turn(
         "voice_turn_state_full_path": str(state_path),
         "voice_turn_receipt_path": f"{CHATGPT_VOICE_BRIDGE_VIRTUAL_TURN_RECEIPTS}/{turn_id}.json",
         "voice_turn_receipt_full_path": str(receipt_path),
+        "voice_substrate_proof": _voice_substrate_proof(
+            {
+                **base_payload,
+                "decision": decision,
+                "reason": reason,
+                "chat_forwarded": chat_forwarded,
+                "voice_turn_receipt_path": f"{CHATGPT_VOICE_BRIDGE_VIRTUAL_TURN_RECEIPTS}/{turn_id}.json",
+            }
+        ),
         "next_smallest_truthful_gap": "confirm_chatgpt_client_calls_mcp_tool_for_each_voice_turn",
     }
     _atomic_write_json(state_path, payload)
@@ -836,6 +976,8 @@ def _virtual_voice_summary(payload: dict[str, Any]) -> dict[str, Any]:
         "voice_output_provider": _safe_str(payload.get("voice_output_provider")),
         "voice_output_mode": _safe_str(payload.get("voice_output_mode")),
         "voice_output_provider_status": _safe_str(payload.get("voice_output_provider_status")),
+        "voice_provider_receipt_mode": _safe_str(payload.get("voice_provider_receipt_mode")),
+        "voice_substrate_proof": payload.get("voice_substrate_proof") or {},
         "live_voice_provider_call": bool(payload.get("live_voice_provider_call")),
         "mock_voice_provider_call": bool(payload.get("mock_voice_provider_call")),
         "fixture_voice_provider_call": bool(payload.get("fixture_voice_provider_call")),
@@ -862,6 +1004,7 @@ def _virtual_voice_summary(payload: dict[str, Any]) -> dict[str, Any]:
 def _write_receipt(payload: dict[str, Any]) -> dict[str, Any]:
     receipt_id = f"chatgpt-voice-{_safe_str(payload.get('decision'), 'recorded')}-{_digest(payload)}"
     created_ts = _now()
+    bridge_receipt_path = f"{CHATGPT_VOICE_BRIDGE_RECEIPTS}/{receipt_id}.json"
     governance = _honesty(
         read_only=False,
         writes_receipt=True,
@@ -883,6 +1026,11 @@ def _write_receipt(payload: dict[str, Any]) -> dict[str, Any]:
         "created_ts": created_ts,
         "created_at": _utc_iso_from_ts(created_ts),
         **payload,
+        "voice_substrate_proof": _voice_substrate_proof(
+            payload,
+            bridge_receipt_id=receipt_id,
+            bridge_receipt_path=bridge_receipt_path,
+        ),
         "governance": governance,
     }
     path = _receipt_root() / f"{receipt_id}.json"
