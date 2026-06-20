@@ -33,6 +33,9 @@ It emits one JSON object with:
 - the loop guards that must pass before a `continue` run chooses work
 - the selected next continue decision, preferring the latest open Stage 17
   remaining truthful gap over unrelated newer ledger entries
+- the selected-gap contract, which states that choosing a gap is a read-only
+  selection and grants no apply, proposal-review, promotion, mutation, or
+  execution authority
 - the percentage movement rules
 
 The model is read-only. The API route is backed by the Francis Python substrate,
@@ -63,6 +66,14 @@ selects that Stage 17 ledger entry as `selected_gap_source` instead of the
 latest overall ledger entry. If Stage 17 is not open, the model falls back to the
 latest ledger gap. If required source documents are missing, the decision is
 blocked on restoring the completion-model sources.
+
+`next_continue_decision.selected_gap_contract` is part of that readback. It
+names the selection basis and repeats the authority boundary: the completion
+model can select a bounded gap for the next worker prompt, but it cannot apply
+proposal evidence, approve proposal reviews, promote or enable capabilities,
+write repo/data state, or grant execution/mutation authority. Any future Stage
+17 apply must still use an existing governed route with dry-run confirmation,
+bounded scope, and focused validation.
 
 ## Percentage Rule
 

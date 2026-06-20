@@ -59,6 +59,29 @@ def test_francis_completion_model_status_projects_ledger_backed_loop_guard() -> 
     assert payload["next_continue_decision"]["status"] == "bounded_slice_required"
     assert payload["next_continue_decision"]["selected_gap_source"] == "stage17_latest_ledger_entry"
     assert payload["next_continue_decision"]["stage17_gap_preferred"] is True
+    selected_gap_contract = payload["next_continue_decision"]["selected_gap_contract"]
+    assert selected_gap_contract["kind"] == "francis.completion_model.selected_gap_contract"
+    assert selected_gap_contract["status"] == "selected"
+    assert selected_gap_contract["selected_gap_source"] == "stage17_latest_ledger_entry"
+    assert selected_gap_contract["selection_basis"] == "latest_open_stage17_remaining_gap"
+    assert selected_gap_contract["selected_gap_is_stage17"] is True
+    assert selected_gap_contract["read_only_selection"] is True
+    assert selected_gap_contract["writes_repo"] is False
+    assert selected_gap_contract["writes_data"] is False
+    assert selected_gap_contract["grants_execution_authority"] is False
+    assert selected_gap_contract["grants_mutation_authority"] is False
+    assert selected_gap_contract["apply_authority_granted"] is False
+    assert selected_gap_contract["proposal_evidence_apply_authority"] is False
+    assert selected_gap_contract["proposal_review_authority"] is False
+    assert selected_gap_contract["promotion_authority"] is False
+    assert selected_gap_contract["capability_execution_authority"] is False
+    assert selected_gap_contract["stage17_readback_authority_denied"] is True
+    assert selected_gap_contract["future_stage17_apply_requires"] == [
+        "existing_governed_route",
+        "dry_run_confirmation",
+        "bounded_scope",
+        "focused_validation",
+    ]
 
     checklist_ids = {item["id"] for item in payload["continue_loop_guard"]["checklist"]}
     assert "ledger_read" in checklist_ids
@@ -219,6 +242,11 @@ def test_francis_completion_model_script_keeps_stage17_gap_when_latest_entry_is_
     assert payload["next_continue_decision"]["next_smallest_truthful_gap"] == (
         "- Stage 17 remains open. Continue the selected-scope queue."
     )
+    assert payload["next_continue_decision"]["selected_gap_contract"]["selected_gap_is_stage17"] is True
+    assert (
+        payload["next_continue_decision"]["selected_gap_contract"]["selection_basis"]
+        == "latest_open_stage17_remaining_gap"
+    )
     checklist = {item["id"]: item for item in payload["continue_loop_guard"]["checklist"]}
     assert checklist["stage17_lane_gap_preserved"]["status"] == "ready"
     assert checklist["stage17_lane_gap_preserved"]["evidence"] == (
@@ -236,6 +264,9 @@ def test_francis_completion_model_script_is_status_only() -> None:
     assert "writes_data = $false" in script
     assert "grants_execution_authority = $false" in script
     assert "grants_mutation_authority = $false" in script
+    assert "apply_authority_granted = $false" in script
+    assert "proposal_review_authority = $false" in script
+    assert "capability_execution_authority = $false" in script
     assert "Set-Content" not in script
     assert "Out-File" not in script
     assert "Add-Content" not in script

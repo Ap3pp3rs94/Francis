@@ -35,6 +35,29 @@ def test_completion_model_snapshot_is_read_only_and_loop_guarded() -> None:
     assert payload["next_continue_decision"]["status"] == "bounded_slice_required"
     assert payload["next_continue_decision"]["selected_gap_source"] == "stage17_latest_ledger_entry"
     assert payload["next_continue_decision"]["stage17_gap_preferred"] is True
+    selected_gap_contract = payload["next_continue_decision"]["selected_gap_contract"]
+    assert selected_gap_contract["kind"] == "francis.completion_model.selected_gap_contract"
+    assert selected_gap_contract["status"] == "selected"
+    assert selected_gap_contract["selected_gap_source"] == "stage17_latest_ledger_entry"
+    assert selected_gap_contract["selection_basis"] == "latest_open_stage17_remaining_gap"
+    assert selected_gap_contract["selected_gap_is_stage17"] is True
+    assert selected_gap_contract["read_only_selection"] is True
+    assert selected_gap_contract["writes_repo"] is False
+    assert selected_gap_contract["writes_data"] is False
+    assert selected_gap_contract["grants_execution_authority"] is False
+    assert selected_gap_contract["grants_mutation_authority"] is False
+    assert selected_gap_contract["apply_authority_granted"] is False
+    assert selected_gap_contract["proposal_evidence_apply_authority"] is False
+    assert selected_gap_contract["proposal_review_authority"] is False
+    assert selected_gap_contract["promotion_authority"] is False
+    assert selected_gap_contract["capability_execution_authority"] is False
+    assert selected_gap_contract["stage17_readback_authority_denied"] is True
+    assert selected_gap_contract["future_stage17_apply_requires"] == [
+        "existing_governed_route",
+        "dry_run_confirmation",
+        "bounded_scope",
+        "focused_validation",
+    ]
     checklist = {item["id"]: item for item in payload["continue_loop_guard"]["checklist"]}
     assert checklist["stage17_lane_gap_preserved"]["status"] == "ready"
     assert checklist["stage17_lane_gap_preserved"]["evidence"]
@@ -55,6 +78,12 @@ def test_completion_model_snapshot_blocks_when_sources_are_missing(tmp_path: Pat
     assert payload["continue_loop_guard"]["blocked_count"] == 3
     assert payload["next_continue_decision"]["selected_gap_source"] == "completion_model_sources"
     assert payload["next_continue_decision"]["next_smallest_truthful_gap"] == "restore_completion_model_sources"
+    selected_gap_contract = payload["next_continue_decision"]["selected_gap_contract"]
+    assert selected_gap_contract["status"] == "blocked"
+    assert selected_gap_contract["selected_gap_source"] == "completion_model_sources"
+    assert selected_gap_contract["selection_basis"] == "restore_completion_model_sources"
+    assert selected_gap_contract["read_only_selection"] is True
+    assert selected_gap_contract["apply_authority_granted"] is False
     checklist = {item["id"]: item["status"] for item in payload["continue_loop_guard"]["checklist"]}
     assert checklist["ledger_read"] == "blocked"
     assert checklist["build_manifest_read"] == "blocked"
@@ -177,6 +206,11 @@ def test_completion_model_snapshot_keeps_stage17_gap_when_latest_entry_is_other_
     assert payload["next_continue_decision"]["next_smallest_truthful_gap"] == (
         "- Stage 17 remains open. Continue the selected-scope queue."
     )
+    assert payload["next_continue_decision"]["selected_gap_contract"]["selected_gap_is_stage17"] is True
+    assert (
+        payload["next_continue_decision"]["selected_gap_contract"]["selection_basis"]
+        == "latest_open_stage17_remaining_gap"
+    )
     checklist = {item["id"]: item for item in payload["continue_loop_guard"]["checklist"]}
     assert checklist["stage17_lane_gap_preserved"]["status"] == "ready"
     assert checklist["stage17_lane_gap_preserved"]["evidence"] == (
@@ -205,3 +239,5 @@ def test_completion_model_status_route_is_mounted_and_read_only() -> None:
     assert body["stage17_status"]["grants_execution_authority"] is False
     assert body["stage17_status"]["grants_mutation_authority"] is False
     assert body["completion_percentage_model"]["movement_allowed_by_this_readback"] is False
+    assert body["next_continue_decision"]["selected_gap_contract"]["read_only_selection"] is True
+    assert body["next_continue_decision"]["selected_gap_contract"]["apply_authority_granted"] is False

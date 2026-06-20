@@ -317,6 +317,49 @@ function New-CompletionLoopGuard {
   }
 }
 
+function New-SelectedGapContract {
+  param(
+    [string]$SelectedSource,
+    [bool]$Stage17GapPreferred
+  )
+
+  $Selected = ($SelectedSource -eq 'stage17_latest_ledger_entry' -or $SelectedSource -eq 'latest_ledger_entry')
+  if ($Stage17GapPreferred) {
+    $SelectionBasis = 'latest_open_stage17_remaining_gap'
+  } elseif ($SelectedSource -eq 'latest_ledger_entry') {
+    $SelectionBasis = 'latest_ledger_remaining_gap'
+  } elseif ($SelectedSource -eq 'completion_model_sources') {
+    $SelectionBasis = 'restore_completion_model_sources'
+  } else {
+    $SelectionBasis = 'no_gap_selected'
+  }
+
+  return [ordered]@{
+    kind = 'francis.completion_model.selected_gap_contract'
+    status = if ($Selected) { 'selected' } else { 'blocked' }
+    selected_gap_source = $SelectedSource
+    selection_basis = $SelectionBasis
+    selected_gap_is_stage17 = $Stage17GapPreferred
+    read_only_selection = $true
+    writes_repo = $false
+    writes_data = $false
+    grants_execution_authority = $false
+    grants_mutation_authority = $false
+    apply_authority_granted = $false
+    proposal_evidence_apply_authority = $false
+    proposal_review_authority = $false
+    promotion_authority = $false
+    capability_execution_authority = $false
+    stage17_readback_authority_denied = $true
+    future_stage17_apply_requires = @(
+      'existing_governed_route',
+      'dry_run_confirmation',
+      'bounded_scope',
+      'focused_validation'
+    )
+  }
+}
+
 function New-NextContinueDecision {
   param(
     [object]$LoopGuard,
@@ -362,6 +405,7 @@ function New-NextContinueDecision {
     selected_roadmap_area = $SelectedRoadmapArea
     stage17_gap_preferred = $Stage17GapPreferred
     next_smallest_truthful_gap = $NextGap
+    selected_gap_contract = New-SelectedGapContract -SelectedSource $SelectedSource -Stage17GapPreferred $Stage17GapPreferred
   }
 }
 

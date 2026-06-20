@@ -110,6 +110,47 @@ def _next_continue_decision(
         "selected_roadmap_area": selected_roadmap_area,
         "stage17_gap_preferred": stage17_gap_preferred,
         "next_smallest_truthful_gap": next_gap,
+        "selected_gap_contract": _selected_gap_contract(
+            selected_source=selected_source,
+            stage17_gap_preferred=stage17_gap_preferred,
+        ),
+    }
+
+
+def _selected_gap_contract(*, selected_source: str, stage17_gap_preferred: bool) -> dict[str, Any]:
+    selected = selected_source in {"stage17_latest_ledger_entry", "latest_ledger_entry"}
+    if stage17_gap_preferred:
+        selection_basis = "latest_open_stage17_remaining_gap"
+    elif selected_source == "latest_ledger_entry":
+        selection_basis = "latest_ledger_remaining_gap"
+    elif selected_source == "completion_model_sources":
+        selection_basis = "restore_completion_model_sources"
+    else:
+        selection_basis = "no_gap_selected"
+
+    return {
+        "kind": "francis.completion_model.selected_gap_contract",
+        "status": "selected" if selected else "blocked",
+        "selected_gap_source": selected_source,
+        "selection_basis": selection_basis,
+        "selected_gap_is_stage17": stage17_gap_preferred,
+        "read_only_selection": True,
+        "writes_repo": False,
+        "writes_data": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "apply_authority_granted": False,
+        "proposal_evidence_apply_authority": False,
+        "proposal_review_authority": False,
+        "promotion_authority": False,
+        "capability_execution_authority": False,
+        "stage17_readback_authority_denied": True,
+        "future_stage17_apply_requires": [
+            "existing_governed_route",
+            "dry_run_confirmation",
+            "bounded_scope",
+            "focused_validation",
+        ],
     }
 
 
@@ -252,7 +293,7 @@ def _loop_guard(
     stage17_gap_evidence = (
         str(stage17_entry.get("title", "")) if isinstance(stage17_entry, dict) else "no Stage 17 ledger entry found"
     )
-    checklist = [
+    checklist: list[dict[str, Any]] = [
         {
             "id": "ledger_read",
             "status": "ready" if ledger_exists else "blocked",
