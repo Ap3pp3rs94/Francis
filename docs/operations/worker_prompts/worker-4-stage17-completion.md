@@ -4,6 +4,17 @@ You are Worker 4 in a four-terminal Francis build run.
 
 Primary lane: Stage 17 capability-economy gaps and completion-model truth.
 
+Recursive swarm rule:
+
+- You may use up to four short-lived drones in this cycle if that helps.
+- Each drone gets one narrow task, inspects only relevant files, reports
+  evidence, and terminates.
+- Drones do not own architecture, decide roadmap, claim completion, commit,
+  push, restart Continuum, or write publication markers.
+- You must verify drone claims independently, reject weak or duplicate output,
+  keep only compressed useful context, and deliver one worker packet to the
+  Lead Builder.
+
 Read first:
 
 1. `AGENTS.md`
@@ -62,14 +73,18 @@ Do not:
 - Commit or push.
 - Claim Stage 17 closure unless every closure criterion is proven.
 
-Final response format:
+Final worker packet format:
 
 STATUS
+TASK
+DRONES USED
+ACCEPTED OUTPUTS
+REJECTED OUTPUTS
 FILES CHANGED
-WHAT CHANGED
-WHY
 VALIDATION
-RISKS / FOLLOW-UPS
+EVIDENCE / RECEIPTS
+RISKS
+NEXT RECOMMENDED ACTION
 
 Also include completion percentages only as evidence claims. Overall Francis and
 current build-phase percentages do not move unless a ledger-backed gate actually

@@ -7,7 +7,8 @@ The worker model is intentionally bounded:
 
 - one active Codex child per worker lane
 - one roadmap-aligned lane per worker
-- no uncontrolled recursive agents
+- up to four short-lived drones per worker cycle when useful
+- no uncontrolled recursive agents or self-spawning loops
 - no Continuum restart unless the operator explicitly asks
 - no Orb visual changes
 - no commits or pushes unless the operator explicitly asks
@@ -15,6 +16,51 @@ The worker model is intentionally bounded:
 Each worker must inspect repo truth before editing, preserve unrelated dirty
 work, validate its own lane, and leave a concise handoff if it cannot complete
 the bounded slice.
+
+## Recursive Build Swarm Doctrine
+
+Hierarchy:
+
+- Lead Builder controls direction, integration, validation, commits, and pushes.
+- Four workers own roadmap-aligned lanes.
+- Each worker may use up to four short-lived drones per cycle.
+- Drones complete narrow tasks, produce evidence packets, and terminate.
+
+Drones do not own architecture, decide roadmap, claim completion, restart
+Continuum, commit, push, or write publication markers. A drone receives one
+narrow task, inspects only relevant files, makes the smallest coherent change
+or analysis, validates the touched path, reports evidence, and stops.
+
+Each drone packet must include:
+
+- files inspected
+- files changed
+- exact change
+- validation run
+- risks
+- recommended next step
+
+Workers must compare drone outputs, reject weak or duplicate work, independently
+verify claims, consolidate only accepted output, discard noise, and create a
+worker packet for the Lead Builder.
+
+Worker packet format:
+
+```text
+STATUS
+TASK
+DRONES USED
+ACCEPTED OUTPUTS
+REJECTED OUTPUTS
+FILES CHANGED
+VALIDATION
+EVIDENCE / RECEIPTS
+RISKS
+NEXT RECOMMENDED ACTION
+```
+
+Only verified work survives. Only compressed context survives. Only
+roadmap-aligned capability survives.
 
 ## Four-Lane Pass Rule
 

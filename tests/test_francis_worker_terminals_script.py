@@ -75,6 +75,10 @@ def test_francis_worker_terminal_launcher_lists_four_bounded_prompts() -> None:
         assert "Do not change the Orb appearance" in prompt or "Do not touch Orb visual files" in prompt
         assert "Restart Continuum" in prompt
         assert "Commit or push" in prompt
+        assert "You may use up to four short-lived drones" in prompt
+        assert "Drones do not own architecture" in prompt
+        assert "Final worker packet format" in prompt
+        assert "DRONES USED" in prompt
 
 
 def test_francis_worker_terminal_launcher_status_is_read_only() -> None:
@@ -139,6 +143,11 @@ def test_francis_worker_coordinator_supports_bounded_no_launch_iteration(tmp_pat
     assert "readback_root" in status
     assert "publication_root" in status
     assert status["re_prompt_publication_gate_required"] is True
+    assert status["recursive_swarm"]["enabled"] is True
+    assert status["recursive_swarm"]["max_workers"] == 4
+    assert status["recursive_swarm"]["max_drones_per_worker"] == 4
+    assert status["recursive_swarm"]["drones_own_architecture"] is False
+    assert status["recursive_swarm"]["worker_verifies_drone_outputs"] is True
     assert (state_root / "dispatches").is_dir() or status["no_launch"] is True
     receipts = (state_root / "receipts.jsonl").read_text(encoding="utf-8-sig").splitlines()
     assert any("francis.worker_terminal.coordinator.iteration" in line for line in receipts)
@@ -197,6 +206,11 @@ def test_francis_worker_coordinator_generates_individual_pm_dispatches(tmp_path:
         assert "Write a concise lane readback" in text
         assert "publication marker" in text
         assert "Do not change the Orb appearance" in text or "Do not touch Orb visual files" in text
+        assert "Recursive Build Swarm Doctrine" in text
+        assert "Each worker may use up to four short-lived drones per cycle" in text
+        assert "Drones do not own architecture" in text
+        assert "Worker packet format" in text
+        assert "ACCEPTED OUTPUTS" in text
 
 
 def test_francis_worker_coordinator_stop_writes_stop_flag(tmp_path: Path) -> None:

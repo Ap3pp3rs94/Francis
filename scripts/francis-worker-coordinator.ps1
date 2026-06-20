@@ -161,6 +161,59 @@ function Get-LaneProjectManagerInstruction {
   }
 }
 
+function Get-RecursiveSwarmDoctrineText {
+  return @'
+## Recursive Build Swarm Doctrine
+
+Hierarchy:
+
+- Lead Builder controls roadmap direction, integration, validation, commits, and pushes.
+- Four workers own roadmap-aligned lanes.
+- Each worker may use up to four short-lived drones per cycle.
+- Drones complete narrow tasks, produce evidence packets, and terminate.
+
+Drone lifecycle:
+
+1. Receive one narrow task.
+2. Inspect only relevant files.
+3. Make the smallest coherent change or analysis.
+4. Validate the touched path.
+5. Report files inspected, files changed, exact change, validation run, risks, and recommended next step.
+6. Stop.
+
+Drone limits:
+
+- Drones do not own architecture.
+- Drones do not decide roadmap.
+- Drones do not claim completion.
+- Drones do not commit, push, restart Continuum, or write publication markers.
+- Drone output is evidence only until the worker verifies it.
+
+Worker responsibility:
+
+- Use no more than four drones per cycle.
+- Compare drone outputs.
+- Reject weak, duplicate, or unvalidated work.
+- Verify accepted claims independently.
+- Compress accepted output into one worker packet.
+
+Worker packet format:
+
+STATUS
+TASK
+DRONES USED
+ACCEPTED OUTPUTS
+REJECTED OUTPUTS
+FILES CHANGED
+VALIDATION
+EVIDENCE / RECEIPTS
+RISKS
+NEXT RECOMMENDED ACTION
+
+Only verified work survives. Only compressed context survives. Only roadmap-aligned capability survives.
+'@
+}
+
 function Get-LaneReadbackPath {
   param([string]$WorkerId)
 
@@ -308,6 +361,8 @@ Generated at: $(Get-UtcNowText)
 You are being individually re-prompted by the Francis coordinator. Stay in your assigned lane, inspect current repo truth before editing, and make one bounded, validated advancement. Do not wait for the other lanes unless your work would conflict with them.
 
 $(Get-LaneProjectManagerInstruction -WorkerId $WorkerId)
+
+$(Get-RecursiveSwarmDoctrineText)
 
 ## Current Build Snapshot
 
@@ -517,6 +572,16 @@ function Invoke-CoordinatorIteration {
     readback_root = $ReadbackRoot
     publication_root = $PublicationRoot
     re_prompt_publication_gate_required = $true
+    recursive_swarm = [ordered]@{
+      enabled = $true
+      max_workers = 4
+      max_drones_per_worker = 4
+      drones_own_architecture = $false
+      drones_claim_completion = $false
+      drones_commit_or_push = $false
+      worker_verifies_drone_outputs = $true
+      lead_builder_integrates_only_verified_packets = $true
+    }
     build_snapshot = $BuildSnapshot
     workers = $After.workers
     stop_flag_path = $StopFlagPath
@@ -545,6 +610,16 @@ function Invoke-CoordinatorIteration {
       readback_root = $ReadbackRoot
       publication_root = $PublicationRoot
       re_prompt_publication_gate_required = $true
+      recursive_swarm = [ordered]@{
+        enabled = $true
+        max_workers = 4
+        max_drones_per_worker = 4
+        drones_own_architecture = $false
+        drones_claim_completion = $false
+        drones_commit_or_push = $false
+        worker_verifies_drone_outputs = $true
+        lead_builder_integrates_only_verified_packets = $true
+      }
       uncontrolled_recursion_allowed = $false
       one_codex_child_per_lane = $true
     })
@@ -720,6 +795,16 @@ Write-CoordinatorJson -Path $StatusPath -Payload ([ordered]@{
     readback_root = $ReadbackRoot
     publication_root = $PublicationRoot
     re_prompt_publication_gate_required = $true
+    recursive_swarm = [ordered]@{
+      enabled = $true
+      max_workers = 4
+      max_drones_per_worker = 4
+      drones_own_architecture = $false
+      drones_claim_completion = $false
+      drones_commit_or_push = $false
+      worker_verifies_drone_outputs = $true
+      lead_builder_integrates_only_verified_packets = $true
+    }
     uncontrolled_recursion_allowed = $false
     one_codex_child_per_lane = $true
   })
