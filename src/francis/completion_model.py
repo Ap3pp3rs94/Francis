@@ -164,6 +164,9 @@ def _selected_gap_contract(*, selected_source: str, stage17_gap_preferred: bool)
         "worker_lane_readback_verified": False,
         "worker_packet_verified": False,
         "worker_readback_authority_granted": False,
+        "selected_gap_is_worker_publication_handoff_evidence": False,
+        "worker_publication_handoff_verified": False,
+        "worker_publication_handoff_authority_granted": False,
         "stage17_readback_authority_denied": True,
         "future_stage17_apply_requires": [
             "existing_governed_route",
@@ -203,6 +206,17 @@ def _selected_gap_contract(*, selected_source: str, stage17_gap_preferred: bool)
         "future_stage17_worker_readback_claim_requires": [
             "worker_lane_readback_path",
             "matching_prompt_sha256",
+            "files_changed",
+            "validation_run",
+            "blockers_and_risks",
+            "proposed_commit_scope",
+            "next_recommended_prompt",
+        ],
+        "future_stage17_worker_publication_handoff_claim_requires": [
+            "worker_lane_readback_path",
+            "pm_owned_publication_marker",
+            "matching_prompt_sha256",
+            "github_push_or_explicit_no_change_or_blocked_receipt",
             "files_changed",
             "validation_run",
             "blockers_and_risks",
@@ -464,6 +478,17 @@ def _loop_guard(
                 "Selected Stage 17 gaps are not worker lane readbacks; worker packet claims require a lane "
                 "readback path, matching prompt hash, files changed, validation, blockers or risks, proposed "
                 "commit scope, and next recommended prompt"
+            ),
+        },
+        {
+            "id": "stage17_worker_publication_handoff_guard",
+            "status": "enforced",
+            "required_before_continue": True,
+            "evidence": (
+                "Selected Stage 17 gaps are not worker/publication handoff evidence; handoff claims require "
+                "a lane readback plus a PM-owned publication marker with matching prompt hash, GitHub push "
+                "or explicit no-change/blocked receipt, files changed, validation, blockers or risks, "
+                "proposed commit scope, and next recommended prompt"
             ),
         },
     ]

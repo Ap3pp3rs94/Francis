@@ -57,6 +57,9 @@ It emits one JSON object with:
   is not proof of a worker lane readback, worker packet, files-touched record,
   validation record, blocker/risk summary, commit-scope proposal, or next-prompt
   recommendation
+- the worker/publication handoff guard, which states that choosing a Stage 17
+  gap is not proof that a worker lane readback and PM-owned publication marker
+  have both been produced for the same prompt hash
 - the percentage movement rules
 
 The model is read-only. The API route is backed by the Francis Python substrate,
@@ -132,6 +135,14 @@ packet or lane readback exists. Worker-readback claims require a lane readback
 path, matching prompt hash, files changed, validation run, blockers/risks,
 proposed commit scope, and next recommended prompt.
 
+The selected-gap contract is also not worker/publication handoff proof. A
+selected Stage 17 gap can route a worker to a bounded slice, but it does not
+prove that both the worker lane readback and PM-owned publication marker exist
+for the same prompt hash. Handoff claims require a lane readback path, PM-owned
+publication marker, matching prompt hash, GitHub push or explicit no-change or
+blocked receipt, files changed, validation run, blockers/risks, proposed commit
+scope, and next recommended prompt.
+
 ## Percentage Rule
 
 The model does not invent numeric completion baselines. Overall Francis and
@@ -183,6 +194,10 @@ Every `continue` run should satisfy these guards:
   worker lane readbacks, and worker packet claims need a lane readback path,
   matching prompt hash, files changed, validation, blockers/risks, proposed
   commit scope, and next recommended prompt
+- keep Stage 17 worker/publication handoff claims receipt-backed: selected gaps
+  are not proof that the lane readback plus PM-owned publication marker exist
+  for a matching prompt hash, GitHub push/no-change/blocked receipt,
+  validation, blockers/risks, proposed commit scope, and next prompt
 
 ## Non-Goals
 

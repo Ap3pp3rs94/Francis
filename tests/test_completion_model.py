@@ -71,6 +71,9 @@ def test_completion_model_snapshot_is_read_only_and_loop_guarded() -> None:
     assert selected_gap_contract["worker_lane_readback_verified"] is False
     assert selected_gap_contract["worker_packet_verified"] is False
     assert selected_gap_contract["worker_readback_authority_granted"] is False
+    assert selected_gap_contract["selected_gap_is_worker_publication_handoff_evidence"] is False
+    assert selected_gap_contract["worker_publication_handoff_verified"] is False
+    assert selected_gap_contract["worker_publication_handoff_authority_granted"] is False
     assert selected_gap_contract["stage17_readback_authority_denied"] is True
     assert selected_gap_contract["future_stage17_apply_requires"] == [
         "existing_governed_route",
@@ -116,6 +119,17 @@ def test_completion_model_snapshot_is_read_only_and_loop_guarded() -> None:
         "proposed_commit_scope",
         "next_recommended_prompt",
     ]
+    assert selected_gap_contract["future_stage17_worker_publication_handoff_claim_requires"] == [
+        "worker_lane_readback_path",
+        "pm_owned_publication_marker",
+        "matching_prompt_sha256",
+        "github_push_or_explicit_no_change_or_blocked_receipt",
+        "files_changed",
+        "validation_run",
+        "blockers_and_risks",
+        "proposed_commit_scope",
+        "next_recommended_prompt",
+    ]
     checklist = {item["id"]: item for item in payload["continue_loop_guard"]["checklist"]}
     assert checklist["stage17_lane_gap_preserved"]["status"] == "ready"
     assert checklist["stage17_lane_gap_preserved"]["evidence"]
@@ -132,6 +146,8 @@ def test_completion_model_snapshot_is_read_only_and_loop_guarded() -> None:
     assert "matching prompt hash" in checklist["stage17_publication_evidence_guard"]["evidence"]
     assert checklist["stage17_worker_readback_evidence_guard"]["status"] == "enforced"
     assert "worker packet claims" in checklist["stage17_worker_readback_evidence_guard"]["evidence"]
+    assert checklist["stage17_worker_publication_handoff_guard"]["status"] == "enforced"
+    assert "PM-owned publication marker" in checklist["stage17_worker_publication_handoff_guard"]["evidence"]
 
 
 def test_completion_model_snapshot_blocks_when_sources_are_missing(tmp_path: Path) -> None:
@@ -166,6 +182,7 @@ def test_completion_model_snapshot_blocks_when_sources_are_missing(tmp_path: Pat
     assert checklist["stage17_proposal_evidence_reference_guard"] == "enforced"
     assert checklist["stage17_publication_evidence_guard"] == "enforced"
     assert checklist["stage17_worker_readback_evidence_guard"] == "enforced"
+    assert checklist["stage17_worker_publication_handoff_guard"] == "enforced"
 
 
 def test_completion_model_snapshot_reads_wrapped_roadmap_area(tmp_path: Path) -> None:
@@ -314,6 +331,9 @@ def test_completion_model_snapshot_keeps_stage17_gap_when_latest_entry_is_other_
     assert selected_gap_contract["worker_lane_readback_verified"] is False
     assert selected_gap_contract["worker_packet_verified"] is False
     assert selected_gap_contract["worker_readback_authority_granted"] is False
+    assert selected_gap_contract["selected_gap_is_worker_publication_handoff_evidence"] is False
+    assert selected_gap_contract["worker_publication_handoff_verified"] is False
+    assert selected_gap_contract["worker_publication_handoff_authority_granted"] is False
     assert selected_gap_contract["future_stage17_queue_count_claim_requires"] == [
         "route_readback_or_apply_response",
         "projection_scope",
@@ -346,6 +366,17 @@ def test_completion_model_snapshot_keeps_stage17_gap_when_latest_entry_is_other_
     assert selected_gap_contract["future_stage17_worker_readback_claim_requires"] == [
         "worker_lane_readback_path",
         "matching_prompt_sha256",
+        "files_changed",
+        "validation_run",
+        "blockers_and_risks",
+        "proposed_commit_scope",
+        "next_recommended_prompt",
+    ]
+    assert selected_gap_contract["future_stage17_worker_publication_handoff_claim_requires"] == [
+        "worker_lane_readback_path",
+        "pm_owned_publication_marker",
+        "matching_prompt_sha256",
+        "github_push_or_explicit_no_change_or_blocked_receipt",
         "files_changed",
         "validation_run",
         "blockers_and_risks",
@@ -387,3 +418,10 @@ def test_completion_model_status_route_is_mounted_and_read_only() -> None:
     assert body["next_continue_decision"]["selected_gap_contract"]["publication_authority_granted"] is False
     assert body["next_continue_decision"]["selected_gap_contract"]["selected_gap_is_worker_readback_evidence"] is False
     assert body["next_continue_decision"]["selected_gap_contract"]["worker_readback_authority_granted"] is False
+    assert (
+        body["next_continue_decision"]["selected_gap_contract"]["selected_gap_is_worker_publication_handoff_evidence"]
+        is False
+    )
+    assert (
+        body["next_continue_decision"]["selected_gap_contract"]["worker_publication_handoff_authority_granted"] is False
+    )
