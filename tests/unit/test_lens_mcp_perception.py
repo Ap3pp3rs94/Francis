@@ -46,6 +46,7 @@ def test_contract_lists_only_read_only_tools_and_claims_not_resident(tmp_path, m
     assert out["overlay_observation"]["reports_mapped_overlay_region"] is True
     assert out["overlay_observation"]["reports_actual_inspected_observed_and_captured_regions"] is True
     assert out["overlay_observation"]["reports_region_basis_readback"] is True
+    assert out["overlay_observation"]["reports_region_comparison_readback"] is True
     assert out["overlay_observation"]["reports_confidence_breakdown"] is True
     assert out["overlay_observation"]["reports_replay_manifest"] is True
     assert out["overlay_observation"]["screenshots"] is False
@@ -406,6 +407,53 @@ def test_overlay_observation_uses_existing_overlay_bounds_and_screen_readback(tm
             "absent_reason": "capture_adapter_unavailable",
         },
     }
+    comparison = spatial["region_comparison"]
+    assert comparison["schema_version"] == 1
+    assert comparison["comparison_scope"] == "requested_mapped_actual_regions"
+    assert comparison["comparison_basis"] == "coordinate_and_metadata_only_not_visual_perception"
+    assert comparison["summary"] == {
+        "requested_geometry_matches_mapped_region": True,
+        "actual_inspected_region_matches_mapped_region": True,
+        "actual_observed_region_matches_mapped_region": True,
+        "actual_captured_region_matches_mapped_region": False,
+        "mapped_region_observed_metadata_only": True,
+        "mapped_region_captured": False,
+        "capture_performed": False,
+        "unsupported_perception_claimed": False,
+    }
+    assert comparison["rows"]["requested_region"]["present"] is True
+    assert comparison["rows"]["requested_region"]["geometry"] == {"x": 10.0, "y": 20.0, "width": 80.0, "height": 60.0}
+    assert comparison["rows"]["requested_region"]["geometry_matches_mapped_region"] is True
+    assert comparison["rows"]["requested_region"]["exact_region_matches_mapped_region"] is False
+    assert (
+        comparison["rows"]["requested_region"]["confidence_basis"]
+        == "operator_supplied_geometry_unverified_by_visual_perception"
+    )
+    assert comparison["rows"]["mapped_overlay_region"]["present"] is True
+    assert comparison["rows"]["mapped_overlay_region"]["exact_region_matches_mapped_region"] is True
+    assert comparison["rows"]["mapped_overlay_region"]["confidence"] == 1.0
+    assert (
+        comparison["rows"]["mapped_overlay_region"]["confidence_basis"]
+        == "declared_overlay_coordinate_model_not_visual_perception"
+    )
+    assert comparison["rows"]["actual_inspected_region"]["present"] is True
+    assert comparison["rows"]["actual_inspected_region"]["source"] == "francis.screen.session"
+    assert comparison["rows"]["actual_inspected_region"]["basis"] == "mcp_metadata"
+    assert comparison["rows"]["actual_inspected_region"]["metadata_only"] is True
+    assert comparison["rows"]["actual_inspected_region"]["geometry_matches_mapped_region"] is True
+    assert comparison["rows"]["actual_inspected_region"]["unknowns"] == out["unknown_information"]
+    assert comparison["rows"]["actual_inspected_region"]["limitations"] == out["limitations"]
+    assert comparison["rows"]["actual_observed_region"]["present"] is True
+    assert comparison["rows"]["actual_observed_region"]["basis"] == "mcp_metadata"
+    assert comparison["rows"]["actual_observed_region"]["metadata_only"] is True
+    assert comparison["rows"]["actual_observed_region"]["geometry_matches_mapped_region"] is True
+    assert comparison["rows"]["actual_captured_region"]["present"] is False
+    assert comparison["rows"]["actual_captured_region"]["capture_performed"] is False
+    assert comparison["rows"]["actual_captured_region"]["geometry_matches_mapped_region"] is False
+    assert "capture_adapter_unavailable" in comparison["rows"]["actual_captured_region"]["limitations"]
+    assert comparison["unsupported_perception"] == spatial["unsupported_perception"]
+    assert comparison["unknowns"] == out["unknown_information"]
+    assert comparison["limitations"] == out["limitations"]
     assert spatial["confidence"] == out["confidence"]
     assert spatial["confidence_basis"] == "mcp_metadata_readback_not_visual_perception"
     assert spatial["confidence_breakdown"] == {
@@ -455,6 +503,7 @@ def test_overlay_observation_uses_existing_overlay_bounds_and_screen_readback(tm
     assert replay["region_presence"] == spatial["region_presence"]
     assert replay["region_truth"] == spatial["region_truth"]
     assert replay["region_basis"] == spatial["region_basis"]
+    assert replay["region_comparison"] == spatial["region_comparison"]
     assert replay["unsupported_perception"] == spatial["unsupported_perception"]
     assert replay["confidence_basis"] == spatial["confidence_basis"]
     assert replay["confidence_breakdown"] == spatial["confidence_breakdown"]
@@ -634,6 +683,28 @@ def test_overlay_observation_blocks_out_of_bounds_region_without_screen_readback
     assert (
         spatial["region_basis"]["actual_captured_region"]["absent_reason"] == "requested_region_outside_overlay_bounds"
     )
+    comparison = spatial["region_comparison"]
+    assert comparison["summary"] == {
+        "requested_geometry_matches_mapped_region": True,
+        "actual_inspected_region_matches_mapped_region": False,
+        "actual_observed_region_matches_mapped_region": False,
+        "actual_captured_region_matches_mapped_region": False,
+        "mapped_region_observed_metadata_only": False,
+        "mapped_region_captured": False,
+        "capture_performed": False,
+        "unsupported_perception_claimed": False,
+    }
+    assert comparison["rows"]["mapped_overlay_region"]["status"] == "blocked"
+    assert comparison["rows"]["mapped_overlay_region"]["geometry_matches_mapped_region"] is True
+    assert comparison["rows"]["actual_inspected_region"]["present"] is False
+    assert comparison["rows"]["actual_inspected_region"]["basis"] == "not_performed"
+    assert comparison["rows"]["actual_observed_region"]["status"] == "not_observed"
+    assert comparison["rows"]["actual_observed_region"]["present"] is False
+    assert comparison["rows"]["actual_observed_region"]["source"] == "none"
+    assert comparison["rows"]["actual_captured_region"]["present"] is False
+    assert comparison["rows"]["actual_captured_region"]["capture_performed"] is False
+    assert "requested_region_outside_overlay_bounds" in comparison["rows"]["actual_captured_region"]["limitations"]
+    assert comparison["unsupported_perception"] == spatial["unsupported_perception"]
     assert spatial["confidence"] == 0.0
     assert spatial["confidence_breakdown"]["coordinate_transform"] == {
         "status": "blocked_after_mapping",
@@ -656,6 +727,7 @@ def test_overlay_observation_blocks_out_of_bounds_region_without_screen_readback
     assert replay["region_presence"] == spatial["region_presence"]
     assert replay["region_truth"] == spatial["region_truth"]
     assert replay["region_basis"] == spatial["region_basis"]
+    assert replay["region_comparison"] == spatial["region_comparison"]
     assert replay["confidence_breakdown"] == spatial["confidence_breakdown"]
     assert replay["failure_or_refusal_reason"] == "requested_region_outside_overlay_bounds"
     assert out["receipt"]["actual_observed_region"] == out["actual_observed_region"]
@@ -806,9 +878,16 @@ def test_api_observe_requires_scope_and_overlay_context(tmp_path, monkeypatch) -
         == "declared_overlay_coordinate_model"
     )
     assert body["spatial_contract"]["region_basis"]["actual_observed_region"]["metadata_only"] is True
+    assert body["spatial_contract"]["region_comparison"]["summary"]["mapped_region_observed_metadata_only"] is True
+    assert body["spatial_contract"]["region_comparison"]["summary"]["mapped_region_captured"] is False
+    assert (
+        body["spatial_contract"]["region_comparison"]["rows"]["actual_captured_region"]["confidence_basis"]
+        == "capture_not_performed"
+    )
     assert body["spatial_contract"]["confidence_breakdown"]["visual_perception"]["supported"] is False
     assert receipt["spatial_contract"]["region_truth"] == body["spatial_contract"]["region_truth"]
     assert receipt["spatial_contract"]["region_basis"] == body["spatial_contract"]["region_basis"]
+    assert receipt["spatial_contract"]["region_comparison"] == body["spatial_contract"]["region_comparison"]
     assert receipt["spatial_contract"]["confidence_breakdown"] == body["spatial_contract"]["confidence_breakdown"]
     assert body["replay_manifest"] == body["spatial_contract"]["replay_manifest"]
     assert receipt["replay_manifest"] == body["replay_manifest"]

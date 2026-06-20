@@ -174,6 +174,7 @@ def lens_mcp_perception_contract() -> dict[str, Any]:
             "reports_mapped_overlay_region": True,
             "reports_actual_inspected_observed_and_captured_regions": True,
             "reports_region_basis_readback": True,
+            "reports_region_comparison_readback": True,
             "reports_confidence_breakdown": True,
             "reports_replay_manifest": True,
             "observation_sources": sorted(_OVERLAY_OBSERVATION_TOOLS),
@@ -897,6 +898,22 @@ def _same_present_region(first: dict[str, Any], second: dict[str, Any]) -> bool:
     return _region_present(first) and _region_present(second) and _as_dict(first) == _as_dict(second)
 
 
+def _region_geometry(region: dict[str, Any]) -> dict[str, float]:
+    x = _safe_float(region.get("x"))
+    y = _safe_float(region.get("y"))
+    width = _safe_float(region.get("width"))
+    height = _safe_float(region.get("height"))
+    if x is None or y is None or width is None or height is None:
+        return {}
+    return {"x": x, "y": y, "width": width, "height": height}
+
+
+def _same_region_geometry(first: dict[str, Any], second: dict[str, Any]) -> bool:
+    first_geometry = _region_geometry(first)
+    second_geometry = _region_geometry(second)
+    return bool(first_geometry and second_geometry and first_geometry == second_geometry)
+
+
 def _region_truth_readback(
     *,
     requested_region: dict[str, Any],
@@ -936,6 +953,156 @@ def _region_truth_readback(
         "capture_performed": capture_performed,
         "unsupported_perception_claimed": any(bool(value) for value in unsupported_perception.values()),
         "unsupported_perception": unsupported_perception,
+    }
+
+
+def _region_comparison_row(
+    *,
+    role: str,
+    status: str,
+    region: dict[str, Any],
+    mapped_region: dict[str, Any],
+    source: str,
+    basis: str,
+    confidence: Any,
+    confidence_basis: str,
+    limitations: list[str] | None = None,
+    unknowns: list[str] | None = None,
+    metadata_only: bool = False,
+    capture_performed: bool = False,
+) -> dict[str, Any]:
+    clean_region = _as_dict(region)
+    return {
+        "role": role,
+        "present": _region_present(clean_region),
+        "status": _safe_str(status),
+        "space": _safe_str(clean_region.get("space")),
+        "region": clean_region if _region_present(clean_region) else {},
+        "geometry": _region_geometry(clean_region),
+        "exact_region_matches_mapped_region": _same_present_region(clean_region, mapped_region),
+        "geometry_matches_mapped_region": _same_region_geometry(clean_region, mapped_region),
+        "source": _safe_str(source, "none"),
+        "basis": _safe_str(basis, "unknown"),
+        "metadata_only": metadata_only,
+        "capture_performed": capture_performed,
+        "confidence": _float_or_zero(confidence),
+        "confidence_basis": _safe_str(confidence_basis),
+        "limitations": list(limitations or []),
+        "unknowns": list(unknowns or []),
+    }
+
+
+def _region_comparison_readback(
+    *,
+    requested_region: dict[str, Any],
+    mapped_overlay_region: dict[str, Any],
+    actual_inspected_region: dict[str, Any],
+    actual_observed_region: dict[str, Any],
+    actual_captured_region: dict[str, Any],
+    source_readback: dict[str, Any],
+    region_truth: dict[str, Any],
+    unsupported_perception: dict[str, bool],
+    limitations: list[str],
+    unknown_information: list[str],
+    capture_performed: bool,
+) -> dict[str, Any]:
+    mapped_region = _as_dict(mapped_overlay_region.get("region"))
+    actual_inspection_region = _as_dict(actual_inspected_region.get("actual_inspection_region"))
+    actual_observation_region = _as_dict(actual_observed_region.get("actual_observation_region"))
+    actual_capture_region = _as_dict(actual_captured_region.get("actual_capture_region"))
+    source_name = _safe_str(source_readback.get("name"), "none")
+    rows = {
+        "requested_region": _region_comparison_row(
+            role="requested_region",
+            status=_safe_str(requested_region.get("status")),
+            region=requested_region,
+            mapped_region=mapped_region,
+            source="caller",
+            basis="caller_supplied_request",
+            confidence=0.0,
+            confidence_basis="operator_supplied_geometry_unverified_by_visual_perception",
+        ),
+        "mapped_overlay_region": _region_comparison_row(
+            role="mapped_overlay_region",
+            status=_safe_str(mapped_overlay_region.get("status")),
+            region=mapped_region,
+            mapped_region=mapped_region,
+            source="overlay_coordinate_model",
+            basis="declared_overlay_coordinate_model",
+            confidence=_as_dict(mapped_overlay_region.get("coordinate_transform")).get("confidence"),
+            confidence_basis=_safe_str(
+                _as_dict(mapped_overlay_region.get("coordinate_transform")).get("confidence_basis"),
+                "declared_overlay_coordinate_model_not_visual_perception",
+            ),
+            limitations=list(_as_dict(mapped_overlay_region.get("coordinate_transform")).get("limitations") or []),
+        ),
+        "actual_inspected_region": _region_comparison_row(
+            role="actual_inspected_region",
+            status=_safe_str(actual_inspected_region.get("status"), "not_inspected"),
+            region=actual_inspection_region,
+            mapped_region=mapped_region,
+            source=source_name,
+            basis=_safe_str(actual_inspected_region.get("readback"), "not_performed"),
+            confidence=actual_inspected_region.get("confidence"),
+            confidence_basis=_safe_str(actual_inspected_region.get("confidence_basis")),
+            limitations=list(actual_inspected_region.get("limitations") or []),
+            unknowns=list(actual_inspected_region.get("unknowns") or []),
+            metadata_only=_safe_str(actual_inspected_region.get("readback")) == "mcp_metadata",
+            capture_performed=False,
+        ),
+        "actual_observed_region": _region_comparison_row(
+            role="actual_observed_region",
+            status=_safe_str(actual_observed_region.get("status"), "not_observed"),
+            region=actual_observation_region,
+            mapped_region=mapped_region,
+            source=_safe_str(actual_observed_region.get("source"), source_name),
+            basis=_safe_str(actual_observed_region.get("readback"), "not_performed"),
+            confidence=actual_observed_region.get("confidence"),
+            confidence_basis=_safe_str(actual_observed_region.get("confidence_basis")),
+            limitations=list(actual_observed_region.get("limitations") or []),
+            unknowns=list(actual_observed_region.get("unknowns") or []),
+            metadata_only=_safe_str(actual_observed_region.get("status")) == "observed_metadata_only",
+            capture_performed=False,
+        ),
+        "actual_captured_region": _region_comparison_row(
+            role="actual_captured_region",
+            status=_safe_str(actual_captured_region.get("status"), "not_captured"),
+            region=actual_capture_region,
+            mapped_region=mapped_region,
+            source=_safe_str(actual_captured_region.get("source"), "none"),
+            basis=_safe_str(actual_captured_region.get("capture"), "not_performed"),
+            confidence=actual_captured_region.get("confidence"),
+            confidence_basis=_safe_str(actual_captured_region.get("confidence_basis")),
+            limitations=list(actual_captured_region.get("limitations") or []),
+            unknowns=list(actual_captured_region.get("unknowns") or []),
+            metadata_only=False,
+            capture_performed=capture_performed,
+        ),
+    }
+    return {
+        "schema_version": 1,
+        "comparison_scope": "requested_mapped_actual_regions",
+        "comparison_basis": "coordinate_and_metadata_only_not_visual_perception",
+        "rows": rows,
+        "summary": {
+            "requested_geometry_matches_mapped_region": rows["requested_region"]["geometry_matches_mapped_region"],
+            "actual_inspected_region_matches_mapped_region": bool(
+                region_truth.get("actual_inspection_region_matches_mapped_region")
+            ),
+            "actual_observed_region_matches_mapped_region": bool(
+                region_truth.get("actual_observed_region_matches_mapped_region")
+            ),
+            "actual_captured_region_matches_mapped_region": bool(
+                region_truth.get("actual_captured_region_matches_mapped_region")
+            ),
+            "mapped_region_observed_metadata_only": bool(region_truth.get("mapped_region_observed_metadata_only")),
+            "mapped_region_captured": bool(region_truth.get("mapped_region_captured")),
+            "capture_performed": capture_performed,
+            "unsupported_perception_claimed": any(bool(value) for value in unsupported_perception.values()),
+        },
+        "unsupported_perception": unsupported_perception,
+        "limitations": limitations,
+        "unknowns": unknown_information,
     }
 
 
@@ -1130,6 +1297,19 @@ def _spatial_contract_readback(
         region_presence=region_presence,
         capture_performed=capture_performed,
     )
+    region_comparison = _region_comparison_readback(
+        requested_region=requested_region,
+        mapped_overlay_region=mapped_overlay_region,
+        actual_inspected_region=actual_inspected_region,
+        actual_observed_region=actual_observed_region,
+        actual_captured_region=actual_captured_region,
+        source_readback=source_readback,
+        region_truth=region_truth,
+        unsupported_perception=unsupported_perception,
+        limitations=limitations,
+        unknown_information=unknown_information,
+        capture_performed=capture_performed,
+    )
     confidence_breakdown = _confidence_breakdown_readback(
         confidence=confidence,
         confidence_basis=confidence_basis,
@@ -1144,6 +1324,7 @@ def _spatial_contract_readback(
         "actual_inspected_region",
         "actual_observed_region",
         "actual_captured_region",
+        "region_comparison",
         "source",
         "evidence_reference",
     ]
@@ -1166,6 +1347,7 @@ def _spatial_contract_readback(
         "region_presence": region_presence,
         "region_truth": region_truth,
         "region_basis": region_basis,
+        "region_comparison": region_comparison,
         "evidence_reference_status": _safe_str(evidence_reference.get("status")),
         "evidence_content_included": bool(evidence_reference.get("content_included")),
         "confidence": confidence,
@@ -1199,6 +1381,7 @@ def _spatial_contract_readback(
         "region_presence": region_presence,
         "region_truth": region_truth,
         "region_basis": region_basis,
+        "region_comparison": region_comparison,
         "confidence": confidence,
         "confidence_basis": confidence_basis,
         "confidence_breakdown": confidence_breakdown,
