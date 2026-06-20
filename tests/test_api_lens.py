@@ -11375,6 +11375,46 @@ def test_lens_tray_presence_execute_retries_transient_resident_readback(
     assert started_body["resident_host_readiness"]["resident_supervised_runtime"] is True
 
 
+def test_lens_overlay_runner_preserves_script_startup_timeout_budget(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    import francis.lens.overlay_authority as overlay_authority_module
+
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    script_root = repo_root / "scripts"
+    script_root.mkdir(parents=True)
+    (script_root / "lens-overlay-window.ps1").write_text("# test overlay runner\n", encoding="utf-8")
+    monkeypatch.setattr(overlay_authority_module, "repo_root", lambda: repo_root)
+    monkeypatch.setattr(overlay_authority_module, "data_dir", lambda: data_root)
+    monkeypatch.setattr(overlay_authority_module, "_powershell_path", lambda: "powershell.exe")
+    captured: dict[str, object] = {}
+
+    def fake_run(
+        command: list[str],
+        **kwargs: object,
+    ) -> subprocess.CompletedProcess[str]:
+        captured["command"] = command
+        captured["kwargs"] = kwargs
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=json.dumps({"ok": True, "status": "started", "blockers": []}),
+            stderr="",
+        )
+
+    monkeypatch.setattr(overlay_authority_module.subprocess, "run", fake_run)
+
+    result = overlay_authority_module._run_lens_overlay_window_action(mode="start", run_seconds=2)
+
+    assert result["ok"] is True
+    command = captured["command"]
+    assert isinstance(command, list)
+    timeout_index = command.index("-StartupTimeoutSeconds")
+    assert command[timeout_index + 1] == "30"
+
+
 def test_lens_overlay_execute_starts_and_stops_governed_overlay_lease(
     monkeypatch,
     tmp_path: Path,

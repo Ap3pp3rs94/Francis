@@ -4963,7 +4963,7 @@ if ($ElevenLabsUseSpeakerBoost) {
   $ArgumentList += '-ElevenLabsUseSpeakerBoost'
 }
 $ArgumentText = Join-OverlayProcessArguments -Arguments $ArgumentList
-Start-Process -FilePath $PowerShell.Source -ArgumentList $ArgumentText -WindowStyle Hidden | Out-Null
+Start-Process -FilePath $PowerShell.Source -ArgumentList $ArgumentText -WindowStyle Normal | Out-Null
 
 $Deadline = [DateTimeOffset]::UtcNow.AddSeconds($StartupTimeoutSeconds)
 do {

@@ -683,6 +683,19 @@ def test_lens_audio_config_declares_elevenlabs_remote_tts_disabled_by_default() 
     assert "Hosted expressive TTS; requires network egress + credentials." in config
 
 
+def test_lens_overlay_window_start_launcher_allows_visible_overlay_child() -> None:
+    script = (_repo_root() / "scripts" / "lens-overlay-window.ps1").read_text(encoding="utf-8")
+
+    assert "Start-Process -FilePath $PowerShell.Source -ArgumentList $ArgumentText -WindowStyle Normal" in script
+    assert (
+        "Start-Process -FilePath $PowerShell.Source -ArgumentList $ArgumentText -WindowStyle Hidden | Out-Null"
+        not in script
+    )
+    assert (
+        "Start-Process -FilePath $PowerShell.Source -ArgumentList $ArgumentText -WindowStyle Hidden -PassThru" in script
+    )
+
+
 def test_lens_overlay_voice_orb_position_command_is_local_and_bounded() -> None:
     script = (_repo_root() / "scripts" / "lens-overlay-window.ps1").read_text(encoding="utf-8")
 

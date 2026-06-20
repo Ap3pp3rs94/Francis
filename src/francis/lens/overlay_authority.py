@@ -881,7 +881,7 @@ def _run_lens_overlay_window_action(*, mode: str, run_seconds: int) -> dict[str,
         ]
     )
     if script_mode == "Start":
-        command.extend(["-StartupTimeoutSeconds", "10"])
+        command.extend(["-StartupTimeoutSeconds", "30"])
     env = dict(os.environ)
     env.setdefault("FRANCIS_ROOT", str(root))
     env.setdefault("FRANCIS_DATA_DIR", str(data_dir()))
