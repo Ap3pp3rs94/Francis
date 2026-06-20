@@ -115,6 +115,25 @@ def test_overlay_observation_refuses_without_overlay_coordinate_model(tmp_path, 
     assert transform["confidence"] == 0.0
     assert transform["confidence_basis"] == "coordinate_transform_unavailable"
     assert out["observation_source"]["status"] == "not_called"
+    assert out["actual_observed_region"]["requested_region"] == out["requested_region"]
+    assert out["actual_observed_region"]["mapped_overlay_region_status"] == "blocked"
+    assert out["actual_observed_region"]["coordinate_boundary"] == boundary
+    assert out["actual_observed_region"]["coordinate_transform"] == transform
+    assert out["actual_observed_region"]["actual_observation_region"] == {}
+    assert out["actual_observed_region"]["observation_adapter"] == "none"
+    assert out["actual_observed_region"]["screenshots"] is False
+    assert out["actual_observed_region"]["pixels"] is False
+    assert out["actual_observed_region"]["confidence"] == 0.0
+    assert out["actual_observed_region"]["unknowns"] == out["unknown_information"]
+    assert "overlay_context_missing" in out["actual_observed_region"]["limitations"]
+    assert out["actual_captured_region"]["requested_region"] == out["requested_region"]
+    assert out["actual_captured_region"]["mapped_overlay_region_status"] == "blocked"
+    assert out["actual_captured_region"]["coordinate_boundary"] == boundary
+    assert out["actual_captured_region"]["coordinate_transform"] == transform
+    assert out["actual_captured_region"]["confidence"] == 0.0
+    assert out["actual_captured_region"]["confidence_basis"] == "capture_not_performed"
+    assert out["actual_captured_region"]["unknowns"] == out["unknown_information"]
+    assert "capture_adapter_unavailable" in out["actual_captured_region"]["limitations"]
     structured = out["structured_observation_receipt"]
     assert structured["status"] == "blocked"
     assert structured["requested_region"] == out["requested_region"]
@@ -198,16 +217,50 @@ def test_overlay_observation_uses_existing_overlay_bounds_and_screen_readback(tm
     assert transform["confidence_basis"] == "declared_overlay_coordinate_model_not_visual_perception"
     assert "visual_registration_unsupported" in transform["limitations"]
     assert out["actual_inspected_region"]["status"] == "inspected_metadata_only"
+    assert out["actual_inspected_region"]["requested_region"] == out["requested_region"]
+    assert out["actual_inspected_region"]["mapped_region"] == out["mapped_overlay_region"]["region"]
+    assert out["actual_inspected_region"]["mapped_overlay_region_status"] == "mapped"
+    assert out["actual_inspected_region"]["coordinate_boundary"] == boundary
+    assert out["actual_inspected_region"]["coordinate_transform"] == transform
+    assert out["actual_inspected_region"]["actual_inspection_region"] == out["mapped_overlay_region"]["region"]
+    assert out["actual_inspected_region"]["source"] == "francis.screen.session"
+    assert out["actual_inspected_region"]["confidence"] == out["confidence"]
+    assert out["actual_inspected_region"]["confidence_basis"] == "mcp_metadata_readback_not_visual_perception"
+    assert out["actual_inspected_region"]["unknowns"] == out["unknown_information"]
+    assert out["actual_inspected_region"]["limitations"] == out["limitations"]
     assert out["actual_inspected_region"]["screenshots"] is False
     assert out["actual_inspected_region"]["pixels"] is False
     assert out["actual_observed_region"]["status"] == "observed_metadata_only"
+    assert out["actual_observed_region"]["requested_region"] == out["requested_region"]
+    assert out["actual_observed_region"]["mapped_region"] == out["mapped_overlay_region"]["region"]
+    assert out["actual_observed_region"]["mapped_overlay_region_status"] == "mapped"
+    assert out["actual_observed_region"]["coordinate_boundary"] == boundary
+    assert out["actual_observed_region"]["coordinate_transform"] == transform
     assert out["actual_observed_region"]["region"] == out["mapped_overlay_region"]["region"]
+    assert out["actual_observed_region"]["actual_observation_region"] == out["mapped_overlay_region"]["region"]
+    assert out["actual_observed_region"]["observation_adapter"] == "mcp_metadata_readback"
     assert out["actual_observed_region"]["capture"] == "not_performed"
+    assert out["actual_observed_region"]["screenshots"] is False
+    assert out["actual_observed_region"]["pixels"] is False
+    assert out["actual_observed_region"]["ocr"] is False
+    assert out["actual_observed_region"]["confidence"] == out["confidence"]
+    assert out["actual_observed_region"]["confidence_basis"] == "mcp_metadata_readback_not_visual_perception"
+    assert out["actual_observed_region"]["unknowns"] == out["unknown_information"]
+    assert out["actual_observed_region"]["limitations"] == out["limitations"]
     assert out["actual_captured_region"]["status"] == "not_captured"
+    assert out["actual_captured_region"]["requested_region"] == out["requested_region"]
     assert out["actual_captured_region"]["region"] == {}
+    assert out["actual_captured_region"]["actual_capture_region"] == {}
     assert out["actual_captured_region"]["mapped_region"] == out["mapped_overlay_region"]["region"]
+    assert out["actual_captured_region"]["mapped_overlay_region_status"] == "mapped"
+    assert out["actual_captured_region"]["coordinate_boundary"] == boundary
+    assert out["actual_captured_region"]["coordinate_transform"] == transform
+    assert out["actual_captured_region"]["capture_adapter"] == "unavailable"
     assert out["actual_captured_region"]["screenshots"] is False
     assert out["actual_captured_region"]["pixels"] is False
+    assert out["actual_captured_region"]["confidence"] == 0.0
+    assert out["actual_captured_region"]["unknowns"] == out["unknown_information"]
+    assert "capture_adapter_unavailable" in out["actual_captured_region"]["limitations"]
     assert out["observation_source"]["tool"] == "francis.screen.session"
     assert out["observation_source"]["live_simulated_fixture_or_replay"] == "live"
     assert out["evidence_reference"]["status"] == "metadata_readback"
@@ -313,14 +366,30 @@ def test_overlay_observation_blocks_out_of_bounds_region_without_screen_readback
     assert "capture_adapter_unavailable" in transform["limitations"]
     assert out["observation_source"]["status"] == "not_called"
     assert out["actual_observed_region"]["status"] == "not_observed"
+    assert out["actual_observed_region"]["requested_region"] == out["requested_region"]
+    assert out["actual_observed_region"]["mapped_region"] == out["mapped_overlay_region"]["region"]
+    assert out["actual_observed_region"]["mapped_overlay_region_status"] == "blocked"
+    assert out["actual_observed_region"]["coordinate_boundary"] == boundary
+    assert out["actual_observed_region"]["coordinate_transform"] == transform
     assert out["actual_observed_region"]["region"] == {}
+    assert out["actual_observed_region"]["actual_observation_region"] == {}
+    assert out["actual_observed_region"]["observation_adapter"] == "none"
     assert out["actual_observed_region"]["reason"] == "requested_region_outside_overlay_bounds"
+    assert out["actual_observed_region"]["confidence"] == 0.0
+    assert out["actual_observed_region"]["unknowns"] == out["unknown_information"]
     assert out["actual_captured_region"]["status"] == "not_captured"
+    assert out["actual_captured_region"]["requested_region"] == out["requested_region"]
     assert out["actual_captured_region"]["region"] == {}
     assert out["actual_captured_region"]["mapped_region"] == out["mapped_overlay_region"]["region"]
+    assert out["actual_captured_region"]["mapped_overlay_region_status"] == "blocked"
+    assert out["actual_captured_region"]["coordinate_boundary"] == boundary
+    assert out["actual_captured_region"]["coordinate_transform"] == transform
     assert out["actual_captured_region"]["screenshots"] is False
     assert out["actual_captured_region"]["pixels"] is False
     assert out["actual_captured_region"]["ocr"] is False
+    assert out["actual_captured_region"]["confidence"] == 0.0
+    assert out["actual_captured_region"]["unknowns"] == out["unknown_information"]
+    assert "requested_region_outside_overlay_bounds" in out["actual_captured_region"]["limitations"]
     assert "requested_region_outside_overlay_bounds" in out["limitations"]
     assert "pixel_capture_unsupported" in out["limitations"]
     structured = out["structured_observation_receipt"]
@@ -388,6 +457,15 @@ def test_overlay_observation_refuses_non_screen_observation_sources(tmp_path, mo
     assert out["ok"] is False
     assert out["status"] == "refused"
     assert out["failure_or_refusal_reason"] == "unsupported_overlay_observation_source"
+    assert out["actual_observed_region"]["requested_region"] == out["requested_region"]
+    assert out["actual_observed_region"]["mapped_overlay_region_status"] == "mapped"
+    assert out["actual_observed_region"]["actual_observation_region"] == {}
+    assert out["actual_observed_region"]["observation_adapter"] == "none"
+    assert out["actual_observed_region"]["confidence"] == 0.0
+    assert out["actual_captured_region"]["requested_region"] == out["requested_region"]
+    assert out["actual_captured_region"]["mapped_overlay_region_status"] == "mapped"
+    assert out["actual_captured_region"]["confidence_basis"] == "capture_not_performed"
+    assert "unsupported_overlay_observation_source" in out["actual_captured_region"]["limitations"]
     assert out["receipt"]["decision"] == "refused"
 
 
@@ -437,4 +515,19 @@ def test_api_observe_requires_scope_and_overlay_context(tmp_path, monkeypatch) -
     body = allowed.json()
     assert body["status"] == "observed"
     assert body["mapped_overlay_region"]["status"] == "mapped"
+    assert body["actual_captured_region"]["mapped_overlay_region_status"] == "mapped"
+    assert body["actual_captured_region"]["coordinate_transform"]["status"] == "mapped"
     assert body["governance"]["uses_existing_overlay"] is True
+
+    receipts = client.get("/lens/mcp/receipts", params={"actor": _ACTOR, "limit": 1}).json()
+    receipt = receipts["receipts"][0]
+    assert receipt["decision"] == "observed"
+    assert receipt["actual_captured_region"]["mapped_overlay_region_status"] == "mapped"
+    assert receipt["actual_captured_region"]["coordinate_boundary"]["status"] == "within_bounds"
+    assert receipt["actual_captured_region"]["coordinate_transform"]["status"] == "mapped"
+    assert receipt["actual_captured_region"]["confidence"] == 0.0
+    assert receipt["actual_observed_region"]["actual_observation_region"] == body["mapped_overlay_region"]["region"]
+    assert receipt["actual_observed_region"]["coordinate_transform"]["status"] == "mapped"
+    assert receipt["actual_inspected_region"]["actual_inspection_region"] == body["mapped_overlay_region"]["region"]
+    assert receipt["actual_inspected_region"]["confidence_basis"] == "mcp_metadata_readback_not_visual_perception"
+    assert "capture_adapter_unavailable" in receipt["actual_captured_region"]["limitations"]

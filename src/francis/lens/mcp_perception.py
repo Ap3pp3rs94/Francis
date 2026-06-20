@@ -735,26 +735,143 @@ def _observation_limitations(
     return limitations
 
 
-def _not_observed_region(reason: str) -> dict[str, Any]:
+def _actual_region_context(
+    *,
+    requested_region: dict[str, Any] | None = None,
+    mapped_overlay_region: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    mapped = _as_dict(mapped_overlay_region)
     return {
-        "status": "not_observed",
-        "region": {},
-        "source": "none",
-        "reason": _safe_str(reason),
+        "requested_region": _as_dict(requested_region),
+        "mapped_region": _as_dict(mapped.get("region")),
+        "mapped_overlay_region_status": _safe_str(mapped.get("status")),
+        "coordinate_boundary": _as_dict(mapped.get("coordinate_boundary")),
+        "coordinate_transform": _as_dict(mapped.get("coordinate_transform")),
     }
 
 
-def _not_captured_region(mapped_overlay_region: dict[str, Any], reason: str) -> dict[str, Any]:
+def _not_observed_region(
+    reason: str,
+    *,
+    requested_region: dict[str, Any] | None = None,
+    mapped_overlay_region: dict[str, Any] | None = None,
+    unknowns: list[str] | None = None,
+    limitations: list[str] | None = None,
+) -> dict[str, Any]:
+    clean_reason = _safe_str(reason)
+    region_context = _actual_region_context(
+        requested_region=requested_region,
+        mapped_overlay_region=mapped_overlay_region,
+    )
     return {
-        "status": "not_captured",
+        "status": "not_observed",
+        **region_context,
         "region": {},
-        "mapped_region": _as_dict(mapped_overlay_region.get("region")),
+        "actual_observation_region": {},
+        "source": "none",
+        "observation_adapter": "none",
+        "readback": "not_performed",
         "capture": "not_performed",
         "screenshots": False,
         "pixels": False,
         "ocr": False,
         "accessibility_tree": False,
-        "reason": _safe_str(reason, "capture_adapter_unavailable"),
+        "visual_similarity": False,
+        "confidence": 0.0,
+        "confidence_basis": "observation_not_performed",
+        "unknowns": list(unknowns or _observation_unknowns()),
+        "limitations": list(limitations or ([clean_reason] if clean_reason else [])),
+        "reason": clean_reason,
+    }
+
+
+def _capture_limitations(reason: str, limitations: list[str] | None = None) -> list[str]:
+    clean_reason = _safe_str(reason, "capture_adapter_unavailable")
+    merged = [
+        "capture_adapter_unavailable",
+        "screenshot_capture_unsupported",
+        "pixel_capture_unsupported",
+        "ocr_unsupported",
+        "accessibility_tree_unsupported",
+        "visual_similarity_unsupported",
+    ]
+    for item in limitations or []:
+        clean_item = _safe_str(item)
+        if clean_item and clean_item not in merged:
+            merged.append(clean_item)
+    if clean_reason and clean_reason not in merged:
+        merged.append(clean_reason)
+    return merged
+
+
+def _not_captured_region(
+    mapped_overlay_region: dict[str, Any],
+    reason: str,
+    *,
+    requested_region: dict[str, Any] | None = None,
+    unknowns: list[str] | None = None,
+    limitations: list[str] | None = None,
+) -> dict[str, Any]:
+    mapped_region = _as_dict(mapped_overlay_region.get("region"))
+    clean_reason = _safe_str(reason, "capture_adapter_unavailable")
+    return {
+        "status": "not_captured",
+        "requested_region": _as_dict(requested_region),
+        "region": {},
+        "actual_capture_region": {},
+        "mapped_region": mapped_region,
+        "mapped_overlay_region_status": _safe_str(mapped_overlay_region.get("status")),
+        "coordinate_boundary": _as_dict(mapped_overlay_region.get("coordinate_boundary")),
+        "coordinate_transform": _as_dict(mapped_overlay_region.get("coordinate_transform")),
+        "source": "none",
+        "capture": "not_performed",
+        "capture_adapter": "unavailable",
+        "screenshots": False,
+        "pixels": False,
+        "ocr": False,
+        "accessibility_tree": False,
+        "confidence": 0.0,
+        "confidence_basis": "capture_not_performed",
+        "unknowns": list(unknowns or _observation_unknowns()),
+        "limitations": _capture_limitations(clean_reason, limitations),
+        "reason": clean_reason,
+    }
+
+
+def _metadata_inspected_region(
+    *,
+    requested_region: dict[str, Any],
+    mapped_overlay_region: dict[str, Any],
+    observation_source: str,
+    ok: bool,
+    governance: dict[str, Any],
+    confidence: float,
+    unknowns: list[str],
+    limitations: list[str],
+    failure_or_refusal_reason: str,
+) -> dict[str, Any]:
+    mapped_region = _as_dict(mapped_overlay_region.get("region"))
+    return {
+        "status": "inspected_metadata_only" if ok else "failed",
+        **_actual_region_context(
+            requested_region=requested_region,
+            mapped_overlay_region=mapped_overlay_region,
+        ),
+        "region": mapped_region,
+        "actual_inspection_region": mapped_region if ok else {},
+        "source": observation_source,
+        "readback": "mcp_metadata" if ok else "mcp_metadata_failed",
+        "capture": "not_performed",
+        "screenshots": bool(governance.get("screenshots")),
+        "pixels": bool(governance.get("pixels")),
+        "ocr": False,
+        "accessibility_tree": False,
+        "visual_similarity": False,
+        "confidence": confidence if ok else 0.0,
+        "confidence_basis": "mcp_metadata_readback_not_visual_perception" if ok else "observation_source_failed",
+        "unknowns": unknowns,
+        "limitations": limitations,
+        "reason": "" if ok else _safe_str(failure_or_refusal_reason, "observation_source_failed"),
     }
 
 
@@ -834,11 +951,24 @@ def lens_observe_overlay_region(
 
     if clean_source not in _OVERLAY_OBSERVATION_TOOLS:
         reason = "unsupported_overlay_observation_source"
-        actual_observed_region = _not_observed_region(reason)
-        actual_captured_region = _not_captured_region(mapped, reason)
         limitations = _observation_limitations(
             mapped_overlay_region=mapped,
             failure_or_refusal_reason=reason,
+        )
+        unknowns = _observation_unknowns()
+        actual_observed_region = _not_observed_region(
+            reason,
+            requested_region=requested,
+            mapped_overlay_region=mapped,
+            unknowns=unknowns,
+            limitations=limitations,
+        )
+        actual_captured_region = _not_captured_region(
+            mapped,
+            reason,
+            requested_region=requested,
+            unknowns=unknowns,
+            limitations=limitations,
         )
         structured = _structured_observation_receipt(
             decision="refused",
@@ -858,7 +988,7 @@ def lens_observe_overlay_region(
             evidence_reference={},
             inferred_information={},
             confidence=0.0,
-            unknown_information=_observation_unknowns(),
+            unknown_information=unknowns,
             limitations=limitations,
             failure_or_refusal_reason=reason,
         )
@@ -890,7 +1020,7 @@ def lens_observe_overlay_region(
             "inferred_information": {},
             "structured_observation_receipt": structured,
             "confidence": 0.0,
-            "unknown_information": _observation_unknowns(),
+            "unknown_information": unknowns,
             "limitations": limitations,
             "failure_or_refusal_reason": reason,
             "receipt": receipt,
@@ -899,11 +1029,24 @@ def lens_observe_overlay_region(
 
     if mapped["status"] != "mapped":
         reason = _safe_str(mapped.get("reason"), "overlay_region_not_mapped")
-        actual_observed_region = _not_observed_region(reason)
-        actual_captured_region = _not_captured_region(mapped, reason)
         limitations = _observation_limitations(
             mapped_overlay_region=mapped,
             failure_or_refusal_reason=reason,
+        )
+        unknowns = _observation_unknowns()
+        actual_observed_region = _not_observed_region(
+            reason,
+            requested_region=requested,
+            mapped_overlay_region=mapped,
+            unknowns=unknowns,
+            limitations=limitations,
+        )
+        actual_captured_region = _not_captured_region(
+            mapped,
+            reason,
+            requested_region=requested,
+            unknowns=unknowns,
+            limitations=limitations,
         )
         structured = _structured_observation_receipt(
             decision="refused",
@@ -923,7 +1066,7 @@ def lens_observe_overlay_region(
             evidence_reference={},
             inferred_information={},
             confidence=0.0,
-            unknown_information=_observation_unknowns(),
+            unknown_information=unknowns,
             limitations=limitations,
             failure_or_refusal_reason=reason,
         )
@@ -955,7 +1098,7 @@ def lens_observe_overlay_region(
             "inferred_information": {},
             "structured_observation_receipt": structured,
             "confidence": 0.0,
-            "unknown_information": _observation_unknowns(),
+            "unknown_information": unknowns,
             "limitations": limitations,
             "failure_or_refusal_reason": reason,
             "receipt": receipt,
@@ -966,14 +1109,6 @@ def lens_observe_overlay_region(
     data = _as_dict(result.get("data"))
     governance = _as_dict(result.get("governance"))
     ok = bool(result.get("ok"))
-    actual_region = {
-        "status": "inspected_metadata_only" if ok else "failed",
-        "region": mapped["region"],
-        "capture": "not_performed",
-        "screenshots": bool(governance.get("screenshots")),
-        "pixels": bool(governance.get("pixels")),
-        "ocr": False,
-    }
     evidence = {
         "status": "metadata_readback",
         "source": clean_source,
@@ -989,34 +1124,77 @@ def lens_observe_overlay_region(
     confidence = 0.35 if ok else 0.0
     unknowns = _observation_unknowns(result)
     failure_or_refusal_reason = "" if ok else _safe_str(result.get("error"), "observation_source_failed")
+    limitations = _observation_limitations(
+        mapped_overlay_region=mapped,
+        result=result,
+        failure_or_refusal_reason=failure_or_refusal_reason,
+    )
+    actual_region = _metadata_inspected_region(
+        requested_region=requested,
+        mapped_overlay_region=mapped,
+        observation_source=clean_source,
+        ok=ok,
+        governance=governance,
+        confidence=confidence,
+        unknowns=unknowns,
+        limitations=limitations,
+        failure_or_refusal_reason=failure_or_refusal_reason,
+    )
     actual_observed_region = (
         {
             "status": "observed_metadata_only",
+            **_actual_region_context(
+                requested_region=requested,
+                mapped_overlay_region=mapped,
+            ),
             "region": mapped["region"],
+            "actual_observation_region": mapped["region"],
             "source": clean_source,
+            "observation_adapter": "mcp_metadata_readback",
             "readback": "mcp_metadata",
             "capture": "not_performed",
+            "screenshots": False,
+            "pixels": False,
+            "ocr": False,
+            "accessibility_tree": False,
+            "visual_similarity": False,
+            "confidence": confidence,
+            "confidence_basis": "mcp_metadata_readback_not_visual_perception",
+            "unknowns": unknowns,
+            "limitations": limitations,
             "reason": "",
         }
         if ok
         else {
             "status": "failed",
+            **_actual_region_context(
+                requested_region=requested,
+                mapped_overlay_region=mapped,
+            ),
             "region": {},
-            "mapped_region": mapped["region"],
+            "actual_observation_region": {},
             "source": clean_source,
+            "observation_adapter": "mcp_metadata_readback",
             "readback": "mcp_metadata",
             "capture": "not_performed",
+            "screenshots": False,
+            "pixels": False,
+            "ocr": False,
+            "accessibility_tree": False,
+            "visual_similarity": False,
+            "confidence": 0.0,
+            "confidence_basis": "observation_source_failed",
+            "unknowns": unknowns,
+            "limitations": limitations,
             "reason": failure_or_refusal_reason,
         }
     )
     actual_captured_region = _not_captured_region(
         mapped,
         "capture_adapter_unavailable" if ok else failure_or_refusal_reason,
-    )
-    limitations = _observation_limitations(
-        mapped_overlay_region=mapped,
-        result=result,
-        failure_or_refusal_reason=failure_or_refusal_reason,
+        requested_region=requested,
+        unknowns=unknowns,
+        limitations=limitations,
     )
     source = {
         "name": clean_source,
