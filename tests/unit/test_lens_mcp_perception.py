@@ -45,6 +45,8 @@ def test_contract_lists_only_read_only_tools_and_claims_not_resident(tmp_path, m
     assert out["overlay_observation"]["reports_requested_region"] is True
     assert out["overlay_observation"]["reports_mapped_overlay_region"] is True
     assert out["overlay_observation"]["reports_actual_inspected_observed_and_captured_regions"] is True
+    assert out["overlay_observation"]["reports_region_basis_readback"] is True
+    assert out["overlay_observation"]["reports_confidence_breakdown"] is True
     assert out["overlay_observation"]["reports_replay_manifest"] is True
     assert out["overlay_observation"]["screenshots"] is False
     assert out["overlay_observation"]["pixels"] is False
@@ -353,8 +355,83 @@ def test_overlay_observation_uses_existing_overlay_bounds_and_screen_readback(tm
         "unsupported_perception_claimed": False,
         "unsupported_perception": spatial["unsupported_perception"],
     }
+    assert spatial["region_basis"] == {
+        "requested_region": {
+            "present": True,
+            "status": "bounded",
+            "space": "desktop",
+            "basis": "caller_supplied_request",
+        },
+        "mapped_overlay_region": {
+            "present": True,
+            "status": "mapped",
+            "space": "desktop_logical_pixels",
+            "basis": "declared_overlay_coordinate_model",
+            "coordinate_boundary_status": "within_bounds",
+            "coordinate_transform_status": "mapped",
+            "bounds_checked": True,
+            "within_overlay_bounds": True,
+            "clipped_by_overlay": False,
+        },
+        "actual_inspected_region": {
+            "present": True,
+            "status": "inspected_metadata_only",
+            "space": "desktop_logical_pixels",
+            "source": "francis.screen.session",
+            "basis": "mcp_metadata",
+            "confidence": 0.35,
+            "confidence_basis": "mcp_metadata_readback_not_visual_perception",
+        },
+        "actual_observed_region": {
+            "present": True,
+            "status": "observed_metadata_only",
+            "space": "desktop_logical_pixels",
+            "source": "francis.screen.session",
+            "basis": "mcp_metadata",
+            "observation_adapter": "mcp_metadata_readback",
+            "metadata_only": True,
+            "confidence": 0.35,
+            "confidence_basis": "mcp_metadata_readback_not_visual_perception",
+        },
+        "actual_captured_region": {
+            "present": False,
+            "status": "not_captured",
+            "space": "",
+            "source": "none",
+            "basis": "not_performed",
+            "capture_adapter": "unavailable",
+            "capture_performed": False,
+            "confidence": 0.0,
+            "confidence_basis": "capture_not_performed",
+            "absent_reason": "capture_adapter_unavailable",
+        },
+    }
     assert spatial["confidence"] == out["confidence"]
     assert spatial["confidence_basis"] == "mcp_metadata_readback_not_visual_perception"
+    assert spatial["confidence_breakdown"] == {
+        "overall": {"confidence": 0.35, "basis": "mcp_metadata_readback_not_visual_perception"},
+        "coordinate_transform": {
+            "status": "mapped",
+            "confidence": 1.0,
+            "basis": "declared_overlay_coordinate_model_not_visual_perception",
+        },
+        "metadata_readback": {
+            "status": "observed_metadata_only",
+            "confidence": 0.35,
+            "basis": "mcp_metadata_readback_not_visual_perception",
+        },
+        "capture": {
+            "status": "not_captured",
+            "confidence": 0.0,
+            "basis": "capture_not_performed",
+            "performed": False,
+        },
+        "visual_perception": {
+            "supported": False,
+            "confidence": 0.0,
+            "basis": "visual_perception_unsupported",
+        },
+    }
     assert spatial["capture_performed"] is False
     assert spatial["unsupported_perception"] == {
         "screenshots": False,
@@ -377,8 +454,10 @@ def test_overlay_observation_uses_existing_overlay_bounds_and_screen_readback(tm
     assert replay["source_status"] == "ready"
     assert replay["region_presence"] == spatial["region_presence"]
     assert replay["region_truth"] == spatial["region_truth"]
+    assert replay["region_basis"] == spatial["region_basis"]
     assert replay["unsupported_perception"] == spatial["unsupported_perception"]
     assert replay["confidence_basis"] == spatial["confidence_basis"]
+    assert replay["confidence_breakdown"] == spatial["confidence_breakdown"]
     assert replay["evidence_content_included"] is False
     assert replay["capture_performed"] is False
     assert "screenshot_pixels" in structured["unknowns"]
@@ -529,7 +608,41 @@ def test_overlay_observation_blocks_out_of_bounds_region_without_screen_readback
     assert spatial["region_truth"]["source_called"] is False
     assert spatial["region_truth"]["metadata_readback_only"] is False
     assert spatial["region_truth"]["unsupported_perception_claimed"] is False
+    assert spatial["region_basis"]["mapped_overlay_region"] == {
+        "present": True,
+        "status": "blocked",
+        "space": "desktop_logical_pixels",
+        "basis": "declared_overlay_coordinate_model",
+        "coordinate_boundary_status": "outside_bounds",
+        "coordinate_transform_status": "blocked_after_mapping",
+        "bounds_checked": True,
+        "within_overlay_bounds": False,
+        "clipped_by_overlay": True,
+    }
+    assert spatial["region_basis"]["actual_observed_region"] == {
+        "present": False,
+        "status": "not_observed",
+        "space": "",
+        "source": "none",
+        "basis": "not_performed",
+        "observation_adapter": "none",
+        "metadata_only": False,
+        "confidence": 0.0,
+        "confidence_basis": "observation_not_performed",
+    }
+    assert spatial["region_basis"]["actual_captured_region"]["present"] is False
+    assert (
+        spatial["region_basis"]["actual_captured_region"]["absent_reason"] == "requested_region_outside_overlay_bounds"
+    )
     assert spatial["confidence"] == 0.0
+    assert spatial["confidence_breakdown"]["coordinate_transform"] == {
+        "status": "blocked_after_mapping",
+        "confidence": 1.0,
+        "basis": "declared_overlay_coordinate_model_not_visual_perception",
+    }
+    assert spatial["confidence_breakdown"]["metadata_readback"]["confidence"] == 0.0
+    assert spatial["confidence_breakdown"]["capture"]["performed"] is False
+    assert spatial["confidence_breakdown"]["visual_perception"]["supported"] is False
     assert spatial["capture_performed"] is False
     assert spatial["failure_or_refusal_reason"] == "requested_region_outside_overlay_bounds"
     replay = spatial["replay_manifest"]
@@ -542,6 +655,8 @@ def test_overlay_observation_blocks_out_of_bounds_region_without_screen_readback
     assert replay["visual_replayable"] is False
     assert replay["region_presence"] == spatial["region_presence"]
     assert replay["region_truth"] == spatial["region_truth"]
+    assert replay["region_basis"] == spatial["region_basis"]
+    assert replay["confidence_breakdown"] == spatial["confidence_breakdown"]
     assert replay["failure_or_refusal_reason"] == "requested_region_outside_overlay_bounds"
     assert out["receipt"]["actual_observed_region"] == out["actual_observed_region"]
     assert out["receipt"]["actual_captured_region"] == out["actual_captured_region"]
@@ -685,7 +800,16 @@ def test_api_observe_requires_scope_and_overlay_context(tmp_path, monkeypatch) -
     assert "capture_adapter_unavailable" in receipt["actual_captured_region"]["limitations"]
     assert body["spatial_contract"]["region_truth"]["mapped_region_observed_metadata_only"] is True
     assert body["spatial_contract"]["region_truth"]["mapped_region_captured"] is False
+    assert body["spatial_contract"]["region_basis"]["requested_region"]["basis"] == "caller_supplied_request"
+    assert (
+        body["spatial_contract"]["region_basis"]["mapped_overlay_region"]["basis"]
+        == "declared_overlay_coordinate_model"
+    )
+    assert body["spatial_contract"]["region_basis"]["actual_observed_region"]["metadata_only"] is True
+    assert body["spatial_contract"]["confidence_breakdown"]["visual_perception"]["supported"] is False
     assert receipt["spatial_contract"]["region_truth"] == body["spatial_contract"]["region_truth"]
+    assert receipt["spatial_contract"]["region_basis"] == body["spatial_contract"]["region_basis"]
+    assert receipt["spatial_contract"]["confidence_breakdown"] == body["spatial_contract"]["confidence_breakdown"]
     assert body["replay_manifest"] == body["spatial_contract"]["replay_manifest"]
     assert receipt["replay_manifest"] == body["replay_manifest"]
     assert receipt["replay_manifest"]["metadata_replayable"] is True
