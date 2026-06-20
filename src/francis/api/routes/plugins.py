@@ -5465,6 +5465,16 @@ def _capability_library_operator_proposal_evidence_intake_export_projection(
         rows: list[dict[str, Any]] = []
         for capability in visible_capabilities:
             capability_id = _safe_str(capability.get("capability")).strip()
+            local_artifact_ref_hint = (
+                capability.get("local_artifact_ref_hint")
+                if isinstance(capability.get("local_artifact_ref_hint"), dict)
+                else {}
+            )
+            suggested_evidence_refs = (
+                _unique_texts(local_artifact_ref_hint.get("evidence_refs"), limit=10)
+                if bool(local_artifact_ref_hint.get("ready"))
+                else []
+            )
             rows.append(
                 {
                     "pack_id": pack_id,
@@ -5482,6 +5492,16 @@ def _capability_library_operator_proposal_evidence_intake_export_projection(
                     ),
                     "evidence_refs_input": "",
                     "evidence_refs_input_format": "comma_separated_or_json_array",
+                    "suggested_evidence_refs": suggested_evidence_refs,
+                    "suggested_evidence_refs_input": json.dumps(suggested_evidence_refs)
+                    if suggested_evidence_refs
+                    else "",
+                    "suggested_evidence_ref_count": len(suggested_evidence_refs),
+                    "suggested_evidence_ref_source": (
+                        "local_proposal_validation_artifact_refs" if suggested_evidence_refs else ""
+                    ),
+                    "suggested_evidence_refs_require_operator_confirmation": True,
+                    "local_artifact_ref_hint": local_artifact_ref_hint,
                     "operator_evidence_refs_required": True,
                     "evidence_ref_collection_status": "pending_operator_input",
                     "claim_scope": "operator_supplied_friction_evidence_reference_not_independent_verification",
@@ -5490,6 +5510,9 @@ def _capability_library_operator_proposal_evidence_intake_export_projection(
                         "pack_ids": [pack_id],
                         "capability_ids": [capability_id],
                         "evidence_refs": [],
+                        "evidence_refs_by_capability": (
+                            {capability_id: suggested_evidence_refs} if suggested_evidence_refs else {}
+                        ),
                         "dry_run": True,
                     },
                     "operator_supplied_evidence_not_independently_verified": True,
@@ -5506,6 +5529,10 @@ def _capability_library_operator_proposal_evidence_intake_export_projection(
                 "export_row_count": len(capabilities),
                 "exported_row_count": len(rows),
                 "evidence_ref_required_count": len(capabilities),
+                "suggested_evidence_ref_capability_count": sum(
+                    1 for row in rows if int(row.get("suggested_evidence_ref_count") or 0) > 0
+                ),
+                "suggested_evidence_ref_count": sum(int(row.get("suggested_evidence_ref_count") or 0) for row in rows),
                 "claim_scope": "operator_supplied_friction_evidence_reference_not_independent_verification",
                 "rows": rows,
                 "rows_truncated": len(rows) < len(capabilities),
@@ -5546,6 +5573,7 @@ def _capability_library_operator_proposal_evidence_intake_export_projection(
                 "capability",
                 "proposal_id",
                 "evidence_refs_input",
+                "suggested_evidence_refs_input",
             ],
             "blank_evidence_refs_input_means_not_ready_for_apply": True,
         },
@@ -5576,6 +5604,8 @@ def _capability_library_operator_proposal_evidence_intake_export_projection(
             "future_proposal_review_required": True,
             "does_not_validate_evidence_truth": True,
             "import_requires_governed_apply_route": True,
+            "suggested_local_artifact_refs_require_operator_confirmation": True,
+            "suggested_refs_do_not_validate_evidence_truth": True,
         },
         "governance": {
             "read_only": True,
@@ -5623,6 +5653,16 @@ def _parse_operator_proposal_evidence_refs_input(value: Any) -> tuple[list[str],
     return refs, "" if refs else "evidence_refs_input_required"
 
 
+def _operator_proposal_evidence_refs_input_empty(value: Any) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return not value.strip()
+    if isinstance(value, list):
+        return not _unique_texts(value, limit=50)
+    return not _safe_str(value).strip()
+
+
 def _capability_library_operator_proposal_evidence_intake_import_preview_projection(
     *,
     rows: list[dict[str, Any]],
@@ -5633,6 +5673,7 @@ def _capability_library_operator_proposal_evidence_intake_import_preview_project
     generated_plugin_sync_performed: bool,
     max_row_count: int,
     max_apply_group_count: int,
+    use_suggested_evidence_refs: bool = False,
 ) -> dict[str, Any]:
     candidates = _capability_library_operator_proposal_evidence_intake_candidates(
         registry=registry,
@@ -5671,7 +5712,16 @@ def _capability_library_operator_proposal_evidence_intake_import_preview_project
         pack_version = _safe_str(row.get("pack_version")).strip()
         capability_id = _safe_str(row.get("capability") or row.get("capability_id")).strip()
         proposal_id = _safe_str(row.get("proposal_id")).strip()
-        evidence_refs, parse_error = _parse_operator_proposal_evidence_refs_input(row.get("evidence_refs_input"))
+        evidence_refs_input = row.get("evidence_refs_input")
+        evidence_refs_source = "operator_supplied_evidence_refs"
+        if bool(use_suggested_evidence_refs) and _operator_proposal_evidence_refs_input_empty(evidence_refs_input):
+            suggested_input = row.get("suggested_evidence_refs_input")
+            if _operator_proposal_evidence_refs_input_empty(suggested_input):
+                suggested_input = row.get("suggested_evidence_refs")
+            if not _operator_proposal_evidence_refs_input_empty(suggested_input):
+                evidence_refs_input = suggested_input
+                evidence_refs_source = "suggested_local_artifact_refs"
+        evidence_refs, parse_error = _parse_operator_proposal_evidence_refs_input(evidence_refs_input)
         base_row = {
             "row_index": index,
             "pack_id": pack_id,
@@ -5696,6 +5746,8 @@ def _capability_library_operator_proposal_evidence_intake_import_preview_project
             "status": "ready_for_preview",
             "evidence_refs": evidence_refs,
             "evidence_ref_count": len(evidence_refs),
+            "evidence_refs_source": evidence_refs_source,
+            "suggested_evidence_refs_used": evidence_refs_source == "suggested_local_artifact_refs",
             "claim_scope": "operator_supplied_friction_evidence_reference_not_independent_verification",
             "operator_supplied_evidence_not_independently_verified": True,
             "requires_future_proposal_review": True,
@@ -5790,6 +5842,10 @@ def _capability_library_operator_proposal_evidence_intake_import_preview_project
         "ready_row_count": len(ready_rows),
         "pending_row_count": len(pending_rows),
         "invalid_row_count": len(invalid_rows),
+        "use_suggested_evidence_refs": bool(use_suggested_evidence_refs),
+        "suggested_evidence_refs_used_count": sum(
+            1 for row in ready_rows if bool(row.get("suggested_evidence_refs_used"))
+        ),
         "apply_group_count": len(apply_payload_groups),
         "apply_groups_truncated": apply_groups_truncated,
         "row_limit": row_limit,
@@ -5823,6 +5879,8 @@ def _capability_library_operator_proposal_evidence_intake_import_preview_project
             "apply_requires_plugins_write_scope": True,
             "capability_scoped_evidence_refs_supported": True,
             "future_proposal_review_required": True,
+            "suggested_local_artifact_refs_require_explicit_opt_in": True,
+            "suggested_refs_do_not_validate_evidence_truth": True,
         },
         "governance": {
             "read_only": True,
@@ -9144,6 +9202,15 @@ def _plugin_governance(
     return out
 
 
+_CAPABILITY_PACK_INVOCATION_RECEIPT_KIND = "plugin.capability_pack.invocation_receipt"
+_CAPABILITY_PACK_INVOCATION_RECEIPT_CONTRACT = "stage17_capability_pack_reusable_invocation_receipt_v1"
+_CAPABILITY_PACK_INVOCATION_ROUTING_GUARD_CONTRACT = "stage17_capability_pack_invocation_routing_guard_v1"
+_MISSION_OPERATION_CONTEXT_BY_CAPABILITY = {
+    "plugin.run": "mission_linked_operation",
+    "plugin.tool.run": "mission_linked_tool_operation",
+}
+
+
 def _capability_pack_invocation_selection(
     *,
     plugin: dict[str, Any],
@@ -9213,9 +9280,9 @@ def _capability_pack_invocation_receipt(
         supported_caller_contexts = []
     invocation_mode = "dry_run" if dry_run else "live_dispatch"
     return {
-        "kind": "plugin.capability_pack.invocation_receipt",
+        "kind": _CAPABILITY_PACK_INVOCATION_RECEIPT_KIND,
         "stage": "Stage 17 / Capability Economy",
-        "contract": "stage17_capability_pack_reusable_invocation_receipt_v1",
+        "contract": _CAPABILITY_PACK_INVOCATION_RECEIPT_CONTRACT,
         "status": _safe_str(receipt.get("status")).strip() or ("dry_run" if dry_run else "unknown"),
         "invocation_mode": invocation_mode,
         "dry_run": dry_run,
@@ -9277,6 +9344,67 @@ def _capability_pack_invocation_receipt(
     }
 
 
+def _capability_pack_invocation_routing_guard(
+    *,
+    operation_capability: str,
+    invocation: dict[str, Any],
+) -> dict[str, object]:
+    capability = _safe_str(operation_capability).strip()
+    caller_context = _safe_str(invocation.get("caller_context")).strip()
+    expected_context = _MISSION_OPERATION_CONTEXT_BY_CAPABILITY.get(capability, "")
+    governance = invocation.get("governance") if isinstance(invocation.get("governance"), dict) else {}
+
+    receipt_kind_supported = _safe_str(invocation.get("kind")).strip() == _CAPABILITY_PACK_INVOCATION_RECEIPT_KIND
+    receipt_contract_supported = (
+        _safe_str(invocation.get("contract")).strip() == _CAPABILITY_PACK_INVOCATION_RECEIPT_CONTRACT
+    )
+    operation_capability_supported = bool(expected_context)
+    caller_context_matches_operation_capability = bool(expected_context and caller_context == expected_context)
+    uses_existing_plugin_dispatcher = _to_bool(governance.get("uses_existing_plugin_dispatcher"))
+    new_authority_granted_by_receipt = _to_bool(governance.get("new_authority_granted_by_receipt"))
+    promotes_capabilities = not _to_bool(governance.get("does_not_promote_capabilities"))
+    enables_capabilities = not _to_bool(governance.get("does_not_enable_capabilities"))
+    memory_write = _to_bool(governance.get("memory_write"))
+    governance_bound = (
+        uses_existing_plugin_dispatcher
+        and not new_authority_granted_by_receipt
+        and not promotes_capabilities
+        and not enables_capabilities
+        and not memory_write
+    )
+
+    reject_reasons: list[str] = []
+    if not operation_capability_supported:
+        reject_reasons.append("unsupported_operation_capability")
+    if not receipt_kind_supported:
+        reject_reasons.append("unsupported_receipt_kind")
+    if not receipt_contract_supported:
+        reject_reasons.append("unsupported_receipt_contract")
+    if not caller_context_matches_operation_capability:
+        reject_reasons.append("caller_context_operation_capability_mismatch")
+    if not governance_bound:
+        reject_reasons.append("governance_boundary_missing")
+
+    return {
+        "contract": _CAPABILITY_PACK_INVOCATION_ROUTING_GUARD_CONTRACT,
+        "operation_capability": capability,
+        "caller_context": caller_context,
+        "expected_caller_context": expected_context,
+        "operation_capability_supported": operation_capability_supported,
+        "receipt_kind_supported": receipt_kind_supported,
+        "receipt_contract_supported": receipt_contract_supported,
+        "caller_context_matches_operation_capability": caller_context_matches_operation_capability,
+        "governance_bound": governance_bound,
+        "uses_existing_plugin_dispatcher": uses_existing_plugin_dispatcher,
+        "new_authority_granted_by_receipt": new_authority_granted_by_receipt,
+        "promotes_capabilities": promotes_capabilities,
+        "enables_capabilities": enables_capabilities,
+        "memory_write": memory_write,
+        "eligible_for_reuse_proof": not reject_reasons,
+        "reject_reasons": reject_reasons,
+    }
+
+
 def _capability_pack_invocation_audit_task_records(*, scan_limit: int) -> list[dict[str, Any]]:
     root = data_dir() / "tasks"
     if not root.exists():
@@ -9330,8 +9458,10 @@ def _capability_pack_invocation_audit_projection(
     filter_capability_id = _safe_str(capability_id).strip()
 
     items: list[dict[str, object]] = []
+    rejected_items: list[dict[str, object]] = []
     for task in _capability_pack_invocation_audit_task_records(scan_limit=safe_scan_limit):
-        if _safe_str(task.get("capability")).strip() not in {"plugin.run", "plugin.tool.run"}:
+        operation_capability = _safe_str(task.get("capability")).strip()
+        if operation_capability not in _MISSION_OPERATION_CONTEXT_BY_CAPABILITY:
             continue
         data, invocation = _capability_pack_invocation_from_task(task)
         if not invocation:
@@ -9349,6 +9479,10 @@ def _capability_pack_invocation_audit_projection(
         if filter_capability_id and item_capability_id != filter_capability_id:
             continue
 
+        routing_guard = _capability_pack_invocation_routing_guard(
+            operation_capability=operation_capability,
+            invocation=invocation,
+        )
         inputs = task.get("inputs") if isinstance(task.get("inputs"), dict) else {}
         input_meta = inputs.get("meta") if isinstance(inputs.get("meta"), dict) else {}
         receipt_linkage = (
@@ -9357,47 +9491,49 @@ def _capability_pack_invocation_audit_projection(
         selection = invocation.get("pack_selection") if isinstance(invocation.get("pack_selection"), dict) else {}
         reuse = invocation.get("reuse") if isinstance(invocation.get("reuse"), dict) else {}
         governance = invocation.get("governance") if isinstance(invocation.get("governance"), dict) else {}
-        items.append(
-            {
-                "operation_id": _safe_str(task.get("task_id")).strip(),
-                "operation_status": _safe_str(task.get("status")).strip(),
-                "operation_capability": _safe_str(task.get("capability")).strip(),
-                "mission_id": _safe_str(inputs.get("mission_id") or input_meta.get("mission_id")).strip(),
-                "receipt_kind": _safe_str(invocation.get("kind")).strip(),
-                "receipt_contract": _safe_str(invocation.get("contract")).strip(),
-                "receipt_embedded_in_operation_output": True,
-                "invocation_mode": _safe_str(invocation.get("invocation_mode")).strip(),
-                "caller_context": _safe_str(invocation.get("caller_context")).strip(),
-                "plugin_id": item_plugin_id,
-                "capability_id": item_capability_id,
-                "action": _safe_str(invocation.get("action")).strip(),
-                "pack_id": item_pack_id,
-                "pack_version": item_pack_version,
-                "pack_reuse_key": _safe_str(invocation.get("pack_reuse_key")).strip(),
-                "pack_selection_contract": _safe_str(
-                    selection.get("contract") or reuse.get("pack_selection_contract")
-                ).strip(),
-                "pack_selection_source": _safe_str(
-                    selection.get("source") or reuse.get("pack_selection_source")
-                ).strip(),
-                "dispatch_status": _safe_str(receipt_linkage.get("dispatch_status")).strip(),
-                "run_id": _safe_str(receipt_linkage.get("run_id") or data.get("run_id")).strip(),
-                "trace_id": _safe_str(receipt_linkage.get("trace_id") or data.get("trace_id")).strip(),
-                "governance": {
-                    "permission_model": _safe_str(governance.get("permission_model")).strip(),
-                    "uses_existing_plugin_dispatcher": _to_bool(governance.get("uses_existing_plugin_dispatcher")),
-                    "promotion_required_before_invocation": _to_bool(
-                        governance.get("promotion_required_before_invocation")
-                    ),
-                    "new_authority_granted_by_receipt": _to_bool(governance.get("new_authority_granted_by_receipt")),
-                    "does_not_promote_capabilities": _to_bool(governance.get("does_not_promote_capabilities")),
-                    "does_not_enable_capabilities": _to_bool(governance.get("does_not_enable_capabilities")),
-                    "memory_write": _to_bool(governance.get("memory_write")),
-                },
-            }
-        )
+        item = {
+            "operation_id": _safe_str(task.get("task_id")).strip(),
+            "operation_status": _safe_str(task.get("status")).strip(),
+            "operation_capability": operation_capability,
+            "mission_id": _safe_str(inputs.get("mission_id") or input_meta.get("mission_id")).strip(),
+            "receipt_kind": _safe_str(invocation.get("kind")).strip(),
+            "receipt_contract": _safe_str(invocation.get("contract")).strip(),
+            "receipt_embedded_in_operation_output": True,
+            "invocation_mode": _safe_str(invocation.get("invocation_mode")).strip(),
+            "caller_context": _safe_str(invocation.get("caller_context")).strip(),
+            "plugin_id": item_plugin_id,
+            "capability_id": item_capability_id,
+            "action": _safe_str(invocation.get("action")).strip(),
+            "pack_id": item_pack_id,
+            "pack_version": item_pack_version,
+            "pack_reuse_key": _safe_str(invocation.get("pack_reuse_key")).strip(),
+            "pack_selection_contract": _safe_str(
+                selection.get("contract") or reuse.get("pack_selection_contract")
+            ).strip(),
+            "pack_selection_source": _safe_str(selection.get("source") or reuse.get("pack_selection_source")).strip(),
+            "dispatch_status": _safe_str(receipt_linkage.get("dispatch_status")).strip(),
+            "run_id": _safe_str(receipt_linkage.get("run_id") or data.get("run_id")).strip(),
+            "trace_id": _safe_str(receipt_linkage.get("trace_id") or data.get("trace_id")).strip(),
+            "routing_guard": routing_guard,
+            "governance": {
+                "permission_model": _safe_str(governance.get("permission_model")).strip(),
+                "uses_existing_plugin_dispatcher": _to_bool(governance.get("uses_existing_plugin_dispatcher")),
+                "promotion_required_before_invocation": _to_bool(
+                    governance.get("promotion_required_before_invocation")
+                ),
+                "new_authority_granted_by_receipt": _to_bool(governance.get("new_authority_granted_by_receipt")),
+                "does_not_promote_capabilities": _to_bool(governance.get("does_not_promote_capabilities")),
+                "does_not_enable_capabilities": _to_bool(governance.get("does_not_enable_capabilities")),
+                "memory_write": _to_bool(governance.get("memory_write")),
+            },
+        }
+        if bool(routing_guard.get("eligible_for_reuse_proof")):
+            items.append(item)
+        else:
+            rejected_items.append(item)
 
     returned = items[:safe_limit]
+    returned_rejected = rejected_items[:safe_limit]
     contexts = sorted(
         {
             str(item.get("caller_context") or "").strip()
@@ -9422,6 +9558,13 @@ def _capability_pack_invocation_audit_projection(
         if reuse_key and caller_context:
             contexts_by_reuse_key.setdefault(reuse_key, set()).add(caller_context)
     context_lists_by_reuse_key = {key: sorted(value) for key, value in sorted(contexts_by_reuse_key.items())}
+    capabilities_by_reuse_key: dict[str, set[str]] = {}
+    for item in items:
+        reuse_key = str(item.get("pack_reuse_key") or "").strip()
+        operation_capability = str(item.get("operation_capability") or "").strip()
+        if reuse_key and operation_capability:
+            capabilities_by_reuse_key.setdefault(reuse_key, set()).add(operation_capability)
+    capability_lists_by_reuse_key = {key: sorted(value) for key, value in sorted(capabilities_by_reuse_key.items())}
     reused_pack_reuse_keys = [
         key for key, caller_contexts in context_lists_by_reuse_key.items() if len(caller_contexts) >= 2
     ]
@@ -9430,6 +9573,12 @@ def _capability_pack_invocation_audit_projection(
         key
         for key, caller_contexts in context_lists_by_reuse_key.items()
         if len(mission_linked_contexts.intersection(caller_contexts)) >= 2
+    ]
+    mission_shape_capabilities = set(_MISSION_OPERATION_CONTEXT_BY_CAPABILITY)
+    mission_shape_reuse_keys = [
+        key
+        for key, operation_capabilities in capability_lists_by_reuse_key.items()
+        if mission_shape_capabilities.issubset(operation_capabilities)
     ]
     return {
         "ok": True,
@@ -9446,7 +9595,9 @@ def _capability_pack_invocation_audit_projection(
             "scan_limit": safe_scan_limit,
         },
         "total_invocation_count": len(items),
+        "rejected_invocation_count": len(rejected_items),
         "returned_invocation_count": len(returned),
+        "returned_rejected_invocation_count": len(returned_rejected),
         "pack_count": len(pack_ids),
         "context_count": len(contexts),
         "contexts": contexts,
@@ -9455,20 +9606,31 @@ def _capability_pack_invocation_audit_projection(
             "contract": "stage17_capability_pack_invocation_audit_reuse_proof_v1",
             "minimum_contexts_per_reuse_key": 2,
             "contexts_by_pack_reuse_key": context_lists_by_reuse_key,
+            "operation_capabilities_by_pack_reuse_key": capability_lists_by_reuse_key,
             "cross_context_reuse_proven": bool(reused_pack_reuse_keys),
             "reused_pack_reuse_keys": reused_pack_reuse_keys,
             "mission_linked_contexts_required": sorted(mission_linked_contexts),
             "mission_linked_reuse_proven": bool(mission_linked_reuse_keys),
             "mission_linked_reuse_keys": mission_linked_reuse_keys,
+            "mission_shape_capabilities_required": sorted(mission_shape_capabilities),
+            "mission_shape_reuse_proven": bool(mission_shape_reuse_keys),
+            "mission_shape_reuse_keys": mission_shape_reuse_keys,
         },
         "items": returned,
+        "rejected_items": returned_rejected,
         "requirements": {
             "embedded_invocation_receipt_required": True,
+            "embedded_invocation_receipt_contract_required": _CAPABILITY_PACK_INVOCATION_RECEIPT_CONTRACT,
             "reads_existing_operation_records": True,
             "reads_existing_plugin_run_and_tool_run_operation_records": True,
+            "routing_guard_contract": _CAPABILITY_PACK_INVOCATION_ROUTING_GUARD_CONTRACT,
+            "routing_guard_required_for_reuse_proof": True,
+            "mission_plugin_run_context_required": _MISSION_OPERATION_CONTEXT_BY_CAPABILITY["plugin.run"],
+            "mission_tool_run_context_required": _MISSION_OPERATION_CONTEXT_BY_CAPABILITY["plugin.tool.run"],
             "cross_context_reuse_claim_requires_matching_pack_reuse_key": True,
             "cross_context_reuse_proof_is_machine_readable": True,
             "mission_linked_reuse_requires_both_mission_contexts": True,
+            "mission_shape_reuse_requires_plugin_run_and_plugin_tool_run": True,
             "does_not_infer_missing_direct_route_receipts": True,
         },
         "governance": {
@@ -10545,6 +10707,8 @@ class CapabilityPackMetadataReceiptBulkFromPlanIn(BaseModel):
     max_pack_count: int = 50
     max_total_capability_count: int = 5000
     max_capability_count_per_pack: int = 500
+    dry_run: bool = True
+    dry_run_fingerprint: str = ""
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -10663,6 +10827,7 @@ class CapabilityLibraryOperatorProposalEvidenceIntakeImportPreviewIn(BaseModel):
     rows: list[dict[str, Any]] = Field(default_factory=list)
     max_row_count: int = _CAPABILITY_LIBRARY_OPERATOR_PROPOSAL_EVIDENCE_EXPORT_ROW_LIMIT
     max_apply_group_count: int = 500
+    use_suggested_evidence_refs: bool = False
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -13622,6 +13787,7 @@ def capability_library_operator_proposal_evidence_intake_import_preview(
             generated_plugin_sync_performed=bool(synced),
             max_row_count=payload.max_row_count,
             max_apply_group_count=payload.max_apply_group_count,
+            use_suggested_evidence_refs=payload.use_suggested_evidence_refs,
         )
         return {
             "ok": True,
@@ -15610,6 +15776,55 @@ def record_capability_pack_metadata_receipt(
         return {"ok": False, "applied": False, "status": "error", "error": api_error_message(exc)}
 
 
+def _capability_pack_metadata_receipts_bulk_from_plan_fingerprint(*, planned: list[dict[str, Any]]) -> str:
+    canonical_packs: list[dict[str, Any]] = []
+    for item in planned:
+        canonical_packs.append(
+            {
+                "pack_id": _safe_str(item.get("pack_id")).strip(),
+                "pack_version": _safe_str(item.get("pack_version")).strip(),
+                "capability_ids": sorted(_unique_texts(item.get("capability_ids"), limit=10000)),
+                "promotion_rules": sorted(_unique_texts(item.get("promotion_rules"), limit=200)),
+                "pack_governance": redact_governed_display_value(item.get("pack_governance")),
+            }
+        )
+    canonical_packs.sort(key=lambda item: (item["pack_id"], item["pack_version"]))
+    body = {
+        "contract": "stage17_capability_pack_metadata_receipts_bulk_from_plan_dry_run_v1",
+        "route": "/plugins/capabilities/packs/metadata/receipts/bulk-from-plan",
+        "planned": canonical_packs,
+    }
+    raw = json.dumps(body, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _capability_pack_metadata_receipts_bulk_governance(
+    *,
+    route_path: str,
+    writes_registry_metadata: bool,
+    writes_receipts: bool,
+) -> dict[str, object]:
+    return {
+        "scope": _PLUGIN_WRITE_SCOPE,
+        "route": route_path,
+        "lifecycle_operation": "capability_pack_metadata_receipts_bulk_from_migration_plan",
+        "policy_gate": _PLUGIN_WRITE_SCOPE,
+        "receipt_contract": "plugin.capability_pack.metadata_receipt",
+        "writes_registry_metadata": writes_registry_metadata,
+        "writes_receipts": writes_receipts,
+        "dry_run_required_before_apply": True,
+        "does_not_approve_proposals": True,
+        "does_not_promote_capabilities": True,
+        "does_not_enable_capabilities": True,
+        "does_not_execute_capabilities": True,
+        "promotion_authority": False,
+        "execution_authority": False,
+        "approval_authority": False,
+        "memory_write": False,
+        "mutates_generated_artifacts": False,
+    }
+
+
 @router.post("/capabilities/packs/metadata/receipts/bulk-from-plan")
 def record_capability_pack_metadata_receipts_from_plan(
     payload: CapabilityPackMetadataReceiptBulkFromPlanIn,
@@ -15652,15 +15867,11 @@ def record_capability_pack_metadata_receipts_from_plan(
                 "recorded_pack_count": 0,
                 "recorded_capability_count": 0,
                 "plan": plan,
-                "governance": {
-                    "scope": _PLUGIN_WRITE_SCOPE,
-                    "route": request.url.path,
-                    "writes_registry_metadata": False,
-                    "writes_receipts": False,
-                    "promotion_authority": False,
-                    "execution_authority": False,
-                    "approval_authority": False,
-                },
+                "governance": _capability_pack_metadata_receipts_bulk_governance(
+                    route_path=request.url.path,
+                    writes_registry_metadata=False,
+                    writes_receipts=False,
+                ),
             }
         if len(candidates) > safe_max_pack_count:
             return {
@@ -15716,6 +15927,74 @@ def record_capability_pack_metadata_receipts_from_plan(
                 "status": "blocked",
                 "error": "candidate_preflight_failed",
                 "blocked_candidates": blocked_candidates,
+            }
+
+        planned: list[dict[str, Any]] = []
+        for item in prepared:
+            candidate = item["candidate"]
+            promotion_rules = _unique_texts(candidate.get("suggested_promotion_rules"), limit=50)
+            pack_governance = dict(candidate.get("suggested_pack_governance") or {})
+            capability_ids = list(item["capability_ids"])
+            planned.append(
+                {
+                    "pack_id": item["pack_id"],
+                    "pack_version": item["pack_version"],
+                    "pack_name": _safe_str(candidate.get("pack_name")).strip() or item["pack_id"],
+                    "capability_count": len(capability_ids),
+                    "capability_ids": capability_ids,
+                    "promotion_rules": promotion_rules,
+                    "pack_governance": redact_governed_display_value(pack_governance),
+                    "writes_registry_metadata": not payload.dry_run,
+                    "writes_receipt": not payload.dry_run,
+                }
+            )
+        planned_capability_count = sum(int(item.get("capability_count") or 0) for item in planned)
+        dry_run_fingerprint = _capability_pack_metadata_receipts_bulk_from_plan_fingerprint(planned=planned)
+        if payload.dry_run:
+            return {
+                "ok": True,
+                "applied": False,
+                "status": "dry_run",
+                "planned_pack_count": len(planned),
+                "planned_capability_count": planned_capability_count,
+                "dry_run_fingerprint": dry_run_fingerprint,
+                "dry_run_confirmation": {
+                    "required_for_apply": True,
+                    "fingerprint": dry_run_fingerprint,
+                    "fingerprint_contract": "stage17_capability_pack_metadata_receipts_bulk_from_plan_dry_run_v1",
+                    "planned_pack_count": len(planned),
+                    "planned_capability_count": planned_capability_count,
+                    "apply_route": request.url.path,
+                },
+                "planned": planned,
+                "plan": plan,
+                "governance": _capability_pack_metadata_receipts_bulk_governance(
+                    route_path=request.url.path,
+                    writes_registry_metadata=False,
+                    writes_receipts=False,
+                ),
+            }
+        provided_dry_run_fingerprint = _safe_str(payload.dry_run_fingerprint).strip()
+        if provided_dry_run_fingerprint != dry_run_fingerprint:
+            return {
+                "ok": False,
+                "applied": False,
+                "status": "blocked",
+                "error": "capability_pack_metadata_receipts_bulk_from_plan_dry_run_confirmation_required",
+                "planned_pack_count": len(planned),
+                "planned_capability_count": planned_capability_count,
+                "dry_run_confirmation": {
+                    "required_for_apply": True,
+                    "fingerprint_contract": "stage17_capability_pack_metadata_receipts_bulk_from_plan_dry_run_v1",
+                    "fingerprint_matched": False,
+                    "apply_route": request.url.path,
+                },
+                "planned": planned,
+                "governance": _capability_pack_metadata_receipts_bulk_governance(
+                    route_path=request.url.path,
+                    writes_registry_metadata=False,
+                    writes_receipts=False,
+                ),
             }
 
         pending_receipts: list[dict[str, Any]] = []
@@ -15833,22 +16112,23 @@ def record_capability_pack_metadata_receipts_from_plan(
             "ok": True,
             "applied": True,
             "status": "recorded",
+            "dry_run_fingerprint": dry_run_fingerprint,
+            "dry_run_confirmation": {
+                "required_for_apply": True,
+                "fingerprint_matched": True,
+                "fingerprint_contract": "stage17_capability_pack_metadata_receipts_bulk_from_plan_dry_run_v1",
+                "apply_route": request.url.path,
+            },
             "recorded_pack_count": len(recorded),
             "recorded_capability_count": sum(int(item.get("capability_count") or 0) for item in recorded),
             "recorded": recorded,
             "remaining_candidate_total": int(refreshed_plan.get("candidate_total") or 0),
             "next_smallest_truthful_gap": str(refreshed_plan.get("next_smallest_truthful_gap") or ""),
-            "governance": {
-                "scope": _PLUGIN_WRITE_SCOPE,
-                "route": request.url.path,
-                "writes_registry_metadata": True,
-                "writes_receipts": True,
-                "promotion_authority": False,
-                "execution_authority": False,
-                "approval_authority": False,
-                "memory_write": False,
-                "mutates_generated_artifacts": False,
-            },
+            "governance": _capability_pack_metadata_receipts_bulk_governance(
+                route_path=request.url.path,
+                writes_registry_metadata=True,
+                writes_receipts=True,
+            ),
         }
     except Exception as exc:
         return {"ok": False, "applied": False, "status": "error", "error": api_error_message(exc)}

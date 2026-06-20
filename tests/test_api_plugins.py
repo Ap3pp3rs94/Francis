@@ -1613,12 +1613,87 @@ def test_plugins_capability_pack_metadata_receipts_bulk_from_migration_plan(
     plan = client.get("/plugins/capabilities/packs/migration/plan").json()
     candidate = next(item for item in plan["candidates"] if plugin_id in item["capability_ids_sample"])
 
+    receipt_dir = data_root / "artifacts" / "plugins" / "capability_packs" / "metadata_receipts"
+    dry_run = client.post(
+        "/plugins/capabilities/packs/metadata/receipts/bulk-from-plan",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "dry run reviewed migration plan candidates",
+            "pack_ids": [candidate["pack_id"]],
+        },
+    )
+
+    assert dry_run.status_code == 200
+    dry_run_body = dry_run.json()
+    assert dry_run_body["ok"] is True
+    assert dry_run_body["applied"] is False
+    assert dry_run_body["status"] == "dry_run"
+    assert dry_run_body["planned_pack_count"] == 1
+    assert dry_run_body["planned_capability_count"] == candidate["capability_count"]
+    assert len(dry_run_body["dry_run_fingerprint"]) == 64
+    assert dry_run_body["dry_run_confirmation"]["required_for_apply"] is True
+    assert dry_run_body["dry_run_confirmation"]["fingerprint"] == dry_run_body["dry_run_fingerprint"]
+    assert dry_run_body["dry_run_confirmation"]["fingerprint_contract"] == (
+        "stage17_capability_pack_metadata_receipts_bulk_from_plan_dry_run_v1"
+    )
+    assert dry_run_body["planned"][0]["pack_id"] == candidate["pack_id"]
+    assert dry_run_body["planned"][0]["writes_registry_metadata"] is False
+    assert dry_run_body["planned"][0]["writes_receipt"] is False
+    assert dry_run_body["governance"]["dry_run_required_before_apply"] is True
+    assert dry_run_body["governance"]["writes_registry_metadata"] is False
+    assert dry_run_body["governance"]["writes_receipts"] is False
+    assert dry_run_body["governance"]["promotion_authority"] is False
+    assert dry_run_body["governance"]["execution_authority"] is False
+    assert not receipt_dir.exists()
+
+    after_dry_run = client.get(f"/plugins/get?id={plugin_id}").json()["item"]
+    assert "pack_metadata_receipt_id" not in after_dry_run["meta"]
+
+    blocked_without_confirmation = client.post(
+        "/plugins/capabilities/packs/metadata/receipts/bulk-from-plan",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "attempt apply without dry run confirmation",
+            "pack_ids": [candidate["pack_id"]],
+            "dry_run": False,
+        },
+    )
+    assert blocked_without_confirmation.status_code == 200
+    blocked_body = blocked_without_confirmation.json()
+    assert blocked_body["ok"] is False
+    assert blocked_body["applied"] is False
+    assert blocked_body["status"] == "blocked"
+    assert blocked_body["error"] == "capability_pack_metadata_receipts_bulk_from_plan_dry_run_confirmation_required"
+    assert blocked_body["dry_run_confirmation"]["required_for_apply"] is True
+    assert blocked_body["dry_run_confirmation"]["fingerprint_matched"] is False
+    assert blocked_body["governance"]["writes_registry_metadata"] is False
+    assert blocked_body["governance"]["writes_receipts"] is False
+    assert not receipt_dir.exists()
+
+    denied = client.post(
+        "/plugins/capabilities/packs/metadata/receipts/bulk-from-plan",
+        json={
+            "actor": "unscoped.migration.apply.operator",
+            "reason": "attempt unscoped migration apply",
+            "pack_ids": [candidate["pack_id"]],
+            "dry_run": False,
+            "dry_run_fingerprint": dry_run_body["dry_run_fingerprint"],
+        },
+    )
+    assert denied.status_code == 200
+    denied_body = denied.json()
+    assert denied_body["ok"] is False
+    assert denied_body["error"] == "api_permission_denied"
+    assert not receipt_dir.exists()
+
     recorded = client.post(
         "/plugins/capabilities/packs/metadata/receipts/bulk-from-plan",
         json={
             "actor": _PLUGIN_ACTOR,
             "reason": "record reviewed migration plan candidates",
             "pack_ids": [candidate["pack_id"]],
+            "dry_run": False,
+            "dry_run_fingerprint": dry_run_body["dry_run_fingerprint"],
         },
     )
 
@@ -1626,13 +1701,21 @@ def test_plugins_capability_pack_metadata_receipts_bulk_from_migration_plan(
     recorded_body = recorded.json()
     assert recorded_body["ok"] is True
     assert recorded_body["status"] == "recorded"
+    assert recorded_body["dry_run_fingerprint"] == dry_run_body["dry_run_fingerprint"]
+    assert recorded_body["dry_run_confirmation"]["required_for_apply"] is True
+    assert recorded_body["dry_run_confirmation"]["fingerprint_matched"] is True
     assert recorded_body["recorded_pack_count"] == 1
     assert recorded_body["recorded_capability_count"] == candidate["capability_count"]
     assert recorded_body["remaining_candidate_total"] < plan["candidate_total"]
+    assert recorded_body["governance"]["dry_run_required_before_apply"] is True
     assert recorded_body["governance"]["writes_registry_metadata"] is True
     assert recorded_body["governance"]["writes_receipts"] is True
     assert recorded_body["governance"]["promotion_authority"] is False
     assert recorded_body["governance"]["execution_authority"] is False
+    assert recorded_body["governance"]["does_not_approve_proposals"] is True
+    assert recorded_body["governance"]["does_not_promote_capabilities"] is True
+    assert recorded_body["governance"]["does_not_enable_capabilities"] is True
+    assert recorded_body["governance"]["does_not_execute_capabilities"] is True
     receipt_ref = recorded_body["recorded"][0]
     assert receipt_ref["pack_id"] == candidate["pack_id"]
 
@@ -6243,6 +6326,46 @@ def test_plugins_capability_library_operator_proposal_evidence_source_readiness_
     assert next_batch["apply_payload_hint"]["evidence_refs"] == []
     assert next_batch["apply_payload_hint"]["evidence_refs_by_capability"] == {plugin_id: local_artifact_refs}
 
+    export = client.get("/plugins/capabilities/library/proposal-evidence/operator-intake/export")
+    assert export.status_code == 200
+    export_body = export.json()
+    export_row = export_body["packs"][0]["rows"][0]
+    assert export_row["capability"] == plugin_id
+    assert export_row["evidence_refs_input"] == ""
+    assert export_row["suggested_evidence_refs"] == local_artifact_refs
+    assert json.loads(export_row["suggested_evidence_refs_input"]) == local_artifact_refs
+    assert export_row["suggested_evidence_ref_source"] == "local_proposal_validation_artifact_refs"
+    assert export_row["suggested_evidence_refs_require_operator_confirmation"] is True
+    assert export_row["apply_payload_hint"]["evidence_refs"] == []
+    assert export_row["apply_payload_hint"]["evidence_refs_by_capability"] == {plugin_id: local_artifact_refs}
+
+    suggested_import_preview = client.post(
+        "/plugins/capabilities/library/proposal-evidence/operator-intake/import-preview",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "rows": [export_row],
+            "use_suggested_evidence_refs": True,
+            "max_row_count": 1,
+            "max_apply_group_count": 1,
+        },
+    )
+
+    assert suggested_import_preview.status_code == 200
+    suggested_import_preview_body = suggested_import_preview.json()
+    assert suggested_import_preview_body["ok"] is True
+    assert suggested_import_preview_body["ready_row_count"] == 1
+    assert suggested_import_preview_body["pending_row_count"] == 0
+    assert suggested_import_preview_body["invalid_row_count"] == 0
+    assert suggested_import_preview_body["use_suggested_evidence_refs"] is True
+    assert suggested_import_preview_body["suggested_evidence_refs_used_count"] == 1
+    assert suggested_import_preview_body["ready_rows"][0]["evidence_refs_source"] == "suggested_local_artifact_refs"
+    assert suggested_import_preview_body["ready_rows"][0]["suggested_evidence_refs_used"] is True
+    suggested_apply_group = suggested_import_preview_body["apply_payload_groups"][0]
+    assert suggested_apply_group["preview_payload"]["evidence_refs"] == []
+    assert suggested_apply_group["preview_payload"]["evidence_refs_by_capability"] == {plugin_id: local_artifact_refs}
+    fetched_after_suggested_preview = client.get(f"/plugins/get?id={plugin_id}").json()["item"]
+    assert "proposal_evidence" not in dict(fetched_after_suggested_preview.get("meta") or {})
+
     evidence_payload = {
         "actor": _PLUGIN_ACTOR,
         "reason": "dry run local artifact proposal evidence hints",
@@ -6355,6 +6478,13 @@ def test_plugins_capability_library_operator_proposal_evidence_intake_records_op
     assert built_body["ok"] is True
     plugin_id = str(built_body["plugin_id"])
     proposal_id = str(built_body["proposal_id"])
+    validation_receipt_id = str(built_body["validation_receipt_id"])
+    local_artifact_refs = [
+        proposal_id,
+        f"data/artifacts/plugins/proposals/{proposal_id}.json",
+        validation_receipt_id,
+        f"data/artifacts/plugins/validations/{validation_receipt_id}.json",
+    ]
 
     registry = plugins._load_registry()
     plugin = plugins._read_plugin(registry, plugin_id)
@@ -6506,6 +6636,7 @@ def test_plugins_capability_library_operator_proposal_evidence_intake_records_op
             "capability",
             "proposal_id",
             "evidence_refs_input",
+            "suggested_evidence_refs_input",
         ],
         "blank_evidence_refs_input_means_not_ready_for_apply": True,
     }
@@ -6521,12 +6652,17 @@ def test_plugins_capability_library_operator_proposal_evidence_intake_records_op
     assert export_row["proposal_id"] == proposal_id
     assert export_row["evidence_refs_input"] == ""
     assert export_row["evidence_refs_input_format"] == "comma_separated_or_json_array"
+    assert export_row["suggested_evidence_refs"] == local_artifact_refs
+    assert json.loads(export_row["suggested_evidence_refs_input"]) == local_artifact_refs
+    assert export_row["suggested_evidence_ref_source"] == "local_proposal_validation_artifact_refs"
+    assert export_row["suggested_evidence_refs_require_operator_confirmation"] is True
     assert export_row["operator_evidence_refs_required"] is True
     assert export_row["dry_run_required"] is True
     assert export_row["apply_payload_hint"] == {
         "pack_ids": [pack_id],
         "capability_ids": [plugin_id],
         "evidence_refs": [],
+        "evidence_refs_by_capability": {plugin_id: local_artifact_refs},
         "dry_run": True,
     }
     assert export_row["operator_supplied_evidence_not_independently_verified"] is True

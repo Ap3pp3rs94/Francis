@@ -1147,6 +1147,36 @@ def test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_missio
     assert mission_tool_invocation["governance"]["does_not_enable_capabilities"] is True
     assert mission_tool_invocation["governance"]["memory_write"] is False
 
+    tampered_operation_id = "tsk_stage17_bad_context"
+    tampered_invocation = dict(mission_tool_invocation)
+    tampered_invocation["caller_context"] = "mission_linked_operation"
+    tampered_output = dict(mission_tool_output)
+    tampered_receipt = dict(mission_tool_output["receipt"])
+    tampered_receipt["capability_pack_invocation"] = tampered_invocation
+    tampered_output["receipt"] = tampered_receipt
+    tampered_output["capability_pack_invocation"] = tampered_invocation
+    tampered_task_dir = data_root / "tasks" / tampered_operation_id
+    tampered_task_dir.mkdir(parents=True)
+    (tampered_task_dir / "record.json").write_text(
+        json.dumps(
+            {
+                "task_id": tampered_operation_id,
+                "status": "completed",
+                "capability": "plugin.tool.run",
+                "requester_id": "test.missions.trace",
+                "created_at": "2026-06-20T17:00:00+00:00",
+                "updated_at": "2026-06-20T17:00:01+00:00",
+                "inputs": {
+                    "mission_id": mission_id,
+                    "meta": {"mission_id": mission_id, "caller_context": "mission_linked_operation"},
+                },
+                "result": {"data": tampered_output},
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
     audit = client.get(
         "/plugins/capabilities/library/invocations/audit",
         params={"pack_id": pack_id, "limit": 10, "scan_limit": 50},
@@ -1159,7 +1189,9 @@ def test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_missio
     assert audit_body["readback_scope"] == "operation_outputs_with_embedded_capability_pack_invocation_receipts"
     assert audit_body["filters"]["pack_id"] == pack_id
     assert audit_body["total_invocation_count"] == 2
+    assert audit_body["rejected_invocation_count"] == 1
     assert audit_body["returned_invocation_count"] == 2
+    assert audit_body["returned_rejected_invocation_count"] == 1
     assert audit_body["pack_count"] == 1
     assert audit_body["context_count"] == 2
     assert audit_body["contexts"] == ["mission_linked_operation", "mission_linked_tool_operation"]
@@ -1170,6 +1202,9 @@ def test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_missio
     assert reuse_proof["contexts_by_pack_reuse_key"] == {
         direct_invocation["pack_reuse_key"]: ["mission_linked_operation", "mission_linked_tool_operation"]
     }
+    assert reuse_proof["operation_capabilities_by_pack_reuse_key"] == {
+        direct_invocation["pack_reuse_key"]: ["plugin.run", "plugin.tool.run"]
+    }
     assert reuse_proof["cross_context_reuse_proven"] is True
     assert reuse_proof["reused_pack_reuse_keys"] == [direct_invocation["pack_reuse_key"]]
     assert reuse_proof["mission_linked_contexts_required"] == [
@@ -1178,11 +1213,23 @@ def test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_missio
     ]
     assert reuse_proof["mission_linked_reuse_proven"] is True
     assert reuse_proof["mission_linked_reuse_keys"] == [direct_invocation["pack_reuse_key"]]
+    assert reuse_proof["mission_shape_capabilities_required"] == ["plugin.run", "plugin.tool.run"]
+    assert reuse_proof["mission_shape_reuse_proven"] is True
+    assert reuse_proof["mission_shape_reuse_keys"] == [direct_invocation["pack_reuse_key"]]
     assert audit_body["requirements"]["embedded_invocation_receipt_required"] is True
+    assert (
+        audit_body["requirements"]["embedded_invocation_receipt_contract_required"]
+        == "stage17_capability_pack_reusable_invocation_receipt_v1"
+    )
     assert audit_body["requirements"]["reads_existing_plugin_run_and_tool_run_operation_records"] is True
+    assert audit_body["requirements"]["routing_guard_contract"] == "stage17_capability_pack_invocation_routing_guard_v1"
+    assert audit_body["requirements"]["routing_guard_required_for_reuse_proof"] is True
+    assert audit_body["requirements"]["mission_plugin_run_context_required"] == "mission_linked_operation"
+    assert audit_body["requirements"]["mission_tool_run_context_required"] == "mission_linked_tool_operation"
     assert audit_body["requirements"]["cross_context_reuse_claim_requires_matching_pack_reuse_key"] is True
     assert audit_body["requirements"]["cross_context_reuse_proof_is_machine_readable"] is True
     assert audit_body["requirements"]["mission_linked_reuse_requires_both_mission_contexts"] is True
+    assert audit_body["requirements"]["mission_shape_reuse_requires_plugin_run_and_plugin_tool_run"] is True
     assert audit_body["requirements"]["does_not_infer_missing_direct_route_receipts"] is True
     audit_items = {item["operation_id"]: item for item in audit_body["items"]}
     assert set(audit_items) == {operation_id, tool_operation_id}
@@ -1201,6 +1248,12 @@ def test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_missio
     assert audit_item["pack_selection_source"] == "plugin_registry_metadata"
     assert audit_item["run_id"] == mission_invocation["receipt_linkage"]["run_id"]
     assert audit_item["trace_id"] == mission_invocation["receipt_linkage"]["trace_id"]
+    assert audit_item["routing_guard"]["contract"] == "stage17_capability_pack_invocation_routing_guard_v1"
+    assert audit_item["routing_guard"]["expected_caller_context"] == "mission_linked_operation"
+    assert audit_item["routing_guard"]["caller_context_matches_operation_capability"] is True
+    assert audit_item["routing_guard"]["governance_bound"] is True
+    assert audit_item["routing_guard"]["eligible_for_reuse_proof"] is True
+    assert audit_item["routing_guard"]["reject_reasons"] == []
     assert audit_item["governance"]["uses_existing_plugin_dispatcher"] is True
     assert audit_item["governance"]["new_authority_granted_by_receipt"] is False
     assert audit_item["governance"]["memory_write"] is False
@@ -1219,9 +1272,24 @@ def test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_missio
     assert audit_tool_item["pack_selection_source"] == "plugin_registry_metadata"
     assert audit_tool_item["run_id"] == mission_tool_invocation["receipt_linkage"]["run_id"]
     assert audit_tool_item["trace_id"] == mission_tool_invocation["receipt_linkage"]["trace_id"]
+    assert audit_tool_item["routing_guard"]["expected_caller_context"] == "mission_linked_tool_operation"
+    assert audit_tool_item["routing_guard"]["caller_context_matches_operation_capability"] is True
+    assert audit_tool_item["routing_guard"]["governance_bound"] is True
+    assert audit_tool_item["routing_guard"]["eligible_for_reuse_proof"] is True
+    assert audit_tool_item["routing_guard"]["reject_reasons"] == []
     assert audit_tool_item["governance"]["uses_existing_plugin_dispatcher"] is True
     assert audit_tool_item["governance"]["new_authority_granted_by_receipt"] is False
     assert audit_tool_item["governance"]["memory_write"] is False
+    rejected_items = {item["operation_id"]: item for item in audit_body["rejected_items"]}
+    assert set(rejected_items) == {tampered_operation_id}
+    rejected_item = rejected_items[tampered_operation_id]
+    assert rejected_item["operation_capability"] == "plugin.tool.run"
+    assert rejected_item["caller_context"] == "mission_linked_operation"
+    assert rejected_item["pack_reuse_key"] == direct_invocation["pack_reuse_key"]
+    assert rejected_item["routing_guard"]["expected_caller_context"] == "mission_linked_tool_operation"
+    assert rejected_item["routing_guard"]["caller_context_matches_operation_capability"] is False
+    assert rejected_item["routing_guard"]["eligible_for_reuse_proof"] is False
+    assert rejected_item["routing_guard"]["reject_reasons"] == ["caller_context_operation_capability_mismatch"]
     assert audit_body["governance"]["read_only"] is True
     assert audit_body["governance"]["route"] == "/plugins/capabilities/library/invocations/audit"
     assert audit_body["governance"]["writes_repo"] is False
