@@ -1951,9 +1951,16 @@ def _plugin_lifecycle_repair_status(
     current: dict[str, Any],
     meta: dict[str, Any],
     lifecycle: dict[str, Any],
+    rollback_source_receipt: dict[str, Any] | None = None,
 ) -> str:
     lifecycle_status = _safe_str(lifecycle.get("status")).strip()
+    rollback_previous = (
+        rollback_source_receipt.get("previous")
+        if isinstance(rollback_source_receipt, dict) and isinstance(rollback_source_receipt.get("previous"), dict)
+        else {}
+    )
     candidates = [
+        rollback_previous.get("status"),
         meta.get(f"{lifecycle_status}_from_status"),
         meta.get("disabled_from_status"),
         current.get("status"),
@@ -1971,9 +1978,16 @@ def _plugin_lifecycle_repair_promotion_status(
     meta: dict[str, Any],
     lifecycle: dict[str, Any],
     restored_status: str,
+    rollback_source_receipt: dict[str, Any] | None = None,
 ) -> str:
     lifecycle_status = _safe_str(lifecycle.get("status")).strip()
+    rollback_previous = (
+        rollback_source_receipt.get("previous")
+        if isinstance(rollback_source_receipt, dict) and isinstance(rollback_source_receipt.get("previous"), dict)
+        else {}
+    )
     candidates = [
+        rollback_previous.get("promotion_status"),
         meta.get(f"{lifecycle_status}_from_promotion_status"),
         meta.get("disabled_from_promotion_status"),
         meta.get("promotion_status"),
@@ -2035,19 +2049,40 @@ def _plugin_lifecycle_repair_plan(
     meta: dict[str, Any],
     lifecycle_before: dict[str, Any],
     lifecycle_action: str,
+    rollback_source_receipt: dict[str, Any] | None = None,
+    rollback_source_readback: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    restored_status = _plugin_lifecycle_repair_status(current, meta, lifecycle_before)
+    restored_status = _plugin_lifecycle_repair_status(
+        current,
+        meta,
+        lifecycle_before,
+        rollback_source_receipt=rollback_source_receipt,
+    )
     restored_promotion_status = _plugin_lifecycle_repair_promotion_status(
         meta,
         lifecycle_before,
         restored_status,
+        rollback_source_receipt=rollback_source_receipt,
     )
     current_lifecycle_status = _safe_str(meta.get("lifecycle_status")).strip()
     current_promotion_status = _safe_str(meta.get("promotion_status")).strip()
+    rollback_source = rollback_source_readback if isinstance(rollback_source_readback, dict) else {}
+    if not rollback_source:
+        rollback_source = {
+            "contract": "plugin.lifecycle.rollback_source_receipt_v1",
+            "required": lifecycle_action == "rollback",
+            "found": False,
+            "status": "not_required" if lifecycle_action != "rollback" else "blocked",
+            "reason": "rollback_not_requested" if lifecycle_action != "rollback" else "rollback_source_not_resolved",
+            "current_lifecycle_receipt_id": _safe_str(meta.get("lifecycle_receipt_id")).strip(),
+            "current_lifecycle_status": _safe_str(lifecycle_before.get("status")).strip(),
+            "receipt": {},
+        }
     return {
         "contract": "plugin.lifecycle.repair_restore_dry_run_v1",
         "plugin_id": plugin_id,
         "lifecycle_action": lifecycle_action,
+        "rollback_source": rollback_source,
         "current": {
             "status": _safe_str(current.get("status")).strip(),
             "enabled": bool(current.get("enabled", False)),
@@ -2236,6 +2271,68 @@ def _plugin_lifecycle_receipt_summary(receipt: dict[str, Any]) -> dict[str, Any]
     }
     redacted = redact_governed_display_value(summary)
     return redacted if isinstance(redacted, dict) else {}
+
+
+def _plugin_lifecycle_rollback_source_receipt(
+    *,
+    plugin_id: str,
+    meta: dict[str, Any],
+    lifecycle_before: dict[str, Any],
+    receipt_scan: dict[str, Any],
+) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+    current_receipt_id = _safe_str(meta.get("lifecycle_receipt_id")).strip()
+    current_lifecycle_status = _safe_str(lifecycle_before.get("status")).strip()
+    receipt_scan_summary = _plugin_lifecycle_receipt_scan_summary(receipt_scan)
+    base = {
+        "contract": "plugin.lifecycle.rollback_source_receipt_v1",
+        "required": True,
+        "found": False,
+        "status": "blocked",
+        "reason": "",
+        "plugin_id": plugin_id,
+        "current_lifecycle_receipt_id": current_receipt_id,
+        "current_lifecycle_status": current_lifecycle_status,
+        "receipt_scan": receipt_scan_summary,
+        "receipt": {},
+    }
+    if not current_receipt_id:
+        return None, {**base, "reason": "current_lifecycle_receipt_id_missing"}
+
+    items = receipt_scan.get("items") if isinstance(receipt_scan.get("items"), list) else []
+    source = next(
+        (
+            item
+            for item in items
+            if isinstance(item, dict) and _safe_str(item.get("receipt_id")).strip() == current_receipt_id
+        ),
+        None,
+    )
+    if source is None:
+        return None, {**base, "reason": "current_lifecycle_receipt_not_found"}
+
+    source_action = _safe_str(source.get("action")).strip()
+    if source_action not in _PLUGIN_DISABLE_LIFECYCLE_ACTIONS:
+        return None, {
+            **base,
+            "reason": "current_lifecycle_receipt_not_a_rollback_source",
+            "receipt": _plugin_lifecycle_receipt_summary(source),
+        }
+
+    source_lifecycle_status = _safe_str(source.get("lifecycle_status")).strip()
+    if _normalize_lifecycle_state(source_lifecycle_status) != _normalize_lifecycle_state(current_lifecycle_status):
+        return None, {
+            **base,
+            "reason": "current_lifecycle_receipt_status_mismatch",
+            "receipt": _plugin_lifecycle_receipt_summary(source),
+        }
+
+    return source, {
+        **base,
+        "found": True,
+        "status": "ready",
+        "reason": "current_lifecycle_receipt_bound",
+        "receipt": _plugin_lifecycle_receipt_summary(source),
+    }
 
 
 def _plugin_lifecycle_current_non_blocking_metadata(
@@ -2467,6 +2564,7 @@ def _plugin_lifecycle_governance(
         "route": route,
         "lifecycle_action": lifecycle_action,
         "lifecycle_status": lifecycle_status,
+        "rollback_source_receipt_required": lifecycle_action == "rollback",
         "writes_registry_metadata": writes_registry_metadata,
         "writes_lifecycle_receipt": writes_lifecycle_receipt,
         "dry_run_required_before_apply": dry_run_required_before_apply,
@@ -2525,6 +2623,7 @@ def _write_plugin_lifecycle_receipt(
     catalog: dict[str, Any],
     route: str = "/plugins/disable",
     gate: str = "plugin_lifecycle_disable",
+    lifecycle_evidence: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     previous_meta = dict(previous.get("meta") or {}) if isinstance(previous.get("meta"), dict) else {}
     current_meta = dict(current.get("meta") or {}) if isinstance(current.get("meta"), dict) else {}
@@ -2567,6 +2666,8 @@ def _write_plugin_lifecycle_receipt(
         ),
         "path": str(receipt_path),
     }
+    if isinstance(lifecycle_evidence, dict) and lifecycle_evidence:
+        receipt["lifecycle_evidence"] = redact_governed_display_value(lifecycle_evidence)
     redacted_receipt = _redact_plugin_receipt(receipt)
     _atomic_write_display_json(receipt_path, redacted_receipt)
     return redacted_receipt
@@ -10029,6 +10130,15 @@ def _capability_pack_invocation_routing_guard(
     expected_context = _MISSION_OPERATION_CONTEXT_BY_CAPABILITY.get(capability, "")
     governance = invocation.get("governance") if isinstance(invocation.get("governance"), dict) else {}
     receipt_linkage = invocation.get("receipt_linkage") if isinstance(invocation.get("receipt_linkage"), dict) else {}
+    reuse = invocation.get("reuse") if isinstance(invocation.get("reuse"), dict) else {}
+    if capability == "plugin.tool.run":
+        reuse_operation_capability_field = "operation_tool_capability"
+        reuse_caller_context_field = "mission_tool_context"
+    else:
+        reuse_operation_capability_field = "operation_capability"
+        reuse_caller_context_field = "mission_context"
+    reuse_operation_capability = _safe_str(reuse.get(reuse_operation_capability_field)).strip()
+    reuse_caller_context = _safe_str(reuse.get(reuse_caller_context_field)).strip()
 
     receipt_kind_supported = _safe_str(invocation.get("kind")).strip() == _CAPABILITY_PACK_INVOCATION_RECEIPT_KIND
     receipt_contract_supported = (
@@ -10036,6 +10146,10 @@ def _capability_pack_invocation_routing_guard(
     )
     operation_capability_supported = bool(expected_context)
     caller_context_matches_operation_capability = bool(expected_context and caller_context == expected_context)
+    reuse_operation_capability_matches = bool(
+        operation_capability_supported and reuse_operation_capability == capability
+    )
+    reuse_caller_context_matches = bool(operation_capability_supported and reuse_caller_context == expected_context)
     input_caller_context_matches_operation_capability = (
         bool(input_caller_context and expected_context and input_caller_context == expected_context)
         if input_caller_context
@@ -10071,6 +10185,10 @@ def _capability_pack_invocation_routing_guard(
         reject_reasons.append("caller_context_operation_capability_mismatch")
     if input_caller_context and expected_context and input_caller_context != expected_context:
         reject_reasons.append("input_caller_context_operation_capability_mismatch")
+    if operation_capability_supported and not reuse_operation_capability_matches:
+        reject_reasons.append("reuse_operation_capability_mismatch")
+    if operation_capability_supported and not reuse_caller_context_matches:
+        reject_reasons.append("reuse_caller_context_mismatch")
     if not dispatch_receipt_linkage_complete:
         reject_reasons.append("dispatch_receipt_linkage_missing")
     if not governance_bound:
@@ -10088,6 +10206,12 @@ def _capability_pack_invocation_routing_guard(
         "receipt_kind_supported": receipt_kind_supported,
         "receipt_contract_supported": receipt_contract_supported,
         "caller_context_matches_operation_capability": caller_context_matches_operation_capability,
+        "reuse_operation_capability_field": reuse_operation_capability_field,
+        "reuse_operation_capability": reuse_operation_capability or None,
+        "reuse_operation_capability_matches": reuse_operation_capability_matches,
+        "reuse_caller_context_field": reuse_caller_context_field,
+        "reuse_caller_context": reuse_caller_context or None,
+        "reuse_caller_context_matches": reuse_caller_context_matches,
         "input_caller_context_matches_operation_capability": input_caller_context_matches_operation_capability,
         "dispatch_receipt_linkage_complete": dispatch_receipt_linkage_complete,
         "dispatch_receipt_present": dispatch_receipt_present,
@@ -10372,6 +10496,8 @@ def _capability_pack_invocation_audit_projection(
             "routing_guard_required_for_reuse_proof": True,
             "operation_input_context_contract": _STAGE17_OPERATION_INVOCATION_CALLER_CONTEXT_CONTRACT,
             "operation_input_caller_context_must_match_when_present": True,
+            "reuse_metadata_must_bind_operation_capability": True,
+            "reuse_metadata_must_bind_mission_caller_context": True,
             "dispatch_receipt_linkage_required_for_reuse_proof": True,
             "dispatch_receipt_linkage_requires_run_and_trace_ids": True,
             "mission_plugin_run_context_required": _MISSION_OPERATION_CONTEXT_BY_CAPABILITY["plugin.run"],
@@ -17712,12 +17838,44 @@ def repair_plugin_lifecycle(payload: PluginLifecycleRepairIn, request: Request) 
             }
 
         meta = dict(current.get("meta") or {}) if isinstance(current.get("meta"), dict) else {}
+        rollback_source_receipt: dict[str, Any] | None = None
+        rollback_source_readback: dict[str, Any] = {}
+        if lifecycle_action == "rollback":
+            receipt_scan = _read_plugin_lifecycle_receipts(plugin_id=plugin_id, limit=50)
+            rollback_source_receipt, rollback_source_readback = _plugin_lifecycle_rollback_source_receipt(
+                plugin_id=plugin_id,
+                meta=meta,
+                lifecycle_before=lifecycle_before,
+                receipt_scan=receipt_scan,
+            )
+            if rollback_source_receipt is None:
+                return {
+                    "ok": False,
+                    "applied": False,
+                    "id": plugin_id,
+                    "status": "blocked",
+                    "error": "plugin_lifecycle_rollback_source_receipt_required",
+                    "lifecycle_action": lifecycle_action,
+                    "lifecycle_before": redact_governed_display_value(lifecycle_before),
+                    "rollback_source": rollback_source_readback,
+                    "governance": _plugin_lifecycle_governance(
+                        gate="plugin_lifecycle_repair",
+                        route=request.url.path,
+                        lifecycle_action=lifecycle_action,
+                        lifecycle_status="active",
+                        writes_registry_metadata=False,
+                        writes_lifecycle_receipt=False,
+                        dry_run_required_before_apply=True,
+                    ),
+                }
         repair_plan = _plugin_lifecycle_repair_plan(
             plugin_id=plugin_id,
             current=current,
             meta=meta,
             lifecycle_before=lifecycle_before,
             lifecycle_action=lifecycle_action,
+            rollback_source_receipt=rollback_source_receipt,
+            rollback_source_readback=rollback_source_readback,
         )
         dry_run_fingerprint = _plugin_lifecycle_repair_fingerprint(plan=repair_plan)
         if payload.dry_run:
@@ -17731,6 +17889,7 @@ def repair_plugin_lifecycle(payload: PluginLifecycleRepairIn, request: Request) 
                 "lifecycle_action": lifecycle_action,
                 "lifecycle_before": redact_governed_display_value(lifecycle_before),
                 "planned_lifecycle_repair": repair_plan,
+                "rollback_source": repair_plan.get("rollback_source", {}),
                 "dry_run_fingerprint": dry_run_fingerprint,
                 "dry_run_confirmation": {
                     "required_for_apply": True,
@@ -17760,6 +17919,7 @@ def repair_plugin_lifecycle(payload: PluginLifecycleRepairIn, request: Request) 
                 "target_status": _safe_str(repair_plan.get("target", {}).get("status")).strip(),
                 "lifecycle_action": lifecycle_action,
                 "planned_lifecycle_repair": repair_plan,
+                "rollback_source": repair_plan.get("rollback_source", {}),
                 "dry_run_confirmation": {
                     "required_for_apply": True,
                     "fingerprint_contract": "stage17_plugin_lifecycle_repair_dry_run_v1",
@@ -17828,6 +17988,18 @@ def repair_plugin_lifecycle(payload: PluginLifecycleRepairIn, request: Request) 
             meta["lifecycle_rollback_previous_error"] = previous_lifecycle_error
             meta["lifecycle_rollback_restored_status"] = restored_status
             meta["lifecycle_rollback_restored_promotion_status"] = restored_promotion_status
+            rollback_source = (
+                repair_plan.get("rollback_source") if isinstance(repair_plan.get("rollback_source"), dict) else {}
+            )
+            rollback_source_receipt = (
+                rollback_source.get("receipt") if isinstance(rollback_source.get("receipt"), dict) else {}
+            )
+            meta["lifecycle_rollback_source_receipt_id"] = _safe_str(rollback_source_receipt.get("receipt_id")).strip()
+            meta["lifecycle_rollback_source_action"] = _safe_str(rollback_source_receipt.get("action")).strip()
+            meta["lifecycle_rollback_source_lifecycle_status"] = _safe_str(
+                rollback_source_receipt.get("lifecycle_status")
+            ).strip()
+            meta["lifecycle_rollback_source_receipt_path"] = _safe_str(rollback_source_receipt.get("path")).strip()
             meta["lifecycle_rollback_receipt_id"] = lifecycle_receipt_id
             meta["lifecycle_rollback_receipt_path"] = str(lifecycle_receipt_path)
         meta["lifecycle_receipt_id"] = lifecycle_receipt_id
@@ -17853,6 +18025,9 @@ def repair_plugin_lifecycle(payload: PluginLifecycleRepairIn, request: Request) 
             catalog=catalog,
             route=request.url.path,
             gate="plugin_lifecycle_repair",
+            lifecycle_evidence=(
+                {"rollback_source": repair_plan.get("rollback_source", {})} if lifecycle_action == "rollback" else None
+            ),
         )
         lifecycle_after = _plugin_lifecycle_state(repaired, {})
 
@@ -17871,6 +18046,7 @@ def repair_plugin_lifecycle(payload: PluginLifecycleRepairIn, request: Request) 
             "lifecycle_before": redact_governed_display_value(lifecycle_before),
             "lifecycle_after": redact_governed_display_value(lifecycle_after),
             "planned_lifecycle_repair": repair_plan,
+            "rollback_source": repair_plan.get("rollback_source", {}),
             "dry_run_fingerprint": dry_run_fingerprint,
             "dry_run_confirmation": {
                 "required_for_apply": True,

@@ -87872,6 +87872,214 @@ Remaining truthful gap:
 - This slice does not close a ledger-backed phase gate and does not move the
   Phase 2 posture.
 
+### 2026-06-20 - Stage 17 receipt-bound lifecycle rollback
+
+Roadmap area: Stage 17 / Capability Economy, executable capability lifecycle,
+receipt-bound rollback, governance-preserving repair/apply, and lifecycle
+auditability.
+
+This pass made rollback safer than the generic repair path by requiring rollback
+to bind to the current lifecycle receipt before any dry-run confirmation or
+apply mutation can proceed:
+
+- `POST /plugins/lifecycle/repair` now treats `lifecycle_action=rollback` as a
+  receipt-bound action. The route scans existing `plugin.lifecycle.receipt`
+  records for the plugin's current `meta.lifecycle_receipt_id` and refuses
+  rollback when that source receipt is missing, mismatched, or not produced by
+  the lifecycle disable/quarantine/deprecation path.
+- Rollback dry-runs now include `rollback_source` with the
+  `plugin.lifecycle.rollback_source_receipt_v1` contract, source receipt id,
+  lifecycle status, receipt scan summary, and before/after plan evidence.
+- Successful rollback still requires the existing dry-run fingerprint echo and
+  `plugins.write` scope, keeps the restored capability non-enabled, and writes a
+  new `plugin.lifecycle.receipt` whose `lifecycle_evidence.rollback_source`
+  points at the receipt being rolled back.
+- The rollback path does not promote, enable, execute, approve proposals, write
+  memory, or bypass the existing staged-promotion readiness gate.
+
+Validation:
+
+- `.\.venv\Scripts\python.exe -m py_compile
+  src\francis\api\routes\plugins.py` passed.
+- `.\.venv\Scripts\python.exe -m pytest
+  tests\test_api_plugins.py::test_plugins_lifecycle_rollback_restores_staged_candidate_without_promoting
+  tests\test_api_plugins.py::test_plugins_lifecycle_rollback_requires_current_source_receipt
+  tests\test_api_plugins.py::test_plugins_lifecycle_repair_denies_unscoped_and_refuses_ambiguous_noop
+  -q` passed with `3 passed` and one existing FastAPI/TestClient deprecation
+  warning.
+- `.\.venv\Scripts\python.exe -m pytest
+  tests\test_api_plugins.py::test_plugins_disable_records_quarantine_lifecycle_receipt_and_catalog_readback
+  tests\test_api_plugins.py::test_plugins_disable_lifecycle_denies_unscoped_and_refuses_unsupported_actions
+  tests\test_api_plugins.py::test_plugins_lifecycle_deprecation_and_unknown_state_block_promotion
+  tests\test_api_plugins.py::test_plugins_lifecycle_repair_restores_staged_candidate_without_promoting
+  tests\test_api_plugins.py::test_plugins_lifecycle_rollback_restores_staged_candidate_without_promoting
+  tests\test_api_plugins.py::test_plugins_lifecycle_rollback_requires_current_source_receipt
+  tests\test_api_plugins.py::test_plugins_lifecycle_repair_denies_unscoped_and_refuses_ambiguous_noop
+  tests\test_api_plugins.py::test_plugins_lifecycle_repair_history_reads_receipts_and_apply_safety
+  -q` passed with `8 passed` and one existing FastAPI/TestClient deprecation
+  warning.
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py` passed.
+- `.\.venv\Scripts\python.exe -m ruff format --check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py` passed with
+  `2 files already formatted`.
+- `git diff --check -- src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py` reported no whitespace errors.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. This pass does not claim full lifecycle closure,
+  process a live Stage 17 queue chunk, promote, enable, execute, write a
+  publication marker, commit, push, or close the Stage 17 capability-economy
+  queue.
+- This pass removes only the receiptless rollback ambiguity for the tested
+  lifecycle repair route. Broader migration apply behavior, live backlog
+  reduction, global projection freshness, proposal-review/proposal-evidence
+  closure scope, publication-marker evidence, and full capability-lifecycle
+  closure remain open.
+- This slice does not close a ledger-backed phase gate and does not move the
+  Phase 2 posture.
+
+### 2026-06-20 - Stage 17 third live metadata receipt batch reduction
+
+Roadmap area: Stage 17 / Capability Economy, live capability-pack backlog
+reduction, governed metadata receipt batch intake, queue-count evidence, and
+receipt-backed selected-scope projection timing.
+
+This pass reused the existing metadata-receipt batch route against the next
+smallest current live migration-plan candidate instead of adding a one-off
+metadata patch:
+
+- Initial live readback from
+  `GET /plugins/capabilities/packs/migration/plan` reported
+  `candidate_total=16`, `status=ready_for_metadata_receipt_review`, and
+  `next_smallest_truthful_gap=stage17_capability_pack_metadata_receipt_operator_review`.
+- The selected current migration-plan candidate was
+  `legacy.generated.capabilityqualitydocsplugin`
+  (`pack_version=0.0.0-migration`). The route resolved 15 current capability ids
+  for that pack.
+- The accepted dry-run used `max_pack_count=1`,
+  `max_total_capability_count=15`, and
+  `max_capability_count_per_pack=15`, returned
+  `dry_run_fingerprint=60237412675fb4ca10c60abc342dfc9624d3288075f9a745b1c44dbf0ef41ba3`,
+  `planned_pack_count=1`, `planned_capability_count=15`,
+  `projection_scope=selected_packs`, `global_counts_included=false`,
+  `before_candidate_total=1`, and `before_global_candidate_total=16`, with
+  registry and receipt writes disabled.
+- Apply echoed that exact fingerprint through
+  `POST /plugins/capabilities/packs/metadata/receipts/bulk-from-plan` and wrote
+  batch `stage17_metadata_receipts_bulk_1781992052` plus receipt
+  `data/artifacts/plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781992052_legacy-generated-capabilityqualitydocsplugin.json`.
+- The apply response reported `recorded_pack_count=1`,
+  `recorded_capability_count=15`, `before_candidate_total=1`,
+  `after_candidate_total=0`, `candidate_reduction_count=1`,
+  `remaining_scoped_candidate_total=0`, `remaining_global_candidate_total=15`,
+  and `remaining_candidate_total=15`.
+- Independent readback after apply reported `candidate_total=15`,
+  `target_pack_still_candidate=false`, and the new receipt visible through
+  `/plugins/capabilities/packs/metadata/receipts?limit=5`.
+- The written receipt carries
+  `stage17_capability_pack_metadata_receipts_batch_queue_evidence_v1` in
+  `metadata_context`, selected pack/capability ids, selected/global before
+  counts, the original source blockers, the worker prompt hash, and the existing
+  permission-gated governance flags.
+- The route preserved the no-proposal-approval, no-promotion, no-enable,
+  no-execution, no-generated-artifact-mutation, and no-memory-write boundary.
+
+Validation:
+
+- Live route dry-run and apply through FastAPI `TestClient` with temporary
+  `stage17.operator` actor scope mapped to `plugins.write` passed. Both runs
+  emitted the existing FastAPI/TestClient deprecation warning.
+- Independent live readback after apply confirmed the selected pack was removed
+  from the migration candidate list and the global candidate total moved from
+  `16` to `15`.
+- `.\.venv\Scripts\python.exe -m pytest
+  tests\test_api_plugins.py::test_plugins_capability_pack_metadata_receipts_bulk_from_migration_plan
+  tests\test_api_plugins.py::test_plugins_capability_pack_metadata_receipts_bulk_selected_batch_reports_before_after_counts
+  -q` passed with `2 passed` and one existing FastAPI/TestClient deprecation
+  warning.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. This pass does not claim full global queue closure,
+  promote, enable, execute, write a publication marker, commit, push, or close
+  the Stage 17 capability-economy queue.
+- This pass reduces one live metadata-receipt migration candidate through the
+  existing selected-batch mechanism. It does not close broader live backlog
+  reduction, global projection freshness, proposal-review/proposal-evidence
+  closure scope, publication-marker evidence, or full capability-lifecycle
+  closure.
+- This slice does not close a ledger-backed phase gate and does not move the
+  Phase 2 posture.
+
+### 2026-06-20 - Stage 17 reuse-metadata routing guard proof
+
+Roadmap area: Stage 17 / Capability Economy, reusable governed invocation,
+mission-to-capability routing guard hardening, receipt-linked reuse proof, and
+read-only invocation auditability.
+
+This pass tightened the existing reusable invocation audit proof so a persisted
+mission operation is eligible for reuse proof only when the embedded
+`plugin.capability_pack.invocation_receipt` metadata binds the same reusable
+pack to the expected mission operation shape:
+
+- The existing `stage17_capability_pack_invocation_routing_guard_v1` readback
+  now checks the embedded receipt's `reuse` metadata for the expected operation
+  capability and mission caller context before the operation record can
+  contribute to reuse proof.
+- `plugin.run` operation records must carry `reuse.operation_capability` equal
+  to `plugin.run` and `reuse.mission_context` equal to
+  `mission_linked_operation`. `plugin.tool.run` operation records must carry
+  `reuse.operation_tool_capability` equal to `plugin.tool.run` and
+  `reuse.mission_tool_context` equal to `mission_linked_tool_operation`.
+- `/plugins/capabilities/library/invocations/audit` now declares the new
+  requirements as `reuse_metadata_must_bind_operation_capability` and
+  `reuse_metadata_must_bind_mission_caller_context` while preserving the
+  existing read-only audit route and dispatch receipt-linkage proof.
+- The focused Stage 17 fixture still proves one governed pack across direct
+  plugin/tool dry-run receipts and mission-linked plugin/tool operation
+  receipts, then adds a tampered persisted operation with correct outer mission
+  context and dispatch linkage but mismatched reusable invocation metadata. The
+  audit rejects that record with `reuse_operation_capability_mismatch` and
+  `reuse_caller_context_mismatch`.
+- No new route, parallel invocation substrate, desktop action, registry
+  promotion, capability enablement, memory write, or execution authority was
+  added. The audit still derives proof only from existing operation records with
+  embedded invocation receipts.
+
+Validation:
+
+- `.\.venv\Scripts\python.exe -m py_compile
+  src\francis\api\routes\plugins.py tests\test_api_missions.py` passed.
+- `.\.venv\Scripts\python.exe -m pytest
+  tests\test_api_missions.py::test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_mission_contexts
+  -q` passed with one existing FastAPI/TestClient deprecation warning.
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_missions.py` passed.
+- `.\.venv\Scripts\python.exe -m ruff format --diff --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_missions.py` passed with
+  `2 files already formatted`.
+- `git diff --check -- src\francis\api\routes\plugins.py
+  tests\test_api_missions.py docs\operations\COMPLETION_LEDGER.md` reported no
+  whitespace errors after this ledger entry.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. This pass does not claim full reusable invocation
+  coverage, process a live Stage 17 queue chunk, promote or enable a capability
+  beyond the isolated test fixture, execute desktop actions, write a
+  publication marker, commit, push, or close the Stage 17 capability-economy
+  queue.
+- This pass removes only the narrow route-guard blocker where a tampered
+  persisted operation could otherwise keep correct outer mission context and
+  dispatch linkage while misdeclaring the embedded reusable invocation metadata.
+  Broader live backlog reduction, global projection freshness,
+  proposal-review/proposal-evidence closure scope, publication-marker evidence,
+  and full capability-lifecycle closure remain open.
+- This slice does not close a ledger-backed phase gate and does not move the
+  Phase 2 posture.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

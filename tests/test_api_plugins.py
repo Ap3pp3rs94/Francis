@@ -1000,6 +1000,11 @@ def test_plugins_lifecycle_rollback_restores_staged_candidate_without_promoting(
     assert dry_run_body["status"] == "dry_run"
     assert dry_run_body["lifecycle_action"] == "rollback"
     assert dry_run_body["planned_lifecycle_repair"]["lifecycle_action"] == "rollback"
+    assert dry_run_body["rollback_source"]["contract"] == "plugin.lifecycle.rollback_source_receipt_v1"
+    assert dry_run_body["rollback_source"]["found"] is True
+    assert dry_run_body["rollback_source"]["status"] == "ready"
+    assert dry_run_body["rollback_source"]["receipt"]["receipt_id"] == quarantined_body["lifecycle_receipt_id"]
+    assert dry_run_body["rollback_source"]["receipt"]["action"] == "quarantine"
     assert dry_run_body["planned_lifecycle_repair"]["target"]["status"] == "staged"
     assert dry_run_body["planned_lifecycle_repair"]["target"]["enabled"] is False
     assert len(list(lifecycle_dir.glob("*.json"))) == receipt_count_before_rollback
@@ -1023,6 +1028,8 @@ def test_plugins_lifecycle_rollback_restores_staged_candidate_without_promoting(
     assert rolled_back_body["lifecycle_rollback_status"] == "rolled_back"
     assert rolled_back_body["lifecycle_before"]["status"] == "quarantined"
     assert rolled_back_body["lifecycle_after"]["status"] == "active"
+    assert rolled_back_body["rollback_source"]["found"] is True
+    assert rolled_back_body["rollback_source"]["receipt"]["receipt_id"] == quarantined_body["lifecycle_receipt_id"]
     assert rolled_back_body["governance"]["gate"] == "plugin_lifecycle_repair"
     assert rolled_back_body["governance"]["writes_registry_metadata"] is True
     assert rolled_back_body["governance"]["writes_lifecycle_receipt"] is True
@@ -1046,6 +1053,11 @@ def test_plugins_lifecycle_rollback_restores_staged_candidate_without_promoting(
     assert rollback_receipt["previous"]["lifecycle_status"] == "quarantined"
     assert rollback_receipt["current"]["status"] == "staged"
     assert rollback_receipt["current"]["enabled"] is False
+    assert rollback_receipt["lifecycle_evidence"]["rollback_source"]["found"] is True
+    assert (
+        rollback_receipt["lifecycle_evidence"]["rollback_source"]["receipt"]["receipt_id"]
+        == quarantined_body["lifecycle_receipt_id"]
+    )
     assert rollback_receipt["governance"]["route"] == "/plugins/lifecycle/repair"
 
     fetched = client.get(f"/plugins/get?id={plugin_id}")
@@ -1058,6 +1070,9 @@ def test_plugins_lifecycle_rollback_restores_staged_candidate_without_promoting(
     assert fetched_meta["lifecycle_repair_action"] == "rollback"
     assert fetched_meta["lifecycle_rollback_status"] == "rolled_back"
     assert fetched_meta["lifecycle_rollback_previous_status"] == "quarantined"
+    assert fetched_meta["lifecycle_rollback_source_receipt_id"] == quarantined_body["lifecycle_receipt_id"]
+    assert fetched_meta["lifecycle_rollback_source_action"] == "quarantine"
+    assert fetched_meta["lifecycle_rollback_source_lifecycle_status"] == "quarantined"
     assert fetched_meta["lifecycle_rollback_receipt_id"] == rolled_back_body["lifecycle_receipt_id"]
 
     history = client.get(f"/plugins/lifecycle/repair/history?id={plugin_id}")
@@ -1077,6 +1092,78 @@ def test_plugins_lifecycle_rollback_restores_staged_candidate_without_promoting(
     assert run_rolled_back_body["ok"] is False
     assert run_rolled_back_body["error"] == "plugin_staged"
     assert run_rolled_back_body["status"] == "staged"
+
+
+def test_plugins_lifecycle_rollback_requires_current_source_receipt(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    client = TestClient(create_app())
+    installed = client.post(
+        "/plugins/install",
+        json={
+            "source_kind": "registry",
+            "source_ref": "acme/lifecycle-rollback-source-required",
+            "reason": "install lifecycle rollback source fixture",
+            "actor": _PLUGIN_ACTOR,
+        },
+    )
+    assert installed.status_code == 200
+    installed_body = installed.json()
+    assert installed_body["ok"] is True
+    plugin_id = str(installed_body["plugin_id"])
+
+    registry = plugins._load_registry()
+    plugin = plugins._read_plugin(registry, plugin_id)
+    assert plugin is not None
+    meta = dict(plugin.get("meta") or {})
+    meta["lifecycle_status"] = "quarantined"
+    plugin["meta"] = meta
+    plugin["enabled"] = False
+    plugin["status"] = "disabled"
+    plugins._write_plugin(registry, plugins._normalize_plugin_record(plugin_id, plugin))
+    plugins._save_registry_and_catalog(registry)
+
+    blocked = client.post(
+        "/plugins/lifecycle/repair",
+        json={
+            "id": plugin_id,
+            "actor": _PLUGIN_ACTOR,
+            "reason": "attempt rollback without lifecycle receipt",
+            "meta": {"lifecycle_action": "rollback"},
+        },
+    )
+
+    assert blocked.status_code == 200
+    blocked_body = blocked.json()
+    assert blocked_body["ok"] is False
+    assert blocked_body["applied"] is False
+    assert blocked_body["status"] == "blocked"
+    assert blocked_body["error"] == "plugin_lifecycle_rollback_source_receipt_required"
+    assert blocked_body["rollback_source"]["required"] is True
+    assert blocked_body["rollback_source"]["found"] is False
+    assert blocked_body["rollback_source"]["reason"] == "current_lifecycle_receipt_id_missing"
+    assert blocked_body["governance"]["writes_registry_metadata"] is False
+    assert blocked_body["governance"]["writes_lifecycle_receipt"] is False
+    assert blocked_body["governance"]["rollback_source_receipt_required"] is True
+
+    after = client.get(f"/plugins/get?id={plugin_id}")
+    assert after.status_code == 200
+    after_item = after.json()["item"]
+    assert after_item["status"] == "disabled"
+    assert after_item["enabled"] is False
+    assert after_item["meta"]["lifecycle_status"] == "quarantined"
+    assert "lifecycle_rollback_status" not in after_item["meta"]
+    lifecycle_dir = data_root / "artifacts" / "plugins" / "lifecycle"
+    assert not lifecycle_dir.exists() or list(lifecycle_dir.glob("*.json")) == []
 
 
 def test_plugins_lifecycle_repair_denies_unscoped_and_refuses_ambiguous_noop(
