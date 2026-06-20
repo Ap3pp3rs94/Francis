@@ -1982,6 +1982,115 @@ def _plugin_lifecycle_repair_promotion_status(
     return "staged" if restored_status == "staged" else "disabled"
 
 
+def _plugin_lifecycle_last_non_blocking_metadata(
+    current: dict[str, Any],
+    meta: dict[str, Any],
+    lifecycle: dict[str, Any],
+    *,
+    restored_status: str,
+    restored_promotion_status: str,
+) -> dict[str, Any]:
+    lifecycle_status = _safe_str(lifecycle.get("status")).strip()
+    candidates = [
+        (f"registry.meta.{lifecycle_status}_from_status", meta.get(f"{lifecycle_status}_from_status")),
+        ("registry.meta.disabled_from_status", meta.get("disabled_from_status")),
+        ("registry.meta.status", meta.get("status")),
+        ("registry.status", current.get("status")),
+        (
+            f"registry.meta.{lifecycle_status}_from_promotion_status",
+            meta.get(f"{lifecycle_status}_from_promotion_status"),
+        ),
+        ("registry.meta.disabled_from_promotion_status", meta.get("disabled_from_promotion_status")),
+        ("registry.meta.promotion_status", meta.get("promotion_status")),
+    ]
+    selected = {"source": "", "raw": "", "status": ""}
+    for source, value in candidates:
+        normalized = _normalize_lifecycle_state(value)
+        if normalized in _PLUGIN_LIFECYCLE_NON_BLOCKING_STATES:
+            selected = {
+                "source": source,
+                "raw": _safe_str(value).strip(),
+                "status": normalized,
+            }
+            break
+    return {
+        **selected,
+        "safe_registry_status": restored_status,
+        "safe_promotion_status": restored_promotion_status,
+        "target_lifecycle_status": "active",
+        "safe_enabled": False,
+    }
+
+
+def _plugin_lifecycle_repair_plan(
+    *,
+    plugin_id: str,
+    current: dict[str, Any],
+    meta: dict[str, Any],
+    lifecycle_before: dict[str, Any],
+    lifecycle_action: str,
+) -> dict[str, Any]:
+    restored_status = _plugin_lifecycle_repair_status(current, meta, lifecycle_before)
+    restored_promotion_status = _plugin_lifecycle_repair_promotion_status(
+        meta,
+        lifecycle_before,
+        restored_status,
+    )
+    current_lifecycle_status = _safe_str(meta.get("lifecycle_status")).strip()
+    current_promotion_status = _safe_str(meta.get("promotion_status")).strip()
+    return {
+        "contract": "plugin.lifecycle.repair_restore_dry_run_v1",
+        "plugin_id": plugin_id,
+        "lifecycle_action": lifecycle_action,
+        "current": {
+            "status": _safe_str(current.get("status")).strip(),
+            "enabled": bool(current.get("enabled", False)),
+            "promotion_status": current_promotion_status,
+            "lifecycle_status": current_lifecycle_status,
+            "lifecycle_receipt_id": _safe_str(meta.get("lifecycle_receipt_id")).strip(),
+            "updated_ts": int(current.get("updated_ts") or 0),
+        },
+        "lifecycle_before": redact_governed_display_value(lifecycle_before),
+        "target": {
+            "status": restored_status,
+            "enabled": False,
+            "promotion_status": restored_promotion_status,
+            "lifecycle_status": "active",
+            "lifecycle_state": "active",
+        },
+        "metadata_clears": [
+            "capability_lifecycle_status",
+            "deprecation_status",
+            "quarantine_status",
+        ],
+        "last_non_blocking_lifecycle_metadata": _plugin_lifecycle_last_non_blocking_metadata(
+            current,
+            meta,
+            lifecycle_before,
+            restored_status=restored_status,
+            restored_promotion_status=restored_promotion_status,
+        ),
+        "writes": {
+            "registry_metadata": True,
+            "lifecycle_receipt": True,
+            "promotion": False,
+            "enablement": False,
+            "execution": False,
+            "memory": False,
+        },
+    }
+
+
+def _plugin_lifecycle_repair_fingerprint(*, plan: dict[str, Any]) -> str:
+    body = {
+        "contract": "stage17_plugin_lifecycle_repair_dry_run_v1",
+        "route": _PLUGIN_LIFECYCLE_REPAIR_ROUTE,
+        "plan": redact_governed_display_value(plan),
+    }
+    raw = json.dumps(body, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
+
 def _plugin_lifecycle_governance(
     *,
     gate: str = "plugin_lifecycle_disable",
@@ -1990,6 +2099,7 @@ def _plugin_lifecycle_governance(
     lifecycle_status: str,
     writes_registry_metadata: bool,
     writes_lifecycle_receipt: bool,
+    dry_run_required_before_apply: bool = False,
 ) -> dict[str, Any]:
     lifecycle_authority = bool(writes_registry_metadata or writes_lifecycle_receipt)
     return {
@@ -2001,6 +2111,7 @@ def _plugin_lifecycle_governance(
         "lifecycle_status": lifecycle_status,
         "writes_registry_metadata": writes_registry_metadata,
         "writes_lifecycle_receipt": writes_lifecycle_receipt,
+        "dry_run_required_before_apply": dry_run_required_before_apply,
         "does_not_promote_capabilities": True,
         "does_not_enable_capabilities": True,
         "does_not_execute_capabilities": True,
@@ -2020,6 +2131,7 @@ def _unsupported_plugin_lifecycle_action(
     route: str = "/plugins/disable",
     gate: str = "plugin_lifecycle_disable",
     supported_actions: list[str] | None = None,
+    dry_run_required_before_apply: bool = False,
 ) -> dict[str, object]:
     return {
         "ok": False,
@@ -2036,6 +2148,7 @@ def _unsupported_plugin_lifecycle_action(
             lifecycle_status="unsupported",
             writes_registry_metadata=False,
             writes_lifecycle_receipt=False,
+            dry_run_required_before_apply=dry_run_required_before_apply,
         ),
     }
 
@@ -10634,6 +10747,11 @@ class PluginToggleIn(BaseModel):
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
+class PluginLifecycleRepairIn(PluginToggleIn):
+    dry_run: bool = True
+    dry_run_fingerprint: str = ""
+
+
 class CapabilityPackOperatorReviewDecisionIn(BaseModel):
     pack_id: str
     pack_version: str
@@ -16583,7 +16701,7 @@ def disable_plugin(payload: PluginToggleIn, request: Request) -> dict[str, objec
 
 
 @router.post("/lifecycle/repair")
-def repair_plugin_lifecycle(payload: PluginToggleIn, request: Request) -> dict[str, object]:
+def repair_plugin_lifecycle(payload: PluginLifecycleRepairIn, request: Request) -> dict[str, object]:
     try:
         permission = _write_permission(payload.actor, route=request.url.path, method=request.method)
         if not permission.allowed:
@@ -16606,6 +16724,7 @@ def repair_plugin_lifecycle(payload: PluginToggleIn, request: Request) -> dict[s
                 route=request.url.path,
                 gate="plugin_lifecycle_repair",
                 supported_actions=["repair", "restore"],
+                dry_run_required_before_apply=True,
             )
 
         lifecycle_before = _plugin_lifecycle_state(current, payload_meta)
@@ -16625,24 +16744,87 @@ def repair_plugin_lifecycle(payload: PluginToggleIn, request: Request) -> dict[s
                     lifecycle_status="active",
                     writes_registry_metadata=False,
                     writes_lifecycle_receipt=False,
+                    dry_run_required_before_apply=True,
+                ),
+            }
+
+        meta = dict(current.get("meta") or {}) if isinstance(current.get("meta"), dict) else {}
+        repair_plan = _plugin_lifecycle_repair_plan(
+            plugin_id=plugin_id,
+            current=current,
+            meta=meta,
+            lifecycle_before=lifecycle_before,
+            lifecycle_action=lifecycle_action,
+        )
+        dry_run_fingerprint = _plugin_lifecycle_repair_fingerprint(plan=repair_plan)
+        if payload.dry_run:
+            return {
+                "ok": True,
+                "applied": False,
+                "id": plugin_id,
+                "status": "dry_run",
+                "current_status": _safe_str(current.get("status")).strip(),
+                "target_status": _safe_str(repair_plan.get("target", {}).get("status")).strip(),
+                "lifecycle_action": lifecycle_action,
+                "lifecycle_before": redact_governed_display_value(lifecycle_before),
+                "planned_lifecycle_repair": repair_plan,
+                "dry_run_fingerprint": dry_run_fingerprint,
+                "dry_run_confirmation": {
+                    "required_for_apply": True,
+                    "fingerprint": dry_run_fingerprint,
+                    "fingerprint_contract": "stage17_plugin_lifecycle_repair_dry_run_v1",
+                    "apply_route": request.url.path,
+                },
+                "governance": _plugin_lifecycle_governance(
+                    gate="plugin_lifecycle_repair",
+                    route=request.url.path,
+                    lifecycle_action=lifecycle_action,
+                    lifecycle_status="active",
+                    writes_registry_metadata=False,
+                    writes_lifecycle_receipt=False,
+                    dry_run_required_before_apply=True,
+                ),
+            }
+        provided_dry_run_fingerprint = _safe_str(payload.dry_run_fingerprint).strip()
+        if provided_dry_run_fingerprint != dry_run_fingerprint:
+            return {
+                "ok": False,
+                "applied": False,
+                "id": plugin_id,
+                "status": "blocked",
+                "error": "plugin_lifecycle_repair_dry_run_confirmation_required",
+                "current_status": _safe_str(current.get("status")).strip(),
+                "target_status": _safe_str(repair_plan.get("target", {}).get("status")).strip(),
+                "lifecycle_action": lifecycle_action,
+                "planned_lifecycle_repair": repair_plan,
+                "dry_run_confirmation": {
+                    "required_for_apply": True,
+                    "fingerprint_contract": "stage17_plugin_lifecycle_repair_dry_run_v1",
+                    "fingerprint_matched": False,
+                    "apply_route": request.url.path,
+                },
+                "governance": _plugin_lifecycle_governance(
+                    gate="plugin_lifecycle_repair",
+                    route=request.url.path,
+                    lifecycle_action=lifecycle_action,
+                    lifecycle_status="active",
+                    writes_registry_metadata=False,
+                    writes_lifecycle_receipt=False,
+                    dry_run_required_before_apply=True,
                 ),
             }
 
         repaired_ts = _now_s()
         actor = redact_governed_value(_safe_str(payload.actor).strip())
         previous = dict(current)
-        meta = dict(current.get("meta") or {}) if isinstance(current.get("meta"), dict) else {}
         previous_status = _safe_str(current.get("status")).strip().lower()
         previous_lifecycle_status = _safe_str(lifecycle_before.get("status")).strip()
         previous_lifecycle_source = _safe_str(lifecycle_before.get("source")).strip()
         previous_lifecycle_error = _safe_str(lifecycle_before.get("error")).strip()
         previous_lifecycle_receipt_id = _safe_str(meta.get("lifecycle_receipt_id")).strip()
-        restored_status = _plugin_lifecycle_repair_status(current, meta, lifecycle_before)
-        restored_promotion_status = _plugin_lifecycle_repair_promotion_status(
-            meta,
-            lifecycle_before,
-            restored_status,
-        )
+        target = repair_plan.get("target") if isinstance(repair_plan.get("target"), dict) else {}
+        restored_status = _safe_str(target.get("status")).strip() or "disabled"
+        restored_promotion_status = _safe_str(target.get("promotion_status")).strip() or "disabled"
         lifecycle_receipt_id = _plugin_lifecycle_receipt_id(plugin_id, lifecycle_action, repaired_ts)
         lifecycle_receipt_path = _plugin_lifecycle_receipt_path(lifecycle_receipt_id)
 
@@ -16712,6 +16894,14 @@ def repair_plugin_lifecycle(payload: PluginToggleIn, request: Request) -> dict[s
             "lifecycle_repair_status": "repaired",
             "lifecycle_before": redact_governed_display_value(lifecycle_before),
             "lifecycle_after": redact_governed_display_value(lifecycle_after),
+            "planned_lifecycle_repair": repair_plan,
+            "dry_run_fingerprint": dry_run_fingerprint,
+            "dry_run_confirmation": {
+                "required_for_apply": True,
+                "fingerprint_matched": True,
+                "fingerprint_contract": "stage17_plugin_lifecycle_repair_dry_run_v1",
+                "apply_route": request.url.path,
+            },
             "lifecycle_receipt_id": lifecycle_receipt_id,
             "lifecycle_receipt_path": str(lifecycle_receipt_path),
             "lifecycle_receipt": lifecycle_receipt,
@@ -16722,6 +16912,7 @@ def repair_plugin_lifecycle(payload: PluginToggleIn, request: Request) -> dict[s
                 lifecycle_status="active",
                 writes_registry_metadata=True,
                 writes_lifecycle_receipt=True,
+                dry_run_required_before_apply=True,
             ),
             "catalog": catalog,
         }

@@ -1066,7 +1066,6 @@ def test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_missio
                 "id": plugin_id,
                 "action": "run",
                 "input": "mission invocation proof",
-                "meta": {"caller_context": "mission_linked_operation"},
             },
         },
     )
@@ -1115,7 +1114,6 @@ def test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_missio
             "input": {
                 "id": tool_id,
                 "input": "mission tool invocation proof",
-                "meta": {"caller_context": "mission_linked_tool_operation"},
             },
         },
     )

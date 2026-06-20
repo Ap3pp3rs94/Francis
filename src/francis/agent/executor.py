@@ -557,8 +557,7 @@ def _write_verification_receipt(
         return {}
 
 
-def _task_mission_id(task: dict[str, Any]) -> str:
-    inputs = task.get("inputs")
+def _operation_input_mission_id(inputs: dict[str, Any]) -> str:
     if not isinstance(inputs, dict):
         return ""
     for key in ("mission_id", "current_task_mission_id", "handoff_mission_id"):
@@ -572,6 +571,24 @@ def _task_mission_id(task: dict[str, Any]) -> str:
             if mission_id:
                 return mission_id
     return ""
+
+
+def _task_mission_id(task: dict[str, Any]) -> str:
+    inputs = task.get("inputs")
+    return _operation_input_mission_id(inputs) if isinstance(inputs, dict) else ""
+
+
+def _mission_linked_caller_meta(
+    inputs: dict[str, Any],
+    meta: dict[str, Any],
+    *,
+    caller_context: str,
+) -> dict[str, Any]:
+    if not _operation_input_mission_id(inputs) or _safe_str(meta.get("caller_context")).strip():
+        return meta
+    updated = dict(meta)
+    updated["caller_context"] = caller_context
+    return updated
 
 
 def _sync_task_transition_to_mission(task: dict[str, Any], *, note: str) -> None:
@@ -1013,6 +1030,7 @@ def _cap_plugin_run(inputs: dict[str, Any], objective: str) -> dict[str, Any]:
     meta = _coerce_meta(inputs.get("meta"))
     if approval_id and "approval_id" not in meta:
         meta["approval_id"] = approval_id
+    meta = _mission_linked_caller_meta(inputs, meta, caller_context="mission_linked_operation")
     try:
         from francis.api.routes import plugins as plugin_routes
 
@@ -1046,6 +1064,7 @@ def _cap_plugin_tool_run(inputs: dict[str, Any], objective: str) -> dict[str, An
     meta = _coerce_meta(inputs.get("meta"))
     if approval_id and "approval_id" not in meta:
         meta["approval_id"] = approval_id
+    meta = _mission_linked_caller_meta(inputs, meta, caller_context="mission_linked_tool_operation")
     try:
         from francis.api.routes import plugins as plugin_routes
 

@@ -772,16 +772,70 @@ def test_plugins_lifecycle_repair_restores_staged_candidate_without_promoting(
     assert blocked_before_body["error"] == "promotion_readiness_blocked"
     assert blocked_before_body["readiness"]["missing_requirements"] == ["lifecycle_state"]
 
+    lifecycle_dir = data_root / "artifacts" / "plugins" / "lifecycle"
+    receipt_count_before_repair = len(list(lifecycle_dir.glob("*.json")))
+    repair_payload = {
+        "id": plugin_id,
+        "actor": _PLUGIN_ACTOR,
+        "reason": "operator repaired deprecated lifecycle state after review",
+        "meta": {
+            "lifecycle_action": "restore",
+            "repair_ref": "operator.lifecycle.repair.1",
+        },
+    }
+
+    repair_dry_run = client.post("/plugins/lifecycle/repair", json=repair_payload)
+    assert repair_dry_run.status_code == 200
+    dry_run_body = repair_dry_run.json()
+    assert dry_run_body["ok"] is True
+    assert dry_run_body["applied"] is False
+    assert dry_run_body["status"] == "dry_run"
+    assert len(dry_run_body["dry_run_fingerprint"]) == 64
+    assert dry_run_body["dry_run_confirmation"]["required_for_apply"] is True
+    assert dry_run_body["dry_run_confirmation"]["fingerprint"] == dry_run_body["dry_run_fingerprint"]
+    assert dry_run_body["dry_run_confirmation"]["fingerprint_contract"] == (
+        "stage17_plugin_lifecycle_repair_dry_run_v1"
+    )
+    assert dry_run_body["planned_lifecycle_repair"]["target"]["status"] == "staged"
+    assert dry_run_body["planned_lifecycle_repair"]["target"]["enabled"] is False
+    assert dry_run_body["planned_lifecycle_repair"]["target"]["lifecycle_status"] == "active"
+    last_non_blocking = dry_run_body["planned_lifecycle_repair"]["last_non_blocking_lifecycle_metadata"]
+    assert last_non_blocking["status"] == "staged"
+    assert last_non_blocking["safe_registry_status"] == "staged"
+    assert last_non_blocking["safe_enabled"] is False
+    assert dry_run_body["governance"]["writes_registry_metadata"] is False
+    assert dry_run_body["governance"]["writes_lifecycle_receipt"] is False
+    assert dry_run_body["governance"]["dry_run_required_before_apply"] is True
+    assert len(list(lifecycle_dir.glob("*.json"))) == receipt_count_before_repair
+
+    after_dry_run = client.get(f"/plugins/get?id={plugin_id}")
+    assert after_dry_run.status_code == 200
+    after_dry_run_item = after_dry_run.json()["item"]
+    assert after_dry_run_item["status"] == "disabled"
+    assert after_dry_run_item["enabled"] is False
+    assert after_dry_run_item["meta"]["lifecycle_status"] == "deprecated"
+
+    blocked_mismatch = client.post(
+        "/plugins/lifecycle/repair",
+        json={**repair_payload, "dry_run": False, "dry_run_fingerprint": "x" * 64},
+    )
+    assert blocked_mismatch.status_code == 200
+    blocked_mismatch_body = blocked_mismatch.json()
+    assert blocked_mismatch_body["ok"] is False
+    assert blocked_mismatch_body["applied"] is False
+    assert blocked_mismatch_body["status"] == "blocked"
+    assert blocked_mismatch_body["error"] == "plugin_lifecycle_repair_dry_run_confirmation_required"
+    assert blocked_mismatch_body["dry_run_confirmation"]["fingerprint_matched"] is False
+    assert blocked_mismatch_body["governance"]["writes_registry_metadata"] is False
+    assert blocked_mismatch_body["governance"]["writes_lifecycle_receipt"] is False
+    assert len(list(lifecycle_dir.glob("*.json"))) == receipt_count_before_repair
+
     repaired = client.post(
         "/plugins/lifecycle/repair",
         json={
-            "id": plugin_id,
-            "actor": _PLUGIN_ACTOR,
-            "reason": "operator repaired deprecated lifecycle state after review",
-            "meta": {
-                "lifecycle_action": "restore",
-                "repair_ref": "operator.lifecycle.repair.1",
-            },
+            **repair_payload,
+            "dry_run": False,
+            "dry_run_fingerprint": dry_run_body["dry_run_fingerprint"],
         },
     )
     assert repaired.status_code == 200
@@ -806,6 +860,9 @@ def test_plugins_lifecycle_repair_restores_staged_candidate_without_promoting(
     assert repaired_body["governance"]["promotion_authority"] is False
     assert repaired_body["governance"]["execution_authority"] is False
     assert repaired_body["governance"]["memory_write"] is False
+    assert repaired_body["dry_run_confirmation"]["fingerprint_matched"] is True
+    assert repaired_body["dry_run_fingerprint"] == dry_run_body["dry_run_fingerprint"]
+    assert len(list(lifecycle_dir.glob("*.json"))) == receipt_count_before_repair + 1
 
     receipt_path = Path(str(repaired_body["lifecycle_receipt_path"]))
     assert receipt_path.exists()
