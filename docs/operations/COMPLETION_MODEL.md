@@ -50,6 +50,9 @@ It emits one JSON object with:
 - the proposal-evidence reference guard, which states that choosing a Stage 17
   gap is not proof that proposal evidence, proposal reviews, validation
   receipts, or quality-evidence references have been verified
+- the publication evidence guard, which states that choosing a Stage 17 gap is
+  not proof of a GitHub push, publication marker, no-change receipt, or
+  blocked-with-evidence receipt
 - the percentage movement rules
 
 The model is read-only. The API route is backed by the Francis Python substrate,
@@ -111,6 +114,14 @@ quality-evidence refs. Proposal-evidence claims require an existing governed
 route, bounded plugin id scope, proposal/review/evidence references, and focused
 validation.
 
+The selected-gap contract is also not publication proof. A selected Stage 17 gap
+can route a worker to a bounded slice, but it does not prove that the slice has
+been committed, pushed, represented by a PM-owned publication marker, accepted
+as an explicit no-change receipt, or blocked with evidence. Publication claims
+require the PM-owned marker to reference the matching prompt hash and represent a
+GitHub push, explicit no-change receipt, or blocked-with-evidence receipt, with
+focused validation named.
+
 ## Percentage Rule
 
 The model does not invent numeric completion baselines. Overall Francis and
@@ -154,6 +165,10 @@ Every `continue` run should satisfy these guards:
   proposal evidence refs, and proposal-evidence movement needs existing route
   evidence, bounded plugin scope, proposal/review/validation refs, and focused
   validation
+- keep Stage 17 publication claims marker-backed: selected gaps are not
+  publication evidence, and publication claims need a PM-owned marker with the
+  matching prompt hash, GitHub push or explicit no-change/blocked receipt, and
+  focused validation
 
 ## Non-Goals
 

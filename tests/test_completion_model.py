@@ -63,6 +63,10 @@ def test_completion_model_snapshot_is_read_only_and_loop_guarded() -> None:
     assert selected_gap_contract["projection_generated_at_verified"] is False
     assert selected_gap_contract["projection_is_fresh"] is False
     assert selected_gap_contract["projection_timing_authority_granted"] is False
+    assert selected_gap_contract["selected_gap_is_publication_evidence"] is False
+    assert selected_gap_contract["github_publication_verified"] is False
+    assert selected_gap_contract["publication_marker_verified"] is False
+    assert selected_gap_contract["publication_authority_granted"] is False
     assert selected_gap_contract["stage17_readback_authority_denied"] is True
     assert selected_gap_contract["future_stage17_apply_requires"] == [
         "existing_governed_route",
@@ -93,6 +97,12 @@ def test_completion_model_snapshot_is_read_only_and_loop_guarded() -> None:
         "bounded_plugin_id_scope",
         "focused_validation",
     ]
+    assert selected_gap_contract["future_stage17_publication_claim_requires"] == [
+        "pm_owned_publication_marker",
+        "matching_prompt_sha256",
+        "github_push_or_explicit_no_change_or_blocked_receipt",
+        "focused_validation",
+    ]
     checklist = {item["id"]: item for item in payload["continue_loop_guard"]["checklist"]}
     assert checklist["stage17_lane_gap_preserved"]["status"] == "ready"
     assert checklist["stage17_lane_gap_preserved"]["evidence"]
@@ -105,6 +115,8 @@ def test_completion_model_snapshot_is_read_only_and_loop_guarded() -> None:
     assert "generated_at or receipt timestamp" in checklist["stage17_projection_timing_evidence_guard"]["evidence"]
     assert checklist["stage17_proposal_evidence_reference_guard"]["status"] == "enforced"
     assert "proposal-review receipt" in checklist["stage17_proposal_evidence_reference_guard"]["evidence"]
+    assert checklist["stage17_publication_evidence_guard"]["status"] == "enforced"
+    assert "matching prompt hash" in checklist["stage17_publication_evidence_guard"]["evidence"]
 
 
 def test_completion_model_snapshot_blocks_when_sources_are_missing(tmp_path: Path) -> None:
@@ -137,6 +149,7 @@ def test_completion_model_snapshot_blocks_when_sources_are_missing(tmp_path: Pat
     assert checklist["stage17_queue_count_evidence_guard"] == "enforced"
     assert checklist["stage17_projection_timing_evidence_guard"] == "enforced"
     assert checklist["stage17_proposal_evidence_reference_guard"] == "enforced"
+    assert checklist["stage17_publication_evidence_guard"] == "enforced"
 
 
 def test_completion_model_snapshot_reads_wrapped_roadmap_area(tmp_path: Path) -> None:
@@ -277,6 +290,10 @@ def test_completion_model_snapshot_keeps_stage17_gap_when_latest_entry_is_other_
     assert selected_gap_contract["projection_generated_at_verified"] is False
     assert selected_gap_contract["projection_is_fresh"] is False
     assert selected_gap_contract["projection_timing_authority_granted"] is False
+    assert selected_gap_contract["selected_gap_is_publication_evidence"] is False
+    assert selected_gap_contract["github_publication_verified"] is False
+    assert selected_gap_contract["publication_marker_verified"] is False
+    assert selected_gap_contract["publication_authority_granted"] is False
     assert selected_gap_contract["future_stage17_queue_count_claim_requires"] == [
         "route_readback_or_apply_response",
         "projection_scope",
@@ -298,6 +315,12 @@ def test_completion_model_snapshot_keeps_stage17_gap_when_latest_entry_is_other_
         "proposal_review_receipt_ref",
         "validation_receipt_or_quality_evidence_ref",
         "bounded_plugin_id_scope",
+        "focused_validation",
+    ]
+    assert selected_gap_contract["future_stage17_publication_claim_requires"] == [
+        "pm_owned_publication_marker",
+        "matching_prompt_sha256",
+        "github_push_or_explicit_no_change_or_blocked_receipt",
         "focused_validation",
     ]
 
@@ -331,3 +354,5 @@ def test_completion_model_status_route_is_mounted_and_read_only() -> None:
     assert (
         body["next_continue_decision"]["selected_gap_contract"]["selected_gap_is_projection_timing_evidence"] is False
     )
+    assert body["next_continue_decision"]["selected_gap_contract"]["selected_gap_is_publication_evidence"] is False
+    assert body["next_continue_decision"]["selected_gap_contract"]["publication_authority_granted"] is False

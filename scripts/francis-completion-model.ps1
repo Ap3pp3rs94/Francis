@@ -324,6 +324,12 @@ function New-CompletionLoopGuard {
       status = 'enforced'
       required_before_continue = $true
       evidence = 'Selected Stage 17 gaps are not proposal-evidence references; proposal evidence claims require proposal artifact, proposal-review receipt, validation or quality-evidence reference, bounded plugin scope, and focused validation'
+    },
+    [ordered]@{
+      id = 'stage17_publication_evidence_guard'
+      status = 'enforced'
+      required_before_continue = $true
+      evidence = 'Selected Stage 17 gaps are not publication evidence; publication claims require a PM-owned publication marker with matching prompt hash, GitHub push or explicit no-change/blocked receipt, and focused validation'
     }
   )
 
@@ -380,6 +386,10 @@ function New-SelectedGapContract {
     projection_generated_at_verified = $false
     projection_is_fresh = $false
     projection_timing_authority_granted = $false
+    selected_gap_is_publication_evidence = $false
+    github_publication_verified = $false
+    publication_marker_verified = $false
+    publication_authority_granted = $false
     stage17_readback_authority_denied = $true
     future_stage17_apply_requires = @(
       'existing_governed_route',
@@ -408,6 +418,12 @@ function New-SelectedGapContract {
       'proposal_review_receipt_ref',
       'validation_receipt_or_quality_evidence_ref',
       'bounded_plugin_id_scope',
+      'focused_validation'
+    )
+    future_stage17_publication_claim_requires = @(
+      'pm_owned_publication_marker',
+      'matching_prompt_sha256',
+      'github_push_or_explicit_no_change_or_blocked_receipt',
       'focused_validation'
     )
   }

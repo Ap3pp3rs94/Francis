@@ -156,6 +156,10 @@ def _selected_gap_contract(*, selected_source: str, stage17_gap_preferred: bool)
         "projection_generated_at_verified": False,
         "projection_is_fresh": False,
         "projection_timing_authority_granted": False,
+        "selected_gap_is_publication_evidence": False,
+        "github_publication_verified": False,
+        "publication_marker_verified": False,
+        "publication_authority_granted": False,
         "stage17_readback_authority_denied": True,
         "future_stage17_apply_requires": [
             "existing_governed_route",
@@ -184,6 +188,12 @@ def _selected_gap_contract(*, selected_source: str, stage17_gap_preferred: bool)
             "proposal_review_receipt_ref",
             "validation_receipt_or_quality_evidence_ref",
             "bounded_plugin_id_scope",
+            "focused_validation",
+        ],
+        "future_stage17_publication_claim_requires": [
+            "pm_owned_publication_marker",
+            "matching_prompt_sha256",
+            "github_push_or_explicit_no_change_or_blocked_receipt",
             "focused_validation",
         ],
     }
@@ -421,6 +431,16 @@ def _loop_guard(
                 "Selected Stage 17 gaps are not proposal-evidence references; proposal evidence claims require "
                 "proposal artifact, proposal-review receipt, validation or quality-evidence reference, bounded "
                 "plugin scope, and focused validation"
+            ),
+        },
+        {
+            "id": "stage17_publication_evidence_guard",
+            "status": "enforced",
+            "required_before_continue": True,
+            "evidence": (
+                "Selected Stage 17 gaps are not publication evidence; publication claims require a PM-owned "
+                "publication marker with matching prompt hash, GitHub push or explicit no-change/blocked receipt, "
+                "and focused validation"
             ),
         },
     ]
