@@ -808,6 +808,8 @@ function New-ManualAcousticOrbPositionProof {
   $VoiceTranscriptSource = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Voice -Name 'transcript_source' -Default '') -MaxLength 120
   $VoiceMicClaimed = [bool](Get-PropertyValue -Payload $Voice -Name 'microphone_recognition_claimed' -Default $false)
   $VoiceWakeDetected = [bool](Get-PropertyValue -Payload $Voice -Name 'wake_phrase_detected' -Default $false)
+  $RequiredAcousticCommandSource = 'local_overlay_speech_recognition'
+  $VoiceCommandSourceTrusted = ($VoiceCommandSource -eq $RequiredAcousticCommandSource)
   $VoiceLocalOrbCommand = (
     [bool](Get-PropertyValue -Payload $Voice -Name 'local_overlay_command' -Default $false) -and
     [bool](Get-PropertyValue -Payload $Voice -Name 'voice_orb_command' -Default $false) -and
@@ -837,6 +839,7 @@ function New-ManualAcousticOrbPositionProof {
   $ReceiptTranscriptSource = if ($null -ne $LatestOrbPositionCommandReceipt) { ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $LatestOrbPositionCommandReceipt -Name 'transcript_source' -Default '') -MaxLength 120 } else { '' }
   $ReceiptMicClaimed = if ($null -ne $LatestOrbPositionCommandReceipt) { [bool](Get-PropertyValue -Payload $LatestOrbPositionCommandReceipt -Name 'microphone_recognition_claimed' -Default $false) } else { $false }
   $ReceiptWakeDetected = if ($null -ne $LatestOrbPositionCommandReceipt) { [bool](Get-PropertyValue -Payload $LatestOrbPositionCommandReceipt -Name 'wake_phrase_detected' -Default $false) } else { $false }
+  $ReceiptCommandSourceTrusted = ($ReceiptCommandSource -eq $RequiredAcousticCommandSource)
   $ReceiptApplied = if ($null -ne $LatestOrbPositionCommandReceipt) {
     [bool](Get-PropertyValue -Payload $LatestOrbPositionCommandReceipt -Name 'applied' -Default $false) -and
     [string](Get-PropertyValue -Payload $LatestOrbPositionCommandReceipt -Name 'status' -Default '') -eq 'orb_voice_command_applied'
@@ -862,19 +865,22 @@ function New-ManualAcousticOrbPositionProof {
     -not [string]::IsNullOrWhiteSpace($ReceiptId) -and
     $ReceiptApplied -and
     $ReceiptMicClaimed -and
+    $ReceiptCommandSourceTrusted -and
     $ReceiptWakeDetected -and
     $ReceiptCommandMatchesVoice -and
     $ReceiptRequestMatchesVoice
   )
-  $VoiceCommandCountsAsAcousticProof = ($VoiceLocalOrbCommand -and $VoiceMicClaimed -and $VoiceWakeDetected)
+  $VoiceCommandCountsAsAcousticProof = ($VoiceLocalOrbCommand -and $VoiceMicClaimed -and $VoiceCommandSourceTrusted -and $VoiceWakeDetected)
   $ReceiptCountsAsAcousticProof = ($ReceiptMatchesVoice -and $ReceiptFresh)
-  $ProofObserved = ($VoiceLocalOrbCommand -and $VoiceMicClaimed -and $VoiceWakeDetected -and $ReceiptMatchesVoice -and $ReceiptFresh)
+  $ProofObserved = ($VoiceCommandCountsAsAcousticProof -and $ReceiptMatchesVoice -and $ReceiptFresh)
   $Status = if ($ProofObserved) {
     'fresh_acoustic_orb_position_command_observed'
-  } elseif ($VoiceLocalOrbCommand -and $VoiceMicClaimed -and $VoiceWakeDetected -and $ReceiptMatchesVoice) {
+  } elseif ($VoiceCommandCountsAsAcousticProof -and $ReceiptMatchesVoice) {
     'stale_acoustic_orb_position_command_observed'
   } elseif ($VoiceLocalOrbCommand -and -not $VoiceMicClaimed) {
     'latest_orb_position_command_not_microphone_origin'
+  } elseif ($VoiceLocalOrbCommand -and -not $VoiceCommandSourceTrusted) {
+    'latest_orb_position_command_not_local_overlay_speech_origin'
   } elseif ($VoiceInputReady -and $WakeListening -and $SignalObserved) {
     'ready_for_operator_acoustic_test'
   } elseif (-not $VoiceInputReady) {
@@ -894,6 +900,8 @@ function New-ManualAcousticOrbPositionProof {
     'awaiting_operator_spoken_orb_command'
   } elseif (-not $VoiceMicClaimed) {
     'latest_voice_command_not_microphone_origin'
+  } elseif (-not $VoiceCommandSourceTrusted) {
+    'latest_voice_command_not_local_overlay_speech_recognition'
   } elseif (-not $VoiceWakeDetected) {
     'latest_voice_command_missing_wake_phrase'
   } elseif ([string]::IsNullOrWhiteSpace($ReceiptId)) {
@@ -902,6 +910,8 @@ function New-ManualAcousticOrbPositionProof {
     'latest_orb_receipt_not_applied'
   } elseif (-not $ReceiptMicClaimed) {
     'latest_orb_receipt_not_microphone_origin'
+  } elseif (-not $ReceiptCommandSourceTrusted) {
+    'latest_orb_receipt_not_local_overlay_speech_recognition'
   } elseif (-not $ReceiptWakeDetected) {
     'latest_orb_receipt_missing_wake_phrase'
   } elseif (-not $ReceiptCommandMatchesVoice) {
@@ -919,6 +929,8 @@ function New-ManualAcousticOrbPositionProof {
     'repeat_hey_francis_move_left_or_right'
   } elseif ($Status -eq 'latest_orb_position_command_not_microphone_origin') {
     'say_hey_francis_move_left_or_right_to_create_microphone_origin_receipt'
+  } elseif ($Status -eq 'latest_orb_position_command_not_local_overlay_speech_origin') {
+    'say_hey_francis_move_left_or_right_to_create_local_overlay_speech_receipt'
   } elseif ($Status -eq 'ready_for_operator_acoustic_test') {
     'say_hey_francis_move_left_or_right'
   } elseif ($Status -eq 'voice_input_not_ready') {
@@ -932,10 +944,12 @@ function New-ManualAcousticOrbPositionProof {
     microphone_signal_observed = [bool]$SignalObserved
     local_overlay_speech_command_observed = [bool]$VoiceLocalOrbCommand
     voice_command_microphone_origin = [bool]$VoiceMicClaimed
+    voice_command_local_overlay_speech_source = [bool]$VoiceCommandSourceTrusted
     voice_command_wake_phrase_observed = [bool]$VoiceWakeDetected
     orb_receipt_observed = -not [string]::IsNullOrWhiteSpace($ReceiptId)
     orb_receipt_applied = [bool]$ReceiptApplied
     orb_receipt_microphone_origin = [bool]$ReceiptMicClaimed
+    orb_receipt_local_overlay_speech_source = [bool]$ReceiptCommandSourceTrusted
     orb_receipt_wake_phrase_observed = [bool]$ReceiptWakeDetected
     orb_receipt_command_matches_voice = [bool]$ReceiptCommandMatchesVoice
     orb_receipt_request_matches_voice = [bool]$ReceiptRequestMatchesVoice
@@ -958,6 +972,60 @@ function New-ManualAcousticOrbPositionProof {
   }
   $FailedRequirements = [string[]]$FailedRequirementItems.ToArray()
   $FirstFailedRequirement = if ($FailedRequirements.Count -gt 0) { $FailedRequirements[0] } else { 'none' }
+  $VoiceCommandRejectionReason = if ($VoiceCommandCountsAsAcousticProof) {
+    'none'
+  } elseif (-not $VoiceLocalOrbCommand) {
+    'no_local_overlay_speech_command'
+  } elseif (-not $VoiceMicClaimed) {
+    'latest_voice_command_not_microphone_origin'
+  } elseif (-not $VoiceCommandSourceTrusted) {
+    'latest_voice_command_not_local_overlay_speech_recognition'
+  } elseif (-not $VoiceWakeDetected) {
+    'latest_voice_command_missing_wake_phrase'
+  } else {
+    'unknown_voice_command_acoustic_rejection'
+  }
+  $OrbReceiptRejectionReason = if ($ReceiptCountsAsAcousticProof) {
+    'none'
+  } elseif ([string]::IsNullOrWhiteSpace($ReceiptId)) {
+    'no_orb_position_receipt'
+  } elseif (-not $ReceiptApplied) {
+    'latest_orb_receipt_not_applied'
+  } elseif (-not $ReceiptMicClaimed) {
+    'latest_orb_receipt_not_microphone_origin'
+  } elseif (-not $ReceiptCommandSourceTrusted) {
+    'latest_orb_receipt_not_local_overlay_speech_recognition'
+  } elseif (-not $ReceiptWakeDetected) {
+    'latest_orb_receipt_missing_wake_phrase'
+  } elseif (-not $ReceiptCommandMatchesVoice) {
+    'orb_receipt_command_mismatch'
+  } elseif (-not $ReceiptRequestMatchesVoice) {
+    'orb_receipt_request_mismatch'
+  } elseif (-not $ReceiptFresh) {
+    'orb_receipt_stale'
+  } else {
+    'unknown_orb_receipt_acoustic_rejection'
+  }
+  $ProofSourceContract = [ordered]@{
+    required_voice_command_source = $RequiredAcousticCommandSource
+    required_orb_receipt_command_source = $RequiredAcousticCommandSource
+    requires_microphone_recognition_claim = $true
+    requires_wake_phrase = $true
+    requires_matching_command = $true
+    requires_matching_request_id_or_receipt_id = $true
+    requires_applied_receipt = $true
+    requires_fresh_receipt_seconds = $FreshnessSeconds
+    api_injected_text_counts_as_proof = $false
+    chatgpt_bridge_file_counts_as_proof = $false
+    transcript_redacted = $true
+    stores_transcript = $false
+  }
+  $ProofRejectionReasons = [ordered]@{
+    latest_voice_command = $VoiceCommandRejectionReason
+    latest_orb_receipt = $OrbReceiptRejectionReason
+    first_failed_requirement = $FirstFailedRequirement
+    proof_blocker = $ProofBlocker
+  }
   $ProofDiagnosticSummary = [ordered]@{
     first_failed_requirement = $FirstFailedRequirement
     proof_blocker = $ProofBlocker
@@ -966,19 +1034,23 @@ function New-ManualAcousticOrbPositionProof {
     local_overlay_speech_command_observed = [bool]$VoiceLocalOrbCommand
     latest_voice_command_source = $VoiceCommandSource
     latest_voice_microphone_recognition_claimed = [bool]$VoiceMicClaimed
+    latest_voice_local_overlay_speech_source = [bool]$VoiceCommandSourceTrusted
     latest_voice_wake_phrase_detected = [bool]$VoiceWakeDetected
     latest_voice_command_counts_as_acoustic_proof = [bool]$VoiceCommandCountsAsAcousticProof
     latest_orb_receipt_id = $ReceiptId
     latest_orb_receipt_command_source = $ReceiptCommandSource
     latest_orb_receipt_applied = [bool]$ReceiptApplied
     latest_orb_receipt_microphone_recognition_claimed = [bool]$ReceiptMicClaimed
+    latest_orb_receipt_local_overlay_speech_source = [bool]$ReceiptCommandSourceTrusted
     latest_orb_receipt_wake_phrase_detected = [bool]$ReceiptWakeDetected
     latest_orb_receipt_command_matches_voice = [bool]$ReceiptCommandMatchesVoice
     latest_orb_receipt_request_matches_voice = [bool]$ReceiptRequestMatchesVoice
     latest_orb_receipt_age_seconds = $ReceiptAgeSeconds
     latest_orb_receipt_fresh = [bool]$ReceiptFresh
     latest_orb_receipt_counts_as_acoustic_proof = [bool]$ReceiptCountsAsAcousticProof
-    required_receipt_source = 'local_overlay_speech_recognition'
+    latest_voice_command_rejection_reason = $VoiceCommandRejectionReason
+    latest_orb_receipt_rejection_reason = $OrbReceiptRejectionReason
+    required_receipt_source = $RequiredAcousticCommandSource
     api_injected_text_counts_as_proof = $false
     transcript_redacted = $true
     stores_transcript = $false
@@ -992,6 +1064,8 @@ function New-ManualAcousticOrbPositionProof {
     failed_requirements = $FailedRequirements
     requirement_checks = $RequirementChecks
     proof_diagnostic_summary = $ProofDiagnosticSummary
+    proof_source_contract = $ProofSourceContract
+    proof_rejection_reasons = $ProofRejectionReasons
     freshness_window_seconds = $FreshnessSeconds
     voice_input_ready = [bool]$VoiceInputReady
     wake_listening = [bool]$WakeListening
@@ -1012,14 +1086,17 @@ function New-ManualAcousticOrbPositionProof {
     latest_voice_command_source = $VoiceCommandSource
     latest_voice_transcript_source = $VoiceTranscriptSource
     latest_voice_microphone_recognition_claimed = [bool]$VoiceMicClaimed
+    latest_voice_local_overlay_speech_source = [bool]$VoiceCommandSourceTrusted
     latest_voice_wake_phrase_detected = [bool]$VoiceWakeDetected
     latest_voice_command_counts_as_acoustic_proof = [bool]$VoiceCommandCountsAsAcousticProof
+    latest_voice_command_rejection_reason = $VoiceCommandRejectionReason
     latest_orb_receipt_id = $ReceiptId
     latest_orb_receipt_command = $ReceiptCommand
     latest_orb_receipt_request_id = $ReceiptRequestId
     latest_orb_receipt_command_source = $ReceiptCommandSource
     latest_orb_receipt_transcript_source = $ReceiptTranscriptSource
     latest_orb_receipt_microphone_recognition_claimed = [bool]$ReceiptMicClaimed
+    latest_orb_receipt_local_overlay_speech_source = [bool]$ReceiptCommandSourceTrusted
     latest_orb_receipt_wake_phrase_detected = [bool]$ReceiptWakeDetected
     latest_orb_receipt_applied = [bool]$ReceiptApplied
     latest_orb_receipt_age_seconds = $ReceiptAgeSeconds
@@ -1027,6 +1104,7 @@ function New-ManualAcousticOrbPositionProof {
     latest_orb_receipt_matches_latest_voice_command = [bool]$ReceiptCommandMatchesVoice
     latest_orb_receipt_matches_latest_voice_request = [bool]$ReceiptRequestMatchesVoice
     latest_orb_receipt_counts_as_acoustic_proof = [bool]$ReceiptCountsAsAcousticProof
+    latest_orb_receipt_rejection_reason = $OrbReceiptRejectionReason
     next_operator_step = $NextStep
     grants_execution_authority = $false
     grants_mutation_authority = $false

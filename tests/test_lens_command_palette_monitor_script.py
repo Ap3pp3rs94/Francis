@@ -741,10 +741,32 @@ def test_lens_command_palette_monitor_probe_records_voice_health(tmp_path: Path)
     assert requirement_checks["wake_listener_ready"] is True
     assert requirement_checks["microphone_signal_observed"] is True
     assert requirement_checks["local_overlay_speech_command_observed"] is False
+    assert requirement_checks["voice_command_local_overlay_speech_source"] is False
     assert requirement_checks["orb_receipt_observed"] is False
+    assert requirement_checks["orb_receipt_local_overlay_speech_source"] is False
     assert requirement_checks["api_injected_text_rejected"] is True
     assert requirement_checks["transcript_redacted"] is True
     assert requirement_checks["stores_transcript"] is False
+    assert acoustic_proof["proof_source_contract"] == {
+        "required_voice_command_source": "local_overlay_speech_recognition",
+        "required_orb_receipt_command_source": "local_overlay_speech_recognition",
+        "requires_microphone_recognition_claim": True,
+        "requires_wake_phrase": True,
+        "requires_matching_command": True,
+        "requires_matching_request_id_or_receipt_id": True,
+        "requires_applied_receipt": True,
+        "requires_fresh_receipt_seconds": 300,
+        "api_injected_text_counts_as_proof": False,
+        "chatgpt_bridge_file_counts_as_proof": False,
+        "transcript_redacted": True,
+        "stores_transcript": False,
+    }
+    assert acoustic_proof["proof_rejection_reasons"] == {
+        "latest_voice_command": "no_local_overlay_speech_command",
+        "latest_orb_receipt": "no_orb_position_receipt",
+        "first_failed_requirement": "local_overlay_speech_command_observed",
+        "proof_blocker": "awaiting_operator_spoken_orb_command",
+    }
     assert acoustic_proof["api_injected_text_counts_as_proof"] is False
     assert acoustic_proof["latest_voice_command_counts_as_acoustic_proof"] is False
     assert acoustic_proof["latest_orb_receipt_counts_as_acoustic_proof"] is False
@@ -821,9 +843,14 @@ def test_lens_command_palette_monitor_reports_applied_orb_voice_command(tmp_path
     assert acoustic_proof["proof_blocker"] == "latest_voice_command_not_microphone_origin"
     assert acoustic_proof["first_failed_requirement"] == "voice_command_microphone_origin"
     assert "voice_command_microphone_origin" in acoustic_proof["failed_requirements"]
+    assert "voice_command_local_overlay_speech_source" in acoustic_proof["failed_requirements"]
     assert acoustic_proof["api_injected_text_counts_as_proof"] is False
     assert acoustic_proof["latest_voice_command_counts_as_acoustic_proof"] is False
     assert acoustic_proof["latest_orb_receipt_counts_as_acoustic_proof"] is False
+    assert acoustic_proof["proof_rejection_reasons"]["latest_voice_command"] == (
+        "latest_voice_command_not_microphone_origin"
+    )
+    assert acoustic_proof["proof_rejection_reasons"]["latest_orb_receipt"] == "no_orb_position_receipt"
 
 
 def test_lens_command_palette_monitor_reports_acoustic_orb_position_proof(tmp_path: Path) -> None:
@@ -930,10 +957,12 @@ def test_lens_command_palette_monitor_reports_acoustic_orb_position_proof(tmp_pa
     assert requirement_checks["microphone_signal_observed"] is True
     assert requirement_checks["local_overlay_speech_command_observed"] is True
     assert requirement_checks["voice_command_microphone_origin"] is True
+    assert requirement_checks["voice_command_local_overlay_speech_source"] is True
     assert requirement_checks["voice_command_wake_phrase_observed"] is True
     assert requirement_checks["orb_receipt_observed"] is True
     assert requirement_checks["orb_receipt_applied"] is True
     assert requirement_checks["orb_receipt_microphone_origin"] is True
+    assert requirement_checks["orb_receipt_local_overlay_speech_source"] is True
     assert requirement_checks["orb_receipt_wake_phrase_observed"] is True
     assert requirement_checks["orb_receipt_command_matches_voice"] is True
     assert requirement_checks["orb_receipt_request_matches_voice"] is True
@@ -948,18 +977,22 @@ def test_lens_command_palette_monitor_reports_acoustic_orb_position_proof(tmp_pa
     assert proof_diagnostic["latest_voice_status"] == "orb_voice_command_applied"
     assert proof_diagnostic["latest_voice_command_source"] == "local_overlay_speech_recognition"
     assert proof_diagnostic["latest_voice_microphone_recognition_claimed"] is True
+    assert proof_diagnostic["latest_voice_local_overlay_speech_source"] is True
     assert proof_diagnostic["latest_voice_wake_phrase_detected"] is True
     assert proof_diagnostic["latest_voice_command_counts_as_acoustic_proof"] is True
     assert proof_diagnostic["latest_orb_receipt_id"] == "local-orb-left-proof"
     assert proof_diagnostic["latest_orb_receipt_command_source"] == "local_overlay_speech_recognition"
     assert proof_diagnostic["latest_orb_receipt_applied"] is True
     assert proof_diagnostic["latest_orb_receipt_microphone_recognition_claimed"] is True
+    assert proof_diagnostic["latest_orb_receipt_local_overlay_speech_source"] is True
     assert proof_diagnostic["latest_orb_receipt_wake_phrase_detected"] is True
     assert proof_diagnostic["latest_orb_receipt_command_matches_voice"] is True
     assert proof_diagnostic["latest_orb_receipt_request_matches_voice"] is True
     assert proof_diagnostic["latest_orb_receipt_age_seconds"] >= 0
     assert proof_diagnostic["latest_orb_receipt_fresh"] is True
     assert proof_diagnostic["latest_orb_receipt_counts_as_acoustic_proof"] is True
+    assert proof_diagnostic["latest_voice_command_rejection_reason"] == "none"
+    assert proof_diagnostic["latest_orb_receipt_rejection_reason"] == "none"
     assert proof_diagnostic["required_receipt_source"] == "local_overlay_speech_recognition"
     assert proof_diagnostic["api_injected_text_counts_as_proof"] is False
     assert proof_diagnostic["transcript_redacted"] is True
@@ -968,17 +1001,28 @@ def test_lens_command_palette_monitor_reports_acoustic_orb_position_proof(tmp_pa
     assert acoustic_proof["latest_voice_command_source"] == "local_overlay_speech_recognition"
     assert acoustic_proof["latest_voice_transcript_source"] == "microphone_wake_listener"
     assert acoustic_proof["latest_voice_microphone_recognition_claimed"] is True
+    assert acoustic_proof["latest_voice_local_overlay_speech_source"] is True
     assert acoustic_proof["latest_voice_command_counts_as_acoustic_proof"] is True
+    assert acoustic_proof["latest_voice_command_rejection_reason"] == "none"
     assert acoustic_proof["latest_orb_receipt_id"] == "local-orb-left-proof"
     assert acoustic_proof["diagnostic_paths"]["latest_orb_receipt"] == (
         "data/runtime/lens-overlay/orb-position-commands/local-orb-left-proof.json"
     )
     assert acoustic_proof["latest_orb_receipt_microphone_recognition_claimed"] is True
+    assert acoustic_proof["latest_orb_receipt_local_overlay_speech_source"] is True
     assert acoustic_proof["latest_orb_receipt_wake_phrase_detected"] is True
     assert acoustic_proof["latest_orb_receipt_fresh"] is True
     assert acoustic_proof["latest_orb_receipt_matches_latest_voice_command"] is True
     assert acoustic_proof["latest_orb_receipt_matches_latest_voice_request"] is True
     assert acoustic_proof["latest_orb_receipt_counts_as_acoustic_proof"] is True
+    assert acoustic_proof["latest_orb_receipt_rejection_reason"] == "none"
+    assert acoustic_proof["proof_source_contract"]["chatgpt_bridge_file_counts_as_proof"] is False
+    assert acoustic_proof["proof_rejection_reasons"] == {
+        "latest_voice_command": "none",
+        "latest_orb_receipt": "none",
+        "first_failed_requirement": "none",
+        "proof_blocker": "none",
+    }
     assert acoustic_proof["api_injected_text_counts_as_proof"] is False
     assert "redacted-hash" not in json.dumps(acoustic_proof, sort_keys=True)
     checks = {item["id"]: item for item in payload["checks"]}
@@ -1032,7 +1076,9 @@ def test_lens_command_palette_monitor_can_require_manual_acoustic_orb_proof(tmp_
     assert requirement_checks["wake_listener_ready"] is True
     assert requirement_checks["microphone_signal_observed"] is True
     assert requirement_checks["local_overlay_speech_command_observed"] is False
+    assert requirement_checks["voice_command_local_overlay_speech_source"] is False
     assert requirement_checks["orb_receipt_observed"] is False
+    assert requirement_checks["orb_receipt_local_overlay_speech_source"] is False
     assert requirement_checks["api_injected_text_rejected"] is True
     assert requirement_checks["transcript_redacted"] is True
     assert requirement_checks["stores_transcript"] is False
@@ -1045,22 +1091,32 @@ def test_lens_command_palette_monitor_can_require_manual_acoustic_orb_proof(tmp_
         "local_overlay_speech_command_observed": False,
         "latest_voice_command_source": "",
         "latest_voice_microphone_recognition_claimed": False,
+        "latest_voice_local_overlay_speech_source": False,
         "latest_voice_wake_phrase_detected": False,
         "latest_voice_command_counts_as_acoustic_proof": False,
         "latest_orb_receipt_id": "",
         "latest_orb_receipt_command_source": "",
         "latest_orb_receipt_applied": False,
         "latest_orb_receipt_microphone_recognition_claimed": False,
+        "latest_orb_receipt_local_overlay_speech_source": False,
         "latest_orb_receipt_wake_phrase_detected": False,
         "latest_orb_receipt_command_matches_voice": False,
         "latest_orb_receipt_request_matches_voice": False,
         "latest_orb_receipt_age_seconds": None,
         "latest_orb_receipt_fresh": False,
         "latest_orb_receipt_counts_as_acoustic_proof": False,
+        "latest_voice_command_rejection_reason": "no_local_overlay_speech_command",
+        "latest_orb_receipt_rejection_reason": "no_orb_position_receipt",
         "required_receipt_source": "local_overlay_speech_recognition",
         "api_injected_text_counts_as_proof": False,
         "transcript_redacted": True,
         "stores_transcript": False,
+    }
+    assert acoustic_proof["proof_rejection_reasons"] == {
+        "latest_voice_command": "no_local_overlay_speech_command",
+        "latest_orb_receipt": "no_orb_position_receipt",
+        "first_failed_requirement": "local_overlay_speech_command_observed",
+        "proof_blocker": "awaiting_operator_spoken_orb_command",
     }
     assert acoustic_proof["api_injected_text_counts_as_proof"] is False
     assert acoustic_proof["latest_voice_command_counts_as_acoustic_proof"] is False
@@ -1082,6 +1138,77 @@ def test_lens_command_palette_monitor_can_require_manual_acoustic_orb_proof(tmp_
         "receipt_fresh=False "
         "next_operator_step=say_hey_francis_move_left_or_right"
     )
+
+
+def test_lens_command_palette_monitor_rejects_bridge_file_orb_receipt_as_acoustic_proof(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    status_path = tmp_path / "lens-status.json"
+    _write_json(status_path, _lens_status())
+    _write_overlay_voice_runtime(data_dir)
+    receipt_dir = data_dir / "runtime" / "lens-overlay" / "orb-position-commands"
+    _write_json(
+        receipt_dir / "bridge-orb-left.json",
+        {
+            "kind": "lens.overlay.orb_position_command.receipt",
+            "receipt_id": "bridge-orb-left",
+            "status": "orb_voice_command_applied",
+            "ok": True,
+            "request_id": "bridge-orb-left",
+            "command": "move_orb_left_side",
+            "command_source": "chatgpt_voice_bridge_file_request",
+            "target_side": "left",
+            "target_anchor": "voice_command_left_side",
+            "applied": True,
+            "client_origin": "chatgpt_voice_bridge_file_request",
+            "microphone_recognition_claimed": False,
+            "microphone_speech": False,
+            "wake_phrase_detected": False,
+            "transcript_source": "chatgpt_voice_bridge_command_request",
+            "transcript": "this bridge-file transcript must stay out of monitor summaries",
+            "transcript_redacted": True,
+            "stores_transcript": False,
+            "bounded_overlay_position_mutation": True,
+            "mutation_authority_scope": "runtime_overlay_position_only",
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+    )
+
+    with _LocalCommandPaletteServer() as url:
+        proc = _run_monitor(
+            "-Mode",
+            "Probe",
+            "-DataDir",
+            str(data_dir),
+            "-CommandPaletteUrl",
+            url,
+            "-LensStatusPath",
+            str(status_path),
+            "-EnableVoiceChecks",
+            "-VoiceProvider",
+            "ElevenLabs",
+            "-RequireManualAcousticOrbProof",
+            "-TimeoutSeconds",
+            "3",
+        )
+
+    assert proc.returncode == 1
+    payload = _json_stdout(proc.stdout)
+    acoustic_proof = payload["voice_monitor"]["manual_acoustic_orb_position_proof"]
+    assert acoustic_proof["proof_observed"] is False
+    assert acoustic_proof["proof_blocker"] == "awaiting_operator_spoken_orb_command"
+    assert acoustic_proof["latest_orb_receipt_id"] == "bridge-orb-left"
+    assert acoustic_proof["latest_orb_receipt_command_source"] == "chatgpt_voice_bridge_file_request"
+    assert acoustic_proof["latest_orb_receipt_microphone_recognition_claimed"] is False
+    assert acoustic_proof["latest_orb_receipt_local_overlay_speech_source"] is False
+    assert acoustic_proof["latest_orb_receipt_counts_as_acoustic_proof"] is False
+    assert acoustic_proof["latest_orb_receipt_rejection_reason"] == "latest_orb_receipt_not_microphone_origin"
+    assert acoustic_proof["proof_rejection_reasons"]["latest_orb_receipt"] == (
+        "latest_orb_receipt_not_microphone_origin"
+    )
+    assert acoustic_proof["proof_source_contract"]["chatgpt_bridge_file_counts_as_proof"] is False
+    assert "voice_manual_acoustic_orb_position_proof" in {item["id"] for item in payload["anomalies"]}
+    assert "bridge-file transcript must stay out" not in json.dumps(acoustic_proof, sort_keys=True)
 
 
 def test_lens_command_palette_monitor_can_require_chatgpt_mcp_proof(tmp_path: Path) -> None:
