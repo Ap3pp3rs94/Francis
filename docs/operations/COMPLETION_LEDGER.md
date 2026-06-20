@@ -87596,6 +87596,139 @@ Remaining truthful gap:
 - This slice does not close a ledger-backed phase gate and does not move the
   Phase 2 posture.
 
+### 2026-06-20 - Stage 17 multi-mission invocation audit proof
+
+Roadmap area: Stage 17 / Capability Economy, reusable governed invocation,
+mission-linked capability-pack reuse, receipt-backed audit readback, and
+cross-context leverage.
+
+This pass tightened the existing reusable invocation audit proof so one pack's
+leverage can be observed across more than one mission record, not only across
+operation capability shapes:
+
+- `/plugins/capabilities/library/invocations/audit` now groups eligible
+  embedded `plugin.capability_pack.invocation_receipt` records by
+  `pack_reuse_key` and mission id, then reports
+  `mission_ids_by_pack_reuse_key`, `multi_mission_reuse_proven`, and
+  `multi_mission_reuse_keys`.
+- The proof still depends on the existing routing guard, dispatch receipt
+  linkage, mission-linked operation records, and matching pack reuse keys. It
+  does not infer direct-route receipts or claim reuse from catalog metadata
+  alone.
+- The focused Stage 17 test now runs the same promoted pack through direct
+  plugin dry-run, direct tool dry-run, mission-linked plugin run,
+  mission-linked tool run, and a second mission-linked plugin run. The audit
+  readback proves three eligible mission-linked invocation receipts, two
+  mission ids, both supported mission operation shapes, and unchanged
+  governance boundaries.
+
+Validation:
+
+- `.\.venv\Scripts\python.exe -m py_compile
+  src\francis\api\routes\plugins.py tests\test_api_missions.py` passed.
+- `.\.venv\Scripts\python.exe -m pytest
+  tests\test_api_missions.py::test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_mission_contexts
+  -q` passed with one existing FastAPI/TestClient deprecation warning.
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_missions.py` passed.
+- `.\.venv\Scripts\python.exe -m ruff format --check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_missions.py` passed with
+  `2 files already formatted`.
+- `git diff --check -- src\francis\api\routes\plugins.py
+  tests\test_api_missions.py` reported no whitespace errors.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. This pass does not claim full reusable invocation
+  coverage, process a live Stage 17 queue chunk, promote or enable a
+  capability beyond the isolated test fixture, execute desktop actions, write a
+  publication marker, commit, push, or close the Stage 17 capability-economy
+  queue.
+- This pass removes only the missing multi-mission readback proof blocker for
+  the tested governed pack and mission-linked plugin/tool operation shapes.
+  Broader live backlog reduction, global projection freshness,
+  proposal-review/proposal-evidence closure scope, publication-marker evidence,
+  and full capability-lifecycle closure remain open.
+- This slice does not close a ledger-backed phase gate and does not move the
+  Phase 2 posture.
+
+### 2026-06-20 - Stage 17 live metadata receipt batch reduction
+
+Roadmap area: Stage 17 / Capability Economy, live capability-pack backlog
+reduction, governed metadata receipt batch intake, queue-count evidence, and
+receipt-backed selected-scope projection timing.
+
+This pass used the existing reusable metadata-receipt batch route against one
+small live migration-plan candidate instead of adding another one-off metadata
+patch:
+
+- Initial live readback from
+  `GET /plugins/capabilities/packs/migration/plan` reported
+  `candidate_total=18`, `status=ready_for_metadata_receipt_review`, and
+  `next_smallest_truthful_gap=stage17_capability_pack_metadata_receipt_operator_review`.
+- The selected candidate was
+  `legacy.generated.capabilityqualitystandardsplugin`
+  (`pack_version=0.0.0-migration`) because it was the smallest observed live
+  candidate. The route resolved 12 current capability ids for that pack.
+- The first dry-run intentionally blocked when the selected pack limit was too
+  low (`total_capability_limit_exceeded`, resolved capability count 12, limit
+  11), which preserved the route preflight boundary before any write.
+- The accepted dry-run used `max_pack_count=1`,
+  `max_total_capability_count=12`, and
+  `max_capability_count_per_pack=12`, returned
+  `dry_run_fingerprint=698ef04292df89331e63addd06ee9d7f876ff0f745ed743860db94aadb06dc45`,
+  `planned_pack_count=1`, `planned_capability_count=12`,
+  `projection_scope=selected_packs`, `global_counts_included=false`,
+  `before_candidate_total=1`, and `before_global_candidate_total=18`, with
+  registry and receipt writes disabled.
+- Apply echoed that exact fingerprint through
+  `POST /plugins/capabilities/packs/metadata/receipts/bulk-from-plan` and wrote
+  batch `stage17_metadata_receipts_bulk_1781989021` plus receipt
+  `data/artifacts/plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781989021_legacy-generated-capabilityqualitystandardsplugin.json`.
+- The apply response reported `recorded_pack_count=1`,
+  `recorded_capability_count=12`, `before_candidate_total=1`,
+  `after_candidate_total=0`, `candidate_reduction_count=1`,
+  `remaining_scoped_candidate_total=0`,
+  `remaining_global_candidate_total=17`, and
+  `remaining_candidate_total=17`.
+- Independent readback after apply reported `candidate_total=17`,
+  `target_pack_still_candidate=false`, and the new receipt visible through
+  `/plugins/capabilities/packs/metadata/receipts?limit=5`.
+- The written receipt carries
+  `stage17_capability_pack_metadata_receipts_batch_queue_evidence_v1` in
+  `metadata_context`, selected pack/capability ids, the selected/global before
+  counts, the original source blockers, and the existing permission-gated
+  governance flags.
+- The route preserved the no-proposal-approval, no-promotion, no-enable,
+  no-execution, no-generated-artifact-mutation, and no-memory-write boundary.
+
+Validation:
+
+- Live route dry-run and apply through FastAPI `TestClient` with temporary
+  `stage17.operator` actor scope mapped to `plugins.write` passed. Both runs
+  emitted the existing FastAPI/TestClient deprecation warning.
+- Independent live readback after apply confirmed the selected pack was removed
+  from the migration candidate list and the global candidate total moved from
+  `18` to `17`.
+- `.\.venv\Scripts\python.exe -m pytest
+  tests\test_api_plugins.py::test_plugins_capability_pack_metadata_receipts_bulk_from_migration_plan
+  tests\test_api_plugins.py::test_plugins_capability_pack_metadata_receipts_bulk_selected_batch_reports_before_after_counts
+  -q` passed with `2 passed` and one existing FastAPI/TestClient deprecation
+  warning.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. This pass does not claim full global queue closure,
+  promote, enable, execute, write a publication marker, commit, push, or close
+  the Stage 17 capability-economy queue.
+- This pass reduces one live metadata-receipt migration candidate and strengthens
+  evidence for the existing selected-batch mechanism. It does not close broader
+  live backlog reduction, global projection freshness, proposal-review/
+  proposal-evidence closure scope, publication-marker evidence, or full
+  capability-lifecycle closure.
+- This slice does not close a ledger-backed phase gate and does not move the
+  Phase 2 posture.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

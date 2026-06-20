@@ -10274,9 +10274,17 @@ def _capability_pack_invocation_audit_projection(
         if reuse_key and operation_capability:
             capabilities_by_reuse_key.setdefault(reuse_key, set()).add(operation_capability)
     capability_lists_by_reuse_key = {key: sorted(value) for key, value in sorted(capabilities_by_reuse_key.items())}
+    missions_by_reuse_key: dict[str, set[str]] = {}
+    for item in items:
+        reuse_key = str(item.get("pack_reuse_key") or "").strip()
+        mission_id = str(item.get("mission_id") or "").strip()
+        if reuse_key and mission_id:
+            missions_by_reuse_key.setdefault(reuse_key, set()).add(mission_id)
+    mission_lists_by_reuse_key = {key: sorted(value) for key, value in sorted(missions_by_reuse_key.items())}
     reused_pack_reuse_keys = [
         key for key, caller_contexts in context_lists_by_reuse_key.items() if len(caller_contexts) >= 2
     ]
+    multi_mission_reuse_keys = [key for key, mission_ids in mission_lists_by_reuse_key.items() if len(mission_ids) >= 2]
     mission_linked_contexts = {"mission_linked_operation", "mission_linked_tool_operation"}
     mission_linked_reuse_keys = [
         key
@@ -10316,8 +10324,12 @@ def _capability_pack_invocation_audit_projection(
             "minimum_contexts_per_reuse_key": 2,
             "contexts_by_pack_reuse_key": context_lists_by_reuse_key,
             "operation_capabilities_by_pack_reuse_key": capability_lists_by_reuse_key,
+            "mission_ids_by_pack_reuse_key": mission_lists_by_reuse_key,
             "cross_context_reuse_proven": bool(reused_pack_reuse_keys),
             "reused_pack_reuse_keys": reused_pack_reuse_keys,
+            "minimum_missions_per_reuse_key": 2,
+            "multi_mission_reuse_proven": bool(multi_mission_reuse_keys),
+            "multi_mission_reuse_keys": multi_mission_reuse_keys,
             "mission_linked_contexts_required": sorted(mission_linked_contexts),
             "mission_linked_reuse_proven": bool(mission_linked_reuse_keys),
             "mission_linked_reuse_keys": mission_linked_reuse_keys,
@@ -10342,6 +10354,8 @@ def _capability_pack_invocation_audit_projection(
             "mission_tool_run_context_required": _MISSION_OPERATION_CONTEXT_BY_CAPABILITY["plugin.tool.run"],
             "cross_context_reuse_claim_requires_matching_pack_reuse_key": True,
             "cross_context_reuse_proof_is_machine_readable": True,
+            "multi_mission_reuse_requires_matching_pack_reuse_key": True,
+            "multi_mission_reuse_requires_distinct_mission_ids": True,
             "mission_linked_reuse_requires_both_mission_contexts": True,
             "mission_shape_reuse_requires_plugin_run_and_plugin_tool_run": True,
             "does_not_infer_missing_direct_route_receipts": True,

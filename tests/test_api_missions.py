@@ -1145,6 +1145,47 @@ def test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_missio
     assert mission_tool_invocation["governance"]["does_not_enable_capabilities"] is True
     assert mission_tool_invocation["governance"]["memory_write"] is False
 
+    second_mission = client.post(
+        "/missions/create",
+        json={
+            "objective": "Reuse the Stage 17 capability pack from another mission.",
+            "summary": "A second mission should carry the same governed pack reuse key without duplicating logic.",
+            "requester_id": "test.missions.trace",
+        },
+    )
+    assert second_mission.status_code == 200
+    second_mission_id = str(second_mission.json()["mission_id"])
+
+    second_created = client.post(
+        "/operations/create",
+        json={
+            "action": "plugin.run",
+            "reason": "second-mission reusable invocation proof",
+            "mission_id": second_mission_id,
+            "input": {
+                "id": plugin_id,
+                "action": "run",
+                "input": "second mission invocation proof",
+            },
+        },
+    )
+    assert second_created.status_code == 200
+    second_operation_id = str(second_created.json()["operation_id"])
+
+    second_executed = client.post(f"/operations/{second_operation_id}/run", json={"worker_id": "test.missions.trace"})
+    assert second_executed.status_code == 200
+    second_executed_body = second_executed.json()
+    assert second_executed_body["ok"] is True
+    assert second_executed_body["status"] == "succeeded"
+    second_mission_output = second_executed_body["operation"]["output"]
+    second_mission_invocation = second_mission_output["capability_pack_invocation"]
+    assert second_mission_invocation["kind"] == "plugin.capability_pack.invocation_receipt"
+    assert second_mission_invocation["caller_context"] == "mission_linked_operation"
+    assert second_mission_invocation["pack_reuse_key"] == direct_invocation["pack_reuse_key"]
+    assert second_mission_invocation["pack_selection"] == direct_invocation["pack_selection"]
+    assert second_mission_invocation["governance"]["uses_existing_plugin_dispatcher"] is True
+    assert second_mission_invocation["governance"]["new_authority_granted_by_receipt"] is False
+
     tampered_operation_id = "tsk_stage17_bad_context"
     tampered_invocation = dict(mission_tool_invocation)
     tampered_invocation["caller_context"] = "mission_linked_operation"
@@ -1242,9 +1283,9 @@ def test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_missio
     assert audit_body["status"] == "ready"
     assert audit_body["readback_scope"] == "operation_outputs_with_embedded_capability_pack_invocation_receipts"
     assert audit_body["filters"]["pack_id"] == pack_id
-    assert audit_body["total_invocation_count"] == 2
+    assert audit_body["total_invocation_count"] == 3
     assert audit_body["rejected_invocation_count"] == 3
-    assert audit_body["returned_invocation_count"] == 2
+    assert audit_body["returned_invocation_count"] == 3
     assert audit_body["returned_rejected_invocation_count"] == 3
     assert audit_body["pack_count"] == 1
     assert audit_body["context_count"] == 2
@@ -1259,8 +1300,14 @@ def test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_missio
     assert reuse_proof["operation_capabilities_by_pack_reuse_key"] == {
         direct_invocation["pack_reuse_key"]: ["plugin.run", "plugin.tool.run"]
     }
+    assert reuse_proof["mission_ids_by_pack_reuse_key"] == {
+        direct_invocation["pack_reuse_key"]: sorted([mission_id, second_mission_id])
+    }
     assert reuse_proof["cross_context_reuse_proven"] is True
     assert reuse_proof["reused_pack_reuse_keys"] == [direct_invocation["pack_reuse_key"]]
+    assert reuse_proof["minimum_missions_per_reuse_key"] == 2
+    assert reuse_proof["multi_mission_reuse_proven"] is True
+    assert reuse_proof["multi_mission_reuse_keys"] == [direct_invocation["pack_reuse_key"]]
     assert reuse_proof["mission_linked_contexts_required"] == [
         "mission_linked_operation",
         "mission_linked_tool_operation",
@@ -1289,11 +1336,13 @@ def test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_missio
     assert audit_body["requirements"]["mission_tool_run_context_required"] == "mission_linked_tool_operation"
     assert audit_body["requirements"]["cross_context_reuse_claim_requires_matching_pack_reuse_key"] is True
     assert audit_body["requirements"]["cross_context_reuse_proof_is_machine_readable"] is True
+    assert audit_body["requirements"]["multi_mission_reuse_requires_matching_pack_reuse_key"] is True
+    assert audit_body["requirements"]["multi_mission_reuse_requires_distinct_mission_ids"] is True
     assert audit_body["requirements"]["mission_linked_reuse_requires_both_mission_contexts"] is True
     assert audit_body["requirements"]["mission_shape_reuse_requires_plugin_run_and_plugin_tool_run"] is True
     assert audit_body["requirements"]["does_not_infer_missing_direct_route_receipts"] is True
     audit_items = {item["operation_id"]: item for item in audit_body["items"]}
-    assert set(audit_items) == {operation_id, tool_operation_id}
+    assert set(audit_items) == {operation_id, tool_operation_id, second_operation_id}
     audit_item = audit_items[operation_id]
     assert audit_item["operation_id"] == operation_id
     assert audit_item["operation_capability"] == "plugin.run"
@@ -1327,6 +1376,18 @@ def test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_missio
     assert audit_item["governance"]["uses_existing_plugin_dispatcher"] is True
     assert audit_item["governance"]["new_authority_granted_by_receipt"] is False
     assert audit_item["governance"]["memory_write"] is False
+    second_audit_item = audit_items[second_operation_id]
+    assert second_audit_item["operation_id"] == second_operation_id
+    assert second_audit_item["operation_capability"] == "plugin.run"
+    assert second_audit_item["mission_id"] == second_mission_id
+    assert second_audit_item["caller_context"] == "mission_linked_operation"
+    assert second_audit_item["pack_reuse_key"] == direct_invocation["pack_reuse_key"]
+    assert second_audit_item["routing_guard"]["expected_caller_context"] == "mission_linked_operation"
+    assert second_audit_item["routing_guard"]["dispatch_receipt_linkage_complete"] is True
+    assert second_audit_item["routing_guard"]["eligible_for_reuse_proof"] is True
+    assert second_audit_item["governance"]["uses_existing_plugin_dispatcher"] is True
+    assert second_audit_item["governance"]["new_authority_granted_by_receipt"] is False
+    assert second_audit_item["governance"]["memory_write"] is False
     audit_tool_item = audit_items[tool_operation_id]
     assert audit_tool_item["operation_id"] == tool_operation_id
     assert audit_tool_item["operation_capability"] == "plugin.tool.run"
