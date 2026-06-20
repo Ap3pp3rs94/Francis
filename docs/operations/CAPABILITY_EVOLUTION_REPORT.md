@@ -48,18 +48,18 @@ Baseline: report initialized after the four-worker pass completed on
 | Lens | 4 | Lens observation contracts gained unmapped-coordinate refusal coverage, invalid-dimension refusal, and command-palette proof readbacks. |
 | Voice | 4 | Voice receipts now separate acoustic proof source, gate mode, provider receipt modes, and embedded provider-boundary evidence. |
 | Memory | 0 | No memory contract advancement in this cycle. |
-| Governance | 8 | Refusal/no-authority boundaries strengthened for acoustic proof, provider receipts, Stage 17 worker-readback/publication handoff claims, invalid coordinates, activity-vs-progress reporting, and worker liveness truth. |
-| Receipts | 8 | New receipt/readback fields for acoustic proof rejection, provider mode state/linkage, worker-readback and worker/publication handoff requirements, capability-evolution worker packets, and worker execution liveness. |
-| Missions | 0 | No mission-routing advancement in this cycle. |
+| Governance | 11 | Refusal/no-authority boundaries strengthened for acoustic proof, provider receipts, Stage 17 worker-readback/publication handoff claims, invalid coordinates, generated-spec compatibility, pack-selection binding, activity-vs-progress reporting, and worker liveness truth. |
+| Receipts | 11 | New receipt/readback fields for acoustic proof rejection, provider mode state/linkage, worker-readback and worker/publication handoff requirements, capability-evolution worker packets, worker execution liveness, metadata receipt batch evidence, and invocation pack-selection receipts. |
+| Missions | 1 | Stage 17 mission-linked invocation audit now rejects tampered embedded pack-selection bindings. |
 | Overlay | 4 | Overlay-related proof now requires local overlay speech source, exposes manual proof mode, and blocked/invalid coordinate cases stay before screen/session readback. |
-| Observability | 9 | Added diagnostics for acoustic proof, provider mode/linkage disambiguation, Stage 17 readback and handoff guard state, build capability evolution, and Exec worker liveness. |
+| Observability | 10 | Added diagnostics for acoustic proof, provider mode/linkage disambiguation, Stage 17 readback and handoff guard state, build capability evolution, Exec worker liveness, and publication-marker prompt matching. |
 | Completion Model | 2 | Completion model now rejects selected Stage 17 gaps as worker-readback proof and worker/publication handoff proof. |
-| Capability Registry | 0 | No capability registry advancement in this cycle. |
+| Capability Registry | 3 | Stage 17 now has generated-spec compatibility binding, catalog lifecycle provenance projection, and selected live metadata-receipt backlog reduction evidence. |
 | Swarm Infrastructure | 4 | Completion model now requires worker readback/handoff evidence, coordinator prompts require capability-evolution packet fields, and active Exec workers are no longer treated as stale. |
 | Operator Controls | 2 | Manual acoustic Orb movement proof now has source-specific next-step diagnostics and explicit manual-proof-required state. |
-| API Surface | 3 | Monitor route sanitizer and ChatGPT voice contract/receipt surfaces expose stricter readback fields. |
-| Documentation | 4 | Completion model docs, worker prompt docs, and this evolution report record durable operating rules. |
-| Testing | 10 | Added or expanded focused tests across worker lanes, coordinator prompt contracts, and worker liveness status. |
+| API Surface | 5 | Monitor route sanitizer, ChatGPT voice contract/receipt surfaces, plugin promotion readiness, plugin runtime execution guards, and invocation audit readbacks expose stricter fields. |
+| Documentation | 5 | Completion model docs, worker prompt docs, Stage 17 closure matrix, ledger entries, and this evolution report record durable operating rules. |
+| Testing | 13 | Added or expanded focused tests across worker lanes, coordinator prompt contracts, worker liveness status, plugin compatibility, metadata receipt batching, and invocation audit binding. |
 
 ## Cycle Log
 
@@ -459,3 +459,53 @@ Next bottleneck:
 - Live evidence remains the major blocker: microphone-origin Orb movement,
   public ChatGPT ingress or marked fixture proof, live ElevenLabs provider
   receipts, and clean Stage 17 queue-reduction artifacts.
+
+## PM Follow-Up - 2026-06-20T22:39Z
+
+Commit:
+
+- `3f9a7390` - `feat(stage17): bind specs and pack selection proof`
+
+Capability classes advanced:
+
+- Capability Registry
+- Governance
+- Receipts
+- Missions
+- Observability
+- API Surface
+- Documentation
+- Testing
+
+What changed:
+
+- Generated `plugin.spec.json` core compatibility now participates in the
+  effective Stage 17 promotion-readiness and runtime-execution gate.
+- Invocation audit proof now requires the embedded `pack_selection` binding to
+  match the same pack, plugin, capability, action, reuse key, and supported
+  caller-context set before an operation can count toward reuse proof.
+- A fifth selected live metadata-receipt batch reduction was accepted from the
+  worker packet and recorded in the completion ledger.
+- PM-owned publication markers for W1, W2, and W3 were updated to the pushed
+  commit so the coordinator could relaunch those lanes with fresh prompts.
+
+Validation:
+
+- Focused plugin metadata and compatibility pytest group passed.
+- Worker-side mission invocation audit proof passed; the Lead Builder local
+  rerun was stopped after the active W4 full-CI lane starved pytest startup
+  without emitting a failure.
+- Python compile and Ruff checks passed before integration for the accepted
+  files.
+- `git diff --cached --check` passed.
+- `scripts/francis-completion-model.ps1 -Mode Status` returned `status=ready`,
+  `current_phase=Phase 2`, `stage17_status=open`, and no percentage movement
+  allowed.
+- `git push origin main` pushed `3f9a7390` to `origin/main`.
+
+Effect:
+
+- Stage 17 gained stronger executable-lifecycle and reusable-invocation
+  evidence without claiming closure. The weakest closure blockers remain
+  full-library queue/projection evidence and the still-running project-wide
+  CI/wiring lane.
