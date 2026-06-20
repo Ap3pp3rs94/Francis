@@ -727,6 +727,8 @@ def test_lens_command_palette_monitor_probe_records_voice_health(tmp_path: Path)
     assert acoustic_proof["status"] == "ready_for_operator_acoustic_test"
     assert acoustic_proof["proof_observed"] is False
     assert acoustic_proof["proof_blocker"] == "awaiting_operator_spoken_orb_command"
+    assert acoustic_proof["manual_acoustic_proof_required"] is False
+    assert acoustic_proof["proof_diagnostic_summary"]["manual_acoustic_proof_required"] is False
     assert acoustic_proof["diagnostic_paths"] == {
         "overlay_status": "data/runtime/lens-overlay/status.json",
         "overlay_voice_status": "data/runtime/lens-overlay/voice-status.json",
@@ -949,6 +951,7 @@ def test_lens_command_palette_monitor_reports_acoustic_orb_position_proof(tmp_pa
     assert acoustic_proof["status"] == "fresh_acoustic_orb_position_command_observed"
     assert acoustic_proof["proof_observed"] is True
     assert acoustic_proof["proof_blocker"] == "none"
+    assert acoustic_proof["manual_acoustic_proof_required"] is True
     assert acoustic_proof["first_failed_requirement"] == "none"
     assert acoustic_proof["failed_requirements"] == []
     requirement_checks = acoustic_proof["requirement_checks"]
@@ -973,6 +976,7 @@ def test_lens_command_palette_monitor_reports_acoustic_orb_position_proof(tmp_pa
     proof_diagnostic = acoustic_proof["proof_diagnostic_summary"]
     assert proof_diagnostic["first_failed_requirement"] == "none"
     assert proof_diagnostic["proof_blocker"] == "none"
+    assert proof_diagnostic["manual_acoustic_proof_required"] is True
     assert proof_diagnostic["local_overlay_speech_command_observed"] is True
     assert proof_diagnostic["latest_voice_status"] == "orb_voice_command_applied"
     assert proof_diagnostic["latest_voice_command_source"] == "local_overlay_speech_recognition"
@@ -1064,6 +1068,7 @@ def test_lens_command_palette_monitor_can_require_manual_acoustic_orb_proof(tmp_
     assert acoustic_proof["status"] == "ready_for_operator_acoustic_test"
     assert acoustic_proof["proof_observed"] is False
     assert acoustic_proof["proof_blocker"] == "awaiting_operator_spoken_orb_command"
+    assert acoustic_proof["manual_acoustic_proof_required"] is True
     assert acoustic_proof["first_failed_requirement"] == "local_overlay_speech_command_observed"
     assert "local_overlay_speech_command_observed" in acoustic_proof["failed_requirements"]
     assert "orb_receipt_observed" in acoustic_proof["failed_requirements"]
@@ -1087,6 +1092,7 @@ def test_lens_command_palette_monitor_can_require_manual_acoustic_orb_proof(tmp_
         "first_failed_requirement": "local_overlay_speech_command_observed",
         "proof_blocker": "awaiting_operator_spoken_orb_command",
         "next_operator_step": "say_hey_francis_move_left_or_right",
+        "manual_acoustic_proof_required": True,
         "latest_voice_status": "spoken",
         "local_overlay_speech_command_observed": False,
         "latest_voice_command_source": "",
@@ -1197,6 +1203,7 @@ def test_lens_command_palette_monitor_rejects_bridge_file_orb_receipt_as_acousti
     acoustic_proof = payload["voice_monitor"]["manual_acoustic_orb_position_proof"]
     assert acoustic_proof["proof_observed"] is False
     assert acoustic_proof["proof_blocker"] == "awaiting_operator_spoken_orb_command"
+    assert acoustic_proof["manual_acoustic_proof_required"] is True
     assert acoustic_proof["latest_orb_receipt_id"] == "bridge-orb-left"
     assert acoustic_proof["latest_orb_receipt_command_source"] == "chatgpt_voice_bridge_file_request"
     assert acoustic_proof["latest_orb_receipt_microphone_recognition_claimed"] is False

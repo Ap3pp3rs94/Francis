@@ -153,6 +153,7 @@ def test_lens_command_palette_monitor_route_projects_voice_bridge_proof(monkeypa
                             "first_failed_requirement": "none",
                             "proof_blocker": "none",
                             "next_operator_step": "keep_monitoring_or_repeat_for_next_acoustic_orb_move",
+                            "manual_acoustic_proof_required": True,
                             "latest_voice_status": "orb_voice_command_applied",
                             "local_overlay_speech_command_observed": True,
                             "latest_voice_command_source": "local_overlay_speech_recognition",
@@ -180,6 +181,7 @@ def test_lens_command_palette_monitor_route_projects_voice_bridge_proof(monkeypa
                             "transcript": "do not expose this proof diagnostic transcript",
                         },
                         "freshness_window_seconds": 300,
+                        "manual_acoustic_proof_required": True,
                         "proof_source_contract": {
                             "required_voice_command_source": "local_overlay_speech_recognition",
                             "required_orb_receipt_command_source": "local_overlay_speech_recognition",
@@ -448,6 +450,7 @@ def test_lens_command_palette_monitor_route_projects_voice_bridge_proof(monkeypa
     assert proof_diagnostic["first_failed_requirement"] == "none"
     assert proof_diagnostic["proof_blocker"] == "none"
     assert proof_diagnostic["next_operator_step"] == "keep_monitoring_or_repeat_for_next_acoustic_orb_move"
+    assert proof_diagnostic["manual_acoustic_proof_required"] is True
     assert proof_diagnostic["latest_voice_status"] == "orb_voice_command_applied"
     assert proof_diagnostic["local_overlay_speech_command_observed"] is True
     assert proof_diagnostic["latest_voice_command_source"] == "local_overlay_speech_recognition"
@@ -494,6 +497,7 @@ def test_lens_command_palette_monitor_route_projects_voice_bridge_proof(monkeypa
         "proof_blocker": "none",
     }
     assert acoustic_proof["latest_voice_command"] == "move_orb_left_side"
+    assert acoustic_proof["manual_acoustic_proof_required"] is True
     assert acoustic_proof["latest_voice_command_source"] == "local_overlay_speech_recognition"
     assert acoustic_proof["latest_voice_transcript_source"] == "microphone_wake_listener"
     assert acoustic_proof["latest_voice_microphone_recognition_claimed"] is True

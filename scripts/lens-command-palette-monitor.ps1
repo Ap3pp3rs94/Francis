@@ -798,7 +798,8 @@ function New-ManualAcousticOrbPositionProof {
     [object]$LatestOrbPositionCommandReceipt,
     [bool]$VoiceInputReady,
     [bool]$WakeListening,
-    [int]$FreshnessSeconds
+    [int]$FreshnessSeconds,
+    [bool]$ManualAcousticProofRequired = $false
   )
 
   $VoiceStatus = [string](Get-PropertyValue -Payload $Voice -Name 'status' -Default '')
@@ -1030,6 +1031,7 @@ function New-ManualAcousticOrbPositionProof {
     first_failed_requirement = $FirstFailedRequirement
     proof_blocker = $ProofBlocker
     next_operator_step = $NextStep
+    manual_acoustic_proof_required = [bool]$ManualAcousticProofRequired
     latest_voice_status = $VoiceStatus
     local_overlay_speech_command_observed = [bool]$VoiceLocalOrbCommand
     latest_voice_command_source = $VoiceCommandSource
@@ -1067,6 +1069,7 @@ function New-ManualAcousticOrbPositionProof {
     proof_source_contract = $ProofSourceContract
     proof_rejection_reasons = $ProofRejectionReasons
     freshness_window_seconds = $FreshnessSeconds
+    manual_acoustic_proof_required = [bool]$ManualAcousticProofRequired
     voice_input_ready = [bool]$VoiceInputReady
     wake_listening = [bool]$WakeListening
     microphone_signal_observed = [bool]$SignalObserved
@@ -1483,7 +1486,7 @@ function New-VoiceMonitorProjection {
   $LatestOrbCommandStatus = if ($VoiceOrbCommand -or $LocalOverlayCommand) { $VoiceStatus } elseif (-not [string]::IsNullOrWhiteSpace($LatestOrbReceiptStatus)) { $LatestOrbReceiptStatus } elseif ($VoicePositionCommandActive) { 'position_anchor_active' } else { '' }
   $LatestOrbCommandApplied = ($VoiceStatus -eq 'orb_voice_command_applied' -or $VoicePositionCommandActive -or $LatestOrbReceiptApplied)
   $OrbPositionCommandReady = ([bool]$VoiceInputReady -and [bool]$WakeListening)
-  $ManualAcousticOrbProof = New-ManualAcousticOrbPositionProof -Voice $Voice -OverlayVoice $OverlayVoice -LatestOrbPositionCommandReceipt $LatestOrbPositionCommandReceipt -VoiceInputReady ([bool]$VoiceInputReady) -WakeListening ([bool]$WakeListening) -FreshnessSeconds $McpProofFreshnessSeconds
+  $ManualAcousticOrbProof = New-ManualAcousticOrbPositionProof -Voice $Voice -OverlayVoice $OverlayVoice -LatestOrbPositionCommandReceipt $LatestOrbPositionCommandReceipt -VoiceInputReady ([bool]$VoiceInputReady) -WakeListening ([bool]$WakeListening) -FreshnessSeconds $McpProofFreshnessSeconds -ManualAcousticProofRequired ([bool]$RequireManualAcousticOrbProof)
   $PassiveListenContract = 'passive_transcript_awareness_only_until_wake_phrase'
   $InterruptPhrase = 'francis stop'
   $LatestReceipt = if (@($Receipts).Count -gt 0) { $Receipts[0] } else { $null }
