@@ -152,6 +152,10 @@ def _selected_gap_contract(*, selected_source: str, stage17_gap_preferred: bool)
         "selected_gap_is_queue_count_evidence": False,
         "global_queue_count_recomputed": False,
         "queue_count_authority_granted": False,
+        "selected_gap_is_projection_timing_evidence": False,
+        "projection_generated_at_verified": False,
+        "projection_is_fresh": False,
+        "projection_timing_authority_granted": False,
         "stage17_readback_authority_denied": True,
         "future_stage17_apply_requires": [
             "existing_governed_route",
@@ -164,6 +168,14 @@ def _selected_gap_contract(*, selected_source: str, stage17_gap_preferred: bool)
             "projection_scope",
             "global_counts_included_flag",
             "before_after_counts",
+            "focused_validation",
+        ],
+        "future_stage17_projection_timing_claim_requires": [
+            "route_readback_or_apply_response",
+            "projection_generated_at_or_receipt_timestamp",
+            "projection_scope",
+            "bounded_plugin_id_scope_or_full_library_declaration",
+            "global_counts_included_flag",
             "focused_validation",
         ],
         "future_stage17_proposal_evidence_claim_requires": [
@@ -388,6 +400,17 @@ def _loop_guard(
                 "Selected Stage 17 gaps are not queue-count evidence; queue movement claims require route "
                 "readback or apply response with projection_scope, global_counts_included, before/after "
                 "counts, and focused validation"
+            ),
+        },
+        {
+            "id": "stage17_projection_timing_evidence_guard",
+            "status": "enforced",
+            "required_before_continue": True,
+            "evidence": (
+                "Selected Stage 17 gaps are not projection timing evidence; broad readback or projection "
+                "hardening claims require route readback or apply response with generated_at or receipt "
+                "timestamp, projection_scope, bounded plugin scope or full-library declaration, "
+                "global_counts_included, and focused validation"
             ),
         },
         {

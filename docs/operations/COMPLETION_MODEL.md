@@ -41,6 +41,12 @@ It emits one JSON object with:
   authorize queue-count claims without a route readback or apply response that
   carries projection scope, global-count inclusion, before/after counts, and
   focused validation
+- the projection-timing evidence guard, which states that choosing a Stage 17
+  gap is not proof that a global projection is fresh, complete, or generated
+  after the current slice; projection-timing claims require route/apply output
+  with a generated-at or receipt timestamp, projection scope, bounded plugin
+  scope or full-library declaration, global-count inclusion, and focused
+  validation
 - the proposal-evidence reference guard, which states that choosing a Stage 17
   gap is not proof that proposal evidence, proposal reviews, validation
   receipts, or quality-evidence references have been verified
@@ -90,6 +96,14 @@ movement claims require a concrete route readback or apply response with
 `projection_scope`, `global_counts_included`, before/after counts, and focused
 validation.
 
+The selected-gap contract is also not projection-timing evidence. A selected
+Stage 17 gap can name a broad-readback or projection-hardening target, but it
+does not prove when a projection was generated, whether it is fresh, or whether
+it covers the intended scope. Projection timing claims require route/apply
+output with `generated_at` or an equivalent receipt timestamp, `projection_scope`,
+bounded plugin scope or an explicit full-library declaration,
+`global_counts_included`, and focused validation.
+
 The selected-gap contract is also not proposal-evidence proof. A selected Stage
 17 gap can name the next capability-economy slice, but it does not verify
 proposal artifact refs, proposal-review receipts, validation receipts, or
@@ -131,6 +145,11 @@ Every `continue` run should satisfy these guards:
 - keep Stage 17 queue-count claims evidence-backed: selected gaps are not global
   queue counts, and queue movement needs route/apply evidence with projection
   scope, global-count inclusion, before/after counts, and validation
+- keep Stage 17 projection-timing claims evidence-backed: selected gaps are not
+  freshness proof, and broad readback/projection hardening needs route/apply
+  evidence with generated-at or receipt timestamp, projection scope, bounded
+  plugin scope or full-library declaration, global-count inclusion, and
+  validation
 - keep Stage 17 proposal-evidence claims reference-backed: selected gaps are not
   proposal evidence refs, and proposal-evidence movement needs existing route
   evidence, bounded plugin scope, proposal/review/validation refs, and focused

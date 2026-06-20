@@ -314,6 +314,12 @@ function New-CompletionLoopGuard {
       evidence = 'Selected Stage 17 gaps are not queue-count evidence; queue movement claims require route readback or apply response with projection_scope, global_counts_included, before/after counts, and focused validation'
     },
     [ordered]@{
+      id = 'stage17_projection_timing_evidence_guard'
+      status = 'enforced'
+      required_before_continue = $true
+      evidence = 'Selected Stage 17 gaps are not projection timing evidence; broad readback or projection hardening claims require route readback or apply response with generated_at or receipt timestamp, projection_scope, bounded plugin scope or full-library declaration, global_counts_included, and focused validation'
+    },
+    [ordered]@{
       id = 'stage17_proposal_evidence_reference_guard'
       status = 'enforced'
       required_before_continue = $true
@@ -370,6 +376,10 @@ function New-SelectedGapContract {
     selected_gap_is_queue_count_evidence = $false
     global_queue_count_recomputed = $false
     queue_count_authority_granted = $false
+    selected_gap_is_projection_timing_evidence = $false
+    projection_generated_at_verified = $false
+    projection_is_fresh = $false
+    projection_timing_authority_granted = $false
     stage17_readback_authority_denied = $true
     future_stage17_apply_requires = @(
       'existing_governed_route',
@@ -382,6 +392,14 @@ function New-SelectedGapContract {
       'projection_scope',
       'global_counts_included_flag',
       'before_after_counts',
+      'focused_validation'
+    )
+    future_stage17_projection_timing_claim_requires = @(
+      'route_readback_or_apply_response',
+      'projection_generated_at_or_receipt_timestamp',
+      'projection_scope',
+      'bounded_plugin_id_scope_or_full_library_declaration',
+      'global_counts_included_flag',
       'focused_validation'
     )
     future_stage17_proposal_evidence_claim_requires = @(
