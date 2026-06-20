@@ -45,6 +45,16 @@ proportions.
   or existing overlay context, calls only read-only screen/session MCP readbacks,
   writes a receipt, and truthfully reports that screenshots, pixels, OCR, and
   accessibility-tree evidence are not captured by this slice.
+- The Lens observation contract now reports explicit coordinate-boundary
+  readback in `mapped_overlay_region.coordinate_boundary`, including
+  coordinate space, overlay/requested edges, intersection region, outside
+  edges, clipped status, bounds-checked status, and refusal reasons without
+  claiming screenshots, pixels, OCR, accessibility, or visual similarity.
+- The Lens observation contract now also reports explicit coordinate-transform
+  readback in `mapped_overlay_region.coordinate_transform`, including requested
+  to mapped deltas, overlay origin, overlay-local region, clipped
+  overlay-local intersection, transform confidence basis, and limitations
+  without claiming visual registration or capture.
 - A narrow `paint the Mona Lisa` / `draw the Mona Lisa` ingress now routes
   through the existing `/chat/send` mission path. It creates a governed mission
   and queued `plan.create` operation with sandbox-required operator metadata,
@@ -160,11 +170,12 @@ proportions.
   improves receipt auditability without changing transcript forwarding,
   authority, or freshness rules.
 - ChatGPT voice bridge receipts now include bounded ingress provenance fields:
-  `ingress_transport`, `mcp_gateway_tool`, and `mcp_server_tool`. The MCP
-  gateway stamps internal tool-origin receipts, the public MCP server stamps the
-  exported `francis_chatgpt_voice_ingress` tool name, and the validation proof
-  requires fresh usable public-MCP-tool provenance instead of trusting
-  `source=chatgpt.voice` alone.
+  `ingress_transport`, `mcp_gateway_tool`, `mcp_server_tool`, and
+  `mcp_server_transport`. The MCP gateway stamps internal tool-origin receipts,
+  the public MCP server stamps the exported `francis_chatgpt_voice_ingress` tool
+  name and its server transport, and the validation proof requires fresh usable
+  `streamable-http` public-MCP transport evidence instead of trusting
+  `source=chatgpt.voice` or MCP-shaped internal dispatch alone.
 - Overlay voice-turn handback readback now formats `completed_at` through an
   invariant UTC timestamp helper so PowerShell cannot emit culture-specific date
   strings on Linux CI while preserving the voice-turn handback contract.
@@ -195,10 +206,41 @@ the Mona Lisa mission/operator chain. It is receipt/schema work only: it does
 not add screenshots, pixels, OCR, live desktop perception, proposal approval,
 promotion, or execution authority.
 
+The latest completed lens/overlay spatial sub-slice strengthens
+`/lens/mcp/observe` with explicit `coordinate_boundary` and
+`coordinate_transform` readback for mapped and blocked regions. It records
+overlay edges, requested edges, intersection region, outside edges, clipped
+status, bounds-check status, requested-to-mapped deltas, overlay origin,
+overlay-local region, clipped overlay-local intersection, and transform
+confidence basis while preserving the metadata-only observation boundary.
+
 The latest completed recognizability sub-slice adds offline fixture evidence for
-the sandbox Mona Lisa artifact. It remains SVG/action replay evidence only and
-does not claim screenshot, pixel, OCR, accessibility, human recognizability, or
-live visual-similarity proof.
+the sandbox Mona Lisa artifact. It remains SVG/action replay evidence and does
+not claim screenshot, OCR, accessibility, human recognizability, or live
+visual-similarity proof.
+
+The latest completed sandbox raster sub-slice writes a deterministic PNG
+preview generated from the same sandbox operator primitives. This is sandbox
+primitive pixel replay evidence only; it is not a desktop screenshot, live
+capture, external reference-image comparison, human recognizability proof, or
+visual-similarity score.
+
+The latest completed post-action observation sub-slice links the sandbox
+operator result back into the lens/overlay receipt chain. Fresh sandbox runs now
+emit `francis.lens.overlay.post_action_observation_receipt` with the same
+requested, mapped, and actual canvas regions as the structured observation
+receipt. The post-action receipt references the action log, manifest, SVG, and
+raster preview artifacts; it remains sandbox replay evidence and does not claim
+screenshots, live desktop pixels, OCR, accessibility, visual similarity, or a
+second overlay/lens application.
+
+The latest completed improvement-channel sub-slice makes sandbox Mona Lisa
+improvement proposals evidence-aware. When raster replay and post-action
+observation receipts are present, the durable proposal channel no longer asks to
+add generic sandbox pixel evidence. It proposes
+`sandbox_canvas_plan_governed_live_observation_adapter`, which is a bounded
+planning proposal for a future governed live observation adapter and remains
+`proposed_not_promoted`.
 
 The latest completed review-scoring sub-slice adds read-only aggregate review
 evidence across recorded sandbox evaluation queue items. It identifies repeated
@@ -206,14 +248,12 @@ failure patterns and review actions, but it does not execute another run,
 promote an improvement, or approve a proposal.
 
 The latest completed validation-proof sub-slice adds the status-only proof
-script for Orb/voice/overlay-lens continuity. The current live proof result is
-`proof_blocked_stale_chatgpt_app_source_receipt`: the overlay is visible, Lens
-MCP body-state is ready, the overlay voice path is waiting for microphone
-signal, the local ChatGPT voice MCP listener is ready, Orb substrate readback is
-healthy, and the latest Mona Lisa sandbox replay passes the structured-
-observation receipt contract. The current public HTTPS connector URL is a
-LocalTunnel fallback (`localtunnel_fallback_replace_needed`), so it is useful
-for live testing but not accepted as persistent ingress truth.
+script for Orb/voice/overlay-lens continuity. The current live proof result
+from `2026-06-19` is `proof_blocked_no_chatgpt_app_source_receipt`: the proof
+found no fresh ChatGPT-source receipt in the current data window, no fresh
+public `streamable-http` MCP server receipt, and no fresh usable public-MCP
+transcript receipt. This is a truthful blocked proof state, not a voice-provider
+failure and not an Orb visual issue.
 
 If a stable connector URL is supplied through
 `FRANCIS_CHATGPT_VOICE_CONNECTOR_URL`, the proof now records the URL source and
@@ -228,7 +268,9 @@ ChatGPT-origin voice receipts also have a bounded live-proof freshness window.
 The default is 900 seconds. Receipts outside that window are counted as stale
 and do not satisfy the live proof; source-only receipts without
 `mcp_server_tool=francis_chatgpt_voice_ingress` remain diagnostic evidence, not
-end-to-end MCP proof.
+end-to-end MCP proof. Receipts with the MCP server tool but no
+`mcp_server_transport=streamable-http` are now preserved for diagnosis but do
+not satisfy the public ChatGPT connector proof.
 
 Acceptance criteria for the completed observation sub-slice:
 
@@ -237,6 +279,12 @@ Acceptance criteria for the completed observation sub-slice:
 - missing overlay context is blocked before screen/session readback
 - successful observation is metadata-only and read-only
 - receipts distinguish requested, mapped, and actually inspected regions
+- mapped regions include explicit coordinate-boundary readback with overlay
+  edges, requested edges, intersection region, outside edges, and bounds status
+- mapped regions include explicit coordinate-transform readback with
+  source/target spaces, requested-to-mapped deltas, overlay origin,
+  overlay-local region, clipped overlay-local intersection, transform
+  confidence basis, and metadata-only limitations
 - screenshots, pixels, OCR, and accessibility evidence remain unknown unless a
   future adapter truthfully provides them
 - no new overlay application or lens app is created
@@ -365,6 +413,10 @@ Acceptance criteria for the completed multi-run review scoring sub-slice:
 - When validating a live ChatGPT voice handoff, require a fresh source receipt
   inside the configured freshness window. The default proof uses
   `ChatGptReceiptFreshnessSeconds=900`.
+- When validating a live ChatGPT voice MCP handoff, require the receipt to carry
+  `mcp_server_transport=streamable-http`. Direct/in-process tool calls and stdio
+  MCP roundtrips are useful tests, but they do not prove the public ChatGPT
+  connector path.
 - Confirm live overlay microphone signal when the operator is present; the
   current safe readback remains `waiting_for_audio_signal`.
 
@@ -768,6 +820,116 @@ Validated for the fresh structured Mona Lisa sandbox replay refresh:
   `orb.status=orb_status`, `mona_lisa_sandbox.passed=true`, and
   `mona_lisa_sandbox.artifact_dir=data/sandbox_canvas/mona_lisa/run_1781766886_c71910f3`.
 
+Validated for the sandbox raster-preview evidence sub-slice:
+
+- `src/francis/agent/sandbox_canvas.py` now writes
+  `mona_lisa_sandbox_preview.png` beside the sandbox SVG, manifest, actions,
+  and receipt when the sandbox run is not a dry run.
+- The raster preview is generated from recorded sandbox operator primitives
+  with mode `sandbox_operator_primitive_raster_replay`; the manifest, receipt,
+  structured observation evidence, operation output, and evaluation readback
+  all carry the preview path/hash and explicit no-screenshot/no-live-capture/
+  no-visual-similarity flags.
+- A fresh governed TestClient runtime run created mission
+  `msn_20260619_181114_6998b325`, sandbox operation
+  `tsk_20260619_181114_e4ce3f2b`, run
+  `run_1781892674_0fec5f26`, and trace
+  `trace_e26f02e29f9449f9`.
+- The fresh sandbox artifact directory is
+  `data/sandbox_canvas/mona_lisa/run_1781892674_0fec5f26`.
+  The raster preview artifact is
+  `data/sandbox_canvas/mona_lisa/run_1781892674_0fec5f26/mona_lisa_sandbox_preview.png`
+  with SHA-256
+  `cfb4a7b970451b90163e82d1a40629e4293e8f9c4ac6c965f21c8196d64aedac`.
+- The recorded evaluation passed with
+  `sandbox_raster_evidence.status=evaluated`,
+  `sandbox_raster_evidence.evidence_mode=sandbox_operator_primitive_raster_replay`,
+  `pixel_evidence=true`, `screenshot=false`,
+  `live_desktop_capture=false`, `visual_similarity_claim=false`, and all
+  optional raster evidence checks true.
+- Manual image inspection confirmed the generated PNG is nonblank primitive
+  sandbox output. This is not used as a visual-similarity score or human
+  recognizability proof.
+- `python -m pytest tests\test_api_operations.py::test_operations_run_mona_lisa_sandbox_canvas_from_chat_mission -q`
+  passed.
+- `python -m ruff check --no-cache src\francis\agent\sandbox_canvas.py
+  tests\test_api_operations.py` passed.
+- `python -m ruff format --check --no-cache
+  src\francis\agent\sandbox_canvas.py tests\test_api_operations.py` passed.
+
+Validated for the sandbox post-action observation receipt sub-slice:
+
+- Fresh sandbox runs now write a linked
+  `francis.lens.overlay.post_action_observation_receipt` under
+  `receipt.post_action_observation_receipts[]` and under
+  `receipt.lens_overlay_observation.post_action_observation_receipt`.
+- The post-action observation receipt uses source
+  `sandbox_canvas_post_action_raster_replay`, mode
+  `sandbox_operator_primitive_raster_replay`,
+  `uses_existing_overlay_coordinate_model=true`, and
+  `creates_overlay_application=false`.
+- Read-only evaluation now exposes
+  `post_action_observation_receipts[]` and
+  `optional_post_action_observation_checks` covering parent linkage, same mapped
+  overlay region, raster preview reference/hash, no screenshot claim, no live
+  desktop pixel claim, and no visual-similarity claim.
+- A fresh governed TestClient runtime run created mission
+  `msn_20260619_190801_042c76e8`, plan operation
+  `tsk_20260619_190801_dd17bb99`, sandbox operation
+  `tsk_20260619_190801_1a839f7c`, run
+  `run_1781896081_817a667d`, and trace
+  `trace_e89bdd06f32d435e`.
+- The persisted post-action receipt id is
+  `sandbox_canvas_7a30993bc5aa4495.post_action_observation.1`; its parent
+  structured observation receipt is
+  `sandbox_canvas_7a30993bc5aa4495.observation.1`.
+- The fresh artifact directory is
+  `data/sandbox_canvas/mona_lisa/run_1781896081_817a667d`.
+  The recorded evaluation is
+  `data/sandbox_canvas/mona_lisa/run_1781896081_817a667d/evaluation_records/eval_run_1781896081_817a667d_9af0feeadb2b.json`.
+  The review queue item is
+  `data/sandbox_canvas/mona_lisa/run_1781896081_817a667d/review_queue/queue_run_1781896081_817a667d_9af0feeadb2b.json`.
+- The fresh evaluation passed with all
+  `optional_post_action_observation_checks` true.
+- `python -m pytest tests\test_api_operations.py::test_operations_run_mona_lisa_sandbox_canvas_from_chat_mission -q`
+  passed.
+- `python -m ruff check --no-cache src\francis\agent\sandbox_canvas.py
+  tests\test_api_operations.py` passed.
+- `python -m ruff format --check --no-cache
+  src\francis\agent\sandbox_canvas.py tests\test_api_operations.py` passed.
+
+Validated for the evidence-aware sandbox improvement proposal sub-slice:
+
+- `src/francis/agent/sandbox_canvas.py` now makes Mona Lisa sandbox improvement
+  proposals conditional on current evaluation evidence.
+- If raster replay evidence or post-action observation receipts are missing,
+  evaluation proposes `sandbox_canvas_complete_replay_evidence_chain`.
+- If raster replay evidence and post-action observation receipts are present,
+  evaluation proposes
+  `sandbox_canvas_plan_governed_live_observation_adapter` instead of the stale
+  `sandbox_canvas_add_pixel_or_multi_run_review` proposal.
+- A fresh governed TestClient runtime run created mission
+  `msn_20260619_191359_30874226`, plan operation
+  `tsk_20260619_191359_679c60ad`, sandbox operation
+  `tsk_20260619_191359_7dd1309e`, run
+  `run_1781896439_9e54f1b2`, and trace
+  `trace_abf6aea5f7544b8c`.
+- The fresh recorded proposal is
+  `data/sandbox_canvas/mona_lisa/run_1781896439_9e54f1b2/improvement_proposals/proposal_1_fe3eac9fbb7f_ceae9080.json`.
+  It has `proposal_id=sandbox_canvas_plan_governed_live_observation_adapter`,
+  `status=proposed_not_promoted`, `promotion.promoted=false`, and
+  `promotion.silent_self_promotion_allowed=false`.
+- The proposal validation requirements explicitly require an approved bounded
+  live target region, real adapter evidence before labeling capture as live, no
+  visual-similarity claim until a governed comparison path exists, and separate
+  approval-gated execution, observation, and promotion.
+- `python -m pytest tests\test_api_operations.py::test_operations_run_mona_lisa_sandbox_canvas_from_chat_mission -q`
+  passed.
+- `python -m ruff check --no-cache src\francis\agent\sandbox_canvas.py
+  tests\test_api_operations.py` passed.
+- `python -m ruff format --check --no-cache
+  src\francis\agent\sandbox_canvas.py tests\test_api_operations.py` passed.
+
 Validated for the persistent ChatGPT voice connector URL record path:
 
 - PowerShell parser check for `scripts\chatgpt-voice-connector.ps1` returned
@@ -977,6 +1139,156 @@ Validated for cross-platform overlay voice-turn handback timestamp readback:
   tests\test_lens_overlay_window_script.py
   tests\test_orb_voice_overlay_lens_validation_script.py` passed.
 
+Validated for live voice-commanded Orb movement:
+
+- The running API initially forwarded `Francis move right` to chat, which proved
+  the live service had not loaded the current Orb position command parser.
+- The API was restarted on `127.0.0.1:8000`, and the overlay was restarted with
+  the same ElevenLabs Emma voice, wake phrase, and overlay flags:
+  `-VoiceProvider ElevenLabs`, `-ElevenLabsVoiceName Emma`,
+  `-EnableWakeListen`, `-EnableVoiceLlm`, and `-DisableAutonomousMotion`.
+- A live POST to `/chatgpt-voice/ingress` with transcript
+  `Francis move right` returned `status=orb_position_command_queued`,
+  `command=move_orb_right_side`, `reference_type=francis_identity`, and
+  `chat_forward.status=suppressed_orb_position_command`.
+- The overlay consumed the queued file request, deleted
+  `data/runtime/lens-overlay/orb-position-command-request.json`, applied the
+  right-side position, and wrote
+  `data/runtime/lens-overlay/orb-position-commands/live-francis-right-after-restart-1781904675.json`
+  with `status=orb_voice_command_applied`, `applied=true`,
+  `overlay_left=1268`, `target_anchor=voice_command_right_side`, and
+  `mutation_authority_scope=runtime_overlay_position_only`.
+- The queued-file adapter now preserves `reference_type` into overlay voice
+  status and applied overlay receipts.
+- A live POST to `/chatgpt-voice/ingress` with transcript
+  `Francis move left` returned `status=orb_position_command_queued`,
+  `command=move_orb_left_side`, `reference_type=francis_identity`, and
+  `chat_forward.status=suppressed_orb_position_command`.
+- The overlay consumed the left-side request and wrote
+  `data/runtime/lens-overlay/orb-position-commands/live-francis-left-reference-1781904853.json`
+  with `status=orb_voice_command_applied`, `applied=true`,
+  `reference_type=francis_identity`, `overlay_left=48`,
+  `target_anchor=voice_command_left_side`, `stores_transcript=false`,
+  `conversation_forwarding_suppressed=true`, `grants_execution_authority=false`,
+  and `grants_mutation_authority=false`.
+- `scripts/lens-command-palette-monitor.ps1 -Mode Probe -EnableVoiceChecks`
+  returned `status=healthy`, `overlay_status=visible`,
+  `voice_input_status=ready`, `selected_provider=ElevenLabs`,
+  `selected_voice=Emma`, `orb_position_command_ready=true`,
+  `latest_orb_position_command=move_orb_left_side`,
+  `latest_orb_position_command_status=orb_voice_command_applied`,
+  `latest_orb_position_command_applied=true`, and
+  `latest_orb_position_command_receipt_observed=true`.
+- `GET /chatgpt-voice/contract?actor=chatgpt.voice` returned `status=ready`
+  with `orb_position_command_accepts_francis_identity_reference=true`.
+- `python -m pytest tests\test_chatgpt_voice_bridge.py
+  tests\test_lens_overlay_window_script.py::test_lens_overlay_voice_orb_position_command_is_local_and_bounded
+  tests\test_lens_command_palette_monitor_script.py::test_lens_command_palette_monitor_probe_records_voice_health
+  tests\test_lens_command_palette_monitor_script.py::test_lens_command_palette_monitor_reports_applied_orb_voice_command
+  tests\unit\test_lens_orb_mcp_status_route.py -q` passed with `23 passed`.
+- PowerShell parser checks for `scripts\lens-overlay-window.ps1` and
+  `scripts\lens-command-palette-monitor.ps1` returned `parse_ok`.
+- `git diff --check -- scripts\lens-overlay-window.ps1
+  scripts\lens-command-palette-monitor.ps1
+  src\francis\lens\command_palette_monitor.py
+  tests\test_lens_overlay_window_script.py
+  tests\test_lens_command_palette_monitor_script.py
+  tests\unit\test_lens_orb_mcp_status_route.py` reported no whitespace errors
+  aside from the existing Git CRLF warnings for the PowerShell files.
+- The locked Orb visual surface was not changed. The only visually sensitive
+  file touched was `scripts/lens-overlay-window.ps1`, and the edits were limited
+  to command parsing, command-file receipt propagation, and runtime state.
+
+Validated for completion-model readback after the live movement proof:
+
+- The completion model parser was hardened to read wrapped `Roadmap area:`
+  paragraphs from `docs/operations/COMPLETION_LEDGER.md` without truncating the
+  continuation line.
+- `python -m pytest tests\test_completion_model.py
+  tests\test_francis_completion_model_script.py -q` passed after adding wrapped
+  roadmap-area coverage.
+- PowerShell parser check for `scripts\francis-completion-model.ps1` returned
+  `parse_ok`.
+- `scripts\francis-completion-model.ps1 -Mode Status` returned latest ledger
+  title `2026-06-19 - Live Francis identity Orb movement proof` with full
+  roadmap area `Stage 6 / Lens MVP, Orb embodiment, voice-to-substrate routing,
+  overlay command receipts, and P9 observability.`
+- The live API was restarted on `127.0.0.1:8000`, and
+  `GET /completion-model/status` returned the same full roadmap area through
+  the Python substrate route.
+
+Validated for manual acoustic Orb command proof boundary:
+
+- Local overlay speech-recognition Orb commands now stamp microphone-origin
+  metadata and write a durable local Orb-position command receipt when applied.
+- Queued ChatGPT/bridge-file Orb commands remain explicitly non-microphone
+  origin and do not count as acoustic proof.
+- `scripts/lens-command-palette-monitor.ps1` exposes
+  `voice_monitor.manual_acoustic_orb_position_proof` so the operator can tell
+  whether the acoustic `hey Francis move left/right` proof is observed, stale,
+  ready, or missing.
+- The sanitized API readback preserves that proof object through
+  `/lens/command-palette/monitor` without exposing transcripts.
+- PowerShell parser checks for `scripts\lens-overlay-window.ps1` and
+  `scripts\lens-command-palette-monitor.ps1` returned `parse_ok`.
+- `python -m pytest
+  tests\test_lens_command_palette_monitor_script.py::test_lens_command_palette_monitor_probe_records_voice_health
+  tests\test_lens_command_palette_monitor_script.py::test_lens_command_palette_monitor_reports_applied_orb_voice_command
+  tests\test_lens_command_palette_monitor_script.py::test_lens_command_palette_monitor_reports_acoustic_orb_position_proof
+  tests\test_lens_overlay_window_script.py::test_lens_overlay_voice_orb_position_command_is_local_and_bounded
+  tests\unit\test_lens_orb_mcp_status_route.py -q` passed with `8 passed`.
+- Live monitor readback returned `selected_provider=ElevenLabs`,
+  `selected_voice=Emma`, `voice_input_status=ready`,
+  `orb_position_command_ready=true`, and
+  `manual_acoustic_orb_position_proof.status=ready_for_operator_acoustic_test`
+  with `proof_observed=false`, `microphone_signal_observed=true`, and
+  `api_injected_text_counts_as_proof=false`.
+- The live API, overlay, and command-palette monitor were restarted with the
+  patched code loaded. `GET /lens/command-palette/monitor` returned
+  `route_status=healthy`, `overlay_status=visible`,
+  `voice_input_status=ready`, `orb_position_command_ready=true`,
+  `acoustic_proof_status=ready_for_operator_acoustic_test`,
+  `acoustic_proof_observed=false`, `api_injected_text_counts_as_proof=false`,
+  and `transcript_redacted=true`.
+- `scripts/lens-command-palette-monitor.ps1` now accepts
+  `-RequireManualAcousticOrbProof`. With that switch, the monitor adds
+  `voice_manual_acoustic_orb_position_proof` to the checks list and fails until
+  a fresh microphone-origin local speech command and matching applied
+  Orb-position receipt are observed.
+- Live normal probe returned `status=healthy`, `overlay_status=visible`,
+  `voice_input_status=ready`, and
+  `manual_acoustic_orb_position_proof.status=ready_for_operator_acoustic_test`.
+- Live required-proof probe with `-RequireManualAcousticOrbProof` returned
+  exit code `1`, `status=anomaly`,
+  anomaly id `voice_manual_acoustic_orb_position_proof`, and evidence
+  `no_fresh_acoustic_orb_position_receipt`.
+
+Validated for Lens overlay observation coordinate-boundary/transform readback:
+
+- `src/francis/lens/mcp_perception.py` now reports
+  `mapped_overlay_region.coordinate_boundary` for mapped, out-of-bounds, and
+  unavailable coordinate-model cases.
+- The boundary object records coordinate space, overlay edges, requested edges,
+  intersection region, within-bounds status, clipped status, outside edges,
+  bounds-checked status, and the unavailable/refusal reason where applicable.
+- `src/francis/lens/mcp_perception.py` now also reports
+  `mapped_overlay_region.coordinate_transform` with source/target spaces,
+  transform-applied status, requested-to-mapped deltas, overlay origin,
+  overlay-local region, clipped overlay-local intersection, transform
+  confidence basis, and metadata-only limitations.
+- Out-of-bounds regions remain blocked before the screen/session MCP readback is
+  called. Actual observed/captured regions stay explicitly
+  `not_observed`/`not_captured`.
+- `python -m pytest tests\unit\test_lens_mcp_perception.py -q` passed with
+  `12 passed`.
+- `python -m ruff check --no-cache src\francis\lens\mcp_perception.py
+  tests\unit\test_lens_mcp_perception.py` passed.
+- `python -m ruff format --check --no-cache
+  src\francis\lens\mcp_perception.py
+  tests\unit\test_lens_mcp_perception.py` passed.
+- `git diff --check -- src\francis\lens\mcp_perception.py
+  tests\unit\test_lens_mcp_perception.py` reported no whitespace errors.
+
 ## Blockers
 
 - The lens/overlay observation contract is metadata-only; it does not yet provide
@@ -985,19 +1297,29 @@ Validated for cross-platform overlay voice-turn handback timestamp readback:
   screen readback contract.
 - Mission advancement now queues the sandbox canvas operation automatically, but
   operator execution is still a separate bounded operation run.
-- The sandbox artifact has no automated screenshot/pixel visual similarity score
-  yet. The current evaluator has deterministic primitive replay plus an offline
-  SVG geometry fixture, not live pixel or human recognizability proof.
+- The sandbox artifact now has deterministic primitive pixel replay through a
+  generated PNG preview, but it still has no live screenshot, external
+  reference-image comparison, human recognizability proof, or visual-similarity
+  score.
 - No live desktop painting run is verified safe.
 - Voice can produce receipts and route through chat, and a narrow Mona Lisa
   phrase can create mission state when transcribed, but the full voice ->
   mission -> automatic operator dispatch -> Orb loop is not complete.
+- Local voice/text command routing can now move the live Orb left/right through
+  the existing bounded overlay command path. A manual acoustic microphone test
+  with the operator saying `hey Francis move left/right` is still not recorded
+  as evidence, but the monitor now exposes a proof boundary that will not count
+  API-injected text as acoustic evidence.
 - The current ChatGPT voice connector control supports persistent HTTPS URL
   planning, environment URL handoff, URL recording, and a bounded Cloudflare
   named-tunnel start path. The current public MCP URL may still be an ephemeral
   LocalTunnel or quick Cloudflare fallback until an operator-owned stable
   hostname/config is supplied; local MCP can be listening while current ChatGPT
   app reachability still remains unproven by the status proof.
+- When the connector readback reports a LocalTunnel fallback (`localtunnel_fallback_replace_needed`),
+  treat it as live-test diagnostic ingress only; it must be replaced by
+  persistent HTTPS `/mcp` ingress before Francis accepts it as stable connector
+  truth.
 - The current ChatGPT voice proof has no fresh usable public-MCP-tool-origin
   receipt in the default freshness window. A fresh ChatGPT app call that reaches
   `francis_chatgpt_voice_ingress` and writes the matching receipt provenance is
@@ -1011,11 +1333,14 @@ Validated for cross-platform overlay voice-turn handback timestamp readback:
 - `data/runtime/lens-overlay/voice-status.json`
 - `data/runtime/lens-overlay/voice-turn-status.json`
 - `data/runtime/lens-overlay/voice-turns/*.json`
+- `data/runtime/lens-overlay/orb-position-command-request.json`
+- `data/runtime/lens-overlay/orb-position-commands/*.json`
 - `data/lens/mcp_perception/*.json`
 - `data/sandbox_canvas/mona_lisa/*/operator_actions.jsonl`
 - `data/sandbox_canvas/mona_lisa/*/manifest.json`
 - `data/sandbox_canvas/mona_lisa/*/receipt.json`
 - `data/sandbox_canvas/mona_lisa/*/mona_lisa_sandbox.svg`
+- `data/sandbox_canvas/mona_lisa/*/mona_lisa_sandbox_preview.png`
 - `data/sandbox_canvas/mona_lisa/*/evaluation_records/*.json`
 - `data/sandbox_canvas/mona_lisa/*/review_queue/*.json`
 - `data/sandbox_canvas/mona_lisa/*/improvement_proposals/*.json`
@@ -1027,16 +1352,20 @@ Validated for cross-platform overlay voice-turn handback timestamp readback:
 ## Repository State
 
 - Branch: `main`
-- Last observed head: `bf9f76bf docs(stage17): record quality evidence remediation for catalog pack`
+- Last observed head: `6ab747337418`
 - Worktree: dirty before this checkpoint; preserve unrelated changes.
 
 ## Exact Next Action
 
+With the live overlay running, have the operator say
+`hey Francis move left` or `hey Francis move right`, then run
+`powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\lens-command-palette-monitor.ps1 -Mode Probe -EnableVoiceChecks -RequireManualAcousticOrbProof -TimeoutSeconds 5`
+and confirm it exits `0` with
+`voice_monitor.manual_acoustic_orb_position_proof.status=fresh_acoustic_orb_position_command_observed`.
+If that proof passes, ledger it. If it remains ready or missing, inspect
+`data/runtime/lens-overlay/voice-status.json` and
+`data/runtime/lens-overlay/orb-position-commands/*.json` before changing code.
 Trigger a fresh ChatGPT app call through the public
-`francis_chatgpt_voice_ingress` MCP tool, confirm the receipt provenance, then
-replace the LocalTunnel fallback with a persistent HTTPS `/mcp` ingress URL and
-record it through the governed `RecordUrl` path. Keep the live Orb overlay
-running docked by default with `right_corner_locked` motion, and verify
-`overlay_position` in status readback after each overlay restart. Use bounded
-desktop roam or manual drag only when explicitly enabled for a movement proof or
-diagnostic.
+`francis_chatgpt_voice_ingress` MCP tool only after the acoustic Orb movement
+proof is resolved. The public ChatGPT app MCP proof remains the next
+external-connector proof after the acoustic Orb movement proof.

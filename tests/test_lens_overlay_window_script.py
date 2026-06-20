@@ -41,6 +41,18 @@ def _run_overlay_window(*args: str, env: dict[str, str] | None = None) -> subpro
 
 
 def test_lens_overlay_window_status_reports_missing_runtime(tmp_path: Path) -> None:
+    env = os.environ.copy()
+    for name in (
+        "FRANCIS_ELEVENLABS_API_KEY",
+        "ELEVENLABS_API_KEY",
+        "FRANCIS_ELEVENLABS_VOICE_ID",
+        "ELEVENLABS_VOICE_ID",
+        "FRANCIS_ELEVENLABS_VOICE_NAME",
+        "FRANCIS_ELEVENLABS_VOICE_LABEL",
+        "ELEVENLABS_VOICE_NAME",
+    ):
+        env.pop(name, None)
+
     proc = _run_overlay_window(
         "-Mode",
         "Status",
@@ -48,6 +60,7 @@ def test_lens_overlay_window_status_reports_missing_runtime(tmp_path: Path) -> N
         "ProcessOnly",
         "-DataDir",
         str(tmp_path / "data"),
+        env=env,
     )
 
     assert proc.returncode == 0, proc.stderr
@@ -717,8 +730,14 @@ def test_lens_overlay_voice_orb_position_command_is_local_and_bounded() -> None:
         "$OrbCommand = Resolve-OverlayVoiceOrbCommand -Text $CommandText -WakePhraseDetected:$CommandWakePhraseDetected"
         in script
     )
-    assert "$DirectFrancisAddressDetected = Test-OverlayDirectFrancisAddressRecognized -RecognizedText $RecognizedText" in script
-    assert "$CommandWakePhraseDetected = (-not [string]::IsNullOrWhiteSpace($UtteranceText) -or $WakePhraseOnly -or $DirectFrancisAddressDetected)" in script
+    assert (
+        "$DirectFrancisAddressDetected = Test-OverlayDirectFrancisAddressRecognized -RecognizedText $RecognizedText"
+        in script
+    )
+    assert (
+        "$CommandWakePhraseDetected = (-not [string]::IsNullOrWhiteSpace($UtteranceText) -or $WakePhraseOnly -or $DirectFrancisAddressDetected)"
+        in script
+    )
     assert "local_overlay_direct_francis_address" in script
     assert "-and -not $DirectFrancisAddressDetected" in script
     assert "$AddressedUtteranceText = if (-not [string]::IsNullOrWhiteSpace($UtteranceText))" in script

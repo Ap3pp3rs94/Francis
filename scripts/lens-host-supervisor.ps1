@@ -352,7 +352,7 @@ function Wait-ForHostStatus {
     $PidValue = [int](Get-PropertyValue -Payload $Latest -Name 'pid' -Default 0)
     $ProcessAlive = [bool](Get-PropertyValue -Payload $Latest -Name 'process_alive' -Default $false)
     $StatusReady = $StateStatus -eq $Status
-    if ($Status -eq 'foreground_running') {
+    if ($Status -eq 'foreground_running' -or $Status -eq 'resident_running') {
       $StatusReady = $StatusReady -and $PidValue -gt 0 -and $ProcessAlive
     }
     if ($StatusReady) {
@@ -1116,12 +1116,22 @@ if ($Mode -eq 'SuperviseOnce' -or $Mode -eq 'SuperviseResidentOnce') {
   $Payload.governance.local_process_launch_authority = $true
   $Payload.next_smallest_truthful_gap = $NextGap
 
-  $InitialStateStatus = [string](Get-PropertyValue -Payload $InitialHostState -Name 'state_status' -Default '')
+  $ExistingCandidateState = $InitialHostState
+  if ($ResidentCandidateMode) {
+    $ExistingCandidateState = Wait-ForHostStatus `
+      -StatePath $HostStatePath `
+      -PidPath $HostPidPath `
+      -Status 'resident_running' `
+      -TimeoutSeconds 5
+  }
+  $ExistingCandidateProcessAlive = [bool](Get-PropertyValue -Payload $ExistingCandidateState -Name 'process_alive' -Default $false)
+  $ExistingCandidatePid = [int](Get-PropertyValue -Payload $ExistingCandidateState -Name 'pid' -Default 0)
+  $InitialStateStatus = [string](Get-PropertyValue -Payload $ExistingCandidateState -Name 'state_status' -Default '')
   $ExistingResidentCandidateObserved = (
     $ResidentCandidateMode -and
     $InitialStateStatus -eq 'resident_running' -and
-    $InitialProcessAlive -and
-    $InitialPid -gt 0
+    $ExistingCandidateProcessAlive -and
+    $ExistingCandidatePid -gt 0
   )
   if ($ExistingResidentCandidateObserved) {
     $Payload.status = 'resident_candidate_already_running_observed'
@@ -1135,7 +1145,7 @@ if ($Mode -eq 'SuperviseOnce' -or $Mode -eq 'SuperviseResidentOnce') {
     $Payload.resident_supervised_runtime = $false
     $Payload.resident_host_process = $false
     $Payload.supervised = $false
-    $Payload.host_readback = $InitialHostState
+    $Payload.host_readback = $ExistingCandidateState
     $Payload.blockers = @(
       'resident_host_process_not_supervised',
       'resident_runtime_candidate_not_persistent',
@@ -1149,8 +1159,8 @@ if ($Mode -eq 'SuperviseOnce' -or $Mode -eq 'SuperviseResidentOnce') {
       'summon_binding_missing'
     ) | Sort-Object -Unique
     $Payload.proof.running_state_status = $InitialStateStatus
-    $Payload.proof.running_pid = $InitialPid
-    $Payload.proof.running_process_alive = $InitialProcessAlive
+    $Payload.proof.running_pid = $ExistingCandidatePid
+    $Payload.proof.running_process_alive = $ExistingCandidateProcessAlive
     $Payload.proof.stopped_state_status = ''
     $Payload.proof.stopped_pid = 0
     $Payload.proof.stopped_process_alive = $false
