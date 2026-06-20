@@ -1022,7 +1022,8 @@ def test_lens_command_palette_monitor_can_require_manual_acoustic_orb_proof(tmp_
     assert checks["voice_manual_acoustic_orb_position_proof"]["status"] == "ready_for_operator_acoustic_test"
     assert checks["voice_manual_acoustic_orb_position_proof"]["evidence"] == (
         "first_failed_requirement=local_overlay_speech_command_observed "
-        "proof_blocker=awaiting_operator_spoken_orb_command"
+        "proof_blocker=awaiting_operator_spoken_orb_command "
+        "next_operator_step=say_hey_francis_move_left_or_right"
     )
 
 

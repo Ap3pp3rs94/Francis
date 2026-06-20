@@ -1609,10 +1609,11 @@ function New-CommandPaletteMonitorProbe {
     $ManualAcousticProofReceiptId = [string](Get-PropertyValue -Payload $ManualAcousticProof -Name 'latest_orb_receipt_id' -Default '')
     $ManualAcousticProofBlocker = [string](Get-PropertyValue -Payload $ManualAcousticProof -Name 'proof_blocker' -Default 'no_fresh_acoustic_orb_position_receipt')
     $ManualAcousticProofFirstFailed = [string](Get-PropertyValue -Payload $ManualAcousticProof -Name 'first_failed_requirement' -Default 'none')
+    $ManualAcousticProofNextStep = [string](Get-PropertyValue -Payload $ManualAcousticProof -Name 'next_operator_step' -Default '')
     $ManualAcousticProofEvidence = if ($ManualAcousticProofObserved -and -not [string]::IsNullOrWhiteSpace($ManualAcousticProofReceiptId)) {
       $ManualAcousticProofReceiptId
     } elseif (-not [string]::IsNullOrWhiteSpace($ManualAcousticProofFirstFailed) -and $ManualAcousticProofFirstFailed -ne 'none') {
-      'first_failed_requirement={0} proof_blocker={1}' -f $ManualAcousticProofFirstFailed, $ManualAcousticProofBlocker
+      'first_failed_requirement={0} proof_blocker={1} next_operator_step={2}' -f $ManualAcousticProofFirstFailed, $ManualAcousticProofBlocker, $ManualAcousticProofNextStep
     } elseif (-not [string]::IsNullOrWhiteSpace($ManualAcousticProofBlocker)) {
       $ManualAcousticProofBlocker
     } else {
