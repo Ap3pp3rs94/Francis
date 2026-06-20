@@ -10028,6 +10028,7 @@ def _capability_pack_invocation_routing_guard(
     input_caller_context = _safe_str(input_context_meta.get("caller_context")).strip()
     expected_context = _MISSION_OPERATION_CONTEXT_BY_CAPABILITY.get(capability, "")
     governance = invocation.get("governance") if isinstance(invocation.get("governance"), dict) else {}
+    receipt_linkage = invocation.get("receipt_linkage") if isinstance(invocation.get("receipt_linkage"), dict) else {}
 
     receipt_kind_supported = _safe_str(invocation.get("kind")).strip() == _CAPABILITY_PACK_INVOCATION_RECEIPT_KIND
     receipt_contract_supported = (
@@ -10039,6 +10040,12 @@ def _capability_pack_invocation_routing_guard(
         bool(input_caller_context and expected_context and input_caller_context == expected_context)
         if input_caller_context
         else None
+    )
+    dispatch_receipt_present = _to_bool(receipt_linkage.get("dispatch_receipt_present"))
+    dispatch_run_id_present = bool(_safe_str(receipt_linkage.get("run_id")).strip())
+    dispatch_trace_id_present = bool(_safe_str(receipt_linkage.get("trace_id")).strip())
+    dispatch_receipt_linkage_complete = (
+        dispatch_receipt_present and dispatch_run_id_present and dispatch_trace_id_present
     )
     uses_existing_plugin_dispatcher = _to_bool(governance.get("uses_existing_plugin_dispatcher"))
     new_authority_granted_by_receipt = _to_bool(governance.get("new_authority_granted_by_receipt"))
@@ -10064,6 +10071,8 @@ def _capability_pack_invocation_routing_guard(
         reject_reasons.append("caller_context_operation_capability_mismatch")
     if input_caller_context and expected_context and input_caller_context != expected_context:
         reject_reasons.append("input_caller_context_operation_capability_mismatch")
+    if not dispatch_receipt_linkage_complete:
+        reject_reasons.append("dispatch_receipt_linkage_missing")
     if not governance_bound:
         reject_reasons.append("governance_boundary_missing")
 
@@ -10080,6 +10089,10 @@ def _capability_pack_invocation_routing_guard(
         "receipt_contract_supported": receipt_contract_supported,
         "caller_context_matches_operation_capability": caller_context_matches_operation_capability,
         "input_caller_context_matches_operation_capability": input_caller_context_matches_operation_capability,
+        "dispatch_receipt_linkage_complete": dispatch_receipt_linkage_complete,
+        "dispatch_receipt_present": dispatch_receipt_present,
+        "dispatch_run_id_present": dispatch_run_id_present,
+        "dispatch_trace_id_present": dispatch_trace_id_present,
         "governance_bound": governance_bound,
         "uses_existing_plugin_dispatcher": uses_existing_plugin_dispatcher,
         "new_authority_granted_by_receipt": new_authority_granted_by_receipt,
@@ -10201,6 +10214,15 @@ def _capability_pack_invocation_audit_projection(
             "dispatch_status": _safe_str(receipt_linkage.get("dispatch_status")).strip(),
             "run_id": _safe_str(receipt_linkage.get("run_id") or data.get("run_id")).strip(),
             "trace_id": _safe_str(receipt_linkage.get("trace_id") or data.get("trace_id")).strip(),
+            "receipt_linkage": {
+                "dispatch_receipt_present": _to_bool(receipt_linkage.get("dispatch_receipt_present")),
+                "dispatch_status": _safe_str(receipt_linkage.get("dispatch_status")).strip(),
+                "run_id": _safe_str(receipt_linkage.get("run_id")).strip(),
+                "trace_id": _safe_str(receipt_linkage.get("trace_id")).strip(),
+                "sandbox_status": _safe_str(receipt_linkage.get("sandbox_status")).strip(),
+                "sandbox_run_id": _safe_str(receipt_linkage.get("sandbox_run_id")).strip(),
+                "sandbox_trace_id": _safe_str(receipt_linkage.get("sandbox_trace_id")).strip(),
+            },
             "routing_guard": routing_guard,
             "governance": {
                 "permission_model": _safe_str(governance.get("permission_model")).strip(),
@@ -10314,6 +10336,8 @@ def _capability_pack_invocation_audit_projection(
             "routing_guard_required_for_reuse_proof": True,
             "operation_input_context_contract": _STAGE17_OPERATION_INVOCATION_CALLER_CONTEXT_CONTRACT,
             "operation_input_caller_context_must_match_when_present": True,
+            "dispatch_receipt_linkage_required_for_reuse_proof": True,
+            "dispatch_receipt_linkage_requires_run_and_trace_ids": True,
             "mission_plugin_run_context_required": _MISSION_OPERATION_CONTEXT_BY_CAPABILITY["plugin.run"],
             "mission_tool_run_context_required": _MISSION_OPERATION_CONTEXT_BY_CAPABILITY["plugin.tool.run"],
             "cross_context_reuse_claim_requires_matching_pack_reuse_key": True,
