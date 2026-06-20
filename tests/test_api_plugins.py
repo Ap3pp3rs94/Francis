@@ -1805,6 +1805,57 @@ def test_plugins_capability_pack_migration_plan_projects_review_candidates(monke
     assert candidate["suggested_pack_governance"]["execution_authority"] is False
 
 
+def test_plugins_capability_pack_readbacks_use_cached_catalog_without_generated_sync(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
+    client = TestClient(create_app())
+    built = client.post(
+        "/plugins/build",
+        json={
+            "name": "Cached Capability Pack Readback Plugin",
+            "description": "Stage 17 cached readback coverage",
+            "actor": _PLUGIN_ACTOR,
+            "meta": _forge_promotion_meta("cached_capability_pack_readback"),
+        },
+    )
+    assert built.status_code == 200
+    assert built.json()["ok"] is True
+    plugins._runtime_catalog_path().touch()
+
+    def fail_generated_sync(*_args, **_kwargs):
+        raise AssertionError("readback GET routes must not sync generated plugins")
+
+    def fail_catalog_write(*_args, **_kwargs):
+        raise AssertionError("readback GET routes must not compile or write the runtime catalog")
+
+    monkeypatch.setattr(plugins, "_sync_generated_plugins", fail_generated_sync)
+    monkeypatch.setattr(plugins, "_compile_runtime_catalog", fail_catalog_write)
+
+    for path in (
+        "/plugins/capabilities/packs/migration/plan",
+        "/plugins/capabilities/packs/quality/evidence/remediation",
+        "/plugins/capabilities/packs/promotion/rules/remediation",
+    ):
+        response = client.get(path)
+        assert response.status_code == 200
+        body = response.json()
+        assert body["ok"] is True, body
+        assert body["catalog"]["source"] == "cached_runtime_catalog"
+        assert body["catalog"]["cached_runtime_catalog_used"] is True
+        assert body["catalog"]["generated_plugin_sync_performed"] is False
+        assert body["catalog"]["catalog_written"] is False
+
+
 def test_plugins_capability_pack_metadata_receipts_bulk_from_migration_plan(
     monkeypatch,
     tmp_path: Path,
@@ -2630,6 +2681,57 @@ def test_plugins_capability_pack_quality_evidence_remediation_skips_oversized_ar
     assert candidates["skips_oversized_artifacts"] is True
     assert candidates["proposals"]["candidate_count"] == 0
     assert candidates["proposals"]["oversized_artifact_count"] == 1
+
+
+def test_plugins_capability_pack_quality_evidence_remediation_reports_limited_artifact_scan(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    proposals_dir = data_root / "artifacts" / "plugins" / "proposals"
+    validations_dir = data_root / "artifacts" / "plugins" / "validations"
+    proposals_dir.mkdir(parents=True)
+    validations_dir.mkdir(parents=True)
+    for index in range(2):
+        plugin_id = f"limited.scan.{index}"
+        (proposals_dir / f"proposal_limited_scan_{index}.json").write_text(
+            json.dumps({"plugin_id": plugin_id, "proposal_id": f"proposal_limited_scan_{index}"}),
+            encoding="utf-8",
+        )
+        (validations_dir / f"validation_limited_scan_{index}.json").write_text(
+            json.dumps(
+                {
+                    "plugin_id": plugin_id,
+                    "validation_receipt_id": f"validation_limited_scan_{index}",
+                    "status": "passed",
+                    "valid": True,
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    client = TestClient(create_app())
+    response = client.get("/plugins/capabilities/packs/quality/evidence/remediation?artifact_scan_limit=1")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["artifact_link_candidates"]["artifact_scan_limit"] == 1
+    assert body["artifact_link_candidates"]["artifact_scan_limited"] is True
+    assert body["artifact_link_candidates"]["validation_artifact_total_count"] == 2
+    assert body["artifact_link_candidates"]["validation_artifact_scanned_count"] == 1
+    assert body["artifact_link_candidates"]["proposal_artifact_total_count"] == 2
+    assert body["artifact_link_candidates"]["proposal_artifact_scanned_count"] == 1
+    assert body["projection_limits"]["artifact_scan_limit"] == 1
+    assert body["projection_limits"]["artifact_scan_limited"] is True
+    assert body["governance"]["artifact_scan_limit"] == 1
+    assert body["governance"]["artifact_scan_limited"] is True
 
 
 def test_plugins_capability_pack_quality_evidence_remediation_projects_artifact_reconstruction_plan(

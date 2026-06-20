@@ -137,6 +137,7 @@ _CAPABILITY_LIBRARY_PROPOSAL_EVIDENCE_FRICTION_REF_PREVIEW_LIMIT = 100
 _CAPABILITY_LIBRARY_PROPOSAL_REVIEW_PLAN_PREVIEW_LIMIT = 100
 _CAPABILITY_LIBRARY_OPERATOR_PROPOSAL_EVIDENCE_EXPORT_ROW_LIMIT = 5000
 _PLUGIN_ARTIFACT_LINK_BODY_MAX_BYTES = 256 * 1024
+_PLUGIN_ARTIFACT_LINK_SCAN_LIMIT = 500
 _CAPABILITY_PACK_QUALITY_TEST_REFERENCE_CANDIDATES = ("tests/test_api_plugins.py",)
 _CAPABILITY_PACK_QUALITY_DOC_REFERENCE_CANDIDATES = (
     "README.md",
@@ -2694,16 +2695,42 @@ def _capability_pack_quality_reference_candidates() -> dict[str, Any]:
     }
 
 
-def _plugin_artifact_payloads(folder_name: str) -> dict[str, Any]:
+def _artifact_link_scan_limit(value: int | None) -> int | None:
+    if value is None:
+        return None
+    try:
+        raw = int(value)
+    except Exception:
+        raw = _PLUGIN_ARTIFACT_LINK_SCAN_LIMIT
+    if raw <= 0:
+        return None
+    return max(1, min(raw, 5000))
+
+
+def _empty_plugin_artifact_payloads(*, scan_limit: int | None, unreadable_artifact_count: int = 0) -> dict[str, Any]:
+    return {
+        "items": [],
+        "artifact_body_max_bytes": _PLUGIN_ARTIFACT_LINK_BODY_MAX_BYTES,
+        "artifact_scan_limit": scan_limit or 0,
+        "artifact_scan_limited": False,
+        "total_artifact_count": 0,
+        "scanned_artifact_count": 0,
+        "unscanned_artifact_count": 0,
+        "oversized_artifact_count": 0,
+        "unreadable_artifact_count": unreadable_artifact_count,
+    }
+
+
+def _plugin_artifact_payloads(
+    folder_name: str,
+    *,
+    scan_limit: int | None = _PLUGIN_ARTIFACT_LINK_SCAN_LIMIT,
+) -> dict[str, Any]:
+    safe_scan_limit = _artifact_link_scan_limit(scan_limit)
     folder = _art_dir() / folder_name
     folder_fs_path = _filesystem_path(folder)
     if not os.path.isdir(folder_fs_path):
-        return {
-            "items": [],
-            "artifact_body_max_bytes": _PLUGIN_ARTIFACT_LINK_BODY_MAX_BYTES,
-            "oversized_artifact_count": 0,
-            "unreadable_artifact_count": 0,
-        }
+        return _empty_plugin_artifact_payloads(scan_limit=safe_scan_limit)
 
     items: list[dict[str, Any]] = []
     oversized_artifact_count = 0
@@ -2711,14 +2738,12 @@ def _plugin_artifact_payloads(folder_name: str) -> dict[str, Any]:
     try:
         entries = [entry for entry in os.scandir(folder_fs_path) if entry.name.endswith(".json") and entry.is_file()]
     except OSError:
-        return {
-            "items": [],
-            "artifact_body_max_bytes": _PLUGIN_ARTIFACT_LINK_BODY_MAX_BYTES,
-            "oversized_artifact_count": 0,
-            "unreadable_artifact_count": 1,
-        }
+        return _empty_plugin_artifact_payloads(scan_limit=safe_scan_limit, unreadable_artifact_count=1)
 
-    for entry in sorted(entries, key=lambda item: item.name):
+    sorted_entries = sorted(entries, key=lambda item: item.name)
+    total_artifact_count = len(sorted_entries)
+    scanned_entries = sorted_entries[:safe_scan_limit] if safe_scan_limit is not None else sorted_entries
+    for entry in scanned_entries:
         try:
             if entry.stat().st_size > _PLUGIN_ARTIFACT_LINK_BODY_MAX_BYTES:
                 oversized_artifact_count += 1
@@ -2743,6 +2768,11 @@ def _plugin_artifact_payloads(folder_name: str) -> dict[str, Any]:
     return {
         "items": items,
         "artifact_body_max_bytes": _PLUGIN_ARTIFACT_LINK_BODY_MAX_BYTES,
+        "artifact_scan_limit": safe_scan_limit or 0,
+        "artifact_scan_limited": len(scanned_entries) < total_artifact_count,
+        "total_artifact_count": total_artifact_count,
+        "scanned_artifact_count": len(scanned_entries),
+        "unscanned_artifact_count": total_artifact_count - len(scanned_entries),
         "oversized_artifact_count": oversized_artifact_count,
         "unreadable_artifact_count": unreadable_artifact_count,
     }
@@ -2802,8 +2832,12 @@ def _unique_plugin_artifact_candidates(
     }
 
 
-def _capability_pack_existing_artifact_link_candidates() -> dict[str, Any]:
-    validation_payloads = _plugin_artifact_payloads("validations")
+def _capability_pack_existing_artifact_link_candidates(
+    *,
+    scan_limit: int | None = _PLUGIN_ARTIFACT_LINK_SCAN_LIMIT,
+) -> dict[str, Any]:
+    safe_scan_limit = _artifact_link_scan_limit(scan_limit)
+    validation_payloads = _plugin_artifact_payloads("validations", scan_limit=safe_scan_limit)
     validation = _unique_plugin_artifact_candidates(
         validation_payloads["items"] if isinstance(validation_payloads.get("items"), list) else [],
         artifact_id_key="validation_receipt_id",
@@ -2812,9 +2846,14 @@ def _capability_pack_existing_artifact_link_candidates() -> dict[str, Any]:
         require_passed_validation=True,
     )
     validation["artifact_body_max_bytes"] = _PLUGIN_ARTIFACT_LINK_BODY_MAX_BYTES
+    validation["artifact_scan_limit"] = safe_scan_limit or 0
+    validation["artifact_scan_limited"] = bool(validation_payloads.get("artifact_scan_limited"))
+    validation["total_artifact_count"] = int(validation_payloads.get("total_artifact_count") or 0)
+    validation["scanned_artifact_count"] = int(validation_payloads.get("scanned_artifact_count") or 0)
+    validation["unscanned_artifact_count"] = int(validation_payloads.get("unscanned_artifact_count") or 0)
     validation["oversized_artifact_count"] = int(validation_payloads.get("oversized_artifact_count") or 0)
     validation["unreadable_artifact_count"] = int(validation_payloads.get("unreadable_artifact_count") or 0)
-    proposal_payloads = _plugin_artifact_payloads("proposals")
+    proposal_payloads = _plugin_artifact_payloads("proposals", scan_limit=safe_scan_limit)
     proposals = _unique_plugin_artifact_candidates(
         proposal_payloads["items"] if isinstance(proposal_payloads.get("items"), list) else [],
         artifact_id_key="proposal_id",
@@ -2822,13 +2861,27 @@ def _capability_pack_existing_artifact_link_candidates() -> dict[str, Any]:
         claim_scope="existing_plugin_proposal_lineage_only_not_approval",
     )
     proposals["artifact_body_max_bytes"] = _PLUGIN_ARTIFACT_LINK_BODY_MAX_BYTES
+    proposals["artifact_scan_limit"] = safe_scan_limit or 0
+    proposals["artifact_scan_limited"] = bool(proposal_payloads.get("artifact_scan_limited"))
+    proposals["total_artifact_count"] = int(proposal_payloads.get("total_artifact_count") or 0)
+    proposals["scanned_artifact_count"] = int(proposal_payloads.get("scanned_artifact_count") or 0)
+    proposals["unscanned_artifact_count"] = int(proposal_payloads.get("unscanned_artifact_count") or 0)
     proposals["oversized_artifact_count"] = int(proposal_payloads.get("oversized_artifact_count") or 0)
     proposals["unreadable_artifact_count"] = int(proposal_payloads.get("unreadable_artifact_count") or 0)
+    artifact_scan_limited = bool(
+        validation_payloads.get("artifact_scan_limited") or proposal_payloads.get("artifact_scan_limited")
+    )
     return {
         "validation_receipts": validation,
         "proposals": proposals,
         "selection_policy": "unique_existing_artifact_with_matching_plugin_id_only",
         "artifact_body_max_bytes": _PLUGIN_ARTIFACT_LINK_BODY_MAX_BYTES,
+        "artifact_scan_limit": safe_scan_limit or 0,
+        "artifact_scan_limited": artifact_scan_limited,
+        "validation_artifact_total_count": int(validation_payloads.get("total_artifact_count") or 0),
+        "validation_artifact_scanned_count": int(validation_payloads.get("scanned_artifact_count") or 0),
+        "proposal_artifact_total_count": int(proposal_payloads.get("total_artifact_count") or 0),
+        "proposal_artifact_scanned_count": int(proposal_payloads.get("scanned_artifact_count") or 0),
         "skips_oversized_artifacts": True,
         "reads_validation_receipt_bodies_for_plugin_id_match": True,
         "reads_proposal_bodies_for_plugin_id_match": True,
@@ -3179,9 +3232,11 @@ def _capability_pack_quality_evidence_remediation_item(
 def _capability_pack_quality_evidence_remediation_projection(
     entries: list[dict[str, Any]],
     promotion_remediation: dict[str, Any],
+    *,
+    artifact_scan_limit: int | None = _PLUGIN_ARTIFACT_LINK_SCAN_LIMIT,
 ) -> dict[str, Any]:
     reference_candidates = _capability_pack_quality_reference_candidates()
-    artifact_link_candidates = _capability_pack_existing_artifact_link_candidates()
+    artifact_link_candidates = _capability_pack_existing_artifact_link_candidates(scan_limit=artifact_scan_limit)
     raw_queue = promotion_remediation.get("remediation_queue")
     source_queue = [item for item in raw_queue if isinstance(item, dict)] if isinstance(raw_queue, list) else []
     items: list[dict[str, Any]] = []
@@ -3286,6 +3341,12 @@ def _capability_pack_quality_evidence_remediation_projection(
             },
             "selection_policy": artifact_link_candidates["selection_policy"],
             "artifact_body_max_bytes": artifact_link_candidates["artifact_body_max_bytes"],
+            "artifact_scan_limit": artifact_link_candidates["artifact_scan_limit"],
+            "artifact_scan_limited": artifact_link_candidates["artifact_scan_limited"],
+            "validation_artifact_total_count": artifact_link_candidates["validation_artifact_total_count"],
+            "validation_artifact_scanned_count": artifact_link_candidates["validation_artifact_scanned_count"],
+            "proposal_artifact_total_count": artifact_link_candidates["proposal_artifact_total_count"],
+            "proposal_artifact_scanned_count": artifact_link_candidates["proposal_artifact_scanned_count"],
             "skips_oversized_artifacts": True,
             "reads_validation_receipt_bodies_for_plugin_id_match": True,
             "reads_proposal_bodies_for_plugin_id_match": True,
@@ -3294,6 +3355,13 @@ def _capability_pack_quality_evidence_remediation_projection(
             "proposal_lineage_does_not_claim_approval": True,
         },
         "remediation_queue": items[:_CAPABILITY_PACK_QUALITY_EVIDENCE_QUEUE_LIMIT],
+        "projection_limits": {
+            "remediation_queue_limit": _CAPABILITY_PACK_QUALITY_EVIDENCE_QUEUE_LIMIT,
+            "capability_preview_limit": _CAPABILITY_PACK_QUALITY_EVIDENCE_CAPABILITY_PREVIEW_LIMIT,
+            "link_preview_limit": _CAPABILITY_PACK_QUALITY_EVIDENCE_LINK_PREVIEW_LIMIT,
+            "artifact_scan_limit": artifact_link_candidates["artifact_scan_limit"],
+            "artifact_scan_limited": artifact_link_candidates["artifact_scan_limited"],
+        },
         "requirements": {
             "read_only_remediation_plan": True,
             "quality_references_must_be_existing_repo_paths": True,
@@ -3304,6 +3372,7 @@ def _capability_pack_quality_evidence_remediation_projection(
             "existing_proposal_lineage_links_require_matching_plugin_id": True,
             "proposal_lineage_links_do_not_approve_proposals": True,
             "artifact_body_reads_are_bounded": True,
+            "artifact_body_scan_is_limited_by_default": artifact_link_candidates["artifact_scan_limit"] > 0,
             "artifact_reconstruction_plan_is_read_only": True,
             "artifact_reconstruction_writer_not_implemented": False,
             "artifact_reconstruction_writer_route": _CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_ROUTE,
@@ -3319,6 +3388,8 @@ def _capability_pack_quality_evidence_remediation_projection(
             "reads_validation_receipt_bodies_for_plugin_id_match": True,
             "reads_proposal_bodies_for_plugin_id_match": True,
             "artifact_body_max_bytes": _PLUGIN_ARTIFACT_LINK_BODY_MAX_BYTES,
+            "artifact_scan_limit": artifact_link_candidates["artifact_scan_limit"],
+            "artifact_scan_limited": artifact_link_candidates["artifact_scan_limited"],
             "skips_oversized_artifacts": True,
             "does_not_write_receipts": True,
             "does_not_write_validation_receipts": True,
@@ -10228,6 +10299,80 @@ def _compile_runtime_catalog(registry: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _runtime_catalog_payload_from_registry(registry: dict[str, Any]) -> dict[str, Any]:
+    runtime_registry = PluginRegistry()
+    rejected: list[dict[str, Any]] = []
+    plugins = registry.get("plugins")
+    if not isinstance(plugins, dict):
+        plugins = {}
+    for plugin_id, raw in plugins.items():
+        if not isinstance(raw, dict):
+            continue
+        normalized = _normalize_plugin_record(_safe_str(plugin_id), raw)
+        spec = _spec_from_plugin_record(normalized)
+        result = runtime_registry.register(spec)
+        if not result.valid:
+            rejected.append({"plugin_id": normalized["id"], "reason": result.reason, "errors": list(result.errors)})
+    payload = runtime_registry.to_dict()
+    payload["rejected"] = rejected
+    return payload
+
+
+def _path_mtime(path: Path) -> float:
+    try:
+        return float(path.stat().st_mtime)
+    except OSError:
+        return 0.0
+
+
+def _read_cached_runtime_catalog_payload() -> dict[str, Any]:
+    path = _runtime_catalog_path()
+    if not path.exists():
+        return {}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+    except Exception:
+        return {}
+    if not isinstance(raw, dict) or not isinstance(raw.get("plugins"), list):
+        return {}
+    return raw
+
+
+def _capability_pack_readback_catalog_snapshot(registry: dict[str, Any]) -> dict[str, Any]:
+    catalog_path = _runtime_catalog_path()
+    registry_path = _registry_path()
+    registry_plugins = registry.get("plugins") if isinstance(registry.get("plugins"), dict) else {}
+    registry_mtime = _path_mtime(registry_path)
+    catalog_mtime = _path_mtime(catalog_path)
+    cached = _read_cached_runtime_catalog_payload()
+    cached_current = bool(cached) and catalog_mtime >= registry_mtime
+    if cached_current:
+        runtime_catalog = cached
+        source = "cached_runtime_catalog"
+        compiled_in_memory = False
+    else:
+        runtime_catalog = _runtime_catalog_payload_from_registry(registry)
+        source = "in_memory_registry_projection"
+        compiled_in_memory = True
+    return {
+        "runtime_catalog": runtime_catalog,
+        "catalog": {
+            "path": str(catalog_path),
+            "source": source,
+            "cached_runtime_catalog_used": source == "cached_runtime_catalog",
+            "cached_runtime_catalog_present": bool(cached),
+            "catalog_stale": bool(cached) and not cached_current,
+            "catalog_written": False,
+            "compiled_in_memory": compiled_in_memory,
+            "generated_plugin_sync_performed": False,
+            "registry_plugin_count": len(registry_plugins),
+            "total_plugins": int(runtime_catalog.get("total_plugins") or 0),
+            "total_tools": int(runtime_catalog.get("total_tools") or 0),
+            "rejected_count": len(runtime_catalog.get("rejected") or []),
+        },
+    }
+
+
 def _read_runtime_catalog_payload(catalog: dict[str, Any]) -> dict[str, Any]:
     path_text = _safe_str(catalog.get("path")).strip()
     if not path_text:
@@ -11561,20 +11706,15 @@ def capability_pack_metadata_receipts(limit: int = 20) -> dict[str, object]:
 def capability_pack_migration_plan() -> dict[str, object]:
     try:
         registry = _load_registry()
-        synced = _sync_generated_plugins(registry)
-        catalog = _save_registry_and_catalog(registry) if synced else _compile_runtime_catalog(registry)
-        runtime_catalog = _read_runtime_catalog_payload(catalog)
+        catalog_snapshot = _capability_pack_readback_catalog_snapshot(registry)
+        runtime_catalog = catalog_snapshot["runtime_catalog"]
         marketplace = marketplace_from_plugin_catalog(runtime_catalog)
         plan = analyze_capability_pack_migration_plan(marketplace.catalog())
         return {
             "ok": True,
             "kind": "plugin.capability_pack.migration_plan",
             **plan,
-            "catalog": {
-                "path": _safe_str(catalog.get("path")).strip(),
-                "total_plugins": int(runtime_catalog.get("total_plugins") or catalog.get("total_plugins") or 0),
-                "total_tools": int(runtime_catalog.get("total_tools") or catalog.get("total_tools") or 0),
-            },
+            "catalog": catalog_snapshot["catalog"],
         }
     except Exception as exc:
         return {"ok": False, "kind": "plugin.capability_pack.migration_plan", "error": api_error_message(exc)}
@@ -11999,25 +12139,26 @@ def capability_pack_lineage_proposals() -> dict[str, object]:
 
 
 @router.get("/capabilities/packs/quality/evidence/remediation")
-def capability_pack_quality_evidence_remediation() -> dict[str, object]:
+def capability_pack_quality_evidence_remediation(
+    artifact_scan_limit: int = _PLUGIN_ARTIFACT_LINK_SCAN_LIMIT,
+) -> dict[str, object]:
     try:
         registry = _load_registry()
-        synced = _sync_generated_plugins(registry)
-        catalog = _save_registry_and_catalog(registry) if synced else _compile_runtime_catalog(registry)
-        runtime_catalog = _read_runtime_catalog_payload(catalog)
+        catalog_snapshot = _capability_pack_readback_catalog_snapshot(registry)
+        runtime_catalog = catalog_snapshot["runtime_catalog"]
         marketplace = marketplace_from_plugin_catalog(runtime_catalog)
         entries = marketplace.catalog()
         promotion_remediation = analyze_capability_pack_promotion_rule_remediation(entries)
-        projection = _capability_pack_quality_evidence_remediation_projection(entries, promotion_remediation)
+        projection = _capability_pack_quality_evidence_remediation_projection(
+            entries,
+            promotion_remediation,
+            artifact_scan_limit=_artifact_link_scan_limit(artifact_scan_limit),
+        )
         return {
             "ok": True,
             "kind": "plugin.capability_pack.quality_evidence.remediation",
             **projection,
-            "catalog": {
-                "path": _safe_str(catalog.get("path")).strip(),
-                "total_plugins": int(runtime_catalog.get("total_plugins") or catalog.get("total_plugins") or 0),
-                "total_tools": int(runtime_catalog.get("total_tools") or catalog.get("total_tools") or 0),
-            },
+            "catalog": catalog_snapshot["catalog"],
         }
     except Exception as exc:
         return {
@@ -12052,7 +12193,11 @@ def apply_capability_pack_quality_evidence_remediation(
         marketplace = marketplace_from_plugin_catalog(runtime_catalog)
         entries = marketplace.catalog()
         promotion_remediation = analyze_capability_pack_promotion_rule_remediation(entries)
-        before = _capability_pack_quality_evidence_remediation_projection(entries, promotion_remediation)
+        before = _capability_pack_quality_evidence_remediation_projection(
+            entries,
+            promotion_remediation,
+            artifact_scan_limit=None,
+        )
         reference_candidates = (
             before.get("reference_candidates") if isinstance(before.get("reference_candidates"), dict) else {}
         )
@@ -12308,6 +12453,7 @@ def apply_capability_pack_quality_evidence_remediation(
         after = _capability_pack_quality_evidence_remediation_projection(
             refreshed_entries,
             refreshed_promotion_remediation,
+            artifact_scan_limit=None,
         )
         selected_after_queue = [
             item
@@ -12404,7 +12550,11 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
         marketplace = marketplace_from_plugin_catalog(runtime_catalog)
         entries = marketplace.catalog()
         promotion_remediation = analyze_capability_pack_promotion_rule_remediation(entries)
-        before = _capability_pack_quality_evidence_remediation_projection(entries, promotion_remediation)
+        before = _capability_pack_quality_evidence_remediation_projection(
+            entries,
+            promotion_remediation,
+            artifact_scan_limit=None,
+        )
         raw_queue = before.get("remediation_queue")
         queue = [item for item in raw_queue if isinstance(item, dict)] if isinstance(raw_queue, list) else []
         queue = [
@@ -12685,6 +12835,7 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
         after = _capability_pack_quality_evidence_remediation_projection(
             refreshed_entries,
             refreshed_promotion_remediation,
+            artifact_scan_limit=None,
         )
         selected_after_queue = [
             item
@@ -15769,20 +15920,15 @@ def capability_pack_promotion_rules() -> dict[str, object]:
 def capability_pack_promotion_rule_remediation() -> dict[str, object]:
     try:
         registry = _load_registry()
-        synced = _sync_generated_plugins(registry)
-        catalog = _save_registry_and_catalog(registry) if synced else _compile_runtime_catalog(registry)
-        runtime_catalog = _read_runtime_catalog_payload(catalog)
+        catalog_snapshot = _capability_pack_readback_catalog_snapshot(registry)
+        runtime_catalog = catalog_snapshot["runtime_catalog"]
         marketplace = marketplace_from_plugin_catalog(runtime_catalog)
         remediation = analyze_capability_pack_promotion_rule_remediation(marketplace.catalog())
         return {
             "ok": True,
             "kind": "plugin.capability_pack.promotion_rules.remediation",
             **remediation,
-            "catalog": {
-                "path": _safe_str(catalog.get("path")).strip(),
-                "total_plugins": int(runtime_catalog.get("total_plugins") or catalog.get("total_plugins") or 0),
-                "total_tools": int(runtime_catalog.get("total_tools") or catalog.get("total_tools") or 0),
-            },
+            "catalog": catalog_snapshot["catalog"],
         }
     except Exception as exc:
         return {
