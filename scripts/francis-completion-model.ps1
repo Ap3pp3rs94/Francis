@@ -228,8 +228,23 @@ function New-CompletionLoopGuard {
   param(
     [bool]$LedgerExists,
     [bool]$BuildManifestExists,
-    [object]$LatestLedgerEntry
+    [object]$LatestLedgerEntry,
+    [object]$Stage17Status
   )
+
+  $Stage17Entry = if ($null -ne $Stage17Status) { $Stage17Status.latest_ledger_entry } else { $null }
+  $Stage17GapPreserved = (
+    $null -ne $Stage17Status -and
+    [bool]$Stage17Status.found -and
+    ([string]$Stage17Status.status) -eq 'open' -and
+    $null -ne $Stage17Entry -and
+    [bool]$Stage17Entry.has_remaining_truthful_gap
+  )
+  $Stage17GapEvidence = if ($Stage17GapPreserved) {
+    [string]$Stage17Entry.title
+  } else {
+    'no open Stage 17 gap selected'
+  }
 
   $Checklist = @(
     [ordered]@{
@@ -257,6 +272,18 @@ function New-CompletionLoopGuard {
       evidence = [string]$LatestLedgerEntry.remaining_truthful_gap
     },
     [ordered]@{
+      id = 'stage17_lane_gap_preserved'
+      status = if ($Stage17GapPreserved) { 'ready' } else { 'not_applicable' }
+      required_before_continue = $true
+      evidence = $Stage17GapEvidence
+    },
+    [ordered]@{
+      id = 'dirty_worktree_preservation_guard'
+      status = 'enforced'
+      required_before_continue = $true
+      evidence = 'inspect git status before editing and preserve unrelated dirty work'
+    },
+    [ordered]@{
       id = 'percentage_movement_guard'
       status = 'enforced'
       required_before_continue = $true
@@ -267,6 +294,18 @@ function New-CompletionLoopGuard {
       status = 'enforced'
       required_before_continue = $true
       evidence = 'continue should pick one roadmap-aligned slice, validate it, then ledger it'
+    },
+    [ordered]@{
+      id = 'material_ledger_update_guard'
+      status = 'enforced'
+      required_before_continue = $true
+      evidence = 'update the ledger only for material repo truth backed by validation'
+    },
+    [ordered]@{
+      id = 'stage17_readback_apply_boundary_guard'
+      status = 'enforced'
+      required_before_continue = $true
+      evidence = 'Stage 17 readbacks stay authority-denying; apply routes must remain governed, dry-run confirmed, scoped, and tested'
     }
   )
 
@@ -339,7 +378,7 @@ if ([string]::IsNullOrWhiteSpace($CurrentPhase)) {
 $LatestLedgerEntry = Get-LatestLedgerEntry -LedgerText $LedgerText
 $Stage17Status = Get-Stage17Status -LedgerText $LedgerText
 $Planes = Get-PlaneReadiness -BuildManifestText $BuildManifestText
-$LoopGuard = New-CompletionLoopGuard -LedgerExists $LedgerExists -BuildManifestExists $BuildManifestExists -LatestLedgerEntry $LatestLedgerEntry
+$LoopGuard = New-CompletionLoopGuard -LedgerExists $LedgerExists -BuildManifestExists $BuildManifestExists -LatestLedgerEntry $LatestLedgerEntry -Stage17Status $Stage17Status
 $NextContinueDecision = New-NextContinueDecision -LoopGuard $LoopGuard -LatestLedgerEntry $LatestLedgerEntry -Stage17Status $Stage17Status
 
 $Payload = [ordered]@{

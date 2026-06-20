@@ -30,6 +30,7 @@ def completion_model_status_snapshot(
         ledger_exists=ledger_exists,
         build_manifest_exists=build_manifest_exists,
         latest_ledger_entry=latest_ledger_entry,
+        stage17_status=stage17_status,
     )
     next_continue_decision = _next_continue_decision(
         loop_guard=loop_guard,
@@ -239,7 +240,18 @@ def _loop_guard(
     ledger_exists: bool,
     build_manifest_exists: bool,
     latest_ledger_entry: dict[str, Any],
+    stage17_status: dict[str, Any],
 ) -> dict[str, Any]:
+    stage17_entry = stage17_status.get("latest_ledger_entry")
+    stage17_gap_preserved = (
+        stage17_status.get("found") is True
+        and stage17_status.get("status") == "open"
+        and isinstance(stage17_entry, dict)
+        and stage17_entry.get("has_remaining_truthful_gap") is True
+    )
+    stage17_gap_evidence = (
+        str(stage17_entry.get("title", "")) if isinstance(stage17_entry, dict) else "no Stage 17 ledger entry found"
+    )
     checklist = [
         {
             "id": "ledger_read",
@@ -266,6 +278,18 @@ def _loop_guard(
             "evidence": str(latest_ledger_entry["remaining_truthful_gap"]),
         },
         {
+            "id": "stage17_lane_gap_preserved",
+            "status": "ready" if stage17_gap_preserved else "not_applicable",
+            "required_before_continue": True,
+            "evidence": stage17_gap_evidence if stage17_gap_preserved else "no open Stage 17 gap selected",
+        },
+        {
+            "id": "dirty_worktree_preservation_guard",
+            "status": "enforced",
+            "required_before_continue": True,
+            "evidence": "inspect git status before editing and preserve unrelated dirty work",
+        },
+        {
             "id": "percentage_movement_guard",
             "status": "enforced",
             "required_before_continue": True,
@@ -276,6 +300,21 @@ def _loop_guard(
             "status": "enforced",
             "required_before_continue": True,
             "evidence": "continue should pick one roadmap-aligned slice, validate it, then ledger it",
+        },
+        {
+            "id": "material_ledger_update_guard",
+            "status": "enforced",
+            "required_before_continue": True,
+            "evidence": "update the ledger only for material repo truth backed by validation",
+        },
+        {
+            "id": "stage17_readback_apply_boundary_guard",
+            "status": "enforced",
+            "required_before_continue": True,
+            "evidence": (
+                "Stage 17 readbacks stay authority-denying; apply routes must remain governed, "
+                "dry-run confirmed, scoped, and tested"
+            ),
         },
     ]
     blocked_count = sum(1 for item in checklist if item["status"] == "blocked")

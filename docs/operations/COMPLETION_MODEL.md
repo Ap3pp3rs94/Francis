@@ -85,10 +85,16 @@ Every `continue` run should satisfy these guards:
 - read the build manifest when phase or milestone posture matters
 - identify the latest validated slice
 - name the remaining truthful gap
+- preserve the open Stage 17 gap when Stage 17 remains open behind newer
+  non-Stage-17 ledger entries
+- inspect and preserve unrelated dirty work before editing
 - preserve dirty work unless explicitly told to revert it
 - choose one bounded roadmap-aligned slice
 - validate the touched path
 - update the ledger only when repo truth materially changed
+- keep Stage 17 readback/apply boundaries explicit: readbacks remain
+  authority-denying, and any apply route must be governed, dry-run confirmed,
+  scoped, and tested
 
 ## Non-Goals
 

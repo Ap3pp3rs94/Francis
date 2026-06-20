@@ -65,8 +65,17 @@ def test_francis_completion_model_status_projects_ledger_backed_loop_guard() -> 
     assert "build_manifest_read" in checklist_ids
     assert "latest_validated_slice_identified" in checklist_ids
     assert "remaining_gap_named" in checklist_ids
+    assert "stage17_lane_gap_preserved" in checklist_ids
+    assert "dirty_worktree_preservation_guard" in checklist_ids
     assert "percentage_movement_guard" in checklist_ids
     assert "single_bounded_slice_guard" in checklist_ids
+    assert "material_ledger_update_guard" in checklist_ids
+    assert "stage17_readback_apply_boundary_guard" in checklist_ids
+    checklist = {item["id"]: item for item in payload["continue_loop_guard"]["checklist"]}
+    assert checklist["stage17_lane_gap_preserved"]["status"] == "ready"
+    assert checklist["dirty_worktree_preservation_guard"]["status"] == "enforced"
+    assert checklist["material_ledger_update_guard"]["status"] == "enforced"
+    assert checklist["stage17_readback_apply_boundary_guard"]["status"] == "enforced"
 
 
 def test_francis_completion_model_percentages_are_evidence_gated_not_invented() -> None:
@@ -210,6 +219,12 @@ def test_francis_completion_model_script_keeps_stage17_gap_when_latest_entry_is_
     assert payload["next_continue_decision"]["next_smallest_truthful_gap"] == (
         "- Stage 17 remains open. Continue the selected-scope queue."
     )
+    checklist = {item["id"]: item for item in payload["continue_loop_guard"]["checklist"]}
+    assert checklist["stage17_lane_gap_preserved"]["status"] == "ready"
+    assert checklist["stage17_lane_gap_preserved"]["evidence"] == (
+        "2026-06-19 - Stage 17 selected-scope proposal evidence/review chunk 52"
+    )
+    assert checklist["stage17_readback_apply_boundary_guard"]["status"] == "enforced"
 
 
 def test_francis_completion_model_script_is_status_only() -> None:

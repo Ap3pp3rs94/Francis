@@ -35,6 +35,12 @@ def test_completion_model_snapshot_is_read_only_and_loop_guarded() -> None:
     assert payload["next_continue_decision"]["status"] == "bounded_slice_required"
     assert payload["next_continue_decision"]["selected_gap_source"] == "stage17_latest_ledger_entry"
     assert payload["next_continue_decision"]["stage17_gap_preferred"] is True
+    checklist = {item["id"]: item for item in payload["continue_loop_guard"]["checklist"]}
+    assert checklist["stage17_lane_gap_preserved"]["status"] == "ready"
+    assert checklist["stage17_lane_gap_preserved"]["evidence"]
+    assert checklist["dirty_worktree_preservation_guard"]["status"] == "enforced"
+    assert checklist["material_ledger_update_guard"]["status"] == "enforced"
+    assert checklist["stage17_readback_apply_boundary_guard"]["status"] == "enforced"
 
 
 def test_completion_model_snapshot_blocks_when_sources_are_missing(tmp_path: Path) -> None:
@@ -53,7 +59,11 @@ def test_completion_model_snapshot_blocks_when_sources_are_missing(tmp_path: Pat
     assert checklist["ledger_read"] == "blocked"
     assert checklist["build_manifest_read"] == "blocked"
     assert checklist["latest_validated_slice_identified"] == "blocked"
+    assert checklist["stage17_lane_gap_preserved"] == "not_applicable"
+    assert checklist["dirty_worktree_preservation_guard"] == "enforced"
     assert checklist["percentage_movement_guard"] == "enforced"
+    assert checklist["material_ledger_update_guard"] == "enforced"
+    assert checklist["stage17_readback_apply_boundary_guard"] == "enforced"
 
 
 def test_completion_model_snapshot_reads_wrapped_roadmap_area(tmp_path: Path) -> None:
@@ -167,6 +177,12 @@ def test_completion_model_snapshot_keeps_stage17_gap_when_latest_entry_is_other_
     assert payload["next_continue_decision"]["next_smallest_truthful_gap"] == (
         "- Stage 17 remains open. Continue the selected-scope queue."
     )
+    checklist = {item["id"]: item for item in payload["continue_loop_guard"]["checklist"]}
+    assert checklist["stage17_lane_gap_preserved"]["status"] == "ready"
+    assert checklist["stage17_lane_gap_preserved"]["evidence"] == (
+        "2026-06-19 - Stage 17 selected-scope proposal evidence/review chunk 52"
+    )
+    assert checklist["stage17_readback_apply_boundary_guard"]["status"] == "enforced"
 
 
 def test_completion_model_status_route_is_mounted_and_read_only() -> None:
