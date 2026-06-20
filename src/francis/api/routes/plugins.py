@@ -16591,6 +16591,43 @@ def _capability_pack_metadata_receipts_bulk_from_plan_fingerprint(*, planned: li
     return hashlib.sha256(raw).hexdigest()
 
 
+def _capability_pack_ambiguous_version_selections(candidates: list[dict[str, Any]]) -> list[dict[str, object]]:
+    versions_by_pack: dict[str, dict[str, dict[str, object]]] = {}
+    for candidate in candidates:
+        pack_id = _safe_str(candidate.get("pack_id")).strip()
+        pack_version = _safe_str(candidate.get("pack_version")).strip()
+        if not pack_id:
+            continue
+        version_item = versions_by_pack.setdefault(pack_id, {}).setdefault(
+            pack_version,
+            {
+                "pack_version": pack_version,
+                "candidate_count": 0,
+                "capability_count": 0,
+            },
+        )
+        version_item["candidate_count"] = int(version_item["candidate_count"]) + 1
+        version_item["capability_count"] = int(version_item["capability_count"]) + _count_value(
+            candidate.get("capability_count")
+        )
+
+    out: list[dict[str, object]] = []
+    for pack_id, versions in sorted(versions_by_pack.items()):
+        if len(versions) <= 1:
+            continue
+        version_items = [dict(item) for _, item in sorted(versions.items())]
+        out.append(
+            {
+                "pack_id": pack_id,
+                "pack_versions": [str(item.get("pack_version") or "") for item in version_items],
+                "candidate_count": sum(int(item.get("candidate_count") or 0) for item in version_items),
+                "capability_count": sum(int(item.get("capability_count") or 0) for item in version_items),
+                "reason": "multiple_pack_versions_selected_for_one_pack_id",
+            }
+        )
+    return out
+
+
 def _capability_pack_migration_batch_projection(
     *,
     plan: dict[str, Any],
@@ -16708,6 +16745,47 @@ def record_capability_pack_metadata_receipts_from_plan(
                 for candidate in candidates
                 if _safe_str(candidate.get("pack_id")).strip() in selected_pack_ids
             ]
+        ambiguous_selections = _capability_pack_ambiguous_version_selections(candidates)
+        if ambiguous_selections:
+            selected_capability_ids = {
+                capability_id
+                for candidate in candidates
+                for capability_id in _capability_ids_for_pack(
+                    entries,
+                    pack_id=_safe_str(candidate.get("pack_id")).strip(),
+                    pack_version=_safe_str(candidate.get("pack_version")).strip(),
+                )
+            }
+            before_projection = _capability_pack_migration_batch_projection(
+                plan=plan,
+                candidates=candidates,
+                selected_pack_ids=selected_pack_ids,
+                selected_capability_ids=selected_capability_ids,
+            )
+            return {
+                "ok": False,
+                "applied": False,
+                "status": "blocked",
+                "error": "ambiguous_pack_version_selection",
+                "ambiguous_pack_selections": ambiguous_selections,
+                "candidate_total": len(candidates),
+                "projection_scope": before_projection["projection_scope"],
+                "global_counts_included": before_projection["global_counts_included"],
+                "projection_generated_at": before_projection["generated_at"],
+                "projection_evidence": before_projection["projection_evidence"],
+                "before": before_projection,
+                "requirements": {
+                    "versioned_pack_identity_required": True,
+                    "one_pack_version_per_pack_id_per_batch": True,
+                    "receipt_identity_contract": "capability_pack_metadata_receipt_id_v1",
+                    "reason": "metadata receipt ids are keyed by pack_id and timestamp",
+                },
+                "governance": _capability_pack_metadata_receipts_bulk_governance(
+                    route_path=request.url.path,
+                    writes_registry_metadata=False,
+                    writes_receipts=False,
+                ),
+            }
         if not candidates:
             before_projection = _capability_pack_migration_batch_projection(
                 plan=plan,

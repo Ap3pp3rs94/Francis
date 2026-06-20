@@ -2283,6 +2283,147 @@ def test_plugins_capability_pack_metadata_receipts_bulk_from_migration_plan(
     assert receipt["metadata_context"]["bulk_from_migration_plan"] is True
 
 
+def test_plugins_capability_pack_metadata_receipts_bulk_blocks_ambiguous_pack_versions(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
+    client = TestClient(create_app())
+    shared_pack_id = "ops.ambiguous_migration"
+    unique_pack_id = "ops.unambiguous_migration"
+    built_plugin_ids: list[str] = []
+    versioned_pack_metadata: dict[str, tuple[str, str]] = {}
+    for label, pack_id, pack_version in (
+        ("ambiguous_v1", shared_pack_id, "1.0.0"),
+        ("ambiguous_v2", shared_pack_id, "2.0.0"),
+        ("unique_v1", unique_pack_id, "1.0.0"),
+    ):
+        built = client.post(
+            "/plugins/build",
+            json={
+                "name": f"Migration Version Guard {label}",
+                "description": "Stage 17 migration version guard coverage",
+                "actor": _PLUGIN_ACTOR,
+                "meta": {
+                    **_forge_promotion_meta(label),
+                    "pack_id": pack_id,
+                    "pack_version": pack_version,
+                    "pack_name": "Migration Version Guard Pack",
+                },
+            },
+        )
+        assert built.status_code == 200
+        built_body = built.json()
+        assert built_body["ok"] is True
+        plugin_id = str(built_body["plugin_id"])
+        built_plugin_ids.append(plugin_id)
+        versioned_pack_metadata[plugin_id] = (pack_id, pack_version)
+
+    registry = plugins._load_registry()
+    for plugin_id, (pack_id, pack_version) in versioned_pack_metadata.items():
+        current = plugins._read_plugin(registry, plugin_id)
+        assert current is not None
+        meta = dict(current.get("meta") or {})
+        meta.update(
+            {
+                "pack_id": pack_id,
+                "pack_version": pack_version,
+                "pack_name": "Migration Version Guard Pack",
+                "pack_metadata_source": "legacy_generated_projection",
+            }
+        )
+        current["meta"] = meta
+        plugins._write_plugin(registry, plugins._normalize_plugin_record(plugin_id, current))
+    plugins._save_registry_and_catalog(registry)
+
+    plan = client.get("/plugins/capabilities/packs/migration/plan").json()
+    ambiguous_candidates = [item for item in plan["candidates"] if str(item.get("pack_id")) == shared_pack_id]
+    assert sorted(str(item["pack_version"]) for item in ambiguous_candidates) == ["1.0.0", "2.0.0"]
+    unique_candidate = next(item for item in plan["candidates"] if str(item.get("pack_id")) == unique_pack_id)
+    receipt_dir = data_root / "artifacts" / "plugins" / "capability_packs" / "metadata_receipts"
+
+    allowed = client.post(
+        "/plugins/capabilities/packs/metadata/receipts/bulk-from-plan",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "dry run unambiguous migration pack",
+            "pack_ids": [unique_pack_id],
+        },
+    )
+    assert allowed.status_code == 200
+    allowed_body = allowed.json()
+    assert allowed_body["ok"] is True
+    assert allowed_body["applied"] is False
+    assert allowed_body["status"] == "dry_run"
+    assert allowed_body["planned"][0]["pack_id"] == unique_pack_id
+    assert allowed_body["planned"][0]["pack_version"] == unique_candidate["pack_version"]
+    assert allowed_body["governance"]["writes_registry_metadata"] is False
+    assert allowed_body["governance"]["writes_receipts"] is False
+    assert not receipt_dir.exists()
+
+    denied = client.post(
+        "/plugins/capabilities/packs/metadata/receipts/bulk-from-plan",
+        json={
+            "actor": "unscoped.versioned.migration.operator",
+            "reason": "unscoped ambiguous migration apply",
+            "pack_ids": [shared_pack_id],
+            "dry_run": False,
+            "dry_run_fingerprint": allowed_body["dry_run_fingerprint"],
+        },
+    )
+    assert denied.status_code == 200
+    denied_body = denied.json()
+    assert denied_body["ok"] is False
+    assert denied_body["error"] == "api_permission_denied"
+    assert denied_body["governance"]["gate"] == "permission_gate"
+    assert not receipt_dir.exists()
+
+    ambiguous = client.post(
+        "/plugins/capabilities/packs/metadata/receipts/bulk-from-plan",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "ambiguous migration pack version selection",
+            "pack_ids": [shared_pack_id],
+        },
+    )
+    assert ambiguous.status_code == 200
+    ambiguous_body = ambiguous.json()
+    assert ambiguous_body["ok"] is False
+    assert ambiguous_body["applied"] is False
+    assert ambiguous_body["status"] == "blocked"
+    assert ambiguous_body["error"] == "ambiguous_pack_version_selection"
+    assert ambiguous_body["projection_scope"] == "selected_packs"
+    assert ambiguous_body["global_counts_included"] is False
+    assert ambiguous_body["before"]["candidate_total"] == 2
+    assert ambiguous_body["requirements"]["versioned_pack_identity_required"] is True
+    assert ambiguous_body["requirements"]["one_pack_version_per_pack_id_per_batch"] is True
+    assert ambiguous_body["requirements"]["receipt_identity_contract"] == "capability_pack_metadata_receipt_id_v1"
+    assert ambiguous_body["governance"]["writes_registry_metadata"] is False
+    assert ambiguous_body["governance"]["writes_receipts"] is False
+    ambiguous_selection = ambiguous_body["ambiguous_pack_selections"][0]
+    assert ambiguous_selection["pack_id"] == shared_pack_id
+    assert ambiguous_selection["pack_versions"] == ["1.0.0", "2.0.0"]
+    assert ambiguous_selection["candidate_count"] == 2
+    assert ambiguous_selection["capability_count"] == 2
+    assert ambiguous_body["before"]["projection_evidence"]["selected_pack_ids"] == [shared_pack_id]
+    assert sorted(ambiguous_body["before"]["projection_evidence"]["selected_capability_ids"]) == sorted(
+        built_plugin_ids[:2]
+    )
+    assert not receipt_dir.exists()
+
+    for plugin_id in built_plugin_ids:
+        fetched = client.get(f"/plugins/get?id={plugin_id}").json()["item"]
+        assert "pack_metadata_receipt_id" not in fetched["meta"]
+
+
 def test_plugins_capability_pack_metadata_receipts_bulk_selected_batch_reports_before_after_counts(
     monkeypatch,
     tmp_path: Path,
