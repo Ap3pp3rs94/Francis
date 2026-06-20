@@ -87729,6 +87729,149 @@ Remaining truthful gap:
 - This slice does not close a ledger-backed phase gate and does not move the
   Phase 2 posture.
 
+### 2026-06-20 - Stage 17 second live metadata receipt batch reduction
+
+Roadmap area: Stage 17 / Capability Economy, live capability-pack backlog
+reduction, governed metadata receipt batch intake, queue-count evidence, and
+receipt-backed selected-scope projection timing.
+
+This pass reused the existing metadata-receipt batch route against the next
+small live migration-plan candidate instead of adding another one-off metadata
+patch:
+
+- Initial live readback from
+  `GET /plugins/capabilities/packs/migration/plan` reported
+  `candidate_total=17`, `status=ready_for_metadata_receipt_review`, and
+  `next_smallest_truthful_gap=stage17_capability_pack_metadata_receipt_operator_review`.
+- The selected current migration-plan candidate was
+  `legacy.generated.capabilitylineageplugin`
+  (`pack_version=0.0.0-migration`). The route resolved 14 current capability ids
+  for that pack.
+- The first dry-run attempt was denied before any write because the actor-scope
+  environment was malformed, returning `api_permission_denied` with missing
+  `plugins.write` scope evidence.
+- The accepted dry-run used `max_pack_count=1`,
+  `max_total_capability_count=14`, and
+  `max_capability_count_per_pack=14`, returned
+  `dry_run_fingerprint=3d0a82183e535275f25d2007b9662af116d7800b4984cd020fbc56faf1589a1b`,
+  `planned_pack_count=1`, `planned_capability_count=14`,
+  `projection_scope=selected_packs`, `global_counts_included=false`,
+  `before_candidate_total=1`, and `before_global_candidate_total=17`, with
+  registry and receipt writes disabled.
+- Apply echoed that exact fingerprint through
+  `POST /plugins/capabilities/packs/metadata/receipts/bulk-from-plan` and wrote
+  batch `stage17_metadata_receipts_bulk_1781990871` plus receipt
+  `data/artifacts/plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781990871_legacy-generated-capabilitylineageplugin.json`.
+- The apply response reported `recorded_pack_count=1`,
+  `recorded_capability_count=14`, `before_candidate_total=1`,
+  `after_candidate_total=0`, `candidate_reduction_count=1`,
+  `remaining_scoped_candidate_total=0`,
+  `remaining_global_candidate_total=16`, and
+  `remaining_candidate_total=16`.
+- Independent readback after apply reported `candidate_total=16`,
+  `target_pack_still_candidate=false`, and the new receipt visible through
+  `/plugins/capabilities/packs/metadata/receipts?limit=5`.
+- The written receipt carries
+  `stage17_capability_pack_metadata_receipts_batch_queue_evidence_v1` in
+  `metadata_context`, selected pack/capability ids, the selected/global before
+  counts, the original source blockers, and the existing permission-gated
+  governance flags. Some selected entries had prior metadata receipt references,
+  so this pass is evidence of clearing the current migration-plan candidate and
+  refreshing the batch receipt, not a first-ever metadata receipt claim for each
+  historical capability.
+- The route preserved the no-proposal-approval, no-promotion, no-enable,
+  no-execution, no-generated-artifact-mutation, and no-memory-write boundary.
+
+Validation:
+
+- Live route dry-run and apply through FastAPI `TestClient` with temporary
+  `stage17.operator` actor scope mapped to `plugins.write` passed. Both runs
+  emitted the existing FastAPI/TestClient deprecation warning.
+- Independent live readback after apply confirmed the selected pack was removed
+  from the migration candidate list and the global candidate total moved from
+  `17` to `16`.
+- `.\.venv\Scripts\python.exe -m pytest
+  tests\test_api_plugins.py::test_plugins_capability_pack_metadata_receipts_bulk_from_migration_plan
+  tests\test_api_plugins.py::test_plugins_capability_pack_metadata_receipts_bulk_selected_batch_reports_before_after_counts
+  -q` passed with `2 passed` and one existing FastAPI/TestClient deprecation
+  warning.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. This pass does not claim full global queue closure,
+  promote, enable, execute, write a publication marker, commit, push, or close
+  the Stage 17 capability-economy queue.
+- This pass reduces one live metadata-receipt migration candidate through the
+  existing selected-batch mechanism. It does not close broader live backlog
+  reduction, global projection freshness, proposal-review/proposal-evidence
+  closure scope, publication-marker evidence, or full capability-lifecycle
+  closure.
+- This slice does not close a ledger-backed phase gate and does not move the
+  Phase 2 posture.
+
+### 2026-06-20 - Stage 17 receipt-linked mission-shape invocation audit proof
+
+Roadmap area: Stage 17 / Capability Economy, reusable governed invocation,
+receipt-linked mission-shape proof, read-only invocation auditability, and
+cross-context leverage.
+
+This pass hardened the existing reusable invocation audit proof so the audit
+does not merely report that one pack reuse key appeared across mission operation
+shapes. It now separately reports whether the same pack reuse key has both
+mission-linked `plugin.run` and `plugin.tool.run` operation capabilities with
+complete dispatch receipt linkage:
+
+- `/plugins/capabilities/library/invocations/audit` now emits
+  `receipt_linked_operation_capabilities_by_pack_reuse_key`,
+  `receipt_linked_mission_shape_reuse_proven`, and
+  `receipt_linked_mission_shape_reuse_keys` inside the existing
+  `stage17_capability_pack_invocation_audit_reuse_proof_v1` readback.
+- The receipt-linked proof is derived only from eligible embedded
+  `plugin.capability_pack.invocation_receipt` operation outputs whose routing
+  guard has complete dispatch linkage or whose embedded receipt linkage has
+  dispatch receipt presence plus run and trace ids.
+- The focused Stage 17 mission fixture still drives one promoted test pack
+  through direct plugin/tool dry-runs and mission-linked plugin/tool operations,
+  while the audit proof now names the receipt-linked mission-shape criterion
+  explicitly.
+- The route remains read-only. It does not infer missing direct-route receipts,
+  write receipts, write registry metadata, approve proposals, promote
+  capabilities, enable capabilities, execute desktop actions, or write memory.
+
+Validation:
+
+- `.\.venv\Scripts\python.exe -m py_compile
+  src\francis\api\routes\plugins.py tests\test_api_missions.py` passed.
+- `.\.venv\Scripts\python.exe -m pytest
+  tests\test_api_missions.py::test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_mission_contexts
+  -q` passed with one existing FastAPI/TestClient deprecation warning.
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_missions.py` passed.
+- `git diff --check -- src\francis\api\routes\plugins.py
+  tests\test_api_missions.py docs\operations\COMPLETION_LEDGER.md` reported no
+  whitespace errors after this ledger entry.
+- `.\.venv\Scripts\python.exe -m ruff format --diff --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_missions.py` still reported
+  formatting deltas only in unrelated pre-existing lifecycle rollback lines in
+  `src\francis\api\routes\plugins.py`; no invocation-audit or mission-test
+  formatting hunks remained.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. This pass does not claim full reusable invocation
+  coverage, process a live Stage 17 queue chunk, promote or enable a capability
+  beyond the isolated test fixture, execute desktop actions, write a
+  publication marker, commit, push, or close the Stage 17 capability-economy
+  queue.
+- This pass removes only the missing explicit receipt-linked mission-shape
+  proof blocker for the tested governed pack and mission-linked plugin/tool
+  operation shapes. Broader live backlog reduction, global projection
+  freshness, proposal-review/proposal-evidence closure scope,
+  publication-marker evidence, and full capability-lifecycle closure remain
+  open.
+- This slice does not close a ledger-backed phase gate and does not move the
+  Phase 2 posture.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

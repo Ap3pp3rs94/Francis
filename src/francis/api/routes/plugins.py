@@ -10297,6 +10297,27 @@ def _capability_pack_invocation_audit_projection(
         for key, operation_capabilities in capability_lists_by_reuse_key.items()
         if mission_shape_capabilities.issubset(operation_capabilities)
     ]
+    receipt_linked_capabilities_by_reuse_key: dict[str, set[str]] = {}
+    for item in items:
+        reuse_key = str(item.get("pack_reuse_key") or "").strip()
+        operation_capability = str(item.get("operation_capability") or "").strip()
+        routing_guard = item.get("routing_guard") if isinstance(item.get("routing_guard"), dict) else {}
+        receipt_linkage = item.get("receipt_linkage") if isinstance(item.get("receipt_linkage"), dict) else {}
+        dispatch_receipt_linkage_complete = _to_bool(routing_guard.get("dispatch_receipt_linkage_complete")) or (
+            _to_bool(receipt_linkage.get("dispatch_receipt_present"))
+            and bool(str(receipt_linkage.get("run_id") or "").strip())
+            and bool(str(receipt_linkage.get("trace_id") or "").strip())
+        )
+        if reuse_key and operation_capability and dispatch_receipt_linkage_complete:
+            receipt_linked_capabilities_by_reuse_key.setdefault(reuse_key, set()).add(operation_capability)
+    receipt_linked_capability_lists_by_reuse_key = {
+        key: sorted(value) for key, value in sorted(receipt_linked_capabilities_by_reuse_key.items())
+    }
+    receipt_linked_mission_shape_reuse_keys = [
+        key
+        for key, operation_capabilities in receipt_linked_capability_lists_by_reuse_key.items()
+        if mission_shape_capabilities.issubset(operation_capabilities)
+    ]
     return {
         "ok": True,
         "kind": "plugin.capability_library.invocations.audit",
@@ -10336,6 +10357,9 @@ def _capability_pack_invocation_audit_projection(
             "mission_shape_capabilities_required": sorted(mission_shape_capabilities),
             "mission_shape_reuse_proven": bool(mission_shape_reuse_keys),
             "mission_shape_reuse_keys": mission_shape_reuse_keys,
+            "receipt_linked_operation_capabilities_by_pack_reuse_key": (receipt_linked_capability_lists_by_reuse_key),
+            "receipt_linked_mission_shape_reuse_proven": bool(receipt_linked_mission_shape_reuse_keys),
+            "receipt_linked_mission_shape_reuse_keys": receipt_linked_mission_shape_reuse_keys,
         },
         "items": returned,
         "rejected_items": returned_rejected,
@@ -10358,6 +10382,7 @@ def _capability_pack_invocation_audit_projection(
             "multi_mission_reuse_requires_distinct_mission_ids": True,
             "mission_linked_reuse_requires_both_mission_contexts": True,
             "mission_shape_reuse_requires_plugin_run_and_plugin_tool_run": True,
+            "receipt_linked_mission_shape_reuse_requires_dispatch_run_and_trace_ids": True,
             "does_not_infer_missing_direct_route_receipts": True,
         },
         "governance": {

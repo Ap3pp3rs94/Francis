@@ -1317,6 +1317,11 @@ def test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_missio
     assert reuse_proof["mission_shape_capabilities_required"] == ["plugin.run", "plugin.tool.run"]
     assert reuse_proof["mission_shape_reuse_proven"] is True
     assert reuse_proof["mission_shape_reuse_keys"] == [direct_invocation["pack_reuse_key"]]
+    assert reuse_proof["receipt_linked_operation_capabilities_by_pack_reuse_key"] == {
+        direct_invocation["pack_reuse_key"]: ["plugin.run", "plugin.tool.run"]
+    }
+    assert reuse_proof["receipt_linked_mission_shape_reuse_proven"] is True
+    assert reuse_proof["receipt_linked_mission_shape_reuse_keys"] == [direct_invocation["pack_reuse_key"]]
     assert audit_body["requirements"]["embedded_invocation_receipt_required"] is True
     assert (
         audit_body["requirements"]["embedded_invocation_receipt_contract_required"]
@@ -1340,6 +1345,7 @@ def test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_missio
     assert audit_body["requirements"]["multi_mission_reuse_requires_distinct_mission_ids"] is True
     assert audit_body["requirements"]["mission_linked_reuse_requires_both_mission_contexts"] is True
     assert audit_body["requirements"]["mission_shape_reuse_requires_plugin_run_and_plugin_tool_run"] is True
+    assert audit_body["requirements"]["receipt_linked_mission_shape_reuse_requires_dispatch_run_and_trace_ids"] is True
     assert audit_body["requirements"]["does_not_infer_missing_direct_route_receipts"] is True
     audit_items = {item["operation_id"]: item for item in audit_body["items"]}
     assert set(audit_items) == {operation_id, tool_operation_id, second_operation_id}
