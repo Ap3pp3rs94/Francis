@@ -345,6 +345,80 @@ def _voice_substrate_proof(
     }
 
 
+def _receipt_linkage(
+    payload: dict[str, Any],
+    *,
+    bridge_receipt_id: str,
+    bridge_receipt_path: str,
+) -> dict[str, Any]:
+    raw_orb_voice_bridge = payload.get("orb_voice_bridge")
+    orb_voice_bridge: dict[str, Any] = raw_orb_voice_bridge if isinstance(raw_orb_voice_bridge, dict) else {}
+    raw_command_request = payload.get("orb_position_command_request")
+    command_request: dict[str, Any] = raw_command_request if isinstance(raw_command_request, dict) else {}
+    provider_receipt_mode = _safe_str(
+        payload.get("voice_provider_receipt_mode"),
+        CHATGPT_VOICE_BRIDGE_PROVIDER_STATE,
+    )
+    voice_turn_receipt_path = _safe_str(
+        payload.get("voice_turn_receipt_path") or orb_voice_bridge.get("voice_turn_receipt_path")
+    )
+    orb_position_command_receipt_path = _safe_str(command_request.get("request_receipt_path"))
+    transcript = _safe_str(payload.get("transcript"))
+    decision = _safe_str(payload.get("decision"))
+    reason = _safe_str(payload.get("reason"))
+    return {
+        "kind": "francis.voice.receipt_linkage.v1",
+        "bridge_receipt": {
+            "present": True,
+            "id": bridge_receipt_id,
+            "path": bridge_receipt_path,
+        },
+        "virtual_voice_turn_receipt": {
+            "present": bool(voice_turn_receipt_path),
+            "path": voice_turn_receipt_path,
+            "virtual_voice_turn": bool(orb_voice_bridge.get("virtual_voice_turn")),
+        },
+        "provider_boundary_receipt": {
+            "present": True,
+            "embedded": True,
+            "mode": provider_receipt_mode,
+            "mode_is_provider_call": provider_receipt_mode != CHATGPT_VOICE_BRIDGE_PROVIDER_STATE,
+            "mode_taxonomy": CHATGPT_VOICE_BRIDGE_PROVIDER_STATE_TAXONOMY,
+            "live_provider_call": False,
+            "mock_provider_call": False,
+            "fixture_provider_call": False,
+            "replay_provider_call": False,
+            "provider_unavailable": False,
+            "provider_unconfigured": False,
+            "provider_unavailable_and_unconfigured_distinct": True,
+            "elevenlabs_provider_invoked": False,
+            "elevenlabs_audio_claimed": False,
+            "elevenlabs_live_use_requires_provider_receipt": True,
+        },
+        "orb_position_command_request_receipt": {
+            "present": bool(orb_position_command_receipt_path),
+            "path": orb_position_command_receipt_path,
+            "overlay_receipt_required_for_applied_state": bool(orb_position_command_receipt_path),
+            "applied_state_claimed_by_bridge": False,
+            "voice_controls_orb_directly": False,
+        },
+        "transcript_state": _transcript_state(decision=decision, reason=reason, transcript=transcript),
+        "redaction": {
+            "transcript_redacted": True,
+            "metadata_secrets_redacted": bool(payload.get("metadata_secrets_redacted")),
+            "redacted_metadata_fields": payload.get("redacted_metadata_fields") or [],
+            "raw_audio": False,
+        },
+        "authority": {
+            "voice_controls_orb_directly": False,
+            "substrate_governance_bypass": False,
+            "mission_governance_bypass": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+    }
+
+
 def _receipt_root() -> Path:
     return data_dir() / "integrations" / "chatgpt_voice" / "receipts"
 
@@ -698,6 +772,7 @@ def chatgpt_voice_bridge_contract(actor: str = "") -> dict[str, Any]:
             "redacted_metadata_fields_field": "redacted_metadata_fields",
             "receipt_readback_redacts_secret_patterns": True,
             "voice_substrate_proof_field": "voice_substrate_proof",
+            "receipt_linkage_field": "receipt_linkage",
             "voice_output_provider_field": "voice_output_provider",
             "voice_output_provider_status_field": "voice_output_provider_status",
             "voice_provider_state_field": "voice_provider_state",
@@ -1027,6 +1102,11 @@ def _write_receipt(payload: dict[str, Any]) -> dict[str, Any]:
         "created_at": _utc_iso_from_ts(created_ts),
         **payload,
         "voice_substrate_proof": _voice_substrate_proof(
+            payload,
+            bridge_receipt_id=receipt_id,
+            bridge_receipt_path=bridge_receipt_path,
+        ),
+        "receipt_linkage": _receipt_linkage(
             payload,
             bridge_receipt_id=receipt_id,
             bridge_receipt_path=bridge_receipt_path,
