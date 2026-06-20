@@ -79298,6 +79298,8246 @@ Remaining truthful gap:
   capabilities, does not enable execution authority, does not grant arbitrary
   mutation authority, and does not close any Stage 17/Stage 18 milestone.
 
+### 2026-06-18 - Lens Orb voice handback/readiness truthfulness
+
+Roadmap area: Stage 6 / Lens MVP, Orb voice runtime truthfulness and
+receipt-backed handback.
+
+The Lens overlay voice runtime now has a narrower, receipt-backed readback path
+for speech handback:
+
+- `Status` mode projects a voice turn from `speaking` to `spoken` only when the
+  matching `voice-playback-status.json` receipt reports `spoken`, the receipt
+  belongs to the same owned speech PID, and that owned speech process is no
+  longer alive.
+- The projected voice-turn readback exposes `voice_turn_completed`,
+  `handback_ready`, `handback_state`, `playback_status`,
+  `playback_receipt_observed`, `speech_process_alive`, and `completed_at`
+  without granting execution, memory-write, or arbitrary audio-control
+  authority.
+- Wake-listener startup no longer converts a pre-signal Windows Speech
+  `NoSignal` event into a hard `microphone_no_signal` blocker before any
+  microphone signal has been observed. It remains in
+  `waiting_for_audio_signal` until speech/audio evidence arrives or a real
+  listener failure is recorded.
+- Continuous no-wake dictation now suppresses likely self-trigger speech for a
+  four-second receipt-backed window after an owned speech playback receipt
+  completes. Wake-prefixed operator corrections remain outside that suppression
+  path.
+
+Latest validation for this Lens Orb voice slice:
+
+- PowerShell parser check for `scripts/lens-overlay-window.ps1` returned
+  `parse_ok`.
+- `python -m pytest tests/test_lens_overlay_window_script.py
+  tests/test_lens_overlay_preflight_script.py
+  tests/test_lens_overlay_runtime_readback.py -q` passed with `14 passed`.
+- `python -m pytest tests/test_llm_client.py tests/test_settings.py
+  tests/test_api_chat.py tests/test_lens_overlay_window_script.py
+  tests/test_lens_overlay_preflight_script.py
+  tests/test_lens_overlay_runtime_readback.py
+  tests/test_lens_elevenlabs_voice_setup_script.py -q` passed with
+  `34 passed`.
+- `git diff --check -- scripts/lens-overlay-window.ps1
+  tests/test_lens_overlay_window_script.py` reported no whitespace errors,
+  aside from the existing Git CRLF warning for the PowerShell file.
+- The live overlay was restarted with ElevenLabs, wake listening, continuous
+  voice chat, and voice LLM enabled. Final live `Status` readback reported
+  `ready=true`, `status=visible`, overlay PID `23172`, process alive,
+  `overlay_voice_status=listening`, `voice_llm_enabled=true`,
+  `continuous_voice_chat=true`, `voice_input_status=waiting_for_audio_signal`,
+  no voice-input blocker, latest `voice_turn_status=spoken`,
+  `handback_ready=true`, and `playback_status=spoken`.
+
+Remaining truthful gap:
+
+- This slice does not implement true in-flight model-call cancellation or
+  thought relevance pruning; the live voice-turn receipts still truthfully mark
+  `model_call_cancellation_supported=false`,
+  `arbitrary_audio_control=false`, and `thought_cancellation_supported=false`.
+  It also does not close Stage 6/Lens, does not move the Phase 2 posture, and
+  does not start a new roadmap stage.
+
+### 2026-06-18 - Lens voice superseded-thought receipt contract
+
+Roadmap area: Stage 6 / Lens MVP, Orb voice interruption and stale-reply
+truthfulness.
+
+The Lens overlay voice runtime now records a bounded stale-thought contract
+without claiming true backend cancellation:
+
+- When a new voice turn starts while the previous active turn is still
+  `active`, `chat_pending`, or `speaking`, the previous turn receipt is marked
+  `superseded_by_new_voice_turn` with `superseded_by_turn_id`,
+  `speech_cancelled_at_supersession`, `speech_cancelled_process_id`,
+  `thought_relevance_status=superseded_pending_result`, and
+  `thought_retention_policy=drop_superseded_reply_unless_operator_reasks`.
+- When an older `/chat/send` reply returns after a newer voice turn became
+  active, that older reply receipt is marked `voice_chat_reply_superseded` /
+  `reply_superseded` with `chat_reply_suppressed=true`,
+  `speech_output_suppressed=true`,
+  `thought_relevance_status=stale_reply_dropped`,
+  `thought_retention_policy=drop_superseded_reply_keep_trace_metadata`, and
+  `model_call_completed_after_superseded` when a model response was observed.
+- Current spoken replies now carry `chat_reply_suppressed=false`,
+  `thought_relevance_status=current_reply_spoken`, and
+  `thought_retention_policy=current_turn_active`.
+- The receipts continue to expose `model_call_abort_requested=false`,
+  `model_call_abort_observed=false`, `model_call_cancellation_supported=false`,
+  and `thought_cancellation_supported=false`; this is explicit stale-result
+  suppression and relevance accounting, not a false claim of cancelable model
+  execution.
+
+Latest validation for this Lens voice supersession contract:
+
+- PowerShell parser check for `scripts/lens-overlay-window.ps1` returned
+  `parse_ok`.
+- `python -m pytest tests/test_lens_overlay_window_script.py
+  tests/test_lens_overlay_preflight_script.py
+  tests/test_lens_overlay_runtime_readback.py -q` passed with `14 passed`.
+- `python -m pytest tests/test_llm_client.py tests/test_settings.py
+  tests/test_api_chat.py tests/test_lens_overlay_window_script.py
+  tests/test_lens_overlay_preflight_script.py
+  tests/test_lens_overlay_runtime_readback.py
+  tests/test_lens_elevenlabs_voice_setup_script.py -q` passed with
+  `34 passed`.
+- `git diff --check -- scripts/lens-overlay-window.ps1
+  tests/test_lens_overlay_window_script.py` reported no whitespace errors,
+  aside from the existing Git CRLF warning for the PowerShell file.
+- The live overlay was restarted with ElevenLabs, wake listening, continuous
+  voice chat, and voice LLM enabled. Because the operator reported the
+  microphone was off, live status truthfully reported the overlay as visible
+  and waiting for microphone signal rather than claiming a ready mic path.
+
+Remaining truthful gap:
+
+- This slice does not add true in-flight cancellation to `/chat/send`, Ollama,
+  or any other model backend. A newer voice turn can supersede and suppress an
+  older completed reply before speech, and receipts now prove that, but the old
+  backend request may still run until it returns.
+
+### 2026-06-18 - Chat voice-turn correlation reaches backend traces
+
+Roadmap area: Stage 6 / Lens MVP, Orb voice interruption/readback truthfulness.
+
+The Lens overlay voice bridge now carries bounded voice-turn identity through
+the backend chat route instead of keeping interruption truth only in local
+overlay receipts:
+
+- `/chat/send` accepts bounded `voice_turn_id` and
+  `supersedes_voice_turn_id` fields, sanitizes them for trace use, and records
+  them in the response `execution_trace`.
+- The same execution trace is written into both user and assistant conversation
+  ledger entries, so a model reply can be correlated to the voice turn that
+  requested it and the prior voice turn it superseded.
+- `scripts/lens-overlay-window.ps1` sends the active and previous voice turn
+  ids to `/chat/send` and records `chat_trace_voice_turn_id`,
+  `chat_trace_supersedes_voice_turn_id`, and
+  `chat_trace_voice_turn_correlation` in both spoken and stale-suppressed voice
+  turn receipts.
+- The trace remains explicitly read-only and non-authorizing:
+  `voice_turn_correlation_read_only=true`,
+  `voice_turn_correlation_grants_execution_authority=false`,
+  `voice_turn_correlation_grants_mutation_authority=false`,
+  `model_call_cancellation_supported=false`,
+  `model_call_abort_requested=false`, `model_call_abort_observed=false`, and
+  `stale_reply_suppression_supported=true`.
+
+Latest validation for this chat voice-turn correlation slice:
+
+- PowerShell parser check for `scripts/lens-overlay-window.ps1` returned
+  `parse_ok`.
+- `python -m pytest tests/test_api_chat.py
+  tests/test_lens_overlay_window_script.py -q` passed with `18 passed`.
+- `python -m pytest tests/test_llm_client.py tests/test_settings.py
+  tests/test_api_chat.py tests/test_lens_overlay_window_script.py
+  tests/test_lens_overlay_preflight_script.py
+  tests/test_lens_overlay_runtime_readback.py
+  tests/test_lens_elevenlabs_voice_setup_script.py -q` passed with
+  `34 passed`.
+- `git diff --check -- src/francis/api/routes/chat.py
+  scripts/lens-overlay-window.ps1 tests/test_api_chat.py
+  tests/test_lens_overlay_window_script.py` reported no whitespace errors,
+  aside from the existing Git CRLF warning for the PowerShell file.
+- The live API was restarted on `127.0.0.1:8000`; `/chat/health` returned
+  `ok=true`, and a live `/chat/send` probe from actor `lens.overlay.voice`
+  returned the expected voice-turn correlation fields without granting
+  execution, mutation, or cancellation authority.
+- The live overlay was reloaded with ElevenLabs, wake listening, continuous
+  voice chat, and voice LLM enabled. Final `Status` readback reported
+  `ready=true`, `status=visible`, `overlay_voice_status=listening`,
+  `voice_llm_enabled=true`, `continuous_voice_chat=true`,
+  `voice_input_status=waiting_for_audio_signal`, and no voice-input blocker.
+
+Remaining truthful gap:
+
+- This slice does not implement true in-flight model cancellation or thought
+  relevance pruning inside the model backend. It makes the backend trace and
+  conversation ledger honest about which voice turn produced a reply, while
+  stale-result suppression remains the current bounded interruption behavior.
+  It does not close Stage 6/Lens, does not move the Phase 2 posture, and does
+  not start a new roadmap stage.
+
+### 2026-06-18 - Completion model readback for loop control
+
+Roadmap area: Phase 2 governed runtime spine, P9 observability, and build-loop
+truthfulness. This also preserves the active Stage 6 / Lens voice trace work
+without changing its authority claims.
+
+Francis now has a first status-only completion model for `continue` runs:
+
+- `scripts/francis-completion-model.ps1 -Mode Status` reads
+  `docs/operations/COMPLETION_LEDGER.md` and
+  `docs/canonical/BUILD_MANIFEST.md`, then emits a single JSON readback with
+  the current phase, plane readiness snapshot, latest ledger entry, latest
+  remaining truthful gap, loop guards, and percentage movement rules.
+- `docs/operations/COMPLETION_MODEL.md` defines how the model should be used:
+  identify the latest validated slice, name the remaining truthful gap, choose
+  one bounded roadmap-aligned change, validate it, and update the ledger only
+  when repo truth materially changed.
+- The completion model is explicitly read-only:
+  `read_only_contract=true`, `writes_repo=false`, `writes_data=false`,
+  `grants_execution_authority=false`, and
+  `grants_mutation_authority=false`.
+- The percentage model intentionally does not invent numeric baselines. It
+  reports `movement_allowed_by_this_readback=false` and requires a known
+  baseline source, validated repo evidence, a ledger-backed gate or milestone
+  change, and explicit remaining blockers before any overall or phase
+  percentage can move.
+- The active Lens voice trace slice is preserved and narrowed: `/chat/send`
+  now names the model-abort boundary as
+  `not_supported_request_runs_to_completion`, keeps backend current-turn lookup
+  and backend stale-reply dropping unsupported, and marks thought relevance
+  pruning as unsupported trace-only work. The overlay copies those returned
+  trace fields into spoken and stale-suppressed voice receipts instead of
+  hard-coding a vague success claim.
+
+Latest validation for this completion model slice:
+
+- PowerShell parser checks for `scripts/francis-completion-model.ps1` and
+  `scripts/lens-overlay-window.ps1` returned `parse_ok`.
+- `python -m pytest tests/test_francis_completion_model_script.py
+  tests/test_api_chat.py tests/test_lens_overlay_window_script.py -q` passed
+  with `21 passed`.
+- `scripts/francis-completion-model.ps1 -Mode Status` returned
+  `kind=francis.completion_model.status`, `status=ready`,
+  `current_phase=Phase 2`, latest ledger title
+  `2026-06-18 - Chat voice-turn correlation reaches backend traces`,
+  `loop_guard=ready`, `percent_movement=false`, and
+  `next_decision=bounded_slice_required`.
+
+Remaining truthful gap:
+
+- This is a local readback model and operations contract, not an API route, HUD
+  surface, CI gate, automatic stage closer, or numeric completion baseline.
+  Future runs still need to call the model, choose a bounded gap, validate the
+  touched path, and ledger material repo truth. This does not close Stage 6/Lens,
+  does not move the Phase 2 posture, does not implement true model cancellation,
+  and does not start a new roadmap stage.
+
+### 2026-06-18 - Completion model becomes API-readable substrate state
+
+Roadmap area: Phase 2 governed runtime spine, P9 observability, P1 interface
+readback readiness, and build-loop truthfulness.
+
+The completion model is now available through the Francis API substrate instead
+of only through a local PowerShell status command:
+
+- `src/francis/completion_model.py` implements the read-only completion model
+  snapshot in Python by reading `docs/operations/COMPLETION_LEDGER.md` and
+  `docs/canonical/BUILD_MANIFEST.md`.
+- `GET /completion-model/status` returns the current phase, plane readiness
+  snapshot, latest ledger entry, latest remaining truthful gap, loop guards,
+  routes, next continue decision, and evidence-gated percentage rules.
+- The route is a direct substrate readback. It does not shell out to the
+  PowerShell script, start a process, write repo files, write runtime data,
+  close milestones, grant execution authority, or grant mutation authority.
+- `docs/operations/COMPLETION_MODEL.md` now documents both the CLI readback and
+  the API readback.
+- The existing chat UI API contract test now includes
+  `GET /completion-model/status`, so later HUD/operator surfaces have a stable
+  route to consume.
+
+Latest validation for this API-readable completion model slice:
+
+- `python -m pytest tests/test_completion_model.py
+  tests/test_francis_completion_model_script.py
+  tests/test_api_contract_chat_ui.py -q` passed with `7 passed`.
+- `python -m ruff check --no-cache src/francis/completion_model.py
+  src/francis/api/routes/completion_model.py tests/test_completion_model.py
+  tests/test_francis_completion_model_script.py
+  tests/test_api_contract_chat_ui.py` passed.
+- `python -m ruff format --check --no-cache src/francis/completion_model.py
+  src/francis/api/routes/completion_model.py tests/test_completion_model.py
+  tests/test_francis_completion_model_script.py
+  tests/test_api_contract_chat_ui.py` passed with all checked files already
+  formatted.
+
+Remaining truthful gap:
+
+- This makes the completion model API-readable but still does not make it a HUD
+  surface, CI gate, automatic stage closer, numeric completion baseline, or
+  Orb embodiment state. Future continuation and Orb work must consume this
+  readback, preserve the visual lock, and connect lens, overlay, voice,
+  mission, operator, and receipts through existing Francis substrate paths.
+  This does not close Stage 6/Lens, does not move the Phase 2 posture, and does
+  not start a new roadmap stage.
+
+### 2026-06-18 - Orb continuum Phase 0 visual lock and continuation state
+
+Roadmap area: Phase 2 governed runtime spine, P1 interface truthfulness, P7
+execution boundaries, P9 observability, and Stage 6 / Lens embodiment.
+
+The Orb continuum now has a repository-owned Phase 0 checkpoint before behavior
+work proceeds:
+
+- `docs/operations/ORB_VISUAL_LOCK.md` records the current Orb face as locked,
+  identifies the visually sensitive files, names the chat UI glyph tokens, and
+  records the WPF desktop overlay renderer constants that must not change.
+- `docs/operations/ORB_CONTINUUM_STATE.md` records the active mandate,
+  non-negotiable visual lock, completed tasks, current task, pending tasks,
+  architecture map, assumptions, validation ledger, blockers, receipt/artifact
+  locations, repository state, and exact next action.
+- The durable state explicitly preserves the lens-to-overlay rule: one
+  transparent overlay host supplies desktop-space coordinate/boundary context,
+  and the lens observation contract must operate through that overlay when
+  desktop-space perception is required.
+- The durable state explicitly preserves the voice-to-Orb rule: voice enters the
+  Francis substrate, Francis creates governed state, and the Orb represents that
+  state instead of receiving direct ElevenLabs animation or desktop-control
+  commands.
+- `tests/test_orb_phase0_contracts.py` protects the new Phase 0 docs and asserts
+  key locked visual constants in `apps/chat_ui/src/lens/orbGlyph.ts` and
+  `scripts/lens-overlay-window.ps1`.
+
+Latest validation for this Orb Phase 0 checkpoint:
+
+- `python -m pytest tests/test_orb_phase0_contracts.py -q` passed with
+  `4 passed`.
+- `python -m ruff check --no-cache tests/test_orb_phase0_contracts.py` passed.
+- `git diff --check -- docs/operations/ORB_VISUAL_LOCK.md
+  docs/operations/ORB_CONTINUUM_STATE.md tests/test_orb_phase0_contracts.py
+  docs/operations/COMPLETION_LEDGER.md` reported no whitespace errors.
+
+Remaining truthful gap:
+
+- This checkpoint protects the current Orb face and durable continuation state;
+  it does not yet implement the overlay-bound lens observation contract, voice
+  to mission routing, sandbox operator, Mona Lisa painting pipeline, or
+  independent replay/evaluation channels. It does not close Stage 6/Lens, does
+  not move the Phase 2 posture, and does not start a new roadmap stage.
+
+### 2026-06-18 - Lens observation binds to existing overlay context
+
+Roadmap area: Phase 2 governed runtime spine, P1 interface truthfulness, P7
+execution boundaries, P9 observability, and Stage 6 / Lens embodiment.
+
+The Lens MCP perception bridge now has a first overlay-bound observation
+contract without creating a second overlay or lens application:
+
+- `POST /lens/mcp/observe` is mounted on the existing Lens API router and uses
+  the existing `lens.mcp.perceive` permission scope.
+- `src/francis/lens/mcp_perception.py` now exposes
+  `lens_observe_overlay_region`, which accepts a requested region, requires an
+  overlay coordinate/boundary model, maps the requested desktop region, calls
+  only read-only screen/session MCP readbacks, and writes a linked perception
+  receipt.
+- Missing overlay context, missing numeric region bounds, unsupported canvas
+  transforms, out-of-bounds regions, and unsupported observation sources fail
+  closed before claiming observation.
+- Successful observation is currently metadata-only. It can report safe
+  screen/session readback such as active-window metadata, takeover state, and
+  session state, but it explicitly reports screenshots, pixels, OCR,
+  accessibility tree, and visual similarity as unknown unless a future adapter
+  truthfully supplies that evidence.
+- `lens_mcp_perception_contract` now advertises the overlay observation surface,
+  its route, its existing-overlay requirement, and its no-screenshot/no-pixel
+  status.
+- `lens_orb_mcp_status_bridge` now includes `/lens/mcp/observe` in its routes
+  readback, so the visible body-state projection can point to the real
+  observation path.
+- `docs/operations/ORB_CONTINUUM_STATE.md` was updated with the completed
+  observation slice, validation evidence, remaining blockers, and next action.
+
+Latest validation for this Lens observation slice:
+
+- `python -m pytest tests/unit/test_lens_mcp_perception.py
+  tests/unit/test_lens_orb_mcp_status_bridge.py
+  tests/unit/test_lens_orb_mcp_status_route.py
+  tests/test_api_contract_chat_ui.py tests/test_orb_phase0_contracts.py -q`
+  passed with `21 passed`.
+- `python -m ruff check --no-cache src/francis/lens/mcp_perception.py
+  src/francis/lens/mcp_status_bridge.py src/francis/lens/__init__.py
+  src/francis/api/routes/lens.py tests/unit/test_lens_mcp_perception.py
+  tests/unit/test_lens_orb_mcp_status_bridge.py
+  tests/unit/test_lens_orb_mcp_status_route.py
+  tests/test_api_contract_chat_ui.py tests/test_orb_phase0_contracts.py`
+  passed.
+- `python -m ruff format --check --no-cache` on the same files passed with
+  `9 files already formatted`.
+- A TestClient probe of `POST /lens/mcp/observe` returned
+  `kind=francis.lens.overlay.observation`, `status=observed`,
+  `mapped=mapped`, `source=francis.screen.session`,
+  `receipt_decision=observed`, `screenshots=false`, and `pixels=false`.
+
+Runtime voice note from this same work window:
+
+- The live overlay status readback reported `ready=true`,
+  `voice_provider=ElevenLabs`, `microphone_capture=true`,
+  `wake_listening=true`, `continuous_voice_chat=true`,
+  `voice_input_status=waiting_for_audio_signal`, and no voice-input blocker.
+  The default capture endpoint was resolved, unmuted, and had nonzero volume.
+  No new microphone signal had been observed during the watch window.
+
+Remaining truthful gap:
+
+- This creates a truthful metadata-only observation path through the existing
+  overlay/lens surface, but it does not yet add screenshot or pixel adapters,
+  accessibility parsing, canvas transforms, operator planning, voice-to-mission
+  routing, sandbox painting, or Mona Lisa execution. It does not close Stage
+  6/Lens, does not move the Phase 2 posture, and does not start a new roadmap
+  stage.
+
+### 2026-06-18 - Mona Lisa intent enters governed mission substrate
+
+Roadmap area: Phase 2 governed runtime spine, P1 interface truthfulness, P7
+execution boundaries, P9 observability, and Stage 6 / Lens embodiment.
+
+The first Mona Lisa vertical-slice ingress is now substrate-backed without
+claiming painting execution:
+
+- `src/francis/chat/router.py` recognizes only a narrow imperative `paint the
+  Mona Lisa` / `draw the Mona Lisa` request, including wake-prefixed phrasing
+  such as `hey Francis paint the Mona Lisa in sandbox`.
+- The recognized intent creates a normal chat mission through `/chat/send`; it
+  does not create a second command engine, voice engine, overlay system, or Orb
+  state machine.
+- `src/francis/api/routes/chat.py` now stores the bounded sandbox contract in
+  mission metadata, preserves voice-turn correlation when supplied, and returns
+  a read-only Orb embodiment projection backed by the mission and queued
+  operation IDs.
+- The metadata explicitly marks `sandbox_required`,
+  `required_not_executed`, `live_desktop_execution=false`,
+  `no_pasted_image=true`, and `claim_completed_painting=false`.
+- `src/francis/missions/runtime.py` carries selected mission context into the
+  queued `plan.create` operation input/metadata so the sandbox, lens/overlay,
+  voice correlation, and Orb projection contract remain visible to downstream
+  operator work.
+- No desktop action is attempted. No painting artifact is created. No screenshot,
+  pixel, OCR, accessibility, or live desktop perception is claimed by this
+  slice.
+
+Latest validation for this Mona Lisa mission-ingress slice:
+
+- `python -m pytest
+  tests\test_api_chat.py::test_chat_mission_command_declares_queued_mission_with_loop_context
+  tests\test_api_chat.py::test_chat_mona_lisa_voice_intent_declares_truthful_sandbox_mission
+  tests\test_api_chat.py::test_chat_send_basic_mode_answers_voice_hearing_probe
+  tests\test_api_chat.py::test_chat_websocket_structured_message_declares_mission
+  -q` passed with `4 passed`.
+- `python -m ruff check --no-cache src\francis\chat\router.py
+  src\francis\api\routes\chat.py src\francis\missions\runtime.py
+  tests\test_api_chat.py` passed.
+- `python -m ruff format --check --no-cache src\francis\chat\router.py
+  src\francis\api\routes\chat.py src\francis\missions\runtime.py
+  tests\test_api_chat.py` passed with `4 files already formatted`.
+
+Remaining truthful gap:
+
+- Francis can now interpret the bounded Mona Lisa phrase into mission and
+  planning state, but it still cannot paint. The next required slice is a
+  Francis-owned sandbox canvas operator adapter that consumes the mission
+  metadata and emits receipt-backed dry-run/sandbox stroke primitives, then
+  produces a truthful artifact or failure evidence. This does not close Stage
+  6/Lens, does not move the Phase 2 posture, and does not start a new roadmap
+  stage.
+
+### 2026-06-18 - Mona Lisa sandbox canvas operator creates primitive artifact
+
+Roadmap area: Phase 2 governed runtime spine, P1 interface truthfulness, P7
+execution boundaries, P9 observability, and Stage 6 / Lens embodiment.
+
+The first governed sandbox painting executor now exists without changing the Orb
+face or claiming live desktop control:
+
+- `src/francis/agent/sandbox_canvas.py` implements the
+  `sandbox.canvas.paint_mona_lisa` capability as a bounded adapter inside the
+  existing executor substrate.
+- `src/francis/agent/executor.py`, `src/francis/operations/runtime.py`, and
+  `src/francis/api/routes/operations.py` now register/map the sandbox action
+  through the existing operation capability path.
+- The adapter consumes Mona Lisa mission metadata, operator contract metadata,
+  and lens/overlay observation metadata. It refuses live desktop execution and
+  pasted/imported image requests.
+- A successful sandbox run writes `operator_actions.jsonl`, `manifest.json`,
+  `receipt.json`, and `mona_lisa_sandbox.svg` under
+  `data/sandbox_canvas/mona_lisa/<run_id>/`.
+- The SVG artifact is produced from discrete operator primitives. The adapter
+  does not paste, import, or display a finished image and does not claim
+  screenshots, pixels, OCR, accessibility evidence, or live desktop perception.
+- Operation readback exposes trace, run, artifact, mission, and receipt handles
+  through the existing operation projection.
+
+Latest validation for this sandbox operator slice:
+
+- `python -m pytest
+  tests\test_api_operations.py::test_operations_run_mona_lisa_sandbox_canvas_from_chat_mission
+  -q` passed.
+- `python -m ruff check --no-cache src\francis\agent\sandbox_canvas.py
+  src\francis\agent\executor.py src\francis\operations\runtime.py
+  src\francis\api\routes\operations.py tests\test_api_operations.py` passed.
+- `python -m ruff format --check --no-cache
+  src\francis\agent\sandbox_canvas.py src\francis\agent\executor.py
+  src\francis\operations\runtime.py src\francis\api\routes\operations.py
+  tests\test_api_operations.py` passed with `5 files already formatted`.
+- Runtime review with temporary local actor scopes created mission
+  `msn_20260618_032722_946ff033`, ran operation
+  `tsk_20260618_032722_4793b14d`, and wrote
+  `data\sandbox_canvas\mona_lisa\run_1781753242_e6103710\mona_lisa_sandbox.svg`
+  plus `data\sandbox_canvas\mona_lisa\run_1781753242_e6103710\receipt.json`
+  with 20 operator primitives.
+
+Remaining truthful gap:
+
+- This is a Francis-owned sandbox run, not a live desktop painting run. Mission
+  advancement still does not automatically enqueue the sandbox operation from
+  the first queued `plan.create` operation, and there is no replay/evaluation
+  score for recognizability yet. This does not close Stage 6/Lens, does not move
+  the Phase 2 posture, and does not start a new roadmap stage.
+
+### 2026-06-18 - Mona Lisa sandbox replay evaluation is readable
+
+Roadmap area: Phase 2 governed runtime spine, P1 interface truthfulness, P7
+execution boundaries, P9 observability, and Stage 6 / Lens embodiment.
+
+The Mona Lisa sandbox artifact now has a read-only replay/evaluation readback
+without changing the Orb face or claiming live desktop perception:
+
+- `src/francis/agent/sandbox_canvas.py` now exposes a read-only evaluator for
+  existing Mona Lisa sandbox artifacts.
+- `GET /operations/sandbox-canvas/mona-lisa/evaluation` resolves an artifact by
+  operation ID, run ID, artifact directory, or latest sandbox run.
+- The evaluator replays `operator_actions.jsonl` and reads only the existing
+  `manifest.json`, `receipt.json`, and `mona_lisa_sandbox.svg` files.
+- It verifies primitive count, contiguous primitive sequence, action kinds, no
+  live desktop action flags, no SVG image import, and artifact/action/manifest
+  hash agreement with the receipt.
+- It produces a deterministic primitive-contract recognizability heuristic and
+  explicitly labels it as not pixel similarity and not proof of live desktop
+  perception.
+- It returns bounded improvement proposals as `proposed_not_promoted`; it does
+  not write files, write receipts, run operations, approve proposals, promote
+  changes, control the desktop, or claim screenshot/pixel/OCR/accessibility
+  evidence.
+
+Latest validation for this sandbox replay/evaluation slice:
+
+- `python -m pytest
+  tests\test_api_operations.py::test_operations_run_mona_lisa_sandbox_canvas_from_chat_mission
+  -q` passed.
+- `python -m ruff check --no-cache src\francis\agent\sandbox_canvas.py
+  src\francis\api\routes\operations.py tests\test_api_operations.py` passed.
+- `python -m ruff format --check --no-cache
+  src\francis\agent\sandbox_canvas.py src\francis\api\routes\operations.py
+  tests\test_api_operations.py` passed with `3 files already formatted`.
+- The focused test verified operation-ID evaluation, read-only governance,
+  primitive replay, receipt hash checks, no live desktop actions, no SVG image
+  import, no visual-similarity claim, bounded improvement proposals, and blocked
+  readback for a missing artifact directory.
+
+Remaining truthful gap:
+
+- The evaluator is replay/readback only. It does not provide screenshot or pixel
+  visual similarity evidence, does not prove human recognizability, does not
+  execute a live desktop paint program, and does not feed results into a durable
+  replay/failure-classification queue yet. This does not close Stage 6/Lens,
+  does not move the Phase 2 posture, and does not start a new roadmap stage.
+
+### 2026-06-18 - Mona Lisa sandbox replay feeds durable review queue
+
+Roadmap area: Phase 2 governed runtime spine, P7 execution boundaries, P9
+observability, durable evaluation channels, and Stage 6 / Lens embodiment.
+
+The Mona Lisa sandbox replay/evaluation can now be recorded into durable
+per-run review artifacts without changing the Orb face or claiming live desktop
+perception:
+
+- `POST /operations/sandbox-canvas/mona-lisa/evaluation/record` requires
+  `operations.write` and passes through the operator posture write guard.
+- The record route runs the existing read-only replay evaluator, then writes
+  per-run `evaluation_records`, `review_queue`, and `improvement_proposals`
+  artifacts under the sandbox artifact directory.
+- `GET /operations/sandbox-canvas/mona-lisa/evaluation-queue` and
+  `GET /operations/sandbox-canvas/mona-lisa/improvement-proposals` expose the
+  durable follow-up state as read-only readbacks.
+- Improvement proposals remain `proposed_not_promoted` and include explicit
+  non-promotion metadata.
+- The route does not run operations, control the desktop, approve proposals,
+  promote changes, import or paste images, claim visual similarity, or claim live
+  desktop perception.
+
+Latest validation for this durable review queue slice:
+
+- `python -m pytest tests\test_orb_phase0_contracts.py
+  tests\test_api_operations.py::test_operations_run_mona_lisa_sandbox_canvas_from_chat_mission
+  -q` passed.
+- `python -m ruff check --no-cache src\francis\agent\sandbox_canvas.py
+  src\francis\api\routes\operations.py tests\test_api_operations.py
+  tests\test_orb_phase0_contracts.py` passed.
+- `python -m ruff format --check --no-cache
+  src\francis\agent\sandbox_canvas.py src\francis\api\routes\operations.py
+  tests\test_api_operations.py tests\test_orb_phase0_contracts.py` passed.
+- `git diff --check -- src\francis\agent\sandbox_canvas.py
+  src\francis\api\routes\operations.py tests\test_api_operations.py
+  tests\test_orb_phase0_contracts.py docs\operations\ORB_CONTINUUM_STATE.md
+  docs\operations\COMPLETION_LEDGER.md` passed.
+
+Remaining truthful gap:
+
+- This is a durable review queue and proposal readback, not automated
+  improvement promotion. It still has no screenshot or pixel visual-similarity
+  adapter, no cross-run trend scoring, and no live desktop painting authority.
+  This does not close Stage 6/Lens, does not move the Phase 2 posture, and does
+  not start a new roadmap stage.
+
+### 2026-06-18 - Stage 17 quality-evidence remediation clears ops pack
+
+Roadmap area: Stage 17 / Capability Economy, capability-pack quality evidence
+and pack-specific artifact readiness for legacy generated packs.
+
+This pass used the existing governed quality-evidence remediation route and the
+existing governed artifact reconstruction route to clear
+`legacy.generated.opsplugin` from the quality-evidence remediation queue.
+
+Pack remediated:
+
+- `legacy.generated.opsplugin`
+
+Capability completed by reconstruction:
+
+- `1781579268_opsplugin`
+
+Artifact refs recorded:
+
+- `data/artifacts/plugins/validations/plugin_validation_1781753932_1781579268-opsplugin.json`
+- `data/artifacts/plugins/proposals/plugin_proposal_1781753932_1781579268-opsplugin.json`
+
+Latest validation for this live Stage 17 remediation:
+
+- Initial live readback for this pass showed `remediation_queue_count: 3`,
+  the first remaining pack as `legacy.generated.opsplugin`, 480 capabilities in
+  the pack, blockers `tests_missing`, `docs_missing`,
+  `validation_receipt_missing`, and `proposal_id_missing`, and the missing
+  artifact candidate `1781579268_opsplugin`. The previously documented next
+  pack `legacy.generated.opsmemoryreceiptplugin` was already absent from the
+  live queue before this pass; this entry does not claim that earlier clearance.
+- Governed quality-evidence dry-run returned `ok: true`, `status: dry_run`,
+  `planned_pack_count: 1`, `planned_capability_count: 480`,
+  `applied_evidence_blockers: ["tests_missing", "docs_missing"]`,
+  `skipped_count: 0`, `writes_registry_metadata: false`,
+  `writes_receipts: false`, `promotion_authority: false`, and
+  `execution_authority: false`.
+- Governed quality-evidence apply returned `ok: true`, `status: recorded`,
+  `applied: true`, `recorded_pack_count: 1`,
+  `recorded_capability_count: 1`, `changed_capability_count: 1`, and
+  `remaining_remediation_queue_count: 3`. The apply reported
+  `writes_registry_metadata: true`, `writes_receipts: false`,
+  `quality_reference_backfill_only: true`,
+  `candidate_references_do_not_claim_pack_specific_coverage: true`,
+  `does_not_write_validation_receipts: true`,
+  `does_not_write_proposals: true`, `does_not_approve_proposals: true`,
+  `does_not_promote_capabilities: true`, `does_not_enable_capabilities: true`,
+  `does_not_execute_capabilities: true`, `promotion_authority: false`,
+  `execution_authority: false`, `approval_authority: false`, and
+  `memory_write: false`.
+- Governed reconstruction dry-run returned `ok: true`, `status: dry_run`,
+  `planned_pack_count: 1`, `planned_capability_count: 1`,
+  `skipped_count: 0`, no dry-run writes, and doctrine flags preserving no
+  proposal approval, no promotion, and no execution.
+- Governed reconstruction apply returned `ok: true`, `status: recorded`,
+  `applied: true`, `recorded_pack_count: 1`,
+  `recorded_capability_count: 1`, `reconstructed_capability_count: 1`, and
+  `remaining_remediation_queue_count: 2`. The apply reported
+  `writes_registry_metadata: true`, `writes_validation_receipts: true`,
+  `writes_proposals: true`, `operator_reconstruction_decision_captured: true`,
+  `proposal_lineage_does_not_approve_proposals: true`,
+  `does_not_approve_proposals: true`, `does_not_promote_capabilities: true`,
+  `does_not_enable_capabilities: true`, `does_not_execute_capabilities: true`,
+  `promotion_authority: false`, `execution_authority: false`,
+  `approval_authority: false`, and `memory_write: false`.
+- Final readback returned `ok: true`, `status: blocked`,
+  `remediation_queue_count: 2`, cleared the pack from the queue, and showed the
+  remaining packs as `legacy.generated.opstoolplugin` and
+  `legacy.generated.reviewrequiredplugin`. The two new artifact refs listed
+  above were verified present on disk by the helper.
+- Focused regression validation passed:
+  `python -m pytest tests\test_api_plugins.py::test_plugins_capability_pack_quality_evidence_remediation_apply_backfills_candidate_refs tests\test_api_plugins.py::test_plugins_capability_pack_quality_evidence_remediation_reconstructs_missing_artifacts -q`.
+
+Remaining truthful gap:
+
+- This pass clears only `legacy.generated.opsplugin` from the quality-evidence
+  remediation queue. Two legacy generated packs remain in that queue. This does
+  not approve proposals, does not promote capabilities, does not enable
+  capabilities, does not grant execution authority, does not grant mutation
+  authority beyond governed quality metadata and governed artifact
+  reconstruction writes, does not close the proposal-review gate, does not close
+  the explicit-promotion gate, does not close Stage 17, and does not start Stage
+  18.
+
+### 2026-06-18 - Stage 17 quality-evidence remediation clears ops tool pack
+
+Roadmap area: Stage 17 / Capability Economy, capability-pack quality evidence
+and pack-specific artifact readiness for legacy generated packs.
+
+This pass used the existing governed quality-evidence remediation route and the
+existing governed artifact reconstruction route to clear
+`legacy.generated.opstoolplugin` from the quality-evidence remediation queue.
+
+Pack remediated:
+
+- `legacy.generated.opstoolplugin`
+
+Capability completed by reconstruction:
+
+- `1781579343_opstoolplugin`
+
+Artifact refs recorded:
+
+- `data/artifacts/plugins/validations/plugin_validation_1781754223_1781579343-opstoolplugin.json`
+- `data/artifacts/plugins/proposals/plugin_proposal_1781754223_1781579343-opstoolplugin.json`
+
+Latest validation for this live Stage 17 remediation:
+
+- Initial live readback for this pass showed `remediation_queue_count: 2`,
+  the first remaining pack as `legacy.generated.opstoolplugin`, 463
+  capabilities in the pack, blockers `tests_missing`, `docs_missing`,
+  `validation_receipt_missing`, and `proposal_id_missing`, and the missing
+  artifact candidate `1781579343_opstoolplugin`.
+- Governed quality-evidence dry-run returned `ok: true`, `status: dry_run`,
+  `planned_pack_count: 1`, `planned_capability_count: 463`,
+  `applied_evidence_blockers: ["tests_missing", "docs_missing"]`,
+  `skipped_count: 0`, `writes_registry_metadata: false`,
+  `writes_receipts: false`, `promotion_authority: false`, and
+  `execution_authority: false`.
+- Governed quality-evidence apply returned `ok: true`, `status: recorded`,
+  `applied: true`, `recorded_pack_count: 1`,
+  `recorded_capability_count: 1`, `changed_capability_count: 1`, and
+  `remaining_remediation_queue_count: 2`. The apply reported
+  `writes_registry_metadata: true`, `writes_receipts: false`,
+  `quality_reference_backfill_only: true`,
+  `candidate_references_do_not_claim_pack_specific_coverage: true`,
+  `does_not_write_validation_receipts: true`,
+  `does_not_write_proposals: true`, `does_not_approve_proposals: true`,
+  `does_not_promote_capabilities: true`, `does_not_enable_capabilities: true`,
+  `does_not_execute_capabilities: true`, `promotion_authority: false`,
+  `execution_authority: false`, `approval_authority: false`, and
+  `memory_write: false`.
+- Governed reconstruction dry-run returned `ok: true`, `status: dry_run`,
+  `planned_pack_count: 1`, `planned_capability_count: 1`,
+  `skipped_count: 0`, no dry-run writes, and doctrine flags preserving no
+  proposal approval, no promotion, and no execution.
+- Governed reconstruction apply returned `ok: true`, `status: recorded`,
+  `applied: true`, `recorded_pack_count: 1`,
+  `recorded_capability_count: 1`, `reconstructed_capability_count: 1`, and
+  `remaining_remediation_queue_count: 1`. The apply reported
+  `writes_registry_metadata: true`, `writes_validation_receipts: true`,
+  `writes_proposals: true`, `operator_reconstruction_decision_captured: true`,
+  `proposal_lineage_does_not_approve_proposals: true`,
+  `does_not_approve_proposals: true`, `does_not_promote_capabilities: true`,
+  `does_not_enable_capabilities: true`, `does_not_execute_capabilities: true`,
+  `promotion_authority: false`, `execution_authority: false`,
+  `approval_authority: false`, and `memory_write: false`.
+- Final readback returned `ok: true`, `status: blocked`,
+  `remediation_queue_count: 1`, cleared the pack from the queue, and showed the
+  next remaining pack as `legacy.generated.reviewrequiredplugin`. The two new
+  artifact refs listed above were verified present on disk by the helper.
+
+Remaining truthful gap:
+
+- This pass clears only `legacy.generated.opstoolplugin` from the
+  quality-evidence remediation queue. One legacy generated pack remained after
+  this pass. This does not approve proposals, does not promote capabilities,
+  does not enable capabilities, does not grant execution authority, does not
+  grant mutation authority beyond governed quality metadata and governed
+  artifact reconstruction writes, does not close the proposal-review gate, does
+  not close the explicit-promotion gate, does not close Stage 17, and does not
+  start Stage 18.
+
+### 2026-06-18 - Stage 17 quality-evidence remediation clears review-required pack
+
+Roadmap area: Stage 17 / Capability Economy, capability-pack quality evidence
+and pack-specific artifact readiness for legacy generated packs.
+
+This pass used the existing governed quality-evidence remediation route and the
+existing governed artifact reconstruction route to clear
+`legacy.generated.reviewrequiredplugin` from the quality-evidence remediation
+queue.
+
+Pack remediated:
+
+- `legacy.generated.reviewrequiredplugin`
+
+Capability completed by reconstruction:
+
+- `1781579503_reviewrequiredplugin`
+
+Artifact refs recorded:
+
+- `data/artifacts/plugins/validations/plugin_validation_1781754465_1781579503-reviewrequiredplugin.json`
+- `data/artifacts/plugins/proposals/plugin_proposal_1781754465_1781579503-reviewrequiredplugin.json`
+
+Latest validation for this live Stage 17 remediation:
+
+- Initial live readback for this pass showed `remediation_queue_count: 1`,
+  the first remaining pack as `legacy.generated.reviewrequiredplugin`, 211
+  capabilities in the pack, blockers `tests_missing`, `docs_missing`,
+  `validation_receipt_missing`, and `proposal_id_missing`, and the missing
+  artifact candidate `1781579503_reviewrequiredplugin`.
+- Governed quality-evidence dry-run returned `ok: true`, `status: dry_run`,
+  `planned_pack_count: 1`, `planned_capability_count: 211`,
+  `applied_evidence_blockers: ["tests_missing", "docs_missing"]`,
+  `skipped_count: 0`, `writes_registry_metadata: false`,
+  `writes_receipts: false`, `promotion_authority: false`, and
+  `execution_authority: false`.
+- Governed quality-evidence apply returned `ok: true`, `status: recorded`,
+  `applied: true`, `recorded_pack_count: 1`,
+  `recorded_capability_count: 1`, `changed_capability_count: 1`, and
+  `remaining_remediation_queue_count: 1`. The apply reported
+  `writes_registry_metadata: true`, `writes_receipts: false`,
+  `quality_reference_backfill_only: true`,
+  `candidate_references_do_not_claim_pack_specific_coverage: true`,
+  `does_not_write_validation_receipts: true`,
+  `does_not_write_proposals: true`, `does_not_approve_proposals: true`,
+  `does_not_promote_capabilities: true`, `does_not_enable_capabilities: true`,
+  `does_not_execute_capabilities: true`, `promotion_authority: false`,
+  `execution_authority: false`, `approval_authority: false`, and
+  `memory_write: false`.
+- Governed reconstruction dry-run returned `ok: true`, `status: dry_run`,
+  `planned_pack_count: 1`, `planned_capability_count: 1`,
+  `skipped_count: 0`, no dry-run writes, and doctrine flags preserving no
+  proposal approval, no promotion, and no execution.
+- Governed reconstruction apply returned `ok: true`, `status: recorded`,
+  `applied: true`, `recorded_pack_count: 1`,
+  `recorded_capability_count: 1`, `reconstructed_capability_count: 1`, and
+  `remaining_remediation_queue_count: 0`. The apply reported
+  `writes_registry_metadata: true`, `writes_validation_receipts: true`,
+  `writes_proposals: true`, `operator_reconstruction_decision_captured: true`,
+  `proposal_lineage_does_not_approve_proposals: true`,
+  `does_not_approve_proposals: true`, `does_not_promote_capabilities: true`,
+  `does_not_enable_capabilities: true`, `does_not_execute_capabilities: true`,
+  `promotion_authority: false`, `execution_authority: false`,
+  `approval_authority: false`, and `memory_write: false`.
+- Final readback returned `ok: true`, `status: ready`,
+  `remediation_queue_count: 0`, an empty remediation queue,
+  `artifact_reconstruction_required_count: 0`, and the next truthful gap
+  `stage17_capability_pack_operator_surface`. The two new artifact refs listed
+  above were verified present on disk by the helper.
+- Focused regression validation passed:
+  `python -m pytest tests\test_api_plugins.py::test_plugins_capability_pack_quality_evidence_remediation_apply_backfills_candidate_refs tests\test_api_plugins.py::test_plugins_capability_pack_quality_evidence_remediation_reconstructs_missing_artifacts tests\test_api_plugins.py::test_plugins_capability_pack_quality_evidence_remediation_links_existing_artifacts_in_chunks -q`.
+
+Remaining truthful gap:
+
+- This pass clears the last visible legacy generated pack from the
+  quality-evidence remediation queue. Final readback shows that queue at zero
+  and no remaining artifact reconstruction requirement. This does not approve
+  proposals, does not promote capabilities, does not enable capabilities, does
+  not grant execution authority, does not grant mutation authority beyond
+  governed quality metadata and governed artifact reconstruction writes, does
+  not close the proposal-review gate, does not close the explicit-promotion
+  gate, does not close Stage 17, and does not start Stage 18. The next surfaced
+  gap is `stage17_capability_pack_operator_surface`.
+
+### 2026-06-18 - Stage 17 quality-standard remediation route lands
+
+Roadmap area: Stage 17 / Capability Economy, capability-pack readiness and
+operator-reviewed promotion discipline.
+
+Added a bounded governed route for the Stage 17 quality-standard gap:
+`POST /plugins/capabilities/packs/quality/standards/remediation/apply`.
+
+The route is intentionally narrow:
+
+- accepts explicit pack IDs and dry-run/apply mode
+- requires the `plugins.write` scope before registry mutation
+- writes only existing test/doc reference metadata for missing quality-standard
+  fields
+- uses only existing repo reference paths:
+  `tests/test_api_plugins.py`, `README.md`, and
+  `docs/operations/COMPLETION_LEDGER.md`
+- does not write receipts, validation artifacts, proposals, promotion receipts,
+  approvals, promotions, enabled state, execution authority, or memory writes
+- appears on the Stage 17 operator surface as
+  `quality_standard_remediation_apply_route`
+
+Validation:
+
+- `python -m pytest tests\test_api_plugins.py::test_plugins_capability_pack_quality_standard_remediation_backfills_candidate_refs -q`
+  passed.
+- `python -m ruff check --no-cache src\francis\api\routes\plugins.py tests\test_api_plugins.py`
+  passed.
+- `python -m ruff format --check --no-cache src\francis\api\routes\plugins.py tests\test_api_plugins.py`
+  passed.
+
+Remaining truthful gap:
+
+- This adds the missing governed readiness-only writer. It does not approve
+  proposals, does not promote capabilities, does not enable capabilities, does
+  not grant execution authority, does not close Stage 17, and does not start
+  Stage 18.
+
+### 2026-06-18 - Stage 17 operator review clears capability-pack readiness backlog
+
+Roadmap area: Stage 17 / Capability Economy, capability-pack remediation,
+quality evidence, operator review, and explicit promotion readiness.
+
+This pass cleared the live Stage 17 capability-pack readiness backlog through
+existing governed routes plus the new quality-standard remediation route.
+
+Live metadata receipts recorded:
+
+- `capability_pack_metadata_1781754805_legacy-generated-capabilitypromotiondisciplineplugin`
+- `capability_pack_metadata_1781754805_legacy-generated-capabilitypromotionrulesplugin`
+- `capability_pack_metadata_1781754805_legacy-generated-debugsourcereadinessfrictionplugin`
+- `capability_pack_metadata_1781756429_legacy-generated-capabilityqualitydocsplugin`
+- `capability_pack_metadata_1781756429_legacy-generated-capabilityqualitystandardsplugin`
+- `capability_pack_metadata_1781756429_legacy-generated-capabilityqualitytestsplugin`
+
+Live quality-standard remediation:
+
+- First quality-standard batch applied existing quality reference metadata for
+  six missing capabilities across:
+  `legacy.generated.capabilitypromotiondisciplineplugin`,
+  `legacy.generated.capabilitypromotionrulesplugin`, and
+  `legacy.generated.debugsourcereadinessfrictionplugin`.
+- Second quality-standard batch dry-run planned 30 capabilities across:
+  `legacy.generated.capabilityqualitydocsplugin`,
+  `legacy.generated.capabilityqualitystandardsplugin`, and
+  `legacy.generated.capabilityqualitytestsplugin`. The apply session was
+  interrupted before its response was captured, but the subsequent authoritative
+  operator-surface readback showed
+  `quality_reference_backfill_candidate_count: 0` and the next gap moved to
+  validation/proposal artifact reconstruction.
+
+Live artifact reconstruction recorded:
+
+- `data/artifacts/plugins/validations/plugin_validation_1781757061_1781755962-capabilityqualitydocsplugin.json`
+- `data/artifacts/plugins/proposals/plugin_proposal_1781757061_1781755962-capabilityqualitydocsplugin.json`
+- `data/artifacts/plugins/validations/plugin_validation_1781757061_1781755759-capabilityqualitystandardsplugin.json`
+- `data/artifacts/plugins/proposals/plugin_proposal_1781757061_1781755759-capabilityqualitystandardsplugin.json`
+- `data/artifacts/plugins/validations/plugin_validation_1781757061_1781755861-capabilityqualitytestsplugin.json`
+- `data/artifacts/plugins/proposals/plugin_proposal_1781757061_1781755861-capabilityqualitytestsplugin.json`
+
+Operator review decision receipts recorded:
+
+- Batch `capability_pack_operator_review_batch_1781756256_3eb093a6` recorded
+  approvals for 14 already-remediated packs and 1,831 capabilities.
+- Batch `capability_pack_operator_review_batch_1781757213_35e0f687` recorded
+  approvals for the final three quality packs and 30 capabilities:
+  `legacy.generated.capabilityqualitydocsplugin`,
+  `legacy.generated.capabilityqualitystandardsplugin`, and
+  `legacy.generated.capabilityqualitytestsplugin`.
+
+Final readback after this pass:
+
+- Stage 17 operator surface: `status=ready_for_explicit_promotion`,
+  `next_smallest_truthful_gap=stage17_capability_library_operator_surface`.
+- Remediation backlog: `status=clear`, `open_count=0`,
+  `metadata_receipt_review_candidate_count=0`,
+  `promotion_rule_remediation_queue_count=0`,
+  `quality_evidence_remediation_queue_count=0`,
+  `artifact_reconstruction_required_count=0`, and
+  `source_quality_remediation_queue_count=0`.
+- Readiness: `status=ready`, `ready_pack_count=51`,
+  `blocked_pack_count=0`.
+- Quality evidence: `status=ready`, `remediation_queue_count=0`,
+  `artifact_reconstruction_required_count=0`.
+- Operator review: `pending_review_queue_count=0`.
+- Promotion discipline: `status=ready`, `ready_pack_count=49`,
+  `blocked_pack_count=0`.
+- Capability library operator surface:
+  `status=ready_for_explicit_promotion`, `ready_pack_count=49`,
+  `blocked_pack_count=0`, `ready_staged_capability_count=2282`, and
+  `ready_promoted_capability_count=0`.
+
+Governance limits preserved:
+
+- No proposals were approved.
+- No capabilities were promoted.
+- No capabilities were enabled.
+- No capability execution authority was granted.
+- No memory writes were performed.
+- The next surfaced action remains the explicit `/plugins/enable` promotion
+  boundary.
+
+Remaining truthful gap:
+
+- Stage 17 is now ready for the capability-library explicit-promotion gate.
+  Promotion still requires an explicit governed `/plugins/enable` action. This
+  pass does not close Stage 17, does not promote any staged capability, and does
+  not start Stage 18.
+
+### 2026-06-18 - Stage 17 absorbs fresh generated entries before promotion gate
+
+Roadmap area: Stage 17 / Capability Economy, capability-pack remediation,
+operator review, and explicit promotion readiness.
+
+After the previous remediation pass and focused validation, the live catalog
+received fresh generated staged capabilities from concurrent Stage 17 work. This
+follow-up cleared those fresh entries through the same governed surfaces rather
+than treating the earlier ready snapshot as final.
+
+Fresh quality-pack entries remediated:
+
+- `1781757620_capabilityqualitydocsplugin`
+- `1781757502_capabilityqualitystandardsplugin`
+- `1781757557_capabilityqualitytestsplugin`
+
+Metadata receipts recorded for the refreshed quality packs:
+
+- `capability_pack_metadata_1781757916_legacy-generated-capabilityqualitydocsplugin`
+- `capability_pack_metadata_1781757916_legacy-generated-capabilityqualitystandardsplugin`
+- `capability_pack_metadata_1781757916_legacy-generated-capabilityqualitytestsplugin`
+
+Artifacts recorded for the refreshed quality packs:
+
+- `data/artifacts/plugins/validations/plugin_validation_1781758106_1781757620-capabilityqualitydocsplugin.json`
+- `data/artifacts/plugins/proposals/plugin_proposal_1781758106_1781757620-capabilityqualitydocsplugin.json`
+- `data/artifacts/plugins/validations/plugin_validation_1781758106_1781757502-capabilityqualitystandardsplugin.json`
+- `data/artifacts/plugins/proposals/plugin_proposal_1781758106_1781757502-capabilityqualitystandardsplugin.json`
+- `data/artifacts/plugins/validations/plugin_validation_1781758106_1781757557-capabilityqualitytestsplugin.json`
+- `data/artifacts/plugins/proposals/plugin_proposal_1781758106_1781757557-capabilityqualitytestsplugin.json`
+
+Fresh ops-pack entries remediated:
+
+- `1781757954_opsmemoryreceiptplugin`
+- `1781757922_opsplugin`
+- `1781757984_opstoolplugin`
+
+Metadata receipts recorded for the refreshed ops packs:
+
+- `capability_pack_metadata_1781758211_legacy-generated-opsmemoryreceiptplugin`
+- `capability_pack_metadata_1781758211_legacy-generated-opsplugin`
+- `capability_pack_metadata_1781758211_legacy-generated-opstoolplugin`
+
+Artifacts recorded for the refreshed ops packs:
+
+- `data/artifacts/plugins/validations/plugin_validation_1781758303_1781757954-opsmemoryreceiptplugin.json`
+- `data/artifacts/plugins/proposals/plugin_proposal_1781758303_1781757954-opsmemoryreceiptplugin.json`
+- `data/artifacts/plugins/validations/plugin_validation_1781758303_1781757922-opsplugin.json`
+- `data/artifacts/plugins/proposals/plugin_proposal_1781758303_1781757922-opsplugin.json`
+- `data/artifacts/plugins/validations/plugin_validation_1781758303_1781757984-opstoolplugin.json`
+- `data/artifacts/plugins/proposals/plugin_proposal_1781758303_1781757984-opstoolplugin.json`
+
+Operator review:
+
+- Batch `capability_pack_operator_review_batch_1781758386_a200f0c1`
+  recorded six receipt-only approvals across 564 staged capabilities. The batch
+  covered the three refreshed quality packs and the three refreshed ops packs.
+
+Final readback after this follow-up:
+
+- Stage 17 operator surface: `status=ready_for_explicit_promotion`,
+  `next_smallest_truthful_gap=stage17_capability_library_operator_surface`.
+- Remediation backlog: `status=clear`, `open_count=0`.
+- Readiness: `status=ready`, `ready_pack_count=51`,
+  `blocked_pack_count=0`.
+- Quality evidence: `status=ready`, `remediation_queue_count=0`,
+  `artifact_reconstruction_required_count=0`.
+- Operator review: `pending_review_queue_count=0`.
+- Promotion discipline: `status=ready`, `ready_pack_count=49`,
+  `blocked_pack_count=0`.
+- Capability library operator surface:
+  `status=ready_for_explicit_promotion`, `ready_pack_count=49`,
+  `blocked_pack_count=0`, `ready_staged_capability_count=2288`, and
+  `ready_promoted_capability_count=0`.
+
+Governance limits preserved:
+
+- No proposals were approved.
+- No capabilities were promoted.
+- No capabilities were enabled.
+- No capability execution authority was granted.
+- No memory writes were performed.
+- The next surfaced action remains the explicit `/plugins/enable` promotion
+  boundary.
+
+Remaining truthful gap:
+
+- The live Stage 17 capability-pack remediation and operator-review backlog is
+  clear as of this readback. Stage 17 remains open at the explicit promotion
+  gate and should not be reported complete until the governed `/plugins/enable`
+  promotion path is intentionally executed and validated.
+
+### 2026-06-18 - Stage 17 explicit promotion batch apply route lands
+
+Roadmap area: Stage 17 / Capability Economy, capability-library explicit
+promotion gate.
+
+The capability library now has a bounded explicit-promotion apply route for
+readiness-proven staged capabilities:
+
+- `POST /plugins/capabilities/library/promotion/apply` requires the existing
+  `plugins.write` scope.
+- The route selects only capabilities that the existing promotion-readiness
+  contract says are promotable.
+- Dry-run mode returns a deterministic
+  `stage17_capability_library_explicit_promotion_dry_run_v1` fingerprint.
+- Non-dry-run apply is blocked unless that dry-run fingerprint is supplied.
+- Apply writes registry promotion metadata, enables the selected capabilities,
+  and writes promotion receipts through the existing promotion receipt writer.
+- The read-only promotion plan now points to the apply route and declares that
+  a dry-run fingerprint is required before bulk promotion.
+
+Latest validation for this Stage 17 promotion-apply slice:
+
+- `python -m pytest
+  tests\test_api_plugins.py::test_plugins_capability_library_promotion_plan_uses_existing_promotion_readiness
+  -q` passed.
+- `python -m pytest
+  tests\test_api_plugins.py::test_plugins_capability_pack_quality_standard_remediation_backfills_candidate_refs
+  tests\test_api_plugins.py::test_plugins_capability_library_promotion_plan_uses_existing_promotion_readiness
+  -q` passed.
+- `python -m ruff check --no-cache src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py` passed.
+- `python -m ruff format --check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py` passed.
+- `git diff --check -- src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py docs\operations\COMPLETION_LEDGER.md` passed.
+
+Remaining truthful gap:
+
+- This adds and validates the governed batch-apply route in tests. It does not
+  execute live workspace promotion across the current Stage 17 capability
+  library, does not grant capability execution authority, does not approve new
+  proposals, does not write memory, and does not close Stage 17. The next live
+  Stage 17 action is a dry-run call to the new promotion apply route against the
+  current ready capability set, followed by a reviewed apply only if the dry-run
+  evidence is acceptable.
+
+### 2026-06-18 - Stage 17 live refresh remediates ops pack quality layer
+
+Roadmap area: Stage 17 / Capability Economy, live generated-pack remediation and
+capability-library promotion readiness.
+
+After the explicit-promotion apply route landed, a live dry-run against the
+current generated catalog truthfully found no promotable candidates because a
+generated-plugin sync exposed fresh blockers:
+
+- `POST /plugins/capabilities/library/promotion/apply` in dry-run mode returned
+  `status=no_candidates`, `planned_pack_count=0`,
+  `planned_capability_count=0`, `applied=false`,
+  `generated_plugin_registry_sync_performed=true`,
+  `writes_registry_metadata=false`, `writes_promotion_receipts=false`, and
+  `promotion_authority=false`.
+- The live promotion plan then reported `status=blocked`,
+  `candidate_capability_count=1757`, `blocked_capability_count=1757`,
+  `promotable_capability_count=0`,
+  `next_smallest_truthful_gap=stage17_capability_pack_promotion_rules`.
+- Blocked packs were the refreshed ops packs:
+  `legacy.generated.opsmemoryreceiptplugin` with 260 capabilities,
+  `legacy.generated.opsplugin` with 483 capabilities, and
+  `legacy.generated.opstoolplugin` with 466 capabilities.
+
+Live governed remediation performed through existing `plugins.write` routes:
+
+- `POST /plugins/capabilities/packs/metadata/receipts/bulk-from-plan` recorded
+  metadata receipts for the three refreshed ops packs:
+  `recorded_pack_count=3`, `recorded_capability_count=1209`,
+  `remaining_candidate_total=0`.
+- `POST /plugins/capabilities/packs/quality/standards/remediation/apply`
+  dry-run planned `planned_pack_count=3`, `planned_capability_count=1209`, then
+  apply recorded candidate quality references:
+  `recorded_pack_count=3`, `recorded_capability_count=6`.
+- `POST /plugins/capabilities/packs/quality/evidence/remediation/reconstruct`
+  reconstructed the remaining pack-specific validation/proposal artifacts:
+  one chunk, `planned_pack_count=3`, `planned_capability_count=6`,
+  `recorded_pack_count=3`, `recorded_capability_count=6`,
+  `remaining_remediation_queue_count=0`.
+- `POST /plugins/capabilities/packs/operator/review/decisions/bulk-from-surface`
+  dry-run planned operator review receipts for the refreshed ops packs, then
+  apply recorded `recorded_pack_count=3`, `recorded_capability_count=537`.
+
+Live readbacks after this remediation:
+
+- Quality evidence remediation: `status=ready`, `remediation_queue_count=0`,
+  `artifact_reconstruction_required_count=0`,
+  `next_smallest_truthful_gap=stage17_capability_pack_operator_surface`.
+- Pack operator surface: `status=ready_for_explicit_promotion`,
+  `next_smallest_truthful_gap=stage17_capability_library_operator_surface`.
+- Capability-library promotion plan: `status=blocked`,
+  `candidate_pack_count=46`, `candidate_capability_count=2294`,
+  `blocked_capability_count=2294`, `promotable_capability_count=0`,
+  `missing_requirement_counts={"proposal_evidence": 1371,
+  "proposal_review": 2294}`,
+  `next_smallest_truthful_gap=stage17_capability_library_promotion_readiness`.
+
+Validation:
+
+- The live scripts used the existing API routes through `TestClient` with scoped
+  local actors carrying only `plugins.write`.
+- Earlier code validation for the touched Stage 17 route remains:
+  `python -m pytest
+  tests\test_api_plugins.py::test_plugins_capability_pack_quality_standard_remediation_backfills_candidate_refs
+  tests\test_api_plugins.py::test_plugins_capability_library_promotion_plan_uses_existing_promotion_readiness
+  -q` passed; `python -m ruff check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py` passed;
+  `python -m ruff format --check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py` passed.
+
+Remaining truthful gap:
+
+- Stage 17 is not closed. The pack-quality layer is clear again, but the
+  capability-library layer still needs governed proposal evidence for 1,371
+  staged capabilities and governed proposal reviews for 2,294 staged
+  capabilities before explicit promotion can be dry-run successfully. There is
+  no bulk proposal-review apply route yet; the existing write path is
+  `/forge/proposals/decision`, while
+  `/plugins/capabilities/library/proposal-review/apply-readiness` is read-only.
+
+### 2026-06-18 - Stage 17 proposal-review batch apply route records ready reviews
+
+Roadmap area: Stage 17 / Capability Economy, capability-library proposal
+review and explicit promotion readiness.
+
+Added a bounded governed proposal-review batch apply route for review-ready
+capabilities:
+
+- `POST /plugins/capabilities/library/proposal-review/apply` requires
+  `plugins.write`.
+- The route derives candidates from the existing capability-library promotion
+  readiness contract and only selects capabilities missing `proposal_review`
+  with no blockers before review.
+- Dry-run mode returns the deterministic
+  `stage17_capability_library_proposal_review_apply_dry_run_v1` fingerprint.
+- Non-dry-run apply is blocked unless that dry-run fingerprint is supplied.
+- Apply writes canonical `plugin.proposal.review.receipt` records using the
+  Forge decision receipt schema and updates proposal records, but it does not
+  promote, enable, execute, or mutate capability registry metadata beyond any
+  generated-plugin sync that the existing readback path performs.
+- The proposal-review plan and apply-readiness readbacks now point to the batch
+  apply route and declare the dry-run fingerprint requirement.
+
+Latest validation for this Stage 17 proposal-review slice:
+
+- `python -m pytest
+  tests\test_api_plugins.py::test_plugins_capability_library_promotion_plan_uses_existing_promotion_readiness
+  -q` passed.
+- `python -m pytest
+  tests\test_api_plugins.py::test_plugins_capability_library_promotion_plan_uses_existing_promotion_readiness
+  tests\test_api_plugins.py::test_plugins_capability_library_proposal_review_plan_blocks_before_review_when_evidence_missing
+  -q` passed.
+- `python -m ruff check --no-cache src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py` passed.
+- `python -m ruff format --check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py` passed.
+- `git diff --check -- src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py docs\operations\COMPLETION_LEDGER.md` passed.
+
+Live readbacks before apply:
+
+- Proposal evidence plan: `status=blocked`, `candidate_pack_count=46`,
+  `candidate_capability_count=2294`,
+  `proposal_evidence_missing_count=1371`,
+  `proposal_evidence_ready_count=923`,
+  `proposal_review_missing_count=2294`,
+  `next_smallest_truthful_gap=stage17_capability_library_promotion_readiness`.
+- Operator evidence audit: `status=operator_evidence_refs_partially_recorded`,
+  `recorded_pack_count=39`, `recorded_capability_count=923`,
+  `evidence_ref_count=3692`, `future_review_required_count=923`,
+  `next_smallest_truthful_gap=stage17_capability_library_operator_proposal_evidence_refs`.
+- Proposal-review apply-readiness:
+  `status=blocked_on_operator_evidence_refs`,
+  `reviewable_pack_count=39`, `reviewable_capability_count=923`,
+  `proposal_review_missing_count=2294`,
+  `blocked_before_review_capability_count=1371`,
+  `next_smallest_truthful_gap=stage17_capability_library_operator_proposal_evidence_refs`.
+- Proposal-review apply dry-run returned `status=dry_run`,
+  `planned_pack_count=39`, `planned_capability_count=923`,
+  `planned_proposal_count=923`, and dry-run fingerprint
+  `3bd576d3bc6e9a5081355f185512488f9de542cfbacbc204ca183b5f9729d9bf`.
+
+Live governed apply performed through the new `plugins.write` route:
+
+- `POST /plugins/capabilities/library/proposal-review/apply` applied the
+  confirmed dry-run fingerprint and returned `status=reviewed`,
+  `batch_id=capability_library_proposal_review_batch_1781762429_ffb1e3e3`,
+  `planned_pack_count=39`, `planned_capability_count=923`,
+  `planned_proposal_count=923`, `recorded_proposal_count=923`,
+  `recorded_capability_count=923`, `failed_count=0`, and
+  `skipped_count=0`.
+- The route reported `writes_proposal_review_receipts=true`,
+  `updates_proposal_records=true`, `approves_proposals=true`,
+  `does_not_promote_capabilities=true`, `does_not_enable_capabilities=true`,
+  `promotion_authority=false`, `execution_authority=false`, and
+  `memory_write=false`.
+- Post-apply readback from the route reported
+  `remaining_proposal_review_missing_count=1371`,
+  `remaining_reviewable_capability_count=0`,
+  `promotable_capability_count=923`, and
+  `next_smallest_truthful_gap=stage17_capability_library_promotion_readiness`.
+
+Promotion dry-run after the review batch:
+
+- `POST /plugins/capabilities/library/promotion/apply` in dry-run mode returned
+  `status=dry_run`, `planned_pack_count=39`,
+  `planned_capability_count=923`, and dry-run fingerprint
+  `5e9a3379874ca9a88bc7192e50bb92feef183ce9275aa3fe2fbc696d8c4ffca1`.
+- No live promotion was applied in this pass. The promotion dry-run reported
+  `writes_registry_metadata=false`, `writes_promotion_receipts=false`,
+  `does_not_promote_capabilities=true`, `does_not_enable_capabilities=true`,
+  `promotion_authority=false`, and `execution_authority=false`.
+
+Remaining truthful gap:
+
+- Stage 17 is not closed. The new proposal-review batch route is validated and
+  the 923 review-ready proposals are now approved with receipts, making 923
+  capabilities promotable by dry-run only. The capability-library layer still
+  has 1,371 capabilities blocked on operator-supplied proposal-evidence refs,
+  and those same 1,371 still need proposal review after evidence is recorded.
+- Existing source routes report
+  `status=no_existing_friction_summary_ref_candidates` and
+  `status=no_existing_artifact_evidence_candidates`; the next truthful action
+  is the governed operator evidence intake path at
+  `/plugins/capabilities/library/proposal-evidence/operator-intake/apply`,
+  using explicit evidence refs that are honest about their
+  `operator_supplied_friction_evidence_reference_not_independent_verification`
+  claim scope.
+
+### 2026-06-18 - Stage 17 records one capabilitycatalog proposal-evidence and review slice
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded one current `legacy.generated.capabilitycatalogplugin`
+operator proposal-evidence capability through the existing governed evidence
+intake route, then reviewed the now-ready proposal through the governed
+capability-library proposal-review apply route. This is a one-capability
+receipt-backed queue reduction only: it does not close Stage 17, does not
+apply promotion, does not enable or execute capabilities, and does not claim
+independent verification of the operator-supplied evidence refs.
+
+Capability recorded in this slice:
+
+- `1781579632_capabilitycatalogplugin`
+
+Recorded evidence refs:
+
+- proposal artifact ref
+  `artifact:plugins/proposals/plugin_proposal_1781744833_1781579632-capabilitycatalogplugin.json`
+- validation artifact ref
+  `artifact:plugins/validations/plugin_validation_1781744833_1781579632-capabilitycatalogplugin.json`
+- pack metadata ref
+  `artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781740662_legacy-generated-capabilitycatalogplugin.json`
+- operator-review ref
+  `artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-capabilitycatalogplugin_865600.json`
+
+Latest validation for this live Stage 17 intake:
+
+- Artifact derivation selected the current first operator-intake checklist
+  item: `pack_id=legacy.generated.capabilitycatalogplugin`,
+  `pack_version=0.0.0-migration`,
+  `capability=1781579632_capabilitycatalogplugin`, and
+  `proposal_id=plugin_proposal_1781744833_1781579632-capabilitycatalogplugin`.
+- Artifact existence check confirmed the proposal, validation, metadata, and
+  operator-review refs existed under `data/artifacts/plugins` before apply.
+- `POST /plugins/capabilities/library/proposal-evidence/operator-intake/apply`
+  dry-run returned `ok=true`, `status=dry_run`,
+  `planned_pack_count=1`, `planned_capability_count=1`,
+  `evidence_ref_count=4`, and dry-run fingerprint
+  `a63b8ae38be5ef2c99c1b20345329df5cdb2ecbd8fb2e835ce844bfb00d18e1c`.
+- The confirmed evidence apply returned `ok=true`, `applied=true`,
+  `status=recorded`, `recorded_pack_count=1`,
+  `recorded_capability_count=1`,
+  `remaining_proposal_evidence_missing_count=1370`,
+  `remaining_proposal_evidence_ready_count=924`, `failed_count=0`, and
+  `next_smallest_truthful_gap=stage17_capability_library_promotion_readiness`.
+- Per-capability readback after evidence apply returned the same four refs,
+  `proposal_evidence_operator_intake_requires_future_review=true`,
+  `proposal_evidence_writes_proposals=false`, and
+  `proposal_evidence_approval_claimed=false`.
+
+Latest validation for the proposal review follow-up:
+
+- `POST /plugins/capabilities/library/proposal-review/apply` dry-run for the
+  same capability returned `ok=true`, `status=dry_run`,
+  `planned_pack_count=1`, `planned_capability_count=1`,
+  `planned_proposal_count=1`, and dry-run fingerprint
+  `100bbf2b1593f423b7f4b5a004e74e5f501a1bd781a91193bddc1679110e4d9f`.
+- The confirmed proposal-review apply returned `ok=true`, `applied=true`,
+  `status=reviewed`,
+  `batch_id=capability_library_proposal_review_batch_1781763516_f31dc60c`,
+  `recorded_proposal_count=1`, `recorded_capability_count=1`,
+  `remaining_proposal_review_missing_count=1370`,
+  `promotable_capability_count=924`, and `failed_count=0`.
+- The review receipt was
+  `data/artifacts/plugins/proposal_reviews/plugin_proposal_review_1781763516_f820f7bf194e_685900.json`.
+
+Live readbacks after this slice:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=16`, `candidate_capability_count=1370`,
+  `evidence_ref_required_count=1370`,
+  `next_smallest_truthful_gap=stage17_capability_library_operator_proposal_evidence_refs`.
+- Proposal-review apply-readiness:
+  `status=blocked_on_operator_evidence_refs`,
+  `reviewable_capability_count=0`,
+  `proposal_review_missing_count=1370`,
+  `blocked_before_review_capability_count=1370`,
+  `next_smallest_truthful_gap=stage17_capability_library_operator_proposal_evidence_refs`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=39`, `planned_capability_count=924`, and fingerprint
+  `c6de2aaf31d3d5033b630cdeae6943ad1db4c304b6a33163a6356c6ccc9b04ef`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,370
+  capabilities remaining, and the same 1,370 are blocked before proposal
+  review. The next surfaced pack is
+  `legacy.generated.capabilitylineageplugin` with one current evidence-ref
+  candidate. The next action is to derive and verify that candidate's proposal,
+  validation, metadata, and operator-review refs, then run the same dry-run
+  and apply sequence through the governed routes.
+
+### 2026-06-18 - Stage 17 records one capabilitylineage proposal-evidence and review slice
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded one current `legacy.generated.capabilitylineageplugin`
+operator proposal-evidence capability through the existing governed evidence
+intake route, then reviewed the now-ready proposal through the governed
+capability-library proposal-review apply route. This is another one-capability
+queue reduction only: it does not close Stage 17, does not apply promotion,
+does not enable or execute capabilities, and does not claim independent
+verification of the operator-supplied evidence refs.
+
+Capability recorded in this slice:
+
+- `1781579709_capabilitylineageplugin`
+
+Recorded evidence refs:
+
+- proposal artifact ref
+  `artifact:plugins/proposals/plugin_proposal_1781745242_1781579709-capabilitylineageplugin.json`
+- validation artifact ref
+  `artifact:plugins/validations/plugin_validation_1781745242_1781579709-capabilitylineageplugin.json`
+- pack metadata ref
+  `artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781740947_legacy-generated-capabilitylineageplugin.json`
+- operator-review ref
+  `artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-capabilitylineageplugin_811200.json`
+
+Latest validation for this live Stage 17 intake:
+
+- Artifact derivation selected the current first operator-intake checklist
+  item after the capabilitycatalog slice:
+  `pack_id=legacy.generated.capabilitylineageplugin`,
+  `pack_version=0.0.0-migration`,
+  `capability=1781579709_capabilitylineageplugin`, and
+  `proposal_id=plugin_proposal_1781745242_1781579709-capabilitylineageplugin`.
+- Artifact existence check confirmed the proposal, validation, metadata, and
+  operator-review refs existed under `data/artifacts/plugins` before apply.
+- `POST /plugins/capabilities/library/proposal-evidence/operator-intake/apply`
+  dry-run returned `ok=true`, `status=dry_run`,
+  `planned_pack_count=1`, `planned_capability_count=1`,
+  `evidence_ref_count=4`, and dry-run fingerprint
+  `40501bef6ec722cd11101232e0de6521bc35c459cfa3bb1ac1139153b89a1cb8`.
+- The confirmed evidence apply returned `ok=true`, `applied=true`,
+  `status=recorded`, `recorded_pack_count=1`,
+  `recorded_capability_count=1`,
+  `remaining_proposal_evidence_missing_count=1369`,
+  `remaining_proposal_evidence_ready_count=925`, `failed_count=0`, and
+  `next_smallest_truthful_gap=stage17_capability_library_promotion_readiness`.
+
+Latest validation for the proposal review follow-up:
+
+- `POST /plugins/capabilities/library/proposal-review/apply` dry-run for the
+  same capability returned `ok=true`, `status=dry_run`,
+  `planned_pack_count=1`, `planned_capability_count=1`,
+  `planned_proposal_count=1`, and dry-run fingerprint
+  `16232f8f4d252daf1b22ba06b9733c48250b424300f1b39b38d0afb229311e65`.
+- The confirmed proposal-review apply returned `ok=true`, `applied=true`,
+  `status=reviewed`,
+  `batch_id=capability_library_proposal_review_batch_1781764247_5f6e0dd9`,
+  `recorded_proposal_count=1`, `recorded_capability_count=1`,
+  `remaining_proposal_review_missing_count=1369`,
+  `promotable_capability_count=925`, and `failed_count=0`.
+
+Live readbacks after this slice:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=15`, `candidate_capability_count=1369`,
+  `evidence_ref_required_count=1369`,
+  `next_smallest_truthful_gap=stage17_capability_library_operator_proposal_evidence_refs`.
+- Proposal-review apply-readiness:
+  `status=blocked_on_operator_evidence_refs`,
+  `reviewable_capability_count=0`,
+  `proposal_review_missing_count=1369`,
+  `blocked_before_review_capability_count=1369`,
+  `next_smallest_truthful_gap=stage17_capability_library_operator_proposal_evidence_refs`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=39`, `planned_capability_count=925`, and fingerprint
+  `3f37e5403a0a7b39cb2aa2be75384cb6d059f3f9fb048b8d6eced6aa8caa42c1`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,369
+  capabilities remaining, and the same 1,369 are blocked before proposal
+  review. The next surfaced pack is
+  `legacy.generated.capabilityoperatorreviewdecisionplugin` with one current
+  evidence-ref candidate. The next action is to derive and verify that
+  candidate's proposal, validation, metadata, and operator-review refs, then
+  run the same dry-run and apply sequence through the governed routes.
+
+### 2026-06-18 - Stage 17 records one capabilityoperatorreviewdecision proposal-evidence and review slice
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded one current
+`legacy.generated.capabilityoperatorreviewdecisionplugin` operator
+proposal-evidence capability through the existing governed evidence intake
+route, then reviewed the now-ready proposal through the governed
+capability-library proposal-review apply route. This is another one-capability
+queue reduction only: it does not close Stage 17, does not apply promotion,
+does not enable or execute capabilities, and does not claim independent
+verification of the operator-supplied evidence refs.
+
+Capability recorded in this slice:
+
+- `1781579810_capabilityoperatorreviewdecisionplugin`
+
+Recorded evidence refs:
+
+- proposal artifact ref
+  `artifact:plugins/proposals/plugin_proposal_1781745633_1781579810-capabilityoperatorreviewdecisionplugin.json`
+- validation artifact ref
+  `artifact:plugins/validations/plugin_validation_1781745633_1781579810-capabilityoperatorreviewdecisionplugin.json`
+- pack metadata ref
+  `artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-capabilityoperatorreviewdecisionplugin.json`
+- operator-review ref
+  `artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-capabilityoperatorreviewdecisionplugin_398700.json`
+
+Latest validation for this live Stage 17 intake:
+
+- Artifact derivation selected the current first operator-intake checklist
+  item after the capabilitylineage slice:
+  `pack_id=legacy.generated.capabilityoperatorreviewdecisionplugin`,
+  `pack_version=0.0.0-migration`,
+  `capability=1781579810_capabilityoperatorreviewdecisionplugin`, and
+  `proposal_id=plugin_proposal_1781745633_1781579810-capabilityoperatorreviewdecisionplugin`.
+- Artifact existence check confirmed the proposal, validation, metadata, and
+  operator-review refs existed under `data/artifacts/plugins` before apply.
+- `POST /plugins/capabilities/library/proposal-evidence/operator-intake/apply`
+  dry-run returned `ok=true`, `status=dry_run`,
+  `planned_pack_count=1`, `planned_capability_count=1`,
+  `evidence_ref_count=4`, and dry-run fingerprint
+  `fcfc7aa246fa254dd6d09c23b6c60500de6dbee755048931213bcb4a6cce4447`.
+- The confirmed evidence apply returned `ok=true`, `applied=true`,
+  `status=recorded`, `recorded_pack_count=1`,
+  `recorded_capability_count=1`,
+  `remaining_proposal_evidence_missing_count=1368`,
+  `remaining_proposal_evidence_ready_count=926`, `failed_count=0`, and
+  `next_smallest_truthful_gap=stage17_capability_library_promotion_readiness`.
+
+Latest validation for the proposal review follow-up:
+
+- `POST /plugins/capabilities/library/proposal-review/apply` dry-run for the
+  same capability returned `ok=true`, `status=dry_run`,
+  `planned_pack_count=1`, `planned_capability_count=1`,
+  `planned_proposal_count=1`, and dry-run fingerprint
+  `816028152108983fb6e97c52c0d332b53a65d2ab0b6377a164b456492466759f`.
+- The confirmed proposal-review apply returned `ok=true`, `applied=true`,
+  `status=reviewed`,
+  `batch_id=capability_library_proposal_review_batch_1781765041_c7152271`,
+  `recorded_proposal_count=1`, `recorded_capability_count=1`,
+  `remaining_proposal_review_missing_count=1368`,
+  `promotable_capability_count=926`, and `failed_count=0`.
+
+Live readbacks after this slice:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=14`, `candidate_capability_count=1368`,
+  `evidence_ref_required_count=1368`,
+  `next_smallest_truthful_gap=stage17_capability_library_operator_proposal_evidence_refs`.
+- Proposal-review apply-readiness:
+  `status=blocked_on_operator_evidence_refs`,
+  `reviewable_capability_count=0`,
+  `proposal_review_missing_count=1368`,
+  `blocked_before_review_capability_count=1368`,
+  `next_smallest_truthful_gap=stage17_capability_library_operator_proposal_evidence_refs`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=39`, `planned_capability_count=926`, and fingerprint
+  `d02666bfbf6035654f3694e6915019e5673854c6f2ea0ead726cbd63caa1fd00`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,368
+  capabilities remaining, and the same 1,368 are blocked before proposal
+  review. The next surfaced pack is
+  `legacy.generated.capabilityoperatorreviewplugin` with one current
+  evidence-ref candidate. The next action is to derive and verify that
+  candidate's proposal, validation, metadata, and operator-review refs, then
+  run the same dry-run and apply sequence through the governed routes.
+
+### 2026-06-18 - Stage 17 records one capabilityoperatorreview proposal-evidence and review slice
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded one current `legacy.generated.capabilityoperatorreviewplugin`
+operator proposal-evidence capability through the existing governed evidence
+intake route, then reviewed the now-ready proposal through the governed
+capability-library proposal-review apply route. This is another one-capability
+queue reduction only: it does not close Stage 17, does not apply promotion,
+does not enable or execute capabilities, and does not claim independent
+verification of the operator-supplied evidence refs.
+
+Capability recorded in this slice:
+
+- `1781579763_capabilityoperatorreviewplugin`
+
+Recorded evidence refs:
+
+- proposal artifact ref
+  `artifact:plugins/proposals/plugin_proposal_1781746108_1781579763-capabilityoperatorreviewplugin.json`
+- validation artifact ref
+  `artifact:plugins/validations/plugin_validation_1781746108_1781579763-capabilityoperatorreviewplugin.json`
+- pack metadata ref
+  `artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-capabilityoperatorreviewplugin.json`
+- operator-review ref
+  `artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-capabilityoperatorreviewplugin_681800.json`
+
+Latest validation for this live Stage 17 intake:
+
+- Artifact derivation selected the current first operator-intake checklist
+  item after the capabilityoperatorreviewdecision slice:
+  `pack_id=legacy.generated.capabilityoperatorreviewplugin`,
+  `pack_version=0.0.0-migration`,
+  `capability=1781579763_capabilityoperatorreviewplugin`, and
+  `proposal_id=plugin_proposal_1781746108_1781579763-capabilityoperatorreviewplugin`.
+- Artifact existence check confirmed the proposal, validation, metadata, and
+  operator-review refs existed under `data/artifacts/plugins` before apply.
+- `POST /plugins/capabilities/library/proposal-evidence/operator-intake/apply`
+  dry-run returned `ok=true`, `status=dry_run`,
+  `planned_pack_count=1`, `planned_capability_count=1`,
+  `evidence_ref_count=4`, and dry-run fingerprint
+  `855f00af7c08b3818986eedf390d02c9e26d5504c58cb2279093bbf5cd43c151`.
+- The confirmed evidence apply returned `ok=true`, `applied=true`,
+  `status=recorded`, `recorded_pack_count=1`,
+  `recorded_capability_count=1`,
+  `remaining_proposal_evidence_missing_count=1367`,
+  `remaining_proposal_evidence_ready_count=927`, `failed_count=0`, and
+  `next_smallest_truthful_gap=stage17_capability_library_promotion_readiness`.
+
+Latest validation for the proposal review follow-up:
+
+- `POST /plugins/capabilities/library/proposal-review/apply` dry-run for the
+  same capability returned `ok=true`, `status=dry_run`,
+  `planned_pack_count=1`, `planned_capability_count=1`,
+  `planned_proposal_count=1`, and dry-run fingerprint
+  `cd5a2356d911548cfb73038348094d8682e7f3b3a56f85996271d798388d6b18`.
+- The confirmed proposal-review apply returned `ok=true`, `applied=true`,
+  `status=reviewed`,
+  `batch_id=capability_library_proposal_review_batch_1781765744_c8bf168d`,
+  `recorded_proposal_count=1`, `recorded_capability_count=1`,
+  `remaining_proposal_review_missing_count=1367`,
+  `promotable_capability_count=927`, and `failed_count=0`.
+
+Live readbacks after this slice:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=13`, `candidate_capability_count=1367`,
+  `evidence_ref_required_count=1367`,
+  `next_smallest_truthful_gap=stage17_capability_library_operator_proposal_evidence_refs`.
+- Proposal-review apply-readiness:
+  `status=blocked_on_operator_evidence_refs`,
+  `reviewable_capability_count=0`,
+  `proposal_review_missing_count=1367`,
+  `blocked_before_review_capability_count=1367`,
+  `next_smallest_truthful_gap=stage17_capability_library_operator_proposal_evidence_refs`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=39`, `planned_capability_count=927`, and fingerprint
+  `63d0ba3c6be63015c6d60009dc4cb2e03d6ba2693730e173390950c15c61427a`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,367
+  capabilities remaining, and the same 1,367 are blocked before proposal
+  review. The next surfaced pack is
+  `legacy.generated.capabilitypromotionreceiptsplugin` with one current
+  evidence-ref candidate. The next action is to derive and verify that
+  candidate's proposal, validation, metadata, and operator-review refs, then
+  run the same dry-run and apply sequence through the governed routes.
+
+### 2026-06-18 - Stage 17 records one capabilitypromotionreceipts proposal-evidence and review slice
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded one current
+`legacy.generated.capabilitypromotionreceiptsplugin` operator proposal-evidence
+capability through the existing governed evidence intake route, then reviewed
+the now-ready proposal through the governed capability-library proposal-review
+apply route. This is another one-capability queue reduction only: it does not
+close Stage 17, does not apply promotion, does not enable or execute
+capabilities, and does not claim independent verification of the
+operator-supplied evidence refs.
+
+Capability recorded in this slice:
+
+- `1781579736_capabilitypromotionreceiptsplugin`
+
+Recorded evidence refs:
+
+- proposal artifact ref
+  `artifact:plugins/proposals/plugin_proposal_1781746403_1781579736-capabilitypromotionreceiptsplugin.json`
+- validation artifact ref
+  `artifact:plugins/validations/plugin_validation_1781746403_1781579736-capabilitypromotionreceiptsplugin.json`
+- pack metadata ref
+  `artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-capabilitypromotionreceiptsplugin.json`
+- operator-review ref
+  `artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-capabilitypromotionreceiptsplugin_249300.json`
+
+Latest validation for this live Stage 17 intake:
+
+- Artifact derivation selected the current first operator-intake checklist
+  item after the capabilityoperatorreview slice:
+  `pack_id=legacy.generated.capabilitypromotionreceiptsplugin`,
+  `pack_version=0.0.0-migration`,
+  `capability=1781579736_capabilitypromotionreceiptsplugin`, and
+  `proposal_id=plugin_proposal_1781746403_1781579736-capabilitypromotionreceiptsplugin`.
+- Artifact existence check confirmed the proposal, validation, metadata, and
+  operator-review refs existed under `data/artifacts/plugins` before apply.
+- `POST /plugins/capabilities/library/proposal-evidence/operator-intake/apply`
+  dry-run returned `ok=true`, `status=dry_run`,
+  `planned_pack_count=1`, `planned_capability_count=1`,
+  `evidence_ref_count=4`, and dry-run fingerprint
+  `1738085853877b9e466ee3a3b94a181747477302f27d144dee12947341382318`.
+- The confirmed evidence apply returned `ok=true`, `applied=true`,
+  `status=recorded`, `recorded_pack_count=1`,
+  `recorded_capability_count=1`,
+  `remaining_proposal_evidence_missing_count=1366`,
+  `remaining_proposal_evidence_ready_count=928`, `failed_count=0`, and
+  `next_smallest_truthful_gap=stage17_capability_library_promotion_readiness`.
+
+Latest validation for the proposal review follow-up:
+
+- `POST /plugins/capabilities/library/proposal-review/apply` dry-run for the
+  same capability returned `ok=true`, `status=dry_run`,
+  `planned_pack_count=1`, `planned_capability_count=1`,
+  `planned_proposal_count=1`, and dry-run fingerprint
+  `926e9eab64b11449aaea79191bcdd3e18989a1e906bd0d793386ae108d740b35`.
+- The confirmed proposal-review apply returned `ok=true`, `applied=true`,
+  `status=reviewed`,
+  `batch_id=capability_library_proposal_review_batch_1781766502_fedec4d2`,
+  `recorded_proposal_count=1`, `recorded_capability_count=1`,
+  `remaining_proposal_review_missing_count=1366`,
+  `promotable_capability_count=928`, and `failed_count=0`.
+
+Live readbacks after this slice:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=12`, `candidate_capability_count=1366`,
+  `evidence_ref_required_count=1366`,
+  `next_smallest_truthful_gap=stage17_capability_library_operator_proposal_evidence_refs`.
+- Proposal-review apply-readiness:
+  `status=blocked_on_operator_evidence_refs`,
+  `reviewable_capability_count=0`,
+  `proposal_review_missing_count=1366`,
+  `blocked_before_review_capability_count=1366`,
+  `next_smallest_truthful_gap=stage17_capability_library_operator_proposal_evidence_refs`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=39`, `planned_capability_count=928`, and fingerprint
+  `48d8980ef971b262f165dc01cd37b84510917ace27d7504726b28e99b34c04f5`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,366
+  capabilities remaining, and the same 1,366 are blocked before proposal
+  review. The next surfaced pack is
+  `legacy.generated.capabilityqualitydocsplugin` with three current
+  evidence-ref candidates. The next action is to derive and verify the first
+  candidate's proposal, validation, metadata, and operator-review refs, then
+  run the same dry-run and apply sequence through the governed routes.
+
+### 2026-06-18 - Stage 17 records capabilityqualitydocs proposal-evidence and review slice
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the three current
+`legacy.generated.capabilityqualitydocsplugin` operator proposal-evidence
+capabilities through the existing governed evidence intake route, then reviewed
+each now-ready proposal through the governed capability-library proposal-review
+apply route. This is a three-capability queue reduction only: it does not close
+Stage 17, does not apply promotion, does not enable or execute capabilities,
+and does not claim independent verification of the operator-supplied evidence
+refs.
+
+Capabilities recorded in this slice:
+
+- `1781579684_capabilityqualitydocsplugin`
+- `1781755962_capabilityqualitydocsplugin`
+- `1781757620_capabilityqualitydocsplugin`
+
+Recorded evidence refs:
+
+- `1781579684_capabilityqualitydocsplugin` recorded
+  `artifact:plugins/proposals/plugin_proposal_1781746926_1781579684-capabilityqualitydocsplugin.json`,
+  `artifact:plugins/validations/plugin_validation_1781746926_1781579684-capabilityqualitydocsplugin.json`,
+  `artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781757916_legacy-generated-capabilityqualitydocsplugin.json`,
+  and
+  `artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781758386_legacy-generated-capabilityqualitydocsplugin_279300.json`.
+- `1781755962_capabilityqualitydocsplugin` recorded
+  `artifact:plugins/proposals/plugin_proposal_1781757061_1781755962-capabilityqualitydocsplugin.json`,
+  `artifact:plugins/validations/plugin_validation_1781757061_1781755962-capabilityqualitydocsplugin.json`,
+  `artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781757916_legacy-generated-capabilityqualitydocsplugin.json`,
+  and
+  `artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781758386_legacy-generated-capabilityqualitydocsplugin_279300.json`.
+- `1781757620_capabilityqualitydocsplugin` recorded
+  `artifact:plugins/proposals/plugin_proposal_1781758106_1781757620-capabilityqualitydocsplugin.json`,
+  `artifact:plugins/validations/plugin_validation_1781758106_1781757620-capabilityqualitydocsplugin.json`,
+  `artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781757916_legacy-generated-capabilityqualitydocsplugin.json`,
+  and
+  `artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781758386_legacy-generated-capabilityqualitydocsplugin_279300.json`.
+
+Latest validation for this live Stage 17 intake:
+
+- Artifact derivation selected the current first operator-intake checklist
+  pack after the capabilitypromotionreceipts slice:
+  `pack_id=legacy.generated.capabilityqualitydocsplugin`,
+  `pack_version=0.0.0-migration`, and `selected_candidate_count=3`.
+- Artifact existence checks confirmed each selected capability had proposal,
+  validation, metadata, and operator-review refs under `data/artifacts/plugins`
+  before apply.
+- `POST /plugins/capabilities/library/proposal-evidence/operator-intake/apply`
+  dry-runs returned:
+  `6e3f45338de5bfdcb33c0a400eda6e5cfc887f94dd0553eee12c295974a31e3a`
+  for `1781579684_capabilityqualitydocsplugin`,
+  `d053fb2fd30552322d32b3b280f770fa392e317f48ee5eb52d6211267d3b0928`
+  for `1781755962_capabilityqualitydocsplugin`, and
+  `99611128b80a5b401b7921348c3d73b1572b5e558a68de394578072ffa9f17df`
+  for `1781757620_capabilityqualitydocsplugin`.
+- Each confirmed evidence apply returned `ok=true`, `applied=true`,
+  `status=recorded`, `recorded_pack_count=1`,
+  `recorded_capability_count=1`, and `failed_count=0`.
+- Remaining evidence counts after each evidence apply were 1,365, 1,364, and
+  1,363 respectively; `remaining_proposal_evidence_ready_count` ended at 931.
+
+Latest validation for the proposal review follow-up:
+
+- `POST /plugins/capabilities/library/proposal-review/apply` dry-runs returned:
+  `ad0c7a42d63602bb2008d8326a3dd70738f5ccee4789b444a378e3a077a5a776`
+  for `1781579684_capabilityqualitydocsplugin`,
+  `de27a6d6c8d60f72716194f4d5618b0df56f28c9f5af07804cb13e2a52c11bb4`
+  for `1781755962_capabilityqualitydocsplugin`, and
+  `d836aad2cd53474ce0ad6c9adb6ac7fd60090c6b8495badcae7357019e135ed6`
+  for `1781757620_capabilityqualitydocsplugin`.
+- Confirmed proposal-review apply batches were
+  `capability_library_proposal_review_batch_1781767199_d9a66816`,
+  `capability_library_proposal_review_batch_1781767447_49c1dde7`, and
+  `capability_library_proposal_review_batch_1781767717_bd5736a4`.
+- Each confirmed proposal-review apply returned `ok=true`, `applied=true`,
+  `status=reviewed`, `recorded_proposal_count=1`,
+  `recorded_capability_count=1`, and `failed_count=0`.
+- Remaining proposal-review counts after each review apply were 1,365, 1,364,
+  and 1,363 respectively; `promotable_capability_count` ended at 931.
+
+Live readbacks after this slice:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=11`, `candidate_capability_count=1363`,
+  `evidence_ref_required_count=1363`,
+  `next_smallest_truthful_gap=stage17_capability_library_operator_proposal_evidence_refs`.
+- Proposal-review apply-readiness:
+  `status=blocked_on_operator_evidence_refs`,
+  `reviewable_capability_count=0`,
+  `proposal_review_missing_count=1363`,
+  `blocked_before_review_capability_count=1363`,
+  `next_smallest_truthful_gap=stage17_capability_library_operator_proposal_evidence_refs`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=39`, `planned_capability_count=931`, and fingerprint
+  `a04ed52c9050eaa00a42d46340c1af6d9f804d30d9b3610456e8a2b33b0c091c`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,363
+  capabilities remaining, and the same 1,363 are blocked before proposal
+  review. The next surfaced pack is
+  `legacy.generated.capabilityqualitystandardsplugin` with three current
+  evidence-ref candidates. The next action is to derive and verify those
+  candidates' proposal, validation, metadata, and operator-review refs, then
+  run the same dry-run and apply sequence through the governed routes.
+
+### 2026-06-18 - Stage 17 records capabilityqualitystandards proposal-evidence and review slice
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the three current
+`legacy.generated.capabilityqualitystandardsplugin` operator
+proposal-evidence capabilities through the existing governed evidence intake
+route, then reviewed each now-ready proposal through the governed
+capability-library proposal-review apply route. This is a three-capability
+queue reduction only: it does not close Stage 17, does not apply promotion,
+does not enable or execute capabilities, and does not claim independent
+verification of the operator-supplied evidence refs.
+
+Capabilities recorded in this slice:
+
+- `1781579659_capabilityqualitystandardsplugin`
+- `1781755759_capabilityqualitystandardsplugin`
+- `1781757502_capabilityqualitystandardsplugin`
+
+Recorded evidence refs:
+
+- `1781579659_capabilityqualitystandardsplugin` recorded
+  `artifact:plugins/proposals/plugin_proposal_1781747721_1781579659-capabilityqualitystandardsplugin.json`,
+  `artifact:plugins/validations/plugin_validation_1781747721_1781579659-capabilityqualitystandardsplugin.json`,
+  `artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781757916_legacy-generated-capabilityqualitystandardsplugin.json`,
+  and
+  `artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781758386_legacy-generated-capabilityqualitystandardsplugin_373300.json`.
+- `1781755759_capabilityqualitystandardsplugin` recorded
+  `artifact:plugins/proposals/plugin_proposal_1781757061_1781755759-capabilityqualitystandardsplugin.json`,
+  `artifact:plugins/validations/plugin_validation_1781757061_1781755759-capabilityqualitystandardsplugin.json`,
+  `artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781757916_legacy-generated-capabilityqualitystandardsplugin.json`,
+  and
+  `artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781758386_legacy-generated-capabilityqualitystandardsplugin_373300.json`.
+- `1781757502_capabilityqualitystandardsplugin` recorded
+  `artifact:plugins/proposals/plugin_proposal_1781758106_1781757502-capabilityqualitystandardsplugin.json`,
+  `artifact:plugins/validations/plugin_validation_1781758106_1781757502-capabilityqualitystandardsplugin.json`,
+  `artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781757916_legacy-generated-capabilityqualitystandardsplugin.json`,
+  and
+  `artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781758386_legacy-generated-capabilityqualitystandardsplugin_373300.json`.
+
+Latest validation for this live Stage 17 intake:
+
+- Artifact derivation selected the current first operator-intake checklist
+  pack after the capabilityqualitydocs slice:
+  `pack_id=legacy.generated.capabilityqualitystandardsplugin`,
+  `pack_version=0.0.0-migration`, and `selected_candidate_count=3`.
+- Artifact existence checks confirmed each selected capability had proposal,
+  validation, metadata, and operator-review refs under `data/artifacts/plugins`
+  before apply.
+- An initial write attempt with actor `stage17.operator` and no
+  `FRANCIS_API_ACTOR_SCOPES` policy was denied by the existing permission
+  gate with `error=api_permission_denied`, `reason=missing_scopes`, and
+  `actor_scope_count=0`; no evidence refs or proposal reviews were recorded by
+  that denied attempt.
+- The successful governed write process used the documented local actor-scope
+  policy `FRANCIS_API_ACTOR_SCOPES={"stage17.operator":["plugins.write"]}`.
+- `POST /plugins/capabilities/library/proposal-evidence/operator-intake/apply`
+  dry-runs returned:
+  `a3edd1ffbbda295e53abe808fbf6d78669c6327bef4afc276b9c8cfa0a508bc2`
+  for `1781579659_capabilityqualitystandardsplugin`,
+  `1331dd58761064abafa28ecdbb52f2053e523488d08f667b95b81d1f375f316f`
+  for `1781755759_capabilityqualitystandardsplugin`, and
+  `1a751faafea7b991cb9684934a998963276f67224b2a77b7c82b2ffd5a7972fb`
+  for `1781757502_capabilityqualitystandardsplugin`.
+- Each confirmed evidence apply returned `ok=true`, `applied=true`,
+  `status=recorded`, `recorded_pack_count=1`,
+  `recorded_capability_count=1`, and `failed_count=0`.
+- Remaining evidence counts after each evidence apply were 1,362, 1,361, and
+  1,360 respectively; `remaining_proposal_evidence_ready_count` ended at 934.
+
+Latest validation for the proposal review follow-up:
+
+- `POST /plugins/capabilities/library/proposal-review/apply` dry-runs
+  returned:
+  `49194ad9f900f74ea452ac31e83f58098229569a14728befa7f002f2306d6ba8`
+  for `1781579659_capabilityqualitystandardsplugin`,
+  `926eae5a4a81342b46b6e174f486cacb2c3e447f696603316ab54545859a34f3`
+  for `1781755759_capabilityqualitystandardsplugin`, and
+  `157d266aa26e5da198973be46b01137cf5505cc2e54bf1c4d93feb6ec4ebc227`
+  for `1781757502_capabilityqualitystandardsplugin`.
+- Confirmed proposal-review apply batches were
+  `capability_library_proposal_review_batch_1781768751_412f4941`,
+  `capability_library_proposal_review_batch_1781769021_08d7f8a5`, and
+  `capability_library_proposal_review_batch_1781769278_a53fc9b1`.
+- Each confirmed proposal-review apply returned `ok=true`, `applied=true`,
+  `status=reviewed`, `recorded_proposal_count=1`,
+  `recorded_capability_count=1`, and `failed_count=0`.
+- Remaining proposal-review counts after each review apply were 1,362, 1,361,
+  and 1,360 respectively.
+
+Live readbacks after this slice:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=10`, `candidate_capability_count=1360`,
+  `evidence_ref_required_count=1360`,
+  `next_smallest_truthful_gap=stage17_capability_library_operator_proposal_evidence_refs`.
+- Proposal-review apply-readiness:
+  `status=blocked_on_operator_evidence_refs`,
+  `reviewable_capability_count=0`,
+  `proposal_review_missing_count=1360`,
+  `blocked_before_review_capability_count=1360`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=39`, `planned_capability_count=934`, and fingerprint
+  `20a11c82af97e02b68b147235b39803502d8bbf0d31e1f772f2520e0c3f59c8c`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,360
+  capabilities remaining, and the same 1,360 are blocked before proposal
+  review. The next surfaced pack is
+  `legacy.generated.capabilityqualitytestsplugin` with three current
+  evidence-ref candidates. The next action is to derive and verify those
+  candidates' proposal, validation, metadata, and operator-review refs, then
+  run the same dry-run and apply sequence through the governed routes.
+
+### 2026-06-18 - Stage 17 records capabilityqualitytests proposal-evidence and review slice
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the three current
+`legacy.generated.capabilityqualitytestsplugin` operator proposal-evidence
+capabilities through the existing governed evidence intake route, then reviewed
+each now-ready proposal through the governed capability-library proposal-review
+apply route. This is a three-capability queue reduction only: it does not close
+Stage 17, does not apply promotion, does not enable or execute capabilities,
+and does not claim independent verification of the operator-supplied evidence
+refs.
+
+Capabilities recorded in this slice:
+
+- `1781579671_capabilityqualitytestsplugin`
+- `1781755861_capabilityqualitytestsplugin`
+- `1781757557_capabilityqualitytestsplugin`
+
+Recorded evidence refs:
+
+- `1781579671_capabilityqualitytestsplugin` recorded
+  `artifact:plugins/proposals/plugin_proposal_1781748117_1781579671-capabilityqualitytestsplugin.json`,
+  `artifact:plugins/validations/plugin_validation_1781748117_1781579671-capabilityqualitytestsplugin.json`,
+  `artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781757916_legacy-generated-capabilityqualitytestsplugin.json`,
+  and
+  `artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781758386_legacy-generated-capabilityqualitytestsplugin_412500.json`.
+- `1781755861_capabilityqualitytestsplugin` recorded
+  `artifact:plugins/proposals/plugin_proposal_1781757061_1781755861-capabilityqualitytestsplugin.json`,
+  `artifact:plugins/validations/plugin_validation_1781757061_1781755861-capabilityqualitytestsplugin.json`,
+  `artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781757916_legacy-generated-capabilityqualitytestsplugin.json`,
+  and
+  `artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781758386_legacy-generated-capabilityqualitytestsplugin_412500.json`.
+- `1781757557_capabilityqualitytestsplugin` recorded
+  `artifact:plugins/proposals/plugin_proposal_1781758106_1781757557-capabilityqualitytestsplugin.json`,
+  `artifact:plugins/validations/plugin_validation_1781758106_1781757557-capabilityqualitytestsplugin.json`,
+  `artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781757916_legacy-generated-capabilityqualitytestsplugin.json`,
+  and
+  `artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781758386_legacy-generated-capabilityqualitytestsplugin_412500.json`.
+
+Latest validation for this live Stage 17 intake:
+
+- Artifact derivation selected the current first operator-intake checklist
+  pack after the capabilityqualitystandards slice:
+  `pack_id=legacy.generated.capabilityqualitytestsplugin`,
+  `pack_version=0.0.0-migration`, and `selected_candidate_count=3`.
+- Artifact existence checks confirmed each selected capability had proposal,
+  validation, metadata, and operator-review refs under `data/artifacts/plugins`
+  before apply.
+- The governed write process used the documented local actor-scope policy
+  `FRANCIS_API_ACTOR_SCOPES={"stage17.operator":["plugins.write"]}`.
+- `POST /plugins/capabilities/library/proposal-evidence/operator-intake/apply`
+  dry-runs returned:
+  `8f1b87821b09b46843909a415bd428b3646c7edfd68e6a5394693332eb9141dd`
+  for `1781579671_capabilityqualitytestsplugin`,
+  `421a85c6822b6cc94e2661171fa24e39e62e041a7a47ddd5161d135278812030`
+  for `1781755861_capabilityqualitytestsplugin`, and
+  `0e1a41ccfbc409f2a0f9dde3de007c19e2950310f53f7c1836b28178ee4706b3`
+  for `1781757557_capabilityqualitytestsplugin`.
+- Each confirmed evidence apply returned `ok=true`, `applied=true`,
+  `status=recorded`, `recorded_pack_count=1`,
+  `recorded_capability_count=1`, and `failed_count=0`.
+- Remaining evidence counts after each evidence apply were 1,359, 1,358, and
+  1,357 respectively; `remaining_proposal_evidence_ready_count` ended at 937.
+
+Latest validation for the proposal review follow-up:
+
+- `POST /plugins/capabilities/library/proposal-review/apply` dry-runs
+  returned:
+  `b521da05ed35ea04a296c8e784cafa7b3b9f454a13be0cd0387c373b6ccf8691`
+  for `1781579671_capabilityqualitytestsplugin`,
+  `866966690fded4764ecbcdbe8dbe4733d58d2853eea0f9fd15d515a7dd489b4d`
+  for `1781755861_capabilityqualitytestsplugin`, and
+  `a58146d0e9f58b8655a528cc3f3b0bc1a5420fe5702fe2be4c25eb86f78e9474`
+  for `1781757557_capabilityqualitytestsplugin`.
+- Confirmed proposal-review apply batches were
+  `capability_library_proposal_review_batch_1781770001_a6e68f74`,
+  `capability_library_proposal_review_batch_1781770254_9122be48`, and
+  `capability_library_proposal_review_batch_1781770518_1bf99911`.
+- Each confirmed proposal-review apply returned `ok=true`, `applied=true`,
+  `status=reviewed`, `recorded_proposal_count=1`,
+  `recorded_capability_count=1`, and `failed_count=0`.
+- Remaining proposal-review counts after each review apply were 1,359, 1,358,
+  and 1,357 respectively.
+
+Live readbacks after this slice:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=9`, `candidate_capability_count=1357`,
+  `evidence_ref_required_count=1357`,
+  `next_smallest_truthful_gap=stage17_capability_library_operator_proposal_evidence_refs`.
+- Proposal-review apply-readiness:
+  `status=blocked_on_operator_evidence_refs`,
+  `reviewable_capability_count=0`,
+  `proposal_review_missing_count=1357`,
+  `blocked_before_review_capability_count=1357`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=39`, `planned_capability_count=937`, and fingerprint
+  `fa67c238194af418978631ba23aeea58e5a9df1601bce65d58b33bd27056b096`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,357
+  capabilities remaining, and the same 1,357 are blocked before proposal
+  review. The next surfaced pack is
+  `legacy.generated.capabilityvalidationreceiptsplugin` with one current
+  evidence-ref candidate. The next action is to derive and verify that
+  candidate's proposal, validation, metadata, and operator-review refs, then
+  run the same dry-run and apply sequence through the governed routes.
+
+### 2026-06-18 - Stage 17 records capabilityvalidationreceipts proposal-evidence and review slice
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the current
+`legacy.generated.capabilityvalidationreceiptsplugin` operator
+proposal-evidence capability through the existing governed evidence intake
+route, then reviewed the now-ready proposal through the governed
+capability-library proposal-review apply route. This is a one-capability queue
+reduction only: it does not close Stage 17, does not apply promotion, does not
+enable or execute capabilities, and does not claim independent verification of
+the operator-supplied evidence refs.
+
+Capability recorded in this slice:
+
+- `1781579696_capabilityvalidationreceiptsplugin`
+
+Recorded evidence refs:
+
+- `1781579696_capabilityvalidationreceiptsplugin` recorded
+  `artifact:plugins/proposals/plugin_proposal_1781748829_1781579696-capabilityvalidationreceiptsplugin.json`,
+  `artifact:plugins/validations/plugin_validation_1781748829_1781579696-capabilityvalidationreceiptsplugin.json`,
+  `artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-capabilityvalidationreceiptsplugin.json`,
+  and
+  `artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-capabilityvalidationreceiptsplugin_831500.json`.
+
+Latest validation for this live Stage 17 intake:
+
+- Artifact derivation selected the current first operator-intake checklist
+  pack after the capabilityqualitytests slice:
+  `pack_id=legacy.generated.capabilityvalidationreceiptsplugin`,
+  `pack_version=0.0.0-migration`, and `selected_candidate_count=1`.
+- Artifact existence checks confirmed the selected capability had proposal,
+  validation, metadata, and operator-review refs under `data/artifacts/plugins`
+  before apply.
+- The latest operator-review receipt for the pack was checked and contains
+  `1781579696_capabilityvalidationreceiptsplugin`.
+- The governed write process used the documented local actor-scope policy
+  `FRANCIS_API_ACTOR_SCOPES={"stage17.operator":["plugins.write"]}`.
+- `POST /plugins/capabilities/library/proposal-evidence/operator-intake/apply`
+  dry-run returned
+  `922537ef3a2b776d40e88c10cb421e17eb5a4cd3706c4d39c6192edcdbfde05b`.
+- The confirmed evidence apply returned `ok=true`, `applied=true`,
+  `status=recorded`, `recorded_pack_count=1`,
+  `recorded_capability_count=1`, `failed_count=0`,
+  `remaining_proposal_evidence_missing_count=1356`, and
+  `remaining_proposal_evidence_ready_count=938`.
+
+Latest validation for the proposal review follow-up:
+
+- `POST /plugins/capabilities/library/proposal-review/apply` dry-run returned
+  `33790adb61900e06a0790390884ff57a5e64b787835dd2bdfa374323554d6a28`.
+- Confirmed proposal-review apply batch was
+  `capability_library_proposal_review_batch_1781771168_672ef26a`.
+- The confirmed proposal-review apply returned `ok=true`, `applied=true`,
+  `status=reviewed`, `recorded_proposal_count=1`,
+  `recorded_capability_count=1`, `failed_count=0`, and
+  `remaining_proposal_review_missing_count=1356`.
+
+Live readbacks after this slice:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=8`, `candidate_capability_count=1356`,
+  `evidence_ref_required_count=1356`,
+  `next_smallest_truthful_gap=stage17_capability_library_operator_proposal_evidence_refs`.
+- Proposal-review apply-readiness:
+  `status=blocked_on_operator_evidence_refs`,
+  `reviewable_capability_count=0`,
+  `proposal_review_missing_count=1356`,
+  `blocked_before_review_capability_count=1356`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=39`, `planned_capability_count=938`, and fingerprint
+  `2e52019225841b0b300f4f2cd0eff7b3bb4074473227edcca6975243c03a074a`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,356
+  capabilities remaining, and the same 1,356 are blocked before proposal
+  review. The next surfaced pack is `legacy.generated.catalogplugin` with one
+  current evidence-ref candidate. The next action is to derive and verify that
+  candidate's proposal, validation, metadata, and operator-review refs, then
+  run the same dry-run and apply sequence through the governed routes.
+
+### 2026-06-18 - Stage 17 records catalog proposal-evidence and review slice
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the current `legacy.generated.catalogplugin` operator
+proposal-evidence capability through the existing governed evidence intake
+route, then reviewed the now-ready proposal through the governed
+capability-library proposal-review apply route. This is a one-capability queue
+reduction only: it does not close Stage 17, does not apply promotion, does not
+enable or execute capabilities, and does not claim independent verification of
+the operator-supplied evidence refs.
+
+Capability recorded in this slice:
+
+- `1781579593_catalogplugin`
+
+Recorded evidence refs:
+
+- `1781579593_catalogplugin` recorded
+  `artifact:plugins/proposals/plugin_proposal_1781749608_1781579593-catalogplugin.json`,
+  `artifact:plugins/validations/plugin_validation_1781749608_1781579593-catalogplugin.json`,
+  `artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-catalogplugin.json`,
+  and
+  `artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-catalogplugin_943600.json`.
+
+Latest validation for this live Stage 17 intake:
+
+- Artifact derivation selected the current first operator-intake checklist
+  pack after the capabilityvalidationreceipts slice:
+  `pack_id=legacy.generated.catalogplugin`,
+  `pack_version=0.0.0-migration`, and `selected_candidate_count=1`.
+- Artifact existence checks confirmed the selected capability had proposal,
+  validation, metadata, and operator-review refs under `data/artifacts/plugins`
+  before apply.
+- The latest metadata and operator-review receipts for the pack were checked
+  and contain `1781579593_catalogplugin`.
+- The governed write process used the documented local actor-scope policy
+  `FRANCIS_API_ACTOR_SCOPES={"stage17.operator":["plugins.write"]}`.
+- `POST /plugins/capabilities/library/proposal-evidence/operator-intake/apply`
+  dry-run returned
+  `88fce1e6e4a2cdefe07526d14c55d08b082c70c479a4c35399b50edbcc3297b0`.
+- The confirmed evidence apply returned `ok=true`, `applied=true`,
+  `status=recorded`, `recorded_pack_count=1`,
+  `recorded_capability_count=1`, `failed_count=0`,
+  `remaining_proposal_evidence_missing_count=1355`, and
+  `remaining_proposal_evidence_ready_count=939`.
+
+Latest validation for the proposal review follow-up:
+
+- `POST /plugins/capabilities/library/proposal-review/apply` dry-run returned
+  `98eefe5e457051da35d9507a29eaddf7b5818fcba9b90507c5261e99c556bb40`.
+- Confirmed proposal-review apply batch was
+  `capability_library_proposal_review_batch_1781771921_cef8c3be`.
+- The confirmed proposal-review apply returned `ok=true`, `applied=true`,
+  `status=reviewed`, `recorded_proposal_count=1`,
+  `recorded_capability_count=1`, `failed_count=0`, and
+  `remaining_proposal_review_missing_count=1355`.
+
+Live readbacks after this slice:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1355`,
+  `evidence_ref_required_count=1355`,
+  `next_smallest_truthful_gap=stage17_capability_library_operator_proposal_evidence_refs`.
+- Proposal-review apply-readiness:
+  `status=blocked_on_operator_evidence_refs`,
+  `reviewable_capability_count=0`,
+  `proposal_review_missing_count=1355`,
+  `blocked_before_review_capability_count=1355`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=39`, `planned_capability_count=939`, and fingerprint
+  `eaf1d791828a77b6a9aab063e5f92fa300f99ea8d1470b039897454efd9a718c`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,355
+  capabilities remaining, and the same 1,355 are blocked before proposal
+  review. The next surfaced pack is `legacy.generated.forgereadbackplugin`
+  with 219 current evidence-ref candidates. The next action is to process a
+  bounded chunk from that pack through the same dry-run and apply sequence
+  after deriving and verifying each candidate's proposal, validation, metadata,
+  and operator-review refs.
+
+### 2026-06-18 - Stage 17 records forgereadback proposal-evidence and review chunk 1
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the first five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. This is a bounded chunk only: it does not close Stage 17, does not
+apply promotion, does not enable or execute capabilities, and does not claim
+independent verification of the operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1777311761_forgereadbackplugin`
+- `1777311777_forgereadbackplugin`
+- `1777311846_forgereadbackplugin`
+- `1777312771_forgereadbackplugin`
+- `1777312789_forgereadbackplugin`
+
+Recorded evidence ref pattern:
+
+- each capability recorded its matching proposal artifact ref under
+  `artifact:plugins/proposals/`
+- each capability recorded its matching validation artifact ref under
+  `artifact:plugins/validations/`
+- each capability recorded shared pack metadata ref
+  `artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`
+- each capability recorded shared operator-review ref
+  `artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`
+
+Evidence dry-run fingerprints:
+
+- `1777311761_forgereadbackplugin`:
+  `c3af8154ca64a61623aae0ae32e77bcfc308234325ea77684fc4c33a53bbe5fe`
+- `1777311777_forgereadbackplugin`:
+  `a7d4fde1d015a1588700f5050b45a9756f73880a40f5edcb1c0d2b0cd82b2383`
+- `1777311846_forgereadbackplugin`:
+  `c206da3ed9086e432225f87ae3951cccaef6bd8ebe6c658f1912791685cd6e1b`
+- `1777312771_forgereadbackplugin`:
+  `be46d4217121cd747f148d689b9384eeaf39bed34450ba08ee8de59d42d720ee`
+- `1777312789_forgereadbackplugin`:
+  `2eb8da3a0bc8b45f94fa93137f6ebdd3fb99a23793bec3b8aeffa5203a7d64c6`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1777311761_forgereadbackplugin`:
+  `23f29e479f6f929bad1f06de989acfbbc20d21bc77312f336851fbff3908087b`,
+  `capability_library_proposal_review_batch_1781772568_447c0a70`
+- `1777311777_forgereadbackplugin`:
+  `f5e04bde5fc5976ac4932a97e26322b76fb9733510699687b385cce0f577f7c3`,
+  `capability_library_proposal_review_batch_1781772811_d427190e`
+- `1777311846_forgereadbackplugin`:
+  `5f7614ea887521fe3e40aa00f79998c23feca37b3b29524be3e72dbaef5bb81e`,
+  `capability_library_proposal_review_batch_1781773054_9611bf38`
+- `1777312771_forgereadbackplugin`:
+  `f71cb2dc814ec1a7346e830cdab5c93767599f240490970b9548a2eb0c540cc4`,
+  `capability_library_proposal_review_batch_1781773300_e6d220bb`
+- `1777312789_forgereadbackplugin`:
+  `1b3ea0266271733df937d0ddb7d62b8121b7118da23ad1b2b4197e2c6a4d8b6b`,
+  `capability_library_proposal_review_batch_1781773587_1dcdd191`
+
+Latest validation for this live Stage 17 chunk:
+
+- Artifact derivation selected the current first five candidates from
+  `legacy.generated.forgereadbackplugin` after the catalog slice:
+  `candidate_capability_count=219`, `selected_candidate_count=5`.
+- Artifact existence checks confirmed each selected capability had proposal
+  and validation refs under `data/artifacts/plugins`.
+- The selected metadata and operator-review receipts were checked and contain
+  all five selected capability IDs.
+- The governed write process used the documented local actor-scope policy
+  `FRANCIS_API_ACTOR_SCOPES={"stage17.operator":["plugins.write"]}`.
+- Every evidence apply returned `ok=true`, `applied=true`,
+  `status=recorded`, `recorded_pack_count=1`,
+  `recorded_capability_count=1`, and `failed_count=0`.
+- Every proposal-review apply returned `ok=true`, `applied=true`,
+  `status=reviewed`, `recorded_proposal_count=1`,
+  `recorded_capability_count=1`, and `failed_count=0`.
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1350`,
+  `evidence_ref_required_count=1350`,
+  `next_smallest_truthful_gap=stage17_capability_library_operator_proposal_evidence_refs`.
+- Proposal-review apply-readiness:
+  `status=blocked_on_operator_evidence_refs`,
+  `reviewable_capability_count=0`,
+  `proposal_review_missing_count=1350`,
+  `blocked_before_review_capability_count=1350`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=944`, and fingerprint
+  `3f7951a9f6313539ee6a7d1cc810d4bb7cb05628f18c3f234c91ce1753b5268d`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,350
+  capabilities remaining, and the same 1,350 are blocked before proposal
+  review. The next surfaced pack is still
+  `legacy.generated.forgereadbackplugin`, now with 214 current evidence-ref
+  candidates. The next action is to process the next bounded chunk from that
+  pack through the same one-capability-at-a-time dry-run and apply sequence.
+
+### 2026-06-18 - Stage 17 records forgereadback proposal-evidence and review chunk 2
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the next five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. This is a bounded chunk only: it does not close Stage 17, does not
+apply promotion, does not enable or execute capabilities, and does not claim
+independent verification of the operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1777313249_forgereadbackplugin`
+- `1777313261_forgereadbackplugin`
+- `1777313684_forgereadbackplugin`
+- `1777313801_forgereadbackplugin`
+- `1777313815_forgereadbackplugin`
+
+Recorded evidence ref pattern:
+
+- each capability recorded its matching proposal artifact ref under
+  `artifact:plugins/proposals/`
+- each capability recorded its matching validation artifact ref under
+  `artifact:plugins/validations/`
+- each capability recorded shared pack metadata ref
+  `artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`
+- each capability recorded shared operator-review ref
+  `artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`
+
+Evidence dry-run fingerprints:
+
+- `1777313249_forgereadbackplugin`:
+  `37ddc68bd0da132cfda6f9c935124c1ba42cc58c0929831798d4a11f1dee1fe7`
+- `1777313261_forgereadbackplugin`:
+  `09051345ec425f4a2b2c087b99918138ac168155bf5d8ce28905bb1957da67b1`
+- `1777313684_forgereadbackplugin`:
+  `8993a9166d7dac22e9c24df2191419bd1e0d9e190f4140354716875f9c49b456`
+- `1777313801_forgereadbackplugin`:
+  `60b956ee9362db135f3095157e6fa38f55bd55b21e6f9d0802c0d1b8e56c8ed0`
+- `1777313815_forgereadbackplugin`:
+  `342fecb2a399659f39a8e5964ce29a9502fad165a8c59d02451f3e9a24fda7ad`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1777313249_forgereadbackplugin`:
+  `ea0f5b7028db32a27f986714f140c6455c5c56596d2b251ed810bb21cf999955`,
+  `capability_library_proposal_review_batch_1781774335_d8362ba7`
+- `1777313261_forgereadbackplugin`:
+  `5f325ea7995ffa86c73239efa33d79d7a7811df9d82a190cd962059a975f5760`,
+  `capability_library_proposal_review_batch_1781774575_59e5004c`
+- `1777313684_forgereadbackplugin`:
+  `510661317254286c9be7c0163b9f3a43c38c4f36913d9d07d7c81822d3cf5b5d`,
+  `capability_library_proposal_review_batch_1781774815_bd64014d`
+- `1777313801_forgereadbackplugin`:
+  `91df0f7dcb8b0122c3f4d3f8a3c05cb9a4c0f4e1988e34f02b586e3f55b0b1c6`,
+  `capability_library_proposal_review_batch_1781775058_6e7e65ea`
+- `1777313815_forgereadbackplugin`:
+  `f70708c4951a4e9f65720d3cb71647a051612f90bcea312a3cc16b929b316ea1`,
+  `capability_library_proposal_review_batch_1781775298_6f430758`
+
+Latest validation for this live Stage 17 chunk:
+
+- Artifact derivation selected the current first five candidates from
+  `legacy.generated.forgereadbackplugin` after chunk 1:
+  `candidate_capability_count=214`, `selected_candidate_count=5`.
+- Artifact existence checks confirmed each selected capability had proposal
+  and validation refs under `data/artifacts/plugins`.
+- The selected metadata and operator-review receipts were checked and contain
+  all five selected capability IDs.
+- The governed write process used the documented local actor-scope policy
+  `FRANCIS_API_ACTOR_SCOPES={"stage17.operator":["plugins.write"]}`.
+- Every evidence apply returned `ok=true`, `applied=true`,
+  `status=recorded`, `recorded_pack_count=1`,
+  `recorded_capability_count=1`, and `failed_count=0`.
+- Every proposal-review apply returned `ok=true`, `applied=true`,
+  `status=reviewed`, `recorded_proposal_count=1`,
+  `recorded_capability_count=1`, and `failed_count=0`.
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1345`,
+  `evidence_ref_required_count=1345`,
+  `next_smallest_truthful_gap=stage17_capability_library_operator_proposal_evidence_refs`.
+- Proposal-review apply-readiness:
+  `status=blocked_on_operator_evidence_refs`,
+  `reviewable_capability_count=0`,
+  `proposal_review_missing_count=1345`,
+  `blocked_before_review_capability_count=1345`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=949`, and fingerprint
+  `85965d857299aa3d7f8df14135601ba362f63ddc35404c6df155fbb71f21916c`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,345
+  capabilities remaining, and the same 1,345 are blocked before proposal
+  review. The next surfaced pack is still
+  `legacy.generated.forgereadbackplugin`, now with 209 current evidence-ref
+  candidates. The next action is to process the next bounded chunk from that
+  pack through the same one-capability-at-a-time dry-run and apply sequence.
+
+### 2026-06-18 - Stage 17 records forgereadback proposal-evidence and review chunk 3
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the next five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. This is a bounded chunk only: it does not close Stage 17, does not
+apply promotion, does not enable or execute capabilities, and does not claim
+independent verification of the operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1777313838_forgereadbackplugin`
+- `1777314620_forgereadbackplugin`
+- `1777314638_forgereadbackplugin`
+- `1777314653_forgereadbackplugin`
+- `1777315032_forgereadbackplugin`
+
+Recorded evidence ref pattern:
+
+- each capability recorded its matching proposal artifact ref under
+  `artifact:plugins/proposals/`
+- each capability recorded its matching validation artifact ref under
+  `artifact:plugins/validations/`
+- each capability recorded shared pack metadata ref
+  `artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`
+- each capability recorded shared operator-review ref
+  `artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`
+
+Evidence dry-run fingerprints:
+
+- `1777313838_forgereadbackplugin`:
+  `087f81f214f9aa1d93056712feeab1ed9a75e5668f19f0e8ef54be4ce922bff6`
+- `1777314620_forgereadbackplugin`:
+  `b5db4d5e2328791d7c4550724df25c9ffe2880238c17a6060d64dd6410fc73f7`
+- `1777314638_forgereadbackplugin`:
+  `0eb0df243af3bc2aa1c60f0a087ed9f1e50f88eb3e69cdc9caeda82b7b3e63ed`
+- `1777314653_forgereadbackplugin`:
+  `8c769084545a72b8147f583797470760e86447c2b42bfccd04287faa48d61269`
+- `1777315032_forgereadbackplugin`:
+  `977de501c3ef5eab6432eeb56ebda3f12db26b2e4c05dcb607c9c9a6faeec65b`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1777313838_forgereadbackplugin`:
+  `bc0a694ed8660644a821671e9e8d29f1e2fa25a8878ac9f8e15f93593fbbef22`,
+  `capability_library_proposal_review_batch_1781775995_0837b384`
+- `1777314620_forgereadbackplugin`:
+  `9e386da7567e48c83b01a69a97df87e70e6c8b4f5e30096755280a44427dd04b`,
+  `capability_library_proposal_review_batch_1781776237_e5fdf85a`
+- `1777314638_forgereadbackplugin`:
+  `b5d4521b56212a3851993246cfec3abe2c9c3b94e27dcd2e9f9e870fdf8324d5`,
+  `capability_library_proposal_review_batch_1781776481_24e93357`
+- `1777314653_forgereadbackplugin`:
+  `e1bda3624d88bb8b7f462be8c24c7908cf06baabccc231db05c896b999dbb92a`,
+  `capability_library_proposal_review_batch_1781776728_7b02b0f3`
+- `1777315032_forgereadbackplugin`:
+  `2cb96d15052aea7060db044d717346101cf31db69be09bf0c879f2b49cea70ad`,
+  `capability_library_proposal_review_batch_1781776993_ab7b300e`
+
+Latest validation for this live Stage 17 chunk:
+
+- Artifact derivation selected the current first five candidates from
+  `legacy.generated.forgereadbackplugin` after chunk 2:
+  `candidate_capability_count=209`, `selected_candidate_count=5`.
+- Artifact existence checks confirmed each selected capability had proposal
+  and validation refs under `data/artifacts/plugins`.
+- The selected metadata and operator-review receipts were checked and contain
+  all five selected capability IDs.
+- The governed write process used the documented local actor-scope policy
+  `FRANCIS_API_ACTOR_SCOPES={"stage17.operator":["plugins.write"]}`.
+- Every evidence apply returned `ok=true`, `applied=true`,
+  `status=recorded`, `recorded_pack_count=1`,
+  `recorded_capability_count=1`, and `failed_count=0`.
+- Every proposal-review apply returned `ok=true`, `applied=true`,
+  `status=reviewed`, `recorded_proposal_count=1`,
+  `recorded_capability_count=1`, and `failed_count=0`.
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1340`,
+  `evidence_ref_required_count=1340`,
+  `next_smallest_truthful_gap=stage17_capability_library_operator_proposal_evidence_refs`.
+- Proposal-review apply-readiness:
+  `status=blocked_on_operator_evidence_refs`,
+  `reviewable_capability_count=0`,
+  `proposal_review_missing_count=1340`,
+  `blocked_before_review_capability_count=1340`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=954`, and fingerprint
+  `7a08cd35b98a45d2aa8ab9eba729bd109b0d0c65b213a4372a6230df3878fc9a`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,340
+  capabilities remaining, and the same 1,340 are blocked before proposal
+  review. The next surfaced pack is still
+  `legacy.generated.forgereadbackplugin`, now with 204 current evidence-ref
+  candidates. The next action is to process the next bounded chunk from that
+  pack through the same one-capability-at-a-time dry-run and apply sequence.
+
+### 2026-06-18 - Stage 17 records forgereadback proposal-evidence and review chunk 4
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the next five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. This is a bounded chunk only: it does not close Stage 17, does not
+apply promotion, does not enable or execute capabilities, and does not claim
+independent verification of the operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1777315046_forgereadbackplugin`
+- `1777317194_forgereadbackplugin`
+- `1777320328_forgereadbackplugin`
+- `1777320589_forgereadbackplugin`
+- `1777320682_forgereadbackplugin`
+
+Recorded evidence refs used the same verified pattern as previous
+`forgereadbackplugin` chunks: each capability's matching proposal artifact,
+each capability's matching validation artifact, shared metadata receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`.
+
+Evidence dry-run fingerprints:
+
+- `1777315046_forgereadbackplugin`:
+  `542909ced12667a79e72bfb530d2a9502aa7174bfe844edb813cd19caccf2052`
+- `1777317194_forgereadbackplugin`:
+  `3db43765deff3be416323b18fbb076287f440832fba18829a1e01965cb63043b`
+- `1777320328_forgereadbackplugin`:
+  `4a9a4e7f36f589ebb205f7a33442f961b929eceec4e9b7ca0b6c951d8970d8ab`
+- `1777320589_forgereadbackplugin`:
+  `607537a238d7a89255178cd369101deda42cb6b7a732fe767c4e5095676c7ed3`
+- `1777320682_forgereadbackplugin`:
+  `914ebf70b487815dee88d72616fa594b10a9cf578b65357e38b5dfdef73b4631`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1777315046_forgereadbackplugin`:
+  `2c0137f4017db564bfb0bda6c23cdae4a75f08784ba8836c9c68f315a778ebbd`,
+  `capability_library_proposal_review_batch_1781777755_f597f0b0`
+- `1777317194_forgereadbackplugin`:
+  `774d0af6cdaabe211ba42817ef5806fb079ba88cdfabd12f3c588ba9143abc4b`,
+  `capability_library_proposal_review_batch_1781777999_7edc06bf`
+- `1777320328_forgereadbackplugin`:
+  `b8598e6f4b29d06b159cb3cf6a434741ff395ee7dc3fdd7bde20f832c16df4a3`,
+  `capability_library_proposal_review_batch_1781778238_8cc7eeb7`
+- `1777320589_forgereadbackplugin`:
+  `3581fa4d03bda9c5489c0c408d3159becf84589a43745302d2ad79353c9b9834`,
+  `capability_library_proposal_review_batch_1781778480_89066f26`
+- `1777320682_forgereadbackplugin`:
+  `099faaf56934a422aa7416d93e9b92168664694947870ff1e6ac84f711c22e67`,
+  `capability_library_proposal_review_batch_1781778723_c64c2e3e`
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1335`,
+  `evidence_ref_required_count=1335`.
+- Proposal-review apply-readiness:
+  `status=blocked_on_operator_evidence_refs`,
+  `proposal_review_missing_count=1335`,
+  `blocked_before_review_capability_count=1335`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=959`, and fingerprint
+  `2bbd86d0371434743972a3fdeb9210c6588d21545526e18dbc78682778a8aee2`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,335
+  capabilities remaining, and the same 1,335 are blocked before proposal
+  review. The next surfaced pack is still
+  `legacy.generated.forgereadbackplugin`, now with 199 current evidence-ref
+  candidates. The next action is to process the next bounded chunk from that
+  pack through the same one-capability-at-a-time dry-run and apply sequence.
+
+### 2026-06-18 - Stage 17 records forgereadback proposal-evidence and review chunk 5
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the next five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. This is a bounded chunk only: it does not close Stage 17, does not
+apply promotion, does not enable or execute capabilities, and does not claim
+independent verification of the operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1777321873_forgereadbackplugin`
+- `1777322279_forgereadbackplugin`
+- `1777323019_forgereadbackplugin`
+- `1777324145_forgereadbackplugin`
+- `1777324932_forgereadbackplugin`
+
+Recorded evidence refs used the same verified pattern as previous
+`forgereadbackplugin` chunks: each capability's matching proposal artifact,
+each capability's matching validation artifact, shared metadata receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`.
+
+Evidence dry-run fingerprints:
+
+- `1777321873_forgereadbackplugin`:
+  `95e90277f701539ca9df19a175bc578f9ef5f254809dad1982475a6486d12444`
+- `1777322279_forgereadbackplugin`:
+  `06f3c00679b8883e766784f43a833d5e791176fad42e3132ed12b907410d122c`
+- `1777323019_forgereadbackplugin`:
+  `7966492ee094f3de5a4c5cbd2ce04a73f6f36c3d2dac6cec85339e72d50ba6dc`
+- `1777324145_forgereadbackplugin`:
+  `ff3e0737c817592db4c003742f25152dabbc1a9c74635269d524cf047c76a60e`
+- `1777324932_forgereadbackplugin`:
+  `a92a6cf4122a8258836a048d570e172278de51ba75fb172fe7e1b3f15234d2cf`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1777321873_forgereadbackplugin`:
+  `9fc145ba3a3c0e0b6ba6cce93b7d47048280b13c25d742b08d5e9120a15b1f0f`,
+  `capability_library_proposal_review_batch_1781779455_e07f8eae`
+- `1777322279_forgereadbackplugin`:
+  `739a5fa584ca0697a9ec405a0f38ed4a30ccb67684fa184ebb4134d77033bb47`,
+  `capability_library_proposal_review_batch_1781779694_97700caf`
+- `1777323019_forgereadbackplugin`:
+  `f59532f1703b40aae0dc27a89d4104b289e459beb3365cfbfd850742e402bd70`,
+  `capability_library_proposal_review_batch_1781779939_71afc22a`
+- `1777324145_forgereadbackplugin`:
+  `90057dd9b26bad45cebe1c2df299de00e5d385a5c48b47c9f412f45437dd86ae`,
+  `capability_library_proposal_review_batch_1781780197_aa54f8a3`
+- `1777324932_forgereadbackplugin`:
+  `d81f5d572247d0587e85b34e03052eb1bf86a5f462bfd10e4ae83cc5cdc927a8`,
+  `capability_library_proposal_review_batch_1781780440_f3d8fae7`
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1330`,
+  `evidence_ref_required_count=1330`.
+- Proposal-review apply-readiness:
+  `status=blocked_on_operator_evidence_refs`,
+  `proposal_review_missing_count=1330`,
+  `blocked_before_review_capability_count=1330`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=964`, and fingerprint
+  `a2663bafd5fbfd5105c5dd104bca2cb135cff06a91d10c158ad389995e759ea8`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,330
+  capabilities remaining, and the same 1,330 are blocked before proposal
+  review. The next surfaced pack is still
+  `legacy.generated.forgereadbackplugin`, now with 194 current evidence-ref
+  candidates. The next action is to process the next bounded chunk from that
+  pack through the same one-capability-at-a-time dry-run and apply sequence.
+
+### 2026-06-18 - Stage 17 records forgereadback proposal-evidence and review chunk 6
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the next five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. This is a bounded chunk only: it does not close Stage 17, does not
+apply promotion, does not enable or execute capabilities, and does not claim
+independent verification of the operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1777325733_forgereadbackplugin`
+- `1777325821_forgereadbackplugin`
+- `1777326038_forgereadbackplugin`
+- `1777326855_forgereadbackplugin`
+- `1777327629_forgereadbackplugin`
+
+Recorded evidence refs used the same verified pattern as previous
+`forgereadbackplugin` chunks: each capability's matching proposal artifact,
+each capability's matching validation artifact, shared metadata receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`.
+
+Evidence dry-run fingerprints:
+
+- `1777325733_forgereadbackplugin`:
+  `e59d52b4b4962bdc44669fecdda8c4f079378914900beb4e4bfb9262237482dd`
+- `1777325821_forgereadbackplugin`:
+  `da809506cc7ff661c3280bc160edd6fd3c7fc0b9bc41fd5902b1661ef80cf8eb`
+- `1777326038_forgereadbackplugin`:
+  `6ff01a42920d081c59e59e0e2072a679f4108527a6cd1806aab98f2cb993e5fc`
+- `1777326855_forgereadbackplugin`:
+  `4762b3fa76d62b032ffbdca23680a25525a8414e4c923e61134bfb5d25e987a9`
+- `1777327629_forgereadbackplugin`:
+  `fd33940ebf1897c9434b6c0326c0eebd00904e491286b522ec5ab8927e02ee10`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1777325733_forgereadbackplugin`:
+  `b11a94102a1df10dd09a2753a35d5f44e344446984e2899381159e3a2355b9e5`,
+  `capability_library_proposal_review_batch_1781781163_0e3e36a4`
+- `1777325821_forgereadbackplugin`:
+  `6c3c932f16751f86a2a94934b7c312eb28d0b206903af1fdb0fbf9717b5cf15f`,
+  `capability_library_proposal_review_batch_1781781407_4e1956f3`
+- `1777326038_forgereadbackplugin`:
+  `4a6db8a224db67d31d5338846d8225d551b2840eb7cf3923d50a163f3026db9a`,
+  `capability_library_proposal_review_batch_1781781652_a50429a7`
+- `1777326855_forgereadbackplugin`:
+  `0025917c0d7d18b27a6fcaeb5ba539a7ffbae3a0561e11d11ea4b201c90aa0fe`,
+  `capability_library_proposal_review_batch_1781781895_5d174478`
+- `1777327629_forgereadbackplugin`:
+  `495e819e01044769f5fa2fed5ea9b65ae06dcc5730f7e31802c616631753cb53`,
+  `capability_library_proposal_review_batch_1781782139_85bee50c`
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1325`,
+  `evidence_ref_required_count=1325`.
+- Proposal-review apply-readiness:
+  `status=blocked_on_operator_evidence_refs`,
+  `proposal_review_missing_count=1325`,
+  `blocked_before_review_capability_count=1325`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=969`, and fingerprint
+  `4020151a4f6f90d3ed258401fdae188d688861cefa7a226d4c40537deaea036b`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,325
+  capabilities remaining, and the same 1,325 are blocked before proposal
+  review. The next surfaced pack is still
+  `legacy.generated.forgereadbackplugin`, now with 189 current evidence-ref
+  candidates. The next action is to process the next bounded chunk from that
+  pack through the same one-capability-at-a-time dry-run and apply sequence.
+
+### 2026-06-18 - Stage 17 records forgereadback proposal-evidence and review chunk 7
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the next five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. This is a bounded chunk only: it does not close Stage 17, does not
+apply promotion, does not enable or execute capabilities, and does not claim
+independent verification of the operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1777328528_forgereadbackplugin`
+- `1777330887_forgereadbackplugin`
+- `1777331270_forgereadbackplugin`
+- `1777334787_forgereadbackplugin`
+- `1777335693_forgereadbackplugin`
+
+Recorded evidence refs used the same verified pattern as previous
+`forgereadbackplugin` chunks: each capability's matching proposal artifact,
+each capability's matching validation artifact, shared metadata receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`.
+
+Evidence dry-run fingerprints:
+
+- `1777328528_forgereadbackplugin`:
+  `1c00e6ac14dc04b69fb399b1d7d55dadd23742e85f05fda5246f50fe4ac64822`
+- `1777330887_forgereadbackplugin`:
+  `500bdbc9adeb0c22608b838bd76bf0811f66c776c3952ecf3a30aa7c05bdf3a2`
+- `1777331270_forgereadbackplugin`:
+  `83e9b61c8ab773d8976c3390f33ad6623b82bdfa566d055b83819f3a68de475d`
+- `1777334787_forgereadbackplugin`:
+  `92859e22c2ff8a9d592ec0775f1fe0aea6a7adc5cff1ff1e1193a3cea3c5dd24`
+- `1777335693_forgereadbackplugin`:
+  `9c9184ee7fbf782283193cc54189f7300c96020f2ccd31315912a8a621008a39`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1777328528_forgereadbackplugin`:
+  `1564e03bd31cc4b9c860a3e762d174b8585d02506f80b8a879af52b5b599258d`,
+  `capability_library_proposal_review_batch_1781782851_34e16f2d`
+- `1777330887_forgereadbackplugin`:
+  `db0e2667bc51dc43dc682f3cbf228d2054c59406503b189383ef1a60d006938e`,
+  `capability_library_proposal_review_batch_1781783125_c81c8fb7`
+- `1777331270_forgereadbackplugin`:
+  `d2be9dbd3ee329004412443da5a0b5220bc88ffd9a7febe375120bcf761d2f75`,
+  `capability_library_proposal_review_batch_1781783366_731fddcd`
+- `1777334787_forgereadbackplugin`:
+  `6973a9ad5cd44cdcbbe1d2802f3d276068e3eb6e33c9d4219ec49a0e3e76d93b`,
+  `capability_library_proposal_review_batch_1781783610_0d548ba8`
+- `1777335693_forgereadbackplugin`:
+  `ce3ef2de5f2b3402c308973887f102b901434205965c11e9abc5a945774bc563`,
+  `capability_library_proposal_review_batch_1781783867_742c4c45`
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1320`,
+  `evidence_ref_required_count=1320`.
+- Proposal-review apply-readiness:
+  `status=blocked_on_operator_evidence_refs`,
+  `proposal_review_missing_count=1320`,
+  `blocked_before_review_capability_count=1320`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=974`, and fingerprint
+  `840fa0274c615fc71ea504e6f242934a26e1acd1b6f2e32cbc7c957bb3f56147`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,320
+  capabilities remaining, and the same 1,320 are blocked before proposal
+  review. The next surfaced pack is still
+  `legacy.generated.forgereadbackplugin`, now with 184 current evidence-ref
+  candidates. The next action is to process the next bounded chunk from that
+  pack through the same one-capability-at-a-time dry-run and apply sequence.
+
+### 2026-06-18 - Stage 17 records forgereadback proposal-evidence and review chunk 8
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the next five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. This is a bounded chunk only: it does not close Stage 17, does not
+apply promotion, does not enable or execute capabilities, and does not claim
+independent verification of the operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1777337401_forgereadbackplugin`
+- `1777338903_forgereadbackplugin`
+- `1777340241_forgereadbackplugin`
+- `1777341469_forgereadbackplugin`
+- `1777342239_forgereadbackplugin`
+
+Recorded evidence refs used the same verified pattern as previous
+`forgereadbackplugin` chunks: each capability's matching proposal artifact,
+each capability's matching validation artifact, shared metadata receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`.
+
+Evidence dry-run fingerprints:
+
+- `1777337401_forgereadbackplugin`:
+  `7854f1bc16dcad66d67cc774ae6c364231791973d0477f1023d63b27594c1ba1`
+- `1777338903_forgereadbackplugin`:
+  `24ddb600e7a5f868a6df5fb720c9f7f933bc7dc5544847d8ca4c49d8827ec0d7`
+- `1777340241_forgereadbackplugin`:
+  `fc2223a8eee502bd94350aa4d83eb0287402f7b7c6286f831371185545b1190f`
+- `1777341469_forgereadbackplugin`:
+  `c8a175be19df84d76acddf73c33a3dd407f312ab8672695f968f19047016372b`
+- `1777342239_forgereadbackplugin`:
+  `daf952a40d173b78688328e1e07d073716819f0b041e43e3d12dfd3c73a55956`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1777337401_forgereadbackplugin`:
+  `8736b4e67025f0f33ee3391e5832ae8d5f2b4e80840f1750842391b231c7150f`,
+  `capability_library_proposal_review_batch_1781784743_8e2abd62`
+- `1777338903_forgereadbackplugin`:
+  `69f10018fe4df1db974c772cc6597f903e8fbe0f69ff27474e62aeaf1a100238`,
+  `capability_library_proposal_review_batch_1781784982_906badd2`
+- `1777340241_forgereadbackplugin`:
+  `64fca43f250260339fa1f8d1c113e30f05f4144dea0f4a5e79d8ddd7fa140a43`,
+  `capability_library_proposal_review_batch_1781785223_3f9136e3`
+- `1777341469_forgereadbackplugin`:
+  `ddfd5048a7e3ca53404cc50881b8fcd543c5652cb04b1a89e2c84e798a745a8b`,
+  `capability_library_proposal_review_batch_1781785463_b55c6eb4`
+- `1777342239_forgereadbackplugin`:
+  `272d17a1ec3a1e4d805fcf34577205754f5d395dec62717950282d870de70e1b`,
+  `capability_library_proposal_review_batch_1781785703_d34d55d5`
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1315`,
+  `evidence_ref_required_count=1315`.
+- Proposal-review apply-readiness:
+  `status=blocked_on_operator_evidence_refs`,
+  `proposal_review_missing_count=1315`,
+  `blocked_before_review_capability_count=1315`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=979`, and fingerprint
+  `47399baeb043b53c73e24aaeb3ca46a327511d6a32ef29098988cadfaaf8ae05`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,315
+  capabilities remaining, and the same 1,315 are blocked before proposal
+  review. The next surfaced pack is still
+  `legacy.generated.forgereadbackplugin`, now with 179 current evidence-ref
+  candidates. The next action is to process the next bounded chunk from that
+  pack through the same one-capability-at-a-time dry-run and apply sequence.
+
+### 2026-06-18 - Stage 17 records forgereadback proposal-evidence and review chunk 9
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the next five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. This is a bounded chunk only: it does not close Stage 17, does not
+apply promotion, does not enable or execute capabilities, and does not claim
+independent verification of the operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1777343203_forgereadbackplugin`
+- `1777346322_forgereadbackplugin`
+- `1777346861_forgereadbackplugin`
+- `1777347014_forgereadbackplugin`
+- `1777347444_forgereadbackplugin`
+
+Recorded evidence refs used the same verified pattern as previous
+`forgereadbackplugin` chunks: each capability's matching proposal artifact,
+each capability's matching validation artifact, shared metadata receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`.
+
+Evidence dry-run fingerprints:
+
+- `1777343203_forgereadbackplugin`:
+  `658a1981615e5eecbf0dc01a3a6da61e9dfa78334c4276b541dc4202f7e0d330`
+- `1777346322_forgereadbackplugin`:
+  `1d8bdde943ec1b73b8e0b0a69af78aaeac3309d9e2d96c1e264d62d660575941`
+- `1777346861_forgereadbackplugin`:
+  `aaf3756243f4a781a03a7767d04a3d66b9ddd026141be254abe7a724d522c6cc`
+- `1777347014_forgereadbackplugin`:
+  `20155de1e4042fc029859d430fefb0f72f014794346f165a58fea84a3a544cba`
+- `1777347444_forgereadbackplugin`:
+  `cb881431aed03ead508d9fb548b4509fd1169838ea760e0f59b4e5bf333881ce`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1777343203_forgereadbackplugin`:
+  `2078ad20fb7cb5585bf6f28883f2601425368c137a9c83e90ba7f9d7138b97a3`,
+  `capability_library_proposal_review_batch_1781786420_4b776e2b`
+- `1777346322_forgereadbackplugin`:
+  `3c52cf45f9cc198d2a01d9c523ba4579b53d8d8f4534db0ed9790f8f7d198555`,
+  `capability_library_proposal_review_batch_1781786683_a88b9b43`
+- `1777346861_forgereadbackplugin`:
+  `17847908b2f59ab037a9c87ffc0c8b94fc88cb5e0102e29af0a3829428542613`,
+  `capability_library_proposal_review_batch_1781786930_dbf81384`
+- `1777347014_forgereadbackplugin`:
+  `760239a33f6b0118ac1fb7e0d089ffcad9e4535b439dc29877d675a37fe6237d`,
+  `capability_library_proposal_review_batch_1781787175_0d522d6c`
+- `1777347444_forgereadbackplugin`:
+  `b4db548a313a060994e5898cccccc782e6d2b25b909665e2ec8b456d723e0501`,
+  `capability_library_proposal_review_batch_1781787427_b7474933`
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1310`,
+  `evidence_ref_required_count=1310`.
+- Proposal-review apply-readiness:
+  `status=blocked_on_operator_evidence_refs`,
+  `proposal_review_missing_count=1310`,
+  `blocked_before_review_capability_count=1310`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=984`, and fingerprint
+  `2ae9ddda4b2763a8822451d59afabfe98c9133bbe544812bbe2c1eeb0fc2b40a`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,310
+  capabilities remaining, and the same 1,310 are blocked before proposal
+  review. The next surfaced pack is still
+  `legacy.generated.forgereadbackplugin`, now with 174 current evidence-ref
+  candidates. The next action is to process the next bounded chunk from that
+  pack through the same one-capability-at-a-time dry-run and apply sequence.
+
+### 2026-06-18 - Stage 17 records forgereadback proposal-evidence and review chunk 10
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the next five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. This is a bounded chunk only: it does not close Stage 17, does not
+apply promotion, does not enable or execute capabilities, and does not claim
+independent verification of the operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1777349300_forgereadbackplugin`
+- `1777350753_forgereadbackplugin`
+- `1777351551_forgereadbackplugin`
+- `1777352811_forgereadbackplugin`
+- `1777353167_forgereadbackplugin`
+
+Recorded evidence refs used the same verified pattern as previous
+`forgereadbackplugin` chunks: each capability's matching proposal artifact,
+each capability's matching validation artifact, shared metadata receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`.
+
+Evidence dry-run fingerprints:
+
+- `1777349300_forgereadbackplugin`:
+  `4ddf42928536ca7b40ec5aa10331b42be98220a850c1106cd8ace592f5b0e797`
+- `1777350753_forgereadbackplugin`:
+  `a43637fee617995447bb11cb3d91d2998edd69c44522790e083c745e1ee9a6fc`
+- `1777351551_forgereadbackplugin`:
+  `da36338ca7e78bb015452e344bb002ae0e3e25176ea62470be371f55e15f7343`
+- `1777352811_forgereadbackplugin`:
+  `a4682b333ba961b6086b25fb6e29b3d2d4d5b94c75f25848ed4bfb14a46309c0`
+- `1777353167_forgereadbackplugin`:
+  `407ac86fa7893c4373f155892e648e9f011126f651b3513bb6ef5d971e416f84`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1777349300_forgereadbackplugin`:
+  `2cc4c8c454473d07b7ac94daf746d4fbcdb13b2c271ee89d8d9a4767e3b348cb`,
+  `capability_library_proposal_review_batch_1781790951_4be4422c`
+- `1777350753_forgereadbackplugin`:
+  `ba025f4adf9111d4790987aa9f1b26ade14f96f5a2ba05fd448d0871a5f0b42f`,
+  `capability_library_proposal_review_batch_1781791168_45a7246c`
+- `1777351551_forgereadbackplugin`:
+  `853f62a8289931478c888fcbed1d65721b0e435b7711e7566e92c79660e5d88c`,
+  `capability_library_proposal_review_batch_1781791403_a80c1653`
+- `1777352811_forgereadbackplugin`:
+  `1ac6caf5920c620b2d4f5683dedc6d6eb38643ba3917b8af1e1a4a84dbe113e5`,
+  `capability_library_proposal_review_batch_1781791632_dd20e27b`
+- `1777353167_forgereadbackplugin`:
+  `1a1b02f4688260ffbdd3e41b1baaae5bf19b5dbb0813f98f6aaa7fc9a17c5640`,
+  `capability_library_proposal_review_batch_1781791868_a447a168`
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1305`,
+  `evidence_ref_required_count=1305`.
+- Proposal-review apply-readiness:
+  `status=blocked_on_operator_evidence_refs`,
+  `proposal_review_missing_count=1305`,
+  `blocked_before_review_capability_count=1305`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=989`, and fingerprint
+  `6368c9db474a1c2e03660d179f8fecff3befe7a27cff75b69f80678e5cc4f3bb`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,305
+  capabilities remaining, and the same 1,305 are blocked before proposal
+  review. The next surfaced pack is still
+  `legacy.generated.forgereadbackplugin`, now with 169 current evidence-ref
+  candidates. The next action is to process the next bounded chunk from that
+  pack through the same one-capability-at-a-time dry-run and apply sequence.
+
+### 2026-06-18 - Stage 17 records forgereadback proposal-evidence and review chunk 11
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the next five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. This is a bounded chunk only: it does not close Stage 17, does not
+apply promotion, does not enable or execute capabilities, and does not claim
+independent verification of the operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1777355125_forgereadbackplugin`
+- `1777355511_forgereadbackplugin`
+- `1777357108_forgereadbackplugin`
+- `1777358760_forgereadbackplugin`
+- `1777359786_forgereadbackplugin`
+
+Recorded evidence refs used the same verified pattern as previous
+`forgereadbackplugin` chunks: each capability's matching proposal artifact,
+each capability's matching validation artifact, shared metadata receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`.
+
+Evidence dry-run fingerprints:
+
+- `1777355125_forgereadbackplugin`:
+  `c3715ac4105fda509a6b29daa799ef40e9f19380e5bc544e1bb2098eac8b13d1`
+- `1777355511_forgereadbackplugin`:
+  `03122163a240828ab51c4f02210787eef825ce661bdd7251bd48f7f301f4dba4`
+- `1777357108_forgereadbackplugin`:
+  `d0f8ca992d2f835a64e7397f740d0ec5e396d9ddfb3c294689d937890cbb500b`
+- `1777358760_forgereadbackplugin`:
+  `7f23eda9e3d0931290dca5765c0159c2174f409a501fe0cb5a9a14696a6c4fed`
+- `1777359786_forgereadbackplugin`:
+  `31a2542beb1434cb7d4506208cec9bc06c0c656c6bcef806e2ddf39ec0e4550b`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1777355125_forgereadbackplugin`:
+  `44b836fa57dbaf689a4729c2f81a7bc13056181003869804f319fe3c602f1236`,
+  `capability_library_proposal_review_batch_1781793263_046ba757`
+- `1777355511_forgereadbackplugin`:
+  `74bbc3c7b196945b2be83ae0b611b487a3701a0e3cebe150fe9a651815edabde`,
+  `capability_library_proposal_review_batch_1781794224_9b4268a8`
+- `1777357108_forgereadbackplugin`:
+  `2dadc6c3b64eebefaade2d2e4f96db19918304952148e5df5b03ecd9a36c0d6d`,
+  `capability_library_proposal_review_batch_1781794493_8556a324`
+- `1777358760_forgereadbackplugin`:
+  `ef2207f1b1eb026494da084314a6147017298b1a55afa856ec3439065014d679`,
+  `capability_library_proposal_review_batch_1781794809_78475d6c`
+- `1777359786_forgereadbackplugin`:
+  `59acd494c8b8b702e1590d8187839f76732fa4ba87f9ce59eb6569bcb4cb495c`,
+  `capability_library_proposal_review_batch_1781795025_cce4d0db`
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1300`,
+  `evidence_ref_required_count=1300`.
+- Proposal-review apply-readiness:
+  `status=blocked_on_operator_evidence_refs`,
+  `proposal_review_missing_count=1300`,
+  `blocked_before_review_capability_count=1300`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=994`, and fingerprint
+  `4a851ad953f8d42f1b4abcd8380d2176945f4eb3d343071847d703e20b0bd738`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,300
+  capabilities remaining, and the same 1,300 are blocked before proposal
+  review. The next surfaced pack is still
+  `legacy.generated.forgereadbackplugin`, now with 164 current evidence-ref
+  candidates. The next action is to process the next bounded chunk from that
+  pack through the same one-capability-at-a-time dry-run and apply sequence.
+
+### 2026-06-18 - Stage 17 records forgereadback proposal-evidence and review chunk 12
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the next five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. This is a bounded chunk only: it does not close Stage 17, does not
+apply promotion, does not enable or execute capabilities, and does not claim
+independent verification of the operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1777360933_forgereadbackplugin`
+- `1777362837_forgereadbackplugin`
+- `1777363636_forgereadbackplugin`
+- `1777364812_forgereadbackplugin`
+- `1777365941_forgereadbackplugin`
+
+Recorded evidence refs used the same verified pattern as previous
+`forgereadbackplugin` chunks: each capability's matching proposal artifact,
+each capability's matching validation artifact, shared metadata receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`.
+
+Evidence dry-run fingerprints:
+
+- `1777360933_forgereadbackplugin`:
+  `026e6c3cce2f99a1fd9378c4569c81eda5fdc7cbdfced829307c694fb76aa247`
+- `1777362837_forgereadbackplugin`:
+  `c83ae6ac526b2a9bf671ae5f302a3132dd15dd0398b4e8babed3272e1f8b8a0b`
+- `1777363636_forgereadbackplugin`:
+  `4557daf0da01b2d0a131329f9338e29cafd5c0a8be7cc1638d1387ce8628398f`
+- `1777364812_forgereadbackplugin`:
+  `1298a6e3c8e0b5630ff761b29dfa30cc55d0d67b7c5cedb50015018e4be87190`
+- `1777365941_forgereadbackplugin`:
+  `1c1a04d3d0ab8f36304905de33efd906dc0b4a117ca73f24c5e861ddafdbabef`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1777360933_forgereadbackplugin`:
+  `62054156902fd18f4b629f2d437f3af0302088b365e7843c5f9a45e49b433845`,
+  `capability_library_proposal_review_batch_1781795784_3efdb456`
+- `1777362837_forgereadbackplugin`:
+  `b946cd30c0fe7ee28617b2267b54c5e57c250ad3edafdc2052449fd60bd9e747`,
+  `capability_library_proposal_review_batch_1781796002_762e7c55`
+- `1777363636_forgereadbackplugin`:
+  `70bd2326126570740a7f4ea2612a69945268bac156e7667c977335a014118532`,
+  `capability_library_proposal_review_batch_1781796222_68b88d22`
+- `1777364812_forgereadbackplugin`:
+  `b6d5fb1ba36f65d4b1a39ac04dfabf1de0e96a7f8f89fda384de2f43b3d63290`,
+  `capability_library_proposal_review_batch_1781796443_c69e09c9`
+- `1777365941_forgereadbackplugin`:
+  `1e678cbd1c5491cd6b14fb7a60dfb0d5c6be3a3e6825cafe7015eff848c66cde`,
+  `capability_library_proposal_review_batch_1781796662_497f6b42`
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1295`,
+  `evidence_ref_required_count=1295`.
+- Proposal-review apply-readiness:
+  `status=blocked_on_operator_evidence_refs`,
+  `proposal_review_missing_count=1295`,
+  `blocked_before_review_capability_count=1295`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=999`, and fingerprint
+  `3c58c5e297c37790232a902dba288a7df0eada2c5c3c8850f1b659296d648131`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,295
+  capabilities remaining, and the same 1,295 are blocked before proposal
+  review. The next surfaced pack is still
+  `legacy.generated.forgereadbackplugin`, now with 159 current evidence-ref
+  candidates. The next action is to process the next bounded chunk from that
+  pack through the same one-capability-at-a-time dry-run and apply sequence.
+
+### 2026-06-18 - Stage 17 records forgereadback proposal-evidence and review chunk 13
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the next five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. This is a bounded chunk only: it does not close Stage 17, does not
+apply promotion, does not enable or execute capabilities, and does not claim
+independent verification of the operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1777366002_forgereadbackplugin`
+- `1777372881_forgereadbackplugin`
+- `1777380714_forgereadbackplugin`
+- `1777380856_forgereadbackplugin`
+- `1777382510_forgereadbackplugin`
+
+Recorded evidence refs used the same verified pattern as previous
+`forgereadbackplugin` chunks: each capability's matching proposal artifact,
+each capability's matching validation artifact, shared metadata receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`.
+
+Evidence dry-run fingerprints:
+
+- `1777366002_forgereadbackplugin`:
+  `750022a1b1caa6109972f09306dc7f6d33af1bb5b6d87dcb3a9569578d756161`
+- `1777372881_forgereadbackplugin`:
+  `82c8154fd9b759436833321ce351e398dd97723154fa58fb5a407ae508e192ba`
+- `1777380714_forgereadbackplugin`:
+  `634cd913de7d279649c5a5325235fcd74aef5426e3c5d78a58a5bcee4329ee28`
+- `1777380856_forgereadbackplugin`:
+  `fd896102dc88fe218c4d494483357591940d7b0c015b841d50170b4185352069`
+- `1777382510_forgereadbackplugin`:
+  `46f249846df31abe01d38f2036ca254796d0b205910c73d94bb739c7b1558500`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1777366002_forgereadbackplugin`:
+  `b270637ce97736f691887bbeb6f2cc686aa10a3c3c06cfb42a359db49ba601cc`,
+  `capability_library_proposal_review_batch_1781797387_0bbd88a4`
+- `1777372881_forgereadbackplugin`:
+  `555e497660a45f33f08405fe730e17e6b22f104eeef46b697238b9c245258658`,
+  `capability_library_proposal_review_batch_1781797645_b7bb48ab`
+- `1777380714_forgereadbackplugin`:
+  `347ba26e19071dbd95b0f7e6f3be31cda6af923c46abf49b2956b31e95b4d373`,
+  `capability_library_proposal_review_batch_1781797903_23455d77`
+- `1777380856_forgereadbackplugin`:
+  `a1af3b4cc71adefdb70287560f97cbaf2c54dc7df9a69a2478bc97f0e45825a5`,
+  `capability_library_proposal_review_batch_1781798197_977ee044`
+- `1777382510_forgereadbackplugin`:
+  `9ea10c7b7fff15b9f159951b3aea8c9bd83226b3a82ca4771b33bc503869c6eb`,
+  `capability_library_proposal_review_batch_1781798442_9b4f88b0`
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1290`,
+  `evidence_ref_required_count=1290`.
+- The next surfaced pack is still `legacy.generated.forgereadbackplugin`,
+  now with 154 current evidence-ref candidates.
+- Proposal-review apply-readiness:
+  `proposal_review_missing_count=1290`,
+  `blocked_before_review_capability_count=1290`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=1004`, and fingerprint
+  `8b2394781568a79b164df55ac3c75ad99eb2be068a8bb3bf1f26da1e043941ce`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,290
+  capabilities remaining, and the same 1,290 are blocked before proposal
+  review. The next action is to process the next bounded chunk from
+  `legacy.generated.forgereadbackplugin` through the same one-capability-at-a-time
+  dry-run and apply sequence.
+
+### 2026-06-18 - Stage 17 records forgereadback proposal-evidence and review chunk 14
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the next five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. This is a bounded chunk only: it does not close Stage 17, does not
+apply promotion, does not enable or execute capabilities, and does not claim
+independent verification of the operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1777387550_forgereadbackplugin`
+- `1777387554_forgereadbackplugin`
+- `1777399214_forgereadbackplugin`
+- `1777399334_forgereadbackplugin`
+- `1777400514_forgereadbackplugin`
+
+Recorded evidence refs used the same verified pattern as previous
+`forgereadbackplugin` chunks: each capability's matching proposal artifact,
+each capability's matching validation artifact, shared metadata receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`.
+
+Evidence dry-run fingerprints:
+
+- `1777387550_forgereadbackplugin`:
+  `48852b282ddeffe0f17121faca6ca42ba7f2cec13604ea5add4f95890ceb3c9c`
+- `1777387554_forgereadbackplugin`:
+  `f6546a844a4782492f66b30248fe2d33663bba56c126df2fc728d47fc4072876`
+- `1777399214_forgereadbackplugin`:
+  `b332b7b967a3fc1839a637c537b6cca4927ef33833a26d67a1c4a52c294e97fa`
+- `1777399334_forgereadbackplugin`:
+  `1ae0f12705faf5bb20e940642035a5d2a03bf06ac8f283770fa62e327a4a58cd`
+- `1777400514_forgereadbackplugin`:
+  `2cd571b694d43dd1294a999e4b7351b320722457949fc0f3e905a6d715c43ebe`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1777387550_forgereadbackplugin`:
+  `cca6e5392ed7b779b80c2d2f5b3eb1687ecf1bed528e23b9698b73b23b52999a`,
+  `capability_library_proposal_review_batch_1781799532_b0c3031f`
+- `1777387554_forgereadbackplugin`:
+  `59389937a8f49fc252925bd8e72f874831ae5bbd04a3234ac1c2941e899cbf64`,
+  `capability_library_proposal_review_batch_1781799837_a1a40073`
+- `1777399214_forgereadbackplugin`:
+  `a021765b1e6aca4eefff65cf47df97233fa36e23e6873f018969c4c583a60624`,
+  `capability_library_proposal_review_batch_1781800121_a842e2ad`
+- `1777399334_forgereadbackplugin`:
+  `1608644ab05d98f09d91fb460a55799b40968d35329c322a63a995d37ea0e77e`,
+  `capability_library_proposal_review_batch_1781800405_45f16f30`
+- `1777400514_forgereadbackplugin`:
+  `b0add1dd6c6c35353332f11845ac7d6bdf626b6d1dd2e89849c58cdec39a1c2f`,
+  `capability_library_proposal_review_batch_1781800694_c03f342e`
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1285`,
+  `evidence_ref_required_count=1285`.
+- The next surfaced pack is still `legacy.generated.forgereadbackplugin`,
+  now with 149 current evidence-ref candidates.
+- Proposal-review apply-readiness:
+  `proposal_review_missing_count=1285`,
+  `blocked_before_review_capability_count=1285`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=1009`, and fingerprint
+  `ef2ae6600c06ad776909bfc65ab601e79c4de8381379b8f5d2fdb84124b4356b`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,285
+  capabilities remaining, and the same 1,285 are blocked before proposal
+  review. The next action is to process the next bounded chunk from
+  `legacy.generated.forgereadbackplugin` through the same one-capability-at-a-time
+  dry-run and apply sequence.
+
+### 2026-06-18 - Stage 17 records forgereadback proposal-evidence and review chunk 15
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the next five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. This is a bounded chunk only: it does not close Stage 17, does not
+apply promotion, does not enable or execute capabilities, and does not claim
+independent verification of the operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1777405524_forgereadbackplugin`
+- `1777410529_forgereadbackplugin`
+- `1777489721_forgereadbackplugin`
+- `1777491859_forgereadbackplugin`
+- `1777494366_forgereadbackplugin`
+
+Recorded evidence refs used the same verified pattern as previous
+`forgereadbackplugin` chunks: each capability's matching proposal artifact,
+each capability's matching validation artifact, shared metadata receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`.
+
+Evidence dry-run fingerprints:
+
+- `1777405524_forgereadbackplugin`:
+  `656ad1243bd415a9475a49a3ddd2dd8c04770cc74452c7dbb26217edcd1fa4d7`
+- `1777410529_forgereadbackplugin`:
+  `4950231b80b4812cf243eaeb462cac3e726e37413a56e048751d234b9333adb2`
+- `1777489721_forgereadbackplugin`:
+  `b85d50020d64ed6a89314ff1f72d230854577fda401116cb7191e2c5111e2211`
+- `1777491859_forgereadbackplugin`:
+  `f3b455c5d43d9f3ce90f3eb9446fc4960e3a76ff3d647713fd0f565d6f4bbaf2`
+- `1777494366_forgereadbackplugin`:
+  `ebaedee2e9e7c6ac995320384bfbd68202e224a6de50492f203dae53ff0b273a`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1777405524_forgereadbackplugin`:
+  `4a2d1bc9d30b2d1e321d8691c75cdcbfdcc8d1c86e99d86148f25e0bb6ae7740`,
+  `capability_library_proposal_review_batch_1781801902_ebfb7a49`
+- `1777410529_forgereadbackplugin`:
+  `842e0b39c6ccb56085ea58465fdabcde08e35c25ae6839eab4ed988e06db0328`,
+  `capability_library_proposal_review_batch_1781802888_729aa616`
+- `1777489721_forgereadbackplugin`:
+  `f3a51f1a4be10452fa834d884227223080648b2d15ef8e8e60a9579b8e340c4a`,
+  `capability_library_proposal_review_batch_1781803775_63d7b70b`
+- `1777491859_forgereadbackplugin`:
+  `f61cfe66792799d839ebe2717c3bfaaa4be80650b55b370e2aa8d79336372e54`,
+  `capability_library_proposal_review_batch_1781804672_0f69507e`
+- `1777494366_forgereadbackplugin`:
+  `14a4ca1a4722e600f54e5000236dd1da0255f5e6119c6959261996cd0f610ac4`,
+  `capability_library_proposal_review_batch_1781805554_06981c8e`
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1280`,
+  `evidence_ref_required_count=1280`.
+- The next surfaced pack is still `legacy.generated.forgereadbackplugin`,
+  now with 144 current evidence-ref candidates.
+- Proposal-review apply-readiness:
+  `proposal_review_missing_count=1280`,
+  `blocked_before_review_capability_count=1280`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=1014`, and fingerprint
+  `8e4e52bd4c69a203cf7ed668625f10eab7f4228a7980e9848fe30b7d9d8f9482`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,280
+  capabilities remaining, and the same 1,280 are blocked before proposal
+  review. The next action is to process the next bounded chunk from
+  `legacy.generated.forgereadbackplugin` through the same one-capability-at-a-time
+  dry-run and apply sequence.
+
+### 2026-06-18 - Stage 17 records forgereadback proposal-evidence and review chunk 16
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the next five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. This is a bounded chunk only: it does not close Stage 17, does not
+apply promotion, does not enable or execute capabilities, and does not claim
+independent verification of the operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1777496524_forgereadbackplugin`
+- `1777498631_forgereadbackplugin`
+- `1777501056_forgereadbackplugin`
+- `1777514298_forgereadbackplugin`
+- `1777514655_forgereadbackplugin`
+
+Recorded evidence refs used the same verified pattern as previous
+`forgereadbackplugin` chunks: each capability's matching proposal artifact,
+each capability's matching validation artifact, shared metadata receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`.
+
+Evidence dry-run fingerprints:
+
+- `1777496524_forgereadbackplugin`:
+  `d88b9e48e70004d15b126ae4d25183d527eddd7f2a873969553864a40b0b8071`
+- `1777498631_forgereadbackplugin`:
+  `19591a68fcd616744ec1dbbf6c59968cff5e52abd38a113653a531bcf9a395e8`
+- `1777501056_forgereadbackplugin`:
+  `a301e01008474548a8258180a727fa5a4fbf7098fa1e8ef59493443c447838d1`
+- `1777514298_forgereadbackplugin`:
+  `2450ca21de70c7788112bf904fd2149d27ed956a2ba5699fdb3235284095144d`
+- `1777514655_forgereadbackplugin`:
+  `957c4c50819f533929bb3513a3675b9215fa01b3d740a02c679d41fa5264862d`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1777496524_forgereadbackplugin`:
+  `35841cbbe0b4c32a65865039f0808b6e0817453ae1778f717ded1dd087b54d2c`,
+  `capability_library_proposal_review_batch_1781806621_dc5910e5`
+- `1777498631_forgereadbackplugin`:
+  `387773fd41c6b5e8119a8afb3b45ad2888eccca8232f5d1873d4d8af9c1c2d99`,
+  `capability_library_proposal_review_batch_1781807079_52e27303`
+- `1777501056_forgereadbackplugin`:
+  `acad90bfe3e1f88c9a37335515dd6aff585dd6caadc435619b05f0579985f396`,
+  `capability_library_proposal_review_batch_1781808079_e83858cd`
+- `1777514298_forgereadbackplugin`:
+  `dc7d3b27a3a5394eb22bf0a1c88946b8366e552ab8e88196111567a350c5ea85`,
+  `capability_library_proposal_review_batch_1781809067_7fcbd419`
+- `1777514655_forgereadbackplugin`:
+  `1cede7993ee74488c630a2bd2e3162ff6695f4bd942c7fc6aae932da074a3430`,
+  `capability_library_proposal_review_batch_1781810262_0dca7471`
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1275`,
+  `evidence_ref_required_count=1275`.
+- The next surfaced pack is still `legacy.generated.forgereadbackplugin`,
+  now with 139 current evidence-ref candidates.
+- Proposal-review apply-readiness:
+  `proposal_review_missing_count=1275`,
+  `blocked_before_review_capability_count=1275`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=1019`, and fingerprint
+  `e833e316a8ae070304be4a1859ee576d44da10d5bd8c85b1594d3c8c1657b012`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,275
+  capabilities remaining, and the same 1,275 are blocked before proposal
+  review. The next action is to process the next bounded chunk from
+  `legacy.generated.forgereadbackplugin` through the same one-capability-at-a-time
+  dry-run and apply sequence.
+
+### 2026-06-18 - Stage 17 records forgereadback proposal-evidence and review chunk 17
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the next five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. This is a bounded chunk only: it does not close Stage 17, does not
+apply promotion, does not enable or execute capabilities, and does not claim
+independent verification of the operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1777514794_forgereadbackplugin`
+- `1777570126_forgereadbackplugin`
+- `1777895246_forgereadbackplugin`
+- `1777904372_forgereadbackplugin`
+- `1777940900_forgereadbackplugin`
+
+Recorded evidence refs used the same verified pattern as previous
+`forgereadbackplugin` chunks: each capability's matching proposal artifact,
+each capability's matching validation artifact, shared metadata receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`.
+
+Evidence dry-run fingerprints:
+
+- `1777514794_forgereadbackplugin`:
+  `f411ef95da24762905b4c5d8f0ad22c115076ec1306fd89aee503e2fdca7eaef`
+- `1777570126_forgereadbackplugin`:
+  `dcde5afef8adbda943212499b1cc62ca042e58ff908ca72ccc9f4e3fd0190955`
+- `1777895246_forgereadbackplugin`:
+  `eeb7116ade3337fb14c7d3d0a6d9df46ac9e355fe0997ae773c7cf8d3c85277f`
+- `1777904372_forgereadbackplugin`:
+  `8d7775d200bf7ab0fce891e6f4c3483cd50d3d2c06ba449da51c10e3689e9042`
+- `1777940900_forgereadbackplugin`:
+  `1c5ec89061f99713a2faa5582b536ee2c4f0f913cd0188065e03e9c6eb29484e`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1777514794_forgereadbackplugin`:
+  `e1e16f9ac1484e2e4bcc0149408cdba9a85a2e77b7f0fa8e49ee172b6384c44b`,
+  `capability_library_proposal_review_batch_1781812857_0cc9edcf`
+- `1777570126_forgereadbackplugin`:
+  `f556a9856aa9a631ced795a8cdbce4d42297d7fef29300e236a520c6f536e301`,
+  `capability_library_proposal_review_batch_1781813780_761e33db`
+- `1777895246_forgereadbackplugin`:
+  `0e809f2caa7aac3045db9fe25f4882831a3955136d8640a4cd34a7bd0e30f122`,
+  `capability_library_proposal_review_batch_1781814070_97736aa1`
+- `1777904372_forgereadbackplugin`:
+  `e78fb126c3077e90f1dd275cc06d78457d87c5c75e16aa307d87d03c8f28d4e3`,
+  `capability_library_proposal_review_batch_1781814352_ff63165f`
+- `1777940900_forgereadbackplugin`:
+  `1f6c2976ac5464c0624d84065e0e43ecaeb51db6ea468b372d06c99c66d4684f`,
+  `capability_library_proposal_review_batch_1781814663_cda26843`
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1270`,
+  `evidence_ref_required_count=1270`.
+- The next surfaced pack is still `legacy.generated.forgereadbackplugin`,
+  now with 134 current evidence-ref candidates.
+- Proposal-review apply-readiness:
+  `proposal_review_missing_count=1270`,
+  `blocked_before_review_capability_count=1270`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=1024`, and fingerprint
+  `702bfb590202d33dfbc79a25187927ca1f28c645abecacb609dbc7bc61270b08`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,270
+  capabilities remaining, and the same 1,270 are blocked before proposal
+  review. The next action is to process the next bounded chunk from
+  `legacy.generated.forgereadbackplugin` through the same one-capability-at-a-time
+  dry-run and apply sequence.
+
+### 2026-06-18 - Stage 17 records forgereadback proposal-evidence and review chunk 18
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the next five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. This is a bounded chunk only: it does not close Stage 17, does not
+apply promotion, does not enable or execute capabilities, and does not claim
+independent verification of the operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1777941288_forgereadbackplugin`
+- `1777941579_forgereadbackplugin`
+- `1777941945_forgereadbackplugin`
+- `1777942130_forgereadbackplugin`
+- `1777943468_forgereadbackplugin`
+
+Recorded evidence refs used the same verified pattern as previous
+`forgereadbackplugin` chunks: each capability's matching proposal artifact,
+each capability's matching validation artifact, shared metadata receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`.
+
+Evidence dry-run fingerprints:
+
+- `1777941288_forgereadbackplugin`:
+  `72de85744a3330c2cfcf68e964d17470d5560b8ed8e538943e0af32830e4e9a8`
+- `1777941579_forgereadbackplugin`:
+  `5b479ab276bbcb7b9893b1d2cfd84e9402b20a55b754bfcd269cc20d41e9cdfd`
+- `1777941945_forgereadbackplugin`:
+  `ea5d975b4b76cee1989f39c912348cb3625b1dc2243d0dead804979bd7b2b92b`
+- `1777942130_forgereadbackplugin`:
+  `0647fa5442b28eb48bdf325705283293433a42d341ed1b0ea47356afc871fd1b`
+- `1777943468_forgereadbackplugin`:
+  `ce6c386a8bf5f3db1e9127953a66984e32f78e1eebb7611f20489b7b77cfa2fb`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1777941288_forgereadbackplugin`:
+  `3b1721814b9491b9da3fcdc9e4068aedf9acd1c03b3032f659ff2e455c48a780`,
+  `capability_library_proposal_review_batch_1781815521_c9ee0a05`
+- `1777941579_forgereadbackplugin`:
+  `d5f811193223680c72d20f7ea1ba2d7acafcc80d666da01cade08b479d0d0f94`,
+  `capability_library_proposal_review_batch_1781815808_64898874`
+- `1777941945_forgereadbackplugin`:
+  `5ef53042fd42aa2df72cc534a22e8408ff6768c781ca153e01fca46a1f8125a0`,
+  `capability_library_proposal_review_batch_1781816095_4e9db31d`
+- `1777942130_forgereadbackplugin`:
+  `49e44274174225d77613804d19534ce3010a320e03226be2ec29b448f251c4c5`,
+  `capability_library_proposal_review_batch_1781816384_80db71ba`
+- `1777943468_forgereadbackplugin`:
+  `aafe55dff82675958de5af9b811277f548097432339f969ef5f7f6fdb4fa643e`,
+  `capability_library_proposal_review_batch_1781816669_b4b80591`
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1265`,
+  `evidence_ref_required_count=1265`.
+- The next surfaced pack is still `legacy.generated.forgereadbackplugin`,
+  now with 129 current evidence-ref candidates.
+- Proposal-review apply-readiness:
+  `proposal_review_missing_count=1265`,
+  `blocked_before_review_capability_count=1265`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=1029`, and fingerprint
+  `bf40fe2c3684dee12704d8a3ff1e7145e3592eea7849ea4d074d27c96edc3721`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,265
+  capabilities remaining, and the same 1,265 are blocked before proposal
+  review. The next action is to process the next bounded chunk from
+  `legacy.generated.forgereadbackplugin` through the same one-capability-at-a-time
+  dry-run and apply sequence.
+
+### 2026-06-18 - Stage 17 records forgereadback proposal-evidence and review chunk 19
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the next five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. This is a bounded chunk only: it does not close Stage 17, does not
+apply promotion, does not enable or execute capabilities, and does not claim
+independent verification of the operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1777943597_forgereadbackplugin`
+- `1778024773_forgereadbackplugin`
+- `1778046100_forgereadbackplugin`
+- `1778076754_forgereadbackplugin`
+- `1778112733_forgereadbackplugin`
+
+Recorded evidence refs used the same verified pattern as previous
+`forgereadbackplugin` chunks: each capability's matching proposal artifact,
+each capability's matching validation artifact, shared metadata receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`.
+
+Evidence dry-run fingerprints:
+
+- `1777943597_forgereadbackplugin`:
+  `306a537d66f3e2643ca33576afc0bdeaad5a034e609c9c703040125a17c1bcd1`
+- `1778024773_forgereadbackplugin`:
+  `0efd8d077feac5c7f6814a2a1d09985750b07831309327d4aa2a60a30077be9c`
+- `1778046100_forgereadbackplugin`:
+  `86615f058908d39dd6b3a0861ba7c8876f547becb1be46abb271bebd044b7329`
+- `1778076754_forgereadbackplugin`:
+  `8c6a79c0518c56a0c676a9540e9950d1325ae1d4a4346d8b758d83e4fdb58005`
+- `1778112733_forgereadbackplugin`:
+  `e21a241603a1c6ec2e036367e57e0cac3d3d141cc54eecf4d6a10598740522e1`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1777943597_forgereadbackplugin`:
+  `5942329670b1d035e9620f134c0d5e529bfcb17676f15f30694732bb285811ec`,
+  `capability_library_proposal_review_batch_1781817635_eb7243d2`
+- `1778024773_forgereadbackplugin`:
+  `18c87a34cdeeba27b5884331705ba2fc4755c7cdc491fb66fb1021f997a6a995`,
+  `capability_library_proposal_review_batch_1781817946_a4422d12`
+- `1778046100_forgereadbackplugin`:
+  `718554d04d08086ea213188d6f7df7a8e97fe3173a94aa4955cad7bd877f4a50`,
+  `capability_library_proposal_review_batch_1781818243_aa7846df`
+- `1778076754_forgereadbackplugin`:
+  `e17dad158744b675b3de9b2a62d4f0456569e3c6c9eb5686203d2f61d550822a`,
+  `capability_library_proposal_review_batch_1781818493_5b64b072`
+- `1778112733_forgereadbackplugin`:
+  `f8efdde4adacc13ee3e64cd4cbbe1685271f809ad821740f7d82f444986dc4e1`,
+  `capability_library_proposal_review_batch_1781818874_964dad13`
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1260`,
+  `evidence_ref_required_count=1260`.
+- The next surfaced pack is still `legacy.generated.forgereadbackplugin`,
+  now with 124 current evidence-ref candidates.
+- Proposal-review apply-readiness:
+  `proposal_review_missing_count=1260`,
+  `blocked_before_review_capability_count=1260`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=1034`, and fingerprint
+  `469b43ee41197ac85f4893ba164e645386baf516508da7631b3f43d30ef0d557`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,260
+  capabilities remaining, and the same 1,260 are blocked before proposal
+  review. The next action is to process the next bounded chunk from
+  `legacy.generated.forgereadbackplugin` through the same one-capability-at-a-time
+  dry-run and apply sequence.
+
+### 2026-06-18 - Stage 17 records forgereadback proposal-evidence and review chunk 20
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the next five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. This is a bounded chunk only: it does not close Stage 17, does not
+apply promotion, does not enable or execute capabilities, and does not claim
+independent verification of the operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1778162785_forgereadbackplugin`
+- `1778206850_forgereadbackplugin`
+- `1778376684_forgereadbackplugin`
+- `1778415554_forgereadbackplugin`
+- `1778507569_forgereadbackplugin`
+
+Recorded evidence refs used the same verified pattern as previous
+`forgereadbackplugin` chunks: each capability's matching proposal artifact,
+each capability's matching validation artifact, shared metadata receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`.
+
+Evidence dry-run fingerprints:
+
+- `1778162785_forgereadbackplugin`:
+  `9a27328637c010cd0d51cb6a9b69aaf2f93b7ccbb8d51edef6bdb96b435c5762`
+- `1778206850_forgereadbackplugin`:
+  `9a46d1f189ef15894df38225312fbddef0e7eec5826a247b2895ebeca404235e`
+- `1778376684_forgereadbackplugin`:
+  `3afc2e69de9f089cd81156e44cc824c349d9436006e1df8b4658169a7ea13acf`
+- `1778415554_forgereadbackplugin`:
+  `38d4eef2bc30b4b29bbd952ce56da9b1c1e9ff3a122bf762ff395be1b0bd2052`
+- `1778507569_forgereadbackplugin`:
+  `c26b9240560eb35c3938c291d5435da365997b39e1c1968ee4bac6e1c002de04`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1778162785_forgereadbackplugin`:
+  `5d5cc64cea68d2bdae7091db83422b23e09d1d21960f31e5d6a9570abab6c0fe`,
+  `capability_library_proposal_review_batch_1781821047_82fea723`
+- `1778206850_forgereadbackplugin`:
+  `f912c7659e4eee6b0e19a02ecb4e4d8e7967967a9a9a38dd7a635d24b7e83472`,
+  `capability_library_proposal_review_batch_1781821271_91af7bcc`
+- `1778376684_forgereadbackplugin`:
+  `cf200965e8877b2f8282cb48f97e9f34206f8515ce932d6f97dcf6f0b9bdde29`,
+  `capability_library_proposal_review_batch_1781821499_6dc3b31e`
+- `1778415554_forgereadbackplugin`:
+  `df7f4bafde8a369c8e00c412c8e9d98de2b1a93e1b14c8bd1645994a7b53aae4`,
+  `capability_library_proposal_review_batch_1781821725_efb50819`
+- `1778507569_forgereadbackplugin`:
+  `d268f76c313dce53e3b851f1a7e8cda4c0fd835ae4e8f9600c913f6b0534d2e7`,
+  `capability_library_proposal_review_batch_1781821950_49a6b12c`
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1255`,
+  `evidence_ref_required_count=1255`.
+- The next surfaced pack is still `legacy.generated.forgereadbackplugin`,
+  now with 119 current evidence-ref candidates.
+- Proposal-review apply-readiness:
+  `proposal_review_missing_count=1255`,
+  `blocked_before_review_capability_count=1255`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=1039`, and fingerprint
+  `90cf8cc6efdd22392c52aee9e404628f2365440874257f94b7384557b59d20e6`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,255
+  capabilities remaining, and the same 1,255 are blocked before proposal
+  review. The next action is to process the next bounded chunk from
+  `legacy.generated.forgereadbackplugin` through the same one-capability-at-a-time
+  dry-run and apply sequence.
+
+### 2026-06-18 - Stage 17 records forgereadback proposal-evidence and review chunk 21
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the next five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. This is a bounded chunk only: it does not close Stage 17, does not
+apply promotion, does not enable or execute capabilities, and does not claim
+independent verification of the operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1778634808_forgereadbackplugin`
+- `1778730748_forgereadbackplugin`
+- `1778744628_forgereadbackplugin`
+- `1778766619_forgereadbackplugin`
+- `1778817054_forgereadbackplugin`
+
+Recorded evidence refs used the same verified pattern as previous
+`forgereadbackplugin` chunks: each capability's matching proposal artifact,
+each capability's matching validation artifact, shared metadata receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`.
+
+Evidence dry-run fingerprints:
+
+- `1778634808_forgereadbackplugin`:
+  `547370cd1074a2b1d38a243d69acd21002953698ff078206badb590f13a9d5fd`
+- `1778730748_forgereadbackplugin`:
+  `0a52ee15f5fbd21593cea511d899ad9249182b9171a564667dd1f98ea2e6a41e`
+- `1778744628_forgereadbackplugin`:
+  `e1448d77b60f047899856281e734dc696b5fe29279766e09fed6dd038f68bbb6`
+- `1778766619_forgereadbackplugin`:
+  `a71e62d57d5da4f61a0e7be66d063f33f8a4caa3910b33d81bab54f4aba990ed`
+- `1778817054_forgereadbackplugin`:
+  `8b81ab8d1c123c2691c6d8a222c2f2f7dd726ac5c244290115ba0773a4169f26`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1778634808_forgereadbackplugin`:
+  `9dc00c119aaa4179ebf65f83d326d65b7273474da15ddb9c2ef03e640ca1c61e`,
+  `capability_library_proposal_review_batch_1781822655_fbc63b30`
+- `1778730748_forgereadbackplugin`:
+  `86e69b7dac72bd4cccd6292f87fe22b4072e05f9b35a6964b83a2412b280a54d`,
+  `capability_library_proposal_review_batch_1781822899_e33af01c`
+- `1778744628_forgereadbackplugin`:
+  `ccfcbf139b9576016d6a7d133f92bfa4a003369abe0c03d1ec416e9e62b3e9e6`,
+  `capability_library_proposal_review_batch_1781823344_2ec73950`
+- `1778766619_forgereadbackplugin`:
+  `ed6702285fd205d7919546174543a0c9a9580df04925cf01f60b09e9edc02fce`,
+  `capability_library_proposal_review_batch_1781823621_c57fccd3`
+- `1778817054_forgereadbackplugin`:
+  `b082ef2f91648e0cb9598ce3edbea1119f62c7969b0c3710f2355e9383bd4e05`,
+  `capability_library_proposal_review_batch_1781823908_8b36edc5`
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1250`,
+  `evidence_ref_required_count=1250`.
+- The next surfaced pack is still `legacy.generated.forgereadbackplugin`,
+  now with 114 current evidence-ref candidates.
+- Proposal-review apply-readiness:
+  `proposal_review_missing_count=1250`,
+  `blocked_before_review_capability_count=1250`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=1044`, and fingerprint
+  `4d35d16bf7a4f88e7d4df8fb1d0ccf9b8ed444dd70591e2d60cf4ed88bd636c1`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,250
+  capabilities remaining, and the same 1,250 are blocked before proposal
+  review. The next action is to process the next bounded chunk from
+  `legacy.generated.forgereadbackplugin` through the same one-capability-at-a-time
+  dry-run and apply sequence.
+
+### 2026-06-18 - Stage 17 records forgereadback proposal-evidence and review chunk 22
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the next five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. This is a bounded chunk only: it does not close Stage 17, does not
+apply promotion, does not enable or execute capabilities, and does not claim
+independent verification of the operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1779025161_forgereadbackplugin`
+- `1779062373_forgereadbackplugin`
+- `1779107360_forgereadbackplugin`
+- `1779144638_forgereadbackplugin`
+- `1779146720_forgereadbackplugin`
+
+Recorded evidence refs used the verified live proposal IDs from the
+operator-intake checklist, each capability's matching validation artifact,
+shared metadata receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`.
+
+Evidence dry-run fingerprints:
+
+- `1779025161_forgereadbackplugin`:
+  `4298563ba21b789977cd325717fba4f2cf27f2bb64b15199e88b580e30fa3093`
+- `1779062373_forgereadbackplugin`:
+  `3893b9b72941a13bbd00eed9c7ad6344c1cb3d8090dd48cd2a85e1311b93a157`
+- `1779107360_forgereadbackplugin`:
+  `7d36b3502671a8ccc00020b89a475f075f73b43d552d6d463ad50e777db55526`
+- `1779144638_forgereadbackplugin`:
+  `1795d1c82ea3b0a6b0ef66e934af6c082557da7726fb0a498350119b80d4a499`
+- `1779146720_forgereadbackplugin`:
+  `15ac4b5f0c13c298504959c55fe174ee1d95aa2406cc698f710c10f642351ebd`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1779025161_forgereadbackplugin`:
+  `0841d8a68ce2366238f234d49cf5e33419f0209fac3af33f9fe6a28b2c0836f2`,
+  `capability_library_proposal_review_batch_1781824745_ee165c14`
+- `1779062373_forgereadbackplugin`:
+  `6350f2b9c9192d93c6f1d0825b11c35f56e026e5cbfe259988c5efb9504d5a41`,
+  `capability_library_proposal_review_batch_1781825072_a8d7c3cf`
+- `1779107360_forgereadbackplugin`:
+  `796221e58d4249fd426e26c67f83139c0bf9c046eb5023670d080755b6170270`,
+  `capability_library_proposal_review_batch_1781825371_f33c3894`
+- `1779144638_forgereadbackplugin`:
+  `e6125a8e70659a9d545b5e6bb5c74cbc43e95a0b7efce24215eac185ff324017`,
+  `capability_library_proposal_review_batch_1781825645_6212b11b`
+- `1779146720_forgereadbackplugin`:
+  `e33c96d092a3d2f7d61c7c2137f2c0f9351a4519f2de843fd42cd53c0b547061`,
+  `capability_library_proposal_review_batch_1781825894_05e1d1a7`
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1245`,
+  `evidence_ref_required_count=1245`.
+- The next surfaced pack is still `legacy.generated.forgereadbackplugin`,
+  now with 109 current evidence-ref candidates.
+- Proposal-review apply-readiness:
+  `proposal_review_missing_count=1245`,
+  `blocked_before_review_capability_count=1245`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=1049`, and fingerprint
+  `77d2bb3d903897cb650495bfa12a00388f540eef1ba981cd660242abdeba75ce`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,245
+  capabilities remaining, and the same 1,245 are blocked before proposal
+  review. The next action is to process the next bounded chunk from
+  `legacy.generated.forgereadbackplugin` through the same one-capability-at-a-time
+  dry-run and apply sequence.
+
+### 2026-06-18 - Stage 17 records forgereadback proposal-evidence and review chunk 23
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the next five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. This is a bounded chunk only: it does not close Stage 17, does not
+apply promotion, does not enable or execute capabilities, and does not claim
+independent verification of the operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1779151513_forgereadbackplugin`
+- `1779153043_forgereadbackplugin`
+- `1779156452_forgereadbackplugin`
+- `1779160237_forgereadbackplugin`
+- `1779164857_forgereadbackplugin`
+
+Recorded evidence refs used the verified live proposal IDs from proposal group
+`1780546331`, each capability's matching validation artifact, shared metadata
+receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`.
+
+Evidence dry-run fingerprints:
+
+- `1779151513_forgereadbackplugin`:
+  `1a83d5b0f4e8101ed050f5eb3d32284f0f3e5a89e03e3016cb0b47d2fb199b5d`
+- `1779153043_forgereadbackplugin`:
+  `f9a243acc01f72f2d5d852696664e2fe335ea6c4a55f9dee50c8b3e8471a0cd7`
+- `1779156452_forgereadbackplugin`:
+  `fb6bfd4f7018ffe02d76ba5d965f1fdb3e79b1f3b3538b02affe7db00816a969`
+- `1779160237_forgereadbackplugin`:
+  `a10f562a8db470396318079ade5c1c5da3ff58778e0e90fa0de19c38d82c5e5d`
+- `1779164857_forgereadbackplugin`:
+  `ef5d86f342cbbd8ec93e53aee1867d252200139b402e76f94b53d163d0b99ad5`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1779151513_forgereadbackplugin`:
+  `20149cc4f407915aa61ef2d211a209f76b98673f0a5fac8d228f0a40f9ef426f`,
+  `capability_library_proposal_review_batch_1781827026_638d0fbc`
+- `1779153043_forgereadbackplugin`:
+  `07a8668ea0793aa768e89454f0228611c9d17265e86f8f0d565f86460f95699e`,
+  `capability_library_proposal_review_batch_1781827313_40289385`
+- `1779156452_forgereadbackplugin`:
+  `7cf9d2f92f12ae4d741629536a2729f05b1a70d378e875522afe1576e3d6f00b`,
+  `capability_library_proposal_review_batch_1781827618_245a3ecf`
+- `1779160237_forgereadbackplugin`:
+  `71c9ef43beca5197bfa90befbc12b5d4b3a7d2134494eff1ce614cd8a6b49aaf`,
+  `capability_library_proposal_review_batch_1781832993_fd5c4832`
+- `1779164857_forgereadbackplugin`:
+  `69c4aeffdbf243c3ba0147bc9f37cc3177668ff8c5027ada8417d13b060fcebd`,
+  `capability_library_proposal_review_batch_1781833226_da42a965`
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1240`,
+  `evidence_ref_required_count=1240`.
+- The next surfaced pack is still `legacy.generated.forgereadbackplugin`,
+  now with 104 current evidence-ref candidates.
+- Proposal-review apply-readiness:
+  `proposal_review_missing_count=1240`,
+  `blocked_before_review_capability_count=1240`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=1054`, and fingerprint
+  `7b152714fe210c70c95e3af14b662c9526b77ea171c91bef4a1e1b1dc251c628`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,240
+  capabilities remaining, and the same 1,240 are blocked before proposal
+  review. The next action is to process the next bounded chunk from
+  `legacy.generated.forgereadbackplugin` through the same one-capability-at-a-time
+  dry-run and apply sequence.
+
+### 2026-06-18 - Stage 17 records forgereadback proposal-evidence and review chunk 24
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the next five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. This is a bounded chunk only: it does not close Stage 17, does not
+apply promotion, does not enable or execute capabilities, and does not claim
+independent verification of the operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1779168544_forgereadbackplugin`
+- `1779172526_forgereadbackplugin`
+- `1779177789_forgereadbackplugin`
+- `1779188664_forgereadbackplugin`
+- `1779192277_forgereadbackplugin`
+
+Recorded evidence refs used the verified live proposal IDs from proposal group
+`1780546331`, each capability's matching validation artifact, shared metadata
+receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`.
+
+Evidence dry-run fingerprints:
+
+- `1779168544_forgereadbackplugin`:
+  `56a09998d6116979703f2061fc78cf0a4f9a0529f3e35b41d9e02a04238f09db`
+- `1779172526_forgereadbackplugin`:
+  `33349fb20da1fb481f3b1399a973445e89b45bf745490a92a14144279213b66f`
+- `1779177789_forgereadbackplugin`:
+  `9db1606088008084945181c5eadbb84afbcecb61c515fd5d1e5852c2c69264e1`
+- `1779188664_forgereadbackplugin`:
+  `c400cdf1963f27aea31c2a396629b36166f3192ab3982719bca60deb5a6ed493`
+- `1779192277_forgereadbackplugin`:
+  `505f105a4bc5c47a24779c68f4ad6de5a4143dcc04dc22075da7f1a410b9c0d1`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1779168544_forgereadbackplugin`:
+  `84497fdb0d5b94d66d8fea614def402b4ed4f2a1e29b195de756545841d9c95b`,
+  `capability_library_proposal_review_batch_1781834107_9b756702`
+- `1779172526_forgereadbackplugin`:
+  `c3ce882f97ed2bbcae92691306ba99b93877bdd9343f5b13ddd92a7ea7bd0885`,
+  `capability_library_proposal_review_batch_1781834328_ef076f5d`
+- `1779177789_forgereadbackplugin`:
+  `6002969b89d27a2b654d3f4f71d3118ea2ab980c2adda7e79e8f176f8d1e7f40`,
+  `capability_library_proposal_review_batch_1781834553_d03636c1`
+- `1779188664_forgereadbackplugin`:
+  `4b178fd88a38a0c105fe035bebae0ef7700dee22622f284650e709cee7f98a93`,
+  `capability_library_proposal_review_batch_1781834839_42ea54cb`
+- `1779192277_forgereadbackplugin`:
+  `8a82817c1e6f3fc57ed9183fc0b8315b2e72dcb26a6e1046da3aa4cbf12aafb7`,
+  `capability_library_proposal_review_batch_1781835112_fb32002a`
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1235`,
+  `evidence_ref_required_count=1235`.
+- The next surfaced pack is still `legacy.generated.forgereadbackplugin`,
+  now with 99 current evidence-ref candidates.
+- Proposal-review apply-readiness:
+  `proposal_review_missing_count=1235`,
+  `blocked_before_review_capability_count=1235`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=1059`, and fingerprint
+  `64f28cb96f7c47474048009c8411b73da7fb6f66354a7a2a6daa11f714512c24`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,235
+  capabilities remaining, and the same 1,235 are blocked before proposal
+  review. The next action is to process the next bounded chunk from
+  `legacy.generated.forgereadbackplugin` through the same one-capability-at-a-time
+  dry-run and apply sequence.
+
+### 2026-06-18 - Stage 17 records forgereadback proposal-evidence and review chunk 25
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the next five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. This is a bounded chunk only: it does not close Stage 17, does not
+apply promotion, does not enable or execute capabilities, and does not claim
+independent verification of the operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1779195900_forgereadbackplugin`
+- `1779199202_forgereadbackplugin`
+- `1779199823_forgereadbackplugin`
+- `1779203592_forgereadbackplugin`
+- `1779207928_forgereadbackplugin`
+
+Recorded evidence refs used the verified live proposal IDs from proposal group
+`1780546331`, each capability's matching validation artifact, shared metadata
+receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`.
+
+Evidence dry-run fingerprints:
+
+- `1779195900_forgereadbackplugin`:
+  `a04f71325bbeeba1bbbb73e1aa0d0682108773f778e234828ff3184c81bd0d85`
+- `1779199202_forgereadbackplugin`:
+  `02b563c1a48c8a64fa5b2e86ceaf3c6ffa59fee479f0e126891589d10e19f50c`
+- `1779199823_forgereadbackplugin`:
+  `97e99da19db212f550da004cb9da00600d884893695237c5a665741007c87a81`
+- `1779203592_forgereadbackplugin`:
+  `da4488f5c7f509673269c22f0211647a950cbd807527419f07c202f89a2776d1`
+- `1779207928_forgereadbackplugin`:
+  `803a9b1f42b5070d4c4d3ea80951e2ef44a881ee959b5cf970771c56d4d978cf`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1779195900_forgereadbackplugin`:
+  `396dbb7bea658b89233bdebd124c3b827e82697e1c2aed0de105441b93e6b224`,
+  `capability_library_proposal_review_batch_1781835850_225eb9a1`
+- `1779199202_forgereadbackplugin`:
+  `d513365b7704a2dbc1a4473a2715375ef7ce24b08488ff4326cdbaf642146cf1`,
+  `capability_library_proposal_review_batch_1781836105_f21077d2`
+- `1779199823_forgereadbackplugin`:
+  `fb2cea047cce7afa46306de5abff65299aa4e5c0bd26e5334ae684bb7b27c6cb`,
+  `capability_library_proposal_review_batch_1781836354_d74aeca7`
+- `1779203592_forgereadbackplugin`:
+  `7350764779bc157907806ae1e9b1eebb5b41c05e89537990906817a5350a55c7`,
+  `capability_library_proposal_review_batch_1781836615_a77c5c69`
+- `1779207928_forgereadbackplugin`:
+  `ac00660be26fb983927ebc30c41ad66a605002e1a3457e05cd3218c00282fb6d`,
+  `capability_library_proposal_review_batch_1781836871_075c12dd`
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1230`,
+  `evidence_ref_required_count=1230`.
+- The next surfaced pack is still `legacy.generated.forgereadbackplugin`,
+  now with 94 current evidence-ref candidates.
+- Proposal-review apply-readiness:
+  `proposal_review_missing_count=1230`,
+  `blocked_before_review_capability_count=1230`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=1064`, and fingerprint
+  `0f9d3e3fe15c048e6ba386786bab4e8e0ada6eabef89f4f1c24f8f911dd20542`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,230
+  capabilities remaining, and the same 1,230 are blocked before proposal
+  review. The next action is to process the next bounded chunk from
+  `legacy.generated.forgereadbackplugin` through the same one-capability-at-a-time
+  dry-run and apply sequence.
+
+### 2026-06-18 - Stage 17 records forgereadback proposal-evidence and review chunk 26
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the next five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. This is a bounded chunk only: it does not close Stage 17, does not
+apply promotion, does not enable or execute capabilities, and does not claim
+independent verification of the operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1779209731_forgereadbackplugin`
+- `1779213380_forgereadbackplugin`
+- `1779217765_forgereadbackplugin`
+- `1779223530_forgereadbackplugin`
+- `1779227345_forgereadbackplugin`
+
+Recorded evidence refs used the verified live proposal IDs from proposal group
+`1780546331`, each capability's matching validation artifact, shared metadata
+receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`.
+
+Evidence dry-run fingerprints:
+
+- `1779209731_forgereadbackplugin`:
+  `9452481ce4c16bd4e20603a9a85a45f021276989bfd20ce4ea4f9467657f59ce`
+- `1779213380_forgereadbackplugin`:
+  `a91294d4260c894a92b6d362dcb6a909523518c1d7c890dd7f3453940b0b0ad8`
+- `1779217765_forgereadbackplugin`:
+  `804af557e1f42d748e9d62ae257111e3a10f3e64e54f3d0539ab69ee81035469`
+- `1779223530_forgereadbackplugin`:
+  `ff6e7f11f9c80730dd1ed0f7535b6adc62f639caeee4f35fda3d11850131f31f`
+- `1779227345_forgereadbackplugin`:
+  `7e78de5c84e40fcced79020870d17736a2348a00e00c75b6270278c30224889d`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1779209731_forgereadbackplugin`:
+  `b9c1eb8bd5d1272fa5229af916b25f8336dfca31d5cbd21db883ea841004cba2`,
+  `capability_library_proposal_review_batch_1781837677_c7960d1e`
+- `1779213380_forgereadbackplugin`:
+  `21ef67f4b744ccc459e1bf81f95b773b57961aa55b022a627ec976d15b687273`,
+  `capability_library_proposal_review_batch_1781837932_bda9dff6`
+- `1779217765_forgereadbackplugin`:
+  `25a1747997361d7ddaeb6ef6b37629876c56299bd2c549441353d356d1eab783`,
+  `capability_library_proposal_review_batch_1781838205_a7f80873`
+- `1779223530_forgereadbackplugin`:
+  `4fe0b4d410890d3fd6f9128d3540723cc8a353534313bc22530765e062814a97`,
+  `capability_library_proposal_review_batch_1781838482_0948a245`
+- `1779227345_forgereadbackplugin`:
+  `98deb5d49a22103828945fb200f3a3ee74f2323c4769e9cfe2bc94a7c2bff6b4`,
+  `capability_library_proposal_review_batch_1781838758_ce8be504`
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1225`,
+  `evidence_ref_required_count=1225`.
+- The next surfaced pack is still `legacy.generated.forgereadbackplugin`,
+  now with 89 current evidence-ref candidates.
+- Proposal-review apply-readiness:
+  `proposal_review_missing_count=1225`,
+  `blocked_before_review_capability_count=1225`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=1069`, and fingerprint
+  `d0d8c9a6f880e5251aeb8084121deadf686bf40f76376c4478b79974a07d6a55`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,225
+  capabilities remaining, and the same 1,225 are blocked before proposal
+  review. The next action is to process the next bounded chunk from
+  `legacy.generated.forgereadbackplugin` through the same one-capability-at-a-time
+  dry-run and apply sequence.
+
+### 2026-06-18 - Stage 17 records forgereadback proposal-evidence and review chunk 27
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the next five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. This is a bounded chunk only: it does not close Stage 17, does not
+apply promotion, does not enable or execute capabilities, and does not claim
+independent verification of the operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1779231395_forgereadbackplugin`
+- `1779235967_forgereadbackplugin`
+- `1779239386_forgereadbackplugin`
+- `1779243447_forgereadbackplugin`
+- `1779256503_forgereadbackplugin`
+
+Recorded evidence refs used verified live proposal IDs from proposal groups
+`1780546331` and `1780546367`, each capability's matching validation artifact,
+shared metadata receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`.
+
+Evidence dry-run fingerprints:
+
+- `1779231395_forgereadbackplugin`:
+  `f515f73581d88ff7b4d51054a77ccb3cf8508ed9588ff82105add331da32d14b`
+- `1779235967_forgereadbackplugin`:
+  `58f781b72950921269fa459c2329c2ea0acf51c7e480900fe2ea2c8720899bd5`
+- `1779239386_forgereadbackplugin`:
+  `8d8c35ef8b07293756104b9736f4ea8104d472bb8900fa443c453bf4b8563595`
+- `1779243447_forgereadbackplugin`:
+  `fdc518a4de73a15ce9a8719c31b26b1201afe6e1ceb9943f690267980614c0b8`
+- `1779256503_forgereadbackplugin`:
+  `871ea92f647b550c8346bdd0bd459a6f6934324b8bfc7f6375151db4c72a4462`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1779231395_forgereadbackplugin`:
+  `f291557f7d3171704e2b4c6b76929a225206c46237dae6fd3ad4f779dc5783ee`,
+  `capability_library_proposal_review_batch_1781839581_ec07ef93`
+- `1779235967_forgereadbackplugin`:
+  `2709e6ec4f1b177ed1dbbb14cb3b551fe73515a9431389772d82cb624c706f10`,
+  `capability_library_proposal_review_batch_1781839794_527ad26b`
+- `1779239386_forgereadbackplugin`:
+  `2246d4c7a31f33d4cd5105725526c6348ab1785f50c95706ae528c919f84f282`,
+  `capability_library_proposal_review_batch_1781840014_43b02ab4`
+- `1779243447_forgereadbackplugin`:
+  `fe2a3a9fd72bae2c1f923c107725e8f062d3c9a522b1c51dccf031f53bc594e5`,
+  `capability_library_proposal_review_batch_1781840310_5a2bf040`
+- `1779256503_forgereadbackplugin`:
+  `ca3f33b1600570cbe77fba35a8dc6e0f1c66b40cb094db284041296844575bfc`,
+  `capability_library_proposal_review_batch_1781840590_6ec097f4`
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1220`,
+  `evidence_ref_required_count=1220`.
+- The next surfaced pack is still `legacy.generated.forgereadbackplugin`,
+  now with 84 current evidence-ref candidates.
+- Proposal-review apply-readiness:
+  `proposal_review_missing_count=1220`,
+  `blocked_before_review_capability_count=1220`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=1074`, and fingerprint
+  `3dd58fa9c52c3a4325027f3f28358d91519bcdc621fb33304214543f726b4235`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,220
+  capabilities remaining, and the same 1,220 are blocked before proposal
+  review. The next action is to process the next bounded chunk from
+  `legacy.generated.forgereadbackplugin` through the same one-capability-at-a-time
+  dry-run and apply sequence.
+
+### 2026-06-18 - Stage 17 records forgereadback proposal-evidence and review chunk 28
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the next five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. This is a bounded chunk only: it does not close Stage 17, does not
+apply promotion, does not enable or execute capabilities, and does not claim
+independent verification of the operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1779260145_forgereadbackplugin`
+- `1779264517_forgereadbackplugin`
+- `1779266613_forgereadbackplugin`
+- `1779271631_forgereadbackplugin`
+- `1779275854_forgereadbackplugin`
+
+Recorded evidence refs used the verified live proposal IDs from proposal group
+`1780546367`, each capability's matching validation artifact, shared metadata
+receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`.
+
+Evidence dry-run fingerprints:
+
+- `1779260145_forgereadbackplugin`:
+  `c088995aa5ab3567c97e9275ea13f71ce4f438b784461664c6db1359380afc71`
+- `1779264517_forgereadbackplugin`:
+  `ea43b2b9e3c1d977bfead1494320dbaec53ff3edef4f1fd840a9a3d7978ebc8b`
+- `1779266613_forgereadbackplugin`:
+  `1d115c56a14382d282b38e9a1c39239bd2dcc05a09dedf313e5e068afd66dd76`
+- `1779271631_forgereadbackplugin`:
+  `fd1dae7ce76c4ae4365a7c412cd3ae080335463ebec4e64312bcfe637b3d5ffb`
+- `1779275854_forgereadbackplugin`:
+  `3a21c0b12d3a1001afbd21209454c1b17ed639705c9b30ad37c5c13cbbe7fc81`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1779260145_forgereadbackplugin`:
+  `ea62953904e35fa38601c35676903e47bd4e96e5b468df2c0fa66a34dd23e58d`,
+  `capability_library_proposal_review_batch_1781841373_e778f78b`
+- `1779264517_forgereadbackplugin`:
+  `ae9963288097feb91e716386b55d711b157248fc3fdbe7237a80309c78c73057`,
+  `capability_library_proposal_review_batch_1781841607_d234a83a`
+- `1779266613_forgereadbackplugin`:
+  `c4f9f74bd1c081b3841c5d2529c8ee1f59495f852ce63065473914249cc265ba`,
+  `capability_library_proposal_review_batch_1781841831_308ba481`
+- `1779271631_forgereadbackplugin`:
+  `a031e4f8fb1f25172339a3a53eb3ac5180d373ca703fd59158110fcaab2cd99e`,
+  `capability_library_proposal_review_batch_1781842050_32697157`
+- `1779275854_forgereadbackplugin`:
+  `e17722c6b6a584b5d144c07b1f0b0313129344007f64350888ab572497ec07ae`,
+  `capability_library_proposal_review_batch_1781842273_8aa752fa`
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1215`,
+  `evidence_ref_required_count=1215`.
+- The next surfaced pack is still `legacy.generated.forgereadbackplugin`,
+  now with 79 current evidence-ref candidates.
+- Proposal-review apply-readiness:
+  `proposal_review_missing_count=1215`,
+  `blocked_before_review_capability_count=1215`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=1079`, and fingerprint
+  `6d198f4232fb59d5f142c1eb055ffb8ae99f0ee06a8db7ee6d27a38a8b9bd8af`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,215
+  capabilities remaining, and the same 1,215 are blocked before proposal
+  review. The next action is to process the next bounded chunk from
+  `legacy.generated.forgereadbackplugin` through the same one-capability-at-a-time
+  dry-run and apply sequence.
+
+### 2026-06-18 - Stage 17 records forgereadback proposal-evidence and review chunk 29
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the next five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. This is a bounded chunk only: it does not close Stage 17, does not
+apply promotion, does not enable or execute capabilities, and does not claim
+independent verification of the operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1779279798_forgereadbackplugin`
+- `1779281395_forgereadbackplugin`
+- `1779291902_forgereadbackplugin`
+- `1779296222_forgereadbackplugin`
+- `1779298132_forgereadbackplugin`
+
+Recorded evidence refs used the verified live proposal IDs from proposal group
+`1780546367`, each capability's matching validation artifact, shared metadata
+receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`.
+
+Evidence dry-run fingerprints:
+
+- `1779279798_forgereadbackplugin`:
+  `7a32d09543dcb699c9762cc9492bf85734a70acb69fdd79f933ed196f2fec20b`
+- `1779281395_forgereadbackplugin`:
+  `d15d10ea414e6c3dafbe201088cbdcc60ef3ee141f90411976ae9afb70edd91f`
+- `1779291902_forgereadbackplugin`:
+  `1dec9d77873e1aaba0c8ffb615a1583a1e451e3eaa34d76d59829a4dde96c270`
+- `1779296222_forgereadbackplugin`:
+  `67729b8dbcf04b6445c6abffd92092c209d8ec0374c470eb0876f9ddfae806d4`
+- `1779298132_forgereadbackplugin`:
+  `b8511052ae4cb48eb49dc03ec34a2cdf23f4dad38688c69d29c1211172339f21`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1779279798_forgereadbackplugin`:
+  `04d6785758e767f760221ebfd501d6d9dca80bb3dfca80fd7f209bef4c572739`,
+  `capability_library_proposal_review_batch_1781843056_d68f3f3e`
+- `1779281395_forgereadbackplugin`:
+  `37af1809051836085648d80dd370289e37b23e5e99ff5e51045dcaf38c8243f9`,
+  `capability_library_proposal_review_batch_1781843346_debb1f9a`
+- `1779291902_forgereadbackplugin`:
+  `7f2562ce2ae1aa75f4f1354b779076949ac675fa65de470c4be733fd84968ab9`,
+  `capability_library_proposal_review_batch_1781843642_c77ddc75`
+- `1779296222_forgereadbackplugin`:
+  `8acc8f11f64c98b8eb935eec44c6e612137178ff052dd8d56ad6bc77f0e5e34c`,
+  `capability_library_proposal_review_batch_1781843982_a81de183`
+- `1779298132_forgereadbackplugin`:
+  `b1cfd362a797f72d323778e2901855c17741ace83c0b934cefbd474a31f63337`,
+  `capability_library_proposal_review_batch_1781844295_9f0a5e87`
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1210`,
+  `evidence_ref_required_count=1210`.
+- The next surfaced pack is still `legacy.generated.forgereadbackplugin`,
+  now with 74 current evidence-ref candidates.
+- Proposal-review apply-readiness:
+  `proposal_review_missing_count=1210`,
+  `blocked_before_review_capability_count=1210`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=1084`, and fingerprint
+  `1425f3efbd056a9d54604d055a9ddd97506eab8b0568f740f5e281068c28f6e7`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,210
+  capabilities remaining, and the same 1,210 are blocked before proposal
+  review. The next action is to process the next bounded chunk from
+  `legacy.generated.forgereadbackplugin` through the same one-capability-at-a-time
+  dry-run and apply sequence.
+
+### 2026-06-18 - Stage 17 records forgereadback proposal-evidence and review chunk 30
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the next five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. This is a bounded chunk only: it does not close Stage 17, does not
+apply promotion, does not enable or execute capabilities, and does not claim
+independent verification of the operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1779313774_forgereadbackplugin`
+- `1779317128_forgereadbackplugin`
+- `1779321173_forgereadbackplugin`
+- `1779325291_forgereadbackplugin`
+- `1779327014_forgereadbackplugin`
+
+Recorded evidence refs used the verified live proposal IDs from proposal group
+`1780546367`, each capability's matching validation artifact, shared metadata
+receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`.
+
+Evidence dry-run fingerprints:
+
+- `1779313774_forgereadbackplugin`:
+  `075a9184d919a0a77c242cca49ce955f73e5a1e9de567f819500464dab8bf19f`
+- `1779317128_forgereadbackplugin`:
+  `d01ea548bf2100b302f522a823c9fe033717d8bcdc9689e1d047cde29c80e587`
+- `1779321173_forgereadbackplugin`:
+  `08af1f3926fce5b9c88a285f62f135b1090f4879222390894f28c1d18ea2d075`
+- `1779325291_forgereadbackplugin`:
+  `317cc6c10e50182d2c602a570d882878f71b4cc9073d7ea5cb93fea6701677a9`
+- `1779327014_forgereadbackplugin`:
+  `58d27adc6b3a5a2253e785b76195f5a213e74c07e5a948e0c8ae2d9a49264a5f`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1779313774_forgereadbackplugin`:
+  `28b08f4de51c5215646457d3cc39708424e66c19e68b478aa0ebb4a736514e0b`,
+  `capability_library_proposal_review_batch_1781845136_a969c5ce`
+- `1779317128_forgereadbackplugin`:
+  `773b0604c338d81f1febfe81ff8ac704b2c5cc3def9771c787b67e849f7cd056`,
+  `capability_library_proposal_review_batch_1781845421_b2e03f54`
+- `1779321173_forgereadbackplugin`:
+  `af729dbbc11ab98a17c77a726b71981b24dfd809c2f5158dd9e54970fbd6008c`,
+  `capability_library_proposal_review_batch_1781845708_b0e8e172`
+- `1779325291_forgereadbackplugin`:
+  `f0fe27a34bfc613da999110b27071dfdad01991a64ea396e0158f710f51d6dbf`,
+  `capability_library_proposal_review_batch_1781845995_a1c6de5c`
+- `1779327014_forgereadbackplugin`:
+  `372261e5cae5750407851ea06e4631c10733736045f86916f0ec7b9c117f38d8`,
+  `capability_library_proposal_review_batch_1781846283_41c5e6a4`
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1205`,
+  `evidence_ref_required_count=1205`.
+- The next surfaced pack is still `legacy.generated.forgereadbackplugin`,
+  now with 69 current evidence-ref candidates.
+- Proposal-review apply-readiness:
+  `proposal_review_missing_count=1205`,
+  `blocked_before_review_capability_count=1205`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=1089`, and fingerprint
+  `189dbd7b84f451de092e64558c1e558730e018ac0270970f753a1f3b31ba2f6b`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,205
+  capabilities remaining, and the same 1,205 are blocked before proposal
+  review. The next action is to process the next bounded chunk from
+  `legacy.generated.forgereadbackplugin` through the same one-capability-at-a-time
+  dry-run and apply sequence.
+
+### 2026-06-19 - Stage 17 records forgereadback proposal-evidence and review chunk 31
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the next five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. This is a bounded chunk only: it does not close Stage 17, does not
+apply promotion, does not enable or execute capabilities, and does not claim
+independent verification of the operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1779329699_forgereadbackplugin`
+- `1779334673_forgereadbackplugin`
+- `1779336208_forgereadbackplugin`
+- `1779340939_forgereadbackplugin`
+- `1779349480_forgereadbackplugin`
+
+Recorded evidence refs used the verified live proposal IDs from proposal group
+`1780546367`, each capability's matching validation artifact, shared metadata
+receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`.
+
+Evidence dry-run fingerprints:
+
+- `1779329699_forgereadbackplugin`:
+  `2bd5ba7e56885f65beb71864d03a29935c4b1751a2ad4ab8e2cb7516ea1b821e`
+- `1779334673_forgereadbackplugin`:
+  `b9484ba3509bb02b1052a7583f724424dfd01d987c61a2d59710bee3960f4779`
+- `1779336208_forgereadbackplugin`:
+  `13f702de7dfd1d228cf73a04e702be47e82a29b70f595e195797c9b047cb64a2`
+- `1779340939_forgereadbackplugin`:
+  `da942193a8517e056ef4f9ed0c2bb18f06b91762d3f7b13528135de7c2cd34f9`
+- `1779349480_forgereadbackplugin`:
+  `d90b04da369fa71c266ab29aa35a599d07ca881e89aedbd533d3ab975c3346f1`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1779329699_forgereadbackplugin`:
+  `26ca32b9629006584d120c674104c0ad940ef6a872023c27e39006872c276e74`,
+  `capability_library_proposal_review_batch_1781847324_ee61d5c0`
+- `1779334673_forgereadbackplugin`:
+  `c7f5d63d928588cded555a51f115c027004ffd8386e4642287e2c60e064538ac`,
+  `capability_library_proposal_review_batch_1781847610_e080913f`
+- `1779336208_forgereadbackplugin`:
+  `0b688bc6292c824eb88a025b56ab6635d454f37df0812f00b6974e7367e2cf37`,
+  `capability_library_proposal_review_batch_1781847901_d23b3279`
+- `1779340939_forgereadbackplugin`:
+  `c1a023a6c5b4e116f14c5f89a8782f0cfc289d21abe4fc27d096824d0c937596`,
+  `capability_library_proposal_review_batch_1781848201_897dbdc7`
+- `1779349480_forgereadbackplugin`:
+  `c49698338a77f9782fc03ebb5c6dc93e85e51393eeb20795d7157f1cc2fbae25`,
+  `capability_library_proposal_review_batch_1781848487_6a9cd7bf`
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1200`,
+  `evidence_ref_required_count=1200`.
+- The next surfaced pack is still `legacy.generated.forgereadbackplugin`,
+  now with 64 current evidence-ref candidates.
+- Proposal-review apply-readiness:
+  `proposal_review_missing_count=1200`,
+  `blocked_before_review_capability_count=1200`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=1094`, and fingerprint
+  `0538b19049aeb95e1c369719ce490f760a8c2e9a6ed0d7c12cbe815c7f8f96bd`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,200
+  capabilities remaining, and the same 1,200 are blocked before proposal
+  review. The next action is to process the next bounded chunk from
+  `legacy.generated.forgereadbackplugin` through the same one-capability-at-a-time
+  dry-run and apply sequence.
+
+### 2026-06-19 - Stage 17 records forgereadback proposal-evidence and review chunk 32
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the next five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. This is a bounded chunk only: it does not close Stage 17, does not
+apply promotion, does not enable or execute capabilities, and does not claim
+independent verification of the operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1779355391_forgereadbackplugin`
+- `1779364873_forgereadbackplugin`
+- `1779366426_forgereadbackplugin`
+- `1779368842_forgereadbackplugin`
+- `1779373241_forgereadbackplugin`
+
+Recorded evidence refs used the verified live proposal IDs from proposal groups
+`1780546367` and `1780546403`, each capability's matching validation artifact,
+shared metadata receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`.
+
+Evidence dry-run fingerprints:
+
+- `1779355391_forgereadbackplugin`:
+  `c4d992a44d3b3766f762a02256f5593444e6c4812cf586b51c82914ad2b98b50`
+- `1779364873_forgereadbackplugin`:
+  `0ce05dffc2991d47f87b276706578738e51d54dc9f043a0f24fcb42205e30172`
+- `1779366426_forgereadbackplugin`:
+  `d7ec7d16dfbb336199a0821ea8dc1543c36af794326a98aec512bc2c1d602cfd`
+- `1779368842_forgereadbackplugin`:
+  `f86adfb6f8d966ba7e877ae0cd9fa3ee7681c1106fef1648eb0ba259333a4ed8`
+- `1779373241_forgereadbackplugin`:
+  `7d8acc78766adb00e9db4abf3bd887bede7679c39699984c5d725ba0f11c35da`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1779355391_forgereadbackplugin`:
+  `e7807c6296f94b198a40c5a52ee3c41c57bd48245f8fef2946b8124aeb0f70e1`,
+  `plugin_proposal_review_1781849489_1be74407f0d7_561300`
+- `1779364873_forgereadbackplugin`:
+  `db3cf1ae706f904bba6f9145a3237dc21a81c11052c2835df3bb381e190747bc`,
+  `plugin_proposal_review_1781849803_b0493e433fda_330600`
+- `1779366426_forgereadbackplugin`:
+  `fa9369f8b8c3c40d84cee7ed660cb80e6da52375d01b706c915f125f26eeceb1`,
+  `plugin_proposal_review_1781850122_04d4c42e58b0_308500`
+- `1779368842_forgereadbackplugin`:
+  `de472f3f32e99761a40619d9f1b6be87baf97def976651ad2bcf14f735766624`,
+  `plugin_proposal_review_1781850440_e980c5fb2231_074200`
+- `1779373241_forgereadbackplugin`:
+  `8d722ac5f4d4392d49c1bc76d4d0b891637cbda6ab3a2076d7ec61602e30cc46`,
+  `plugin_proposal_review_1781850752_7951aaccbc11_096800`
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1195`,
+  `evidence_ref_required_count=1195`.
+- The next surfaced pack is still `legacy.generated.forgereadbackplugin`,
+  now with 59 current evidence-ref candidates.
+- Proposal-review apply-readiness:
+  `proposal_review_missing_count=1195`,
+  `blocked_before_review_capability_count=1195`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=1099`, and fingerprint
+  `af67944a3d78eccb8596aaa06fb4d48d048d9f23295af3a577126f6b3cb0f958`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,195
+  capabilities remaining, and the same 1,195 are blocked before proposal
+  review. The next action is to process the next bounded chunk from
+  `legacy.generated.forgereadbackplugin` through the same one-capability-at-a-time
+  dry-run and apply sequence.
+
+### 2026-06-19 - Stage 17 records forgereadback proposal-evidence and review chunk 33
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the next five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. This is a bounded chunk only: it does not close Stage 17, does not
+apply promotion, does not enable or execute capabilities, and does not claim
+independent verification of the operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1779377632_forgereadbackplugin`
+- `1779389591_forgereadbackplugin`
+- `1779395072_forgereadbackplugin`
+- `1779399413_forgereadbackplugin`
+- `1779401296_forgereadbackplugin`
+
+Recorded evidence refs used the verified live proposal IDs from proposal group
+`1780546403`, each capability's matching validation artifact, shared metadata
+receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`.
+
+Evidence dry-run fingerprints:
+
+- `1779377632_forgereadbackplugin`:
+  `a62cd88aa13e85f8c2bfab4fc0bbef7142cf0b2afa0773675ab754a8661879f9`
+- `1779389591_forgereadbackplugin`:
+  `8a426ac4a13b012f8037085da0ebeb4f094b9299755c30e581ecf6612777566f`
+- `1779395072_forgereadbackplugin`:
+  `0380e21ccd9bff91a70ae320909d9cd2c19fa360bf45e54cbdbf417fd8bd9346`
+- `1779399413_forgereadbackplugin`:
+  `a61ff5387a255be1957ee1fc52b9bc44400a0bcc4a541470ee9715ec0ec55402`
+- `1779401296_forgereadbackplugin`:
+  `d57d2fdf559b6a2457852018029b0da7164235f6a6c5d29a62ff396847c62b5e`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1779377632_forgereadbackplugin`:
+  `7c55c0c7e1823912cf8e295bc533db6e4cef37cb4073415df06c9212fc6f27fb`,
+  `plugin_proposal_review_1781851633_1952160e3b56_948700`
+- `1779389591_forgereadbackplugin`:
+  `adcc0f804947daaad1af9c7dc4376d9890b1d686496025f71bc429475114453e`,
+  `plugin_proposal_review_1781852003_8964828c703b_891500`
+- `1779395072_forgereadbackplugin`:
+  `a054f16e5dd9eed6f060c0fcf5f7f438b51b2caef6ce083d97449e8ff84c8143`,
+  `plugin_proposal_review_1781852306_608ea473b656_456900`
+- `1779399413_forgereadbackplugin`:
+  `66af0c78acf6a07ce6f88b9b61897efe1df65aca0c2630eb6352a1f22b25c2f3`,
+  `plugin_proposal_review_1781852641_2434f75b9da9_665200`
+- `1779401296_forgereadbackplugin`:
+  `f4a1172d333a308a2ce8a14dba63d6c136753271f0221441d835712437613c5b`,
+  `plugin_proposal_review_1781852942_f7ec015221b4_500700`
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1190`,
+  `evidence_ref_required_count=1190`.
+- The next surfaced pack is still `legacy.generated.forgereadbackplugin`,
+  now with 54 current evidence-ref candidates.
+- Proposal-review apply-readiness:
+  `proposal_review_missing_count=1190`,
+  `blocked_before_review_capability_count=1190`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=1104`, and fingerprint
+  `61b71ce54469983eaf4da00292400e35eaf88d2975a9988830e68cdb605dda91`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,190
+  capabilities remaining, and the same 1,190 are blocked before proposal
+  review. The next action is to process the next bounded chunk from
+  `legacy.generated.forgereadbackplugin` through the same one-capability-at-a-time
+  dry-run and apply sequence.
+
+### 2026-06-19 - Stage 17 records forgereadback proposal-evidence and review chunk 34
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the next five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. This is a bounded chunk only: it does not close Stage 17, does not
+apply promotion, does not enable or execute capabilities, and does not claim
+independent verification of the operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1779404196_forgereadbackplugin`
+- `1779405951_forgereadbackplugin`
+- `1779411466_forgereadbackplugin`
+- `1779417945_forgereadbackplugin`
+- `1779423399_forgereadbackplugin`
+
+Recorded evidence refs used the verified live proposal IDs from proposal group
+`1780546403`, each capability's matching validation artifact, shared metadata
+receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`.
+
+Evidence dry-run fingerprints:
+
+- `1779404196_forgereadbackplugin`:
+  `d7b9c011fa5b5b1ab765508d1596b5d10a6b1e5d6471ea1a754e0ea933311e40`
+- `1779405951_forgereadbackplugin`:
+  `84b6d76bb97fb0d37832fe628e9bb0781fe600073aa481527e8ab4d728106459`
+- `1779411466_forgereadbackplugin`:
+  `74afd8da1b9d289e6dd51ebbfbb67b72bfacec96f806dcff616f3af3d5003e64`
+- `1779417945_forgereadbackplugin`:
+  `76c3d2e84cfb7478169297e17cac90abc59f3f2f8780ec12f7138c3c5a7f9cb4`
+- `1779423399_forgereadbackplugin`:
+  `33ecae7cb217867d4b88022f8463ddc26a56960aec43a8f1a1904e0a76c7dea9`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1779404196_forgereadbackplugin`:
+  `dd47e9f35c5a621c2916b1f72efcb05b42211c067d9fd6c7409a916f4c2c58dd`,
+  `plugin_proposal_review_1781853765_f3d91806119e_517000`
+- `1779405951_forgereadbackplugin`:
+  `aba29e2644fc4dc0b36f3d846755cdee19e082581dfea47023d7e920a61128ae`,
+  `plugin_proposal_review_1781854056_d620ae0cd803_840700`
+- `1779411466_forgereadbackplugin`:
+  `1938856dd6b04f3dab1e048f161a9ef94bcf76b86d4a4d5f1e5c98e0aef0417f`,
+  `plugin_proposal_review_1781854343_d6de5b198881_963500`
+- `1779417945_forgereadbackplugin`:
+  `c32ffa6e090fc8e2b835c9639d6b986a795e8a0bad8108e5685befaea84f6a8e`,
+  `plugin_proposal_review_1781854651_772d4682c564_140700`
+- `1779423399_forgereadbackplugin`:
+  `00bd6f56a8449e387baf076cba858a8f8cd9b6a3440d309f09eb71cab082f4c4`,
+  `plugin_proposal_review_1781854963_638b4e7a2cda_110200`
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1185`,
+  `evidence_ref_required_count=1185`.
+- The next surfaced pack is still `legacy.generated.forgereadbackplugin`,
+  now with 49 current evidence-ref candidates.
+- Proposal-review apply-readiness:
+  `proposal_review_missing_count=1185`,
+  `blocked_before_review_capability_count=1185`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=1109`, and fingerprint
+  `eebae6402b33772b132cd98feefe219627684c4b5a86f9fe9b615e5b0b60ff50`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,185
+  capabilities remaining, and the same 1,185 are blocked before proposal
+  review. The next action is to process the next bounded chunk from
+  `legacy.generated.forgereadbackplugin` through the same one-capability-at-a-time
+  dry-run and apply sequence.
+
+### 2026-06-19 - Stage 17 records forgereadback proposal-evidence and review chunk 35
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the next five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. This is a bounded chunk only: it does not close Stage 17, does not
+apply promotion, does not enable or execute capabilities, and does not claim
+independent verification of the operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1779453833_forgereadbackplugin`
+- `1779454772_forgereadbackplugin`
+- `1779468857_forgereadbackplugin`
+- `1779690074_forgereadbackplugin`
+- `1779692948_forgereadbackplugin`
+
+Recorded evidence refs used the verified live proposal IDs from proposal group
+`1780546403`, each capability's matching validation artifact, shared metadata
+receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`.
+
+Evidence dry-run fingerprints:
+
+- `1779453833_forgereadbackplugin`:
+  `5c660ef4b58a4db10111ce1a628a49e6f8a4978ced6ac14d690a81654fee67b2`
+- `1779454772_forgereadbackplugin`:
+  `8661aa841ef1752e608d6d1a5ea82b11a177e36d1831821ad749b28e6db92f18`
+- `1779468857_forgereadbackplugin`:
+  `cf6b1d408908b3caaa95bdd032a81a13190c043019dbf27176f4bfea2284bfae`
+- `1779690074_forgereadbackplugin`:
+  `f4293d52dc30b78b553aa3ce09cff1a9a901022b614c46a7ae290beae9327efc`
+- `1779692948_forgereadbackplugin`:
+  `61972e474d3fa6f5b8a776fb7f836e84a1c135f377e3ea96b67217061547825f`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1779453833_forgereadbackplugin`:
+  `b16bb39a1b60eec5dd8bddd94146dd68edb388f37fa272d1a1c9c127e2f45374`,
+  `plugin_proposal_review_1781855849_2b176ea9abf7_872400`
+- `1779454772_forgereadbackplugin`:
+  `f7341df25ff819b7e774270423c6b782384f4b7ec98887aac565d2d1f648e638`,
+  `plugin_proposal_review_1781856149_cc1d71551fb3_759200`
+- `1779468857_forgereadbackplugin`:
+  `1689e640a07f21648c6bbb2374966b782779535e6111b2abaf6e9e8fd10f0b99`,
+  `plugin_proposal_review_1781856436_bd0cff3507be_388000`
+- `1779690074_forgereadbackplugin`:
+  `65353bb2679441d00336f055710a9419ffe3dd44e98bd4bcb4d703cf42898020`,
+  `plugin_proposal_review_1781856725_a2337030a336_044200`
+- `1779692948_forgereadbackplugin`:
+  `439879447da7707993ad7332942bf5b3a7b793059b133515548f2cd2bfe1dbbd`,
+  `plugin_proposal_review_1781857015_20d77cae1b1e_321000`
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1180`,
+  `evidence_ref_required_count=1180`.
+- The next surfaced pack is still `legacy.generated.forgereadbackplugin`,
+  now with 44 current evidence-ref candidates.
+- Proposal-review apply-readiness:
+  `proposal_review_missing_count=1180`,
+  `blocked_before_review_capability_count=1180`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=1114`, and fingerprint
+  `0091b56354dfe0039575ee8e663b35088a1c94a981061e6b98e509ddca5d8586`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,180
+  capabilities remaining, and the same 1,180 are blocked before proposal
+  review. The next action is to process the next bounded chunk from
+  `legacy.generated.forgereadbackplugin` through the same one-capability-at-a-time
+  dry-run and apply sequence.
+
+### 2026-06-19 - Stage 17 records forgereadback proposal-evidence and review chunk 36
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the next five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. This is a bounded chunk only: it does not close Stage 17, does not
+apply promotion, does not enable or execute capabilities, and does not claim
+independent verification of the operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1779800086_forgereadbackplugin`
+- `1779801575_forgereadbackplugin`
+- `1779809961_forgereadbackplugin`
+- `1779882164_forgereadbackplugin`
+- `1780018806_forgereadbackplugin`
+
+Recorded evidence refs used the verified live proposal IDs from proposal group
+`1780546403`, each capability's matching validation artifact, shared metadata
+receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`.
+
+Evidence dry-run fingerprints:
+
+- `1779800086_forgereadbackplugin`:
+  `2951673dbdba2b5ef3c55bb241019e2963dcfb14f694ed07e75c4085a425f627`
+- `1779801575_forgereadbackplugin`:
+  `9001e3e78d3888a9692c97be798c2d8dc7b1e170a592a9b73d4c91478edf1a72`
+- `1779809961_forgereadbackplugin`:
+  `903698ab5775630e1586a6ea92cc59bd42acf2b957cd9399e6305f1ea9541928`
+- `1779882164_forgereadbackplugin`:
+  `629462e236962c62cc5445693fb136faae50cbae74709e1d8cfc2b244700f432`
+- `1780018806_forgereadbackplugin`:
+  `ac34405f6f42c93a8538afa2e7a68041d1eadb63fbd2864e958123f3c51042cb`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1779800086_forgereadbackplugin`:
+  `1ca82d3a446d1ef147baa411d7f9be6cade9dfde43a2ae5ae2d4fdc9f1006b2a`,
+  `plugin_proposal_review_1781857855_384477536578_920400`
+- `1779801575_forgereadbackplugin`:
+  `96cda06861cca484b137b90e1538051f181cf90a798fa293e3223f5bf4ff7d34`,
+  `plugin_proposal_review_1781858162_390f7e48e8f3_582800`
+- `1779809961_forgereadbackplugin`:
+  `3248d1f3ba421ef159af9403350001b58ec57d85e38171f68dcf350490f8bac4`,
+  `plugin_proposal_review_1781858459_2b35e3df0308_372600`
+- `1779882164_forgereadbackplugin`:
+  `782903c926074cd7c314e827c75a3be867f67ed49b998bc00f0a136f101eb943`,
+  `plugin_proposal_review_1781858767_9623e11b2d4a_717800`
+- `1780018806_forgereadbackplugin`:
+  `a38dea5dffb961a261c66c9ace07c991533d34afa51aea282925192a0886ac9a`,
+  `plugin_proposal_review_1781859093_d65b7306047e_294200`
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1175`,
+  `evidence_ref_required_count=1175`.
+- The next surfaced pack is still `legacy.generated.forgereadbackplugin`,
+  now with 39 current evidence-ref candidates.
+- Proposal-review apply-readiness:
+  `proposal_review_missing_count=1175`,
+  `blocked_before_review_capability_count=1175`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=1119`, and fingerprint
+  `d1118a265f8895f1265073446a711de8e48e0d7b10815f7f192ffa14c02a9594`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,175
+  capabilities remaining, and the same 1,175 are blocked before proposal
+  review. The next action is to process the next bounded chunk from
+  `legacy.generated.forgereadbackplugin` through the same one-capability-at-a-time
+  dry-run and apply sequence.
+
+### 2026-06-19 - Stage 17 records forgereadback proposal-evidence and review chunk 37
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the next five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. This is a bounded chunk only: it does not close Stage 17, does not
+apply promotion, does not enable or execute capabilities, and does not claim
+independent verification of the operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1780025723_forgereadbackplugin`
+- `1780025769_forgereadbackplugin`
+- `1780025780_forgereadbackplugin`
+- `1780025861_forgereadbackplugin`
+- `1780028567_forgereadbackplugin`
+
+Recorded evidence refs used the verified live proposal IDs from proposal groups
+`1780546403` and `1780546439`, each capability's matching validation artifact,
+shared metadata receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`.
+
+Evidence dry-run fingerprints:
+
+- `1780025723_forgereadbackplugin`:
+  `e99bef5cf6a37624dadc8bab2f05e4464a0895167482c4574f8c2806d6e0515f`
+- `1780025769_forgereadbackplugin`:
+  `f42358f5c913c05642ea66f45a53965f5f28843f4c98f1a411f2dad897364bed`
+- `1780025780_forgereadbackplugin`:
+  `6ba2d2e1d4ee306d847a5858d60c4c9e39559b08b715c985ded7e91a8e26c994`
+- `1780025861_forgereadbackplugin`:
+  `254c85d338294755fdc250dfb434b78c7223289864036098c5fcdcd3930e8ae5`
+- `1780028567_forgereadbackplugin`:
+  `e399fd4bfaf280552e1c70ad7b41259f21181255600a305acd6c65d8cbbd0782`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1780025723_forgereadbackplugin`:
+  `da52b2cf47481ff30d294cb52f6bad97f323dda13d81c6cf3c7ed5aa27b4edc7`,
+  `plugin_proposal_review_1781859964_5186f7001fa3_838500`
+- `1780025769_forgereadbackplugin`:
+  `df6a94295f31eaa4bc2a3b07dd6753e1481016562c0a5dbdd4b5c73837020a8c`,
+  `plugin_proposal_review_1781860248_1b468140d8f0_691600`
+- `1780025780_forgereadbackplugin`:
+  `51666a141e6976ee8de4d29f41dfdd54ebeba53c200a17776495397f1c285518`,
+  `plugin_proposal_review_1781860553_1c1a80499003_500600`
+- `1780025861_forgereadbackplugin`:
+  `10ea317815613c32b0bed3e06583e7f07ffd2113114433ce68c8198dcea7188d`,
+  `plugin_proposal_review_1781860853_479ca652118b_669500`
+- `1780028567_forgereadbackplugin`:
+  `989e89b6fa4fef631dc6fe7fb3c03130fb3a4c008c29b13a08573b539e58a59e`,
+  `plugin_proposal_review_1781861129_5b850c357678_244700`
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1170`,
+  `evidence_ref_required_count=1170`.
+- The next surfaced pack is still `legacy.generated.forgereadbackplugin`,
+  now with 34 current evidence-ref candidates.
+- Proposal-review apply-readiness:
+  `proposal_review_missing_count=1170`,
+  `blocked_before_review_capability_count=1170`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=1124`, and fingerprint
+  `37d0925099240ecead2e9fc15414ce45e27f9b71905d70b4e8ea50d65ecce654`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,170
+  capabilities remaining, and the same 1,170 are blocked before proposal
+  review. The next action is to process the next bounded chunk from
+  `legacy.generated.forgereadbackplugin` through the same one-capability-at-a-time
+  dry-run and apply sequence.
+
+### 2026-06-19 - Stage 17 records forgereadback proposal-evidence and review chunk 38
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the next five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. This is a bounded chunk only: it does not close Stage 17, does not
+apply promotion, does not enable or execute capabilities, and does not claim
+independent verification of the operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1780029242_forgereadbackplugin`
+- `1780029608_forgereadbackplugin`
+- `1780031861_forgereadbackplugin`
+- `1780033110_forgereadbackplugin`
+- `1780041476_forgereadbackplugin`
+
+Recorded evidence refs used the verified live proposal IDs from proposal group
+`1780546439`, each capability's matching validation artifact, shared metadata
+receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`.
+
+Evidence dry-run fingerprints:
+
+- `1780029242_forgereadbackplugin`:
+  `a1a7be854b5d66aad65552aa34d29afcb5ac439ff04d93353bd0a949323b4296`
+- `1780029608_forgereadbackplugin`:
+  `e1e24046a7d2a96a02c3e348c52ab56b61eeeb5bd51d05644b3457672b881725`
+- `1780031861_forgereadbackplugin`:
+  `28ae2de80d08adaf438648581f8a9f73cf3eee10dbc00a774dc99bef40c13175`
+- `1780033110_forgereadbackplugin`:
+  `4af6475454490c4a989047b2d5da2c4262907a8f466f65521daa5c9037537e6c`
+- `1780041476_forgereadbackplugin`:
+  `4ce752bfcf470eb2016526524672d7e0b33d0a2311abf2901b13b91a70ac04b2`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1780029242_forgereadbackplugin`:
+  `5b4e05d51bf2aee7ddd5bfcb7ea7bc69eb58bdc70a1105935891fcc950771831`,
+  `plugin_proposal_review_1781861973_104e32a3c7f3_041700`
+- `1780029608_forgereadbackplugin`:
+  `4381f14f3237c046893d69704c9b71d6d4ca40fd34fd4e387355851748988198`,
+  `plugin_proposal_review_1781862249_554791bd8e59_401600`
+- `1780031861_forgereadbackplugin`:
+  `1daed0d95b4b4591d1e8fd49a8b19c289aa97a8ecf15dcbb7bded103cf619fa7`,
+  `plugin_proposal_review_1781862528_cf991d36d4ac_904400`
+- `1780033110_forgereadbackplugin`:
+  `33b025aee7093c4b85b9f8508ef758f57120339d573f8bf3f7a0ec5b19b10701`,
+  `plugin_proposal_review_1781862804_93492af1ff8f_622900`
+- `1780041476_forgereadbackplugin`:
+  `3f567e96882a8739a0d7c0498870fabcc2a24451f2e5e217cb445c06faa9dde5`,
+  `plugin_proposal_review_1781863083_344ab0eb80e8_556900`
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1165`,
+  `evidence_ref_required_count=1165`.
+- The next surfaced pack is still `legacy.generated.forgereadbackplugin`,
+  now with 29 current evidence-ref candidates.
+- Proposal-review apply-readiness:
+  `proposal_review_missing_count=1165`,
+  `blocked_before_review_capability_count=1165`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=1129`, and fingerprint
+  `eb74342dc84eabbc7dfd0fdfe7dcf1f375019444f8512fc385ca905b1e1596d3`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,165
+  capabilities remaining, and the same 1,165 are blocked before proposal
+  review. The next action is to process the next bounded chunk from
+  `legacy.generated.forgereadbackplugin` through the same one-capability-at-a-time
+  dry-run and apply sequence.
+
+### 2026-06-19 - Stage 17 records forgereadback proposal-evidence and review chunk 39
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the next five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. This is a bounded chunk only: it does not close Stage 17, does not
+apply promotion, does not enable or execute capabilities, and does not claim
+independent verification of the operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1780045689_forgereadbackplugin`
+- `1780046796_forgereadbackplugin`
+- `1780048431_forgereadbackplugin`
+- `1780051620_forgereadbackplugin`
+- `1780065115_forgereadbackplugin`
+
+Recorded evidence refs used the verified live proposal IDs from proposal group
+`1780546439`, each capability's matching validation artifact, shared metadata
+receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`.
+
+Evidence dry-run fingerprints:
+
+- `1780045689_forgereadbackplugin`:
+  `bcc79b024d8a633a8c1b314aa08887ffdc83fa0c4e4cfeb2f0308847b6606382`
+- `1780046796_forgereadbackplugin`:
+  `bef42091244faeb94b35e7b16c3be37b9e7cb9b89cf6413848450eb07974178c`
+- `1780048431_forgereadbackplugin`:
+  `f41710e28349bfbdcf7c5f5535f336ed535e12bcb45ed2d2168a8048d8c8b0b9`
+- `1780051620_forgereadbackplugin`:
+  `75dc5899e61b5cf34cb20d1d3ffccab16ea3a362068f6c8c3710d4699f281a8a`
+- `1780065115_forgereadbackplugin`:
+  `cf6aea632c51f4fb259228ee22b42698e672c8f7308a6e7b8ecd89415d03ddee`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1780045689_forgereadbackplugin`:
+  `d21e89b4fc64b059e2f57b300d739d9f1b8ac491772954f6ef1014a72ce580e1`,
+  `plugin_proposal_review_1781863866_ff0ac0968496_219700`
+- `1780046796_forgereadbackplugin`:
+  `67b395f0781366c009cdd788a418007a4074462d0a2d5e4843008eba4f3fd389`,
+  `plugin_proposal_review_1781864144_c2e202781389_882900`
+- `1780048431_forgereadbackplugin`:
+  `51e87eba01e181416ffaff13e18fb3a8c248fd47a708aed6d57ef590746b654d`,
+  `plugin_proposal_review_1781864443_38eb296c9f70_162200`
+- `1780051620_forgereadbackplugin`:
+  `8e1899017cec24728495ca44781c14b6b181f51966a08a329bfb5115278debc2`,
+  `plugin_proposal_review_1781864774_1cf407dbfe9d_042400`
+- `1780065115_forgereadbackplugin`:
+  `3183cd30ae992e2e959a0e00361c2cf7e92e6368acf0e2efcf9d0d5063cf6de7`,
+  `plugin_proposal_review_1781865069_17425b25b826_948300`
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1160`,
+  `evidence_ref_required_count=1160`.
+- The next surfaced pack is still `legacy.generated.forgereadbackplugin`,
+  now with 24 current evidence-ref candidates.
+- Proposal-review apply-readiness:
+  `proposal_review_missing_count=1160`,
+  `blocked_before_review_capability_count=1160`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=1134`, and fingerprint
+  `53e53fb871b1ce0ba56ebd1255762f9b7d03385fdebcc02ea9ae9e35939aba5a`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,160
+  capabilities remaining, and the same 1,160 are blocked before proposal
+  review. The next action is to process the next bounded chunk from
+  `legacy.generated.forgereadbackplugin` through the same one-capability-at-a-time
+  dry-run and apply sequence.
+
+### 2026-06-19 - Stage 17 records forgereadback proposal-evidence and review chunk 40
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass started as the next five-capability
+`legacy.generated.forgereadbackplugin` chunk, but the long-running route process
+was interrupted after recording evidence for only one capability. The recovery
+path was narrowed to the exact partially recorded capability and completed its
+proposal review through the governed capability-library proposal-review apply
+route. This is a bounded recovery chunk only: it does not close Stage 17, does
+not apply promotion, does not enable or execute capabilities, and does not
+claim independent verification of the operator-supplied evidence refs.
+
+Capability recorded in this chunk:
+
+- `1780101891_forgereadbackplugin`
+
+Persisted evidence refs for this capability point to proposal
+`plugin_proposal_1780546439_1780101891-forgereadbackplugin`, its matching
+validation artifact, shared metadata receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`.
+The evidence intake dry-run fingerprint was not recovered from stdout because
+the original five-item writer was stopped before flushing its progress output;
+the registry readback confirms the four evidence refs were recorded and no
+capability status or enabled state change was made by evidence intake.
+
+Proposal-review dry-run fingerprint and apply receipt:
+
+- `1780101891_forgereadbackplugin`:
+  `8f0618c19cc6546a57681dc317d377e42731c6cb5fbc45762dff5a5bcd0df0f1`,
+  `plugin_proposal_review_1781866372_6f47da803fc9_609600`
+
+Live readbacks after this recovery chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1159`,
+  `evidence_ref_required_count=1159`.
+- The next surfaced pack is still `legacy.generated.forgereadbackplugin`,
+  now with 23 current evidence-ref candidates.
+- Proposal-review apply-readiness:
+  `status=blocked_on_operator_evidence_refs`,
+  `proposal_review_missing_count=1159`,
+  `blocked_before_review_capability_count=1159`,
+  `reviewable_capability_count=0`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=1135`, and fingerprint
+  `71906126c20ca605bf86e0266c18f83d17ad79aec351e5f524a5e5818addeee9`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,159
+  capabilities remaining, and the same 1,159 are blocked before proposal
+  review. The next action is to process the next bounded chunk from
+  `legacy.generated.forgereadbackplugin` through the same one-capability-at-a-time
+  dry-run and apply sequence. Avoid running concurrent API readbacks while a
+  Stage 17 writer is active; the route can collide with the registry atomic
+  write path under this large generated catalog.
+
+### 2026-06-19 - Stage 17 records forgereadback proposal-evidence and review chunk 41
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the next five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. The run used a single unbuffered writer and did not run concurrent
+API readbacks while the writer was active. This is a bounded chunk only: it does
+not close Stage 17, does not apply promotion, does not enable or execute
+capabilities, and does not claim independent verification of the
+operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1780105269_forgereadbackplugin`
+- `1780147270_forgereadbackplugin`
+- `1780148197_forgereadbackplugin`
+- `1780148298_forgereadbackplugin`
+- `1780149095_forgereadbackplugin`
+
+Recorded evidence refs used the verified live proposal IDs from proposal group
+`1780546439`, each capability's matching validation artifact, shared metadata
+receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`.
+
+Evidence dry-run fingerprints:
+
+- `1780105269_forgereadbackplugin`:
+  `98a98b51ecd70d2f04355c006d0b326f46bce56e4f1f7958304ada4b61ddbeb7`
+- `1780147270_forgereadbackplugin`:
+  `f8e4d5d5f70c418a5a2ea92d18cc31769c69f27b95a7b92774b4955140d00fda`
+- `1780148197_forgereadbackplugin`:
+  `23341860b5177ca19b55b1cf86b6313800e2a33d777bdd48f1c83242fadf52de`
+- `1780148298_forgereadbackplugin`:
+  `585606f9557b614b4ee240eb108bb69e2b00fd0a77f94412cd147c66fd98b2af`
+- `1780149095_forgereadbackplugin`:
+  `fdcaaaa05fc136567a3ef101a0708fc94e19527f31fd3f8dea26fb528254f8e7`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1780105269_forgereadbackplugin`:
+  `1f2f0dd10c254967b915f92d72a929858d99e37d0b24600cadbab9b2da0742e0`,
+  `plugin_proposal_review_1781867339_37f44b85d6aa_674100`
+- `1780147270_forgereadbackplugin`:
+  `7d2b41c0e4040f72a33cd4c870603c2cd5c8f61de97c05895f6a88535eddf7c9`,
+  `plugin_proposal_review_1781867655_326ff1a436c5_821600`
+- `1780148197_forgereadbackplugin`:
+  `74ecac5e6b13cae72bae5a194d90919ee37f4989cbb85f674480c6df9dcf02bd`,
+  `plugin_proposal_review_1781867980_356086533cc9_199200`
+- `1780148298_forgereadbackplugin`:
+  `38340aac497576559e9f72a960c2c212d132f31f7815b01203f2d8df5139a8a4`,
+  `plugin_proposal_review_1781868309_659afc7cb4ea_205800`
+- `1780149095_forgereadbackplugin`:
+  `30580cb655b5a598469ad2815f05b6d43e5ada908c28f26d88ac740d8ba8d456`,
+  `plugin_proposal_review_1781868693_fd0cc701d72e_620400`
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1154`,
+  `evidence_ref_required_count=1154`.
+- The next surfaced pack is still `legacy.generated.forgereadbackplugin`,
+  now with 18 current evidence-ref candidates.
+- Proposal-review apply-readiness:
+  `status=blocked_on_operator_evidence_refs`,
+  `proposal_review_missing_count=1154`,
+  `blocked_before_review_capability_count=1154`,
+  `reviewable_capability_count=0`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=1140`, and fingerprint
+  `2f35fec367fb9393fdfdd4224b023f499f136e79e0ac1471d9930aecf1039e86`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,154
+  capabilities remaining, and the same 1,154 are blocked before proposal
+  review. The next action is to process the next bounded chunk from
+  `legacy.generated.forgereadbackplugin` through the same one-capability-at-a-time
+  dry-run and apply sequence, keeping the API route writer single-threaded.
+
+### 2026-06-19 - Stage 17 records forgereadback proposal-evidence and review chunk 42
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the next five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. The run used a single unbuffered writer and did not run concurrent
+API readbacks while the writer was active. This is a bounded chunk only: it does
+not close Stage 17, does not apply promotion, does not enable or execute
+capabilities, and does not claim independent verification of the
+operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1780149390_forgereadbackplugin`
+- `1780152472_forgereadbackplugin`
+- `1780153758_forgereadbackplugin`
+- `1780155408_forgereadbackplugin`
+- `1780155530_forgereadbackplugin`
+
+Recorded evidence refs used the verified live proposal IDs from proposal group
+`1780546439`, each capability's matching validation artifact, shared metadata
+receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`.
+
+Evidence dry-run fingerprints:
+
+- `1780149390_forgereadbackplugin`:
+  `92b89e8e844025c8de0a2f85240362cc7ccf29c9a350865824017aad7811a5e2`
+- `1780152472_forgereadbackplugin`:
+  `1430c7f992974329b28a92951e61f2acf0de22cc6d79c094b22c37a173e314fe`
+- `1780153758_forgereadbackplugin`:
+  `4282cfc91dab55b55fcbf4171b1f0d1906bcb2254bd2d846a5ba1c0f386f423e`
+- `1780155408_forgereadbackplugin`:
+  `c903f2ec6eb19df671b5a0d5035746b07848fdcff150316e2263e8655b35606f`
+- `1780155530_forgereadbackplugin`:
+  `ee71ca60fee136b12ccc297868779ca684261168344cb7ff4473f321c0af397f`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1780149390_forgereadbackplugin`:
+  `4d1613a6ef098fac2b64d3feeb1b9a7d1fd8b4894b643cbd971bd9875f5f052c`,
+  `plugin_proposal_review_1781869699_303b85c11f3b_567200`
+- `1780152472_forgereadbackplugin`:
+  `421d7bf9d960ca69fbb1e3db6cca5a1dcfe8c630cad19181821f93d2f27f2922`,
+  `plugin_proposal_review_1781870010_6930c5095b3e_557300`
+- `1780153758_forgereadbackplugin`:
+  `289c0696e9f0855f134c4d0c7ccd749f9cb746aa8d35c14436dfcbc7ddd66080`,
+  `plugin_proposal_review_1781870335_b1c4ed5fd1e1_796600`
+- `1780155408_forgereadbackplugin`:
+  `e9b52d1aec3659f28a9e464dfc928959a38b3b554fb33eab805edc477b13158c`,
+  `plugin_proposal_review_1781870642_311d7028a309_649900`
+- `1780155530_forgereadbackplugin`:
+  `cf09f3df4ad1832ecac8779da9490b59a52f2dd2a99bccd0b094cbb2351dc66b`,
+  `plugin_proposal_review_1781870988_831edd14533a_252500`
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1149`,
+  `evidence_ref_required_count=1149`.
+- The next surfaced pack is still `legacy.generated.forgereadbackplugin`,
+  now with 13 current evidence-ref candidates.
+- Proposal-review apply-readiness:
+  `status=blocked_on_operator_evidence_refs`,
+  `proposal_review_missing_count=1149`,
+  `blocked_before_review_capability_count=1149`,
+  `reviewable_capability_count=0`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=1145`, and fingerprint
+  `1f3366e02689e4362d036272521323d3cde76d0fbffeadffe99405f4d43f3cae`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,149
+  capabilities remaining, and the same 1,149 are blocked before proposal
+  review. The next action is to process the next bounded chunk from
+  `legacy.generated.forgereadbackplugin` through the same one-capability-at-a-time
+  dry-run and apply sequence, keeping the API route writer single-threaded.
+
+### 2026-06-19 - Stage 17 records forgereadback proposal-evidence and review chunk 43
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the next five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. The run used a single unbuffered writer and did not run concurrent
+API readbacks while the writer was active. This is a bounded chunk only: it does
+not close Stage 17, does not apply promotion, does not enable or execute
+capabilities, and does not claim independent verification of the
+operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1780156133_forgereadbackplugin`
+- `1780156192_forgereadbackplugin`
+- `1780156343_forgereadbackplugin`
+- `1780157352_forgereadbackplugin`
+- `1780157872_forgereadbackplugin`
+
+Recorded evidence refs used the verified live proposal IDs from proposal groups
+`1780546439` and `1780546478`, each capability's matching validation artifact,
+shared metadata receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`.
+
+Evidence dry-run fingerprints:
+
+- `1780156133_forgereadbackplugin`:
+  `6456d940b5a51d926d5e328a1262128560b2e519b2f0b83784cc396eeb95fab4`
+- `1780156192_forgereadbackplugin`:
+  `cdcfbc859caa874a431237107318089c05580534cf721488bfaddbd59e9f8e05`
+- `1780156343_forgereadbackplugin`:
+  `6be1627055cb263a4711b7c4eac47c9ee9b5ea4985f322f4421b207fc0ff4f87`
+- `1780157352_forgereadbackplugin`:
+  `e34a3566b3de5ccb9c447e61d2b51a2e61f976890643f6ba0bb1b78b50d91d87`
+- `1780157872_forgereadbackplugin`:
+  `189efd60f5f41393240c83608cfe748e26f1f14d2f7a39006e1a27caa90d7e8c`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1780156133_forgereadbackplugin`:
+  `481a10b0f36afdc1a6709df70de56dfc6a2a50105e85599d2e8d56bd3b3814ef`,
+  `plugin_proposal_review_1781871955_e04379af59f5_611400`
+- `1780156192_forgereadbackplugin`:
+  `8708fd5265ea6b0734c48a3e2b459787f58fd7bfabcdea5e713146341fbdca30`,
+  `plugin_proposal_review_1781872279_51dbc0193cb9_257900`
+- `1780156343_forgereadbackplugin`:
+  `7b597b8e3bb7a95b4df0047438480bb0f2efdbc5cabc2f240d52ca5442aecd33`,
+  `plugin_proposal_review_1781872603_3216bc01ba76_235400`
+- `1780157352_forgereadbackplugin`:
+  `20597e2b5267ea237c8e22b8109473533bf4a14da5af6c625c39ab4f4ee4cb5b`,
+  `plugin_proposal_review_1781872911_1811b5523065_290400`
+- `1780157872_forgereadbackplugin`:
+  `667747e114abd8337d59679df81d1ca49bf9311bba0f7e21ad6f78144e2b1a4f`,
+  `plugin_proposal_review_1781873224_809b0d2750d6_265700`
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1144`,
+  `evidence_ref_required_count=1144`.
+- The next surfaced pack is still `legacy.generated.forgereadbackplugin`,
+  now with 8 current evidence-ref candidates.
+- Proposal-review apply-readiness:
+  `status=blocked_on_operator_evidence_refs`,
+  `proposal_review_missing_count=1144`,
+  `blocked_before_review_capability_count=1144`,
+  `reviewable_capability_count=0`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=1150`, and fingerprint
+  `568d58b64d836961e276b1b1a5a4fc41e094e526a4e334711452902f0aaf4f98`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,144
+  capabilities remaining, and the same 1,144 are blocked before proposal
+  review. The next action is to process the next bounded chunk from
+  `legacy.generated.forgereadbackplugin` through the same one-capability-at-a-time
+  dry-run and apply sequence, keeping the API route writer single-threaded.
+
+### 2026-06-19 - Stage 17 records forgereadback proposal-evidence and review chunk 44
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the next five current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. The run used a single unbuffered writer and did not run concurrent
+API readbacks while the writer was active. This is a bounded chunk only: it does
+not close Stage 17, does not apply promotion, does not enable or execute
+capabilities, and does not claim independent verification of the
+operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1780158416_forgereadbackplugin`
+- `1780158517_forgereadbackplugin`
+- `1780184439_forgereadbackplugin`
+- `1780446264_forgereadbackplugin`
+- `1780460928_forgereadbackplugin`
+
+Recorded evidence refs used the verified live proposal IDs from proposal group
+`1780546478`, each capability's matching validation artifact, shared metadata
+receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`.
+
+Evidence dry-run fingerprints:
+
+- `1780158416_forgereadbackplugin`:
+  `478ae64b9fdeb0e1481a3dda497866f468d502a1b74637e37bb929a26fcf6f67`
+- `1780158517_forgereadbackplugin`:
+  `b9ca665157889472da205fac65357d0e69512d52d50a11db1b5577ad695793df`
+- `1780184439_forgereadbackplugin`:
+  `cba13902094df4c9fc58b95643bacfe49ac06e2161c83c1f490b7bf0abbef037`
+- `1780446264_forgereadbackplugin`:
+  `4f00184dcf23a03286921294d635152eb17d1d1cf623fb4127ff1e8da11bf048`
+- `1780460928_forgereadbackplugin`:
+  `e38d00e2c585d74131db22a35abb0475730b612d1038823e512c92a8478ce51d`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1780158416_forgereadbackplugin`:
+  `c2521c0694adefe8ed848dafec5e3991e845a300e017a47d609b8906e4e60382`,
+  `plugin_proposal_review_1781874182_32bee90e5463_971900`
+- `1780158517_forgereadbackplugin`:
+  `559eb8506fc159cf4ed4c3e00c328601a8226c64fb32a3213ad6aa0eadd55a7d`,
+  `plugin_proposal_review_1781874502_062d4c3dcf10_549100`
+- `1780184439_forgereadbackplugin`:
+  `c8353bbd935c4d2b705bde77081c076e4a21d22e2d49d6c1ea72dab4438e4589`,
+  `plugin_proposal_review_1781874826_be4166502782_033100`
+- `1780446264_forgereadbackplugin`:
+  `eb592ba5b4c7ceaa9cd974390a0d8e84a2ec419ded6b475183f86976dbf6b6cc`,
+  `plugin_proposal_review_1781875148_a91f17e40d66_341500`
+- `1780460928_forgereadbackplugin`:
+  `9987f681ceda1670c737ad8cf9c59261d73a9e4d8e81f88f7549e88e083ccfec`,
+  `plugin_proposal_review_1781875455_611822076b43_326700`
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=7`, `candidate_capability_count=1139`,
+  `evidence_ref_required_count=1139`.
+- The next surfaced pack is still `legacy.generated.forgereadbackplugin`,
+  now with 3 current evidence-ref candidates.
+- Proposal-review apply-readiness:
+  `status=blocked_on_operator_evidence_refs`,
+  `proposal_review_missing_count=1139`,
+  `blocked_before_review_capability_count=1139`,
+  `reviewable_capability_count=0`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=1155`, and fingerprint
+  `04bbb48b329bea38d257aa3621b44ab7c752dfb6b8d323954c03ad95ea5c1a9a`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,139
+  capabilities remaining, and the same 1,139 are blocked before proposal
+  review. The next action is to clear the final three current
+  `legacy.generated.forgereadbackplugin` candidates through the same
+  one-capability-at-a-time dry-run and apply sequence, keeping the API route
+  writer single-threaded.
+
+### 2026-06-19 - Stage 17 clears current forgereadback proposal-evidence queue chunk 45
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded the final three current
+`legacy.generated.forgereadbackplugin` operator proposal-evidence capabilities
+through the existing governed evidence intake route, then reviewed each
+now-ready proposal through the governed capability-library proposal-review
+apply route. The run used a single unbuffered writer and did not run concurrent
+API readbacks while the writer was active. This is a bounded chunk only: it does
+not close Stage 17, does not apply promotion, does not enable or execute
+capabilities, and does not claim independent verification of the
+operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1780489452_forgereadbackplugin`
+- `1780493816_forgereadbackplugin`
+- `1781577232_forgereadbackplugin`
+
+Recorded evidence refs used the verified live proposal IDs from proposal groups
+`1780546478` and `1781750423`, each capability's matching validation artifact,
+shared metadata receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereadbackplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereadbackplugin_346100.json`.
+
+Evidence dry-run fingerprints:
+
+- `1780489452_forgereadbackplugin`:
+  `155d411e322f3ac0975784ff9805f47b003edc3bdadee9a2b0b38d8273cde349`
+- `1780493816_forgereadbackplugin`:
+  `acc81914948930ac4d0b782bd81ce569a8b804704e80bbdbfd23a9d8f147ad83`
+- `1781577232_forgereadbackplugin`:
+  `8903499030dca1b6d1ec079e7680849112be9f9c0ae351705b13134443695dcc`
+
+Proposal-review dry-run fingerprints and apply batches:
+
+- `1780489452_forgereadbackplugin`:
+  `19be82ff12cc6b5a1ddc292a89167e333805ec4565842f8b2801c1514f809b3b`,
+  `plugin_proposal_review_1781877858_5bd06d4e1346_522400`
+- `1780493816_forgereadbackplugin`:
+  `9bbf3457641e1c3507c6c50eda1af5e882ccf675a22643e9fa05db633429d646`,
+  `plugin_proposal_review_1781878088_47d157f7c9f1_721500`
+- `1781577232_forgereadbackplugin`:
+  `2ad257f90d71c90aa6c0afddc2cd6b4a9729841116f9418ef25992a340686164`,
+  `plugin_proposal_review_1781878323_1cb3a04e97ec_048800`
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=6`, `candidate_capability_count=1136`,
+  `evidence_ref_required_count=1136`.
+- `legacy.generated.forgereadbackplugin` cleared from the current
+  proposal-evidence queue.
+- The next surfaced pack is `legacy.generated.forgereviewplugin`, with 213
+  current evidence-ref candidates.
+- Proposal-review apply-readiness:
+  `status=blocked_on_operator_evidence_refs`,
+  `proposal_review_missing_count=1136`,
+  `blocked_before_review_capability_count=1136`,
+  `reviewable_capability_count=0`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=40`, `planned_capability_count=1158`, and fingerprint
+  `4e7e49e9ab460987670669faaaf177fede2e2f97c23f7bd382be531508d275a4`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,136
+  capabilities remaining, and the same 1,136 are blocked before proposal
+  review. The next action is to process a bounded chunk from
+  `legacy.generated.forgereviewplugin` through the same one-capability-at-a-time
+  dry-run and apply sequence, keeping the API route writer single-threaded.
+
+### 2026-06-19 - Stage 17 records forgereview proposal-evidence and review chunk 46
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded five current `legacy.generated.forgereviewplugin` operator
+proposal-evidence capabilities through the existing governed evidence intake
+route, then reviewed each now-ready proposal through the governed
+capability-library proposal-review apply route. The run used one active writer
+at a time and did not run concurrent API mutations. This is a bounded chunk
+only: it does not close Stage 17, does not apply promotion, does not enable or
+execute capabilities, and does not claim independent verification of the
+operator-supplied evidence refs.
+
+Capabilities recorded in this chunk:
+
+- `1777311778_forgereviewplugin`
+- `1777311848_forgereviewplugin`
+- `1777312791_forgereviewplugin`
+- `1777313263_forgereviewplugin`
+- `1777313690_forgereviewplugin`
+
+Recorded evidence refs used each capability's verified live proposal artifact,
+each capability's matching validation artifact, shared metadata receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereviewplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereviewplugin_418300.json`.
+
+Proposal-review receipts and apply batches:
+
+- `1777311778_forgereviewplugin`:
+  `plugin_proposal_review_1781882230_926a8ac38bf8_020000`,
+  `capability_library_proposal_review_batch_1781882230_0dbceeb3`
+- `1777311848_forgereviewplugin`:
+  `plugin_proposal_review_1781882355_d1f86112b878_092600`,
+  `capability_library_proposal_review_batch_1781882355_bd5293ce`
+- `1777312791_forgereviewplugin`:
+  `plugin_proposal_review_1781882478_7a242c5fc19c_044800`,
+  `capability_library_proposal_review_batch_1781882478_decc5808`
+- `1777313263_forgereviewplugin`:
+  `plugin_proposal_review_1781882813_eee0d3886806_623900`,
+  `capability_library_proposal_review_batch_1781882813_cdf1af69`
+- `1777313690_forgereviewplugin`:
+  `plugin_proposal_review_1781883423_5ff548eaf0fe_986500`,
+  `capability_library_proposal_review_batch_1781883423_11b66f40`
+
+Live readbacks after this chunk:
+
+- Operator-intake checklist: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=6`, `candidate_capability_count=1131`,
+  `evidence_ref_required_count=1131`.
+- `legacy.generated.forgereviewplugin` remains the current
+  proposal-evidence queue pack, with 208 current evidence-ref candidates
+  remaining.
+- Proposal-review apply-readiness:
+  `status=blocked_on_operator_evidence_refs`,
+  `proposal_review_missing_count=1131`,
+  `blocked_before_review_capability_count=1131`,
+  `reviewable_capability_count=0`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=41`, `planned_capability_count=1163`, and fingerprint
+  `144488be8bd8f2b01297cd00e7a2ef73f227738767afa8c12087ec91746d1c83`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,131
+  capabilities remaining, and the same 1,131 are blocked before proposal
+  review. The next action is to process the next bounded chunk from
+  `legacy.generated.forgereviewplugin` through the same one-capability-at-a-time
+  dry-run and apply sequence. Because the first `forgereviewplugin` chunk was
+  slow, the next chunk should use a smaller chunk size unless route timing is
+  improved first.
+
+### 2026-06-19 - Stage 17 records forgereview proposal-evidence and review chunk 47
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded one current `legacy.generated.forgereviewplugin` operator
+proposal-evidence capability through the existing governed evidence intake
+route, then reviewed the now-ready proposal through the governed
+capability-library proposal-review apply route. The run used one active writer
+at a time and did not run concurrent API mutations. This is a bounded chunk
+only: it does not close Stage 17, does not apply promotion, does not enable or
+execute capabilities, and does not claim independent verification of the
+operator-supplied evidence refs.
+
+Capability recorded in this chunk:
+
+- `1777313818_forgereviewplugin`
+
+Recorded evidence refs used the capability's verified live proposal artifact,
+the capability's matching validation artifact, shared metadata receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereviewplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereviewplugin_418300.json`.
+
+Proposal-review dry-run fingerprint, receipt, and apply batch:
+
+- `1777313818_forgereviewplugin`:
+  `d827efd68bf114f2b890714b28a12402ce37b1684e3a3ee9a00b2aed82e2f647`,
+  `plugin_proposal_review_1781887774_5d4296c051dd_260100`,
+  `capability_library_proposal_review_batch_1781887774_5d6344c2`
+
+Live readbacks after this chunk:
+
+- Operator-intake helper readback: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=6`, `candidate_capability_count=1130`,
+  `evidence_ref_required_count=1130`.
+- `legacy.generated.forgereviewplugin` remains the current
+  proposal-evidence queue pack, with 207 current evidence-ref candidates
+  remaining.
+- Proposal-review apply-readiness:
+  `status=blocked_on_operator_evidence_refs`,
+  `proposal_review_missing_count=1130`,
+  `blocked_before_review_capability_count=1130`,
+  `reviewable_capability_count=0`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=41`, `planned_capability_count=1164`, and fingerprint
+  `318cffc329c1ce35f127430da6624e3f561b2cc83138a9558ac8c56a75553b94`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,130
+  capabilities remaining, and the same 1,130 are blocked before proposal
+  review. The next action is to process the next bounded chunk from
+  `legacy.generated.forgereviewplugin` through the same one-capability-at-a-time
+  dry-run and apply sequence. Route timing remains expensive even for a
+  one-capability chunk, so further work should preserve the single-writer guard
+  and avoid overlapping readbacks while a writer is active.
+
+### 2026-06-19 - Stage 17 records forgereview proposal-evidence and review chunk 48
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded one current `legacy.generated.forgereviewplugin` operator
+proposal-evidence capability through the existing governed evidence intake
+route, then reviewed the now-ready proposal through the governed
+capability-library proposal-review apply route. The run used one active writer
+at a time and did not run concurrent API mutations. This is a bounded chunk
+only: it does not close Stage 17, does not apply promotion, does not enable or
+execute capabilities, and does not claim independent verification of the
+operator-supplied evidence refs.
+
+Capability recorded in this chunk:
+
+- `1777314640_forgereviewplugin`
+
+Recorded evidence refs used the capability's verified live proposal artifact,
+the capability's matching validation artifact, shared metadata receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereviewplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereviewplugin_418300.json`.
+
+Proposal-review dry-run fingerprint, receipt, and apply batch:
+
+- `1777314640_forgereviewplugin`:
+  `3d8bc6aefc24722d1fed15200de4216a3ef5deaf584f422cab34aefef7bdf441`,
+  `plugin_proposal_review_1781890479_8a33dc8005a6_358200`,
+  `capability_library_proposal_review_batch_1781890479_886a7a7f`
+
+Live readbacks after this chunk:
+
+- Operator-intake helper readback: `status=ready_for_operator_evidence_refs`,
+  `candidate_pack_count=6`, `candidate_capability_count=1129`,
+  `evidence_ref_required_count=1129`.
+- `legacy.generated.forgereviewplugin` remains the current
+  proposal-evidence queue pack, with 206 current evidence-ref candidates
+  remaining.
+- Proposal-review apply-readiness:
+  `status=blocked_on_operator_evidence_refs`,
+  `proposal_review_missing_count=1129`,
+  `blocked_before_review_capability_count=1129`,
+  `reviewable_capability_count=0`,
+  `approved_proposal_review_count=1165`.
+- Explicit-promotion apply dry-run returned `status=dry_run`,
+  `planned_pack_count=41`, `planned_capability_count=1165`, and fingerprint
+  `858df2084693f885eb75113fb5057b5893621671672c72731ecf4544a63c69e7`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-evidence queue now has 1,129
+  capabilities remaining, and the same 1,129 are blocked before proposal
+  review. The next action is to process the next bounded chunk from
+  `legacy.generated.forgereviewplugin` through the same one-capability-at-a-time
+  dry-run and apply sequence. Route timing remains expensive; the next slice
+  should either keep the one-capability single-writer guard or improve the
+  projection timing before increasing chunk size.
+
+### 2026-06-19 - Stage 17 records forgereview proposal-evidence and review chunk 49
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence and capability-library proposal review.
+
+This pass recorded one current `legacy.generated.forgereviewplugin` operator
+proposal-evidence capability through the existing governed evidence intake
+route, then reviewed the now-ready proposal through the governed
+capability-library proposal-review apply route. The initial helper command
+(`python data\tmp_stage17_catalog_chunk.py legacy.generated.forgereviewplugin 1`)
+was stopped after a prolonged CPU-active run without a final JSON payload. A
+direct registry readback showed that the helper had already recorded the
+operator evidence refs, so the slice was recovered by applying only the missing
+proposal-review step for that same capability. This is a bounded recovery chunk
+only: it does not close Stage 17, does not apply promotion, does not enable or
+execute capabilities, and does not claim independent verification of the
+operator-supplied evidence refs.
+
+Capability recorded in this chunk:
+
+- `1777314654_forgereviewplugin`
+
+Recorded evidence refs used the capability's verified live proposal artifact,
+the capability's matching validation artifact, shared metadata receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereviewplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereviewplugin_418300.json`.
+
+Proposal-review dry-run fingerprint, receipt, and apply batch:
+
+- `1777314654_forgereviewplugin`:
+  `fae1ddc0e13a2fbb2cadd77ddea4302651db96d78adbaba37a470ef6dff93a46`,
+  `plugin_proposal_review_1781895099_99f2350d99f8_298400`,
+  `capability_library_proposal_review_batch_1781895099_60dc9f56`
+
+Readbacks after this chunk:
+
+- Direct registry/artifact check confirmed `1777314654_forgereviewplugin`
+  remained `status=enabled`, `enabled=true`, has 4 proposal-evidence refs,
+  records
+  `proposal_evidence_link_source=stage17_capability_library_operator_proposal_evidence_intake_apply`,
+  `proposal_evidence_operator_intake_actor=stage17.operator`,
+  `proposal_evidence_approval_claimed=false`, and
+  `proposal_evidence_writes_proposals=false`.
+- Proposal artifact
+  `data/artifacts/plugins/proposals/plugin_proposal_1780545182_1777314654-forgereviewplugin.json`
+  now has `status=approved`.
+- Proposal-review receipt
+  `data/artifacts/plugins/proposal_reviews/plugin_proposal_review_1781895099_99f2350d99f8_298400.json`
+  exists with `status=approved`, `proposal_id=plugin_proposal_1780545182_1777314654-forgereviewplugin`,
+  and governance declaring the proposal-review route, `plugins.write` scope,
+  no promotion authority, and no execution authority.
+- The targeted proposal-review apply response returned
+  `remaining_proposal_review_missing_count=1128`,
+  `remaining_reviewable_capability_count=0`,
+  `promotable_capability_count=1166`, and
+  `next_smallest_truthful_gap=stage17_capability_library_promotion_readiness`.
+- A fresh full operator-intake checklist/API readback was not captured in this
+  pass. The broad Stage 17 projection path remained CPU-active but did not
+  return in a practical window, so the recovery evidence above is intentionally
+  narrower than the prior helper JSON blocks.
+
+Validation:
+
+- `python -m pytest tests\test_api_plugins.py::test_plugins_capability_library_operator_proposal_evidence_intake_records_operator_refs_only tests\test_api_plugins.py::test_plugins_capability_library_promotion_plan_uses_existing_promotion_readiness -q`
+  passed.
+- Direct registry/artifact validation confirmed the recorded evidence refs,
+  proposal approval, and proposal-review receipt for
+  `1777314654_forgereviewplugin`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The proposal-review missing count is now 1,128 after
+  this recovered one-capability slice. The next action is to process the next
+  bounded `legacy.generated.forgereviewplugin` capability through the same
+  one-capability evidence-and-review path or first improve the Stage 17
+  projection timing. The route timing is now a material operational risk:
+  broad helper/readback projections can remain CPU-active for many minutes
+  without output, so larger chunks should not resume until that cost is
+  reduced or instrumented.
+
+### 2026-06-19 - Orb Mona Lisa sandbox raster replay evidence
+
+Roadmap area: Phase 2 governed runtime spine, P5 evidence, P7 execution
+boundaries, P9 observability, and Stage 6 / Lens embodiment.
+
+The Mona Lisa sandbox operator pipeline now emits deterministic pixel evidence
+without claiming live desktop perception:
+
+- `src/francis/agent/sandbox_canvas.py` writes
+  `mona_lisa_sandbox_preview.png` beside the sandbox SVG, action log, manifest,
+  and receipt for non-dry-run sandbox executions.
+- The PNG is generated from the same recorded sandbox operator primitives that
+  produce the SVG. The evidence mode is
+  `sandbox_operator_primitive_raster_replay`.
+- The sandbox manifest, execution receipt, structured observation receipt,
+  operation output, and read-only evaluation now carry the raster preview path,
+  SHA-256 hash, PNG header/dimension evidence, and explicit flags that this is
+  not a screenshot, not live desktop capture, not an external reference-image
+  comparison, and not a visual-similarity claim.
+- Existing artifacts without the PNG remain evaluatable. Raster preview checks
+  are reported under optional evidence checks so older runs are truthful rather
+  than retroactively failed.
+- No Orb visual surface was touched. This slice does not alter the locked Orb
+  shape, size, color, glow, material, opacity, halo, shader, texture, asset
+  reference, or overlay renderer.
+
+Fresh sandbox run evidence:
+
+- Mission: `msn_20260619_181114_6998b325`
+- Plan operation: `tsk_20260619_181114_a7b4c78e`
+- Sandbox operation: `tsk_20260619_181114_e4ce3f2b`
+- Run: `run_1781892674_0fec5f26`
+- Trace: `trace_e26f02e29f9449f9`
+- Artifact directory:
+  `data/sandbox_canvas/mona_lisa/run_1781892674_0fec5f26`
+- Raster preview:
+  `data/sandbox_canvas/mona_lisa/run_1781892674_0fec5f26/mona_lisa_sandbox_preview.png`
+- Raster preview hash:
+  `cfb4a7b970451b90163e82d1a40629e4293e8f9c4ac6c965f21c8196d64aedac`
+- Evaluation record:
+  `data/sandbox_canvas/mona_lisa/run_1781892674_0fec5f26/evaluation_records/eval_run_1781892674_0fec5f26_2e5912525b95.json`
+- Review queue item:
+  `data/sandbox_canvas/mona_lisa/run_1781892674_0fec5f26/review_queue/queue_run_1781892674_0fec5f26_2e5912525b95.json`
+
+Validation:
+
+- `python -m pytest tests\test_api_operations.py::test_operations_run_mona_lisa_sandbox_canvas_from_chat_mission -q`
+  passed.
+- `python -m ruff check --no-cache src\francis\agent\sandbox_canvas.py
+  tests\test_api_operations.py` passed.
+- `python -m ruff format --check --no-cache
+  src\francis\agent\sandbox_canvas.py tests\test_api_operations.py` passed.
+- A fresh governed TestClient run produced the artifact and evaluation listed
+  above. The evaluation reported `sandbox_raster_evidence.status=evaluated`,
+  `pixel_evidence=true`, `screenshot=false`,
+  `live_desktop_capture=false`, `visual_similarity_claim=false`, and all
+  optional raster evidence checks true.
+- Manual image inspection confirmed the PNG is nonblank primitive sandbox output
+  generated from operator actions. No human recognizability proof or visual
+  similarity score is claimed.
+
+Remaining truthful gap:
+
+- This strengthens the sandbox Mona Lisa evidence chain, but it is still a
+  Francis-owned sandbox run rather than a live desktop painting run. The
+  overlay/lens path still does not provide live screenshots, OCR,
+  accessibility-tree evidence, external reference-image comparison, or
+  visual-similarity scoring. This does not close Stage 6/Lens, does not move
+  the Phase 2 posture, and does not start a new roadmap stage.
+
+### 2026-06-19 - Orb sandbox post-action observation receipts
+
+Roadmap area: Phase 2 governed runtime spine, P5 evidence, P7 execution
+boundaries, P9 observability, and Stage 6 / Lens embodiment.
+
+The Mona Lisa sandbox operator pipeline now records a linked post-action
+observation receipt after the bounded sandbox action sequence:
+
+- Fresh sandbox runs emit
+  `francis.lens.overlay.post_action_observation_receipt` in
+  `receipt.post_action_observation_receipts[]` and
+  `receipt.lens_overlay_observation.post_action_observation_receipt`.
+- The post-action receipt is linked to the structured observation receipt by
+  `parent_receipt_id`, carries the same requested/mapped/actual canvas regions,
+  references the manifest, action log, SVG artifact, and raster preview, and
+  reports source `sandbox_canvas_post_action_raster_replay`.
+- Evaluation readback now exposes `post_action_observation_receipts[]` plus
+  optional post-action checks for parent linkage, same mapped overlay region,
+  raster preview reference/hash matching, no screenshot claim, no live desktop
+  pixel claim, and no visual-similarity claim.
+- Existing sandbox artifacts without this new receipt remain evaluatable; the
+  post-action checks are optional evidence checks so older runs are not
+  retroactively converted into false failures.
+- No Orb visual surface was touched. This slice does not alter the locked Orb
+  shape, size, color, glow, material, opacity, halo, shader, texture, asset
+  reference, or overlay renderer.
+
+Fresh sandbox run evidence:
+
+- Mission: `msn_20260619_190801_042c76e8`
+- Plan operation: `tsk_20260619_190801_dd17bb99`
+- Sandbox operation: `tsk_20260619_190801_1a839f7c`
+- Run: `run_1781896081_817a667d`
+- Trace: `trace_e89bdd06f32d435e`
+- Artifact directory:
+  `data/sandbox_canvas/mona_lisa/run_1781896081_817a667d`
+- Post-action receipt:
+  `sandbox_canvas_7a30993bc5aa4495.post_action_observation.1`
+- Parent structured observation receipt:
+  `sandbox_canvas_7a30993bc5aa4495.observation.1`
+- Raster preview:
+  `data/sandbox_canvas/mona_lisa/run_1781896081_817a667d/mona_lisa_sandbox_preview.png`
+- Raster preview hash:
+  `cfb4a7b970451b90163e82d1a40629e4293e8f9c4ac6c965f21c8196d64aedac`
+- Evaluation record:
+  `data/sandbox_canvas/mona_lisa/run_1781896081_817a667d/evaluation_records/eval_run_1781896081_817a667d_9af0feeadb2b.json`
+- Review queue item:
+  `data/sandbox_canvas/mona_lisa/run_1781896081_817a667d/review_queue/queue_run_1781896081_817a667d_9af0feeadb2b.json`
+
+Validation:
+
+- `python -m pytest tests\test_api_operations.py::test_operations_run_mona_lisa_sandbox_canvas_from_chat_mission -q`
+  passed.
+- `python -m ruff check --no-cache src\francis\agent\sandbox_canvas.py
+  tests\test_api_operations.py` passed.
+- `python -m ruff format --check --no-cache
+  src\francis\agent\sandbox_canvas.py tests\test_api_operations.py` passed.
+- The fresh governed TestClient run above passed evaluation with every
+  `optional_post_action_observation_checks` item true and with governance
+  declaring `screenshots=false`, `live_desktop_pixels=false`,
+  `visual_similarity_claim=false`, no execution authority, and no mutation
+  authority.
+
+Remaining truthful gap:
+
+- This strengthens the mission -> operator action -> post-action observation ->
+  evaluation receipt chain inside the Francis-owned sandbox. It is still not a
+  live desktop painting run and still does not provide live screenshot, OCR,
+  accessibility-tree, external reference-image comparison, or visual-similarity
+  evidence. This does not close Stage 6/Lens, does not move the Phase 2 posture,
+  and does not start a new roadmap stage.
+
+### 2026-06-19 - Orb sandbox improvement proposals become evidence-aware
+
+Roadmap area: Phase 2 governed runtime spine, P5 evidence, P7 execution
+boundaries, P9 observability, and Stage 6 / Lens embodiment.
+
+The Mona Lisa sandbox improvement channel now proposes the next truthful
+improvement based on current evidence instead of repeating stale work:
+
+- When raster replay evidence or linked post-action observation receipts are
+  missing, evaluation proposes
+  `sandbox_canvas_complete_replay_evidence_chain`.
+- When raster replay evidence and linked post-action observation receipts are
+  present, evaluation proposes
+  `sandbox_canvas_plan_governed_live_observation_adapter`.
+- The previous always-on proposal
+  `sandbox_canvas_add_pixel_or_multi_run_review` is no longer emitted for fresh
+  runs that already have sandbox raster replay and post-action observation
+  receipts.
+- The live-adapter proposal remains `proposed_not_promoted` and requires a
+  bounded live target region, real adapter evidence before labeling capture as
+  live, no visual-similarity claim until a governed comparison path exists, and
+  separate approval-gated execution, observation, and promotion.
+- No Orb visual surface was touched. This slice does not alter the locked Orb
+  shape, size, color, glow, material, opacity, halo, shader, texture, asset
+  reference, or overlay renderer.
+
+Fresh sandbox run evidence:
+
+- Mission: `msn_20260619_191359_30874226`
+- Plan operation: `tsk_20260619_191359_679c60ad`
+- Sandbox operation: `tsk_20260619_191359_7dd1309e`
+- Run: `run_1781896439_9e54f1b2`
+- Trace: `trace_abf6aea5f7544b8c`
+- Artifact directory:
+  `data/sandbox_canvas/mona_lisa/run_1781896439_9e54f1b2`
+- Post-action receipt:
+  `sandbox_canvas_ca8f26802c174385.post_action_observation.1`
+- Improvement proposal:
+  `data/sandbox_canvas/mona_lisa/run_1781896439_9e54f1b2/improvement_proposals/proposal_1_fe3eac9fbb7f_ceae9080.json`
+- Review queue item:
+  `data/sandbox_canvas/mona_lisa/run_1781896439_9e54f1b2/review_queue/queue_run_1781896439_9e54f1b2_fe3eac9fbb7f.json`
+
+Validation:
+
+- `python -m pytest tests\test_api_operations.py::test_operations_run_mona_lisa_sandbox_canvas_from_chat_mission -q`
+  passed.
+- `python -m ruff check --no-cache src\francis\agent\sandbox_canvas.py
+  tests\test_api_operations.py` passed.
+- `python -m ruff format --check --no-cache
+  src\francis\agent\sandbox_canvas.py tests\test_api_operations.py` passed.
+- The fresh governed TestClient run above recorded
+  `proposal_id=sandbox_canvas_plan_governed_live_observation_adapter`,
+  `status=proposed_not_promoted`, `promotion.promoted=false`, and
+  `promotion.silent_self_promotion_allowed=false`.
+
+Remaining truthful gap:
+
+- This improves the durable proposal channel, but it does not implement the
+  live observation adapter, does not grant desktop capture authority, does not
+  execute a live desktop painting workflow, and does not promote any proposal.
+  This does not close Stage 6/Lens, does not move the Phase 2 posture, and does
+  not start a new roadmap stage.
+
+### 2026-06-19 - Stage 17 selected-scope proposal evidence/review chunk 50
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence, capability-library proposal review, and route-timing containment.
+
+This pass added a selected-capability fast path for Stage 17 evidence and
+proposal-review apply routes, then used it to process one more current
+`legacy.generated.forgereviewplugin` capability. The fast path is used only when
+the operator supplies explicit `capability_ids`; broad readbacks and broad apply
+requests still use the existing full catalog projection. Selected responses now
+declare `projection_scope=selected_capabilities` and
+`global_counts_included=false` so selected-scope remaining counts cannot be
+mistaken for global Stage 17 queue counts.
+
+The selected path avoids the expensive full runtime catalog compile/readback for
+one-capability dry-run/apply loops by deriving the candidate context from the
+registry plus generated contract metadata for the explicitly selected
+capability. It still uses the existing permission gate, readiness checks, dry-run
+fingerprints, registry evidence writer, proposal-review receipt writer, and
+governance flags. For selected evidence applies, the registry is saved without
+forcing a full catalog rebuild; the full catalog projection remains available
+through the existing broad routes when a global readback is required.
+
+Capability recorded in this chunk:
+
+- `1777315047_forgereviewplugin`
+
+Recorded evidence refs used the capability's verified live proposal artifact,
+the capability's matching validation artifact, shared metadata receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereviewplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereviewplugin_418300.json`.
+
+Dry-run fingerprints and proposal-review receipt:
+
+- Evidence intake fingerprint:
+  `20afb415ffb381f628a37e005549084295c7acf82a36a38ec99255fbae5973b9`
+- Proposal-review fingerprint:
+  `3b666ba2c19c92c1f6d4052f376c8c5b6f459b8e66d4b621ae45aa557a3cafbd`
+- Proposal-review receipt:
+  `plugin_proposal_review_1781901093_10f76df4c8ec_934900`
+
+Direct artifact readback after this chunk confirmed:
+
+- `1777315047_forgereviewplugin` remains `status=enabled`, `enabled=true`.
+- It has 4 operator proposal-evidence refs with
+  `proposal_evidence_link_source=stage17_capability_library_operator_proposal_evidence_intake_apply`,
+  `proposal_evidence_operator_intake_actor=stage17.operator`,
+  `proposal_evidence_approval_claimed=false`, and
+  `proposal_evidence_writes_proposals=false`.
+- Proposal artifact
+  `data/artifacts/plugins/proposals/plugin_proposal_1780545182_1777315047-forgereviewplugin.json`
+  now has `status=approved`.
+- Review receipt
+  `data/artifacts/plugins/proposal_reviews/plugin_proposal_review_1781901093_10f76df4c8ec_934900.json`
+  exists with `status=approved`, route
+  `/plugins/capabilities/library/proposal-review/apply`,
+  `promotion_authority=false`, and `execution_authority=false`.
+
+Validation:
+
+- `python -m py_compile src\francis\api\routes\plugins.py` passed.
+- `python -m pytest tests\test_api_plugins.py::test_plugins_capability_library_operator_proposal_evidence_intake_records_operator_refs_only tests\test_api_plugins.py::test_plugins_capability_library_promotion_plan_uses_existing_promotion_readiness -q`
+  passed.
+- Direct registry/proposal/review-receipt readback confirmed the selected
+  capability evidence refs and approved proposal-review receipt listed above.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. This pass does not promote, enable, or execute any
+  capability and does not claim full global queue counts after chunk 50; the
+  global projection path is still expensive and was intentionally not rerun for
+  the final readback. The next truthful Stage 17 action is to continue the
+  selected one-capability queue using the explicit staged candidate set, or to
+  further harden the global projection timing before attempting broad readbacks
+  or larger chunks.
+
+### 2026-06-19 - Stage 17 selected-scope proposal evidence/review chunk 51
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence, capability-library proposal review, and receipt-backed queue
+reduction.
+
+This pass continued the selected-capability Stage 17 evidence/review path
+without rerunning the expensive global capability-library projection. The
+selected route accepted the next current `legacy.generated.forgereviewplugin`
+candidate after chunk 50 and again declared
+`projection_scope=selected_capabilities` and `global_counts_included=false` in
+both evidence and review dry-run readbacks.
+
+Capability recorded in this chunk:
+
+- `1777316629_forgereviewplugin`
+
+Recorded evidence refs used the capability's verified local proposal artifact,
+the matching validation artifact, shared metadata receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereviewplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereviewplugin_418300.json`.
+
+Dry-run fingerprints and proposal-review receipt:
+
+- Evidence intake fingerprint:
+  `f113696edb9dc1317aeced4048f9b06707c2ee0fb2760fcc818725e7568290a9`
+- Proposal-review fingerprint:
+  `327e098792c20aad0ff557b9e12f8cee1837968bf361178de3e0a1b58a6275e3`
+- Proposal-review receipt:
+  `plugin_proposal_review_1781901567_8bbc0b36ccdb_141600`
+
+Direct artifact readback after this chunk confirmed:
+
+- `1777316629_forgereviewplugin` remains `status=enabled`, `enabled=true`.
+- It has 4 operator proposal-evidence refs with
+  `proposal_evidence_link_source=stage17_capability_library_operator_proposal_evidence_intake_apply`,
+  `proposal_evidence_operator_intake_actor=stage17.operator`,
+  `proposal_evidence_approval_claimed=false`, and
+  `proposal_evidence_writes_proposals=false`.
+- Proposal artifact
+  `data/artifacts/plugins/proposals/plugin_proposal_1780545182_1777316629-forgereviewplugin.json`
+  now has `status=approved`.
+- Review receipt
+  `data/artifacts/plugins/proposal_reviews/plugin_proposal_review_1781901567_8bbc0b36ccdb_141600.json`
+  exists with `status=approved`, `actor=stage17.operator`,
+  `governance.route=/plugins/capabilities/library/proposal-review/apply`,
+  `promotion_authority=false`, and `execution_authority=false`.
+
+Validation:
+
+- The selected TestClient execution completed the evidence dry-run, evidence
+  apply, proposal-review dry-run, and proposal-review apply for
+  `1777316629_forgereviewplugin`.
+- Direct registry/proposal/review-receipt readback confirmed the selected
+  capability evidence refs and approved proposal-review receipt listed above.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. This pass does not promote, enable, or execute any
+  capability and does not claim full global queue counts after chunk 51. The
+  next truthful Stage 17 action is to process the next selected
+  `legacy.generated.forgereviewplugin` capability, or to harden the global
+  projection timing before attempting broad readbacks or larger chunks.
+
+### 2026-06-19 - Stage 17 selected-scope proposal evidence/review chunk 52
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence, capability-library proposal review, and receipt-backed queue
+reduction.
+
+This pass continued the selected-capability Stage 17 evidence/review path for
+one more current `legacy.generated.forgereviewplugin` capability. The dry-run
+readbacks remained selected-scope only:
+`projection_scope=selected_capabilities` and `global_counts_included=false`.
+
+Capability recorded in this chunk:
+
+- `1777320334_forgereviewplugin`
+
+Recorded evidence refs used the capability's verified local proposal artifact,
+the matching validation artifact, shared metadata receipt
+`artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781741141_legacy-generated-forgereviewplugin.json`,
+and shared operator-review receipt
+`artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1781756256_legacy-generated-forgereviewplugin_418300.json`.
+
+Dry-run fingerprints and proposal-review receipt:
+
+- Evidence intake fingerprint:
+  `d13a181a4e2bd365c6b1d4d36374a75a85bc6d5dc99725fe31e6a036528753a1`
+- Proposal-review fingerprint:
+  `b6d0049dcd1e4c8f0918e88394ba94501a978db936b051fd511c52a8b328f782`
+- Proposal-review receipt:
+  `plugin_proposal_review_1781901669_dae58ff8075b_116900`
+
+Direct artifact readback after this chunk confirmed:
+
+- `1777320334_forgereviewplugin` remains `status=enabled`, `enabled=true`.
+- It has 4 operator proposal-evidence refs.
+- Proposal artifact
+  `data/artifacts/plugins/proposals/plugin_proposal_1780545182_1777320334-forgereviewplugin.json`
+  now has `status=approved`.
+- Review receipt
+  `data/artifacts/plugins/proposal_reviews/plugin_proposal_review_1781901669_dae58ff8075b_116900.json`
+  exists with `status=approved`,
+  `governance.route=/plugins/capabilities/library/proposal-review/apply`,
+  `promotion_authority=false`, and `execution_authority=false`.
+
+Validation:
+
+- The selected TestClient execution completed the evidence dry-run, evidence
+  apply, proposal-review dry-run, and proposal-review apply for
+  `1777320334_forgereviewplugin`.
+- Direct registry/proposal/review-receipt readback confirmed the selected
+  capability evidence refs and approved proposal-review receipt listed above.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. This pass does not promote, enable, or execute any
+  capability and does not claim full global queue counts after chunk 52. The
+  next truthful Stage 17 action is to process the next selected
+  `legacy.generated.forgereviewplugin` capability, or to harden the global
+  projection timing before attempting broad readbacks or larger chunks.
+
+### 2026-06-19 - Orb voice MCP ingress proof records public connector transport
+
+Roadmap area: Stage 17-adjacent governance/receipt readback and Orb voice bridge
+proof hardening. This is not a voice-provider change and does not alter
+ElevenLabs configuration, voice selection, Orb visuals, desktop control, or
+capability promotion.
+
+This pass added bounded `mcp_server_transport` provenance to ChatGPT voice bridge
+receipts. The MCP server adapters now stamp their active transport into voice
+ingress and MCP-proof receipts, while direct HTTP and in-process tool calls
+remain transport-unverified. The Orb/voice/overlay-lens validation proof now
+separates:
+
+- ChatGPT-source receipts
+- MCP gateway/tool-shaped receipts
+- public `streamable-http` MCP server receipts
+- usable public-MCP transcript receipts
+
+Internal MCP dispatch and stdio MCP test roundtrips remain useful validation
+evidence, but they no longer satisfy the public ChatGPT connector proof.
+
+Validation:
+
+- `python -m py_compile src\francis\chatgpt_voice_bridge.py
+  src\francis\mcp_gateway\server.py src\francis\mcp_gateway\tools.py`
+- PowerShell parser check for
+  `scripts\orb-voice-overlay-lens-validation.ps1`
+- `python -m pytest tests\test_chatgpt_voice_bridge.py
+  tests\unit\test_mcp_gateway.py tests\test_mcp_client_roundtrip.py
+  tests\test_orb_voice_overlay_lens_validation_script.py -q`
+- `python -m ruff check --no-cache ...` on touched Python/test files
+- `python -m ruff format --check --no-cache ...` on touched Python/test files
+- Visual-sensitive diff check for the locked Orb paths returned no changed
+  files.
+- Current validation readback reports
+  `status=proof_blocked_no_chatgpt_app_source_receipt`,
+  `fresh_streamable_http=0`, and
+  `public_transport_check=missing`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The next Stage 17 queue action is still the next
+  selected-scope proposal evidence/review chunk or global projection hardening.
+- The voice bridge still needs a fresh live ChatGPT app/public MCP tool call that
+  produces `mcp_server_transport=streamable-http` and a usable transcript inside
+  the freshness window before the connector proof can pass.
+
+### 2026-06-19 - Live Francis identity Orb movement proof
+
+Roadmap area: Stage 6 / Lens MVP, Orb embodiment, voice-to-substrate routing,
+overlay command receipts, and P9 observability.
+
+This pass verified and hardened the live command path where the operator can say
+or send `Francis move left/right` and the live Orb moves through the existing
+bounded overlay command system. This is not a visual redesign, not an
+ElevenLabs voice change, not a direct voice-to-animation shortcut, and not
+ungoverned desktop control.
+
+The live path now behaves as:
+
+- voice/text transcript enters `/chatgpt-voice/ingress`
+- the voice bridge recognizes the Francis identity reference as an Orb
+  embodiment movement command
+- chat forwarding is suppressed for the local position command
+- the bridge writes `data/runtime/lens-overlay/orb-position-command-request.json`
+  plus a request receipt under
+  `data/runtime/lens-overlay/orb-position-commands/`
+- the overlay runtime owns execution, applies the bounded left/right window
+  position, removes the pending command file, and writes an applied overlay
+  command receipt
+- command receipts preserve `reference_type=francis_identity`,
+  transcript hash only, redaction flags, bounded mutation scope, and explicit
+  non-authority fields
+
+Validated live evidence:
+
+- Before restart, a live POST of `Francis move right` to
+  `/chatgpt-voice/ingress` forwarded to chat, proving the running API had not
+  loaded the current command parser.
+- The API was restarted on `127.0.0.1:8000`.
+- The overlay was restarted with the same voice/runtime configuration:
+  ElevenLabs provider, Emma voice, wake listening enabled, voice LLM enabled,
+  and autonomous motion disabled.
+- After restart, a live POST with transcript `Francis move right` returned
+  `status=orb_position_command_queued`, `command=move_orb_right_side`,
+  `reference_type=francis_identity`, and
+  `chat_forward.status=suppressed_orb_position_command`.
+- The overlay consumed the right-side request and wrote
+  `data/runtime/lens-overlay/orb-position-commands/live-francis-right-after-restart-1781904675.json`
+  with `status=orb_voice_command_applied`, `applied=true`,
+  `overlay_left=1268`, `target_anchor=voice_command_right_side`, and
+  `mutation_authority_scope=runtime_overlay_position_only`.
+- The queued-file adapter was hardened so `reference_type` survives from the
+  bridge request into overlay voice status and applied overlay receipts.
+- A live POST with transcript `Francis move left` returned
+  `status=orb_position_command_queued`, `command=move_orb_left_side`,
+  `reference_type=francis_identity`, and
+  `chat_forward.status=suppressed_orb_position_command`.
+- The overlay consumed the left-side request and wrote
+  `data/runtime/lens-overlay/orb-position-commands/live-francis-left-reference-1781904853.json`
+  with `status=orb_voice_command_applied`, `applied=true`,
+  `reference_type=francis_identity`, `overlay_left=48`,
+  `target_anchor=voice_command_left_side`, `stores_transcript=false`,
+  `conversation_forwarding_suppressed=true`, `grants_execution_authority=false`,
+  and `grants_mutation_authority=false`.
+- `scripts/lens-command-palette-monitor.ps1 -Mode Probe -EnableVoiceChecks`
+  returned `status=healthy`, `overlay_status=visible`,
+  `voice_input_status=ready`, `selected_provider=ElevenLabs`,
+  `selected_voice=Emma`, `orb_position_command_ready=true`,
+  `latest_orb_position_command=move_orb_left_side`,
+  `latest_orb_position_command_status=orb_voice_command_applied`,
+  `latest_orb_position_command_applied=true`, and
+  `latest_orb_position_command_receipt_observed=true`.
+- `GET /chatgpt-voice/contract?actor=chatgpt.voice` returned `status=ready`
+  with `orb_position_command_accepts_francis_identity_reference=true`.
+
+Validation:
+
+- `python -m pytest tests\test_chatgpt_voice_bridge.py
+  tests\test_lens_overlay_window_script.py::test_lens_overlay_voice_orb_position_command_is_local_and_bounded
+  tests\test_lens_command_palette_monitor_script.py::test_lens_command_palette_monitor_probe_records_voice_health
+  tests\test_lens_command_palette_monitor_script.py::test_lens_command_palette_monitor_reports_applied_orb_voice_command
+  tests\unit\test_lens_orb_mcp_status_route.py -q` passed with `23 passed`.
+- PowerShell parser checks for `scripts\lens-overlay-window.ps1` and
+  `scripts\lens-command-palette-monitor.ps1` returned `parse_ok`.
+- `git diff --check -- scripts\lens-overlay-window.ps1
+  scripts\lens-command-palette-monitor.ps1
+  src\francis\lens\command_palette_monitor.py
+  tests\test_lens_overlay_window_script.py
+  tests\test_lens_command_palette_monitor_script.py
+  tests\unit\test_lens_orb_mcp_status_route.py` reported no whitespace errors,
+  aside from the existing Git CRLF warnings for the PowerShell files.
+- Visual-sensitive diff review confirmed no `apps/chat_ui/src/lens/orbGlyph.ts`,
+  `apps/chat_ui/src/lens/*`, `apps/chat_ui/src/App.tsx`, or
+  `docs/operations/ORB_VISUAL_LOCK.md` changes. The only visually sensitive file
+  touched was `scripts/lens-overlay-window.ps1`, and the edit was limited to
+  command parsing, command-file propagation, and receipt/readback metadata.
+- The completion model parser was hardened so wrapped `Roadmap area:`
+  paragraphs are not truncated in readback.
+- `python -m pytest tests\test_completion_model.py
+  tests\test_francis_completion_model_script.py -q` passed after adding wrapped
+  roadmap-area coverage.
+- PowerShell parser check for `scripts\francis-completion-model.ps1` returned
+  `parse_ok`.
+- `scripts\francis-completion-model.ps1 -Mode Status` returned latest ledger
+  title `2026-06-19 - Live Francis identity Orb movement proof` with full
+  roadmap area `Stage 6 / Lens MVP, Orb embodiment, voice-to-substrate routing,
+  overlay command receipts, and P9 observability.`
+- After restarting the API on `127.0.0.1:8000`,
+  `GET /completion-model/status` returned the same full roadmap area through
+  the Python substrate route.
+
+Remaining truthful gap:
+
+- This proves the live API-to-overlay command path and physical Orb movement for
+  `Francis move left/right`, but it is not a recorded acoustic microphone proof.
+  A manual operator-spoken `hey Francis move left/right` test is still needed to
+  prove end-to-end local speech recognition for this command.
+- The public ChatGPT connector proof still needs a fresh live ChatGPT app/public
+  MCP tool call that produces `mcp_server_transport=streamable-http` and a
+  usable transcript inside the freshness window.
+- Stage 17 remains open. This pass does not promote, enable, or execute any
+  capability, does not claim full global queue counts, does not close Stage
+  6/Lens, and does not move the Phase 2 posture.
+
+### 2026-06-19 - Manual acoustic Orb command proof boundary
+
+Roadmap area: Stage 6 / Lens MVP, Orb embodiment, voice-to-substrate routing,
+overlay command receipts, and P9 observability.
+
+This pass added a truthful proof boundary for the specific operator expectation
+that saying `hey Francis move left/right` should move the visible Orb. It does
+not simulate a microphone event, does not fabricate an acoustic proof, does not
+change ElevenLabs configuration, and does not change the Orb visual surface.
+
+The monitor now distinguishes:
+
+- voice input is ready for an operator acoustic test
+- API-injected or bridge-file Orb movement is not acoustic proof
+- a local overlay speech-recognition command can count only when the overlay
+  voice state claims microphone recognition, the wake phrase was detected, and a
+  matching applied overlay Orb-position receipt exists
+
+The overlay command receipt path was tightened:
+
+- local speech-recognition Orb commands now stamp
+  `microphone_recognition_claimed=true`, `microphone_speech=true`,
+  `transcript_source=microphone_wake_listener` or
+  `microphone_continuous_dictation`, and a generated local command receipt ID
+- queued ChatGPT/bridge-file commands now remain explicitly non-microphone
+  origin and do not count as acoustic proof
+- `scripts/lens-command-palette-monitor.ps1` exposes
+  `voice_monitor.manual_acoustic_orb_position_proof` with redacted transcript
+  handling, proof status, required phrase, latest voice command metadata, latest
+  overlay command receipt metadata, and the next operator step
+- `GET /lens/command-palette/monitor` preserves the same proof contract through
+  the sanitized Python API readback
+
+Validation:
+
+- PowerShell parser checks for `scripts\lens-overlay-window.ps1` and
+  `scripts\lens-command-palette-monitor.ps1` returned `parse_ok`.
+- `python -m pytest
+  tests\test_lens_command_palette_monitor_script.py::test_lens_command_palette_monitor_probe_records_voice_health
+  tests\test_lens_command_palette_monitor_script.py::test_lens_command_palette_monitor_reports_applied_orb_voice_command
+  tests\test_lens_command_palette_monitor_script.py::test_lens_command_palette_monitor_reports_acoustic_orb_position_proof
+  tests\test_lens_overlay_window_script.py::test_lens_overlay_voice_orb_position_command_is_local_and_bounded
+  tests\unit\test_lens_orb_mcp_status_route.py -q` passed with `8 passed`.
+- `git diff --check -- scripts\lens-overlay-window.ps1
+  scripts\lens-command-palette-monitor.ps1
+  src\francis\lens\command_palette_monitor.py
+  tests\test_lens_overlay_window_script.py
+  tests\test_lens_command_palette_monitor_script.py
+  tests\unit\test_lens_orb_mcp_status_route.py` reported no whitespace errors,
+  aside from the existing Git CRLF warnings for the PowerShell files.
+- Live monitor readback returned `selected_provider=ElevenLabs`,
+  `selected_voice=Emma`, `voice_input_status=ready`,
+  `orb_position_command_ready=true`, and
+  `manual_acoustic_orb_position_proof.status=ready_for_operator_acoustic_test`
+  with `proof_observed=false`,
+  `microphone_signal_observed=true`, and
+  `api_injected_text_counts_as_proof=false`.
+- After restarting the live API, overlay, and command-palette monitor,
+  `GET /lens/command-palette/monitor` returned `route_status=healthy`,
+  `overlay_status=visible`, `voice_input_status=ready`,
+  `orb_position_command_ready=true`,
+  `acoustic_proof_status=ready_for_operator_acoustic_test`,
+  `acoustic_proof_observed=false`,
+  `api_injected_text_counts_as_proof=false`, and
+  `transcript_redacted=true`.
+
+Remaining truthful gap:
+
+- A real operator-spoken `hey Francis move left/right` test is still needed.
+  The system is now able to classify that proof without counting API-injected
+  text as acoustic evidence.
+- The public ChatGPT connector proof still needs a fresh live ChatGPT app/public
+  MCP tool call that produces `mcp_server_transport=streamable-http` and a
+  usable transcript inside the freshness window.
+- Stage 17 remains open. This pass does not promote, enable, or execute any
+  capability, does not close Stage 6/Lens, and does not move the Phase 2
+  posture.
+
+### 2026-06-19 - Manual acoustic Orb proof becomes an enforceable monitor gate
+
+Roadmap area: Stage 6 / Lens MVP, Orb embodiment, voice-to-substrate routing,
+overlay command receipts, and P9 observability.
+
+This pass made the manual acoustic Orb movement proof an explicit monitor gate
+instead of only a passive readback object:
+
+- `scripts/lens-command-palette-monitor.ps1` now accepts
+  `-RequireManualAcousticOrbProof`.
+- When the switch is present, the monitor adds
+  `voice_manual_acoustic_orb_position_proof` to the checks list.
+- The check passes only when
+  `voice_monitor.manual_acoustic_orb_position_proof.proof_observed=true`.
+- If the Orb can be moved through API/text but no real microphone-origin local
+  speech command has been observed, the check fails with
+  `no_fresh_acoustic_orb_position_receipt` rather than pointing at the latest
+  non-acoustic receipt.
+- The switch is propagated through `Probe`, `Run`, and `Start` monitor modes.
+
+Validation:
+
+- PowerShell parser check for `scripts\lens-command-palette-monitor.ps1`
+  returned `parse_ok`.
+- `python -m pytest
+  tests\test_lens_command_palette_monitor_script.py::test_lens_command_palette_monitor_reports_acoustic_orb_position_proof
+  tests\test_lens_command_palette_monitor_script.py::test_lens_command_palette_monitor_can_require_manual_acoustic_orb_proof -q`
+  passed with `2 passed`.
+- `python -m pytest
+  tests\test_lens_command_palette_monitor_script.py::test_lens_command_palette_monitor_probe_records_voice_health
+  tests\test_lens_command_palette_monitor_script.py::test_lens_command_palette_monitor_reports_applied_orb_voice_command
+  tests\test_lens_command_palette_monitor_script.py::test_lens_command_palette_monitor_reports_acoustic_orb_position_proof
+  tests\test_lens_command_palette_monitor_script.py::test_lens_command_palette_monitor_can_require_manual_acoustic_orb_proof
+  tests\test_lens_command_palette_monitor_script.py::test_lens_command_palette_monitor_can_require_chatgpt_mcp_proof -q`
+  passed with `5 passed`.
+- `python -m ruff check --no-cache
+  tests\test_lens_command_palette_monitor_script.py` passed.
+- `python -m ruff format --check --no-cache
+  tests\test_lens_command_palette_monitor_script.py` passed.
+- Live normal probe returned `status=healthy`, `overlay_status=visible`,
+  `voice_input_status=ready`,
+  `acoustic_proof_status=ready_for_operator_acoustic_test`, and
+  `acoustic_proof_observed=false`.
+- Live required-proof probe with `-RequireManualAcousticOrbProof` returned
+  exit code `1`, `status=anomaly`,
+  anomaly id `voice_manual_acoustic_orb_position_proof`,
+  `acoustic_proof_status=ready_for_operator_acoustic_test`,
+  `acoustic_proof_observed=false`, and evidence
+  `no_fresh_acoustic_orb_position_receipt`.
+
+Remaining truthful gap:
+
+- A real operator-spoken `hey Francis move left/right` test is still needed to
+  turn this gate green.
+- The public ChatGPT connector proof still needs a fresh live ChatGPT app/public
+  MCP tool call that produces `mcp_server_transport=streamable-http` and a
+  usable transcript inside the freshness window.
+- Stage 17 remains open. This pass does not promote, enable, or execute any
+  capability, does not close Stage 6/Lens, and does not move the Phase 2
+  posture.
+
+### 2026-06-19 - Completion model preserves Stage 17 readback across lane drift
+
+Roadmap area: Stage 17-adjacent Capability Economy, completion-model truth, and P9
+observability readback.
+
+This pass hardened the read-only completion model so Stage 17 continuations do
+not lose the capability-economy queue behind newer non-Stage-17 ledger entries.
+The Python substrate and PowerShell status script now return a separate
+`stage17_status` object alongside `latest_ledger_entry`.
+
+The new readback reports:
+
+- the latest true Stage 17 ledger entry by title or `Stage 17 / ...` roadmap
+  area
+- `status=open` when that Stage 17 remaining gap says Stage 17 remains open or
+  still needs work
+- the latest Stage 17 roadmap area and remaining truthful gap
+- explicit read-only, no repo-write, no data-write, no execution-authority, and
+  no mutation-authority flags
+
+Current status readback after this pass:
+
+- latest overall ledger entry:
+  `2026-06-19 - Manual acoustic Orb proof becomes an enforceable monitor gate`
+- latest Stage 17 ledger entry:
+  `2026-06-19 - Stage 17 selected-scope proposal evidence/review chunk 52`
+- `stage17_status.status=open`
+- next Stage 17 gap:
+  process the next selected `legacy.generated.forgereviewplugin` capability or
+  harden global projection timing before broad readbacks/larger chunks
+
+Validation:
+
+- `python -m pytest tests\test_completion_model.py
+  tests\test_francis_completion_model_script.py -q` passed with `10 passed`.
+- `python -m ruff check --no-cache src\francis\completion_model.py
+  tests\test_completion_model.py tests\test_francis_completion_model_script.py`
+  passed.
+- `python -m ruff format --check --no-cache src\francis\completion_model.py
+  tests\test_completion_model.py tests\test_francis_completion_model_script.py`
+  passed.
+- PowerShell parser check for `scripts\francis-completion-model.ps1` returned
+  `parse_ok`.
+- `scripts\francis-completion-model.ps1 -Mode Status` returned
+  `stage17_status.status=open`, read-only/no-authority flags, and latest Stage
+  17 title `2026-06-19 - Stage 17 selected-scope proposal evidence/review chunk
+  52`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. This pass does not promote, enable, or execute any
+  capability, does not apply proposal evidence, does not approve proposal
+  reviews, does not recompute full global queue counts, and does not close the
+  Stage 17 capability-economy queue.
+- The next Stage 17 action remains to process the next selected
+  `legacy.generated.forgereviewplugin` capability or harden global projection
+  timing before broad readbacks/larger chunks.
+- This completion-model hardening does not close a ledger-backed phase gate and
+  does not move the Phase 2 posture.
+
+### 2026-06-19 - Lens overlay observation coordinate-boundary readback
+
+Roadmap area: Stage 6 / Lens MVP, lens-to-overlay spatial contract, P1
+interface truthfulness, and P9 observability.
+
+This pass strengthened the existing metadata-only `/lens/mcp/observe` spatial
+contract without adding a second overlay, changing Orb visuals, or claiming
+unsupported perception.
+
+The Lens overlay observation path now reports explicit coordinate-boundary
+readback inside `mapped_overlay_region.coordinate_boundary`:
+
+- `coordinate_space`
+- `overlay_edges`
+- `requested_edges`
+- `intersection_region`
+- `within_overlay_bounds`
+- `clipped_by_overlay`
+- `outside_edges`
+- `bounds_checked`
+- an unavailable or refusal reason when the overlay coordinate model cannot be
+  checked
+
+Mapped observations still report `actual_observed_region` as
+`observed_metadata_only` and `actual_captured_region` as `not_captured`.
+Out-of-bounds requests remain blocked before the screen/session MCP readback is
+called. Missing overlay context remains blocked before any readback. The
+contract continues to report screenshots, pixels, OCR, accessibility tree, and
+visual similarity as unsupported/unknown unless a future adapter truthfully
+provides that evidence.
+
+Validation:
+
+- `.\.venv\Scripts\python.exe -m pytest tests\unit\test_lens_mcp_perception.py -q`
+  passed with `11 passed` and one existing FastAPI/TestClient deprecation
+  warning.
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache
+  src\francis\lens\mcp_perception.py
+  tests\unit\test_lens_mcp_perception.py` passed.
+- `.\.venv\Scripts\python.exe -m ruff format --check --no-cache
+  src\francis\lens\mcp_perception.py
+  tests\unit\test_lens_mcp_perception.py` passed with both files already
+  formatted.
+- `git diff --check -- src\francis\lens\mcp_perception.py
+  tests\unit\test_lens_mcp_perception.py` reported no whitespace errors.
+
+Remaining truthful gap:
+
+- The lens/overlay observation contract remains metadata-only. It does not
+  provide screenshots, pixels, OCR, accessibility tree, visual similarity,
+  live desktop capture, or an independent lens application.
+- This slice does not close Stage 6/Lens, Stage 17, or any Phase 2 gate and does
+  not move the Phase 2 posture.
+
+### 2026-06-19 - Lens overlay observation coordinate-transform readback
+
+Roadmap area: Stage 6 / Lens MVP, lens-to-overlay spatial contract, P1
+interface truthfulness, and P9 observability.
+
+This pass strengthened the existing metadata-only `/lens/mcp/observe` spatial
+contract by adding explicit coordinate-transform readback alongside the existing
+coordinate-boundary readback. It did not add a second overlay, change Orb
+visuals, create a separate lens app, or claim screenshots, pixels, OCR,
+accessibility tree, visual similarity, or live desktop capture.
+
+The Lens overlay observation path now reports
+`mapped_overlay_region.coordinate_transform` with:
+
+- source, target, and mapped coordinate spaces
+- the declared transform and whether a transform was applied
+- requested-to-mapped rectangle deltas
+- the overlay origin derived from the overlay coordinate model
+- the requested region expressed in overlay-local logical pixels
+- the intersected/clipped region expressed in overlay-local logical pixels
+- bounds-checked, within-bounds, and clipped flags
+- transform confidence and confidence basis scoped only to the declared metadata
+  coordinate model, not visual perception
+- limitations for metadata-only transform readback, unsupported visual
+  registration, and unavailable capture adapter
+
+Missing overlay context, missing numeric bounds, missing coordinate models, and
+canvas-space requests return unavailable transform readback. Out-of-bounds
+desktop requests still map the rectangle metadata, report the clipped
+intersection, and then block before the screen/session MCP readback is called.
+Mapped observations still report `actual_observed_region` as
+`observed_metadata_only` and `actual_captured_region` as `not_captured`.
+
+Validation:
+
+- `.\.venv\Scripts\python.exe -m pytest tests\unit\test_lens_mcp_perception.py -q`
+  passed with `12 passed` and one existing FastAPI/TestClient deprecation
+  warning.
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache
+  src\francis\lens\mcp_perception.py
+  tests\unit\test_lens_mcp_perception.py` passed.
+- `.\.venv\Scripts\python.exe -m ruff format --check --no-cache
+  src\francis\lens\mcp_perception.py
+  tests\unit\test_lens_mcp_perception.py` passed with both files already
+  formatted.
+- `git diff --check -- src\francis\lens\mcp_perception.py
+  tests\unit\test_lens_mcp_perception.py` reported no whitespace errors.
+
+Remaining truthful gap:
+
+- The lens/overlay observation contract remains metadata-only. It does not
+  provide screenshots, pixels, OCR, accessibility tree, visual similarity,
+  live desktop capture, visual registration, or an independent lens application.
+- This slice does not close Stage 6/Lens, Stage 17, or any Phase 2 gate and does
+  not move the Phase 2 posture.
+
+### 2026-06-19 - Completion model loop guard drift protections
+
+Roadmap area: Stage 17-adjacent Capability Economy, completion-model truth, P9
+observability readback, and build-loop guardrails.
+
+This pass hardened the read-only completion model loop guard so future
+continuation runs keep the Stage 17 lane and local worktree constraints visible
+inside the same status payload:
+
+- `continue_loop_guard.checklist` now includes
+  `stage17_lane_gap_preserved`, which reports `ready` when the model has found
+  an open Stage 17 ledger gap and names the preserved Stage 17 ledger entry as
+  evidence.
+- The checklist now includes enforced dirty-work and material-ledger-update
+  guards, making the existing operator rule explicit in both the Python API
+  readback and the PowerShell status script.
+- `docs/operations/COMPLETION_MODEL.md` now documents those guards, and the
+  focused Python and PowerShell completion-model tests assert the new checklist
+  items.
+
+Validation:
+
+- `python -m pytest tests\test_completion_model.py
+  tests\test_francis_completion_model_script.py -q` passed with `10 passed`.
+- `python -m ruff check --no-cache src\francis\completion_model.py
+  tests\test_completion_model.py tests\test_francis_completion_model_script.py`
+  passed.
+- `python -m ruff format --check --no-cache src\francis\completion_model.py
+  tests\test_completion_model.py tests\test_francis_completion_model_script.py`
+  passed with all checked files already formatted.
+- PowerShell parser check for `scripts\francis-completion-model.ps1` returned
+  `parse_ok`.
+- `scripts\francis-completion-model.ps1 -Mode Status` returned `status=ready`,
+  `stage17_lane_gap_preserved.status=ready`,
+  `dirty_worktree_preservation_guard.status=enforced`,
+  `material_ledger_update_guard.status=enforced`,
+  `next_continue_decision.selected_gap_source=stage17_latest_ledger_entry`,
+  and the read-only/no-write/no-authority flags remained false.
+- `git diff --check -- src\francis\completion_model.py
+  scripts\francis-completion-model.ps1 tests\test_completion_model.py
+  tests\test_francis_completion_model_script.py
+  docs\operations\COMPLETION_MODEL.md` passed, with only the existing Git CRLF
+  warning for the PowerShell script.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. This pass does not promote, enable, execute, or apply
+  any capability, does not approve proposal reviews, does not recompute full
+  global queue counts, and does not close the Stage 17 capability-economy queue.
+- The next Stage 17 action remains to process the next selected
+  `legacy.generated.forgereviewplugin` capability or harden global projection
+  timing before broad readbacks or larger chunks.
+- This completion-model hardening does not close a ledger-backed phase gate and
+  does not move the Phase 2 posture.
+
+### 2026-06-19 - Completion model readback/apply boundary guard
+
+Roadmap area: Stage 17-adjacent Capability Economy, completion-model truth, P9
+observability readback, and build-loop guardrails.
+
+This pass hardened the read-only completion model loop guard so future Stage 17
+continuation runs keep the readback/apply boundary visible in the same status
+payload as the selected Stage 17 gap.
+
+The completion model checklist now includes
+`stage17_readback_apply_boundary_guard`, which reports `enforced` and states
+that Stage 17 readbacks stay authority-denying while apply routes must remain
+governed, dry-run confirmed, scoped, and tested. The guard is mirrored in the
+PowerShell status script, documented in `docs/operations/COMPLETION_MODEL.md`,
+and asserted by the focused Python and PowerShell completion-model tests.
+
+Validation:
+
+- `python -m pytest tests\test_completion_model.py
+  tests\test_francis_completion_model_script.py -q` passed.
+- `python -m ruff check --no-cache src\francis\completion_model.py
+  tests\test_completion_model.py tests\test_francis_completion_model_script.py`
+  passed.
+- `python -m ruff format --check --no-cache src\francis\completion_model.py
+  tests\test_completion_model.py tests\test_francis_completion_model_script.py`
+  passed with `3 files already formatted`.
+- PowerShell parser check for `scripts\francis-completion-model.ps1` returned
+  `parse_ok`.
+- `scripts\francis-completion-model.ps1 -Mode Status` returned `status=ready`,
+  `current_phase=Phase 2`,
+  `stage17_readback_apply_boundary_guard.status=enforced`,
+  `next_continue_decision.selected_gap_source=stage17_latest_ledger_entry`,
+  and preserved `read_only_contract=true`, `writes_repo=false`,
+  `writes_data=false`, `grants_execution_authority=false`, and
+  `grants_mutation_authority=false`.
+- `git diff --check -- src\francis\completion_model.py
+  scripts\francis-completion-model.ps1 tests\test_completion_model.py
+  tests\test_francis_completion_model_script.py
+  docs\operations\COMPLETION_MODEL.md` passed, with only the existing Git CRLF
+  warning for the PowerShell script.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. This pass does not promote, enable, execute, apply
+  proposal evidence, approve proposal reviews, recompute full global queue
+  counts, or close the Stage 17 capability-economy queue.
+- The next Stage 17 action remains to process the next selected
+  `legacy.generated.forgereviewplugin` capability or harden global projection
+  timing before broad readbacks or larger chunks.
+- This completion-model hardening does not close a ledger-backed phase gate and
+  does not move the Phase 2 posture.
+
+### 2026-06-19 - Completion model selected-gap authority contract
+
+Roadmap area: Stage 17-adjacent Capability Economy, completion-model truth, P9
+observability readback, and build-loop guardrails.
+
+This pass hardened the read-only completion model by making the selected
+continue gap's authority boundary explicit in both API and CLI readbacks.
+
+`next_continue_decision.selected_gap_contract` now states:
+
+- the selected gap source and selection basis
+- whether the selected gap is the latest open Stage 17 gap
+- that the selection itself is read-only
+- that the completion model writes no repo or data state
+- that the completion model grants no apply, proposal-evidence, proposal-review,
+  promotion, mutation, or execution authority
+- that any future Stage 17 apply must still use an existing governed route with
+  dry-run confirmation, bounded scope, and focused validation
+
+This prevents a future coordinator or worker from treating a selected gap as an
+implicit apply authorization. The completion model still only selects the next
+bounded work slice; it does not mutate Stage 17 artifacts or capability state.
+
+Validation:
+
+- `python -m pytest tests\test_completion_model.py
+  tests\test_francis_completion_model_script.py -q` passed with `10 passed`.
+- `python -m ruff check --no-cache src\francis\completion_model.py
+  tests\test_completion_model.py tests\test_francis_completion_model_script.py`
+  passed.
+- `python -m ruff format --check --no-cache src\francis\completion_model.py
+  tests\test_completion_model.py tests\test_francis_completion_model_script.py`
+  passed with `3 files already formatted`.
+- PowerShell parser check for `scripts\francis-completion-model.ps1` returned
+  `parse_ok`.
+- `scripts\francis-completion-model.ps1 -Mode Status` returned `status=ready`,
+  `next_continue_decision.selected_gap_source=stage17_latest_ledger_entry`,
+  `selected_gap_contract.status=selected`,
+  `selected_gap_contract.selection_basis=latest_open_stage17_remaining_gap`,
+  `read_only_selection=true`, `apply_authority_granted=false`,
+  `proposal_review_authority=false`, `promotion_authority=false`,
+  `capability_execution_authority=false`, `writes_repo=false`, and
+  `writes_data=false`.
+- `git diff --check -- src\francis\completion_model.py
+  scripts\francis-completion-model.ps1 tests\test_completion_model.py
+  tests\test_francis_completion_model_script.py
+  docs\operations\COMPLETION_MODEL.md` passed, with only the existing Git CRLF
+  warning for the PowerShell script.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. This pass does not promote, enable, execute, apply
+  proposal evidence, approve proposal reviews, recompute full global queue
+  counts, or close the Stage 17 capability-economy queue.
+- The next Stage 17 action remains to process the next selected
+  `legacy.generated.forgereviewplugin` capability or harden global projection
+  timing before broad readbacks or larger chunks.
+- This completion-model hardening does not close a ledger-backed phase gate and
+  does not move the Phase 2 posture.
+
+### 2026-06-20 - Completion model queue-count evidence guard
+
+Roadmap area: Stage 17-adjacent Capability Economy, completion-model truth, P9
+observability readback, and build-loop guardrails.
+
+This pass hardened the read-only completion model so a selected Stage 17 gap
+cannot be mistaken for global queue-count proof.
+
+The completion model now reports:
+
+- `continue_loop_guard.checklist.stage17_queue_count_evidence_guard`, which is
+  enforced before continue work and states that selected Stage 17 gaps are not
+  queue-count evidence.
+- `next_continue_decision.selected_gap_contract.selected_gap_is_queue_count_evidence=false`.
+- `next_continue_decision.selected_gap_contract.global_queue_count_recomputed=false`.
+- `next_continue_decision.selected_gap_contract.queue_count_authority_granted=false`.
+- `next_continue_decision.selected_gap_contract.future_stage17_queue_count_claim_requires`,
+  which requires a route readback or apply response with `projection_scope`,
+  `global_counts_included`, before/after counts, and focused validation before
+  any queue movement claim.
+
+This preserves the selected-gap readback as a bounded worker-routing contract,
+not a queue-clearing or Stage 17 closure signal. It does not promote, enable,
+execute, approve, apply proposal evidence, or recompute global queue counts.
+
+Validation:
+
+- `.\.venv\Scripts\python.exe -m pytest tests\test_completion_model.py
+  tests\test_francis_completion_model_script.py -q` passed with `10 passed`
+  and one existing FastAPI/TestClient deprecation warning.
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache
+  src\francis\completion_model.py tests\test_completion_model.py
+  tests\test_francis_completion_model_script.py` passed.
+- `.\.venv\Scripts\python.exe -m ruff format --check --no-cache
+  src\francis\completion_model.py tests\test_completion_model.py
+  tests\test_francis_completion_model_script.py` passed with `3 files already
+  formatted`.
+- PowerShell parser check for `scripts\francis-completion-model.ps1` returned
+  `parse_ok`.
+- `scripts\francis-completion-model.ps1 -Mode Status` returned `status=ready`,
+  `stage17_queue_count_evidence_guard.status=enforced`,
+  `selected_gap_contract.selected_gap_is_queue_count_evidence=false`,
+  `global_queue_count_recomputed=false`, `queue_count_authority_granted=false`,
+  and preserved the selected Stage 17 gap as
+  `stage17_latest_ledger_entry`.
+- `git diff --check -- src\francis\completion_model.py
+  scripts\francis-completion-model.ps1 tests\test_completion_model.py
+  tests\test_francis_completion_model_script.py
+  docs\operations\COMPLETION_MODEL.md` passed, with only the existing Git CRLF
+  warning for the PowerShell script.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. This pass does not promote, enable, execute, apply
+  proposal evidence, approve proposal reviews, recompute full global queue
+  counts, or close the Stage 17 capability-economy queue.
+- The next Stage 17 action remains to process the next selected
+  `legacy.generated.forgereviewplugin` capability through the existing bounded
+  proposal-evidence/review path or harden global projection timing before broad
+  readbacks or larger chunks.
+- This completion-model hardening does not close a ledger-backed phase gate and
+  does not move the Phase 2 posture.
+
+### 2026-06-20 - Completion model proposal-evidence reference guard
+
+Roadmap area: Stage 17-adjacent Capability Economy, completion-model truth, P9
+observability readback, and build-loop guardrails.
+
+This pass hardened the read-only completion model so a selected Stage 17 gap
+cannot be mistaken for proposal-evidence reference proof.
+
+The completion model now reports:
+
+- `continue_loop_guard.checklist.stage17_proposal_evidence_reference_guard`,
+  which is enforced before continue work and states that selected Stage 17 gaps
+  are not proposal-evidence references.
+- `next_continue_decision.selected_gap_contract.selected_gap_is_proposal_evidence_reference=false`.
+- `next_continue_decision.selected_gap_contract.proposal_evidence_refs_verified=false`.
+- `next_continue_decision.selected_gap_contract.proposal_review_receipts_verified=false`.
+- `next_continue_decision.selected_gap_contract.validation_receipts_verified=false`.
+- `next_continue_decision.selected_gap_contract.proposal_evidence_reference_authority_granted=false`.
+- `next_continue_decision.selected_gap_contract.future_stage17_proposal_evidence_claim_requires`,
+  which requires an existing governed route, proposal artifact ref,
+  proposal-review receipt ref, validation or quality-evidence ref, bounded
+  plugin id scope, and focused validation before any proposal-evidence movement
+  claim.
+
+This preserves the selected-gap readback as a worker-routing contract, not a
+substitute for proposal artifacts, review receipts, validation receipts, or
+quality-evidence references. It does not promote, enable, execute, approve,
+apply proposal evidence, or recompute global queue counts.
+
+Validation:
+
+- `.\.venv\Scripts\python.exe -m pytest tests\test_completion_model.py
+  tests\test_francis_completion_model_script.py -q` passed.
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache
+  src\francis\completion_model.py tests\test_completion_model.py
+  tests\test_francis_completion_model_script.py` passed.
+- `.\.venv\Scripts\python.exe -m ruff format --check --no-cache
+  src\francis\completion_model.py tests\test_completion_model.py
+  tests\test_francis_completion_model_script.py` passed.
+- PowerShell parser check for `scripts\francis-completion-model.ps1` returned
+  `parse_ok`.
+- `scripts\francis-completion-model.ps1 -Mode Status` returned `status=ready`,
+  `stage17_proposal_evidence_reference_guard.status=enforced`,
+  `selected_gap_contract.selected_gap_is_proposal_evidence_reference=false`,
+  `proposal_evidence_refs_verified=false`,
+  `proposal_review_receipts_verified=false`,
+  `validation_receipts_verified=false`, and preserved the selected Stage 17 gap
+  as `stage17_latest_ledger_entry`.
+- `git diff --check -- src\francis\completion_model.py
+  scripts\francis-completion-model.ps1 tests\test_completion_model.py
+  tests\test_francis_completion_model_script.py
+  docs\operations\COMPLETION_MODEL.md docs\operations\COMPLETION_LEDGER.md`
+  passed, with only the existing Git CRLF warning for the PowerShell script.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. This pass does not promote, enable, execute, apply
+  proposal evidence, approve proposal reviews, recompute full global queue
+  counts, or close the Stage 17 capability-economy queue.
+- The next Stage 17 action remains to process the next selected
+  `legacy.generated.forgereviewplugin` capability through the existing bounded
+  proposal-evidence/review path or harden global projection timing before broad
+  readbacks or larger chunks.
+- This completion-model hardening does not close a ledger-backed phase gate and
+  does not move the Phase 2 posture.
+
+### 2026-06-20 - Completion model publication evidence guard
+
+Roadmap area: Stage 17-adjacent Capability Economy, completion-model truth, P9
+observability readback, and build-loop guardrails.
+
+This pass hardened the read-only completion model so a selected Stage 17 gap
+cannot be mistaken for publication proof.
+
+The completion model now reports:
+
+- `continue_loop_guard.checklist.stage17_publication_evidence_guard`, which is
+  enforced before continue work and states that selected Stage 17 gaps are not
+  publication evidence.
+- `next_continue_decision.selected_gap_contract.selected_gap_is_publication_evidence=false`.
+- `next_continue_decision.selected_gap_contract.github_publication_verified=false`.
+- `next_continue_decision.selected_gap_contract.publication_marker_verified=false`.
+- `next_continue_decision.selected_gap_contract.publication_authority_granted=false`.
+- `next_continue_decision.selected_gap_contract.future_stage17_publication_claim_requires`,
+  which requires a PM-owned publication marker, matching prompt hash, GitHub
+  push or explicit no-change/blocked receipt, and focused validation before any
+  Stage 17 publication claim.
+
+This preserves selected-gap readback as a worker-routing contract, not a GitHub
+push, publication marker, no-change receipt, or blocked-with-evidence receipt.
+It does not commit, push, write publication markers, promote, enable, execute,
+approve, apply proposal evidence, or recompute global queue counts.
+
+Validation:
+
+- `.\.venv\Scripts\python.exe -m pytest tests\test_completion_model.py
+  tests\test_francis_completion_model_script.py -q` passed with `10 passed`
+  and one existing FastAPI/TestClient deprecation warning.
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache
+  src\francis\completion_model.py tests\test_completion_model.py
+  tests\test_francis_completion_model_script.py` passed.
+- `.\.venv\Scripts\python.exe -m ruff format --check --no-cache
+  src\francis\completion_model.py tests\test_completion_model.py
+  tests\test_francis_completion_model_script.py` passed with `3 files already
+  formatted`.
+- `.\.venv\Scripts\python.exe -m mypy src\francis\completion_model.py` passed.
+- PowerShell parser check for `scripts\francis-completion-model.ps1` returned
+  `parse_ok`.
+- `scripts\francis-completion-model.ps1 -Mode Status` returned `status=ready`,
+  `stage17_publication_evidence_guard.status=enforced`,
+  `selected_gap_contract.selected_gap_is_publication_evidence=false`,
+  `github_publication_verified=false`, `publication_marker_verified=false`,
+  `publication_authority_granted=false`, and preserved the read-only/no-write/
+  no-authority flags.
+- `git diff --check -- src\francis\completion_model.py
+  scripts\francis-completion-model.ps1 tests\test_completion_model.py
+  tests\test_francis_completion_model_script.py
+  docs\operations\COMPLETION_MODEL.md` passed, with only the existing Git CRLF
+  warning for the PowerShell script.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. This pass does not promote, enable, execute, apply
+  proposal evidence, approve proposal reviews, recompute full global queue
+  counts, commit, push, write a publication marker, or close the Stage 17
+  capability-economy queue.
+- The next Stage 17 action remains to process the next selected
+  `legacy.generated.forgereviewplugin` capability through the existing bounded
+  proposal-evidence/review path or harden global projection timing before broad
+  readbacks or larger chunks.
+- This completion-model hardening does not close a ledger-backed phase gate and
+  does not move the Phase 2 posture.
+
+### 2026-06-20 - Completion model worker-readback evidence guard
+
+Roadmap area: Stage 17-adjacent Capability Economy, completion-model truth, P9
+observability readback, and build-loop guardrails.
+
+This pass hardened the read-only completion model so a selected Stage 17 gap
+cannot be mistaken for a worker lane readback or worker packet receipt.
+
+The completion model now reports:
+
+- `continue_loop_guard.checklist.stage17_worker_readback_evidence_guard`, which
+  is enforced before continue work and states that selected Stage 17 gaps are
+  not worker lane readbacks.
+- `next_continue_decision.selected_gap_contract.selected_gap_is_worker_readback_evidence=false`.
+- `next_continue_decision.selected_gap_contract.worker_lane_readback_verified=false`.
+- `next_continue_decision.selected_gap_contract.worker_packet_verified=false`.
+- `next_continue_decision.selected_gap_contract.worker_readback_authority_granted=false`.
+- `next_continue_decision.selected_gap_contract.future_stage17_worker_readback_claim_requires`,
+  which requires a worker lane readback path, matching prompt hash, files
+  changed, validation run, blockers/risks, proposed commit scope, and next
+  recommended prompt before any worker-readback claim.
+
+This preserves selected-gap readback as a worker-routing contract, not a lane
+readback, worker packet, files-touched receipt, validation receipt, blocker
+summary, commit-scope proposal, or next-prompt recommendation. It does not
+commit, push, write a PM-owned publication marker, promote, enable, execute,
+approve, apply proposal evidence, or recompute global queue counts.
+
+Validation:
+
+- `.\.venv\Scripts\python.exe -m pytest tests\test_completion_model.py
+  tests\test_francis_completion_model_script.py -q` passed, with one existing
+  FastAPI/TestClient deprecation warning.
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache
+  src\francis\completion_model.py tests\test_completion_model.py
+  tests\test_francis_completion_model_script.py` passed.
+- `.\.venv\Scripts\python.exe -m ruff format --check --no-cache
+  src\francis\completion_model.py tests\test_completion_model.py
+  tests\test_francis_completion_model_script.py` passed with `3 files already
+  formatted`.
+- `.\.venv\Scripts\python.exe -m mypy src\francis\completion_model.py` passed.
+- PowerShell parser check for `scripts\francis-completion-model.ps1` returned
+  `parse_ok`.
+- `scripts\francis-completion-model.ps1 -Mode Status` returned `status=ready`,
+  `stage17_worker_readback_evidence_guard.status=enforced`,
+  `selected_gap_contract.selected_gap_is_worker_readback_evidence=false`,
+  `worker_lane_readback_verified=false`, `worker_packet_verified=false`,
+  `worker_readback_authority_granted=false`, and preserved the selected Stage
+  17 gap as `stage17_latest_ledger_entry`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. This pass does not promote, enable, execute, apply
+  proposal evidence, approve proposal reviews, recompute full global queue
+  counts, commit, push, write a publication marker, or close the Stage 17
+  capability-economy queue.
+- The next Stage 17 action remains to process the next selected
+  `legacy.generated.forgereviewplugin` capability through the existing bounded
+  proposal-evidence/review path or harden global projection timing before broad
+  readbacks or larger chunks.
+- This completion-model hardening does not close a ledger-backed phase gate and
+  does not move the Phase 2 posture.
+
+### 2026-06-20 - Completion model worker-publication handoff guard
+
+Roadmap area: Stage 17-adjacent Capability Economy, completion-model truth, P9
+observability readback, and build-loop guardrails.
+
+This pass hardened the read-only completion model so a selected Stage 17 gap
+cannot be mistaken for proof that the worker lane readback and PM-owned
+publication marker handoff exists for the same prompt.
+
+The completion model now reports:
+
+- `continue_loop_guard.checklist.stage17_worker_publication_handoff_guard`,
+  which is enforced before continue work and states that selected Stage 17 gaps
+  are not worker/publication handoff evidence.
+- `next_continue_decision.selected_gap_contract.selected_gap_is_worker_publication_handoff_evidence=false`.
+- `next_continue_decision.selected_gap_contract.worker_publication_handoff_verified=false`.
+- `next_continue_decision.selected_gap_contract.worker_publication_handoff_authority_granted=false`.
+- `next_continue_decision.selected_gap_contract.future_stage17_worker_publication_handoff_claim_requires`,
+  which requires a worker lane readback path, PM-owned publication marker,
+  matching prompt hash, GitHub push or explicit no-change/blocked receipt,
+  files changed, validation run, blockers/risks, proposed commit scope, and
+  next recommended prompt before any Stage 17 worker/publication handoff claim.
+
+This preserves selected-gap readback as a worker-routing contract, not a lane
+handoff, publication marker, GitHub push, no-change receipt, or
+blocked-with-evidence receipt. It does not commit, push, write a PM-owned
+publication marker, promote, enable, execute, approve, apply proposal evidence,
+or recompute global queue counts.
+
+Validation:
+
+- `.\.venv\Scripts\python.exe -m pytest tests\test_completion_model.py
+  tests\test_francis_completion_model_script.py -q` passed with `10 passed`
+  and one existing FastAPI/TestClient deprecation warning.
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache
+  src\francis\completion_model.py tests\test_completion_model.py
+  tests\test_francis_completion_model_script.py` passed.
+- `.\.venv\Scripts\python.exe -m ruff format --check --no-cache
+  src\francis\completion_model.py tests\test_completion_model.py
+  tests\test_francis_completion_model_script.py` passed with `3 files already
+  formatted`.
+- `.\.venv\Scripts\python.exe -m mypy src\francis\completion_model.py` passed.
+- PowerShell parser check for `scripts\francis-completion-model.ps1` returned
+  `parse_ok`.
+- `scripts\francis-completion-model.ps1 -Mode Status` returned `status=ready`,
+  `selected_gap_source=stage17_latest_ledger_entry`,
+  `stage17_worker_publication_handoff_guard.status=enforced`,
+  `selected_gap_contract.selected_gap_is_worker_publication_handoff_evidence=false`,
+  and `worker_publication_handoff_authority_granted=false`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. This pass does not promote, enable, execute, apply
+  proposal evidence, approve proposal reviews, recompute full global queue
+  counts, commit, push, write a publication marker, write the lane readback for
+  another worker, or close the Stage 17 capability-economy queue.
+- The next Stage 17 action remains to process the next selected
+  `legacy.generated.forgereviewplugin` capability through the existing bounded
+  proposal-evidence/review path or harden global projection timing before broad
+  readbacks or larger chunks.
+- This completion-model hardening does not close a ledger-backed phase gate and
+  does not move the Phase 2 posture.
+
+### 2026-06-20 - Completion model worker execution liveness guard
+
+Roadmap area: Stage 17-adjacent Capability Economy, completion-model truth, P9
+observability readback, and build-loop guardrails.
+
+This pass hardened the read-only completion model so a selected Stage 17 gap
+cannot be mistaken for proof that a worker process/session is alive, completed,
+blocked, or represented by a valid execution readback.
+
+The completion model now reports:
+
+- `continue_loop_guard.checklist.stage17_worker_execution_liveness_guard`,
+  which is enforced before continue work and states that selected Stage 17 gaps
+  are not worker execution or session-liveness evidence.
+- `next_continue_decision.selected_gap_contract.selected_gap_is_worker_execution_liveness_evidence=false`.
+- `next_continue_decision.selected_gap_contract.worker_session_liveness_verified=false`.
+- `next_continue_decision.selected_gap_contract.worker_process_completion_verified=false`.
+- `next_continue_decision.selected_gap_contract.worker_execution_readback_authority_granted=false`.
+- `next_continue_decision.selected_gap_contract.future_stage17_worker_execution_liveness_claim_requires`,
+  which requires a worker session path, matching prompt hash, process liveness
+  or exit code, completed or blocked status, lane readback or last message,
+  files-changed or no-change scope, and validation or blocker evidence before
+  any worker execution/session-liveness claim.
+
+This preserves selected-gap readback as a worker-routing contract, not a worker
+terminal liveness probe, process completion receipt, lane readback, last-message
+receipt, no-change receipt, or blocked-with-evidence receipt. It does not
+commit, push, write a PM-owned publication marker, promote, enable, execute,
+approve, apply proposal evidence, or recompute global queue counts.
+
+Validation:
+
+- `.\.venv\Scripts\python.exe -m pytest tests\test_completion_model.py
+  tests\test_francis_completion_model_script.py -q` passed with `10 passed`
+  and one existing FastAPI/TestClient deprecation warning.
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache
+  src\francis\completion_model.py tests\test_completion_model.py
+  tests\test_francis_completion_model_script.py` passed.
+- `.\.venv\Scripts\python.exe -m ruff format --check --no-cache
+  src\francis\completion_model.py tests\test_completion_model.py
+  tests\test_francis_completion_model_script.py` passed with `3 files already
+  formatted`.
+- `.\.venv\Scripts\python.exe -m mypy src\francis\completion_model.py` passed.
+- PowerShell parser check for `scripts\francis-completion-model.ps1` returned
+  `parse_ok`.
+- `scripts\francis-completion-model.ps1 -Mode Status` returned `status=ready`,
+  `selected_gap_source=stage17_latest_ledger_entry`,
+  `stage17_worker_execution_liveness_guard.status=enforced`,
+  `selected_gap_contract.selected_gap_is_worker_execution_liveness_evidence=false`,
+  and `worker_execution_readback_authority_granted=false`, while preserving
+  `writes_repo=false` and `grants_execution_authority=false`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. This pass does not promote, enable, execute, apply
+  proposal evidence, approve proposal reviews, recompute full global queue
+  counts, commit, push, write a publication marker, write the lane readback for
+  another worker, prove a worker process/session is alive or complete, or close
+  the Stage 17 capability-economy queue.
+- The next Stage 17 action remains to process the next selected
+  `legacy.generated.forgereviewplugin` capability through the existing bounded
+  proposal-evidence/review path or harden global projection timing before broad
+  readbacks or larger chunks.
+- This completion-model hardening does not close a ledger-backed phase gate and
+  does not move the Phase 2 posture.
+
+### 2026-06-20 - Stage 17 capability-scoped proposal evidence batch intake
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence, capability-library proposal review, and receipt-backed batch
+reduction.
+
+This pass hardened the existing operator proposal-evidence intake route so a
+bounded selected-capability batch can carry distinct operator evidence refs per
+capability instead of forcing repeated one-capability applies when proposal and
+validation artifact refs differ by capability.
+
+The existing route
+`POST /plugins/capabilities/library/proposal-evidence/operator-intake/apply`
+now accepts `evidence_refs_by_capability` alongside the existing shared
+`evidence_refs` list. The dry-run fingerprint includes the exact per-capability
+refs, the route blocks refs for capabilities outside the selected plan, and each
+capability records only its own merged evidence refs. Responses expose shared,
+capability-specific, and total evidence-ref counts while preserving
+`projection_scope=selected_capabilities` and `global_counts_included=false` for
+selected batches.
+
+Test-backed before/after evidence:
+
+- A focused API contract test built two staged capabilities in one pack with
+  missing proposal evidence and staged proposal reviews.
+- Before apply: operator-evidence checklist reported `candidate_pack_count=1`
+  and `candidate_capability_count=2`.
+- Evidence dry-run/apply recorded two capability-specific evidence refs in one
+  selected batch with `recorded_capability_count=2`,
+  `remaining_proposal_evidence_missing_count=0`, and
+  `remaining_proposal_evidence_ready_count=2`.
+- The same test then used the existing proposal-review apply route to approve
+  both selected proposal reviews in one dry-run-confirmed batch with
+  `recorded_proposal_count=2`, `recorded_capability_count=2`,
+  `remaining_proposal_review_missing_count=0`, and
+  `promotable_capability_count=2`.
+- Both capabilities remained `status=staged` and `enabled=false`; the pass did
+  not promote, enable, execute, or grant memory-write authority.
+
+Validation:
+
+- `.\.venv\Scripts\python.exe -m py_compile
+  src\francis\api\routes\plugins.py` passed.
+- `.\.venv\Scripts\python.exe -m pytest
+  tests\test_api_plugins.py::test_plugins_capability_library_operator_proposal_evidence_intake_batches_capability_scoped_refs
+  tests\test_api_plugins.py::test_plugins_capability_library_operator_proposal_evidence_intake_records_operator_refs_only
+  -q` passed with `2 passed` and one existing FastAPI/TestClient deprecation
+  warning.
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py` passed.
+- `.\.venv\Scripts\python.exe -m ruff format --check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py` passed with
+  `2 files already formatted`.
+- `git diff --check -- src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py` reported no whitespace errors.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. This pass does not promote, enable, or execute any
+  capability; does not claim full global queue counts; does not process a live
+  `legacy.generated.forgereviewplugin` chunk; does not commit, push, or write a
+  publication marker; and does not close the Stage 17 capability-economy queue.
+- The next Stage 17 action is to use this bounded capability-scoped evidence
+  mechanism on the next selected `legacy.generated.forgereviewplugin` batch
+  and verify the route receipts against real before/after selected counts, or
+  to harden global projection timing before broader queue claims.
+- This mechanism does not close a ledger-backed phase gate and does not move
+  the Phase 2 posture.
+
+### 2026-06-20 - Stage 17 live capability-scoped evidence/review batch reduction
+
+Roadmap area: Stage 17 / Capability Economy, live
+`legacy.generated.forgereviewplugin` operator-supplied proposal evidence,
+capability-library proposal review, and receipt-backed selected-batch backlog
+reduction.
+
+This pass used the existing capability-scoped operator evidence mechanism on a
+live selected `legacy.generated.forgereviewplugin` batch, then applied proposal
+reviews for the same selected capabilities through the existing governed
+proposal-review apply route.
+
+Live before/after evidence:
+
+- Evidence dry-run selected two capabilities:
+  `1777320595_forgereviewplugin` and `1777320689_forgereviewplugin`.
+- Before apply: operator-evidence checklist reported
+  `candidate_capability_count=1125` and current pack remaining count `202`.
+- Evidence apply recorded `evidence_ref_count=8` and
+  `capability_specific_evidence_ref_count=8`, with
+  `projection_scope=selected_capabilities` and `global_counts_included=false`.
+- Proposal-review apply wrote two `plugin.proposal.review.receipt` records:
+  `data/artifacts/plugins/proposal_reviews/plugin_proposal_review_1781965595_7ca852b330aa_485100.json`
+  and
+  `data/artifacts/plugins/proposal_reviews/plugin_proposal_review_1781965595_73f8529dc05a_588000.json`.
+- After apply: selected operator-evidence checklist reported
+  `candidate_capability_count=1123` and current pack remaining count `200`.
+- Both route responses preserved the no-promotion/no-enable/no-execution
+  boundary; the review apply wrote proposal-review receipts and updated proposal
+  records only.
+
+Validation:
+
+- Live dry-run/apply script against `TestClient(create_app())` passed for a
+  two-capability selected `legacy.generated.forgereviewplugin` batch and
+  verified dry-run fingerprints, selected projection scope, before/after counts,
+  governance flags, proposal-review receipts, and unchanged capability
+  `status`/`enabled` state.
+- `.\.venv\Scripts\python.exe -m pytest
+  tests\test_api_plugins.py::test_plugins_capability_library_operator_proposal_evidence_intake_batches_capability_scoped_refs
+  -q` passed with one existing FastAPI/TestClient deprecation warning.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. This pass does not promote, enable, execute, claim full
+  global queue closure, write a publication marker, commit, push, or close the
+  Stage 17 capability-economy queue.
+- This pass only proves a two-capability live selected-batch reduction for the
+  current `legacy.generated.forgereviewplugin` backlog. The next Stage 17 action
+  is to continue bounded selected batches with the same route receipts, or to
+  harden full-library projection timing before making broader queue claims.
+- This live batch does not close a ledger-backed phase gate and does not move
+  the Phase 2 posture.
+
+### 2026-06-20 - Stage 17 operator evidence import-preview batch payloads
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence, capability-library proposal review, and reusable selected-batch
+backlog reduction.
+
+This pass connected the existing operator evidence export/import-preview path to
+the capability-scoped operator evidence apply contract. Import preview now groups
+ready rows by capability pack/version and emits one bounded apply payload per
+pack with `evidence_refs_by_capability`, instead of grouping by identical
+evidence-ref sets and forcing repeated one-capability applies when each
+capability has distinct operator evidence references.
+
+Test-backed before/after evidence:
+
+- Before this mechanism, the import-preview payload shape carried shared
+  `evidence_refs`, so distinct per-capability references were not projected as a
+  single capability-scoped batch payload.
+- After this mechanism, a focused two-capability test exports two operator
+  evidence rows, imports distinct refs for each row, and receives
+  `apply_group_count=1`, `capability_count=2`, `evidence_ref_count=2`,
+  `shared_evidence_ref_count=0`, and
+  `capability_specific_evidence_ref_count=2`.
+- The same test feeds the import-preview payload into the existing governed
+  operator evidence apply route, which records each capability's own evidence
+  ref only, then applies proposal reviews through the existing proposal-review
+  apply route with `recorded_proposal_count=2`, `recorded_capability_count=2`,
+  and `promotable_capability_count=2`.
+- Both capabilities remain `status=staged` and `enabled=false`; this pass does
+  not promote, enable, execute, or grant memory-write authority.
+
+Validation:
+
+- `.\.venv\Scripts\python.exe -m py_compile
+  src\francis\api\routes\plugins.py` passed.
+- `.\.venv\Scripts\python.exe -m pytest
+  tests\test_api_plugins.py::test_plugins_capability_library_operator_proposal_evidence_intake_records_operator_refs_only
+  tests\test_api_plugins.py::test_plugins_capability_library_operator_proposal_evidence_intake_batches_capability_scoped_refs
+  -q` passed with `2 passed` and one existing FastAPI/TestClient deprecation
+  warning.
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py` passed.
+- `.\.venv\Scripts\python.exe -m ruff format --check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py` passed with
+  `2 files already formatted`.
+- `git diff --check -- src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py` reported no whitespace errors.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. This pass does not promote, enable, execute, claim full
+  global queue closure, process a live `legacy.generated.forgereviewplugin`
+  chunk, write a publication marker, commit, push, or close the Stage 17
+  capability-economy queue.
+- The next Stage 17 action is to use the export/import-preview generated
+  capability-scoped payload on the next live selected
+  `legacy.generated.forgereviewplugin` batch, or continue hardening projection
+  timing before broader queue claims.
+- This mechanism does not close a ledger-backed phase gate and does not move the
+  Phase 2 posture.
+
+### 2026-06-20 - Stage 17 live scoped evidence/review batch continuation
+
+Roadmap area: Stage 17 / Capability Economy, live
+`legacy.generated.forgereviewplugin` operator-supplied proposal evidence,
+capability-library proposal review, and receipt-backed selected-batch backlog
+reduction.
+
+This pass continued the existing capability-scoped operator evidence mechanism
+against the next live selected `legacy.generated.forgereviewplugin` batch, then
+applied proposal reviews for the same selected capabilities through the existing
+governed proposal-review apply route.
+
+Live before/after evidence:
+
+- Evidence dry-run selected two capabilities:
+  `1777321880_forgereviewplugin` and `1777322287_forgereviewplugin`.
+- The evidence refs were capability-specific references to existing local
+  proposal and validation artifacts: proposal id, proposal artifact path,
+  validation receipt id, and validation artifact path for each selected
+  capability. The route still classifies these as operator-supplied evidence
+  references, not independent evidence verification.
+- Before apply: operator-evidence checklist reported
+  `candidate_capability_count=1123`, `candidate_pack_count=6`, and current
+  `legacy.generated.forgereviewplugin` pack remaining count `200`.
+- Evidence apply recorded `recorded_capability_count=2`,
+  `evidence_ref_count=8`, and `capability_specific_evidence_ref_count=8`, with
+  `projection_scope=selected_capabilities` and `global_counts_included=false`.
+- Proposal-review apply wrote two `plugin.proposal.review.receipt` records:
+  `data/artifacts/plugins/proposal_reviews/plugin_proposal_review_1781966588_4d049e5327b6_692500.json`
+  and
+  `data/artifacts/plugins/proposal_reviews/plugin_proposal_review_1781966588_dc34949ed238_692700.json`.
+- After apply: operator-evidence checklist reported
+  `candidate_capability_count=913`, `candidate_pack_count=5`, and current
+  `legacy.generated.forgereviewplugin` pack remaining count `198`.
+- The reliable reduction claim for this worker pass is the selected current-pack
+  movement from `200` to `198`. The broader checklist count changed from `1123`
+  to `913`, but this pass does not claim full-library queue closure or sole
+  causal ownership of the broader projection movement.
+- Both selected capabilities retained `status=enabled` and `enabled=true`;
+  no promotion, enablement, invocation, or execution occurred in this pass.
+
+Validation:
+
+- Live dry-run/apply script against `TestClient(create_app())` passed for a
+  two-capability selected `legacy.generated.forgereviewplugin` batch and
+  verified local proposal/validation artifact refs, dry-run fingerprints,
+  selected projection scope, before/after counts, governance flags,
+  proposal-review receipts, and unchanged capability `status`/`enabled` state.
+- `.\.venv\Scripts\python.exe -m py_compile
+  src\francis\api\routes\plugins.py` passed.
+- `.\.venv\Scripts\python.exe -m pytest
+  tests\test_api_plugins.py::test_plugins_capability_library_operator_proposal_evidence_intake_batches_capability_scoped_refs
+  -q` passed with one existing FastAPI/TestClient deprecation warning.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. This pass does not promote, enable, execute, claim full
+  global queue closure, write a publication marker, commit, push, or close the
+  Stage 17 capability-economy queue.
+- This pass only proves another two-capability live selected-batch reduction for
+  the current `legacy.generated.forgereviewplugin` backlog. The next Stage 17
+  action is to continue bounded selected batches with the same route receipts,
+  use the import-preview generated capability-scoped payload where practical, or
+  harden full-library projection timing before making broader queue claims.
+- This live batch does not close a ledger-backed phase gate and does not move
+  the Phase 2 posture.
+
+### 2026-06-20 - Stage 17 live missiontrace import-preview evidence/review batch
+
+Roadmap area: Stage 17 / Capability Economy, live
+`legacy.generated.missiontraceplugin` operator-supplied proposal evidence,
+capability-library proposal review, and reusable import-preview-backed
+selected-batch backlog reduction.
+
+This pass used the existing operator evidence export/import-preview mechanism to
+generate one capability-scoped apply payload for the next two live
+`legacy.generated.missiontraceplugin` capabilities, then applied proposal
+reviews for the same selected capabilities through the existing governed
+proposal-review apply route.
+
+Live before/after evidence:
+
+- Export before apply reported `export_row_count=715` across `4` packs and
+  current `legacy.generated.missiontraceplugin` pack remaining count `178`.
+- The selected capabilities were `1777313705_missiontraceplugin` and
+  `1777320420_missiontraceplugin`.
+- Import preview reported `ready_row_count=2`, `apply_group_count=1`,
+  `capability_count=2`, `evidence_ref_count=8`,
+  `shared_evidence_ref_count=0`, and
+  `capability_specific_evidence_ref_count=8`.
+- The evidence refs were capability-specific references to existing local
+  proposal and validation artifacts: proposal id, proposal artifact path,
+  validation receipt id, and validation artifact path for each selected
+  capability. The route still classifies these as operator-supplied evidence
+  references, not independent evidence verification.
+- Evidence apply recorded `recorded_pack_count=1`,
+  `recorded_capability_count=2`, `evidence_ref_count=8`, and
+  `capability_specific_evidence_ref_count=8`, with
+  `projection_scope=selected_capabilities` and `global_counts_included=false`.
+- Proposal-review apply wrote two `plugin.proposal.review.receipt` records:
+  `data/artifacts/plugins/proposal_reviews/plugin_proposal_review_1781967595_04f3c71066f3_734500.json`
+  and
+  `data/artifacts/plugins/proposal_reviews/plugin_proposal_review_1781967595_d3518faf251a_736700.json`.
+- Export after apply reported `export_row_count=713` across `4` packs and
+  current `legacy.generated.missiontraceplugin` pack remaining count `176`.
+- The reliable reduction claim for this worker pass is the selected current-pack
+  movement from `178` to `176`; the full operator-evidence export moved from
+  `715` to `713` in the same after-readback, but this pass does not claim
+  full-library queue closure.
+- Both selected capabilities retained `status=enabled` and `enabled=true`; no
+  promotion, enablement, invocation, or execution occurred in this pass.
+
+Validation:
+
+- Live dry-run/apply script against `TestClient(create_app())` passed for a
+  two-capability selected `legacy.generated.missiontraceplugin` batch and
+  verified existing local proposal/validation artifact refs, import-preview
+  grouping, dry-run fingerprints, selected projection scope, before/after
+  counts, governance flags, proposal-review receipts, and unchanged capability
+  `status`/`enabled` state.
+- `.\.venv\Scripts\python.exe -m pytest
+  tests\test_api_plugins.py::test_plugins_capability_library_operator_proposal_evidence_intake_records_operator_refs_only
+  tests\test_api_plugins.py::test_plugins_capability_library_operator_proposal_evidence_intake_batches_capability_scoped_refs
+  -q` passed with `2 passed` and one existing FastAPI/TestClient deprecation
+  warning.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. This pass does not promote, enable, execute, claim full
+  global queue closure, write a publication marker, commit, push, or close the
+  Stage 17 capability-economy queue.
+- This pass only proves another two-capability live selected-batch reduction for
+  the current `legacy.generated.missiontraceplugin` backlog using the reusable
+  import-preview payload path. The next Stage 17 action is to continue bounded
+  selected batches against the remaining live packs with the same route
+  receipts, or harden full-library projection timing before making broader queue
+  claims.
+- This live batch does not close a ledger-backed phase gate and does not move
+  the Phase 2 posture.
+
+### 2026-06-20 - Stage 17 lifecycle repair/restore route
+
+Roadmap area: Stage 17 / Capability Economy, executable capability lifecycle,
+governed repair/restore, promotion readiness, and receipt-backed lifecycle
+maintenance.
+
+This pass made the dedicated lifecycle repair/restore blocker executable:
+
+- `POST /plugins/lifecycle/repair` now uses the existing `plugins.write`
+  permission gate and only repairs a plugin when the current lifecycle readback
+  blocks promotion or execution.
+- Repair/restore writes a `plugin.lifecycle.receipt` with before/after lifecycle
+  state, updates registry metadata to an active lifecycle state, and restores a
+  safe non-enabled registry posture such as `staged` or `disabled`.
+- The repair route does not promote, enable, execute, approve proposals, or
+  write memory. Staged capabilities must still move through `/plugins/enable`
+  and the existing promotion-readiness gate before execution authority can
+  return.
+- Unsupported repair actions and non-blocking/no-op repair attempts return
+  explicit non-mutating responses. Unscoped actors still fail at the permission
+  gate before registry or receipt writes.
+- The Stage 17 closure-matrix readback now lists
+  `/plugins/lifecycle/repair` and the `plugin.lifecycle.repair_restore_v1`
+  contract under `criterion_3_executable_lifecycle`, removing the prior
+  `dedicated_pack_lifecycle_repair_or_restore_route_missing` blocker from that
+  criterion without claiming full Stage 17 closure.
+
+Validation:
+
+- `.\.venv\Scripts\python.exe -m py_compile
+  src\francis\api\routes\plugins.py` passed.
+- `.\.venv\Scripts\python.exe -m pytest
+  tests\test_api_plugins.py::test_plugins_lifecycle_repair_restores_staged_candidate_without_promoting
+  tests\test_api_plugins.py::test_plugins_lifecycle_repair_denies_unscoped_and_refuses_ambiguous_noop
+  -q` passed with `2 passed` and one existing FastAPI/TestClient deprecation
+  warning.
+- `.\.venv\Scripts\python.exe -m pytest
+  tests\test_api_plugins.py::test_plugins_disable_records_quarantine_lifecycle_receipt_and_catalog_readback
+  tests\test_api_plugins.py::test_plugins_disable_lifecycle_denies_unscoped_and_refuses_unsupported_actions
+  tests\test_api_plugins.py::test_plugins_lifecycle_deprecation_and_unknown_state_block_promotion
+  tests\test_api_plugins.py::test_plugins_lifecycle_repair_restores_staged_candidate_without_promoting
+  tests\test_api_plugins.py::test_plugins_lifecycle_repair_denies_unscoped_and_refuses_ambiguous_noop
+  tests\test_api_plugins.py::test_plugins_capability_catalog_readback -q`
+  passed with `6 passed` and one existing FastAPI/TestClient deprecation
+  warning.
+- `.\.venv\Scripts\python.exe -m pytest
+  tests\test_api_plugins.py::test_plugins_lifecycle_repair_restores_staged_candidate_without_promoting
+  tests\test_api_plugins.py::test_plugins_lifecycle_repair_denies_unscoped_and_refuses_ambiguous_noop
+  tests\test_api_plugins.py::test_plugins_capability_catalog_readback -q`
+  passed with `3 passed` and one existing FastAPI/TestClient deprecation
+  warning.
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py` passed.
+- `.\.venv\Scripts\python.exe -m ruff format --check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py` passed with
+  `2 files already formatted`.
+- `git diff --check -- src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py` reported no whitespace errors.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. This pass does not promote, enable, execute, claim full
+  lifecycle completion, process a live Stage 17 queue chunk, write a publication
+  marker, commit, push, or close the Stage 17 capability-economy queue.
+- This pass removes the dedicated lifecycle repair/restore route blocker from
+  the executable lifecycle criterion only. Other Stage 17 closure criteria and
+  live backlog/projection work remain open.
+- This slice does not close a ledger-backed phase gate and does not move the
+  Phase 2 posture.
+
+### 2026-06-20 - Stage 17 reusable governed invocation proof
+
+Roadmap area: Stage 17 / Capability Economy, reusable capability-pack
+invocation, governed execution boundaries, mission-linked operation reuse, and
+receipt-backed cross-context leverage.
+
+This pass proved one reusable governed invocation path for a single capability
+pack across direct plugin, direct tool, mission-linked plugin operation, and
+mission-linked tool operation callers:
+
+- The invocation receipt now carries a `plugin.capability_pack.invocation_receipt`
+  with the `stage17_capability_pack_reusable_invocation_receipt_v1` contract,
+  the selected pack id/version, capability id, action, pack reuse key, dispatch
+  run/trace linkage, and promotion/proposal/validation evidence references.
+- The reusable pack selection helper records the
+  `stage17_capability_pack_invocation_selection_v1` contract, derives a stable
+  pack reuse key from registry metadata, and names the supported caller
+  contexts without duplicating plugin execution logic.
+- Direct `/plugins/run` now defaults missing `caller_context` metadata to
+  `direct_plugin_route`; `/plugins/tools/run` already defaults to
+  `plugin_tool_route`. Mission-linked callers can pass their mission context
+  through the existing operation input metadata.
+- Mission-linked `plugin.run` and `plugin.tool.run` operation paths continue to
+  call the existing plugin route helpers through the operation executor. No
+  parallel invocation substrate, new desktop action, or ungoverned execution path
+  was added.
+- The read-only
+  `/plugins/capabilities/library/invocations/audit` route reads existing
+  operation records with embedded invocation receipts and only claims reuse when
+  matching pack reuse keys appear across mission-linked caller contexts.
+
+Validation:
+
+- `.\.venv\Scripts\python.exe -m py_compile
+  src\francis\api\routes\plugins.py` passed.
+- `.\.venv\Scripts\python.exe -m pytest
+  tests\test_api_missions.py::test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_mission_contexts
+  -q` passed with one existing FastAPI/TestClient deprecation warning.
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_missions.py` passed.
+- `.\.venv\Scripts\python.exe -m ruff format --check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_missions.py` passed with
+  `2 files already formatted`.
+- `git diff --check -- src\francis\api\routes\plugins.py
+  tests\test_api_missions.py` reported no whitespace errors.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. This pass does not claim full reusable invocation
+  coverage, promote new capabilities, enable new capabilities outside the test
+  fixture, process a live Stage 17 queue chunk, write a publication marker,
+  commit, push, or close the Stage 17 capability-economy queue.
+- This pass advances the reusable-invocation proof criterion for one governed
+  pack and removes the missing one-pack cross-context proof blocker only for the
+  tested direct/plugin-tool/mission-linked operation shapes.
+- The broader Stage 17 queue, projection freshness, live backlog reduction,
+  publication-marker, and full capability-lifecycle closure criteria remain
+  open. This slice does not close a ledger-backed phase gate and does not move
+  the Phase 2 posture.
+
+### 2026-06-20 - Stage 17 invocation audit reuse-proof readback
+
+Roadmap area: Stage 17 / Capability Economy, reusable capability-pack
+invocation, read-only invocation auditability, and receipt-backed cross-context
+leverage.
+
+This pass hardened the read-only invocation audit proof added by the reusable
+governed invocation slice:
+
+- `/plugins/capabilities/library/invocations/audit` now emits a
+  `reuse_proof` object with the
+  `stage17_capability_pack_invocation_audit_reuse_proof_v1` contract.
+- The proof groups caller contexts by embedded `pack_reuse_key`, reports
+  `cross_context_reuse_proven` only when the same key appears in at least two
+  contexts, and separately reports `mission_linked_reuse_proven` only when both
+  mission-linked plugin and mission-linked tool operation contexts are present.
+- The route remains read-only and derives proof only from existing operation
+  records with embedded `plugin.capability_pack.invocation_receipt` payloads. It
+  does not infer missing direct-route receipts, execute capabilities, write
+  receipts, promote, enable, mutate data, or grant authority.
+
+Validation:
+
+- `.\.venv\Scripts\python.exe -m py_compile
+  src\francis\api\routes\plugins.py` passed.
+- `.\.venv\Scripts\python.exe -m pytest
+  tests\test_api_missions.py::test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_mission_contexts
+  -q` passed with one existing FastAPI/TestClient deprecation warning.
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_missions.py` passed.
+- `.\.venv\Scripts\python.exe -m ruff format --check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_missions.py` passed with
+  `2 files already formatted`.
+- `git diff --check -- src\francis\api\routes\plugins.py
+  tests\test_api_missions.py` reported no whitespace errors.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. This pass does not claim full reusable invocation
+  coverage, promote or enable capabilities, process a live Stage 17 queue chunk,
+  write a publication marker, commit, push, or close the Stage 17
+  capability-economy queue.
+- This pass only makes the one-pack cross-context invocation proof
+  machine-readable in the audit readback for the tested mission-linked plugin
+  and mission-linked tool operation shapes.
+- The broader Stage 17 queue, projection freshness, live backlog reduction,
+  publication-marker, and full capability-lifecycle closure criteria remain
+  open. This slice does not close a ledger-backed phase gate and does not move
+  the Phase 2 posture.
+
+### 2026-06-20 - Stage 17 runtime compatibility execution gate
+
+Roadmap area: Stage 17 / Capability Economy, executable capability lifecycle,
+compatibility refusal, governed execution boundaries, and promotion/apply
+safety.
+
+This pass made recorded core compatibility an execution-time refusal, not only a
+promotion-readiness check:
+
+- `/plugins/run` now reads registry-held `meta.compatibility.min_core_version`
+  through the existing `plugin.compatibility.min_core_version` contract after
+  the existing lifecycle and enabled-state gates and before resolving or running
+  the requested plugin action.
+- Already-enabled plugins whose registry metadata requires a newer Francis core,
+  has an invalid minimum core version, or cannot be evaluated now return
+  `plugin_core_incompatible` with compatibility readback and a
+  `plugin_runtime_compatibility_gate` governance payload.
+- Runtime compatibility uses registry-held metadata only; request-supplied
+  `meta.compatibility` cannot downgrade the stored requirement during
+  execution.
+- The denial path does not write registry metadata, write receipts, promote,
+  enable, execute, approve proposals, or write memory. Compatible enabled
+  plugins continue through the existing `/plugins/run` execution path.
+
+Validation:
+
+- `.\.venv\Scripts\python.exe -m py_compile
+  src\francis\api\routes\plugins.py` passed.
+- `.\.venv\Scripts\python.exe -m pytest
+  tests\test_api_plugins.py::test_plugins_run_blocks_incompatible_registry_core_versions
+  -q` passed with one existing FastAPI/TestClient deprecation warning.
+- `.\.venv\Scripts\python.exe -m pytest
+  tests\test_api_plugins.py::test_plugins_promotion_readiness_blocks_incompatible_core_versions
+  tests\test_api_plugins.py::test_plugins_run_blocks_incompatible_registry_core_versions
+  -q` passed with one existing FastAPI/TestClient deprecation warning.
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py` passed.
+- `.\.venv\Scripts\python.exe -m ruff format --check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py` passed with
+  `2 files already formatted`.
+- `git diff --check -- src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py` reported no whitespace errors.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. This pass does not promote, enable, execute an
+  incompatible capability, process a live Stage 17 queue chunk, write a
+  publication marker, commit, push, or close the Stage 17 capability-economy
+  queue.
+- This pass removes only the runtime compatibility-refusal blocker for
+  already-enabled plugin execution. Broader rollback orchestration, migration
+  apply behavior, live backlog/projection work, publication-marker evidence,
+  and full capability-lifecycle closure remain open.
+- This slice does not close a ledger-backed phase gate and does not move the
+  Phase 2 posture.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

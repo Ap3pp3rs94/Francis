@@ -65,6 +65,31 @@ def _isolate_generated_plugin_root(monkeypatch, plugins_module, tmp_path: Path) 
     monkeypatch.setattr(spec_builder, "_gen_dir", lambda: generated_root)
 
 
+def _assert_stage17_projection_readback(
+    readback: dict[str, object],
+    *,
+    projection_scope: str,
+    global_counts_included: bool,
+    selected_capability_ids: list[str] | None = None,
+) -> None:
+    generated_at = str(readback["generated_at"])
+    assert "T" in generated_at
+    assert generated_at.endswith("Z")
+    assert readback["projection_contract"] == "stage17_capability_library_projection_evidence_v1"
+    projection_evidence = readback["projection_evidence"]
+    assert isinstance(projection_evidence, dict)
+    assert projection_evidence["contract"] == "stage17_capability_library_projection_evidence_v1"
+    assert projection_evidence["stage"] == "Stage 17 / Capability Economy"
+    assert projection_evidence["projection_scope"] == projection_scope
+    assert projection_evidence["global_counts_included"] is global_counts_included
+    assert projection_evidence["selected_capability_ids"] == sorted(selected_capability_ids or [])
+    assert projection_evidence["read_only_projection"] is True
+    assert projection_evidence["writes_repo"] is False
+    assert projection_evidence["writes_data"] is False
+    assert projection_evidence["grants_execution_authority"] is False
+    assert projection_evidence["grants_mutation_authority"] is False
+
+
 def test_plugins_atomic_write_json_uses_unique_temp_siblings(monkeypatch, tmp_path: Path) -> None:
     from francis.api.routes import plugins
 
@@ -366,6 +391,597 @@ def test_plugins_disable_generated_staged_plugin_updates_catalog_lifecycle_statu
     still_disabled = client.get(f"/plugins/get?id={plugin_id}")
     assert still_disabled.status_code == 200
     assert still_disabled.json()["item"]["status"] == "disabled"
+
+
+def test_plugins_disable_records_quarantine_lifecycle_receipt_and_catalog_readback(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
+    client = TestClient(create_app())
+    built = client.post(
+        "/plugins/build",
+        json={
+            "name": "Generated Quarantine Plugin",
+            "description": "Stage 17 quarantine lifecycle receipt coverage",
+            "actor": _PLUGIN_ACTOR,
+            "meta": {
+                **_forge_promotion_meta("generated_quarantine_lifecycle"),
+                "pack_id": "ops.lifecycle_quarantine",
+                "pack_version": "1.0.0",
+                "pack_name": "Ops Lifecycle Quarantine Pack",
+                "promotion_rules": [
+                    "metadata_receipt_before_promotion",
+                    "quality_standards_before_promotion",
+                    "operator_review_before_promotion",
+                ],
+                "pack_governance": {
+                    "risk_tier": "normal",
+                    "scope": "build_dev",
+                    "operator_review_required": True,
+                },
+            },
+        },
+    )
+    assert built.status_code == 200
+    built_body = built.json()
+    assert built_body["ok"] is True
+    plugin_id = str(built_body["plugin_id"])
+
+    quarantined = client.post(
+        "/plugins/disable",
+        json={
+            "id": plugin_id,
+            "actor": _PLUGIN_ACTOR,
+            "reason": "operator quarantined capability after lifecycle review",
+            "meta": {
+                "lifecycle_action": "quarantine",
+                "finding_ref": "operator.lifecycle.finding.1",
+            },
+        },
+    )
+
+    assert quarantined.status_code == 200
+    quarantine_body = quarantined.json()
+    assert quarantine_body["ok"] is True
+    assert quarantine_body["applied"] is True
+    assert quarantine_body["enabled"] is False
+    assert quarantine_body["status"] == "disabled"
+    assert quarantine_body["lifecycle_action"] == "quarantine"
+    assert quarantine_body["lifecycle_status"] == "quarantined"
+    assert quarantine_body["governance"]["scope"] == "plugins.write"
+    assert quarantine_body["governance"]["writes_registry_metadata"] is True
+    assert quarantine_body["governance"]["writes_lifecycle_receipt"] is True
+    assert quarantine_body["governance"]["does_not_promote_capabilities"] is True
+    assert quarantine_body["governance"]["does_not_enable_capabilities"] is True
+    assert quarantine_body["governance"]["does_not_execute_capabilities"] is True
+    assert quarantine_body["governance"]["promotion_authority"] is False
+    assert quarantine_body["governance"]["execution_authority"] is False
+    assert quarantine_body["governance"]["memory_write"] is False
+
+    receipt_path = Path(str(quarantine_body["lifecycle_receipt_path"]))
+    assert receipt_path.exists()
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    assert receipt["kind"] == "plugin.lifecycle.receipt"
+    assert receipt["receipt_id"] == quarantine_body["lifecycle_receipt_id"]
+    assert receipt["plugin_id"] == plugin_id
+    assert receipt["action"] == "quarantine"
+    assert receipt["lifecycle_status"] == "quarantined"
+    assert receipt["previous"]["status"] == "staged"
+    assert receipt["previous"]["enabled"] is False
+    assert receipt["current"]["status"] == "disabled"
+    assert receipt["current"]["enabled"] is False
+    assert receipt["governance"]["writes_lifecycle_receipt"] is True
+    assert receipt["governance"]["does_not_execute_capabilities"] is True
+
+    fetched = client.get(f"/plugins/get?id={plugin_id}")
+    assert fetched.status_code == 200
+    fetched_item = fetched.json()["item"]
+    assert fetched_item["status"] == "disabled"
+    assert fetched_item["enabled"] is False
+    fetched_meta = fetched_item["meta"]
+    assert fetched_meta["lifecycle_action"] == "quarantine"
+    assert fetched_meta["lifecycle_status"] == "quarantined"
+    assert fetched_meta["lifecycle_receipt_id"] == quarantine_body["lifecycle_receipt_id"]
+    assert fetched_meta["lifecycle_receipt_path"] == quarantine_body["lifecycle_receipt_path"]
+    assert fetched_meta["disabled_from_status"] == "staged"
+    assert fetched_meta["disabled_from_promotion_status"] == "staged"
+
+    run_quarantined = client.post("/plugins/run", json={"id": plugin_id, "action": "run", "input": "hello"})
+    assert run_quarantined.status_code == 200
+    run_body = run_quarantined.json()
+    assert run_body["ok"] is False
+    assert run_body["error"] == "plugin_quarantined"
+    assert run_body["status"] == "quarantined"
+    assert run_body["lifecycle"]["status"] == "quarantined"
+    assert run_body["lifecycle"]["blocks_execution"] is True
+    assert run_body["governance"]["gate"] == "plugin_lifecycle_gate"
+    assert run_body["governance"]["execution_authority"] is False
+
+    catalog = client.get("/plugins/capabilities/catalog?limit=5000")
+    assert catalog.status_code == 200
+    catalog_body = catalog.json()
+    entry = next(item for item in catalog_body["items"] if item["capability"] == plugin_id)
+    assert entry["status"] == "disabled"
+    assert entry["metadata"]["lifecycle_action"] == "quarantine"
+    assert entry["metadata"]["lifecycle_status"] == "quarantined"
+    assert entry["metadata"]["lifecycle_receipt_id"] == quarantine_body["lifecycle_receipt_id"]
+    assert entry["metadata"]["lifecycle_receipt_path"] == quarantine_body["lifecycle_receipt_path"]
+
+
+def test_plugins_disable_lifecycle_denies_unscoped_and_refuses_unsupported_actions(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    installed = client.post(
+        "/plugins/install",
+        json={
+            "source_kind": "registry",
+            "source_ref": "acme/lifecycle-refusal",
+            "reason": "install lifecycle refusal fixture",
+            "actor": _PLUGIN_ACTOR,
+        },
+    )
+    assert installed.status_code == 200
+    installed_body = installed.json()
+    assert installed_body["ok"] is True
+    plugin_id = str(installed_body["plugin_id"])
+
+    denied = client.post(
+        "/plugins/disable",
+        json={
+            "id": plugin_id,
+            "actor": "unscoped.lifecycle.operator",
+            "reason": "unscoped quarantine attempt",
+            "meta": {"lifecycle_action": "quarantine"},
+        },
+    )
+    assert denied.status_code == 200
+    denied_body = denied.json()
+    assert denied_body["ok"] is False
+    assert denied_body["applied"] is False
+    assert denied_body["status"] == "denied"
+    assert denied_body["error"] == "api_permission_denied"
+    assert denied_body["governance"]["gate"] == "permission_gate"
+
+    after_denied = client.get(f"/plugins/get?id={plugin_id}")
+    assert after_denied.status_code == 200
+    after_denied_item = after_denied.json()["item"]
+    assert after_denied_item["status"] == "enabled"
+    assert after_denied_item["enabled"] is True
+    assert "lifecycle_status" not in after_denied_item["meta"]
+
+    unsupported = client.post(
+        "/plugins/disable",
+        json={
+            "id": plugin_id,
+            "actor": _PLUGIN_ACTOR,
+            "reason": "unsupported lifecycle action",
+            "meta": {"lifecycle_action": "archive"},
+        },
+    )
+    assert unsupported.status_code == 200
+    unsupported_body = unsupported.json()
+    assert unsupported_body["ok"] is False
+    assert unsupported_body["applied"] is False
+    assert unsupported_body["status"] == "blocked"
+    assert unsupported_body["error"] == "unsupported_plugin_lifecycle_action"
+    assert unsupported_body["requested_lifecycle_action"] == "archive"
+    assert unsupported_body["supported_lifecycle_actions"] == ["disable", "quarantine", "deprecate"]
+    assert unsupported_body["governance"]["writes_registry_metadata"] is False
+    assert unsupported_body["governance"]["writes_lifecycle_receipt"] is False
+    assert unsupported_body["governance"]["does_not_execute_capabilities"] is True
+
+    after_unsupported = client.get(f"/plugins/get?id={plugin_id}")
+    assert after_unsupported.status_code == 200
+    after_unsupported_item = after_unsupported.json()["item"]
+    assert after_unsupported_item["status"] == "enabled"
+    assert after_unsupported_item["enabled"] is True
+    assert "lifecycle_status" not in after_unsupported_item["meta"]
+    lifecycle_dir = data_root / "artifacts" / "plugins" / "lifecycle"
+    assert not lifecycle_dir.exists() or list(lifecycle_dir.glob("*.json")) == []
+
+
+def test_plugins_lifecycle_deprecation_and_unknown_state_block_promotion(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
+    client = TestClient(create_app())
+
+    def build_reviewed(label: str) -> str:
+        built = client.post(
+            "/plugins/build",
+            json={
+                "name": f"Lifecycle {label}",
+                "description": "Stage 17 lifecycle promotion guard coverage",
+                "actor": _PLUGIN_ACTOR,
+                "meta": _forge_promotion_meta(f"lifecycle_{label}"),
+            },
+        )
+        assert built.status_code == 200
+        built_body = built.json()
+        assert built_body["ok"] is True
+        _approve_forge_proposal(client, str(built_body["proposal_id"]))
+        return str(built_body["plugin_id"])
+
+    deprecated_id = build_reviewed("deprecated")
+    ambiguous_id = build_reviewed("ambiguous")
+    active_id = build_reviewed("active")
+
+    deprecated = client.post(
+        "/plugins/disable",
+        json={
+            "id": deprecated_id,
+            "actor": _PLUGIN_ACTOR,
+            "reason": "operator superseded staged candidate",
+            "meta": {"lifecycle_action": "deprecate"},
+        },
+    )
+    assert deprecated.status_code == 200
+    deprecated_body = deprecated.json()
+    assert deprecated_body["ok"] is True
+    assert deprecated_body["lifecycle_action"] == "deprecate"
+    assert deprecated_body["lifecycle_status"] == "deprecated"
+    assert deprecated_body["lifecycle_receipt"]["kind"] == "plugin.lifecycle.receipt"
+
+    blocked_deprecated = client.post(
+        "/plugins/enable",
+        json={
+            "id": deprecated_id,
+            "actor": _PLUGIN_ACTOR,
+            "reason": "attempt deprecated lifecycle promotion",
+        },
+    )
+    assert blocked_deprecated.status_code == 200
+    blocked_deprecated_body = blocked_deprecated.json()
+    assert blocked_deprecated_body["ok"] is False
+    assert blocked_deprecated_body["error"] == "promotion_readiness_blocked"
+    assert blocked_deprecated_body["readiness"]["missing_requirements"] == ["lifecycle_state"]
+    deprecated_lifecycle = blocked_deprecated_body["readiness"]["evidence"]["lifecycle"]
+    assert deprecated_lifecycle["status"] == "deprecated"
+    assert deprecated_lifecycle["blocks_promotion"] is True
+    assert deprecated_lifecycle["error"] == "plugin_deprecated"
+
+    registry = plugins._load_registry()
+    ambiguous = plugins._read_plugin(registry, ambiguous_id)
+    assert ambiguous is not None
+    ambiguous_meta = dict(ambiguous.get("meta") or {})
+    ambiguous_meta["lifecycle_status"] = "operator_review_limbo"
+    ambiguous["meta"] = ambiguous_meta
+    plugins._write_plugin(registry, plugins._normalize_plugin_record(ambiguous_id, ambiguous))
+    plugins._save_registry_and_catalog(registry)
+
+    blocked_ambiguous = client.post(
+        "/plugins/enable",
+        json={
+            "id": ambiguous_id,
+            "actor": _PLUGIN_ACTOR,
+            "reason": "attempt ambiguous lifecycle promotion",
+        },
+    )
+    assert blocked_ambiguous.status_code == 200
+    blocked_ambiguous_body = blocked_ambiguous.json()
+    assert blocked_ambiguous_body["ok"] is False
+    assert blocked_ambiguous_body["error"] == "promotion_readiness_blocked"
+    assert blocked_ambiguous_body["readiness"]["missing_requirements"] == ["lifecycle_state"]
+    ambiguous_lifecycle = blocked_ambiguous_body["readiness"]["evidence"]["lifecycle"]
+    assert ambiguous_lifecycle["status"] == "operator_review_limbo"
+    assert ambiguous_lifecycle["blocks_promotion"] is True
+    assert ambiguous_lifecycle["error"] == "plugin_lifecycle_state_unknown"
+
+    enabled = client.post(
+        "/plugins/enable",
+        json={
+            "id": active_id,
+            "actor": _PLUGIN_ACTOR,
+            "reason": "promote active lifecycle candidate",
+        },
+    )
+    assert enabled.status_code == 200
+    enabled_body = enabled.json()
+    assert enabled_body["ok"] is True
+    assert enabled_body["enabled"] is True
+    assert enabled_body["promotion_receipt"]["lifecycle"]["blocks_promotion"] is False
+
+    run_active = client.post("/plugins/run", json={"id": active_id, "action": "run", "input": "hello"})
+    assert run_active.status_code == 200
+    run_active_body = run_active.json()
+    assert run_active_body["ok"] is True
+    assert run_active_body["status"] == "ok"
+
+
+def test_plugins_lifecycle_repair_restores_staged_candidate_without_promoting(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
+    client = TestClient(create_app())
+    built = client.post(
+        "/plugins/build",
+        json={
+            "name": "Lifecycle Repair",
+            "description": "Stage 17 lifecycle repair coverage",
+            "actor": _PLUGIN_ACTOR,
+            "meta": _forge_promotion_meta("lifecycle_repair"),
+        },
+    )
+    assert built.status_code == 200
+    built_body = built.json()
+    assert built_body["ok"] is True
+    plugin_id = str(built_body["plugin_id"])
+    _approve_forge_proposal(client, str(built_body["proposal_id"]))
+
+    deprecated = client.post(
+        "/plugins/disable",
+        json={
+            "id": plugin_id,
+            "actor": _PLUGIN_ACTOR,
+            "reason": "operator deprecated staged candidate before repair",
+            "meta": {"lifecycle_action": "deprecate"},
+        },
+    )
+    assert deprecated.status_code == 200
+    deprecated_body = deprecated.json()
+    assert deprecated_body["ok"] is True
+    assert deprecated_body["lifecycle_status"] == "deprecated"
+
+    blocked_before_repair = client.post(
+        "/plugins/enable",
+        json={
+            "id": plugin_id,
+            "actor": _PLUGIN_ACTOR,
+            "reason": "attempt deprecated lifecycle promotion before repair",
+        },
+    )
+    assert blocked_before_repair.status_code == 200
+    blocked_before_body = blocked_before_repair.json()
+    assert blocked_before_body["ok"] is False
+    assert blocked_before_body["error"] == "promotion_readiness_blocked"
+    assert blocked_before_body["readiness"]["missing_requirements"] == ["lifecycle_state"]
+
+    repaired = client.post(
+        "/plugins/lifecycle/repair",
+        json={
+            "id": plugin_id,
+            "actor": _PLUGIN_ACTOR,
+            "reason": "operator repaired deprecated lifecycle state after review",
+            "meta": {
+                "lifecycle_action": "restore",
+                "repair_ref": "operator.lifecycle.repair.1",
+            },
+        },
+    )
+    assert repaired.status_code == 200
+    repaired_body = repaired.json()
+    assert repaired_body["ok"] is True
+    assert repaired_body["applied"] is True
+    assert repaired_body["enabled"] is False
+    assert repaired_body["status"] == "staged"
+    assert repaired_body["lifecycle_action"] == "restore"
+    assert repaired_body["lifecycle_status"] == "active"
+    assert repaired_body["lifecycle_before"]["status"] == "deprecated"
+    assert repaired_body["lifecycle_before"]["blocks_promotion"] is True
+    assert repaired_body["lifecycle_after"]["status"] == "active"
+    assert repaired_body["lifecycle_after"]["blocks_promotion"] is False
+    assert repaired_body["governance"]["gate"] == "plugin_lifecycle_repair"
+    assert repaired_body["governance"]["scope"] == "plugins.write"
+    assert repaired_body["governance"]["writes_registry_metadata"] is True
+    assert repaired_body["governance"]["writes_lifecycle_receipt"] is True
+    assert repaired_body["governance"]["does_not_promote_capabilities"] is True
+    assert repaired_body["governance"]["does_not_enable_capabilities"] is True
+    assert repaired_body["governance"]["does_not_execute_capabilities"] is True
+    assert repaired_body["governance"]["promotion_authority"] is False
+    assert repaired_body["governance"]["execution_authority"] is False
+    assert repaired_body["governance"]["memory_write"] is False
+
+    receipt_path = Path(str(repaired_body["lifecycle_receipt_path"]))
+    assert receipt_path.exists()
+    repair_receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    assert repair_receipt["kind"] == "plugin.lifecycle.receipt"
+    assert repair_receipt["receipt_id"] == repaired_body["lifecycle_receipt_id"]
+    assert repair_receipt["plugin_id"] == plugin_id
+    assert repair_receipt["action"] == "restore"
+    assert repair_receipt["lifecycle_status"] == "active"
+    assert repair_receipt["previous"]["status"] == "disabled"
+    assert repair_receipt["previous"]["lifecycle_status"] == "deprecated"
+    assert repair_receipt["current"]["status"] == "staged"
+    assert repair_receipt["current"]["enabled"] is False
+    assert repair_receipt["current"]["lifecycle_status"] == "active"
+    assert repair_receipt["governance"]["route"] == "/plugins/lifecycle/repair"
+    assert repair_receipt["governance"]["does_not_enable_capabilities"] is True
+    assert repair_receipt["governance"]["does_not_execute_capabilities"] is True
+
+    fetched = client.get(f"/plugins/get?id={plugin_id}")
+    assert fetched.status_code == 200
+    fetched_item = fetched.json()["item"]
+    assert fetched_item["status"] == "staged"
+    assert fetched_item["enabled"] is False
+    fetched_meta = fetched_item["meta"]
+    assert fetched_meta["lifecycle_status"] == "active"
+    assert fetched_meta["lifecycle_repair_status"] == "repaired"
+    assert fetched_meta["lifecycle_repair_previous_status"] == "deprecated"
+    assert fetched_meta["lifecycle_repair_receipt_id"] == repaired_body["lifecycle_receipt_id"]
+
+    run_repaired = client.post("/plugins/run", json={"id": plugin_id, "action": "run", "input": "hello"})
+    assert run_repaired.status_code == 200
+    run_repaired_body = run_repaired.json()
+    assert run_repaired_body["ok"] is False
+    assert run_repaired_body["error"] == "plugin_staged"
+    assert run_repaired_body["status"] == "staged"
+
+    promoted = client.post(
+        "/plugins/enable",
+        json={
+            "id": plugin_id,
+            "actor": _PLUGIN_ACTOR,
+            "reason": "promote after explicit lifecycle repair",
+        },
+    )
+    assert promoted.status_code == 200
+    promoted_body = promoted.json()
+    assert promoted_body["ok"] is True
+    assert promoted_body["enabled"] is True
+    assert promoted_body["promotion_status"] == "promoted"
+    assert promoted_body["promotion_receipt"]["lifecycle"]["status"] == "active"
+    assert promoted_body["promotion_receipt"]["lifecycle"]["blocks_promotion"] is False
+
+
+def test_plugins_lifecycle_repair_denies_unscoped_and_refuses_ambiguous_noop(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    installed = client.post(
+        "/plugins/install",
+        json={
+            "source_kind": "registry",
+            "source_ref": "acme/lifecycle-repair-refusal",
+            "reason": "install lifecycle repair refusal fixture",
+            "actor": _PLUGIN_ACTOR,
+        },
+    )
+    assert installed.status_code == 200
+    installed_body = installed.json()
+    assert installed_body["ok"] is True
+    plugin_id = str(installed_body["plugin_id"])
+
+    quarantined = client.post(
+        "/plugins/disable",
+        json={
+            "id": plugin_id,
+            "actor": _PLUGIN_ACTOR,
+            "reason": "quarantine before denied repair",
+            "meta": {"lifecycle_action": "quarantine"},
+        },
+    )
+    assert quarantined.status_code == 200
+    assert quarantined.json()["ok"] is True
+    lifecycle_dir = data_root / "artifacts" / "plugins" / "lifecycle"
+    receipt_count_before_denied = len(list(lifecycle_dir.glob("*.json")))
+
+    denied = client.post(
+        "/plugins/lifecycle/repair",
+        json={
+            "id": plugin_id,
+            "actor": "unscoped.lifecycle.repair.operator",
+            "reason": "unscoped lifecycle repair attempt",
+            "meta": {"lifecycle_action": "repair"},
+        },
+    )
+    assert denied.status_code == 200
+    denied_body = denied.json()
+    assert denied_body["ok"] is False
+    assert denied_body["applied"] is False
+    assert denied_body["status"] == "denied"
+    assert denied_body["error"] == "api_permission_denied"
+    assert denied_body["governance"]["gate"] == "permission_gate"
+    assert len(list(lifecycle_dir.glob("*.json"))) == receipt_count_before_denied
+
+    after_denied = client.get(f"/plugins/get?id={plugin_id}")
+    assert after_denied.status_code == 200
+    after_denied_item = after_denied.json()["item"]
+    assert after_denied_item["status"] == "disabled"
+    assert after_denied_item["enabled"] is False
+    assert after_denied_item["meta"]["lifecycle_status"] == "quarantined"
+    assert "lifecycle_repair_status" not in after_denied_item["meta"]
+
+    unsupported = client.post(
+        "/plugins/lifecycle/repair",
+        json={
+            "id": plugin_id,
+            "actor": _PLUGIN_ACTOR,
+            "reason": "unsupported lifecycle repair action",
+            "meta": {"lifecycle_action": "archive"},
+        },
+    )
+    assert unsupported.status_code == 200
+    unsupported_body = unsupported.json()
+    assert unsupported_body["ok"] is False
+    assert unsupported_body["applied"] is False
+    assert unsupported_body["status"] == "blocked"
+    assert unsupported_body["error"] == "unsupported_plugin_lifecycle_action"
+    assert unsupported_body["requested_lifecycle_action"] == "archive"
+    assert unsupported_body["supported_lifecycle_actions"] == ["repair", "restore"]
+    assert unsupported_body["governance"]["gate"] == "plugin_lifecycle_repair"
+    assert unsupported_body["governance"]["writes_registry_metadata"] is False
+    assert unsupported_body["governance"]["writes_lifecycle_receipt"] is False
+    assert len(list(lifecycle_dir.glob("*.json"))) == receipt_count_before_denied
+
+    active = client.post(
+        "/plugins/install",
+        json={
+            "source_kind": "registry",
+            "source_ref": "acme/lifecycle-repair-active",
+            "reason": "install active lifecycle repair noop fixture",
+            "actor": _PLUGIN_ACTOR,
+        },
+    )
+    assert active.status_code == 200
+    active_body = active.json()
+    assert active_body["ok"] is True
+    active_id = str(active_body["plugin_id"])
+
+    noop = client.post(
+        "/plugins/lifecycle/repair",
+        json={
+            "id": active_id,
+            "actor": _PLUGIN_ACTOR,
+            "reason": "ambiguous repair with no blocking lifecycle state",
+            "meta": {"lifecycle_action": "repair"},
+        },
+    )
+    assert noop.status_code == 200
+    noop_body = noop.json()
+    assert noop_body["ok"] is False
+    assert noop_body["applied"] is False
+    assert noop_body["status"] == "not_required"
+    assert noop_body["error"] == "lifecycle_repair_not_required"
+    assert noop_body["lifecycle_before"]["blocks_promotion"] is False
+    assert noop_body["governance"]["gate"] == "plugin_lifecycle_repair"
+    assert noop_body["governance"]["writes_registry_metadata"] is False
+    assert noop_body["governance"]["writes_lifecycle_receipt"] is False
+    assert noop_body["governance"]["does_not_enable_capabilities"] is True
+    assert len(list(lifecycle_dir.glob("*.json"))) == receipt_count_before_denied
 
 
 def test_plugins_build_requires_forge_staging_quality(monkeypatch, tmp_path: Path) -> None:
@@ -699,6 +1315,46 @@ def test_plugins_capability_catalog_readback(monkeypatch, tmp_path: Path) -> Non
     assert body["coherence"]["total"] >= 1
     assert body["pack_readiness"]["stage"] == "Stage 17 / Capability Economy"
     assert body["pack_readiness"]["governance"]["read_only"] is True
+    closure = body["stage17_closure_matrix"]
+    assert closure["kind"] == "plugin.capability_catalog.stage17_closure_matrix"
+    assert closure["stage"] == "Stage 17 / Capability Economy"
+    assert closure["closure_claimed"] is False
+    assert closure["governance"]["read_only"] is True
+    assert closure["governance"]["closure_authority"] is False
+    assert closure["governance"]["does_not_promote_capabilities"] is True
+    assert closure["source_readbacks"]["catalog_route"] == "/plugins/capabilities/catalog"
+    criteria = {str(item["id"]): item for item in closure["criteria"]}
+    assert set(criteria) == {
+        "criterion_1_reusable_operational_assets",
+        "criterion_2_pack_evidence_travels",
+        "criterion_3_executable_lifecycle",
+        "criterion_4_catalog_coherence",
+        "criterion_5_governed_operator_paths",
+        "criterion_6_reuse_leverage",
+    }
+    assert closure["weakest_criterion"]["id"] in criteria
+    executable_lifecycle = criteria["criterion_3_executable_lifecycle"]
+    assert executable_lifecycle["status"] == "ready"
+    assert executable_lifecycle["blockers"] == []
+    assert executable_lifecycle["evidence"]["plugin_lifecycle_repair_route"] == "/plugins/lifecycle/repair"
+    assert executable_lifecycle["evidence"]["lifecycle_repair_contract"] == "plugin.lifecycle.repair_restore_v1"
+    assert "/plugins/lifecycle/repair" in executable_lifecycle["routes"]
+    catalog_coherence = criteria["criterion_4_catalog_coherence"]
+    assert catalog_coherence["routes"] == ["/plugins/capabilities/catalog"]
+    assert "stage17_closure_matrix" in catalog_coherence["evidence"]["catalog_readback_fields"]
+    assert catalog_coherence["blocker_counts"]["duplicate_capabilities"] == len(
+        body["coherence"]["duplicate_capabilities"]
+    )
+    assert catalog_coherence["blocker_counts"]["duplicate_proposals"] == len(body["coherence"]["duplicate_proposals"])
+    assert catalog_coherence["blocker_counts"]["lineage_gaps"] == len(body["coherence"]["lineage_gaps"])
+    assert catalog_coherence["blocker_counts"]["validation_lineage_gaps"] == len(
+        body["coherence"]["validation_lineage_gaps"]
+    )
+    assert catalog_coherence["blocker_counts"]["quality_gaps"] == len(body["coherence"]["quality_gaps"])
+    reuse_leverage = criteria["criterion_6_reuse_leverage"]
+    assert reuse_leverage["evidence"]["claim_boundary"] == (
+        "catalog evidence does not prove reuse across real operator contexts"
+    )
     assert not any(gap["capability"] == plugin_id for gap in body["coherence"]["lineage_gaps"])
     assert not any(gap["capability"] == plugin_id for gap in body["coherence"]["validation_lineage_gaps"])
 
@@ -1179,6 +1835,156 @@ def test_plugins_capability_pack_quality_docs_projects_read_only_doc_evidence(
     assert pack["invalid_doc_reference_count"] == 0
     assert pack["doc_files"] == ["README.md"]
     assert all(item["capability"] != plugin_id for item in pack["failing_capabilities_sample"])
+
+
+def test_plugins_capability_pack_quality_standard_remediation_backfills_candidate_refs(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
+    client = TestClient(create_app())
+    plugin_ids: list[str] = []
+    for index in range(2):
+        built = client.post(
+            "/plugins/build",
+            json={
+                "name": f"Capability Quality Standard Remediation Plugin {index}",
+                "description": "Stage 17 quality standard remediation coverage",
+                "actor": _PLUGIN_ACTOR,
+                "meta": _forge_promotion_meta(f"capability_quality_standard_remediation_{index}"),
+            },
+        )
+        assert built.status_code == 200
+        built_body = built.json()
+        assert built_body["ok"] is True
+        plugin_ids.append(str(built_body["plugin_id"]))
+
+    pack_id = "ops.quality_standard_remediation"
+    pack_version = "1.0.0"
+    recorded = client.post(
+        "/plugins/capabilities/packs/metadata/receipts",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "record reviewed pack metadata before quality standard remediation",
+            "pack_id": pack_id,
+            "pack_version": pack_version,
+            "pack_name": "Ops Quality Standard Remediation Pack",
+            "capability_ids": plugin_ids,
+            "promotion_rules": [
+                "metadata_receipt_before_promotion",
+                "quality_standards_before_promotion",
+                "operator_review_before_promotion",
+            ],
+            "pack_governance": {
+                "risk_tier": "normal",
+                "scope": "build_dev",
+                "operator_review_required": True,
+                "requires_validation_receipt": True,
+            },
+        },
+    )
+    assert recorded.status_code == 200
+    assert recorded.json()["ok"] is True
+
+    registry = plugins._load_registry()
+    plugin = plugins._read_plugin(registry, plugin_ids[1])
+    assert plugin is not None
+    meta = dict(plugin.get("meta") or {})
+    for key in ("tests", "test_refs", "docs", "documentation", "quality"):
+        meta.pop(key, None)
+    plugin["meta"] = meta
+    plugins._write_plugin(registry, plugins._normalize_plugin_record(plugin_ids[1], plugin))
+    plugins._save_registry_and_catalog(registry)
+
+    before = client.get("/plugins/capabilities/packs/quality/standards").json()
+    before_pack = next(item for item in before["packs"] if item["pack_id"] == pack_id)
+    assert before_pack["status"] == "blocked"
+    assert before_pack["blockers"] == ["tests_missing", "docs_missing"]
+    assert before_pack["tested_count"] == 1
+    assert before_pack["documented_count"] == 1
+
+    request_body = {
+        "actor": _PLUGIN_ACTOR,
+        "reason": "operator reviewed quality standard candidate refs",
+        "pack_ids": [pack_id],
+        "max_pack_count": 1,
+        "max_total_capability_count": 2,
+        "max_capability_count_per_pack": 2,
+    }
+    dry_run = client.post(
+        "/plugins/capabilities/packs/quality/standards/remediation/apply",
+        json={**request_body, "dry_run": True},
+    )
+    assert dry_run.status_code == 200
+    dry_run_body = dry_run.json()
+    assert dry_run_body["ok"] is True
+    assert dry_run_body["status"] == "dry_run"
+    assert dry_run_body["planned_pack_count"] == 1
+    assert dry_run_body["planned_capability_count"] == 2
+    planned = dry_run_body["planned"][0]
+    assert planned["missing_test_capability_count"] == 1
+    assert planned["missing_doc_capability_count"] == 1
+    assert planned["quality_references"]["tests"] == ["tests/test_api_plugins.py"]
+    assert planned["quality_references"]["docs"] == ["README.md", "docs/operations/COMPLETION_LEDGER.md"]
+    assert dry_run_body["governance"]["writes_registry_metadata"] is False
+    assert dry_run_body["governance"]["writes_receipts"] is False
+
+    post_dry = plugins._read_plugin(plugins._load_registry(), plugin_ids[1])
+    assert post_dry is not None
+    assert "quality" not in dict(post_dry.get("meta") or {})
+
+    applied = client.post(
+        "/plugins/capabilities/packs/quality/standards/remediation/apply",
+        json=request_body,
+    )
+    assert applied.status_code == 200
+    applied_body = applied.json()
+    assert applied_body["ok"] is True
+    assert applied_body["applied"] is True
+    assert applied_body["status"] == "recorded"
+    assert applied_body["recorded_pack_count"] == 1
+    assert applied_body["recorded_capability_count"] == 1
+    assert applied_body["remaining_quality_standard_queue_count"] == 0
+    assert applied_body["governance"]["writes_registry_metadata"] is True
+    assert applied_body["governance"]["writes_receipts"] is False
+    assert applied_body["governance"]["candidate_references_do_not_claim_pack_specific_coverage"] is True
+    assert applied_body["governance"]["does_not_write_validation_receipts"] is True
+    assert applied_body["governance"]["does_not_write_proposals"] is True
+    assert applied_body["governance"]["does_not_promote_capabilities"] is True
+    assert applied_body["governance"]["does_not_execute_capabilities"] is True
+
+    stored = plugins._read_plugin(plugins._load_registry(), plugin_ids[1])
+    assert stored is not None
+    stored_meta = dict(stored.get("meta") or {})
+    stored_quality = stored_meta["quality"]
+    assert stored_quality["tests"] == ["tests/test_api_plugins.py"]
+    assert stored_quality["docs"] == ["README.md", "docs/operations/COMPLETION_LEDGER.md"]
+    assert stored_quality["claim_scope"] == "candidate_reference_only_not_pack_specific_proof"
+    assert stored_quality["pack_specific_coverage_claimed"] is False
+    assert stored_quality["validation_receipt_written"] is False
+    assert stored_quality["proposal_lineage_written"] is False
+    assert stored_meta["quality_standard_remediation_source"] == (
+        "stage17_capability_pack_quality_standard_remediation_apply"
+    )
+
+    after = client.get("/plugins/capabilities/packs/quality/standards").json()
+    after_pack = next(item for item in after["packs"] if item["pack_id"] == pack_id)
+    assert after_pack["status"] == "ready"
+    assert after_pack["blockers"] == []
+
+    surface = client.get("/plugins/capabilities/packs/operator/surface").json()
+    assert (
+        surface["routes"]["quality_standard_remediation_apply_route"]
+        == "/plugins/capabilities/packs/quality/standards/remediation/apply"
+    )
 
 
 def test_plugins_capability_pack_validation_receipts_projects_read_only_receipt_evidence(
@@ -3797,11 +4603,16 @@ def test_plugins_capability_library_promotion_plan_uses_existing_promotion_readi
     assert review_plan_body["blocked_proposal_count"] == 0
     assert review_plan_body["packs_truncated"] is False
     assert review_plan_body["next_smallest_truthful_gap"] == "stage17_capability_library_proposal_review_apply"
+    assert review_plan_body["routes"]["proposal_review_apply_route"] == (
+        "/plugins/capabilities/library/proposal-review/apply"
+    )
     assert review_plan_body["routes"]["proposal_review_route"] == "/forge/proposals/decision"
     assert review_plan_body["routes"]["promotion_plan_route"] == "/plugins/capabilities/library/promotion/plan"
     assert review_plan_body["requirements"]["uses_existing_plugin_promotion_readiness"] is True
     assert review_plan_body["requirements"]["proposal_evidence_required_before_review"] is True
     assert review_plan_body["requirements"]["tests_required_before_review"] is True
+    assert review_plan_body["requirements"]["proposal_review_uses_forge_decision_receipt_schema"] is True
+    assert review_plan_body["requirements"]["bulk_proposal_review_apply_requires_dry_run_fingerprint"] is True
     assert review_plan_body["requirements"]["proposal_review_does_not_promote_or_enable_capabilities"] is True
     assert review_plan_body["requirements"]["no_auto_approval"] is True
     assert review_plan_body["governance"]["read_only"] is True
@@ -3849,12 +4660,17 @@ def test_plugins_capability_library_promotion_plan_uses_existing_promotion_readi
     assert readiness_body["routes"]["proposal_review_apply_readiness_route"] == (
         "/plugins/capabilities/library/proposal-review/apply-readiness"
     )
+    assert (
+        readiness_body["routes"]["proposal_review_apply_route"] == "/plugins/capabilities/library/proposal-review/apply"
+    )
     assert readiness_body["routes"]["proposal_review_route"] == "/forge/proposals/decision"
     assert readiness_body["routes"]["operator_intake_audit_route"] == (
         "/plugins/capabilities/library/proposal-evidence/operator-intake/audit"
     )
     assert readiness_body["requirements"]["proposal_evidence_required_before_review"] is True
     assert readiness_body["requirements"]["forge_decision_route_required"] is True
+    assert readiness_body["requirements"]["proposal_review_uses_forge_decision_receipt_schema"] is True
+    assert readiness_body["requirements"]["bulk_proposal_review_apply_requires_dry_run_fingerprint"] is True
     assert readiness_body["requirements"]["does_not_apply_reviews"] is True
     assert readiness_body["governance"]["read_only"] is True
     assert readiness_body["governance"]["does_not_write_proposal_review_receipts"] is True
@@ -3874,7 +4690,136 @@ def test_plugins_capability_library_promotion_plan_uses_existing_promotion_readi
     assert readiness_proposal["proposal_review_would_promote_capability"] is False
     assert readiness_proposal["proposal_review_would_enable_capability"] is False
 
-    _approve_forge_proposal(client, proposal_id)
+    review_dry_run = client.post(
+        "/plugins/capabilities/library/proposal-review/apply",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "dry run capability-library proposal review",
+            "pack_ids": [pack_id],
+            "capability_ids": [plugin_id],
+            "max_pack_count": 1,
+            "max_total_capability_count": 1,
+            "max_capability_count_per_pack": 1,
+            "dry_run": True,
+        },
+    )
+
+    assert review_dry_run.status_code == 200
+    review_dry_run_body = review_dry_run.json()
+    assert review_dry_run_body["ok"] is True
+    assert review_dry_run_body["applied"] is False
+    assert review_dry_run_body["kind"] == "plugin.capability_library.proposal_review.apply"
+    assert review_dry_run_body["status"] == "dry_run"
+    assert review_dry_run_body["planned_pack_count"] == 1
+    assert review_dry_run_body["planned_capability_count"] == 1
+    assert review_dry_run_body["planned_proposal_count"] == 1
+    assert len(review_dry_run_body["dry_run_fingerprint"]) == 64
+    assert review_dry_run_body["before"]["projection_scope"] == "selected_capabilities"
+    assert review_dry_run_body["before"]["global_counts_included"] is False
+    assert review_dry_run_body["dry_run_confirmation"]["required_for_apply"] is True
+    assert review_dry_run_body["dry_run_confirmation"]["fingerprint"] == review_dry_run_body["dry_run_fingerprint"]
+    assert review_dry_run_body["dry_run_confirmation"]["fingerprint_contract"] == (
+        "stage17_capability_library_proposal_review_apply_dry_run_v1"
+    )
+    assert review_dry_run_body["planned"][0]["pack_id"] == pack_id
+    planned_review = review_dry_run_body["planned"][0]["proposals"][0]
+    assert planned_review["proposal_id"] == proposal_id
+    assert planned_review["capability_ids"] == [plugin_id]
+    assert planned_review["writes_proposal_review_receipt"] is False
+    assert planned_review["updates_proposal_record"] is False
+    assert planned_review["approves_proposal"] is True
+    assert planned_review["promotes_capability"] is False
+    assert planned_review["enables_capability"] is False
+    assert review_dry_run_body["governance"]["writes_proposal_review_receipts"] is False
+    assert review_dry_run_body["governance"]["updates_proposal_records"] is False
+    assert review_dry_run_body["governance"]["uses_forge_decision_receipt_schema"] is True
+    assert review_dry_run_body["governance"]["dry_run_required_before_apply"] is True
+    assert review_dry_run_body["governance"]["would_approve_proposals"] is True
+    assert review_dry_run_body["governance"]["approves_proposals"] is False
+    assert review_dry_run_body["governance"]["does_not_promote_capabilities"] is True
+    assert review_dry_run_body["governance"]["does_not_enable_capabilities"] is True
+    assert review_dry_run_body["governance"]["proposal_review_authority"] is False
+    assert review_dry_run_body["governance"]["promotion_authority"] is False
+
+    proposal_after_review_dry_run = client.get(f"/forge/proposals/get?id={proposal_id}").json()["item"]
+    assert proposal_after_review_dry_run["status"] == "staged"
+
+    review_blocked_without_confirmation = client.post(
+        "/plugins/capabilities/library/proposal-review/apply",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "apply capability-library proposal review without dry run confirmation",
+            "pack_ids": [pack_id],
+            "capability_ids": [plugin_id],
+            "max_pack_count": 1,
+            "max_total_capability_count": 1,
+            "max_capability_count_per_pack": 1,
+            "dry_run": False,
+        },
+    )
+
+    assert review_blocked_without_confirmation.status_code == 200
+    review_blocked_body = review_blocked_without_confirmation.json()
+    assert review_blocked_body["ok"] is False
+    assert review_blocked_body["applied"] is False
+    assert review_blocked_body["status"] == "blocked"
+    assert review_blocked_body["error"] == "capability_library_proposal_review_dry_run_confirmation_required"
+    assert review_blocked_body["dry_run_confirmation"]["required_for_apply"] is True
+    assert review_blocked_body["dry_run_confirmation"]["fingerprint_matched"] is False
+    assert review_blocked_body["governance"]["writes_proposal_review_receipts"] is False
+    assert review_blocked_body["governance"]["updates_proposal_records"] is False
+    assert review_blocked_body["governance"]["proposal_review_authority"] is False
+
+    proposal_after_blocked_review = client.get(f"/forge/proposals/get?id={proposal_id}").json()["item"]
+    assert proposal_after_blocked_review["status"] == "staged"
+
+    review_applied = client.post(
+        "/plugins/capabilities/library/proposal-review/apply",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "apply capability-library proposal review",
+            "pack_ids": [pack_id],
+            "capability_ids": [plugin_id],
+            "max_pack_count": 1,
+            "max_total_capability_count": 1,
+            "max_capability_count_per_pack": 1,
+            "dry_run": False,
+            "dry_run_fingerprint": review_dry_run_body["dry_run_fingerprint"],
+        },
+    )
+
+    assert review_applied.status_code == 200
+    review_applied_body = review_applied.json()
+    assert review_applied_body["ok"] is True
+    assert review_applied_body["applied"] is True
+    assert review_applied_body["kind"] == "plugin.capability_library.proposal_review.apply"
+    assert review_applied_body["status"] == "reviewed"
+    assert review_applied_body["planned_pack_count"] == 1
+    assert review_applied_body["planned_capability_count"] == 1
+    assert review_applied_body["planned_proposal_count"] == 1
+    assert review_applied_body["recorded_proposal_count"] == 1
+    assert review_applied_body["recorded_capability_count"] == 1
+    assert review_applied_body["recorded"][0]["proposal_id"] == proposal_id
+    assert review_applied_body["recorded"][0]["capability_ids"] == [plugin_id]
+    assert Path(review_applied_body["recorded"][0]["receipt_path"]).exists()
+    assert review_applied_body["dry_run_confirmation"]["fingerprint_matched"] is True
+    assert review_applied_body["remaining_proposal_review_missing_count"] == 0
+    assert review_applied_body["remaining_reviewable_capability_count"] == 0
+    assert review_applied_body["promotable_capability_count"] == 1
+    assert review_applied_body["next_smallest_truthful_gap"] == "stage17_capability_library_explicit_promotion_apply"
+    assert review_applied_body["governance"]["writes_proposal_review_receipts"] is True
+    assert review_applied_body["governance"]["updates_proposal_records"] is True
+    assert review_applied_body["governance"]["approves_proposals"] is True
+    assert review_applied_body["governance"]["does_not_promote_capabilities"] is True
+    assert review_applied_body["governance"]["does_not_enable_capabilities"] is True
+    assert review_applied_body["governance"]["proposal_review_authority"] is True
+    assert review_applied_body["governance"]["promotion_authority"] is False
+
+    review_receipt = json.loads(Path(review_applied_body["recorded"][0]["receipt_path"]).read_text(encoding="utf-8"))
+    assert review_receipt["kind"] == "plugin.proposal.review.receipt"
+    assert review_receipt["proposal_id"] == proposal_id
+    assert review_receipt["status"] == "approved"
+    assert review_receipt["governance"]["uses_forge_decision_receipt_schema"] is True
 
     reviewed = client.get("/plugins/capabilities/library/proposal-review/plan")
 
@@ -3906,17 +4851,408 @@ def test_plugins_capability_library_promotion_plan_uses_existing_promotion_readi
     assert ready_body["packs_truncated"] is False
     assert ready_body["missing_requirement_counts"] == {}
     assert ready_body["next_smallest_truthful_gap"] == "stage17_capability_library_explicit_promotion_apply"
+    assert ready_body["routes"]["promotion_apply_route"] == "/plugins/capabilities/library/promotion/apply"
+    assert ready_body["requirements"]["bulk_promotion_apply_requires_dry_run_fingerprint"] is True
+    assert ready_body["requirements"]["core_compatibility_required_before_promotion"] is True
 
     ready_capability = ready_body["packs"][0]["capabilities"][0]
     assert ready_capability["capability"] == plugin_id
     assert ready_capability["promotion_ready"] is True
     assert ready_capability["proposal_review_status"] == "approved"
+    assert ready_capability["compatibility"]["compatible"] is True
+    assert ready_capability["compatibility"]["status"] == "compatible"
+    assert ready_capability["compatibility"]["min_core_version"] == "0.3.0"
 
     fetched = client.get(f"/plugins/get?id={plugin_id}")
     assert fetched.status_code == 200
     fetched_item = fetched.json()["item"]
     assert fetched_item["status"] == "staged"
     assert fetched_item["enabled"] is False
+
+    dry_run = client.post(
+        "/plugins/capabilities/library/promotion/apply",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "dry run explicit capability-library promotion",
+            "pack_ids": [pack_id],
+            "capability_ids": [plugin_id],
+            "max_pack_count": 1,
+            "max_total_capability_count": 1,
+            "max_capability_count_per_pack": 1,
+            "dry_run": True,
+        },
+    )
+
+    assert dry_run.status_code == 200
+    dry_run_body = dry_run.json()
+    assert dry_run_body["ok"] is True
+    assert dry_run_body["applied"] is False
+    assert dry_run_body["kind"] == "plugin.capability_library.explicit_promotion.apply"
+    assert dry_run_body["status"] == "dry_run"
+    assert dry_run_body["planned_pack_count"] == 1
+    assert dry_run_body["planned_capability_count"] == 1
+    assert len(dry_run_body["dry_run_fingerprint"]) == 64
+    assert dry_run_body["dry_run_confirmation"]["required_for_apply"] is True
+    assert dry_run_body["dry_run_confirmation"]["fingerprint"] == dry_run_body["dry_run_fingerprint"]
+    assert dry_run_body["dry_run_confirmation"]["fingerprint_contract"] == (
+        "stage17_capability_library_explicit_promotion_dry_run_v1"
+    )
+    assert dry_run_body["planned"][0]["pack_id"] == pack_id
+    planned_promotion_capability = dry_run_body["planned"][0]["capabilities"][0]
+    assert planned_promotion_capability["capability"] == plugin_id
+    assert planned_promotion_capability["compatibility"]["compatible"] is True
+    assert planned_promotion_capability["compatibility"]["status"] == "compatible"
+    assert dry_run_body["planned"][0]["writes_promotion_receipts"] is False
+    assert dry_run_body["planned"][0]["promotes_capabilities"] is False
+    assert dry_run_body["planned"][0]["enables_capabilities"] is False
+    assert dry_run_body["governance"]["writes_registry_metadata"] is False
+    assert dry_run_body["governance"]["writes_promotion_receipts"] is False
+    assert dry_run_body["governance"]["lifecycle_operation"] == "explicit_promotion_apply"
+    assert dry_run_body["governance"]["policy_gate"] == "plugins.write"
+    assert dry_run_body["governance"]["receipt_contract"] == "plugin.promotion.receipt"
+    assert dry_run_body["governance"]["uses_existing_plugin_promotion_readiness"] is True
+    assert dry_run_body["governance"]["uses_plugin_promotion_receipt_schema"] is True
+    assert isinstance(dry_run_body["governance"]["generated_plugin_registry_sync_performed"], bool)
+    assert isinstance(dry_run_body["governance"]["does_not_mutate_registry"], bool)
+    assert dry_run_body["governance"]["dry_run_required_before_apply"] is True
+    assert dry_run_body["governance"]["does_not_approve_proposals"] is True
+    assert dry_run_body["governance"]["does_not_execute_capabilities"] is True
+    assert dry_run_body["governance"]["promotion_authority"] is False
+    assert dry_run_body["governance"]["execution_authority"] is False
+    assert dry_run_body["governance"]["memory_write"] is False
+
+    fetched_after_dry_run = client.get(f"/plugins/get?id={plugin_id}").json()["item"]
+    assert fetched_after_dry_run["status"] == "staged"
+    assert fetched_after_dry_run["enabled"] is False
+
+    blocked_without_confirmation = client.post(
+        "/plugins/capabilities/library/promotion/apply",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "apply explicit capability-library promotion without dry run confirmation",
+            "pack_ids": [pack_id],
+            "capability_ids": [plugin_id],
+            "max_pack_count": 1,
+            "max_total_capability_count": 1,
+            "max_capability_count_per_pack": 1,
+            "dry_run": False,
+        },
+    )
+
+    assert blocked_without_confirmation.status_code == 200
+    blocked_body = blocked_without_confirmation.json()
+    assert blocked_body["ok"] is False
+    assert blocked_body["applied"] is False
+    assert blocked_body["status"] == "blocked"
+    assert blocked_body["error"] == "capability_library_explicit_promotion_dry_run_confirmation_required"
+    assert blocked_body["dry_run_confirmation"]["required_for_apply"] is True
+    assert blocked_body["dry_run_confirmation"]["fingerprint_matched"] is False
+    assert blocked_body["governance"]["writes_registry_metadata"] is False
+    assert blocked_body["governance"]["writes_promotion_receipts"] is False
+    assert blocked_body["governance"]["lifecycle_operation"] == "explicit_promotion_apply"
+    assert blocked_body["governance"]["receipt_contract"] == "plugin.promotion.receipt"
+    assert blocked_body["governance"]["uses_plugin_promotion_receipt_schema"] is True
+    assert blocked_body["governance"]["promotion_authority"] is False
+
+    fetched_after_blocked_apply = client.get(f"/plugins/get?id={plugin_id}").json()["item"]
+    assert fetched_after_blocked_apply["status"] == "staged"
+    assert fetched_after_blocked_apply["enabled"] is False
+
+    applied = client.post(
+        "/plugins/capabilities/library/promotion/apply",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "apply explicit capability-library promotion",
+            "pack_ids": [pack_id],
+            "capability_ids": [plugin_id],
+            "max_pack_count": 1,
+            "max_total_capability_count": 1,
+            "max_capability_count_per_pack": 1,
+            "dry_run": False,
+            "dry_run_fingerprint": dry_run_body["dry_run_fingerprint"],
+        },
+    )
+
+    assert applied.status_code == 200
+    applied_body = applied.json()
+    assert applied_body["ok"] is True
+    assert applied_body["applied"] is True
+    assert applied_body["status"] == "promoted"
+    assert applied_body["planned_pack_count"] == 1
+    assert applied_body["planned_capability_count"] == 1
+    assert applied_body["promoted_capability_count"] == 1
+    assert applied_body["promotion_receipt_count"] == 1
+    assert applied_body["promoted"][0]["capability"] == plugin_id
+    assert applied_body["promoted"][0]["pack_id"] == pack_id
+    assert applied_body["promotion_receipts"][0]["kind"] == "plugin.promotion.receipt"
+    assert applied_body["promotion_receipts"][0]["plugin_id"] == plugin_id
+    assert applied_body["promotion_receipts"][0]["status"] == "promoted"
+    assert applied_body["promotion_receipts"][0]["proposal_review"]["status"] == "approved"
+    assert applied_body["promotion_receipts"][0]["compatibility"]["compatible"] is True
+    assert applied_body["promotion_receipts"][0]["compatibility"]["status"] == "compatible"
+    assert applied_body["dry_run_fingerprint"] == dry_run_body["dry_run_fingerprint"]
+    assert applied_body["dry_run_confirmation"]["fingerprint_matched"] is True
+    assert applied_body["remaining_candidate_capability_count"] == 0
+    assert applied_body["remaining_promotable_capability_count"] == 0
+    assert applied_body["next_smallest_truthful_gap"] == "stage17_capability_library_promotion_receipts"
+    assert applied_body["governance"]["writes_registry_metadata"] is True
+    assert applied_body["governance"]["writes_promotion_receipts"] is True
+    assert applied_body["governance"]["lifecycle_operation"] == "explicit_promotion_apply"
+    assert applied_body["governance"]["policy_gate"] == "plugins.write"
+    assert applied_body["governance"]["receipt_contract"] == "plugin.promotion.receipt"
+    assert applied_body["governance"]["uses_existing_plugin_promotion_readiness"] is True
+    assert applied_body["governance"]["uses_plugin_promotion_receipt_schema"] is True
+    assert isinstance(applied_body["governance"]["generated_plugin_registry_sync_performed"], bool)
+    assert applied_body["governance"]["does_not_mutate_registry"] is False
+    assert applied_body["governance"]["dry_run_required_before_apply"] is True
+    assert applied_body["governance"]["does_not_approve_proposals"] is True
+    assert applied_body["governance"]["does_not_promote_capabilities"] is False
+    assert applied_body["governance"]["does_not_enable_capabilities"] is False
+    assert applied_body["governance"]["does_not_execute_capabilities"] is True
+    assert applied_body["governance"]["promotion_authority"] is True
+    assert applied_body["governance"]["execution_authority"] is False
+    assert applied_body["governance"]["memory_write"] is False
+
+    promoted_item = client.get(f"/plugins/get?id={plugin_id}").json()["item"]
+    assert promoted_item["status"] == "enabled"
+    assert promoted_item["enabled"] is True
+    promoted_meta = promoted_item["meta"]
+    assert promoted_meta["promotion_status"] == "promoted"
+    assert promoted_meta["promotion_receipt_id"] == applied_body["promotion_receipts"][0]["receipt_id"]
+    assert Path(promoted_meta["promotion_receipt_path"]).exists()
+
+
+def test_plugins_promotion_readiness_blocks_incompatible_core_versions(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
+    client = TestClient(create_app())
+    pack_id = "ops.capability_library_incompatible_core"
+    pack_version = "1.0.0"
+    compatibility_cases = {
+        "requires_future_core": {"min_core_version": "99.0.0"},
+        "malformed_core_version": {"min_core_version": "not-a-version"},
+    }
+    built_items: dict[str, tuple[str, str]] = {}
+
+    for label, compatibility in compatibility_cases.items():
+        meta = {
+            **_forge_promotion_meta(label),
+            "pack_id": pack_id,
+            "pack_version": pack_version,
+            "pack_name": "Ops Capability Library Incompatible Core Pack",
+            "promotion_rules": [
+                "metadata_receipt_before_promotion",
+                "quality_standards_before_promotion",
+                "operator_review_before_promotion",
+            ],
+            "pack_governance": {
+                "risk_tier": "normal",
+                "scope": "build_dev",
+                "operator_review_required": True,
+            },
+        }
+        built = client.post(
+            "/plugins/build",
+            json={
+                "name": f"Incompatible Core {label}",
+                "description": "Stage 17 compatibility refusal coverage",
+                "actor": _PLUGIN_ACTOR,
+                "meta": meta,
+            },
+        )
+        assert built.status_code == 200
+        built_body = built.json()
+        assert built_body["ok"] is True
+        plugin_id = str(built_body["plugin_id"])
+        proposal_id = str(built_body["proposal_id"])
+        built_items[label] = (plugin_id, proposal_id)
+
+        registry = plugins._load_registry()
+        plugin = plugins._read_plugin(registry, plugin_id)
+        assert plugin is not None
+        generated_dir = Path(str(plugin["generated_dir"]))
+        spec_path = generated_dir / "plugin.spec.json"
+        spec = json.loads(spec_path.read_text(encoding="utf-8"))
+        spec["compatibility"] = compatibility
+        spec_path.write_text(json.dumps(spec, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        plugin_meta = dict(plugin.get("meta") or {})
+        plugin_meta["compatibility"] = compatibility
+        plugin["meta"] = plugin_meta
+        plugins._write_plugin(registry, plugins._normalize_plugin_record(plugin_id, plugin))
+        plugins._save_registry_and_catalog(registry)
+
+        _approve_forge_proposal(client, proposal_id)
+
+    _approve_capability_pack_operator_review(
+        client,
+        pack_id=pack_id,
+        pack_version=pack_version,
+    )
+
+    plan = client.get("/plugins/capabilities/library/promotion/plan")
+
+    assert plan.status_code == 200
+    plan_body = plan.json()
+    assert plan_body["ok"] is True
+    assert plan_body["status"] == "blocked"
+    assert plan_body["promotion_plan_ready"] is False
+    assert plan_body["candidate_pack_count"] == 1
+    assert plan_body["candidate_capability_count"] == 2
+    assert plan_body["promotable_capability_count"] == 0
+    assert plan_body["blocked_capability_count"] == 2
+    assert plan_body["missing_requirement_counts"]["core_compatibility"] == 2
+    assert plan_body["requirements"]["core_compatibility_required_before_promotion"] is True
+    assert plan_body["governance"]["does_not_promote_capabilities"] is True
+
+    capabilities = {item["capability"]: item for pack in plan_body["packs"] for item in pack["capabilities"]}
+    future_plugin_id, _ = built_items["requires_future_core"]
+    malformed_plugin_id, _ = built_items["malformed_core_version"]
+    assert capabilities[future_plugin_id]["promotion_ready"] is False
+    assert "core_compatibility" in capabilities[future_plugin_id]["missing_requirements"]
+    assert capabilities[future_plugin_id]["compatibility"]["status"] == "requires_newer_core"
+    assert capabilities[future_plugin_id]["compatibility"]["min_core_version"] == "99.0.0"
+    assert capabilities[malformed_plugin_id]["promotion_ready"] is False
+    assert "core_compatibility" in capabilities[malformed_plugin_id]["missing_requirements"]
+    assert capabilities[malformed_plugin_id]["compatibility"]["status"] == "invalid_min_core_version"
+    assert capabilities[malformed_plugin_id]["compatibility"]["min_core_version"] == "not-a-version"
+
+    blocked_enable = client.post(
+        "/plugins/enable",
+        json={
+            "id": future_plugin_id,
+            "reason": "attempt incompatible staged promotion",
+            "actor": _PLUGIN_ACTOR,
+        },
+    )
+
+    assert blocked_enable.status_code == 200
+    blocked_body = blocked_enable.json()
+    assert blocked_body["ok"] is False
+    assert blocked_body["applied"] is False
+    assert blocked_body["error"] == "promotion_readiness_blocked"
+    assert blocked_body["status"] == "staged"
+    assert "core_compatibility" in blocked_body["readiness"]["missing_requirements"]
+    assert blocked_body["readiness"]["evidence"]["compatibility"]["status"] == "requires_newer_core"
+    assert blocked_body["readiness"]["evidence"]["compatibility"]["compatible"] is False
+    assert blocked_body["governance"]["scope"] == "plugins.write"
+
+    fetched_after_block = client.get(f"/plugins/get?id={future_plugin_id}")
+    assert fetched_after_block.status_code == 200
+    fetched_item = fetched_after_block.json()["item"]
+    assert fetched_item["status"] == "staged"
+    assert fetched_item["enabled"] is False
+
+
+def test_plugins_run_blocks_incompatible_registry_core_versions(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    client = TestClient(create_app())
+
+    def install_with_registry_compatibility(label: str, compatibility: dict[str, object]) -> tuple[str, int]:
+        installed = client.post(
+            "/plugins/install",
+            json={
+                "source_kind": "registry",
+                "source_ref": f"acme/runtime-compatibility-{label}",
+                "actor": _PLUGIN_ACTOR,
+                "reason": f"install runtime compatibility {label}",
+            },
+        )
+        assert installed.status_code == 200
+        installed_body = installed.json()
+        assert installed_body["ok"] is True
+        plugin_id = str(installed_body["plugin_id"])
+
+        registry = plugins._load_registry()
+        plugin = plugins._read_plugin(registry, plugin_id)
+        assert plugin is not None
+        meta = dict(plugin.get("meta") or {})
+        meta["compatibility"] = compatibility
+        plugin["meta"] = meta
+        normalized = plugins._normalize_plugin_record(plugin_id, plugin)
+        plugins._write_plugin(registry, normalized)
+        plugins._save_registry_and_catalog(registry)
+        return plugin_id, int(normalized.get("updated_ts") or 0)
+
+    compatible_id, _ = install_with_registry_compatibility("compatible", {"min_core_version": "0.0.0"})
+    future_id, future_updated_ts = install_with_registry_compatibility("future", {"min_core_version": "99.0.0"})
+    malformed_id, malformed_updated_ts = install_with_registry_compatibility(
+        "malformed",
+        {"min_core_version": "not-a-version"},
+    )
+
+    allowed = client.post("/plugins/run", json={"id": compatible_id, "action": "run", "input": "hello"})
+    assert allowed.status_code == 200
+    allowed_body = allowed.json()
+    assert allowed_body["ok"] is True
+    assert allowed_body["status"] == "ok"
+    assert allowed_body["receipt"]["ok"] is True
+
+    blocked_future = client.post(
+        "/plugins/run",
+        json={
+            "id": future_id,
+            "action": "run",
+            "input": "hello",
+            "meta": {"compatibility": {"min_core_version": "0.0.0"}},
+        },
+    )
+    assert blocked_future.status_code == 200
+    blocked_future_body = blocked_future.json()
+    assert blocked_future_body["ok"] is False
+    assert blocked_future_body["error"] == "plugin_core_incompatible"
+    assert blocked_future_body["status"] == "blocked"
+    assert blocked_future_body["compatibility"]["compatible"] is False
+    assert blocked_future_body["compatibility"]["status"] == "requires_newer_core"
+    assert blocked_future_body["compatibility"]["min_core_version"] == "99.0.0"
+    assert blocked_future_body["governance"]["gate"] == "plugin_runtime_compatibility_gate"
+    assert blocked_future_body["governance"]["scope"] == "plugin.run"
+    assert blocked_future_body["governance"]["does_not_execute_capabilities"] is True
+    assert blocked_future_body["governance"]["promotion_authority"] is False
+    assert blocked_future_body["governance"]["execution_authority"] is False
+    assert "receipt" not in blocked_future_body
+
+    blocked_malformed = client.post(
+        "/plugins/run",
+        json={"id": malformed_id, "action": "run", "input": "hello"},
+    )
+    assert blocked_malformed.status_code == 200
+    blocked_malformed_body = blocked_malformed.json()
+    assert blocked_malformed_body["ok"] is False
+    assert blocked_malformed_body["error"] == "plugin_core_incompatible"
+    assert blocked_malformed_body["compatibility"]["compatible"] is False
+    assert blocked_malformed_body["compatibility"]["status"] == "invalid_min_core_version"
+    assert blocked_malformed_body["compatibility"]["min_core_version"] == "not-a-version"
+    assert blocked_malformed_body["governance"]["compatibility_status"] == "invalid_min_core_version"
+    assert blocked_malformed_body["governance"]["does_not_execute_capabilities"] is True
+    assert "receipt" not in blocked_malformed_body
+
+    registry = plugins._load_registry()
+    future_after = plugins._read_plugin(registry, future_id)
+    malformed_after = plugins._read_plugin(registry, malformed_id)
+    assert future_after is not None
+    assert malformed_after is not None
+    assert int(future_after.get("updated_ts") or 0) == future_updated_ts
+    assert int(malformed_after.get("updated_ts") or 0) == malformed_updated_ts
 
 
 def test_plugins_capability_library_proposal_review_plan_blocks_before_review_when_evidence_missing(
@@ -4612,6 +5948,13 @@ def test_plugins_capability_library_proposal_evidence_source_readiness_inventory
     assert built_body["ok"] is True
     plugin_id = str(built_body["plugin_id"])
     proposal_id = str(built_body["proposal_id"])
+    validation_receipt_id = str(built_body["validation_receipt_id"])
+    local_artifact_refs = [
+        proposal_id,
+        f"data/artifacts/plugins/proposals/{proposal_id}.json",
+        validation_receipt_id,
+        f"data/artifacts/plugins/validations/{validation_receipt_id}.json",
+    ]
 
     registry = plugins._load_registry()
     plugin = plugins._read_plugin(registry, plugin_id)
@@ -4646,6 +5989,11 @@ def test_plugins_capability_library_proposal_evidence_source_readiness_inventory
     assert readiness_body["kind"] == "plugin.capability_library.proposal_evidence_source_readiness"
     assert readiness_body["stage"] == "Stage 17 / Capability Economy"
     assert readiness_body["status"] == "operator_evidence_refs_required"
+    _assert_stage17_projection_readback(
+        readiness_body,
+        projection_scope="full_library",
+        global_counts_included=True,
+    )
     assert readiness_body["proposal_evidence_source_readiness_ready"] is True
     assert readiness_body["proposal_evidence_missing_count"] == 1
     assert readiness_body["proposal_evidence_ready_count"] == 0
@@ -4699,10 +6047,17 @@ def test_plugins_capability_library_proposal_evidence_source_readiness_inventory
     assert next_batch["does_not_validate_evidence_truth"] is True
     assert next_batch["dry_run_required_before_apply"] is True
     assert next_batch["no_synthetic_evidence"] is True
+    assert next_batch["local_artifact_ref_hints_ready"] is True
+    assert next_batch["local_artifact_ref_hint_capability_count"] == 1
+    assert next_batch["local_artifact_ref_hint_evidence_ref_count"] == 4
+    assert next_batch["local_artifact_ref_hints_complete"] is True
+    assert next_batch["operator_must_review_local_artifact_refs_before_apply"] is True
+    assert next_batch["local_artifact_refs_by_capability"] == {plugin_id: local_artifact_refs}
     assert next_batch["apply_payload_hint"] == {
         "pack_ids": [pack_id],
         "capability_ids": [plugin_id],
         "evidence_refs": [],
+        "evidence_refs_by_capability": {plugin_id: local_artifact_refs},
         "dry_run": True,
         "max_pack_count": 1,
         "max_total_capability_count": 1,
@@ -4715,6 +6070,11 @@ def test_plugins_capability_library_proposal_evidence_source_readiness_inventory
     assert next_batch_capability["capability"] == plugin_id
     assert next_batch_capability["proposal_id"] == proposal_id
     assert next_batch_capability["evidence_refs_required"] is True
+    assert next_batch_capability["local_artifact_ref_hint"]["ready"] is True
+    assert next_batch_capability["local_artifact_ref_hint"]["claim_scope"] == (
+        "local_artifact_reference_hint_not_independent_evidence_verification"
+    )
+    assert next_batch_capability["local_artifact_ref_hint"]["evidence_refs"] == local_artifact_refs
     assert next_batch_capability["intake_apply_route"] == (
         "/plugins/capabilities/library/proposal-evidence/operator-intake/apply"
     )
@@ -4796,6 +6156,156 @@ def test_plugins_capability_library_proposal_evidence_source_readiness_inventory
         == 1
     )
     assert friction_readiness_body["source_inventory"]["operator_supplied_evidence_refs"]["ready"] is True
+
+
+def test_plugins_capability_library_operator_proposal_evidence_source_readiness_hints_apply_local_refs(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
+    client = TestClient(create_app())
+    pack_id = "ops.capability_library_operator_proposal_evidence_local_hints"
+    pack_version = "1.0.0"
+    built = client.post(
+        "/plugins/build",
+        json={
+            "name": "Capability Library Operator Proposal Evidence Local Hints Plugin",
+            "description": "Stage 17 local artifact evidence hint coverage",
+            "actor": _PLUGIN_ACTOR,
+            "meta": {
+                **_forge_promotion_meta("capability_library_operator_proposal_evidence_local_hints"),
+                "pack_id": pack_id,
+                "pack_version": pack_version,
+                "pack_name": "Ops Capability Library Operator Proposal Evidence Local Hints Pack",
+                "promotion_rules": [
+                    "metadata_receipt_before_promotion",
+                    "quality_standards_before_promotion",
+                    "operator_review_before_promotion",
+                ],
+                "pack_governance": {
+                    "risk_tier": "normal",
+                    "scope": "build_dev",
+                    "operator_review_required": True,
+                },
+            },
+        },
+    )
+    assert built.status_code == 200
+    built_body = built.json()
+    assert built_body["ok"] is True
+    plugin_id = str(built_body["plugin_id"])
+    proposal_id = str(built_body["proposal_id"])
+    validation_receipt_id = str(built_body["validation_receipt_id"])
+    local_artifact_refs = [
+        proposal_id,
+        f"data/artifacts/plugins/proposals/{proposal_id}.json",
+        validation_receipt_id,
+        f"data/artifacts/plugins/validations/{validation_receipt_id}.json",
+    ]
+
+    registry = plugins._load_registry()
+    plugin = plugins._read_plugin(registry, plugin_id)
+    assert plugin is not None
+    plugin_meta = dict(plugin.get("meta") or {})
+    plugin_meta.pop("proposal_evidence", None)
+    plugin_meta.pop("evidence", None)
+    plugin["meta"] = plugin_meta
+    plugins._write_plugin(registry, plugins._normalize_plugin_record(plugin_id, plugin))
+    plugins._save_registry_and_catalog(registry)
+
+    proposal_path = plugins._plugin_proposal_path(proposal_id)
+    proposal_record = json.loads(proposal_path.read_text(encoding="utf-8"))
+    proposal_record["friction"]["evidence"] = []
+    proposal_path.write_text(json.dumps(proposal_record, indent=2, sort_keys=True), encoding="utf-8")
+
+    _approve_capability_pack_operator_review(
+        client,
+        pack_id=pack_id,
+        pack_version=pack_version,
+    )
+
+    before = client.get("/plugins/capabilities/library/proposal-evidence/source-readiness")
+    assert before.status_code == 200
+    before_body = before.json()
+    assert before_body["proposal_evidence_missing_count"] == 1
+    assert before_body["operator_evidence_intake_candidate_capability_count"] == 1
+    next_batch = before_body["next_operator_evidence_batch"]
+    assert next_batch["local_artifact_ref_hints_ready"] is True
+    assert next_batch["local_artifact_refs_by_capability"] == {plugin_id: local_artifact_refs}
+    assert next_batch["apply_payload_hint"]["evidence_refs"] == []
+    assert next_batch["apply_payload_hint"]["evidence_refs_by_capability"] == {plugin_id: local_artifact_refs}
+
+    evidence_payload = {
+        "actor": _PLUGIN_ACTOR,
+        "reason": "dry run local artifact proposal evidence hints",
+        **next_batch["apply_payload_hint"],
+    }
+    dry_run = client.post(
+        "/plugins/capabilities/library/proposal-evidence/operator-intake/apply",
+        json=evidence_payload,
+    )
+    assert dry_run.status_code == 200
+    dry_run_body = dry_run.json()
+    assert dry_run_body["ok"] is True
+    assert dry_run_body["applied"] is False
+    assert dry_run_body["status"] == "dry_run"
+    assert dry_run_body["planned_capability_count"] == 1
+    assert dry_run_body["evidence_ref_count"] == 4
+    assert dry_run_body["shared_evidence_ref_count"] == 0
+    assert dry_run_body["capability_specific_evidence_ref_count"] == 4
+    assert dry_run_body["before"]["proposal_evidence_missing_count"] == 1
+    assert dry_run_body["before"]["projection_scope"] == "selected_capabilities"
+    assert dry_run_body["before"]["global_counts_included"] is False
+    assert dry_run_body["governance"]["writes_registry_metadata"] is False
+    assert dry_run_body["governance"]["does_not_promote_capabilities"] is True
+    assert dry_run_body["governance"]["does_not_execute_capabilities"] is True
+
+    evidence_payload["dry_run"] = False
+    evidence_payload["dry_run_fingerprint"] = dry_run_body["dry_run_fingerprint"]
+    applied = client.post(
+        "/plugins/capabilities/library/proposal-evidence/operator-intake/apply",
+        json=evidence_payload,
+    )
+    assert applied.status_code == 200
+    applied_body = applied.json()
+    assert applied_body["ok"] is True
+    assert applied_body["applied"] is True
+    assert applied_body["status"] == "recorded"
+    assert applied_body["recorded_capability_count"] == 1
+    assert applied_body["evidence_ref_count"] == 4
+    assert applied_body["remaining_proposal_evidence_missing_count"] == 0
+    assert applied_body["remaining_proposal_evidence_ready_count"] == 1
+    assert applied_body["governance"]["writes_registry_metadata"] is True
+    assert applied_body["governance"]["writes_proposals"] is False
+    assert applied_body["governance"]["does_not_approve_proposals"] is True
+    assert applied_body["governance"]["does_not_promote_capabilities"] is True
+    assert applied_body["governance"]["does_not_enable_capabilities"] is True
+    assert applied_body["governance"]["does_not_execute_capabilities"] is True
+
+    after = client.get("/plugins/capabilities/library/proposal-evidence/source-readiness")
+    assert after.status_code == 200
+    after_body = after.json()
+    assert after_body["proposal_evidence_missing_count"] == 0
+    assert after_body["recorded_operator_evidence_capability_count"] == 1
+    assert after_body["recorded_operator_evidence_ref_count"] == 4
+
+    fetched = client.get(f"/plugins/get?id={plugin_id}")
+    assert fetched.status_code == 200
+    fetched_meta = dict(fetched.json()["item"].get("meta") or {})
+    assert fetched_meta["proposal_evidence"] == local_artifact_refs
+    assert fetched_meta["proposal_evidence_claim_scope"] == (
+        "operator_supplied_friction_evidence_reference_not_independent_verification"
+    )
+    assert fetched_meta["proposal_evidence_writes_proposals"] is False
+    assert fetched_meta["proposal_evidence_approval_claimed"] is False
 
 
 def test_plugins_capability_library_operator_proposal_evidence_intake_records_operator_refs_only(
@@ -5070,14 +6580,20 @@ def test_plugins_capability_library_operator_proposal_evidence_intake_records_op
     assert apply_group["preview_payload"] == {
         "pack_ids": [pack_id],
         "capability_ids": [plugin_id],
-        "evidence_refs": [evidence_ref],
+        "evidence_refs": [],
+        "evidence_refs_by_capability": {plugin_id: [evidence_ref]},
         "dry_run": True,
         "max_pack_count": 1,
         "max_total_capability_count": 1,
         "max_capability_count_per_pack": 1,
     }
     assert apply_group["apply_payload_hint"]["dry_run_fingerprint_required"] is True
-    assert apply_group["apply_payload_hint"]["evidence_refs"] == [evidence_ref]
+    assert apply_group["apply_payload_hint"]["evidence_refs"] == []
+    assert apply_group["apply_payload_hint"]["evidence_refs_by_capability"] == {plugin_id: [evidence_ref]}
+    assert apply_group["shared_evidence_ref_count"] == 0
+    assert apply_group["capability_specific_evidence_ref_count"] == 1
+    assert apply_group["capability_scoped_evidence_refs_supported"] is True
+    assert import_preview_body["requirements"]["capability_scoped_evidence_refs_supported"] is True
     assert import_preview_body["requirements"]["does_not_validate_evidence_truth"] is True
     assert import_preview_body["requirements"]["no_synthetic_evidence"] is True
     assert import_preview_body["governance"]["read_only"] is True
@@ -5174,6 +6690,8 @@ def test_plugins_capability_library_operator_proposal_evidence_intake_records_op
     assert dry_run_body["dry_run_confirmation"]["apply_route"] == (
         "/plugins/capabilities/library/proposal-evidence/operator-intake/apply"
     )
+    assert dry_run_body["before"]["projection_scope"] == "selected_capabilities"
+    assert dry_run_body["before"]["global_counts_included"] is False
     assert dry_run_body["before"]["proposal_evidence_missing_count"] == 1
     assert dry_run_body["planned"][0]["claim_scope"] == (
         "operator_supplied_friction_evidence_reference_not_independent_verification"
@@ -5331,6 +6849,314 @@ def test_plugins_capability_library_operator_proposal_evidence_intake_records_op
     proposal_state = plugins._plugin_proposal_review_state(proposal_id)
     assert proposal_state["approved"] is False
     assert proposal_state["review_status"] == "staged"
+
+
+def test_plugins_capability_library_operator_proposal_evidence_intake_batches_capability_scoped_refs(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
+    client = TestClient(create_app())
+    pack_id = "ops.capability_library_operator_proposal_evidence_batch"
+    pack_version = "1.0.0"
+    labels = [
+        "capability_library_operator_proposal_evidence_batch_one",
+        "capability_library_operator_proposal_evidence_batch_two",
+    ]
+    built_items: list[tuple[str, str, str]] = []
+
+    for label in labels:
+        meta = {
+            **_forge_promotion_meta(label),
+            "pack_id": pack_id,
+            "pack_version": pack_version,
+            "pack_name": "Ops Capability Library Operator Proposal Evidence Batch Pack",
+            "promotion_rules": [
+                "metadata_receipt_before_promotion",
+                "quality_standards_before_promotion",
+                "operator_review_before_promotion",
+            ],
+            "pack_governance": {
+                "risk_tier": "normal",
+                "scope": "build_dev",
+                "operator_review_required": True,
+            },
+        }
+        built = client.post(
+            "/plugins/build",
+            json={
+                "name": f"Scoped Evidence Batch {len(built_items) + 1}",
+                "description": "Stage 17 capability-scoped operator evidence batch coverage",
+                "actor": _PLUGIN_ACTOR,
+                "meta": meta,
+            },
+        )
+        assert built.status_code == 200
+        built_body = built.json()
+        assert built_body["ok"] is True
+        plugin_id = str(built_body["plugin_id"])
+        proposal_id = str(built_body["proposal_id"])
+        evidence_ref = f"operator.case.{label}.artifact"
+        built_items.append((plugin_id, proposal_id, evidence_ref))
+
+        registry = plugins._load_registry()
+        plugin = plugins._read_plugin(registry, plugin_id)
+        assert plugin is not None
+        plugin_meta = dict(plugin.get("meta") or {})
+        plugin_meta.pop("proposal_evidence", None)
+        plugin_meta.pop("evidence", None)
+        plugin["meta"] = plugin_meta
+        plugins._write_plugin(registry, plugins._normalize_plugin_record(plugin_id, plugin))
+        plugins._save_registry_and_catalog(registry)
+
+        proposal_path = plugins._plugin_proposal_path(proposal_id)
+        proposal = json.loads(proposal_path.read_text(encoding="utf-8"))
+        proposal["friction"]["evidence"] = []
+        proposal_path.write_text(json.dumps(proposal, indent=2, sort_keys=True), encoding="utf-8")
+
+    capability_ids = [plugin_id for plugin_id, _, _ in built_items]
+    proposal_ids = [proposal_id for _, proposal_id, _ in built_items]
+    evidence_refs_by_capability = {plugin_id: [evidence_ref] for plugin_id, _, evidence_ref in built_items}
+
+    _approve_capability_pack_operator_review(
+        client,
+        pack_id=pack_id,
+        pack_version=pack_version,
+    )
+
+    checklist = client.get("/plugins/capabilities/library/proposal-evidence/operator-intake/checklist")
+    assert checklist.status_code == 200
+    checklist_body = checklist.json()
+    assert checklist_body["ok"] is True
+    assert checklist_body["candidate_pack_count"] == 1
+    assert checklist_body["candidate_capability_count"] == 2
+    assert checklist_body["packs"][0]["pack_id"] == pack_id
+    assert checklist_body["packs"][0]["candidate_capability_count"] == 2
+
+    export = client.get("/plugins/capabilities/library/proposal-evidence/operator-intake/export")
+    assert export.status_code == 200
+    export_body = export.json()
+    export_rows = export_body["packs"][0]["rows"]
+    export_rows_by_capability = {row["capability"]: row for row in export_rows}
+    import_preview = client.post(
+        "/plugins/capabilities/library/proposal-evidence/operator-intake/import-preview",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "rows": [
+                {**export_rows_by_capability[plugin_id], "evidence_refs_input": evidence_ref}
+                for plugin_id, _, evidence_ref in built_items
+            ],
+            "max_row_count": 10,
+            "max_apply_group_count": 10,
+        },
+    )
+    assert import_preview.status_code == 200
+    import_preview_body = import_preview.json()
+    assert import_preview_body["ok"] is True
+    assert import_preview_body["status"] == "ready_for_operator_evidence_import_preview"
+    assert import_preview_body["ready_row_count"] == 2
+    assert import_preview_body["pending_row_count"] == 0
+    assert import_preview_body["invalid_row_count"] == 0
+    assert import_preview_body["apply_group_count"] == 1
+    apply_group = import_preview_body["apply_payload_groups"][0]
+    assert apply_group["pack_id"] == pack_id
+    assert apply_group["capability_count"] == 2
+    assert apply_group["evidence_ref_count"] == 2
+    assert apply_group["shared_evidence_ref_count"] == 0
+    assert apply_group["capability_specific_evidence_ref_count"] == 2
+    assert apply_group["capability_scoped_evidence_refs_supported"] is True
+    assert apply_group["preview_payload"]["evidence_refs"] == []
+    assert apply_group["preview_payload"]["evidence_refs_by_capability"] == evidence_refs_by_capability
+
+    evidence_payload = {
+        "actor": _PLUGIN_ACTOR,
+        "reason": "dry run capability-scoped operator proposal evidence batch",
+        **apply_group["preview_payload"],
+    }
+    dry_run = client.post(
+        "/plugins/capabilities/library/proposal-evidence/operator-intake/apply",
+        json=evidence_payload,
+    )
+
+    assert dry_run.status_code == 200
+    dry_run_body = dry_run.json()
+    assert dry_run_body["ok"] is True
+    assert dry_run_body["applied"] is False
+    assert dry_run_body["status"] == "dry_run"
+    assert dry_run_body["planned_pack_count"] == 1
+    assert dry_run_body["planned_capability_count"] == 2
+    assert dry_run_body["evidence_ref_count"] == 2
+    assert dry_run_body["shared_evidence_ref_count"] == 0
+    assert dry_run_body["capability_specific_evidence_ref_count"] == 2
+    assert dry_run_body["before"]["projection_scope"] == "selected_capabilities"
+    assert dry_run_body["before"]["global_counts_included"] is False
+    assert dry_run_body["projection_generated_at"] == dry_run_body["before"]["generated_at"]
+    assert dry_run_body["projection_evidence"] == dry_run_body["before"]["projection_evidence"]
+    _assert_stage17_projection_readback(
+        dry_run_body["before"],
+        projection_scope="selected_capabilities",
+        global_counts_included=False,
+        selected_capability_ids=capability_ids,
+    )
+    assert dry_run_body["dry_run_confirmation"]["required_for_apply"] is True
+    assert dry_run_body["governance"]["capability_scoped_evidence_refs_supported"] is True
+    assert dry_run_body["governance"]["writes_registry_metadata"] is False
+    planned_pack = dry_run_body["planned"][0]
+    assert planned_pack["pack_id"] == pack_id
+    assert planned_pack["evidence_ref_count"] == 2
+    planned_by_capability = {item["capability"]: item for item in planned_pack["capabilities"]}
+    assert set(planned_by_capability) == set(capability_ids)
+    assert all(item["evidence_ref_count"] == 1 for item in planned_by_capability.values())
+
+    evidence_payload["dry_run"] = False
+    evidence_payload["dry_run_fingerprint"] = dry_run_body["dry_run_fingerprint"]
+    applied = client.post(
+        "/plugins/capabilities/library/proposal-evidence/operator-intake/apply",
+        json=evidence_payload,
+    )
+
+    assert applied.status_code == 200
+    applied_body = applied.json()
+    assert applied_body["ok"] is True
+    assert applied_body["applied"] is True
+    assert applied_body["status"] == "recorded"
+    assert applied_body["recorded_pack_count"] == 1
+    assert applied_body["recorded_capability_count"] == 2
+    assert applied_body["evidence_ref_count"] == 2
+    assert applied_body["shared_evidence_ref_count"] == 0
+    assert applied_body["capability_specific_evidence_ref_count"] == 2
+    assert applied_body["remaining_proposal_evidence_missing_count"] == 0
+    assert applied_body["remaining_proposal_evidence_ready_count"] == 2
+    assert applied_body["before_projection_generated_at"]
+    assert applied_body["after_projection_generated_at"]
+    assert applied_body["projection_evidence"]["projection_scope"] == "selected_capabilities"
+    assert applied_body["projection_evidence"]["global_counts_included"] is False
+    assert applied_body["projection_evidence"]["selected_capability_ids"] == sorted(capability_ids)
+    assert applied_body["projection_evidence"]["read_only_projection"] is True
+    assert applied_body["projection_evidence"]["writes_data"] is False
+    assert applied_body["dry_run_confirmation"]["fingerprint_matched"] is True
+    assert applied_body["governance"]["writes_registry_metadata"] is True
+    assert applied_body["governance"]["writes_proposals"] is False
+    assert applied_body["governance"]["does_not_approve_proposals"] is True
+    assert applied_body["governance"]["does_not_promote_capabilities"] is True
+    assert applied_body["governance"]["does_not_enable_capabilities"] is True
+    assert applied_body["governance"]["memory_write"] is False
+
+    for plugin_id, proposal_id, evidence_ref in built_items:
+        fetched = client.get(f"/plugins/get?id={plugin_id}")
+        assert fetched.status_code == 200
+        item = fetched.json()["item"]
+        assert item["status"] == "staged"
+        assert item["enabled"] is False
+        meta = dict(item.get("meta") or {})
+        assert meta["proposal_evidence"] == [evidence_ref]
+        assert meta["proposal_evidence_artifact_proposal_id"] == proposal_id
+        assert meta["proposal_evidence_writes_proposals"] is False
+        assert meta["proposal_evidence_approval_claimed"] is False
+
+    review_dry_run = client.post(
+        "/plugins/capabilities/library/proposal-review/apply",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "dry run batched proposal review after capability-scoped evidence",
+            "pack_ids": [pack_id],
+            "capability_ids": capability_ids,
+            "max_pack_count": 1,
+            "max_total_capability_count": 2,
+            "max_capability_count_per_pack": 2,
+            "dry_run": True,
+        },
+    )
+
+    assert review_dry_run.status_code == 200
+    review_dry_run_body = review_dry_run.json()
+    assert review_dry_run_body["ok"] is True
+    assert review_dry_run_body["applied"] is False
+    assert review_dry_run_body["status"] == "dry_run"
+    assert review_dry_run_body["planned_pack_count"] == 1
+    assert review_dry_run_body["planned_capability_count"] == 2
+    assert review_dry_run_body["planned_proposal_count"] == 2
+    assert review_dry_run_body["before"]["projection_scope"] == "selected_capabilities"
+    assert review_dry_run_body["before"]["global_counts_included"] is False
+    assert review_dry_run_body["projection_generated_at"] == review_dry_run_body["before"]["generated_at"]
+    assert review_dry_run_body["projection_evidence"] == review_dry_run_body["before"]["projection_evidence"]
+    _assert_stage17_projection_readback(
+        review_dry_run_body["before"],
+        projection_scope="selected_capabilities",
+        global_counts_included=False,
+        selected_capability_ids=capability_ids,
+    )
+    assert review_dry_run_body["governance"]["writes_proposal_review_receipts"] is False
+    assert review_dry_run_body["governance"]["approves_proposals"] is False
+    assert review_dry_run_body["governance"]["proposal_review_authority"] is False
+
+    review_applied = client.post(
+        "/plugins/capabilities/library/proposal-review/apply",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "apply batched proposal review after capability-scoped evidence",
+            "pack_ids": [pack_id],
+            "capability_ids": capability_ids,
+            "max_pack_count": 1,
+            "max_total_capability_count": 2,
+            "max_capability_count_per_pack": 2,
+            "dry_run": False,
+            "dry_run_fingerprint": review_dry_run_body["dry_run_fingerprint"],
+        },
+    )
+
+    assert review_applied.status_code == 200
+    review_applied_body = review_applied.json()
+    assert review_applied_body["ok"] is True
+    assert review_applied_body["applied"] is True
+    assert review_applied_body["status"] == "reviewed"
+    assert review_applied_body["recorded_proposal_count"] == 2
+    assert review_applied_body["recorded_capability_count"] == 2
+    assert review_applied_body["remaining_proposal_review_missing_count"] == 0
+    assert review_applied_body["remaining_reviewable_capability_count"] == 0
+    assert review_applied_body["promotable_capability_count"] == 2
+    assert review_applied_body["before_projection_generated_at"]
+    assert review_applied_body["after_projection_generated_at"]
+    assert review_applied_body["projection_evidence"]["projection_scope"] == "selected_capabilities"
+    assert review_applied_body["projection_evidence"]["global_counts_included"] is False
+    assert review_applied_body["projection_evidence"]["selected_capability_ids"] == sorted(capability_ids)
+    assert review_applied_body["projection_evidence"]["read_only_projection"] is True
+    assert review_applied_body["projection_evidence"]["writes_data"] is False
+    assert review_applied_body["dry_run_confirmation"]["fingerprint_matched"] is True
+    assert review_applied_body["governance"]["writes_proposal_review_receipts"] is True
+    assert review_applied_body["governance"]["updates_proposal_records"] is True
+    assert review_applied_body["governance"]["approves_proposals"] is True
+    assert review_applied_body["governance"]["does_not_promote_capabilities"] is True
+    assert review_applied_body["governance"]["does_not_enable_capabilities"] is True
+    assert review_applied_body["governance"]["promotion_authority"] is False
+
+    recorded_by_proposal = {item["proposal_id"]: item for item in review_applied_body["recorded"]}
+    assert set(recorded_by_proposal) == set(proposal_ids)
+    for proposal_id in proposal_ids:
+        receipt_path = Path(recorded_by_proposal[proposal_id]["receipt_path"])
+        assert receipt_path.exists()
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+        assert receipt["kind"] == "plugin.proposal.review.receipt"
+        assert receipt["proposal_id"] == proposal_id
+        assert receipt["status"] == "approved"
+        proposal_state = plugins._plugin_proposal_review_state(proposal_id)
+        assert proposal_state["approved"] is True
+        assert proposal_state["review_status"] == "approved"
+
+    for plugin_id in capability_ids:
+        fetched = client.get(f"/plugins/get?id={plugin_id}")
+        assert fetched.status_code == 200
+        item = fetched.json()["item"]
+        assert item["status"] == "staged"
+        assert item["enabled"] is False
 
 
 def test_plugins_capability_pack_metadata_receipt_expands_reviewed_migration_plan_candidate(

@@ -11,6 +11,7 @@ import os
 import re
 import shutil
 import time
+import tomllib
 import uuid
 from pathlib import Path
 from typing import Any
@@ -143,6 +144,7 @@ _CAPABILITY_PACK_QUALITY_DOC_REFERENCE_CANDIDATES = (
 )
 _CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_ROUTE = "/plugins/capabilities/packs/quality/evidence/remediation/reconstruct"
 _CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_SOURCE = "stage17_capability_pack_artifact_reconstruction_apply"
+_CAPABILITY_PACK_QUALITY_STANDARD_REMEDIATION_SOURCE = "stage17_capability_pack_quality_standard_remediation_apply"
 _CAPABILITY_LIBRARY_PROPOSAL_EVIDENCE_REMEDIATION_APPLY_ROUTE = (
     "/plugins/capabilities/library/proposal-evidence/remediation/apply"
 )
@@ -188,6 +190,32 @@ _CAPABILITY_LIBRARY_OPERATOR_PROPOSAL_EVIDENCE_INTAKE_SOURCE = (
 _CAPABILITY_LIBRARY_PROPOSAL_REVIEW_APPLY_READINESS_ROUTE = (
     "/plugins/capabilities/library/proposal-review/apply-readiness"
 )
+_CAPABILITY_LIBRARY_PROPOSAL_REVIEW_APPLY_ROUTE = "/plugins/capabilities/library/proposal-review/apply"
+_CAPABILITY_LIBRARY_EXPLICIT_PROMOTION_APPLY_ROUTE = "/plugins/capabilities/library/promotion/apply"
+_PLUGIN_LIFECYCLE_REPAIR_ROUTE = "/plugins/lifecycle/repair"
+_CAPABILITY_LIBRARY_PROPOSAL_REVIEW_DECISIONS = {
+    "approve": "approved",
+    "approved": "approved",
+    "reject": "rejected",
+    "rejected": "rejected",
+    "request_changes": "needs_revision",
+    "needs_revision": "needs_revision",
+}
+_PLUGIN_DISABLE_LIFECYCLE_ACTIONS = {
+    "disable": ("disable", "disabled"),
+    "disabled": ("disable", "disabled"),
+    "quarantine": ("quarantine", "quarantined"),
+    "quarantined": ("quarantine", "quarantined"),
+    "deprecate": ("deprecate", "deprecated"),
+    "deprecated": ("deprecate", "deprecated"),
+    "deprecation": ("deprecate", "deprecated"),
+}
+_PLUGIN_REPAIR_LIFECYCLE_ACTIONS = {
+    "repair": "repair",
+    "repaired": "repair",
+    "restore": "restore",
+    "restored": "restore",
+}
 
 
 def _safe_str(value: Any) -> str:
@@ -225,6 +253,42 @@ def _permission_denied(decision: ApiPermissionDecision) -> dict[str, object]:
 
 def _now_s() -> int:
     return int(time.time())
+
+
+def _now_utc_iso() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def _stage17_projection_evidence(
+    *,
+    projection_scope: str,
+    global_counts_included: bool,
+    selected_pack_ids: set[str] | None = None,
+    selected_capability_ids: set[str] | None = None,
+    generated_plugin_sync_performed: bool = False,
+) -> dict[str, object]:
+    selected_packs = sorted(_unique_texts(sorted(selected_pack_ids or set()), limit=1000))
+    selected_capabilities = sorted(_unique_texts(sorted(selected_capability_ids or set()), limit=10000))
+    return {
+        "generated_at": _now_utc_iso(),
+        "projection_contract": "stage17_capability_library_projection_evidence_v1",
+        "projection_evidence": {
+            "contract": "stage17_capability_library_projection_evidence_v1",
+            "stage": "Stage 17 / Capability Economy",
+            "projection_scope": _safe_str(projection_scope).strip() or "full_library",
+            "global_counts_included": bool(global_counts_included),
+            "selected_pack_ids": selected_packs,
+            "selected_capability_ids": selected_capabilities,
+            "selected_pack_count": len(selected_packs),
+            "selected_capability_count": len(selected_capabilities),
+            "generated_plugin_registry_sync_performed": bool(generated_plugin_sync_performed),
+            "read_only_projection": True,
+            "writes_repo": False,
+            "writes_data": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+    }
 
 
 def _to_bool(value: Any, *, default: bool = False) -> bool:
@@ -940,6 +1004,14 @@ def _plugin_promotion_receipt_id(plugin_id: str, promoted_ts: int) -> str:
     return f"plugin_promotion_{promoted_ts}_{_slugify(plugin_id)}"
 
 
+def _plugin_lifecycle_receipt_path(receipt_id: str) -> Path:
+    return _art_dir() / "lifecycle" / f"{_safe_str(receipt_id).strip()}.json"
+
+
+def _plugin_lifecycle_receipt_id(plugin_id: str, action: str, recorded_ts: int) -> str:
+    return f"plugin_lifecycle_{recorded_ts}_{_slugify(plugin_id)}_{_slugify(action)}"
+
+
 def _capability_pack_metadata_receipt_id(pack_id: str, recorded_ts: int) -> str:
     return f"capability_pack_metadata_{recorded_ts}_{_slugify(pack_id)}"
 
@@ -1285,6 +1357,214 @@ def _has_readiness_value(value: Any) -> bool:
     return value is not None
 
 
+def _current_core_version() -> str:
+    try:
+        payload = tomllib.loads((repo_root() / "pyproject.toml").read_text(encoding="utf-8"))
+        project = payload.get("project") if isinstance(payload, dict) else {}
+        version = _safe_str(project.get("version") if isinstance(project, dict) else "").strip()
+        if version:
+            return version
+    except Exception:
+        pass
+    return "0.0.0+dev"
+
+
+def _version_triplet(value: Any) -> tuple[int, int, int] | None:
+    text = _safe_str(value).strip().lower()
+    if text.startswith("v"):
+        text = text[1:]
+    text = re.split(r"[+-]", text, maxsplit=1)[0]
+    parts = text.split(".")
+    if not 1 <= len(parts) <= 3:
+        return None
+    if any(not part.isdigit() for part in parts):
+        return None
+    numbers = [int(part) for part in parts]
+    while len(numbers) < 3:
+        numbers.append(0)
+    return numbers[0], numbers[1], numbers[2]
+
+
+def _plugin_core_compatibility(payload_meta: dict[str, Any]) -> dict[str, Any]:
+    compatibility = payload_meta.get("compatibility") if isinstance(payload_meta.get("compatibility"), dict) else {}
+    min_core_version = _safe_str(
+        compatibility.get("min_core_version")
+        or compatibility.get("minimum_core_version")
+        or compatibility.get("min_francis_version")
+    ).strip()
+    current_core_version = _current_core_version()
+    contract = "plugin.compatibility.min_core_version"
+    if not min_core_version:
+        return {
+            "compatible": True,
+            "status": "no_min_core_version_declared",
+            "contract": contract,
+            "current_core_version": current_core_version,
+            "min_core_version": "",
+            "source": "pyproject.toml",
+        }
+
+    current_triplet = _version_triplet(current_core_version)
+    minimum_triplet = _version_triplet(min_core_version)
+    if minimum_triplet is None:
+        return {
+            "compatible": False,
+            "status": "invalid_min_core_version",
+            "contract": contract,
+            "current_core_version": current_core_version,
+            "min_core_version": min_core_version,
+            "source": "pyproject.toml",
+        }
+    if current_triplet is None:
+        return {
+            "compatible": False,
+            "status": "current_core_version_unknown",
+            "contract": contract,
+            "current_core_version": current_core_version,
+            "min_core_version": min_core_version,
+            "source": "pyproject.toml",
+        }
+
+    compatible = current_triplet >= minimum_triplet
+    return {
+        "compatible": compatible,
+        "status": "compatible" if compatible else "requires_newer_core",
+        "contract": contract,
+        "current_core_version": current_core_version,
+        "min_core_version": min_core_version,
+        "source": "pyproject.toml",
+    }
+
+
+_PLUGIN_LIFECYCLE_BLOCKING_STATES = {
+    "archived",
+    "deprecated",
+    "quarantined",
+    "retired",
+}
+_PLUGIN_LIFECYCLE_REGISTRY_BLOCKING_STATES = {
+    "archived",
+    "deprecated",
+    "quarantined",
+    "retired",
+}
+_PLUGIN_LIFECYCLE_NON_BLOCKING_STATES = {
+    "active",
+    "beta",
+    "disabled",
+    "enabled",
+    "experimental",
+    "preview",
+    "promoted",
+    "stable",
+    "staged",
+    "uninstalled",
+}
+
+
+def _normalize_lifecycle_state(value: Any) -> str:
+    text = _safe_str(value).strip().lower()
+    if not text:
+        return ""
+    return re.sub(r"[^a-z0-9]+", "_", text).strip("_")
+
+
+def _plugin_lifecycle_state(plugin: dict[str, Any], payload_meta: dict[str, Any]) -> dict[str, Any]:
+    plugin_meta = dict(plugin.get("meta") or {}) if isinstance(plugin.get("meta"), dict) else {}
+    candidates: list[dict[str, Any]] = []
+
+    def add_candidate(source: str, value: Any, *, explicit: bool) -> None:
+        raw = _safe_str(value).strip()
+        normalized = _normalize_lifecycle_state(raw)
+        if normalized:
+            candidates.append(
+                {
+                    "source": source,
+                    "raw": raw,
+                    "state": normalized,
+                    "explicit_lifecycle_metadata": explicit,
+                }
+            )
+
+    for key in (
+        "lifecycle_status",
+        "lifecycle_state",
+        "capability_lifecycle_status",
+        "deprecation_status",
+        "quarantine_status",
+    ):
+        add_candidate(f"registry.meta.{key}", plugin_meta.get(key), explicit=True)
+
+    add_candidate("registry.status", plugin.get("status"), explicit=False)
+    add_candidate("registry.meta.status", plugin_meta.get("status"), explicit=False)
+    add_candidate("registry.meta.promotion_status", plugin_meta.get("promotion_status"), explicit=False)
+
+    for key in (
+        "lifecycle_status",
+        "lifecycle_state",
+        "capability_lifecycle_status",
+        "deprecation_status",
+        "quarantine_status",
+    ):
+        add_candidate(f"request.meta.{key}", payload_meta.get(key), explicit=True)
+
+    blocking = next(
+        (
+            item
+            for item in candidates
+            if (
+                bool(item["explicit_lifecycle_metadata"])
+                and _safe_str(item.get("state")).strip() in _PLUGIN_LIFECYCLE_BLOCKING_STATES
+            )
+            or (
+                not bool(item["explicit_lifecycle_metadata"])
+                and _safe_str(item.get("state")).strip() in _PLUGIN_LIFECYCLE_REGISTRY_BLOCKING_STATES
+            )
+        ),
+        None,
+    )
+    unknown = next(
+        (
+            item
+            for item in candidates
+            if bool(item["explicit_lifecycle_metadata"])
+            and _safe_str(item.get("state")).strip() not in _PLUGIN_LIFECYCLE_BLOCKING_STATES
+            and _safe_str(item.get("state")).strip() not in _PLUGIN_LIFECYCLE_NON_BLOCKING_STATES
+        ),
+        None,
+    )
+    selected = blocking or unknown or (candidates[0] if candidates else None)
+    status = _safe_str(selected.get("state") if isinstance(selected, dict) else "").strip() or "active"
+    source = _safe_str(selected.get("source") if isinstance(selected, dict) else "").strip()
+    blocks = bool(blocking or unknown)
+    error = (
+        "plugin_lifecycle_state_unknown"
+        if unknown is not None and blocking is None
+        else f"plugin_{status}"
+        if blocks
+        else ""
+    )
+    reason = (
+        "explicit_unknown_lifecycle_state"
+        if unknown is not None and blocking is None
+        else "explicit_or_registry_lifecycle_block"
+        if blocks
+        else "lifecycle_state_allows_promotion_and_execution"
+    )
+    return {
+        "status": status,
+        "source": source,
+        "contract": "plugin.lifecycle.quarantine_deprecation_v1",
+        "blocks_promotion": blocks,
+        "blocks_execution": blocks,
+        "error": error,
+        "reason": reason,
+        "known_blocking_states": sorted(_PLUGIN_LIFECYCLE_BLOCKING_STATES),
+        "known_non_blocking_states": sorted(_PLUGIN_LIFECYCLE_NON_BLOCKING_STATES),
+        "observed_states": candidates,
+    }
+
+
 def _plugin_promotion_readiness(
     plugin_id: str,
     staged: dict[str, Any],
@@ -1309,6 +1589,8 @@ def _plugin_promotion_readiness(
     tests = payload_meta.get("tests") or payload_meta.get("test_refs") or quality_meta.get("tests") or []
     proposal_review = _plugin_proposal_review_state(proposal_id)
     pack_operator_review = _capability_pack_operator_review_state(plugin_id, payload_meta)
+    compatibility = _plugin_core_compatibility(payload_meta)
+    lifecycle = _plugin_lifecycle_state(staged, payload_meta)
     requirements = {
         "proposal_id": bool(proposal_id),
         "proposal_review": bool(proposal_review["approved"]),
@@ -1316,6 +1598,8 @@ def _plugin_promotion_readiness(
         "tests": _has_readiness_value(tests),
         "docs": _has_readiness_value(docs),
         "risk_tier": risk_tier in _RISK_ORDER,
+        "core_compatibility": bool(compatibility["compatible"]),
+        "lifecycle_state": not bool(lifecycle["blocks_promotion"]),
     }
     if bool(pack_operator_review["required"]):
         requirements["pack_operator_review"] = bool(pack_operator_review["approved"])
@@ -1334,6 +1618,8 @@ def _plugin_promotion_readiness(
             "risk_tier": risk_tier,
             "validation_receipt_id": _safe_str(payload_meta.get("validation_receipt_id")).strip(),
             "validation_receipt_path": _safe_str(payload_meta.get("validation_receipt_path")).strip(),
+            "compatibility": compatibility,
+            "lifecycle": lifecycle,
             "pack_operator_review_required": bool(pack_operator_review["required"]),
             "pack_operator_review_status": pack_operator_review["review_status"],
             "pack_operator_review_receipt_id": pack_operator_review["receipt_id"],
@@ -1373,8 +1659,46 @@ def _promotion_readiness_blocked(
             ),
             "operator_hint": (
                 "Promotion requires an approved proposal review, any required capability-pack operator review, "
-                "proposal evidence, tests, docs, and a bounded risk tier."
+                "proposal evidence, tests, docs, a bounded risk tier, core compatibility, and a non-blocking "
+                "lifecycle state."
             ),
+        },
+    }
+
+
+def _plugin_runtime_compatibility_blocked(
+    *,
+    plugin_id: str,
+    action: str,
+    compatibility: dict[str, Any],
+) -> dict[str, object]:
+    status = _safe_str(compatibility.get("status")).strip() or "incompatible"
+    return {
+        "ok": False,
+        "error": "plugin_core_incompatible",
+        "id": plugin_id,
+        "status": "blocked",
+        "compatibility": redact_governed_display_value(compatibility),
+        "message": "Plugin execution is blocked by the recorded core compatibility requirement.",
+        "governance": {
+            "plane": "P3_GOVERNANCE",
+            "gate": "plugin_runtime_compatibility_gate",
+            "scope": "plugin.run",
+            "route": "/plugins/run",
+            "next_step": "review_plugin_compatibility_before_execution",
+            "operator_hint": (
+                "A plugin requiring a newer or malformed Francis core version must be migrated or repaired before "
+                "execution."
+            ),
+            "action": _safe_str(action).strip(),
+            "compatibility_status": status,
+            "does_not_promote_capabilities": True,
+            "does_not_enable_capabilities": True,
+            "does_not_execute_capabilities": True,
+            "promotion_authority": False,
+            "execution_authority": False,
+            "approval_authority": False,
+            "memory_write": False,
         },
     }
 
@@ -1555,6 +1879,8 @@ def _write_plugin_promotion_receipt(
             "pack_id": pack_operator_review["pack_id"],
             "pack_version": pack_operator_review["pack_version"],
         },
+        "compatibility": _plugin_core_compatibility(payload_meta),
+        "lifecycle": _plugin_lifecycle_state(promoted, payload_meta),
         "proposal_evidence": proposal_evidence,
         "quality": _plugin_promotion_quality(plugin_id, promoted, payload_meta, catalog),
         "promotion_context": payload_meta,
@@ -1564,6 +1890,210 @@ def _write_plugin_promotion_receipt(
             "route": "/plugins/enable",
             "explicit": True,
         },
+        "path": str(receipt_path),
+    }
+    redacted_receipt = _redact_plugin_receipt(receipt)
+    _atomic_write_display_json(receipt_path, redacted_receipt)
+    return redacted_receipt
+
+
+def _plugin_disable_lifecycle(raw_meta: dict[str, Any]) -> dict[str, Any]:
+    raw_action = (
+        _safe_str(raw_meta.get("lifecycle_action")).strip()
+        or _safe_str(raw_meta.get("lifecycle_status")).strip()
+        or "disable"
+    )
+    normalized = raw_action.lower().replace("-", "_")
+    if normalized not in _PLUGIN_DISABLE_LIFECYCLE_ACTIONS:
+        return {
+            "supported": False,
+            "requested_action": raw_action,
+            "action": normalized,
+            "lifecycle_status": "",
+        }
+    action, lifecycle_status = _PLUGIN_DISABLE_LIFECYCLE_ACTIONS[normalized]
+    return {
+        "supported": True,
+        "requested_action": raw_action,
+        "action": action,
+        "lifecycle_status": lifecycle_status,
+    }
+
+
+def _plugin_repair_lifecycle(raw_meta: dict[str, Any]) -> dict[str, Any]:
+    raw_action = (
+        _safe_str(raw_meta.get("lifecycle_repair_action")).strip()
+        or _safe_str(raw_meta.get("repair_action")).strip()
+        or _safe_str(raw_meta.get("lifecycle_action")).strip()
+        or "repair"
+    )
+    normalized = raw_action.lower().replace("-", "_")
+    if normalized not in _PLUGIN_REPAIR_LIFECYCLE_ACTIONS:
+        return {
+            "supported": False,
+            "requested_action": raw_action,
+            "action": normalized,
+        }
+    return {
+        "supported": True,
+        "requested_action": raw_action,
+        "action": _PLUGIN_REPAIR_LIFECYCLE_ACTIONS[normalized],
+    }
+
+
+def _plugin_lifecycle_repair_status(
+    current: dict[str, Any],
+    meta: dict[str, Any],
+    lifecycle: dict[str, Any],
+) -> str:
+    lifecycle_status = _safe_str(lifecycle.get("status")).strip()
+    candidates = [
+        meta.get(f"{lifecycle_status}_from_status"),
+        meta.get("disabled_from_status"),
+        current.get("status"),
+    ]
+    for candidate in candidates:
+        status = _normalize_lifecycle_state(candidate)
+        if status == "staged":
+            return "staged"
+        if status in {"disabled", "enabled", "promoted"}:
+            return "disabled"
+    return "disabled"
+
+
+def _plugin_lifecycle_repair_promotion_status(
+    meta: dict[str, Any],
+    lifecycle: dict[str, Any],
+    restored_status: str,
+) -> str:
+    lifecycle_status = _safe_str(lifecycle.get("status")).strip()
+    candidates = [
+        meta.get(f"{lifecycle_status}_from_promotion_status"),
+        meta.get("disabled_from_promotion_status"),
+        meta.get("promotion_status"),
+        restored_status,
+    ]
+    for candidate in candidates:
+        status = _normalize_lifecycle_state(candidate)
+        if status == "staged":
+            return "staged"
+        if status in {"disabled", "enabled", "promoted"}:
+            return "disabled"
+    return "staged" if restored_status == "staged" else "disabled"
+
+
+def _plugin_lifecycle_governance(
+    *,
+    gate: str = "plugin_lifecycle_disable",
+    route: str = "/plugins/disable",
+    lifecycle_action: str,
+    lifecycle_status: str,
+    writes_registry_metadata: bool,
+    writes_lifecycle_receipt: bool,
+) -> dict[str, Any]:
+    lifecycle_authority = bool(writes_registry_metadata or writes_lifecycle_receipt)
+    return {
+        "plane": "P3_GOVERNANCE",
+        "gate": gate,
+        "scope": _PLUGIN_WRITE_SCOPE,
+        "route": route,
+        "lifecycle_action": lifecycle_action,
+        "lifecycle_status": lifecycle_status,
+        "writes_registry_metadata": writes_registry_metadata,
+        "writes_lifecycle_receipt": writes_lifecycle_receipt,
+        "does_not_promote_capabilities": True,
+        "does_not_enable_capabilities": True,
+        "does_not_execute_capabilities": True,
+        "does_not_approve_proposals": True,
+        "promotion_authority": False,
+        "execution_authority": False,
+        "approval_authority": False,
+        "memory_write": False,
+        "lifecycle_authority": lifecycle_authority,
+    }
+
+
+def _unsupported_plugin_lifecycle_action(
+    *,
+    plugin_id: str,
+    requested_action: str,
+    route: str = "/plugins/disable",
+    gate: str = "plugin_lifecycle_disable",
+    supported_actions: list[str] | None = None,
+) -> dict[str, object]:
+    return {
+        "ok": False,
+        "applied": False,
+        "id": plugin_id,
+        "status": "blocked",
+        "error": "unsupported_plugin_lifecycle_action",
+        "requested_lifecycle_action": requested_action,
+        "supported_lifecycle_actions": supported_actions or ["disable", "quarantine", "deprecate"],
+        "governance": _plugin_lifecycle_governance(
+            gate=gate,
+            route=route,
+            lifecycle_action=_safe_str(requested_action).strip(),
+            lifecycle_status="unsupported",
+            writes_registry_metadata=False,
+            writes_lifecycle_receipt=False,
+        ),
+    }
+
+
+def _write_plugin_lifecycle_receipt(
+    *,
+    plugin_id: str,
+    receipt_id: str,
+    receipt_path: Path,
+    previous: dict[str, Any],
+    current: dict[str, Any],
+    payload: "PluginToggleIn",
+    recorded_ts: int,
+    lifecycle_action: str,
+    lifecycle_status: str,
+    catalog: dict[str, Any],
+    route: str = "/plugins/disable",
+    gate: str = "plugin_lifecycle_disable",
+) -> dict[str, Any]:
+    previous_meta = dict(previous.get("meta") or {}) if isinstance(previous.get("meta"), dict) else {}
+    current_meta = dict(current.get("meta") or {}) if isinstance(current.get("meta"), dict) else {}
+    receipt = {
+        "kind": "plugin.lifecycle.receipt",
+        "receipt_id": receipt_id,
+        "plugin_id": plugin_id,
+        "action": lifecycle_action,
+        "lifecycle_status": lifecycle_status,
+        "registry_status": _safe_str(current.get("status")).strip() or "disabled",
+        "enabled": bool(current.get("enabled", False)),
+        "previous": {
+            "status": _safe_str(previous.get("status")).strip() or "unknown",
+            "enabled": bool(previous.get("enabled", False)),
+            "promotion_status": _safe_str(previous_meta.get("promotion_status")).strip(),
+            "lifecycle_status": _safe_str(previous_meta.get("lifecycle_status")).strip(),
+        },
+        "current": {
+            "status": _safe_str(current.get("status")).strip() or "disabled",
+            "enabled": bool(current.get("enabled", False)),
+            "promotion_status": _safe_str(current_meta.get("promotion_status")).strip(),
+            "lifecycle_status": _safe_str(current_meta.get("lifecycle_status")).strip(),
+        },
+        "recorded_ts": recorded_ts,
+        "actor": redact_governed_value(_safe_str(payload.actor).strip()),
+        "reason": redact_governed_value(_safe_str(payload.reason).strip() or "requested"),
+        "lifecycle_context": redact_governed_metadata(payload.meta),
+        "catalog": {
+            "path": _safe_str(catalog.get("path")).strip(),
+            "total_plugins": int(catalog.get("total_plugins") or 0),
+            "total_tools": int(catalog.get("total_tools") or 0),
+        },
+        "governance": _plugin_lifecycle_governance(
+            gate=gate,
+            route=route,
+            lifecycle_action=lifecycle_action,
+            lifecycle_status=lifecycle_status,
+            writes_registry_metadata=True,
+            writes_lifecycle_receipt=True,
+        ),
         "path": str(receipt_path),
     }
     redacted_receipt = _redact_plugin_receipt(receipt)
@@ -2716,6 +3246,9 @@ def _capability_pack_operator_surface_projection(
             "promotion_rule_remediation_apply_route": "/plugins/capabilities/packs/promotion/rules/remediation/apply",
             "quality_evidence_remediation_route": "/plugins/capabilities/packs/quality/evidence/remediation",
             "quality_evidence_apply_route": "/plugins/capabilities/packs/quality/evidence/remediation/apply",
+            "quality_standard_remediation_apply_route": (
+                "/plugins/capabilities/packs/quality/standards/remediation/apply"
+            ),
             "artifact_reconstruction_route": _CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_ROUTE,
             "operator_review_route": "/plugins/capabilities/packs/operator/review",
             "operator_review_decision_route": "/plugins/capabilities/packs/operator/review/decisions",
@@ -2947,6 +3480,8 @@ def _capability_library_explicit_promotion_plan_projection(
                     missing_requirement_counts[requirement] = missing_requirement_counts.get(requirement, 0) + 1
             if include_pack_preview and preview_remaining > 0:
                 evidence = readiness.get("evidence") if isinstance(readiness.get("evidence"), dict) else {}
+                compatibility = evidence.get("compatibility") if isinstance(evidence.get("compatibility"), dict) else {}
+                lifecycle = evidence.get("lifecycle") if isinstance(evidence.get("lifecycle"), dict) else {}
                 pack_capabilities.append(
                     {
                         "capability": capability_id,
@@ -2958,6 +3493,8 @@ def _capability_library_explicit_promotion_plan_projection(
                         "proposal_review_status": _safe_str(evidence.get("proposal_review_status")).strip(),
                         "proposal_review_receipt_id": _safe_str(evidence.get("proposal_review_receipt_id")).strip(),
                         "validation_receipt_id": _safe_str(evidence.get("validation_receipt_id")).strip(),
+                        "compatibility": compatibility,
+                        "lifecycle": lifecycle,
                         "pack_operator_review_required": _to_bool(evidence.get("pack_operator_review_required")),
                         "pack_operator_review_status": _safe_str(evidence.get("pack_operator_review_status")).strip(),
                         "pack_operator_review_receipt_id": _safe_str(
@@ -3001,7 +3538,9 @@ def _capability_library_explicit_promotion_plan_projection(
             if requirement != "proposal_review"
         }
         next_gap = (
-            "stage17_capability_library_promotion_readiness"
+            "stage17_pack_lifecycle_quarantine_deprecation_contract"
+            if "lifecycle_state" in missing_requirement_counts
+            else "stage17_capability_library_promotion_readiness"
             if missing_before_review
             else "stage17_capability_library_proposal_review"
         )
@@ -3031,14 +3570,19 @@ def _capability_library_explicit_promotion_plan_projection(
             "proposal_review_route": "/forge/proposals/decision",
             "promotion_route": "/plugins/enable",
             "promotion_receipts_route": "/plugins/capabilities/packs/promotion/receipts",
+            "promotion_apply_route": _CAPABILITY_LIBRARY_EXPLICIT_PROMOTION_APPLY_ROUTE,
         },
         "requirements": {
             "derived_from_capability_library_operator_surface": True,
             "uses_existing_plugin_promotion_readiness": True,
             "proposal_review_required_before_promotion": True,
             "pack_operator_review_required_when_declared": True,
+            "core_compatibility_required_before_promotion": True,
+            "quarantine_deprecation_blocks_promotion": True,
+            "unknown_explicit_lifecycle_state_blocks_promotion": True,
             "promotion_requires_plugins_write_scope": True,
             "promotion_writes_receipts_only_through_enable_route": True,
+            "bulk_promotion_apply_requires_dry_run_fingerprint": True,
             "explicit_operator_action_required": True,
             "no_auto_promotion": True,
         },
@@ -3060,6 +3604,279 @@ def _capability_library_explicit_promotion_plan_projection(
             "memory_write": False,
         },
         "next_smallest_truthful_gap": next_gap,
+    }
+
+
+def _capability_library_explicit_promotion_candidates(
+    *,
+    registry: dict[str, Any],
+    entries: list[dict[str, Any]],
+    promotion_discipline: dict[str, Any],
+    selected_pack_ids: set[str],
+    selected_capability_ids: set[str],
+) -> list[dict[str, Any]]:
+    raw_packs = promotion_discipline.get("packs") if isinstance(promotion_discipline.get("packs"), list) else []
+    candidates: list[dict[str, Any]] = []
+    for pack in raw_packs:
+        if not isinstance(pack, dict):
+            continue
+        if not bool(pack.get("ready")) or _safe_str(pack.get("status")).strip() != "ready":
+            continue
+        pack_id = _safe_str(pack.get("pack_id")).strip()
+        pack_version = _safe_str(pack.get("pack_version")).strip()
+        if selected_pack_ids and pack_id not in selected_pack_ids:
+            continue
+        pack_entries = _entries_for_capability_pack(entries, pack_id=pack_id, pack_version=pack_version)
+        staged_ids = _unique_texts(
+            [
+                _safe_str(entry.get("capability")).strip()
+                for entry in pack_entries
+                if _safe_str(entry.get("status")).strip() == "staged"
+            ],
+            limit=10000,
+        )
+        capabilities: list[dict[str, Any]] = []
+        for capability_id in staged_ids:
+            if selected_capability_ids and capability_id not in selected_capability_ids:
+                continue
+            plugin = _read_plugin(registry, capability_id)
+            if plugin is None:
+                continue
+            readiness = _plugin_promotion_readiness(
+                capability_id,
+                plugin,
+                PluginToggleIn(id=capability_id, reason="capability_library_explicit_promotion_apply"),
+            )
+            if not readiness["ready"]:
+                continue
+            evidence = readiness.get("evidence") if isinstance(readiness.get("evidence"), dict) else {}
+            compatibility = evidence.get("compatibility") if isinstance(evidence.get("compatibility"), dict) else {}
+            lifecycle = evidence.get("lifecycle") if isinstance(evidence.get("lifecycle"), dict) else {}
+            capabilities.append(
+                {
+                    "capability": capability_id,
+                    "proposal_id": _safe_str(evidence.get("proposal_id")).strip(),
+                    "proposal_review_status": _safe_str(evidence.get("proposal_review_status")).strip(),
+                    "proposal_review_receipt_id": _safe_str(evidence.get("proposal_review_receipt_id")).strip(),
+                    "pack_operator_review_required": _to_bool(evidence.get("pack_operator_review_required")),
+                    "pack_operator_review_status": _safe_str(evidence.get("pack_operator_review_status")).strip(),
+                    "pack_operator_review_receipt_id": _safe_str(
+                        evidence.get("pack_operator_review_receipt_id")
+                    ).strip(),
+                    "compatibility": compatibility,
+                    "lifecycle": lifecycle,
+                    "promotion_route": "/plugins/enable",
+                    "promotion_would_write_receipt": True,
+                    "promotion_would_enable_capability": True,
+                }
+            )
+        if capabilities:
+            candidates.append(
+                {
+                    "pack_id": pack_id,
+                    "pack_version": pack_version,
+                    "pack_name": _safe_str(pack.get("pack_name")).strip(),
+                    "capabilities": capabilities,
+                }
+            )
+    return candidates
+
+
+def _capability_library_explicit_promotion_fingerprint(*, planned: list[dict[str, Any]]) -> str:
+    canonical_packs: list[dict[str, Any]] = []
+    for pack in planned:
+        raw_capabilities = pack.get("capabilities") if isinstance(pack.get("capabilities"), list) else []
+        capabilities = [
+            {
+                "capability": _safe_str(capability.get("capability")).strip(),
+                "proposal_id": _safe_str(capability.get("proposal_id")).strip(),
+            }
+            for capability in raw_capabilities
+            if isinstance(capability, dict)
+        ]
+        capabilities.sort(key=lambda item: (item["capability"], item["proposal_id"]))
+        canonical_packs.append(
+            {
+                "pack_id": _safe_str(pack.get("pack_id")).strip(),
+                "pack_version": _safe_str(pack.get("pack_version")).strip(),
+                "capabilities": capabilities,
+            }
+        )
+    canonical_packs.sort(key=lambda item: (item["pack_id"], item["pack_version"]))
+    body = {
+        "contract": "stage17_capability_library_explicit_promotion_dry_run_v1",
+        "route": _CAPABILITY_LIBRARY_EXPLICIT_PROMOTION_APPLY_ROUTE,
+        "planned": canonical_packs,
+    }
+    raw = json.dumps(body, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _prepare_capability_library_explicit_promotion_plan(
+    *,
+    payload: "CapabilityLibraryExplicitPromotionApplyIn",
+) -> dict[str, Any]:
+    safe_max_pack_count = max(1, min(int(payload.max_pack_count or 10), 100))
+    safe_max_total_capability_count = max(1, min(int(payload.max_total_capability_count or 1000), 10000))
+    safe_max_capability_count_per_pack = max(1, min(int(payload.max_capability_count_per_pack or 500), 1000))
+    try:
+        selected_pack_ids = {_validate_plugin_id(raw_id) for raw_id in _unique_texts(payload.pack_ids, limit=100)}
+        selected_capability_ids = {
+            _validate_plugin_id(raw_id) for raw_id in _unique_texts(payload.capability_ids, limit=10000)
+        }
+    except Exception:
+        return {"ok": False, "status": "blocked", "error": "invalid_selector_id"}
+
+    registry = _load_registry()
+    synced = _sync_generated_plugins(registry)
+    catalog = _save_registry_and_catalog(registry) if synced else _compile_runtime_catalog(registry)
+    runtime_catalog = _read_runtime_catalog_payload(catalog)
+    marketplace = marketplace_from_plugin_catalog(runtime_catalog)
+    entries = list(marketplace.catalog())
+    available_proposals = _available_capability_pack_proposals()
+    available_validation_receipts = _available_capability_pack_validation_receipts()
+    available_promotion_receipts = _available_capability_pack_promotion_receipts()
+    promotion_discipline = analyze_capability_pack_promotion_discipline(
+        entries,
+        available_proposal_ids=available_proposals["ids"],
+        available_validation_receipt_ids=available_validation_receipts["ids"],
+        available_promotion_receipt_ids=available_promotion_receipts["ids"],
+        operator_review_decisions=_read_capability_pack_operator_review_decisions(limit=500),
+    )
+    before = _capability_library_explicit_promotion_plan_projection(
+        registry=registry,
+        entries=entries,
+        promotion_discipline=promotion_discipline,
+        generated_plugin_sync_performed=bool(synced),
+    )
+    candidates = _capability_library_explicit_promotion_candidates(
+        registry=registry,
+        entries=entries,
+        promotion_discipline=promotion_discipline,
+        selected_pack_ids=selected_pack_ids,
+        selected_capability_ids=selected_capability_ids,
+    )
+    if not candidates:
+        return {
+            "ok": True,
+            "status": "no_candidates",
+            "planned_pack_count": 0,
+            "planned_capability_count": 0,
+            "before": before,
+            "registry": registry,
+            "catalog": catalog,
+            "generated_plugin_registry_sync_performed": bool(synced),
+        }
+    if len(candidates) > safe_max_pack_count:
+        return {
+            "ok": False,
+            "status": "blocked",
+            "error": "capability_library_promotion_pack_limit_exceeded",
+            "candidate_total": len(candidates),
+            "limit": safe_max_pack_count,
+            "before": before,
+            "generated_plugin_registry_sync_performed": bool(synced),
+        }
+
+    planned: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+    total_capability_count = 0
+    for pack in candidates:
+        raw_capabilities = pack.get("capabilities") if isinstance(pack.get("capabilities"), list) else []
+        capabilities = [capability for capability in raw_capabilities if isinstance(capability, dict)]
+        capability_count = len(capabilities)
+        if capability_count > safe_max_capability_count_per_pack:
+            skipped.append(
+                {
+                    "pack_id": _safe_str(pack.get("pack_id")).strip(),
+                    "pack_version": _safe_str(pack.get("pack_version")).strip(),
+                    "error": "candidate_capability_limit_exceeded",
+                    "capability_count": capability_count,
+                    "limit": safe_max_capability_count_per_pack,
+                }
+            )
+            continue
+        total_capability_count += capability_count
+        planned.append(
+            {
+                "pack_id": _safe_str(pack.get("pack_id")).strip(),
+                "pack_version": _safe_str(pack.get("pack_version")).strip(),
+                "pack_name": _safe_str(pack.get("pack_name")).strip(),
+                "capability_count": capability_count,
+                "capabilities": capabilities,
+                "writes_promotion_receipts": not payload.dry_run,
+                "promotes_capabilities": not payload.dry_run,
+                "enables_capabilities": not payload.dry_run,
+            }
+        )
+    if total_capability_count > safe_max_total_capability_count:
+        return {
+            "ok": False,
+            "status": "blocked",
+            "error": "capability_library_promotion_total_capability_limit_exceeded",
+            "capability_count": total_capability_count,
+            "limit": safe_max_total_capability_count,
+            "before": before,
+            "generated_plugin_registry_sync_performed": bool(synced),
+        }
+    if not planned:
+        return {
+            "ok": True,
+            "status": "no_supported_promotion_candidates",
+            "planned_pack_count": 0,
+            "planned_capability_count": 0,
+            "skipped": skipped,
+            "before": before,
+            "registry": registry,
+            "catalog": catalog,
+            "generated_plugin_registry_sync_performed": bool(synced),
+        }
+    return {
+        "ok": True,
+        "status": "planned",
+        "planned": planned,
+        "skipped": skipped,
+        "planned_pack_count": len(planned),
+        "planned_capability_count": total_capability_count,
+        "dry_run_fingerprint": _capability_library_explicit_promotion_fingerprint(planned=planned),
+        "before": before,
+        "registry": registry,
+        "catalog": catalog,
+        "generated_plugin_registry_sync_performed": bool(synced),
+    }
+
+
+def _capability_library_explicit_promotion_apply_governance(
+    *,
+    route_path: str,
+    writes_registry_metadata: bool,
+    writes_promotion_receipts: bool,
+    generated_plugin_registry_sync_performed: bool,
+) -> dict[str, object]:
+    promotion_authority = bool(writes_registry_metadata or writes_promotion_receipts)
+    return {
+        "scope": _PLUGIN_WRITE_SCOPE,
+        "route": route_path,
+        "lifecycle_operation": "explicit_promotion_apply",
+        "policy_gate": _PLUGIN_WRITE_SCOPE,
+        "receipt_contract": "plugin.promotion.receipt",
+        "uses_existing_plugin_promotion_readiness": True,
+        "uses_plugin_promotion_receipt_schema": True,
+        "writes_registry_metadata": writes_registry_metadata,
+        "writes_promotion_receipts": writes_promotion_receipts,
+        "generated_plugin_registry_sync_performed": generated_plugin_registry_sync_performed,
+        "does_not_mutate_registry": not (
+            generated_plugin_registry_sync_performed or writes_registry_metadata or writes_promotion_receipts
+        ),
+        "dry_run_required_before_apply": True,
+        "does_not_approve_proposals": True,
+        "does_not_promote_capabilities": not promotion_authority,
+        "does_not_enable_capabilities": not promotion_authority,
+        "does_not_execute_capabilities": True,
+        "promotion_authority": promotion_authority,
+        "execution_authority": False,
+        "approval_authority": False,
+        "memory_write": False,
     }
 
 
@@ -3237,6 +4054,11 @@ def _capability_library_proposal_evidence_plan_projection(
     return {
         "stage": "Stage 17 / Capability Economy",
         "status": status,
+        **_stage17_projection_evidence(
+            projection_scope="full_library",
+            global_counts_included=True,
+            generated_plugin_sync_performed=sync_performed,
+        ),
         "proposal_evidence_plan_ready": bool(proposal_evidence_missing_count or blocked_before_evidence_count)
         and not discipline_blocked_pack_count,
         "pack_total": _count_value(promotion_discipline.get("pack_total")),
@@ -3295,6 +4117,309 @@ def _capability_library_proposal_evidence_plan_projection(
             "memory_write": False,
         },
         "next_smallest_truthful_gap": next_gap,
+    }
+
+
+def _capability_library_selected_capability_readiness_projection(
+    *,
+    registry: dict[str, Any],
+    entries: list[dict[str, Any]],
+    promotion_discipline: dict[str, Any],
+    selected_pack_ids: set[str],
+    selected_capability_ids: set[str],
+    generated_plugin_sync_performed: bool,
+) -> dict[str, Any]:
+    raw_packs = promotion_discipline.get("packs") if isinstance(promotion_discipline.get("packs"), list) else []
+    ready_packs = [
+        pack
+        for pack in raw_packs
+        if isinstance(pack, dict) and bool(pack.get("ready")) and _safe_str(pack.get("status")).strip() == "ready"
+    ]
+    planned_packs: list[dict[str, Any]] = []
+    candidate_pack_count = 0
+    candidate_capability_count = 0
+    proposal_evidence_missing_count = 0
+    proposal_evidence_ready_count = 0
+    proposal_review_missing_count = 0
+    approved_proposal_review_count = 0
+    reviewable_capability_count = 0
+    blocked_before_evidence_count = 0
+    blocked_before_review_capability_count = 0
+    promotable_capability_count = 0
+    missing_requirement_counts: dict[str, int] = {}
+    unique_proposal_ids: set[str] = set()
+
+    for pack in ready_packs:
+        pack_id = _safe_str(pack.get("pack_id")).strip()
+        pack_version = _safe_str(pack.get("pack_version")).strip()
+        if selected_pack_ids and pack_id not in selected_pack_ids:
+            continue
+        pack_entries = _entries_for_capability_pack(entries, pack_id=pack_id, pack_version=pack_version)
+        staged_ids = _unique_texts(
+            [
+                _safe_str(entry.get("capability")).strip()
+                for entry in pack_entries
+                if _safe_str(entry.get("status")).strip() == "staged"
+            ],
+            limit=10000,
+        )
+        staged_ids = [capability_id for capability_id in staged_ids if capability_id in selected_capability_ids]
+        if not staged_ids:
+            continue
+
+        candidate_pack_count += 1
+        pack_capabilities: list[dict[str, Any]] = []
+        pack_missing_evidence_count = 0
+        pack_ready_evidence_count = 0
+        pack_reviewable_count = 0
+        pack_blocked_before_evidence_count = 0
+        pack_blocked_before_review_count = 0
+        pack_approved_review_count = 0
+        pack_promotable_count = 0
+
+        for capability_id in staged_ids:
+            candidate_capability_count += 1
+            plugin = _read_plugin(registry, capability_id)
+            if plugin is None:
+                readiness = {
+                    "ready": False,
+                    "missing_requirements": ["plugin_record"],
+                    "requirements": {"plugin_record": False},
+                    "evidence": {},
+                }
+            else:
+                readiness = _plugin_promotion_readiness(
+                    capability_id,
+                    plugin,
+                    PluginToggleIn(id=capability_id, reason="capability_library_selected_readiness"),
+                )
+
+            missing = _unique_texts(readiness.get("missing_requirements"), limit=25)
+            evidence = readiness.get("evidence") if isinstance(readiness.get("evidence"), dict) else {}
+            proposal_id = _safe_str(evidence.get("proposal_id")).strip()
+            proposal_review_status = _safe_str(evidence.get("proposal_review_status")).strip()
+            proposal_review_receipt_id = _safe_str(evidence.get("proposal_review_receipt_id")).strip()
+            compatibility = evidence.get("compatibility") if isinstance(evidence.get("compatibility"), dict) else {}
+            proposal_evidence = _unique_texts(evidence.get("proposal_evidence"), limit=50)
+            proposal_evidence_missing = "proposal_evidence" in missing
+            proposal_evidence_ready = not proposal_evidence_missing and _has_readiness_value(proposal_evidence)
+            blockers_before_evidence = [
+                requirement for requirement in missing if requirement not in {"proposal_evidence", "proposal_review"}
+            ]
+            blockers_before_review = [requirement for requirement in missing if requirement != "proposal_review"]
+            proposal_review_missing = "proposal_review" in missing
+            approved_review = proposal_review_status == "approved" and bool(proposal_review_receipt_id)
+            reviewable = proposal_review_missing and bool(proposal_id) and not blockers_before_review
+            promotable = bool(readiness.get("ready"))
+
+            if proposal_id:
+                unique_proposal_ids.add(proposal_id)
+            for requirement in missing:
+                missing_requirement_counts[requirement] = missing_requirement_counts.get(requirement, 0) + 1
+            if proposal_evidence_missing:
+                proposal_evidence_missing_count += 1
+                pack_missing_evidence_count += 1
+            elif proposal_evidence_ready:
+                proposal_evidence_ready_count += 1
+                pack_ready_evidence_count += 1
+            if proposal_review_missing:
+                proposal_review_missing_count += 1
+            if approved_review:
+                approved_proposal_review_count += 1
+                pack_approved_review_count += 1
+            elif reviewable:
+                reviewable_capability_count += 1
+                pack_reviewable_count += 1
+            if blockers_before_evidence:
+                blocked_before_evidence_count += 1
+                pack_blocked_before_evidence_count += 1
+            if blockers_before_review:
+                blocked_before_review_capability_count += 1
+                pack_blocked_before_review_count += 1
+            if promotable:
+                promotable_capability_count += 1
+                pack_promotable_count += 1
+
+            pack_capabilities.append(
+                {
+                    "capability": capability_id,
+                    "status": _safe_str(plugin.get("status") if isinstance(plugin, dict) else "missing").strip(),
+                    "proposal_id": proposal_id,
+                    "proposal_evidence_ready": proposal_evidence_ready,
+                    "proposal_evidence_missing": proposal_evidence_missing,
+                    "proposal_review_status": proposal_review_status,
+                    "proposal_review_receipt_id": proposal_review_receipt_id,
+                    "proposal_review_missing": proposal_review_missing,
+                    "compatibility": compatibility,
+                    "review_ready": reviewable,
+                    "approved_review": approved_review,
+                    "promotion_ready": promotable,
+                    "missing_requirements": missing,
+                    "blockers_before_evidence": blockers_before_evidence,
+                    "blockers_before_review": blockers_before_review,
+                }
+            )
+
+        planned_packs.append(
+            {
+                "pack_id": pack_id,
+                "pack_version": pack_version,
+                "pack_name": _safe_str(pack.get("pack_name")).strip(),
+                "staged_capability_count": len(staged_ids),
+                "candidate_capability_count": len(staged_ids),
+                "proposal_evidence_missing_count": pack_missing_evidence_count,
+                "proposal_evidence_ready_count": pack_ready_evidence_count,
+                "reviewable_capability_count": pack_reviewable_count,
+                "blocked_before_evidence_count": pack_blocked_before_evidence_count,
+                "blocked_before_review_capability_count": pack_blocked_before_review_count,
+                "approved_proposal_review_count": pack_approved_review_count,
+                "promotable_capability_count": pack_promotable_count,
+                "capabilities": pack_capabilities,
+                "capabilities_truncated": False,
+            }
+        )
+
+    if not candidate_capability_count:
+        status = "no_selected_staged_capabilities"
+        next_gap = "stage17_capability_library_selected_capability_readback"
+    elif blocked_before_evidence_count or proposal_evidence_missing_count:
+        status = "blocked"
+        next_gap = "stage17_capability_library_operator_proposal_evidence_refs"
+    elif blocked_before_review_capability_count:
+        status = "blocked"
+        next_gap = "stage17_capability_library_promotion_readiness"
+    elif reviewable_capability_count:
+        status = "ready_for_proposal_review"
+        next_gap = "stage17_capability_library_proposal_review_apply"
+    elif promotable_capability_count:
+        status = "selected_capabilities_ready_for_explicit_promotion"
+        next_gap = "stage17_capability_library_explicit_promotion_apply"
+    elif proposal_review_missing_count == 0 and approved_proposal_review_count:
+        status = "proposal_review_complete"
+        next_gap = "stage17_capability_library_explicit_promotion_apply"
+    else:
+        status = "selected_capability_review_state_unknown"
+        next_gap = "stage17_capability_library_selected_capability_readback"
+
+    return {
+        "stage": "Stage 17 / Capability Economy",
+        "status": status,
+        "projection_scope": "selected_capabilities",
+        "global_counts_included": False,
+        **_stage17_projection_evidence(
+            projection_scope="selected_capabilities",
+            global_counts_included=False,
+            selected_pack_ids=selected_pack_ids,
+            selected_capability_ids=selected_capability_ids,
+            generated_plugin_sync_performed=bool(generated_plugin_sync_performed),
+        ),
+        "selected_capability_ids": sorted(selected_capability_ids),
+        "selected_pack_ids": sorted(selected_pack_ids),
+        "candidate_pack_count": candidate_pack_count,
+        "candidate_capability_count": candidate_capability_count,
+        "unique_proposal_count": len(unique_proposal_ids),
+        "proposal_evidence_missing_count": proposal_evidence_missing_count,
+        "proposal_evidence_ready_count": proposal_evidence_ready_count,
+        "missing_proposal_evidence_count": proposal_evidence_missing_count,
+        "evidence_ready_proposal_count": proposal_evidence_ready_count,
+        "proposal_review_missing_count": proposal_review_missing_count,
+        "approved_proposal_review_count": approved_proposal_review_count,
+        "reviewable_capability_count": reviewable_capability_count,
+        "blocked_before_evidence_count": blocked_before_evidence_count,
+        "blocked_before_review_capability_count": blocked_before_review_capability_count,
+        "promotable_capability_count": promotable_capability_count,
+        "missing_requirement_counts": missing_requirement_counts,
+        "packs": planned_packs,
+        "packs_truncated": False,
+        "requirements": {
+            "selected_scope_readback_only": True,
+            "does_not_replace_full_stage17_projection": True,
+            "selected_capability_ids_required_for_fast_scope": True,
+            "core_compatibility_required_before_promotion": True,
+        },
+        "governance": {
+            "read_only": True,
+            "operator_facing": True,
+            "generated_plugin_registry_sync_performed": bool(generated_plugin_sync_performed),
+            "does_not_write_receipts": True,
+            "does_not_write_validation_receipts": True,
+            "does_not_write_proposals": True,
+            "does_not_write_proposal_review_receipts": True,
+            "does_not_approve_proposals": True,
+            "does_not_promote_capabilities": True,
+            "does_not_enable_capabilities": True,
+            "does_not_execute_capabilities": True,
+            "proposal_review_authority": False,
+            "promotion_authority": False,
+            "execution_authority": False,
+            "approval_authority": False,
+            "memory_write": False,
+        },
+        "next_smallest_truthful_gap": next_gap,
+    }
+
+
+def _capability_library_selected_catalog_entries_from_registry(
+    *,
+    registry: dict[str, Any],
+    selected_capability_ids: set[str],
+) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    for capability_id in sorted(selected_capability_ids):
+        plugin = _read_plugin(registry, capability_id)
+        if plugin is None:
+            continue
+        spec = _spec_from_plugin_record(plugin)
+        metadata = dict(spec.metadata) if isinstance(spec.metadata, dict) else {}
+        status = _safe_str(metadata.get("promotion_status") or metadata.get("status")).strip().lower() or "unknown"
+        quality = metadata.get("quality") if isinstance(metadata.get("quality"), dict) else {}
+        tests = _unique_texts(metadata.get("tests") or metadata.get("test_refs") or quality.get("tests"), limit=50)
+        docs = _unique_texts(metadata.get("docs") or metadata.get("documentation") or quality.get("docs"), limit=50)
+        entries.append(
+            {
+                "capability": capability_id,
+                "version": _safe_str(spec.version).strip() or _safe_str(plugin.get("version")).strip() or "0.1.0",
+                "status": status,
+                "risk_tier": _safe_str(metadata.get("risk_tier")).strip().lower()
+                or _safe_str(spec.risk_class).strip().lower()
+                or _plugin_risk_tier(plugin),
+                "source": _safe_str(spec.origin).strip().lower()
+                or _safe_str(plugin.get("source_kind")).strip().lower()
+                or "unknown",
+                "proposal_id": _safe_str(metadata.get("proposal_id") or metadata.get("forge_proposal_id")).strip(),
+                "promotion_receipt_id": _safe_str(metadata.get("promotion_receipt_id")).strip(),
+                "quality": {"tests": tests, "docs": docs},
+                "metadata": metadata,
+            }
+        )
+    return entries
+
+
+def _capability_library_selected_promotion_discipline_context(
+    *,
+    registry: dict[str, Any],
+    selected_capability_ids: set[str],
+) -> dict[str, Any]:
+    for capability_id in sorted(selected_capability_ids):
+        _ensure_plugin_from_generated(registry, capability_id)
+    entries = _capability_library_selected_catalog_entries_from_registry(
+        registry=registry,
+        selected_capability_ids=selected_capability_ids,
+    )
+    available_proposals = _available_capability_pack_proposals()
+    available_validation_receipts = _available_capability_pack_validation_receipts()
+    available_promotion_receipts = _available_capability_pack_promotion_receipts()
+    promotion_discipline = analyze_capability_pack_promotion_discipline(
+        entries,
+        available_proposal_ids=available_proposals["ids"],
+        available_validation_receipt_ids=available_validation_receipts["ids"],
+        available_promotion_receipt_ids=available_promotion_receipts["ids"],
+        operator_review_decisions=_read_capability_pack_operator_review_decisions(limit=500),
+    )
+    return {
+        "entries": entries,
+        "promotion_discipline": promotion_discipline,
+        "generated_plugin_registry_sync_performed": bool(selected_capability_ids),
     }
 
 
@@ -3910,6 +5035,46 @@ def _record_capability_library_proposal_evidence_remediation_batch(
     return {"recorded": recorded, "failed": failed}
 
 
+def _capability_library_operator_proposal_evidence_local_artifact_ref_hint(
+    *,
+    plugin: dict[str, Any],
+    proposal_id: str,
+) -> dict[str, Any]:
+    meta = dict(plugin.get("meta") or {}) if isinstance(plugin.get("meta"), dict) else {}
+    proposal_ref_id = _safe_str(proposal_id or meta.get("proposal_id") or meta.get("forge_proposal_id")).strip()
+    validation_ref_id = _safe_str(meta.get("validation_receipt_id")).strip()
+    refs: list[str] = []
+    proposal_path = ""
+    validation_receipt_path = ""
+
+    if proposal_ref_id and _PLUGIN_ARTIFACT_ID_RE.match(proposal_ref_id):
+        resolved_proposal_path = _plugin_proposal_path(proposal_ref_id)
+        if _is_under(_art_dir() / "proposals", resolved_proposal_path) and resolved_proposal_path.is_file():
+            proposal_path = _plugin_artifact_relative_path("proposals", proposal_ref_id)
+            refs.extend([proposal_ref_id, proposal_path])
+
+    if validation_ref_id and _PLUGIN_ARTIFACT_ID_RE.match(validation_ref_id):
+        resolved_validation_path = _plugin_validation_receipt_path(validation_ref_id)
+        if _is_under(_art_dir() / "validations", resolved_validation_path) and resolved_validation_path.is_file():
+            validation_receipt_path = _plugin_artifact_relative_path("validations", validation_ref_id)
+            refs.extend([validation_ref_id, validation_receipt_path])
+
+    evidence_refs = _unique_texts(refs, limit=10)
+    return {
+        "ready": bool(evidence_refs),
+        "source": "local_proposal_validation_artifact_refs",
+        "claim_scope": "local_artifact_reference_hint_not_independent_evidence_verification",
+        "operator_must_review_before_apply": True,
+        "does_not_validate_evidence_truth": True,
+        "proposal_id": proposal_ref_id if proposal_path else "",
+        "proposal_artifact_path": proposal_path,
+        "validation_receipt_id": validation_ref_id if validation_receipt_path else "",
+        "validation_receipt_path": validation_receipt_path,
+        "evidence_refs": evidence_refs,
+        "evidence_ref_count": len(evidence_refs),
+    }
+
+
 def _capability_library_operator_proposal_evidence_intake_candidates(
     *,
     registry: dict[str, Any],
@@ -3963,6 +5128,10 @@ def _capability_library_operator_proposal_evidence_intake_candidates(
             ]
             if "proposal_evidence" not in missing or not proposal_id or blockers_before_evidence:
                 continue
+            local_artifact_ref_hint = _capability_library_operator_proposal_evidence_local_artifact_ref_hint(
+                plugin=plugin,
+                proposal_id=proposal_id,
+            )
             capabilities.append(
                 {
                     "capability": capability_id,
@@ -3972,6 +5141,7 @@ def _capability_library_operator_proposal_evidence_intake_candidates(
                     "proposal_review_receipt_id": _safe_str(evidence.get("proposal_review_receipt_id")).strip(),
                     "missing_requirements": missing,
                     "blockers_before_evidence": blockers_before_evidence,
+                    "local_artifact_ref_hint": local_artifact_ref_hint,
                 }
             )
 
@@ -4038,6 +5208,9 @@ def _capability_library_operator_proposal_evidence_intake_checklist_projection(
                         ),
                         "evidence_refs_required": True,
                         "operator_supplied_evidence_not_independently_verified": True,
+                        "local_artifact_ref_hint": capability.get("local_artifact_ref_hint")
+                        if isinstance(capability.get("local_artifact_ref_hint"), dict)
+                        else {},
                         "intake_apply_route": _CAPABILITY_LIBRARY_OPERATOR_PROPOSAL_EVIDENCE_INTAKE_APPLY_ROUTE,
                     }
                     for capability in visible_capabilities
@@ -4487,7 +5660,7 @@ def _capability_library_operator_proposal_evidence_intake_import_preview_project
     ready_rows: list[dict[str, Any]] = []
     pending_rows: list[dict[str, Any]] = []
     invalid_rows: list[dict[str, Any]] = []
-    groups_by_key: dict[tuple[str, str, tuple[str, ...]], dict[str, Any]] = {}
+    groups_by_key: dict[tuple[str, str], dict[str, Any]] = {}
 
     for index, row in enumerate(raw_rows):
         if not isinstance(row, dict):
@@ -4528,36 +5701,57 @@ def _capability_library_operator_proposal_evidence_intake_import_preview_project
             "requires_future_proposal_review": True,
         }
         ready_rows.append(ready)
-        group_key = (pack_id, pack_version, tuple(evidence_refs))
+        group_key = (pack_id, pack_version)
         group = groups_by_key.setdefault(
             group_key,
             {
                 "pack_id": pack_id,
                 "pack_version": pack_version,
                 "capability_ids": [],
-                "evidence_refs": evidence_refs,
+                "evidence_refs_by_capability": {},
                 "row_indexes": [],
             },
         )
         group["capability_ids"].append(capability_id)
+        refs_by_capability = group.get("evidence_refs_by_capability")
+        if not isinstance(refs_by_capability, dict):
+            refs_by_capability = {}
+            group["evidence_refs_by_capability"] = refs_by_capability
+        existing_refs = _unique_texts(refs_by_capability.get(capability_id), limit=50)
+        refs_by_capability[capability_id] = _unique_texts([*existing_refs, *evidence_refs], limit=50)
         group["row_indexes"].append(index)
 
     apply_payload_groups: list[dict[str, Any]] = []
     for group in groups_by_key.values():
         capability_ids = _unique_texts(group.get("capability_ids"), limit=1000)
         row_indexes = [int(item) for item in group.get("row_indexes", []) if isinstance(item, int)]
+        raw_refs_by_capability = (
+            group.get("evidence_refs_by_capability")
+            if isinstance(group.get("evidence_refs_by_capability"), dict)
+            else {}
+        )
+        evidence_refs_by_capability: dict[str, list[str]] = {}
+        for capability_id in capability_ids:
+            refs = _unique_texts(raw_refs_by_capability.get(capability_id), limit=50)
+            if refs:
+                evidence_refs_by_capability[capability_id] = refs
+        evidence_ref_count = sum(len(refs) for refs in evidence_refs_by_capability.values())
         apply_payload_groups.append(
             {
                 "pack_id": _safe_str(group.get("pack_id")).strip(),
                 "pack_version": _safe_str(group.get("pack_version")).strip(),
                 "capability_count": len(capability_ids),
-                "evidence_ref_count": len(group.get("evidence_refs") or []),
+                "evidence_ref_count": evidence_ref_count,
+                "shared_evidence_ref_count": 0,
+                "capability_specific_evidence_ref_count": evidence_ref_count,
                 "row_indexes": row_indexes[:100],
                 "row_indexes_truncated": len(row_indexes) > 100,
+                "capability_scoped_evidence_refs_supported": True,
                 "preview_payload": {
                     "pack_ids": [_safe_str(group.get("pack_id")).strip()],
                     "capability_ids": capability_ids,
-                    "evidence_refs": group.get("evidence_refs") or [],
+                    "evidence_refs": [],
+                    "evidence_refs_by_capability": evidence_refs_by_capability,
                     "dry_run": True,
                     "max_pack_count": 1,
                     "max_total_capability_count": len(capability_ids),
@@ -4566,7 +5760,8 @@ def _capability_library_operator_proposal_evidence_intake_import_preview_project
                 "apply_payload_hint": {
                     "pack_ids": [_safe_str(group.get("pack_id")).strip()],
                     "capability_ids": capability_ids,
-                    "evidence_refs": group.get("evidence_refs") or [],
+                    "evidence_refs": [],
+                    "evidence_refs_by_capability": evidence_refs_by_capability,
                     "dry_run": True,
                     "dry_run_fingerprint_required": True,
                     "max_pack_count": 1,
@@ -4626,6 +5821,7 @@ def _capability_library_operator_proposal_evidence_intake_import_preview_project
             "no_synthetic_evidence": True,
             "dry_run_required_before_apply": True,
             "apply_requires_plugins_write_scope": True,
+            "capability_scoped_evidence_refs_supported": True,
             "future_proposal_review_required": True,
         },
         "governance": {
@@ -4844,7 +6040,9 @@ def _capability_library_operator_proposal_evidence_intake_plan_fingerprint(
     *,
     planned: list[dict[str, Any]],
     evidence_refs: list[str],
+    evidence_refs_by_capability: dict[str, list[str]] | None = None,
 ) -> str:
+    refs_by_capability = evidence_refs_by_capability or {}
     canonical_packs: list[dict[str, Any]] = []
     for pack in planned:
         raw_capabilities = pack.get("capabilities") if isinstance(pack.get("capabilities"), list) else []
@@ -4852,6 +6050,11 @@ def _capability_library_operator_proposal_evidence_intake_plan_fingerprint(
             {
                 "capability": _safe_str(capability.get("capability")).strip(),
                 "proposal_id": _safe_str(capability.get("proposal_id")).strip(),
+                "evidence_refs": _operator_proposal_evidence_refs_for_capability(
+                    evidence_refs,
+                    refs_by_capability,
+                    _safe_str(capability.get("capability")).strip(),
+                ),
             }
             for capability in raw_capabilities
             if isinstance(capability, dict)
@@ -4869,10 +6072,61 @@ def _capability_library_operator_proposal_evidence_intake_plan_fingerprint(
         "contract": "stage17_operator_proposal_evidence_intake_dry_run_v1",
         "claim_scope": "operator_supplied_friction_evidence_reference_not_independent_verification",
         "evidence_refs": _unique_texts(evidence_refs, limit=50),
+        "evidence_refs_by_capability": {
+            capability_id: _unique_texts(refs, limit=50) for capability_id, refs in sorted(refs_by_capability.items())
+        },
         "planned": canonical_packs,
     }
     raw = json.dumps(body, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(raw).hexdigest()
+
+
+def _operator_proposal_evidence_refs_by_capability(raw: Any) -> dict[str, list[str]]:
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ValueError("evidence refs by capability must be an object")
+    out: dict[str, list[str]] = {}
+    for raw_capability_id, raw_refs in raw.items():
+        capability_id = _validate_plugin_id(_safe_str(raw_capability_id).strip())
+        refs = _unique_texts(raw_refs, limit=50)
+        if refs:
+            out[capability_id] = refs
+        if len(out) >= 1000:
+            break
+    return out
+
+
+def _operator_proposal_evidence_refs_for_capability(
+    shared_refs: list[str],
+    refs_by_capability: dict[str, list[str]],
+    capability_id: str,
+) -> list[str]:
+    return _unique_texts([*shared_refs, *refs_by_capability.get(capability_id, [])], limit=50)
+
+
+def _operator_proposal_evidence_planned_capability_ids(planned: list[dict[str, Any]]) -> list[str]:
+    capability_ids: list[str] = []
+    for pack in planned:
+        raw_capabilities = pack.get("capabilities") if isinstance(pack.get("capabilities"), list) else []
+        for capability in raw_capabilities:
+            if not isinstance(capability, dict):
+                continue
+            capability_id = _safe_str(capability.get("capability")).strip()
+            if capability_id and capability_id not in capability_ids:
+                capability_ids.append(capability_id)
+    return capability_ids
+
+
+def _operator_proposal_evidence_ref_count_for_planned(
+    planned: list[dict[str, Any]],
+    shared_refs: list[str],
+    refs_by_capability: dict[str, list[str]],
+) -> int:
+    return sum(
+        len(_operator_proposal_evidence_refs_for_capability(shared_refs, refs_by_capability, capability_id))
+        for capability_id in _operator_proposal_evidence_planned_capability_ids(planned)
+    )
 
 
 def _capability_library_operator_proposal_evidence_intake_governance(
@@ -4889,6 +6143,7 @@ def _capability_library_operator_proposal_evidence_intake_governance(
         "writes_registry_metadata": writes_registry_metadata,
         "writes_proposals": False,
         "dry_run_required_before_apply": True,
+        "capability_scoped_evidence_refs_supported": True,
         "operator_supplied_evidence_not_independently_verified": True,
         "does_not_approve_proposals": True,
         "does_not_promote_capabilities": True,
@@ -4924,7 +6179,18 @@ def _prepare_capability_library_operator_proposal_evidence_intake_plan(
     planned_writes_registry_metadata: bool,
 ) -> dict[str, Any]:
     evidence_refs = _unique_texts(payload.evidence_refs, limit=50)
-    if not evidence_refs:
+    try:
+        evidence_refs_by_capability = _operator_proposal_evidence_refs_by_capability(
+            payload.evidence_refs_by_capability
+        )
+    except Exception:
+        return {
+            "ok": False,
+            "status": "blocked",
+            "error": "invalid_evidence_refs_by_capability",
+            "evidence_refs": evidence_refs,
+        }
+    if not evidence_refs and not evidence_refs_by_capability:
         return {
             "ok": False,
             "status": "blocked",
@@ -5047,13 +6313,40 @@ def _prepare_capability_library_operator_proposal_evidence_intake_plan(
             "pack_version": _safe_str(item.get("pack_version")).strip(),
             "pack_name": _safe_str(item.get("pack_name")).strip(),
             "capability_count": len(item.get("capabilities") if isinstance(item.get("capabilities"), list) else []),
-            "evidence_ref_count": len(evidence_refs),
+            "evidence_ref_count": sum(
+                len(
+                    _operator_proposal_evidence_refs_for_capability(
+                        evidence_refs,
+                        evidence_refs_by_capability,
+                        _safe_str(capability.get("capability")).strip(),
+                    )
+                )
+                for capability in (item.get("capabilities") if isinstance(item.get("capabilities"), list) else [])
+                if isinstance(capability, dict)
+            ),
+            "shared_evidence_ref_count": len(evidence_refs),
+            "capability_specific_evidence_ref_count": sum(
+                len(evidence_refs_by_capability.get(_safe_str(capability.get("capability")).strip(), []))
+                for capability in (item.get("capabilities") if isinstance(item.get("capabilities"), list) else [])
+                if isinstance(capability, dict)
+            ),
             "claim_scope": "operator_supplied_friction_evidence_reference_not_independent_verification",
             "capabilities": [
                 {
                     "capability": _safe_str(capability.get("capability")).strip(),
                     "proposal_id": _safe_str(capability.get("proposal_id")).strip(),
                     "missing_requirements": _unique_texts(capability.get("missing_requirements"), limit=25),
+                    "evidence_ref_count": len(
+                        _operator_proposal_evidence_refs_for_capability(
+                            evidence_refs,
+                            evidence_refs_by_capability,
+                            _safe_str(capability.get("capability")).strip(),
+                        )
+                    ),
+                    "shared_evidence_ref_count": len(evidence_refs),
+                    "capability_specific_evidence_ref_count": len(
+                        evidence_refs_by_capability.get(_safe_str(capability.get("capability")).strip(), [])
+                    ),
                 }
                 for capability in (item.get("capabilities") if isinstance(item.get("capabilities"), list) else [])
                 if isinstance(capability, dict)
@@ -5066,6 +6359,41 @@ def _prepare_capability_library_operator_proposal_evidence_intake_plan(
         }
         for item in prepared
     ]
+    planned_capability_ids = _operator_proposal_evidence_planned_capability_ids(planned)
+    unplanned_ref_ids = sorted(set(evidence_refs_by_capability) - set(planned_capability_ids))
+    if unplanned_ref_ids:
+        return {
+            "ok": False,
+            "status": "blocked",
+            "error": "operator_evidence_refs_capability_not_planned",
+            "unplanned_capability_ids": unplanned_ref_ids[:50],
+            "unplanned_capability_ids_truncated": len(unplanned_ref_ids) > 50,
+            "planned_capability_count": len(planned_capability_ids),
+            "before": before,
+            "evidence_refs": evidence_refs,
+            "generated_plugin_registry_sync_performed": bool(synced),
+        }
+    missing_ref_capability_ids = [
+        capability_id
+        for capability_id in planned_capability_ids
+        if not _operator_proposal_evidence_refs_for_capability(
+            evidence_refs,
+            evidence_refs_by_capability,
+            capability_id,
+        )
+    ]
+    if missing_ref_capability_ids:
+        return {
+            "ok": False,
+            "status": "blocked",
+            "error": "operator_evidence_refs_required_for_capabilities",
+            "missing_capability_ids": missing_ref_capability_ids[:50],
+            "missing_capability_ids_truncated": len(missing_ref_capability_ids) > 50,
+            "planned_capability_count": len(planned_capability_ids),
+            "before": before,
+            "evidence_refs": evidence_refs,
+            "generated_plugin_registry_sync_performed": bool(synced),
+        }
     if not prepared:
         return {
             "ok": True,
@@ -5082,6 +6410,7 @@ def _prepare_capability_library_operator_proposal_evidence_intake_plan(
     dry_run_fingerprint = _capability_library_operator_proposal_evidence_intake_plan_fingerprint(
         planned=planned,
         evidence_refs=evidence_refs,
+        evidence_refs_by_capability=evidence_refs_by_capability,
     )
     return {
         "ok": True,
@@ -5095,7 +6424,16 @@ def _prepare_capability_library_operator_proposal_evidence_intake_plan(
         "dry_run_fingerprint": dry_run_fingerprint,
         "planned_pack_count": len(planned),
         "planned_capability_count": sum(int(item.get("capability_count") or 0) for item in planned),
-        "evidence_ref_count": len(evidence_refs),
+        "evidence_ref_count": _operator_proposal_evidence_ref_count_for_planned(
+            planned,
+            evidence_refs,
+            evidence_refs_by_capability,
+        ),
+        "shared_evidence_ref_count": len(evidence_refs),
+        "capability_specific_evidence_ref_count": sum(
+            len(evidence_refs_by_capability.get(capability_id, [])) for capability_id in planned_capability_ids
+        ),
+        "evidence_refs_by_capability": evidence_refs_by_capability,
         "generated_plugin_registry_sync_performed": bool(synced),
     }
 
@@ -5119,8 +6457,13 @@ def _capability_library_operator_proposal_evidence_intake_problem_response(
         "limit",
         "capability_count",
         "planned_pack_count",
+        "planned_capability_count",
         "recorded_pack_count",
         "recorded_capability_count",
+        "missing_capability_ids",
+        "missing_capability_ids_truncated",
+        "unplanned_capability_ids",
+        "unplanned_capability_ids_truncated",
         "skipped",
         "before",
     ):
@@ -5142,8 +6485,10 @@ def _record_capability_library_operator_proposal_evidence_intake_batch(
     registry: dict[str, Any],
     prepared: list[dict[str, Any]],
     evidence_refs: list[str],
+    evidence_refs_by_capability: dict[str, list[str]] | None = None,
     payload: CapabilityLibraryOperatorProposalEvidenceIntakeApplyIn,
     route_path: str,
+    update_runtime_catalog: bool = True,
 ) -> dict[str, list[dict[str, Any]]]:
     recorded_ts = _now_s()
     recorded: list[dict[str, Any]] = []
@@ -5151,6 +6496,7 @@ def _record_capability_library_operator_proposal_evidence_intake_batch(
     changed = False
     actor = redact_governed_value(_safe_str(payload.actor).strip())
     reason = redact_governed_value(_safe_str(payload.reason).strip() or "stage17_operator_proposal_evidence_intake")
+    refs_by_capability = evidence_refs_by_capability or {}
 
     for item in prepared:
         pack_id = _safe_str(item.get("pack_id")).strip()
@@ -5170,9 +6516,17 @@ def _record_capability_library_operator_proposal_evidence_intake_batch(
             if not proposal_id:
                 blocked_capabilities.append({"capability": capability_id, "error": "proposal_id_required"})
                 continue
+            capability_evidence_refs = _operator_proposal_evidence_refs_for_capability(
+                evidence_refs,
+                refs_by_capability,
+                capability_id,
+            )
+            if not capability_evidence_refs:
+                blocked_capabilities.append({"capability": capability_id, "error": "operator_evidence_refs_required"})
+                continue
             meta = dict(current.get("meta") or {}) if isinstance(current.get("meta"), dict) else {}
             existing = _unique_texts(meta.get("proposal_evidence") or meta.get("evidence"), limit=50)
-            merged = _merge_proposal_evidence(existing, evidence_refs)
+            merged = _merge_proposal_evidence(existing, capability_evidence_refs)
             if merged == existing:
                 continue
 
@@ -5214,7 +6568,21 @@ def _record_capability_library_operator_proposal_evidence_intake_batch(
                 "changed_capability_count": len(changed_capability_ids),
                 "changed_capability_ids": changed_capability_ids[:50],
                 "changed_capability_ids_truncated": len(changed_capability_ids) > 50,
-                "evidence_ref_count": len(evidence_refs),
+                "evidence_ref_count": sum(
+                    len(
+                        _operator_proposal_evidence_refs_for_capability(
+                            evidence_refs,
+                            refs_by_capability,
+                            _safe_str(capability.get("capability")).strip(),
+                        )
+                    )
+                    for capability in capabilities
+                ),
+                "shared_evidence_ref_count": len(evidence_refs),
+                "capability_specific_evidence_ref_count": sum(
+                    len(refs_by_capability.get(_safe_str(capability.get("capability")).strip(), []))
+                    for capability in capabilities
+                ),
                 "claim_scope": "operator_supplied_friction_evidence_reference_not_independent_verification",
                 "writes_registry_metadata": bool(changed_capability_ids),
                 "writes_proposals": False,
@@ -5226,7 +6594,10 @@ def _record_capability_library_operator_proposal_evidence_intake_batch(
         )
 
     if changed:
-        _save_registry_and_catalog(registry)
+        if update_runtime_catalog:
+            _save_registry_and_catalog(registry)
+        else:
+            _save_registry(registry)
     return {"recorded": recorded, "failed": failed}
 
 
@@ -5390,6 +6761,11 @@ def _capability_library_proposal_review_plan_projection(
     return {
         "stage": "Stage 17 / Capability Economy",
         "status": status,
+        **_stage17_projection_evidence(
+            projection_scope="full_library",
+            global_counts_included=True,
+            generated_plugin_sync_performed=sync_performed,
+        ),
         "proposal_review_plan_ready": status == "ready_for_proposal_review",
         "pack_total": _count_value(promotion_discipline.get("pack_total")),
         "ready_pack_count": _count_value(promotion_discipline.get("ready_pack_count")),
@@ -5411,6 +6787,7 @@ def _capability_library_proposal_review_plan_projection(
         "routes": {
             "promotion_plan_route": "/plugins/capabilities/library/promotion/plan",
             "proposal_evidence_plan_route": "/plugins/capabilities/library/proposal-evidence/plan",
+            "proposal_review_apply_route": _CAPABILITY_LIBRARY_PROPOSAL_REVIEW_APPLY_ROUTE,
             "proposal_review_route": "/forge/proposals/decision",
             "proposal_reviews_route": "/forge/proposal_reviews/list",
             "promotion_readiness_route": "/forge/promotion_readiness/list",
@@ -5425,7 +6802,8 @@ def _capability_library_proposal_review_plan_projection(
             "docs_required_before_review": True,
             "risk_tier_required_before_review": True,
             "pack_operator_review_required_when_declared": True,
-            "proposal_review_writes_receipts_only_through_forge_decision_route": True,
+            "proposal_review_uses_forge_decision_receipt_schema": True,
+            "bulk_proposal_review_apply_requires_dry_run_fingerprint": True,
             "proposal_review_does_not_promote_or_enable_capabilities": True,
             "explicit_operator_action_required": True,
             "no_auto_approval": True,
@@ -5568,6 +6946,7 @@ def _capability_library_proposal_review_apply_readiness_projection(
         "packs_truncated": _count_value(proposal_review_plan.get("candidate_pack_count")) > len(review_packs),
         "routes": {
             "proposal_review_apply_readiness_route": _CAPABILITY_LIBRARY_PROPOSAL_REVIEW_APPLY_READINESS_ROUTE,
+            "proposal_review_apply_route": _CAPABILITY_LIBRARY_PROPOSAL_REVIEW_APPLY_ROUTE,
             "proposal_review_plan_route": "/plugins/capabilities/library/proposal-review/plan",
             "proposal_review_route": "/forge/proposals/decision",
             "proposal_reviews_route": "/forge/proposal_reviews/list",
@@ -5588,6 +6967,8 @@ def _capability_library_proposal_review_apply_readiness_projection(
             "review_ready_capabilities_only": True,
             "explicit_operator_action_required": True,
             "forge_decision_route_required": True,
+            "proposal_review_uses_forge_decision_receipt_schema": True,
+            "bulk_proposal_review_apply_requires_dry_run_fingerprint": True,
             "no_auto_approval": True,
             "does_not_apply_reviews": True,
         },
@@ -5610,6 +6991,644 @@ def _capability_library_proposal_review_apply_readiness_projection(
         },
         "next_smallest_truthful_gap": next_gap,
     }
+
+
+def _validate_plugin_artifact_id(value: Any) -> str:
+    text = _safe_str(value).strip()
+    if not text or not _PLUGIN_ARTIFACT_ID_RE.match(text):
+        raise ValueError("invalid plugin artifact id")
+    return text
+
+
+def _plugin_proposal_review_receipt_id(proposal_id: str, decided_ts: int) -> str:
+    digest = hashlib.sha256(_safe_str(proposal_id).strip().encode("utf-8")).hexdigest()[:12]
+    nonce = time.time_ns() % 1_000_000
+    return f"plugin_proposal_review_{decided_ts}_{digest}_{nonce:06d}"
+
+
+def _plugin_proposal_review_receipt_path(receipt_id: str) -> Path:
+    return _art_dir() / "proposal_reviews" / f"{_safe_str(receipt_id).strip()}.json"
+
+
+def _read_plugin_proposal_for_review(proposal_id: str) -> tuple[Path | None, dict[str, Any] | None]:
+    safe_id = _safe_str(proposal_id).strip()
+    if not safe_id or not _PLUGIN_ARTIFACT_ID_RE.match(safe_id):
+        return None, None
+    proposal_root = _art_dir() / "proposals"
+    proposal_path = _plugin_proposal_path(safe_id)
+    if not _is_under(proposal_root, proposal_path):
+        return None, None
+    if not proposal_path.exists() or not proposal_path.is_file():
+        return proposal_path, None
+    try:
+        raw = json.loads(proposal_path.read_text(encoding="utf-8", errors="replace"))
+    except Exception:
+        return proposal_path, None
+    if not isinstance(raw, dict):
+        return proposal_path, None
+    raw["proposal_id"] = safe_id
+    return proposal_path, raw
+
+
+def _capability_library_proposal_review_apply_candidates(
+    *,
+    registry: dict[str, Any],
+    entries: list[dict[str, Any]],
+    promotion_discipline: dict[str, Any],
+    selected_pack_ids: set[str],
+    selected_capability_ids: set[str],
+    selected_proposal_ids: set[str],
+) -> list[dict[str, Any]]:
+    raw_packs = promotion_discipline.get("packs") if isinstance(promotion_discipline.get("packs"), list) else []
+    ready_packs = [
+        pack
+        for pack in raw_packs
+        if isinstance(pack, dict) and bool(pack.get("ready")) and _safe_str(pack.get("status")).strip() == "ready"
+    ]
+    candidates: list[dict[str, Any]] = []
+
+    for pack in ready_packs:
+        pack_id = _safe_str(pack.get("pack_id")).strip()
+        pack_version = _safe_str(pack.get("pack_version")).strip()
+        if selected_pack_ids and pack_id not in selected_pack_ids:
+            continue
+        pack_entries = _entries_for_capability_pack(entries, pack_id=pack_id, pack_version=pack_version)
+        staged_ids = _unique_texts(
+            [
+                _safe_str(entry.get("capability")).strip()
+                for entry in pack_entries
+                if _safe_str(entry.get("status")).strip() == "staged"
+            ],
+            limit=10000,
+        )
+        if selected_capability_ids:
+            staged_ids = [capability_id for capability_id in staged_ids if capability_id in selected_capability_ids]
+        if not staged_ids:
+            continue
+
+        capabilities: list[dict[str, Any]] = []
+        for capability_id in staged_ids:
+            plugin = _read_plugin(registry, capability_id)
+            if plugin is None:
+                continue
+            readiness = _plugin_promotion_readiness(
+                capability_id,
+                plugin,
+                PluginToggleIn(id=capability_id, reason="capability_library_proposal_review_apply"),
+            )
+            missing = _unique_texts(readiness.get("missing_requirements"), limit=25)
+            evidence = readiness.get("evidence") if isinstance(readiness.get("evidence"), dict) else {}
+            proposal_id = _safe_str(evidence.get("proposal_id")).strip()
+            if selected_proposal_ids and proposal_id not in selected_proposal_ids:
+                continue
+            blockers_before_review = [requirement for requirement in missing if requirement != "proposal_review"]
+            if "proposal_review" not in missing or not proposal_id or blockers_before_review:
+                continue
+            capabilities.append(
+                {
+                    "capability": capability_id,
+                    "status": _safe_str(plugin.get("status")).strip(),
+                    "proposal_id": proposal_id,
+                    "proposal_review_status": _safe_str(evidence.get("proposal_review_status")).strip(),
+                    "proposal_review_receipt_id": _safe_str(evidence.get("proposal_review_receipt_id")).strip(),
+                    "missing_requirements": missing,
+                    "blockers_before_review": blockers_before_review,
+                }
+            )
+
+        if capabilities:
+            candidates.append(
+                {
+                    "pack_id": pack_id,
+                    "pack_version": pack_version,
+                    "pack_name": _safe_str(pack.get("pack_name")).strip() or pack_id,
+                    "staged_capability_count": len(staged_ids),
+                    "capabilities": capabilities,
+                }
+            )
+
+    return candidates
+
+
+def _capability_library_proposal_review_apply_plan_fingerprint(
+    *,
+    planned: list[dict[str, Any]],
+    action: str,
+    decision_status: str,
+) -> str:
+    canonical_packs: list[dict[str, Any]] = []
+    for pack in planned:
+        raw_proposals = pack.get("proposals") if isinstance(pack.get("proposals"), list) else []
+        proposals: list[dict[str, Any]] = []
+        for proposal in raw_proposals:
+            if not isinstance(proposal, dict):
+                continue
+            capabilities = _unique_texts(proposal.get("capability_ids"), limit=10000)
+            proposals.append(
+                {
+                    "proposal_id": _safe_str(proposal.get("proposal_id")).strip(),
+                    "capability_ids": sorted(capabilities),
+                }
+            )
+        proposals.sort(key=lambda item: item["proposal_id"])
+        canonical_packs.append(
+            {
+                "pack_id": _safe_str(pack.get("pack_id")).strip(),
+                "pack_version": _safe_str(pack.get("pack_version")).strip(),
+                "proposals": proposals,
+            }
+        )
+    canonical_packs.sort(key=lambda item: (item["pack_id"], item["pack_version"]))
+    body = {
+        "contract": "stage17_capability_library_proposal_review_apply_dry_run_v1",
+        "action": _safe_str(action).strip().lower(),
+        "decision_status": _safe_str(decision_status).strip().lower(),
+        "planned": canonical_packs,
+    }
+    raw = json.dumps(body, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _capability_library_proposal_review_apply_governance(
+    *,
+    route_path: str,
+    action: str,
+    decision_status: str,
+    writes_proposal_review_receipts: bool,
+    updates_proposal_records: bool,
+    generated_plugin_registry_sync_performed: bool = False,
+) -> dict[str, object]:
+    approved_decision = _safe_str(decision_status).strip().lower() == "approved"
+    return {
+        "scope": _PLUGIN_WRITE_SCOPE,
+        "route": route_path,
+        "single_decision_route": "/forge/proposals/decision",
+        "uses_forge_decision_receipt_schema": True,
+        "dry_run_required_before_apply": True,
+        "action": _safe_str(action).strip().lower(),
+        "decision_status": _safe_str(decision_status).strip().lower(),
+        "writes_proposal_review_receipts": writes_proposal_review_receipts,
+        "updates_proposal_records": updates_proposal_records,
+        "writes_registry_metadata": False,
+        "does_not_mutate_registry": not generated_plugin_registry_sync_performed,
+        "generated_plugin_registry_sync_performed": generated_plugin_registry_sync_performed,
+        "approves_proposals": bool(writes_proposal_review_receipts and approved_decision),
+        "would_approve_proposals": approved_decision,
+        "does_not_promote_capabilities": True,
+        "does_not_enable_capabilities": True,
+        "does_not_execute_capabilities": True,
+        "proposal_review_authority": writes_proposal_review_receipts,
+        "promotion_authority": False,
+        "execution_authority": False,
+        "memory_write": False,
+    }
+
+
+def _prepare_capability_library_proposal_review_apply_plan(
+    *,
+    payload: CapabilityLibraryProposalReviewApplyIn,
+) -> dict[str, Any]:
+    action = _safe_str(payload.action).strip().lower()
+    decided_status = _CAPABILITY_LIBRARY_PROPOSAL_REVIEW_DECISIONS.get(action)
+    if decided_status is None:
+        return {
+            "ok": False,
+            "status": "blocked",
+            "error": "invalid_decision",
+            "allowed_actions": sorted(_CAPABILITY_LIBRARY_PROPOSAL_REVIEW_DECISIONS),
+        }
+
+    safe_max_pack_count = max(1, min(int(payload.max_pack_count or 10), 50))
+    safe_max_total_capability_count = max(1, min(int(payload.max_total_capability_count or 1000), 10000))
+    safe_max_capability_count_per_pack = max(1, min(int(payload.max_capability_count_per_pack or 500), 500))
+    try:
+        selected_pack_ids = {_validate_plugin_id(raw_id) for raw_id in _unique_texts(payload.pack_ids, limit=100)}
+        selected_capability_ids = {
+            _validate_plugin_id(raw_id) for raw_id in _unique_texts(payload.capability_ids, limit=1000)
+        }
+        selected_proposal_ids = {
+            _validate_plugin_artifact_id(raw_id) for raw_id in _unique_texts(payload.proposal_ids, limit=1000)
+        }
+    except Exception:
+        return {
+            "ok": False,
+            "status": "blocked",
+            "error": "invalid_selector_id",
+            "action": action,
+            "decision_status": decided_status,
+        }
+
+    registry = _load_registry()
+    if selected_capability_ids:
+        context = _capability_library_selected_promotion_discipline_context(
+            registry=registry,
+            selected_capability_ids=selected_capability_ids,
+        )
+        entries = context["entries"] if isinstance(context.get("entries"), list) else []
+        promotion_discipline = (
+            context["promotion_discipline"] if isinstance(context.get("promotion_discipline"), dict) else {}
+        )
+        before = _capability_library_selected_capability_readiness_projection(
+            registry=registry,
+            entries=entries,
+            promotion_discipline=promotion_discipline,
+            selected_pack_ids=selected_pack_ids,
+            selected_capability_ids=selected_capability_ids,
+            generated_plugin_sync_performed=bool(context.get("generated_plugin_registry_sync_performed")),
+        )
+        synced = bool(context.get("generated_plugin_registry_sync_performed"))
+    else:
+        synced = _sync_generated_plugins(registry)
+        catalog = _save_registry_and_catalog(registry) if synced else _compile_runtime_catalog(registry)
+        runtime_catalog = _read_runtime_catalog_payload(catalog)
+        marketplace = marketplace_from_plugin_catalog(runtime_catalog)
+        entries = list(marketplace.catalog())
+        available_proposals = _available_capability_pack_proposals()
+        available_validation_receipts = _available_capability_pack_validation_receipts()
+        available_promotion_receipts = _available_capability_pack_promotion_receipts()
+        promotion_discipline = analyze_capability_pack_promotion_discipline(
+            entries,
+            available_proposal_ids=available_proposals["ids"],
+            available_validation_receipt_ids=available_validation_receipts["ids"],
+            available_promotion_receipt_ids=available_promotion_receipts["ids"],
+            operator_review_decisions=_read_capability_pack_operator_review_decisions(limit=500),
+        )
+        before = _capability_library_proposal_review_plan_projection(
+            registry=registry,
+            entries=entries,
+            promotion_discipline=promotion_discipline,
+            generated_plugin_sync_performed=bool(synced),
+        )
+    candidates = _capability_library_proposal_review_apply_candidates(
+        registry=registry,
+        entries=entries,
+        promotion_discipline=promotion_discipline,
+        selected_pack_ids=selected_pack_ids,
+        selected_capability_ids=selected_capability_ids,
+        selected_proposal_ids=selected_proposal_ids,
+    )
+    if not candidates:
+        return {
+            "ok": True,
+            "status": "no_candidates",
+            "action": action,
+            "decision_status": decided_status,
+            "planned_pack_count": 0,
+            "planned_capability_count": 0,
+            "planned_proposal_count": 0,
+            "recorded_proposal_count": 0,
+            "before": before,
+            "generated_plugin_registry_sync_performed": bool(synced),
+        }
+    if len(candidates) > safe_max_pack_count:
+        return {
+            "ok": False,
+            "status": "blocked",
+            "error": "proposal_review_apply_pack_limit_exceeded",
+            "candidate_total": len(candidates),
+            "limit": safe_max_pack_count,
+            "action": action,
+            "decision_status": decided_status,
+            "before": before,
+            "generated_plugin_registry_sync_performed": bool(synced),
+        }
+
+    prepared: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+    total_capability_count = 0
+    unique_proposal_ids: set[str] = set()
+    for pack in candidates:
+        raw_capabilities = pack.get("capabilities") if isinstance(pack.get("capabilities"), list) else []
+        capabilities = [capability for capability in raw_capabilities if isinstance(capability, dict)]
+        capability_count = len(capabilities)
+        if capability_count <= 0:
+            skipped.append(
+                {
+                    "pack_id": _safe_str(pack.get("pack_id")).strip(),
+                    "pack_version": _safe_str(pack.get("pack_version")).strip(),
+                    "error": "capability_ids_required",
+                }
+            )
+            continue
+        if capability_count > safe_max_capability_count_per_pack:
+            skipped.append(
+                {
+                    "pack_id": _safe_str(pack.get("pack_id")).strip(),
+                    "pack_version": _safe_str(pack.get("pack_version")).strip(),
+                    "error": "candidate_capability_limit_exceeded",
+                    "capability_count": capability_count,
+                    "limit": safe_max_capability_count_per_pack,
+                }
+            )
+            continue
+
+        proposals_by_id: dict[str, dict[str, Any]] = {}
+        blocked_capabilities: list[dict[str, Any]] = []
+        for capability in capabilities:
+            proposal_id = _safe_str(capability.get("proposal_id")).strip()
+            capability_id = _safe_str(capability.get("capability")).strip()
+            proposal_path, proposal = _read_plugin_proposal_for_review(proposal_id)
+            if proposal_path is None or proposal is None:
+                blocked_capabilities.append(
+                    {
+                        "capability": capability_id,
+                        "proposal_id": proposal_id,
+                        "error": "proposal_record_required",
+                    }
+                )
+                continue
+            bucket = proposals_by_id.setdefault(
+                proposal_id,
+                {
+                    "proposal_id": proposal_id,
+                    "proposal_path": str(proposal_path),
+                    "plugin_id": _safe_str(proposal.get("plugin_id")).strip(),
+                    "capability_ids": [],
+                },
+            )
+            bucket["capability_ids"].append(capability_id)
+            unique_proposal_ids.add(proposal_id)
+
+        if blocked_capabilities:
+            skipped.append(
+                {
+                    "pack_id": _safe_str(pack.get("pack_id")).strip(),
+                    "pack_version": _safe_str(pack.get("pack_version")).strip(),
+                    "error": "proposal_review_apply_blocked",
+                    "capabilities": blocked_capabilities,
+                }
+            )
+        proposals = list(proposals_by_id.values())
+        if not proposals:
+            continue
+
+        total_capability_count += sum(len(_unique_texts(item.get("capability_ids"), limit=10000)) for item in proposals)
+        prepared.append(
+            {
+                "pack_id": _safe_str(pack.get("pack_id")).strip(),
+                "pack_version": _safe_str(pack.get("pack_version")).strip(),
+                "pack_name": _safe_str(pack.get("pack_name")).strip() or _safe_str(pack.get("pack_id")).strip(),
+                "staged_capability_count": int(pack.get("staged_capability_count") or 0),
+                "proposals": proposals,
+            }
+        )
+
+    if total_capability_count > safe_max_total_capability_count:
+        return {
+            "ok": False,
+            "status": "blocked",
+            "error": "proposal_review_apply_total_capability_limit_exceeded",
+            "capability_count": total_capability_count,
+            "limit": safe_max_total_capability_count,
+            "action": action,
+            "decision_status": decided_status,
+            "before": before,
+            "generated_plugin_registry_sync_performed": bool(synced),
+        }
+    if not prepared:
+        return {
+            "ok": True,
+            "status": "no_supported_proposal_reviews",
+            "action": action,
+            "decision_status": decided_status,
+            "planned_pack_count": 0,
+            "planned_capability_count": 0,
+            "planned_proposal_count": 0,
+            "recorded_proposal_count": 0,
+            "skipped": skipped,
+            "before": before,
+            "generated_plugin_registry_sync_performed": bool(synced),
+        }
+
+    planned = [
+        {
+            "pack_id": _safe_str(pack.get("pack_id")).strip(),
+            "pack_version": _safe_str(pack.get("pack_version")).strip(),
+            "pack_name": _safe_str(pack.get("pack_name")).strip(),
+            "action": action,
+            "decision_status": decided_status,
+            "proposal_count": len(pack.get("proposals") if isinstance(pack.get("proposals"), list) else []),
+            "capability_count": sum(
+                len(_unique_texts(proposal.get("capability_ids"), limit=10000))
+                for proposal in (pack.get("proposals") if isinstance(pack.get("proposals"), list) else [])
+                if isinstance(proposal, dict)
+            ),
+            "proposals": [
+                {
+                    "proposal_id": _safe_str(proposal.get("proposal_id")).strip(),
+                    "proposal_path": _safe_str(proposal.get("proposal_path")).strip(),
+                    "plugin_id": _safe_str(proposal.get("plugin_id")).strip(),
+                    "capability_ids": _unique_texts(proposal.get("capability_ids"), limit=10000),
+                    "writes_proposal_review_receipt": False,
+                    "updates_proposal_record": False,
+                    "approves_proposal": decided_status == "approved",
+                    "promotes_capability": False,
+                    "enables_capability": False,
+                }
+                for proposal in (pack.get("proposals") if isinstance(pack.get("proposals"), list) else [])
+                if isinstance(proposal, dict)
+            ],
+        }
+        for pack in prepared
+    ]
+    dry_run_fingerprint = _capability_library_proposal_review_apply_plan_fingerprint(
+        planned=planned,
+        action=action,
+        decision_status=decided_status,
+    )
+    return {
+        "ok": True,
+        "status": "planned",
+        "action": action,
+        "decision_status": decided_status,
+        "before": before,
+        "prepared": prepared,
+        "planned": planned,
+        "skipped": skipped,
+        "dry_run_fingerprint": dry_run_fingerprint,
+        "planned_pack_count": len(planned),
+        "planned_capability_count": total_capability_count,
+        "planned_proposal_count": len(unique_proposal_ids),
+        "selected_pack_ids": sorted(selected_pack_ids),
+        "selected_capability_ids": sorted(selected_capability_ids),
+        "selected_proposal_ids": sorted(selected_proposal_ids),
+        "generated_plugin_registry_sync_performed": bool(synced),
+    }
+
+
+def _write_capability_library_proposal_review_decision_receipt(
+    *,
+    proposal_id: str,
+    action: str,
+    decided_status: str,
+    actor: Any,
+    reason: str,
+    notes: str,
+    meta: dict[str, Any],
+    route_path: str,
+) -> dict[str, Any]:
+    proposal_path, proposal = _read_plugin_proposal_for_review(proposal_id)
+    if proposal_path is None:
+        return {"ok": False, "error": "invalid_proposal_id", "proposal_id": proposal_id}
+    if proposal is None:
+        return {"ok": False, "error": "proposal_record_required", "proposal_id": proposal_id}
+
+    previous_status = _safe_str(proposal.get("status")).strip() or "unknown"
+    decided_ts = _now_s()
+    receipt_id = _plugin_proposal_review_receipt_id(proposal_id, decided_ts)
+    receipt_path = _plugin_proposal_review_receipt_path(receipt_id)
+    receipt_root = _art_dir() / "proposal_reviews"
+    if not _is_under(receipt_root, receipt_path):
+        return {"ok": False, "error": "invalid_receipt_path", "proposal_id": proposal_id}
+
+    receipt = {
+        "kind": "plugin.proposal.review.receipt",
+        "receipt_id": receipt_id,
+        "proposal_id": proposal_id,
+        "plugin_id": _safe_str(proposal.get("plugin_id")).strip(),
+        "previous_status": previous_status,
+        "status": decided_status,
+        "decision": action,
+        "decided_ts": decided_ts,
+        "actor": _safe_str(actor).strip(),
+        "reason": _safe_str(reason).strip() or "stage17_capability_library_proposal_review",
+        "notes": _safe_str(notes).strip(),
+        "meta": meta if isinstance(meta, dict) else {},
+        "proposal_path": str(proposal_path),
+        "governance": {
+            "gate": "permission_gate",
+            "scope": _PLUGIN_WRITE_SCOPE,
+            "route": route_path,
+            "single_decision_route": "/forge/proposals/decision",
+            "uses_forge_decision_receipt_schema": True,
+            "promotion_authority": False,
+            "execution_authority": False,
+        },
+        "path": str(receipt_path),
+    }
+    redacted_receipt = redact_governed_display_value(receipt)
+    receipt_out = redacted_receipt if isinstance(redacted_receipt, dict) else {}
+
+    history = proposal.get("review_history")
+    if not isinstance(history, list):
+        history = []
+    history.append(
+        {
+            "receipt_id": receipt_id,
+            "status": decided_status,
+            "decision": action,
+            "decided_ts": decided_ts,
+            "actor": receipt_out.get("actor", ""),
+        }
+    )
+    proposal["status"] = decided_status
+    proposal["updated_ts"] = decided_ts
+    proposal["review_receipt_id"] = receipt_id
+    proposal["review_receipt_path"] = str(receipt_path)
+    proposal["review"] = {
+        "status": decided_status,
+        "decision": action,
+        "reason": receipt_out.get("reason", ""),
+        "notes": receipt_out.get("notes", ""),
+        "actor": receipt_out.get("actor", ""),
+        "decided_ts": decided_ts,
+        "receipt_id": receipt_id,
+    }
+    proposal["review_history"] = history
+
+    redacted_proposal = redact_governed_display_value(proposal)
+    proposal_out = redacted_proposal if isinstance(redacted_proposal, dict) else {}
+    _atomic_write_display_json(receipt_path, receipt_out)
+    _atomic_write_display_json(proposal_path, proposal_out)
+    return {
+        "ok": True,
+        "proposal_id": proposal_id,
+        "plugin_id": _safe_str(proposal.get("plugin_id")).strip(),
+        "receipt_id": receipt_id,
+        "receipt_path": str(receipt_path),
+        "receipt": receipt_out,
+        "status": decided_status,
+    }
+
+
+def _record_capability_library_proposal_review_apply_batch(
+    *,
+    prepared: list[dict[str, Any]],
+    payload: CapabilityLibraryProposalReviewApplyIn,
+    action: str,
+    decided_status: str,
+    route_path: str,
+) -> dict[str, Any]:
+    batch_id = f"capability_library_proposal_review_batch_{_now_s()}_{uuid.uuid4().hex[:8]}"
+    batch_meta = {
+        **payload.meta,
+        "stage": "Stage 17 / Capability Economy",
+        "capability_library_bulk_review": True,
+        "bulk_review_batch_id": batch_id,
+        "bulk_review_route": route_path,
+        "single_decision_route": "/forge/proposals/decision",
+        "uses_forge_decision_receipt_schema": True,
+        "dry_run": False,
+    }
+    recorded: list[dict[str, Any]] = []
+    failed: list[dict[str, Any]] = []
+    seen_proposal_ids: set[str] = set()
+
+    for pack in prepared:
+        pack_id = _safe_str(pack.get("pack_id")).strip()
+        pack_version = _safe_str(pack.get("pack_version")).strip()
+        raw_proposals = pack.get("proposals") if isinstance(pack.get("proposals"), list) else []
+        for proposal in raw_proposals:
+            if not isinstance(proposal, dict):
+                continue
+            proposal_id = _safe_str(proposal.get("proposal_id")).strip()
+            if not proposal_id or proposal_id in seen_proposal_ids:
+                continue
+            seen_proposal_ids.add(proposal_id)
+            capability_ids = _unique_texts(proposal.get("capability_ids"), limit=10000)
+            meta = {
+                **batch_meta,
+                "pack_id": pack_id,
+                "pack_version": pack_version,
+                "capability_ids": capability_ids,
+                "capability_count": len(capability_ids),
+            }
+            result = _write_capability_library_proposal_review_decision_receipt(
+                proposal_id=proposal_id,
+                action=action,
+                decided_status=decided_status,
+                actor=payload.actor,
+                reason=_safe_str(payload.reason).strip() or "stage17_capability_library_proposal_review",
+                notes=_safe_str(payload.notes).strip(),
+                meta=meta,
+                route_path=route_path,
+            )
+            if not result.get("ok"):
+                failed.append(
+                    {
+                        "pack_id": pack_id,
+                        "pack_version": pack_version,
+                        "proposal_id": proposal_id,
+                        "capability_ids": capability_ids,
+                        "error": _safe_str(result.get("error")).strip() or "proposal_review_write_failed",
+                    }
+                )
+                continue
+            recorded.append(
+                {
+                    "pack_id": pack_id,
+                    "pack_version": pack_version,
+                    "proposal_id": proposal_id,
+                    "plugin_id": _safe_str(result.get("plugin_id")).strip(),
+                    "receipt_id": _safe_str(result.get("receipt_id")).strip(),
+                    "receipt_path": _safe_str(result.get("receipt_path")).strip(),
+                    "capability_ids": capability_ids,
+                    "capability_count": len(capability_ids),
+                    "status": decided_status,
+                }
+            )
+
+    return {"batch_id": batch_id, "recorded": recorded, "failed": failed}
 
 
 def _capability_library_operator_proposal_evidence_next_batch(operator_checklist: dict[str, Any]) -> dict[str, Any]:
@@ -5637,6 +7656,23 @@ def _capability_library_operator_proposal_evidence_next_batch(operator_checklist
     batch_capability_count = len(capability_ids)
     pack_candidate_count = _count_value(pack.get("candidate_capability_count"))
     batch_truncated = bool(pack.get("capabilities_truncated")) or batch_capability_count < pack_candidate_count
+    local_artifact_ref_hints = {
+        _safe_str(capability.get("capability")).strip(): capability.get("local_artifact_ref_hint")
+        for capability in capabilities
+        if isinstance(capability.get("local_artifact_ref_hint"), dict)
+        and _safe_str(capability.get("capability")).strip()
+    }
+    local_artifact_refs_by_capability = {
+        capability_id: _unique_texts(hint.get("evidence_refs"), limit=10)
+        for capability_id, hint in local_artifact_ref_hints.items()
+        if bool(hint.get("ready"))
+    }
+    local_artifact_ref_hint_capability_count = len(local_artifact_refs_by_capability)
+    local_artifact_ref_hint_evidence_ref_count = sum(len(refs) for refs in local_artifact_refs_by_capability.values())
+    local_artifact_ref_hints_complete = bool(batch_capability_count) and (
+        local_artifact_ref_hint_capability_count == batch_capability_count
+    )
+    apply_payload_refs_by_capability = local_artifact_refs_by_capability if local_artifact_ref_hints_complete else {}
     return {
         "status": "ready_for_operator_evidence_batch" if batch_capability_count else "no_operator_evidence_batch",
         "ready": bool(batch_capability_count),
@@ -5656,6 +7692,12 @@ def _capability_library_operator_proposal_evidence_next_batch(operator_checklist
         "requires_future_proposal_review": True,
         "dry_run_required_before_apply": True,
         "no_synthetic_evidence": True,
+        "local_artifact_ref_hints_ready": local_artifact_ref_hints_complete,
+        "local_artifact_ref_hint_capability_count": local_artifact_ref_hint_capability_count,
+        "local_artifact_ref_hint_evidence_ref_count": local_artifact_ref_hint_evidence_ref_count,
+        "local_artifact_ref_hints_complete": local_artifact_ref_hints_complete,
+        "operator_must_review_local_artifact_refs_before_apply": True,
+        "local_artifact_refs_by_capability": local_artifact_refs_by_capability,
         "capabilities": [
             {
                 "capability": _safe_str(capability.get("capability")).strip(),
@@ -5667,6 +7709,9 @@ def _capability_library_operator_proposal_evidence_next_batch(operator_checklist
                 "blockers_before_evidence": _unique_texts(capability.get("blockers_before_evidence"), limit=25),
                 "evidence_refs_required": True,
                 "operator_supplied_evidence_not_independently_verified": True,
+                "local_artifact_ref_hint": capability.get("local_artifact_ref_hint")
+                if isinstance(capability.get("local_artifact_ref_hint"), dict)
+                else {},
                 "intake_apply_route": _CAPABILITY_LIBRARY_OPERATOR_PROPOSAL_EVIDENCE_INTAKE_APPLY_ROUTE,
             }
             for capability in capabilities
@@ -5675,6 +7720,7 @@ def _capability_library_operator_proposal_evidence_next_batch(operator_checklist
             "pack_ids": [pack_id] if pack_id else [],
             "capability_ids": capability_ids,
             "evidence_refs": [],
+            "evidence_refs_by_capability": apply_payload_refs_by_capability,
             "dry_run": True,
             "max_pack_count": 1,
             "max_total_capability_count": max(1, batch_capability_count),
@@ -5753,6 +7799,11 @@ def _capability_library_proposal_evidence_source_readiness_projection(
     return {
         "stage": "Stage 17 / Capability Economy",
         "status": status,
+        **_stage17_projection_evidence(
+            projection_scope="full_library",
+            global_counts_included=True,
+            generated_plugin_sync_performed=sync_performed,
+        ),
         "proposal_evidence_source_readiness_ready": not bool(discipline_blocked_pack_count),
         "proposal_evidence_missing_count": proposal_evidence_missing_count,
         "proposal_evidence_ready_count": proposal_evidence_ready_count,
@@ -6103,6 +8154,132 @@ def _record_capability_pack_quality_evidence_remediation_batch(
     return {"recorded": recorded, "failed": failed}
 
 
+def _quality_standard_reference_candidates() -> dict[str, list[str]]:
+    available_tests = _available_capability_pack_test_paths()
+    available_docs = _available_capability_pack_doc_paths()
+
+    def existing_repo_ref(ref: str) -> bool:
+        candidate = _resolve_under(repo_root(), ref)
+        return candidate is not None and candidate.is_file()
+
+    return {
+        "tests": [
+            ref
+            for ref in _unique_texts(list(_CAPABILITY_PACK_QUALITY_TEST_REFERENCE_CANDIDATES), limit=50)
+            if ref in available_tests or existing_repo_ref(ref)
+        ],
+        "docs": [
+            ref
+            for ref in _unique_texts(list(_CAPABILITY_PACK_QUALITY_DOC_REFERENCE_CANDIDATES), limit=50)
+            if ref in available_docs or existing_repo_ref(ref)
+        ],
+    }
+
+
+def _quality_standard_missing_capability_ids(
+    pack_entries: list[dict[str, Any]],
+) -> tuple[list[str], list[str]]:
+    missing_tests: list[str] = []
+    missing_docs: list[str] = []
+    for entry in pack_entries:
+        capability_id = _safe_str(entry.get("capability")).strip()
+        if not capability_id:
+            continue
+        quality = entry.get("quality") if isinstance(entry.get("quality"), dict) else {}
+        if not _unique_texts(quality.get("tests"), limit=50):
+            missing_tests.append(capability_id)
+        if not _unique_texts(quality.get("docs"), limit=50):
+            missing_docs.append(capability_id)
+    return (_unique_texts(missing_tests, limit=500), _unique_texts(missing_docs, limit=500))
+
+
+def _record_capability_pack_quality_standard_remediation_batch(
+    *,
+    registry: dict[str, Any],
+    prepared: list[dict[str, Any]],
+) -> dict[str, list[dict[str, Any]]]:
+    recorded_ts = _now_s()
+    failed: list[dict[str, Any]] = []
+    recorded: list[dict[str, Any]] = []
+    changed = False
+
+    for item in prepared:
+        pack_id = _safe_str(item.get("pack_id")).strip()
+        pack_version = _safe_str(item.get("pack_version")).strip()
+        capability_ids = _unique_texts(item.get("capability_ids"), limit=500)
+        test_refs = _unique_texts(item.get("test_refs"), limit=50)
+        doc_refs = _unique_texts(item.get("doc_refs"), limit=50)
+        missing_test_ids = set(_unique_texts(item.get("missing_test_capability_ids"), limit=500))
+        missing_doc_ids = set(_unique_texts(item.get("missing_doc_capability_ids"), limit=500))
+        missing = [capability_id for capability_id in capability_ids if _read_plugin(registry, capability_id) is None]
+        if missing:
+            failed.append(
+                {
+                    "pack_id": pack_id,
+                    "pack_version": pack_version,
+                    "status": "blocked",
+                    "error": "capability_not_found",
+                    "missing_capability_ids": missing,
+                }
+            )
+            continue
+
+        changed_capability_ids: list[str] = []
+        for capability_id in capability_ids:
+            current = _read_plugin(registry, capability_id)
+            if current is None:
+                continue
+            meta = dict(current.get("meta") or {}) if isinstance(current.get("meta"), dict) else {}
+            quality = dict(meta.get("quality") or {}) if isinstance(meta.get("quality"), dict) else {}
+            before_quality = dict(quality)
+            before_meta = dict(meta)
+            if capability_id in missing_test_ids and test_refs and not _unique_texts(quality.get("tests"), limit=50):
+                quality["tests"] = _merge_quality_references(quality.get("tests"), test_refs)
+            if capability_id in missing_doc_ids and doc_refs and not _unique_texts(quality.get("docs"), limit=50):
+                quality["docs"] = _merge_quality_references(quality.get("docs"), doc_refs)
+            if quality != before_quality:
+                quality["reference_source"] = _CAPABILITY_PACK_QUALITY_STANDARD_REMEDIATION_SOURCE
+                quality["claim_scope"] = "candidate_reference_only_not_pack_specific_proof"
+                quality["pack_specific_coverage_claimed"] = False
+                quality["validation_receipt_written"] = False
+                quality["proposal_lineage_written"] = False
+                meta["quality"] = quality
+                meta["quality_standard_remediation_source"] = _CAPABILITY_PACK_QUALITY_STANDARD_REMEDIATION_SOURCE
+                meta["quality_reference_remediation_source"] = _CAPABILITY_PACK_QUALITY_STANDARD_REMEDIATION_SOURCE
+            if meta == before_meta:
+                continue
+            current["meta"] = meta
+            current["updated_ts"] = recorded_ts
+            _write_plugin(registry, _normalize_plugin_record(capability_id, current))
+            changed = True
+            changed_capability_ids.append(capability_id)
+
+        recorded.append(
+            {
+                "pack_id": pack_id,
+                "pack_version": pack_version,
+                "capability_count": len(capability_ids),
+                "changed_capability_count": len(changed_capability_ids),
+                "changed_capability_ids": changed_capability_ids[:50],
+                "changed_capability_ids_truncated": len(changed_capability_ids) > 50,
+                "quality_references": {
+                    "tests": test_refs,
+                    "docs": doc_refs,
+                    "claim_scope": "candidate_reference_only_not_pack_specific_proof",
+                    "pack_specific_coverage_claimed": False,
+                },
+                "writes_validation_receipts": False,
+                "writes_proposals": False,
+                "applied_quality_blockers": _unique_texts(item.get("quality_blockers"), limit=50),
+                "status": "recorded" if changed_capability_ids else "unchanged",
+            }
+        )
+
+    if changed:
+        _save_registry_and_catalog(registry)
+    return {"recorded": recorded, "failed": failed}
+
+
 def _plugin_artifact_relative_path(folder_name: str, artifact_id: str) -> str:
     safe_folder = _safe_str(folder_name).strip().strip("/\\")
     safe_id = _safe_str(artifact_id).strip()
@@ -6122,6 +8299,340 @@ def _quality_references_from_reconstruction_capability(capability: dict[str, Any
         list(_CAPABILITY_PACK_QUALITY_TEST_REFERENCE_CANDIDATES),
         list(_CAPABILITY_PACK_QUALITY_DOC_REFERENCE_CANDIDATES),
     )
+
+
+def _stage17_closure_matrix(
+    *,
+    all_items: list[dict[str, Any]],
+    coherence: dict[str, Any],
+    pack_readiness: dict[str, Any],
+    catalog: dict[str, Any],
+) -> dict[str, Any]:
+    pack_total = _count_value(pack_readiness.get("pack_total"))
+    ready_pack_count = _count_value(pack_readiness.get("ready_pack_count"))
+    blocked_pack_count = _count_value(pack_readiness.get("blocked_pack_count"))
+    unpacked_entry_count = _count_value(pack_readiness.get("unpacked_entry_count"))
+    duplicate_capability_count = _stage17_list_count(coherence, "duplicate_capabilities")
+    duplicate_proposal_count = _stage17_list_count(coherence, "duplicate_proposals")
+    lineage_gap_count = _stage17_list_count(coherence, "lineage_gaps")
+    validation_lineage_gap_count = _stage17_list_count(coherence, "validation_lineage_gaps")
+    quality_gap_count = _stage17_list_count(coherence, "quality_gaps")
+    pack_blockers = _stage17_pack_blocker_counts(pack_readiness)
+
+    criteria = [
+        _stage17_closure_criterion(
+            criterion_id="criterion_1_reusable_operational_assets",
+            title="Packs are reusable operational assets.",
+            status=_stage17_status(
+                pack_total > 0,
+                [
+                    *(["no_versioned_packs_detected"] if pack_total <= 0 else []),
+                    *(["blocked_packs_present"] if blocked_pack_count else []),
+                    *(["unpacked_capabilities_present"] if unpacked_entry_count else []),
+                ],
+            ),
+            blockers=[
+                *(["no_versioned_packs_detected"] if pack_total <= 0 else []),
+                *(["blocked_packs_present"] if blocked_pack_count else []),
+                *(["unpacked_capabilities_present"] if unpacked_entry_count else []),
+            ],
+            evidence={
+                "pack_total": pack_total,
+                "ready_pack_count": ready_pack_count,
+                "blocked_pack_count": blocked_pack_count,
+                "unpacked_entry_count": unpacked_entry_count,
+            },
+            routes=["/plugins/capabilities/catalog", "/plugins/capabilities/packs/migration/plan"],
+            next_step=_safe_str(pack_readiness.get("next_smallest_truthful_gap")).strip(),
+        ),
+        _stage17_closure_criterion(
+            criterion_id="criterion_2_pack_evidence_travels",
+            title="Governance, permissions, risks, receipts, and validation travel with each pack.",
+            status=_stage17_status(
+                pack_total > 0,
+                [
+                    *(
+                        ["pack_governance_or_rules_gap_present"]
+                        if any(
+                            key in pack_blockers
+                            for key in (
+                                "pack_governance_missing",
+                                "promotion_rules_missing",
+                                "pack_metadata_receipt_missing",
+                            )
+                        )
+                        else []
+                    ),
+                    *(["validation_lineage_gap_present"] if validation_lineage_gap_count else []),
+                ],
+            ),
+            blockers=[
+                *(
+                    ["pack_governance_or_rules_gap_present"]
+                    if any(
+                        key in pack_blockers
+                        for key in (
+                            "pack_governance_missing",
+                            "promotion_rules_missing",
+                            "pack_metadata_receipt_missing",
+                        )
+                    )
+                    else []
+                ),
+                *(["validation_lineage_gap_present"] if validation_lineage_gap_count else []),
+            ],
+            evidence={
+                "pack_blocker_counts": pack_blockers,
+                "validation_lineage_gap_count": validation_lineage_gap_count,
+            },
+            routes=[
+                "/plugins/capabilities/packs/metadata/receipts",
+                "/plugins/capabilities/packs/validation/receipts",
+                "/plugins/capabilities/packs/promotion/discipline",
+            ],
+            next_step=_safe_str(pack_readiness.get("next_smallest_truthful_gap")).strip(),
+        ),
+        _stage17_closure_criterion(
+            criterion_id="criterion_3_executable_lifecycle",
+            title=(
+                "Versioning, migration, testing, promotion, quarantine, deprecation, "
+                "and documentation are executable lifecycle behavior."
+            ),
+            status=_stage17_status(True, []),
+            blockers=[],
+            evidence={
+                "migration_route": "/plugins/capabilities/packs/migration/plan",
+                "quality_routes": [
+                    "/plugins/capabilities/packs/quality/standards",
+                    "/plugins/capabilities/packs/quality/tests",
+                    "/plugins/capabilities/packs/quality/docs",
+                ],
+                "promotion_routes": [
+                    "/plugins/capabilities/library/promotion/plan",
+                    _CAPABILITY_LIBRARY_EXPLICIT_PROMOTION_APPLY_ROUTE,
+                ],
+                "plugin_quarantine_deprecation_routes": ["/plugins/disable", "/plugins/uninstall"],
+                "plugin_lifecycle_repair_route": _PLUGIN_LIFECYCLE_REPAIR_ROUTE,
+                "lifecycle_guard_contract": "plugin.lifecycle.quarantine_deprecation_v1",
+                "lifecycle_repair_contract": "plugin.lifecycle.repair_restore_v1",
+                "lifecycle_guard_readback_fields": [
+                    "readiness.evidence.lifecycle",
+                    "promotion_plan.packs.capabilities.lifecycle",
+                    "promotion_receipt.lifecycle",
+                    "run_denial.lifecycle",
+                ],
+                "lifecycle_guard_blocks": [
+                    "explicit_quarantine",
+                    "explicit_deprecation",
+                    "unknown_explicit_lifecycle_state",
+                ],
+            },
+            routes=[
+                "/plugins/capabilities/packs/migration/plan",
+                "/plugins/capabilities/packs/quality/standards",
+                "/plugins/capabilities/library/promotion/plan",
+                _CAPABILITY_LIBRARY_EXPLICIT_PROMOTION_APPLY_ROUTE,
+                "/plugins/disable",
+                _PLUGIN_LIFECYCLE_REPAIR_ROUTE,
+                "/plugins/run",
+            ],
+            next_step="continue_stage17_remaining_non_lifecycle_blockers",
+        ),
+        _stage17_closure_criterion(
+            criterion_id="criterion_4_catalog_coherence",
+            title="The catalog is discoverable, deduplicated, curated, and maintainable.",
+            status=_stage17_status(
+                bool(all_items),
+                [
+                    *(["duplicate_capabilities_present"] if duplicate_capability_count else []),
+                    *(["duplicate_proposal_lineage_present"] if duplicate_proposal_count else []),
+                    *(["lineage_gaps_present"] if lineage_gap_count else []),
+                    *(["validation_lineage_gaps_present"] if validation_lineage_gap_count else []),
+                    *(["quality_gaps_present"] if quality_gap_count else []),
+                ],
+            ),
+            blockers=[
+                *(["duplicate_capabilities_present"] if duplicate_capability_count else []),
+                *(["duplicate_proposal_lineage_present"] if duplicate_proposal_count else []),
+                *(["lineage_gaps_present"] if lineage_gap_count else []),
+                *(["validation_lineage_gaps_present"] if validation_lineage_gap_count else []),
+                *(["quality_gaps_present"] if quality_gap_count else []),
+            ],
+            evidence={
+                "catalog_readback_fields": [
+                    "summary",
+                    "coherence",
+                    "pack_readiness",
+                    "stage17_closure_matrix",
+                ],
+                "catalog_path": _safe_str(catalog.get("path")).strip(),
+                "catalog_total_plugins": _count_value(catalog.get("total_plugins")),
+                "coherence_report": "/plugins/capabilities/catalog",
+            },
+            blocker_counts={
+                "duplicate_capabilities": duplicate_capability_count,
+                "duplicate_proposals": duplicate_proposal_count,
+                "lineage_gaps": lineage_gap_count,
+                "validation_lineage_gaps": validation_lineage_gap_count,
+                "quality_gaps": quality_gap_count,
+            },
+            routes=["/plugins/capabilities/catalog"],
+            next_step="stage17_catalog_coherence_remediation",
+        ),
+        _stage17_closure_criterion(
+            criterion_id="criterion_5_governed_operator_paths",
+            title="Operators can inspect, evaluate, promote, invoke, and maintain packs through governed paths.",
+            status=_stage17_status(bool(all_items), []),
+            blockers=[] if all_items else ["no_capability_catalog_entries"],
+            evidence={
+                "inspect_routes": [
+                    "/plugins/capabilities/catalog",
+                    "/plugins/capabilities/packs/operator/surface",
+                ],
+                "evaluate_routes": [
+                    "/plugins/capabilities/packs/promotion/discipline",
+                    "/plugins/capabilities/library/proposal-review/plan",
+                ],
+                "promote_routes": [
+                    "/plugins/enable",
+                    _CAPABILITY_LIBRARY_EXPLICIT_PROMOTION_APPLY_ROUTE,
+                ],
+                "invoke_route": "/plugins/run",
+                "maintain_routes": ["/plugins/disable", "/plugins/uninstall"],
+            },
+            routes=[
+                "/plugins/capabilities/packs/operator/surface",
+                "/plugins/capabilities/library/proposal-review/plan",
+                _CAPABILITY_LIBRARY_EXPLICIT_PROMOTION_APPLY_ROUTE,
+                "/plugins/run",
+            ],
+            next_step="stage17_operator_surface_end_to_end_receipts",
+        ),
+        _stage17_closure_criterion(
+            criterion_id="criterion_6_reuse_leverage",
+            title="Reuse creates visible leverage across multiple real contexts.",
+            status="partial" if all_items else "blocked",
+            blockers=(
+                ["multi_context_reuse_receipts_not_proven_by_catalog_readback"]
+                if all_items
+                else ["no_capability_catalog_entries"]
+            ),
+            evidence={
+                "catalog_entry_count": len(all_items),
+                "distinct_sources": sorted(
+                    {
+                        _safe_str(item.get("source")).strip()
+                        for item in all_items
+                        if _safe_str(item.get("source")).strip()
+                    }
+                ),
+                "distinct_statuses": sorted(
+                    {
+                        _safe_str(item.get("status")).strip()
+                        for item in all_items
+                        if _safe_str(item.get("status")).strip()
+                    }
+                ),
+                "claim_boundary": "catalog evidence does not prove reuse across real operator contexts",
+            },
+            routes=["/plugins/capabilities/catalog"],
+            next_step="stage17_reuse_leverage_receipts",
+        ),
+    ]
+
+    weakest = _stage17_weakest_closure_criterion(criteria)
+    all_criteria_ready = all(_safe_str(item.get("status")).strip() == "ready" for item in criteria)
+    return {
+        "kind": "plugin.capability_catalog.stage17_closure_matrix",
+        "stage": "Stage 17 / Capability Economy",
+        "status": "ready_for_closure_review" if all_criteria_ready else "open",
+        "closure_claimed": False,
+        "all_criteria_ready": all_criteria_ready,
+        "weakest_criterion": weakest,
+        "criteria": criteria,
+        "governance": {
+            "read_only": True,
+            "derived_from_existing_catalog_readbacks": True,
+            "writes_repo": False,
+            "writes_data": False,
+            "does_not_promote_capabilities": True,
+            "does_not_enable_capabilities": True,
+            "does_not_execute_capabilities": True,
+            "does_not_claim_stage17_closure": True,
+            "closure_authority": False,
+            "promotion_authority": False,
+            "execution_authority": False,
+        },
+        "source_readbacks": {
+            "catalog_route": "/plugins/capabilities/catalog",
+            "coherence_field": "coherence",
+            "pack_readiness_field": "pack_readiness",
+        },
+    }
+
+
+def _stage17_list_count(payload: dict[str, Any], key: str) -> int:
+    value = payload.get(key)
+    return len(value) if isinstance(value, list) else _count_value(value)
+
+
+def _stage17_status(evidence_present: bool, blockers: list[str]) -> str:
+    if not evidence_present:
+        return "blocked"
+    return "ready" if not blockers else "partial"
+
+
+def _stage17_pack_blocker_counts(pack_readiness: dict[str, Any]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    packs = pack_readiness.get("packs") if isinstance(pack_readiness.get("packs"), list) else []
+    for pack in packs:
+        if not isinstance(pack, dict):
+            continue
+        for blocker in _unique_texts(pack.get("blockers"), limit=100):
+            counts[blocker] = counts.get(blocker, 0) + 1
+    return dict(sorted(counts.items()))
+
+
+def _stage17_closure_criterion(
+    *,
+    criterion_id: str,
+    title: str,
+    status: str,
+    blockers: list[str],
+    evidence: dict[str, Any],
+    routes: list[str],
+    next_step: str,
+    blocker_counts: dict[str, int] | None = None,
+) -> dict[str, Any]:
+    out = {
+        "id": criterion_id,
+        "criterion": title,
+        "status": status,
+        "blockers": blockers,
+        "blocker_counts": blocker_counts or {},
+        "evidence": evidence,
+        "routes": routes,
+        "next_step": next_step,
+    }
+    return out
+
+
+def _stage17_weakest_closure_criterion(criteria: list[dict[str, Any]]) -> dict[str, Any]:
+    severity = {"blocked": 3, "partial": 2, "ready": 1}
+    weakest = max(
+        criteria,
+        key=lambda item: (
+            severity.get(_safe_str(item.get("status")).strip(), 0),
+            len(item.get("blockers") if isinstance(item.get("blockers"), list) else []),
+        ),
+    )
+    return {
+        "id": _safe_str(weakest.get("id")).strip(),
+        "criterion": _safe_str(weakest.get("criterion")).strip(),
+        "status": _safe_str(weakest.get("status")).strip(),
+        "blockers": weakest.get("blockers") if isinstance(weakest.get("blockers"), list) else [],
+        "next_step": _safe_str(weakest.get("next_step")).strip(),
+    }
 
 
 def _write_reconstructed_validation_receipt(
@@ -6631,6 +9142,349 @@ def _plugin_governance(
     if approval_status:
         out["approval_status"] = approval_status
     return out
+
+
+def _capability_pack_invocation_selection(
+    *,
+    plugin: dict[str, Any],
+    capability: dict[str, Any],
+    action: str,
+) -> dict[str, object]:
+    plugin_id = _safe_str(plugin.get("id")).strip()
+    plugin_meta = dict(plugin.get("meta") or {}) if isinstance(plugin.get("meta"), dict) else {}
+    cap_meta = dict(capability.get("meta") or {}) if isinstance(capability.get("meta"), dict) else {}
+    pack_id = _safe_str(plugin_meta.get("pack_id") or plugin_meta.get("capability_pack_id")).strip()
+    pack_version = _safe_str(plugin_meta.get("pack_version") or plugin_meta.get("capability_pack_version")).strip()
+    capability_id = _safe_str(capability.get("id")).strip() or f"{plugin_id}.{action or 'run'}"
+    pack_reuse_key = (
+        f"{pack_id}@{pack_version}:{capability_id}" if pack_id or pack_version else f"unpacked:{capability_id}"
+    )
+    pack_name = redact_governed_value(_safe_str(plugin_meta.get("pack_name") or pack_id).strip())
+    return {
+        "contract": "stage17_capability_pack_invocation_selection_v1",
+        "source": "plugin_registry_metadata",
+        "plugin_id": plugin_id,
+        "capability_id": capability_id,
+        "action": _safe_str(action).strip(),
+        "tool_name": _safe_str(cap_meta.get("tool_name")).strip() or capability_id,
+        "pack_id": pack_id,
+        "pack_version": pack_version,
+        "pack_name": _safe_str(pack_name).strip(),
+        "pack_reuse_key": pack_reuse_key,
+        "supported_caller_contexts": [
+            "direct_plugin_route",
+            "plugin_tool_route",
+            "mission_linked_operation",
+            "mission_linked_tool_operation",
+        ],
+        "duplicates_plugin_execution_logic": False,
+    }
+
+
+def _capability_pack_invocation_receipt(
+    *,
+    plugin: dict[str, Any],
+    capability: dict[str, Any],
+    action: str,
+    payload_meta: dict[str, Any],
+    receipt: dict[str, Any],
+    risk_tier: str,
+    required_trust: int,
+    current_trust: int,
+    dry_run: bool,
+) -> dict[str, object]:
+    plugin_meta = dict(plugin.get("meta") or {}) if isinstance(plugin.get("meta"), dict) else {}
+    selection = _capability_pack_invocation_selection(plugin=plugin, capability=capability, action=action)
+    plugin_id = _safe_str(selection.get("plugin_id")).strip()
+    capability_id = _safe_str(selection.get("capability_id")).strip()
+    tool_name = _safe_str(selection.get("tool_name")).strip()
+    pack_id = _safe_str(selection.get("pack_id")).strip()
+    pack_version = _safe_str(selection.get("pack_version")).strip()
+    pack_name = _safe_str(selection.get("pack_name")).strip()
+    pack_reuse_key = _safe_str(selection.get("pack_reuse_key")).strip()
+    sandbox = receipt.get("sandbox") if isinstance(receipt.get("sandbox"), dict) else {}
+    caller_context = redact_governed_value(_safe_str(payload_meta.get("caller_context")).strip())
+    promotion_receipt_id = _safe_str(plugin_meta.get("promotion_receipt_id")).strip()
+    proposal_review_receipt_id = _safe_str(plugin_meta.get("proposal_review_receipt_id")).strip()
+    pack_operator_review_receipt_id = _safe_str(plugin_meta.get("pack_operator_review_receipt_id")).strip()
+    validation_receipt_id = _safe_str(plugin_meta.get("validation_receipt_id")).strip()
+    supported_caller_contexts = selection.get("supported_caller_contexts")
+    if not isinstance(supported_caller_contexts, list):
+        supported_caller_contexts = []
+    invocation_mode = "dry_run" if dry_run else "live_dispatch"
+    return {
+        "kind": "plugin.capability_pack.invocation_receipt",
+        "stage": "Stage 17 / Capability Economy",
+        "contract": "stage17_capability_pack_reusable_invocation_receipt_v1",
+        "status": _safe_str(receipt.get("status")).strip() or ("dry_run" if dry_run else "unknown"),
+        "invocation_mode": invocation_mode,
+        "dry_run": dry_run,
+        "caller_context": _safe_str(caller_context).strip(),
+        "plugin_id": plugin_id,
+        "capability_id": capability_id,
+        "action": _safe_str(action).strip(),
+        "tool_name": tool_name,
+        "pack_id": pack_id,
+        "pack_version": pack_version,
+        "pack_name": pack_name,
+        "pack_reuse_key": pack_reuse_key,
+        "pack_selection": selection,
+        "receipt_linkage": {
+            "dispatch_receipt_present": True,
+            "dispatch_status": _safe_str(receipt.get("status")).strip(),
+            "run_id": _safe_str(receipt.get("run_id")).strip(),
+            "trace_id": _safe_str(receipt.get("trace_id")).strip(),
+            "sandbox_status": _safe_str(sandbox.get("status")).strip(),
+            "sandbox_run_id": _safe_str(sandbox.get("run_id")).strip(),
+            "sandbox_trace_id": _safe_str(sandbox.get("trace_id")).strip(),
+        },
+        "evidence": {
+            "promotion_status": _safe_str(plugin_meta.get("promotion_status")).strip(),
+            "promotion_receipt_id": promotion_receipt_id,
+            "proposal_id": _safe_str(plugin_meta.get("proposal_id") or plugin_meta.get("forge_proposal_id")).strip(),
+            "proposal_review_receipt_id": proposal_review_receipt_id,
+            "validation_receipt_id": validation_receipt_id,
+            "pack_operator_review_receipt_id": pack_operator_review_receipt_id,
+        },
+        "reuse": {
+            "pack_selection_source": _safe_str(selection.get("source")).strip(),
+            "pack_selection_contract": _safe_str(selection.get("contract")).strip(),
+            "supported_caller_contexts": list(supported_caller_contexts),
+            "direct_plugin_route": "/plugins/run",
+            "plugin_tool_route": "/plugins/tools/run",
+            "operation_capability": "plugin.run",
+            "operation_tool_capability": "plugin.tool.run",
+            "mission_context": "mission_linked_operation",
+            "mission_tool_context": "mission_linked_tool_operation",
+            "duplicates_plugin_execution_logic": False,
+        },
+        "governance": {
+            "plane": "P3_GOVERNANCE",
+            "permission_model": "plugin_runtime_trust_and_approval_gates",
+            "uses_existing_plugin_dispatcher": True,
+            "uses_existing_sandbox_runner": True,
+            "promotion_required_before_invocation": True,
+            "risk_tier": risk_tier,
+            "required_trust": required_trust,
+            "current_trust": current_trust,
+            "approval_required_when_risk_requires": True,
+            "new_authority_granted_by_receipt": False,
+            "does_not_approve_proposals": True,
+            "does_not_promote_capabilities": True,
+            "does_not_enable_capabilities": True,
+            "memory_write": False,
+        },
+    }
+
+
+def _capability_pack_invocation_audit_task_records(*, scan_limit: int) -> list[dict[str, Any]]:
+    root = data_dir() / "tasks"
+    if not root.exists():
+        return []
+    records: list[dict[str, Any]] = []
+    try:
+        task_dirs = [item for item in root.iterdir() if item.is_dir()]
+        task_dirs.sort(key=lambda item: item.stat().st_mtime, reverse=True)
+    except Exception:
+        return []
+
+    for task_dir in task_dirs[: max(1, min(int(scan_limit), 5000))]:
+        record_path = task_dir / "record.json"
+        if not record_path.exists():
+            continue
+        try:
+            raw = json.loads(record_path.read_text(encoding="utf-8", errors="replace"))
+        except Exception:
+            continue
+        if isinstance(raw, dict):
+            records.append(raw)
+    return records
+
+
+def _capability_pack_invocation_from_task(task: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    result = task.get("result") if isinstance(task.get("result"), dict) else {}
+    data = result.get("data") if isinstance(result.get("data"), dict) else {}
+    invocation = (
+        data.get("capability_pack_invocation") if isinstance(data.get("capability_pack_invocation"), dict) else {}
+    )
+    receipt = data.get("receipt") if isinstance(data.get("receipt"), dict) else {}
+    if not invocation and isinstance(receipt.get("capability_pack_invocation"), dict):
+        invocation = receipt["capability_pack_invocation"]
+    return data, invocation if isinstance(invocation, dict) else {}
+
+
+def _capability_pack_invocation_audit_projection(
+    *,
+    pack_id: str = "",
+    pack_version: str = "",
+    plugin_id: str = "",
+    capability_id: str = "",
+    limit: int = 200,
+    scan_limit: int = 5000,
+) -> dict[str, object]:
+    safe_limit = max(1, min(int(limit), 500))
+    safe_scan_limit = max(safe_limit, min(int(scan_limit), 5000))
+    filter_pack_id = _safe_str(pack_id).strip()
+    filter_pack_version = _safe_str(pack_version).strip()
+    filter_plugin_id = _safe_str(plugin_id).strip()
+    filter_capability_id = _safe_str(capability_id).strip()
+
+    items: list[dict[str, object]] = []
+    for task in _capability_pack_invocation_audit_task_records(scan_limit=safe_scan_limit):
+        if _safe_str(task.get("capability")).strip() not in {"plugin.run", "plugin.tool.run"}:
+            continue
+        data, invocation = _capability_pack_invocation_from_task(task)
+        if not invocation:
+            continue
+        item_pack_id = _safe_str(invocation.get("pack_id")).strip()
+        item_pack_version = _safe_str(invocation.get("pack_version")).strip()
+        item_plugin_id = _safe_str(invocation.get("plugin_id")).strip()
+        item_capability_id = _safe_str(invocation.get("capability_id")).strip()
+        if filter_pack_id and item_pack_id != filter_pack_id:
+            continue
+        if filter_pack_version and item_pack_version != filter_pack_version:
+            continue
+        if filter_plugin_id and item_plugin_id != filter_plugin_id:
+            continue
+        if filter_capability_id and item_capability_id != filter_capability_id:
+            continue
+
+        inputs = task.get("inputs") if isinstance(task.get("inputs"), dict) else {}
+        input_meta = inputs.get("meta") if isinstance(inputs.get("meta"), dict) else {}
+        receipt_linkage = (
+            invocation.get("receipt_linkage") if isinstance(invocation.get("receipt_linkage"), dict) else {}
+        )
+        selection = invocation.get("pack_selection") if isinstance(invocation.get("pack_selection"), dict) else {}
+        reuse = invocation.get("reuse") if isinstance(invocation.get("reuse"), dict) else {}
+        governance = invocation.get("governance") if isinstance(invocation.get("governance"), dict) else {}
+        items.append(
+            {
+                "operation_id": _safe_str(task.get("task_id")).strip(),
+                "operation_status": _safe_str(task.get("status")).strip(),
+                "operation_capability": _safe_str(task.get("capability")).strip(),
+                "mission_id": _safe_str(inputs.get("mission_id") or input_meta.get("mission_id")).strip(),
+                "receipt_kind": _safe_str(invocation.get("kind")).strip(),
+                "receipt_contract": _safe_str(invocation.get("contract")).strip(),
+                "receipt_embedded_in_operation_output": True,
+                "invocation_mode": _safe_str(invocation.get("invocation_mode")).strip(),
+                "caller_context": _safe_str(invocation.get("caller_context")).strip(),
+                "plugin_id": item_plugin_id,
+                "capability_id": item_capability_id,
+                "action": _safe_str(invocation.get("action")).strip(),
+                "pack_id": item_pack_id,
+                "pack_version": item_pack_version,
+                "pack_reuse_key": _safe_str(invocation.get("pack_reuse_key")).strip(),
+                "pack_selection_contract": _safe_str(
+                    selection.get("contract") or reuse.get("pack_selection_contract")
+                ).strip(),
+                "pack_selection_source": _safe_str(
+                    selection.get("source") or reuse.get("pack_selection_source")
+                ).strip(),
+                "dispatch_status": _safe_str(receipt_linkage.get("dispatch_status")).strip(),
+                "run_id": _safe_str(receipt_linkage.get("run_id") or data.get("run_id")).strip(),
+                "trace_id": _safe_str(receipt_linkage.get("trace_id") or data.get("trace_id")).strip(),
+                "governance": {
+                    "permission_model": _safe_str(governance.get("permission_model")).strip(),
+                    "uses_existing_plugin_dispatcher": _to_bool(governance.get("uses_existing_plugin_dispatcher")),
+                    "promotion_required_before_invocation": _to_bool(
+                        governance.get("promotion_required_before_invocation")
+                    ),
+                    "new_authority_granted_by_receipt": _to_bool(governance.get("new_authority_granted_by_receipt")),
+                    "does_not_promote_capabilities": _to_bool(governance.get("does_not_promote_capabilities")),
+                    "does_not_enable_capabilities": _to_bool(governance.get("does_not_enable_capabilities")),
+                    "memory_write": _to_bool(governance.get("memory_write")),
+                },
+            }
+        )
+
+    returned = items[:safe_limit]
+    contexts = sorted(
+        {
+            str(item.get("caller_context") or "").strip()
+            for item in items
+            if str(item.get("caller_context") or "").strip()
+        }
+    )
+    pack_reuse_keys = sorted(
+        {
+            str(item.get("pack_reuse_key") or "").strip()
+            for item in items
+            if str(item.get("pack_reuse_key") or "").strip()
+        }
+    )
+    pack_ids = sorted(
+        {str(item.get("pack_id") or "").strip() for item in items if str(item.get("pack_id") or "").strip()}
+    )
+    contexts_by_reuse_key: dict[str, set[str]] = {}
+    for item in items:
+        reuse_key = str(item.get("pack_reuse_key") or "").strip()
+        caller_context = str(item.get("caller_context") or "").strip()
+        if reuse_key and caller_context:
+            contexts_by_reuse_key.setdefault(reuse_key, set()).add(caller_context)
+    context_lists_by_reuse_key = {key: sorted(value) for key, value in sorted(contexts_by_reuse_key.items())}
+    reused_pack_reuse_keys = [
+        key for key, caller_contexts in context_lists_by_reuse_key.items() if len(caller_contexts) >= 2
+    ]
+    mission_linked_contexts = {"mission_linked_operation", "mission_linked_tool_operation"}
+    mission_linked_reuse_keys = [
+        key
+        for key, caller_contexts in context_lists_by_reuse_key.items()
+        if len(mission_linked_contexts.intersection(caller_contexts)) >= 2
+    ]
+    return {
+        "ok": True,
+        "kind": "plugin.capability_library.invocations.audit",
+        "stage": "Stage 17 / Capability Economy",
+        "status": "ready" if items else "no_invocation_receipts",
+        "readback_scope": "operation_outputs_with_embedded_capability_pack_invocation_receipts",
+        "filters": {
+            "pack_id": filter_pack_id,
+            "pack_version": filter_pack_version,
+            "plugin_id": filter_plugin_id,
+            "capability_id": filter_capability_id,
+            "limit": safe_limit,
+            "scan_limit": safe_scan_limit,
+        },
+        "total_invocation_count": len(items),
+        "returned_invocation_count": len(returned),
+        "pack_count": len(pack_ids),
+        "context_count": len(contexts),
+        "contexts": contexts,
+        "pack_reuse_keys": pack_reuse_keys,
+        "reuse_proof": {
+            "contract": "stage17_capability_pack_invocation_audit_reuse_proof_v1",
+            "minimum_contexts_per_reuse_key": 2,
+            "contexts_by_pack_reuse_key": context_lists_by_reuse_key,
+            "cross_context_reuse_proven": bool(reused_pack_reuse_keys),
+            "reused_pack_reuse_keys": reused_pack_reuse_keys,
+            "mission_linked_contexts_required": sorted(mission_linked_contexts),
+            "mission_linked_reuse_proven": bool(mission_linked_reuse_keys),
+            "mission_linked_reuse_keys": mission_linked_reuse_keys,
+        },
+        "items": returned,
+        "requirements": {
+            "embedded_invocation_receipt_required": True,
+            "reads_existing_operation_records": True,
+            "reads_existing_plugin_run_and_tool_run_operation_records": True,
+            "cross_context_reuse_claim_requires_matching_pack_reuse_key": True,
+            "cross_context_reuse_proof_is_machine_readable": True,
+            "mission_linked_reuse_requires_both_mission_contexts": True,
+            "does_not_infer_missing_direct_route_receipts": True,
+        },
+        "governance": {
+            "read_only": True,
+            "writes_repo": False,
+            "writes_data": False,
+            "writes_receipts": False,
+            "approves_proposals": False,
+            "promotes_capabilities": False,
+            "enables_capabilities": False,
+            "executes_capabilities": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+            "memory_write": False,
+        },
+    }
 
 
 def _tool_item(plugin: dict[str, Any], capability: dict[str, Any]) -> dict[str, Any]:
@@ -7716,6 +10570,17 @@ class CapabilityPackQualityEvidenceRemediationApplyIn(BaseModel):
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
+class CapabilityPackQualityStandardRemediationApplyIn(BaseModel):
+    actor: str = ""
+    reason: str = "stage17_quality_standard_remediation"
+    pack_ids: list[str] = Field(default_factory=list)
+    max_pack_count: int = 10
+    max_total_capability_count: int = 1000
+    max_capability_count_per_pack: int = 500
+    dry_run: bool = False
+    meta: dict[str, Any] = Field(default_factory=dict)
+
+
 class CapabilityPackQualityEvidenceReconstructionApplyIn(BaseModel):
     actor: str = ""
     reason: str = "stage17_artifact_reconstruction"
@@ -7755,6 +10620,36 @@ class CapabilityLibraryOperatorProposalEvidenceIntakeApplyIn(BaseModel):
     pack_ids: list[str] = Field(default_factory=list)
     capability_ids: list[str] = Field(default_factory=list)
     evidence_refs: list[str] = Field(default_factory=list)
+    evidence_refs_by_capability: dict[str, list[str]] = Field(default_factory=dict)
+    max_pack_count: int = 10
+    max_total_capability_count: int = 1000
+    max_capability_count_per_pack: int = 500
+    dry_run: bool = True
+    dry_run_fingerprint: str = ""
+    meta: dict[str, Any] = Field(default_factory=dict)
+
+
+class CapabilityLibraryProposalReviewApplyIn(BaseModel):
+    actor: str = ""
+    reason: str = "stage17_capability_library_proposal_review"
+    action: str = "approve"
+    notes: str = ""
+    pack_ids: list[str] = Field(default_factory=list)
+    capability_ids: list[str] = Field(default_factory=list)
+    proposal_ids: list[str] = Field(default_factory=list)
+    max_pack_count: int = 10
+    max_total_capability_count: int = 1000
+    max_capability_count_per_pack: int = 500
+    dry_run: bool = True
+    dry_run_fingerprint: str = ""
+    meta: dict[str, Any] = Field(default_factory=dict)
+
+
+class CapabilityLibraryExplicitPromotionApplyIn(BaseModel):
+    actor: str = ""
+    reason: str = "stage17_capability_library_explicit_promotion"
+    pack_ids: list[str] = Field(default_factory=list)
+    capability_ids: list[str] = Field(default_factory=list)
     max_pack_count: int = 10
     max_total_capability_count: int = 1000
     max_capability_count_per_pack: int = 500
@@ -8024,6 +10919,8 @@ def list_plugin_capabilities(
         risk_counts = runtime_catalog.get("risk_class_counts")
         lifecycle_counts = runtime_catalog.get("lifecycle_status_counts")
         tool_risk_counts = runtime_catalog.get("tool_risk_class_counts")
+        coherence = analyze_capability_catalog_coherence(all_items)
+        pack_readiness = analyze_capability_pack_readiness(all_items)
 
         return {
             "ok": True,
@@ -8038,8 +10935,14 @@ def list_plugin_capabilities(
                 "source": source_filter,
             },
             "summary": marketplace.summary(),
-            "coherence": analyze_capability_catalog_coherence(all_items),
-            "pack_readiness": analyze_capability_pack_readiness(all_items),
+            "coherence": coherence,
+            "pack_readiness": pack_readiness,
+            "stage17_closure_matrix": _stage17_closure_matrix(
+                all_items=all_items,
+                coherence=coherence,
+                pack_readiness=pack_readiness,
+                catalog=catalog,
+            ),
             "catalog": {
                 "path": _safe_str(catalog.get("path")).strip(),
                 "version": int(runtime_catalog.get("version") or 0),
@@ -8182,6 +11085,293 @@ def capability_pack_quality_docs() -> dict[str, object]:
         }
     except Exception as exc:
         return {"ok": False, "kind": "plugin.capability_pack.quality_docs", "error": api_error_message(exc)}
+
+
+@router.post("/capabilities/packs/quality/standards/remediation/apply")
+def apply_capability_pack_quality_standard_remediation(
+    payload: CapabilityPackQualityStandardRemediationApplyIn,
+    request: Request,
+) -> dict[str, object]:
+    try:
+        permission = _write_permission(payload.actor, route=request.url.path, method=request.method)
+        if not permission.allowed:
+            return _permission_denied(permission)
+
+        safe_max_pack_count = max(1, min(int(payload.max_pack_count or 10), 50))
+        safe_max_total_capability_count = max(1, min(int(payload.max_total_capability_count or 1000), 10000))
+        safe_max_capability_count_per_pack = max(1, min(int(payload.max_capability_count_per_pack or 500), 500))
+        try:
+            selected_pack_ids = {_validate_plugin_id(raw_id) for raw_id in _unique_texts(payload.pack_ids, limit=100)}
+        except Exception:
+            return {"ok": False, "applied": False, "status": "blocked", "error": "invalid_pack_id"}
+
+        registry = _load_registry()
+        _sync_generated_plugins(registry)
+        catalog = _save_registry_and_catalog(registry)
+        runtime_catalog = _read_runtime_catalog_payload(catalog)
+        marketplace = marketplace_from_plugin_catalog(runtime_catalog)
+        entries = marketplace.catalog()
+        standards = analyze_capability_pack_quality_standards(entries)
+        references = _quality_standard_reference_candidates()
+        raw_packs = standards.get("packs") if isinstance(standards.get("packs"), list) else []
+        queue = [
+            item
+            for item in raw_packs
+            if isinstance(item, dict)
+            and any(
+                blocker in _unique_texts(item.get("blockers"), limit=50)
+                for blocker in ("tests_missing", "docs_missing")
+            )
+        ]
+        if selected_pack_ids:
+            queue = [item for item in queue if _safe_str(item.get("pack_id")).strip() in selected_pack_ids]
+        if not queue:
+            return {
+                "ok": True,
+                "applied": False,
+                "status": "no_candidates",
+                "planned_pack_count": 0,
+                "recorded_pack_count": 0,
+                "recorded_capability_count": 0,
+                "before": standards,
+                "governance": {
+                    "scope": _PLUGIN_WRITE_SCOPE,
+                    "route": request.url.path,
+                    "writes_registry_metadata": False,
+                    "writes_receipts": False,
+                    "does_not_write_validation_receipts": True,
+                    "does_not_write_proposals": True,
+                    "does_not_approve_proposals": True,
+                    "does_not_promote_capabilities": True,
+                    "does_not_enable_capabilities": True,
+                    "does_not_execute_capabilities": True,
+                    "promotion_authority": False,
+                    "execution_authority": False,
+                    "approval_authority": False,
+                    "memory_write": False,
+                    "mutates_generated_artifacts": False,
+                },
+            }
+        if len(queue) > safe_max_pack_count:
+            return {
+                "ok": False,
+                "applied": False,
+                "status": "blocked",
+                "error": "quality_standard_pack_limit_exceeded",
+                "candidate_total": len(queue),
+                "limit": safe_max_pack_count,
+            }
+
+        prepared: list[dict[str, Any]] = []
+        skipped: list[dict[str, Any]] = []
+        total_capability_count = 0
+        for item in queue:
+            pack_id = _safe_str(item.get("pack_id")).strip()
+            pack_version = _safe_str(item.get("pack_version")).strip()
+            try:
+                pack_id = _validate_plugin_id(pack_id)
+            except Exception:
+                skipped.append({"pack_id": pack_id, "pack_version": pack_version, "error": "invalid_pack_id"})
+                continue
+            pack_entries = _entries_for_capability_pack(entries, pack_id=pack_id, pack_version=pack_version)
+            capability_ids = _capability_ids_for_pack(entries, pack_id=pack_id, pack_version=pack_version)
+            capability_count = len(capability_ids)
+            total_capability_count += capability_count
+            blockers = _unique_texts(item.get("blockers"), limit=50)
+            test_refs = references["tests"] if "tests_missing" in blockers else []
+            doc_refs = references["docs"] if "docs_missing" in blockers else []
+            missing_test_ids, missing_doc_ids = _quality_standard_missing_capability_ids(pack_entries)
+            if not test_refs and not doc_refs:
+                skipped.append(
+                    {
+                        "pack_id": pack_id,
+                        "pack_version": pack_version,
+                        "error": "no_supported_quality_standard_references",
+                        "blockers": blockers,
+                    }
+                )
+                continue
+            if capability_count <= 0:
+                skipped.append({"pack_id": pack_id, "pack_version": pack_version, "error": "capability_ids_required"})
+                continue
+            if capability_count > safe_max_capability_count_per_pack:
+                skipped.append(
+                    {
+                        "pack_id": pack_id,
+                        "pack_version": pack_version,
+                        "error": "candidate_capability_limit_exceeded",
+                        "capability_count": capability_count,
+                        "limit": safe_max_capability_count_per_pack,
+                    }
+                )
+                continue
+            prepared.append(
+                {
+                    "item": item,
+                    "pack_id": pack_id,
+                    "pack_version": pack_version,
+                    "pack_name": _safe_str(item.get("pack_name")).strip() or pack_id,
+                    "capability_ids": capability_ids,
+                    "missing_test_capability_ids": missing_test_ids,
+                    "missing_doc_capability_ids": missing_doc_ids,
+                    "test_refs": test_refs,
+                    "doc_refs": doc_refs,
+                    "quality_blockers": [
+                        blocker for blocker in blockers if blocker in {"tests_missing", "docs_missing"}
+                    ],
+                }
+            )
+        if total_capability_count > safe_max_total_capability_count:
+            return {
+                "ok": False,
+                "applied": False,
+                "status": "blocked",
+                "error": "total_capability_limit_exceeded",
+                "capability_count": total_capability_count,
+                "limit": safe_max_total_capability_count,
+            }
+        if not prepared:
+            return {
+                "ok": True,
+                "applied": False,
+                "status": "no_supported_quality_standard_references",
+                "planned_pack_count": 0,
+                "recorded_pack_count": 0,
+                "recorded_capability_count": 0,
+                "skipped": skipped,
+                "before": standards,
+                "governance": {
+                    "scope": _PLUGIN_WRITE_SCOPE,
+                    "route": request.url.path,
+                    "writes_registry_metadata": False,
+                    "writes_receipts": False,
+                    "does_not_write_validation_receipts": True,
+                    "does_not_write_proposals": True,
+                    "does_not_approve_proposals": True,
+                    "does_not_promote_capabilities": True,
+                    "does_not_enable_capabilities": True,
+                    "does_not_execute_capabilities": True,
+                    "promotion_authority": False,
+                    "execution_authority": False,
+                    "approval_authority": False,
+                    "memory_write": False,
+                    "mutates_generated_artifacts": False,
+                },
+            }
+
+        planned = [
+            {
+                "pack_id": item["pack_id"],
+                "pack_version": item["pack_version"],
+                "pack_name": item["pack_name"],
+                "capability_count": len(item["capability_ids"]),
+                "missing_test_capability_count": len(item["missing_test_capability_ids"]),
+                "missing_doc_capability_count": len(item["missing_doc_capability_ids"]),
+                "quality_blockers": item["quality_blockers"],
+                "quality_references": {
+                    "tests": item["test_refs"],
+                    "docs": item["doc_refs"],
+                    "claim_scope": "candidate_reference_only_not_pack_specific_proof",
+                    "pack_specific_coverage_claimed": False,
+                },
+            }
+            for item in prepared
+        ]
+        if payload.dry_run:
+            return {
+                "ok": True,
+                "applied": False,
+                "status": "dry_run",
+                "planned_pack_count": len(planned),
+                "planned_capability_count": sum(int(item.get("capability_count") or 0) for item in planned),
+                "planned": planned,
+                "skipped": skipped,
+                "before": standards,
+                "governance": {
+                    "scope": _PLUGIN_WRITE_SCOPE,
+                    "route": request.url.path,
+                    "writes_registry_metadata": False,
+                    "writes_receipts": False,
+                    "quality_reference_backfill_only": True,
+                    "candidate_references_do_not_claim_pack_specific_coverage": True,
+                    "does_not_write_validation_receipts": True,
+                    "does_not_write_proposals": True,
+                    "does_not_approve_proposals": True,
+                    "does_not_promote_capabilities": True,
+                    "does_not_enable_capabilities": True,
+                    "does_not_execute_capabilities": True,
+                    "promotion_authority": False,
+                    "execution_authority": False,
+                    "approval_authority": False,
+                    "memory_write": False,
+                    "mutates_generated_artifacts": False,
+                },
+            }
+
+        batch = _record_capability_pack_quality_standard_remediation_batch(
+            registry=registry,
+            prepared=prepared,
+        )
+        recorded = batch["recorded"]
+        failed = batch["failed"]
+        changed_records = [item for item in recorded if item.get("status") == "recorded"]
+        refreshed_registry = _load_registry()
+        refreshed_catalog = _compile_runtime_catalog(refreshed_registry)
+        refreshed_runtime_catalog = _read_runtime_catalog_payload(refreshed_catalog)
+        refreshed_marketplace = marketplace_from_plugin_catalog(refreshed_runtime_catalog)
+        after = analyze_capability_pack_quality_standards(refreshed_marketplace.catalog())
+        selected_after_queue = [
+            item
+            for item in after.get("packs", [])
+            if isinstance(item, dict)
+            and _safe_str(item.get("pack_id")).strip()
+            in {_safe_str(record.get("pack_id")).strip() for record in recorded}
+            and item.get("status") != "ready"
+        ]
+        applied = bool(changed_records)
+        return {
+            "ok": not failed,
+            "applied": applied,
+            "status": "recorded" if not failed and applied else ("partial" if applied else "blocked"),
+            "planned_pack_count": len(prepared),
+            "recorded_pack_count": len(changed_records),
+            "recorded_capability_count": sum(
+                int(item.get("changed_capability_count") or 0) for item in changed_records
+            ),
+            "recorded": recorded,
+            "failed": failed,
+            "skipped": skipped,
+            "remaining_quality_standard_queue": selected_after_queue,
+            "remaining_quality_standard_queue_count": len(selected_after_queue),
+            "next_smallest_truthful_gap": _safe_str(after.get("next_smallest_truthful_gap")).strip(),
+            "governance": {
+                "scope": _PLUGIN_WRITE_SCOPE,
+                "route": request.url.path,
+                "writes_registry_metadata": applied,
+                "writes_receipts": False,
+                "quality_reference_backfill_only": True,
+                "candidate_references_do_not_claim_pack_specific_coverage": True,
+                "does_not_write_validation_receipts": True,
+                "does_not_write_proposals": True,
+                "does_not_approve_proposals": True,
+                "does_not_promote_capabilities": True,
+                "does_not_enable_capabilities": True,
+                "does_not_execute_capabilities": True,
+                "promotion_authority": False,
+                "execution_authority": False,
+                "approval_authority": False,
+                "memory_write": False,
+                "mutates_generated_artifacts": False,
+            },
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "applied": False,
+            "kind": "plugin.capability_pack.quality_standard.remediation.apply",
+            "status": "error",
+            "error": api_error_message(exc),
+        }
 
 
 @router.get("/capabilities/packs/validation/receipts")
@@ -9141,6 +12331,32 @@ def capability_library_operator_surface() -> dict[str, object]:
         return {"ok": False, "kind": "plugin.capability_library.operator_surface", "error": api_error_message(exc)}
 
 
+@router.get("/capabilities/library/invocations/audit")
+def capability_library_invocations_audit(
+    request: Request,
+    pack_id: str | None = None,
+    pack_version: str | None = None,
+    plugin_id: str | None = None,
+    capability_id: str | None = None,
+    limit: int = 200,
+    scan_limit: int = 5000,
+) -> dict[str, object]:
+    try:
+        audit = _capability_pack_invocation_audit_projection(
+            pack_id=pack_id or "",
+            pack_version=pack_version or "",
+            plugin_id=plugin_id or "",
+            capability_id=capability_id or "",
+            limit=limit,
+            scan_limit=scan_limit,
+        )
+        governance = audit.get("governance") if isinstance(audit.get("governance"), dict) else {}
+        audit["governance"] = {**governance, "route": request.url.path}
+        return audit
+    except Exception as exc:
+        return {"ok": False, "kind": "plugin.capability_library.invocations.audit", "error": api_error_message(exc)}
+
+
 @router.get("/capabilities/library/promotion/plan")
 def capability_library_promotion_plan() -> dict[str, object]:
     try:
@@ -9178,6 +12394,247 @@ def capability_library_promotion_plan() -> dict[str, object]:
         }
     except Exception as exc:
         return {"ok": False, "kind": "plugin.capability_library.promotion_plan", "error": api_error_message(exc)}
+
+
+@router.post("/capabilities/library/promotion/apply")
+def apply_capability_library_explicit_promotion(
+    payload: CapabilityLibraryExplicitPromotionApplyIn,
+    request: Request,
+) -> dict[str, object]:
+    try:
+        permission = _write_permission(payload.actor, route=request.url.path, method=request.method)
+        if not permission.allowed:
+            return _permission_denied(permission)
+
+        plan = _prepare_capability_library_explicit_promotion_plan(payload=payload)
+        generated_sync = bool(plan.get("generated_plugin_registry_sync_performed"))
+        if plan.get("status") != "planned":
+            return {
+                "ok": bool(plan.get("ok")),
+                "applied": False,
+                "kind": "plugin.capability_library.explicit_promotion.apply",
+                "status": _safe_str(plan.get("status")).strip() or "blocked",
+                "error": _safe_str(plan.get("error")).strip(),
+                "planned_pack_count": int(plan.get("planned_pack_count") or 0),
+                "planned_capability_count": int(plan.get("planned_capability_count") or 0),
+                "before": plan.get("before") if isinstance(plan.get("before"), dict) else {},
+                "governance": _capability_library_explicit_promotion_apply_governance(
+                    route_path=request.url.path,
+                    writes_registry_metadata=False,
+                    writes_promotion_receipts=False,
+                    generated_plugin_registry_sync_performed=generated_sync,
+                ),
+            }
+
+        dry_run_fingerprint = _safe_str(plan.get("dry_run_fingerprint")).strip()
+        planned = plan.get("planned") if isinstance(plan.get("planned"), list) else []
+        skipped = plan.get("skipped") if isinstance(plan.get("skipped"), list) else []
+        planned_pack_count = int(plan.get("planned_pack_count") or 0)
+        planned_capability_count = int(plan.get("planned_capability_count") or 0)
+        if payload.dry_run:
+            return {
+                "ok": True,
+                "applied": False,
+                "kind": "plugin.capability_library.explicit_promotion.apply",
+                "status": "dry_run",
+                "planned_pack_count": planned_pack_count,
+                "planned_capability_count": planned_capability_count,
+                "dry_run_fingerprint": dry_run_fingerprint,
+                "dry_run_confirmation": {
+                    "required_for_apply": True,
+                    "fingerprint": dry_run_fingerprint,
+                    "fingerprint_contract": "stage17_capability_library_explicit_promotion_dry_run_v1",
+                    "planned_pack_count": planned_pack_count,
+                    "planned_capability_count": planned_capability_count,
+                    "apply_route": request.url.path,
+                },
+                "planned": planned,
+                "skipped": skipped,
+                "before": plan.get("before") if isinstance(plan.get("before"), dict) else {},
+                "governance": _capability_library_explicit_promotion_apply_governance(
+                    route_path=request.url.path,
+                    writes_registry_metadata=False,
+                    writes_promotion_receipts=False,
+                    generated_plugin_registry_sync_performed=generated_sync,
+                ),
+            }
+
+        provided_dry_run_fingerprint = _safe_str(payload.dry_run_fingerprint).strip()
+        if provided_dry_run_fingerprint != dry_run_fingerprint:
+            return {
+                "ok": False,
+                "applied": False,
+                "kind": "plugin.capability_library.explicit_promotion.apply",
+                "status": "blocked",
+                "error": "capability_library_explicit_promotion_dry_run_confirmation_required",
+                "planned_pack_count": planned_pack_count,
+                "planned_capability_count": planned_capability_count,
+                "dry_run_confirmation": {
+                    "required_for_apply": True,
+                    "fingerprint_contract": "stage17_capability_library_explicit_promotion_dry_run_v1",
+                    "fingerprint_matched": False,
+                    "apply_route": request.url.path,
+                },
+                "governance": _capability_library_explicit_promotion_apply_governance(
+                    route_path=request.url.path,
+                    writes_registry_metadata=False,
+                    writes_promotion_receipts=False,
+                    generated_plugin_registry_sync_performed=generated_sync,
+                ),
+            }
+
+        registry = plan.get("registry") if isinstance(plan.get("registry"), dict) else _load_registry()
+        actor = redact_governed_value(_safe_str(payload.actor).strip())
+        promoted_items: list[dict[str, Any]] = []
+        failed_items: list[dict[str, Any]] = []
+        pending_receipts: list[dict[str, Any]] = []
+        for pack in planned:
+            raw_capabilities = pack.get("capabilities") if isinstance(pack.get("capabilities"), list) else []
+            for capability in raw_capabilities:
+                if not isinstance(capability, dict):
+                    continue
+                plugin_id = _safe_str(capability.get("capability")).strip()
+                current = _read_plugin(registry, plugin_id)
+                if current is None:
+                    failed_items.append({"capability": plugin_id, "error": "plugin_not_found"})
+                    continue
+                toggle_payload = PluginToggleIn(
+                    id=plugin_id,
+                    reason=payload.reason,
+                    actor=payload.actor,
+                    meta=payload.meta,
+                )
+                readiness = _plugin_promotion_readiness(plugin_id, current, toggle_payload)
+                if not readiness["ready"]:
+                    failed_items.append(
+                        {
+                            "capability": plugin_id,
+                            "error": "promotion_readiness_blocked",
+                            "missing_requirements": _unique_texts(readiness.get("missing_requirements"), limit=25),
+                        }
+                    )
+                    continue
+
+                previous = dict(current)
+                promoted_ts = _now_s()
+                promotion_receipt_id = _plugin_promotion_receipt_id(plugin_id, promoted_ts)
+                promotion_receipt_path = _plugin_promotion_receipt_path(promotion_receipt_id)
+                tags = [tag for tag in _parse_tags(current.get("tags")) if tag != "staged"]
+                if "promoted" not in tags:
+                    tags.append("promoted")
+                current["tags"] = tags
+                meta = dict(current.get("meta") or {}) if isinstance(current.get("meta"), dict) else {}
+                meta.update(
+                    {
+                        "promotion_status": "promoted",
+                        "promotion_receipt_id": promotion_receipt_id,
+                        "promotion_receipt_path": str(promotion_receipt_path),
+                        "promoted_ts": promoted_ts,
+                        "promoted_by": actor,
+                    }
+                )
+                current["meta"] = meta
+                current["enabled"] = True
+                current["status"] = "enabled"
+                current["updated_ts"] = promoted_ts
+                promoted = _normalize_plugin_record(plugin_id, current)
+                _write_plugin(registry, promoted)
+                promoted_items.append(
+                    {
+                        "capability": plugin_id,
+                        "pack_id": _safe_str(pack.get("pack_id")).strip(),
+                        "pack_version": _safe_str(pack.get("pack_version")).strip(),
+                        "promotion_receipt_id": promotion_receipt_id,
+                        "promotion_receipt_path": str(promotion_receipt_path),
+                        "status": "promoted",
+                    }
+                )
+                pending_receipts.append(
+                    {
+                        "plugin_id": plugin_id,
+                        "receipt_id": promotion_receipt_id,
+                        "receipt_path": promotion_receipt_path,
+                        "previous": previous,
+                        "promoted": promoted,
+                        "payload": toggle_payload,
+                        "promoted_ts": promoted_ts,
+                    }
+                )
+
+        catalog = _save_registry_and_catalog(registry)
+        promotion_receipts = [
+            _write_plugin_promotion_receipt(
+                plugin_id=_safe_str(item.get("plugin_id")).strip(),
+                receipt_id=_safe_str(item.get("receipt_id")).strip(),
+                receipt_path=item["receipt_path"],
+                previous=item["previous"],
+                promoted=item["promoted"],
+                payload=item["payload"],
+                promoted_ts=int(item.get("promoted_ts") or 0),
+                catalog=catalog,
+            )
+            for item in pending_receipts
+        ]
+
+        refreshed_registry = _load_registry()
+        refreshed_catalog = _compile_runtime_catalog(refreshed_registry)
+        refreshed_runtime_catalog = _read_runtime_catalog_payload(refreshed_catalog)
+        refreshed_marketplace = marketplace_from_plugin_catalog(refreshed_runtime_catalog)
+        refreshed_entries = list(refreshed_marketplace.catalog())
+        refreshed_available_proposals = _available_capability_pack_proposals()
+        refreshed_available_validation_receipts = _available_capability_pack_validation_receipts()
+        refreshed_available_promotion_receipts = _available_capability_pack_promotion_receipts()
+        refreshed_promotion_discipline = analyze_capability_pack_promotion_discipline(
+            refreshed_entries,
+            available_proposal_ids=refreshed_available_proposals["ids"],
+            available_validation_receipt_ids=refreshed_available_validation_receipts["ids"],
+            available_promotion_receipt_ids=refreshed_available_promotion_receipts["ids"],
+            operator_review_decisions=_read_capability_pack_operator_review_decisions(limit=500),
+        )
+        after = _capability_library_explicit_promotion_plan_projection(
+            registry=refreshed_registry,
+            entries=refreshed_entries,
+            promotion_discipline=refreshed_promotion_discipline,
+            generated_plugin_sync_performed=False,
+        )
+        applied = bool(promoted_items)
+        return {
+            "ok": not failed_items,
+            "applied": applied,
+            "kind": "plugin.capability_library.explicit_promotion.apply",
+            "status": "promoted" if applied and not failed_items else ("partial" if applied else "blocked"),
+            "planned_pack_count": planned_pack_count,
+            "planned_capability_count": planned_capability_count,
+            "promoted_capability_count": len(promoted_items),
+            "promotion_receipt_count": len(promotion_receipts),
+            "promoted": promoted_items,
+            "failed": failed_items,
+            "skipped": skipped,
+            "dry_run_fingerprint": dry_run_fingerprint,
+            "dry_run_confirmation": {
+                "required_for_apply": True,
+                "fingerprint_matched": True,
+                "fingerprint_contract": "stage17_capability_library_explicit_promotion_dry_run_v1",
+                "apply_route": request.url.path,
+            },
+            "remaining_candidate_capability_count": int(after.get("candidate_capability_count") or 0),
+            "remaining_promotable_capability_count": int(after.get("promotable_capability_count") or 0),
+            "next_smallest_truthful_gap": _safe_str(after.get("next_smallest_truthful_gap")).strip(),
+            "promotion_receipts": promotion_receipts,
+            "governance": _capability_library_explicit_promotion_apply_governance(
+                route_path=request.url.path,
+                writes_registry_metadata=applied,
+                writes_promotion_receipts=bool(promotion_receipts),
+                generated_plugin_registry_sync_performed=generated_sync,
+            ),
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "applied": False,
+            "kind": "plugin.capability_library.explicit_promotion.apply",
+            "error": api_error_message(exc),
+        }
 
 
 @router.get("/capabilities/library/proposal-evidence/plan")
@@ -10309,7 +13766,32 @@ def apply_capability_library_operator_proposal_evidence_intake(
             return _permission_denied(permission)
 
         evidence_refs = _unique_texts(payload.evidence_refs, limit=50)
-        if not evidence_refs:
+        try:
+            evidence_refs_by_capability = _operator_proposal_evidence_refs_by_capability(
+                payload.evidence_refs_by_capability
+            )
+        except Exception:
+            return {
+                "ok": False,
+                "applied": False,
+                "status": "blocked",
+                "error": "invalid_evidence_refs_by_capability",
+                "governance": {
+                    "scope": _PLUGIN_WRITE_SCOPE,
+                    "route": request.url.path,
+                    "writes_registry_metadata": False,
+                    "writes_proposals": False,
+                    "does_not_approve_proposals": True,
+                    "does_not_promote_capabilities": True,
+                    "does_not_enable_capabilities": True,
+                    "does_not_execute_capabilities": True,
+                    "promotion_authority": False,
+                    "execution_authority": False,
+                    "approval_authority": False,
+                    "memory_write": False,
+                },
+            }
+        if not evidence_refs and not evidence_refs_by_capability:
             return {
                 "ok": False,
                 "applied": False,
@@ -10343,27 +13825,45 @@ def apply_capability_library_operator_proposal_evidence_intake(
             return {"ok": False, "applied": False, "status": "blocked", "error": "invalid_selector_id"}
 
         registry = _load_registry()
-        _sync_generated_plugins(registry)
-        catalog = _save_registry_and_catalog(registry)
-        runtime_catalog = _read_runtime_catalog_payload(catalog)
-        marketplace = marketplace_from_plugin_catalog(runtime_catalog)
-        entries = list(marketplace.catalog())
-        available_proposals = _available_capability_pack_proposals()
-        available_validation_receipts = _available_capability_pack_validation_receipts()
-        available_promotion_receipts = _available_capability_pack_promotion_receipts()
-        promotion_discipline = analyze_capability_pack_promotion_discipline(
-            entries,
-            available_proposal_ids=available_proposals["ids"],
-            available_validation_receipt_ids=available_validation_receipts["ids"],
-            available_promotion_receipt_ids=available_promotion_receipts["ids"],
-            operator_review_decisions=_read_capability_pack_operator_review_decisions(limit=500),
-        )
-        before = _capability_library_proposal_evidence_plan_projection(
-            registry=registry,
-            entries=entries,
-            promotion_discipline=promotion_discipline,
-            generated_plugin_sync_performed=True,
-        )
+        if selected_capability_ids:
+            context = _capability_library_selected_promotion_discipline_context(
+                registry=registry,
+                selected_capability_ids=selected_capability_ids,
+            )
+            entries = context["entries"] if isinstance(context.get("entries"), list) else []
+            promotion_discipline = (
+                context["promotion_discipline"] if isinstance(context.get("promotion_discipline"), dict) else {}
+            )
+            before = _capability_library_selected_capability_readiness_projection(
+                registry=registry,
+                entries=entries,
+                promotion_discipline=promotion_discipline,
+                selected_pack_ids=selected_pack_ids,
+                selected_capability_ids=selected_capability_ids,
+                generated_plugin_sync_performed=bool(context.get("generated_plugin_registry_sync_performed")),
+            )
+        else:
+            _sync_generated_plugins(registry)
+            catalog = _save_registry_and_catalog(registry)
+            runtime_catalog = _read_runtime_catalog_payload(catalog)
+            marketplace = marketplace_from_plugin_catalog(runtime_catalog)
+            entries = list(marketplace.catalog())
+            available_proposals = _available_capability_pack_proposals()
+            available_validation_receipts = _available_capability_pack_validation_receipts()
+            available_promotion_receipts = _available_capability_pack_promotion_receipts()
+            promotion_discipline = analyze_capability_pack_promotion_discipline(
+                entries,
+                available_proposal_ids=available_proposals["ids"],
+                available_validation_receipt_ids=available_validation_receipts["ids"],
+                available_promotion_receipt_ids=available_promotion_receipts["ids"],
+                operator_review_decisions=_read_capability_pack_operator_review_decisions(limit=500),
+            )
+            before = _capability_library_proposal_evidence_plan_projection(
+                registry=registry,
+                entries=entries,
+                promotion_discipline=promotion_discipline,
+                generated_plugin_sync_performed=True,
+            )
         candidates = _capability_library_operator_proposal_evidence_intake_candidates(
             registry=registry,
             entries=entries,
@@ -10450,13 +13950,40 @@ def apply_capability_library_operator_proposal_evidence_intake(
                 "pack_version": _safe_str(item.get("pack_version")).strip(),
                 "pack_name": _safe_str(item.get("pack_name")).strip(),
                 "capability_count": len(item.get("capabilities") if isinstance(item.get("capabilities"), list) else []),
-                "evidence_ref_count": len(evidence_refs),
+                "evidence_ref_count": sum(
+                    len(
+                        _operator_proposal_evidence_refs_for_capability(
+                            evidence_refs,
+                            evidence_refs_by_capability,
+                            _safe_str(capability.get("capability")).strip(),
+                        )
+                    )
+                    for capability in (item.get("capabilities") if isinstance(item.get("capabilities"), list) else [])
+                    if isinstance(capability, dict)
+                ),
+                "shared_evidence_ref_count": len(evidence_refs),
+                "capability_specific_evidence_ref_count": sum(
+                    len(evidence_refs_by_capability.get(_safe_str(capability.get("capability")).strip(), []))
+                    for capability in (item.get("capabilities") if isinstance(item.get("capabilities"), list) else [])
+                    if isinstance(capability, dict)
+                ),
                 "claim_scope": "operator_supplied_friction_evidence_reference_not_independent_verification",
                 "capabilities": [
                     {
                         "capability": _safe_str(capability.get("capability")).strip(),
                         "proposal_id": _safe_str(capability.get("proposal_id")).strip(),
                         "missing_requirements": _unique_texts(capability.get("missing_requirements"), limit=25),
+                        "evidence_ref_count": len(
+                            _operator_proposal_evidence_refs_for_capability(
+                                evidence_refs,
+                                evidence_refs_by_capability,
+                                _safe_str(capability.get("capability")).strip(),
+                            )
+                        ),
+                        "shared_evidence_ref_count": len(evidence_refs),
+                        "capability_specific_evidence_ref_count": len(
+                            evidence_refs_by_capability.get(_safe_str(capability.get("capability")).strip(), [])
+                        ),
                     }
                     for capability in (item.get("capabilities") if isinstance(item.get("capabilities"), list) else [])
                     if isinstance(capability, dict)
@@ -10494,9 +14021,83 @@ def apply_capability_library_operator_proposal_evidence_intake(
                     "memory_write": False,
                 },
             }
+        planned_capability_ids = _operator_proposal_evidence_planned_capability_ids(planned)
+        unplanned_ref_ids = sorted(set(evidence_refs_by_capability) - set(planned_capability_ids))
+        if unplanned_ref_ids:
+            return {
+                "ok": False,
+                "applied": False,
+                "status": "blocked",
+                "error": "operator_evidence_refs_capability_not_planned",
+                "unplanned_capability_ids": unplanned_ref_ids[:50],
+                "unplanned_capability_ids_truncated": len(unplanned_ref_ids) > 50,
+                "planned_capability_count": len(planned_capability_ids),
+                "before": before,
+                "governance": {
+                    "scope": _PLUGIN_WRITE_SCOPE,
+                    "route": request.url.path,
+                    "writes_registry_metadata": False,
+                    "writes_proposals": False,
+                    "dry_run_required_before_apply": True,
+                    "capability_scoped_evidence_refs_supported": True,
+                    "does_not_approve_proposals": True,
+                    "does_not_promote_capabilities": True,
+                    "does_not_enable_capabilities": True,
+                    "does_not_execute_capabilities": True,
+                    "promotion_authority": False,
+                    "execution_authority": False,
+                    "approval_authority": False,
+                    "memory_write": False,
+                },
+            }
+        missing_ref_capability_ids = [
+            capability_id
+            for capability_id in planned_capability_ids
+            if not _operator_proposal_evidence_refs_for_capability(
+                evidence_refs,
+                evidence_refs_by_capability,
+                capability_id,
+            )
+        ]
+        if missing_ref_capability_ids:
+            return {
+                "ok": False,
+                "applied": False,
+                "status": "blocked",
+                "error": "operator_evidence_refs_required_for_capabilities",
+                "missing_capability_ids": missing_ref_capability_ids[:50],
+                "missing_capability_ids_truncated": len(missing_ref_capability_ids) > 50,
+                "planned_capability_count": len(planned_capability_ids),
+                "before": before,
+                "governance": {
+                    "scope": _PLUGIN_WRITE_SCOPE,
+                    "route": request.url.path,
+                    "writes_registry_metadata": False,
+                    "writes_proposals": False,
+                    "dry_run_required_before_apply": True,
+                    "capability_scoped_evidence_refs_supported": True,
+                    "does_not_approve_proposals": True,
+                    "does_not_promote_capabilities": True,
+                    "does_not_enable_capabilities": True,
+                    "does_not_execute_capabilities": True,
+                    "promotion_authority": False,
+                    "execution_authority": False,
+                    "approval_authority": False,
+                    "memory_write": False,
+                },
+            }
+        planned_evidence_ref_count = _operator_proposal_evidence_ref_count_for_planned(
+            planned,
+            evidence_refs,
+            evidence_refs_by_capability,
+        )
+        capability_specific_evidence_ref_count = sum(
+            len(evidence_refs_by_capability.get(capability_id, [])) for capability_id in planned_capability_ids
+        )
         dry_run_fingerprint = _capability_library_operator_proposal_evidence_intake_plan_fingerprint(
             planned=planned,
             evidence_refs=evidence_refs,
+            evidence_refs_by_capability=evidence_refs_by_capability,
         )
         if payload.dry_run:
             return {
@@ -10505,8 +14106,16 @@ def apply_capability_library_operator_proposal_evidence_intake(
                 "status": "dry_run",
                 "planned_pack_count": len(planned),
                 "planned_capability_count": sum(int(item.get("capability_count") or 0) for item in planned),
-                "evidence_ref_count": len(evidence_refs),
+                "evidence_ref_count": planned_evidence_ref_count,
+                "shared_evidence_ref_count": len(evidence_refs),
+                "capability_specific_evidence_ref_count": capability_specific_evidence_ref_count,
                 "dry_run_fingerprint": dry_run_fingerprint,
+                "projection_scope": _safe_str(before.get("projection_scope")).strip() or "full_library",
+                "global_counts_included": bool(before.get("global_counts_included", True)),
+                "projection_generated_at": _safe_str(before.get("generated_at")).strip(),
+                "projection_evidence": before.get("projection_evidence")
+                if isinstance(before.get("projection_evidence"), dict)
+                else {},
                 "dry_run_confirmation": {
                     "required_for_apply": True,
                     "fingerprint": dry_run_fingerprint,
@@ -10514,7 +14123,9 @@ def apply_capability_library_operator_proposal_evidence_intake(
                     "claim_scope": "operator_supplied_friction_evidence_reference_not_independent_verification",
                     "planned_pack_count": len(planned),
                     "planned_capability_count": sum(int(item.get("capability_count") or 0) for item in planned),
-                    "evidence_ref_count": len(evidence_refs),
+                    "evidence_ref_count": planned_evidence_ref_count,
+                    "shared_evidence_ref_count": len(evidence_refs),
+                    "capability_specific_evidence_ref_count": capability_specific_evidence_ref_count,
                     "apply_route": request.url.path,
                 },
                 "planned": planned,
@@ -10526,6 +14137,7 @@ def apply_capability_library_operator_proposal_evidence_intake(
                     "writes_registry_metadata": False,
                     "writes_proposals": False,
                     "dry_run_required_before_apply": True,
+                    "capability_scoped_evidence_refs_supported": True,
                     "operator_supplied_evidence_not_independently_verified": True,
                     "does_not_approve_proposals": True,
                     "does_not_promote_capabilities": True,
@@ -10546,7 +14158,9 @@ def apply_capability_library_operator_proposal_evidence_intake(
                 "error": "operator_evidence_intake_dry_run_confirmation_required",
                 "planned_pack_count": len(planned),
                 "planned_capability_count": sum(int(item.get("capability_count") or 0) for item in planned),
-                "evidence_ref_count": len(evidence_refs),
+                "evidence_ref_count": planned_evidence_ref_count,
+                "shared_evidence_ref_count": len(evidence_refs),
+                "capability_specific_evidence_ref_count": capability_specific_evidence_ref_count,
                 "dry_run_confirmation": {
                     "required_for_apply": True,
                     "fingerprint_contract": "stage17_operator_proposal_evidence_intake_dry_run_v1",
@@ -10559,6 +14173,7 @@ def apply_capability_library_operator_proposal_evidence_intake(
                     "writes_registry_metadata": False,
                     "writes_proposals": False,
                     "dry_run_required_before_apply": True,
+                    "capability_scoped_evidence_refs_supported": True,
                     "operator_supplied_evidence_not_independently_verified": True,
                     "does_not_approve_proposals": True,
                     "does_not_promote_capabilities": True,
@@ -10575,34 +14190,58 @@ def apply_capability_library_operator_proposal_evidence_intake(
             registry=registry,
             prepared=prepared,
             evidence_refs=evidence_refs,
+            evidence_refs_by_capability=evidence_refs_by_capability,
             payload=payload,
             route_path=request.url.path,
+            update_runtime_catalog=not bool(selected_capability_ids),
         )
         recorded = batch["recorded"]
         failed = batch["failed"]
         changed_records = [item for item in recorded if item.get("status") == "recorded"]
 
         refreshed_registry = _load_registry()
-        refreshed_catalog = _compile_runtime_catalog(refreshed_registry)
-        refreshed_runtime_catalog = _read_runtime_catalog_payload(refreshed_catalog)
-        refreshed_marketplace = marketplace_from_plugin_catalog(refreshed_runtime_catalog)
-        refreshed_entries = list(refreshed_marketplace.catalog())
-        refreshed_available_proposals = _available_capability_pack_proposals()
-        refreshed_available_validation_receipts = _available_capability_pack_validation_receipts()
-        refreshed_available_promotion_receipts = _available_capability_pack_promotion_receipts()
-        refreshed_promotion_discipline = analyze_capability_pack_promotion_discipline(
-            refreshed_entries,
-            available_proposal_ids=refreshed_available_proposals["ids"],
-            available_validation_receipt_ids=refreshed_available_validation_receipts["ids"],
-            available_promotion_receipt_ids=refreshed_available_promotion_receipts["ids"],
-            operator_review_decisions=_read_capability_pack_operator_review_decisions(limit=500),
-        )
-        after = _capability_library_proposal_evidence_plan_projection(
-            registry=refreshed_registry,
-            entries=refreshed_entries,
-            promotion_discipline=refreshed_promotion_discipline,
-            generated_plugin_sync_performed=False,
-        )
+        if selected_capability_ids:
+            refreshed_context = _capability_library_selected_promotion_discipline_context(
+                registry=refreshed_registry,
+                selected_capability_ids=selected_capability_ids,
+            )
+            refreshed_entries = (
+                refreshed_context["entries"] if isinstance(refreshed_context.get("entries"), list) else []
+            )
+            refreshed_promotion_discipline = (
+                refreshed_context["promotion_discipline"]
+                if isinstance(refreshed_context.get("promotion_discipline"), dict)
+                else {}
+            )
+            after = _capability_library_selected_capability_readiness_projection(
+                registry=refreshed_registry,
+                entries=refreshed_entries,
+                promotion_discipline=refreshed_promotion_discipline,
+                selected_pack_ids=selected_pack_ids,
+                selected_capability_ids=selected_capability_ids,
+                generated_plugin_sync_performed=bool(refreshed_context.get("generated_plugin_registry_sync_performed")),
+            )
+        else:
+            refreshed_catalog = _compile_runtime_catalog(refreshed_registry)
+            refreshed_runtime_catalog = _read_runtime_catalog_payload(refreshed_catalog)
+            refreshed_marketplace = marketplace_from_plugin_catalog(refreshed_runtime_catalog)
+            refreshed_entries = list(refreshed_marketplace.catalog())
+            refreshed_available_proposals = _available_capability_pack_proposals()
+            refreshed_available_validation_receipts = _available_capability_pack_validation_receipts()
+            refreshed_available_promotion_receipts = _available_capability_pack_promotion_receipts()
+            refreshed_promotion_discipline = analyze_capability_pack_promotion_discipline(
+                refreshed_entries,
+                available_proposal_ids=refreshed_available_proposals["ids"],
+                available_validation_receipt_ids=refreshed_available_validation_receipts["ids"],
+                available_promotion_receipt_ids=refreshed_available_promotion_receipts["ids"],
+                operator_review_decisions=_read_capability_pack_operator_review_decisions(limit=500),
+            )
+            after = _capability_library_proposal_evidence_plan_projection(
+                registry=refreshed_registry,
+                entries=refreshed_entries,
+                promotion_discipline=refreshed_promotion_discipline,
+                generated_plugin_sync_performed=False,
+            )
         applied = bool(changed_records)
         return {
             "ok": not failed,
@@ -10613,7 +14252,9 @@ def apply_capability_library_operator_proposal_evidence_intake(
             "recorded_capability_count": sum(
                 int(item.get("changed_capability_count") or 0) for item in changed_records
             ),
-            "evidence_ref_count": len(evidence_refs),
+            "evidence_ref_count": planned_evidence_ref_count,
+            "shared_evidence_ref_count": len(evidence_refs),
+            "capability_specific_evidence_ref_count": capability_specific_evidence_ref_count,
             "recorded": recorded,
             "failed": failed,
             "skipped": skipped,
@@ -10626,6 +14267,13 @@ def apply_capability_library_operator_proposal_evidence_intake(
             },
             "remaining_proposal_evidence_missing_count": int(after.get("proposal_evidence_missing_count") or 0),
             "remaining_proposal_evidence_ready_count": int(after.get("proposal_evidence_ready_count") or 0),
+            "projection_scope": _safe_str(after.get("projection_scope")).strip() or "full_library",
+            "global_counts_included": bool(after.get("global_counts_included", True)),
+            "before_projection_generated_at": _safe_str(before.get("generated_at")).strip(),
+            "after_projection_generated_at": _safe_str(after.get("generated_at")).strip(),
+            "projection_evidence": after.get("projection_evidence")
+            if isinstance(after.get("projection_evidence"), dict)
+            else {},
             "next_smallest_truthful_gap": _safe_str(after.get("next_smallest_truthful_gap")).strip(),
             "governance": {
                 "scope": _PLUGIN_WRITE_SCOPE,
@@ -10633,6 +14281,7 @@ def apply_capability_library_operator_proposal_evidence_intake(
                 "writes_registry_metadata": applied,
                 "writes_proposals": False,
                 "dry_run_required_before_apply": True,
+                "capability_scoped_evidence_refs_supported": True,
                 "operator_supplied_evidence_not_independently_verified": True,
                 "evidence_claim_scope": "operator_supplied_friction_evidence_reference_not_independent_verification",
                 "does_not_write_validation_receipts": True,
@@ -10756,6 +14405,248 @@ def capability_library_proposal_review_apply_readiness() -> dict[str, object]:
         return {
             "ok": False,
             "kind": "plugin.capability_library.proposal_review_apply_readiness",
+            "error": api_error_message(exc),
+        }
+
+
+@router.post("/capabilities/library/proposal-review/apply")
+def apply_capability_library_proposal_review(
+    payload: CapabilityLibraryProposalReviewApplyIn,
+    request: Request,
+) -> dict[str, object]:
+    try:
+        permission = _write_permission(payload.actor, route=request.url.path, method=request.method)
+        if not permission.allowed:
+            return _permission_denied(permission)
+
+        plan = _prepare_capability_library_proposal_review_apply_plan(payload=payload)
+        generated_sync = bool(plan.get("generated_plugin_registry_sync_performed"))
+        action = _safe_str(plan.get("action")).strip() or _safe_str(payload.action).strip().lower()
+        decided_status = _safe_str(plan.get("decision_status")).strip()
+        if plan.get("status") != "planned":
+            response: dict[str, object] = {
+                "ok": bool(plan.get("ok")),
+                "applied": False,
+                "kind": "plugin.capability_library.proposal_review.apply",
+                "status": _safe_str(plan.get("status")).strip() or "blocked",
+                "planned_pack_count": int(plan.get("planned_pack_count") or 0),
+                "planned_capability_count": int(plan.get("planned_capability_count") or 0),
+                "planned_proposal_count": int(plan.get("planned_proposal_count") or 0),
+                "before": plan.get("before") if isinstance(plan.get("before"), dict) else {},
+                "governance": _capability_library_proposal_review_apply_governance(
+                    route_path=request.url.path,
+                    action=action,
+                    decision_status=decided_status,
+                    writes_proposal_review_receipts=False,
+                    updates_proposal_records=False,
+                    generated_plugin_registry_sync_performed=generated_sync,
+                ),
+            }
+            for key in ("error", "allowed_actions", "candidate_total", "limit", "capability_count", "skipped"):
+                if key in plan:
+                    response[key] = plan[key]
+            return response
+
+        dry_run_fingerprint = _safe_str(plan.get("dry_run_fingerprint")).strip()
+        planned = plan.get("planned") if isinstance(plan.get("planned"), list) else []
+        skipped = plan.get("skipped") if isinstance(plan.get("skipped"), list) else []
+        planned_pack_count = int(plan.get("planned_pack_count") or 0)
+        planned_capability_count = int(plan.get("planned_capability_count") or 0)
+        planned_proposal_count = int(plan.get("planned_proposal_count") or 0)
+        if payload.dry_run:
+            return {
+                "ok": True,
+                "applied": False,
+                "kind": "plugin.capability_library.proposal_review.apply",
+                "status": "dry_run",
+                "planned_pack_count": planned_pack_count,
+                "planned_capability_count": planned_capability_count,
+                "planned_proposal_count": planned_proposal_count,
+                "dry_run_fingerprint": dry_run_fingerprint,
+                "projection_scope": _safe_str(plan.get("before", {}).get("projection_scope")).strip()
+                if isinstance(plan.get("before"), dict)
+                else "full_library",
+                "global_counts_included": bool(
+                    plan.get("before", {}).get("global_counts_included", True)
+                    if isinstance(plan.get("before"), dict)
+                    else True
+                ),
+                "projection_generated_at": _safe_str(plan.get("before", {}).get("generated_at")).strip()
+                if isinstance(plan.get("before"), dict)
+                else "",
+                "projection_evidence": plan.get("before", {}).get("projection_evidence")
+                if isinstance(plan.get("before"), dict)
+                and isinstance(plan.get("before", {}).get("projection_evidence"), dict)
+                else {},
+                "dry_run_confirmation": {
+                    "required_for_apply": True,
+                    "fingerprint": dry_run_fingerprint,
+                    "fingerprint_contract": "stage17_capability_library_proposal_review_apply_dry_run_v1",
+                    "planned_pack_count": planned_pack_count,
+                    "planned_capability_count": planned_capability_count,
+                    "planned_proposal_count": planned_proposal_count,
+                    "apply_route": request.url.path,
+                },
+                "planned": planned,
+                "skipped": skipped,
+                "before": plan.get("before") if isinstance(plan.get("before"), dict) else {},
+                "governance": _capability_library_proposal_review_apply_governance(
+                    route_path=request.url.path,
+                    action=action,
+                    decision_status=decided_status,
+                    writes_proposal_review_receipts=False,
+                    updates_proposal_records=False,
+                    generated_plugin_registry_sync_performed=generated_sync,
+                ),
+            }
+
+        provided_dry_run_fingerprint = _safe_str(payload.dry_run_fingerprint).strip()
+        if provided_dry_run_fingerprint != dry_run_fingerprint:
+            return {
+                "ok": False,
+                "applied": False,
+                "kind": "plugin.capability_library.proposal_review.apply",
+                "status": "blocked",
+                "error": "capability_library_proposal_review_dry_run_confirmation_required",
+                "planned_pack_count": planned_pack_count,
+                "planned_capability_count": planned_capability_count,
+                "planned_proposal_count": planned_proposal_count,
+                "dry_run_confirmation": {
+                    "required_for_apply": True,
+                    "fingerprint_contract": "stage17_capability_library_proposal_review_apply_dry_run_v1",
+                    "fingerprint_matched": False,
+                    "apply_route": request.url.path,
+                },
+                "governance": _capability_library_proposal_review_apply_governance(
+                    route_path=request.url.path,
+                    action=action,
+                    decision_status=decided_status,
+                    writes_proposal_review_receipts=False,
+                    updates_proposal_records=False,
+                    generated_plugin_registry_sync_performed=generated_sync,
+                ),
+            }
+
+        prepared = plan.get("prepared") if isinstance(plan.get("prepared"), list) else []
+        batch = _record_capability_library_proposal_review_apply_batch(
+            prepared=prepared,
+            payload=payload,
+            action=action,
+            decided_status=decided_status,
+            route_path=request.url.path,
+        )
+        recorded = batch["recorded"] if isinstance(batch.get("recorded"), list) else []
+        failed = batch["failed"] if isinstance(batch.get("failed"), list) else []
+        applied = bool(recorded)
+
+        refreshed_registry = _load_registry()
+        selected_capability_ids = set(_unique_texts(plan.get("selected_capability_ids"), limit=1000))
+        selected_pack_ids = set(_unique_texts(plan.get("selected_pack_ids"), limit=100))
+        if selected_capability_ids:
+            refreshed_context = _capability_library_selected_promotion_discipline_context(
+                registry=refreshed_registry,
+                selected_capability_ids=selected_capability_ids,
+            )
+            refreshed_entries = (
+                refreshed_context["entries"] if isinstance(refreshed_context.get("entries"), list) else []
+            )
+            refreshed_promotion_discipline = (
+                refreshed_context["promotion_discipline"]
+                if isinstance(refreshed_context.get("promotion_discipline"), dict)
+                else {}
+            )
+            after_review = _capability_library_selected_capability_readiness_projection(
+                registry=refreshed_registry,
+                entries=refreshed_entries,
+                promotion_discipline=refreshed_promotion_discipline,
+                selected_pack_ids=selected_pack_ids,
+                selected_capability_ids=selected_capability_ids,
+                generated_plugin_sync_performed=bool(refreshed_context.get("generated_plugin_registry_sync_performed")),
+            )
+            after_promotion = after_review
+        else:
+            refreshed_catalog = _compile_runtime_catalog(refreshed_registry)
+            refreshed_runtime_catalog = _read_runtime_catalog_payload(refreshed_catalog)
+            refreshed_marketplace = marketplace_from_plugin_catalog(refreshed_runtime_catalog)
+            refreshed_entries = list(refreshed_marketplace.catalog())
+            refreshed_available_proposals = _available_capability_pack_proposals()
+            refreshed_available_validation_receipts = _available_capability_pack_validation_receipts()
+            refreshed_available_promotion_receipts = _available_capability_pack_promotion_receipts()
+            refreshed_promotion_discipline = analyze_capability_pack_promotion_discipline(
+                refreshed_entries,
+                available_proposal_ids=refreshed_available_proposals["ids"],
+                available_validation_receipt_ids=refreshed_available_validation_receipts["ids"],
+                available_promotion_receipt_ids=refreshed_available_promotion_receipts["ids"],
+                operator_review_decisions=_read_capability_pack_operator_review_decisions(limit=500),
+            )
+            after_review = _capability_library_proposal_review_plan_projection(
+                registry=refreshed_registry,
+                entries=refreshed_entries,
+                promotion_discipline=refreshed_promotion_discipline,
+                generated_plugin_sync_performed=False,
+            )
+            after_promotion = _capability_library_explicit_promotion_plan_projection(
+                registry=refreshed_registry,
+                entries=refreshed_entries,
+                promotion_discipline=refreshed_promotion_discipline,
+                generated_plugin_sync_performed=False,
+            )
+        review_complete = _safe_str(after_review.get("status")).strip() == "proposal_review_complete"
+        next_gap = (
+            _safe_str(after_promotion.get("next_smallest_truthful_gap")).strip()
+            if review_complete
+            else _safe_str(after_review.get("next_smallest_truthful_gap")).strip()
+        )
+        return {
+            "ok": not failed,
+            "applied": applied,
+            "kind": "plugin.capability_library.proposal_review.apply",
+            "status": "reviewed" if applied and not failed else ("partial" if applied else "blocked"),
+            "dry_run": False,
+            "batch_id": _safe_str(batch.get("batch_id")).strip(),
+            "planned_pack_count": planned_pack_count,
+            "planned_capability_count": planned_capability_count,
+            "planned_proposal_count": planned_proposal_count,
+            "recorded_proposal_count": len(recorded),
+            "recorded_capability_count": sum(int(item.get("capability_count") or 0) for item in recorded),
+            "recorded": recorded,
+            "failed": failed,
+            "skipped": skipped,
+            "dry_run_fingerprint": dry_run_fingerprint,
+            "dry_run_confirmation": {
+                "required_for_apply": True,
+                "fingerprint_matched": True,
+                "fingerprint_contract": "stage17_capability_library_proposal_review_apply_dry_run_v1",
+                "apply_route": request.url.path,
+            },
+            "remaining_proposal_review_missing_count": int(after_review.get("proposal_review_missing_count") or 0),
+            "remaining_reviewable_capability_count": int(after_review.get("reviewable_capability_count") or 0),
+            "promotable_capability_count": int(after_promotion.get("promotable_capability_count") or 0),
+            "projection_scope": _safe_str(after_review.get("projection_scope")).strip() or "full_library",
+            "global_counts_included": bool(after_review.get("global_counts_included", True)),
+            "before_projection_generated_at": _safe_str(plan.get("before", {}).get("generated_at")).strip()
+            if isinstance(plan.get("before"), dict)
+            else "",
+            "after_projection_generated_at": _safe_str(after_review.get("generated_at")).strip(),
+            "projection_evidence": after_review.get("projection_evidence")
+            if isinstance(after_review.get("projection_evidence"), dict)
+            else {},
+            "next_smallest_truthful_gap": next_gap,
+            "governance": _capability_library_proposal_review_apply_governance(
+                route_path=request.url.path,
+                action=action,
+                decision_status=decided_status,
+                writes_proposal_review_receipts=applied,
+                updates_proposal_records=applied,
+                generated_plugin_registry_sync_performed=generated_sync,
+            ),
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "applied": False,
+            "kind": "plugin.capability_library.proposal_review.apply",
+            "status": "error",
             "error": api_error_message(exc),
         }
 
@@ -12182,6 +16073,9 @@ def run_plugin_tool(payload: PluginToolRunIn) -> dict[str, object]:
         action = _safe_str(tool.get("action")).strip() or "run"
         if not plugin_id:
             return {"ok": False, "error": "invalid_tool", "status": "error", "tool_id": tool_id}
+        run_meta = dict(payload.meta or {})
+        if not _safe_str(run_meta.get("caller_context")).strip():
+            run_meta["caller_context"] = "plugin_tool_route"
         run_payload = PluginRunIn(
             id=plugin_id,
             action=action,
@@ -12189,7 +16083,7 @@ def run_plugin_tool(payload: PluginToolRunIn) -> dict[str, object]:
             reason=payload.reason,
             approval_id=payload.approval_id,
             idempotency_key=payload.idempotency_key,
-            meta=dict(payload.meta or {}),
+            meta=run_meta,
         )
         result = run_plugin(run_payload)
         if isinstance(result, dict):
@@ -12325,32 +16219,230 @@ def disable_plugin(payload: PluginToggleIn, request: Request) -> dict[str, objec
         if current is None:
             return {"ok": False, "error": "not_found", "id": plugin_id}
 
+        payload_meta = redact_governed_metadata(payload.meta)
+        lifecycle = _plugin_disable_lifecycle(payload_meta)
+        requested_lifecycle_action = _safe_str(lifecycle.get("requested_action")).strip()
+        if not bool(lifecycle.get("supported")):
+            return _unsupported_plugin_lifecycle_action(
+                plugin_id=plugin_id,
+                requested_action=requested_lifecycle_action,
+                route=request.url.path,
+            )
+
         disabled_ts = _now_s()
         actor = redact_governed_value(_safe_str(payload.actor).strip())
+        previous = dict(current)
         meta = dict(current.get("meta") or {}) if isinstance(current.get("meta"), dict) else {}
         previous_status = _safe_str(current.get("status")).strip().lower()
         promotion_status = _safe_str(meta.get("promotion_status")).strip().lower()
+        lifecycle_action = _safe_str(lifecycle.get("action")).strip() or "disable"
+        lifecycle_status = _safe_str(lifecycle.get("lifecycle_status")).strip() or "disabled"
+        lifecycle_receipt_id = _plugin_lifecycle_receipt_id(plugin_id, lifecycle_action, disabled_ts)
+        lifecycle_receipt_path = _plugin_lifecycle_receipt_path(lifecycle_receipt_id)
         if promotion_status:
             meta["disabled_from_promotion_status"] = promotion_status
         if previous_status:
             meta["disabled_from_status"] = previous_status
+        meta[f"{lifecycle_status}_from_status"] = previous_status
+        meta[f"{lifecycle_status}_from_promotion_status"] = promotion_status
         meta["promotion_status"] = "disabled"
         meta["status"] = "disabled"
         meta["disabled_ts"] = disabled_ts
         meta["disabled_by"] = actor
+        meta["lifecycle_action"] = lifecycle_action
+        meta["lifecycle_status"] = lifecycle_status
+        meta["lifecycle_status_ts"] = disabled_ts
+        meta["lifecycle_status_by"] = actor
+        meta["lifecycle_reason"] = redact_governed_value(_safe_str(payload.reason).strip() or "requested")
+        meta["lifecycle_receipt_id"] = lifecycle_receipt_id
+        meta["lifecycle_receipt_path"] = str(lifecycle_receipt_path)
+        meta["lifecycle_receipt_kind"] = "plugin.lifecycle.receipt"
         current["meta"] = meta
         current["enabled"] = False
         current["status"] = "disabled"
         current["updated_ts"] = disabled_ts
-        _write_plugin(registry, _normalize_plugin_record(plugin_id, current))
+        disabled = _normalize_plugin_record(plugin_id, current)
+        _write_plugin(registry, disabled)
         catalog = _save_registry_and_catalog(registry)
+        lifecycle_receipt = _write_plugin_lifecycle_receipt(
+            plugin_id=plugin_id,
+            receipt_id=lifecycle_receipt_id,
+            receipt_path=lifecycle_receipt_path,
+            previous=previous,
+            current=disabled,
+            payload=payload,
+            recorded_ts=disabled_ts,
+            lifecycle_action=lifecycle_action,
+            lifecycle_status=lifecycle_status,
+            catalog=catalog,
+        )
 
         return {
             "ok": True,
+            "applied": True,
             "id": plugin_id,
             "enabled": False,
             "status": "disabled",
-            "message": "disabled",
+            "message": lifecycle_status,
+            "lifecycle_action": lifecycle_action,
+            "lifecycle_status": lifecycle_status,
+            "lifecycle_receipt_id": lifecycle_receipt_id,
+            "lifecycle_receipt_path": str(lifecycle_receipt_path),
+            "lifecycle_receipt": lifecycle_receipt,
+            "governance": _plugin_lifecycle_governance(
+                route=request.url.path,
+                lifecycle_action=lifecycle_action,
+                lifecycle_status=lifecycle_status,
+                writes_registry_metadata=True,
+                writes_lifecycle_receipt=True,
+            ),
+            "catalog": catalog,
+        }
+    except Exception as exc:
+        return {"ok": False, "error": api_error_message(exc)}
+
+
+@router.post("/lifecycle/repair")
+def repair_plugin_lifecycle(payload: PluginToggleIn, request: Request) -> dict[str, object]:
+    try:
+        permission = _write_permission(payload.actor, route=request.url.path, method=request.method)
+        if not permission.allowed:
+            return _permission_denied(permission)
+
+        plugin_id = _validate_plugin_id(payload.id)
+        registry = _load_registry()
+        _sync_generated_plugins(registry)
+        current = _read_plugin(registry, plugin_id)
+        if current is None:
+            return {"ok": False, "error": "not_found", "id": plugin_id}
+
+        payload_meta = redact_governed_metadata(payload.meta)
+        repair = _plugin_repair_lifecycle(payload_meta)
+        requested_lifecycle_action = _safe_str(repair.get("requested_action")).strip()
+        if not bool(repair.get("supported")):
+            return _unsupported_plugin_lifecycle_action(
+                plugin_id=plugin_id,
+                requested_action=requested_lifecycle_action,
+                route=request.url.path,
+                gate="plugin_lifecycle_repair",
+                supported_actions=["repair", "restore"],
+            )
+
+        lifecycle_before = _plugin_lifecycle_state(current, payload_meta)
+        lifecycle_action = _safe_str(repair.get("action")).strip() or "repair"
+        if not bool(lifecycle_before.get("blocks_promotion")) and not bool(lifecycle_before.get("blocks_execution")):
+            return {
+                "ok": False,
+                "applied": False,
+                "id": plugin_id,
+                "status": "not_required",
+                "error": "lifecycle_repair_not_required",
+                "lifecycle_before": redact_governed_display_value(lifecycle_before),
+                "governance": _plugin_lifecycle_governance(
+                    gate="plugin_lifecycle_repair",
+                    route=request.url.path,
+                    lifecycle_action=lifecycle_action,
+                    lifecycle_status="active",
+                    writes_registry_metadata=False,
+                    writes_lifecycle_receipt=False,
+                ),
+            }
+
+        repaired_ts = _now_s()
+        actor = redact_governed_value(_safe_str(payload.actor).strip())
+        previous = dict(current)
+        meta = dict(current.get("meta") or {}) if isinstance(current.get("meta"), dict) else {}
+        previous_status = _safe_str(current.get("status")).strip().lower()
+        previous_lifecycle_status = _safe_str(lifecycle_before.get("status")).strip()
+        previous_lifecycle_source = _safe_str(lifecycle_before.get("source")).strip()
+        previous_lifecycle_error = _safe_str(lifecycle_before.get("error")).strip()
+        previous_lifecycle_receipt_id = _safe_str(meta.get("lifecycle_receipt_id")).strip()
+        restored_status = _plugin_lifecycle_repair_status(current, meta, lifecycle_before)
+        restored_promotion_status = _plugin_lifecycle_repair_promotion_status(
+            meta,
+            lifecycle_before,
+            restored_status,
+        )
+        lifecycle_receipt_id = _plugin_lifecycle_receipt_id(plugin_id, lifecycle_action, repaired_ts)
+        lifecycle_receipt_path = _plugin_lifecycle_receipt_path(lifecycle_receipt_id)
+
+        for key in (
+            "capability_lifecycle_status",
+            "deprecation_status",
+            "quarantine_status",
+        ):
+            meta.pop(key, None)
+        meta["status"] = restored_status
+        meta["promotion_status"] = restored_promotion_status
+        meta["lifecycle_action"] = lifecycle_action
+        meta["lifecycle_status"] = "active"
+        meta["lifecycle_state"] = "active"
+        meta["lifecycle_status_ts"] = repaired_ts
+        meta["lifecycle_status_by"] = actor
+        meta["lifecycle_reason"] = redact_governed_value(_safe_str(payload.reason).strip() or "requested")
+        meta["lifecycle_repair_action"] = lifecycle_action
+        meta["lifecycle_repair_status"] = "repaired"
+        meta["lifecycle_repair_ts"] = repaired_ts
+        meta["lifecycle_repair_by"] = actor
+        meta["lifecycle_repair_reason"] = redact_governed_value(_safe_str(payload.reason).strip() or "requested")
+        meta["lifecycle_repair_previous_status"] = previous_lifecycle_status
+        meta["lifecycle_repair_previous_source"] = previous_lifecycle_source
+        meta["lifecycle_repair_previous_error"] = previous_lifecycle_error
+        meta["lifecycle_repair_previous_receipt_id"] = previous_lifecycle_receipt_id
+        meta["lifecycle_repair_restored_status"] = restored_status
+        meta["lifecycle_repair_restored_promotion_status"] = restored_promotion_status
+        meta["lifecycle_repair_receipt_id"] = lifecycle_receipt_id
+        meta["lifecycle_repair_receipt_path"] = str(lifecycle_receipt_path)
+        meta["lifecycle_receipt_id"] = lifecycle_receipt_id
+        meta["lifecycle_receipt_path"] = str(lifecycle_receipt_path)
+        meta["lifecycle_receipt_kind"] = "plugin.lifecycle.receipt"
+        current["meta"] = meta
+        current["enabled"] = False
+        current["status"] = restored_status
+        current["updated_ts"] = repaired_ts
+        repaired = _normalize_plugin_record(plugin_id, current)
+        _write_plugin(registry, repaired)
+        catalog = _save_registry_and_catalog(registry)
+        lifecycle_receipt = _write_plugin_lifecycle_receipt(
+            plugin_id=plugin_id,
+            receipt_id=lifecycle_receipt_id,
+            receipt_path=lifecycle_receipt_path,
+            previous=previous,
+            current=repaired,
+            payload=payload,
+            recorded_ts=repaired_ts,
+            lifecycle_action=lifecycle_action,
+            lifecycle_status="active",
+            catalog=catalog,
+            route=request.url.path,
+            gate="plugin_lifecycle_repair",
+        )
+        lifecycle_after = _plugin_lifecycle_state(repaired, {})
+
+        return {
+            "ok": True,
+            "applied": True,
+            "id": plugin_id,
+            "enabled": False,
+            "status": restored_status,
+            "previous_status": previous_status,
+            "message": "lifecycle_repaired",
+            "lifecycle_action": lifecycle_action,
+            "lifecycle_status": "active",
+            "lifecycle_repair_status": "repaired",
+            "lifecycle_before": redact_governed_display_value(lifecycle_before),
+            "lifecycle_after": redact_governed_display_value(lifecycle_after),
+            "lifecycle_receipt_id": lifecycle_receipt_id,
+            "lifecycle_receipt_path": str(lifecycle_receipt_path),
+            "lifecycle_receipt": lifecycle_receipt,
+            "governance": _plugin_lifecycle_governance(
+                gate="plugin_lifecycle_repair",
+                route=request.url.path,
+                lifecycle_action=lifecycle_action,
+                lifecycle_status="active",
+                writes_registry_metadata=True,
+                writes_lifecycle_receipt=True,
+            ),
             "catalog": catalog,
         }
     except Exception as exc:
@@ -12516,10 +16608,45 @@ def run_plugin(payload: PluginRunIn) -> dict[str, object]:
         current = _read_plugin(registry, plugin_id)
         if current is None:
             return {"ok": False, "error": "not_found", "id": plugin_id, "status": "error"}
+        payload_meta = dict(payload.meta or {}) if isinstance(payload.meta, dict) else {}
+        if not _safe_str(payload_meta.get("caller_context")).strip():
+            payload_meta["caller_context"] = "direct_plugin_route"
+        lifecycle = _plugin_lifecycle_state(current, payload_meta)
+        if bool(lifecycle.get("blocks_execution")):
+            lifecycle_status = _safe_str(lifecycle.get("status")).strip() or "blocked"
+            return {
+                "ok": False,
+                "error": _safe_str(lifecycle.get("error")).strip() or "plugin_lifecycle_blocked",
+                "id": plugin_id,
+                "status": lifecycle_status,
+                "lifecycle": redact_governed_display_value(lifecycle),
+                "message": "Plugin execution is blocked by the recorded lifecycle state.",
+                "governance": {
+                    "plane": "P3_GOVERNANCE",
+                    "gate": "plugin_lifecycle_gate",
+                    "scope": "plugin.run",
+                    "route": "/plugins/run",
+                    "next_step": "review_plugin_lifecycle_receipt_before_execution",
+                    "operator_hint": "A quarantined, deprecated, archived, retired, or unknown lifecycle state must be reviewed before execution.",
+                    "does_not_execute_capabilities": True,
+                    "promotion_authority": False,
+                    "execution_authority": False,
+                    "approval_authority": False,
+                    "memory_write": False,
+                },
+            }
         if not bool(current.get("enabled", False)):
             current_status = _safe_str(current.get("status")).strip() or "disabled"
             error = "plugin_staged" if current_status == "staged" else "plugin_disabled"
             return {"ok": False, "error": error, "id": plugin_id, "status": current_status}
+        registry_meta = dict(current.get("meta") or {}) if isinstance(current.get("meta"), dict) else {}
+        compatibility = _plugin_core_compatibility(registry_meta)
+        if not bool(compatibility.get("compatible")):
+            return _plugin_runtime_compatibility_blocked(
+                plugin_id=plugin_id,
+                action=requested_action,
+                compatibility=compatibility,
+            )
         action = _resolve_plugin_action(current, requested_action)
         if not action:
             return {
@@ -12763,8 +16890,20 @@ def run_plugin(payload: PluginRunIn) -> dict[str, object]:
                     },
                 }
 
-        dry_run = _to_bool((payload.meta or {}).get("dry_run"), default=False)
+        dry_run = _to_bool(payload_meta.get("dry_run"), default=False)
         receipt = _redact_plugin_receipt(_execute_plugin_action(current, capability, payload.input, dry_run=dry_run))
+        invocation_receipt = _capability_pack_invocation_receipt(
+            plugin=current,
+            capability=capability,
+            action=action,
+            payload_meta=payload_meta,
+            receipt=receipt,
+            risk_tier=risk_tier,
+            required_trust=required_trust,
+            current_trust=trust_level,
+            dry_run=dry_run,
+        )
+        receipt["capability_pack_invocation"] = invocation_receipt
         current["updated_ts"] = _now_s()
         _write_plugin(registry, _normalize_plugin_record(plugin_id, current))
         _save_registry_and_catalog(registry)
@@ -12775,6 +16914,7 @@ def run_plugin(payload: PluginRunIn) -> dict[str, object]:
                 "status": _safe_str(receipt.get("status")).strip() or "error",
                 "error": _safe_str(receipt.get("error")).strip() or "plugin_execution_failed",
                 "receipt": receipt,
+                "capability_pack_invocation": invocation_receipt,
                 "meta": {
                     "action": action,
                     "risk_tier": risk_tier,
@@ -12788,6 +16928,7 @@ def run_plugin(payload: PluginRunIn) -> dict[str, object]:
             "status": _safe_str(receipt.get("status")).strip() or "ok",
             "output": receipt.get("output"),
             "receipt": receipt,
+            "capability_pack_invocation": invocation_receipt,
             "meta": {
                 "action": action,
                 "risk_tier": risk_tier,
