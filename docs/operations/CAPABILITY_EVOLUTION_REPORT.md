@@ -509,3 +509,109 @@ Effect:
   evidence without claiming closure. The weakest closure blockers remain
   full-library queue/projection evidence and the still-running project-wide
   CI/wiring lane.
+
+## PM Follow-Up - 2026-06-20T23:07Z
+
+Commit:
+
+- `e09af591` - `feat(stage17): harden lifecycle and invocation proof`
+
+Active workers:
+
+- W1 backlog class reduction: accepted and published.
+- W2 lifecycle behavior: accepted and published.
+- W3 reusable invocation proof: accepted and published.
+- W4 CI/wiring: still active on the broad project gate.
+
+Commits produced:
+
+- 1 coherent Lead Builder integration commit.
+
+Commits accepted:
+
+- 1.
+
+Commits rejected:
+
+- 0 from the reviewed W1/W2/W3 packets.
+
+Validations passed:
+
+- `py_compile` for `src\francis\api\routes\plugins.py` and
+  `tests\test_api_plugins.py`.
+- Focused 13-test Stage 17 plugin acceptance set covering invocation audit
+  replay, lifecycle repair compatibility, lifecycle repair/rollback safety, and
+  metadata receipt bulk no-write plus selected-batch behavior.
+- Ruff check for the touched Python files.
+- Ruff format check for the touched Python files.
+- `git diff --check` for the accepted files.
+- `scripts\francis-completion-model.ps1 -Mode Status`, with Stage 17 still
+  open and no percentage movement allowed.
+- `git push origin main` pushed `e09af591`.
+
+Validations failed:
+
+- None in the accepted integration packet.
+- Full-project CI remains red from the existing Lens proof-script cluster named
+  by W4; this commit did not claim to close that gate.
+
+Receipts generated:
+
+- PM publication markers were updated for W1, W2, and W3 with commit
+  `e09af591` and their matching prompt hashes.
+- W1 live route apply wrote batch
+  `stage17_metadata_receipts_bulk_1781996165` with 18 metadata receipts under
+  ignored runtime data.
+- Completion ledger entries were added for the invocation replay proof,
+  lifecycle compatibility guard, and remaining live metadata receipt batch
+  reduction.
+
+Roadmap items advanced:
+
+- Stage 17 / Capability Economy.
+- Phase 2 governed capability-pack lifecycle and reuse evidence.
+- P3 Governance and P9 Observability around capability packs.
+
+Capability classes advanced:
+
+- Capability Registry
+- Governance
+- Receipts
+- Missions
+- API Surface
+- Documentation
+- Testing
+- Observability
+
+New capabilities created or strengthened:
+
+- Metadata receipt bulk planning now stays no-write during dry-run and
+  failed-fingerprint paths while still clearing the current live selected
+  metadata-receipt backlog when confirmed.
+- Lifecycle repair now refuses generated-spec/core ambiguous or incompatible
+  candidates before dry-run fingerprinting, registry mutation, or lifecycle
+  receipt writes.
+- Invocation audit proof now has a fast durable-fixture replay path for one pack
+  reuse key across multiple mission-shaped operation records, including a guard
+  rejection for memory-writing receipts.
+
+Most important change:
+
+- The remaining live `pack_metadata_receipt_missing` backlog class moved from
+  18 candidates to 0 through the existing governed route, while lifecycle repair
+  became compatibility-aware and reusable invocation proof became easier to
+  replay.
+
+Biggest remaining bottleneck:
+
+- Stage 17 remains open. The next named Stage 17 gap is
+  `stage17_capability_pack_quality_standards`; full-library/global queue
+  projection evidence, proposal/quality evidence closure, publication coverage
+  for future worker packets, and full CI/wiring trust remain open.
+
+Next highest leverage action:
+
+- Advance `stage17_capability_pack_quality_standards` through an existing
+  governed readback/apply path or build the smallest missing governed path that
+  can prove before/after quality-standard evidence without promotion,
+  enablement, execution, memory write, or Stage 17 closure overclaim.
