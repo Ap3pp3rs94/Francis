@@ -55,9 +55,18 @@ REJECTED OUTPUTS
 FILES CHANGED
 VALIDATION
 EVIDENCE / RECEIPTS
+CAPABILITY EVOLUTION
 RISKS
 NEXT RECOMMENDED ACTION
 ```
+
+The `CAPABILITY EVOLUTION` section must classify accepted work using the
+operation report categories when applicable: Presence, Lens, Voice, Memory,
+Governance, Receipts, Missions, Overlay, Observability, Completion Model,
+Capability Registry, Swarm Infrastructure, Operator Controls, API Surface,
+Documentation, and Testing. Workers should distinguish activity from progress
+and name any new receipt, governance protection, validation coverage, or
+architectural contract strengthened.
 
 Only verified work survives. Only compressed context survives. Only
 roadmap-aligned capability survives.

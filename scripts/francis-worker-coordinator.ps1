@@ -178,7 +178,7 @@ Drone lifecycle:
 2. Inspect only relevant files.
 3. Make the smallest coherent change or analysis.
 4. Validate the touched path.
-5. Report files inspected, files changed, exact change, validation run, risks, and recommended next step.
+5. Report files inspected, files changed, exact change, validation run, capability classes advanced, risks, and recommended next step.
 6. Stop.
 
 Drone limits:
@@ -207,6 +207,7 @@ REJECTED OUTPUTS
 FILES CHANGED
 VALIDATION
 EVIDENCE / RECEIPTS
+CAPABILITY EVOLUTION
 RISKS
 NEXT RECOMMENDED ACTION
 
@@ -395,6 +396,7 @@ $PreviousWorkerJson
 - Validate the touched path.
 - Update durable state only when repo truth materially changed.
 - Write a concise lane readback to `$ReadbackPath` before ending. Include files touched, validation, blockers, proposed Git commit scope, and the next highest-value prompt for this lane.
+- Include a CAPABILITY EVOLUTION section in the readback. Classify accepted work using these categories when applicable: Presence, Lens, Voice, Memory, Governance, Receipts, Missions, Overlay, Observability, Completion Model, Capability Registry, Swarm Infrastructure, Operator Controls, API Surface, Documentation, Testing. Distinguish activity from progress, and name any new receipt, governance, validation, or architectural contract strengthened.
 - The next prompt for this lane is gated on that readback plus a PM-owned publication marker at `$PublicationPath`. The marker must reference this pass prompt hash and represent a GitHub push, an explicit no-change receipt, or a blocked-with-evidence receipt.
 - Final answer must include exact files changed, validation, and remaining risks.
 - Do not commit, push, restart Continuum, or spawn new workers. The project-manager session owns GitHub publication after lane review and validation.

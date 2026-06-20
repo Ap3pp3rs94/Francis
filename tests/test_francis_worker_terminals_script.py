@@ -211,6 +211,8 @@ def test_francis_worker_coordinator_generates_individual_pm_dispatches(tmp_path:
         assert "Drones do not own architecture" in text
         assert "Worker packet format" in text
         assert "ACCEPTED OUTPUTS" in text
+        assert "CAPABILITY EVOLUTION" in text
+        assert "Distinguish activity from progress" in text
 
 
 def test_francis_worker_coordinator_stop_writes_stop_flag(tmp_path: Path) -> None:
