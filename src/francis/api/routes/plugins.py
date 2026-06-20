@@ -1391,7 +1391,11 @@ def _version_triplet(value: Any) -> tuple[int, int, int] | None:
     return numbers[0], numbers[1], numbers[2]
 
 
-def _plugin_core_compatibility(payload_meta: dict[str, Any]) -> dict[str, Any]:
+def _plugin_core_compatibility(
+    payload_meta: dict[str, Any],
+    *,
+    requirement_source: str = "registry.meta.compatibility",
+) -> dict[str, Any]:
     compatibility = payload_meta.get("compatibility") if isinstance(payload_meta.get("compatibility"), dict) else {}
     min_core_version = _safe_str(
         compatibility.get("min_core_version")
@@ -1408,6 +1412,7 @@ def _plugin_core_compatibility(payload_meta: dict[str, Any]) -> dict[str, Any]:
             "current_core_version": current_core_version,
             "min_core_version": "",
             "source": "pyproject.toml",
+            "requirement_source": requirement_source,
         }
 
     current_triplet = _version_triplet(current_core_version)
@@ -1420,6 +1425,7 @@ def _plugin_core_compatibility(payload_meta: dict[str, Any]) -> dict[str, Any]:
             "current_core_version": current_core_version,
             "min_core_version": min_core_version,
             "source": "pyproject.toml",
+            "requirement_source": requirement_source,
         }
     if current_triplet is None:
         return {
@@ -1429,6 +1435,7 @@ def _plugin_core_compatibility(payload_meta: dict[str, Any]) -> dict[str, Any]:
             "current_core_version": current_core_version,
             "min_core_version": min_core_version,
             "source": "pyproject.toml",
+            "requirement_source": requirement_source,
         }
 
     compatible = current_triplet >= minimum_triplet
@@ -1439,7 +1446,100 @@ def _plugin_core_compatibility(payload_meta: dict[str, Any]) -> dict[str, Any]:
         "current_core_version": current_core_version,
         "min_core_version": min_core_version,
         "source": "pyproject.toml",
+        "requirement_source": requirement_source,
     }
+
+
+def _plugin_core_compatibility_error(*, status: str, requirement_source: str, detail: str = "") -> dict[str, Any]:
+    return {
+        "compatible": False,
+        "status": status,
+        "contract": "plugin.compatibility.min_core_version",
+        "current_core_version": _current_core_version(),
+        "min_core_version": "",
+        "source": "pyproject.toml",
+        "requirement_source": requirement_source,
+        "detail": detail,
+    }
+
+
+def _plugin_generated_spec_core_compatibility(plugin_id: str, plugin: dict[str, Any]) -> dict[str, Any] | None:
+    generated_dir = _safe_str(plugin.get("generated_dir")).strip()
+    if not generated_dir:
+        return None
+
+    plugin_dir = _generated_plugin_dir(plugin_id, generated_dir)
+    if plugin_dir is None:
+        return _plugin_core_compatibility_error(
+            status="generated_spec_directory_unresolved",
+            requirement_source="plugin.spec.json",
+            detail="generated_dir_outside_expected_plugin_directory",
+        )
+
+    spec_path = _generated_child_path(plugin_dir, "plugin.spec.json")
+    if spec_path is None or not spec_path.exists() or not spec_path.is_file():
+        return _plugin_core_compatibility_error(
+            status="generated_spec_missing",
+            requirement_source="plugin.spec.json",
+            detail="plugin_spec_json_missing",
+        )
+
+    try:
+        spec_payload = json.loads(spec_path.read_text(encoding="utf-8", errors="replace"))
+    except Exception:
+        return _plugin_core_compatibility_error(
+            status="generated_spec_unreadable",
+            requirement_source="plugin.spec.json",
+            detail="plugin_spec_json_unreadable",
+        )
+    if not isinstance(spec_payload, dict):
+        return _plugin_core_compatibility_error(
+            status="generated_spec_invalid",
+            requirement_source="plugin.spec.json",
+            detail="plugin_spec_json_not_object",
+        )
+
+    compatibility = spec_payload.get("compatibility") if isinstance(spec_payload.get("compatibility"), dict) else {}
+    result = _plugin_core_compatibility(
+        {"compatibility": compatibility},
+        requirement_source="plugin.spec.json",
+    )
+    result["spec_path"] = str(spec_path)
+    return result
+
+
+def _compatibility_sort_key(result: dict[str, Any]) -> tuple[int, int, int]:
+    triplet = _version_triplet(result.get("min_core_version"))
+    return triplet or (0, 0, 0)
+
+
+def _plugin_effective_core_compatibility(
+    plugin_id: str,
+    plugin: dict[str, Any],
+    payload_meta: dict[str, Any],
+) -> dict[str, Any]:
+    checks: list[dict[str, Any]] = [
+        _plugin_core_compatibility(
+            payload_meta,
+            requirement_source="registry.meta.compatibility",
+        )
+    ]
+    spec_check = _plugin_generated_spec_core_compatibility(plugin_id, plugin)
+    if isinstance(spec_check, dict):
+        checks.append(spec_check)
+
+    blocking = next((check for check in checks if not bool(check.get("compatible"))), None)
+    selected = blocking if blocking is not None else max(checks, key=_compatibility_sort_key)
+    effective = dict(selected)
+    effective["contract"] = "plugin.compatibility.effective_core_version_v1"
+    effective["checked_sources"] = checks
+    effective["selected_requirement_source"] = _safe_str(selected.get("requirement_source")).strip()
+    effective["source_count"] = len(checks)
+    effective["artifact_contract_checked"] = any(
+        _safe_str(check.get("requirement_source")).strip() == "plugin.spec.json" for check in checks
+    )
+    effective["metadata_contract_checked"] = True
+    return effective
 
 
 _PLUGIN_LIFECYCLE_BLOCKING_STATES = {
@@ -1595,7 +1695,7 @@ def _plugin_promotion_readiness(
     tests = payload_meta.get("tests") or payload_meta.get("test_refs") or quality_meta.get("tests") or []
     proposal_review = _plugin_proposal_review_state(proposal_id)
     pack_operator_review = _capability_pack_operator_review_state(plugin_id, payload_meta)
-    compatibility = _plugin_core_compatibility(payload_meta)
+    compatibility = _plugin_effective_core_compatibility(plugin_id, staged, payload_meta)
     lifecycle = _plugin_lifecycle_state(staged, payload_meta)
     requirements = {
         "proposal_id": bool(proposal_id),
@@ -1885,7 +1985,7 @@ def _write_plugin_promotion_receipt(
             "pack_id": pack_operator_review["pack_id"],
             "pack_version": pack_operator_review["pack_version"],
         },
-        "compatibility": _plugin_core_compatibility(payload_meta),
+        "compatibility": _plugin_effective_core_compatibility(plugin_id, previous, payload_meta),
         "lifecycle": _plugin_lifecycle_state(promoted, payload_meta),
         "proposal_evidence": proposal_evidence,
         "quality": _plugin_promotion_quality(plugin_id, promoted, payload_meta, catalog),
@@ -9975,9 +10075,17 @@ def _plugin_governance(
 
 
 _CAPABILITY_PACK_INVOCATION_RECEIPT_KIND = "plugin.capability_pack.invocation_receipt"
+_CAPABILITY_PACK_INVOCATION_SELECTION_CONTRACT = "stage17_capability_pack_invocation_selection_v1"
+_CAPABILITY_PACK_INVOCATION_SELECTION_SOURCE = "plugin_registry_metadata"
 _CAPABILITY_PACK_INVOCATION_RECEIPT_CONTRACT = "stage17_capability_pack_reusable_invocation_receipt_v1"
 _CAPABILITY_PACK_INVOCATION_ROUTING_GUARD_CONTRACT = "stage17_capability_pack_invocation_routing_guard_v1"
 _STAGE17_OPERATION_INVOCATION_CALLER_CONTEXT_CONTRACT = "stage17_operation_invocation_caller_context_readback_v1"
+_CAPABILITY_PACK_INVOCATION_SUPPORTED_CALLER_CONTEXTS = [
+    "direct_plugin_route",
+    "plugin_tool_route",
+    "mission_linked_operation",
+    "mission_linked_tool_operation",
+]
 _MISSION_OPERATION_CONTEXT_BY_CAPABILITY = {
     "plugin.run": "mission_linked_operation",
     "plugin.tool.run": "mission_linked_tool_operation",
@@ -10001,8 +10109,8 @@ def _capability_pack_invocation_selection(
     )
     pack_name = redact_governed_value(_safe_str(plugin_meta.get("pack_name") or pack_id).strip())
     return {
-        "contract": "stage17_capability_pack_invocation_selection_v1",
-        "source": "plugin_registry_metadata",
+        "contract": _CAPABILITY_PACK_INVOCATION_SELECTION_CONTRACT,
+        "source": _CAPABILITY_PACK_INVOCATION_SELECTION_SOURCE,
         "plugin_id": plugin_id,
         "capability_id": capability_id,
         "action": _safe_str(action).strip(),
@@ -10011,13 +10119,31 @@ def _capability_pack_invocation_selection(
         "pack_version": pack_version,
         "pack_name": _safe_str(pack_name).strip(),
         "pack_reuse_key": pack_reuse_key,
-        "supported_caller_contexts": [
-            "direct_plugin_route",
-            "plugin_tool_route",
-            "mission_linked_operation",
-            "mission_linked_tool_operation",
-        ],
+        "supported_caller_contexts": list(_CAPABILITY_PACK_INVOCATION_SUPPORTED_CALLER_CONTEXTS),
         "duplicates_plugin_execution_logic": False,
+    }
+
+
+def _capability_pack_invocation_selection_binding(invocation: dict[str, Any]) -> dict[str, object]:
+    selection = invocation.get("pack_selection") if isinstance(invocation.get("pack_selection"), dict) else {}
+    supported_contexts: list[str] = []
+    raw_contexts = selection.get("supported_caller_contexts")
+    if isinstance(raw_contexts, list):
+        for item in raw_contexts:
+            context = _safe_str(item).strip()
+            if context and context not in supported_contexts:
+                supported_contexts.append(context)
+    return {
+        "contract": _safe_str(selection.get("contract")).strip(),
+        "source": _safe_str(selection.get("source")).strip(),
+        "plugin_id": _safe_str(selection.get("plugin_id")).strip(),
+        "capability_id": _safe_str(selection.get("capability_id")).strip(),
+        "action": _safe_str(selection.get("action")).strip(),
+        "tool_name": _safe_str(selection.get("tool_name")).strip(),
+        "pack_id": _safe_str(selection.get("pack_id")).strip(),
+        "pack_version": _safe_str(selection.get("pack_version")).strip(),
+        "pack_reuse_key": _safe_str(selection.get("pack_reuse_key")).strip(),
+        "supported_caller_contexts": supported_contexts,
     }
 
 
@@ -10131,6 +10257,7 @@ def _capability_pack_invocation_routing_guard(
     governance = invocation.get("governance") if isinstance(invocation.get("governance"), dict) else {}
     receipt_linkage = invocation.get("receipt_linkage") if isinstance(invocation.get("receipt_linkage"), dict) else {}
     reuse = invocation.get("reuse") if isinstance(invocation.get("reuse"), dict) else {}
+    selection_binding = _capability_pack_invocation_selection_binding(invocation)
     if capability == "plugin.tool.run":
         reuse_operation_capability_field = "operation_tool_capability"
         reuse_caller_context_field = "mission_tool_context"
@@ -10139,6 +10266,51 @@ def _capability_pack_invocation_routing_guard(
         reuse_caller_context_field = "mission_context"
     reuse_operation_capability = _safe_str(reuse.get(reuse_operation_capability_field)).strip()
     reuse_caller_context = _safe_str(reuse.get(reuse_caller_context_field)).strip()
+    selection_supported_contexts = set()
+    raw_selection_contexts = selection_binding.get("supported_caller_contexts")
+    if isinstance(raw_selection_contexts, list):
+        selection_supported_contexts = {context for context in raw_selection_contexts if isinstance(context, str)}
+    required_selection_contexts = set(_CAPABILITY_PACK_INVOCATION_SUPPORTED_CALLER_CONTEXTS)
+    pack_selection_contract_supported = (
+        _safe_str(selection_binding.get("contract")).strip() == _CAPABILITY_PACK_INVOCATION_SELECTION_CONTRACT
+    )
+    pack_selection_source_supported = (
+        _safe_str(selection_binding.get("source")).strip() == _CAPABILITY_PACK_INVOCATION_SELECTION_SOURCE
+    )
+    pack_selection_pack_reuse_key_matches = (
+        bool(_safe_str(selection_binding.get("pack_reuse_key")).strip())
+        and _safe_str(selection_binding.get("pack_reuse_key")).strip()
+        == _safe_str(invocation.get("pack_reuse_key")).strip()
+    )
+    pack_selection_pack_id_matches = (
+        _safe_str(selection_binding.get("pack_id")).strip() == _safe_str(invocation.get("pack_id")).strip()
+    )
+    pack_selection_pack_version_matches = (
+        _safe_str(selection_binding.get("pack_version")).strip() == _safe_str(invocation.get("pack_version")).strip()
+    )
+    pack_selection_plugin_id_matches = (
+        _safe_str(selection_binding.get("plugin_id")).strip() == _safe_str(invocation.get("plugin_id")).strip()
+    )
+    pack_selection_capability_id_matches = (
+        _safe_str(selection_binding.get("capability_id")).strip() == _safe_str(invocation.get("capability_id")).strip()
+    )
+    pack_selection_action_matches = (
+        _safe_str(selection_binding.get("action")).strip() == _safe_str(invocation.get("action")).strip()
+    )
+    pack_selection_supported_contexts_cover_required = required_selection_contexts.issubset(
+        selection_supported_contexts
+    )
+    pack_selection_bound = (
+        pack_selection_contract_supported
+        and pack_selection_source_supported
+        and pack_selection_pack_reuse_key_matches
+        and pack_selection_pack_id_matches
+        and pack_selection_pack_version_matches
+        and pack_selection_plugin_id_matches
+        and pack_selection_capability_id_matches
+        and pack_selection_action_matches
+        and pack_selection_supported_contexts_cover_required
+    )
 
     receipt_kind_supported = _safe_str(invocation.get("kind")).strip() == _CAPABILITY_PACK_INVOCATION_RECEIPT_KIND
     receipt_contract_supported = (
@@ -10189,6 +10361,24 @@ def _capability_pack_invocation_routing_guard(
         reject_reasons.append("reuse_operation_capability_mismatch")
     if operation_capability_supported and not reuse_caller_context_matches:
         reject_reasons.append("reuse_caller_context_mismatch")
+    if not pack_selection_contract_supported:
+        reject_reasons.append("pack_selection_contract_mismatch")
+    if not pack_selection_source_supported:
+        reject_reasons.append("pack_selection_source_mismatch")
+    if not pack_selection_pack_reuse_key_matches:
+        reject_reasons.append("pack_selection_pack_reuse_key_mismatch")
+    if not pack_selection_pack_id_matches:
+        reject_reasons.append("pack_selection_pack_id_mismatch")
+    if not pack_selection_pack_version_matches:
+        reject_reasons.append("pack_selection_pack_version_mismatch")
+    if not pack_selection_plugin_id_matches:
+        reject_reasons.append("pack_selection_plugin_id_mismatch")
+    if not pack_selection_capability_id_matches:
+        reject_reasons.append("pack_selection_capability_id_mismatch")
+    if not pack_selection_action_matches:
+        reject_reasons.append("pack_selection_action_mismatch")
+    if not pack_selection_supported_contexts_cover_required:
+        reject_reasons.append("pack_selection_supported_contexts_missing")
     if not dispatch_receipt_linkage_complete:
         reject_reasons.append("dispatch_receipt_linkage_missing")
     if not governance_bound:
@@ -10212,6 +10402,17 @@ def _capability_pack_invocation_routing_guard(
         "reuse_caller_context_field": reuse_caller_context_field,
         "reuse_caller_context": reuse_caller_context or None,
         "reuse_caller_context_matches": reuse_caller_context_matches,
+        "pack_selection_binding": selection_binding,
+        "pack_selection_contract_supported": pack_selection_contract_supported,
+        "pack_selection_source_supported": pack_selection_source_supported,
+        "pack_selection_pack_reuse_key_matches": pack_selection_pack_reuse_key_matches,
+        "pack_selection_pack_id_matches": pack_selection_pack_id_matches,
+        "pack_selection_pack_version_matches": pack_selection_pack_version_matches,
+        "pack_selection_plugin_id_matches": pack_selection_plugin_id_matches,
+        "pack_selection_capability_id_matches": pack_selection_capability_id_matches,
+        "pack_selection_action_matches": pack_selection_action_matches,
+        "pack_selection_supported_contexts_cover_required": pack_selection_supported_contexts_cover_required,
+        "pack_selection_bound": pack_selection_bound,
         "input_caller_context_matches_operation_capability": input_caller_context_matches_operation_capability,
         "dispatch_receipt_linkage_complete": dispatch_receipt_linkage_complete,
         "dispatch_receipt_present": dispatch_receipt_present,
@@ -10315,6 +10516,7 @@ def _capability_pack_invocation_audit_projection(
         selection = invocation.get("pack_selection") if isinstance(invocation.get("pack_selection"), dict) else {}
         reuse = invocation.get("reuse") if isinstance(invocation.get("reuse"), dict) else {}
         governance = invocation.get("governance") if isinstance(invocation.get("governance"), dict) else {}
+        selection_binding = _capability_pack_invocation_selection_binding(invocation)
         item = {
             "operation_id": _safe_str(task.get("task_id")).strip(),
             "operation_status": _safe_str(task.get("status")).strip(),
@@ -10335,6 +10537,7 @@ def _capability_pack_invocation_audit_projection(
                 selection.get("contract") or reuse.get("pack_selection_contract")
             ).strip(),
             "pack_selection_source": _safe_str(selection.get("source") or reuse.get("pack_selection_source")).strip(),
+            "pack_selection_binding": selection_binding,
             "dispatch_status": _safe_str(receipt_linkage.get("dispatch_status")).strip(),
             "run_id": _safe_str(receipt_linkage.get("run_id") or data.get("run_id")).strip(),
             "trace_id": _safe_str(receipt_linkage.get("trace_id") or data.get("trace_id")).strip(),
@@ -10442,6 +10645,23 @@ def _capability_pack_invocation_audit_projection(
         for key, operation_capabilities in receipt_linked_capability_lists_by_reuse_key.items()
         if mission_shape_capabilities.issubset(operation_capabilities)
     ]
+    selection_bindings_by_reuse_key: dict[str, dict[str, dict[str, object]]] = {}
+    for item in items:
+        reuse_key = str(item.get("pack_reuse_key") or "").strip()
+        binding = item.get("pack_selection_binding") if isinstance(item.get("pack_selection_binding"), dict) else {}
+        if not reuse_key or not binding:
+            continue
+        binding_key = json.dumps(binding, sort_keys=True, ensure_ascii=True, default=str)
+        selection_bindings_by_reuse_key.setdefault(reuse_key, {})[binding_key] = binding
+    selection_binding_lists_by_reuse_key = {
+        key: list(value.values()) for key, value in sorted(selection_bindings_by_reuse_key.items())
+    }
+    selection_consistent_reuse_keys = [
+        key for key, bindings in selection_binding_lists_by_reuse_key.items() if len(bindings) == 1
+    ]
+    receipt_linked_selection_consistent_mission_shape_reuse_keys = [
+        key for key in receipt_linked_mission_shape_reuse_keys if key in selection_consistent_reuse_keys
+    ]
     return {
         "ok": True,
         "kind": "plugin.capability_library.invocations.audit",
@@ -10484,6 +10704,15 @@ def _capability_pack_invocation_audit_projection(
             "receipt_linked_operation_capabilities_by_pack_reuse_key": (receipt_linked_capability_lists_by_reuse_key),
             "receipt_linked_mission_shape_reuse_proven": bool(receipt_linked_mission_shape_reuse_keys),
             "receipt_linked_mission_shape_reuse_keys": receipt_linked_mission_shape_reuse_keys,
+            "pack_selection_bindings_by_pack_reuse_key": selection_binding_lists_by_reuse_key,
+            "pack_selection_consistent_reuse_proven": bool(selection_consistent_reuse_keys),
+            "pack_selection_consistent_reuse_keys": selection_consistent_reuse_keys,
+            "receipt_linked_selection_consistent_mission_shape_reuse_proven": bool(
+                receipt_linked_selection_consistent_mission_shape_reuse_keys
+            ),
+            "receipt_linked_selection_consistent_mission_shape_reuse_keys": (
+                receipt_linked_selection_consistent_mission_shape_reuse_keys
+            ),
         },
         "items": returned,
         "rejected_items": returned_rejected,
@@ -10498,6 +10727,12 @@ def _capability_pack_invocation_audit_projection(
             "operation_input_caller_context_must_match_when_present": True,
             "reuse_metadata_must_bind_operation_capability": True,
             "reuse_metadata_must_bind_mission_caller_context": True,
+            "pack_selection_contract_required": _CAPABILITY_PACK_INVOCATION_SELECTION_CONTRACT,
+            "pack_selection_source_required": _CAPABILITY_PACK_INVOCATION_SELECTION_SOURCE,
+            "pack_selection_must_bind_pack_reuse_key": True,
+            "pack_selection_must_bind_pack_capability_action": True,
+            "pack_selection_must_declare_supported_caller_contexts": True,
+            "selection_consistency_reuse_requires_single_binding": True,
             "dispatch_receipt_linkage_required_for_reuse_proof": True,
             "dispatch_receipt_linkage_requires_run_and_trace_ids": True,
             "mission_plugin_run_context_required": _MISSION_OPERATION_CONTEXT_BY_CAPABILITY["plugin.run"],
@@ -18263,7 +18498,7 @@ def run_plugin(payload: PluginRunIn) -> dict[str, object]:
             error = "plugin_staged" if current_status == "staged" else "plugin_disabled"
             return {"ok": False, "error": error, "id": plugin_id, "status": current_status}
         registry_meta = dict(current.get("meta") or {}) if isinstance(current.get("meta"), dict) else {}
-        compatibility = _plugin_core_compatibility(registry_meta)
+        compatibility = _plugin_effective_core_compatibility(plugin_id, current, registry_meta)
         if not bool(compatibility.get("compatible")):
             return _plugin_runtime_compatibility_blocked(
                 plugin_id=plugin_id,

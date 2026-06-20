@@ -73,6 +73,73 @@ def _contains_key(value: object, key: str) -> bool:
     return False
 
 
+def test_plugin_effective_core_compatibility_uses_generated_spec_contract(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    from francis.api.routes import plugins
+
+    plugin_id = "compatibility_spec_contract"
+    generated_root = tmp_path / "generated_plugins"
+    plugin_dir = generated_root / plugin_id
+    spec_path = plugin_dir / "plugin.spec.json"
+    monkeypatch.setattr(plugins, "_gen_dir", lambda: generated_root)
+
+    def write_spec(compatibility: dict[str, object] | str) -> dict[str, object]:
+        plugin_dir.mkdir(parents=True, exist_ok=True)
+        if isinstance(compatibility, str):
+            spec_path.write_text(compatibility, encoding="utf-8")
+        else:
+            spec_path.write_text(
+                json.dumps(
+                    {
+                        "plugin_id": plugin_id,
+                        "name": "Compatibility Spec Contract",
+                        "version": "1.0.0",
+                        "origin": "generated",
+                        "entrypoint": "plugin.py",
+                        "compatibility": compatibility,
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+        return {"id": plugin_id, "generated_dir": str(plugin_dir), "meta": {}}
+
+    allowed_plugin = write_spec({"min_core_version": "0.0.1"})
+    allowed = plugins._plugin_effective_core_compatibility(plugin_id, allowed_plugin, {})
+    assert allowed["compatible"] is True
+    assert allowed["status"] == "compatible"
+    assert allowed["selected_requirement_source"] == "plugin.spec.json"
+    assert allowed["artifact_contract_checked"] is True
+    assert allowed["metadata_contract_checked"] is True
+
+    conflicting_plugin = write_spec({"min_core_version": "99.0.0"})
+    conflicting = plugins._plugin_effective_core_compatibility(
+        plugin_id,
+        conflicting_plugin,
+        {"compatibility": {"min_core_version": "0.0.0"}},
+    )
+    assert conflicting["compatible"] is False
+    assert conflicting["status"] == "requires_newer_core"
+    assert conflicting["selected_requirement_source"] == "plugin.spec.json"
+    assert conflicting["min_core_version"] == "99.0.0"
+    assert conflicting["source_count"] == 2
+
+    ambiguous_plugin = write_spec("{not-json")
+    ambiguous = plugins._plugin_effective_core_compatibility(
+        plugin_id,
+        ambiguous_plugin,
+        {"compatibility": {"min_core_version": "0.0.0"}},
+    )
+    assert ambiguous["compatible"] is False
+    assert ambiguous["status"] == "generated_spec_unreadable"
+    assert ambiguous["selected_requirement_source"] == "plugin.spec.json"
+    assert ambiguous["detail"] == "plugin_spec_json_unreadable"
+
+
 def _assert_stage17_projection_readback(
     readback: dict[str, object],
     *,
@@ -6180,6 +6247,11 @@ def test_plugins_promotion_readiness_blocks_incompatible_core_versions(
     assert "core_compatibility" in capabilities[future_plugin_id]["missing_requirements"]
     assert capabilities[future_plugin_id]["compatibility"]["status"] == "requires_newer_core"
     assert capabilities[future_plugin_id]["compatibility"]["min_core_version"] == "99.0.0"
+    assert capabilities[future_plugin_id]["compatibility"]["artifact_contract_checked"] is True
+    assert capabilities[future_plugin_id]["compatibility"]["metadata_contract_checked"] is True
+    assert {
+        source["requirement_source"] for source in capabilities[future_plugin_id]["compatibility"]["checked_sources"]
+    } == {"registry.meta.compatibility", "plugin.spec.json"}
     assert capabilities[malformed_plugin_id]["promotion_ready"] is False
     assert "core_compatibility" in capabilities[malformed_plugin_id]["missing_requirements"]
     assert capabilities[malformed_plugin_id]["compatibility"]["status"] == "invalid_min_core_version"
@@ -6203,6 +6275,11 @@ def test_plugins_promotion_readiness_blocks_incompatible_core_versions(
     assert "core_compatibility" in blocked_body["readiness"]["missing_requirements"]
     assert blocked_body["readiness"]["evidence"]["compatibility"]["status"] == "requires_newer_core"
     assert blocked_body["readiness"]["evidence"]["compatibility"]["compatible"] is False
+    assert blocked_body["readiness"]["evidence"]["compatibility"]["artifact_contract_checked"] is True
+    assert {
+        source["requirement_source"]
+        for source in blocked_body["readiness"]["evidence"]["compatibility"]["checked_sources"]
+    } == {"registry.meta.compatibility", "plugin.spec.json"}
     assert blocked_body["governance"]["scope"] == "plugins.write"
 
     fetched_after_block = client.get(f"/plugins/get?id={future_plugin_id}")
@@ -6224,6 +6301,8 @@ def test_plugins_run_blocks_incompatible_registry_core_versions(
     from francis.api.app import create_app
     from francis.api.routes import plugins
 
+    generated_root = tmp_path / "runtime_generated_contracts"
+    monkeypatch.setattr(plugins, "_gen_dir", lambda: generated_root)
     client = TestClient(create_app())
 
     def install_with_registry_compatibility(label: str, compatibility: dict[str, object]) -> tuple[str, int]:
@@ -6258,6 +6337,17 @@ def test_plugins_run_blocks_incompatible_registry_core_versions(
         "malformed",
         {"min_core_version": "not-a-version"},
     )
+    missing_spec_id, missing_spec_updated_ts = install_with_registry_compatibility(
+        "missing-spec",
+        {"min_core_version": "0.0.0"},
+    )
+    registry = plugins._load_registry()
+    missing_spec = plugins._read_plugin(registry, missing_spec_id)
+    assert missing_spec is not None
+    missing_spec["generated_dir"] = str(generated_root / missing_spec_id)
+    missing_spec = plugins._normalize_plugin_record(missing_spec_id, missing_spec)
+    plugins._write_plugin(registry, missing_spec)
+    plugins._save_registry_and_catalog(registry)
 
     allowed = client.post("/plugins/run", json={"id": compatible_id, "action": "run", "input": "hello"})
     assert allowed.status_code == 200
@@ -6305,13 +6395,32 @@ def test_plugins_run_blocks_incompatible_registry_core_versions(
     assert blocked_malformed_body["governance"]["does_not_execute_capabilities"] is True
     assert "receipt" not in blocked_malformed_body
 
+    blocked_missing_spec = client.post(
+        "/plugins/run",
+        json={"id": missing_spec_id, "action": "run", "input": "hello"},
+    )
+    assert blocked_missing_spec.status_code == 200
+    blocked_missing_spec_body = blocked_missing_spec.json()
+    assert blocked_missing_spec_body["ok"] is False
+    assert blocked_missing_spec_body["error"] == "plugin_core_incompatible"
+    assert blocked_missing_spec_body["status"] == "blocked"
+    assert blocked_missing_spec_body["compatibility"]["compatible"] is False
+    assert blocked_missing_spec_body["compatibility"]["status"] == "generated_spec_missing"
+    assert blocked_missing_spec_body["compatibility"]["selected_requirement_source"] == "plugin.spec.json"
+    assert blocked_missing_spec_body["compatibility"]["artifact_contract_checked"] is True
+    assert blocked_missing_spec_body["governance"]["does_not_execute_capabilities"] is True
+    assert "receipt" not in blocked_missing_spec_body
+
     registry = plugins._load_registry()
     future_after = plugins._read_plugin(registry, future_id)
     malformed_after = plugins._read_plugin(registry, malformed_id)
+    missing_spec_after = plugins._read_plugin(registry, missing_spec_id)
     assert future_after is not None
     assert malformed_after is not None
+    assert missing_spec_after is not None
     assert int(future_after.get("updated_ts") or 0) == future_updated_ts
     assert int(malformed_after.get("updated_ts") or 0) == malformed_updated_ts
+    assert int(missing_spec_after.get("updated_ts") or 0) == missing_spec_updated_ts
 
 
 def test_plugins_capability_library_proposal_review_plan_blocks_before_review_when_evidence_missing(

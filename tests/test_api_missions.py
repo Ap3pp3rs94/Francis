@@ -1305,6 +1305,38 @@ def test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_missio
         encoding="utf-8",
     )
 
+    tampered_selection_operation_id = "tsk_stage17_bad_selection_binding"
+    tampered_selection_invocation = dict(mission_invocation)
+    tampered_selection = dict(mission_invocation["pack_selection"])
+    tampered_selection["pack_reuse_key"] = "ops.stage17_other_pack@1.0.0:tampered.capability"
+    tampered_selection_invocation["pack_selection"] = tampered_selection
+    tampered_selection_output = dict(mission_output)
+    tampered_selection_receipt = dict(mission_output["receipt"])
+    tampered_selection_receipt["capability_pack_invocation"] = tampered_selection_invocation
+    tampered_selection_output["receipt"] = tampered_selection_receipt
+    tampered_selection_output["capability_pack_invocation"] = tampered_selection_invocation
+    tampered_selection_task_dir = data_root / "tasks" / tampered_selection_operation_id
+    tampered_selection_task_dir.mkdir(parents=True)
+    (tampered_selection_task_dir / "record.json").write_text(
+        json.dumps(
+            {
+                "task_id": tampered_selection_operation_id,
+                "status": "completed",
+                "capability": "plugin.run",
+                "requester_id": "test.missions.trace",
+                "created_at": "2026-06-20T17:00:08+00:00",
+                "updated_at": "2026-06-20T17:00:09+00:00",
+                "inputs": {
+                    "mission_id": mission_id,
+                    "meta": {"mission_id": mission_id, "caller_context": "mission_linked_operation"},
+                },
+                "result": {"data": tampered_selection_output},
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
     audit = client.get(
         "/plugins/capabilities/library/invocations/audit",
         params={"pack_id": pack_id, "limit": 10, "scan_limit": 50},
@@ -1317,14 +1349,26 @@ def test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_missio
     assert audit_body["readback_scope"] == "operation_outputs_with_embedded_capability_pack_invocation_receipts"
     assert audit_body["filters"]["pack_id"] == pack_id
     assert audit_body["total_invocation_count"] == 3
-    assert audit_body["rejected_invocation_count"] == 4
+    assert audit_body["rejected_invocation_count"] == 5
     assert audit_body["returned_invocation_count"] == 3
-    assert audit_body["returned_rejected_invocation_count"] == 4
+    assert audit_body["returned_rejected_invocation_count"] == 5
     assert audit_body["pack_count"] == 1
     assert audit_body["context_count"] == 2
     assert audit_body["contexts"] == ["mission_linked_operation", "mission_linked_tool_operation"]
     assert audit_body["pack_reuse_keys"] == [direct_invocation["pack_reuse_key"]]
     reuse_proof = audit_body["reuse_proof"]
+    expected_selection_binding = {
+        "contract": "stage17_capability_pack_invocation_selection_v1",
+        "source": "plugin_registry_metadata",
+        "plugin_id": plugin_id,
+        "capability_id": direct_invocation["capability_id"],
+        "action": "run",
+        "tool_name": direct_invocation["tool_name"],
+        "pack_id": pack_id,
+        "pack_version": pack_version,
+        "pack_reuse_key": direct_invocation["pack_reuse_key"],
+        "supported_caller_contexts": expected_caller_contexts,
+    }
     assert reuse_proof["contract"] == "stage17_capability_pack_invocation_audit_reuse_proof_v1"
     assert reuse_proof["minimum_contexts_per_reuse_key"] == 2
     assert reuse_proof["contexts_by_pack_reuse_key"] == {
@@ -1355,6 +1399,15 @@ def test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_missio
     }
     assert reuse_proof["receipt_linked_mission_shape_reuse_proven"] is True
     assert reuse_proof["receipt_linked_mission_shape_reuse_keys"] == [direct_invocation["pack_reuse_key"]]
+    assert reuse_proof["pack_selection_bindings_by_pack_reuse_key"] == {
+        direct_invocation["pack_reuse_key"]: [expected_selection_binding]
+    }
+    assert reuse_proof["pack_selection_consistent_reuse_proven"] is True
+    assert reuse_proof["pack_selection_consistent_reuse_keys"] == [direct_invocation["pack_reuse_key"]]
+    assert reuse_proof["receipt_linked_selection_consistent_mission_shape_reuse_proven"] is True
+    assert reuse_proof["receipt_linked_selection_consistent_mission_shape_reuse_keys"] == [
+        direct_invocation["pack_reuse_key"]
+    ]
     assert audit_body["requirements"]["embedded_invocation_receipt_required"] is True
     assert (
         audit_body["requirements"]["embedded_invocation_receipt_contract_required"]
@@ -1370,6 +1423,15 @@ def test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_missio
     assert audit_body["requirements"]["operation_input_caller_context_must_match_when_present"] is True
     assert audit_body["requirements"]["reuse_metadata_must_bind_operation_capability"] is True
     assert audit_body["requirements"]["reuse_metadata_must_bind_mission_caller_context"] is True
+    assert (
+        audit_body["requirements"]["pack_selection_contract_required"]
+        == "stage17_capability_pack_invocation_selection_v1"
+    )
+    assert audit_body["requirements"]["pack_selection_source_required"] == "plugin_registry_metadata"
+    assert audit_body["requirements"]["pack_selection_must_bind_pack_reuse_key"] is True
+    assert audit_body["requirements"]["pack_selection_must_bind_pack_capability_action"] is True
+    assert audit_body["requirements"]["pack_selection_must_declare_supported_caller_contexts"] is True
+    assert audit_body["requirements"]["selection_consistency_reuse_requires_single_binding"] is True
     assert audit_body["requirements"]["dispatch_receipt_linkage_required_for_reuse_proof"] is True
     assert audit_body["requirements"]["dispatch_receipt_linkage_requires_run_and_trace_ids"] is True
     assert audit_body["requirements"]["mission_plugin_run_context_required"] == "mission_linked_operation"
@@ -1475,12 +1537,26 @@ def test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_missio
     assert audit_tool_item["governance"]["uses_existing_plugin_dispatcher"] is True
     assert audit_tool_item["governance"]["new_authority_granted_by_receipt"] is False
     assert audit_tool_item["governance"]["memory_write"] is False
+    for selected_item in (audit_item, second_audit_item, audit_tool_item):
+        assert selected_item["pack_selection_binding"] == expected_selection_binding
+        assert selected_item["routing_guard"]["pack_selection_binding"] == expected_selection_binding
+        assert selected_item["routing_guard"]["pack_selection_contract_supported"] is True
+        assert selected_item["routing_guard"]["pack_selection_source_supported"] is True
+        assert selected_item["routing_guard"]["pack_selection_pack_reuse_key_matches"] is True
+        assert selected_item["routing_guard"]["pack_selection_pack_id_matches"] is True
+        assert selected_item["routing_guard"]["pack_selection_pack_version_matches"] is True
+        assert selected_item["routing_guard"]["pack_selection_plugin_id_matches"] is True
+        assert selected_item["routing_guard"]["pack_selection_capability_id_matches"] is True
+        assert selected_item["routing_guard"]["pack_selection_action_matches"] is True
+        assert selected_item["routing_guard"]["pack_selection_supported_contexts_cover_required"] is True
+        assert selected_item["routing_guard"]["pack_selection_bound"] is True
     rejected_items = {item["operation_id"]: item for item in audit_body["rejected_items"]}
     assert set(rejected_items) == {
         tampered_operation_id,
         tampered_input_operation_id,
         missing_linkage_operation_id,
         tampered_reuse_operation_id,
+        tampered_selection_operation_id,
     }
     rejected_item = rejected_items[tampered_operation_id]
     assert rejected_item["operation_capability"] == "plugin.tool.run"
@@ -1543,6 +1619,30 @@ def test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_missio
         "reuse_operation_capability_mismatch",
         "reuse_caller_context_mismatch",
     ]
+    rejected_selection_item = rejected_items[tampered_selection_operation_id]
+    assert rejected_selection_item["operation_capability"] == "plugin.run"
+    assert rejected_selection_item["caller_context"] == "mission_linked_operation"
+    assert rejected_selection_item["pack_reuse_key"] == direct_invocation["pack_reuse_key"]
+    assert rejected_selection_item["pack_selection_binding"]["pack_reuse_key"] == (
+        "ops.stage17_other_pack@1.0.0:tampered.capability"
+    )
+    assert rejected_selection_item["routing_guard"]["expected_caller_context"] == "mission_linked_operation"
+    assert rejected_selection_item["routing_guard"]["caller_context_matches_operation_capability"] is True
+    assert rejected_selection_item["routing_guard"]["reuse_operation_capability_matches"] is True
+    assert rejected_selection_item["routing_guard"]["reuse_caller_context_matches"] is True
+    assert rejected_selection_item["routing_guard"]["pack_selection_contract_supported"] is True
+    assert rejected_selection_item["routing_guard"]["pack_selection_source_supported"] is True
+    assert rejected_selection_item["routing_guard"]["pack_selection_pack_reuse_key_matches"] is False
+    assert rejected_selection_item["routing_guard"]["pack_selection_pack_id_matches"] is True
+    assert rejected_selection_item["routing_guard"]["pack_selection_pack_version_matches"] is True
+    assert rejected_selection_item["routing_guard"]["pack_selection_plugin_id_matches"] is True
+    assert rejected_selection_item["routing_guard"]["pack_selection_capability_id_matches"] is True
+    assert rejected_selection_item["routing_guard"]["pack_selection_action_matches"] is True
+    assert rejected_selection_item["routing_guard"]["pack_selection_supported_contexts_cover_required"] is True
+    assert rejected_selection_item["routing_guard"]["pack_selection_bound"] is False
+    assert rejected_selection_item["routing_guard"]["dispatch_receipt_linkage_complete"] is True
+    assert rejected_selection_item["routing_guard"]["eligible_for_reuse_proof"] is False
+    assert rejected_selection_item["routing_guard"]["reject_reasons"] == ["pack_selection_pack_reuse_key_mismatch"]
     assert audit_body["governance"]["read_only"] is True
     assert audit_body["governance"]["route"] == "/plugins/capabilities/library/invocations/audit"
     assert audit_body["governance"]["writes_repo"] is False
