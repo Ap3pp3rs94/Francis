@@ -88,6 +88,152 @@ def test_operations_create_list_get_cancel(monkeypatch, tmp_path: Path) -> None:
     assert cancelled_body["status"] in {"queued", "running", "failed", "canceled", "succeeded", "unknown"}
 
 
+def test_operations_readback_derives_stage17_invocation_caller_context(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    mission = client.post(
+        "/missions/create",
+        json={
+            "objective": "Read back Stage 17 invocation caller context.",
+            "summary": "The operation readback should derive mission caller context without execution authority.",
+            "requester_id": "test.missions.trace",
+        },
+    )
+    assert mission.status_code == 200
+    mission_id = str(mission.json()["mission_id"])
+
+    def create_operation(payload: dict[str, object]) -> str:
+        created = client.post("/operations/create", json=payload)
+        assert created.status_code == 200
+        created_body = created.json()
+        assert created_body["ok"] is True
+        return str(created_body["operation_id"])
+
+    def read_context(operation_id: str) -> dict[str, object]:
+        fetched = client.get(f"/operations/{operation_id}")
+        assert fetched.status_code == 200
+        context = fetched.json()["operation"]["meta"].get("invocation_caller_context")
+        assert isinstance(context, dict)
+        return context
+
+    plugin_operation_id = create_operation(
+        {
+            "action": "plugin.run",
+            "reason": "mission plugin caller-context readback",
+            "mission_id": mission_id,
+            "input": {"id": "stage17.readback.plugin", "action": "run"},
+        }
+    )
+    plugin_context = read_context(plugin_operation_id)
+    assert plugin_context["contract"] == "stage17_operation_invocation_caller_context_readback_v1"
+    assert plugin_context["status"] == "derived"
+    assert plugin_context["readback_scope"] == "operation_readback_metadata"
+    assert plugin_context["source"] == "operation_capability_and_mission_linkage"
+    assert plugin_context["operation_capability"] == "plugin.run"
+    assert plugin_context["mission_linked"] is True
+    assert plugin_context["derived"] is True
+    assert plugin_context["derived_caller_context"] == "mission_linked_operation"
+    assert plugin_context["expected_caller_context"] == "mission_linked_operation"
+    assert plugin_context["input_caller_context_present"] is False
+    assert plugin_context["input_caller_context_matches_derived"] is None
+    assert plugin_context["eligible_for_invocation_audit_after_execution"] is True
+    assert plugin_context["reject_reasons"] == []
+    assert plugin_context["receipt_backing"]["source_kind"] == "delegation_task_record"
+    assert plugin_context["receipt_backing"]["operation_record_present"] is True
+    assert plugin_context["receipt_backing"]["actual_invocation_receipt_read"] is False
+    assert plugin_context["receipt_backing"]["actual_invocation_receipt_required_for_execution_audit"] is True
+    assert plugin_context["receipt_backing"]["writes_receipts"] is False
+    assert plugin_context["governance"]["read_only"] is True
+    assert plugin_context["governance"]["writes_data"] is False
+    assert plugin_context["governance"]["executes_capabilities"] is False
+    assert plugin_context["governance"]["grants_execution_authority"] is False
+    assert plugin_context["governance"]["memory_write"] is False
+
+    tool_operation_id = create_operation(
+        {
+            "action": "tool.run",
+            "reason": "mission tool caller-context readback",
+            "mission_id": mission_id,
+            "input": {"id": "stage17.readback.tool"},
+        }
+    )
+    tool_context = read_context(tool_operation_id)
+    assert tool_context["status"] == "derived"
+    assert tool_context["operation_capability"] == "plugin.tool.run"
+    assert tool_context["derived_caller_context"] == "mission_linked_tool_operation"
+    assert tool_context["expected_caller_context"] == "mission_linked_tool_operation"
+    assert tool_context["eligible_for_invocation_audit_after_execution"] is True
+    assert tool_context["reject_reasons"] == []
+
+    non_mission_operation_id = create_operation(
+        {
+            "action": "plugin.run",
+            "reason": "non-mission plugin caller-context readback",
+            "input": {"id": "stage17.readback.plugin", "action": "run"},
+        }
+    )
+    non_mission_context = read_context(non_mission_operation_id)
+    assert non_mission_context["status"] == "not_applicable"
+    assert non_mission_context["operation_capability"] == "plugin.run"
+    assert non_mission_context["mission_linked"] is False
+    assert non_mission_context["derived"] is False
+    assert non_mission_context["derived_caller_context"] is None
+    assert non_mission_context["expected_caller_context"] == "mission_linked_operation"
+    assert non_mission_context["eligible_for_invocation_audit_after_execution"] is False
+    assert non_mission_context["reject_reasons"] == ["mission_linkage_missing"]
+
+    unsupported_operation_id = create_operation(
+        {
+            "action": "plan.create",
+            "reason": "unsupported mission caller-context readback",
+            "mission_id": mission_id,
+            "input": {"goal": "prove unsupported shape does not claim invocation context"},
+        }
+    )
+    unsupported_context = read_context(unsupported_operation_id)
+    assert unsupported_context["status"] == "not_applicable"
+    assert unsupported_context["operation_capability"] == "plan.create"
+    assert unsupported_context["mission_linked"] is True
+    assert unsupported_context["derived"] is False
+    assert unsupported_context["expected_caller_context"] is None
+    assert unsupported_context["eligible_for_invocation_audit_after_execution"] is False
+    assert unsupported_context["reject_reasons"] == ["unsupported_operation_capability"]
+
+    mismatch_operation_id = create_operation(
+        {
+            "action": "tool.run",
+            "reason": "mismatched caller-context readback",
+            "mission_id": mission_id,
+            "input": {"id": "stage17.readback.tool"},
+            "meta": {"caller_context": "mission_linked_operation"},
+        }
+    )
+    mismatch_context = read_context(mismatch_operation_id)
+    assert mismatch_context["status"] == "mismatch"
+    assert mismatch_context["operation_capability"] == "plugin.tool.run"
+    assert mismatch_context["mission_linked"] is True
+    assert mismatch_context["derived"] is True
+    assert mismatch_context["derived_caller_context"] == "mission_linked_tool_operation"
+    assert mismatch_context["input_caller_context_present"] is True
+    assert mismatch_context["input_caller_context"] == "mission_linked_operation"
+    assert mismatch_context["input_caller_context_matches_derived"] is False
+    assert mismatch_context["eligible_for_invocation_audit_after_execution"] is False
+    assert mismatch_context["reject_reasons"] == ["input_caller_context_mismatch"]
+    assert mismatch_context["governance"]["read_only"] is True
+    assert mismatch_context["governance"]["writes_receipts"] is False
+    assert mismatch_context["governance"]["changes_operation_input"] is False
+
+
 def test_operations_create_reuses_existing_operation_for_matching_idempotency_key(
     monkeypatch,
     tmp_path: Path,

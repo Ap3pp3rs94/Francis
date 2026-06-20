@@ -75,6 +75,12 @@ _ACTION_TO_CAPABILITY: dict[str, str] = {
     "plugins.tools.run": "plugin.tool.run",
 }
 
+_STAGE17_OPERATION_INVOCATION_CALLER_CONTEXT_CONTRACT = "stage17_operation_invocation_caller_context_readback_v1"
+_MISSION_CALLER_CONTEXT_BY_OPERATION_CAPABILITY: dict[str, str] = {
+    "plugin.run": "mission_linked_operation",
+    "plugin.tool.run": "mission_linked_tool_operation",
+}
+
 
 class OperationCreateIn(BaseModel):
     action: str
@@ -501,6 +507,28 @@ def _task_to_operation(task: dict[str, Any]) -> dict[str, Any]:
     )
     orb_plane = _operation_plane(raw_status, result_status, governance)
     mission_id = _task_mission_id(task)
+    invocation_caller_context = _operation_invocation_caller_context_readback(task, mission_id=mission_id)
+    meta = {
+        "raw_status": raw_status,
+        "objective": redact_operation_optional_text(task.get("objective")),
+        "priority": task.get("priority"),
+        "ttl_sec": task.get("ttl_sec"),
+        "assigned_to": task.get("assigned_to"),
+        "attempts": task.get("attempts"),
+        "created_at": created_at,
+        "updated_at": updated_at,
+        "result_status": result_status or None,
+        "result_message": result_message or None,
+        "approval_id": approval_id or None,
+        "trace_id": trace_id or None,
+        "run_id": run_id or None,
+        "artifact_dir": artifact_dir or None,
+        "mission_id": mission_id or None,
+        "governance": redact_operation_value(governance) if governance else None,
+        "orb_plane": orb_plane,
+    }
+    if invocation_caller_context is not None:
+        meta["invocation_caller_context"] = invocation_caller_context
 
     return {
         "id": task_id,
@@ -519,24 +547,75 @@ def _task_to_operation(task: dict[str, Any]) -> dict[str, Any]:
         "output": output,
         "error": error,
         "tags": task.get("tags") if isinstance(task.get("tags"), list) else None,
-        "meta": {
-            "raw_status": raw_status,
-            "objective": redact_operation_optional_text(task.get("objective")),
-            "priority": task.get("priority"),
-            "ttl_sec": task.get("ttl_sec"),
-            "assigned_to": task.get("assigned_to"),
-            "attempts": task.get("attempts"),
-            "created_at": created_at,
-            "updated_at": updated_at,
-            "result_status": result_status or None,
-            "result_message": result_message or None,
-            "approval_id": approval_id or None,
-            "trace_id": trace_id or None,
-            "run_id": run_id or None,
-            "artifact_dir": artifact_dir or None,
-            "mission_id": mission_id or None,
-            "governance": redact_operation_value(governance) if governance else None,
-            "orb_plane": orb_plane,
+        "meta": meta,
+    }
+
+
+def _operation_invocation_caller_context_readback(
+    task: dict[str, Any],
+    *,
+    mission_id: str,
+) -> dict[str, object] | None:
+    operation_capability = _safe_str(task.get("capability")).strip()
+    expected_caller_context = _MISSION_CALLER_CONTEXT_BY_OPERATION_CAPABILITY.get(operation_capability, "")
+    mission_linked = bool(_safe_str(mission_id).strip())
+    if not expected_caller_context and not mission_linked:
+        return None
+
+    inputs = task.get("inputs") if isinstance(task.get("inputs"), dict) else {}
+    input_meta = inputs.get("meta") if isinstance(inputs.get("meta"), dict) else {}
+    input_caller_context = redact_operation_optional_text(input_meta.get("caller_context"))
+    input_caller_context = _safe_str(input_caller_context).strip()
+    derived = bool(expected_caller_context and mission_linked)
+
+    reject_reasons: list[str] = []
+    if not expected_caller_context:
+        reject_reasons.append("unsupported_operation_capability")
+    if not mission_linked:
+        reject_reasons.append("mission_linkage_missing")
+    if input_caller_context and expected_caller_context and input_caller_context != expected_caller_context:
+        reject_reasons.append("input_caller_context_mismatch")
+
+    status = "derived" if derived and not reject_reasons else "mismatch" if derived else "not_applicable"
+    return {
+        "contract": _STAGE17_OPERATION_INVOCATION_CALLER_CONTEXT_CONTRACT,
+        "stage": "Stage 17 / Capability Economy",
+        "status": status,
+        "readback_scope": "operation_readback_metadata",
+        "source": "operation_capability_and_mission_linkage",
+        "operation_capability": operation_capability,
+        "mission_linked": mission_linked,
+        "mission_id_present": mission_linked,
+        "derived": derived,
+        "derived_caller_context": expected_caller_context if derived else None,
+        "expected_caller_context": expected_caller_context or None,
+        "input_caller_context_present": bool(input_caller_context),
+        "input_caller_context": input_caller_context or None,
+        "input_caller_context_matches_derived": (
+            bool(input_caller_context and expected_caller_context and input_caller_context == expected_caller_context)
+            if input_caller_context
+            else None
+        ),
+        "eligible_for_invocation_audit_after_execution": bool(derived and not reject_reasons),
+        "reject_reasons": reject_reasons,
+        "receipt_backing": {
+            "source_kind": "delegation_task_record",
+            "operation_record_present": True,
+            "source_fields": ["task.capability", "task.inputs.mission_id", "task.inputs.meta.mission_id"],
+            "actual_invocation_receipt_read": False,
+            "actual_invocation_receipt_required_for_execution_audit": True,
+            "writes_receipts": False,
+        },
+        "governance": {
+            "read_only": True,
+            "writes_repo": False,
+            "writes_data": False,
+            "writes_receipts": False,
+            "executes_capabilities": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+            "memory_write": False,
+            "changes_operation_input": False,
         },
     }
 
