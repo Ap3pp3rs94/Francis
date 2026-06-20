@@ -144,6 +144,17 @@ def test_francis_worker_coordinator_supports_bounded_no_launch_iteration(tmp_pat
     assert any("francis.worker_terminal.coordinator.iteration" in line for line in receipts)
 
 
+def test_francis_worker_coordinator_publication_gate_uses_unwrapped_worker_status() -> None:
+    script = (_repo_root() / "scripts" / "francis-worker-coordinator.ps1").read_text(encoding="utf-8")
+
+    assert "function Select-CoordinatorWorker" in script
+    assert "$Worker = Select-CoordinatorWorker -WorkersPayload $Before.workers -WorkerId $WorkerId" in script
+    assert "$Worker = @($Before.workers" not in script
+    assert "if ($Worker -is [array])" in script
+    assert "first_prompt_allowed" in script
+    assert "publication_marker_prompt_mismatch" in script
+
+
 def test_francis_worker_coordinator_generates_individual_pm_dispatches(tmp_path: Path) -> None:
     state_root = tmp_path / "coordinator"
     proc = _run_coordinator(
@@ -163,18 +174,22 @@ def test_francis_worker_coordinator_generates_individual_pm_dispatches(tmp_path:
     dispatches = sorted((state_root / "dispatches").glob("worker-*-iteration-1.md"))
     assert len(dispatches) == 4
     by_name = {path.name: path.read_text(encoding="utf-8-sig") for path in dispatches}
-    assert "Project-manager direction: advance the next smallest Orb voice proof slice." in by_name[
-        "worker-1-orb-voice-proof-iteration-1.md"
-    ]
-    assert "Project-manager direction: advance the next smallest lens-to-overlay spatial contract slice." in by_name[
-        "worker-2-lens-overlay-spatial-iteration-1.md"
-    ]
-    assert "Project-manager direction: advance the next smallest voice receipt or provider-boundary slice." in by_name[
-        "worker-3-voice-receipts-iteration-1.md"
-    ]
-    assert "Project-manager direction: advance the next smallest Stage 17 or completion-model truth slice." in by_name[
-        "worker-4-stage17-completion-iteration-1.md"
-    ]
+    assert (
+        "Project-manager direction: advance the next smallest Orb voice proof slice."
+        in by_name["worker-1-orb-voice-proof-iteration-1.md"]
+    )
+    assert (
+        "Project-manager direction: advance the next smallest lens-to-overlay spatial contract slice."
+        in by_name["worker-2-lens-overlay-spatial-iteration-1.md"]
+    )
+    assert (
+        "Project-manager direction: advance the next smallest voice receipt or provider-boundary slice."
+        in by_name["worker-3-voice-receipts-iteration-1.md"]
+    )
+    assert (
+        "Project-manager direction: advance the next smallest Stage 17 or completion-model truth slice."
+        in by_name["worker-4-stage17-completion-iteration-1.md"]
+    )
     for text in by_name.values():
         assert "Current Build Snapshot" in text
         assert "Dirty Worktree" in text

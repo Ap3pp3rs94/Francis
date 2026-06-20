@@ -173,11 +173,32 @@ function Get-LanePublicationPath {
   return (Join-Path $PublicationRoot ('{0}.json' -f $WorkerId))
 }
 
+function Select-CoordinatorWorker {
+  param(
+    [object]$WorkersPayload,
+    [string]$WorkerId
+  )
+
+  $Matches = @($WorkersPayload | Where-Object { [string]$_.worker_id -eq $WorkerId })
+  if ($Matches.Count -eq 0) {
+    return $null
+  }
+  return $Matches[0]
+}
+
 function Test-LaneRePromptPublicationGate {
   param(
     [string]$WorkerId,
     [object]$Worker
   )
+
+  if ($Worker -is [array]) {
+    if ($Worker.Count -eq 0) {
+      $Worker = $null
+    } else {
+      $Worker = $Worker[0]
+    }
+  }
 
   New-Item -ItemType Directory -Force -Path $ReadbackRoot | Out-Null
   New-Item -ItemType Directory -Force -Path $PublicationRoot | Out-Null
@@ -419,7 +440,7 @@ function Invoke-CoordinatorIteration {
   $BuildSnapshot = Get-CoordinatorBuildSnapshot
   $Actions = @()
   foreach ($WorkerId in $Workers) {
-    $Worker = @($Before.workers | Where-Object { [string]$_.worker_id -eq $WorkerId } | Select-Object -First 1)
+    $Worker = Select-CoordinatorWorker -WorkersPayload $Before.workers -WorkerId $WorkerId
     if ($null -eq $Worker) {
       $NeedsPrompt = $true
       $Reason = 'missing_worker_status'
