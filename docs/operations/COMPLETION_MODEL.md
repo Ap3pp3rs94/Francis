@@ -36,6 +36,14 @@ It emits one JSON object with:
 - the selected-gap contract, which states that choosing a gap is a read-only
   selection and grants no apply, proposal-review, promotion, mutation, or
   execution authority
+- the queue-count evidence guard, which states that choosing a Stage 17 gap is
+  not proof of queue movement, does not recompute global counts, and does not
+  authorize queue-count claims without a route readback or apply response that
+  carries projection scope, global-count inclusion, before/after counts, and
+  focused validation
+- the proposal-evidence reference guard, which states that choosing a Stage 17
+  gap is not proof that proposal evidence, proposal reviews, validation
+  receipts, or quality-evidence references have been verified
 - the percentage movement rules
 
 The model is read-only. The API route is backed by the Francis Python substrate,
@@ -75,6 +83,20 @@ write repo/data state, or grant execution/mutation authority. Any future Stage
 17 apply must still use an existing governed route with dry-run confirmation,
 bounded scope, and focused validation.
 
+The selected-gap contract is also not queue-count evidence. A selected Stage 17
+gap can point a worker at the next bounded slice, but it does not prove queue
+movement, recompute global queue counts, or authorize a completion claim. Queue
+movement claims require a concrete route readback or apply response with
+`projection_scope`, `global_counts_included`, before/after counts, and focused
+validation.
+
+The selected-gap contract is also not proposal-evidence proof. A selected Stage
+17 gap can name the next capability-economy slice, but it does not verify
+proposal artifact refs, proposal-review receipts, validation receipts, or
+quality-evidence refs. Proposal-evidence claims require an existing governed
+route, bounded plugin id scope, proposal/review/evidence references, and focused
+validation.
+
 ## Percentage Rule
 
 The model does not invent numeric completion baselines. Overall Francis and
@@ -106,6 +128,13 @@ Every `continue` run should satisfy these guards:
 - keep Stage 17 readback/apply boundaries explicit: readbacks remain
   authority-denying, and any apply route must be governed, dry-run confirmed,
   scoped, and tested
+- keep Stage 17 queue-count claims evidence-backed: selected gaps are not global
+  queue counts, and queue movement needs route/apply evidence with projection
+  scope, global-count inclusion, before/after counts, and validation
+- keep Stage 17 proposal-evidence claims reference-backed: selected gaps are not
+  proposal evidence refs, and proposal-evidence movement needs existing route
+  evidence, bounded plugin scope, proposal/review/validation refs, and focused
+  validation
 
 ## Non-Goals
 

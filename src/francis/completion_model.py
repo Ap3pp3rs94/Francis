@@ -144,11 +144,34 @@ def _selected_gap_contract(*, selected_source: str, stage17_gap_preferred: bool)
         "proposal_review_authority": False,
         "promotion_authority": False,
         "capability_execution_authority": False,
+        "selected_gap_is_proposal_evidence_reference": False,
+        "proposal_evidence_refs_verified": False,
+        "proposal_review_receipts_verified": False,
+        "validation_receipts_verified": False,
+        "proposal_evidence_reference_authority_granted": False,
+        "selected_gap_is_queue_count_evidence": False,
+        "global_queue_count_recomputed": False,
+        "queue_count_authority_granted": False,
         "stage17_readback_authority_denied": True,
         "future_stage17_apply_requires": [
             "existing_governed_route",
             "dry_run_confirmation",
             "bounded_scope",
+            "focused_validation",
+        ],
+        "future_stage17_queue_count_claim_requires": [
+            "route_readback_or_apply_response",
+            "projection_scope",
+            "global_counts_included_flag",
+            "before_after_counts",
+            "focused_validation",
+        ],
+        "future_stage17_proposal_evidence_claim_requires": [
+            "existing_governed_route",
+            "proposal_artifact_ref",
+            "proposal_review_receipt_ref",
+            "validation_receipt_or_quality_evidence_ref",
+            "bounded_plugin_id_scope",
             "focused_validation",
         ],
     }
@@ -355,6 +378,26 @@ def _loop_guard(
             "evidence": (
                 "Stage 17 readbacks stay authority-denying; apply routes must remain governed, "
                 "dry-run confirmed, scoped, and tested"
+            ),
+        },
+        {
+            "id": "stage17_queue_count_evidence_guard",
+            "status": "enforced",
+            "required_before_continue": True,
+            "evidence": (
+                "Selected Stage 17 gaps are not queue-count evidence; queue movement claims require route "
+                "readback or apply response with projection_scope, global_counts_included, before/after "
+                "counts, and focused validation"
+            ),
+        },
+        {
+            "id": "stage17_proposal_evidence_reference_guard",
+            "status": "enforced",
+            "required_before_continue": True,
+            "evidence": (
+                "Selected Stage 17 gaps are not proposal-evidence references; proposal evidence claims require "
+                "proposal artifact, proposal-review receipt, validation or quality-evidence reference, bounded "
+                "plugin scope, and focused validation"
             ),
         },
     ]

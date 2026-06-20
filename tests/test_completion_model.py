@@ -51,11 +51,34 @@ def test_completion_model_snapshot_is_read_only_and_loop_guarded() -> None:
     assert selected_gap_contract["proposal_review_authority"] is False
     assert selected_gap_contract["promotion_authority"] is False
     assert selected_gap_contract["capability_execution_authority"] is False
+    assert selected_gap_contract["selected_gap_is_proposal_evidence_reference"] is False
+    assert selected_gap_contract["proposal_evidence_refs_verified"] is False
+    assert selected_gap_contract["proposal_review_receipts_verified"] is False
+    assert selected_gap_contract["validation_receipts_verified"] is False
+    assert selected_gap_contract["proposal_evidence_reference_authority_granted"] is False
+    assert selected_gap_contract["selected_gap_is_queue_count_evidence"] is False
+    assert selected_gap_contract["global_queue_count_recomputed"] is False
+    assert selected_gap_contract["queue_count_authority_granted"] is False
     assert selected_gap_contract["stage17_readback_authority_denied"] is True
     assert selected_gap_contract["future_stage17_apply_requires"] == [
         "existing_governed_route",
         "dry_run_confirmation",
         "bounded_scope",
+        "focused_validation",
+    ]
+    assert selected_gap_contract["future_stage17_queue_count_claim_requires"] == [
+        "route_readback_or_apply_response",
+        "projection_scope",
+        "global_counts_included_flag",
+        "before_after_counts",
+        "focused_validation",
+    ]
+    assert selected_gap_contract["future_stage17_proposal_evidence_claim_requires"] == [
+        "existing_governed_route",
+        "proposal_artifact_ref",
+        "proposal_review_receipt_ref",
+        "validation_receipt_or_quality_evidence_ref",
+        "bounded_plugin_id_scope",
         "focused_validation",
     ]
     checklist = {item["id"]: item for item in payload["continue_loop_guard"]["checklist"]}
@@ -64,6 +87,10 @@ def test_completion_model_snapshot_is_read_only_and_loop_guarded() -> None:
     assert checklist["dirty_worktree_preservation_guard"]["status"] == "enforced"
     assert checklist["material_ledger_update_guard"]["status"] == "enforced"
     assert checklist["stage17_readback_apply_boundary_guard"]["status"] == "enforced"
+    assert checklist["stage17_queue_count_evidence_guard"]["status"] == "enforced"
+    assert "global_counts_included" in checklist["stage17_queue_count_evidence_guard"]["evidence"]
+    assert checklist["stage17_proposal_evidence_reference_guard"]["status"] == "enforced"
+    assert "proposal-review receipt" in checklist["stage17_proposal_evidence_reference_guard"]["evidence"]
 
 
 def test_completion_model_snapshot_blocks_when_sources_are_missing(tmp_path: Path) -> None:
@@ -93,6 +120,8 @@ def test_completion_model_snapshot_blocks_when_sources_are_missing(tmp_path: Pat
     assert checklist["percentage_movement_guard"] == "enforced"
     assert checklist["material_ledger_update_guard"] == "enforced"
     assert checklist["stage17_readback_apply_boundary_guard"] == "enforced"
+    assert checklist["stage17_queue_count_evidence_guard"] == "enforced"
+    assert checklist["stage17_proposal_evidence_reference_guard"] == "enforced"
 
 
 def test_completion_model_snapshot_reads_wrapped_roadmap_area(tmp_path: Path) -> None:
@@ -217,6 +246,32 @@ def test_completion_model_snapshot_keeps_stage17_gap_when_latest_entry_is_other_
         "2026-06-19 - Stage 17 selected-scope proposal evidence/review chunk 52"
     )
     assert checklist["stage17_readback_apply_boundary_guard"]["status"] == "enforced"
+    assert checklist["stage17_queue_count_evidence_guard"]["status"] == "enforced"
+    assert checklist["stage17_proposal_evidence_reference_guard"]["status"] == "enforced"
+    selected_gap_contract = payload["next_continue_decision"]["selected_gap_contract"]
+    assert selected_gap_contract["selected_gap_is_proposal_evidence_reference"] is False
+    assert selected_gap_contract["proposal_evidence_refs_verified"] is False
+    assert selected_gap_contract["proposal_review_receipts_verified"] is False
+    assert selected_gap_contract["validation_receipts_verified"] is False
+    assert selected_gap_contract["proposal_evidence_reference_authority_granted"] is False
+    assert selected_gap_contract["selected_gap_is_queue_count_evidence"] is False
+    assert selected_gap_contract["global_queue_count_recomputed"] is False
+    assert selected_gap_contract["queue_count_authority_granted"] is False
+    assert selected_gap_contract["future_stage17_queue_count_claim_requires"] == [
+        "route_readback_or_apply_response",
+        "projection_scope",
+        "global_counts_included_flag",
+        "before_after_counts",
+        "focused_validation",
+    ]
+    assert selected_gap_contract["future_stage17_proposal_evidence_claim_requires"] == [
+        "existing_governed_route",
+        "proposal_artifact_ref",
+        "proposal_review_receipt_ref",
+        "validation_receipt_or_quality_evidence_ref",
+        "bounded_plugin_id_scope",
+        "focused_validation",
+    ]
 
 
 def test_completion_model_status_route_is_mounted_and_read_only() -> None:
@@ -241,3 +296,7 @@ def test_completion_model_status_route_is_mounted_and_read_only() -> None:
     assert body["completion_percentage_model"]["movement_allowed_by_this_readback"] is False
     assert body["next_continue_decision"]["selected_gap_contract"]["read_only_selection"] is True
     assert body["next_continue_decision"]["selected_gap_contract"]["apply_authority_granted"] is False
+    assert (
+        body["next_continue_decision"]["selected_gap_contract"]["selected_gap_is_proposal_evidence_reference"] is False
+    )
+    assert body["next_continue_decision"]["selected_gap_contract"]["selected_gap_is_queue_count_evidence"] is False

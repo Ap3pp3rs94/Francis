@@ -306,6 +306,18 @@ function New-CompletionLoopGuard {
       status = 'enforced'
       required_before_continue = $true
       evidence = 'Stage 17 readbacks stay authority-denying; apply routes must remain governed, dry-run confirmed, scoped, and tested'
+    },
+    [ordered]@{
+      id = 'stage17_queue_count_evidence_guard'
+      status = 'enforced'
+      required_before_continue = $true
+      evidence = 'Selected Stage 17 gaps are not queue-count evidence; queue movement claims require route readback or apply response with projection_scope, global_counts_included, before/after counts, and focused validation'
+    },
+    [ordered]@{
+      id = 'stage17_proposal_evidence_reference_guard'
+      status = 'enforced'
+      required_before_continue = $true
+      evidence = 'Selected Stage 17 gaps are not proposal-evidence references; proposal evidence claims require proposal artifact, proposal-review receipt, validation or quality-evidence reference, bounded plugin scope, and focused validation'
     }
   )
 
@@ -350,11 +362,34 @@ function New-SelectedGapContract {
     proposal_review_authority = $false
     promotion_authority = $false
     capability_execution_authority = $false
+    selected_gap_is_proposal_evidence_reference = $false
+    proposal_evidence_refs_verified = $false
+    proposal_review_receipts_verified = $false
+    validation_receipts_verified = $false
+    proposal_evidence_reference_authority_granted = $false
+    selected_gap_is_queue_count_evidence = $false
+    global_queue_count_recomputed = $false
+    queue_count_authority_granted = $false
     stage17_readback_authority_denied = $true
     future_stage17_apply_requires = @(
       'existing_governed_route',
       'dry_run_confirmation',
       'bounded_scope',
+      'focused_validation'
+    )
+    future_stage17_queue_count_claim_requires = @(
+      'route_readback_or_apply_response',
+      'projection_scope',
+      'global_counts_included_flag',
+      'before_after_counts',
+      'focused_validation'
+    )
+    future_stage17_proposal_evidence_claim_requires = @(
+      'existing_governed_route',
+      'proposal_artifact_ref',
+      'proposal_review_receipt_ref',
+      'validation_receipt_or_quality_evidence_ref',
+      'bounded_plugin_id_scope',
       'focused_validation'
     )
   }

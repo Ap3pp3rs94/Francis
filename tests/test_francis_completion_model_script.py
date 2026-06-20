@@ -75,11 +75,34 @@ def test_francis_completion_model_status_projects_ledger_backed_loop_guard() -> 
     assert selected_gap_contract["proposal_review_authority"] is False
     assert selected_gap_contract["promotion_authority"] is False
     assert selected_gap_contract["capability_execution_authority"] is False
+    assert selected_gap_contract["selected_gap_is_proposal_evidence_reference"] is False
+    assert selected_gap_contract["proposal_evidence_refs_verified"] is False
+    assert selected_gap_contract["proposal_review_receipts_verified"] is False
+    assert selected_gap_contract["validation_receipts_verified"] is False
+    assert selected_gap_contract["proposal_evidence_reference_authority_granted"] is False
+    assert selected_gap_contract["selected_gap_is_queue_count_evidence"] is False
+    assert selected_gap_contract["global_queue_count_recomputed"] is False
+    assert selected_gap_contract["queue_count_authority_granted"] is False
     assert selected_gap_contract["stage17_readback_authority_denied"] is True
     assert selected_gap_contract["future_stage17_apply_requires"] == [
         "existing_governed_route",
         "dry_run_confirmation",
         "bounded_scope",
+        "focused_validation",
+    ]
+    assert selected_gap_contract["future_stage17_queue_count_claim_requires"] == [
+        "route_readback_or_apply_response",
+        "projection_scope",
+        "global_counts_included_flag",
+        "before_after_counts",
+        "focused_validation",
+    ]
+    assert selected_gap_contract["future_stage17_proposal_evidence_claim_requires"] == [
+        "existing_governed_route",
+        "proposal_artifact_ref",
+        "proposal_review_receipt_ref",
+        "validation_receipt_or_quality_evidence_ref",
+        "bounded_plugin_id_scope",
         "focused_validation",
     ]
 
@@ -94,11 +117,17 @@ def test_francis_completion_model_status_projects_ledger_backed_loop_guard() -> 
     assert "single_bounded_slice_guard" in checklist_ids
     assert "material_ledger_update_guard" in checklist_ids
     assert "stage17_readback_apply_boundary_guard" in checklist_ids
+    assert "stage17_queue_count_evidence_guard" in checklist_ids
+    assert "stage17_proposal_evidence_reference_guard" in checklist_ids
     checklist = {item["id"]: item for item in payload["continue_loop_guard"]["checklist"]}
     assert checklist["stage17_lane_gap_preserved"]["status"] == "ready"
     assert checklist["dirty_worktree_preservation_guard"]["status"] == "enforced"
     assert checklist["material_ledger_update_guard"]["status"] == "enforced"
     assert checklist["stage17_readback_apply_boundary_guard"]["status"] == "enforced"
+    assert checklist["stage17_queue_count_evidence_guard"]["status"] == "enforced"
+    assert "global_counts_included" in checklist["stage17_queue_count_evidence_guard"]["evidence"]
+    assert checklist["stage17_proposal_evidence_reference_guard"]["status"] == "enforced"
+    assert "proposal-review receipt" in checklist["stage17_proposal_evidence_reference_guard"]["evidence"]
 
 
 def test_francis_completion_model_percentages_are_evidence_gated_not_invented() -> None:
@@ -253,6 +282,32 @@ def test_francis_completion_model_script_keeps_stage17_gap_when_latest_entry_is_
         "2026-06-19 - Stage 17 selected-scope proposal evidence/review chunk 52"
     )
     assert checklist["stage17_readback_apply_boundary_guard"]["status"] == "enforced"
+    assert checklist["stage17_queue_count_evidence_guard"]["status"] == "enforced"
+    assert checklist["stage17_proposal_evidence_reference_guard"]["status"] == "enforced"
+    selected_gap_contract = payload["next_continue_decision"]["selected_gap_contract"]
+    assert selected_gap_contract["selected_gap_is_proposal_evidence_reference"] is False
+    assert selected_gap_contract["proposal_evidence_refs_verified"] is False
+    assert selected_gap_contract["proposal_review_receipts_verified"] is False
+    assert selected_gap_contract["validation_receipts_verified"] is False
+    assert selected_gap_contract["proposal_evidence_reference_authority_granted"] is False
+    assert selected_gap_contract["selected_gap_is_queue_count_evidence"] is False
+    assert selected_gap_contract["global_queue_count_recomputed"] is False
+    assert selected_gap_contract["queue_count_authority_granted"] is False
+    assert selected_gap_contract["future_stage17_queue_count_claim_requires"] == [
+        "route_readback_or_apply_response",
+        "projection_scope",
+        "global_counts_included_flag",
+        "before_after_counts",
+        "focused_validation",
+    ]
+    assert selected_gap_contract["future_stage17_proposal_evidence_claim_requires"] == [
+        "existing_governed_route",
+        "proposal_artifact_ref",
+        "proposal_review_receipt_ref",
+        "validation_receipt_or_quality_evidence_ref",
+        "bounded_plugin_id_scope",
+        "focused_validation",
+    ]
 
 
 def test_francis_completion_model_script_is_status_only() -> None:
@@ -267,6 +322,10 @@ def test_francis_completion_model_script_is_status_only() -> None:
     assert "apply_authority_granted = $false" in script
     assert "proposal_review_authority = $false" in script
     assert "capability_execution_authority = $false" in script
+    assert "selected_gap_is_proposal_evidence_reference = $false" in script
+    assert "proposal_evidence_reference_authority_granted = $false" in script
+    assert "selected_gap_is_queue_count_evidence = $false" in script
+    assert "queue_count_authority_granted = $false" in script
     assert "Set-Content" not in script
     assert "Out-File" not in script
     assert "Add-Content" not in script
