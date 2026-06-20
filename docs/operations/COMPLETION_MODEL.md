@@ -53,6 +53,10 @@ It emits one JSON object with:
 - the publication evidence guard, which states that choosing a Stage 17 gap is
   not proof of a GitHub push, publication marker, no-change receipt, or
   blocked-with-evidence receipt
+- the worker-readback evidence guard, which states that choosing a Stage 17 gap
+  is not proof of a worker lane readback, worker packet, files-touched record,
+  validation record, blocker/risk summary, commit-scope proposal, or next-prompt
+  recommendation
 - the percentage movement rules
 
 The model is read-only. The API route is backed by the Francis Python substrate,
@@ -122,6 +126,12 @@ require the PM-owned marker to reference the matching prompt hash and represent 
 GitHub push, explicit no-change receipt, or blocked-with-evidence receipt, with
 focused validation named.
 
+The selected-gap contract is also not worker-readback proof. A selected Stage 17
+gap can route a worker to a bounded slice, but it does not prove that a worker
+packet or lane readback exists. Worker-readback claims require a lane readback
+path, matching prompt hash, files changed, validation run, blockers/risks,
+proposed commit scope, and next recommended prompt.
+
 ## Percentage Rule
 
 The model does not invent numeric completion baselines. Overall Francis and
@@ -169,6 +179,10 @@ Every `continue` run should satisfy these guards:
   publication evidence, and publication claims need a PM-owned marker with the
   matching prompt hash, GitHub push or explicit no-change/blocked receipt, and
   focused validation
+- keep Stage 17 worker-readback claims receipt-backed: selected gaps are not
+  worker lane readbacks, and worker packet claims need a lane readback path,
+  matching prompt hash, files changed, validation, blockers/risks, proposed
+  commit scope, and next recommended prompt
 
 ## Non-Goals
 
