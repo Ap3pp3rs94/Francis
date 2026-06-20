@@ -165,6 +165,218 @@ def _assert_stage17_projection_readback(
     assert projection_evidence["grants_mutation_authority"] is False
 
 
+def test_plugins_invocation_audit_reads_durable_fixture_records_without_execution(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    pack_id = "ops.stage17_fixture_reuse"
+    pack_version = "1.0.0"
+    plugin_id = "stage17_fixture_plugin"
+    capability_id = "stage17_fixture_capability"
+    reuse_key = f"{pack_id}@{pack_version}:{capability_id}"
+    supported_contexts = [
+        "direct_plugin_route",
+        "plugin_tool_route",
+        "mission_linked_operation",
+        "mission_linked_tool_operation",
+    ]
+
+    def invocation(context: str, *, run_id: str, trace_id: str) -> dict[str, object]:
+        return {
+            "kind": "plugin.capability_pack.invocation_receipt",
+            "contract": "stage17_capability_pack_reusable_invocation_receipt_v1",
+            "status": "succeeded",
+            "invocation_mode": "fixture_replay",
+            "dry_run": False,
+            "caller_context": context,
+            "plugin_id": plugin_id,
+            "capability_id": capability_id,
+            "action": "run",
+            "tool_name": "run",
+            "pack_id": pack_id,
+            "pack_version": pack_version,
+            "pack_name": "Stage 17 Fixture Reuse Pack",
+            "pack_reuse_key": reuse_key,
+            "pack_selection": {
+                "contract": "stage17_capability_pack_invocation_selection_v1",
+                "source": "plugin_registry_metadata",
+                "plugin_id": plugin_id,
+                "capability_id": capability_id,
+                "action": "run",
+                "tool_name": "run",
+                "pack_id": pack_id,
+                "pack_version": pack_version,
+                "pack_name": "Stage 17 Fixture Reuse Pack",
+                "pack_reuse_key": reuse_key,
+                "supported_caller_contexts": supported_contexts,
+            },
+            "receipt_linkage": {
+                "dispatch_receipt_present": True,
+                "dispatch_status": "succeeded",
+                "run_id": run_id,
+                "trace_id": trace_id,
+            },
+            "reuse": {
+                "pack_selection_source": "plugin_registry_metadata",
+                "pack_selection_contract": "stage17_capability_pack_invocation_selection_v1",
+                "supported_caller_contexts": supported_contexts,
+                "direct_plugin_route": "/plugins/run",
+                "plugin_tool_route": "/plugins/tools/run",
+                "operation_capability": "plugin.run",
+                "operation_tool_capability": "plugin.tool.run",
+                "mission_context": "mission_linked_operation",
+                "mission_tool_context": "mission_linked_tool_operation",
+                "duplicates_plugin_execution_logic": False,
+            },
+            "governance": {
+                "permission_model": "plugin_runtime_trust_and_approval_gates",
+                "uses_existing_plugin_dispatcher": True,
+                "promotion_required_before_invocation": True,
+                "new_authority_granted_by_receipt": False,
+                "does_not_promote_capabilities": True,
+                "does_not_enable_capabilities": True,
+                "memory_write": False,
+            },
+        }
+
+    def write_task(
+        operation_id: str,
+        *,
+        capability: str,
+        mission_id: str,
+        context: str,
+        receipt: dict[str, object],
+    ) -> None:
+        record_dir = data_root / "tasks" / operation_id
+        record_dir.mkdir(parents=True)
+        (record_dir / "record.json").write_text(
+            json.dumps(
+                {
+                    "task_id": operation_id,
+                    "status": "completed",
+                    "capability": capability,
+                    "requester_id": "test.plugins.fixture",
+                    "created_at": "2026-06-20T22:50:00+00:00",
+                    "updated_at": "2026-06-20T22:50:01+00:00",
+                    "inputs": {
+                        "mission_id": mission_id,
+                        "meta": {"mission_id": mission_id, "caller_context": context},
+                    },
+                    "result": {
+                        "data": {
+                            "ok": True,
+                            "status": "succeeded",
+                            "run_id": receipt["receipt_linkage"]["run_id"],
+                            "trace_id": receipt["receipt_linkage"]["trace_id"],
+                            "receipt": {"capability_pack_invocation": receipt},
+                            "capability_pack_invocation": receipt,
+                        }
+                    },
+                },
+                indent=2,
+                sort_keys=True,
+            ),
+            encoding="utf-8",
+        )
+
+    plugin_receipt = invocation(
+        "mission_linked_operation", run_id="run_fixture_plugin", trace_id="trace_fixture_plugin"
+    )
+    tool_receipt = invocation(
+        "mission_linked_tool_operation",
+        run_id="run_fixture_tool",
+        trace_id="trace_fixture_tool",
+    )
+    second_mission_receipt = invocation(
+        "mission_linked_operation",
+        run_id="run_fixture_second_mission",
+        trace_id="trace_fixture_second_mission",
+    )
+    tampered_receipt = invocation(
+        "mission_linked_tool_operation",
+        run_id="run_fixture_tampered",
+        trace_id="trace_fixture_tampered",
+    )
+    tampered_receipt["governance"] = {**tampered_receipt["governance"], "memory_write": True}
+
+    write_task(
+        "tsk_stage17_fixture_plugin",
+        capability="plugin.run",
+        mission_id="msn_stage17_fixture_a",
+        context="mission_linked_operation",
+        receipt=plugin_receipt,
+    )
+    write_task(
+        "tsk_stage17_fixture_tool",
+        capability="plugin.tool.run",
+        mission_id="msn_stage17_fixture_a",
+        context="mission_linked_tool_operation",
+        receipt=tool_receipt,
+    )
+    write_task(
+        "tsk_stage17_fixture_second_mission",
+        capability="plugin.run",
+        mission_id="msn_stage17_fixture_b",
+        context="mission_linked_operation",
+        receipt=second_mission_receipt,
+    )
+    write_task(
+        "tsk_stage17_fixture_tampered_memory",
+        capability="plugin.tool.run",
+        mission_id="msn_stage17_fixture_a",
+        context="mission_linked_tool_operation",
+        receipt=tampered_receipt,
+    )
+
+    audit = client.get(
+        "/plugins/capabilities/library/invocations/audit",
+        params={"pack_id": pack_id, "limit": 10, "scan_limit": 10},
+    )
+
+    assert audit.status_code == 200
+    body = audit.json()
+    assert body["ok"] is True
+    assert body["status"] == "ready"
+    assert body["readback_scope"] == "operation_outputs_with_embedded_capability_pack_invocation_receipts"
+    assert body["total_invocation_count"] == 3
+    assert body["rejected_invocation_count"] == 1
+    assert body["contexts"] == ["mission_linked_operation", "mission_linked_tool_operation"]
+    assert body["pack_reuse_keys"] == [reuse_key]
+    assert body["governance"]["read_only"] is True
+    assert body["governance"]["writes_data"] is False
+    assert body["governance"]["writes_receipts"] is False
+    assert body["governance"]["executes_capabilities"] is False
+    assert body["governance"]["route"] == "/plugins/capabilities/library/invocations/audit"
+
+    reuse_proof = body["reuse_proof"]
+    assert reuse_proof["cross_context_reuse_proven"] is True
+    assert reuse_proof["mission_linked_reuse_proven"] is True
+    assert reuse_proof["mission_shape_reuse_proven"] is True
+    assert reuse_proof["receipt_linked_mission_shape_reuse_proven"] is True
+    assert reuse_proof["multi_mission_reuse_proven"] is True
+    assert reuse_proof["pack_selection_consistent_reuse_proven"] is True
+    assert reuse_proof["receipt_linked_selection_consistent_mission_shape_reuse_proven"] is True
+    assert reuse_proof["operation_capabilities_by_pack_reuse_key"] == {reuse_key: ["plugin.run", "plugin.tool.run"]}
+    assert reuse_proof["mission_ids_by_pack_reuse_key"] == {
+        reuse_key: ["msn_stage17_fixture_a", "msn_stage17_fixture_b"]
+    }
+
+    rejected = {item["operation_id"]: item for item in body["rejected_items"]}
+    assert set(rejected) == {"tsk_stage17_fixture_tampered_memory"}
+    assert rejected["tsk_stage17_fixture_tampered_memory"]["routing_guard"]["eligible_for_reuse_proof"] is False
+    assert rejected["tsk_stage17_fixture_tampered_memory"]["routing_guard"]["reject_reasons"] == [
+        "governance_boundary_missing"
+    ]
+
+
 def test_plugins_atomic_write_json_uses_unique_temp_siblings(monkeypatch, tmp_path: Path) -> None:
     from francis.api.routes import plugins
 
@@ -874,6 +1086,13 @@ def test_plugins_lifecycle_repair_restores_staged_candidate_without_promoting(
     assert dry_run_body["dry_run_confirmation"]["fingerprint_contract"] == (
         "stage17_plugin_lifecycle_repair_dry_run_v1"
     )
+    core_guard = dry_run_body["core_compatibility_guard"]
+    assert core_guard["contract"] == "stage17_plugin_lifecycle_repair_core_compatibility_guard_v1"
+    assert core_guard["status"] == "ready"
+    assert core_guard["compatible"] is True
+    assert core_guard["blocks_lifecycle_repair_apply"] is False
+    assert core_guard["compatibility"]["contract"] == "plugin.compatibility.effective_core_version_v1"
+    assert dry_run_body["planned_lifecycle_repair"]["core_compatibility_guard"] == core_guard
     assert dry_run_body["planned_lifecycle_repair"]["target"]["status"] == "staged"
     assert dry_run_body["planned_lifecycle_repair"]["target"]["enabled"] is False
     assert dry_run_body["planned_lifecycle_repair"]["target"]["lifecycle_status"] == "active"
@@ -928,6 +1147,8 @@ def test_plugins_lifecycle_repair_restores_staged_candidate_without_promoting(
     assert repaired_body["lifecycle_before"]["blocks_promotion"] is True
     assert repaired_body["lifecycle_after"]["status"] == "active"
     assert repaired_body["lifecycle_after"]["blocks_promotion"] is False
+    assert repaired_body["core_compatibility_guard"]["status"] == "ready"
+    assert repaired_body["core_compatibility_guard"]["compatible"] is True
     assert repaired_body["governance"]["gate"] == "plugin_lifecycle_repair"
     assert repaired_body["governance"]["scope"] == "plugins.write"
     assert repaired_body["governance"]["writes_registry_metadata"] is True
@@ -955,6 +1176,8 @@ def test_plugins_lifecycle_repair_restores_staged_candidate_without_promoting(
     assert repair_receipt["current"]["status"] == "staged"
     assert repair_receipt["current"]["enabled"] is False
     assert repair_receipt["current"]["lifecycle_status"] == "active"
+    assert repair_receipt["lifecycle_evidence"]["core_compatibility_guard"]["status"] == "ready"
+    assert repair_receipt["lifecycle_evidence"]["core_compatibility_guard"]["compatible"] is True
     assert repair_receipt["governance"]["route"] == "/plugins/lifecycle/repair"
     assert repair_receipt["governance"]["does_not_enable_capabilities"] is True
     assert repair_receipt["governance"]["does_not_execute_capabilities"] is True
@@ -969,6 +1192,11 @@ def test_plugins_lifecycle_repair_restores_staged_candidate_without_promoting(
     assert fetched_meta["lifecycle_repair_status"] == "repaired"
     assert fetched_meta["lifecycle_repair_previous_status"] == "deprecated"
     assert fetched_meta["lifecycle_repair_receipt_id"] == repaired_body["lifecycle_receipt_id"]
+    assert fetched_meta["lifecycle_repair_core_compatibility_contract"] == (
+        "stage17_plugin_lifecycle_repair_core_compatibility_guard_v1"
+    )
+    assert fetched_meta["lifecycle_repair_core_compatibility_status"] == "compatible"
+    assert fetched_meta["lifecycle_repair_core_compatibility_ambiguous"] is False
 
     run_repaired = client.post("/plugins/run", json={"id": plugin_id, "action": "run", "input": "hello"})
     assert run_repaired.status_code == 200
@@ -992,6 +1220,108 @@ def test_plugins_lifecycle_repair_restores_staged_candidate_without_promoting(
     assert promoted_body["promotion_status"] == "promoted"
     assert promoted_body["promotion_receipt"]["lifecycle"]["status"] == "active"
     assert promoted_body["promotion_receipt"]["lifecycle"]["blocks_promotion"] is False
+
+
+def test_plugins_lifecycle_repair_blocks_ambiguous_generated_spec_before_apply(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
+    client = TestClient(create_app())
+    built = client.post(
+        "/plugins/build",
+        json={
+            "name": "Lifecycle Compatibility Guard",
+            "description": "Stage 17 lifecycle compatibility guard coverage",
+            "actor": _PLUGIN_ACTOR,
+            "meta": _forge_promotion_meta("lifecycle_compatibility_guard"),
+        },
+    )
+    assert built.status_code == 200
+    built_body = built.json()
+    assert built_body["ok"] is True
+    plugin_id = str(built_body["plugin_id"])
+
+    quarantined = client.post(
+        "/plugins/disable",
+        json={
+            "id": plugin_id,
+            "actor": _PLUGIN_ACTOR,
+            "reason": "operator quarantined generated candidate before compatibility repair",
+            "meta": {"lifecycle_action": "quarantine"},
+        },
+    )
+    assert quarantined.status_code == 200
+    quarantine_body = quarantined.json()
+    assert quarantine_body["ok"] is True
+    assert quarantine_body["lifecycle_status"] == "quarantined"
+
+    registry = plugins._load_registry()
+    plugin = plugins._read_plugin(registry, plugin_id)
+    assert plugin is not None
+    spec_path = Path(str(plugin["generated_dir"])) / "plugin.spec.json"
+    assert spec_path.exists()
+    spec_path.unlink()
+
+    lifecycle_dir = data_root / "artifacts" / "plugins" / "lifecycle"
+    receipt_count_before_repair = len(list(lifecycle_dir.glob("*.json")))
+    repair_payload = {
+        "id": plugin_id,
+        "actor": _PLUGIN_ACTOR,
+        "reason": "attempt lifecycle repair while generated spec is missing",
+        "meta": {"lifecycle_action": "restore"},
+    }
+
+    blocked_dry_run = client.post("/plugins/lifecycle/repair", json=repair_payload)
+    assert blocked_dry_run.status_code == 200
+    blocked_body = blocked_dry_run.json()
+    assert blocked_body["ok"] is False
+    assert blocked_body["applied"] is False
+    assert blocked_body["status"] == "blocked"
+    assert blocked_body["error"] == "plugin_lifecycle_repair_core_compatibility_blocked"
+    assert blocked_body["lifecycle_before"]["status"] == "quarantined"
+    assert blocked_body["lifecycle_before"]["blocks_promotion"] is True
+    core_guard = blocked_body["core_compatibility_guard"]
+    assert core_guard["contract"] == "stage17_plugin_lifecycle_repair_core_compatibility_guard_v1"
+    assert core_guard["status"] == "blocked"
+    assert core_guard["compatible"] is False
+    assert core_guard["ambiguous"] is True
+    assert core_guard["blocks_lifecycle_repair_apply"] is True
+    assert core_guard["compatibility_status"] == "generated_spec_missing"
+    assert core_guard["compatibility"]["status"] == "generated_spec_missing"
+    assert core_guard["compatibility"]["selected_requirement_source"] == "plugin.spec.json"
+    assert blocked_body["dry_run_confirmation"]["fingerprint_available"] is False
+    assert blocked_body["governance"]["writes_registry_metadata"] is False
+    assert blocked_body["governance"]["writes_lifecycle_receipt"] is False
+    assert len(list(lifecycle_dir.glob("*.json"))) == receipt_count_before_repair
+
+    blocked_apply = client.post(
+        "/plugins/lifecycle/repair",
+        json={**repair_payload, "dry_run": False, "dry_run_fingerprint": "x" * 64},
+    )
+    assert blocked_apply.status_code == 200
+    blocked_apply_body = blocked_apply.json()
+    assert blocked_apply_body["ok"] is False
+    assert blocked_apply_body["applied"] is False
+    assert blocked_apply_body["error"] == "plugin_lifecycle_repair_core_compatibility_blocked"
+    assert blocked_apply_body["core_compatibility_guard"]["compatibility_status"] == "generated_spec_missing"
+    assert len(list(lifecycle_dir.glob("*.json"))) == receipt_count_before_repair
+
+    after = client.get(f"/plugins/get?id={plugin_id}")
+    assert after.status_code == 200
+    after_item = after.json()["item"]
+    assert after_item["status"] == "disabled"
+    assert after_item["enabled"] is False
+    assert after_item["meta"]["lifecycle_status"] == "quarantined"
+    assert "lifecycle_repair_status" not in after_item["meta"]
 
 
 def test_plugins_lifecycle_rollback_restores_staged_candidate_without_promoting(
@@ -2438,6 +2768,94 @@ def test_plugins_capability_pack_metadata_receipts_bulk_from_migration_plan(
     assert receipt["governance"]["route"] == "/plugins/capabilities/packs/metadata/receipts/bulk-from-plan"
     assert receipt["expanded_from_migration_plan"] is False
     assert receipt["metadata_context"]["bulk_from_migration_plan"] is True
+
+
+def test_plugins_capability_pack_metadata_receipts_bulk_dry_run_and_unconfirmed_apply_do_not_persist(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
+    client = TestClient(create_app())
+    built = client.post(
+        "/plugins/build",
+        json={
+            "name": "Bulk Migration Dry Run Persistence Guard Plugin",
+            "description": "Stage 17 bulk dry-run persistence guard coverage",
+            "actor": _PLUGIN_ACTOR,
+            "meta": _forge_promotion_meta("bulk_migration_plan_dry_run_persistence_guard"),
+        },
+    )
+    assert built.status_code == 200
+    built_body = built.json()
+    assert built_body["ok"] is True
+    plugin_id = str(built_body["plugin_id"])
+
+    plan = client.get("/plugins/capabilities/packs/migration/plan").json()
+    candidate = next(item for item in plan["candidates"] if plugin_id in item["capability_ids_sample"])
+    receipt_dir = data_root / "artifacts" / "plugins" / "capability_packs" / "metadata_receipts"
+
+    def fail_persist(*_args, **_kwargs):
+        raise AssertionError("metadata-receipt dry-run or unconfirmed apply must not persist registry/catalog state")
+
+    monkeypatch.setattr(plugins, "_save_registry", fail_persist)
+    monkeypatch.setattr(plugins, "_save_registry_and_catalog", fail_persist)
+    monkeypatch.setattr(plugins, "_compile_runtime_catalog", fail_persist)
+
+    dry_run = client.post(
+        "/plugins/capabilities/packs/metadata/receipts/bulk-from-plan",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "dry run must not persist migration plan candidates",
+            "pack_ids": [candidate["pack_id"]],
+        },
+    )
+
+    assert dry_run.status_code == 200
+    dry_run_body = dry_run.json()
+    assert dry_run_body["ok"] is True
+    assert dry_run_body["applied"] is False
+    assert dry_run_body["status"] == "dry_run"
+    assert dry_run_body["governance"]["writes_registry_metadata"] is False
+    assert dry_run_body["governance"]["writes_receipts"] is False
+    assert not receipt_dir.exists()
+
+    registry_after_dry_run = plugins._load_registry()
+    dry_run_plugin = plugins._read_plugin(registry_after_dry_run, plugin_id)
+    assert dry_run_plugin is not None
+    assert "pack_metadata_receipt_id" not in dry_run_plugin["meta"]
+
+    blocked = client.post(
+        "/plugins/capabilities/packs/metadata/receipts/bulk-from-plan",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "unconfirmed apply must not persist migration plan candidates",
+            "pack_ids": [candidate["pack_id"]],
+            "dry_run": False,
+        },
+    )
+
+    assert blocked.status_code == 200
+    blocked_body = blocked.json()
+    assert blocked_body["ok"] is False
+    assert blocked_body["applied"] is False
+    assert blocked_body["status"] == "blocked"
+    assert blocked_body["error"] == "capability_pack_metadata_receipts_bulk_from_plan_dry_run_confirmation_required"
+    assert blocked_body["governance"]["writes_registry_metadata"] is False
+    assert blocked_body["governance"]["writes_receipts"] is False
+    assert not receipt_dir.exists()
+
+    registry_after_blocked = plugins._load_registry()
+    blocked_plugin = plugins._read_plugin(registry_after_blocked, plugin_id)
+    assert blocked_plugin is not None
+    assert "pack_metadata_receipt_id" not in blocked_plugin["meta"]
 
 
 def test_plugins_capability_pack_metadata_receipts_bulk_blocks_ambiguous_pack_versions(

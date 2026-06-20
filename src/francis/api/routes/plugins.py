@@ -1542,6 +1542,47 @@ def _plugin_effective_core_compatibility(
     return effective
 
 
+def _plugin_lifecycle_repair_core_compatibility_guard(
+    plugin_id: str,
+    current: dict[str, Any],
+    meta: dict[str, Any],
+) -> dict[str, Any]:
+    compatibility = _plugin_effective_core_compatibility(plugin_id, current, meta)
+    compatibility_status = _safe_str(compatibility.get("status")).strip() or "unknown"
+    compatible = bool(compatibility.get("compatible"))
+    ambiguous = compatibility_status in _PLUGIN_CORE_COMPATIBILITY_AMBIGUOUS_STATUSES
+    return {
+        "contract": "stage17_plugin_lifecycle_repair_core_compatibility_guard_v1",
+        "required": True,
+        "status": "ready" if compatible else "blocked",
+        "compatible": compatible,
+        "ambiguous": ambiguous,
+        "blocks_lifecycle_repair_apply": not compatible,
+        "reason": (
+            "core_compatibility_allows_lifecycle_repair"
+            if compatible
+            else "ambiguous_core_compatibility_blocks_lifecycle_repair"
+            if ambiguous
+            else "incompatible_core_version_blocks_lifecycle_repair"
+        ),
+        "compatibility_status": compatibility_status,
+        "selected_requirement_source": _safe_str(compatibility.get("selected_requirement_source")).strip(),
+        "artifact_contract_checked": bool(compatibility.get("artifact_contract_checked")),
+        "metadata_contract_checked": bool(compatibility.get("metadata_contract_checked")),
+        "checked_source_count": int(compatibility.get("source_count") or 0),
+        "compatibility": redact_governed_display_value(compatibility),
+        "writes_registry_metadata_if_blocked": False,
+        "writes_lifecycle_receipt_if_blocked": False,
+        "does_not_promote_capabilities": True,
+        "does_not_enable_capabilities": True,
+        "does_not_execute_capabilities": True,
+        "promotion_authority": False,
+        "execution_authority": False,
+        "approval_authority": False,
+        "memory_write": False,
+    }
+
+
 _PLUGIN_LIFECYCLE_BLOCKING_STATES = {
     "archived",
     "deprecated",
@@ -1565,6 +1606,14 @@ _PLUGIN_LIFECYCLE_NON_BLOCKING_STATES = {
     "stable",
     "staged",
     "uninstalled",
+}
+_PLUGIN_CORE_COMPATIBILITY_AMBIGUOUS_STATUSES = {
+    "current_core_version_unknown",
+    "generated_spec_directory_unresolved",
+    "generated_spec_invalid",
+    "generated_spec_missing",
+    "generated_spec_unreadable",
+    "invalid_min_core_version",
 }
 
 
@@ -2151,6 +2200,7 @@ def _plugin_lifecycle_repair_plan(
     lifecycle_action: str,
     rollback_source_receipt: dict[str, Any] | None = None,
     rollback_source_readback: dict[str, Any] | None = None,
+    core_compatibility_guard: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     restored_status = _plugin_lifecycle_repair_status(
         current,
@@ -2192,6 +2242,11 @@ def _plugin_lifecycle_repair_plan(
             "updated_ts": int(current.get("updated_ts") or 0),
         },
         "lifecycle_before": redact_governed_display_value(lifecycle_before),
+        "core_compatibility_guard": (
+            redact_governed_display_value(core_compatibility_guard)
+            if isinstance(core_compatibility_guard, dict)
+            else {}
+        ),
         "target": {
             "status": restored_status,
             "enabled": False,
@@ -17128,8 +17183,9 @@ def record_capability_pack_metadata_receipts_from_plan(
 
         registry = _load_registry()
         _sync_generated_plugins(registry)
-        catalog = _save_registry_and_catalog(registry)
-        runtime_catalog = _read_runtime_catalog_payload(catalog)
+        # Plan from the same in-memory generated-plugin sync apply will persist,
+        # but keep dry-run and failed-fingerprint paths truthfully no-write.
+        runtime_catalog = _runtime_catalog_payload_from_registry(registry)
         marketplace = marketplace_from_plugin_catalog(runtime_catalog)
         entries = marketplace.catalog()
         plan = analyze_capability_pack_migration_plan(entries)
@@ -18051,6 +18107,7 @@ def repair_plugin_lifecycle(payload: PluginLifecycleRepairIn, request: Request) 
                 dry_run_required_before_apply=True,
             )
 
+        meta = dict(current.get("meta") or {}) if isinstance(current.get("meta"), dict) else {}
         lifecycle_before = _plugin_lifecycle_state(current, payload_meta)
         lifecycle_action = _safe_str(repair.get("action")).strip() or "repair"
         if not bool(lifecycle_before.get("blocks_promotion")) and not bool(lifecycle_before.get("blocks_execution")):
@@ -18072,7 +18129,6 @@ def repair_plugin_lifecycle(payload: PluginLifecycleRepairIn, request: Request) 
                 ),
             }
 
-        meta = dict(current.get("meta") or {}) if isinstance(current.get("meta"), dict) else {}
         rollback_source_receipt: dict[str, Any] | None = None
         rollback_source_readback: dict[str, Any] = {}
         if lifecycle_action == "rollback":
@@ -18103,6 +18159,34 @@ def repair_plugin_lifecycle(payload: PluginLifecycleRepairIn, request: Request) 
                         dry_run_required_before_apply=True,
                     ),
                 }
+        core_compatibility_guard = _plugin_lifecycle_repair_core_compatibility_guard(plugin_id, current, meta)
+        if not bool(core_compatibility_guard.get("compatible")):
+            return {
+                "ok": False,
+                "applied": False,
+                "id": plugin_id,
+                "status": "blocked",
+                "error": "plugin_lifecycle_repair_core_compatibility_blocked",
+                "lifecycle_action": lifecycle_action,
+                "lifecycle_before": redact_governed_display_value(lifecycle_before),
+                "core_compatibility_guard": core_compatibility_guard,
+                "dry_run_confirmation": {
+                    "required_for_apply": True,
+                    "fingerprint_available": False,
+                    "fingerprint_contract": "stage17_plugin_lifecycle_repair_dry_run_v1",
+                    "apply_route": request.url.path,
+                    "reason": "core_compatibility_guard_blocked",
+                },
+                "governance": _plugin_lifecycle_governance(
+                    gate="plugin_lifecycle_repair",
+                    route=request.url.path,
+                    lifecycle_action=lifecycle_action,
+                    lifecycle_status="active",
+                    writes_registry_metadata=False,
+                    writes_lifecycle_receipt=False,
+                    dry_run_required_before_apply=True,
+                ),
+            }
         repair_plan = _plugin_lifecycle_repair_plan(
             plugin_id=plugin_id,
             current=current,
@@ -18111,6 +18195,7 @@ def repair_plugin_lifecycle(payload: PluginLifecycleRepairIn, request: Request) 
             lifecycle_action=lifecycle_action,
             rollback_source_receipt=rollback_source_receipt,
             rollback_source_readback=rollback_source_readback,
+            core_compatibility_guard=core_compatibility_guard,
         )
         dry_run_fingerprint = _plugin_lifecycle_repair_fingerprint(plan=repair_plan)
         if payload.dry_run:
@@ -18123,6 +18208,7 @@ def repair_plugin_lifecycle(payload: PluginLifecycleRepairIn, request: Request) 
                 "target_status": _safe_str(repair_plan.get("target", {}).get("status")).strip(),
                 "lifecycle_action": lifecycle_action,
                 "lifecycle_before": redact_governed_display_value(lifecycle_before),
+                "core_compatibility_guard": repair_plan.get("core_compatibility_guard", {}),
                 "planned_lifecycle_repair": repair_plan,
                 "rollback_source": repair_plan.get("rollback_source", {}),
                 "dry_run_fingerprint": dry_run_fingerprint,
@@ -18154,6 +18240,7 @@ def repair_plugin_lifecycle(payload: PluginLifecycleRepairIn, request: Request) 
                 "target_status": _safe_str(repair_plan.get("target", {}).get("status")).strip(),
                 "lifecycle_action": lifecycle_action,
                 "planned_lifecycle_repair": repair_plan,
+                "core_compatibility_guard": repair_plan.get("core_compatibility_guard", {}),
                 "rollback_source": repair_plan.get("rollback_source", {}),
                 "dry_run_confirmation": {
                     "required_for_apply": True,
@@ -18185,6 +18272,11 @@ def repair_plugin_lifecycle(payload: PluginLifecycleRepairIn, request: Request) 
         restored_promotion_status = _safe_str(target.get("promotion_status")).strip() or "disabled"
         lifecycle_receipt_id = _plugin_lifecycle_receipt_id(plugin_id, lifecycle_action, repaired_ts)
         lifecycle_receipt_path = _plugin_lifecycle_receipt_path(lifecycle_receipt_id)
+        core_compatibility_guard = (
+            repair_plan.get("core_compatibility_guard")
+            if isinstance(repair_plan.get("core_compatibility_guard"), dict)
+            else {}
+        )
 
         for key in (
             "capability_lifecycle_status",
@@ -18213,6 +18305,16 @@ def repair_plugin_lifecycle(payload: PluginLifecycleRepairIn, request: Request) 
         meta["lifecycle_repair_restored_promotion_status"] = restored_promotion_status
         meta["lifecycle_repair_receipt_id"] = lifecycle_receipt_id
         meta["lifecycle_repair_receipt_path"] = str(lifecycle_receipt_path)
+        meta["lifecycle_repair_core_compatibility_contract"] = _safe_str(
+            core_compatibility_guard.get("contract")
+        ).strip()
+        meta["lifecycle_repair_core_compatibility_status"] = _safe_str(
+            core_compatibility_guard.get("compatibility_status")
+        ).strip()
+        meta["lifecycle_repair_core_compatibility_source"] = _safe_str(
+            core_compatibility_guard.get("selected_requirement_source")
+        ).strip()
+        meta["lifecycle_repair_core_compatibility_ambiguous"] = bool(core_compatibility_guard.get("ambiguous"))
         if lifecycle_action == "rollback":
             meta["lifecycle_rollback_status"] = "rolled_back"
             meta["lifecycle_rollback_ts"] = repaired_ts
@@ -18260,9 +18362,14 @@ def repair_plugin_lifecycle(payload: PluginLifecycleRepairIn, request: Request) 
             catalog=catalog,
             route=request.url.path,
             gate="plugin_lifecycle_repair",
-            lifecycle_evidence=(
-                {"rollback_source": repair_plan.get("rollback_source", {})} if lifecycle_action == "rollback" else None
-            ),
+            lifecycle_evidence={
+                "core_compatibility_guard": core_compatibility_guard,
+                **(
+                    {"rollback_source": repair_plan.get("rollback_source", {})}
+                    if lifecycle_action == "rollback"
+                    else {}
+                ),
+            },
         )
         lifecycle_after = _plugin_lifecycle_state(repaired, {})
 
@@ -18280,6 +18387,7 @@ def repair_plugin_lifecycle(payload: PluginLifecycleRepairIn, request: Request) 
             "lifecycle_rollback_status": "rolled_back" if lifecycle_action == "rollback" else "",
             "lifecycle_before": redact_governed_display_value(lifecycle_before),
             "lifecycle_after": redact_governed_display_value(lifecycle_after),
+            "core_compatibility_guard": core_compatibility_guard,
             "planned_lifecycle_repair": repair_plan,
             "rollback_source": repair_plan.get("rollback_source", {}),
             "dry_run_fingerprint": dry_run_fingerprint,
