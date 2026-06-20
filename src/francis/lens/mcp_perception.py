@@ -138,6 +138,9 @@ def _observation_honesty() -> dict[str, Any]:
         "creates_lens_app": False,
         "requires_overlay_coordinate_model": True,
         "observation_sources": sorted(_OVERLAY_OBSERVATION_TOOLS),
+        "ocr": False,
+        "accessibility_tree": False,
+        "visual_similarity": False,
     }
 
 
@@ -165,6 +168,16 @@ def lens_mcp_perception_contract() -> dict[str, Any]:
             "screenshots": False,
             "pixels": False,
             "ocr": False,
+            "accessibility_tree": False,
+            "visual_similarity": False,
+            "limitations": [
+                "metadata_only_screen_session_readback",
+                "screenshot_capture_unsupported",
+                "pixel_capture_unsupported",
+                "ocr_unsupported",
+                "accessibility_tree_unsupported",
+                "visual_similarity_unsupported",
+            ],
         },
         "refused_tool_note": (
             "mutating or approval-gated MCP tools are refused at the bridge; use the tool's own MCP approval surface"
@@ -183,6 +196,8 @@ def _receipt_optional_fields(payload: dict[str, Any]) -> dict[str, Any]:
         "requested_region",
         "mapped_overlay_region",
         "actual_inspected_region",
+        "actual_observed_region",
+        "actual_captured_region",
         "observation_source",
         "observation_status",
         "observation_mode",
@@ -190,6 +205,7 @@ def _receipt_optional_fields(payload: dict[str, Any]) -> dict[str, Any]:
         "evidence_reference",
         "confidence",
         "unknown_information",
+        "limitations",
         "failure_or_refusal_reason",
     ):
         if key in payload:
@@ -318,53 +334,356 @@ def _contains(bounds: dict[str, Any], region: dict[str, Any]) -> bool:
     return rx >= bx and ry >= by and (rx + rw) <= (bx + bw) and (ry + rh) <= (by + bh)
 
 
+def _region_edges(region: dict[str, Any]) -> dict[str, float]:
+    x = _safe_float(region.get("x"))
+    y = _safe_float(region.get("y"))
+    width = _safe_float(region.get("width"))
+    height = _safe_float(region.get("height"))
+    if x is None or y is None or width is None or height is None:
+        return {}
+    return {"left": x, "top": y, "right": x + width, "bottom": y + height}
+
+
+def _outside_edges(bounds: dict[str, Any], region: dict[str, Any]) -> list[str]:
+    bound_edges = _region_edges(bounds)
+    region_edges = _region_edges(region)
+    if not bound_edges or not region_edges:
+        return []
+    outside = []
+    if region_edges["left"] < bound_edges["left"]:
+        outside.append("left")
+    if region_edges["top"] < bound_edges["top"]:
+        outside.append("top")
+    if region_edges["right"] > bound_edges["right"]:
+        outside.append("right")
+    if region_edges["bottom"] > bound_edges["bottom"]:
+        outside.append("bottom")
+    return outside
+
+
+def _intersection_region(
+    *,
+    bounds: dict[str, Any],
+    region: dict[str, Any],
+    coordinate_space: str,
+) -> dict[str, Any]:
+    bound_edges = _region_edges(bounds)
+    region_edges = _region_edges(region)
+    if not bound_edges or not region_edges:
+        return {}
+    left = max(bound_edges["left"], region_edges["left"])
+    top = max(bound_edges["top"], region_edges["top"])
+    right = min(bound_edges["right"], region_edges["right"])
+    bottom = min(bound_edges["bottom"], region_edges["bottom"])
+    if right <= left or bottom <= top:
+        return {}
+    return {
+        "space": coordinate_space,
+        "x": left,
+        "y": top,
+        "width": right - left,
+        "height": bottom - top,
+    }
+
+
+def _overlay_origin(bounds: dict[str, Any], coordinate_space: str) -> dict[str, Any]:
+    bound_edges = _region_edges(bounds)
+    if not bound_edges:
+        return {}
+    return {
+        "space": coordinate_space,
+        "x": bound_edges["left"],
+        "y": bound_edges["top"],
+        "source": "overlay_coordinate_model.bounds",
+    }
+
+
+def _overlay_local_region(
+    *,
+    bounds: dict[str, Any],
+    region: dict[str, Any],
+) -> dict[str, Any]:
+    bound_edges = _region_edges(bounds)
+    region_edges = _region_edges(region)
+    width = _safe_float(region.get("width"))
+    height = _safe_float(region.get("height"))
+    if not bound_edges or not region_edges or width is None or height is None:
+        return {}
+    return {
+        "space": "overlay_local_logical_pixels",
+        "x": region_edges["left"] - bound_edges["left"],
+        "y": region_edges["top"] - bound_edges["top"],
+        "width": width,
+        "height": height,
+    }
+
+
+def _region_delta(source: dict[str, Any], target: dict[str, Any]) -> dict[str, float]:
+    deltas: dict[str, float] = {}
+    for key in ("x", "y", "width", "height"):
+        source_value = _safe_float(source.get(key))
+        target_value = _safe_float(target.get(key))
+        if source_value is None or target_value is None:
+            return {}
+        deltas[key] = target_value - source_value
+    return deltas
+
+
+def _coordinate_transform_readback(
+    *,
+    requested: dict[str, Any],
+    bounds: dict[str, Any],
+    region: dict[str, Any],
+    boundary: dict[str, Any],
+    coordinate_space: str,
+    transform: str,
+    reason: str = "",
+) -> dict[str, Any]:
+    clean_transform = _safe_str(transform, "unavailable")
+    source_space = _safe_str(requested.get("space"), "desktop")
+    clean_reason = _safe_str(reason) or _safe_str(boundary.get("reason"))
+    limitations = [
+        "metadata_only_coordinate_transform",
+        "visual_registration_unsupported",
+        "capture_adapter_unavailable",
+    ]
+    if not region or not _region_edges(region):
+        return {
+            "status": "unavailable",
+            "reason": clean_reason or "mapped_region_unavailable",
+            "source_space": source_space,
+            "target_space": coordinate_space,
+            "transform": clean_transform,
+            "transform_applied": False,
+            "requested_to_mapped_delta": {},
+            "overlay_origin": _overlay_origin(bounds, coordinate_space),
+            "overlay_local_region": {},
+            "intersection_overlay_local_region": {},
+            "bounds_checked": False,
+            "within_overlay_bounds": False,
+            "clipped_by_overlay": False,
+            "confidence": 0.0,
+            "confidence_basis": "coordinate_transform_unavailable",
+            "limitations": limitations,
+        }
+
+    bounds_checked = bool(boundary.get("bounds_checked"))
+    within_bounds = bool(boundary.get("within_overlay_bounds"))
+    intersection = _as_dict(boundary.get("intersection_region"))
+    return {
+        "status": "mapped" if within_bounds else "blocked_after_mapping",
+        "reason": "" if within_bounds else clean_reason or "requested_region_outside_overlay_bounds",
+        "source_space": source_space,
+        "target_space": coordinate_space,
+        "mapped_region_space": _safe_str(region.get("space"), coordinate_space),
+        "transform": clean_transform,
+        "transform_applied": clean_transform != "unavailable",
+        "requested_to_mapped_delta": _region_delta(requested, region),
+        "overlay_origin": _overlay_origin(bounds, coordinate_space),
+        "overlay_local_region": _overlay_local_region(bounds=bounds, region=region),
+        "intersection_overlay_local_region": _overlay_local_region(bounds=bounds, region=intersection),
+        "bounds_checked": bounds_checked,
+        "within_overlay_bounds": within_bounds,
+        "clipped_by_overlay": bool(boundary.get("clipped_by_overlay")),
+        "confidence": 1.0 if bounds_checked and clean_transform != "unavailable" else 0.0,
+        "confidence_basis": "declared_overlay_coordinate_model_not_visual_perception",
+        "limitations": limitations,
+    }
+
+
+def _coordinate_boundary(
+    *,
+    bounds: dict[str, Any],
+    region: dict[str, Any],
+    coordinate_space: str,
+    reason: str = "",
+) -> dict[str, Any]:
+    clean_reason = _safe_str(reason)
+    bound_edges = _region_edges(bounds)
+    region_edges = _region_edges(region)
+    if not bounds or not bound_edges:
+        return {
+            "status": "unavailable",
+            "reason": clean_reason or "overlay_coordinate_model_missing",
+            "coordinate_space": coordinate_space,
+            "overlay_bounds": {},
+            "overlay_edges": {},
+            "requested_edges": region_edges,
+            "intersection_region": {},
+            "within_overlay_bounds": False,
+            "clipped_by_overlay": False,
+            "outside_edges": [],
+            "bounds_checked": False,
+        }
+    if not region or not region_edges:
+        return {
+            "status": "unavailable",
+            "reason": clean_reason or "requested_region_missing_numeric_bounds",
+            "coordinate_space": coordinate_space,
+            "overlay_bounds": bounds,
+            "overlay_edges": bound_edges,
+            "requested_edges": {},
+            "intersection_region": {},
+            "within_overlay_bounds": False,
+            "clipped_by_overlay": False,
+            "outside_edges": [],
+            "bounds_checked": False,
+        }
+
+    contained = _contains(bounds, region)
+    outside = _outside_edges(bounds, region)
+    return {
+        "status": "within_bounds" if contained else "outside_bounds",
+        "reason": "" if contained else clean_reason or "requested_region_outside_overlay_bounds",
+        "coordinate_space": coordinate_space,
+        "overlay_bounds": bounds,
+        "overlay_edges": bound_edges,
+        "requested_edges": region_edges,
+        "intersection_region": _intersection_region(
+            bounds=bounds,
+            region=region,
+            coordinate_space=coordinate_space,
+        ),
+        "within_overlay_bounds": contained,
+        "clipped_by_overlay": bool(outside),
+        "outside_edges": outside,
+        "bounds_checked": True,
+    }
+
+
 def _map_overlay_region(requested: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
     coordinate_model = _as_dict(overlay.get("coordinate_model"))
     bounds = _as_dict(coordinate_model.get("bounds"))
+    coordinate_space = _safe_str(coordinate_model.get("coordinate_space"), "desktop_logical_pixels")
+    transform = _safe_str(coordinate_model.get("transform"), "unavailable")
     if not bool(overlay.get("available")):
+        reason = "overlay_context_missing"
+        boundary = _coordinate_boundary(
+            bounds=bounds,
+            region={},
+            coordinate_space=coordinate_space,
+            reason=reason,
+        )
         return {
             "status": "blocked",
-            "reason": "overlay_context_missing",
+            "reason": reason,
             "region": {},
             "transform": "unavailable",
+            "coordinate_boundary": boundary,
+            "coordinate_transform": _coordinate_transform_readback(
+                requested=requested,
+                bounds=bounds,
+                region={},
+                boundary=boundary,
+                coordinate_space=coordinate_space,
+                transform="unavailable",
+                reason=reason,
+            ),
         }
     if not bool(requested.get("numeric_bounds")):
+        reason = "requested_region_missing_numeric_bounds"
+        boundary = _coordinate_boundary(
+            bounds=bounds,
+            region={},
+            coordinate_space=coordinate_space,
+            reason=reason,
+        )
         return {
             "status": "blocked",
-            "reason": "requested_region_missing_numeric_bounds",
+            "reason": reason,
             "region": {},
             "transform": "unavailable",
+            "coordinate_boundary": boundary,
+            "coordinate_transform": _coordinate_transform_readback(
+                requested=requested,
+                bounds=bounds,
+                region={},
+                boundary=boundary,
+                coordinate_space=coordinate_space,
+                transform="unavailable",
+                reason=reason,
+            ),
         }
     if not bounds:
+        reason = "overlay_coordinate_model_missing"
+        boundary = _coordinate_boundary(
+            bounds=bounds,
+            region={},
+            coordinate_space=coordinate_space,
+            reason=reason,
+        )
         return {
             "status": "blocked",
-            "reason": "overlay_coordinate_model_missing",
+            "reason": reason,
             "region": {},
             "transform": "unavailable",
+            "coordinate_boundary": boundary,
+            "coordinate_transform": _coordinate_transform_readback(
+                requested=requested,
+                bounds=bounds,
+                region={},
+                boundary=boundary,
+                coordinate_space=coordinate_space,
+                transform="unavailable",
+                reason=reason,
+            ),
         }
     if _safe_str(requested.get("space")).lower() == "canvas":
+        reason = "canvas_transform_unavailable"
+        boundary = _coordinate_boundary(
+            bounds=bounds,
+            region={},
+            coordinate_space=coordinate_space,
+            reason=reason,
+        )
         return {
             "status": "blocked",
-            "reason": "canvas_transform_unavailable",
+            "reason": reason,
             "region": {},
             "transform": "unavailable",
+            "coordinate_boundary": boundary,
+            "coordinate_transform": _coordinate_transform_readback(
+                requested=requested,
+                bounds=bounds,
+                region={},
+                boundary=boundary,
+                coordinate_space=coordinate_space,
+                transform="unavailable",
+                reason=reason,
+            ),
         }
 
     region = {
-        "space": coordinate_model.get("coordinate_space") or "desktop_logical_pixels",
+        "space": coordinate_space,
         "x": requested["x"],
         "y": requested["y"],
         "width": requested["width"],
         "height": requested["height"],
     }
-    contained = _contains(bounds, region)
+    boundary = _coordinate_boundary(
+        bounds=bounds,
+        region=region,
+        coordinate_space=coordinate_space,
+        reason="requested_region_outside_overlay_bounds",
+    )
+    contained = bool(boundary.get("within_overlay_bounds"))
     return {
         "status": "mapped" if contained else "blocked",
         "reason": "" if contained else "requested_region_outside_overlay_bounds",
         "region": region,
-        "transform": coordinate_model.get("transform") or "identity_desktop_logical",
+        "transform": transform if transform != "unavailable" else "identity_desktop_logical",
         "bounds_checked": True,
         "within_overlay_bounds": contained,
+        "coordinate_boundary": boundary,
+        "coordinate_transform": _coordinate_transform_readback(
+            requested=requested,
+            bounds=bounds,
+            region=region,
+            boundary=boundary,
+            coordinate_space=coordinate_space,
+            transform=transform if transform != "unavailable" else "identity_desktop_logical",
+            reason="requested_region_outside_overlay_bounds",
+        ),
     }
 
 
@@ -393,6 +712,52 @@ def _observation_unknowns(result: dict[str, Any] | None = None) -> list[str]:
     return unknowns
 
 
+def _observation_limitations(
+    *,
+    mapped_overlay_region: dict[str, Any] | None = None,
+    result: dict[str, Any] | None = None,
+    failure_or_refusal_reason: str = "",
+) -> list[str]:
+    governance = _as_dict((result or {}).get("governance"))
+    limitations = ["metadata_only_screen_session_readback"]
+    if not bool(governance.get("screenshots")):
+        limitations.append("screenshot_capture_unsupported")
+    if not bool(governance.get("pixels")):
+        limitations.append("pixel_capture_unsupported")
+    limitations.extend(["ocr_unsupported", "accessibility_tree_unsupported", "visual_similarity_unsupported"])
+    mapped = _as_dict(mapped_overlay_region)
+    if mapped and _safe_str(mapped.get("status")) != "mapped":
+        reason = _safe_str(mapped.get("reason"), "overlay_region_not_mapped")
+        limitations.append(reason)
+    reason = _safe_str(failure_or_refusal_reason)
+    if reason and reason not in limitations:
+        limitations.append(reason)
+    return limitations
+
+
+def _not_observed_region(reason: str) -> dict[str, Any]:
+    return {
+        "status": "not_observed",
+        "region": {},
+        "source": "none",
+        "reason": _safe_str(reason),
+    }
+
+
+def _not_captured_region(mapped_overlay_region: dict[str, Any], reason: str) -> dict[str, Any]:
+    return {
+        "status": "not_captured",
+        "region": {},
+        "mapped_region": _as_dict(mapped_overlay_region.get("region")),
+        "capture": "not_performed",
+        "screenshots": False,
+        "pixels": False,
+        "ocr": False,
+        "accessibility_tree": False,
+        "reason": _safe_str(reason, "capture_adapter_unavailable"),
+    }
+
+
 def _structured_observation_receipt(
     *,
     decision: str,
@@ -400,11 +765,14 @@ def _structured_observation_receipt(
     requested_region: dict[str, Any],
     mapped_overlay_region: dict[str, Any],
     actual_inspected_region: dict[str, Any],
+    actual_observed_region: dict[str, Any],
+    actual_captured_region: dict[str, Any],
     source: dict[str, Any],
     evidence_reference: dict[str, Any],
     inferred_information: dict[str, Any],
     confidence: float,
     unknown_information: list[str],
+    limitations: list[str],
     failure_or_refusal_reason: str = "",
 ) -> dict[str, Any]:
     return {
@@ -415,11 +783,14 @@ def _structured_observation_receipt(
         "requested_region": requested_region,
         "mapped_overlay_region": mapped_overlay_region,
         "actual_inspected_region": actual_inspected_region,
+        "actual_observed_region": actual_observed_region,
+        "actual_captured_region": actual_captured_region,
         "source": source,
         "evidence_reference": evidence_reference,
         "inferred_information": inferred_information,
         "confidence": confidence,
         "unknowns": unknown_information,
+        "limitations": limitations,
         "failure_or_refusal_reason": _safe_str(failure_or_refusal_reason),
         "governance": _observation_honesty(),
     }
@@ -463,12 +834,20 @@ def lens_observe_overlay_region(
 
     if clean_source not in _OVERLAY_OBSERVATION_TOOLS:
         reason = "unsupported_overlay_observation_source"
+        actual_observed_region = _not_observed_region(reason)
+        actual_captured_region = _not_captured_region(mapped, reason)
+        limitations = _observation_limitations(
+            mapped_overlay_region=mapped,
+            failure_or_refusal_reason=reason,
+        )
         structured = _structured_observation_receipt(
             decision="refused",
             status="refused",
             requested_region=requested,
             mapped_overlay_region=mapped,
             actual_inspected_region={},
+            actual_observed_region=actual_observed_region,
+            actual_captured_region=actual_captured_region,
             source={
                 "name": clean_source,
                 "status": "refused",
@@ -480,10 +859,19 @@ def lens_observe_overlay_region(
             inferred_information={},
             confidence=0.0,
             unknown_information=_observation_unknowns(),
+            limitations=limitations,
             failure_or_refusal_reason=reason,
         )
         receipt = _record_receipt(
-            {**base_receipt, "decision": "refused", "reason": reason, "structured_observation_receipt": structured}
+            {
+                **base_receipt,
+                "decision": "refused",
+                "reason": reason,
+                "actual_observed_region": actual_observed_region,
+                "actual_captured_region": actual_captured_region,
+                "limitations": limitations,
+                "structured_observation_receipt": structured,
+            }
         )
         return {
             "kind": "francis.lens.overlay.observation",
@@ -495,12 +883,15 @@ def lens_observe_overlay_region(
             "overlay_context": overlay,
             "mapped_overlay_region": mapped,
             "actual_inspected_region": {},
+            "actual_observed_region": actual_observed_region,
+            "actual_captured_region": actual_captured_region,
             "observation_source": {"tool": clean_source, "status": "refused"},
             "evidence_reference": {},
             "inferred_information": {},
             "structured_observation_receipt": structured,
             "confidence": 0.0,
             "unknown_information": _observation_unknowns(),
+            "limitations": limitations,
             "failure_or_refusal_reason": reason,
             "receipt": receipt,
             "governance": _observation_honesty(),
@@ -508,12 +899,20 @@ def lens_observe_overlay_region(
 
     if mapped["status"] != "mapped":
         reason = _safe_str(mapped.get("reason"), "overlay_region_not_mapped")
+        actual_observed_region = _not_observed_region(reason)
+        actual_captured_region = _not_captured_region(mapped, reason)
+        limitations = _observation_limitations(
+            mapped_overlay_region=mapped,
+            failure_or_refusal_reason=reason,
+        )
         structured = _structured_observation_receipt(
             decision="refused",
             status="blocked",
             requested_region=requested,
             mapped_overlay_region=mapped,
             actual_inspected_region={},
+            actual_observed_region=actual_observed_region,
+            actual_captured_region=actual_captured_region,
             source={
                 "name": clean_source,
                 "status": "not_called",
@@ -525,10 +924,19 @@ def lens_observe_overlay_region(
             inferred_information={},
             confidence=0.0,
             unknown_information=_observation_unknowns(),
+            limitations=limitations,
             failure_or_refusal_reason=reason,
         )
         receipt = _record_receipt(
-            {**base_receipt, "decision": "refused", "reason": reason, "structured_observation_receipt": structured}
+            {
+                **base_receipt,
+                "decision": "refused",
+                "reason": reason,
+                "actual_observed_region": actual_observed_region,
+                "actual_captured_region": actual_captured_region,
+                "limitations": limitations,
+                "structured_observation_receipt": structured,
+            }
         )
         return {
             "kind": "francis.lens.overlay.observation",
@@ -540,12 +948,15 @@ def lens_observe_overlay_region(
             "overlay_context": overlay,
             "mapped_overlay_region": mapped,
             "actual_inspected_region": {},
+            "actual_observed_region": actual_observed_region,
+            "actual_captured_region": actual_captured_region,
             "observation_source": {"tool": clean_source, "status": "not_called"},
             "evidence_reference": {},
             "inferred_information": {},
             "structured_observation_receipt": structured,
             "confidence": 0.0,
             "unknown_information": _observation_unknowns(),
+            "limitations": limitations,
             "failure_or_refusal_reason": reason,
             "receipt": receipt,
             "governance": _observation_honesty(),
@@ -578,6 +989,35 @@ def lens_observe_overlay_region(
     confidence = 0.35 if ok else 0.0
     unknowns = _observation_unknowns(result)
     failure_or_refusal_reason = "" if ok else _safe_str(result.get("error"), "observation_source_failed")
+    actual_observed_region = (
+        {
+            "status": "observed_metadata_only",
+            "region": mapped["region"],
+            "source": clean_source,
+            "readback": "mcp_metadata",
+            "capture": "not_performed",
+            "reason": "",
+        }
+        if ok
+        else {
+            "status": "failed",
+            "region": {},
+            "mapped_region": mapped["region"],
+            "source": clean_source,
+            "readback": "mcp_metadata",
+            "capture": "not_performed",
+            "reason": failure_or_refusal_reason,
+        }
+    )
+    actual_captured_region = _not_captured_region(
+        mapped,
+        "capture_adapter_unavailable" if ok else failure_or_refusal_reason,
+    )
+    limitations = _observation_limitations(
+        mapped_overlay_region=mapped,
+        result=result,
+        failure_or_refusal_reason=failure_or_refusal_reason,
+    )
     source = {
         "name": clean_source,
         "status": _safe_str(result.get("status")),
@@ -591,11 +1031,14 @@ def lens_observe_overlay_region(
         requested_region=requested,
         mapped_overlay_region=mapped,
         actual_inspected_region=actual_region,
+        actual_observed_region=actual_observed_region,
+        actual_captured_region=actual_captured_region,
         source=source,
         evidence_reference=evidence,
         inferred_information=inferred,
         confidence=confidence,
         unknown_information=unknowns,
+        limitations=limitations,
         failure_or_refusal_reason=failure_or_refusal_reason,
     )
     receipt = _record_receipt(
@@ -605,11 +1048,14 @@ def lens_observe_overlay_region(
             "mcp_status": result.get("status"),
             "mcp_authority": governance.get("authority"),
             "actual_inspected_region": actual_region,
+            "actual_observed_region": actual_observed_region,
+            "actual_captured_region": actual_captured_region,
             "observation_status": "observed" if ok else "failed",
             "structured_observation_receipt": structured,
             "evidence_reference": evidence,
             "confidence": confidence,
             "unknown_information": unknowns,
+            "limitations": limitations,
             "failure_or_refusal_reason": failure_or_refusal_reason,
         }
     )
@@ -623,6 +1069,8 @@ def lens_observe_overlay_region(
         "overlay_context": overlay,
         "mapped_overlay_region": mapped,
         "actual_inspected_region": actual_region,
+        "actual_observed_region": actual_observed_region,
+        "actual_captured_region": actual_captured_region,
         "observation_source": {
             "tool": clean_source,
             "status": _safe_str(result.get("status")),
@@ -634,6 +1082,7 @@ def lens_observe_overlay_region(
         "structured_observation_receipt": structured,
         "confidence": confidence,
         "unknown_information": unknowns,
+        "limitations": limitations,
         "failure_or_refusal_reason": failure_or_refusal_reason,
         "receipt": receipt,
         "governance": _observation_honesty(),

@@ -101,6 +101,19 @@ def test_overlay_observation_refuses_without_overlay_coordinate_model(tmp_path, 
     assert out["surface"] == "lens.overlay.observation"
     assert out["overlay_context"]["source"] == "missing"
     assert out["mapped_overlay_region"]["reason"] == "overlay_context_missing"
+    boundary = out["mapped_overlay_region"]["coordinate_boundary"]
+    assert boundary["status"] == "unavailable"
+    assert boundary["reason"] == "overlay_context_missing"
+    assert boundary["bounds_checked"] is False
+    assert boundary["within_overlay_bounds"] is False
+    transform = out["mapped_overlay_region"]["coordinate_transform"]
+    assert transform["status"] == "unavailable"
+    assert transform["reason"] == "overlay_context_missing"
+    assert transform["source_space"] == "desktop"
+    assert transform["target_space"] == "desktop_logical_pixels"
+    assert transform["transform_applied"] is False
+    assert transform["confidence"] == 0.0
+    assert transform["confidence_basis"] == "coordinate_transform_unavailable"
     assert out["observation_source"]["status"] == "not_called"
     structured = out["structured_observation_receipt"]
     assert structured["status"] == "blocked"
@@ -145,9 +158,56 @@ def test_overlay_observation_uses_existing_overlay_bounds_and_screen_readback(tm
     assert out["overlay_context"]["coordinate_model"]["status"] == "available"
     assert out["mapped_overlay_region"]["status"] == "mapped"
     assert out["mapped_overlay_region"]["within_overlay_bounds"] is True
+    boundary = out["mapped_overlay_region"]["coordinate_boundary"]
+    assert boundary["status"] == "within_bounds"
+    assert boundary["bounds_checked"] is True
+    assert boundary["within_overlay_bounds"] is True
+    assert boundary["clipped_by_overlay"] is False
+    assert boundary["outside_edges"] == []
+    assert boundary["coordinate_space"] == "desktop_logical_pixels"
+    assert boundary["overlay_edges"] == {"left": 0.0, "top": 0.0, "right": 500.0, "bottom": 400.0}
+    assert boundary["requested_edges"] == {"left": 10.0, "top": 20.0, "right": 90.0, "bottom": 80.0}
+    assert boundary["intersection_region"] == out["mapped_overlay_region"]["region"]
+    transform = out["mapped_overlay_region"]["coordinate_transform"]
+    assert transform["status"] == "mapped"
+    assert transform["reason"] == ""
+    assert transform["source_space"] == "desktop"
+    assert transform["target_space"] == "desktop_logical_pixels"
+    assert transform["mapped_region_space"] == "desktop_logical_pixels"
+    assert transform["transform"] == "identity_desktop_logical"
+    assert transform["transform_applied"] is True
+    assert transform["requested_to_mapped_delta"] == {"x": 0.0, "y": 0.0, "width": 0.0, "height": 0.0}
+    assert transform["overlay_origin"] == {
+        "space": "desktop_logical_pixels",
+        "x": 0.0,
+        "y": 0.0,
+        "source": "overlay_coordinate_model.bounds",
+    }
+    assert transform["overlay_local_region"] == {
+        "space": "overlay_local_logical_pixels",
+        "x": 10.0,
+        "y": 20.0,
+        "width": 80.0,
+        "height": 60.0,
+    }
+    assert transform["intersection_overlay_local_region"] == transform["overlay_local_region"]
+    assert transform["bounds_checked"] is True
+    assert transform["within_overlay_bounds"] is True
+    assert transform["clipped_by_overlay"] is False
+    assert transform["confidence"] == 1.0
+    assert transform["confidence_basis"] == "declared_overlay_coordinate_model_not_visual_perception"
+    assert "visual_registration_unsupported" in transform["limitations"]
     assert out["actual_inspected_region"]["status"] == "inspected_metadata_only"
     assert out["actual_inspected_region"]["screenshots"] is False
     assert out["actual_inspected_region"]["pixels"] is False
+    assert out["actual_observed_region"]["status"] == "observed_metadata_only"
+    assert out["actual_observed_region"]["region"] == out["mapped_overlay_region"]["region"]
+    assert out["actual_observed_region"]["capture"] == "not_performed"
+    assert out["actual_captured_region"]["status"] == "not_captured"
+    assert out["actual_captured_region"]["region"] == {}
+    assert out["actual_captured_region"]["mapped_region"] == out["mapped_overlay_region"]["region"]
+    assert out["actual_captured_region"]["screenshots"] is False
+    assert out["actual_captured_region"]["pixels"] is False
     assert out["observation_source"]["tool"] == "francis.screen.session"
     assert out["observation_source"]["live_simulated_fixture_or_replay"] == "live"
     assert out["evidence_reference"]["status"] == "metadata_readback"
@@ -158,17 +218,158 @@ def test_overlay_observation_uses_existing_overlay_bounds_and_screen_readback(tm
     assert structured["status"] == "observed"
     assert structured["source"]["name"] == "francis.screen.session"
     assert structured["source"]["live_simulated_fixture_or_replay"] == "live"
+    assert structured["actual_observed_region"] == out["actual_observed_region"]
+    assert structured["actual_captured_region"] == out["actual_captured_region"]
     assert structured["evidence_reference"] == out["evidence_reference"]
     assert structured["inferred_information"] == out["inferred_information"]
     assert structured["confidence"] == out["confidence"]
     assert "screenshot_pixels" in structured["unknowns"]
+    assert "metadata_only_screen_session_readback" in structured["limitations"]
+    assert "pixel_capture_unsupported" in structured["limitations"]
+    assert "ocr_unsupported" in structured["limitations"]
+    assert structured["limitations"] == out["limitations"]
     assert structured["governance"]["grants_execution_authority"] is False
     assert out["confidence"] == 0.35
     assert "screenshot_pixels" in out["unknown_information"]
     assert out["receipt"]["decision"] == "observed"
     assert out["receipt"]["structured_observation_receipt"] == structured
+    assert out["receipt"]["actual_observed_region"] == out["actual_observed_region"]
+    assert out["receipt"]["actual_captured_region"] == out["actual_captured_region"]
+    assert out["receipt"]["limitations"] == out["limitations"]
     assert out["receipt"]["correlation_id"] == "corr-observe-test"
     assert out["receipt"]["mission_id"] == "mission-observe-test"
+
+
+def test_overlay_observation_blocks_out_of_bounds_region_without_screen_readback(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+
+    def fail_if_called(*_args, **_kwargs):  # pragma: no cover - exercised only on regression
+        raise AssertionError("out-of-bounds overlay observation must not call MCP readback")
+
+    monkeypatch.setattr("francis.lens.mcp_perception._mcp_run_tool", fail_if_called)
+
+    out = lens_observe_overlay_region(
+        {"space": "desktop", "label": "outside", "x": 490, "y": 20, "width": 20, "height": 60},
+        {
+            "overlay_name": "Francis Lens Overlay",
+            "overlay_scope": "user_session",
+            "coordinate_space": "desktop_logical_pixels",
+            "bounds": {"x": 0, "y": 0, "width": 500, "height": 400},
+        },
+        actor=_ACTOR,
+        observation_source="francis.screen.session",
+    )
+
+    assert out["ok"] is False
+    assert out["status"] == "blocked"
+    assert out["mapped_overlay_region"]["status"] == "blocked"
+    assert out["mapped_overlay_region"]["reason"] == "requested_region_outside_overlay_bounds"
+    assert out["mapped_overlay_region"]["region"] == {
+        "space": "desktop_logical_pixels",
+        "x": 490.0,
+        "y": 20.0,
+        "width": 20.0,
+        "height": 60.0,
+    }
+    boundary = out["mapped_overlay_region"]["coordinate_boundary"]
+    assert boundary["status"] == "outside_bounds"
+    assert boundary["bounds_checked"] is True
+    assert boundary["within_overlay_bounds"] is False
+    assert boundary["clipped_by_overlay"] is True
+    assert boundary["outside_edges"] == ["right"]
+    assert boundary["overlay_edges"] == {"left": 0.0, "top": 0.0, "right": 500.0, "bottom": 400.0}
+    assert boundary["requested_edges"] == {"left": 490.0, "top": 20.0, "right": 510.0, "bottom": 80.0}
+    assert boundary["intersection_region"] == {
+        "space": "desktop_logical_pixels",
+        "x": 490.0,
+        "y": 20.0,
+        "width": 10.0,
+        "height": 60.0,
+    }
+    transform = out["mapped_overlay_region"]["coordinate_transform"]
+    assert transform["status"] == "blocked_after_mapping"
+    assert transform["reason"] == "requested_region_outside_overlay_bounds"
+    assert transform["transform"] == "identity_desktop_logical"
+    assert transform["transform_applied"] is True
+    assert transform["requested_to_mapped_delta"] == {"x": 0.0, "y": 0.0, "width": 0.0, "height": 0.0}
+    assert transform["overlay_local_region"] == {
+        "space": "overlay_local_logical_pixels",
+        "x": 490.0,
+        "y": 20.0,
+        "width": 20.0,
+        "height": 60.0,
+    }
+    assert transform["intersection_overlay_local_region"] == {
+        "space": "overlay_local_logical_pixels",
+        "x": 490.0,
+        "y": 20.0,
+        "width": 10.0,
+        "height": 60.0,
+    }
+    assert transform["within_overlay_bounds"] is False
+    assert transform["clipped_by_overlay"] is True
+    assert transform["confidence"] == 1.0
+    assert transform["confidence_basis"] == "declared_overlay_coordinate_model_not_visual_perception"
+    assert "capture_adapter_unavailable" in transform["limitations"]
+    assert out["observation_source"]["status"] == "not_called"
+    assert out["actual_observed_region"]["status"] == "not_observed"
+    assert out["actual_observed_region"]["region"] == {}
+    assert out["actual_observed_region"]["reason"] == "requested_region_outside_overlay_bounds"
+    assert out["actual_captured_region"]["status"] == "not_captured"
+    assert out["actual_captured_region"]["region"] == {}
+    assert out["actual_captured_region"]["mapped_region"] == out["mapped_overlay_region"]["region"]
+    assert out["actual_captured_region"]["screenshots"] is False
+    assert out["actual_captured_region"]["pixels"] is False
+    assert out["actual_captured_region"]["ocr"] is False
+    assert "requested_region_outside_overlay_bounds" in out["limitations"]
+    assert "pixel_capture_unsupported" in out["limitations"]
+    structured = out["structured_observation_receipt"]
+    assert structured["status"] == "blocked"
+    assert structured["actual_observed_region"] == out["actual_observed_region"]
+    assert structured["actual_captured_region"] == out["actual_captured_region"]
+    assert structured["limitations"] == out["limitations"]
+    assert out["receipt"]["actual_observed_region"] == out["actual_observed_region"]
+    assert out["receipt"]["actual_captured_region"] == out["actual_captured_region"]
+    assert out["receipt"]["limitations"] == out["limitations"]
+
+
+def test_overlay_observation_reports_overlay_local_transform_for_offset_bounds(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("FRANCIS_INPUT_ACTUATOR_STATE_DIR", str(tmp_path / "input"))
+    monkeypatch.setenv("FRANCIS_TAKEOVER_SESSION_STATE_DIR", str(tmp_path / "takeover"))
+    monkeypatch.setenv("FRANCIS_MCP_GATEWAY_STATE_DIR", str(tmp_path / "mcp"))
+
+    out = lens_observe_overlay_region(
+        {"space": "desktop", "label": "offset target", "x": 130, "y": 240, "width": 20, "height": 30},
+        {
+            "overlay_name": "Francis Lens Overlay",
+            "overlay_scope": "user_session",
+            "coordinate_space": "desktop_logical_pixels",
+            "bounds": {"x": 100, "y": 200, "width": 300, "height": 250},
+        },
+        actor=_ACTOR,
+        observation_source="francis.screen.session",
+    )
+
+    assert out["ok"] is True
+    transform = out["mapped_overlay_region"]["coordinate_transform"]
+    assert transform["status"] == "mapped"
+    assert transform["overlay_origin"] == {
+        "space": "desktop_logical_pixels",
+        "x": 100.0,
+        "y": 200.0,
+        "source": "overlay_coordinate_model.bounds",
+    }
+    assert transform["overlay_local_region"] == {
+        "space": "overlay_local_logical_pixels",
+        "x": 30.0,
+        "y": 40.0,
+        "width": 20.0,
+        "height": 30.0,
+    }
+    assert transform["intersection_overlay_local_region"] == transform["overlay_local_region"]
+    assert transform["requested_to_mapped_delta"] == {"x": 0.0, "y": 0.0, "width": 0.0, "height": 0.0}
+    assert transform["confidence_basis"] == "declared_overlay_coordinate_model_not_visual_perception"
 
 
 def test_overlay_observation_refuses_non_screen_observation_sources(tmp_path, monkeypatch) -> None:
