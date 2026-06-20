@@ -360,6 +360,97 @@ def test_orb_voice_overlay_lens_validation_uses_environment_connector_url(
     assert "environment URL proof should redact" not in summary
 
 
+def test_orb_voice_overlay_lens_validation_requires_same_public_mcp_receipt_for_usable_transcript(
+    tmp_path: Path,
+) -> None:
+    data_dir = tmp_path / "data"
+    receipt_dir = data_dir / "integrations" / "chatgpt_voice" / "receipts"
+    receipt_dir.mkdir(parents=True)
+    public_unavailable_receipt = {
+        "kind": "francis.chatgpt_voice.bridge.receipt",
+        "receipt_id": "chatgpt-voice-rejected-public-unavailable-test",
+        "actor": "chatgpt.voice",
+        "source": "chatgpt.voice",
+        **_mcp_server_voice_provenance(),
+        "decision": "rejected",
+        "reason": "transcript_unavailable",
+        "chat_forward_status": "rejected",
+        "chat_forwarded": False,
+        "transcript": "Transcript Unavailable",
+        "transcript_char_count": 22,
+        "reply": "ChatGPT reported that the transcript was unavailable.",
+        "reply_source": "bridge.transcript_guard",
+        "governance": {
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+    }
+    internal_usable_receipt = {
+        "kind": "francis.chatgpt_voice.bridge.receipt",
+        "receipt_id": "chatgpt-voice-recorded-internal-usable-test",
+        "actor": "chatgpt.voice",
+        "source": "chatgpt.voice",
+        "ingress_transport": "mcp_gateway_tool",
+        "mcp_gateway_tool": "francis.chatgpt_voice.ingress",
+        "mcp_server_tool": "francis_chatgpt_voice_ingress",
+        "mcp_server_transport": "",
+        "decision": "recorded",
+        "chat_forward_status": "forwarded",
+        "chat_forwarded": True,
+        "transcript": "internal usable MCP transcript should not satisfy public MCP proof",
+        "transcript_char_count": 64,
+        "reply": "I can hear you. Voice input is reaching Francis.",
+        "reply_source": "chat_forward.response",
+        "governance": {
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+    }
+    (receipt_dir / "chatgpt-voice-rejected-public-unavailable-test.json").write_text(
+        json.dumps(public_unavailable_receipt),
+        encoding="utf-8",
+    )
+    (receipt_dir / "chatgpt-voice-recorded-internal-usable-test.json").write_text(
+        json.dumps(internal_usable_receipt),
+        encoding="utf-8",
+    )
+    port = _unused_local_port()
+
+    proc = _run_validation_script(
+        "-DataDir",
+        str(data_dir),
+        "-ConnectorPort",
+        str(port),
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["status"] == "proof_blocked_no_usable_chatgpt_app_public_mcp_transcript"
+    assert payload["next_smallest_truthful_gap"] == (
+        "trigger_fresh_chatgpt_app_public_mcp_tool_call_with_usable_transcript"
+    )
+    receipts = payload["chatgpt_voice_receipts"]
+    assert receipts["fresh_streamable_http_mcp_server_chatgpt_source_count"] == 1
+    assert receipts["fresh_usable_mcp_server_chatgpt_source_count"] == 1
+    assert receipts["fresh_usable_streamable_http_mcp_server_chatgpt_source_count"] == 0
+    latest_public_mcp = receipts["latest_fresh_streamable_http_mcp_server_chatgpt_source"]
+    assert latest_public_mcp["receipt_id"] == "chatgpt-voice-rejected-public-unavailable-test"
+    assert latest_public_mcp["transcript_unavailable_detected"] is True
+    latest_usable_mcp = receipts["latest_fresh_usable_mcp_server_chatgpt_source"]
+    assert latest_usable_mcp["receipt_id"] == "chatgpt-voice-recorded-internal-usable-test"
+    assert latest_usable_mcp["source_claims_streamable_http_mcp_server"] is False
+    checks = {check["id"]: check for check in payload["checks"]}
+    assert checks["chatgpt_app_public_mcp_transport_observed"]["passed"] is True
+    assert checks["chatgpt_app_mcp_tool_usable_transcript_observed"]["passed"] is True
+    assert checks["chatgpt_app_public_mcp_usable_transcript_observed"]["passed"] is False
+    assert checks["chatgpt_app_public_mcp_usable_transcript_observed"]["status"] == "transcript_unavailable"
+    assert checks["chatgpt_app_public_mcp_usable_transcript_observed"]["reason"] == (
+        "latest_streamable_http_mcp_tool_receipt_has_unavailable_transcript"
+    )
+    summary = json.dumps(receipts)
+    assert "internal usable MCP transcript should not satisfy" not in summary
+
+
 def test_orb_voice_overlay_lens_validation_reports_mcp_probe_connection_proof(
     tmp_path: Path,
 ) -> None:
