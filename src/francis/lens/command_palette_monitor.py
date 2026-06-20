@@ -292,6 +292,7 @@ def _manual_acoustic_orb_position_proof(value: Any) -> dict[str, Any]:
             raw.get("requirement_checks"),
             allowed_keys=_MANUAL_ACOUSTIC_REQUIREMENT_KEYS,
         ),
+        "proof_diagnostic_summary": _manual_acoustic_proof_diagnostic_summary(raw.get("proof_diagnostic_summary")),
         "freshness_window_seconds": _safe_int(raw.get("freshness_window_seconds")),
         "voice_input_ready": _safe_bool(raw.get("voice_input_ready")),
         "wake_listening": _safe_bool(raw.get("wake_listening")),
@@ -353,6 +354,36 @@ def _manual_acoustic_orb_position_proof(value: Any) -> dict[str, Any]:
         "next_operator_step": _safe_str(raw.get("next_operator_step"), max_length=200),
         "grants_execution_authority": False,
         "grants_mutation_authority": False,
+    }
+
+
+def _manual_acoustic_proof_diagnostic_summary(value: Any) -> dict[str, Any]:
+    raw = _as_dict(value)
+    return {
+        "first_failed_requirement": _safe_requirement_key(raw.get("first_failed_requirement")),
+        "proof_blocker": _safe_str(raw.get("proof_blocker"), max_length=160),
+        "next_operator_step": _safe_str(raw.get("next_operator_step"), max_length=200),
+        "latest_voice_status": _safe_str(raw.get("latest_voice_status"), max_length=120),
+        "local_overlay_speech_command_observed": _safe_bool(raw.get("local_overlay_speech_command_observed")),
+        "latest_voice_command_source": _safe_str(raw.get("latest_voice_command_source"), max_length=120),
+        "latest_orb_receipt_id": _safe_str(raw.get("latest_orb_receipt_id"), max_length=160),
+        "latest_orb_receipt_command_source": _safe_str(
+            raw.get("latest_orb_receipt_command_source"),
+            max_length=120,
+        ),
+        "latest_orb_receipt_age_seconds": _safe_int(raw.get("latest_orb_receipt_age_seconds")),
+        "latest_orb_receipt_fresh": _safe_bool(raw.get("latest_orb_receipt_fresh")),
+        "latest_orb_receipt_counts_as_acoustic_proof": _safe_bool(
+            raw.get("latest_orb_receipt_counts_as_acoustic_proof"),
+        ),
+        "required_receipt_source": _safe_str(
+            raw.get("required_receipt_source"),
+            "local_overlay_speech_recognition",
+            max_length=120,
+        ),
+        "api_injected_text_counts_as_proof": _safe_bool(raw.get("api_injected_text_counts_as_proof")),
+        "transcript_redacted": True,
+        "stores_transcript": False,
     }
 
 

@@ -147,6 +147,24 @@ def test_lens_command_palette_monitor_route_projects_voice_bridge_proof(monkeypa
                             "stores_transcript": False,
                             "transcript": True,
                         },
+                        "proof_diagnostic_summary": {
+                            "first_failed_requirement": "none",
+                            "proof_blocker": "none",
+                            "next_operator_step": "keep_monitoring_or_repeat_for_next_acoustic_orb_move",
+                            "latest_voice_status": "orb_voice_command_applied",
+                            "local_overlay_speech_command_observed": True,
+                            "latest_voice_command_source": "local_overlay_speech_recognition",
+                            "latest_orb_receipt_id": "local-orb-left-proof",
+                            "latest_orb_receipt_command_source": "local_overlay_speech_recognition",
+                            "latest_orb_receipt_age_seconds": 2,
+                            "latest_orb_receipt_fresh": True,
+                            "latest_orb_receipt_counts_as_acoustic_proof": True,
+                            "required_receipt_source": "local_overlay_speech_recognition",
+                            "api_injected_text_counts_as_proof": False,
+                            "transcript_redacted": True,
+                            "stores_transcript": False,
+                            "transcript": "do not expose this proof diagnostic transcript",
+                        },
                         "freshness_window_seconds": 300,
                         "voice_input_ready": True,
                         "wake_listening": True,
@@ -384,6 +402,23 @@ def test_lens_command_palette_monitor_route_projects_voice_bridge_proof(monkeypa
     assert requirement_checks["transcript_redacted"] is True
     assert requirement_checks["stores_transcript"] is False
     assert "transcript" not in requirement_checks
+    proof_diagnostic = acoustic_proof["proof_diagnostic_summary"]
+    assert proof_diagnostic["first_failed_requirement"] == "none"
+    assert proof_diagnostic["proof_blocker"] == "none"
+    assert proof_diagnostic["next_operator_step"] == "keep_monitoring_or_repeat_for_next_acoustic_orb_move"
+    assert proof_diagnostic["latest_voice_status"] == "orb_voice_command_applied"
+    assert proof_diagnostic["local_overlay_speech_command_observed"] is True
+    assert proof_diagnostic["latest_voice_command_source"] == "local_overlay_speech_recognition"
+    assert proof_diagnostic["latest_orb_receipt_id"] == "local-orb-left-proof"
+    assert proof_diagnostic["latest_orb_receipt_command_source"] == "local_overlay_speech_recognition"
+    assert proof_diagnostic["latest_orb_receipt_age_seconds"] == 2
+    assert proof_diagnostic["latest_orb_receipt_fresh"] is True
+    assert proof_diagnostic["latest_orb_receipt_counts_as_acoustic_proof"] is True
+    assert proof_diagnostic["required_receipt_source"] == "local_overlay_speech_recognition"
+    assert proof_diagnostic["api_injected_text_counts_as_proof"] is False
+    assert proof_diagnostic["transcript_redacted"] is True
+    assert proof_diagnostic["stores_transcript"] is False
+    assert "transcript" not in proof_diagnostic
     assert acoustic_proof["latest_voice_command"] == "move_orb_left_side"
     assert acoustic_proof["latest_voice_command_source"] == "local_overlay_speech_recognition"
     assert acoustic_proof["latest_voice_transcript_source"] == "microphone_wake_listener"

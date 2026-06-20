@@ -941,6 +941,21 @@ def test_lens_command_palette_monitor_reports_acoustic_orb_position_proof(tmp_pa
     assert requirement_checks["api_injected_text_rejected"] is True
     assert requirement_checks["transcript_redacted"] is True
     assert requirement_checks["stores_transcript"] is False
+    proof_diagnostic = acoustic_proof["proof_diagnostic_summary"]
+    assert proof_diagnostic["first_failed_requirement"] == "none"
+    assert proof_diagnostic["proof_blocker"] == "none"
+    assert proof_diagnostic["local_overlay_speech_command_observed"] is True
+    assert proof_diagnostic["latest_voice_status"] == "orb_voice_command_applied"
+    assert proof_diagnostic["latest_voice_command_source"] == "local_overlay_speech_recognition"
+    assert proof_diagnostic["latest_orb_receipt_id"] == "local-orb-left-proof"
+    assert proof_diagnostic["latest_orb_receipt_command_source"] == "local_overlay_speech_recognition"
+    assert proof_diagnostic["latest_orb_receipt_age_seconds"] >= 0
+    assert proof_diagnostic["latest_orb_receipt_fresh"] is True
+    assert proof_diagnostic["latest_orb_receipt_counts_as_acoustic_proof"] is True
+    assert proof_diagnostic["required_receipt_source"] == "local_overlay_speech_recognition"
+    assert proof_diagnostic["api_injected_text_counts_as_proof"] is False
+    assert proof_diagnostic["transcript_redacted"] is True
+    assert proof_diagnostic["stores_transcript"] is False
     assert acoustic_proof["latest_voice_command"] == "move_orb_left_side"
     assert acoustic_proof["latest_voice_command_source"] == "local_overlay_speech_recognition"
     assert acoustic_proof["latest_voice_transcript_source"] == "microphone_wake_listener"
@@ -1013,6 +1028,24 @@ def test_lens_command_palette_monitor_can_require_manual_acoustic_orb_proof(tmp_
     assert requirement_checks["api_injected_text_rejected"] is True
     assert requirement_checks["transcript_redacted"] is True
     assert requirement_checks["stores_transcript"] is False
+    proof_diagnostic = acoustic_proof["proof_diagnostic_summary"]
+    assert proof_diagnostic == {
+        "first_failed_requirement": "local_overlay_speech_command_observed",
+        "proof_blocker": "awaiting_operator_spoken_orb_command",
+        "next_operator_step": "say_hey_francis_move_left_or_right",
+        "latest_voice_status": "spoken",
+        "local_overlay_speech_command_observed": False,
+        "latest_voice_command_source": "",
+        "latest_orb_receipt_id": "",
+        "latest_orb_receipt_command_source": "",
+        "latest_orb_receipt_age_seconds": None,
+        "latest_orb_receipt_fresh": False,
+        "latest_orb_receipt_counts_as_acoustic_proof": False,
+        "required_receipt_source": "local_overlay_speech_recognition",
+        "api_injected_text_counts_as_proof": False,
+        "transcript_redacted": True,
+        "stores_transcript": False,
+    }
     assert acoustic_proof["api_injected_text_counts_as_proof"] is False
     assert acoustic_proof["latest_voice_command_counts_as_acoustic_proof"] is False
     assert acoustic_proof["latest_orb_receipt_counts_as_acoustic_proof"] is False
@@ -1023,6 +1056,9 @@ def test_lens_command_palette_monitor_can_require_manual_acoustic_orb_proof(tmp_
     assert checks["voice_manual_acoustic_orb_position_proof"]["evidence"] == (
         "first_failed_requirement=local_overlay_speech_command_observed "
         "proof_blocker=awaiting_operator_spoken_orb_command "
+        "latest_voice_status=spoken "
+        "latest_orb_receipt_id= "
+        "receipt_fresh=False "
         "next_operator_step=say_hey_francis_move_left_or_right"
     )
 

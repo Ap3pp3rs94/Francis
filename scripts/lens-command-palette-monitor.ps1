@@ -958,6 +958,23 @@ function New-ManualAcousticOrbPositionProof {
   }
   $FailedRequirements = [string[]]$FailedRequirementItems.ToArray()
   $FirstFailedRequirement = if ($FailedRequirements.Count -gt 0) { $FailedRequirements[0] } else { 'none' }
+  $ProofDiagnosticSummary = [ordered]@{
+    first_failed_requirement = $FirstFailedRequirement
+    proof_blocker = $ProofBlocker
+    next_operator_step = $NextStep
+    latest_voice_status = $VoiceStatus
+    local_overlay_speech_command_observed = [bool]$VoiceLocalOrbCommand
+    latest_voice_command_source = $VoiceCommandSource
+    latest_orb_receipt_id = $ReceiptId
+    latest_orb_receipt_command_source = $ReceiptCommandSource
+    latest_orb_receipt_age_seconds = $ReceiptAgeSeconds
+    latest_orb_receipt_fresh = [bool]$ReceiptFresh
+    latest_orb_receipt_counts_as_acoustic_proof = [bool]$ReceiptCountsAsAcousticProof
+    required_receipt_source = 'local_overlay_speech_recognition'
+    api_injected_text_counts_as_proof = $false
+    transcript_redacted = $true
+    stores_transcript = $false
+  }
 
   return [ordered]@{
     status = $Status
@@ -966,6 +983,7 @@ function New-ManualAcousticOrbPositionProof {
     first_failed_requirement = $FirstFailedRequirement
     failed_requirements = $FailedRequirements
     requirement_checks = $RequirementChecks
+    proof_diagnostic_summary = $ProofDiagnosticSummary
     freshness_window_seconds = $FreshnessSeconds
     voice_input_ready = [bool]$VoiceInputReady
     wake_listening = [bool]$WakeListening
@@ -1610,10 +1628,14 @@ function New-CommandPaletteMonitorProbe {
     $ManualAcousticProofBlocker = [string](Get-PropertyValue -Payload $ManualAcousticProof -Name 'proof_blocker' -Default 'no_fresh_acoustic_orb_position_receipt')
     $ManualAcousticProofFirstFailed = [string](Get-PropertyValue -Payload $ManualAcousticProof -Name 'first_failed_requirement' -Default 'none')
     $ManualAcousticProofNextStep = [string](Get-PropertyValue -Payload $ManualAcousticProof -Name 'next_operator_step' -Default '')
+    $ManualAcousticProofDiagnostic = Get-PropertyValue -Payload $ManualAcousticProof -Name 'proof_diagnostic_summary'
+    $ManualAcousticProofLatestVoiceStatus = [string](Get-PropertyValue -Payload $ManualAcousticProofDiagnostic -Name 'latest_voice_status' -Default '')
+    $ManualAcousticProofLatestReceiptId = [string](Get-PropertyValue -Payload $ManualAcousticProofDiagnostic -Name 'latest_orb_receipt_id' -Default '')
+    $ManualAcousticProofReceiptFresh = [bool](Get-PropertyValue -Payload $ManualAcousticProofDiagnostic -Name 'latest_orb_receipt_fresh' -Default $false)
     $ManualAcousticProofEvidence = if ($ManualAcousticProofObserved -and -not [string]::IsNullOrWhiteSpace($ManualAcousticProofReceiptId)) {
       $ManualAcousticProofReceiptId
     } elseif (-not [string]::IsNullOrWhiteSpace($ManualAcousticProofFirstFailed) -and $ManualAcousticProofFirstFailed -ne 'none') {
-      'first_failed_requirement={0} proof_blocker={1} next_operator_step={2}' -f $ManualAcousticProofFirstFailed, $ManualAcousticProofBlocker, $ManualAcousticProofNextStep
+      'first_failed_requirement={0} proof_blocker={1} latest_voice_status={2} latest_orb_receipt_id={3} receipt_fresh={4} next_operator_step={5}' -f $ManualAcousticProofFirstFailed, $ManualAcousticProofBlocker, $ManualAcousticProofLatestVoiceStatus, $ManualAcousticProofLatestReceiptId, $ManualAcousticProofReceiptFresh, $ManualAcousticProofNextStep
     } elseif (-not [string]::IsNullOrWhiteSpace($ManualAcousticProofBlocker)) {
       $ManualAcousticProofBlocker
     } else {
