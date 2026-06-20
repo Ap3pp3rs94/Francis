@@ -521,8 +521,11 @@ def test_plugins_disable_records_quarantine_lifecycle_receipt_and_catalog_readba
     assert entry["status"] == "disabled"
     assert entry["metadata"]["lifecycle_action"] == "quarantine"
     assert entry["metadata"]["lifecycle_status"] == "quarantined"
+    assert entry["metadata"]["lifecycle_receipt_kind"] == "plugin.lifecycle.receipt"
     assert entry["metadata"]["lifecycle_receipt_id"] == quarantine_body["lifecycle_receipt_id"]
     assert entry["metadata"]["lifecycle_receipt_path"] == quarantine_body["lifecycle_receipt_path"]
+    assert entry["metadata"]["disabled_from_status"] == "staged"
+    assert entry["metadata"]["disabled_from_promotion_status"] == "staged"
 
 
 def test_plugins_disable_lifecycle_denies_unscoped_and_refuses_unsupported_actions(

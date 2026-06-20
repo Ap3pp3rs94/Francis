@@ -88080,6 +88080,135 @@ Remaining truthful gap:
 - This slice does not close a ledger-backed phase gate and does not move the
   Phase 2 posture.
 
+### 2026-06-20 - Stage 17 fourth live metadata receipt batch reduction
+
+Roadmap area: Stage 17 / Capability Economy, live capability-pack backlog
+reduction, governed metadata receipt batch intake, queue-count evidence, and
+receipt-backed selected-scope projection timing.
+
+This pass reused the existing metadata-receipt batch route against the next
+smallest current live migration-plan candidate instead of adding a one-off
+metadata patch:
+
+- Initial live readback from
+  `GET /plugins/capabilities/packs/migration/plan` reported
+  `candidate_total=15`, `status=ready_for_metadata_receipt_review`, and
+  `next_smallest_truthful_gap=stage17_capability_pack_metadata_receipt_operator_review`.
+- The selected current migration-plan candidate was
+  `legacy.generated.capabilityqualitytestsplugin`
+  (`pack_version=0.0.0-migration`). The route resolved 15 current capability ids
+  for that pack.
+- The accepted dry-run used `max_pack_count=1`,
+  `max_total_capability_count=15`, and
+  `max_capability_count_per_pack=15`, returned
+  `dry_run_fingerprint=1d964486d49a56e892d985881ce47e4bee7edada0ce7921983fc402cc1db4cd6`,
+  `planned_pack_count=1`, `planned_capability_count=15`,
+  `projection_scope=selected_packs`, `global_counts_included=false`,
+  `before_candidate_total=1`, and `before_global_candidate_total=15`, with
+  registry and receipt writes disabled.
+- Apply echoed that exact fingerprint through
+  `POST /plugins/capabilities/packs/metadata/receipts/bulk-from-plan` and wrote
+  batch `stage17_metadata_receipts_bulk_1781993392` plus receipt
+  `data/artifacts/plugins/capability_packs/metadata_receipts/capability_pack_metadata_1781993392_legacy-generated-capabilityqualitytestsplugin.json`.
+- The apply response reported `recorded_pack_count=1`,
+  `recorded_capability_count=15`, `before_candidate_total=1`,
+  `after_candidate_total=0`, `candidate_reduction_count=1`,
+  `remaining_scoped_candidate_total=0`, `remaining_global_candidate_total=14`,
+  and `remaining_candidate_total=14`.
+- Independent readback after apply reported `candidate_total=14`,
+  `target_pack_still_candidate=false`, and the new receipt visible through
+  `/plugins/capabilities/packs/metadata/receipts?limit=10`.
+- The written receipt carries
+  `stage17_capability_pack_metadata_receipts_batch_queue_evidence_v1` in
+  `metadata_context`, selected pack/capability ids, selected/global before
+  counts, the original source blockers, the worker prompt hash, and the existing
+  permission-gated governance flags.
+- The route preserved the no-proposal-approval, no-promotion, no-enable,
+  no-execution, no-generated-artifact-mutation, and no-memory-write boundary.
+
+Validation:
+
+- Live route dry-run and apply through FastAPI `TestClient` with temporary
+  `stage17.operator` actor scope mapped to `plugins.write` passed. Both runs
+  emitted the existing FastAPI/TestClient deprecation warning.
+- Independent live readback after apply confirmed the selected pack was removed
+  from the migration candidate list and the global candidate total moved from
+  `15` to `14`.
+- `.\.venv\Scripts\python.exe -m pytest
+  tests\test_api_plugins.py::test_plugins_capability_pack_metadata_receipts_bulk_from_migration_plan
+  tests\test_api_plugins.py::test_plugins_capability_pack_metadata_receipts_bulk_selected_batch_reports_before_after_counts
+  -q` passed with `2 passed` and one existing FastAPI/TestClient deprecation
+  warning.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. This pass does not claim full global queue closure,
+  promote, enable, execute, write a publication marker, commit, push, or close
+  the Stage 17 capability-economy queue.
+- This pass reduces one live metadata-receipt migration candidate through the
+  existing selected-batch mechanism. It does not close broader live backlog
+  reduction, global projection freshness, proposal-review/proposal-evidence
+  closure scope, publication-marker evidence, or full capability-lifecycle
+  closure.
+- This slice does not close a ledger-backed phase gate and does not move the
+  Phase 2 posture.
+
+### 2026-06-20 - Stage 17 catalog lifecycle provenance projection
+
+Roadmap area: Stage 17 / Capability Economy, catalog coherence, executable
+capability lifecycle, lifecycle receipts, and operator maintainability.
+
+This pass tightened the capability catalog as a real operator maintenance
+surface instead of treating lifecycle receipts as route-local evidence only:
+
+- The plugin catalog projection now carries lifecycle provenance fields from
+  registry metadata into capability listings, including lifecycle action,
+  lifecycle status, lifecycle timestamp, lifecycle reason, lifecycle receipt id,
+  lifecycle receipt path, lifecycle receipt kind, and the prior
+  `disabled_from_*` status fields.
+- `/plugins/capabilities/catalog` now exposes enough lifecycle provenance for an
+  operator or maintenance worker to see not only that a capability is disabled,
+  quarantined, or deprecated, but which lifecycle receipt backs that state and
+  which status/promotion status it came from.
+- The focused quarantine/catalog test now proves that a governed quarantine
+  writes a lifecycle receipt and that the catalog readback preserves the
+  receipt kind plus previous status provenance.
+- This is a catalog coherence improvement only. It does not grant rollback,
+  promotion, enablement, execution, proposal approval, memory write, or
+  Stage 17 closure authority.
+
+Validation:
+
+- `.\.venv\Scripts\python.exe -m pytest
+  tests\test_api_plugins.py::test_plugins_disable_records_quarantine_lifecycle_receipt_and_catalog_readback
+  -q` passed with one existing FastAPI/TestClient deprecation warning.
+- `.\.venv\Scripts\python.exe -m py_compile
+  src\francis\economy\markets\capability_catalog_projection.py
+  tests\test_api_plugins.py` passed.
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache
+  src\francis\economy\markets\capability_catalog_projection.py
+  tests\test_api_plugins.py` passed.
+- `.\.venv\Scripts\python.exe -m ruff format --check --no-cache
+  src\francis\economy\markets\capability_catalog_projection.py
+  tests\test_api_plugins.py` was attempted and found an unrelated active Worker
+  2 formatting delta in `tests\test_api_plugins.py`; this catalog slice did not
+  touch or claim that worker-owned compatibility-spec hunk.
+- `git diff --check -- src\francis\economy\markets\capability_catalog_projection.py
+  tests\test_api_plugins.py docs\operations\COMPLETION_LEDGER.md
+  docs\operations\STAGE17_CLOSURE_MATRIX.md` reported no whitespace errors.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. This pass does not claim catalog closure, full
+  lifecycle closure, migration apply closure, live backlog closure, promotion,
+  enablement, execution, publication, or phase movement.
+- This pass removes only the catalog-readback blocker where lifecycle receipt
+  provenance existed in registry metadata but did not fully travel through the
+  capability listing contract.
+- Broader live backlog reduction, migration apply behavior, global projection
+  freshness, proposal-review/proposal-evidence closure scope, publication-marker
+  evidence, and full reusable invocation closure remain open.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

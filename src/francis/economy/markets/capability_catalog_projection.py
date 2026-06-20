@@ -77,6 +77,15 @@ def _catalog_metadata(plugin: Mapping[str, Any], metadata: Mapping[str, Any]) ->
         "pack_metadata_receipt_id",
         "pack_metadata_receipt_path",
         "pack_migration_reason",
+        "lifecycle_action",
+        "lifecycle_status",
+        "lifecycle_status_ts",
+        "lifecycle_reason",
+        "lifecycle_receipt_id",
+        "lifecycle_receipt_path",
+        "lifecycle_receipt_kind",
+        "disabled_from_status",
+        "disabled_from_promotion_status",
     ):
         value = metadata.get(key)
         if value:
