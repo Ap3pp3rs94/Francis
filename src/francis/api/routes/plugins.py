@@ -8158,19 +8158,7 @@ def _record_capability_library_proposal_review_apply_batch(
     return {"batch_id": batch_id, "recorded": recorded, "failed": failed}
 
 
-def _capability_library_operator_proposal_evidence_next_batch(operator_checklist: dict[str, Any]) -> dict[str, Any]:
-    raw_packs = operator_checklist.get("packs") if isinstance(operator_checklist.get("packs"), list) else []
-    pack = next((item for item in raw_packs if isinstance(item, dict)), None)
-    if pack is None:
-        return {
-            "status": "no_operator_evidence_batch",
-            "ready": False,
-            "batch_capability_count": 0,
-            "batch_evidence_ref_required_count": 0,
-            "operator_must_supply_evidence_refs": True,
-            "no_synthetic_evidence": True,
-        }
-
+def _capability_library_operator_proposal_evidence_batch_for_pack(pack: dict[str, Any]) -> dict[str, Any]:
     pack_id = _safe_str(pack.get("pack_id")).strip()
     pack_version = _safe_str(pack.get("pack_version")).strip()
     raw_capabilities = pack.get("capabilities") if isinstance(pack.get("capabilities"), list) else []
@@ -8265,6 +8253,140 @@ def _capability_library_operator_proposal_evidence_next_batch(operator_checklist
     }
 
 
+def _capability_library_operator_proposal_evidence_next_batch(operator_checklist: dict[str, Any]) -> dict[str, Any]:
+    raw_packs = operator_checklist.get("packs") if isinstance(operator_checklist.get("packs"), list) else []
+    pack = next((item for item in raw_packs if isinstance(item, dict)), None)
+    if pack is None:
+        return {
+            "status": "no_operator_evidence_batch",
+            "ready": False,
+            "batch_capability_count": 0,
+            "batch_evidence_ref_required_count": 0,
+            "operator_must_supply_evidence_refs": True,
+            "no_synthetic_evidence": True,
+        }
+
+    return _capability_library_operator_proposal_evidence_batch_for_pack(pack)
+
+
+def _capability_library_operator_proposal_evidence_ready_batch(operator_checklist: dict[str, Any]) -> dict[str, Any]:
+    raw_packs = operator_checklist.get("packs") if isinstance(operator_checklist.get("packs"), list) else []
+    groups: list[dict[str, Any]] = []
+    combined_pack_ids: list[str] = []
+    combined_capability_ids: list[str] = []
+    combined_refs_by_capability: dict[str, list[str]] = {}
+
+    for raw_pack in raw_packs:
+        if not isinstance(raw_pack, dict):
+            continue
+        batch = _capability_library_operator_proposal_evidence_batch_for_pack(raw_pack)
+        if not bool(batch.get("ready")) or not bool(batch.get("local_artifact_ref_hints_complete")):
+            continue
+        pack_id = _safe_str(batch.get("pack_id")).strip()
+        capability_ids = _unique_texts(batch.get("apply_payload_hint", {}).get("capability_ids"), limit=1000)
+        refs_by_capability = (
+            batch.get("local_artifact_refs_by_capability")
+            if isinstance(batch.get("local_artifact_refs_by_capability"), dict)
+            else {}
+        )
+        evidence_refs_by_capability: dict[str, list[str]] = {}
+        for capability_id in capability_ids:
+            refs = _unique_texts(refs_by_capability.get(capability_id), limit=10)
+            if refs:
+                evidence_refs_by_capability[capability_id] = refs
+                combined_refs_by_capability[capability_id] = refs
+        if not capability_ids or set(evidence_refs_by_capability) != set(capability_ids):
+            continue
+
+        if pack_id:
+            combined_pack_ids.append(pack_id)
+        combined_capability_ids.extend(capability_ids)
+        groups.append(
+            {
+                "pack_id": pack_id,
+                "pack_version": _safe_str(batch.get("pack_version")).strip(),
+                "pack_name": _safe_str(batch.get("pack_name")).strip(),
+                "capability_count": len(capability_ids),
+                "evidence_ref_count": sum(len(refs) for refs in evidence_refs_by_capability.values()),
+                "capability_ids": capability_ids,
+                "evidence_refs_by_capability": evidence_refs_by_capability,
+                "batch_capabilities_truncated": bool(batch.get("batch_capabilities_truncated")),
+                "claim_scope": "operator_supplied_friction_evidence_reference_not_independent_verification",
+                "operator_must_review_local_artifact_refs_before_apply": True,
+                "does_not_validate_evidence_truth": True,
+                "requires_future_proposal_review": True,
+                "apply_payload_hint": {
+                    "pack_ids": [pack_id] if pack_id else [],
+                    "capability_ids": capability_ids,
+                    "evidence_refs": [],
+                    "evidence_refs_by_capability": evidence_refs_by_capability,
+                    "dry_run": True,
+                    "max_pack_count": 1,
+                    "max_total_capability_count": max(1, len(capability_ids)),
+                    "max_capability_count_per_pack": max(1, len(capability_ids)),
+                },
+            }
+        )
+
+    combined_pack_ids = _unique_texts(combined_pack_ids, limit=100)
+    combined_capability_ids = _unique_texts(combined_capability_ids, limit=1000)
+    combined_evidence_ref_count = sum(len(refs) for refs in combined_refs_by_capability.values())
+    ready = bool(groups)
+    return {
+        "status": "ready_for_local_artifact_ref_batch_apply" if ready else "no_ready_local_artifact_ref_batches",
+        "ready": ready,
+        "batch_source": "operator_evidence_intake_checklist_visible_packs_with_complete_local_artifact_refs",
+        "group_count": len(groups),
+        "capability_count": len(combined_capability_ids),
+        "evidence_ref_count": combined_evidence_ref_count,
+        "groups": groups,
+        "groups_truncated": bool(operator_checklist.get("packs_truncated")),
+        "combined_apply_payload_ready": ready,
+        "combined_apply_payload_hint": {
+            "pack_ids": combined_pack_ids,
+            "capability_ids": combined_capability_ids,
+            "evidence_refs": [],
+            "evidence_refs_by_capability": combined_refs_by_capability,
+            "dry_run": True,
+            "max_pack_count": max(1, len(combined_pack_ids)),
+            "max_total_capability_count": max(1, len(combined_capability_ids)),
+            "max_capability_count_per_pack": max(
+                1,
+                max((int(group.get("capability_count") or 0) for group in groups), default=0),
+            ),
+        }
+        if ready
+        else {},
+        "claim_scope": "operator_supplied_friction_evidence_reference_not_independent_verification",
+        "operator_must_review_local_artifact_refs_before_apply": True,
+        "operator_supplied_evidence_not_independently_verified": True,
+        "does_not_validate_evidence_truth": True,
+        "requires_future_proposal_review": True,
+        "dry_run_required_before_apply": True,
+        "no_synthetic_evidence": True,
+        "routes": {
+            "operator_intake_preview_route": _CAPABILITY_LIBRARY_OPERATOR_PROPOSAL_EVIDENCE_INTAKE_PREVIEW_ROUTE,
+            "operator_intake_apply_route": _CAPABILITY_LIBRARY_OPERATOR_PROPOSAL_EVIDENCE_INTAKE_APPLY_ROUTE,
+            "proposal_review_apply_route": _CAPABILITY_LIBRARY_PROPOSAL_REVIEW_APPLY_ROUTE,
+        },
+        "governance": {
+            "read_only": True,
+            "writes_registry_metadata": False,
+            "writes_proposals": False,
+            "does_not_write_validation_receipts": True,
+            "does_not_write_proposal_review_receipts": True,
+            "does_not_approve_proposals": True,
+            "does_not_promote_capabilities": True,
+            "does_not_enable_capabilities": True,
+            "does_not_execute_capabilities": True,
+            "promotion_authority": False,
+            "execution_authority": False,
+            "approval_authority": False,
+            "memory_write": False,
+        },
+    }
+
+
 def _capability_library_proposal_evidence_source_readiness_projection(
     *,
     proposal_evidence_plan: dict[str, Any],
@@ -8298,6 +8420,7 @@ def _capability_library_proposal_evidence_source_readiness_projection(
         proposal_evidence_missing_count > 0 and automatic_source_candidate_capability_count == 0
     )
     next_operator_batch = _capability_library_operator_proposal_evidence_next_batch(operator_checklist)
+    ready_operator_batch = _capability_library_operator_proposal_evidence_ready_batch(operator_checklist)
     next_operator_batch_count = _count_value(next_operator_batch.get("batch_capability_count"))
 
     if discipline_blocked_pack_count:
@@ -8348,6 +8471,13 @@ def _capability_library_proposal_evidence_source_readiness_projection(
         "next_operator_evidence_batch_ready": bool(next_operator_batch.get("ready")),
         "next_operator_evidence_batch_capability_count": next_operator_batch_count,
         "next_operator_evidence_batch": next_operator_batch,
+        "ready_operator_evidence_batch_ready": bool(ready_operator_batch.get("ready")),
+        "ready_operator_evidence_batch_group_count": _count_value(ready_operator_batch.get("group_count")),
+        "ready_operator_evidence_batch_capability_count": _count_value(ready_operator_batch.get("capability_count")),
+        "ready_operator_evidence_batch_evidence_ref_count": _count_value(
+            ready_operator_batch.get("evidence_ref_count")
+        ),
+        "ready_operator_evidence_batch": ready_operator_batch,
         "proposal_review_apply_status": _safe_str(proposal_review_apply_readiness.get("status")).strip(),
         "source_proposal_evidence_plan": {
             "status": _safe_str(proposal_evidence_plan.get("status")).strip(),
@@ -9674,6 +9804,7 @@ def _plugin_governance(
 _CAPABILITY_PACK_INVOCATION_RECEIPT_KIND = "plugin.capability_pack.invocation_receipt"
 _CAPABILITY_PACK_INVOCATION_RECEIPT_CONTRACT = "stage17_capability_pack_reusable_invocation_receipt_v1"
 _CAPABILITY_PACK_INVOCATION_ROUTING_GUARD_CONTRACT = "stage17_capability_pack_invocation_routing_guard_v1"
+_STAGE17_OPERATION_INVOCATION_CALLER_CONTEXT_CONTRACT = "stage17_operation_invocation_caller_context_readback_v1"
 _MISSION_OPERATION_CONTEXT_BY_CAPABILITY = {
     "plugin.run": "mission_linked_operation",
     "plugin.tool.run": "mission_linked_tool_operation",
@@ -9817,9 +9948,12 @@ def _capability_pack_invocation_routing_guard(
     *,
     operation_capability: str,
     invocation: dict[str, Any],
+    input_meta: dict[str, Any] | None = None,
 ) -> dict[str, object]:
     capability = _safe_str(operation_capability).strip()
     caller_context = _safe_str(invocation.get("caller_context")).strip()
+    input_context_meta = input_meta if isinstance(input_meta, dict) else {}
+    input_caller_context = _safe_str(input_context_meta.get("caller_context")).strip()
     expected_context = _MISSION_OPERATION_CONTEXT_BY_CAPABILITY.get(capability, "")
     governance = invocation.get("governance") if isinstance(invocation.get("governance"), dict) else {}
 
@@ -9829,6 +9963,11 @@ def _capability_pack_invocation_routing_guard(
     )
     operation_capability_supported = bool(expected_context)
     caller_context_matches_operation_capability = bool(expected_context and caller_context == expected_context)
+    input_caller_context_matches_operation_capability = (
+        bool(input_caller_context and expected_context and input_caller_context == expected_context)
+        if input_caller_context
+        else None
+    )
     uses_existing_plugin_dispatcher = _to_bool(governance.get("uses_existing_plugin_dispatcher"))
     new_authority_granted_by_receipt = _to_bool(governance.get("new_authority_granted_by_receipt"))
     promotes_capabilities = not _to_bool(governance.get("does_not_promote_capabilities"))
@@ -9851,18 +9990,24 @@ def _capability_pack_invocation_routing_guard(
         reject_reasons.append("unsupported_receipt_contract")
     if not caller_context_matches_operation_capability:
         reject_reasons.append("caller_context_operation_capability_mismatch")
+    if input_caller_context and expected_context and input_caller_context != expected_context:
+        reject_reasons.append("input_caller_context_operation_capability_mismatch")
     if not governance_bound:
         reject_reasons.append("governance_boundary_missing")
 
     return {
         "contract": _CAPABILITY_PACK_INVOCATION_ROUTING_GUARD_CONTRACT,
+        "operation_input_context_contract": _STAGE17_OPERATION_INVOCATION_CALLER_CONTEXT_CONTRACT,
         "operation_capability": capability,
         "caller_context": caller_context,
+        "input_caller_context_present": bool(input_caller_context),
+        "input_caller_context": input_caller_context or None,
         "expected_caller_context": expected_context,
         "operation_capability_supported": operation_capability_supported,
         "receipt_kind_supported": receipt_kind_supported,
         "receipt_contract_supported": receipt_contract_supported,
         "caller_context_matches_operation_capability": caller_context_matches_operation_capability,
+        "input_caller_context_matches_operation_capability": input_caller_context_matches_operation_capability,
         "governance_bound": governance_bound,
         "uses_existing_plugin_dispatcher": uses_existing_plugin_dispatcher,
         "new_authority_granted_by_receipt": new_authority_granted_by_receipt,
@@ -9948,12 +10093,13 @@ def _capability_pack_invocation_audit_projection(
         if filter_capability_id and item_capability_id != filter_capability_id:
             continue
 
+        inputs = task.get("inputs") if isinstance(task.get("inputs"), dict) else {}
+        input_meta = inputs.get("meta") if isinstance(inputs.get("meta"), dict) else {}
         routing_guard = _capability_pack_invocation_routing_guard(
             operation_capability=operation_capability,
             invocation=invocation,
+            input_meta=input_meta,
         )
-        inputs = task.get("inputs") if isinstance(task.get("inputs"), dict) else {}
-        input_meta = inputs.get("meta") if isinstance(inputs.get("meta"), dict) else {}
         receipt_linkage = (
             invocation.get("receipt_linkage") if isinstance(invocation.get("receipt_linkage"), dict) else {}
         )
@@ -10094,6 +10240,8 @@ def _capability_pack_invocation_audit_projection(
             "reads_existing_plugin_run_and_tool_run_operation_records": True,
             "routing_guard_contract": _CAPABILITY_PACK_INVOCATION_ROUTING_GUARD_CONTRACT,
             "routing_guard_required_for_reuse_proof": True,
+            "operation_input_context_contract": _STAGE17_OPERATION_INVOCATION_CALLER_CONTEXT_CONTRACT,
+            "operation_input_caller_context_must_match_when_present": True,
             "mission_plugin_run_context_required": _MISSION_OPERATION_CONTEXT_BY_CAPABILITY["plugin.run"],
             "mission_tool_run_context_required": _MISSION_OPERATION_CONTEXT_BY_CAPABILITY["plugin.tool.run"],
             "cross_context_reuse_claim_requires_matching_pack_reuse_key": True,

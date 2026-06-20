@@ -6756,6 +6756,251 @@ def test_plugins_capability_library_operator_proposal_evidence_source_readiness_
     assert fetched_meta["proposal_evidence_approval_claimed"] is False
 
 
+def test_plugins_capability_library_source_readiness_combines_ready_local_ref_batches(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
+    client = TestClient(create_app())
+    pack_version = "1.0.0"
+    built_items: list[dict[str, object]] = []
+
+    for index in range(2):
+        label = f"capability_library_source_readiness_combined_batch_{index}"
+        pack_id = f"ops.{label}"
+        built = client.post(
+            "/plugins/build",
+            json={
+                "name": f"Source Readiness Combined Batch {index + 1}",
+                "description": "Stage 17 combined local artifact evidence batch coverage",
+                "actor": _PLUGIN_ACTOR,
+                "meta": {
+                    **_forge_promotion_meta(label),
+                    "pack_id": pack_id,
+                    "pack_version": pack_version,
+                    "pack_name": f"Ops Source Readiness Combined Batch {index + 1}",
+                    "promotion_rules": [
+                        "metadata_receipt_before_promotion",
+                        "quality_standards_before_promotion",
+                        "operator_review_before_promotion",
+                    ],
+                    "pack_governance": {
+                        "risk_tier": "normal",
+                        "scope": "build_dev",
+                        "operator_review_required": True,
+                    },
+                },
+            },
+        )
+        assert built.status_code == 200
+        built_body = built.json()
+        assert built_body["ok"] is True
+        plugin_id = str(built_body["plugin_id"])
+        proposal_id = str(built_body["proposal_id"])
+        validation_receipt_id = str(built_body["validation_receipt_id"])
+        local_artifact_refs = [
+            proposal_id,
+            f"data/artifacts/plugins/proposals/{proposal_id}.json",
+            validation_receipt_id,
+            f"data/artifacts/plugins/validations/{validation_receipt_id}.json",
+        ]
+
+        registry = plugins._load_registry()
+        plugin = plugins._read_plugin(registry, plugin_id)
+        assert plugin is not None
+        plugin_meta = dict(plugin.get("meta") or {})
+        plugin_meta.pop("proposal_evidence", None)
+        plugin_meta.pop("evidence", None)
+        plugin["meta"] = plugin_meta
+        plugins._write_plugin(registry, plugins._normalize_plugin_record(plugin_id, plugin))
+        plugins._save_registry_and_catalog(registry)
+
+        proposal_path = plugins._plugin_proposal_path(proposal_id)
+        proposal = json.loads(proposal_path.read_text(encoding="utf-8"))
+        proposal["friction"]["evidence"] = []
+        proposal_path.write_text(json.dumps(proposal, indent=2, sort_keys=True), encoding="utf-8")
+
+        _approve_capability_pack_operator_review(
+            client,
+            pack_id=pack_id,
+            pack_version=pack_version,
+        )
+        built_items.append(
+            {
+                "pack_id": pack_id,
+                "plugin_id": plugin_id,
+                "proposal_id": proposal_id,
+                "local_artifact_refs": local_artifact_refs,
+            }
+        )
+
+    pack_ids = [str(item["pack_id"]) for item in built_items]
+    capability_ids = [str(item["plugin_id"]) for item in built_items]
+    proposal_ids = [str(item["proposal_id"]) for item in built_items]
+    evidence_refs_by_capability = {str(item["plugin_id"]): list(item["local_artifact_refs"]) for item in built_items}
+
+    before = client.get("/plugins/capabilities/library/proposal-evidence/source-readiness")
+    assert before.status_code == 200
+    before_body = before.json()
+    assert before_body["ok"] is True
+    assert before_body["proposal_evidence_missing_count"] == 2
+    assert before_body["operator_evidence_intake_candidate_capability_count"] == 2
+    assert before_body["ready_operator_evidence_batch_ready"] is True
+    assert before_body["ready_operator_evidence_batch_group_count"] == 2
+    assert before_body["ready_operator_evidence_batch_capability_count"] == 2
+    assert before_body["ready_operator_evidence_batch_evidence_ref_count"] == 8
+    ready_batch = before_body["ready_operator_evidence_batch"]
+    assert ready_batch["status"] == "ready_for_local_artifact_ref_batch_apply"
+    assert ready_batch["group_count"] == 2
+    assert ready_batch["capability_count"] == 2
+    assert ready_batch["evidence_ref_count"] == 8
+    assert ready_batch["operator_must_review_local_artifact_refs_before_apply"] is True
+    assert ready_batch["does_not_validate_evidence_truth"] is True
+    assert ready_batch["governance"]["read_only"] is True
+    assert ready_batch["governance"]["writes_registry_metadata"] is False
+    assert ready_batch["governance"]["does_not_write_proposal_review_receipts"] is True
+    assert ready_batch["governance"]["does_not_promote_capabilities"] is True
+    assert ready_batch["governance"]["does_not_execute_capabilities"] is True
+    combined_payload = ready_batch["combined_apply_payload_hint"]
+    assert set(combined_payload["pack_ids"]) == set(pack_ids)
+    assert set(combined_payload["capability_ids"]) == set(capability_ids)
+    assert combined_payload["evidence_refs"] == []
+    assert combined_payload["evidence_refs_by_capability"] == evidence_refs_by_capability
+    assert combined_payload["dry_run"] is True
+    assert combined_payload["max_pack_count"] == 2
+    assert combined_payload["max_total_capability_count"] == 2
+    assert combined_payload["max_capability_count_per_pack"] == 1
+
+    evidence_payload = {
+        "actor": _PLUGIN_ACTOR,
+        "reason": "dry run combined source-readiness local artifact proposal evidence batch",
+        **combined_payload,
+    }
+    dry_run = client.post(
+        "/plugins/capabilities/library/proposal-evidence/operator-intake/apply",
+        json=evidence_payload,
+    )
+    assert dry_run.status_code == 200
+    dry_run_body = dry_run.json()
+    assert dry_run_body["ok"] is True
+    assert dry_run_body["applied"] is False
+    assert dry_run_body["status"] == "dry_run"
+    assert dry_run_body["planned_pack_count"] == 2
+    assert dry_run_body["planned_capability_count"] == 2
+    assert dry_run_body["evidence_ref_count"] == 8
+    assert dry_run_body["shared_evidence_ref_count"] == 0
+    assert dry_run_body["capability_specific_evidence_ref_count"] == 8
+    assert dry_run_body["before"]["proposal_evidence_missing_count"] == 2
+    assert dry_run_body["before"]["projection_scope"] == "selected_capabilities"
+    assert dry_run_body["before"]["global_counts_included"] is False
+    assert dry_run_body["governance"]["writes_registry_metadata"] is False
+    assert dry_run_body["governance"]["does_not_promote_capabilities"] is True
+    assert dry_run_body["governance"]["does_not_execute_capabilities"] is True
+
+    evidence_payload["dry_run"] = False
+    evidence_payload["dry_run_fingerprint"] = dry_run_body["dry_run_fingerprint"]
+    applied = client.post(
+        "/plugins/capabilities/library/proposal-evidence/operator-intake/apply",
+        json=evidence_payload,
+    )
+    assert applied.status_code == 200
+    applied_body = applied.json()
+    assert applied_body["ok"] is True
+    assert applied_body["applied"] is True
+    assert applied_body["status"] == "recorded"
+    assert applied_body["recorded_pack_count"] == 2
+    assert applied_body["recorded_capability_count"] == 2
+    assert applied_body["remaining_proposal_evidence_missing_count"] == 0
+    assert applied_body["remaining_proposal_evidence_ready_count"] == 2
+    assert applied_body["governance"]["writes_registry_metadata"] is True
+    assert applied_body["governance"]["writes_proposals"] is False
+    assert applied_body["governance"]["does_not_approve_proposals"] is True
+    assert applied_body["governance"]["does_not_promote_capabilities"] is True
+    assert applied_body["governance"]["does_not_execute_capabilities"] is True
+
+    review_dry_run = client.post(
+        "/plugins/capabilities/library/proposal-review/apply",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "dry run proposal reviews after combined source-readiness evidence batch",
+            "pack_ids": pack_ids,
+            "capability_ids": capability_ids,
+            "max_pack_count": 2,
+            "max_total_capability_count": 2,
+            "max_capability_count_per_pack": 1,
+            "dry_run": True,
+        },
+    )
+    assert review_dry_run.status_code == 200
+    review_dry_run_body = review_dry_run.json()
+    assert review_dry_run_body["ok"] is True
+    assert review_dry_run_body["planned_pack_count"] == 2
+    assert review_dry_run_body["planned_capability_count"] == 2
+    assert review_dry_run_body["planned_proposal_count"] == 2
+    assert review_dry_run_body["before"]["proposal_review_missing_count"] == 2
+    assert review_dry_run_body["governance"]["writes_proposal_review_receipts"] is False
+    assert review_dry_run_body["governance"]["proposal_review_authority"] is False
+
+    review_applied = client.post(
+        "/plugins/capabilities/library/proposal-review/apply",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "apply proposal reviews after combined source-readiness evidence batch",
+            "pack_ids": pack_ids,
+            "capability_ids": capability_ids,
+            "max_pack_count": 2,
+            "max_total_capability_count": 2,
+            "max_capability_count_per_pack": 1,
+            "dry_run": False,
+            "dry_run_fingerprint": review_dry_run_body["dry_run_fingerprint"],
+        },
+    )
+    assert review_applied.status_code == 200
+    review_applied_body = review_applied.json()
+    assert review_applied_body["ok"] is True
+    assert review_applied_body["applied"] is True
+    assert review_applied_body["recorded_proposal_count"] == 2
+    assert review_applied_body["recorded_capability_count"] == 2
+    assert review_applied_body["remaining_proposal_review_missing_count"] == 0
+    assert review_applied_body["promotable_capability_count"] == 2
+    assert review_applied_body["governance"]["writes_proposal_review_receipts"] is True
+    assert review_applied_body["governance"]["updates_proposal_records"] is True
+    assert review_applied_body["governance"]["does_not_promote_capabilities"] is True
+    assert review_applied_body["governance"]["does_not_enable_capabilities"] is True
+
+    recorded_by_proposal = {item["proposal_id"]: item for item in review_applied_body["recorded"]}
+    assert set(recorded_by_proposal) == set(proposal_ids)
+    for proposal_id in proposal_ids:
+        receipt_path = Path(recorded_by_proposal[proposal_id]["receipt_path"])
+        assert receipt_path.exists()
+        proposal_state = plugins._plugin_proposal_review_state(proposal_id)
+        assert proposal_state["approved"] is True
+        assert proposal_state["review_status"] == "approved"
+
+    after = client.get("/plugins/capabilities/library/proposal-evidence/source-readiness")
+    assert after.status_code == 200
+    after_body = after.json()
+    assert after_body["proposal_evidence_missing_count"] == 0
+    assert after_body["ready_operator_evidence_batch_ready"] is False
+    assert after_body["recorded_operator_evidence_capability_count"] == 2
+    assert after_body["recorded_operator_evidence_ref_count"] == 8
+
+    for plugin_id in capability_ids:
+        fetched = client.get(f"/plugins/get?id={plugin_id}")
+        assert fetched.status_code == 200
+        item = fetched.json()["item"]
+        assert item["status"] == "staged"
+        assert item["enabled"] is False
+
+
 def test_plugins_capability_library_operator_proposal_evidence_intake_records_operator_refs_only(
     monkeypatch,
     tmp_path: Path,
