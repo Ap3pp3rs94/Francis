@@ -168,6 +168,7 @@ def lens_mcp_perception_contract() -> dict[str, Any]:
             "reports_requested_region": True,
             "reports_mapped_overlay_region": True,
             "reports_actual_inspected_observed_and_captured_regions": True,
+            "reports_replay_manifest": True,
             "observation_sources": sorted(_OVERLAY_OBSERVATION_TOOLS),
             "screenshots": False,
             "pixels": False,
@@ -209,6 +210,7 @@ def _receipt_optional_fields(payload: dict[str, Any]) -> dict[str, Any]:
         "evidence_reference",
         "confidence",
         "spatial_contract",
+        "replay_manifest",
         "unknown_information",
         "limitations",
         "failure_or_refusal_reason",
@@ -884,6 +886,52 @@ def _region_present(region: dict[str, Any]) -> bool:
     return bool(_region_edges(_as_dict(region)))
 
 
+def _same_present_region(first: dict[str, Any], second: dict[str, Any]) -> bool:
+    return _region_present(first) and _region_present(second) and _as_dict(first) == _as_dict(second)
+
+
+def _region_truth_readback(
+    *,
+    requested_region: dict[str, Any],
+    mapped_overlay_region: dict[str, Any],
+    actual_inspected_region: dict[str, Any],
+    actual_observed_region: dict[str, Any],
+    actual_captured_region: dict[str, Any],
+    source_status: str,
+    capture_performed: bool,
+    unsupported_perception: dict[str, bool],
+) -> dict[str, Any]:
+    mapped_region = _as_dict(mapped_overlay_region.get("region"))
+    actual_inspection_region = _as_dict(actual_inspected_region.get("actual_inspection_region"))
+    actual_observation_region = _as_dict(actual_observed_region.get("actual_observation_region"))
+    actual_capture_region = _as_dict(actual_captured_region.get("actual_capture_region"))
+    source_called = _safe_str(source_status) not in {"", "unknown", "none", "not_called", "refused"}
+    return {
+        "requested_region_present": _region_present(requested_region),
+        "mapped_region_present": _region_present(mapped_region),
+        "actual_inspection_region_present": _region_present(actual_inspection_region),
+        "actual_observation_region_present": _region_present(actual_observation_region),
+        "actual_capture_region_present": _region_present(actual_capture_region),
+        "actual_inspection_region_matches_mapped_region": _same_present_region(actual_inspection_region, mapped_region),
+        "actual_observed_region_matches_mapped_region": _same_present_region(actual_observation_region, mapped_region),
+        "actual_captured_region_matches_mapped_region": _same_present_region(actual_capture_region, mapped_region),
+        "mapped_region_observed_metadata_only": (
+            _safe_str(actual_observed_region.get("status")) == "observed_metadata_only"
+            and _same_present_region(actual_observation_region, mapped_region)
+        ),
+        "mapped_region_captured": capture_performed and _same_present_region(actual_capture_region, mapped_region),
+        "actual_capture_region_absent_reason": ""
+        if _region_present(actual_capture_region)
+        else _safe_str(actual_captured_region.get("reason")),
+        "source_called": source_called,
+        "metadata_readback_only": _safe_str(actual_observed_region.get("readback")) == "mcp_metadata"
+        and not capture_performed,
+        "capture_performed": capture_performed,
+        "unsupported_perception_claimed": any(bool(value) for value in unsupported_perception.values()),
+        "unsupported_perception": unsupported_perception,
+    }
+
+
 def _spatial_contract_readback(
     *,
     status: str,
@@ -908,6 +956,13 @@ def _spatial_contract_readback(
     )
     source_name = _safe_str(source.get("name")) or _safe_str(source.get("tool")) or "none"
     source_status = _safe_str(source.get("status"), "unknown")
+    source_readback = {
+        "name": source_name,
+        "status": source_status,
+        "mode": _safe_str(source.get("mode")),
+        "read_only": bool(source.get("read_only")),
+        "live_simulated_fixture_or_replay": _safe_str(source.get("live_simulated_fixture_or_replay")),
+    }
     observed_confidence_basis = _safe_str(
         actual_observed_region.get("confidence_basis"),
         "mcp_metadata_readback_not_visual_perception",
@@ -917,6 +972,70 @@ def _spatial_contract_readback(
         "capture_not_performed",
     )
     capture_state = _safe_str(actual_captured_region.get("capture"))
+    region_presence = {
+        "requested_region": _region_present(requested_region),
+        "mapped_region": _region_present(_as_dict(mapped_overlay_region.get("region"))),
+        "actual_inspection_region": _region_present(_as_dict(actual_inspected_region.get("actual_inspection_region"))),
+        "actual_observation_region": _region_present(_as_dict(actual_observed_region.get("actual_observation_region"))),
+        "actual_capture_region": _region_present(_as_dict(actual_captured_region.get("actual_capture_region"))),
+    }
+    confidence_basis = observed_confidence_basis if confidence > 0 else captured_confidence_basis
+    unsupported_perception = {
+        "screenshots": False,
+        "pixels": False,
+        "ocr": False,
+        "accessibility_tree": False,
+        "visual_similarity": False,
+    }
+    capture_performed = bool(capture_state and capture_state != "not_performed")
+    region_truth = _region_truth_readback(
+        requested_region=requested_region,
+        mapped_overlay_region=mapped_overlay_region,
+        actual_inspected_region=actual_inspected_region,
+        actual_observed_region=actual_observed_region,
+        actual_captured_region=actual_captured_region,
+        source_status=source_status,
+        capture_performed=capture_performed,
+        unsupported_perception=unsupported_perception,
+    )
+    replay_keys = [
+        "requested_region",
+        "mapped_overlay_region",
+        "actual_inspected_region",
+        "actual_observed_region",
+        "actual_captured_region",
+        "source",
+        "evidence_reference",
+    ]
+    replay_manifest = {
+        "schema_version": 1,
+        "contract": "lens_overlay_spatial_metadata_replay_v1",
+        "replay_scope": "coordinate_and_metadata_only",
+        "metadata_replayable": True,
+        "visual_replayable": False,
+        "source": source_readback,
+        "source_mode": source_readback["mode"],
+        "source_status": source_status,
+        "requested_region_status": _safe_str(requested_region.get("status")),
+        "mapped_overlay_region_status": _safe_str(mapped_overlay_region.get("status")),
+        "actual_inspected_region_status": _safe_str(actual_inspected_region.get("status"), "not_inspected"),
+        "actual_observed_region_status": _safe_str(actual_observed_region.get("status"), "not_observed"),
+        "actual_captured_region_status": _safe_str(actual_captured_region.get("status"), "not_captured"),
+        "coordinate_boundary_status": _safe_str(boundary.get("status"), "unavailable"),
+        "coordinate_transform_status": _safe_str(transform.get("status"), "unavailable"),
+        "region_presence": region_presence,
+        "region_truth": region_truth,
+        "evidence_reference_status": _safe_str(evidence_reference.get("status")),
+        "evidence_content_included": bool(evidence_reference.get("content_included")),
+        "confidence": confidence,
+        "confidence_basis": confidence_basis,
+        "capture_performed": capture_performed,
+        "unsupported_perception": unsupported_perception,
+        "unknowns": unknown_information,
+        "limitations": limitations,
+        "failure_or_refusal_reason": _safe_str(failure_or_refusal_reason),
+        "replay_keys": replay_keys,
+    }
     return {
         "schema_version": 1,
         "contract": "lens_overlay_spatial_metadata_v1",
@@ -932,48 +1051,20 @@ def _spatial_contract_readback(
         "bounds_checked": bool(boundary.get("bounds_checked")) or bool(transform.get("bounds_checked")),
         "within_overlay_bounds": bool(boundary.get("within_overlay_bounds")),
         "clipped_by_overlay": bool(boundary.get("clipped_by_overlay")),
-        "source": {
-            "name": source_name,
-            "status": source_status,
-            "mode": _safe_str(source.get("mode")),
-            "read_only": bool(source.get("read_only")),
-            "live_simulated_fixture_or_replay": _safe_str(source.get("live_simulated_fixture_or_replay")),
-        },
+        "source": source_readback,
         "evidence_reference_status": _safe_str(evidence_reference.get("status")),
         "evidence_content_included": bool(evidence_reference.get("content_included")),
-        "region_presence": {
-            "requested_region": _region_present(requested_region),
-            "mapped_region": _region_present(_as_dict(mapped_overlay_region.get("region"))),
-            "actual_inspection_region": _region_present(
-                _as_dict(actual_inspected_region.get("actual_inspection_region"))
-            ),
-            "actual_observation_region": _region_present(
-                _as_dict(actual_observed_region.get("actual_observation_region"))
-            ),
-            "actual_capture_region": _region_present(_as_dict(actual_captured_region.get("actual_capture_region"))),
-        },
+        "region_presence": region_presence,
+        "region_truth": region_truth,
         "confidence": confidence,
-        "confidence_basis": observed_confidence_basis if confidence > 0 else captured_confidence_basis,
-        "capture_performed": bool(capture_state and capture_state != "not_performed"),
-        "unsupported_perception": {
-            "screenshots": False,
-            "pixels": False,
-            "ocr": False,
-            "accessibility_tree": False,
-            "visual_similarity": False,
-        },
+        "confidence_basis": confidence_basis,
+        "capture_performed": capture_performed,
+        "unsupported_perception": unsupported_perception,
         "unknowns": unknown_information,
         "limitations": limitations,
         "failure_or_refusal_reason": _safe_str(failure_or_refusal_reason),
-        "replay_keys": [
-            "requested_region",
-            "mapped_overlay_region",
-            "actual_inspected_region",
-            "actual_observed_region",
-            "actual_captured_region",
-            "source",
-            "evidence_reference",
-        ],
+        "replay_keys": replay_keys,
+        "replay_manifest": replay_manifest,
     }
 
 
@@ -1023,6 +1114,7 @@ def _structured_observation_receipt(
         "inferred_information": inferred_information,
         "confidence": confidence,
         "spatial_contract": spatial_contract,
+        "replay_manifest": spatial_contract["replay_manifest"],
         "unknowns": unknown_information,
         "limitations": limitations,
         "failure_or_refusal_reason": _safe_str(failure_or_refusal_reason),
@@ -1118,6 +1210,7 @@ def lens_observe_overlay_region(
                 "actual_captured_region": actual_captured_region,
                 "limitations": limitations,
                 "spatial_contract": structured["spatial_contract"],
+                "replay_manifest": structured["replay_manifest"],
                 "structured_observation_receipt": structured,
             }
         )
@@ -1138,6 +1231,7 @@ def lens_observe_overlay_region(
             "inferred_information": {},
             "structured_observation_receipt": structured,
             "spatial_contract": structured["spatial_contract"],
+            "replay_manifest": structured["replay_manifest"],
             "confidence": 0.0,
             "unknown_information": unknowns,
             "limitations": limitations,
@@ -1198,6 +1292,7 @@ def lens_observe_overlay_region(
                 "actual_captured_region": actual_captured_region,
                 "limitations": limitations,
                 "spatial_contract": structured["spatial_contract"],
+                "replay_manifest": structured["replay_manifest"],
                 "structured_observation_receipt": structured,
             }
         )
@@ -1218,6 +1313,7 @@ def lens_observe_overlay_region(
             "inferred_information": {},
             "structured_observation_receipt": structured,
             "spatial_contract": structured["spatial_contract"],
+            "replay_manifest": structured["replay_manifest"],
             "confidence": 0.0,
             "unknown_information": unknowns,
             "limitations": limitations,
@@ -1356,6 +1452,7 @@ def lens_observe_overlay_region(
             "unknown_information": unknowns,
             "limitations": limitations,
             "spatial_contract": structured["spatial_contract"],
+            "replay_manifest": structured["replay_manifest"],
             "failure_or_refusal_reason": failure_or_refusal_reason,
         }
     )
@@ -1381,6 +1478,7 @@ def lens_observe_overlay_region(
         "inferred_information": inferred,
         "structured_observation_receipt": structured,
         "spatial_contract": structured["spatial_contract"],
+        "replay_manifest": structured["replay_manifest"],
         "confidence": confidence,
         "unknown_information": unknowns,
         "limitations": limitations,

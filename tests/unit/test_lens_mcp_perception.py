@@ -45,6 +45,7 @@ def test_contract_lists_only_read_only_tools_and_claims_not_resident(tmp_path, m
     assert out["overlay_observation"]["reports_requested_region"] is True
     assert out["overlay_observation"]["reports_mapped_overlay_region"] is True
     assert out["overlay_observation"]["reports_actual_inspected_observed_and_captured_regions"] is True
+    assert out["overlay_observation"]["reports_replay_manifest"] is True
     assert out["overlay_observation"]["screenshots"] is False
     assert out["overlay_observation"]["pixels"] is False
     assert out["governance"]["resident"] is False
@@ -334,6 +335,24 @@ def test_overlay_observation_uses_existing_overlay_bounds_and_screen_readback(tm
         "actual_observation_region": True,
         "actual_capture_region": False,
     }
+    assert spatial["region_truth"] == {
+        "requested_region_present": True,
+        "mapped_region_present": True,
+        "actual_inspection_region_present": True,
+        "actual_observation_region_present": True,
+        "actual_capture_region_present": False,
+        "actual_inspection_region_matches_mapped_region": True,
+        "actual_observed_region_matches_mapped_region": True,
+        "actual_captured_region_matches_mapped_region": False,
+        "mapped_region_observed_metadata_only": True,
+        "mapped_region_captured": False,
+        "actual_capture_region_absent_reason": "capture_adapter_unavailable",
+        "source_called": True,
+        "metadata_readback_only": True,
+        "capture_performed": False,
+        "unsupported_perception_claimed": False,
+        "unsupported_perception": spatial["unsupported_perception"],
+    }
     assert spatial["confidence"] == out["confidence"]
     assert spatial["confidence_basis"] == "mcp_metadata_readback_not_visual_perception"
     assert spatial["capture_performed"] is False
@@ -348,6 +367,20 @@ def test_overlay_observation_uses_existing_overlay_bounds_and_screen_readback(tm
     assert spatial["limitations"] == out["limitations"]
     assert spatial["failure_or_refusal_reason"] == ""
     assert "actual_captured_region" in spatial["replay_keys"]
+    replay = spatial["replay_manifest"]
+    assert replay == structured["replay_manifest"] == out["replay_manifest"]
+    assert replay["contract"] == "lens_overlay_spatial_metadata_replay_v1"
+    assert replay["replay_scope"] == "coordinate_and_metadata_only"
+    assert replay["metadata_replayable"] is True
+    assert replay["visual_replayable"] is False
+    assert replay["source_mode"] == "live_readback"
+    assert replay["source_status"] == "ready"
+    assert replay["region_presence"] == spatial["region_presence"]
+    assert replay["region_truth"] == spatial["region_truth"]
+    assert replay["unsupported_perception"] == spatial["unsupported_perception"]
+    assert replay["confidence_basis"] == spatial["confidence_basis"]
+    assert replay["evidence_content_included"] is False
+    assert replay["capture_performed"] is False
     assert "screenshot_pixels" in structured["unknowns"]
     assert "metadata_only_screen_session_readback" in structured["limitations"]
     assert "pixel_capture_unsupported" in structured["limitations"]
@@ -362,6 +395,7 @@ def test_overlay_observation_uses_existing_overlay_bounds_and_screen_readback(tm
     assert out["receipt"]["actual_captured_region"] == out["actual_captured_region"]
     assert out["receipt"]["limitations"] == out["limitations"]
     assert out["receipt"]["spatial_contract"] == spatial
+    assert out["receipt"]["replay_manifest"] == replay
     assert out["receipt"]["correlation_id"] == "corr-observe-test"
     assert out["receipt"]["mission_id"] == "mission-observe-test"
 
@@ -483,13 +517,37 @@ def test_overlay_observation_blocks_out_of_bounds_region_without_screen_readback
     assert spatial["source"]["status"] == "not_called"
     assert spatial["region_presence"]["mapped_region"] is True
     assert spatial["region_presence"]["actual_observation_region"] is False
+    assert spatial["region_truth"]["requested_region_present"] is True
+    assert spatial["region_truth"]["mapped_region_present"] is True
+    assert spatial["region_truth"]["actual_observation_region_present"] is False
+    assert spatial["region_truth"]["actual_capture_region_present"] is False
+    assert spatial["region_truth"]["actual_observed_region_matches_mapped_region"] is False
+    assert spatial["region_truth"]["actual_captured_region_matches_mapped_region"] is False
+    assert spatial["region_truth"]["mapped_region_observed_metadata_only"] is False
+    assert spatial["region_truth"]["mapped_region_captured"] is False
+    assert spatial["region_truth"]["actual_capture_region_absent_reason"] == "requested_region_outside_overlay_bounds"
+    assert spatial["region_truth"]["source_called"] is False
+    assert spatial["region_truth"]["metadata_readback_only"] is False
+    assert spatial["region_truth"]["unsupported_perception_claimed"] is False
     assert spatial["confidence"] == 0.0
     assert spatial["capture_performed"] is False
     assert spatial["failure_or_refusal_reason"] == "requested_region_outside_overlay_bounds"
+    replay = spatial["replay_manifest"]
+    assert replay == structured["replay_manifest"] == out["replay_manifest"]
+    assert replay["source_status"] == "not_called"
+    assert replay["mapped_overlay_region_status"] == "blocked"
+    assert replay["actual_observed_region_status"] == "not_observed"
+    assert replay["actual_captured_region_status"] == "not_captured"
+    assert replay["metadata_replayable"] is True
+    assert replay["visual_replayable"] is False
+    assert replay["region_presence"] == spatial["region_presence"]
+    assert replay["region_truth"] == spatial["region_truth"]
+    assert replay["failure_or_refusal_reason"] == "requested_region_outside_overlay_bounds"
     assert out["receipt"]["actual_observed_region"] == out["actual_observed_region"]
     assert out["receipt"]["actual_captured_region"] == out["actual_captured_region"]
     assert out["receipt"]["limitations"] == out["limitations"]
     assert out["receipt"]["spatial_contract"] == spatial
+    assert out["receipt"]["replay_manifest"] == replay
 
 
 def test_overlay_observation_reports_overlay_local_transform_for_offset_bounds(tmp_path, monkeypatch) -> None:
@@ -625,3 +683,10 @@ def test_api_observe_requires_scope_and_overlay_context(tmp_path, monkeypatch) -
     assert receipt["actual_inspected_region"]["actual_inspection_region"] == body["mapped_overlay_region"]["region"]
     assert receipt["actual_inspected_region"]["confidence_basis"] == "mcp_metadata_readback_not_visual_perception"
     assert "capture_adapter_unavailable" in receipt["actual_captured_region"]["limitations"]
+    assert body["spatial_contract"]["region_truth"]["mapped_region_observed_metadata_only"] is True
+    assert body["spatial_contract"]["region_truth"]["mapped_region_captured"] is False
+    assert receipt["spatial_contract"]["region_truth"] == body["spatial_contract"]["region_truth"]
+    assert body["replay_manifest"] == body["spatial_contract"]["replay_manifest"]
+    assert receipt["replay_manifest"] == body["replay_manifest"]
+    assert receipt["replay_manifest"]["metadata_replayable"] is True
+    assert receipt["replay_manifest"]["visual_replayable"] is False
