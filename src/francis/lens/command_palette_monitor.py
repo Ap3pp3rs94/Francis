@@ -98,6 +98,25 @@ def _safe_bool_dict(value: Any, *, allowed_keys: tuple[str, ...]) -> dict[str, b
     return {key: _safe_bool(raw.get(key)) for key in allowed_keys}
 
 
+def _safe_requirement_key(value: Any, default: str = "none") -> str:
+    text = _safe_str(value, max_length=120)
+    if text == "none" or text in _MANUAL_ACOUSTIC_REQUIREMENT_KEYS:
+        return text
+    return default
+
+
+def _safe_requirement_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    allowed = set(_MANUAL_ACOUSTIC_REQUIREMENT_KEYS)
+    out: list[str] = []
+    for item in value[: len(_MANUAL_ACOUSTIC_REQUIREMENT_KEYS)]:
+        text = _safe_str(item, max_length=120)
+        if text in allowed:
+            out.append(text)
+    return out
+
+
 def _read_json(path: Path) -> dict[str, Any] | None:
     try:
         if not path.is_file():
@@ -267,6 +286,8 @@ def _manual_acoustic_orb_position_proof(value: Any) -> dict[str, Any]:
         "status": _safe_str(raw.get("status"), "not_checked", max_length=120),
         "proof_observed": _safe_bool(raw.get("proof_observed")),
         "proof_blocker": _safe_str(raw.get("proof_blocker"), max_length=160),
+        "first_failed_requirement": _safe_requirement_key(raw.get("first_failed_requirement")),
+        "failed_requirements": _safe_requirement_list(raw.get("failed_requirements")),
         "requirement_checks": _safe_bool_dict(
             raw.get("requirement_checks"),
             allowed_keys=_MANUAL_ACOUSTIC_REQUIREMENT_KEYS,

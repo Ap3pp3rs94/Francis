@@ -926,29 +926,46 @@ function New-ManualAcousticOrbPositionProof {
   } else {
     'confirm_wake_listener_then_say_hey_francis_move_left_or_right'
   }
+  $RequirementChecks = [ordered]@{
+    voice_input_ready = [bool]$VoiceInputReady
+    wake_listener_ready = [bool]$WakeListening
+    microphone_signal_observed = [bool]$SignalObserved
+    local_overlay_speech_command_observed = [bool]$VoiceLocalOrbCommand
+    voice_command_microphone_origin = [bool]$VoiceMicClaimed
+    voice_command_wake_phrase_observed = [bool]$VoiceWakeDetected
+    orb_receipt_observed = -not [string]::IsNullOrWhiteSpace($ReceiptId)
+    orb_receipt_applied = [bool]$ReceiptApplied
+    orb_receipt_microphone_origin = [bool]$ReceiptMicClaimed
+    orb_receipt_wake_phrase_observed = [bool]$ReceiptWakeDetected
+    orb_receipt_command_matches_voice = [bool]$ReceiptCommandMatchesVoice
+    orb_receipt_request_matches_voice = [bool]$ReceiptRequestMatchesVoice
+    orb_receipt_fresh = [bool]$ReceiptFresh
+    api_injected_text_rejected = $true
+    transcript_redacted = $true
+    stores_transcript = $false
+  }
+  $FailedRequirementItems = [System.Collections.Generic.List[string]]::new()
+  foreach ($Check in $RequirementChecks.GetEnumerator()) {
+    if ([string]$Check.Key -eq 'stores_transcript') {
+      if ([bool]$Check.Value) {
+        $FailedRequirementItems.Add([string]$Check.Key)
+      }
+      continue
+    }
+    if (-not [bool]$Check.Value) {
+      $FailedRequirementItems.Add([string]$Check.Key)
+    }
+  }
+  $FailedRequirements = [string[]]$FailedRequirementItems.ToArray()
+  $FirstFailedRequirement = if ($FailedRequirements.Count -gt 0) { $FailedRequirements[0] } else { 'none' }
 
   return [ordered]@{
     status = $Status
     proof_observed = [bool]$ProofObserved
     proof_blocker = $ProofBlocker
-    requirement_checks = [ordered]@{
-      voice_input_ready = [bool]$VoiceInputReady
-      wake_listener_ready = [bool]$WakeListening
-      microphone_signal_observed = [bool]$SignalObserved
-      local_overlay_speech_command_observed = [bool]$VoiceLocalOrbCommand
-      voice_command_microphone_origin = [bool]$VoiceMicClaimed
-      voice_command_wake_phrase_observed = [bool]$VoiceWakeDetected
-      orb_receipt_observed = -not [string]::IsNullOrWhiteSpace($ReceiptId)
-      orb_receipt_applied = [bool]$ReceiptApplied
-      orb_receipt_microphone_origin = [bool]$ReceiptMicClaimed
-      orb_receipt_wake_phrase_observed = [bool]$ReceiptWakeDetected
-      orb_receipt_command_matches_voice = [bool]$ReceiptCommandMatchesVoice
-      orb_receipt_request_matches_voice = [bool]$ReceiptRequestMatchesVoice
-      orb_receipt_fresh = [bool]$ReceiptFresh
-      api_injected_text_rejected = $true
-      transcript_redacted = $true
-      stores_transcript = $false
-    }
+    first_failed_requirement = $FirstFailedRequirement
+    failed_requirements = $FailedRequirements
+    requirement_checks = $RequirementChecks
     freshness_window_seconds = $FreshnessSeconds
     voice_input_ready = [bool]$VoiceInputReady
     wake_listening = [bool]$WakeListening
@@ -1591,6 +1608,16 @@ function New-CommandPaletteMonitorProbe {
     $ManualAcousticProofStatus = [string](Get-PropertyValue -Payload $ManualAcousticProof -Name 'status' -Default 'not_checked')
     $ManualAcousticProofReceiptId = [string](Get-PropertyValue -Payload $ManualAcousticProof -Name 'latest_orb_receipt_id' -Default '')
     $ManualAcousticProofBlocker = [string](Get-PropertyValue -Payload $ManualAcousticProof -Name 'proof_blocker' -Default 'no_fresh_acoustic_orb_position_receipt')
+    $ManualAcousticProofFirstFailed = [string](Get-PropertyValue -Payload $ManualAcousticProof -Name 'first_failed_requirement' -Default 'none')
+    $ManualAcousticProofEvidence = if ($ManualAcousticProofObserved -and -not [string]::IsNullOrWhiteSpace($ManualAcousticProofReceiptId)) {
+      $ManualAcousticProofReceiptId
+    } elseif (-not [string]::IsNullOrWhiteSpace($ManualAcousticProofFirstFailed) -and $ManualAcousticProofFirstFailed -ne 'none') {
+      'first_failed_requirement={0} proof_blocker={1}' -f $ManualAcousticProofFirstFailed, $ManualAcousticProofBlocker
+    } elseif (-not [string]::IsNullOrWhiteSpace($ManualAcousticProofBlocker)) {
+      $ManualAcousticProofBlocker
+    } else {
+      'no_fresh_acoustic_orb_position_receipt'
+    }
     [void]$Checks.Add((New-MonitorCheck -Id 'voice_overlay_readback' -Passed $VoiceReadbackOk -Status $(if ($VoiceReadbackOk) { 'readback_ready' } else { 'readback_failed' }) -Evidence 'scripts/lens-overlay-window.ps1 -Mode Status'))
     [void]$Checks.Add((New-MonitorCheck -Id 'voice_overlay_runtime' -Passed ($VoiceReadbackOk -and $VoiceOverlayReady) -Status $(if ($VoiceReadbackOk -and $VoiceOverlayReady) { 'visible' } else { 'overlay_not_ready' }) -Evidence $(if ([string]::IsNullOrWhiteSpace($VoiceOverlayStatus)) { 'overlay_status_missing' } else { $VoiceOverlayStatus })))
     [void]$Checks.Add((New-MonitorCheck -Id 'voice_provider_readiness' -Passed $VoiceProviderReady -Status $(if ($VoiceProviderReady) { 'configured' } else { 'not_configured' }) -Evidence ([string](Get-PropertyValue -Payload $VoiceMonitor -Name 'selected_provider' -Default ''))))
@@ -1602,7 +1629,7 @@ function New-CommandPaletteMonitorProbe {
       [void]$Checks.Add((New-MonitorCheck -Id 'voice_chatgpt_mcp_tool_proof' -Passed $McpConnectionProofObserved -Status $McpConnectionProofStatus -Evidence $(if ([string]::IsNullOrWhiteSpace($McpConnectionProofReceiptId)) { 'no_fresh_mcp_connection_receipt' } else { $McpConnectionProofReceiptId })))
     }
     if ($RequireManualAcousticOrbProof) {
-      [void]$Checks.Add((New-MonitorCheck -Id 'voice_manual_acoustic_orb_position_proof' -Passed $ManualAcousticProofObserved -Status $ManualAcousticProofStatus -Evidence $(if ($ManualAcousticProofObserved -and -not [string]::IsNullOrWhiteSpace($ManualAcousticProofReceiptId)) { $ManualAcousticProofReceiptId } elseif (-not [string]::IsNullOrWhiteSpace($ManualAcousticProofBlocker)) { $ManualAcousticProofBlocker } else { 'no_fresh_acoustic_orb_position_receipt' })))
+      [void]$Checks.Add((New-MonitorCheck -Id 'voice_manual_acoustic_orb_position_proof' -Passed $ManualAcousticProofObserved -Status $ManualAcousticProofStatus -Evidence $ManualAcousticProofEvidence))
     }
   }
   if ($ConnectorChecksEnabled) {

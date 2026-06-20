@@ -126,6 +126,8 @@ def test_lens_command_palette_monitor_route_projects_voice_bridge_proof(monkeypa
                         "status": "fresh_acoustic_orb_position_command_observed",
                         "proof_observed": True,
                         "proof_blocker": "none",
+                        "first_failed_requirement": "none",
+                        "failed_requirements": ["transcript"],
                         "requirement_checks": {
                             "voice_input_ready": True,
                             "wake_listener_ready": True,
@@ -362,6 +364,8 @@ def test_lens_command_palette_monitor_route_projects_voice_bridge_proof(monkeypa
     assert acoustic_proof["status"] == "fresh_acoustic_orb_position_command_observed"
     assert acoustic_proof["proof_observed"] is True
     assert acoustic_proof["proof_blocker"] == "none"
+    assert acoustic_proof["first_failed_requirement"] == "none"
+    assert acoustic_proof["failed_requirements"] == []
     requirement_checks = acoustic_proof["requirement_checks"]
     assert requirement_checks["voice_input_ready"] is True
     assert requirement_checks["wake_listener_ready"] is True
