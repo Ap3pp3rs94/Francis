@@ -87538,6 +87538,64 @@ Remaining truthful gap:
 - This slice does not close a ledger-backed phase gate and does not move the
   Phase 2 posture.
 
+### 2026-06-20 - Stage 17 metadata receipt batch queue evidence
+
+Roadmap area: Stage 17 / Capability Economy, capability-pack backlog
+reduction, governed batch metadata receipt intake, queue-count evidence, and
+receipt-backed selected-scope projection timing.
+
+This pass strengthened the reusable metadata-receipt batch mechanism instead of
+adding another one-off metadata patch:
+
+- `POST /plugins/capabilities/packs/metadata/receipts/bulk-from-plan` now emits
+  a `stage17_capability_pack_metadata_receipts_batch_queue_evidence_v1`
+  contract with `projection_scope`, `global_counts_included`, generated-at
+  projection timestamps, selected pack/capability ids, before/after candidate
+  totals, scoped/global remaining totals, and `candidate_reduction_count`.
+- Dry-run and dry-run-confirmation-blocked responses now carry the same
+  selected/full-scope projection evidence without writing registry metadata or
+  receipts.
+- Apply responses now carry before/after queue evidence for the affected batch,
+  and each written metadata receipt records the batch id plus selected-scope
+  queue evidence in its redacted `metadata_context`.
+- The route still uses the existing `plugins.write` permission gate, still
+  requires dry-run confirmation before apply, and still does not approve
+  proposals, promote capabilities, enable capabilities, execute capabilities,
+  mutate generated artifacts, or write memory.
+- Focused route coverage proves a two-pack selected migration batch in isolated
+  test data moved from `before_candidate_total=2` to `after_candidate_total=0`
+  with `candidate_reduction_count=2`, while each affected pack received a
+  metadata receipt carrying the batch evidence contract.
+
+Validation:
+
+- `.\.venv\Scripts\python.exe -m py_compile
+  src\francis\api\routes\plugins.py` passed.
+- `.\.venv\Scripts\python.exe -m pytest
+  tests\test_api_plugins.py::test_plugins_capability_pack_metadata_receipts_bulk_from_migration_plan
+  tests\test_api_plugins.py::test_plugins_capability_pack_metadata_receipts_bulk_selected_batch_reports_before_after_counts
+  -q` passed with `2 passed` and one existing FastAPI/TestClient deprecation
+  warning.
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py` passed.
+- `.\.venv\Scripts\python.exe -m ruff format --check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py` passed with
+  `2 files already formatted`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. This pass does not process the live repository
+  Stage 17 queue, claim full global queue closure, promote, enable, execute,
+  write a publication marker, commit, push, or close the Stage 17
+  capability-economy queue.
+- This pass removes only the repeated selected-batch queue-evidence blocker for
+  metadata receipt migration batches. Broader live backlog reduction, global
+  projection freshness, proposal-review/proposal-evidence closure scope,
+  publication-marker evidence, and full capability-lifecycle closure remain
+  open.
+- This slice does not close a ledger-backed phase gate and does not move the
+  Phase 2 posture.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

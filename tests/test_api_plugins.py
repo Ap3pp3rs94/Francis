@@ -2283,6 +2283,154 @@ def test_plugins_capability_pack_metadata_receipts_bulk_from_migration_plan(
     assert receipt["metadata_context"]["bulk_from_migration_plan"] is True
 
 
+def test_plugins_capability_pack_metadata_receipts_bulk_selected_batch_reports_before_after_counts(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
+    client = TestClient(create_app())
+    built_plugin_ids: list[str] = []
+    for index, label in enumerate(("one", "two"), start=1):
+        built = client.post(
+            "/plugins/build",
+            json={
+                "name": f"Bulk Migration Batch Plugin {index}",
+                "description": "Stage 17 selected batch metadata receipt coverage",
+                "actor": _PLUGIN_ACTOR,
+                "meta": _forge_promotion_meta(f"bulk_migration_plan_batch_{label}"),
+            },
+        )
+        assert built.status_code == 200
+        built_body = built.json()
+        assert built_body["ok"] is True
+        built_plugin_ids.append(str(built_body["plugin_id"]))
+
+    plan = client.get("/plugins/capabilities/packs/migration/plan").json()
+    selected_candidates = [
+        item
+        for item in plan["candidates"]
+        if any(plugin_id in item["capability_ids_sample"] for plugin_id in built_plugin_ids)
+    ]
+    assert len(selected_candidates) == 2
+    selected_pack_ids = sorted(str(item["pack_id"]) for item in selected_candidates)
+    assert plan["candidate_total"] == 2
+
+    dry_run = client.post(
+        "/plugins/capabilities/packs/metadata/receipts/bulk-from-plan",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "dry run selected migration batch evidence",
+            "pack_ids": selected_pack_ids,
+            "max_pack_count": 2,
+            "max_total_capability_count": 2,
+        },
+    )
+
+    assert dry_run.status_code == 200
+    dry_run_body = dry_run.json()
+    assert dry_run_body["ok"] is True
+    assert dry_run_body["applied"] is False
+    assert dry_run_body["status"] == "dry_run"
+    assert dry_run_body["planned_pack_count"] == 2
+    assert dry_run_body["planned_capability_count"] == 2
+    assert dry_run_body["projection_scope"] == "selected_packs"
+    assert dry_run_body["global_counts_included"] is False
+    assert dry_run_body["before_candidate_total"] == 2
+    assert dry_run_body["before"]["candidate_total"] == 2
+    assert dry_run_body["before"]["global_candidate_total"] == plan["candidate_total"]
+    assert dry_run_body["before"]["candidate_capability_count"] == 2
+    assert dry_run_body["before"]["projection_evidence"]["queue_count_contract"] == (
+        "stage17_capability_pack_metadata_receipts_batch_queue_evidence_v1"
+    )
+    assert dry_run_body["before"]["projection_evidence"]["selected_pack_ids"] == sorted(selected_pack_ids)
+    assert dry_run_body["before"]["projection_evidence"]["selected_capability_ids"] == sorted(built_plugin_ids)
+    assert dry_run_body["governance"]["queue_count_contract"] == (
+        "stage17_capability_pack_metadata_receipts_batch_queue_evidence_v1"
+    )
+    assert dry_run_body["governance"]["writes_registry_metadata"] is False
+    assert dry_run_body["governance"]["writes_receipts"] is False
+
+    applied = client.post(
+        "/plugins/capabilities/packs/metadata/receipts/bulk-from-plan",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "record selected migration batch evidence",
+            "pack_ids": selected_pack_ids,
+            "max_pack_count": 2,
+            "max_total_capability_count": 2,
+            "dry_run": False,
+            "dry_run_fingerprint": dry_run_body["dry_run_fingerprint"],
+        },
+    )
+
+    assert applied.status_code == 200
+    applied_body = applied.json()
+    assert applied_body["ok"] is True
+    assert applied_body["applied"] is True
+    assert applied_body["status"] == "recorded"
+    assert applied_body["recorded_pack_count"] == 2
+    assert applied_body["recorded_capability_count"] == 2
+    assert applied_body["projection_scope"] == "selected_packs"
+    assert applied_body["global_counts_included"] is False
+    assert applied_body["before_candidate_total"] == 2
+    assert applied_body["after_candidate_total"] == 0
+    assert applied_body["candidate_reduction_count"] == 2
+    assert applied_body["remaining_scoped_candidate_total"] == 0
+    assert applied_body["remaining_global_candidate_total"] == 0
+    assert applied_body["remaining_candidate_total"] == 0
+    assert applied_body["before_projection_generated_at"]
+    assert applied_body["after_projection_generated_at"]
+    assert applied_body["before"]["projection_evidence"]["selected_pack_ids"] == sorted(selected_pack_ids)
+    assert applied_body["after"]["projection_evidence"]["selected_pack_ids"] == sorted(selected_pack_ids)
+    assert applied_body["after"]["projection_evidence"]["selected_capability_ids"] == sorted(built_plugin_ids)
+    assert applied_body["projection_evidence"]["queue_count_contract"] == (
+        "stage17_capability_pack_metadata_receipts_batch_queue_evidence_v1"
+    )
+    assert applied_body["governance"]["writes_registry_metadata"] is True
+    assert applied_body["governance"]["writes_receipts"] is True
+    assert applied_body["governance"]["does_not_approve_proposals"] is True
+    assert applied_body["governance"]["does_not_promote_capabilities"] is True
+    assert applied_body["governance"]["does_not_enable_capabilities"] is True
+    assert applied_body["governance"]["does_not_execute_capabilities"] is True
+
+    recorded_by_pack = {item["pack_id"]: item for item in applied_body["recorded"]}
+    assert set(recorded_by_pack) == set(selected_pack_ids)
+    for receipt_ref in recorded_by_pack.values():
+        assert receipt_ref["batch_id"] == applied_body["batch_id"]
+        receipt_path = Path(str(receipt_ref["receipt_path"]))
+        receipt_fs_path = Path(plugins._filesystem_path(receipt_path))
+        assert receipt_fs_path.exists()
+        receipt = json.loads(receipt_fs_path.read_text(encoding="utf-8"))
+        assert receipt["kind"] == "plugin.capability_pack.metadata_receipt"
+        assert receipt["governance"]["route"] == "/plugins/capabilities/packs/metadata/receipts/bulk-from-plan"
+        assert receipt["governance"]["promotion_authority"] is False
+        assert receipt["governance"]["execution_authority"] is False
+        metadata_context = receipt["metadata_context"]
+        assert metadata_context["bulk_from_migration_plan"] is True
+        assert metadata_context["bulk_batch_id"] == applied_body["batch_id"]
+        assert metadata_context["queue_count_contract"] == (
+            "stage17_capability_pack_metadata_receipts_batch_queue_evidence_v1"
+        )
+        assert metadata_context["projection_scope"] == "selected_packs"
+        assert metadata_context["global_counts_included"] is False
+        assert metadata_context["before_candidate_total"] == 2
+        assert metadata_context["before_global_candidate_total"] == 2
+        assert metadata_context["selected_pack_ids"] == sorted(selected_pack_ids)
+        assert metadata_context["selected_capability_ids"] == sorted(built_plugin_ids)
+        assert "pack_metadata_receipt_missing" in metadata_context["source_candidate_blockers"]
+
+    refreshed_plan = client.get("/plugins/capabilities/packs/migration/plan").json()
+    assert refreshed_plan["candidate_total"] == 0
+
+
 def test_plugins_capability_pack_quality_standards_projects_pack_evidence(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

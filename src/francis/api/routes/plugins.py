@@ -16567,6 +16567,61 @@ def _capability_pack_metadata_receipts_bulk_from_plan_fingerprint(*, planned: li
     return hashlib.sha256(raw).hexdigest()
 
 
+def _capability_pack_migration_batch_projection(
+    *,
+    plan: dict[str, Any],
+    candidates: list[dict[str, Any]],
+    selected_pack_ids: set[str],
+    selected_capability_ids: set[str],
+) -> dict[str, object]:
+    projection_scope = "selected_packs" if selected_pack_ids else "full_library"
+    global_counts_included = not bool(selected_pack_ids)
+    candidate_pack_ids = sorted(
+        _unique_texts(
+            [
+                _safe_str(candidate.get("pack_id")).strip()
+                for candidate in candidates
+                if _safe_str(candidate.get("pack_id")).strip()
+            ],
+            limit=1000,
+        )
+    )
+    candidate_capability_count = sum(_count_value(candidate.get("capability_count")) for candidate in candidates)
+    projection = _stage17_projection_evidence(
+        projection_scope=projection_scope,
+        global_counts_included=global_counts_included,
+        selected_pack_ids=selected_pack_ids or set(candidate_pack_ids),
+        selected_capability_ids=selected_capability_ids,
+    )
+    projection_evidence = (
+        dict(projection.get("projection_evidence")) if isinstance(projection.get("projection_evidence"), dict) else {}
+    )
+    scoped_candidate_total = len(candidates) if selected_pack_ids else _count_value(plan.get("candidate_total"))
+    global_candidate_total = _count_value(plan.get("candidate_total"))
+    projection_evidence.update(
+        {
+            "queue_count_contract": "stage17_capability_pack_metadata_receipts_batch_queue_evidence_v1",
+            "candidate_total": scoped_candidate_total,
+            "global_candidate_total": global_candidate_total,
+            "candidate_pack_count": len(candidate_pack_ids),
+            "candidate_pack_ids": candidate_pack_ids,
+            "candidate_capability_count": candidate_capability_count,
+        }
+    )
+    return {
+        **projection,
+        "projection_evidence": projection_evidence,
+        "projection_scope": projection_scope,
+        "global_counts_included": global_counts_included,
+        "candidate_total": scoped_candidate_total,
+        "global_candidate_total": global_candidate_total,
+        "candidate_pack_count": len(candidate_pack_ids),
+        "candidate_pack_ids": candidate_pack_ids,
+        "candidate_capability_count": candidate_capability_count,
+        "next_smallest_truthful_gap": _safe_str(plan.get("next_smallest_truthful_gap")).strip(),
+    }
+
+
 def _capability_pack_metadata_receipts_bulk_governance(
     *,
     route_path: str,
@@ -16579,6 +16634,7 @@ def _capability_pack_metadata_receipts_bulk_governance(
         "lifecycle_operation": "capability_pack_metadata_receipts_bulk_from_migration_plan",
         "policy_gate": _PLUGIN_WRITE_SCOPE,
         "receipt_contract": "plugin.capability_pack.metadata_receipt",
+        "queue_count_contract": "stage17_capability_pack_metadata_receipts_batch_queue_evidence_v1",
         "writes_registry_metadata": writes_registry_metadata,
         "writes_receipts": writes_receipts,
         "dry_run_required_before_apply": True,
@@ -16629,10 +16685,24 @@ def record_capability_pack_metadata_receipts_from_plan(
                 if _safe_str(candidate.get("pack_id")).strip() in selected_pack_ids
             ]
         if not candidates:
+            before_projection = _capability_pack_migration_batch_projection(
+                plan=plan,
+                candidates=candidates,
+                selected_pack_ids=selected_pack_ids,
+                selected_capability_ids=set(),
+            )
             return {
                 "ok": True,
                 "applied": False,
                 "status": "no_candidates",
+                "projection_scope": before_projection["projection_scope"],
+                "global_counts_included": before_projection["global_counts_included"],
+                "projection_generated_at": before_projection["generated_at"],
+                "projection_evidence": before_projection["projection_evidence"],
+                "before": before_projection,
+                "before_candidate_total": before_projection["candidate_total"],
+                "after_candidate_total": before_projection["candidate_total"],
+                "candidate_reduction_count": 0,
                 "recorded_pack_count": 0,
                 "recorded_capability_count": 0,
                 "plan": plan,
@@ -16718,6 +16788,18 @@ def record_capability_pack_metadata_receipts_from_plan(
                 }
             )
         planned_capability_count = sum(int(item.get("capability_count") or 0) for item in planned)
+        planned_capability_ids = {
+            _safe_str(capability_id).strip()
+            for item in prepared
+            for capability_id in list(item.get("capability_ids") or [])
+            if _safe_str(capability_id).strip()
+        }
+        before_projection = _capability_pack_migration_batch_projection(
+            plan=plan,
+            candidates=candidates,
+            selected_pack_ids=selected_pack_ids,
+            selected_capability_ids=planned_capability_ids,
+        )
         dry_run_fingerprint = _capability_pack_metadata_receipts_bulk_from_plan_fingerprint(planned=planned)
         if payload.dry_run:
             return {
@@ -16727,6 +16809,12 @@ def record_capability_pack_metadata_receipts_from_plan(
                 "planned_pack_count": len(planned),
                 "planned_capability_count": planned_capability_count,
                 "dry_run_fingerprint": dry_run_fingerprint,
+                "projection_scope": before_projection["projection_scope"],
+                "global_counts_included": before_projection["global_counts_included"],
+                "projection_generated_at": before_projection["generated_at"],
+                "projection_evidence": before_projection["projection_evidence"],
+                "before": before_projection,
+                "before_candidate_total": before_projection["candidate_total"],
                 "dry_run_confirmation": {
                     "required_for_apply": True,
                     "fingerprint": dry_run_fingerprint,
@@ -16752,6 +16840,12 @@ def record_capability_pack_metadata_receipts_from_plan(
                 "error": "capability_pack_metadata_receipts_bulk_from_plan_dry_run_confirmation_required",
                 "planned_pack_count": len(planned),
                 "planned_capability_count": planned_capability_count,
+                "projection_scope": before_projection["projection_scope"],
+                "global_counts_included": before_projection["global_counts_included"],
+                "projection_generated_at": before_projection["generated_at"],
+                "projection_evidence": before_projection["projection_evidence"],
+                "before": before_projection,
+                "before_candidate_total": before_projection["candidate_total"],
                 "dry_run_confirmation": {
                     "required_for_apply": True,
                     "fingerprint_contract": "stage17_capability_pack_metadata_receipts_bulk_from_plan_dry_run_v1",
@@ -16768,6 +16862,12 @@ def record_capability_pack_metadata_receipts_from_plan(
 
         pending_receipts: list[dict[str, Any]] = []
         recorded_ts = _now_s()
+        batch_id = f"stage17_metadata_receipts_bulk_{recorded_ts}"
+        before_projection_evidence = (
+            before_projection["projection_evidence"]
+            if isinstance(before_projection.get("projection_evidence"), dict)
+            else {}
+        )
         for item in prepared:
             candidate = item["candidate"]
             pack_id = item["pack_id"]
@@ -16828,6 +16928,14 @@ def record_capability_pack_metadata_receipts_from_plan(
                 meta={
                     **redact_governed_metadata(payload.meta),
                     "bulk_from_migration_plan": True,
+                    "bulk_batch_id": batch_id,
+                    "queue_count_contract": "stage17_capability_pack_metadata_receipts_batch_queue_evidence_v1",
+                    "projection_scope": before_projection["projection_scope"],
+                    "global_counts_included": before_projection["global_counts_included"],
+                    "before_candidate_total": before_projection["candidate_total"],
+                    "before_global_candidate_total": before_projection["global_candidate_total"],
+                    "selected_pack_ids": before_projection_evidence.get("selected_pack_ids", []),
+                    "selected_capability_ids": before_projection_evidence.get("selected_capability_ids", []),
                     "source_candidate_blockers": candidate.get("blockers")
                     if isinstance(candidate.get("blockers"), list)
                     else [],
@@ -16843,6 +16951,7 @@ def record_capability_pack_metadata_receipts_from_plan(
                     "pack_name": pack_name,
                     "capability_ids": capability_ids,
                     "previous_metadata": previous_metadata,
+                    "batch_id": batch_id,
                 }
             )
 
@@ -16869,6 +16978,7 @@ def record_capability_pack_metadata_receipts_from_plan(
                     "receipt_path": str(item["receipt_path"]),
                     "capability_count": len(item["capability_ids"]),
                     "receipt_status": receipt.get("status"),
+                    "batch_id": item["batch_id"],
                 }
             )
 
@@ -16877,10 +16987,33 @@ def record_capability_pack_metadata_receipts_from_plan(
         refreshed_runtime_catalog = _read_runtime_catalog_payload(refreshed_catalog)
         refreshed_marketplace = marketplace_from_plugin_catalog(refreshed_runtime_catalog)
         refreshed_plan = analyze_capability_pack_migration_plan(refreshed_marketplace.catalog())
+        refreshed_candidates = (
+            [candidate for candidate in refreshed_plan.get("candidates") if isinstance(candidate, dict)]
+            if isinstance(refreshed_plan.get("candidates"), list)
+            else []
+        )
+        if selected_pack_ids:
+            refreshed_candidates = [
+                candidate
+                for candidate in refreshed_candidates
+                if _safe_str(candidate.get("pack_id")).strip() in selected_pack_ids
+            ]
+        after_projection = _capability_pack_migration_batch_projection(
+            plan=refreshed_plan,
+            candidates=refreshed_candidates,
+            selected_pack_ids=selected_pack_ids,
+            selected_capability_ids=planned_capability_ids,
+        )
+        candidate_reduction_count = max(
+            0,
+            _count_value(before_projection.get("candidate_total"))
+            - _count_value(after_projection.get("candidate_total")),
+        )
         return {
             "ok": True,
             "applied": True,
             "status": "recorded",
+            "batch_id": batch_id,
             "dry_run_fingerprint": dry_run_fingerprint,
             "dry_run_confirmation": {
                 "required_for_apply": True,
@@ -16891,6 +17024,18 @@ def record_capability_pack_metadata_receipts_from_plan(
             "recorded_pack_count": len(recorded),
             "recorded_capability_count": sum(int(item.get("capability_count") or 0) for item in recorded),
             "recorded": recorded,
+            "projection_scope": after_projection["projection_scope"],
+            "global_counts_included": after_projection["global_counts_included"],
+            "before_projection_generated_at": before_projection["generated_at"],
+            "after_projection_generated_at": after_projection["generated_at"],
+            "projection_evidence": after_projection["projection_evidence"],
+            "before": before_projection,
+            "after": after_projection,
+            "before_candidate_total": before_projection["candidate_total"],
+            "after_candidate_total": after_projection["candidate_total"],
+            "candidate_reduction_count": candidate_reduction_count,
+            "remaining_scoped_candidate_total": after_projection["candidate_total"],
+            "remaining_global_candidate_total": after_projection["global_candidate_total"],
             "remaining_candidate_total": int(refreshed_plan.get("candidate_total") or 0),
             "next_smallest_truthful_gap": str(refreshed_plan.get("next_smallest_truthful_gap") or ""),
             "governance": _capability_pack_metadata_receipts_bulk_governance(
