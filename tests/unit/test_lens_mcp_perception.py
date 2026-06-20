@@ -187,6 +187,131 @@ def test_overlay_observation_refuses_without_overlay_coordinate_model(tmp_path, 
     assert out["governance"]["creates_lens_app"] is False
 
 
+@pytest.mark.parametrize(
+    ("requested_region", "overlay_context", "reason", "requested_status", "source_space"),
+    [
+        (
+            {"space": "desktop", "x": 10, "y": 20, "width": 80},
+            {
+                "overlay_name": "Francis Lens Overlay",
+                "overlay_scope": "user_session",
+                "coordinate_space": "desktop_logical_pixels",
+                "bounds": {"x": 0, "y": 0, "width": 500, "height": 400},
+            },
+            "requested_region_missing_numeric_bounds",
+            "unbounded",
+            "desktop",
+        ),
+        (
+            {"space": "desktop", "x": 10, "y": 20, "width": 80, "height": 60},
+            {
+                "overlay_name": "Francis Lens Overlay",
+                "overlay_scope": "user_session",
+                "coordinate_space": "desktop_logical_pixels",
+            },
+            "overlay_coordinate_model_missing",
+            "bounded",
+            "desktop",
+        ),
+        (
+            {"space": "canvas", "x": 10, "y": 20, "width": 80, "height": 60},
+            {
+                "overlay_name": "Francis Lens Overlay",
+                "overlay_scope": "user_session",
+                "coordinate_space": "desktop_logical_pixels",
+                "bounds": {"x": 0, "y": 0, "width": 500, "height": 400},
+            },
+            "canvas_transform_unavailable",
+            "bounded",
+            "canvas",
+        ),
+    ],
+)
+def test_overlay_observation_blocks_unmapped_coordinate_cases_before_readback(
+    tmp_path,
+    monkeypatch,
+    requested_region,
+    overlay_context,
+    reason,
+    requested_status,
+    source_space,
+) -> None:
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+
+    def fail_if_called(*_args, **_kwargs):
+        raise AssertionError("blocked coordinate cases must not call MCP readback")
+
+    monkeypatch.setattr("francis.lens.mcp_perception._mcp_run_tool", fail_if_called)
+
+    out = lens_observe_overlay_region(
+        requested_region,
+        overlay_context,
+        actor=_ACTOR,
+        observation_source="francis.screen.session",
+    )
+
+    assert out["ok"] is False
+    assert out["status"] == "blocked"
+    assert out["requested_region"]["status"] == requested_status
+    assert out["mapped_overlay_region"]["status"] == "blocked"
+    assert out["mapped_overlay_region"]["reason"] == reason
+    assert out["mapped_overlay_region"]["region"] == {}
+    boundary = out["mapped_overlay_region"]["coordinate_boundary"]
+    assert boundary["status"] == "unavailable"
+    assert boundary["reason"] == reason
+    assert boundary["bounds_checked"] is False
+    assert boundary["within_overlay_bounds"] is False
+    transform = out["mapped_overlay_region"]["coordinate_transform"]
+    assert transform["status"] == "unavailable"
+    assert transform["reason"] == reason
+    assert transform["source_space"] == source_space
+    assert transform["target_space"] == "desktop_logical_pixels"
+    assert transform["transform_applied"] is False
+    assert transform["confidence"] == 0.0
+    assert transform["confidence_basis"] == "coordinate_transform_unavailable"
+    assert "visual_registration_unsupported" in transform["limitations"]
+    assert out["observation_source"]["status"] == "not_called"
+    assert out["actual_inspected_region"] == {}
+    assert out["actual_observed_region"]["status"] == "not_observed"
+    assert out["actual_observed_region"]["actual_observation_region"] == {}
+    assert out["actual_observed_region"]["reason"] == reason
+    assert out["actual_observed_region"]["coordinate_boundary"] == boundary
+    assert out["actual_observed_region"]["coordinate_transform"] == transform
+    assert out["actual_captured_region"]["status"] == "not_captured"
+    assert out["actual_captured_region"]["actual_capture_region"] == {}
+    assert out["actual_captured_region"]["reason"] == reason
+    assert out["actual_captured_region"]["coordinate_boundary"] == boundary
+    assert out["actual_captured_region"]["coordinate_transform"] == transform
+    assert "capture_adapter_unavailable" in out["actual_captured_region"]["limitations"]
+    assert reason in out["limitations"]
+
+    spatial = out["spatial_contract"]
+    assert spatial["status"] == "blocked"
+    assert spatial["requested_region_status"] == requested_status
+    assert spatial["mapped_overlay_region_status"] == "blocked"
+    assert spatial["actual_inspected_region_status"] == "not_inspected"
+    assert spatial["actual_observed_region_status"] == "not_observed"
+    assert spatial["actual_captured_region_status"] == "not_captured"
+    assert spatial["coordinate_boundary_status"] == "unavailable"
+    assert spatial["coordinate_transform_status"] == "unavailable"
+    assert spatial["source"]["status"] == "not_called"
+    assert spatial["region_truth"]["source_called"] is False
+    assert spatial["region_truth"]["metadata_readback_only"] is False
+    assert spatial["region_truth"]["capture_performed"] is False
+    assert spatial["region_truth"]["unsupported_perception_claimed"] is False
+    assert spatial["region_basis"]["mapped_overlay_region"]["present"] is False
+    assert spatial["region_basis"]["actual_observed_region"]["present"] is False
+    assert spatial["region_basis"]["actual_captured_region"]["present"] is False
+    assert spatial["region_comparison"]["summary"]["actual_observed_region_matches_mapped_region"] is False
+    assert spatial["confidence"] == 0.0
+    assert spatial["confidence_breakdown"]["coordinate_transform"]["status"] == "unavailable"
+    assert spatial["confidence_breakdown"]["visual_perception"]["supported"] is False
+    assert spatial["failure_or_refusal_reason"] == reason
+    assert spatial["replay_manifest"]["failure_or_refusal_reason"] == reason
+    assert spatial["replay_manifest"]["visual_replayable"] is False
+    assert out["receipt"]["spatial_contract"] == spatial
+
+
 def test_overlay_observation_uses_existing_overlay_bounds_and_screen_readback(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("FRANCIS_INPUT_ACTUATOR_STATE_DIR", str(tmp_path / "input"))
