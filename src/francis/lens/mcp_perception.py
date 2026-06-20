@@ -175,6 +175,7 @@ def lens_mcp_perception_contract() -> dict[str, Any]:
             "reports_actual_inspected_observed_and_captured_regions": True,
             "reports_region_basis_readback": True,
             "reports_region_comparison_readback": True,
+            "reports_requested_region_coordinate_validity": True,
             "reports_confidence_breakdown": True,
             "reports_replay_manifest": True,
             "observation_sources": sorted(_OVERLAY_OBSERVATION_TOOLS),
@@ -265,6 +266,12 @@ def _region_payload(value: dict[str, Any] | None) -> dict[str, Any]:
     width = _safe_float(raw.get("width"))
     height = _safe_float(raw.get("height"))
     numeric = x is not None and y is not None and width is not None and height is not None
+    positive_dimensions = bool(numeric and width is not None and height is not None and width > 0 and height > 0)
+    invalid_reason = ""
+    if not numeric:
+        invalid_reason = "requested_region_missing_numeric_bounds"
+    elif not positive_dimensions:
+        invalid_reason = "requested_region_non_positive_dimensions"
     return {
         "space": _safe_str(raw.get("space"), "desktop") or "desktop",
         "label": _safe_str(raw.get("label")),
@@ -273,7 +280,9 @@ def _region_payload(value: dict[str, Any] | None) -> dict[str, Any]:
         "width": width,
         "height": height,
         "numeric_bounds": numeric,
-        "status": "bounded" if numeric else "unbounded",
+        "positive_dimensions": positive_dimensions,
+        "invalid_reason": invalid_reason,
+        "status": "bounded" if positive_dimensions else "invalid" if numeric else "unbounded",
     }
 
 
@@ -354,7 +363,7 @@ def _region_edges(region: dict[str, Any]) -> dict[str, float]:
     y = _safe_float(region.get("y"))
     width = _safe_float(region.get("width"))
     height = _safe_float(region.get("height"))
-    if x is None or y is None or width is None or height is None:
+    if x is None or y is None or width is None or height is None or width <= 0 or height <= 0:
         return {}
     return {"left": x, "top": y, "right": x + width, "bottom": y + height}
 
@@ -597,6 +606,30 @@ def _map_overlay_region(requested: dict[str, Any], overlay: dict[str, Any]) -> d
         }
     if not bool(requested.get("numeric_bounds")):
         reason = "requested_region_missing_numeric_bounds"
+        boundary = _coordinate_boundary(
+            bounds=bounds,
+            region={},
+            coordinate_space=coordinate_space,
+            reason=reason,
+        )
+        return {
+            "status": "blocked",
+            "reason": reason,
+            "region": {},
+            "transform": "unavailable",
+            "coordinate_boundary": boundary,
+            "coordinate_transform": _coordinate_transform_readback(
+                requested=requested,
+                bounds=bounds,
+                region={},
+                boundary=boundary,
+                coordinate_space=coordinate_space,
+                transform="unavailable",
+                reason=reason,
+            ),
+        }
+    if not bool(requested.get("positive_dimensions")):
+        reason = _safe_str(requested.get("invalid_reason"), "requested_region_non_positive_dimensions")
         boundary = _coordinate_boundary(
             bounds=bounds,
             region={},

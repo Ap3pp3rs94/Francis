@@ -47,6 +47,7 @@ def test_contract_lists_only_read_only_tools_and_claims_not_resident(tmp_path, m
     assert out["overlay_observation"]["reports_actual_inspected_observed_and_captured_regions"] is True
     assert out["overlay_observation"]["reports_region_basis_readback"] is True
     assert out["overlay_observation"]["reports_region_comparison_readback"] is True
+    assert out["overlay_observation"]["reports_requested_region_coordinate_validity"] is True
     assert out["overlay_observation"]["reports_confidence_breakdown"] is True
     assert out["overlay_observation"]["reports_replay_manifest"] is True
     assert out["overlay_observation"]["screenshots"] is False
@@ -309,6 +310,82 @@ def test_overlay_observation_blocks_unmapped_coordinate_cases_before_readback(
     assert spatial["failure_or_refusal_reason"] == reason
     assert spatial["replay_manifest"]["failure_or_refusal_reason"] == reason
     assert spatial["replay_manifest"]["visual_replayable"] is False
+    assert out["receipt"]["spatial_contract"] == spatial
+
+
+@pytest.mark.parametrize(
+    "requested_region",
+    [
+        {"space": "desktop", "x": 10, "y": 20, "width": 0, "height": 60},
+        {"space": "desktop", "x": 10, "y": 20, "width": 80, "height": -5},
+    ],
+)
+def test_overlay_observation_blocks_non_positive_requested_dimensions_before_readback(
+    tmp_path,
+    monkeypatch,
+    requested_region,
+) -> None:
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+
+    def fail_if_called(*_args, **_kwargs):
+        raise AssertionError("invalid requested dimensions must not call MCP readback")
+
+    monkeypatch.setattr("francis.lens.mcp_perception._mcp_run_tool", fail_if_called)
+
+    out = lens_observe_overlay_region(
+        requested_region,
+        {
+            "overlay_name": "Francis Lens Overlay",
+            "overlay_scope": "user_session",
+            "coordinate_space": "desktop_logical_pixels",
+            "bounds": {"x": 0, "y": 0, "width": 500, "height": 400},
+        },
+        actor=_ACTOR,
+        observation_source="francis.screen.session",
+    )
+
+    assert out["ok"] is False
+    assert out["status"] == "blocked"
+    assert out["requested_region"]["numeric_bounds"] is True
+    assert out["requested_region"]["positive_dimensions"] is False
+    assert out["requested_region"]["invalid_reason"] == "requested_region_non_positive_dimensions"
+    assert out["requested_region"]["status"] == "invalid"
+    assert out["mapped_overlay_region"]["status"] == "blocked"
+    assert out["mapped_overlay_region"]["reason"] == "requested_region_non_positive_dimensions"
+    assert out["mapped_overlay_region"]["region"] == {}
+    boundary = out["mapped_overlay_region"]["coordinate_boundary"]
+    assert boundary["status"] == "unavailable"
+    assert boundary["reason"] == "requested_region_non_positive_dimensions"
+    assert boundary["overlay_edges"] == {"left": 0.0, "top": 0.0, "right": 500.0, "bottom": 400.0}
+    assert boundary["requested_edges"] == {}
+    assert boundary["bounds_checked"] is False
+    transform = out["mapped_overlay_region"]["coordinate_transform"]
+    assert transform["status"] == "unavailable"
+    assert transform["reason"] == "requested_region_non_positive_dimensions"
+    assert transform["transform_applied"] is False
+    assert transform["confidence"] == 0.0
+    assert out["observation_source"]["status"] == "not_called"
+    assert out["actual_observed_region"]["status"] == "not_observed"
+    assert out["actual_observed_region"]["actual_observation_region"] == {}
+    assert out["actual_observed_region"]["reason"] == "requested_region_non_positive_dimensions"
+    assert out["actual_captured_region"]["status"] == "not_captured"
+    assert out["actual_captured_region"]["actual_capture_region"] == {}
+    assert "requested_region_non_positive_dimensions" in out["limitations"]
+    spatial = out["spatial_contract"]
+    assert spatial["requested_region_status"] == "invalid"
+    assert spatial["mapped_overlay_region_status"] == "blocked"
+    assert spatial["actual_observed_region_status"] == "not_observed"
+    assert spatial["actual_captured_region_status"] == "not_captured"
+    assert spatial["coordinate_boundary_status"] == "unavailable"
+    assert spatial["coordinate_transform_status"] == "unavailable"
+    assert spatial["region_presence"]["requested_region"] is False
+    assert spatial["region_truth"]["source_called"] is False
+    assert spatial["region_truth"]["capture_performed"] is False
+    assert spatial["confidence"] == 0.0
+    assert spatial["failure_or_refusal_reason"] == "requested_region_non_positive_dimensions"
+    assert spatial["replay_manifest"]["failure_or_refusal_reason"] == "requested_region_non_positive_dimensions"
+    assert spatial["replay_manifest"]["visual_replayable"] is False
+    assert out["receipt"]["decision"] == "refused"
     assert out["receipt"]["spatial_contract"] == spatial
 
 
