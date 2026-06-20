@@ -69,6 +69,19 @@ def test_chatgpt_voice_contract_is_permission_gated(monkeypatch, tmp_path: Path)
         "provider_unavailable",
         "provider_unconfigured",
     ]
+    assert body["receipt_contract"]["voice_provider_call_modes"] == [
+        "live_provider_receipt",
+        "mock_provider_receipt",
+        "fixture_provider_receipt",
+        "replay_provider_receipt",
+    ]
+    assert body["receipt_contract"]["voice_provider_status_modes"] == [
+        "provider_unavailable",
+        "provider_unconfigured",
+    ]
+    assert body["receipt_contract"]["voice_provider_mode_disambiguation_field"] == (
+        "voice_provider_mode_disambiguation"
+    )
     assert body["receipt_contract"]["voice_provider_receipt_modes_are_mutually_exclusive"] is True
     assert body["orb_voice_contract"]["francis_identity"] == "Francis"
     assert body["orb_voice_contract"]["francis_surfaces"] == ["voice", "lens", "orb"]
@@ -112,6 +125,18 @@ def test_chatgpt_voice_contract_is_permission_gated(monkeypatch, tmp_path: Path)
     substrate_proof = provider_boundary["voice_substrate_proof"]
     assert substrate_proof["provider_receipt_mode"] == "client_text_reply_no_provider_call"
     assert substrate_proof["provider_taxonomy_enforced"] is True
+    assert substrate_proof["provider_call_modes"] == [
+        "live_provider_receipt",
+        "mock_provider_receipt",
+        "fixture_provider_receipt",
+        "replay_provider_receipt",
+    ]
+    assert substrate_proof["provider_status_modes"] == ["provider_unavailable", "provider_unconfigured"]
+    assert substrate_proof["provider_mode_disambiguation"]["active_modes"] == ["client_text_reply_no_provider_call"]
+    assert substrate_proof["provider_mode_disambiguation"]["provider_receipt_mode_is_provider_call"] is False
+    assert substrate_proof["provider_mode_disambiguation"]["provider_unavailable"] is False
+    assert substrate_proof["provider_mode_disambiguation"]["provider_unconfigured"] is False
+    assert substrate_proof["provider_mode_disambiguation"]["provider_state_inferred_from_transcript"] is False
     assert substrate_proof["output_provider_call_claimed"] is False
     assert substrate_proof["elevenlabs_live_use_requires_provider_receipt"] is True
     assert substrate_proof["voice_controls_orb_directly"] is False
@@ -131,6 +156,20 @@ def test_chatgpt_voice_contract_is_permission_gated(monkeypatch, tmp_path: Path)
     assert provider_receipt["client_text_reply"] is True
     assert provider_receipt["provider_unavailable_and_unconfigured_distinct"] is True
     assert provider_receipt["live_mock_fixture_replay_are_mutually_exclusive"] is True
+    assert provider_receipt["mode_disambiguation"]["active_mode_count"] == 1
+    assert provider_receipt["mode_disambiguation"]["active_modes"] == ["client_text_reply_no_provider_call"]
+    assert provider_receipt["mode_disambiguation"]["provider_call_modes"] == [
+        "live_provider_receipt",
+        "mock_provider_receipt",
+        "fixture_provider_receipt",
+        "replay_provider_receipt",
+    ]
+    assert provider_receipt["mode_disambiguation"]["provider_status_modes"] == [
+        "provider_unavailable",
+        "provider_unconfigured",
+    ]
+    assert provider_receipt["mode_disambiguation"]["provider_receipt_mode_is_provider_call"] is False
+    assert provider_receipt["mode_disambiguation"]["provider_unavailable_and_unconfigured_distinct"] is True
     assert provider_receipt["elevenlabs"]["operator_preferred_provider"] is True
     assert provider_receipt["elevenlabs"]["configuration_driven"] is True
     assert provider_receipt["elevenlabs"]["bridge_invokes_provider"] is False
@@ -141,6 +180,13 @@ def test_chatgpt_voice_contract_is_permission_gated(monkeypatch, tmp_path: Path)
         provider_boundary["provider_boundary"]["bridge_provider_receipt_mode"] == "client_text_reply_no_provider_call"
     )
     assert provider_boundary["provider_boundary"]["bridge_provider_receipt_mode_is_provider_call"] is False
+    assert provider_boundary["voice_provider_mode_disambiguation"]["active_modes"] == [
+        "client_text_reply_no_provider_call"
+    ]
+    assert provider_boundary["voice_provider_mode_disambiguation"]["provider_receipt_mode_is_provider_call"] is False
+    assert provider_boundary["provider_boundary"]["bridge_provider_mode_disambiguation"]["active_modes"] == [
+        "client_text_reply_no_provider_call"
+    ]
     assert body["governance"]["read_only"] is True
     assert body["governance"]["grants_execution_authority"] is False
     assert body["governance"]["grants_mutation_authority"] is False
@@ -219,6 +265,11 @@ def test_chatgpt_voice_ingress_records_without_chat_forward(monkeypatch, tmp_pat
     assert receipt_proof["structured_receipts"]["provider_boundary_receipt"] is True
     assert receipt_proof["structured_receipts"]["orb_position_command_request_receipt"] is False
     assert receipt_proof["provider_receipt_mode"] == "client_text_reply_no_provider_call"
+    assert receipt_proof["provider_mode_disambiguation"]["active_modes"] == ["client_text_reply_no_provider_call"]
+    assert receipt_proof["provider_mode_disambiguation"]["provider_receipt_mode_is_provider_call"] is False
+    assert receipt_proof["provider_mode_disambiguation"]["provider_unavailable"] is False
+    assert receipt_proof["provider_mode_disambiguation"]["provider_unconfigured"] is False
+    assert receipt_proof["provider_mode_disambiguation"]["provider_state_inferred_from_transcript"] is False
     assert receipt_proof["output_provider_call_claimed"] is False
     assert receipt_proof["voice_controls_orb_directly"] is False
     assert body["receipt"]["voice_provider_receipt"]["provider_status_observed"] is False
@@ -253,6 +304,19 @@ def test_chatgpt_voice_ingress_records_without_chat_forward(monkeypatch, tmp_pat
     assert linkage["provider_boundary_receipt"]["provider_unconfigured"] is False
     assert linkage["provider_boundary_receipt"]["provider_unavailable_and_unconfigured_distinct"] is True
     assert linkage["provider_boundary_receipt"]["elevenlabs_live_use_requires_provider_receipt"] is True
+    assert linkage["provider_boundary_receipt"]["mode_disambiguation"]["active_modes"] == [
+        "client_text_reply_no_provider_call"
+    ]
+    assert linkage["provider_boundary_receipt"]["mode_disambiguation"]["provider_status_modes"] == [
+        "provider_unavailable",
+        "provider_unconfigured",
+    ]
+    assert (
+        linkage["provider_boundary_receipt"]["mode_disambiguation"][
+            "transcript_unavailable_is_not_provider_unavailable"
+        ]
+        is True
+    )
     assert linkage["orb_position_command_request_receipt"]["present"] is False
     assert linkage["transcript_state"] == "redacted_transcript_recorded"
     assert linkage["redaction"]["transcript_redacted"] is True
@@ -1074,6 +1138,12 @@ def test_chatgpt_voice_ingress_rejects_unavailable_transcript_with_reply(monkeyp
     assert unavailable_proof["structured_receipts"]["bridge_ingress_receipt"] is True
     assert unavailable_proof["structured_receipts"]["virtual_voice_turn_receipt"] is True
     assert unavailable_proof["provider_receipt_mode"] == "client_text_reply_no_provider_call"
+    assert unavailable_proof["provider_mode_disambiguation"]["transcript_state"] == "transcript_unavailable_rejected"
+    assert unavailable_proof["provider_mode_disambiguation"]["active_modes"] == ["client_text_reply_no_provider_call"]
+    assert (
+        unavailable_proof["provider_mode_disambiguation"]["transcript_unavailable_is_not_provider_unavailable"] is True
+    )
+    assert unavailable_proof["provider_mode_disambiguation"]["provider_state_inferred_from_transcript"] is False
     assert unavailable_proof["output_provider_call_claimed"] is False
     assert unavailable_proof["voice_provider_unavailable"] is False
     assert unavailable_proof["voice_provider_unconfigured"] is False
@@ -1083,6 +1153,11 @@ def test_chatgpt_voice_ingress_rejects_unavailable_transcript_with_reply(monkeyp
     assert unavailable_linkage["virtual_voice_turn_receipt"]["present"] is True
     assert unavailable_linkage["provider_boundary_receipt"]["provider_unavailable"] is False
     assert unavailable_linkage["provider_boundary_receipt"]["provider_unconfigured"] is False
+    assert unavailable_linkage["provider_boundary_receipt"]["mode_disambiguation"]["transcript_state"] == (
+        "transcript_unavailable_rejected"
+    )
+    assert unavailable_linkage["provider_boundary_receipt"]["mode_disambiguation"]["provider_unavailable"] is False
+    assert unavailable_linkage["provider_boundary_receipt"]["mode_disambiguation"]["provider_unconfigured"] is False
     assert unavailable_linkage["authority"]["voice_controls_orb_directly"] is False
     assert body["receipt"]["orb_voice_bridge"]["status"] == "chatgpt_voice_transcript_rejected"
     assert body["orb_voice_bridge"]["status"] == "chatgpt_voice_transcript_rejected"

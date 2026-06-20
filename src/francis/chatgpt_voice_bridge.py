@@ -40,6 +40,16 @@ CHATGPT_VOICE_BRIDGE_PROVIDER_STATE_TAXONOMY = [
     "provider_unavailable",
     "provider_unconfigured",
 ]
+CHATGPT_VOICE_BRIDGE_PROVIDER_CALL_MODES = [
+    "live_provider_receipt",
+    "mock_provider_receipt",
+    "fixture_provider_receipt",
+    "replay_provider_receipt",
+]
+CHATGPT_VOICE_BRIDGE_PROVIDER_STATUS_MODES = [
+    "provider_unavailable",
+    "provider_unconfigured",
+]
 CHATGPT_VOICE_BRIDGE_VIRTUAL_TURN_STATE = "data/runtime/lens-overlay/voice-turn-status.json"
 CHATGPT_VOICE_BRIDGE_VIRTUAL_TURN_RECEIPTS = "data/runtime/lens-overlay/voice-turns"
 CHATGPT_VOICE_BRIDGE_ORB_POSITION_COMMAND_REQUEST = "data/runtime/lens-overlay/orb-position-command-request.json"
@@ -184,6 +194,7 @@ def _voice_response(
 
 
 def _voice_provider_receipt() -> dict[str, Any]:
+    mode_state = _voice_provider_mode_state()
     return {
         "state": CHATGPT_VOICE_BRIDGE_PROVIDER_STATE,
         "state_source": "chatgpt_voice_bridge_static_boundary",
@@ -205,6 +216,7 @@ def _voice_provider_receipt() -> dict[str, Any]:
         "provider_unconfigured_status_claimed": False,
         "provider_unavailable_and_unconfigured_distinct": True,
         "live_mock_fixture_replay_are_mutually_exclusive": True,
+        "mode_disambiguation": mode_state,
         "elevenlabs": {
             "operator_preferred_provider": True,
             "configuration_driven": True,
@@ -217,7 +229,63 @@ def _voice_provider_receipt() -> dict[str, Any]:
     }
 
 
+def _voice_provider_mode_state(
+    mode: str = "",
+    *,
+    transcript_state: str = "not_applicable",
+) -> dict[str, Any]:
+    clean_mode = _safe_str(mode) or CHATGPT_VOICE_BRIDGE_PROVIDER_STATE
+    mode_recognized = clean_mode in CHATGPT_VOICE_BRIDGE_PROVIDER_STATE_TAXONOMY
+    active_modes = [clean_mode] if mode_recognized else []
+    live_provider_call = clean_mode == "live_provider_receipt"
+    mock_provider_call = clean_mode == "mock_provider_receipt"
+    fixture_provider_call = clean_mode == "fixture_provider_receipt"
+    replay_provider_call = clean_mode == "replay_provider_receipt"
+    provider_unavailable = clean_mode == "provider_unavailable"
+    provider_unconfigured = clean_mode == "provider_unconfigured"
+    provider_call_count = sum(
+        [
+            live_provider_call,
+            mock_provider_call,
+            fixture_provider_call,
+            replay_provider_call,
+        ]
+    )
+    return {
+        "kind": "francis.voice.provider_mode_state.v1",
+        "mode": clean_mode,
+        "mode_recognized": mode_recognized,
+        "taxonomy": CHATGPT_VOICE_BRIDGE_PROVIDER_STATE_TAXONOMY,
+        "provider_call_modes": CHATGPT_VOICE_BRIDGE_PROVIDER_CALL_MODES,
+        "provider_status_modes": CHATGPT_VOICE_BRIDGE_PROVIDER_STATUS_MODES,
+        "active_modes": active_modes,
+        "inactive_modes": [item for item in CHATGPT_VOICE_BRIDGE_PROVIDER_STATE_TAXONOMY if item not in active_modes],
+        "active_mode_count": len(active_modes),
+        "client_text_reply_no_provider_call": clean_mode == CHATGPT_VOICE_BRIDGE_PROVIDER_STATE,
+        "provider_receipt_mode_is_provider_call": clean_mode in CHATGPT_VOICE_BRIDGE_PROVIDER_CALL_MODES,
+        "live_provider_call": live_provider_call,
+        "mock_provider_call": mock_provider_call,
+        "fixture_provider_call": fixture_provider_call,
+        "replay_provider_call": replay_provider_call,
+        "provider_unavailable": provider_unavailable,
+        "provider_unconfigured": provider_unconfigured,
+        "provider_call_count": provider_call_count,
+        "provider_modes_mutually_exclusive": len(active_modes) <= 1,
+        "live_mock_fixture_replay_are_mutually_exclusive": provider_call_count <= 1,
+        "provider_unavailable_and_unconfigured_distinct": True,
+        "provider_unavailable_and_unconfigured_mutually_exclusive": not (
+            provider_unavailable and provider_unconfigured
+        ),
+        "transcript_state": transcript_state,
+        "transcript_unavailable_is_not_provider_unavailable": True,
+        "provider_state_inferred_from_transcript": False,
+        "provider_state_inferred_from_missing_configuration": False,
+        "non_client_mode_requires_external_provider_receipt": True,
+    }
+
+
 def _voice_output_boundary() -> dict[str, Any]:
+    mode_state = _voice_provider_mode_state()
     return {
         "voice_output_provider": CHATGPT_VOICE_BRIDGE_OUTPUT_PROVIDER,
         "voice_output_mode": CHATGPT_VOICE_BRIDGE_OUTPUT_MODE,
@@ -241,6 +309,7 @@ def _voice_output_boundary() -> dict[str, Any]:
         "elevenlabs_audio_claimed": False,
         "overlay_audio_claimed": False,
         "voice_provider_receipt": _voice_provider_receipt(),
+        "voice_provider_mode_disambiguation": mode_state,
         "voice_substrate_proof": _voice_substrate_proof(),
         "provider_boundary": {
             "bridge_calls_live_voice_provider": False,
@@ -257,6 +326,9 @@ def _voice_output_boundary() -> dict[str, Any]:
             "bridge_provider_receipt_mode": CHATGPT_VOICE_BRIDGE_PROVIDER_STATE,
             "bridge_provider_receipt_mode_is_provider_call": False,
             "bridge_provider_receipt_mode_taxonomy": CHATGPT_VOICE_BRIDGE_PROVIDER_STATE_TAXONOMY,
+            "bridge_provider_call_modes": CHATGPT_VOICE_BRIDGE_PROVIDER_CALL_MODES,
+            "bridge_provider_status_modes": CHATGPT_VOICE_BRIDGE_PROVIDER_STATUS_MODES,
+            "bridge_provider_mode_disambiguation": mode_state,
         },
     }
 
@@ -298,12 +370,14 @@ def _voice_substrate_proof(
     bridge_receipt_present = bool(bridge_receipt_id or bridge_receipt_path)
     virtual_voice_turn_present = bool(voice_turn_receipt_path)
     orb_command_present = bool(command_request)
+    transcript_state = _transcript_state(decision=decision, reason=reason, transcript=transcript)
+    mode_state = _voice_provider_mode_state(provider_receipt_mode, transcript_state=transcript_state)
     return {
         "kind": "francis.voice.substrate_proof.v1",
         "bridge": CHATGPT_VOICE_BRIDGE_VERSION,
         "decision": decision,
         "reason": reason,
-        "transcript_state": _transcript_state(decision=decision, reason=reason, transcript=transcript),
+        "transcript_state": transcript_state,
         "transcript_redacted": True,
         "raw_audio": False,
         "accepts_audio_stream": False,
@@ -321,8 +395,11 @@ def _voice_substrate_proof(
         },
         "provider_receipt_mode": provider_receipt_mode,
         "provider_receipt_mode_taxonomy": CHATGPT_VOICE_BRIDGE_PROVIDER_STATE_TAXONOMY,
+        "provider_call_modes": CHATGPT_VOICE_BRIDGE_PROVIDER_CALL_MODES,
+        "provider_status_modes": CHATGPT_VOICE_BRIDGE_PROVIDER_STATUS_MODES,
         "provider_taxonomy_enforced": True,
-        "provider_receipt_mode_is_provider_call": provider_receipt_mode != CHATGPT_VOICE_BRIDGE_PROVIDER_STATE,
+        "provider_receipt_mode_is_provider_call": mode_state["provider_receipt_mode_is_provider_call"],
+        "provider_mode_disambiguation": mode_state,
         "output_provider_call_claimed": False,
         "live_voice_provider_call": False,
         "mock_voice_provider_call": False,
@@ -366,6 +443,8 @@ def _receipt_linkage(
     transcript = _safe_str(payload.get("transcript"))
     decision = _safe_str(payload.get("decision"))
     reason = _safe_str(payload.get("reason"))
+    transcript_state = _transcript_state(decision=decision, reason=reason, transcript=transcript)
+    mode_state = _voice_provider_mode_state(provider_receipt_mode, transcript_state=transcript_state)
     return {
         "kind": "francis.voice.receipt_linkage.v1",
         "bridge_receipt": {
@@ -382,8 +461,9 @@ def _receipt_linkage(
             "present": True,
             "embedded": True,
             "mode": provider_receipt_mode,
-            "mode_is_provider_call": provider_receipt_mode != CHATGPT_VOICE_BRIDGE_PROVIDER_STATE,
+            "mode_is_provider_call": mode_state["provider_receipt_mode_is_provider_call"],
             "mode_taxonomy": CHATGPT_VOICE_BRIDGE_PROVIDER_STATE_TAXONOMY,
+            "mode_disambiguation": mode_state,
             "live_provider_call": False,
             "mock_provider_call": False,
             "fixture_provider_call": False,
@@ -402,7 +482,7 @@ def _receipt_linkage(
             "applied_state_claimed_by_bridge": False,
             "voice_controls_orb_directly": False,
         },
-        "transcript_state": _transcript_state(decision=decision, reason=reason, transcript=transcript),
+        "transcript_state": transcript_state,
         "redaction": {
             "transcript_redacted": True,
             "metadata_secrets_redacted": bool(payload.get("metadata_secrets_redacted")),
@@ -780,6 +860,9 @@ def chatgpt_voice_bridge_contract(actor: str = "") -> dict[str, Any]:
             "voice_provider_receipt_mode_field": "voice_provider_receipt_mode",
             "voice_provider_state_taxonomy": CHATGPT_VOICE_BRIDGE_PROVIDER_STATE_TAXONOMY,
             "voice_provider_receipt_mode_taxonomy": CHATGPT_VOICE_BRIDGE_PROVIDER_STATE_TAXONOMY,
+            "voice_provider_call_modes": CHATGPT_VOICE_BRIDGE_PROVIDER_CALL_MODES,
+            "voice_provider_status_modes": CHATGPT_VOICE_BRIDGE_PROVIDER_STATUS_MODES,
+            "voice_provider_mode_disambiguation_field": "voice_provider_mode_disambiguation",
             "voice_provider_receipt_modes_are_mutually_exclusive": True,
         },
         "orb_voice_contract": {
