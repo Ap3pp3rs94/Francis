@@ -154,8 +154,16 @@ def test_lens_command_palette_monitor_route_projects_voice_bridge_proof(monkeypa
                             "latest_voice_status": "orb_voice_command_applied",
                             "local_overlay_speech_command_observed": True,
                             "latest_voice_command_source": "local_overlay_speech_recognition",
+                            "latest_voice_microphone_recognition_claimed": True,
+                            "latest_voice_wake_phrase_detected": True,
+                            "latest_voice_command_counts_as_acoustic_proof": True,
                             "latest_orb_receipt_id": "local-orb-left-proof",
                             "latest_orb_receipt_command_source": "local_overlay_speech_recognition",
+                            "latest_orb_receipt_applied": True,
+                            "latest_orb_receipt_microphone_recognition_claimed": True,
+                            "latest_orb_receipt_wake_phrase_detected": True,
+                            "latest_orb_receipt_command_matches_voice": True,
+                            "latest_orb_receipt_request_matches_voice": True,
                             "latest_orb_receipt_age_seconds": 2,
                             "latest_orb_receipt_fresh": True,
                             "latest_orb_receipt_counts_as_acoustic_proof": True,
@@ -409,8 +417,16 @@ def test_lens_command_palette_monitor_route_projects_voice_bridge_proof(monkeypa
     assert proof_diagnostic["latest_voice_status"] == "orb_voice_command_applied"
     assert proof_diagnostic["local_overlay_speech_command_observed"] is True
     assert proof_diagnostic["latest_voice_command_source"] == "local_overlay_speech_recognition"
+    assert proof_diagnostic["latest_voice_microphone_recognition_claimed"] is True
+    assert proof_diagnostic["latest_voice_wake_phrase_detected"] is True
+    assert proof_diagnostic["latest_voice_command_counts_as_acoustic_proof"] is True
     assert proof_diagnostic["latest_orb_receipt_id"] == "local-orb-left-proof"
     assert proof_diagnostic["latest_orb_receipt_command_source"] == "local_overlay_speech_recognition"
+    assert proof_diagnostic["latest_orb_receipt_applied"] is True
+    assert proof_diagnostic["latest_orb_receipt_microphone_recognition_claimed"] is True
+    assert proof_diagnostic["latest_orb_receipt_wake_phrase_detected"] is True
+    assert proof_diagnostic["latest_orb_receipt_command_matches_voice"] is True
+    assert proof_diagnostic["latest_orb_receipt_request_matches_voice"] is True
     assert proof_diagnostic["latest_orb_receipt_age_seconds"] == 2
     assert proof_diagnostic["latest_orb_receipt_fresh"] is True
     assert proof_diagnostic["latest_orb_receipt_counts_as_acoustic_proof"] is True

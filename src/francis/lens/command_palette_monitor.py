@@ -366,10 +366,30 @@ def _manual_acoustic_proof_diagnostic_summary(value: Any) -> dict[str, Any]:
         "latest_voice_status": _safe_str(raw.get("latest_voice_status"), max_length=120),
         "local_overlay_speech_command_observed": _safe_bool(raw.get("local_overlay_speech_command_observed")),
         "latest_voice_command_source": _safe_str(raw.get("latest_voice_command_source"), max_length=120),
+        "latest_voice_microphone_recognition_claimed": _safe_bool(
+            raw.get("latest_voice_microphone_recognition_claimed"),
+        ),
+        "latest_voice_wake_phrase_detected": _safe_bool(raw.get("latest_voice_wake_phrase_detected")),
+        "latest_voice_command_counts_as_acoustic_proof": _safe_bool(
+            raw.get("latest_voice_command_counts_as_acoustic_proof"),
+        ),
         "latest_orb_receipt_id": _safe_str(raw.get("latest_orb_receipt_id"), max_length=160),
         "latest_orb_receipt_command_source": _safe_str(
             raw.get("latest_orb_receipt_command_source"),
             max_length=120,
+        ),
+        "latest_orb_receipt_applied": _safe_bool(raw.get("latest_orb_receipt_applied")),
+        "latest_orb_receipt_microphone_recognition_claimed": _safe_bool(
+            raw.get("latest_orb_receipt_microphone_recognition_claimed"),
+        ),
+        "latest_orb_receipt_wake_phrase_detected": _safe_bool(
+            raw.get("latest_orb_receipt_wake_phrase_detected"),
+        ),
+        "latest_orb_receipt_command_matches_voice": _safe_bool(
+            raw.get("latest_orb_receipt_command_matches_voice"),
+        ),
+        "latest_orb_receipt_request_matches_voice": _safe_bool(
+            raw.get("latest_orb_receipt_request_matches_voice"),
         ),
         "latest_orb_receipt_age_seconds": _safe_int(raw.get("latest_orb_receipt_age_seconds")),
         "latest_orb_receipt_fresh": _safe_bool(raw.get("latest_orb_receipt_fresh")),

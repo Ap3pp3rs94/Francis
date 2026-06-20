@@ -947,8 +947,16 @@ def test_lens_command_palette_monitor_reports_acoustic_orb_position_proof(tmp_pa
     assert proof_diagnostic["local_overlay_speech_command_observed"] is True
     assert proof_diagnostic["latest_voice_status"] == "orb_voice_command_applied"
     assert proof_diagnostic["latest_voice_command_source"] == "local_overlay_speech_recognition"
+    assert proof_diagnostic["latest_voice_microphone_recognition_claimed"] is True
+    assert proof_diagnostic["latest_voice_wake_phrase_detected"] is True
+    assert proof_diagnostic["latest_voice_command_counts_as_acoustic_proof"] is True
     assert proof_diagnostic["latest_orb_receipt_id"] == "local-orb-left-proof"
     assert proof_diagnostic["latest_orb_receipt_command_source"] == "local_overlay_speech_recognition"
+    assert proof_diagnostic["latest_orb_receipt_applied"] is True
+    assert proof_diagnostic["latest_orb_receipt_microphone_recognition_claimed"] is True
+    assert proof_diagnostic["latest_orb_receipt_wake_phrase_detected"] is True
+    assert proof_diagnostic["latest_orb_receipt_command_matches_voice"] is True
+    assert proof_diagnostic["latest_orb_receipt_request_matches_voice"] is True
     assert proof_diagnostic["latest_orb_receipt_age_seconds"] >= 0
     assert proof_diagnostic["latest_orb_receipt_fresh"] is True
     assert proof_diagnostic["latest_orb_receipt_counts_as_acoustic_proof"] is True
@@ -1036,8 +1044,16 @@ def test_lens_command_palette_monitor_can_require_manual_acoustic_orb_proof(tmp_
         "latest_voice_status": "spoken",
         "local_overlay_speech_command_observed": False,
         "latest_voice_command_source": "",
+        "latest_voice_microphone_recognition_claimed": False,
+        "latest_voice_wake_phrase_detected": False,
+        "latest_voice_command_counts_as_acoustic_proof": False,
         "latest_orb_receipt_id": "",
         "latest_orb_receipt_command_source": "",
+        "latest_orb_receipt_applied": False,
+        "latest_orb_receipt_microphone_recognition_claimed": False,
+        "latest_orb_receipt_wake_phrase_detected": False,
+        "latest_orb_receipt_command_matches_voice": False,
+        "latest_orb_receipt_request_matches_voice": False,
         "latest_orb_receipt_age_seconds": None,
         "latest_orb_receipt_fresh": False,
         "latest_orb_receipt_counts_as_acoustic_proof": False,
@@ -1057,7 +1073,12 @@ def test_lens_command_palette_monitor_can_require_manual_acoustic_orb_proof(tmp_
         "first_failed_requirement=local_overlay_speech_command_observed "
         "proof_blocker=awaiting_operator_spoken_orb_command "
         "latest_voice_status=spoken "
+        "latest_voice_source= "
+        "latest_voice_microphone=False "
         "latest_orb_receipt_id= "
+        "latest_orb_receipt_source= "
+        "latest_orb_receipt_applied=False "
+        "latest_orb_receipt_microphone=False "
         "receipt_fresh=False "
         "next_operator_step=say_hey_francis_move_left_or_right"
     )
