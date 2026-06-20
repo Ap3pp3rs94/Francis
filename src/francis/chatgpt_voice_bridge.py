@@ -29,6 +29,7 @@ CHATGPT_VOICE_BRIDGE_CHATGPT_APP_VOICE_CLIENT = "chatgpt_app_voice"
 CHATGPT_VOICE_BRIDGE_OUTPUT_PROVIDER = "chatgpt_voice_client"
 CHATGPT_VOICE_BRIDGE_OUTPUT_MODE = "client_text_reply"
 CHATGPT_VOICE_BRIDGE_OUTPUT_PROVIDER_STATUS = "client_speaks_top_level_reply"
+CHATGPT_VOICE_BRIDGE_PROVIDER_STATE = "client_text_reply_no_provider_call"
 CHATGPT_VOICE_BRIDGE_VIRTUAL_TURN_STATE = "data/runtime/lens-overlay/voice-turn-status.json"
 CHATGPT_VOICE_BRIDGE_VIRTUAL_TURN_RECEIPTS = "data/runtime/lens-overlay/voice-turns"
 CHATGPT_VOICE_BRIDGE_ORB_POSITION_COMMAND_REQUEST = "data/runtime/lens-overlay/orb-position-command-request.json"
@@ -151,6 +152,8 @@ def _voice_response(
         "voice_output_provider": CHATGPT_VOICE_BRIDGE_OUTPUT_PROVIDER,
         "voice_output_mode": CHATGPT_VOICE_BRIDGE_OUTPUT_MODE,
         "voice_output_provider_status": CHATGPT_VOICE_BRIDGE_OUTPUT_PROVIDER_STATUS,
+        "voice_provider_state": CHATGPT_VOICE_BRIDGE_PROVIDER_STATE,
+        "voice_provider_state_source": "chatgpt_voice_bridge_static_boundary",
         "live_voice_provider_call": False,
         "mock_voice_provider_call": False,
         "fixture_voice_provider_call": False,
@@ -159,9 +162,40 @@ def _voice_response(
         "voice_provider_unconfigured": False,
         "elevenlabs_provider_invoked": False,
         "elevenlabs_audio_claimed": False,
+        "voice_provider_receipt": _voice_provider_receipt(),
         "raw_audio": False,
         "grants_execution_authority": False,
         "grants_mutation_authority": False,
+    }
+
+
+def _voice_provider_receipt() -> dict[str, Any]:
+    return {
+        "state": CHATGPT_VOICE_BRIDGE_PROVIDER_STATE,
+        "state_source": "chatgpt_voice_bridge_static_boundary",
+        "state_basis": "bridge_returns_text_for_client_speech",
+        "client_text_reply": True,
+        "provider_status_observed": False,
+        "provider_status_observation_source": "not_observed_bridge_did_not_call_provider",
+        "live_provider_call": False,
+        "mock_provider_call": False,
+        "fixture_provider_call": False,
+        "replay_provider_call": False,
+        "provider_unavailable": False,
+        "provider_unconfigured": False,
+        "provider_unavailable_status_claimed": False,
+        "provider_unconfigured_status_claimed": False,
+        "provider_unavailable_and_unconfigured_distinct": True,
+        "live_mock_fixture_replay_are_mutually_exclusive": True,
+        "elevenlabs": {
+            "operator_preferred_provider": True,
+            "configuration_driven": True,
+            "bridge_invokes_provider": False,
+            "bridge_claims_audio": False,
+            "live_use_requires_provider_receipt": True,
+            "direct_orb_control": False,
+            "orb_animation_coupled_to_provider": False,
+        },
     }
 
 
@@ -170,6 +204,8 @@ def _voice_output_boundary() -> dict[str, Any]:
         "voice_output_provider": CHATGPT_VOICE_BRIDGE_OUTPUT_PROVIDER,
         "voice_output_mode": CHATGPT_VOICE_BRIDGE_OUTPUT_MODE,
         "voice_output_provider_status": CHATGPT_VOICE_BRIDGE_OUTPUT_PROVIDER_STATUS,
+        "voice_provider_state": CHATGPT_VOICE_BRIDGE_PROVIDER_STATE,
+        "voice_provider_state_source": "chatgpt_voice_bridge_static_boundary",
         "voice_output_transport": "chatgpt_voice_client_reply",
         "client_speaks_top_level_reply": True,
         "live_voice_provider_call": False,
@@ -183,6 +219,7 @@ def _voice_output_boundary() -> dict[str, Any]:
         "elevenlabs_provider_invoked": False,
         "elevenlabs_audio_claimed": False,
         "overlay_audio_claimed": False,
+        "voice_provider_receipt": _voice_provider_receipt(),
         "provider_boundary": {
             "bridge_calls_live_voice_provider": False,
             "bridge_calls_mock_voice_provider": False,
@@ -191,6 +228,9 @@ def _voice_output_boundary() -> dict[str, Any]:
             "bridge_claims_provider_unavailable": False,
             "bridge_claims_provider_unconfigured": False,
             "elevenlabs_called_by_bridge": False,
+            "elevenlabs_live_use_requires_provider_receipt": True,
+            "provider_unavailable_and_unconfigured_distinct": True,
+            "live_mock_fixture_replay_are_mutually_exclusive": True,
             "chatgpt_client_speaks_top_level_reply": True,
         },
     }
@@ -525,6 +565,17 @@ def chatgpt_voice_bridge_contract(actor: str = "") -> dict[str, Any]:
             "receipt_readback_redacts_secret_patterns": True,
             "voice_output_provider_field": "voice_output_provider",
             "voice_output_provider_status_field": "voice_output_provider_status",
+            "voice_provider_state_field": "voice_provider_state",
+            "voice_provider_receipt_field": "voice_provider_receipt",
+            "voice_provider_state_taxonomy": [
+                CHATGPT_VOICE_BRIDGE_PROVIDER_STATE,
+                "live_provider_receipt",
+                "mock_provider_receipt",
+                "fixture_provider_receipt",
+                "replay_provider_receipt",
+                "provider_unavailable",
+                "provider_unconfigured",
+            ],
         },
         "orb_voice_contract": {
             "francis_identity": "Francis",
