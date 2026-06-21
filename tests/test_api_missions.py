@@ -6,6 +6,14 @@ from pathlib import Path
 _PLUGIN_ACTOR = "test.plugins.write"
 
 
+def _isolate_generated_plugin_root(monkeypatch, plugins_module, tmp_path: Path) -> None:
+    from francis.plugin_factory import spec_builder
+
+    generated_root = tmp_path / "generated_plugins"
+    monkeypatch.setattr(plugins_module, "_gen_dir", lambda: generated_root)
+    monkeypatch.setattr(spec_builder, "_gen_dir", lambda: generated_root)
+
+
 def _forge_promotion_meta(label: str) -> dict[str, object]:
     return {
         "friction_summary": f"Repeated {label} mission plugin review",
@@ -940,7 +948,9 @@ def test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_missio
     from fastapi.testclient import TestClient
 
     from francis.api.app import create_app
+    from francis.api.routes import plugins as plugins_module
 
+    _isolate_generated_plugin_root(monkeypatch, plugins_module, tmp_path)
     client = TestClient(create_app())
     pack_id = "ops.stage17_reusable_invocation"
     pack_version = "1.0.0"

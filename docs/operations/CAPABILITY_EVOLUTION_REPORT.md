@@ -48,18 +48,18 @@ Baseline: report initialized after the four-worker pass completed on
 | Lens | 4 | Lens observation contracts gained unmapped-coordinate refusal coverage, invalid-dimension refusal, and command-palette proof readbacks. |
 | Voice | 4 | Voice receipts now separate acoustic proof source, gate mode, provider receipt modes, and embedded provider-boundary evidence. |
 | Memory | 0 | No memory contract advancement in this cycle. |
-| Governance | 19 | Refusal/no-authority boundaries strengthened for acoustic proof, provider receipts, Stage 17 worker-readback/publication handoff claims, invalid coordinates, generated-spec compatibility, lifecycle history readback compatibility, unsupported invocation receipt rejection, quality-standard dry-run/apply receipt gates, pack-selection binding, activity-vs-progress reporting, worker liveness truth, unversioned migration refusal, read-only invocation proof readiness, artifact reconstruction dry-run confirmation, lifecycle-blocked re-enable refusal, and operation-readback-bound invocation proof. |
-| Receipts | 19 | New receipt/readback fields for acoustic proof rejection, provider mode state/linkage, worker-readback and worker/publication handoff requirements, capability-evolution worker packets, worker execution liveness, metadata receipt batch evidence, quality-standard remediation batch receipts, lifecycle history compatibility evidence, invocation pack-selection/rejection receipts, migration identity, proof-readiness linkage, artifact reconstruction queue evidence, validation/proposal reconstruction receipts, and operation caller-context readback binding. |
-| Missions | 3 | Stage 17 mission-linked invocation audit rejects tampered embedded pack-selection bindings, surfaces unsupported operation-capability receipts as rejected evidence, and now requires operation-readback mission-shape reuse before readiness. |
+| Governance | 20 | Refusal/no-authority boundaries strengthened for acoustic proof, provider receipts, Stage 17 worker-readback/publication handoff claims, invalid coordinates, generated-spec compatibility, lifecycle history readback compatibility, unsupported invocation receipt rejection, quality-standard dry-run/apply receipt gates, pack-selection binding, activity-vs-progress reporting, worker liveness truth, unversioned migration refusal, read-only invocation proof readiness, artifact reconstruction dry-run confirmation, lifecycle-blocked re-enable refusal, operation-readback-bound invocation proof, and long-path proposal-review readiness. |
+| Receipts | 20 | New receipt/readback fields for acoustic proof rejection, provider mode state/linkage, worker-readback and worker/publication handoff requirements, capability-evolution worker packets, worker execution liveness, metadata receipt batch evidence, quality-standard remediation batch receipts, lifecycle history compatibility evidence, invocation pack-selection/rejection receipts, migration identity, proof-readiness linkage, artifact reconstruction queue evidence, validation/proposal reconstruction receipts, operation caller-context readback binding, and long-path proposal-review receipt readability. |
+| Missions | 4 | Stage 17 mission-linked invocation audit rejects tampered embedded pack-selection bindings, surfaces unsupported operation-capability receipts as rejected evidence, requires operation-readback mission-shape reuse before readiness, and now has a passing isolated reusable-invocation mission proof. |
 | Overlay | 4 | Overlay-related proof now requires local overlay speech source, exposes manual proof mode, and blocked/invalid coordinate cases stay before screen/session readback. |
-| Observability | 16 | Added diagnostics for acoustic proof, provider mode/linkage disambiguation, Stage 17 readback and handoff guard state, quality-standard after-sync queue honesty, unsupported invocation rejection visibility, build capability evolution, Exec worker liveness, publication-marker prompt matching, migration identity readback, invocation proof readiness, artifact reconstruction before/after queue evidence, and operation caller-context audit binding. |
+| Observability | 17 | Added diagnostics for acoustic proof, provider mode/linkage disambiguation, Stage 17 readback and handoff guard state, quality-standard after-sync queue honesty, unsupported invocation rejection visibility, build capability evolution, Exec worker liveness, publication-marker prompt matching, migration identity readback, invocation proof readiness, artifact reconstruction before/after queue evidence, operation caller-context audit binding, and retained long-path proposal-review failure evidence. |
 | Completion Model | 2 | Completion model now rejects selected Stage 17 gaps as worker-readback proof and worker/publication handoff proof. |
-| Capability Registry | 8 | Stage 17 now has generated-spec compatibility binding, catalog lifecycle provenance projection, selected live metadata-receipt backlog reduction evidence, receipt-backed quality-standard backlog reduction, lifecycle-history compatibility readback evidence, versioned migration identity enforcement, one live artifact reconstruction backlog reduction, and lifecycle-blocked re-enable prevention. |
+| Capability Registry | 9 | Stage 17 now has generated-spec compatibility binding, catalog lifecycle provenance projection, selected live metadata-receipt backlog reduction evidence, receipt-backed quality-standard backlog reduction, lifecycle-history compatibility readback evidence, versioned migration identity enforcement, one live artifact reconstruction backlog reduction, lifecycle-blocked re-enable prevention, and long-path-safe proposal review state for promotion readiness. |
 | Swarm Infrastructure | 4 | Completion model now requires worker readback/handoff evidence, coordinator prompts require capability-evolution packet fields, and active Exec workers are no longer treated as stale. |
 | Operator Controls | 2 | Manual acoustic Orb movement proof now has source-specific next-step diagnostics and explicit manual-proof-required state. |
-| API Surface | 13 | Monitor route sanitizer, ChatGPT voice contract/receipt surfaces, plugin promotion readiness, plugin runtime execution guards, quality-standard remediation receipts, lifecycle-history compatibility readbacks, migration identity refusal, artifact reconstruction evidence fields, lifecycle enable refusal, and invocation audit readbacks expose stricter fields. |
-| Documentation | 9 | Completion model docs, worker prompt docs, Stage 17 closure matrix, ledger entries, and this evolution report record durable operating rules and current Stage 17 blockers. |
-| Testing | 21 | Added or expanded focused tests across worker lanes, coordinator prompt contracts, worker liveness status, plugin compatibility, metadata receipt batching, quality-standard receipt/after-sync behavior, lifecycle history compatibility, migration identity refusal, artifact reconstruction queue evidence, lifecycle enable refusal, and invocation audit binding. |
+| API Surface | 14 | Monitor route sanitizer, ChatGPT voice contract/receipt surfaces, plugin promotion readiness, plugin runtime execution guards, quality-standard remediation receipts, lifecycle-history compatibility readbacks, migration identity refusal, artifact reconstruction evidence fields, lifecycle enable refusal, invocation audit readbacks, and long-path-safe forge proposal review expose stricter behavior. |
+| Documentation | 10 | Completion model docs, worker prompt docs, Stage 17 closure matrix, ledger entries, and this evolution report record durable operating rules, current Stage 17 blockers, and accepted/rejected local-drone evidence. |
+| Testing | 23 | Added or expanded focused tests across worker lanes, coordinator prompt contracts, worker liveness status, plugin compatibility, metadata receipt batching, quality-standard receipt/after-sync behavior, lifecycle history compatibility, migration identity refusal, artifact reconstruction queue evidence, lifecycle enable refusal, invocation audit binding, long-path proposal review, and isolated reusable-invocation mission proof. |
 
 ## Cycle Log
 
@@ -1445,3 +1445,107 @@ Next highest leverage action:
   candidate cleanly, and W3 to repair the mission fixture proposal lookup before
   proving mission-shape invocation reuse. Each worker should use or explicitly
   skip up to four local drones and publish a packet before the next prompt.
+
+### Cycle 2026-06-21T15:08Z to 2026-06-21T15:36Z
+
+Scope: three-worker Stage 17 continuation with local-drone assistance while
+Codex worker launches were blocked by usage limits.
+
+Active workers:
+
+- `worker-1-orb-voice-proof`
+- `worker-2-lens-overlay-spatial`
+- `worker-3-voice-receipts`
+
+Active drones:
+
+- 12 local-drone attempts were recorded under `.francis\local-drones`.
+- The first untuned drone in each worker lane timed out and was rejected as
+  unavailable evidence.
+- The remaining tuned drones completed advisory packets. Only the W3 long-path
+  proposal-root hypothesis survived direct repo verification.
+
+Commits produced: pending at report time.
+
+Commits accepted: pending at report time.
+
+Commits rejected: 0.
+
+Validations passed:
+
+- `py_compile` for `src\francis\api\routes\forge.py`,
+  `src\francis\api\routes\plugins.py`, `tests\test_api_plugins.py`, and
+  `tests\test_api_missions.py`.
+- `ruff check --no-cache` for the same touched files.
+- `ruff format --check --no-cache` for the same touched files.
+- Focused pytest:
+  `tests\test_api_plugins.py::test_plugins_forge_proposal_review_supports_long_windows_artifact_paths`.
+- Focused pytest:
+  `tests\test_api_missions.py::test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_mission_contexts`.
+- Combined focused pytest for both tests in one command.
+
+Validations failed or blocked:
+
+- The prior Codex worker iterations 118 and 119 failed before implementation
+  because Codex reported a usage-limit retry time of 11:19 AM.
+- The first local-drone attempt in each lane timed out through Ollama and was
+  rejected as unavailable evidence.
+- An unisolated mission-proof run was stopped after exceeding the focused-test
+  window while syncing a 10 MB generated-plugin registry. It is not accepted as
+  passing validation.
+
+Receipts generated:
+
+- Local-drone receipts:
+  `.francis\local-drones\receipts.jsonl`.
+- Retained pytest evidence roots:
+  `data\test_runs\pytest\stage17-lead-longpath-regression2`,
+  `data\test_runs\pytest\stage17-lead-mission-proof-isolated`, and
+  `data\test_runs\pytest\stage17-lead-final-focused2`.
+
+Roadmap items advanced:
+
+- Stage 17 / Capability Economy.
+- Governed proposal review and promotion-readiness path.
+- Reusable invocation mission proof.
+- Worker/drone evidence discipline.
+
+Capability classes advanced:
+
+- Governance
+- Receipts
+- Missions
+- Observability
+- Capability Registry
+- API Surface
+- Documentation
+- Testing
+
+New capabilities created or strengthened:
+
+- Forge proposal review can now operate on retained Windows artifact paths
+  longer than 260 characters.
+- Plugin proposal review state and proposal friction evidence can now read the
+  same long-path proposal records that plugin build wrote.
+- The Stage 17 reusable invocation mission proof now passes in an isolated
+  generated-plugin root, preserving the actual governed build, review, enable,
+  direct/tool invocation, mission-linked operation, and receipt assertions.
+- A focused long-path regression prevents recurrence of false `not_found`
+  proposal-review failures caused by Windows path length.
+
+Most important change:
+
+- Stage 17 mission-path proof moved from blocked at proposal lookup to a passing
+  validated mission invocation proof without weakening governance.
+
+Biggest remaining bottleneck:
+
+- Live quality-evidence queue reduction remains open. The next accepted queue
+  movement still requires clean JSON output, before/after counts, and a durable
+  artifact reconstruction receipt.
+
+Next highest leverage action:
+
+- Run a bounded live `smallest_full_pack_first` artifact reconstruction apply
+  that records `stage17_capability_pack_artifact_reconstruction_receipt_v1`, or
+  produce a precise blocker if the live apply still cannot return clean JSON.

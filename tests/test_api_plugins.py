@@ -65,6 +65,57 @@ def _isolate_generated_plugin_root(monkeypatch, plugins_module, tmp_path: Path) 
     monkeypatch.setattr(spec_builder, "_gen_dir", lambda: generated_root)
 
 
+def test_plugins_forge_proposal_review_supports_long_windows_artifact_paths(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "long_path_case" / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins as plugins_module
+
+    _isolate_generated_plugin_root(monkeypatch, plugins_module, tmp_path)
+    client = TestClient(create_app())
+
+    built = client.post(
+        "/plugins/build",
+        json={
+            "name": "Long Path Proposal Review Plugin",
+            "description": "long path proposal review",
+            "actor": _PLUGIN_ACTOR,
+            "meta": _forge_promotion_meta("long_path_proposal_review"),
+        },
+    )
+    assert built.status_code == 200
+    built_body = built.json()
+    assert built_body["ok"] is True
+    proposal_id = str(built_body["proposal_id"])
+    proposal_path = Path(str(built_body["proposal_path"]))
+    assert len(str(proposal_path)) > 260
+
+    approved = _approve_forge_proposal(client, proposal_id)
+    assert approved["review_receipt_id"]
+    review = plugins_module._plugin_proposal_review_state(proposal_id)
+    assert review["approved"] is True
+    assert review["receipt_id"] == approved["review_receipt_id"]
+
+    enabled = client.post(
+        "/plugins/enable",
+        json={
+            "id": str(built_body["plugin_id"]),
+            "reason": "long path proposal review proof",
+            "actor": _PLUGIN_ACTOR,
+        },
+    )
+    assert enabled.status_code == 200
+    enabled_body = enabled.json()
+    assert enabled_body["ok"] is True, enabled_body
+    assert enabled_body["promotion_receipt_id"]
+
+
 def _empty_artifact_link_candidates(plugins_module, *, scan_limit=None) -> dict[str, object]:
     safe_scan_limit = int(scan_limit or 0)
     registry = plugins_module._load_registry()

@@ -89270,6 +89270,83 @@ Remaining truthful gap:
   investigate why the current live apply probe can exceed the worker command
   window before returning receipt evidence.
 
+### 2026-06-21 15:36Z - Stage 17 long-path proposal review unblocks mission invocation proof
+
+Current posture: Stage 17 / Capability Economy remains open. This pass removed
+a Windows long-path blocker in the governed proposal-review path and validated
+the reusable invocation mission proof in an isolated generated-plugin root. It
+does not claim live quality-evidence queue reduction, metadata migration
+closure, full CI, or Stage 17 completion.
+
+What changed:
+
+- Forge collection file I/O now uses the same Windows extended-length path
+  pattern already used by plugin artifact writes, so proposal review can read
+  and update proposal records whose retained pytest artifact paths exceed 260
+  characters.
+- Plugin proposal-read helpers now use the same long-path-safe file access when
+  reading proposal friction evidence, proposal review state, and proposal-review
+  apply candidates.
+- The Stage 17 reusable invocation mission proof isolates its generated-plugin
+  root, preventing the test from syncing the accumulated repo-level
+  `plugins/generated` tree while preserving the same governed build, review,
+  enable, direct invocation, tool invocation, mission-linked operation, and
+  receipt assertions.
+- A focused regression now proves forge proposal review, plugin proposal review
+  state, and plugin enablement all work with proposal artifact paths longer than
+  260 characters.
+
+Worker and drone evidence:
+
+- The 3-worker Codex coordinator remained stopped because the prior worker
+  prompts hit the Codex usage limit before implementation.
+- The lead used 12 local-drone attempts across the three active lanes. The
+  first untuned drone in each lane timed out and was rejected as unavailable
+  evidence. The tuned local drones produced advisory packets; only the W3 path
+  mismatch hypothesis survived direct inspection.
+- Direct repo verification found the actual root cause: Python `Path.exists()`
+  returned false for the retained 273-character proposal path, while the
+  proposal artifact existed and the plugin writer had successfully written it
+  through long-path-safe file access.
+
+Validation:
+
+- `.\.venv\Scripts\python.exe -m py_compile
+  src\francis\api\routes\forge.py src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py tests\test_api_missions.py` passed.
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache
+  src\francis\api\routes\forge.py src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py tests\test_api_missions.py` passed.
+- `.\.venv\Scripts\python.exe -m ruff format --check --no-cache
+  src\francis\api\routes\forge.py src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py tests\test_api_missions.py` passed.
+- `.\.venv\Scripts\python.exe -m pytest
+  tests\test_api_plugins.py::test_plugins_forge_proposal_review_supports_long_windows_artifact_paths
+  tests\test_api_missions.py::test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_mission_contexts
+  -q --tb=short` passed with one existing FastAPI/Starlette TestClient
+  deprecation warning.
+
+Rejected evidence:
+
+- The initial unisolated mission proof run was stopped after it exceeded the
+  focused-test window while syncing a 10 MB generated-plugin registry. It
+  produced proposal review and promotion artifacts, but the hung run is not
+  accepted as passing validation.
+- The local-drone packets are advisory only. No drone output is treated as
+  architecture, implementation, or completion evidence without the focused tests
+  above.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. Live quality-evidence queue reduction, clean metadata
+  apply response closure, full quality-evidence closure, proposal review queue
+  closure, promotion queue closure, full CI, and phase movement remain unproven.
+- The next build action should return to W1's bounded live
+  `smallest_full_pack_first` artifact reconstruction apply and require clean
+  JSON output, before/after queue counts, and a durable
+  `stage17_capability_pack_artifact_reconstruction_receipt_v1` before accepting
+  queue movement.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

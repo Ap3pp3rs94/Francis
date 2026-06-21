@@ -73,6 +73,41 @@ def _real_path(value: str | Path) -> Path:
     return Path(os.path.realpath(os.fspath(value)))
 
 
+def _filesystem_path(path: Path) -> str:
+    if os.name != "nt":
+        return str(path)
+    resolved = str(path.resolve())
+    if resolved.startswith("\\\\?\\"):
+        return resolved
+    if resolved.startswith("\\\\"):
+        return "\\\\?\\UNC\\" + resolved[2:]
+    return "\\\\?\\" + resolved
+
+
+def _path_is_file(path: Path) -> bool:
+    return os.path.isfile(_filesystem_path(path))
+
+
+def _path_is_dir(path: Path) -> bool:
+    return os.path.isdir(_filesystem_path(path))
+
+
+def _iter_json_files(path: Path) -> list[Path]:
+    try:
+        names = os.listdir(_filesystem_path(path))
+    except OSError:
+        return []
+    return sorted(
+        (path / name for name in names if name.endswith(".json")),
+        key=lambda item: item.name,
+    )
+
+
+def _read_json_file(path: Path) -> Any:
+    with open(_filesystem_path(path), encoding="utf-8", errors="replace") as handle:
+        return json.load(handle)
+
+
 def _safe_record_id(value: Any) -> str:
     record_id = _safe_str(value).strip()
     return record_id if _SAFE_RECORD_ID_RE.match(record_id) else ""
@@ -83,12 +118,22 @@ def _atomic_write_record_json(collection: str, record_id: str, obj: dict[str, An
     if resolved_path is None:
         return None
     # CodeQL false positive: resolved_path is built from an allowlisted collection and safe record id.
-    resolved_path.parent.mkdir(parents=True, exist_ok=True)
+    os.makedirs(_filesystem_path(resolved_path.parent), exist_ok=True)
     tmp = resolved_path.with_suffix(resolved_path.suffix + ".tmp")
+    tmp_fs_path = _filesystem_path(tmp)
+    target_fs_path = _filesystem_path(resolved_path)
     # CodeQL false positive: tmp is derived from resolved_path after collection-root containment.
-    tmp.write_text(json.dumps(obj, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
-    # CodeQL false positive: both paths are constrained under the same collection root.
-    os.replace(tmp, resolved_path)
+    try:
+        with open(tmp_fs_path, "w", encoding="utf-8") as handle:
+            handle.write(json.dumps(obj, indent=2, ensure_ascii=False, default=str))
+        # CodeQL false positive: both paths are constrained under the same collection root.
+        os.replace(tmp_fs_path, target_fs_path)
+    finally:
+        if os.path.exists(tmp_fs_path):
+            try:
+                os.unlink(tmp_fs_path)
+            except OSError:
+                pass
     return resolved_path
 
 
@@ -191,7 +236,7 @@ def _record_ts(item: dict[str, Any], collection: str, path: Path) -> int:
         if parsed >= 0:
             return parsed
     try:
-        return int(path.stat().st_mtime)
+        return int(os.path.getmtime(_filesystem_path(path)))
     except OSError:
         return 0
 
@@ -202,7 +247,7 @@ def _read_json_record(path: Path, collection: str) -> dict[str, Any] | None:
         return None
     try:
         # CodeQL false positive: resolved_path is accepted only by _collection_path containment and suffix checks.
-        raw = json.loads(resolved_path.read_text(encoding="utf-8", errors="replace"))
+        raw = _read_json_file(resolved_path)
     except Exception:
         return None
     if not isinstance(raw, dict):
@@ -237,7 +282,7 @@ def _read_raw_record(path: Path, collection: str) -> dict[str, Any] | None:
         return None
     try:
         # CodeQL false positive: resolved_path is accepted only by _collection_path containment and suffix checks.
-        raw = json.loads(resolved_path.read_text(encoding="utf-8", errors="replace"))
+        raw = _read_json_file(resolved_path)
     except Exception:
         return None
     return raw if isinstance(raw, dict) else None
@@ -257,10 +302,10 @@ def _has_readiness_value(value: Any) -> bool:
 
 def _registry_plugins() -> dict[str, Any]:
     path = _registry_path()
-    if not path.exists() or not path.is_file():
+    if not _path_is_file(path):
         return {}
     try:
-        registry = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+        registry = _read_json_file(path)
     except Exception:
         return {}
     if not isinstance(registry, dict):
@@ -274,7 +319,7 @@ def _read_proposal(proposal_id: str) -> dict[str, Any]:
     if not resolved_id:
         return {}
     path = _collection_record_path("proposals", resolved_id)
-    if path is None or not path.exists() or not path.is_file():
+    if path is None or not _path_is_file(path):
         return {}
     proposal = _read_raw_record(path, "proposals")
     return proposal if isinstance(proposal, dict) else {}
@@ -391,13 +436,13 @@ def _promotion_readiness_items() -> list[dict[str, Any]]:
 
 def _records(collection: str) -> list[dict[str, Any]]:
     root = _collection_dir(collection)
-    if not root.exists() or not root.is_dir():
+    if not _path_is_dir(root):
         return []
 
     items: list[tuple[dict[str, Any], int]] = []
-    for path in sorted(root.glob("*.json")):
+    for path in _iter_json_files(root):
         resolved_path = _collection_path(collection, path)
-        if resolved_path is None or not resolved_path.is_file():
+        if resolved_path is None or not _path_is_file(resolved_path):
             continue
         item = _read_json_record(resolved_path, collection)
         if item is not None:
@@ -475,7 +520,7 @@ def _get_collection(collection: str, id: str) -> dict[str, Any]:
     if path is None:
         return {"ok": False, "error": "invalid_id", "item": None}
     # CodeQL false positive: path is built from an allowlisted collection and safe record id.
-    if not path.exists() or not path.is_file():
+    if not _path_is_file(path):
         return {"ok": False, "error": "not_found", "item": None}
     item = _read_json_record(path, collection)
     if item is None:
@@ -644,7 +689,7 @@ def decide_proposal(payload: ProposalDecisionIn, request: Request) -> dict[str, 
     if proposal_path is None:
         return {"ok": False, "applied": False, "error": "invalid_id", "item": None}
     # CodeQL false positive: proposal_path is built from the proposals collection and a safe record id.
-    if not proposal_path.exists() or not proposal_path.is_file():
+    if not _path_is_file(proposal_path):
         return {"ok": False, "applied": False, "error": "not_found", "item": None}
 
     proposal = _read_raw_record(proposal_path, "proposals")

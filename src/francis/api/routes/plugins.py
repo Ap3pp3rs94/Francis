@@ -890,11 +890,11 @@ def _plugin_proposal_friction_evidence(proposal_id: str) -> list[str]:
     proposal_path = _plugin_proposal_path(resolved_id)
     if not _is_under(proposal_root, proposal_path):
         return []
-    if not proposal_path.exists() or not proposal_path.is_file():
+    if not _path_is_file(proposal_path):
         return []
 
     try:
-        raw = json.loads(proposal_path.read_text(encoding="utf-8", errors="replace"))
+        raw = _read_json_file(proposal_path)
     except Exception:
         return []
     if not isinstance(raw, dict):
@@ -922,11 +922,11 @@ def _plugin_proposal_review_state(proposal_id: str) -> dict[str, Any]:
     proposal_path = _plugin_proposal_path(resolved_id)
     if not _is_under(proposal_root, proposal_path):
         return {"status": "invalid", "review_status": "invalid", "receipt_id": "", "approved": False}
-    if not proposal_path.exists() or not proposal_path.is_file():
+    if not _path_is_file(proposal_path):
         return {"status": "missing", "review_status": "missing", "receipt_id": "", "approved": False}
 
     try:
-        proposal = json.loads(proposal_path.read_text(encoding="utf-8", errors="replace"))
+        proposal = _read_json_file(proposal_path)
     except Exception:
         return {"status": "unreadable", "review_status": "unreadable", "receipt_id": "", "approved": False}
     if not isinstance(proposal, dict):
@@ -8203,10 +8203,10 @@ def _read_plugin_proposal_for_review(proposal_id: str) -> tuple[Path | None, dic
     proposal_path = _plugin_proposal_path(safe_id)
     if not _is_under(proposal_root, proposal_path):
         return None, None
-    if not proposal_path.exists() or not proposal_path.is_file():
+    if not _path_is_file(proposal_path):
         return proposal_path, None
     try:
-        raw = json.loads(proposal_path.read_text(encoding="utf-8", errors="replace"))
+        raw = _read_json_file(proposal_path)
     except Exception:
         return proposal_path, None
     if not isinstance(raw, dict):
@@ -11822,6 +11822,15 @@ def _filesystem_path(path: Path) -> str:
     if resolved.startswith("\\\\"):
         return "\\\\?\\UNC\\" + resolved[2:]
     return "\\\\?\\" + resolved
+
+
+def _path_is_file(path: Path) -> bool:
+    return os.path.isfile(_filesystem_path(path))
+
+
+def _read_json_file(path: Path) -> Any:
+    with open(_filesystem_path(path), encoding="utf-8", errors="replace") as handle:
+        return json.load(handle)
 
 
 def _atomic_write_json(path: Path, obj: dict[str, Any]) -> None:
