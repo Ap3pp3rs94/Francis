@@ -88897,6 +88897,93 @@ Remaining truthful gap:
 - This slice does not close a ledger-backed phase gate and does not move the
   Phase 2 posture.
 
+### 2026-06-21 - Stage 17 artifact reconstruction and lifecycle enable gates
+
+Roadmap area: Stage 17 / Capability Economy, validation/proposal artifact
+reconstruction, executable lifecycle behavior, reusable governed invocation
+proof, receipt-backed queue evidence, and worker publication handoff.
+
+This pass integrated the next three active worker packets from the 3-worker
+Stage 17 cycle without creating a parallel capability substrate:
+
+- `POST /plugins/capabilities/packs/quality/evidence/remediation/reconstruct`
+  now returns deterministic
+  `stage17_capability_pack_artifact_reconstruction_dry_run_v1` fingerprint
+  evidence and requires the matching `dry_run_fingerprint` before apply. A
+  missing or stale fingerprint returns
+  `capability_pack_artifact_reconstruction_dry_run_confirmation_required` and
+  performs no validation/proposal writes.
+- The artifact reconstruction route now reports selected/global before and
+  after queue evidence with contract
+  `stage17_capability_pack_artifact_reconstruction_batch_queue_evidence_v1` for
+  dry-run, blocked apply, unsupported/no-candidate paths, and successful apply.
+  The worker live route proof reduced the quality-evidence artifact
+  reconstruction queue from `18 -> 17` by writing four validation receipts and
+  four proposal lineage receipts for
+  `legacy.generated.capabilitylineageplugin`.
+- Lead Builder retained the route/test hardening and runtime readback evidence,
+  then adjusted the focused test to prove a proposal-only reconstruction case
+  truthfully. That lead-level test does not claim validation receipt closure for
+  the file-lock scenario it exercised.
+- `/plugins/enable` now checks existing lifecycle state before non-staged
+  re-enable writes. Quarantined, deprecated, archived, retired, and explicitly
+  unknown lifecycle states return `plugin_lifecycle_enable_blocked` with
+  lifecycle receipt/readback evidence and without registry mutation or lifecycle
+  receipt writes.
+- `/plugins/capabilities/library/invocations/audit` now attaches
+  `operation_caller_context_readback` and `operation_caller_context_bound` to
+  accepted invocation records. Aggregate proof readiness now requires
+  operation-readback mission-shape reuse across both supported operation shapes
+  before the strongest evidence can be reported as
+  `receipt_linked_selection_consistent_operation_readback_bound_mission_shape_reuse`.
+- Worker prompt hashes reviewed in this pass:
+  `4bc3790c1a7b60bf58a0ecc200f70414c7c6b7b245fdcd3167fbd7ee4425bc48`,
+  `557792723169b2d4bbc08f3c0b7081a1e5ecf1459cba2354427d826c2244f3ed`, and
+  `72ea27e0c890be0ea488e13a7a1cfb912cde29aa936f6c0cfb09b43fd1942561`.
+
+Validation:
+
+- `.\.venv\Scripts\python.exe -m py_compile
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py
+  tests\test_api_missions.py` passed.
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py
+  tests\test_api_missions.py` passed.
+- `.\.venv\Scripts\python.exe -m ruff format --check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py
+  tests\test_api_missions.py` passed.
+- `git diff --check -- src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py tests\test_api_missions.py` passed.
+- Focused pytest selection passed for artifact reconstruction
+  dry-run/apply queue evidence, lifecycle enable blocking, adjacent lifecycle
+  promotion/repair behavior, and the durable invocation audit fixture:
+  `tests\test_api_plugins.py::test_plugins_capability_pack_quality_evidence_remediation_reconstructs_missing_artifacts`,
+  `tests\test_api_plugins.py::test_plugins_enable_lifecycle_gate_blocks_blocking_and_unknown_states_without_writes`,
+  `tests\test_api_plugins.py::test_plugins_lifecycle_deprecation_and_unknown_state_block_promotion`, and
+  `tests\test_api_plugins.py::test_plugins_invocation_audit_reads_durable_fixture_records_without_execution`.
+- Completion-model readback after the change reports
+  `current_phase=Phase 2`, `stage17_status=open`, and
+  `next_smallest_truthful_gap=select_from_latest_stage17_remaining_truthful_gap`.
+- FastAPI `TestClient` readback after the change reports
+  `migration_candidate_total=1` for
+  `legacy.generated.stage17reusableinvocationplugin`,
+  `remediation_queue_count=17`, `validation_receipt_missing=17`,
+  `proposal_id_missing=17`, and
+  `quality_standard_queue_count=null` with status `blocked`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. This pass does not claim validation-receipt closure,
+  proposal-lineage closure, migration-candidate closure, proposal review,
+  promotion, enablement, execution, full CI, or phase movement.
+- Worker 3's live mission-linked proof was attempted by the worker but did not
+  finish in the bounded window. Lead Builder did not keep new mission-test
+  assertions from that packet, and no live mission-path proof is claimed here.
+- Runtime receipts under `data/` are ignored local evidence; the source commit
+  carries the route/test contracts and this ledger entry.
+- This slice does not close a ledger-backed phase gate and does not move the
+  Phase 2 posture.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

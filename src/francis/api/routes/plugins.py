@@ -145,6 +145,10 @@ _CAPABILITY_PACK_QUALITY_DOC_REFERENCE_CANDIDATES = (
 )
 _CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_ROUTE = "/plugins/capabilities/packs/quality/evidence/remediation/reconstruct"
 _CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_SOURCE = "stage17_capability_pack_artifact_reconstruction_apply"
+_CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_DRY_RUN_CONTRACT = "stage17_capability_pack_artifact_reconstruction_dry_run_v1"
+_CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_QUEUE_CONTRACT = (
+    "stage17_capability_pack_artifact_reconstruction_batch_queue_evidence_v1"
+)
 _CAPABILITY_PACK_QUALITY_STANDARD_REMEDIATION_SOURCE = "stage17_capability_pack_quality_standard_remediation_apply"
 _CAPABILITY_PACK_QUALITY_STANDARD_REMEDIATION_DRY_RUN_CONTRACT = (
     "stage17_capability_pack_quality_standard_remediation_dry_run_v1"
@@ -1834,6 +1838,52 @@ def _promotion_readiness_blocked(
     }
 
 
+def _plugin_enable_lifecycle_blocked(
+    *,
+    plugin_id: str,
+    current: dict[str, Any],
+    lifecycle: dict[str, Any],
+    route: str,
+) -> dict[str, object]:
+    current_meta = dict(current.get("meta") or {}) if isinstance(current.get("meta"), dict) else {}
+    lifecycle_status = _safe_str(lifecycle.get("status")).strip() or "unknown"
+    governance = _plugin_lifecycle_governance(
+        gate="plugin_enable_lifecycle_gate",
+        route=route,
+        lifecycle_action="enable",
+        lifecycle_status=lifecycle_status,
+        writes_registry_metadata=False,
+        writes_lifecycle_receipt=False,
+    )
+    governance.update(
+        {
+            "next_step": "repair_or_rollback_lifecycle_before_enable",
+            "operator_hint": (
+                "A quarantined, deprecated, archived, retired, or unknown lifecycle state must be repaired "
+                "or rolled back before the plugin can be re-enabled."
+            ),
+        }
+    )
+    return {
+        "ok": False,
+        "applied": False,
+        "id": plugin_id,
+        "enabled": False,
+        "status": "blocked",
+        "error": "plugin_lifecycle_enable_blocked",
+        "lifecycle": redact_governed_display_value(lifecycle),
+        "current": {
+            "status": _safe_str(current.get("status")).strip(),
+            "enabled": bool(current.get("enabled", False)),
+            "promotion_status": _safe_str(current_meta.get("promotion_status")).strip(),
+            "lifecycle_status": _safe_str(current_meta.get("lifecycle_status")).strip(),
+            "lifecycle_receipt_id": _safe_str(current_meta.get("lifecycle_receipt_id")).strip(),
+            "lifecycle_receipt_path": _safe_str(current_meta.get("lifecycle_receipt_path")).strip(),
+        },
+        "governance": governance,
+    }
+
+
 def _plugin_runtime_compatibility_blocked(
     *,
     plugin_id: str,
@@ -2298,6 +2348,86 @@ def _plugin_lifecycle_repair_fingerprint(*, plan: dict[str, Any]) -> str:
     }
     raw = json.dumps(body, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(raw).hexdigest()
+
+
+def _capability_pack_artifact_reconstruction_fingerprint(*, planned: list[dict[str, Any]]) -> str:
+    canonical_packs: list[dict[str, Any]] = []
+    for pack in planned:
+        raw_capabilities = pack.get("capabilities") if isinstance(pack.get("capabilities"), list) else []
+        capabilities = [
+            {
+                "capability": _safe_str(capability.get("capability")).strip(),
+                "needs_validation_receipt": bool(capability.get("needs_validation_receipt")),
+                "needs_proposal_lineage": bool(capability.get("needs_proposal_lineage")),
+            }
+            for capability in raw_capabilities
+            if isinstance(capability, dict)
+        ]
+        capabilities.sort(key=lambda item: item["capability"])
+        canonical_packs.append(
+            {
+                "pack_id": _safe_str(pack.get("pack_id")).strip(),
+                "pack_version": _safe_str(pack.get("pack_version")).strip(),
+                "capabilities_truncated": bool(pack.get("capabilities_truncated")),
+                "partial_reconstruction": bool(pack.get("partial_reconstruction")),
+                "capabilities": capabilities,
+            }
+        )
+    canonical_packs.sort(key=lambda item: (item["pack_id"], item["pack_version"]))
+    body = {
+        "contract": _CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_DRY_RUN_CONTRACT,
+        "route": _CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_ROUTE,
+        "planned": canonical_packs,
+    }
+    raw = json.dumps(body, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _capability_pack_artifact_reconstruction_queue_evidence(
+    *,
+    projection: dict[str, Any],
+    queue: list[dict[str, Any]],
+    selected_pack_ids: set[str],
+) -> dict[str, Any]:
+    selected = bool(selected_pack_ids)
+    blocker_counts: dict[str, int] = {}
+    validation_required_count = 0
+    proposal_required_count = 0
+    for item in queue:
+        for blocker in _unique_texts(item.get("blockers"), limit=50):
+            blocker_counts[blocker] = blocker_counts.get(blocker, 0) + 1
+        plan = (
+            item.get("artifact_reconstruction_plan")
+            if isinstance(item.get("artifact_reconstruction_plan"), dict)
+            else {}
+        )
+        validation_required_count += _count_value(plan.get("validation_receipt_reconstruction_required_count"))
+        proposal_required_count += _count_value(plan.get("proposal_lineage_reconstruction_required_count"))
+
+    return {
+        "queue_count_contract": _CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_QUEUE_CONTRACT,
+        "projection_scope": "selected_packs" if selected else "full_library",
+        "global_counts_included": not selected,
+        "selected_pack_ids": sorted(selected_pack_ids),
+        "remediation_queue_count": len(queue),
+        "global_remediation_queue_count": _count_value(projection.get("remediation_queue_count")),
+        "artifact_reconstruction_required_count": len(queue),
+        "global_artifact_reconstruction_required_count": _count_value(
+            projection.get("artifact_reconstruction_required_count")
+        ),
+        "validation_receipt_reconstruction_required_count": validation_required_count,
+        "global_validation_receipt_reconstruction_required_count": _count_value(
+            projection.get("validation_receipt_reconstruction_required_count")
+        ),
+        "proposal_lineage_reconstruction_required_count": proposal_required_count,
+        "global_proposal_lineage_reconstruction_required_count": _count_value(
+            projection.get("proposal_lineage_reconstruction_required_count")
+        ),
+        "blocker_counts": dict(sorted(blocker_counts.items())),
+        "global_blocker_counts": (
+            dict(projection.get("blocker_counts")) if isinstance(projection.get("blocker_counts"), dict) else {}
+        ),
+    }
 
 
 def _read_plugin_lifecycle_receipts(*, plugin_id: str = "", limit: int = 20) -> dict[str, Any]:
@@ -10864,6 +10994,80 @@ def _capability_pack_invocation_from_task(task: dict[str, Any]) -> tuple[dict[st
     return data, invocation if isinstance(invocation, dict) else {}
 
 
+def _capability_pack_operation_caller_context_readback(
+    *,
+    operation_capability: str,
+    mission_id: str,
+    input_meta: dict[str, Any],
+    invocation: dict[str, Any],
+) -> dict[str, object]:
+    capability = _safe_str(operation_capability).strip()
+    expected_context = _MISSION_OPERATION_CONTEXT_BY_CAPABILITY.get(capability, "")
+    mission_linked = bool(_safe_str(mission_id).strip())
+    input_caller_context = _safe_str(input_meta.get("caller_context")).strip()
+    invocation_caller_context = _safe_str(invocation.get("caller_context")).strip()
+    derived = bool(expected_context and mission_linked)
+
+    reject_reasons: list[str] = []
+    if not expected_context:
+        reject_reasons.append("unsupported_operation_capability")
+    if not mission_linked:
+        reject_reasons.append("mission_linkage_missing")
+    if input_caller_context and expected_context and input_caller_context != expected_context:
+        reject_reasons.append("input_caller_context_mismatch")
+    if invocation_caller_context and expected_context and invocation_caller_context != expected_context:
+        reject_reasons.append("invocation_caller_context_mismatch")
+
+    status = "derived" if derived and not reject_reasons else "mismatch" if derived else "not_applicable"
+    return {
+        "contract": _STAGE17_OPERATION_INVOCATION_CALLER_CONTEXT_CONTRACT,
+        "stage": "Stage 17 / Capability Economy",
+        "status": status,
+        "readback_scope": "operation_record_metadata_for_invocation_audit",
+        "source": "operation_capability_and_mission_linkage",
+        "operation_capability": capability,
+        "mission_linked": mission_linked,
+        "mission_id_present": mission_linked,
+        "derived": derived,
+        "derived_caller_context": expected_context if derived else None,
+        "expected_caller_context": expected_context or None,
+        "input_caller_context_present": bool(input_caller_context),
+        "input_caller_context": input_caller_context or None,
+        "input_caller_context_matches_derived": (
+            bool(input_caller_context and expected_context and input_caller_context == expected_context)
+            if input_caller_context
+            else None
+        ),
+        "invocation_caller_context": invocation_caller_context or None,
+        "invocation_caller_context_matches_derived": (
+            bool(invocation_caller_context and expected_context and invocation_caller_context == expected_context)
+            if invocation_caller_context
+            else None
+        ),
+        "eligible_for_invocation_audit_after_execution": bool(derived and not reject_reasons),
+        "reject_reasons": reject_reasons,
+        "receipt_backing": {
+            "source_kind": "delegation_task_record",
+            "operation_record_present": True,
+            "source_fields": ["task.capability", "task.inputs.mission_id", "task.inputs.meta.mission_id"],
+            "actual_invocation_receipt_read": True,
+            "actual_invocation_receipt_required_for_execution_audit": True,
+            "writes_receipts": False,
+        },
+        "governance": {
+            "read_only": True,
+            "writes_repo": False,
+            "writes_data": False,
+            "writes_receipts": False,
+            "executes_capabilities": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+            "memory_write": False,
+            "changes_operation_input": False,
+        },
+    }
+
+
 def _capability_pack_invocation_audit_projection(
     *,
     pack_id: str = "",
@@ -10902,6 +11106,7 @@ def _capability_pack_invocation_audit_projection(
 
         inputs = task.get("inputs") if isinstance(task.get("inputs"), dict) else {}
         input_meta = inputs.get("meta") if isinstance(inputs.get("meta"), dict) else {}
+        mission_id = _safe_str(inputs.get("mission_id") or input_meta.get("mission_id")).strip()
         routing_guard = _capability_pack_invocation_routing_guard(
             operation_capability=operation_capability,
             operation_status=_safe_str(task.get("status")).strip(),
@@ -10915,11 +11120,23 @@ def _capability_pack_invocation_audit_projection(
         reuse = invocation.get("reuse") if isinstance(invocation.get("reuse"), dict) else {}
         governance = invocation.get("governance") if isinstance(invocation.get("governance"), dict) else {}
         selection_binding = _capability_pack_invocation_selection_binding(invocation)
+        operation_caller_context = _capability_pack_operation_caller_context_readback(
+            operation_capability=operation_capability,
+            mission_id=mission_id,
+            input_meta=input_meta,
+            invocation=invocation,
+        )
+        operation_caller_context_bound = bool(
+            operation_caller_context.get("eligible_for_invocation_audit_after_execution")
+            and operation_caller_context.get("derived_caller_context")
+            == _safe_str(invocation.get("caller_context")).strip()
+            and operation_caller_context.get("operation_capability") == operation_capability
+        )
         item = {
             "operation_id": _safe_str(task.get("task_id")).strip(),
             "operation_status": _safe_str(task.get("status")).strip(),
             "operation_capability": operation_capability,
-            "mission_id": _safe_str(inputs.get("mission_id") or input_meta.get("mission_id")).strip(),
+            "mission_id": mission_id,
             "receipt_kind": _safe_str(invocation.get("kind")).strip(),
             "receipt_contract": _safe_str(invocation.get("contract")).strip(),
             "receipt_embedded_in_operation_output": True,
@@ -10949,6 +11166,8 @@ def _capability_pack_invocation_audit_projection(
                 "sandbox_trace_id": _safe_str(receipt_linkage.get("sandbox_trace_id")).strip(),
             },
             "routing_guard": routing_guard,
+            "operation_caller_context_readback": operation_caller_context,
+            "operation_caller_context_bound": operation_caller_context_bound,
             "governance": {
                 "permission_model": _safe_str(governance.get("permission_model")).strip(),
                 "uses_existing_plugin_dispatcher": _to_bool(governance.get("uses_existing_plugin_dispatcher")),
@@ -11043,6 +11262,20 @@ def _capability_pack_invocation_audit_projection(
         for key, operation_capabilities in receipt_linked_capability_lists_by_reuse_key.items()
         if mission_shape_capabilities.issubset(operation_capabilities)
     ]
+    operation_readback_capabilities_by_reuse_key: dict[str, set[str]] = {}
+    for item in items:
+        reuse_key = str(item.get("pack_reuse_key") or "").strip()
+        operation_capability = str(item.get("operation_capability") or "").strip()
+        if reuse_key and operation_capability and _to_bool(item.get("operation_caller_context_bound")):
+            operation_readback_capabilities_by_reuse_key.setdefault(reuse_key, set()).add(operation_capability)
+    operation_readback_capability_lists_by_reuse_key = {
+        key: sorted(value) for key, value in sorted(operation_readback_capabilities_by_reuse_key.items())
+    }
+    operation_readback_mission_shape_reuse_keys = [
+        key
+        for key, operation_capabilities in operation_readback_capability_lists_by_reuse_key.items()
+        if mission_shape_capabilities.issubset(operation_capabilities)
+    ]
     selection_bindings_by_reuse_key: dict[str, dict[str, dict[str, object]]] = {}
     for item in items:
         reuse_key = str(item.get("pack_reuse_key") or "").strip()
@@ -11060,7 +11293,11 @@ def _capability_pack_invocation_audit_projection(
     receipt_linked_selection_consistent_mission_shape_reuse_keys = [
         key for key in receipt_linked_mission_shape_reuse_keys if key in selection_consistent_reuse_keys
     ]
-    governed_reuse_proof_keys = receipt_linked_selection_consistent_mission_shape_reuse_keys
+    governed_reuse_proof_keys = [
+        key
+        for key in receipt_linked_selection_consistent_mission_shape_reuse_keys
+        if key in operation_readback_mission_shape_reuse_keys
+    ]
     governed_reuse_proof_ready = bool(governed_reuse_proof_keys)
     return {
         "ok": True,
@@ -11088,7 +11325,7 @@ def _capability_pack_invocation_audit_projection(
             "contract": "stage17_capability_pack_governed_invocation_proof_readiness_v1",
             "status": "reuse_proof_ready" if governed_reuse_proof_ready else "reuse_proof_incomplete",
             "ready": governed_reuse_proof_ready,
-            "strongest_evidence": "receipt_linked_selection_consistent_mission_shape_reuse",
+            "strongest_evidence": ("receipt_linked_selection_consistent_operation_readback_bound_mission_shape_reuse"),
             "pack_reuse_keys": governed_reuse_proof_keys,
             "accepted_invocation_count": len(items),
             "rejected_invocation_count": len(rejected_items),
@@ -11098,9 +11335,19 @@ def _capability_pack_invocation_audit_projection(
             "requires_dispatch_receipt_linkage": True,
             "requires_pack_selection_consistency": True,
             "requires_mission_plugin_and_tool_operation_shapes": True,
+            "requires_operation_caller_context_readback": True,
             "missing_evidence": []
             if governed_reuse_proof_ready
-            else ["receipt_linked_selection_consistent_mission_shape_reuse"],
+            else [
+                item
+                for item, proven in {
+                    "receipt_linked_selection_consistent_mission_shape_reuse": bool(
+                        receipt_linked_selection_consistent_mission_shape_reuse_keys
+                    ),
+                    "operation_readback_mission_shape_reuse": bool(operation_readback_mission_shape_reuse_keys),
+                }.items()
+                if not proven
+            ],
             "read_only": True,
             "writes_repo": False,
             "writes_data": False,
@@ -11129,6 +11376,9 @@ def _capability_pack_invocation_audit_projection(
             "receipt_linked_operation_capabilities_by_pack_reuse_key": (receipt_linked_capability_lists_by_reuse_key),
             "receipt_linked_mission_shape_reuse_proven": bool(receipt_linked_mission_shape_reuse_keys),
             "receipt_linked_mission_shape_reuse_keys": receipt_linked_mission_shape_reuse_keys,
+            "operation_readback_capabilities_by_pack_reuse_key": operation_readback_capability_lists_by_reuse_key,
+            "operation_readback_mission_shape_reuse_proven": bool(operation_readback_mission_shape_reuse_keys),
+            "operation_readback_mission_shape_reuse_keys": operation_readback_mission_shape_reuse_keys,
             "pack_selection_bindings_by_pack_reuse_key": selection_binding_lists_by_reuse_key,
             "pack_selection_consistent_reuse_proven": bool(selection_consistent_reuse_keys),
             "pack_selection_consistent_reuse_keys": selection_consistent_reuse_keys,
@@ -11149,6 +11399,8 @@ def _capability_pack_invocation_audit_projection(
             "routing_guard_contract": _CAPABILITY_PACK_INVOCATION_ROUTING_GUARD_CONTRACT,
             "routing_guard_required_for_reuse_proof": True,
             "operation_input_context_contract": _STAGE17_OPERATION_INVOCATION_CALLER_CONTEXT_CONTRACT,
+            "operation_caller_context_readback_required_for_reuse_proof": True,
+            "operation_caller_context_readback_scope": "operation_record_metadata_for_invocation_audit",
             "operation_input_caller_context_must_match_when_present": True,
             "reuse_metadata_must_bind_operation_capability": True,
             "reuse_metadata_must_bind_mission_caller_context": True,
@@ -12378,6 +12630,7 @@ class CapabilityPackQualityEvidenceReconstructionApplyIn(BaseModel):
     max_total_capability_count: int = 100
     max_capability_count_per_pack: int = 50
     dry_run: bool = False
+    dry_run_fingerprint: str = ""
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -13720,6 +13973,11 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
         ]
         if selected_pack_ids:
             queue = [item for item in queue if _safe_str(item.get("pack_id")).strip() in selected_pack_ids]
+        before_evidence = _capability_pack_artifact_reconstruction_queue_evidence(
+            projection=before,
+            queue=queue,
+            selected_pack_ids=selected_pack_ids,
+        )
         if not queue:
             return {
                 "ok": True,
@@ -13728,6 +13986,27 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
                 "planned_pack_count": 0,
                 "recorded_pack_count": 0,
                 "recorded_capability_count": 0,
+                "queue_count_contract": _CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_QUEUE_CONTRACT,
+                "projection_scope": before_evidence["projection_scope"],
+                "global_counts_included": before_evidence["global_counts_included"],
+                "before_remediation_queue_count": before_evidence["remediation_queue_count"],
+                "before_global_remediation_queue_count": before_evidence["global_remediation_queue_count"],
+                "after_remediation_queue_count": before_evidence["remediation_queue_count"],
+                "candidate_reduction_count": 0,
+                "before_validation_receipt_reconstruction_required_count": before_evidence[
+                    "validation_receipt_reconstruction_required_count"
+                ],
+                "after_validation_receipt_reconstruction_required_count": before_evidence[
+                    "validation_receipt_reconstruction_required_count"
+                ],
+                "before_proposal_lineage_reconstruction_required_count": before_evidence[
+                    "proposal_lineage_reconstruction_required_count"
+                ],
+                "after_proposal_lineage_reconstruction_required_count": before_evidence[
+                    "proposal_lineage_reconstruction_required_count"
+                ],
+                "before_queue_evidence": before_evidence,
+                "after_queue_evidence": before_evidence,
                 "before": before,
                 "governance": {
                     "scope": _PLUGIN_WRITE_SCOPE,
@@ -13880,6 +14159,8 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
             for item in prepared
         ]
         partial_reconstruction_count = sum(1 for item in planned if bool(item.get("partial_reconstruction")))
+        planned_capability_count = sum(int(item.get("capability_count") or 0) for item in planned)
+        dry_run_fingerprint = _capability_pack_artifact_reconstruction_fingerprint(planned=planned)
         if not prepared:
             return {
                 "ok": True,
@@ -13889,6 +14170,27 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
                 "recorded_pack_count": 0,
                 "recorded_capability_count": 0,
                 "skipped": skipped,
+                "queue_count_contract": _CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_QUEUE_CONTRACT,
+                "projection_scope": before_evidence["projection_scope"],
+                "global_counts_included": before_evidence["global_counts_included"],
+                "before_remediation_queue_count": before_evidence["remediation_queue_count"],
+                "before_global_remediation_queue_count": before_evidence["global_remediation_queue_count"],
+                "after_remediation_queue_count": before_evidence["remediation_queue_count"],
+                "candidate_reduction_count": 0,
+                "before_validation_receipt_reconstruction_required_count": before_evidence[
+                    "validation_receipt_reconstruction_required_count"
+                ],
+                "after_validation_receipt_reconstruction_required_count": before_evidence[
+                    "validation_receipt_reconstruction_required_count"
+                ],
+                "before_proposal_lineage_reconstruction_required_count": before_evidence[
+                    "proposal_lineage_reconstruction_required_count"
+                ],
+                "after_proposal_lineage_reconstruction_required_count": before_evidence[
+                    "proposal_lineage_reconstruction_required_count"
+                ],
+                "before_queue_evidence": before_evidence,
+                "after_queue_evidence": before_evidence,
                 "before": before,
                 "governance": {
                     "scope": _PLUGIN_WRITE_SCOPE,
@@ -13913,10 +14215,40 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
                 "applied": False,
                 "status": "dry_run",
                 "planned_pack_count": len(planned),
-                "planned_capability_count": sum(int(item.get("capability_count") or 0) for item in planned),
+                "planned_capability_count": planned_capability_count,
                 "partial_reconstruction_count": partial_reconstruction_count,
+                "dry_run_fingerprint": dry_run_fingerprint,
+                "dry_run_confirmation": {
+                    "required_for_apply": True,
+                    "fingerprint": dry_run_fingerprint,
+                    "fingerprint_contract": _CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_DRY_RUN_CONTRACT,
+                    "planned_pack_count": len(planned),
+                    "planned_capability_count": planned_capability_count,
+                    "apply_route": request.url.path,
+                },
+                "queue_count_contract": _CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_QUEUE_CONTRACT,
+                "projection_scope": before_evidence["projection_scope"],
+                "global_counts_included": before_evidence["global_counts_included"],
+                "before_remediation_queue_count": before_evidence["remediation_queue_count"],
+                "before_global_remediation_queue_count": before_evidence["global_remediation_queue_count"],
+                "after_remediation_queue_count": before_evidence["remediation_queue_count"],
+                "candidate_reduction_count": 0,
+                "before_validation_receipt_reconstruction_required_count": before_evidence[
+                    "validation_receipt_reconstruction_required_count"
+                ],
+                "after_validation_receipt_reconstruction_required_count": before_evidence[
+                    "validation_receipt_reconstruction_required_count"
+                ],
+                "before_proposal_lineage_reconstruction_required_count": before_evidence[
+                    "proposal_lineage_reconstruction_required_count"
+                ],
+                "after_proposal_lineage_reconstruction_required_count": before_evidence[
+                    "proposal_lineage_reconstruction_required_count"
+                ],
                 "planned": planned,
                 "skipped": skipped,
+                "before_queue_evidence": before_evidence,
+                "after_queue_evidence": before_evidence,
                 "before": before,
                 "governance": {
                     "scope": _PLUGIN_WRITE_SCOPE,
@@ -13942,10 +14274,38 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
                 "status": "blocked",
                 "error": "operator_reconstruction_decision_required",
                 "planned_pack_count": len(planned),
-                "planned_capability_count": sum(int(item.get("capability_count") or 0) for item in planned),
+                "planned_capability_count": planned_capability_count,
                 "partial_reconstruction_count": partial_reconstruction_count,
+                "dry_run_fingerprint": dry_run_fingerprint,
+                "dry_run_confirmation": {
+                    "required_for_apply": True,
+                    "fingerprint_contract": _CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_DRY_RUN_CONTRACT,
+                    "fingerprint_matched": _safe_str(payload.dry_run_fingerprint).strip() == dry_run_fingerprint,
+                    "apply_route": request.url.path,
+                },
+                "queue_count_contract": _CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_QUEUE_CONTRACT,
+                "projection_scope": before_evidence["projection_scope"],
+                "global_counts_included": before_evidence["global_counts_included"],
+                "before_remediation_queue_count": before_evidence["remediation_queue_count"],
+                "before_global_remediation_queue_count": before_evidence["global_remediation_queue_count"],
+                "after_remediation_queue_count": before_evidence["remediation_queue_count"],
+                "candidate_reduction_count": 0,
+                "before_validation_receipt_reconstruction_required_count": before_evidence[
+                    "validation_receipt_reconstruction_required_count"
+                ],
+                "after_validation_receipt_reconstruction_required_count": before_evidence[
+                    "validation_receipt_reconstruction_required_count"
+                ],
+                "before_proposal_lineage_reconstruction_required_count": before_evidence[
+                    "proposal_lineage_reconstruction_required_count"
+                ],
+                "after_proposal_lineage_reconstruction_required_count": before_evidence[
+                    "proposal_lineage_reconstruction_required_count"
+                ],
                 "planned": planned,
                 "skipped": skipped,
+                "before_queue_evidence": before_evidence,
+                "after_queue_evidence": before_evidence,
                 "before": before,
                 "governance": {
                     "scope": _PLUGIN_WRITE_SCOPE,
@@ -13954,6 +14314,67 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
                     "writes_validation_receipts": False,
                     "writes_proposals": False,
                     "requires_operator_reconstruction_decision": True,
+                    "partial_reconstruction_count": partial_reconstruction_count,
+                    "partial_reconstruction_does_not_claim_pack_complete": partial_reconstruction_count > 0,
+                    "does_not_approve_proposals": True,
+                    "does_not_promote_capabilities": True,
+                    "does_not_execute_capabilities": True,
+                    "promotion_authority": False,
+                    "execution_authority": False,
+                    "approval_authority": False,
+                    "memory_write": False,
+                },
+            }
+
+        provided_dry_run_fingerprint = _safe_str(payload.dry_run_fingerprint).strip()
+        if provided_dry_run_fingerprint != dry_run_fingerprint:
+            return {
+                "ok": False,
+                "applied": False,
+                "status": "blocked",
+                "error": "capability_pack_artifact_reconstruction_dry_run_confirmation_required",
+                "planned_pack_count": len(planned),
+                "planned_capability_count": planned_capability_count,
+                "partial_reconstruction_count": partial_reconstruction_count,
+                "dry_run_fingerprint": dry_run_fingerprint,
+                "dry_run_confirmation": {
+                    "required_for_apply": True,
+                    "fingerprint_contract": _CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_DRY_RUN_CONTRACT,
+                    "fingerprint_matched": False,
+                    "apply_route": request.url.path,
+                },
+                "queue_count_contract": _CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_QUEUE_CONTRACT,
+                "projection_scope": before_evidence["projection_scope"],
+                "global_counts_included": before_evidence["global_counts_included"],
+                "before_remediation_queue_count": before_evidence["remediation_queue_count"],
+                "before_global_remediation_queue_count": before_evidence["global_remediation_queue_count"],
+                "after_remediation_queue_count": before_evidence["remediation_queue_count"],
+                "candidate_reduction_count": 0,
+                "before_validation_receipt_reconstruction_required_count": before_evidence[
+                    "validation_receipt_reconstruction_required_count"
+                ],
+                "after_validation_receipt_reconstruction_required_count": before_evidence[
+                    "validation_receipt_reconstruction_required_count"
+                ],
+                "before_proposal_lineage_reconstruction_required_count": before_evidence[
+                    "proposal_lineage_reconstruction_required_count"
+                ],
+                "after_proposal_lineage_reconstruction_required_count": before_evidence[
+                    "proposal_lineage_reconstruction_required_count"
+                ],
+                "planned": planned,
+                "skipped": skipped,
+                "before_queue_evidence": before_evidence,
+                "after_queue_evidence": before_evidence,
+                "before": before,
+                "governance": {
+                    "scope": _PLUGIN_WRITE_SCOPE,
+                    "route": request.url.path,
+                    "writes_registry_metadata": False,
+                    "writes_validation_receipts": False,
+                    "writes_proposals": False,
+                    "requires_operator_reconstruction_decision": True,
+                    "operator_reconstruction_decision_captured": True,
                     "partial_reconstruction_count": partial_reconstruction_count,
                     "partial_reconstruction_does_not_claim_pack_complete": partial_reconstruction_count > 0,
                     "does_not_approve_proposals": True,
@@ -13997,11 +14418,21 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
                 or _safe_str(item.get("pack_id")).strip() in {str(record.get("pack_id")) for record in recorded}
             )
         ]
+        after_evidence = _capability_pack_artifact_reconstruction_queue_evidence(
+            projection=after,
+            queue=selected_after_queue,
+            selected_pack_ids=selected_pack_ids,
+        )
         validation_write_count = sum(
             len(item.get("validation_receipts") or []) for item in changed_records if isinstance(item, dict)
         )
         proposal_write_count = sum(
             len(item.get("proposal_lineages") or []) for item in changed_records if isinstance(item, dict)
+        )
+        candidate_reduction_count = max(
+            0,
+            _count_value(before_evidence.get("remediation_queue_count"))
+            - _count_value(after_evidence.get("remediation_queue_count")),
         )
         applied = bool(changed_records)
         return {
@@ -14017,6 +14448,35 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
             "recorded": recorded,
             "failed": failed,
             "skipped": skipped,
+            "dry_run_fingerprint": dry_run_fingerprint,
+            "dry_run_confirmation": {
+                "required_for_apply": True,
+                "fingerprint_matched": True,
+                "fingerprint_contract": _CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_DRY_RUN_CONTRACT,
+                "apply_route": request.url.path,
+            },
+            "queue_count_contract": _CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_QUEUE_CONTRACT,
+            "projection_scope": before_evidence["projection_scope"],
+            "global_counts_included": before_evidence["global_counts_included"],
+            "before_remediation_queue_count": before_evidence["remediation_queue_count"],
+            "before_global_remediation_queue_count": before_evidence["global_remediation_queue_count"],
+            "after_remediation_queue_count": after_evidence["remediation_queue_count"],
+            "after_global_remediation_queue_count": after_evidence["global_remediation_queue_count"],
+            "candidate_reduction_count": candidate_reduction_count,
+            "before_validation_receipt_reconstruction_required_count": before_evidence[
+                "validation_receipt_reconstruction_required_count"
+            ],
+            "after_validation_receipt_reconstruction_required_count": after_evidence[
+                "validation_receipt_reconstruction_required_count"
+            ],
+            "before_proposal_lineage_reconstruction_required_count": before_evidence[
+                "proposal_lineage_reconstruction_required_count"
+            ],
+            "after_proposal_lineage_reconstruction_required_count": after_evidence[
+                "proposal_lineage_reconstruction_required_count"
+            ],
+            "before_queue_evidence": before_evidence,
+            "after_queue_evidence": after_evidence,
             "remaining_remediation_queue": selected_after_queue,
             "remaining_remediation_queue_count": int(after.get("remediation_queue_count") or 0),
             "next_smallest_truthful_gap": _safe_str(after.get("next_smallest_truthful_gap")).strip(),
@@ -18448,6 +18908,14 @@ def enable_plugin(payload: PluginToggleIn, request: Request) -> dict[str, object
             )
             current["meta"] = meta
         else:
+            lifecycle = _plugin_lifecycle_state(previous, redact_governed_metadata(payload.meta))
+            if bool(lifecycle.get("blocks_promotion")) or bool(lifecycle.get("blocks_execution")):
+                return _plugin_enable_lifecycle_blocked(
+                    plugin_id=plugin_id,
+                    current=previous,
+                    lifecycle=lifecycle,
+                    route=request.url.path,
+                )
             meta = dict(current.get("meta") or {}) if isinstance(current.get("meta"), dict) else {}
             promotion_status = _safe_str(meta.get("promotion_status")).strip().lower()
             if promotion_status in {"disabled", "uninstalled"}:

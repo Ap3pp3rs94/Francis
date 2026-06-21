@@ -48,18 +48,18 @@ Baseline: report initialized after the four-worker pass completed on
 | Lens | 4 | Lens observation contracts gained unmapped-coordinate refusal coverage, invalid-dimension refusal, and command-palette proof readbacks. |
 | Voice | 4 | Voice receipts now separate acoustic proof source, gate mode, provider receipt modes, and embedded provider-boundary evidence. |
 | Memory | 0 | No memory contract advancement in this cycle. |
-| Governance | 16 | Refusal/no-authority boundaries strengthened for acoustic proof, provider receipts, Stage 17 worker-readback/publication handoff claims, invalid coordinates, generated-spec compatibility, lifecycle history readback compatibility, unsupported invocation receipt rejection, quality-standard dry-run/apply receipt gates, pack-selection binding, activity-vs-progress reporting, worker liveness truth, unversioned migration refusal, and read-only invocation proof readiness. |
-| Receipts | 16 | New receipt/readback fields for acoustic proof rejection, provider mode state/linkage, worker-readback and worker/publication handoff requirements, capability-evolution worker packets, worker execution liveness, metadata receipt batch evidence, quality-standard remediation batch receipts, lifecycle history compatibility evidence, invocation pack-selection/rejection receipts, migration identity, and proof-readiness linkage. |
-| Missions | 2 | Stage 17 mission-linked invocation audit rejects tampered embedded pack-selection bindings and now surfaces unsupported operation-capability receipts as rejected evidence. |
+| Governance | 19 | Refusal/no-authority boundaries strengthened for acoustic proof, provider receipts, Stage 17 worker-readback/publication handoff claims, invalid coordinates, generated-spec compatibility, lifecycle history readback compatibility, unsupported invocation receipt rejection, quality-standard dry-run/apply receipt gates, pack-selection binding, activity-vs-progress reporting, worker liveness truth, unversioned migration refusal, read-only invocation proof readiness, artifact reconstruction dry-run confirmation, lifecycle-blocked re-enable refusal, and operation-readback-bound invocation proof. |
+| Receipts | 19 | New receipt/readback fields for acoustic proof rejection, provider mode state/linkage, worker-readback and worker/publication handoff requirements, capability-evolution worker packets, worker execution liveness, metadata receipt batch evidence, quality-standard remediation batch receipts, lifecycle history compatibility evidence, invocation pack-selection/rejection receipts, migration identity, proof-readiness linkage, artifact reconstruction queue evidence, validation/proposal reconstruction receipts, and operation caller-context readback binding. |
+| Missions | 3 | Stage 17 mission-linked invocation audit rejects tampered embedded pack-selection bindings, surfaces unsupported operation-capability receipts as rejected evidence, and now requires operation-readback mission-shape reuse before readiness. |
 | Overlay | 4 | Overlay-related proof now requires local overlay speech source, exposes manual proof mode, and blocked/invalid coordinate cases stay before screen/session readback. |
-| Observability | 14 | Added diagnostics for acoustic proof, provider mode/linkage disambiguation, Stage 17 readback and handoff guard state, quality-standard after-sync queue honesty, unsupported invocation rejection visibility, build capability evolution, Exec worker liveness, publication-marker prompt matching, migration identity readback, and invocation proof readiness. |
+| Observability | 16 | Added diagnostics for acoustic proof, provider mode/linkage disambiguation, Stage 17 readback and handoff guard state, quality-standard after-sync queue honesty, unsupported invocation rejection visibility, build capability evolution, Exec worker liveness, publication-marker prompt matching, migration identity readback, invocation proof readiness, artifact reconstruction before/after queue evidence, and operation caller-context audit binding. |
 | Completion Model | 2 | Completion model now rejects selected Stage 17 gaps as worker-readback proof and worker/publication handoff proof. |
-| Capability Registry | 6 | Stage 17 now has generated-spec compatibility binding, catalog lifecycle provenance projection, selected live metadata-receipt backlog reduction evidence, receipt-backed quality-standard backlog reduction, lifecycle-history compatibility readback evidence, and versioned migration identity enforcement. |
+| Capability Registry | 8 | Stage 17 now has generated-spec compatibility binding, catalog lifecycle provenance projection, selected live metadata-receipt backlog reduction evidence, receipt-backed quality-standard backlog reduction, lifecycle-history compatibility readback evidence, versioned migration identity enforcement, one live artifact reconstruction backlog reduction, and lifecycle-blocked re-enable prevention. |
 | Swarm Infrastructure | 4 | Completion model now requires worker readback/handoff evidence, coordinator prompts require capability-evolution packet fields, and active Exec workers are no longer treated as stale. |
 | Operator Controls | 2 | Manual acoustic Orb movement proof now has source-specific next-step diagnostics and explicit manual-proof-required state. |
-| API Surface | 10 | Monitor route sanitizer, ChatGPT voice contract/receipt surfaces, plugin promotion readiness, plugin runtime execution guards, quality-standard remediation receipts, lifecycle-history compatibility readbacks, migration identity refusal, and invocation audit readbacks expose stricter fields. |
-| Documentation | 8 | Completion model docs, worker prompt docs, Stage 17 closure matrix, ledger entries, and this evolution report record durable operating rules and current Stage 17 blockers. |
-| Testing | 18 | Added or expanded focused tests across worker lanes, coordinator prompt contracts, worker liveness status, plugin compatibility, metadata receipt batching, quality-standard receipt/after-sync behavior, lifecycle history compatibility, migration identity refusal, and invocation audit binding. |
+| API Surface | 13 | Monitor route sanitizer, ChatGPT voice contract/receipt surfaces, plugin promotion readiness, plugin runtime execution guards, quality-standard remediation receipts, lifecycle-history compatibility readbacks, migration identity refusal, artifact reconstruction evidence fields, lifecycle enable refusal, and invocation audit readbacks expose stricter fields. |
+| Documentation | 9 | Completion model docs, worker prompt docs, Stage 17 closure matrix, ledger entries, and this evolution report record durable operating rules and current Stage 17 blockers. |
+| Testing | 21 | Added or expanded focused tests across worker lanes, coordinator prompt contracts, worker liveness status, plugin compatibility, metadata receipt batching, quality-standard receipt/after-sync behavior, lifecycle history compatibility, migration identity refusal, artifact reconstruction queue evidence, lifecycle enable refusal, and invocation audit binding. |
 
 ## Cycle Log
 
@@ -927,3 +927,129 @@ Next highest leverage action:
 - Have the next three-worker cycle target the still-live migration candidate,
   the 18 validation/proposal blockers, and the mission test hang as separate
   lanes, with local drones limited to narrow analysis packets.
+
+## PM Follow-Up - 2026-06-21T13:00Z
+
+Commit:
+
+- Pending at the time of this entry: Stage 17 artifact reconstruction,
+  lifecycle enable, and operation-readback proof integration.
+
+Active workers:
+
+- W1 quality-evidence artifact reconstruction: accepted source/test hardening
+  plus live runtime evidence reducing the artifact reconstruction queue from
+  `18 -> 17`.
+- W2 executable lifecycle lane: accepted non-staged `/plugins/enable`
+  lifecycle-blocking gate.
+- W3 reusable invocation proof lane: accepted read-only operation
+  caller-context readback binding for the durable invocation audit fixture.
+  Worker-attempted live mission proof remained inconclusive and was not counted
+  as accepted evidence.
+- W4 parked to preserve usage.
+
+Active drones:
+
+- 0 local drones reported by the accepted worker packets. The next cycle should
+  use local drones only for narrow analysis packets that workers independently
+  verify.
+
+Commits produced:
+
+- 1 pending coherent Lead Builder integration commit.
+
+Commits accepted:
+
+- 0 pushed at the time of this entry.
+
+Commits rejected:
+
+- 0 complete worker packets rejected.
+- 1 worker sub-output rejected: W3 mission-linked test assertions were not kept
+  because the live mission proof did not finish in the bounded window.
+
+Validations passed:
+
+- `py_compile` for `src\francis\api\routes\plugins.py`,
+  `tests\test_api_plugins.py`, and `tests\test_api_missions.py`.
+- Ruff check for the three accepted Python files.
+- Ruff format check for the three accepted Python files.
+- `git diff --check` for the accepted Stage 17 source/test files.
+- Focused pytest selection covering artifact reconstruction queue evidence and
+  dry-run apply confirmation, lifecycle enable blocking, adjacent lifecycle
+  promotion/readback behavior, and durable invocation audit replay.
+- Completion-model readback kept Stage 17 open.
+- FastAPI `TestClient` readback reported `migration_candidate_total=1`,
+  `remediation_queue_count=17`, `validation_receipt_missing=17`, and
+  `proposal_id_missing=17`.
+
+Validations failed or blocked:
+
+- Full `scripts\check.ps1` was not run in this bounded cycle.
+- Worker 3's live mission-linked proof did not complete in its bounded window.
+  No live mission-path pass is claimed by this entry.
+
+Receipts generated:
+
+- W1 readback:
+  `.francis\worker-terminal-coordinator\readbacks\worker-1-orb-voice-proof.md`.
+- W2 readback:
+  `.francis\worker-terminal-coordinator\readbacks\worker-2-stage17-lifecycle-promotion.md`.
+- W3 readback:
+  `.francis\worker-terminal-coordinator\readbacks\worker-3-voice-receipts.md`.
+- W1 live route apply wrote ignored runtime validation receipts and proposal
+  lineage receipts under `data/artifacts/plugins/validations/` and
+  `data/artifacts/plugins/proposals/` for four
+  `legacy.generated.capabilitylineageplugin` capabilities.
+
+Roadmap items advanced:
+
+- Stage 17 / Capability Economy.
+- Governed validation/proposal artifact reconstruction.
+- Executable lifecycle behavior.
+- Reusable invocation proof truthfulness.
+- Receipt-linked queue observability.
+
+Capability classes advanced:
+
+- Capability Registry
+- Governance
+- Receipts
+- Missions
+- Observability
+- API Surface
+- Documentation
+- Testing
+
+New capabilities created or strengthened:
+
+- Artifact reconstruction apply now requires a matching dry-run fingerprint and
+  exposes selected/global before-after queue evidence.
+- A live artifact reconstruction packet removed one capability pack from the
+  remaining quality-evidence queue through the existing governed route.
+- Non-staged `/plugins/enable` can no longer mark lifecycle-blocked plugins as
+  enabled before repair/rollback.
+- Invocation audit proof readiness now requires operation caller-context
+  readback binding across supported mission operation shapes.
+
+Most important change:
+
+- Stage 17 moved from merely having artifact reconstruction as a writer to
+  having a fingerprint-confirmed, queue-evidenced artifact reconstruction apply
+  path that reduced one live pack while still reporting the remaining queue
+  honestly.
+
+Biggest remaining bottleneck:
+
+- Stage 17 remains open. Current lead readback reports
+  `migration_candidate_total=1`, `remediation_queue_count=17`,
+  `validation_receipt_missing=17`, and `proposal_id_missing=17`; full CI and
+  live mission proof remain unproven.
+
+Next highest leverage action:
+
+- Launch the next three-worker cycle with W1 reducing the next
+  validation/proposal artifact-reconstruction pack, W2 converting lifecycle
+  block visibility into an operator-readable selected-scope readback, and W3
+  isolating the mission-linked invocation proof hang without modifying mission
+  assertions until the command finishes.
