@@ -88752,6 +88752,87 @@ Remaining truthful gap:
 - This slice does not close a ledger-backed phase gate and does not move the
   Phase 2 posture.
 
+### 2026-06-21 - Stage 17 quality-standard receipts and invocation evidence
+
+Roadmap area: Stage 17 / Capability Economy, governed quality-standard
+remediation, lifecycle repair history truthfulness, reusable invocation proof,
+receipt-backed batch evidence, and worker publication handoff.
+
+This pass integrated the three active worker packets from the 3-worker
+Stage 17 cycle without creating a parallel capability substrate:
+
+- `POST /plugins/capabilities/packs/quality/standards/remediation/apply` now
+  writes a dedicated
+  `stage17_capability_pack_quality_standard_remediation_receipt_v1` batch
+  receipt after dry-run-fingerprint-confirmed apply. The receipt records
+  before/after quality-standard queue counts, global count inclusion, candidate
+  reduction, recorded/skipped/failed pack results, redacted actor/reason/meta,
+  and authority-denying governance.
+- Quality-standard remediation after-counts now run the same generated-plugin
+  sync shape used during planning before reporting final queue counts. This
+  prevents a full-library response from claiming closure when generated sync
+  introduces another quality-standard candidate after the batch writes.
+- Live governed route proof with `stage17.operator -> plugins.write` wrote
+  `stage17_quality_standard_remediation_batch_1782041640_receipt.json` for an
+  18-pack batch, then a second generated-sync follow-up receipt
+  `stage17_quality_standard_remediation_batch_1782042062_receipt.json` for the
+  final one-pack moving candidate from the worker pass. Lead Builder validation
+  then re-ran the combined focused tests, observed that the test path had
+  reintroduced one generated legacy quality-standard candidate, and cleared it
+  through the same governed route with
+  `stage17_quality_standard_remediation_batch_1782042862_receipt.json`.
+  The final independent readback reported `quality_standard_queue_count=0`,
+  `tests_missing=0`, and `docs_missing=0`.
+- `GET /plugins/lifecycle/repair/history` now reuses the existing lifecycle
+  repair generated-spec/core compatibility guard before it reports apply
+  readiness. History readback no longer advertises repair availability when the
+  corresponding apply route would refuse the candidate for ambiguous or
+  incompatible generated-spec/core evidence.
+- `/plugins/capabilities/library/invocations/audit` now extracts embedded
+  invocation receipts before supported-operation filtering, then rejects
+  unsupported operation capabilities with explicit routing-guard evidence.
+  Accepted reuse proof still counts only supported mission operation shapes.
+- Worker readbacks were reviewed for prompt hashes
+  `56d51cf6fb592944e5828518c1095a0403d9ec4857570b942b71b4f4128a6c5c`,
+  `70355265bab49efc1805eafd3b674d3120febc14708f0b16780803838a614601`, and
+  `dbe6015142007499193133eb94546972afd913e6903713ae7d5db0e28a15a904`.
+
+Validation:
+
+- `.\.venv\Scripts\python.exe -m py_compile
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py
+  tests\test_api_missions.py` passed.
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py
+  tests\test_api_missions.py` passed.
+- `.\.venv\Scripts\python.exe -m ruff format --check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py
+  tests\test_api_missions.py` passed with `3 files already formatted`.
+- `git diff --check -- src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py tests\test_api_missions.py` passed.
+- Combined focused pytest selection passed for three quality-standard
+  remediation tests, four lifecycle repair-history tests, the durable
+  invocation audit fixture, and the mission-linked invocation proof.
+- Lead Builder post-validation FastAPI `TestClient` dry-run/apply with
+  `stage17.operator -> plugins.write` returned dry-run fingerprint
+  `cd1116a8588f35e995369a2849bc426e6704e3e9922402290fa40ba43e867f89`, wrote
+  `stage17_quality_standard_remediation_batch_1782042862_receipt.json`, and
+  reduced the post-validation quality-standard queue from `1 -> 0`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. This pass does not claim validation-receipt closure,
+  proposal-lineage closure, migration-candidate closure, proposal review,
+  promotion, enablement, execution, full CI, or phase movement.
+- The current quality-standard tests/docs queue is zero, but final readback
+  still reports `validation_receipt_missing=18`, `proposal_id_missing=18`, and
+  `migration_candidate_total=1` for
+  `legacy.generated.stage17reusableinvocationplugin`.
+- Runtime receipts under `data/` are ignored local evidence; the source commit
+  carries the route/test contracts and this ledger entry.
+- This slice does not close a ledger-backed phase gate and does not move the
+  Phase 2 posture.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

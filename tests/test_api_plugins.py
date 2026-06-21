@@ -1913,11 +1913,19 @@ def test_plugins_lifecycle_repair_history_reads_receipts_and_apply_safety(
     assert before_body["apply_readiness"]["reason"] == (
         "blocking_lifecycle_state_detected_with_non_enabled_restore_target"
     )
+    before_core_guard = before_body["core_compatibility_guard"]
+    assert before_core_guard["contract"] == "stage17_plugin_lifecycle_repair_core_compatibility_guard_v1"
+    assert before_core_guard["status"] == "ready"
+    assert before_core_guard["compatible"] is True
+    assert before_core_guard["blocks_lifecycle_repair_apply"] is False
+    assert before_body["apply_readiness"]["core_compatibility_required"] is True
+    assert before_body["apply_readiness"]["core_compatibility_guard"] == before_core_guard
     assert before_body["apply_readiness"]["dry_run_fingerprint_available"] is False
     assert before_body["apply_readiness"]["dry_run_confirmation"]["required_for_apply"] is True
     assert before_body["apply_readiness"]["dry_run_confirmation"]["fingerprint_available_from_apply_dry_run"] is True
     assert before_body["apply_readiness"]["planned_lifecycle_repair"]["target"]["status"] == "disabled"
     assert before_body["apply_readiness"]["planned_lifecycle_repair"]["target"]["enabled"] is False
+    assert before_body["apply_readiness"]["planned_lifecycle_repair"]["core_compatibility_guard"] == before_core_guard
     assert before_body["apply_readiness"]["writes_registry_metadata_if_applied"] is True
     assert before_body["apply_readiness"]["writes_lifecycle_receipt_if_applied"] is True
     assert before_body["governance"]["read_only"] is True
@@ -1969,6 +1977,9 @@ def test_plugins_lifecycle_repair_history_reads_receipts_and_apply_safety(
     assert after_body["last_non_blocking_lifecycle_metadata"]["source"] == (
         "registry.meta.lifecycle_repair_restored_status"
     )
+    assert after_body["core_compatibility_guard"]["status"] == "ready"
+    assert after_body["apply_readiness"]["core_compatibility_required"] is True
+    assert after_body["apply_readiness"]["core_compatibility_guard"] == after_body["core_compatibility_guard"]
     assert after_body["apply_readiness"]["safe_to_apply"] is False
     assert after_body["apply_readiness"]["reason"] == "lifecycle_repair_not_required"
     assert after_body["apply_readiness"]["planned_lifecycle_repair"] == {}
@@ -1978,6 +1989,101 @@ def test_plugins_lifecycle_repair_history_reads_receipts_and_apply_safety(
     assert after_body["governance"]["lifecycle_authority"] is False
     assert registry_path.read_text(encoding="utf-8") == registry_before_second_history
     assert sorted(path.name for path in lifecycle_dir.glob("*.json")) == receipt_names_before_second_history
+
+
+def test_plugins_lifecycle_repair_history_blocks_ambiguous_generated_spec_without_writes(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
+    client = TestClient(create_app())
+    built = client.post(
+        "/plugins/build",
+        json={
+            "name": "Lifecycle History Compatibility Guard",
+            "description": "Stage 17 lifecycle history compatibility guard coverage",
+            "actor": _PLUGIN_ACTOR,
+            "meta": _forge_promotion_meta("lifecycle_history_compatibility_guard"),
+        },
+    )
+    assert built.status_code == 200
+    built_body = built.json()
+    assert built_body["ok"] is True
+    plugin_id = str(built_body["plugin_id"])
+
+    quarantined = client.post(
+        "/plugins/disable",
+        json={
+            "id": plugin_id,
+            "actor": _PLUGIN_ACTOR,
+            "reason": "quarantine before lifecycle history compatibility review",
+            "meta": {"lifecycle_action": "quarantine"},
+        },
+    )
+    assert quarantined.status_code == 200
+    quarantined_body = quarantined.json()
+    assert quarantined_body["ok"] is True
+    assert quarantined_body["lifecycle_status"] == "quarantined"
+
+    registry = plugins._load_registry()
+    plugin = plugins._read_plugin(registry, plugin_id)
+    assert plugin is not None
+    spec_path = Path(str(plugin["generated_dir"])) / "plugin.spec.json"
+    assert spec_path.exists()
+    spec_path.unlink()
+
+    registry_path = data_root / "plugins" / "_registry.json"
+    lifecycle_dir = data_root / "artifacts" / "plugins" / "lifecycle"
+    registry_before_history = registry_path.read_text(encoding="utf-8")
+    receipt_names_before_history = sorted(path.name for path in lifecycle_dir.glob("*.json"))
+
+    history = client.get(f"/plugins/lifecycle/repair/history?id={plugin_id}")
+    assert history.status_code == 200
+    body = history.json()
+    assert body["ok"] is True
+    assert body["applied"] is False
+    assert body["status"] == "blocked"
+    assert body["current_lifecycle"]["status"] == "quarantined"
+    assert body["current_lifecycle"]["blocks_promotion"] is True
+
+    core_guard = body["core_compatibility_guard"]
+    assert core_guard["contract"] == "stage17_plugin_lifecycle_repair_core_compatibility_guard_v1"
+    assert core_guard["status"] == "blocked"
+    assert core_guard["compatible"] is False
+    assert core_guard["ambiguous"] is True
+    assert core_guard["blocks_lifecycle_repair_apply"] is True
+    assert core_guard["compatibility_status"] == "generated_spec_missing"
+    assert core_guard["compatibility"]["selected_requirement_source"] == "plugin.spec.json"
+
+    readiness = body["apply_readiness"]
+    assert readiness["safe_to_apply"] is False
+    assert readiness["status"] == "blocked"
+    assert readiness["reason"] == "core_compatibility_guard_blocked"
+    assert readiness["core_compatibility_required"] is True
+    assert readiness["core_compatibility_guard"] == core_guard
+    assert readiness["dry_run_fingerprint_available"] is False
+    assert readiness["dry_run_confirmation"]["fingerprint_available_from_apply_dry_run"] is False
+    assert readiness["dry_run_confirmation"]["reason"] == "core_compatibility_guard_blocked"
+    assert readiness["planned_lifecycle_repair"] == {}
+    assert readiness["writes_registry_metadata_if_applied"] is False
+    assert readiness["writes_lifecycle_receipt_if_applied"] is False
+    assert readiness["promotion_authority"] is False
+    assert readiness["execution_authority"] is False
+    assert readiness["memory_write"] is False
+    assert body["governance"]["read_only"] is True
+    assert body["governance"]["writes_registry_metadata"] is False
+    assert body["governance"]["writes_lifecycle_receipt"] is False
+
+    assert registry_path.read_text(encoding="utf-8") == registry_before_history
+    assert sorted(path.name for path in lifecycle_dir.glob("*.json")) == receipt_names_before_history
 
 
 def test_plugins_lifecycle_repair_history_tolerates_invalid_receipts_with_skipped_count(
@@ -3628,13 +3734,38 @@ def test_plugins_capability_pack_quality_standard_remediation_backfills_candidat
         "stage17_capability_pack_quality_standard_remediation_batch_queue_evidence_v1"
     )
     assert applied_body["governance"]["writes_registry_metadata"] is True
-    assert applied_body["governance"]["writes_receipts"] is False
+    assert applied_body["governance"]["writes_receipts"] is True
+    assert applied_body["governance"]["writes_batch_remediation_receipt"] is True
+    assert applied_body["governance"]["receipt_contract"] == (
+        "stage17_capability_pack_quality_standard_remediation_receipt_v1"
+    )
     assert applied_body["governance"]["dry_run_required_before_apply"] is True
     assert applied_body["governance"]["candidate_references_do_not_claim_pack_specific_coverage"] is True
     assert applied_body["governance"]["does_not_write_validation_receipts"] is True
     assert applied_body["governance"]["does_not_write_proposals"] is True
     assert applied_body["governance"]["does_not_promote_capabilities"] is True
     assert applied_body["governance"]["does_not_execute_capabilities"] is True
+    assert applied_body["receipt_id"] == f"{applied_body['recorded'][0]['batch_id']}_receipt"
+    assert applied_body["receipt_path"]
+    receipt_path = Path(applied_body["receipt_path"])
+    assert plugins.os.path.exists(plugins._filesystem_path(receipt_path))
+    with open(plugins._filesystem_path(receipt_path), encoding="utf-8") as handle:
+        receipt = json.load(handle)
+    assert receipt["kind"] == "plugin.capability_pack.quality_standard_remediation.receipt"
+    assert receipt["contract"] == "stage17_capability_pack_quality_standard_remediation_receipt_v1"
+    assert receipt["receipt_id"] == applied_body["receipt_id"]
+    assert receipt["batch_id"] == applied_body["recorded"][0]["batch_id"]
+    assert receipt["dry_run_confirmation"]["fingerprint_matched"] is True
+    assert receipt["before_quality_standard_queue_count"] == 1
+    assert receipt["after_quality_standard_queue_count"] == 0
+    assert receipt["candidate_reduction_count"] == 1
+    assert receipt["recorded_pack_count"] == 1
+    assert receipt["recorded_capability_count"] == 1
+    assert receipt["governance"]["writes_receipt"] is True
+    assert receipt["governance"]["does_not_write_validation_receipts"] is True
+    assert receipt["governance"]["does_not_write_proposals"] is True
+    assert receipt["governance"]["does_not_promote_capabilities"] is True
+    assert receipt["governance"]["does_not_execute_capabilities"] is True
 
     stored = plugins._read_plugin(plugins._load_registry(), plugin_ids[1])
     assert stored is not None
@@ -3784,11 +3915,24 @@ def test_plugins_capability_pack_quality_standard_remediation_batches_selected_p
     assert applied_body["candidate_reduction_count"] == 2
     assert applied_body["remaining_quality_standard_queue_count"] == 0
     assert applied_body["governance"]["writes_registry_metadata"] is True
-    assert applied_body["governance"]["writes_receipts"] is False
+    assert applied_body["governance"]["writes_receipts"] is True
+    assert applied_body["governance"]["writes_batch_remediation_receipt"] is True
     assert applied_body["governance"]["does_not_write_validation_receipts"] is True
     assert applied_body["governance"]["does_not_write_proposals"] is True
     assert applied_body["governance"]["does_not_promote_capabilities"] is True
     assert applied_body["governance"]["does_not_execute_capabilities"] is True
+    assert applied_body["receipt_id"] == f"{applied_body['recorded'][0]['batch_id']}_receipt"
+    receipt_path = Path(applied_body["receipt_path"])
+    assert plugins.os.path.exists(plugins._filesystem_path(receipt_path))
+    with open(plugins._filesystem_path(receipt_path), encoding="utf-8") as handle:
+        receipt = json.load(handle)
+    assert receipt["contract"] == "stage17_capability_pack_quality_standard_remediation_receipt_v1"
+    assert receipt["before_quality_standard_queue_count"] == 2
+    assert receipt["after_quality_standard_queue_count"] == 0
+    assert receipt["candidate_reduction_count"] == 2
+    assert receipt["recorded_pack_count"] == 2
+    assert receipt["recorded_capability_count"] == 2
+    assert receipt["governance"]["writes_receipt"] is True
 
     batch_ids = {item["batch_id"] for item in applied_body["recorded"]}
     assert len(batch_ids) == 1
@@ -3802,6 +3946,146 @@ def test_plugins_capability_pack_quality_standard_remediation_batches_selected_p
 
     after = client.get("/plugins/capabilities/packs/quality/standards").json()
     assert all(item["pack_id"] not in selected_pack_ids for item in after["packs"] if item["status"] != "ready")
+
+
+def test_plugins_capability_pack_quality_standard_remediation_apply_counts_after_generated_sync_queue(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
+    client = TestClient(create_app())
+    built = client.post(
+        "/plugins/build",
+        json={
+            "name": "Capability Quality Standard After Sync Plugin",
+            "description": "Stage 17 quality standard after-sync count coverage",
+            "actor": _PLUGIN_ACTOR,
+            "meta": _forge_promotion_meta("capability_quality_standard_after_sync"),
+        },
+    )
+    assert built.status_code == 200
+    built_body = built.json()
+    assert built_body["ok"] is True
+    plugin_id = str(built_body["plugin_id"])
+
+    pack_id = "ops.quality_standard_after_sync"
+    recorded = client.post(
+        "/plugins/capabilities/packs/metadata/receipts",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "record reviewed pack metadata before after-sync count proof",
+            "pack_id": pack_id,
+            "pack_version": "1.0.0",
+            "pack_name": "Ops Quality Standard After Sync Pack",
+            "capability_ids": [plugin_id],
+            "promotion_rules": [
+                "metadata_receipt_before_promotion",
+                "quality_standards_before_promotion",
+                "operator_review_before_promotion",
+            ],
+            "pack_governance": {
+                "risk_tier": "normal",
+                "scope": "build_dev",
+                "operator_review_required": True,
+                "requires_validation_receipt": True,
+            },
+        },
+    )
+    assert recorded.status_code == 200
+    assert recorded.json()["ok"] is True
+
+    registry = plugins._load_registry()
+    plugin = plugins._read_plugin(registry, plugin_id)
+    assert plugin is not None
+    meta = dict(plugin.get("meta") or {})
+    for key in ("tests", "test_refs", "docs", "documentation", "quality"):
+        meta.pop(key, None)
+    plugin["meta"] = meta
+    plugins._write_plugin(registry, plugins._normalize_plugin_record(plugin_id, plugin))
+    plugins._save_registry_and_catalog(registry)
+
+    request_body = {
+        "actor": _PLUGIN_ACTOR,
+        "reason": "operator reviewed quality standard after-sync evidence",
+        "max_pack_count": 2,
+        "max_total_capability_count": 2,
+        "max_capability_count_per_pack": 1,
+    }
+    dry_run = client.post(
+        "/plugins/capabilities/packs/quality/standards/remediation/apply",
+        json={**request_body, "dry_run": True},
+    )
+    assert dry_run.status_code == 200
+    dry_run_body = dry_run.json()
+    assert dry_run_body["ok"] is True
+    assert dry_run_body["before_quality_standard_queue_count"] == 1
+
+    original_sync_generated_plugins = plugins._sync_generated_plugins
+    sync_call_count = 0
+
+    def sync_with_after_gap(registry_obj):
+        nonlocal sync_call_count
+        sync_call_count += 1
+        synced = original_sync_generated_plugins(registry_obj)
+        if sync_call_count == 2:
+            new_plugin_id = "generated_after_quality_standard_sync"
+            plugins_obj = registry_obj.setdefault("plugins", {})
+            plugins_obj[new_plugin_id] = plugins._normalize_plugin_record(
+                new_plugin_id,
+                {
+                    "id": new_plugin_id,
+                    "name": "Generated After Quality Standard Sync",
+                    "version": "0.1.0",
+                    "description": "Generated after the quality-standard batch planned its scope.",
+                    "status": "staged",
+                    "enabled": False,
+                    "source_kind": "generated",
+                    "source_ref": new_plugin_id,
+                    "installed_ts": plugins._now_s(),
+                    "updated_ts": plugins._now_s(),
+                    "tags": ["generated"],
+                    "meta": {
+                        "pack_id": "ops.after_sync_quality_standard_gap",
+                        "pack_version": "1.0.0",
+                        "pack_name": "Ops After Sync Quality Standard Gap",
+                        "risk_tier": "normal",
+                    },
+                },
+            )
+            return synced + 1
+        return synced
+
+    monkeypatch.setattr(plugins, "_sync_generated_plugins", sync_with_after_gap)
+
+    applied = client.post(
+        "/plugins/capabilities/packs/quality/standards/remediation/apply",
+        json={**request_body, "dry_run_fingerprint": dry_run_body["dry_run_fingerprint"]},
+    )
+    assert applied.status_code == 200
+    applied_body = applied.json()
+    assert applied_body["ok"] is True
+    assert applied_body["applied"] is True
+    assert applied_body["status"] == "recorded"
+    assert applied_body["recorded_pack_count"] == 1
+    assert applied_body["before_quality_standard_queue_count"] == 1
+    assert applied_body["after_quality_standard_queue_count"] == 1
+    assert applied_body["candidate_reduction_count"] == 0
+    assert applied_body["remaining_quality_standard_queue_count"] == 1
+    assert applied_body["remaining_quality_standard_queue"][0]["pack_id"] == "ops.after_sync_quality_standard_gap"
+    receipt_path = Path(applied_body["receipt_path"])
+    with open(plugins._filesystem_path(receipt_path), encoding="utf-8") as handle:
+        receipt = json.load(handle)
+    assert receipt["before_quality_standard_queue_count"] == 1
+    assert receipt["after_quality_standard_queue_count"] == 1
+    assert receipt["candidate_reduction_count"] == 0
 
 
 def test_plugins_capability_pack_validation_receipts_projects_read_only_receipt_evidence(

@@ -152,6 +152,9 @@ _CAPABILITY_PACK_QUALITY_STANDARD_REMEDIATION_DRY_RUN_CONTRACT = (
 _CAPABILITY_PACK_QUALITY_STANDARD_REMEDIATION_QUEUE_CONTRACT = (
     "stage17_capability_pack_quality_standard_remediation_batch_queue_evidence_v1"
 )
+_CAPABILITY_PACK_QUALITY_STANDARD_REMEDIATION_RECEIPT_CONTRACT = (
+    "stage17_capability_pack_quality_standard_remediation_receipt_v1"
+)
 _CAPABILITY_LIBRARY_PROPOSAL_EVIDENCE_REMEDIATION_APPLY_ROUTE = (
     "/plugins/capabilities/library/proposal-evidence/remediation/apply"
 )
@@ -1030,6 +1033,10 @@ def _capability_pack_metadata_receipt_id(pack_id: str, recorded_ts: int) -> str:
 
 def _capability_pack_metadata_receipt_path(receipt_id: str) -> Path:
     return _art_dir() / "capability_packs" / "metadata_receipts" / f"{_safe_str(receipt_id).strip()}.json"
+
+
+def _capability_pack_quality_standard_remediation_receipt_path(receipt_id: str) -> Path:
+    return _art_dir() / "capability_packs" / "quality_standard_remediations" / f"{_safe_str(receipt_id).strip()}.json"
 
 
 def _capability_pack_operator_review_receipt_id(pack_id: str, decided_ts: int) -> str:
@@ -2702,6 +2709,8 @@ def _plugin_lifecycle_repair_history_projection(
                 "reason": "plugin_not_found",
                 "apply_route": _PLUGIN_LIFECYCLE_REPAIR_ROUTE,
                 "requires_dry_run_confirmation": True,
+                "core_compatibility_required": True,
+                "core_compatibility_guard": {},
                 "writes_registry_metadata_if_applied": False,
                 "writes_lifecycle_receipt_if_applied": False,
                 "promotion_authority": False,
@@ -2722,35 +2731,43 @@ def _plugin_lifecycle_repair_history_projection(
         "fingerprint_available_from_apply_dry_run": True,
     }
     last_non_blocking = _plugin_lifecycle_current_non_blocking_metadata(current, meta, lifecycle)
+    core_compatibility_guard = _plugin_lifecycle_repair_core_compatibility_guard(plugin_id, current, meta)
     safe_to_apply = False
     readiness_status = "not_required"
     readiness_reason = "lifecycle_repair_not_required"
 
     if repair_required:
-        repair_plan = _plugin_lifecycle_repair_plan(
-            plugin_id=plugin_id,
-            current=current,
-            meta=meta,
-            lifecycle_before=lifecycle,
-            lifecycle_action="restore",
-        )
-        target = repair_plan.get("target") if isinstance(repair_plan.get("target"), dict) else {}
-        target_status = _normalize_lifecycle_state(target.get("status"))
-        target_lifecycle = _normalize_lifecycle_state(target.get("lifecycle_status"))
-        target_enabled = bool(target.get("enabled", False))
-        safe_to_apply = (
-            target_status in _PLUGIN_LIFECYCLE_NON_BLOCKING_STATES
-            and target_lifecycle in _PLUGIN_LIFECYCLE_NON_BLOCKING_STATES
-            and not target_enabled
-        )
-        readiness_status = "repair_available" if safe_to_apply else "blocked"
-        readiness_reason = (
-            "blocking_lifecycle_state_detected_with_non_enabled_restore_target"
-            if safe_to_apply
-            else "repair_plan_target_not_safe"
-        )
-        if isinstance(repair_plan.get("last_non_blocking_lifecycle_metadata"), dict):
-            last_non_blocking = repair_plan["last_non_blocking_lifecycle_metadata"]
+        if not bool(core_compatibility_guard.get("compatible")):
+            readiness_status = "blocked"
+            readiness_reason = "core_compatibility_guard_blocked"
+            dry_run_confirmation["fingerprint_available_from_apply_dry_run"] = False
+            dry_run_confirmation["reason"] = "core_compatibility_guard_blocked"
+        else:
+            repair_plan = _plugin_lifecycle_repair_plan(
+                plugin_id=plugin_id,
+                current=current,
+                meta=meta,
+                lifecycle_before=lifecycle,
+                lifecycle_action="restore",
+                core_compatibility_guard=core_compatibility_guard,
+            )
+            target = repair_plan.get("target") if isinstance(repair_plan.get("target"), dict) else {}
+            target_status = _normalize_lifecycle_state(target.get("status"))
+            target_lifecycle = _normalize_lifecycle_state(target.get("lifecycle_status"))
+            target_enabled = bool(target.get("enabled", False))
+            safe_to_apply = (
+                target_status in _PLUGIN_LIFECYCLE_NON_BLOCKING_STATES
+                and target_lifecycle in _PLUGIN_LIFECYCLE_NON_BLOCKING_STATES
+                and not target_enabled
+            )
+            readiness_status = "repair_available" if safe_to_apply else "blocked"
+            readiness_reason = (
+                "blocking_lifecycle_state_detected_with_non_enabled_restore_target"
+                if safe_to_apply
+                else "repair_plan_target_not_safe"
+            )
+            if isinstance(repair_plan.get("last_non_blocking_lifecycle_metadata"), dict):
+                last_non_blocking = repair_plan["last_non_blocking_lifecycle_metadata"]
 
     return {
         "ok": True,
@@ -2766,6 +2783,7 @@ def _plugin_lifecycle_repair_history_projection(
             "updated_ts": int(current.get("updated_ts") or 0),
         },
         "current_lifecycle": redact_governed_display_value(lifecycle),
+        "core_compatibility_guard": core_compatibility_guard,
         "last_non_blocking_lifecycle_metadata": redact_governed_display_value(last_non_blocking),
         "history_count": len(receipt_history),
         "repair_restore_history_count": len(repair_restore_history),
@@ -2788,6 +2806,8 @@ def _plugin_lifecycle_repair_history_projection(
             "requires_dry_run_confirmation": True,
             "dry_run_fingerprint_available": False,
             "dry_run_confirmation": dry_run_confirmation,
+            "core_compatibility_required": True,
+            "core_compatibility_guard": core_compatibility_guard,
             "planned_lifecycle_repair": repair_plan,
             "writes_registry_metadata_if_applied": safe_to_apply,
             "writes_lifecycle_receipt_if_applied": safe_to_apply,
@@ -9372,6 +9392,7 @@ def _capability_pack_quality_standard_remediation_governance(
     *,
     route_path: str,
     writes_registry_metadata: bool,
+    writes_receipts: bool = False,
 ) -> dict[str, object]:
     return {
         "scope": _PLUGIN_WRITE_SCOPE,
@@ -9379,8 +9400,10 @@ def _capability_pack_quality_standard_remediation_governance(
         "lifecycle_operation": "capability_pack_quality_standard_remediation",
         "policy_gate": _PLUGIN_WRITE_SCOPE,
         "queue_count_contract": _CAPABILITY_PACK_QUALITY_STANDARD_REMEDIATION_QUEUE_CONTRACT,
+        "receipt_contract": _CAPABILITY_PACK_QUALITY_STANDARD_REMEDIATION_RECEIPT_CONTRACT,
         "writes_registry_metadata": writes_registry_metadata,
-        "writes_receipts": False,
+        "writes_receipts": writes_receipts,
+        "writes_batch_remediation_receipt": writes_receipts,
         "dry_run_required_before_apply": True,
         "quality_reference_backfill_only": True,
         "candidate_references_do_not_claim_pack_specific_coverage": True,
@@ -9396,6 +9419,82 @@ def _capability_pack_quality_standard_remediation_governance(
         "memory_write": False,
         "mutates_generated_artifacts": False,
     }
+
+
+def _write_capability_pack_quality_standard_remediation_receipt(
+    *,
+    batch_id: str,
+    receipt_id: str,
+    receipt_path: Path,
+    payload: "CapabilityPackQualityStandardRemediationApplyIn",
+    route_path: str,
+    dry_run_fingerprint: str,
+    before_evidence: dict[str, object],
+    after_evidence: dict[str, object],
+    recorded: list[dict[str, Any]],
+    failed: list[dict[str, Any]],
+    skipped: list[dict[str, Any]],
+    candidate_reduction_count: int,
+) -> dict[str, Any]:
+    receipt = {
+        "kind": "plugin.capability_pack.quality_standard_remediation.receipt",
+        "contract": _CAPABILITY_PACK_QUALITY_STANDARD_REMEDIATION_RECEIPT_CONTRACT,
+        "receipt_id": receipt_id,
+        "batch_id": batch_id,
+        "status": "recorded" if not failed else "partial",
+        "actor": redact_governed_value(_safe_str(payload.actor).strip()),
+        "reason": redact_governed_value(_safe_str(payload.reason).strip() or "stage17_quality_standard_remediation"),
+        "recorded_ts": _now_s(),
+        "route": route_path,
+        "dry_run_confirmation": {
+            "required_for_apply": True,
+            "fingerprint_matched": True,
+            "fingerprint": dry_run_fingerprint,
+            "fingerprint_contract": _CAPABILITY_PACK_QUALITY_STANDARD_REMEDIATION_DRY_RUN_CONTRACT,
+        },
+        "queue_count_contract": _CAPABILITY_PACK_QUALITY_STANDARD_REMEDIATION_QUEUE_CONTRACT,
+        "projection_scope": _safe_str(before_evidence.get("projection_scope")).strip(),
+        "global_counts_included": bool(before_evidence.get("global_counts_included")),
+        "before_quality_standard_queue_count": _count_value(before_evidence.get("quality_standard_queue_count")),
+        "before_global_quality_standard_queue_count": _count_value(
+            before_evidence.get("global_quality_standard_queue_count")
+        ),
+        "after_quality_standard_queue_count": _count_value(after_evidence.get("quality_standard_queue_count")),
+        "after_global_quality_standard_queue_count": _count_value(
+            after_evidence.get("global_quality_standard_queue_count")
+        ),
+        "candidate_reduction_count": candidate_reduction_count,
+        "recorded_pack_count": sum(1 for item in recorded if item.get("status") == "recorded"),
+        "recorded_capability_count": sum(int(item.get("changed_capability_count") or 0) for item in recorded),
+        "recorded": recorded,
+        "failed": failed,
+        "skipped": skipped,
+        "payload_meta": redact_governed_metadata(payload.meta),
+        "governance": {
+            "gate": "permission_gate",
+            "scope": _PLUGIN_WRITE_SCOPE,
+            "route": route_path,
+            "writes_registry_metadata": True,
+            "writes_receipt": True,
+            "quality_reference_backfill_only": True,
+            "candidate_references_do_not_claim_pack_specific_coverage": True,
+            "does_not_write_validation_receipts": True,
+            "does_not_write_proposals": True,
+            "does_not_approve_proposals": True,
+            "does_not_promote_capabilities": True,
+            "does_not_enable_capabilities": True,
+            "does_not_execute_capabilities": True,
+            "promotion_authority": False,
+            "execution_authority": False,
+            "approval_authority": False,
+            "memory_write": False,
+            "mutates_generated_artifacts": False,
+        },
+        "path": str(receipt_path),
+    }
+    redacted_receipt = _redact_plugin_receipt(receipt)
+    _atomic_write_display_json(receipt_path, redacted_receipt)
+    return redacted_receipt
 
 
 def _record_capability_pack_quality_standard_remediation_batch(
@@ -10785,8 +10884,6 @@ def _capability_pack_invocation_audit_projection(
     rejected_items: list[dict[str, object]] = []
     for task in _capability_pack_invocation_audit_task_records(scan_limit=safe_scan_limit):
         operation_capability = _safe_str(task.get("capability")).strip()
-        if operation_capability not in _MISSION_OPERATION_CONTEXT_BY_CAPABILITY:
-            continue
         data, invocation = _capability_pack_invocation_from_task(task)
         if not invocation:
             continue
@@ -11045,6 +11142,8 @@ def _capability_pack_invocation_audit_projection(
             "mission_linked_reuse_requires_both_mission_contexts": True,
             "mission_shape_reuse_requires_plugin_run_and_plugin_tool_run": True,
             "receipt_linked_mission_shape_reuse_requires_dispatch_run_and_trace_ids": True,
+            "reuse_proof_counts_only_supported_mission_operation_capabilities": True,
+            "unsupported_operation_capability_receipts_are_rejected": True,
             "reusable_operation_statuses": sorted(_CAPABILITY_PACK_INVOCATION_REUSABLE_OPERATION_STATUSES),
             "reusable_dispatch_statuses": sorted(_CAPABILITY_PACK_INVOCATION_REUSABLE_DISPATCH_STATUSES),
             "failed_or_blocked_statuses_do_not_count_as_reuse_proof": True,
@@ -13008,8 +13107,8 @@ def apply_capability_pack_quality_standard_remediation(
         failed = batch["failed"]
         changed_records = [item for item in recorded if item.get("status") == "recorded"]
         refreshed_registry = _load_registry()
-        refreshed_catalog = _compile_runtime_catalog(refreshed_registry)
-        refreshed_runtime_catalog = _read_runtime_catalog_payload(refreshed_catalog)
+        _sync_generated_plugins(refreshed_registry)
+        refreshed_runtime_catalog = _runtime_catalog_payload_from_registry(refreshed_registry)
         refreshed_marketplace = marketplace_from_plugin_catalog(refreshed_runtime_catalog)
         after = analyze_capability_pack_quality_standards(refreshed_marketplace.catalog())
         after_queue = _capability_pack_quality_standard_queue(after)
@@ -13030,6 +13129,28 @@ def apply_capability_pack_quality_standard_remediation(
             0,
         )
         applied = bool(changed_records)
+        receipt: dict[str, Any] = {}
+        receipt_id = ""
+        receipt_path = ""
+        if applied:
+            batch_id = _safe_str(changed_records[0].get("batch_id")).strip()
+            receipt_id = f"{batch_id}_receipt"
+            resolved_receipt_path = _capability_pack_quality_standard_remediation_receipt_path(receipt_id)
+            receipt = _write_capability_pack_quality_standard_remediation_receipt(
+                batch_id=batch_id,
+                receipt_id=receipt_id,
+                receipt_path=resolved_receipt_path,
+                payload=payload,
+                route_path=request.url.path,
+                dry_run_fingerprint=dry_run_fingerprint,
+                before_evidence=before_evidence,
+                after_evidence=after_evidence,
+                recorded=recorded,
+                failed=failed,
+                skipped=skipped,
+                candidate_reduction_count=candidate_reduction_count,
+            )
+            receipt_path = str(resolved_receipt_path)
         return {
             "ok": not failed,
             "applied": applied,
@@ -13042,6 +13163,9 @@ def apply_capability_pack_quality_standard_remediation(
             "recorded": recorded,
             "failed": failed,
             "skipped": skipped,
+            "receipt_id": receipt_id,
+            "receipt_path": receipt_path,
+            "receipt": receipt,
             "dry_run_fingerprint": dry_run_fingerprint,
             "dry_run_confirmation": {
                 "required_for_apply": True,
@@ -13066,6 +13190,7 @@ def apply_capability_pack_quality_standard_remediation(
             "governance": _capability_pack_quality_standard_remediation_governance(
                 route_path=request.url.path,
                 writes_registry_metadata=applied,
+                writes_receipts=applied,
             ),
         }
     except Exception as exc:
