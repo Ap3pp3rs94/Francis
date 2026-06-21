@@ -472,6 +472,31 @@ def test_plugins_invocation_audit_reads_durable_fixture_records_without_executio
     assert proof_readiness["executes_capabilities"] is False
     assert proof_readiness["grants_execution_authority"] is False
     assert proof_readiness["grants_mutation_authority"] is False
+    mission_shape_proof = body["mission_shape_proof"]
+    assert mission_shape_proof["contract"] == "stage17_capability_pack_invocation_mission_shape_reuse_proof_v1"
+    assert mission_shape_proof["status"] == "mission_shape_reuse_proven"
+    assert mission_shape_proof["ready"] is True
+    assert mission_shape_proof["proof_source"] == "accepted_operation_output_invocation_receipts"
+    assert mission_shape_proof["accepted_reuse_keys"] == [reuse_key]
+    assert mission_shape_proof["required_operation_capabilities"] == ["plugin.run", "plugin.tool.run"]
+    assert mission_shape_proof["required_caller_contexts"] == [
+        "mission_linked_operation",
+        "mission_linked_tool_operation",
+    ]
+    assert mission_shape_proof["operation_readback_bound_reuse_keys"] == [reuse_key]
+    assert mission_shape_proof["receipt_linked_selection_consistent_reuse_keys"] == [reuse_key]
+    assert mission_shape_proof["direct_route_contexts_declared_by_pack_selection"] == [
+        "direct_plugin_route",
+        "plugin_tool_route",
+    ]
+    assert mission_shape_proof["direct_route_contexts_count_for_operation_audit"] is False
+    assert mission_shape_proof["direct_route_receipts_required_for_mission_shape_proof"] is False
+    assert mission_shape_proof["governance"]["read_only"] is True
+    assert mission_shape_proof["governance"]["writes_data"] is False
+    assert mission_shape_proof["governance"]["writes_receipts"] is False
+    assert mission_shape_proof["governance"]["executes_capabilities"] is False
+    assert mission_shape_proof["governance"]["grants_execution_authority"] is False
+    assert mission_shape_proof["governance"]["grants_mutation_authority"] is False
     assert body["governance"]["read_only"] is True
     assert body["governance"]["writes_data"] is False
     assert body["governance"]["writes_receipts"] is False
@@ -483,6 +508,15 @@ def test_plugins_invocation_audit_reads_durable_fixture_records_without_executio
     assert (
         body["requirements"]["proof_readiness_requires_receipt_linked_selection_consistent_mission_shape_reuse"] is True
     )
+    assert body["requirements"]["mission_shape_reuse_proof_contract"] == (
+        "stage17_capability_pack_invocation_mission_shape_reuse_proof_v1"
+    )
+    assert body["requirements"]["mission_shape_reuse_proof_source"] == ("accepted_operation_output_invocation_receipts")
+    assert body["requirements"]["direct_route_contexts_declared_but_not_counted_by_operation_audit"] == [
+        "direct_plugin_route",
+        "plugin_tool_route",
+    ]
+    assert body["requirements"]["direct_route_receipts_required_for_mission_shape_proof"] is False
     assert body["requirements"]["failed_or_blocked_statuses_do_not_count_as_reuse_proof"] is True
     assert "failed" not in body["requirements"]["reusable_operation_statuses"]
     assert "failed" not in body["requirements"]["reusable_dispatch_statuses"]
@@ -3542,6 +3576,108 @@ def test_plugins_capability_pack_metadata_receipts_bulk_dry_run_and_unconfirmed_
     assert "pack_metadata_receipt_id" not in blocked_plugin["meta"]
 
 
+def test_plugins_capability_pack_metadata_receipts_bulk_apply_persistence_failure_rolls_back_without_receipts(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
+    client = TestClient(create_app())
+    built = client.post(
+        "/plugins/build",
+        json={
+            "name": "Bulk Migration Persistence Failure Guard Plugin",
+            "description": "Stage 17 metadata receipt persistence failure coverage",
+            "actor": _PLUGIN_ACTOR,
+            "meta": _forge_promotion_meta("bulk_migration_plan_persistence_failure_guard"),
+        },
+    )
+    assert built.status_code == 200
+    built_body = built.json()
+    assert built_body["ok"] is True
+    plugin_id = str(built_body["plugin_id"])
+
+    plan = client.get("/plugins/capabilities/packs/migration/plan").json()
+    candidate = next(item for item in plan["candidates"] if plugin_id in item["capability_ids_sample"])
+    dry_run = client.post(
+        "/plugins/capabilities/packs/metadata/receipts/bulk-from-plan",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "dry run before persistence failure",
+            "pack_ids": [candidate["pack_id"]],
+        },
+    )
+    assert dry_run.status_code == 200
+    dry_run_body = dry_run.json()
+    assert dry_run_body["ok"] is True
+    assert dry_run_body["status"] == "dry_run"
+
+    original_save_registry_and_catalog = plugins._save_registry_and_catalog
+    persist_attempts = {"count": 0}
+
+    def fail_first_persistence(registry):
+        persist_attempts["count"] += 1
+        if persist_attempts["count"] == 1:
+            plugins._save_registry(registry)
+            raise PermissionError("simulated registry/catalog replace failure")
+        return original_save_registry_and_catalog(registry)
+
+    monkeypatch.setattr(plugins, "_save_registry_and_catalog", fail_first_persistence)
+    receipt_dir = data_root / "artifacts" / "plugins" / "capability_packs" / "metadata_receipts"
+    blocked = client.post(
+        "/plugins/capabilities/packs/metadata/receipts/bulk-from-plan",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "confirmed apply hits persistence failure",
+            "pack_ids": [candidate["pack_id"]],
+            "dry_run": False,
+            "dry_run_fingerprint": dry_run_body["dry_run_fingerprint"],
+        },
+    )
+
+    assert blocked.status_code == 200
+    blocked_body = blocked.json()
+    assert blocked_body["ok"] is False
+    assert blocked_body["applied"] is False
+    assert blocked_body["status"] == "blocked"
+    assert blocked_body["error"] == "capability_pack_metadata_receipts_bulk_persistence_failed"
+    assert blocked_body["dry_run_confirmation"]["fingerprint_matched"] is True
+    assert blocked_body["apply_revalidation"]["status"] == "ready"
+    apply_persistence = blocked_body["apply_persistence"]
+    assert apply_persistence["contract"] == "stage17_capability_pack_metadata_receipt_apply_persistence_guard_v1"
+    assert apply_persistence["status"] == "failed"
+    assert apply_persistence["error_class"] == "PermissionError"
+    assert apply_persistence["receipt_write_status"] == "not_started"
+    assert apply_persistence["receipts_written"] is False
+    assert apply_persistence["pending_receipt_count"] == 1
+    assert apply_persistence["rollback"]["attempted"] is True
+    assert apply_persistence["rollback"]["status"] == "restored"
+    assert apply_persistence["rollback"]["restored"] is True
+    assert blocked_body["recorded_pack_count"] == 0
+    assert blocked_body["recorded_capability_count"] == 0
+    assert blocked_body["recorded"] == []
+    assert blocked_body["pending_receipts"][0]["pack_id"] == candidate["pack_id"]
+    assert blocked_body["requirements"]["persistence_success_required_before_receipt_write"] is True
+    assert blocked_body["requirements"]["receipt_writes_blocked_on_persistence_failure"] is True
+    assert blocked_body["governance"]["writes_registry_metadata"] is False
+    assert blocked_body["governance"]["writes_receipts"] is False
+    assert blocked_body["governance"]["promotion_authority"] is False
+    assert blocked_body["governance"]["execution_authority"] is False
+    assert not receipt_dir.exists()
+
+    after_failure = client.get(f"/plugins/get?id={plugin_id}").json()["item"]
+    assert "pack_metadata_receipt_id" not in after_failure["meta"]
+    assert "pack_metadata_receipt_path" not in after_failure["meta"]
+    assert "pack_metadata_source" not in after_failure["meta"]
+
+
 def test_plugins_capability_pack_metadata_receipts_bulk_blocks_ambiguous_pack_versions(
     monkeypatch,
     tmp_path: Path,
@@ -6151,6 +6287,183 @@ def test_plugins_capability_pack_quality_evidence_reconstruction_selects_smalles
     after = client.get("/plugins/capabilities/packs/quality/evidence/remediation").json()
     after_pack_ids = [item["pack_id"] for item in after["remediation_queue"]]
     assert small_pack_id not in after_pack_ids
+    assert large_pack_id in after_pack_ids
+
+
+def test_plugins_capability_pack_quality_evidence_reconstruction_selects_smallest_budgeted_batch(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
+    client = TestClient(create_app())
+    built_plugin_ids: list[str] = []
+    for index in range(5):
+        built = client.post(
+            "/plugins/build",
+            json={
+                "name": f"Capability Artifact Reconstruction Budget Plugin {index}",
+                "description": "Stage 17 budgeted reconstruction strategy coverage",
+                "actor": _PLUGIN_ACTOR,
+                "meta": _forge_promotion_meta(f"capability_artifact_reconstruction_budget_{index}"),
+            },
+        )
+        assert built.status_code == 200
+        built_body = built.json()
+        assert built_body["ok"] is True
+        built_plugin_ids.append(str(built_body["plugin_id"]))
+
+    large_pack_id = "ops.reconstruction_budget_large"
+    small_pack_a_id = "ops.reconstruction_budget_small_a"
+    small_pack_b_id = "ops.reconstruction_budget_small_b"
+
+    def record_pack(pack_id: str, capability_ids: list[str]) -> None:
+        recorded = client.post(
+            "/plugins/capabilities/packs/metadata/receipts",
+            json={
+                "actor": _PLUGIN_ACTOR,
+                "reason": f"record reviewed metadata before {pack_id} reconstruction",
+                "pack_id": pack_id,
+                "pack_version": "1.0.0",
+                "pack_name": pack_id.replace(".", " ").title(),
+                "capability_ids": capability_ids,
+                "promotion_rules": [
+                    "metadata_receipt_before_promotion",
+                    "quality_standards_before_promotion",
+                    "operator_review_before_promotion",
+                ],
+                "pack_governance": {
+                    "risk_tier": "normal",
+                    "scope": "build_dev",
+                    "operator_review_required": True,
+                    "requires_validation_receipt": True,
+                },
+            },
+        )
+        assert recorded.status_code == 200
+        assert recorded.json()["ok"] is True
+
+    record_pack(large_pack_id, built_plugin_ids[:3])
+    record_pack(small_pack_a_id, built_plugin_ids[3:4])
+    record_pack(small_pack_b_id, built_plugin_ids[4:])
+
+    for artifact_dir in (
+        data_root / "artifacts" / "plugins" / "validations",
+        data_root / "artifacts" / "plugins" / "proposals",
+    ):
+        for artifact_path in artifact_dir.glob("*.json"):
+            artifact_path.unlink(missing_ok=True)
+
+    registry = plugins._load_registry()
+    for plugin_id in built_plugin_ids:
+        plugin = plugins._read_plugin(registry, plugin_id)
+        assert plugin is not None
+        meta = dict(plugin.get("meta") or {})
+        for key in (
+            "proposal_id",
+            "forge_proposal_id",
+            "proposal_path",
+            "validation_receipt_id",
+            "validation_receipt_path",
+        ):
+            meta.pop(key, None)
+        meta["quality"] = {
+            "tests": ["tests/test_api_plugins.py"],
+            "docs": ["README.md", "docs/operations/COMPLETION_LEDGER.md"],
+            "claim_scope": "explicit_budgeted_reconstruction_fixture_quality_references",
+            "pack_specific_coverage_claimed": False,
+        }
+        plugin["meta"] = meta
+        plugins._write_plugin(registry, plugins._normalize_plugin_record(plugin_id, plugin))
+    plugins._save_registry_and_catalog(registry)
+    _disable_existing_artifact_link_candidates(monkeypatch, plugins)
+
+    before = client.get("/plugins/capabilities/packs/quality/evidence/remediation").json()
+    assert before["remediation_queue_count"] == 3
+    large_item = next(item for item in before["remediation_queue"] if item["pack_id"] == large_pack_id)
+    small_a_item = next(item for item in before["remediation_queue"] if item["pack_id"] == small_pack_a_id)
+    small_b_item = next(item for item in before["remediation_queue"] if item["pack_id"] == small_pack_b_id)
+    assert large_item["artifact_reconstruction_plan"]["capability_count"] == 3
+    assert small_a_item["artifact_reconstruction_plan"]["capability_count"] == 1
+    assert small_b_item["artifact_reconstruction_plan"]["capability_count"] == 1
+
+    request_body = {
+        "actor": _PLUGIN_ACTOR,
+        "reason": "operator approved deterministic budgeted reconstruction batch",
+        "selection_strategy": "smallest_full_pack_first",
+        "max_pack_count": 3,
+        "max_total_capability_count": 2,
+        "max_capability_count_per_pack": 2,
+    }
+    dry_run = client.post(
+        "/plugins/capabilities/packs/quality/evidence/remediation/reconstruct",
+        json={**request_body, "dry_run": True},
+    )
+    assert dry_run.status_code == 200
+    dry_run_body = dry_run.json()
+    assert dry_run_body["ok"] is True
+    assert dry_run_body["status"] == "dry_run"
+    assert dry_run_body["selection_strategy"] == "smallest_full_pack_first"
+    assert dry_run_body["selected_by_strategy"] is True
+    assert dry_run_body["selected_reconstruction_pack_ids"] == [small_pack_a_id, small_pack_b_id]
+    assert dry_run_body["planned_pack_count"] == 2
+    assert dry_run_body["planned_capability_count"] == 2
+    assert [item["pack_id"] for item in dry_run_body["planned"]] == [small_pack_a_id, small_pack_b_id]
+    assert dry_run_body["before_remediation_queue_count"] == 3
+    assert dry_run_body["after_remediation_queue_count"] == 3
+    assert dry_run_body["candidate_reduction_count"] == 0
+    assert dry_run_body["before_validation_receipt_reconstruction_required_count"] == 5
+    assert dry_run_body["before_proposal_lineage_reconstruction_required_count"] == 5
+
+    applied = client.post(
+        "/plugins/capabilities/packs/quality/evidence/remediation/reconstruct",
+        json={
+            **request_body,
+            "dry_run_fingerprint": dry_run_body["dry_run_fingerprint"],
+            "meta": {"operator_reconstruction_decision": "approved_for_reconstruction"},
+        },
+    )
+    assert applied.status_code == 200
+    applied_body = applied.json()
+    assert applied_body["ok"] is True
+    assert applied_body["applied"] is True
+    assert applied_body["status"] == "recorded"
+    assert applied_body["selection_strategy"] == "smallest_full_pack_first"
+    assert applied_body["selected_by_strategy"] is True
+    assert applied_body["selected_reconstruction_pack_ids"] == [small_pack_a_id, small_pack_b_id]
+    assert applied_body["planned_pack_count"] == 2
+    assert applied_body["recorded_pack_count"] == 2
+    assert applied_body["recorded_capability_count"] == 2
+    assert [item["pack_id"] for item in applied_body["recorded"]] == [small_pack_a_id, small_pack_b_id]
+    assert applied_body["before_remediation_queue_count"] == 3
+    assert applied_body["after_remediation_queue_count"] == 1
+    assert applied_body["candidate_reduction_count"] == 2
+    assert applied_body["before_validation_receipt_reconstruction_required_count"] == 5
+    assert applied_body["after_validation_receipt_reconstruction_required_count"] == 3
+    assert applied_body["before_proposal_lineage_reconstruction_required_count"] == 5
+    assert applied_body["after_proposal_lineage_reconstruction_required_count"] == 3
+    assert applied_body["governance"]["writes_batch_reconstruction_receipt"] is True
+    assert applied_body["governance"]["selection_strategy"] == "smallest_full_pack_first"
+
+    receipt = applied_body["receipt"]
+    assert receipt["contract"] == "stage17_capability_pack_artifact_reconstruction_receipt_v1"
+    assert receipt["selected_reconstruction_pack_ids"] == [small_pack_a_id, small_pack_b_id]
+    assert receipt["recorded_pack_count"] == 2
+    assert receipt["candidate_reduction_count"] == 2
+    assert receipt["before_validation_receipt_reconstruction_required_count"] == 5
+    assert receipt["after_validation_receipt_reconstruction_required_count"] == 3
+
+    after = client.get("/plugins/capabilities/packs/quality/evidence/remediation").json()
+    after_pack_ids = [item["pack_id"] for item in after["remediation_queue"]]
+    assert small_pack_a_id not in after_pack_ids
+    assert small_pack_b_id not in after_pack_ids
     assert large_pack_id in after_pack_ids
 
 

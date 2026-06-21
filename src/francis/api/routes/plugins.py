@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from francis.api.errors import api_error_message
+import copy
 import csv
 from dataclasses import replace
 import hashlib
@@ -166,6 +167,9 @@ _CAPABILITY_PACK_QUALITY_STANDARD_REMEDIATION_RECEIPT_CONTRACT = (
 )
 _CAPABILITY_PACK_METADATA_RECEIPT_APPLY_REVALIDATION_CONTRACT = (
     "stage17_capability_pack_metadata_receipt_apply_revalidation_v1"
+)
+_CAPABILITY_PACK_METADATA_RECEIPT_PERSISTENCE_GUARD_CONTRACT = (
+    "stage17_capability_pack_metadata_receipt_apply_persistence_guard_v1"
 )
 _CAPABILITY_LIBRARY_PROPOSAL_EVIDENCE_REMEDIATION_APPLY_ROUTE = (
     "/plugins/capabilities/library/proposal-evidence/remediation/apply"
@@ -2386,14 +2390,37 @@ def _capability_pack_artifact_reconstruction_selection_key(item: dict[str, Any])
     )
 
 
+def _capability_pack_artifact_reconstruction_planned_capability_count(item: dict[str, Any]) -> int:
+    plan = (
+        item.get("artifact_reconstruction_plan") if isinstance(item.get("artifact_reconstruction_plan"), dict) else {}
+    )
+    raw_capabilities = plan.get("capabilities") if isinstance(plan.get("capabilities"), list) else []
+    capabilities = [capability for capability in raw_capabilities if isinstance(capability, dict)]
+    return len(capabilities)
+
+
 def _capability_pack_artifact_reconstruction_select_queue(
     queue: list[dict[str, Any]],
     *,
     selection_strategy: str,
     max_pack_count: int,
+    max_total_capability_count: int,
+    max_capability_count_per_pack: int,
 ) -> list[dict[str, Any]]:
     if selection_strategy == "smallest_full_pack_first":
-        return sorted(queue, key=_capability_pack_artifact_reconstruction_selection_key)[:max_pack_count]
+        selected: list[dict[str, Any]] = []
+        selected_capability_count = 0
+        for item in sorted(queue, key=_capability_pack_artifact_reconstruction_selection_key):
+            capability_count = _capability_pack_artifact_reconstruction_planned_capability_count(item)
+            if capability_count <= 0 or capability_count > max_capability_count_per_pack:
+                continue
+            if selected_capability_count + capability_count > max_total_capability_count:
+                continue
+            selected.append(item)
+            selected_capability_count += capability_count
+            if len(selected) >= max_pack_count:
+                break
+        return selected
     return queue
 
 
@@ -10756,6 +10783,9 @@ _CAPABILITY_PACK_INVOCATION_CALLER_CONTEXT_BINDING_CONTRACT = (
     "stage17_capability_pack_invocation_caller_context_binding_v1"
 )
 _STAGE17_OPERATION_INVOCATION_CALLER_CONTEXT_CONTRACT = "stage17_operation_invocation_caller_context_readback_v1"
+_CAPABILITY_PACK_INVOCATION_MISSION_SHAPE_PROOF_CONTRACT = (
+    "stage17_capability_pack_invocation_mission_shape_reuse_proof_v1"
+)
 _CAPABILITY_PACK_INVOCATION_SUPPORTED_CALLER_CONTEXTS = [
     "direct_plugin_route",
     "plugin_tool_route",
@@ -11451,6 +11481,11 @@ def _capability_pack_invocation_audit_projection(
         for key, operation_capabilities in capability_lists_by_reuse_key.items()
         if mission_shape_capabilities.issubset(operation_capabilities)
     ]
+    direct_route_contexts = [
+        context
+        for context in _CAPABILITY_PACK_INVOCATION_SUPPORTED_CALLER_CONTEXTS
+        if context not in mission_linked_contexts
+    ]
     receipt_linked_capabilities_by_reuse_key: dict[str, set[str]] = {}
     for item in items:
         reuse_key = str(item.get("pack_reuse_key") or "").strip()
@@ -11566,6 +11601,33 @@ def _capability_pack_invocation_audit_projection(
             "grants_execution_authority": False,
             "grants_mutation_authority": False,
         },
+        "mission_shape_proof": {
+            "contract": _CAPABILITY_PACK_INVOCATION_MISSION_SHAPE_PROOF_CONTRACT,
+            "status": "mission_shape_reuse_proven" if governed_reuse_proof_ready else "mission_shape_reuse_incomplete",
+            "ready": governed_reuse_proof_ready,
+            "readback_scope": "operation_outputs_with_embedded_capability_pack_invocation_receipts",
+            "proof_source": "accepted_operation_output_invocation_receipts",
+            "accepted_reuse_keys": governed_reuse_proof_keys,
+            "required_operation_capabilities": sorted(mission_shape_capabilities),
+            "required_caller_contexts": sorted(mission_linked_contexts),
+            "operation_readback_bound_reuse_keys": operation_readback_mission_shape_reuse_keys,
+            "receipt_linked_selection_consistent_reuse_keys": (
+                receipt_linked_selection_consistent_mission_shape_reuse_keys
+            ),
+            "direct_route_contexts_declared_by_pack_selection": direct_route_contexts,
+            "direct_route_contexts_count_for_operation_audit": False,
+            "direct_route_receipts_required_for_mission_shape_proof": False,
+            "governance": {
+                "read_only": True,
+                "writes_repo": False,
+                "writes_data": False,
+                "writes_receipts": False,
+                "executes_capabilities": False,
+                "grants_execution_authority": False,
+                "grants_mutation_authority": False,
+                "memory_write": False,
+            },
+        },
         "reuse_proof": {
             "contract": "stage17_capability_pack_invocation_audit_reuse_proof_v1",
             "minimum_contexts_per_reuse_key": 2,
@@ -11637,6 +11699,10 @@ def _capability_pack_invocation_audit_projection(
             "receipt_linked_mission_shape_reuse_requires_dispatch_run_and_trace_ids": True,
             "reuse_proof_counts_only_supported_mission_operation_capabilities": True,
             "unsupported_operation_capability_receipts_are_rejected": True,
+            "mission_shape_reuse_proof_contract": _CAPABILITY_PACK_INVOCATION_MISSION_SHAPE_PROOF_CONTRACT,
+            "mission_shape_reuse_proof_source": "accepted_operation_output_invocation_receipts",
+            "direct_route_contexts_declared_but_not_counted_by_operation_audit": direct_route_contexts,
+            "direct_route_receipts_required_for_mission_shape_proof": False,
             "proof_readiness_contract": "stage17_capability_pack_governed_invocation_proof_readiness_v1",
             "proof_readiness_requires_receipt_linked_selection_consistent_mission_shape_reuse": True,
             "reusable_operation_statuses": sorted(_CAPABILITY_PACK_INVOCATION_REUSABLE_OPERATION_STATUSES),
@@ -14208,6 +14274,8 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
                 queue,
                 selection_strategy=selection_strategy,
                 max_pack_count=safe_max_pack_count,
+                max_total_capability_count=safe_max_total_capability_count,
+                max_capability_count_per_pack=safe_max_capability_count_per_pack,
             )
             selected_by_strategy = True
         if not queue:
@@ -18555,6 +18623,121 @@ def _capability_pack_metadata_receipts_bulk_governance(
     }
 
 
+def _capability_pack_metadata_receipts_bulk_pending_receipts(
+    pending_receipts: list[dict[str, Any]],
+) -> list[dict[str, object]]:
+    out: list[dict[str, object]] = []
+    for item in pending_receipts:
+        capability_ids = item.get("capability_ids") if isinstance(item.get("capability_ids"), list) else []
+        out.append(
+            {
+                "pack_id": _safe_str(item.get("pack_id")).strip(),
+                "pack_version": _safe_str(item.get("pack_version")).strip(),
+                "receipt_id": _safe_str(item.get("receipt_id")).strip(),
+                "receipt_path": str(item.get("receipt_path") or ""),
+                "capability_count": len(capability_ids),
+                "batch_id": _safe_str(item.get("batch_id")).strip(),
+            }
+        )
+    return out
+
+
+def _capability_pack_metadata_receipts_bulk_registry_rollback(
+    *,
+    previous_registry: dict[str, Any],
+) -> dict[str, object]:
+    plugins = previous_registry.get("plugins") if isinstance(previous_registry.get("plugins"), dict) else {}
+    try:
+        _save_registry_and_catalog(copy.deepcopy(previous_registry))
+    except Exception as exc:
+        return {
+            "contract": _CAPABILITY_PACK_METADATA_RECEIPT_PERSISTENCE_GUARD_CONTRACT,
+            "attempted": True,
+            "status": "failed",
+            "restored": False,
+            "error": api_error_message(exc),
+            "error_class": exc.__class__.__name__,
+            "previous_registry_plugin_count": len(plugins),
+            "receipt_writes_started": False,
+        }
+    return {
+        "contract": _CAPABILITY_PACK_METADATA_RECEIPT_PERSISTENCE_GUARD_CONTRACT,
+        "attempted": True,
+        "status": "restored",
+        "restored": True,
+        "previous_registry_plugin_count": len(plugins),
+        "receipt_writes_started": False,
+    }
+
+
+def _capability_pack_metadata_receipts_bulk_persistence_failure_response(
+    *,
+    exc: Exception,
+    route_path: str,
+    planned: list[dict[str, Any]],
+    pending_receipts: list[dict[str, Any]],
+    before_projection: dict[str, Any],
+    dry_run_fingerprint: str,
+    apply_revalidation: dict[str, Any],
+    rollback: dict[str, object],
+) -> dict[str, object]:
+    pending = _capability_pack_metadata_receipts_bulk_pending_receipts(pending_receipts)
+    planned_capability_count = sum(int(item.get("capability_count") or 0) for item in planned)
+    return {
+        "ok": False,
+        "applied": False,
+        "status": "blocked",
+        "error": "capability_pack_metadata_receipts_bulk_persistence_failed",
+        "planned_pack_count": len(planned),
+        "planned_capability_count": planned_capability_count,
+        "dry_run_fingerprint": dry_run_fingerprint,
+        "dry_run_confirmation": {
+            "required_for_apply": True,
+            "fingerprint_matched": True,
+            "fingerprint_contract": "stage17_capability_pack_metadata_receipts_bulk_from_plan_dry_run_v1",
+            "apply_route": route_path,
+        },
+        "apply_revalidation": apply_revalidation,
+        "apply_persistence": {
+            "contract": _CAPABILITY_PACK_METADATA_RECEIPT_PERSISTENCE_GUARD_CONTRACT,
+            "required": True,
+            "status": "failed",
+            "error": api_error_message(exc),
+            "error_class": exc.__class__.__name__,
+            "registry_catalog_persistence_attempted": True,
+            "registry_metadata_persistence_confirmed": False,
+            "catalog_persistence_confirmed": False,
+            "receipt_write_status": "not_started",
+            "receipts_written": False,
+            "pending_receipt_count": len(pending),
+            "rollback": rollback,
+        },
+        "recorded_pack_count": 0,
+        "recorded_capability_count": 0,
+        "recorded": [],
+        "pending_receipts": pending,
+        "projection_scope": before_projection["projection_scope"],
+        "global_counts_included": before_projection["global_counts_included"],
+        "projection_generated_at": before_projection["generated_at"],
+        "projection_evidence": before_projection["projection_evidence"],
+        "before": before_projection,
+        "before_candidate_total": before_projection["candidate_total"],
+        "requirements": {
+            "persistence_success_required_before_receipt_write": True,
+            "receipt_writes_blocked_on_persistence_failure": True,
+            "rollback_attempted_before_response": True,
+            "apply_revalidation_required_before_registry_write": True,
+            "apply_revalidation_contract": _CAPABILITY_PACK_METADATA_RECEIPT_APPLY_REVALIDATION_CONTRACT,
+        },
+        "planned": planned,
+        "governance": _capability_pack_metadata_receipts_bulk_governance(
+            route_path=route_path,
+            writes_registry_metadata=False,
+            writes_receipts=False,
+        ),
+    }
+
+
 @router.post("/capabilities/packs/metadata/receipts/bulk-from-plan")
 def record_capability_pack_metadata_receipts_from_plan(
     payload: CapabilityPackMetadataReceiptBulkFromPlanIn,
@@ -18976,6 +19159,7 @@ def record_capability_pack_metadata_receipts_from_plan(
                 ),
             }
 
+        registry_before_apply = copy.deepcopy(registry)
         pending_receipts: list[dict[str, Any]] = []
         recorded_ts = _now_s()
         batch_id = f"stage17_metadata_receipts_bulk_{recorded_ts}"
@@ -19085,7 +19269,22 @@ def record_capability_pack_metadata_receipts_from_plan(
                 }
             )
 
-        _save_registry_and_catalog(registry)
+        try:
+            _save_registry_and_catalog(registry)
+        except Exception as persist_exc:
+            rollback = _capability_pack_metadata_receipts_bulk_registry_rollback(
+                previous_registry=registry_before_apply,
+            )
+            return _capability_pack_metadata_receipts_bulk_persistence_failure_response(
+                exc=persist_exc,
+                route_path=request.url.path,
+                planned=planned,
+                pending_receipts=pending_receipts,
+                before_projection=before_projection,
+                dry_run_fingerprint=dry_run_fingerprint,
+                apply_revalidation=apply_revalidation,
+                rollback=rollback,
+            )
         recorded: list[dict[str, Any]] = []
         for item in pending_receipts:
             receipt = _write_capability_pack_metadata_receipt(

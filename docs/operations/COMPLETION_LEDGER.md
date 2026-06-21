@@ -89187,6 +89187,89 @@ Remaining truthful gap:
   continue reducing the remaining 16-pack quality-evidence reconstruction queue
   through bounded selector-backed batches with receipts and before/after counts.
 
+### 2026-06-21 14:29Z - Stage 17 budget-aware artifact reconstruction selector
+
+Current posture: Stage 17 / Capability Economy remains open. This worker pass
+advanced the reusable backlog-reduction mechanism for quality-evidence artifact
+reconstruction, but it does not claim live queue reduction because the live apply
+probe did not return receipt-backed output.
+
+What changed:
+
+- `POST /plugins/capabilities/packs/quality/evidence/remediation/reconstruct`
+  now makes the opt-in `smallest_full_pack_first` selector budget-aware when no
+  explicit `pack_ids` are supplied.
+- Strategy-selected batches now skip candidates that exceed
+  `max_capability_count_per_pack` or would exceed
+  `max_total_capability_count`, allowing the route to select the smallest
+  bounded batch that fits instead of requiring repeated one-pack calls or
+  blocking on an oversized candidate.
+- The default `queue_order` behavior and explicit `pack_ids` behavior remain
+  unchanged. Existing permission, dry-run fingerprint, operator decision,
+  registry/receipt write, before/after queue evidence, and governance readback
+  contracts remain attached to the route.
+
+Worker evidence accepted:
+
+- Focused fixture proof added a three-pack quality-evidence reconstruction
+  queue where the budgeted selector reduced two eligible small packs in one
+  governed apply while leaving the oversized pack in the queue: remediation
+  queue `3 -> 1`, validation reconstruction required `5 -> 3`, proposal lineage
+  reconstruction required `5 -> 3`, `recorded_pack_count=2`,
+  `recorded_capability_count=2`, and durable receipt
+  `stage17_capability_pack_artifact_reconstruction_receipt_v1`.
+- Live dry-run-only probe with `stage17.operator`, `plugins.write`,
+  `selection_strategy=smallest_full_pack_first`, `max_pack_count=2`,
+  `max_total_capability_count=10`, and `max_capability_count_per_pack=10`
+  returned `status=dry_run`, selected
+  `legacy.generated.capabilityoperatorreviewplugin` and
+  `legacy.generated.capabilitypromotionreceiptsplugin`,
+  `planned_pack_count=2`, `planned_capability_count=8`,
+  `before_remediation_queue_count=16`, `after_remediation_queue_count=16`, and a
+  64-character dry-run fingerprint.
+
+Rejected evidence:
+
+- A live apply attempt using the same bounded batch ended with process exit code
+  `-1` and no JSON route output. Independent readback showed no new artifact
+  reconstruction receipt and no live queue reduction, so this pass rejects that
+  attempt as accepted queue-movement evidence.
+- Fresh readback after the failed live apply attempt still reported
+  `remediation_queue_count=16` and no new receipt beyond the prior
+  `stage17_artifact_reconstruction_batch_1782050127_receipt.json`.
+
+Validation:
+
+- `.\.venv\Scripts\python.exe -m py_compile
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py` passed.
+- `.\.venv\Scripts\python.exe -m pytest
+  tests\test_api_plugins.py::test_plugins_capability_pack_quality_evidence_reconstruction_selects_smallest_budgeted_batch
+  -q` passed with one existing FastAPI/Starlette TestClient deprecation warning.
+- `.\.venv\Scripts\python.exe -m pytest
+  tests\test_api_plugins.py::test_plugins_capability_pack_quality_evidence_reconstruction_selects_smallest_full_pack
+  tests\test_api_plugins.py::test_plugins_capability_pack_quality_evidence_reconstruction_selects_smallest_budgeted_batch
+  tests\test_api_plugins.py::test_plugins_capability_pack_quality_evidence_remediation_reconstructs_missing_artifacts
+  tests\test_api_plugins.py::test_plugins_capability_pack_quality_evidence_remediation_reconstructs_truncated_plan_chunk
+  -q` passed with one existing FastAPI/Starlette TestClient deprecation warning.
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py` passed.
+- `.\.venv\Scripts\python.exe -m ruff format --check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py` passed after
+  formatting `tests\test_api_plugins.py`.
+- `git diff --check -- src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py` passed.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. This pass does not claim live quality-evidence queue
+  reduction, clean metadata apply response closure, full quality-evidence
+  closure, proposal review, promotion, enablement, execution, live mission-path
+  proof, full CI, or phase movement.
+- The next build action should use the budget-aware selector in a bounded live
+  apply that returns clean JSON output and an artifact reconstruction receipt, or
+  investigate why the current live apply probe can exceed the worker command
+  window before returning receipt evidence.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

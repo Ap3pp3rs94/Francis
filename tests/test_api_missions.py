@@ -28,7 +28,7 @@ def _approve_forge_proposal(client, proposal_id: str) -> None:
     )
     assert approved.status_code == 200
     approved_body = approved.json()
-    assert approved_body["ok"] is True
+    assert approved_body["ok"] is True, approved_body
     assert approved_body["status"] == "approved"
 
 

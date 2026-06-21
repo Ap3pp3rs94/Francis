@@ -1308,3 +1308,140 @@ Next highest leverage action:
 - Investigate and fix the metadata receipt apply Windows registry replacement
   error, then continue selector-backed quality-evidence reconstruction batches
   with receipts and before/after readbacks.
+
+## PM Follow-Up - 2026-06-21T15:00Z
+
+Commit:
+
+- Pending at the time of this entry: budget-aware artifact reconstruction
+  selection, metadata receipt persistence guard, invocation mission-shape audit
+  proof, and mission-test diagnostic readback.
+
+Active workers:
+
+- W1 quality-evidence artifact reconstruction: accepted the budget-aware
+  `smallest_full_pack_first` selector behavior and fixture proof for reducing a
+  bounded two-pack batch while skipping an oversized pack. Live apply evidence
+  was rejected because the attempted live apply returned no JSON route output
+  and no new receipt-backed queue movement.
+- W2 metadata receipt apply: accepted
+  `stage17_capability_pack_metadata_receipt_apply_persistence_guard_v1`, which
+  blocks metadata receipt writes when registry/catalog persistence fails,
+  attempts rollback, and returns a structured blocked response.
+- W3 reusable invocation proof: accepted the read-only plugin invocation audit
+  `mission_shape_proof` projection and durable fixture coverage. The
+  mission-test assertion additions were rejected because the existing mission
+  fixture fails before the new assertions while approving the forge proposal.
+- W4 remained parked to honor the three-worker usage cap.
+
+Active drones:
+
+- 0 local drones reported by the accepted worker packets. The next prompts
+  should require each worker to use or explicitly skip up to four local drones
+  and report their evidence packets separately.
+
+Commits produced:
+
+- 1 pending coherent Lead Builder integration commit.
+
+Commits accepted:
+
+- 0 pushed at the time of this entry.
+
+Commits rejected:
+
+- 0 complete worker packets rejected.
+- 2 worker sub-outputs rejected: W1 live apply queue-movement claim and W3
+  mission-test assertion additions.
+
+Validations passed:
+
+- Lead `py_compile`, Ruff check, Ruff format check, and `git diff --check`
+  passed on the accepted Stage 17 source/test/docs paths.
+- Lead focused pytest passed for metadata receipt persistence failure rollback,
+  durable invocation audit replay, smallest full-pack reconstruction selection,
+  budget-aware reconstruction selection, missing artifact reconstruction, and
+  truncated plan chunk reconstruction.
+- Completion-model readback selected latest Stage 17 ledger entry
+  `2026-06-21 14:29Z - Stage 17 budget-aware artifact reconstruction selector`,
+  kept `stage17_status=open`, and kept `current_phase=Phase 2`.
+- FastAPI readback returned `migration_candidate_total=1`,
+  `remediation_queue_count=16`,
+  `validation_receipt_reconstruction_required_count=2822`, and
+  `proposal_lineage_reconstruction_required_count=2822`.
+
+Validations failed or blocked:
+
+- `tests\test_api_missions.py::test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_mission_contexts`
+  failed before W3's new assertions with forge proposal approval
+  `{'applied': False, 'error': 'not_found', 'item': None, 'ok': False}`.
+  The retained change only adds the response body to the helper assertion so the
+  fixture failure remains diagnosable.
+- Full `scripts\check.ps1`, full plugin suite, and CI were not run.
+- Stage 17 remains open. Live quality-evidence queue reduction, clean metadata
+  apply response closure, full quality-evidence closure, proposal review,
+  promotion, enablement, execution, and live mission-path proof remain unproven.
+
+Receipts generated:
+
+- W1 last-message packet:
+  `.francis\worker-terminal-logs\worker-1-orb-voice-proof-20260621T1417491890974Z.last-message.md`.
+- W2 last-message packet:
+  `.francis\worker-terminal-logs\worker-2-lens-overlay-spatial-20260621T1418074441138Z.last-message.md`.
+- W3 last-message packet:
+  `.francis\worker-terminal-logs\worker-3-voice-receipts-20260621T1418233624474Z.last-message.md`.
+- Coordinator publication markers still require the final pushed commit hash
+  before the next worker prompts may launch.
+
+Roadmap items advanced:
+
+- Stage 17 / Capability Economy.
+- Governed artifact reconstruction selection.
+- Metadata receipt apply safety.
+- Reusable invocation proof readback.
+- Worker-swarm publication discipline.
+
+Capability classes advanced:
+
+- Capability Registry
+- Governance
+- Receipts
+- Missions
+- Observability
+- API Surface
+- Documentation
+- Testing
+
+New capabilities created or strengthened:
+
+- Artifact reconstruction selection can now build a bounded batch that respects
+  both per-pack and total capability budgets when using
+  `smallest_full_pack_first`.
+- Metadata receipt bulk apply now fails closed before receipt writes when
+  registry/catalog persistence fails, with rollback evidence and no false
+  receipt record.
+- Reusable invocation audit now exposes a read-only mission-shape proof based
+  on accepted operation-output invocation receipts without granting execution or
+  mutation authority.
+- Mission test proposal approval failures now include the response body in the
+  assertion output.
+
+Most important change:
+
+- Stage 17 gained stronger fail-closed persistence and selector controls around
+  the existing capability-pack routes without creating a parallel substrate.
+
+Biggest remaining bottleneck:
+
+- Stage 17 remains open with `migration_candidate_total=1`,
+  `remediation_queue_count=16`, and 2,822 validation/proposal reconstruction
+  gaps. The live mission-path proof still fails at proposal lookup before the
+  reusable invocation assertions can run.
+
+Next highest leverage action:
+
+- Re-prompt W1 to complete a bounded live budget-aware reconstruction apply
+  with a returned receipt, W2 to close the remaining metadata migration
+  candidate cleanly, and W3 to repair the mission fixture proposal lookup before
+  proving mission-shape invocation reuse. Each worker should use or explicitly
+  skip up to four local drones and publish a packet before the next prompt.
