@@ -89899,6 +89899,84 @@ Remaining truthful gap:
   the remaining three reconstruction candidates, then re-read the next smallest
   Stage 17 gap instead of assuming completion.
 
+### 2026-06-21 17:44Z - Stage 17 reconstruction tail reaches one blocked pack
+
+Current posture: Stage 17 / Capability Economy remains open. This pass recorded
+the final successful artifact reconstruction tail and the first truthful blocker
+after the queue stopped producing supported reconstruction candidates. It does
+not claim quality-evidence closure, full CI, or Stage 17 completion.
+
+What changed:
+
+- Tail iteration 1 selected `legacy.generated.reviewrequiredplugin`,
+  reconstructed 5 capabilities, and reduced the queue `3 -> 2`.
+- Tail iteration 2 selected `legacy.generated.capabilitycatalogplugin`,
+  reconstructed 10 capabilities, and reduced the queue `2 -> 1`.
+- The remaining pack is `legacy.generated.stage17reusableinvocationplugin`.
+  Live dry-runs now return no supported quality-evidence backfill and no
+  supported artifact reconstruction for that pack.
+- No runtime code changed in this cycle.
+
+Live receipt evidence:
+
+- Iteration 1 receipt:
+  `data\artifacts\plugins\capability_packs\artifact_reconstructions\stage17_artifact_reconstruction_batch_1782063311_36ef0986_receipt.json`.
+  SHA-256:
+  `6DFC79A94BDCAE9DE6418524E4B34B1489E484DA354DBAEBD705C0C198CB80A0`.
+  Dry-run fingerprint:
+  `1ce8c5d29289ad792d9ffd0b7c88f5e5821a41aefbac39e6630b1138d3e92f26`.
+- Iteration 2 receipt:
+  `data\artifacts\plugins\capability_packs\artifact_reconstructions\stage17_artifact_reconstruction_batch_1782063429_969a348a_receipt.json`.
+  SHA-256:
+  `9ED30C23164837A31D6233EFCCEC4F54FB13122BCADB2B3C5883C4DD70E6059A`.
+  Dry-run fingerprint:
+  `cdaa62da0458d5ea94e175b21d9bda2cc71f0529675f715a5e70addb9db6b687`.
+- Batch queue movement:
+  `before_remediation_queue_count=3`,
+  `after_remediation_queue_count=1`.
+- Reconstruction-required movement:
+  validation receipts `37 -> 22`; proposal lineages `37 -> 22`.
+- Readback after tail:
+  `remediation_queue_count=1`,
+  `artifact_reconstruction_required_count=1`,
+  `next_smallest_truthful_gap=stage17_capability_pack_artifact_reconstruction_apply`.
+
+Validation:
+
+- Each successful tail iteration's live dry-run returned `ok=true`,
+  `status=dry_run`, a single selected pack, and a unique fingerprint.
+- Each successful tail iteration's live apply returned `ok=true`,
+  `applied=true`, `status=recorded`, `recorded_pack_count=1`,
+  `failed_count=0`, `skipped_count=0`, and `candidate_reduction_count=1`.
+- `.\scripts\francis-completion-model.ps1` returned clean JSON with the newest
+  receipt:
+  `stage17_artifact_reconstruction_batch_1782063429_969a348a_receipt`.
+- A scoped live dry-run of
+  `POST /plugins/capabilities/packs/quality/evidence/remediation/apply` for
+  `legacy.generated.stage17reusableinvocationplugin` returned
+  `status=no_supported_quality_evidence_backfill`.
+- A scoped live dry-run of
+  `POST /plugins/capabilities/packs/quality/evidence/remediation/reconstruct`
+  for `legacy.generated.stage17reusableinvocationplugin` returned
+  `status=no_supported_artifact_reconstruction`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. One artifact reconstruction-required pack remains:
+  `legacy.generated.stage17reusableinvocationplugin`.
+- The remaining pack has 67 capabilities. The first unsupported reconstruction
+  sample reports missing `quality_test_references` and
+  `quality_doc_references`; later sample capabilities also report missing
+  `pack_metadata_receipt`.
+- Existing apply/reconstruction routes correctly refuse to fabricate missing
+  evidence. The next accepted build action should add or repair a governed,
+  receipt-backed route for the missing metadata/quality evidence inputs, or
+  correct the projection if it is naming reconstruction as the next gap when
+  prerequisites are absent.
+- Full quality-evidence closure, metadata apply closure, proposal review queue
+  closure, promotion queue closure, enablement/execution readiness, full CI,
+  and phase movement remain unproven.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

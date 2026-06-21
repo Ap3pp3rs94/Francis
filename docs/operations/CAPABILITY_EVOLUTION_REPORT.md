@@ -2217,3 +2217,99 @@ Next highest leverage action:
 
 - Run a smaller bounded reconstruction batch for the remaining three
   candidates, then re-read Stage 17 status to identify the next truthful gate.
+
+### Cycle 2026-06-21T17:33Z to 2026-06-21T17:44Z
+
+Scope: Stage 17 reconstruction tail plus blocker classification for the final
+unsupported pack.
+
+Active workers:
+
+- Lead-only live mutation. No worker packets were accepted in this batch cycle.
+
+Active drones:
+
+- 0 local drones were accepted in this cycle.
+
+Commits produced: pending at report time.
+
+Commits accepted: pending at report time.
+
+Commits rejected: 0.
+
+Validations passed:
+
+- Tail iteration 1 dry-run/apply selected
+  `legacy.generated.reviewrequiredplugin`, reconstructed 5 capabilities, and
+  moved the queue `3 -> 2`.
+- Tail iteration 2 dry-run/apply selected
+  `legacy.generated.capabilitycatalogplugin`, reconstructed 10 capabilities,
+  and moved the queue `2 -> 1`.
+- Both successful tail iterations returned `ok=true`, `applied=true`,
+  `status=recorded`, `recorded_pack_count=1`, `failed_count=0`,
+  `skipped_count=0`, and `candidate_reduction_count=1`.
+- Live remediation readback returned `remediation_queue_count=1` and
+  `artifact_reconstruction_required_count=1`.
+- `.\scripts\francis-completion-model.ps1` returned clean JSON with the newest
+  receipt `stage17_artifact_reconstruction_batch_1782063429_969a348a_receipt`.
+- A scoped dry-run of the quality-evidence remediation apply route for
+  `legacy.generated.stage17reusableinvocationplugin` returned
+  `status=no_supported_quality_evidence_backfill`.
+- A scoped dry-run of the artifact reconstruction route for
+  `legacy.generated.stage17reusableinvocationplugin` returned
+  `status=no_supported_artifact_reconstruction`.
+
+Validations failed or blocked:
+
+- The final pack cannot be reconstructed through the existing route because
+  sample capabilities are missing quality reference inputs, and later samples
+  also lack `pack_metadata_receipt`.
+- Full local `.\scripts\check.ps1` was not run.
+- Full GitHub CI remains a final stabilization gate after the blocker is
+  repaired.
+
+Receipts generated:
+
+- `stage17_artifact_reconstruction_batch_1782063311_36ef0986_receipt`;
+  SHA-256 `6DFC79A94BDCAE9DE6418524E4B34B1489E484DA354DBAEBD705C0C198CB80A0`.
+- `stage17_artifact_reconstruction_batch_1782063429_969a348a_receipt`;
+  SHA-256 `9ED30C23164837A31D6233EFCCEC4F54FB13122BCADB2B3C5883C4DD70E6059A`.
+
+Roadmap items advanced:
+
+- Stage 17 / Capability Economy.
+- Governed quality-evidence artifact reconstruction.
+- Completion-model receipt readback continuity.
+- Blocker classification for the last unsupported reconstruction pack.
+
+Capability classes advanced:
+
+- Capability Registry
+- Governance
+- Receipts
+- Observability
+- Completion Model
+- Documentation
+
+New capabilities created or strengthened:
+
+- The live Stage 17 quality-evidence reconstruction queue has been reduced from
+  3 remaining packs to 1 remaining pack.
+- The final unsupported pack is now classified by live route evidence instead
+  of treated as another clean reconstruction candidate.
+
+Most important change:
+
+- Stage 17 artifact reconstruction-required packs dropped to 1 remaining, and
+  the remaining blocker is named precisely.
+
+Biggest remaining bottleneck:
+
+- `legacy.generated.stage17reusableinvocationplugin` needs a governed evidence
+  input repair before artifact reconstruction can close.
+
+Next highest leverage action:
+
+- Implement or repair the smallest governed metadata/quality evidence input
+  path for `legacy.generated.stage17reusableinvocationplugin`, then re-run the
+  reconstruction dry-run and apply only after the route can prove its inputs.
