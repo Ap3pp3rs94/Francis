@@ -60,6 +60,9 @@ It emits one JSON object with:
 - the worker/publication handoff guard, which states that choosing a Stage 17
   gap is not proof that a worker lane readback and PM-owned publication marker
   have both been produced for the same prompt hash
+- the worker execution/session-liveness guard, which states that choosing a
+  Stage 17 gap is not proof that a worker process is alive, completed, blocked,
+  or represented by a valid session readback
 - the percentage movement rules
 
 The model is read-only. The API route is backed by the Francis Python substrate,
@@ -143,6 +146,14 @@ publication marker, matching prompt hash, GitHub push or explicit no-change or
 blocked receipt, files changed, validation run, blockers/risks, proposed commit
 scope, and next recommended prompt.
 
+The selected-gap contract is also not worker execution or session-liveness
+proof. A selected Stage 17 gap can route a worker to a bounded slice, but it
+does not prove that a worker terminal/session is alive, completed, blocked, or
+represented by a usable readback. Worker execution claims require a worker
+session path, matching prompt hash, process liveness or exit code, completed or
+blocked status, lane readback or last message, files-changed or no-change scope,
+and validation or blocker evidence.
+
 ## Percentage Rule
 
 The model does not invent numeric completion baselines. Overall Francis and
@@ -198,6 +209,12 @@ Every `continue` run should satisfy these guards:
   are not proof that the lane readback plus PM-owned publication marker exist
   for a matching prompt hash, GitHub push/no-change/blocked receipt,
   validation, blockers/risks, proposed commit scope, and next prompt
+- keep Stage 17 worker execution/session-liveness claims evidence-backed:
+  selected gaps are not proof that a worker process is alive, completed,
+  blocked, or represented by a valid session readback; worker execution claims
+  need a worker session path, matching prompt hash, process liveness or exit
+  code, completed or blocked status, lane readback or last message,
+  files-changed or no-change scope, and validation or blocker evidence
 
 ## Non-Goals
 

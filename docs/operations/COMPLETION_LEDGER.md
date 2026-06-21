@@ -89347,6 +89347,105 @@ Remaining truthful gap:
   `stage17_capability_pack_artifact_reconstruction_receipt_v1` before accepting
   queue movement.
 
+### 2026-06-21 17:04Z - Stage 17 live artifact reconstruction reduces quality-evidence queue
+
+Current posture: Stage 17 / Capability Economy remains open. This pass removed
+a premature dry-run registry persistence write from the artifact reconstruction
+route, then ran a bounded live `smallest_full_pack_first` reconstruction apply
+with operator approval and a matching dry-run fingerprint. It proves one live
+quality-evidence queue reduction and receipt-backed artifact reconstruction; it
+does not claim full quality-evidence closure, metadata migration closure, full
+CI, or Stage 17 completion.
+
+What changed:
+
+- The artifact reconstruction route now compiles the runtime catalog during
+  preflight instead of saving the registry/catalog before dry-run confirmation
+  or operator approval.
+- A focused regression proves dry-run returns a clean planned fingerprint even
+  when registry persistence is unavailable, preserving the route's
+  `writes_registry_metadata=false` governance claim.
+- The completion-model PowerShell readback now reports read-only
+  `stage17_artifact_reconstruction_evidence` from durable reconstruction
+  receipts, including queue movement, receipt contract, selected pack IDs, and
+  authority-denial flags.
+- A bounded live apply selected
+  `legacy.generated.capabilityoperatorreviewplugin`, reconstructed 4
+  capabilities, wrote 4 validation receipts and 4 proposal-lineage records, and
+  recorded a durable reconstruction receipt.
+
+Live receipt evidence:
+
+- Receipt:
+  `data\artifacts\plugins\capability_packs\artifact_reconstructions\stage17_artifact_reconstruction_batch_1782061142_receipt.json`.
+- Receipt contract:
+  `stage17_capability_pack_artifact_reconstruction_receipt_v1`.
+- Receipt SHA-256:
+  `DE7AD0136A8471219F136C86912468C1F59915BE92EEECC241C01792D1EB6A9D`.
+- Dry-run fingerprint:
+  `6c84132a7b52e87c7f0789e81e7dc1f982633c362077b1fc1ae28137a1ae1256`.
+- Queue movement: `before_remediation_queue_count=16`,
+  `after_remediation_queue_count=15`, `candidate_reduction_count=1`.
+- Reconstruction-required movement:
+  validation receipts `89 -> 85`; proposal lineages `89 -> 85`.
+- Readback after apply:
+  `artifact_reconstruction_required_count=15`,
+  `next_smallest_truthful_gap=stage17_capability_pack_artifact_reconstruction_apply`.
+
+Worker evidence:
+
+- Worker 1 accepted: route/test patch for dry-run preflight persistence
+  discipline in `src\francis\api\routes\plugins.py` and
+  `tests\test_api_plugins.py`.
+- Worker 3 accepted: read-only completion-model receipt evidence in
+  `scripts\francis-completion-model.ps1` and
+  `tests\test_francis_completion_model_script.py`.
+- Worker 2 accepted: read-only Stage 17 wiring and route-family diagram update
+  in `docs\operations\CURRENT_BUILD_WIRING_DIAGRAM.md`.
+
+Validation:
+
+- Live dry-run via FastAPI `TestClient` returned `ok=true`,
+  `status=dry_run`, `planned_pack_count=1`, `planned_capability_count=4`, and
+  the fingerprint above.
+- Live apply via FastAPI `TestClient` returned `ok=true`, `applied=true`,
+  `status=recorded`, `recorded_pack_count=1`, `recorded_capability_count=4`,
+  and `candidate_reduction_count=1`.
+- Live remediation readback returned `remediation_queue_count=15` and
+  `artifact_reconstruction_required_count=15`.
+- `.\scripts\francis-completion-model.ps1` returned clean JSON with
+  `stage17_artifact_reconstruction_evidence.receipt_id=
+  stage17_artifact_reconstruction_batch_1782061142_receipt`.
+- `.\.venv\Scripts\python.exe -m pytest
+  tests\test_api_plugins.py::test_plugins_capability_pack_quality_evidence_reconstruction_dry_run_avoids_registry_persistence
+  tests\test_api_plugins.py::test_plugins_capability_pack_quality_evidence_reconstruction_selects_smallest_full_pack
+  tests\test_francis_completion_model_script.py::test_francis_completion_model_reports_stage17_artifact_reconstruction_evidence
+  -q --tb=short` passed with one existing FastAPI/Starlette TestClient
+  deprecation warning.
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py
+  tests\test_francis_completion_model_script.py` passed.
+- `.\.venv\Scripts\python.exe -m ruff format --check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py
+  tests\test_francis_completion_model_script.py` passed.
+- Worker 2 reported `.\.venv\Scripts\python.exe -m pytest
+  tests\test_completion_model.py tests\test_francis_completion_model_script.py
+  -q` passed, focused plugin/governance reconstruction tests passed, and
+  `GET /completion-model/status` returned `ok=true`. The rejected long-path
+  proposal-review check is not accepted here because its generated path was
+  below the test's `>260` precondition in this checkout.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The live queue is reduced but not closed:
+  15 artifact reconstruction-required packs remain.
+- Clean metadata apply response closure, proposal review queue closure,
+  promotion queue closure, enablement/execution readiness, full CI, and phase
+  movement remain unproven.
+- The next accepted build action should run the next bounded
+  `smallest_full_pack_first` apply or close a different documented Stage 17 gap
+  with receipt-backed before/after evidence.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

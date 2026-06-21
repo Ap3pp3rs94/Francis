@@ -1549,3 +1549,123 @@ Next highest leverage action:
 - Run a bounded live `smallest_full_pack_first` artifact reconstruction apply
   that records `stage17_capability_pack_artifact_reconstruction_receipt_v1`, or
   produce a precise blocker if the live apply still cannot return clean JSON.
+
+### Cycle 2026-06-21T15:36Z to 2026-06-21T17:04Z
+
+Scope: three-worker Stage 17 continuation after the usage reset, with the lead
+owning the live artifact reconstruction apply.
+
+Active workers:
+
+- Worker 1: artifact reconstruction route/test defect isolation.
+- Worker 2: Stage 17 CI and wiring pass.
+- Worker 3: completion-model artifact reconstruction receipt readback.
+
+Active drones:
+
+- 0 local drones were accepted in this cycle.
+- Workers were allowed up to 4 local drones each, but the accepted packets used
+  direct inspection and validation instead.
+
+Commits produced: pending at report time.
+
+Commits accepted: pending at report time.
+
+Commits rejected: 0.
+
+Validations passed:
+
+- Live reconstruction dry-run through FastAPI `TestClient` returned clean JSON
+  for `selection_strategy=smallest_full_pack_first`,
+  `planned_pack_count=1`, `planned_capability_count=4`, and fingerprint
+  `6c84132a7b52e87c7f0789e81e7dc1f982633c362077b1fc1ae28137a1ae1256`.
+- Live reconstruction apply through FastAPI `TestClient` returned
+  `ok=true`, `applied=true`, `status=recorded`,
+  `recorded_pack_count=1`, `recorded_capability_count=4`, and
+  `candidate_reduction_count=1`.
+- Live remediation readback returned `remediation_queue_count=15` and
+  `artifact_reconstruction_required_count=15`.
+- `.\scripts\francis-completion-model.ps1` returned clean JSON with
+  `stage17_artifact_reconstruction_evidence` for
+  `stage17_artifact_reconstruction_batch_1782061142_receipt`.
+- Focused pytest:
+  `tests\test_api_plugins.py::test_plugins_capability_pack_quality_evidence_reconstruction_dry_run_avoids_registry_persistence`.
+- Focused pytest:
+  `tests\test_api_plugins.py::test_plugins_capability_pack_quality_evidence_reconstruction_selects_smallest_full_pack`.
+- Focused pytest:
+  `tests\test_francis_completion_model_script.py::test_francis_completion_model_reports_stage17_artifact_reconstruction_evidence`.
+- `ruff check --no-cache` on `src\francis\api\routes\plugins.py`,
+  `tests\test_api_plugins.py`, and
+  `tests\test_francis_completion_model_script.py`.
+- `ruff format --check --no-cache` on the same files.
+- Worker 2 reported `tests\test_completion_model.py` plus
+  `tests\test_francis_completion_model_script.py` passed with 11 tests, a
+  `/completion-model/status` `TestClient` probe passed, and focused
+  plugin/governance reconstruction tests passed.
+
+Validations failed or blocked:
+
+- An initial full-library dry-run took longer than the practical command
+  window, but later returned clean JSON; no second dry-run was launched.
+- `.\scripts\francis-completion-model.ps1 -Json` failed because the script
+  does not expose a `-Json` parameter; the accepted readback command uses the
+  existing `-Mode Status` default output.
+- Worker 2 rejected
+  `test_plugins_forge_proposal_review_supports_long_windows_artifact_paths` as
+  evidence because the generated path was 245 characters, below the test's
+  `>260` precondition in this checkout.
+
+Receipts generated:
+
+- `data\artifacts\plugins\capability_packs\artifact_reconstructions\stage17_artifact_reconstruction_batch_1782061142_receipt.json`.
+- Receipt SHA-256:
+  `DE7AD0136A8471219F136C86912468C1F59915BE92EEECC241C01792D1EB6A9D`.
+
+Roadmap items advanced:
+
+- Stage 17 / Capability Economy.
+- Governed quality-evidence artifact reconstruction.
+- Completion-model readback for live Stage 17 receipt evidence.
+- Worker packet verification and integration discipline.
+
+Capability classes advanced:
+
+- Capability Registry
+- Governance
+- Receipts
+- Observability
+- Completion Model
+- API Surface
+- Documentation
+- Testing
+
+New capabilities created or strengthened:
+
+- Artifact reconstruction dry-run now avoids premature registry/catalog
+  persistence before dry-run confirmation or operator approval.
+- A regression proves dry-run can still produce a governed fingerprint when
+  registry persistence is unavailable.
+- Completion-model readback can now surface durable Stage 17 artifact
+  reconstruction receipt evidence without granting write, approval, promotion,
+  execution, or memory authority.
+- The current wiring diagram now records the mounted route-family inventory and
+  clarifies the Stage 17 live quality-evidence reconstruction queue as the
+  active blocker.
+- The live Stage 17 quality-evidence queue has one receipt-backed reduction:
+  `16 -> 15`.
+
+Most important change:
+
+- Stage 17 moved from "live reconstruction apply still unproven" to a verified
+  live queue reduction backed by a durable reconstruction receipt.
+
+Biggest remaining bottleneck:
+
+- Stage 17 still has 15 artifact reconstruction-required packs, plus remaining
+  metadata, proposal-review, promotion, enablement/execution, and full-CI gates.
+
+Next highest leverage action:
+
+- Run the next bounded `smallest_full_pack_first` apply, or choose the smallest
+  independent Stage 17 gate that can produce receipt-backed before/after
+  evidence without touching Orb visuals or unrelated dirty work.

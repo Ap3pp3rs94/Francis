@@ -14247,7 +14247,7 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
 
         registry = _load_registry()
         _sync_generated_plugins(registry)
-        catalog = _save_registry_and_catalog(registry)
+        catalog = _compile_runtime_catalog(registry)
         runtime_catalog = _read_runtime_catalog_payload(catalog)
         marketplace = marketplace_from_plugin_catalog(runtime_catalog)
         entries = marketplace.catalog()

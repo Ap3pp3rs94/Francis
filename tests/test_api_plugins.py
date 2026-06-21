@@ -5609,6 +5609,118 @@ def test_plugins_capability_pack_quality_evidence_remediation_projects_artifact_
     assert not proposal_path.exists()
 
 
+def test_plugins_capability_pack_quality_evidence_reconstruction_dry_run_avoids_registry_persistence(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
+    client = TestClient(create_app())
+    built = client.post(
+        "/plugins/build",
+        json={
+            "name": "Capability Artifact Reconstruction Dry Run Persistence Guard Plugin",
+            "description": "Stage 17 artifact reconstruction dry-run persistence guard coverage",
+            "actor": _PLUGIN_ACTOR,
+            "meta": _forge_promotion_meta("capability_artifact_reconstruction_dry_run_persistence_guard"),
+        },
+    )
+    assert built.status_code == 200
+    built_body = built.json()
+    assert built_body["ok"] is True
+    plugin_id = str(built_body["plugin_id"])
+
+    pack_id = "ops.artifact_reconstruction_dry_run_persistence_guard"
+    recorded = client.post(
+        "/plugins/capabilities/packs/metadata/receipts",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "record reviewed pack metadata before dry-run persistence guard",
+            "pack_id": pack_id,
+            "pack_version": "1.0.0",
+            "pack_name": "Ops Artifact Reconstruction Dry Run Persistence Guard Pack",
+            "capability_ids": [plugin_id],
+            "promotion_rules": [
+                "metadata_receipt_before_promotion",
+                "quality_standards_before_promotion",
+                "operator_review_before_promotion",
+            ],
+            "pack_governance": {
+                "risk_tier": "normal",
+                "scope": "build_dev",
+                "operator_review_required": True,
+                "requires_validation_receipt": True,
+            },
+        },
+    )
+    assert recorded.status_code == 200
+    assert recorded.json()["ok"] is True
+
+    for artifact_dir in (
+        data_root / "artifacts" / "plugins" / "validations",
+        data_root / "artifacts" / "plugins" / "proposals",
+    ):
+        for artifact_path in artifact_dir.glob("*.json"):
+            artifact_path.unlink(missing_ok=True)
+
+    registry = plugins._load_registry()
+    plugin = plugins._read_plugin(registry, plugin_id)
+    assert plugin is not None
+    meta = dict(plugin.get("meta") or {})
+    for key in (
+        "proposal_id",
+        "forge_proposal_id",
+        "proposal_path",
+        "validation_receipt_id",
+        "validation_receipt_path",
+    ):
+        meta.pop(key, None)
+    meta["quality"] = {
+        "tests": ["tests/test_api_plugins.py"],
+        "docs": ["README.md", "docs/operations/COMPLETION_LEDGER.md"],
+        "claim_scope": "explicit_dry_run_persistence_guard_quality_references",
+        "pack_specific_coverage_claimed": False,
+    }
+    plugin["meta"] = meta
+    plugins._write_plugin(registry, plugins._normalize_plugin_record(plugin_id, plugin))
+    plugins._save_registry_and_catalog(registry)
+    _disable_existing_artifact_link_candidates(monkeypatch, plugins)
+
+    def fail_registry_persistence(*_args, **_kwargs):
+        raise AssertionError("artifact reconstruction dry-run must not persist registry state")
+
+    monkeypatch.setattr(plugins, "_save_registry", fail_registry_persistence)
+    monkeypatch.setattr(plugins, "_save_registry_and_catalog", fail_registry_persistence)
+
+    dry_run = client.post(
+        "/plugins/capabilities/packs/quality/evidence/remediation/reconstruct",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "dry run must not persist artifact reconstruction registry state",
+            "pack_ids": [pack_id],
+            "dry_run": True,
+        },
+    )
+
+    assert dry_run.status_code == 200
+    dry_run_body = dry_run.json()
+    assert dry_run_body["ok"] is True
+    assert dry_run_body["status"] == "dry_run"
+    assert dry_run_body["planned_pack_count"] == 1
+    assert dry_run_body["planned_capability_count"] == 1
+    assert len(dry_run_body["dry_run_fingerprint"]) == 64
+    assert dry_run_body["governance"]["writes_registry_metadata"] is False
+    assert dry_run_body["governance"]["writes_validation_receipts"] is False
+    assert dry_run_body["governance"]["writes_proposals"] is False
+
+
 def test_plugins_capability_pack_quality_evidence_remediation_reconstructs_missing_artifacts(
     monkeypatch,
     tmp_path: Path,

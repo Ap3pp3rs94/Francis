@@ -5,7 +5,9 @@ param(
 
   [string]$LedgerPath = '',
 
-  [string]$BuildManifestPath = ''
+  [string]$BuildManifestPath = '',
+
+  [string]$ArtifactReconstructionReceiptRootPath = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -224,6 +226,122 @@ function Get-PlaneReadiness {
   return @($Planes)
 }
 
+function ConvertTo-CompletionModelBool {
+  param([object]$Value)
+
+  return ($null -ne $Value -and [bool]$Value)
+}
+
+function Get-Stage17ArtifactReconstructionEvidence {
+  param([string]$ReceiptRootPath)
+
+  $Evidence = [ordered]@{
+    found = $false
+    status = 'missing'
+    read_only_contract = $true
+    writes_repo = $false
+    writes_data = $false
+    grants_execution_authority = $false
+    grants_mutation_authority = $false
+    receipt_root = $ReceiptRootPath
+    receipt_count = 0
+    malformed_receipt_count = 0
+    clean_json = $false
+    latest_receipt_path = ''
+    receipt_id = ''
+    contract = ''
+    durable_receipt_contract_verified = $false
+    queue_count_contract = ''
+    queue_count_contract_verified = $false
+    kind = ''
+    route = ''
+    actor = ''
+    receipt_status = ''
+    selection_strategy = ''
+    projection_scope = ''
+    global_counts_included = $false
+    before_global_remediation_queue_count = $null
+    after_global_remediation_queue_count = $null
+    before_remediation_queue_count = $null
+    after_remediation_queue_count = $null
+    before_validation_receipt_reconstruction_required_count = $null
+    after_validation_receipt_reconstruction_required_count = $null
+    before_proposal_lineage_reconstruction_required_count = $null
+    after_proposal_lineage_reconstruction_required_count = $null
+    candidate_reduction_count = $null
+    validation_receipt_write_count = $null
+    proposal_lineage_write_count = $null
+    recorded_pack_count = $null
+    recorded_capability_count = $null
+    dry_run_fingerprint_matched = $false
+    writes_batch_reconstruction_receipt = $false
+    approval_authority = $false
+    promotion_authority = $false
+    execution_authority = $false
+    memory_write = $false
+    selected_reconstruction_pack_ids = @()
+  }
+
+  if ([string]::IsNullOrWhiteSpace($ReceiptRootPath) -or -not (Test-Path -LiteralPath $ReceiptRootPath -PathType Container)) {
+    return $Evidence
+  }
+
+  $Files = @(Get-ChildItem -LiteralPath $ReceiptRootPath -File -Filter '*_receipt.json' | Sort-Object LastWriteTime -Descending)
+  $Evidence.receipt_count = $Files.Count
+  foreach ($File in $Files) {
+    try {
+      $Receipt = Get-Content -LiteralPath $File.FullName -Raw | ConvertFrom-Json
+    } catch {
+      $Evidence.malformed_receipt_count += 1
+      continue
+    }
+
+    if ([string]$Receipt.contract -ne 'stage17_capability_pack_artifact_reconstruction_receipt_v1') {
+      continue
+    }
+
+    $Evidence.found = $true
+    $Evidence.status = 'ready'
+    $Evidence.clean_json = $true
+    $Evidence.latest_receipt_path = [string]$File.FullName
+    $Evidence.receipt_id = [string]$Receipt.receipt_id
+    $Evidence.contract = [string]$Receipt.contract
+    $Evidence.durable_receipt_contract_verified = $true
+    $Evidence.queue_count_contract = [string]$Receipt.queue_count_contract
+    $Evidence.queue_count_contract_verified = ([string]$Receipt.queue_count_contract -eq 'stage17_capability_pack_artifact_reconstruction_batch_queue_evidence_v1')
+    $Evidence.kind = [string]$Receipt.kind
+    $Evidence.route = [string]$Receipt.route
+    $Evidence.actor = [string]$Receipt.actor
+    $Evidence.receipt_status = [string]$Receipt.status
+    $Evidence.selection_strategy = [string]$Receipt.selection_strategy
+    $Evidence.projection_scope = [string]$Receipt.projection_scope
+    $Evidence.global_counts_included = ConvertTo-CompletionModelBool -Value $Receipt.global_counts_included
+    $Evidence.before_global_remediation_queue_count = $Receipt.before_global_remediation_queue_count
+    $Evidence.after_global_remediation_queue_count = $Receipt.after_global_remediation_queue_count
+    $Evidence.before_remediation_queue_count = $Receipt.before_remediation_queue_count
+    $Evidence.after_remediation_queue_count = $Receipt.after_remediation_queue_count
+    $Evidence.before_validation_receipt_reconstruction_required_count = $Receipt.before_validation_receipt_reconstruction_required_count
+    $Evidence.after_validation_receipt_reconstruction_required_count = $Receipt.after_validation_receipt_reconstruction_required_count
+    $Evidence.before_proposal_lineage_reconstruction_required_count = $Receipt.before_proposal_lineage_reconstruction_required_count
+    $Evidence.after_proposal_lineage_reconstruction_required_count = $Receipt.after_proposal_lineage_reconstruction_required_count
+    $Evidence.candidate_reduction_count = $Receipt.candidate_reduction_count
+    $Evidence.validation_receipt_write_count = $Receipt.validation_receipt_write_count
+    $Evidence.proposal_lineage_write_count = $Receipt.proposal_lineage_write_count
+    $Evidence.recorded_pack_count = $Receipt.recorded_pack_count
+    $Evidence.recorded_capability_count = $Receipt.recorded_capability_count
+    $Evidence.dry_run_fingerprint_matched = ConvertTo-CompletionModelBool -Value $Receipt.dry_run_confirmation.fingerprint_matched
+    $Evidence.writes_batch_reconstruction_receipt = ConvertTo-CompletionModelBool -Value $Receipt.governance.writes_batch_reconstruction_receipt
+    $Evidence.approval_authority = ConvertTo-CompletionModelBool -Value $Receipt.governance.approval_authority
+    $Evidence.promotion_authority = ConvertTo-CompletionModelBool -Value $Receipt.governance.promotion_authority
+    $Evidence.execution_authority = ConvertTo-CompletionModelBool -Value $Receipt.governance.execution_authority
+    $Evidence.memory_write = ConvertTo-CompletionModelBool -Value $Receipt.governance.memory_write
+    $Evidence.selected_reconstruction_pack_ids = @($Receipt.selected_reconstruction_pack_ids)
+    return $Evidence
+  }
+
+  return $Evidence
+}
+
 function New-CompletionLoopGuard {
   param(
     [bool]$LedgerExists,
@@ -342,6 +460,12 @@ function New-CompletionLoopGuard {
       status = 'enforced'
       required_before_continue = $true
       evidence = 'Selected Stage 17 gaps are not worker/publication handoff evidence; handoff claims require a lane readback plus a PM-owned publication marker with matching prompt hash, GitHub push or explicit no-change/blocked receipt, files changed, validation, blockers or risks, proposed commit scope, and next recommended prompt'
+    },
+    [ordered]@{
+      id = 'stage17_worker_execution_liveness_guard'
+      status = 'enforced'
+      required_before_continue = $true
+      evidence = 'Selected Stage 17 gaps are not worker execution or session-liveness evidence; worker execution claims require a worker session path, matching prompt hash, process liveness or exit code, completed or blocked status, lane readback or last message, files changed or no-change scope, and validation or blocker evidence'
     }
   )
 
@@ -409,6 +533,10 @@ function New-SelectedGapContract {
     selected_gap_is_worker_publication_handoff_evidence = $false
     worker_publication_handoff_verified = $false
     worker_publication_handoff_authority_granted = $false
+    selected_gap_is_worker_execution_liveness_evidence = $false
+    worker_session_liveness_verified = $false
+    worker_process_completion_verified = $false
+    worker_execution_readback_authority_granted = $false
     stage17_readback_authority_denied = $true
     future_stage17_apply_requires = @(
       'existing_governed_route',
@@ -465,6 +593,15 @@ function New-SelectedGapContract {
       'proposed_commit_scope',
       'next_recommended_prompt'
     )
+    future_stage17_worker_execution_liveness_claim_requires = @(
+      'worker_session_path',
+      'matching_prompt_sha256',
+      'process_alive_or_exit_code',
+      'worker_execution_completed_or_blocked_status',
+      'lane_readback_path_or_last_message',
+      'files_changed_or_no_change_scope',
+      'validation_or_blocker_evidence'
+    )
   }
 }
 
@@ -519,6 +656,7 @@ function New-NextContinueDecision {
 
 $ResolvedLedgerPath = Resolve-CompletionModelPath -Override $LedgerPath -DefaultRelativePath 'docs/operations/COMPLETION_LEDGER.md'
 $ResolvedBuildManifestPath = Resolve-CompletionModelPath -Override $BuildManifestPath -DefaultRelativePath 'docs/canonical/BUILD_MANIFEST.md'
+$ResolvedArtifactReconstructionReceiptRootPath = Resolve-CompletionModelPath -Override $ArtifactReconstructionReceiptRootPath -DefaultRelativePath 'data/artifacts/plugins/capability_packs/artifact_reconstructions'
 $LedgerExists = Test-Path -LiteralPath $ResolvedLedgerPath -PathType Leaf
 $BuildManifestExists = Test-Path -LiteralPath $ResolvedBuildManifestPath -PathType Leaf
 $LedgerText = Read-CompletionModelText -Path $ResolvedLedgerPath
@@ -532,6 +670,7 @@ $Stage17Status = Get-Stage17Status -LedgerText $LedgerText
 $Planes = Get-PlaneReadiness -BuildManifestText $BuildManifestText
 $LoopGuard = New-CompletionLoopGuard -LedgerExists $LedgerExists -BuildManifestExists $BuildManifestExists -LatestLedgerEntry $LatestLedgerEntry -Stage17Status $Stage17Status
 $NextContinueDecision = New-NextContinueDecision -LoopGuard $LoopGuard -LatestLedgerEntry $LatestLedgerEntry -Stage17Status $Stage17Status
+$Stage17ArtifactReconstructionEvidence = Get-Stage17ArtifactReconstructionEvidence -ReceiptRootPath $ResolvedArtifactReconstructionReceiptRootPath
 
 $Payload = [ordered]@{
   ok = ($LedgerExists -and $BuildManifestExists)
@@ -552,6 +691,7 @@ $Payload = [ordered]@{
   plane_readiness_snapshot = $Planes
   latest_ledger_entry = $LatestLedgerEntry
   stage17_status = $Stage17Status
+  stage17_artifact_reconstruction_evidence = $Stage17ArtifactReconstructionEvidence
   completion_percentage_model = [ordered]@{
     status = 'evidence_gated'
     numeric_baseline_declared_here = $false

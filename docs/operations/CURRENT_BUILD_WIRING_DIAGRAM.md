@@ -34,8 +34,9 @@ governance are more real than the finished operator product surface.
 Current audit status:
 
 - This diagram is a repo-truth orientation artifact, not a completion claim.
-- A Worker 4 CI/wiring pass is responsible for verifying or correcting it
-  against `src/francis/api/app.py`, the completion model, and current tests.
+- The 2026-06-20 Worker 4 CI/wiring pass verified the route-family inventory
+  against `src/francis/api/app.py`, the runtime `create_app()` route table, the
+  completion model, and the worker coordinator status readback.
 - Full CI status must be read from the latest Worker 4 packet or Lead Builder
   validation notes; this file does not imply the full gate passed.
 
@@ -184,6 +185,54 @@ This is the current wiring shape, not a finished product claim. Several mounted
 surfaces are readback-heavy or boundary-heavy. A route existing in the API does
 not imply that the corresponding product capability is complete.
 
+### Mounted Route-Family Inventory
+
+Verified on 2026-06-20 from `src/francis/api/app.py` and a runtime
+`create_app()` route table. This inventory records mounted families only; it
+does not claim product completeness, closure, or execution authority.
+
+| Prefix | Router family | Current wiring interpretation |
+| --- | --- | --- |
+| `/system` | `system` | foundation, settings, observer, ORB, and mutating-route authority readbacks |
+| `/chat` | `chat` | operator interface ingress |
+| `/chatgpt-voice` | `chatgpt_voice_bridge` | voice bridge contract, ingress, proof, and receipt surface |
+| `/completion-model` | `completion_model` | read-only completion/status projection |
+| `/attachments` | `attachments` | bounded attachment upload surface |
+| `/continuity` | `continuity` | continuity briefing, prompt context, and ledger readback |
+| `/artifacts` | `artifacts` | artifact inspection readback |
+| `/approvals` | `approvals` | governance approval request/decision surface |
+| `/plugins` | `plugins` | plugin registry, capability catalog, Stage 17 pack and apply surfaces |
+| `/trust`, `/system/trust` | `trust` | trust policy/state readbacks and guarded mutation aliases |
+| `/domains` | `domains`, `domain_learner` | domain records plus domain-learner status |
+| `/simulation` | `simulation` | simulation status surface |
+| `/operations` | `supervised_exec`, `operations` | supervised execution and operations readbacks |
+| `/resilience` | `resilience` | resilience status surface |
+| `/evolution` | `evolution` | evolution status surface |
+| `/credentials` | `credentials` | identity, scopes, credential requests, delegation readbacks |
+| `/developer-bridge` | `developer_bridge` | local developer bridge readbacks and bounded file/diff helpers |
+| `/web_learning`, `/web-learning`, `/system/web_learning`, `/system/web-learning` | `web_learning` | web-learning policy, quarantine, records, and alias surfaces |
+| `/federation` | `federation` | federation readbacks, pairing/trust contracts, and gated receipt surfaces |
+| `/forge` | `forge` | Forge proposal, promotion, validation, and readiness readbacks/decisions |
+| `/ingest` | `ingest` | code-born ingest, Lab, runner-boundary, and no-op receipt surfaces |
+| `/explanation`, `/explanations` | `explanation` | explanation records and alias surface |
+| `/memory/timeline` | `memory_timeline` | memory timeline readback |
+| `/missions` | `missions` | mission creation, advancement, receipts, and recovery surfaces |
+| `/reactor` | `reactor` | event, retry, review, deadletter, and operator-visibility surfaces |
+| `/lens` | `lens`, `lens_mcp_status` | Lens, HUD, overlay, host, OS binding, and MCP readbacks/actions |
+| `/telemetry` | `telemetry` | context, feedback, git, IDE, terminal, and status telemetry |
+| `/executor` | `executor_substrate` | executor substrate reviews and closure-decision receipts |
+| `/takeover` | `takeover` | takeover controls, panic stop, handback, and receipt surfaces |
+| `/away` | `away` | away-mode budgets, progress samples, return briefings, and receipts |
+| `/apprenticeship` | `apprenticeship` | teaching, replay, skillization, Forge handoff, and closure surfaces |
+| `/knowledge-fabric` | `knowledge_fabric` | knowledge fabric status, retrieval, retention, and closure surfaces |
+| `/trust-calibration` | `trust_calibration` | calibrated claim, visual readback, and closure-decision surfaces |
+| `/adversarial-hardening` | `adversarial_hardening` | hardening contracts, regression suites, and closure decisions |
+| `/swarm` | `swarm` | swarm contracts, completion review, and closure-decision surfaces |
+| `/managed-copies` | `managed_copies` | managed-copy route family |
+| `/industrial` | `industrial` | industrial assets, runs, safety, telemetry, and simulation surfaces |
+| `/digital_twin` | `digital_twin` | digital twin status surface |
+| `/controller` | static mount | optional controller UI if `apps/controller_ui` exists |
+
 ## Completion Model and Stage 17 Wiring
 
 ```mermaid
@@ -200,7 +249,7 @@ flowchart LR
   Route["GET /completion-model/status"]:::readback
   Decision["next_continue_decision<br/>selects latest open Stage 17 gap"]:::readback
   Denial["selected-gap contract<br/>writes_repo=false<br/>writes_data=false<br/>execution and mutation authority denied"]:::denied
-  Stage17["Stage 17 / Capability Economy<br/>proposal evidence and proposal-review queue remains open"]:::future
+  Stage17["Stage 17 / Capability Economy<br/>live quality-evidence reconstruction queue remains open"]:::future
   GovernedApply["Future Stage 17 progress must use existing governed routes<br/>dry-run confirmation, bounded scope, focused validation"]:::future
 
   Ledger --> Model
@@ -218,6 +267,9 @@ Current completion-model readback truth:
 
 - `current_phase` is `Phase 2`.
 - `stage17_status.status` is `open`.
+- The selected Stage 17 gap is the bounded live `smallest_full_pack_first`
+  artifact reconstruction apply requiring clean JSON, before/after queue counts,
+  and a durable `stage17_capability_pack_artifact_reconstruction_receipt_v1`.
 - The selected Stage 17 gap is read-only worker routing, not apply authority.
 - The selected gap is not queue-count evidence.
 - The selected gap is not proposal-evidence reference proof.
