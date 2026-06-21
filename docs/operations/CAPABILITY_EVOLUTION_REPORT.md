@@ -2663,3 +2663,106 @@ Next highest leverage action:
 - Prove the promoted capability library through the governed execution/reuse
   path without bypassing capability routing, policy, receipts, or mission
   readbacks.
+
+### Cycle 2026-06-21T19:15Z to 2026-06-21T19:34Z
+
+Scope: Stage 17 execution-readiness readback, promoted invocation reuse proof,
+promotion apply permission-gate coverage, and wiring diagram correction after
+the 2,438-capability promotion checkpoint.
+
+Active workers:
+
+- 3 worker lanes active.
+- Worker 1 produced the execution-readiness readback route and focused test.
+- Worker 2 produced promoted-evidence reuse-proof expectations.
+- Worker 3 corrected the wiring diagram and verified mounted route posture.
+- Lead reconciled Worker 1 and Worker 2 overlap in
+  `src\francis\api\routes\plugins.py`.
+
+Active drones:
+
+- 0 local drones were accepted in this cycle.
+
+Commits produced: pending at report time.
+
+Commits accepted: pending at report time.
+
+Commits rejected: 0.
+
+Validations passed:
+
+- Focused pytest passed for the Stage 17 invocation reuse proof, durable
+  invocation-audit fixture, direct dry-run invocation binding, execution
+  readiness readback, and promotion apply permission gate.
+- Ruff lint passed for the touched Stage 17 route and tests.
+- Ruff format check passed for the touched Stage 17 route and tests.
+- Whitespace diff check passed for the touched Stage 17 files and wiring
+  diagram.
+
+Validations failed or blocked:
+
+- One intermediate lead-level combined pytest run failed while Worker 1 and
+  Worker 2 overlap was only partially reconciled. The accepted fix added the
+  missing route-side post-promotion evidence guard and updated the durable
+  fixture to model a promoted receipt. The final focused run passed.
+- Full local `.\scripts\check.ps1` was attempted for this checkpoint. Branch
+  state, Ruff lint, Ruff format, and mypy passed, but pytest emitted multiple
+  failure markers and was stopped while a Lens command-palette proof subprocess
+  was active. The full local gate remains red/unproven.
+- GitHub CI remains unproven for this checkpoint.
+
+Receipts generated:
+
+- No runtime receipts were written by this read-only checkpoint.
+- Durable evidence is the completion-ledger entry, this evolution cycle, the
+  focused test results, and the route/readback contracts.
+
+Roadmap items advanced:
+
+- Stage 17 / Capability Economy.
+- Governed execution readiness.
+- Multi-context invocation reuse leverage.
+- Promotion permission gating.
+- Wiring and readback truthfulness.
+
+Capability classes advanced:
+
+- Capability Registry
+- Governance
+- Receipts
+- Missions
+- Observability
+- API Surface
+- Documentation
+- Testing
+
+New capabilities created or strengthened:
+
+- `GET /plugins/capabilities/library/execution/readiness` now reports whether
+  promoted capabilities are structurally routeable through existing dispatcher
+  paths before any dry-run or live execution claim.
+- Invocation-audit reuse proof now requires post-promotion evidence and exposes
+  that evidence in readback items.
+- Promotion apply permission-gate regression coverage now proves denial without
+  an actor and without required scopes.
+- The wiring diagram now distinguishes closed proposal/review/promotion gates
+  from the still-open execution, reuse, local check, and CI gates.
+
+Most important change:
+
+- Stage 17 now has a truthful read-only bridge from promoted capability records
+  toward governed execution probing, while reuse-proof credit is blocked unless
+  invocation receipts are tied to promotion evidence.
+
+Biggest remaining bottleneck:
+
+- A governed dry-run execution probe through existing plugin dispatch routes
+  still needs to be run and verified through invocation audit before execution
+  readiness can move from readback to proven operation.
+
+Next highest leverage action:
+
+- Select one promoted, routeable, no-approval capability from execution
+  readiness, run it through existing governed dry-run dispatch, then verify the
+  resulting invocation receipt through
+  `/plugins/capabilities/library/invocations/audit`.

@@ -90305,6 +90305,56 @@ Remaining truthful gap:
   current readbacks point to promotion-receipt/operator-surface confirmation and
   the remaining execution/reuse validation gates.
 
+### 2026-06-21 19:34Z - Stage 17 execution readiness and promoted reuse proof hardening
+
+Current posture: Stage 17 / Capability Economy remains open. This pass adds a
+read-only execution-readiness surface for the promoted capability library and
+hardens invocation-audit reuse proof so only post-promotion invocation evidence
+can count. It does not claim live execution, approval consumption, full local
+`.\scripts\check.ps1`, GitHub CI, or Stage 17 completion.
+
+What changed:
+
+- Added `GET /plugins/capabilities/library/execution/readiness` as a read-only
+  operator-facing projection over promoted registry records. The route reports
+  promoted capability counts, routeable promoted capability counts,
+  promotion-receipt linkage, trust/approval gates, structural blockers, and the
+  next smallest truthful execution gap without mutating the registry, writing
+  receipts, requesting approvals, or executing capabilities.
+- Hardened `/plugins/capabilities/library/invocations/audit` so reuse-proof
+  eligibility requires invocation receipts to carry post-promotion evidence:
+  `promotion_status=promoted` and a non-empty `promotion_receipt_id`.
+- Extended durable invocation-audit readback to expose safe promotion evidence
+  fields and reject otherwise valid operation records that lack post-promotion
+  evidence.
+- Extended the permission-gate regression test so explicit promotion apply is
+  denied without an actor and denied without the required actor scope.
+- Updated the current wiring diagram from pre-promotion posture to the current
+  promoted-route posture and named the remaining gates.
+
+Validation:
+
+- Focused pytest passed:
+  `.venv\Scripts\python.exe -m pytest tests\test_api_missions.py::test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_mission_contexts tests\test_api_plugins.py::test_plugins_invocation_audit_reads_durable_fixture_records_without_execution tests\test_api_plugins.py::test_plugins_invocation_receipts_bind_pack_selection_across_direct_dry_run_contexts tests\test_api_plugins.py::test_plugins_capability_library_execution_readiness_is_read_only_after_promotion tests\test_api_plugins_permission_gate.py::test_plugin_lifecycle_mutations_deny_without_actor_scope -q --tb=short`.
+- Ruff passed:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\api\routes\plugins.py tests\test_api_missions.py tests\test_api_plugins.py tests\test_api_plugins_permission_gate.py`.
+- Ruff format check passed:
+  `.venv\Scripts\python.exe -m ruff format --check --no-cache src\francis\api\routes\plugins.py tests\test_api_missions.py tests\test_api_plugins.py tests\test_api_plugins_permission_gate.py`.
+- Whitespace diff check passed for the touched Stage 17 files and wiring
+  diagram.
+- Full local `.\scripts\check.ps1` was attempted after the focused validation.
+  Branch state, Ruff lint, Ruff format, and mypy passed. The pytest phase later
+  emitted multiple failure markers and was stopped while a Lens command-palette
+  proof subprocess was active, so the full gate remains red/unproven for this
+  checkpoint.
+
+Remaining truthful gap:
+
+- Stage 17 remains open and still requires a governed dry-run execution probe
+  through existing `/plugins/run` or `/plugins/tools/run`, invocation-audit
+  verification of that probe, full local `.\scripts\check.ps1`, GitHub CI, and
+  final closure reconciliation.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

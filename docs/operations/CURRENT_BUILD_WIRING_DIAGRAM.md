@@ -22,7 +22,8 @@ Roadmap phase: `Phase 2`.
 Current priority supported by this diagram:
 
 - keep three worker lanes focused on Stage 17 / Capability Economy construction
-- use Worker 4 for full-project CI and wiring verification
+- use the CI/wiring worker lane for route-surface, readback, and check-gate
+  verification
 - preserve Stage 17 completion-model truth while Capability Economy work remains
   open
 - keep the governed runtime spine inspectable: plan -> gate -> execute -> trace
@@ -37,6 +38,9 @@ Current audit status:
 - The 2026-06-20 Worker 4 CI/wiring pass verified the route-family inventory
   against `src/francis/api/app.py`, the runtime `create_app()` route table, the
   completion model, and the worker coordinator status readback.
+- The 2026-06-21 Stage 17 wiring audit after commit `e9fdc353` verified the
+  promoted-route posture for proposal evidence, proposal review, explicit
+  promotion, promotion receipts, operator surface, and completion-model readback.
 - Full CI status must be read from the latest Worker 4 packet or Lead Builder
   validation notes; this file does not imply the full gate passed.
 
@@ -252,9 +256,10 @@ flowchart LR
   Evidence["Capability pack evidence<br/>metadata, quality standards, validation receipts, proposal lineage"]:::readback
   Review["Operator review decisions<br/>closed by fingerprinted receipt-only apply"]:::readback
   ProposalEvidence["Proposal evidence readiness<br/>stage17_capability_library_promotion_readiness"]:::future
-  ProposalReview["Capability library proposal review<br/>blocked until proposal evidence is ready"]:::future
-  Promotion["Capability library promotion<br/>blocked until readiness and review pass"]:::future
-  Closure["Stage 17 closure matrix<br/>criteria 1-5 ready, criterion 6 partial"]:::future
+  ProposalReview["Capability library proposal review<br/>closed for current 2,438-record surface"]:::readback
+  Promotion["Capability library explicit promotion<br/>closed for current 2,438-record surface"]:::readback
+  Receipts["Promotion receipts and operator surface<br/>confirmation readbacks"]:::readback
+  Closure["Stage 17 remaining gates<br/>execution readiness, reuse leverage, local check, CI"]:::future
 
   Ledger --> Model
   Manifest --> Model
@@ -268,25 +273,29 @@ flowchart LR
   Review --> ProposalEvidence
   ProposalEvidence --> ProposalReview
   ProposalReview --> Promotion
-  Promotion --> Closure
+  Promotion --> Receipts
+  Receipts --> Closure
 ```
 
 Current completion-model readback truth:
 
 - `current_phase` is `Phase 2`.
 - `stage17_status.status` is `open`.
-- The artifact reconstruction queue is closed again: latest durable receipt
-  `stage17_artifact_reconstruction_batch_1782065757_43749ec7_receipt` moved the
-  reopened reconstruction queue `1 -> 0` for
-  `legacy.generated.capabilityoperatorreviewdecisionplugin`.
-- Pack operator review decisions are receipt-backed and closed for the current
-  ready surface after fingerprinted bulk applies.
-- The capability library operator surface is ready for explicit promotion with
-  50 ready packs and 2,438 staged capabilities.
-- Promotion remains blocked by `stage17_capability_library_promotion_readiness`:
-  1,263 capabilities still lack proposal evidence and proposal review.
-- The closure matrix reports criteria 1 through 5 ready and criterion 6 partial;
-  this is not a Stage 17 closure claim.
+- The current proposal-evidence, proposal-review, and explicit-promotion gates
+  are closed for the 2,438 evidence-backed Stage 17 capability records.
+- The registry reports 2,438 promoted capability records, 2,438 promotion
+  receipt ids, and 2,438 enabled evidence-backed capabilities.
+- The live promotion plan readback reports
+  `status=no_staged_promotion_candidates` with zero candidate, promotable, or
+  blocked capability counts.
+- The live promotion-receipts readback reports `status=ready`, `pack_total=52`,
+  `ready_pack_count=52`, and `blocked_pack_count=0`.
+- The live library operator surface readback reports `status=promotion_complete`
+  with `ready_staged_capability_count=0` and
+  `ready_promoted_capability_count=2438`.
+- This is not a Stage 17 closure claim: execution readiness, multi-context reuse
+  leverage, full local `.\scripts\check.ps1`, GitHub CI, and final Stage 17
+  closure remain unproven.
 - The selected Stage 17 gap is read-only worker routing, not apply authority.
 - The selected gap is not queue-count evidence.
 - The selected gap is not proposal-evidence reference proof.

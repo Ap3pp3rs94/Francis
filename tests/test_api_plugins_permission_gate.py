@@ -48,6 +48,43 @@ def test_plugin_lifecycle_mutations_deny_without_actor_scope(monkeypatch, tmp_pa
     assert denied_reload_body["governance"]["reason"] == "missing_actor"
     assert not (data_root / "plugins" / "_registry.json").exists()
 
+    denied_promotion_dry_run = client.post(
+        "/plugins/capabilities/library/promotion/apply",
+        json={"reason": "missing actor explicit promotion dry run", "dry_run": True},
+    )
+    assert denied_promotion_dry_run.status_code == 200
+    denied_promotion_dry_run_body = denied_promotion_dry_run.json()
+    assert denied_promotion_dry_run_body["ok"] is False
+    assert denied_promotion_dry_run_body["applied"] is False
+    assert denied_promotion_dry_run_body["status"] == "denied"
+    assert denied_promotion_dry_run_body["error"] == "api_permission_denied"
+    assert denied_promotion_dry_run_body["governance"]["gate"] == "permission_gate"
+    assert denied_promotion_dry_run_body["governance"]["reason"] == "missing_actor"
+    assert denied_promotion_dry_run_body["governance"]["evidence"]["route"] == (
+        "/plugins/capabilities/library/promotion/apply"
+    )
+    assert not (data_root / "plugins" / "_registry.json").exists()
+
+    denied_promotion_apply = client.post(
+        "/plugins/capabilities/library/promotion/apply",
+        json={
+            "actor": "unscoped.stage17.promotion",
+            "reason": "unscoped explicit promotion apply",
+            "dry_run": False,
+            "dry_run_fingerprint": "x" * 64,
+        },
+    )
+    assert denied_promotion_apply.status_code == 200
+    denied_promotion_apply_body = denied_promotion_apply.json()
+    assert denied_promotion_apply_body["ok"] is False
+    assert denied_promotion_apply_body["applied"] is False
+    assert denied_promotion_apply_body["status"] == "denied"
+    assert denied_promotion_apply_body["error"] == "api_permission_denied"
+    assert denied_promotion_apply_body["governance"]["gate"] == "permission_gate"
+    assert denied_promotion_apply_body["governance"]["reason"] == "missing_scopes"
+    assert denied_promotion_apply_body["governance"]["evidence"]["scope_decision"]["missing_scope_count"] == 1
+    assert not (data_root / "plugins" / "_registry.json").exists()
+
 
 def test_plugin_lifecycle_mutations_allow_scoped_actor(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"

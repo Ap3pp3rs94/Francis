@@ -348,6 +348,13 @@ def test_plugins_invocation_audit_reads_durable_fixture_records_without_executio
                 "pack_reuse_key": reuse_key,
                 "supported_caller_contexts": supported_contexts,
             },
+            "evidence": {
+                "promotion_status": "promoted",
+                "promotion_receipt_id": "promotion_stage17_fixture_reuse",
+                "proposal_review_receipt_id": "proposal_review_stage17_fixture_reuse",
+                "validation_receipt_id": "validation_stage17_fixture_reuse",
+                "pack_operator_review_receipt_id": "pack_operator_review_stage17_fixture_reuse",
+            },
             "receipt_linkage": {
                 "dispatch_receipt_present": True,
                 "dispatch_status": "succeeded",
@@ -516,6 +523,7 @@ def test_plugins_invocation_audit_reads_durable_fixture_records_without_executio
     assert proof_readiness["requires_pack_selection_consistency"] is True
     assert proof_readiness["requires_mission_plugin_and_tool_operation_shapes"] is True
     assert proof_readiness["requires_operation_caller_context_readback"] is True
+    assert proof_readiness["requires_post_promotion_invocation_evidence"] is True
     assert proof_readiness["missing_evidence"] == []
     assert proof_readiness["read_only"] is True
     assert proof_readiness["writes_data"] is False
@@ -568,6 +576,9 @@ def test_plugins_invocation_audit_reads_durable_fixture_records_without_executio
         "plugin_tool_route",
     ]
     assert body["requirements"]["direct_route_receipts_required_for_mission_shape_proof"] is False
+    assert body["requirements"]["post_promotion_invocation_evidence_required_for_reuse_proof"] is True
+    assert body["requirements"]["post_promotion_invocation_evidence_requires_status_promoted"] is True
+    assert body["requirements"]["post_promotion_invocation_evidence_requires_promotion_receipt_id"] is True
     assert body["requirements"]["failed_or_blocked_statuses_do_not_count_as_reuse_proof"] is True
     assert "failed" not in body["requirements"]["reusable_operation_statuses"]
     assert "failed" not in body["requirements"]["reusable_dispatch_statuses"]
@@ -600,6 +611,10 @@ def test_plugins_invocation_audit_reads_durable_fixture_records_without_executio
     tool_item = items["tsk_stage17_fixture_tool"]
     assert plugin_item["operation_caller_context_bound"] is True
     assert tool_item["operation_caller_context_bound"] is True
+    assert plugin_item["evidence"]["promotion_status"] == "promoted"
+    assert plugin_item["evidence"]["promotion_receipt_id"] == "promotion_stage17_fixture_reuse"
+    assert plugin_item["routing_guard"]["post_promotion_evidence_bound"] is True
+    assert plugin_item["routing_guard"]["promotion_receipt_id_present"] is True
     plugin_context = plugin_item["operation_caller_context_readback"]
     assert plugin_context["contract"] == "stage17_operation_invocation_caller_context_readback_v1"
     assert plugin_context["status"] == "derived"
@@ -764,6 +779,115 @@ def test_plugins_invocation_receipts_bind_pack_selection_across_direct_dry_run_c
         "direct_plugin_route",
         "plugin_tool_route",
     }
+
+
+def test_plugins_capability_library_execution_readiness_is_read_only_after_promotion(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    monkeypatch.setattr(plugins, "_sync_generated_plugins", lambda registry: 0)
+
+    registry = plugins._default_registry()
+    for plugin_id, action, approval_required in (
+        ("stage17_ready_direct", "summarize", False),
+        ("stage17_ready_approval", "deploy", True),
+    ):
+        plugins._write_plugin(
+            registry,
+            plugins._normalize_plugin_record(
+                plugin_id,
+                {
+                    "id": plugin_id,
+                    "name": plugin_id,
+                    "version": "1.0.0",
+                    "status": "enabled",
+                    "enabled": True,
+                    "source_kind": "registry",
+                    "source_ref": f"tests.{plugin_id}",
+                    "capabilities": [
+                        {
+                            "id": f"{plugin_id}.{action}",
+                            "kind": "tool",
+                            "name": action,
+                            "action": action,
+                            "description": "Promoted Stage 17 execution-readiness fixture.",
+                            "meta": {
+                                "risk_tier": "normal",
+                                "required_trust": 0,
+                                "approvals_required": approval_required,
+                                "tool_name": f"stage17.{plugin_id}.{action}",
+                            },
+                        }
+                    ],
+                    "meta": {
+                        "pack_id": "ops.stage17_execution_readiness",
+                        "pack_version": "1.0.0",
+                        "pack_name": "Stage 17 Execution Readiness",
+                        "promotion_status": "promoted",
+                        "promotion_receipt_id": f"promotion_{plugin_id}",
+                        "proposal_review_receipt_id": f"review_{plugin_id}",
+                        "validation_receipt_id": f"validation_{plugin_id}",
+                    },
+                },
+            ),
+        )
+    plugins._save_registry(registry)
+
+    def fail_write(*args, **kwargs):  # noqa: ANN002, ANN003
+        raise AssertionError("execution readiness readback must not write registry or catalog")
+
+    def fail_execute(*args, **kwargs):  # noqa: ANN002, ANN003
+        raise AssertionError("execution readiness readback must not execute plugin capabilities")
+
+    monkeypatch.setattr(plugins, "_write_plugin", fail_write)
+    monkeypatch.setattr(plugins, "_save_registry", fail_write)
+    monkeypatch.setattr(plugins, "_save_registry_and_catalog", fail_write)
+    monkeypatch.setattr(plugins, "_execute_plugin_action", fail_execute)
+    monkeypatch.setattr(plugins, "_request_plugin_approval", fail_execute)
+
+    client = TestClient(create_app())
+    response = client.get("/plugins/capabilities/library/execution/readiness")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["kind"] == "plugin.capability_library.execution_readiness"
+    assert body["contract"] == "stage17_capability_library_execution_readiness_readback_v1"
+    assert body["status"] == "ready_for_governed_approval_probe"
+    assert body["promoted_capability_count"] == 2
+    assert body["routeable_promoted_capability_count"] == 2
+    assert body["structurally_blocked_capability_count"] == 0
+    assert body["promotion_receipt_linked_capability_count"] == 2
+    assert body["approval_required_capability_count"] == 1
+    assert body["current_trust_blocked_capability_count"] == 0
+    assert body["immediate_dry_run_capability_count"] == 1
+    assert body["gate_counts"] == {"approval_required": 1}
+    assert body["blocker_counts"] == {}
+    assert body["requirements"]["actual_execution_proof_required_for_stage17_closure"] is True
+    assert body["requirements"]["trust_gate_remains_enforced_by_plugins_run"] is True
+    assert body["requirements"]["approval_gate_remains_enforced_by_plugins_run"] is True
+    assert body["governance"]["read_only"] is True
+    assert body["governance"]["does_not_write_receipts"] is True
+    assert body["governance"]["does_not_request_approvals"] is True
+    assert body["governance"]["does_not_execute_capabilities"] is True
+    assert body["governance"]["execution_authority"] is False
+    assert body["governance"]["memory_write"] is False
+    assert body["catalog"]["catalog_written"] is False
+    assert body["catalog"]["compiled_in_memory"] is True
+    assert body["capabilities_truncated"] is False
+    assert {item["plugin_id"] for item in body["capabilities"]} == {
+        "stage17_ready_direct",
+        "stage17_ready_approval",
+    }
+    assert all(item["routeable_through_existing_dispatcher"] is True for item in body["capabilities"])
 
 
 def test_plugins_atomic_write_json_uses_unique_temp_siblings(monkeypatch, tmp_path: Path) -> None:

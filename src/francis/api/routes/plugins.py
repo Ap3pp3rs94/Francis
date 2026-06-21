@@ -221,6 +221,8 @@ _CAPABILITY_LIBRARY_PROPOSAL_REVIEW_APPLY_READINESS_ROUTE = (
 )
 _CAPABILITY_LIBRARY_PROPOSAL_REVIEW_APPLY_ROUTE = "/plugins/capabilities/library/proposal-review/apply"
 _CAPABILITY_LIBRARY_EXPLICIT_PROMOTION_APPLY_ROUTE = "/plugins/capabilities/library/promotion/apply"
+_CAPABILITY_LIBRARY_EXECUTION_READINESS_ROUTE = "/plugins/capabilities/library/execution/readiness"
+_CAPABILITY_LIBRARY_EXECUTION_READINESS_CONTRACT = "stage17_capability_library_execution_readiness_readback_v1"
 _PLUGIN_LIFECYCLE_REPAIR_ROUTE = "/plugins/lifecycle/repair"
 _PLUGIN_LIFECYCLE_REPAIR_HISTORY_ROUTE = "/plugins/lifecycle/repair/history"
 _CAPABILITY_LIBRARY_PROPOSAL_REVIEW_DECISIONS = {
@@ -4623,6 +4625,180 @@ def _capability_library_operator_surface_projection(
             "does_not_promote_capabilities": True,
             "does_not_enable_capabilities": True,
             "does_not_execute_capabilities": True,
+            "promotion_authority": False,
+            "execution_authority": False,
+            "approval_authority": False,
+            "memory_write": False,
+        },
+        "next_smallest_truthful_gap": next_gap,
+    }
+
+
+def _capability_library_execution_readiness_projection(
+    *,
+    registry: dict[str, Any],
+    generated_plugin_sync_performed: bool,
+    preview_limit: int = _CAPABILITY_LIBRARY_OPERATOR_SURFACE_PACK_PREVIEW_LIMIT,
+) -> dict[str, Any]:
+    sync_performed = bool(generated_plugin_sync_performed)
+    plugins = registry.get("plugins") if isinstance(registry.get("plugins"), dict) else {}
+    current_trust = _current_trust_level()
+    promoted_capability_count = 0
+    routeable_capability_count = 0
+    structurally_blocked_capability_count = 0
+    approval_required_capability_count = 0
+    current_trust_blocked_capability_count = 0
+    immediate_dry_run_capability_count = 0
+    promotion_receipt_linked_capability_count = 0
+    pack_keys: set[str] = set()
+    blocker_counts: dict[str, int] = {}
+    gate_counts: dict[str, int] = {"approval_required": 0, "current_trust_below_required": 0}
+    preview: list[dict[str, Any]] = []
+
+    for plugin_id, raw in sorted(plugins.items()):
+        if not isinstance(raw, dict):
+            continue
+        plugin = _normalize_plugin_record(_safe_str(plugin_id).strip(), raw)
+        meta = dict(plugin.get("meta") or {}) if isinstance(plugin.get("meta"), dict) else {}
+        promotion_status = _safe_str(meta.get("promotion_status")).strip().lower()
+        if promotion_status != "promoted":
+            continue
+
+        lifecycle = _plugin_lifecycle_state(plugin, {"caller_context": "direct_plugin_route"})
+        compatibility = _plugin_effective_core_compatibility(plugin["id"], plugin, meta)
+        promotion_receipt_id = _safe_str(meta.get("promotion_receipt_id")).strip()
+        pack_id = _safe_str(meta.get("pack_id") or meta.get("capability_pack_id")).strip()
+        pack_version = _safe_str(meta.get("pack_version") or meta.get("capability_pack_version")).strip()
+        pack_key = f"{pack_id}@{pack_version}" if pack_id or pack_version else f"unpacked:{plugin['id']}"
+        pack_keys.add(pack_key)
+        for capability in _capabilities_for_plugin(plugin["id"], plugin.get("capabilities")):
+            action = _safe_str(capability.get("action")).strip() or _safe_str(capability.get("name")).strip()
+            resolved_action = _resolve_plugin_action(plugin, action)
+            cap_meta = capability.get("meta") if isinstance(capability.get("meta"), dict) else {}
+            risk_tier = _safe_str(cap_meta.get("risk_tier")).strip().lower() or "normal"
+            required_trust = _required_trust_for_capability(capability, risk_tier)
+            approval_required = _approval_required_for_capability(capability, risk_tier)
+            capability_id = _safe_str(capability.get("id")).strip() or f"{plugin['id']}.{resolved_action or action}"
+            blockers: list[str] = []
+            if not bool(plugin.get("enabled")) or _safe_str(plugin.get("status")).strip() != "enabled":
+                blockers.append("plugin_not_enabled")
+            if not promotion_receipt_id:
+                blockers.append("promotion_receipt_missing")
+            if bool(lifecycle.get("blocks_execution")):
+                blockers.append("lifecycle_blocks_execution")
+            if not bool(compatibility.get("compatible")):
+                blockers.append("core_compatibility_blocked")
+            if not resolved_action:
+                blockers.append("action_not_routable")
+
+            promoted_capability_count += 1
+            if promotion_receipt_id:
+                promotion_receipt_linked_capability_count += 1
+            for blocker in blockers:
+                blocker_counts[blocker] = blocker_counts.get(blocker, 0) + 1
+            if approval_required:
+                approval_required_capability_count += 1
+                gate_counts["approval_required"] += 1
+            if current_trust < required_trust:
+                current_trust_blocked_capability_count += 1
+                gate_counts["current_trust_below_required"] += 1
+            routeable = not blockers
+            if routeable:
+                routeable_capability_count += 1
+            else:
+                structurally_blocked_capability_count += 1
+            if routeable and not approval_required and current_trust >= required_trust:
+                immediate_dry_run_capability_count += 1
+            if len(preview) < max(1, min(preview_limit, 100)):
+                preview.append(
+                    {
+                        "plugin_id": plugin["id"],
+                        "capability_id": capability_id,
+                        "action": resolved_action or action,
+                        "pack_id": pack_id,
+                        "pack_version": pack_version,
+                        "promotion_status": promotion_status,
+                        "promotion_receipt_id": promotion_receipt_id,
+                        "enabled": bool(plugin.get("enabled")),
+                        "lifecycle_status": _safe_str(lifecycle.get("status")).strip(),
+                        "core_compatibility_status": _safe_str(compatibility.get("status")).strip(),
+                        "risk_tier": risk_tier,
+                        "required_trust": required_trust,
+                        "current_trust": current_trust,
+                        "approval_required": approval_required,
+                        "routeable_through_existing_dispatcher": routeable,
+                        "current_operator_trust_ready": current_trust >= required_trust,
+                        "blockers": blockers,
+                    }
+                )
+
+    if not promoted_capability_count:
+        status = "no_promoted_capabilities"
+        next_gap = "stage17_capability_library_promotion_receipts"
+    elif structurally_blocked_capability_count:
+        status = "blocked"
+        next_gap = "stage17_capability_execution_readiness_blockers"
+    elif current_trust_blocked_capability_count:
+        status = "operator_trust_blocked"
+        next_gap = "raise_trust_or_select_lower_risk_execution_probe"
+    elif approval_required_capability_count:
+        status = "ready_for_governed_approval_probe"
+        next_gap = "stage17_governed_execution_approval_probe"
+    else:
+        status = "ready_for_governed_dry_run_probe"
+        next_gap = "stage17_governed_execution_dry_run_probe"
+
+    return {
+        "ok": True,
+        "kind": "plugin.capability_library.execution_readiness",
+        "stage": "Stage 17 / Capability Economy",
+        "contract": _CAPABILITY_LIBRARY_EXECUTION_READINESS_CONTRACT,
+        "status": status,
+        "promoted_capability_count": promoted_capability_count,
+        "promoted_pack_count": len(pack_keys),
+        "routeable_promoted_capability_count": routeable_capability_count,
+        "structurally_blocked_capability_count": structurally_blocked_capability_count,
+        "promotion_receipt_linked_capability_count": promotion_receipt_linked_capability_count,
+        "approval_required_capability_count": approval_required_capability_count,
+        "current_trust_blocked_capability_count": current_trust_blocked_capability_count,
+        "immediate_dry_run_capability_count": immediate_dry_run_capability_count,
+        "current_trust": current_trust,
+        "blocker_counts": blocker_counts,
+        "gate_counts": {key: value for key, value in gate_counts.items() if value},
+        "capabilities": preview,
+        "capabilities_truncated": promoted_capability_count > len(preview),
+        "capability_preview_limit": max(1, min(preview_limit, 100)),
+        "routes": {
+            "execution_route": "/plugins/run",
+            "tool_execution_route": "/plugins/tools/run",
+            "invocation_audit_route": "/plugins/capabilities/library/invocations/audit",
+            "operator_surface_route": "/plugins/capabilities/library/operator/surface",
+            "promotion_receipts_route": "/plugins/capabilities/packs/promotion/receipts",
+        },
+        "requirements": {
+            "derived_from_promoted_registry_records": True,
+            "promotion_receipt_required_for_routeable_readiness": True,
+            "enabled_status_required": True,
+            "lifecycle_must_not_block_execution": True,
+            "core_compatibility_must_be_ready": True,
+            "action_must_resolve_through_existing_dispatcher": True,
+            "trust_gate_remains_enforced_by_plugins_run": True,
+            "approval_gate_remains_enforced_by_plugins_run": True,
+            "dry_run_still_uses_existing_plugin_dispatcher": True,
+            "actual_execution_proof_required_for_stage17_closure": True,
+        },
+        "governance": {
+            "read_only": True,
+            "operator_facing": True,
+            "generated_plugin_registry_sync_performed": sync_performed,
+            "does_not_mutate_registry": True,
+            "does_not_write_receipts": True,
+            "does_not_request_approvals": True,
+            "does_not_consume_approvals": True,
+            "does_not_promote_capabilities": True,
+            "does_not_enable_capabilities": True,
+            "does_not_execute_capabilities": True,
+            "uses_existing_plugin_dispatcher_for_future_probe": True,
             "promotion_authority": False,
             "execution_authority": False,
             "approval_authority": False,
@@ -11133,6 +11309,10 @@ def _capability_pack_invocation_routing_guard(
     receipt_linkage = invocation.get("receipt_linkage") if isinstance(invocation.get("receipt_linkage"), dict) else {}
     reuse = invocation.get("reuse") if isinstance(invocation.get("reuse"), dict) else {}
     selection_binding = _capability_pack_invocation_selection_binding(invocation)
+    evidence = invocation.get("evidence") if isinstance(invocation.get("evidence"), dict) else {}
+    promotion_status = _safe_str(evidence.get("promotion_status")).strip().lower()
+    promotion_receipt_id = _safe_str(evidence.get("promotion_receipt_id")).strip()
+    post_promotion_evidence_bound = promotion_status == "promoted" and bool(promotion_receipt_id)
     if capability == "plugin.tool.run":
         reuse_operation_capability_field = "operation_tool_capability"
         reuse_caller_context_field = "mission_tool_context"
@@ -11268,6 +11448,8 @@ def _capability_pack_invocation_routing_guard(
         reject_reasons.append("dispatch_status_not_reusable")
     if not governance_bound:
         reject_reasons.append("governance_boundary_missing")
+    if not post_promotion_evidence_bound:
+        reject_reasons.append("post_promotion_evidence_missing")
 
     return {
         "contract": _CAPABILITY_PACK_INVOCATION_ROUTING_GUARD_CONTRACT,
@@ -11309,6 +11491,9 @@ def _capability_pack_invocation_routing_guard(
         "dispatch_receipt_present": dispatch_receipt_present,
         "dispatch_run_id_present": dispatch_run_id_present,
         "dispatch_trace_id_present": dispatch_trace_id_present,
+        "promotion_status": promotion_status or None,
+        "promotion_receipt_id_present": bool(promotion_receipt_id),
+        "post_promotion_evidence_bound": post_promotion_evidence_bound,
         "governance_bound": governance_bound,
         "uses_existing_plugin_dispatcher": uses_existing_plugin_dispatcher,
         "new_authority_granted_by_receipt": new_authority_granted_by_receipt,
@@ -11478,6 +11663,7 @@ def _capability_pack_invocation_audit_projection(
         receipt_linkage = (
             invocation.get("receipt_linkage") if isinstance(invocation.get("receipt_linkage"), dict) else {}
         )
+        evidence = invocation.get("evidence") if isinstance(invocation.get("evidence"), dict) else {}
         selection = invocation.get("pack_selection") if isinstance(invocation.get("pack_selection"), dict) else {}
         reuse = invocation.get("reuse") if isinstance(invocation.get("reuse"), dict) else {}
         governance = invocation.get("governance") if isinstance(invocation.get("governance"), dict) else {}
@@ -11515,6 +11701,13 @@ def _capability_pack_invocation_audit_projection(
             ).strip(),
             "pack_selection_source": _safe_str(selection.get("source") or reuse.get("pack_selection_source")).strip(),
             "pack_selection_binding": selection_binding,
+            "evidence": {
+                "promotion_status": _safe_str(evidence.get("promotion_status")).strip(),
+                "promotion_receipt_id": _safe_str(evidence.get("promotion_receipt_id")).strip(),
+                "proposal_review_receipt_id": _safe_str(evidence.get("proposal_review_receipt_id")).strip(),
+                "validation_receipt_id": _safe_str(evidence.get("validation_receipt_id")).strip(),
+                "pack_operator_review_receipt_id": _safe_str(evidence.get("pack_operator_review_receipt_id")).strip(),
+            },
             "dispatch_status": _safe_str(receipt_linkage.get("dispatch_status")).strip(),
             "run_id": _safe_str(receipt_linkage.get("run_id") or data.get("run_id")).strip(),
             "trace_id": _safe_str(receipt_linkage.get("trace_id") or data.get("trace_id")).strip(),
@@ -11703,6 +11896,7 @@ def _capability_pack_invocation_audit_projection(
             "requires_pack_selection_consistency": True,
             "requires_mission_plugin_and_tool_operation_shapes": True,
             "requires_operation_caller_context_readback": True,
+            "requires_post_promotion_invocation_evidence": True,
             "missing_evidence": []
             if governed_reuse_proof_ready
             else [
@@ -11796,6 +11990,9 @@ def _capability_pack_invocation_audit_projection(
             "operation_caller_context_readback_required_for_reuse_proof": True,
             "operation_caller_context_readback_scope": "operation_record_metadata_for_invocation_audit",
             "operation_input_caller_context_must_match_when_present": True,
+            "post_promotion_invocation_evidence_required_for_reuse_proof": True,
+            "post_promotion_invocation_evidence_requires_status_promoted": True,
+            "post_promotion_invocation_evidence_requires_promotion_receipt_id": True,
             "reuse_metadata_must_bind_operation_capability": True,
             "reuse_metadata_must_bind_mission_caller_context": True,
             "invocation_receipt_caller_context_binding_contract": (
@@ -15197,6 +15394,23 @@ def capability_library_invocations_audit(
         return audit
     except Exception as exc:
         return {"ok": False, "kind": "plugin.capability_library.invocations.audit", "error": api_error_message(exc)}
+
+
+@router.get("/capabilities/library/execution/readiness")
+def capability_library_execution_readiness() -> dict[str, object]:
+    try:
+        registry = _load_registry()
+        catalog_snapshot = _capability_pack_readback_catalog_snapshot(registry)
+        catalog = catalog_snapshot.get("catalog") if isinstance(catalog_snapshot.get("catalog"), dict) else {}
+        return {
+            **_capability_library_execution_readiness_projection(
+                registry=registry,
+                generated_plugin_sync_performed=False,
+            ),
+            "catalog": catalog,
+        }
+    except Exception as exc:
+        return {"ok": False, "kind": "plugin.capability_library.execution_readiness", "error": api_error_message(exc)}
 
 
 @router.get("/capabilities/library/promotion/plan")

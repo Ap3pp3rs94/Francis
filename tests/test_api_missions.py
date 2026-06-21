@@ -1282,6 +1282,39 @@ def test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_missio
         encoding="utf-8",
     )
 
+    missing_promotion_operation_id = "tsk_stage17_missing_promotion_evidence"
+    missing_promotion_invocation = dict(mission_invocation)
+    missing_promotion_evidence = dict(mission_invocation["evidence"])
+    missing_promotion_evidence["promotion_status"] = "staged"
+    missing_promotion_evidence["promotion_receipt_id"] = ""
+    missing_promotion_invocation["evidence"] = missing_promotion_evidence
+    missing_promotion_output = dict(mission_output)
+    missing_promotion_receipt = dict(mission_output["receipt"])
+    missing_promotion_receipt["capability_pack_invocation"] = missing_promotion_invocation
+    missing_promotion_output["receipt"] = missing_promotion_receipt
+    missing_promotion_output["capability_pack_invocation"] = missing_promotion_invocation
+    missing_promotion_task_dir = data_root / "tasks" / missing_promotion_operation_id
+    missing_promotion_task_dir.mkdir(parents=True)
+    (missing_promotion_task_dir / "record.json").write_text(
+        json.dumps(
+            {
+                "task_id": missing_promotion_operation_id,
+                "status": "completed",
+                "capability": "plugin.run",
+                "requester_id": "test.missions.trace",
+                "created_at": "2026-06-20T17:00:05+00:00",
+                "updated_at": "2026-06-20T17:00:06+00:00",
+                "inputs": {
+                    "mission_id": mission_id,
+                    "meta": {"mission_id": mission_id, "caller_context": "mission_linked_operation"},
+                },
+                "result": {"data": missing_promotion_output},
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
     tampered_reuse_operation_id = "tsk_stage17_bad_reuse_metadata"
     tampered_reuse_invocation = dict(mission_tool_invocation)
     tampered_reuse = dict(mission_tool_invocation["reuse"])
@@ -1389,13 +1422,15 @@ def test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_missio
     assert audit_body["readback_scope"] == "operation_outputs_with_embedded_capability_pack_invocation_receipts"
     assert audit_body["filters"]["pack_id"] == pack_id
     assert audit_body["total_invocation_count"] == 3
-    assert audit_body["rejected_invocation_count"] == 6
+    assert audit_body["rejected_invocation_count"] == 7
     assert audit_body["returned_invocation_count"] == 3
-    assert audit_body["returned_rejected_invocation_count"] == 6
+    assert audit_body["returned_rejected_invocation_count"] == 7
     assert audit_body["pack_count"] == 1
     assert audit_body["context_count"] == 2
     assert audit_body["contexts"] == ["mission_linked_operation", "mission_linked_tool_operation"]
     assert audit_body["pack_reuse_keys"] == [direct_invocation["pack_reuse_key"]]
+    assert audit_body["proof_readiness"]["requires_post_promotion_invocation_evidence"] is True
+    assert audit_body["proof_readiness"]["status"] == "reuse_proof_ready"
     reuse_proof = audit_body["reuse_proof"]
     expected_selection_binding = {
         "contract": "stage17_capability_pack_invocation_selection_v1",
@@ -1460,6 +1495,9 @@ def test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_missio
         audit_body["requirements"]["operation_input_context_contract"]
         == "stage17_operation_invocation_caller_context_readback_v1"
     )
+    assert audit_body["requirements"]["post_promotion_invocation_evidence_required_for_reuse_proof"] is True
+    assert audit_body["requirements"]["post_promotion_invocation_evidence_requires_status_promoted"] is True
+    assert audit_body["requirements"]["post_promotion_invocation_evidence_requires_promotion_receipt_id"] is True
     assert audit_body["requirements"]["operation_input_caller_context_must_match_when_present"] is True
     assert audit_body["requirements"]["reuse_metadata_must_bind_operation_capability"] is True
     assert audit_body["requirements"]["reuse_metadata_must_bind_mission_caller_context"] is True
@@ -1501,6 +1539,8 @@ def test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_missio
     assert audit_item["pack_reuse_key"] == direct_invocation["pack_reuse_key"]
     assert audit_item["pack_selection_contract"] == "stage17_capability_pack_invocation_selection_v1"
     assert audit_item["pack_selection_source"] == "plugin_registry_metadata"
+    assert audit_item["evidence"]["promotion_status"] == "promoted"
+    assert audit_item["evidence"]["promotion_receipt_id"] == promotion_receipt_id
     assert audit_item["run_id"] == mission_invocation["receipt_linkage"]["run_id"]
     assert audit_item["trace_id"] == mission_invocation["receipt_linkage"]["trace_id"]
     assert audit_item["receipt_linkage"]["dispatch_receipt_present"] is True
@@ -1521,6 +1561,9 @@ def test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_missio
     assert audit_item["routing_guard"]["dispatch_receipt_present"] is True
     assert audit_item["routing_guard"]["dispatch_run_id_present"] is True
     assert audit_item["routing_guard"]["dispatch_trace_id_present"] is True
+    assert audit_item["routing_guard"]["promotion_status"] == "promoted"
+    assert audit_item["routing_guard"]["promotion_receipt_id_present"] is True
+    assert audit_item["routing_guard"]["post_promotion_evidence_bound"] is True
     assert audit_item["routing_guard"]["governance_bound"] is True
     assert audit_item["routing_guard"]["eligible_for_reuse_proof"] is True
     assert audit_item["routing_guard"]["reject_reasons"] == []
@@ -1597,6 +1640,7 @@ def test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_missio
         tampered_operation_id,
         tampered_input_operation_id,
         missing_linkage_operation_id,
+        missing_promotion_operation_id,
         tampered_reuse_operation_id,
         tampered_selection_operation_id,
         unsupported_operation_id,
@@ -1646,6 +1690,17 @@ def test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_missio
         "dispatch_receipt_linkage_missing",
         "dispatch_status_not_reusable",
     ]
+    missing_promotion_item = rejected_items[missing_promotion_operation_id]
+    assert missing_promotion_item["operation_capability"] == "plugin.run"
+    assert missing_promotion_item["caller_context"] == "mission_linked_operation"
+    assert missing_promotion_item["pack_reuse_key"] == direct_invocation["pack_reuse_key"]
+    assert missing_promotion_item["evidence"]["promotion_status"] == "staged"
+    assert missing_promotion_item["evidence"]["promotion_receipt_id"] == ""
+    assert missing_promotion_item["routing_guard"]["promotion_status"] == "staged"
+    assert missing_promotion_item["routing_guard"]["promotion_receipt_id_present"] is False
+    assert missing_promotion_item["routing_guard"]["post_promotion_evidence_bound"] is False
+    assert missing_promotion_item["routing_guard"]["eligible_for_reuse_proof"] is False
+    assert missing_promotion_item["routing_guard"]["reject_reasons"] == ["post_promotion_evidence_missing"]
     rejected_reuse_item = rejected_items[tampered_reuse_operation_id]
     assert rejected_reuse_item["operation_capability"] == "plugin.tool.run"
     assert rejected_reuse_item["caller_context"] == "mission_linked_tool_operation"
