@@ -16,6 +16,9 @@ param(
   [ValidateSet('Visible', 'Minimized', 'Background', 'Exec')]
   [string]$WorkerLaunchMode = 'Exec',
 
+  [ValidateRange(1, 4)]
+  [int]$MaxWorkers = 3,
+
   [string]$StateRoot = '',
 
   [switch]$NoLaunch,
@@ -49,6 +52,7 @@ $Workers = @(
   'worker-3-voice-receipts',
   'worker-4-stage17-completion'
 )
+$ActiveWorkers = @($Workers | Select-Object -First $MaxWorkers)
 
 function Initialize-CoordinatorStateRoot {
   New-Item -ItemType Directory -Force -Path $StateRoot | Out-Null
@@ -168,17 +172,19 @@ function Get-RecursiveSwarmDoctrineText {
 Hierarchy:
 
 - Lead Builder controls roadmap direction, integration, validation, commits, and pushes.
-- Four workers own roadmap-aligned lanes.
-- Each worker may use up to four short-lived drones per cycle.
+- Three active Codex workers own roadmap-aligned lanes by default.
+- Worker 4 is parked unless the operator explicitly starts the coordinator with -MaxWorkers 4.
+- Each worker may use up to four local-model short-lived drones per cycle.
 - Drones complete narrow tasks, produce evidence packets, and terminate.
+- Local drones should use scripts/francis-local-drone.ps1, defaulting to the installed llama3.2:3b Ollama model.
 
 Drone lifecycle:
 
-1. Receive one narrow task.
-2. Inspect only relevant files.
-3. Make the smallest coherent change or analysis.
-4. Validate the touched path.
-5. Report files inspected, files changed, exact change, validation run, capability classes advanced, risks, and recommended next step.
+1. Receive one narrow task plus bounded worker-supplied context.
+2. Inspect only that context and any explicitly provided file excerpts.
+3. Make the smallest coherent analysis.
+4. Recommend focused validation for the worker to run.
+5. Report files inspected, files changed, exact change or analysis, validation to run, capability classes advanced, risks, and recommended next step.
 6. Stop.
 
 Drone limits:
@@ -188,12 +194,13 @@ Drone limits:
 - Drones do not claim completion.
 - Drones do not commit, push, restart Continuum, or write publication markers.
 - Drone output is evidence only until the worker verifies it.
+- Unavailable local-model output must be recorded as unavailable and rejected as accepted evidence.
 
 Worker responsibility:
 
 - Use no more than four drones per cycle.
 - Compare drone outputs.
-- Reject weak, duplicate, or unvalidated work.
+- Reject unavailable, weak, duplicate, or unvalidated work.
 - Verify accepted claims independently.
 - Compress accepted output into one worker packet.
 
@@ -506,7 +513,7 @@ function Invoke-CoordinatorIteration {
   $Before = Get-LauncherStatus
   $BuildSnapshot = Get-CoordinatorBuildSnapshot
   $Actions = @()
-  foreach ($WorkerId in $Workers) {
+  foreach ($WorkerId in $ActiveWorkers) {
     $Worker = Select-CoordinatorWorker -WorkersPayload $Before.workers -WorkerId $WorkerId
     if ($null -eq $Worker) {
       $NeedsPrompt = $true
@@ -578,7 +585,7 @@ function Invoke-CoordinatorIteration {
     sandbox = $Sandbox
     model = $Model
     worker_launch_mode = $WorkerLaunchMode
-    worker_count = $Workers.Count
+    worker_count = $ActiveWorkers.Count
     actions = $Actions
     project_manager_dispatch = $true
     dispatch_root = $DispatchRoot
@@ -587,7 +594,7 @@ function Invoke-CoordinatorIteration {
     re_prompt_publication_gate_required = $true
     recursive_swarm = [ordered]@{
       enabled = $true
-      max_workers = 4
+      max_workers = $MaxWorkers
       max_drones_per_worker = 4
       drones_own_architecture = $false
       drones_claim_completion = $false
@@ -614,6 +621,7 @@ function Invoke-CoordinatorIteration {
       no_launch = [bool]$NoLaunch
       force_prompt_all = [bool]$ForcePromptAll
       worker_launch_mode = $WorkerLaunchMode
+      max_workers = $MaxWorkers
       stop_flag_path = $StopFlagPath
       receipt_path = $ReceiptPath
       workers = $After.workers
@@ -625,7 +633,7 @@ function Invoke-CoordinatorIteration {
       re_prompt_publication_gate_required = $true
       recursive_swarm = [ordered]@{
         enabled = $true
-        max_workers = 4
+        max_workers = $MaxWorkers
         max_drones_per_worker = 4
         drones_own_architecture = $false
         drones_claim_completion = $false
@@ -709,6 +717,8 @@ if ($Mode -eq 'Start') {
     $Sandbox,
     '-WorkerLaunchMode',
     $WorkerLaunchMode,
+    '-MaxWorkers',
+    ([string]$MaxWorkers),
     '-StateRoot',
     $StateRoot
   )
@@ -732,6 +742,7 @@ if ($Mode -eq 'Start') {
       sandbox = $Sandbox
       model = $Model
       worker_launch_mode = $WorkerLaunchMode
+      max_workers = $MaxWorkers
       no_launch = [bool]$NoLaunch
       force_prompt_all = [bool]$ForcePromptAll
     })
@@ -748,6 +759,7 @@ if ($Mode -eq 'Start') {
     max_iterations = $MaxIterations
     no_launch = [bool]$NoLaunch
     force_prompt_all = [bool]$ForcePromptAll
+    max_workers = $MaxWorkers
   } | ConvertTo-Json -Depth 8
   exit 0
 }
@@ -764,6 +776,7 @@ Add-CoordinatorReceipt -Payload ([ordered]@{
     sandbox = $Sandbox
     model = $Model
     worker_launch_mode = $WorkerLaunchMode
+    max_workers = $MaxWorkers
     no_launch = [bool]$NoLaunch
     force_prompt_all = [bool]$ForcePromptAll
   })
@@ -800,6 +813,7 @@ Write-CoordinatorJson -Path $StatusPath -Payload ([ordered]@{
     max_iterations = $MaxIterations
     no_launch = [bool]$NoLaunch
     worker_launch_mode = $WorkerLaunchMode
+    max_workers = $MaxWorkers
     stop_flag_path = $StopFlagPath
     receipt_path = $ReceiptPath
     workers = (Get-LauncherStatus).workers
@@ -810,7 +824,7 @@ Write-CoordinatorJson -Path $StatusPath -Payload ([ordered]@{
     re_prompt_publication_gate_required = $true
     recursive_swarm = [ordered]@{
       enabled = $true
-      max_workers = 4
+      max_workers = $MaxWorkers
       max_drones_per_worker = 4
       drones_own_architecture = $false
       drones_claim_completion = $false

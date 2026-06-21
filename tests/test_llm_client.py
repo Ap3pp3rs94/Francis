@@ -50,6 +50,28 @@ def test_generate_prefers_francis_ollama_env(monkeypatch) -> None:
     }
 
 
+def test_generate_accepts_explicit_model_override(monkeypatch) -> None:
+    monkeypatch.setenv("FRANCIS_OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+    monkeypatch.setenv("FRANCIS_LLM_CHAT_MODEL", "francis-chat")
+
+    captured: dict[str, object] = {}
+
+    def fake_post(url: str, *, json: dict[str, object], timeout: int) -> _FakeResponse:
+        captured["url"] = url
+        captured["json"] = json
+        captured["timeout"] = timeout
+        return _FakeResponse({"response": "ok"})
+
+    monkeypatch.setattr(client.httpx, "post", fake_post)
+
+    assert client.generate("say only ok", model="llama3.2:3b", timeout_seconds=12) == "ok"
+    assert captured["url"] == "http://127.0.0.1:11434/api/generate"
+    assert captured["timeout"] == 12
+    payload = captured["json"]
+    assert isinstance(payload, dict)
+    assert payload["model"] == "llama3.2:3b"
+
+
 def test_resolve_ollama_config_falls_back_to_legacy_env(monkeypatch) -> None:
     monkeypatch.delenv("FRANCIS_OLLAMA_BASE_URL", raising=False)
     monkeypatch.delenv("FRANCIS_LLM_CHAT_MODEL", raising=False)

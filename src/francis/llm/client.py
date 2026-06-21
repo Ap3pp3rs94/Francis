@@ -73,15 +73,24 @@ def resolve_ollama_options() -> dict[str, int]:
     }
 
 
-def generate(prompt: str) -> str:
-    base, model = resolve_ollama_config()
-    timeout_seconds = resolve_ollama_timeout_seconds()
+def generate(
+    prompt: str,
+    *,
+    base_url: str | None = None,
+    model: str | None = None,
+    timeout_seconds: int | None = None,
+    options: dict[str, int] | None = None,
+) -> str:
+    resolved_base, resolved_model = resolve_ollama_config()
+    base = (base_url or resolved_base).rstrip("/")
+    model = model or resolved_model
+    timeout_seconds = timeout_seconds or resolve_ollama_timeout_seconds()
     url = f"{base}/api/generate"
     payload: dict[str, Any] = {
         "model": model,
         "prompt": prompt,
         "stream": False,
-        "options": resolve_ollama_options(),
+        "options": options or resolve_ollama_options(),
     }
     try:
         r = httpx.post(url, json=payload, timeout=timeout_seconds)

@@ -7,7 +7,7 @@ The worker model is intentionally bounded:
 
 - one active Codex child per worker lane
 - one roadmap-aligned lane per worker
-- up to four short-lived drones per worker cycle when useful
+- up to four local-model short-lived drones per worker cycle when useful
 - no uncontrolled recursive agents or self-spawning loops
 - no Continuum restart unless the operator explicitly asks
 - no Orb visual changes
@@ -22,14 +22,19 @@ the bounded slice.
 Hierarchy:
 
 - Lead Builder controls direction, integration, validation, commits, and pushes.
-- Four workers own roadmap-aligned lanes.
-- Each worker may use up to four short-lived drones per cycle.
+- Three active Codex workers own roadmap-aligned lanes by default.
+- A fourth CI/wiring lane remains parked unless explicitly enabled.
+- Each worker may use up to four local-model short-lived drones per cycle.
 - Drones complete narrow tasks, produce evidence packets, and terminate.
 
-Drones do not own architecture, decide roadmap, claim completion, restart
-Continuum, commit, push, or write publication markers. A drone receives one
-narrow task, inspects only relevant files, makes the smallest coherent change
-or analysis, validates the touched path, reports evidence, and stops.
+Local drones should use `scripts/francis-local-drone.ps1`, which defaults to
+the installed `llama3.2:3b` Ollama model and writes packets/receipts under
+`.francis/local-drones/`. Drones do not own architecture, decide roadmap, claim
+completion, restart Continuum, commit, push, or write publication markers. A
+drone receives one narrow task plus bounded worker-supplied context, makes the
+smallest coherent analysis, recommends validation, reports evidence, and stops.
+Unavailable local-model output must be recorded as unavailable, not treated as
+accepted worker evidence.
 
 Each drone packet must include:
 
@@ -71,19 +76,19 @@ architectural contract strengthened.
 Only verified work survives. Only compressed context survives. Only
 roadmap-aligned capability survives.
 
-## Four-Lane Pass Rule
+## Three-Worker Pass Rule
 
-Each coordinator pass should keep all four lanes active at the same time:
+Each coordinator pass should keep three Codex lanes active by default:
 
 - Worker 1 advances Stage 17 backlog class reduction through bounded pack/batch mechanisms.
 - Worker 2 advances Stage 17 lifecycle, versioning, migration, compatibility, promotion/apply, quarantine, and deprecation.
 - Worker 3 advances Stage 17 governed reusable invocation and visible cross-context reuse.
-- Worker 4 runs project-wide CI and wiring checks, verifies the current build
-  diagram against repo truth, and fixes only narrow CI/wiring blockers.
+- Worker 4 remains the parked CI/wiring lane and is enabled only when the
+  operator explicitly opts into a fourth worker with `-MaxWorkers 4`.
 
 The worker IDs are retained for script compatibility, but the active priority is
 truthful Stage 17 closure. At least three active workers must remain on direct
-Stage 17 construction while Worker 4 owns the CI/wiring truth lane. CI,
+Stage 17 construction. CI,
 receipts, governance, docs, and observability support construction; they do not
 replace it.
 
@@ -100,7 +105,7 @@ launch-mode record, and a stable prompt hash before treating the pass as active.
 For continuous operation, use the bounded coordinator:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\francis-worker-coordinator.ps1 -Mode Start
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\francis-worker-coordinator.ps1 -Mode Start -MaxWorkers 3
 ```
 
 The coordinator keeps one active Codex child per lane. When a lane finishes and
@@ -147,7 +152,7 @@ This prevents silent prompt loops: every re-prompt must be preceded by either a
 GitHub-backed update, an explicit no-change receipt, or a blocked receipt with
 evidence.
 
-Preview the next four dispatch prompts without launching duplicate workers:
+Preview the next three dispatch prompts without launching duplicate workers:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\francis-worker-coordinator.ps1 -Mode Run -MaxIterations 1 -PollSeconds 5 -NoLaunch -ForcePromptAll -StateRoot .\.francis\worker-terminal-coordinator-preview

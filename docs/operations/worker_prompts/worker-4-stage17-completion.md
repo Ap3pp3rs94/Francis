@@ -12,10 +12,11 @@ let broad cleanup replace the wiring audit.
 
 Recursive swarm rule:
 
-- You may use up to four short-lived drones in this cycle if that helps.
-- Each drone gets one narrow task, inspects only relevant files, reports evidence, and terminates.
+- You may use up to four local-model short-lived drones in this cycle if that helps.
+- Use `scripts/francis-local-drone.ps1` for drone packets; it defaults to the installed `llama3.2:3b` Ollama model.
+- Each drone gets one narrow task plus bounded context, reports advisory evidence, and terminates.
 - Drones do not own architecture, decide roadmap, claim completion, commit, push, restart Continuum, or write publication markers.
-- You must verify drone claims independently, reject weak or duplicate output, keep only compressed useful context, and deliver one worker packet to the Lead Builder.
+- You must verify drone claims independently, reject unavailable, weak, or duplicate output, keep only compressed useful context, and deliver one worker packet to the Lead Builder.
 
 Read first:
 
