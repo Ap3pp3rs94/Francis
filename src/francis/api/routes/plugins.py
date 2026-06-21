@@ -4555,18 +4555,23 @@ def _capability_library_operator_surface_projection(
     pack_total = _count_value(promotion_discipline.get("pack_total"))
     ready_pack_count = _count_value(promotion_discipline.get("ready_pack_count"))
     blocked_pack_count = _count_value(promotion_discipline.get("blocked_pack_count"))
-    status = "ready_for_explicit_promotion" if ready_pack_count and not blocked_pack_count else "blocked"
+    ready_staged_capability_count = sum(_count_value(pack.get("staged_capability_count")) for pack in ready_packs)
+    ready_promoted_capability_count = sum(_count_value(pack.get("promoted_capability_count")) for pack in ready_packs)
+    status = "blocked"
+    if ready_pack_count and not blocked_pack_count:
+        status = "ready_for_explicit_promotion" if ready_staged_capability_count else "promotion_complete"
     if not pack_total:
         status = "no_capability_packs"
-    next_gap = (
-        "stage17_capability_library_explicit_promotion"
-        if status == "ready_for_explicit_promotion"
-        else _safe_str(promotion_discipline.get("next_smallest_truthful_gap")).strip()
-    )
+    if status == "ready_for_explicit_promotion":
+        next_gap = "stage17_capability_library_explicit_promotion"
+    elif status == "promotion_complete":
+        next_gap = "stage17_capability_library_promotion_receipts"
+    else:
+        next_gap = _safe_str(promotion_discipline.get("next_smallest_truthful_gap")).strip()
     return {
         "stage": "Stage 17 / Capability Economy",
         "status": status,
-        "library_operator_surface_ready": status == "ready_for_explicit_promotion",
+        "library_operator_surface_ready": status in {"ready_for_explicit_promotion", "promotion_complete"},
         "pack_total": pack_total,
         "ready_pack_count": ready_pack_count,
         "blocked_pack_count": blocked_pack_count,
@@ -4580,10 +4585,8 @@ def _capability_library_operator_surface_projection(
         "available_promotion_receipt_count": _count_value(
             promotion_discipline.get("available_promotion_receipt_count")
         ),
-        "ready_staged_capability_count": sum(_count_value(pack.get("staged_capability_count")) for pack in ready_packs),
-        "ready_promoted_capability_count": sum(
-            _count_value(pack.get("promoted_capability_count")) for pack in ready_packs
-        ),
+        "ready_staged_capability_count": ready_staged_capability_count,
+        "ready_promoted_capability_count": ready_promoted_capability_count,
         "packs": library_packs,
         "packs_truncated": len(ready_packs) > len(library_packs),
         "pack_preview_limit": _CAPABILITY_LIBRARY_OPERATOR_SURFACE_PACK_PREVIEW_LIMIT,
@@ -4601,6 +4604,7 @@ def _capability_library_operator_surface_projection(
             "ready_pack_requires_quality_and_lineage_evidence": True,
             "ready_pack_requires_explicit_promotion_rules": True,
             "explicit_promotion_remains_separate": True,
+            "does_not_report_explicit_promotion_when_no_staged_capabilities": True,
             "proposal_approval_remains_separate": True,
             "surface_status_is_derived_from_readbacks": True,
             "no_fake_progress_status": True,
@@ -4945,27 +4949,49 @@ def _prepare_capability_library_explicit_promotion_plan(
         return {"ok": False, "status": "blocked", "error": "invalid_selector_id"}
 
     registry = _load_registry()
-    synced = _sync_generated_plugins(registry)
-    catalog = _save_registry_and_catalog(registry) if synced else _compile_runtime_catalog(registry)
-    runtime_catalog = _read_runtime_catalog_payload(catalog)
-    marketplace = marketplace_from_plugin_catalog(runtime_catalog)
-    entries = list(marketplace.catalog())
-    available_proposals = _available_capability_pack_proposals()
-    available_validation_receipts = _available_capability_pack_validation_receipts()
-    available_promotion_receipts = _available_capability_pack_promotion_receipts()
-    promotion_discipline = analyze_capability_pack_promotion_discipline(
-        entries,
-        available_proposal_ids=available_proposals["ids"],
-        available_validation_receipt_ids=available_validation_receipts["ids"],
-        available_promotion_receipt_ids=available_promotion_receipts["ids"],
-        operator_review_decisions=_read_capability_pack_operator_review_decisions(limit=500),
-    )
-    before = _capability_library_explicit_promotion_plan_projection(
-        registry=registry,
-        entries=entries,
-        promotion_discipline=promotion_discipline,
-        generated_plugin_sync_performed=bool(synced),
-    )
+    if selected_capability_ids:
+        selected_context = _capability_library_selected_promotion_discipline_context(
+            registry=registry,
+            selected_capability_ids=selected_capability_ids,
+        )
+        entries = selected_context["entries"] if isinstance(selected_context.get("entries"), list) else []
+        promotion_discipline = (
+            selected_context["promotion_discipline"]
+            if isinstance(selected_context.get("promotion_discipline"), dict)
+            else {}
+        )
+        synced = bool(selected_context.get("generated_plugin_registry_sync_performed"))
+        catalog = {}
+        before = _capability_library_selected_capability_readiness_projection(
+            registry=registry,
+            entries=entries,
+            promotion_discipline=promotion_discipline,
+            selected_pack_ids=selected_pack_ids,
+            selected_capability_ids=selected_capability_ids,
+            generated_plugin_sync_performed=synced,
+        )
+    else:
+        synced = _sync_generated_plugins(registry)
+        catalog = _save_registry_and_catalog(registry) if synced else _compile_runtime_catalog(registry)
+        runtime_catalog = _read_runtime_catalog_payload(catalog)
+        marketplace = marketplace_from_plugin_catalog(runtime_catalog)
+        entries = list(marketplace.catalog())
+        available_proposals = _available_capability_pack_proposals()
+        available_validation_receipts = _available_capability_pack_validation_receipts()
+        available_promotion_receipts = _available_capability_pack_promotion_receipts()
+        promotion_discipline = analyze_capability_pack_promotion_discipline(
+            entries,
+            available_proposal_ids=available_proposals["ids"],
+            available_validation_receipt_ids=available_validation_receipts["ids"],
+            available_promotion_receipt_ids=available_promotion_receipts["ids"],
+            operator_review_decisions=_read_capability_pack_operator_review_decisions(limit=500),
+        )
+        before = _capability_library_explicit_promotion_plan_projection(
+            registry=registry,
+            entries=entries,
+            promotion_discipline=promotion_discipline,
+            generated_plugin_sync_performed=bool(synced),
+        )
     candidates = _capability_library_explicit_promotion_candidates(
         registry=registry,
         entries=entries,
@@ -4982,6 +5008,8 @@ def _prepare_capability_library_explicit_promotion_plan(
             "before": before,
             "registry": registry,
             "catalog": catalog,
+            "selected_pack_ids": sorted(selected_pack_ids),
+            "selected_capability_ids": sorted(selected_capability_ids),
             "generated_plugin_registry_sync_performed": bool(synced),
         }
     if len(candidates) > safe_max_pack_count:
@@ -5046,6 +5074,8 @@ def _prepare_capability_library_explicit_promotion_plan(
             "before": before,
             "registry": registry,
             "catalog": catalog,
+            "selected_pack_ids": sorted(selected_pack_ids),
+            "selected_capability_ids": sorted(selected_capability_ids),
             "generated_plugin_registry_sync_performed": bool(synced),
         }
     return {
@@ -5059,6 +5089,8 @@ def _prepare_capability_library_explicit_promotion_plan(
         "before": before,
         "registry": registry,
         "catalog": catalog,
+        "selected_pack_ids": sorted(selected_pack_ids),
+        "selected_capability_ids": sorted(selected_capability_ids),
         "generated_plugin_registry_sync_performed": bool(synced),
     }
 
@@ -15387,27 +15419,54 @@ def apply_capability_library_explicit_promotion(
         ]
 
         refreshed_registry = _load_registry()
-        refreshed_catalog = _compile_runtime_catalog(refreshed_registry)
-        refreshed_runtime_catalog = _read_runtime_catalog_payload(refreshed_catalog)
-        refreshed_marketplace = marketplace_from_plugin_catalog(refreshed_runtime_catalog)
-        refreshed_entries = list(refreshed_marketplace.catalog())
-        refreshed_available_proposals = _available_capability_pack_proposals()
-        refreshed_available_validation_receipts = _available_capability_pack_validation_receipts()
-        refreshed_available_promotion_receipts = _available_capability_pack_promotion_receipts()
-        refreshed_promotion_discipline = analyze_capability_pack_promotion_discipline(
-            refreshed_entries,
-            available_proposal_ids=refreshed_available_proposals["ids"],
-            available_validation_receipt_ids=refreshed_available_validation_receipts["ids"],
-            available_promotion_receipt_ids=refreshed_available_promotion_receipts["ids"],
-            operator_review_decisions=_read_capability_pack_operator_review_decisions(limit=500),
-        )
-        after = _capability_library_explicit_promotion_plan_projection(
-            registry=refreshed_registry,
-            entries=refreshed_entries,
-            promotion_discipline=refreshed_promotion_discipline,
-            generated_plugin_sync_performed=False,
-        )
+        selected_capability_ids = set(_unique_texts(plan.get("selected_capability_ids"), limit=10000))
+        selected_pack_ids = set(_unique_texts(plan.get("selected_pack_ids"), limit=100))
+        if selected_capability_ids:
+            refreshed_context = _capability_library_selected_promotion_discipline_context(
+                registry=refreshed_registry,
+                selected_capability_ids=selected_capability_ids,
+            )
+            refreshed_entries = (
+                refreshed_context["entries"] if isinstance(refreshed_context.get("entries"), list) else []
+            )
+            refreshed_promotion_discipline = (
+                refreshed_context["promotion_discipline"]
+                if isinstance(refreshed_context.get("promotion_discipline"), dict)
+                else {}
+            )
+            after = _capability_library_selected_capability_readiness_projection(
+                registry=refreshed_registry,
+                entries=refreshed_entries,
+                promotion_discipline=refreshed_promotion_discipline,
+                selected_pack_ids=selected_pack_ids,
+                selected_capability_ids=selected_capability_ids,
+                generated_plugin_sync_performed=bool(refreshed_context.get("generated_plugin_registry_sync_performed")),
+            )
+        else:
+            refreshed_catalog = _compile_runtime_catalog(refreshed_registry)
+            refreshed_runtime_catalog = _read_runtime_catalog_payload(refreshed_catalog)
+            refreshed_marketplace = marketplace_from_plugin_catalog(refreshed_runtime_catalog)
+            refreshed_entries = list(refreshed_marketplace.catalog())
+            refreshed_available_proposals = _available_capability_pack_proposals()
+            refreshed_available_validation_receipts = _available_capability_pack_validation_receipts()
+            refreshed_available_promotion_receipts = _available_capability_pack_promotion_receipts()
+            refreshed_promotion_discipline = analyze_capability_pack_promotion_discipline(
+                refreshed_entries,
+                available_proposal_ids=refreshed_available_proposals["ids"],
+                available_validation_receipt_ids=refreshed_available_validation_receipts["ids"],
+                available_promotion_receipt_ids=refreshed_available_promotion_receipts["ids"],
+                operator_review_decisions=_read_capability_pack_operator_review_decisions(limit=500),
+            )
+            after = _capability_library_explicit_promotion_plan_projection(
+                registry=refreshed_registry,
+                entries=refreshed_entries,
+                promotion_discipline=refreshed_promotion_discipline,
+                generated_plugin_sync_performed=False,
+            )
         applied = bool(promoted_items)
+        next_gap = _safe_str(after.get("next_smallest_truthful_gap")).strip()
+        if selected_capability_ids and int(after.get("candidate_capability_count") or 0) == 0:
+            next_gap = "stage17_capability_library_promotion_receipts"
         return {
             "ok": not failed_items,
             "applied": applied,
@@ -15429,7 +15488,7 @@ def apply_capability_library_explicit_promotion(
             },
             "remaining_candidate_capability_count": int(after.get("candidate_capability_count") or 0),
             "remaining_promotable_capability_count": int(after.get("promotable_capability_count") or 0),
-            "next_smallest_truthful_gap": _safe_str(after.get("next_smallest_truthful_gap")).strip(),
+            "next_smallest_truthful_gap": next_gap,
             "promotion_receipts": promotion_receipts,
             "governance": _capability_library_explicit_promotion_apply_governance(
                 route_path=request.url.path,

@@ -8660,6 +8660,38 @@ def test_plugins_capability_library_operator_surface_projects_ready_pack_library
     assert pack["proposal_lineage_ready"] is True
 
 
+def test_plugins_capability_library_operator_surface_reports_promoted_without_staged_candidates() -> None:
+    from francis.api.routes import plugins
+
+    body = plugins._capability_library_operator_surface_projection(
+        promotion_discipline={
+            "pack_total": 1,
+            "ready_pack_count": 1,
+            "blocked_pack_count": 0,
+            "packs": [
+                {
+                    "pack_id": "legacy.generated.promoted",
+                    "pack_version": "1.0.0",
+                    "pack_name": "Promoted Pack",
+                    "status": "ready",
+                    "ready": True,
+                    "capability_count": 2,
+                    "staged_capability_count": 0,
+                    "promoted_capability_count": 2,
+                }
+            ],
+        },
+        generated_plugin_sync_performed=False,
+    )
+
+    assert body["status"] == "promotion_complete"
+    assert body["library_operator_surface_ready"] is True
+    assert body["ready_staged_capability_count"] == 0
+    assert body["ready_promoted_capability_count"] == 2
+    assert body["next_smallest_truthful_gap"] == "stage17_capability_library_promotion_receipts"
+    assert body["requirements"]["does_not_report_explicit_promotion_when_no_staged_capabilities"] is True
+
+
 def test_plugins_capability_library_promotion_plan_uses_existing_promotion_readiness(
     monkeypatch,
     tmp_path: Path,
@@ -9137,6 +9169,10 @@ def test_plugins_capability_library_promotion_plan_uses_existing_promotion_readi
         "stage17_capability_library_explicit_promotion_dry_run_v1"
     )
     assert dry_run_body["planned"][0]["pack_id"] == pack_id
+    assert dry_run_body["before"]["projection_scope"] == "selected_capabilities"
+    assert dry_run_body["before"]["global_counts_included"] is False
+    assert dry_run_body["before"]["candidate_capability_count"] == 1
+    assert dry_run_body["before"]["promotable_capability_count"] == 1
     planned_promotion_capability = dry_run_body["planned"][0]["capabilities"][0]
     assert planned_promotion_capability["capability"] == plugin_id
     assert planned_promotion_capability["compatibility"]["compatible"] is True
@@ -11356,6 +11392,46 @@ def test_plugins_capability_library_operator_proposal_evidence_intake_records_op
     assert applied_body["governance"]["does_not_promote_capabilities"] is True
     assert applied_body["governance"]["does_not_enable_capabilities"] is True
     assert applied_body["governance"]["memory_write"] is False
+
+    review_plan = client.get("/plugins/capabilities/library/proposal-review/plan")
+    assert review_plan.status_code == 200
+    review_plan_body = review_plan.json()
+    assert review_plan_body["ok"] is True
+    assert review_plan_body["status"] == "ready_for_proposal_review"
+    assert review_plan_body["proposal_review_plan_ready"] is True
+    assert review_plan_body["proposal_review_missing_count"] == 1
+    assert review_plan_body["reviewable_capability_count"] == 1
+    assert review_plan_body["blocked_before_review_capability_count"] == 0
+    assert review_plan_body["missing_requirement_counts"] == {"proposal_review": 1}
+    assert review_plan_body["governance"]["read_only"] is True
+    assert review_plan_body["governance"]["does_not_write_proposal_review_receipts"] is True
+    assert review_plan_body["governance"]["does_not_approve_proposals"] is True
+    assert review_plan_body["governance"]["does_not_promote_capabilities"] is True
+    review_proposal = review_plan_body["packs"][0]["proposals"][0]
+    assert review_proposal["capability"] == plugin_id
+    assert review_proposal["proposal_id"] == proposal_id
+    assert review_proposal["review_ready"] is True
+    assert review_proposal["proposal_review_missing"] is True
+    assert review_proposal["approved_review"] is False
+    assert review_proposal["blockers_before_review"] == []
+    assert review_proposal["proposal_review_would_write_receipt"] is True
+    assert review_proposal["proposal_review_would_promote_capability"] is False
+    assert review_proposal["proposal_review_would_enable_capability"] is False
+
+    promotion_plan = client.get("/plugins/capabilities/library/promotion/plan")
+    assert promotion_plan.status_code == 200
+    promotion_plan_body = promotion_plan.json()
+    assert promotion_plan_body["ok"] is True
+    assert promotion_plan_body["status"] == "blocked"
+    assert promotion_plan_body["promotion_plan_ready"] is False
+    assert promotion_plan_body["blocked_capability_count"] == 1
+    assert promotion_plan_body["promotable_capability_count"] == 0
+    assert promotion_plan_body["missing_requirement_counts"] == {"proposal_review": 1}
+    promotion_capability = promotion_plan_body["packs"][0]["capabilities"][0]
+    assert promotion_capability["capability"] == plugin_id
+    assert promotion_capability["promotion_ready"] is False
+    assert promotion_capability["proposal_review_status"] == "staged"
+    assert promotion_capability["pack_operator_review_status"] == "approved"
 
     audit = client.get("/plugins/capabilities/library/proposal-evidence/operator-intake/audit")
     assert audit.status_code == 200

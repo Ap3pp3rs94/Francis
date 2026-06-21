@@ -90200,6 +90200,111 @@ Remaining truthful gap:
   proposal evidence and proposal review, and the proposal-review plan has
   `reviewable_capability_count=0` until proposal evidence is repaired.
 
+### 2026-06-21 19:15Z - Stage 17 proposal evidence, review, and promotion gates close
+
+Current posture: Stage 17 / Capability Economy remains open. This pass closed
+the current proposal-evidence, proposal-review, and explicit-promotion gates for
+the capability library through governed Stage 17 routes. It does not claim
+execution readiness, multi-context reuse leverage closure, full local
+`.\scripts\check.ps1`, GitHub CI, or Stage 17 completion.
+
+What changed:
+
+- Applied operator-supplied local artifact proposal-evidence references for the
+  remaining capability library candidates through
+  `POST /plugins/capabilities/library/proposal-evidence/operator-intake/apply`.
+  The route recorded evidence metadata for 1,000 capabilities in the first
+  selected batch and the remaining 263 capabilities in the tail batch. The live
+  registry now has proposal evidence on all 2,438 evidence-backed Stage 17
+  capability records.
+- Applied governed proposal-review decisions through
+  `POST /plugins/capabilities/library/proposal-review/apply`. The first selected
+  batch recorded 1,000 approved proposal-review receipts, and the tail selected
+  batch recorded 263 additional approved proposal-review receipts. Direct
+  receipt-state verification now reports 2,438 approved proposal reviews and
+  zero unapproved evidence-backed proposals.
+- Hardened selected-scope explicit promotion planning so selected capability
+  promotion applies use the existing selected readback projection instead of
+  rebuilding a full-library before/after projection.
+- Applied governed explicit promotion through
+  `POST /plugins/capabilities/library/promotion/apply` in selected chunks after
+  dry-run fingerprint confirmation. The proof chunk promoted 50 capabilities,
+  then 8 bounded chunks promoted the remaining 2,388 capabilities. The registry
+  now reports 2,438 promoted capability records, 2,438 promotion receipt ids, and
+  2,438 enabled evidence-backed capabilities.
+- Corrected the library operator surface readback so a promoted-only ready
+  surface reports `status=promotion_complete` instead of continuing to report
+  `ready_for_explicit_promotion` when `ready_staged_capability_count=0`.
+
+Live receipt and fingerprint evidence:
+
+- Proposal-evidence selected batch dry-run fingerprint:
+  `14d63689c51e6d37307558fe8263defa474b9b8222c44c7af6acb53dba89b8f4`;
+  recorded 1,000 capabilities, `evidence_ref_count=4000`, and
+  `remaining_proposal_evidence_missing_count=0` for the selected projection.
+- Proposal-review selected batch dry-run fingerprint:
+  `232adf7dc8ee17654f189d419db45f5a761839e2eb6bdcb840384435127afbcc`;
+  batch `capability_library_proposal_review_batch_1782067407_81f87449`,
+  recorded 1,000 proposals/capabilities, and left 263 proposal reviews
+  remaining.
+- Proposal-review tail dry-run fingerprint:
+  `90a058a41e5fe4bf732db6155c5a3de347c7cb2f53fca37684e97605f769d39b`;
+  batch `capability_library_proposal_review_batch_1782067931_208f93af`,
+  recorded 263 proposals/capabilities and left
+  `remaining_proposal_review_missing_count=0`.
+- Explicit promotion proof chunk dry-run fingerprint:
+  `b9565b27d3fd4bf86ace82dabffdf5ddd0359c47d5c6721d78ee1317ab129069`;
+  promoted 50 capabilities and wrote 50 promotion receipts.
+- Explicit promotion chunk dry-run fingerprints:
+  `f3d42f46759931e73ea9906fa0de2dddd87c8071cee9ce84782c07a7842bb632`,
+  `e7a26078f088d3f1ff7169d02d9a55da7afc3ceb25128ba03dc2949dfb65a9ac`,
+  `3d452e9095a22704f3de07ff29a4cf9f8d0f35980e6380fafc1405bc2212d276`,
+  `48dc17e3811466220ecd405aa72947cb7ca51004ad8762074c320e00cfe7f10a`,
+  `41beabd1d4925bb0c199b7620b294f60010c6547a714386a6277d7d271a3136f`,
+  `4cf88bdb41e055b85352221ba2a4ca1ce3847c73960ac6bc50233c13f5a02a9a`,
+  `7525061df8ff2058912bb577b352b2b91e5f10e3e8df71f7342587063489147b`,
+  and `6d4f860e8c3af837bb01c366bb991059cf401954ae940bd94d1e43f2314654ab`;
+  promoted 2,388 capabilities and wrote 2,388 promotion receipts.
+- Promotion receipt count from registry metadata: 2,438.
+  Sample first receipt:
+  `data\artifacts\plugins\promotions\plugin_promotion_1782068819_1777313290-catalogplugin.json`;
+  SHA-256:
+  `287D33AF277EE162502BB3B9D2EC013CC4D90EA6CA89B70019932D541044D534`.
+  Sample tail receipt:
+  `data\artifacts\plugins\promotions\plugin_promotion_1782069231_1782055701-stage17reusableinvocationplugin.json`;
+  SHA-256:
+  `F79C3A70BE6AFF4FFB975ACBB7E80EB28C121C5AFCE2FBB7CB4D4DBAF4188295`.
+
+Validation:
+
+- Direct registry/proposal-review verification returned
+  `evidence_backed_capabilities=2438`,
+  `approved_proposal_reviews=2438`,
+  `promotion_status_promoted=2438`, `promotion_receipt_ids=2438`,
+  `enabled_count=2438`, and `status_counts={enabled: 2438}`.
+- Live promotion plan readback returned `status=no_staged_promotion_candidates`,
+  `candidate_capability_count=0`, `promotable_capability_count=0`,
+  `blocked_capability_count=0`, `missing_requirement_counts={}`, and
+  `next_smallest_truthful_gap=stage17_capability_library_promotion_receipts`.
+- Live promotion-receipts readback returned `status=ready`, `pack_total=52`,
+  `ready_pack_count=52`, `blocked_pack_count=0`, and
+  `next_smallest_truthful_gap=stage17_capability_pack_operator_surface`.
+- Live library operator surface readback returned `status=promotion_complete`,
+  `ready_staged_capability_count=0`, `ready_promoted_capability_count=2438`,
+  and `next_smallest_truthful_gap=stage17_capability_library_promotion_receipts`.
+- Focused validation:
+  `.venv\Scripts\python.exe -m pytest tests\test_api_plugins.py::test_plugins_capability_library_operator_surface_projects_ready_pack_library tests\test_api_plugins.py::test_plugins_capability_library_operator_surface_reports_promoted_without_staged_candidates tests\test_api_plugins.py::test_plugins_capability_library_promotion_plan_uses_existing_promotion_readiness -q --tb=short`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. Proposal evidence, proposal review, and explicit
+  promotion are closed for the current 2,438-capability library surface, but
+  execution readiness, multi-context reuse leverage, full local
+  `.\scripts\check.ps1`, GitHub CI, and final Stage 17 closure remain unproven.
+- The next readback gap is no longer proposal evidence/review/promotion. The
+  current readbacks point to promotion-receipt/operator-surface confirmation and
+  the remaining execution/reuse validation gates.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

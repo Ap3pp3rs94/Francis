@@ -48,18 +48,18 @@ Baseline: report initialized after the four-worker pass completed on
 | Lens | 4 | Lens observation contracts gained unmapped-coordinate refusal coverage, invalid-dimension refusal, and command-palette proof readbacks. |
 | Voice | 4 | Voice receipts now separate acoustic proof source, gate mode, provider receipt modes, and embedded provider-boundary evidence. |
 | Memory | 0 | No memory contract advancement in this cycle. |
-| Governance | 20 | Refusal/no-authority boundaries strengthened for acoustic proof, provider receipts, Stage 17 worker-readback/publication handoff claims, invalid coordinates, generated-spec compatibility, lifecycle history readback compatibility, unsupported invocation receipt rejection, quality-standard dry-run/apply receipt gates, pack-selection binding, activity-vs-progress reporting, worker liveness truth, unversioned migration refusal, read-only invocation proof readiness, artifact reconstruction dry-run confirmation, lifecycle-blocked re-enable refusal, operation-readback-bound invocation proof, and long-path proposal-review readiness. |
-| Receipts | 20 | New receipt/readback fields for acoustic proof rejection, provider mode state/linkage, worker-readback and worker/publication handoff requirements, capability-evolution worker packets, worker execution liveness, metadata receipt batch evidence, quality-standard remediation batch receipts, lifecycle history compatibility evidence, invocation pack-selection/rejection receipts, migration identity, proof-readiness linkage, artifact reconstruction queue evidence, validation/proposal reconstruction receipts, operation caller-context readback binding, and long-path proposal-review receipt readability. |
+| Governance | 23 | Refusal/no-authority boundaries strengthened for acoustic proof, provider receipts, Stage 17 worker-readback/publication handoff claims, invalid coordinates, generated-spec compatibility, lifecycle history readback compatibility, unsupported invocation receipt rejection, quality-standard dry-run/apply receipt gates, pack-selection binding, activity-vs-progress reporting, worker liveness truth, unversioned migration refusal, read-only invocation proof readiness, artifact reconstruction dry-run confirmation, lifecycle-blocked re-enable refusal, operation-readback-bound invocation proof, long-path proposal-review readiness, proposal-evidence intake dry-run/apply separation, proposal-review receipt authority separation, and explicit promotion dry-run/fingerprint governance. |
+| Receipts | 23 | New receipt/readback fields for acoustic proof rejection, provider mode state/linkage, worker-readback and worker/publication handoff requirements, capability-evolution worker packets, worker execution liveness, metadata receipt batch evidence, quality-standard remediation batch receipts, lifecycle history compatibility evidence, invocation pack-selection/rejection receipts, migration identity, proof-readiness linkage, artifact reconstruction queue evidence, validation/proposal reconstruction receipts, operation caller-context readback binding, long-path proposal-review receipt readability, proposal-evidence reference metadata, proposal-review receipts, and promotion receipts. |
 | Missions | 4 | Stage 17 mission-linked invocation audit rejects tampered embedded pack-selection bindings, surfaces unsupported operation-capability receipts as rejected evidence, requires operation-readback mission-shape reuse before readiness, and now has a passing isolated reusable-invocation mission proof. |
 | Overlay | 4 | Overlay-related proof now requires local overlay speech source, exposes manual proof mode, and blocked/invalid coordinate cases stay before screen/session readback. |
-| Observability | 17 | Added diagnostics for acoustic proof, provider mode/linkage disambiguation, Stage 17 readback and handoff guard state, quality-standard after-sync queue honesty, unsupported invocation rejection visibility, build capability evolution, Exec worker liveness, publication-marker prompt matching, migration identity readback, invocation proof readiness, artifact reconstruction before/after queue evidence, operation caller-context audit binding, and retained long-path proposal-review failure evidence. |
+| Observability | 19 | Added diagnostics for acoustic proof, provider mode/linkage disambiguation, Stage 17 readback and handoff guard state, quality-standard after-sync queue honesty, unsupported invocation rejection visibility, build capability evolution, Exec worker liveness, publication-marker prompt matching, migration identity readback, invocation proof readiness, artifact reconstruction before/after queue evidence, operation caller-context audit binding, retained long-path proposal-review failure evidence, selected-scope promotion planning evidence, and promoted-only operator-surface status truth. |
 | Completion Model | 2 | Completion model now rejects selected Stage 17 gaps as worker-readback proof and worker/publication handoff proof. |
-| Capability Registry | 9 | Stage 17 now has generated-spec compatibility binding, catalog lifecycle provenance projection, selected live metadata-receipt backlog reduction evidence, receipt-backed quality-standard backlog reduction, lifecycle-history compatibility readback evidence, versioned migration identity enforcement, one live artifact reconstruction backlog reduction, lifecycle-blocked re-enable prevention, and long-path-safe proposal review state for promotion readiness. |
+| Capability Registry | 12 | Stage 17 now has generated-spec compatibility binding, catalog lifecycle provenance projection, selected live metadata-receipt backlog reduction evidence, receipt-backed quality-standard backlog reduction, lifecycle-history compatibility readback evidence, versioned migration identity enforcement, one live artifact reconstruction backlog reduction, lifecycle-blocked re-enable prevention, long-path-safe proposal review state for promotion readiness, full proposal-evidence coverage, full proposal-review coverage, and explicit promotion receipt coverage for the current library surface. |
 | Swarm Infrastructure | 4 | Completion model now requires worker readback/handoff evidence, coordinator prompts require capability-evolution packet fields, and active Exec workers are no longer treated as stale. |
 | Operator Controls | 2 | Manual acoustic Orb movement proof now has source-specific next-step diagnostics and explicit manual-proof-required state. |
-| API Surface | 14 | Monitor route sanitizer, ChatGPT voice contract/receipt surfaces, plugin promotion readiness, plugin runtime execution guards, quality-standard remediation receipts, lifecycle-history compatibility readbacks, migration identity refusal, artifact reconstruction evidence fields, lifecycle enable refusal, invocation audit readbacks, and long-path-safe forge proposal review expose stricter behavior. |
-| Documentation | 10 | Completion model docs, worker prompt docs, Stage 17 closure matrix, ledger entries, and this evolution report record durable operating rules, current Stage 17 blockers, and accepted/rejected local-drone evidence. |
-| Testing | 23 | Added or expanded focused tests across worker lanes, coordinator prompt contracts, worker liveness status, plugin compatibility, metadata receipt batching, quality-standard receipt/after-sync behavior, lifecycle history compatibility, migration identity refusal, artifact reconstruction queue evidence, lifecycle enable refusal, invocation audit binding, long-path proposal review, and isolated reusable-invocation mission proof. |
+| API Surface | 16 | Monitor route sanitizer, ChatGPT voice contract/receipt surfaces, plugin promotion readiness, plugin runtime execution guards, quality-standard remediation receipts, lifecycle-history compatibility readbacks, migration identity refusal, artifact reconstruction evidence fields, lifecycle enable refusal, invocation audit readbacks, long-path-safe forge proposal review, selected-scope promotion apply, and promoted-only operator-surface readback expose stricter behavior. |
+| Documentation | 11 | Completion model docs, worker prompt docs, Stage 17 closure matrix, ledger entries, and this evolution report record durable operating rules, current Stage 17 blockers, accepted/rejected local-drone evidence, and proposal-evidence/review/promotion gate closure evidence. |
+| Testing | 25 | Added or expanded focused tests across worker lanes, coordinator prompt contracts, worker liveness status, plugin compatibility, metadata receipt batching, quality-standard receipt/after-sync behavior, lifecycle history compatibility, migration identity refusal, artifact reconstruction queue evidence, lifecycle enable refusal, invocation audit binding, long-path proposal review, isolated reusable-invocation mission proof, selected-scope promotion planning, and promoted-only operator surface truth. |
 
 ## Cycle Log
 
@@ -2543,3 +2543,123 @@ Next highest leverage action:
 
 - Use the existing proposal-evidence readiness/remediation surfaces to reduce
   `proposal_evidence` missing counts before applying proposal review.
+
+### Cycle 2026-06-21T18:22Z to 2026-06-21T19:15Z
+
+Scope: Stage 17 proposal-evidence closure, proposal-review closure, explicit
+promotion apply, selected-scope promotion planning hardening, and promoted-only
+operator-surface truthfulness.
+
+Active workers:
+
+- 3 worker lanes active.
+- Lead accepted and integrated the proposal-evidence/proposal-review lane
+  directly after verifying live readbacks.
+- Lead accepted a route/test hardening patch for selected-scope promotion
+  planning and promoted-only operator surface status.
+
+Active drones:
+
+- 0 local drones were accepted in this cycle.
+
+Commits produced: pending at report time.
+
+Commits accepted: pending at report time.
+
+Commits rejected: 0.
+
+Validations passed:
+
+- Direct registry/proposal-review verification reported
+  `evidence_backed_capabilities=2438`,
+  `approved_proposal_reviews=2438`, and zero unapproved evidence-backed
+  proposals.
+- Proposal-evidence operator intake recorded the remaining proposal evidence
+  references through selected apply batches; the registry now reports proposal
+  evidence on all 2,438 evidence-backed capabilities.
+- Proposal-review apply recorded a 1,000-capability batch and a 263-capability
+  tail batch. Tail batch
+  `capability_library_proposal_review_batch_1782067931_208f93af` left
+  `remaining_proposal_review_missing_count=0`.
+- Explicit promotion apply promoted a 50-capability proof chunk, then 8 selected
+  chunks for the remaining 2,388 capabilities. The registry now reports
+  `promotion_status_promoted=2438`, `promotion_receipt_ids=2438`, and
+  `enabled_count=2438`.
+- Live promotion plan readback returned `status=no_staged_promotion_candidates`,
+  `candidate_capability_count=0`, `promotable_capability_count=0`,
+  `blocked_capability_count=0`, and `missing_requirement_counts={}`.
+- Live promotion-receipts readback returned `status=ready`, `pack_total=52`,
+  `ready_pack_count=52`, and `blocked_pack_count=0`.
+- Live library operator surface readback returned `status=promotion_complete`,
+  `ready_staged_capability_count=0`, and
+  `ready_promoted_capability_count=2438`.
+- Focused pytest passed for the selected promotion and operator-surface
+  readback contract.
+
+Validations failed or blocked:
+
+- Full local `.\scripts\check.ps1` was not run.
+- Full GitHub CI remains unproven for this checkpoint.
+- Stage 17 execution readiness and multi-context reuse leverage remain open.
+
+Receipts generated:
+
+- Proposal-review batch
+  `capability_library_proposal_review_batch_1782067407_81f87449`, 1,000
+  proposal-review receipts.
+- Proposal-review batch
+  `capability_library_proposal_review_batch_1782067931_208f93af`, 263
+  proposal-review receipts.
+- 2,438 promotion receipts under `data\artifacts\plugins\promotions\`.
+  Sample first receipt:
+  `plugin_promotion_1782068819_1777313290-catalogplugin`, SHA-256
+  `287D33AF277EE162502BB3B9D2EC013CC4D90EA6CA89B70019932D541044D534`.
+  Sample tail receipt:
+  `plugin_promotion_1782069231_1782055701-stage17reusableinvocationplugin`,
+  SHA-256
+  `F79C3A70BE6AFF4FFB975ACBB7E80EB28C121C5AFCE2FBB7CB4D4DBAF4188295`.
+
+Roadmap items advanced:
+
+- Stage 17 / Capability Economy.
+- Proposal evidence coverage.
+- Proposal review coverage.
+- Explicit promotion apply.
+- Promotion receipt readback.
+- Operator-surface truthfulness after promotion.
+
+Capability classes advanced:
+
+- Capability Registry
+- Governance
+- Receipts
+- Observability
+- API Surface
+- Documentation
+- Testing
+
+New capabilities created or strengthened:
+
+- Selected-scope explicit promotion apply avoids full-library before/after
+  projection when a bounded capability selection is supplied.
+- The capability library can now close the current proposal evidence,
+  proposal-review, and promotion gates through receipts without executing
+  capabilities.
+- The library operator surface now distinguishes staged promotion readiness
+  from a promoted-only complete promotion surface.
+
+Most important change:
+
+- The current 2,438-capability library surface now has complete proposal
+  evidence, approved proposal reviews, and promotion receipts.
+
+Biggest remaining bottleneck:
+
+- Stage 17 still needs execution-readiness proof, multi-context reuse leverage
+  proof, full local validation, and GitHub CI before closure can be claimed.
+
+Next highest leverage action:
+
+- Prove the promoted capability library through the governed execution/reuse
+  path without bypassing capability routing, policy, receipts, or mission
+  readbacks.
