@@ -6453,6 +6453,157 @@ def test_plugins_capability_pack_quality_evidence_reconstruction_selects_smalles
     assert large_pack_id in after_pack_ids
 
 
+def test_plugins_capability_pack_quality_evidence_reconstruction_receipts_do_not_collide_same_second(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
+    monkeypatch.setattr(plugins, "_now_s", lambda: 1782061142)
+    client = TestClient(create_app())
+    built_plugin_ids: list[str] = []
+    for index in range(2):
+        built = client.post(
+            "/plugins/build",
+            json={
+                "name": f"Capability Artifact Reconstruction Receipt Collision Plugin {index}",
+                "description": "Stage 17 same-second reconstruction receipt integrity coverage",
+                "actor": _PLUGIN_ACTOR,
+                "meta": _forge_promotion_meta(f"capability_artifact_reconstruction_receipt_collision_{index}"),
+            },
+        )
+        assert built.status_code == 200
+        built_body = built.json()
+        assert built_body["ok"] is True
+        built_plugin_ids.append(str(built_body["plugin_id"]))
+
+    pack_ids = ["ops.reconstruction_receipt_collision_a", "ops.reconstruction_receipt_collision_b"]
+    for pack_id, plugin_id in zip(pack_ids, built_plugin_ids, strict=True):
+        recorded = client.post(
+            "/plugins/capabilities/packs/metadata/receipts",
+            json={
+                "actor": _PLUGIN_ACTOR,
+                "reason": f"record reviewed metadata before {pack_id} reconstruction",
+                "pack_id": pack_id,
+                "pack_version": "1.0.0",
+                "pack_name": pack_id.replace(".", " ").title(),
+                "capability_ids": [plugin_id],
+                "promotion_rules": [
+                    "metadata_receipt_before_promotion",
+                    "quality_standards_before_promotion",
+                    "operator_review_before_promotion",
+                ],
+                "pack_governance": {
+                    "risk_tier": "normal",
+                    "scope": "build_dev",
+                    "operator_review_required": True,
+                    "requires_validation_receipt": True,
+                },
+            },
+        )
+        assert recorded.status_code == 200
+        assert recorded.json()["ok"] is True
+
+    for artifact_dir in (
+        data_root / "artifacts" / "plugins" / "validations",
+        data_root / "artifacts" / "plugins" / "proposals",
+    ):
+        for artifact_path in artifact_dir.glob("*.json"):
+            artifact_path.unlink(missing_ok=True)
+
+    registry = plugins._load_registry()
+    for plugin_id in built_plugin_ids:
+        plugin = plugins._read_plugin(registry, plugin_id)
+        assert plugin is not None
+        meta = dict(plugin.get("meta") or {})
+        for key in (
+            "proposal_id",
+            "forge_proposal_id",
+            "proposal_path",
+            "validation_receipt_id",
+            "validation_receipt_path",
+        ):
+            meta.pop(key, None)
+        meta["quality"] = {
+            "tests": ["tests/test_api_plugins.py"],
+            "docs": ["README.md", "docs/operations/COMPLETION_LEDGER.md"],
+            "claim_scope": "explicit_reconstruction_receipt_collision_quality_references",
+            "pack_specific_coverage_claimed": False,
+        }
+        plugin["meta"] = meta
+        plugins._write_plugin(registry, plugins._normalize_plugin_record(plugin_id, plugin))
+    plugins._save_registry_and_catalog(registry)
+    _disable_existing_artifact_link_candidates(monkeypatch, plugins)
+
+    request_body = {
+        "actor": _PLUGIN_ACTOR,
+        "reason": "operator approved same-second receipt integrity reconstruction",
+        "selection_strategy": "smallest_full_pack_first",
+        "max_pack_count": 1,
+        "max_total_capability_count": 1,
+        "max_capability_count_per_pack": 1,
+    }
+    first_dry_run = client.post(
+        "/plugins/capabilities/packs/quality/evidence/remediation/reconstruct",
+        json={**request_body, "dry_run": True},
+    )
+    assert first_dry_run.status_code == 200
+    first_dry_run_body = first_dry_run.json()
+    assert first_dry_run_body["selected_reconstruction_pack_ids"] == [pack_ids[0]]
+
+    first_apply = client.post(
+        "/plugins/capabilities/packs/quality/evidence/remediation/reconstruct",
+        json={
+            **request_body,
+            "dry_run_fingerprint": first_dry_run_body["dry_run_fingerprint"],
+            "meta": {"operator_reconstruction_decision": "approved_for_reconstruction"},
+        },
+    )
+    assert first_apply.status_code == 200
+    first_apply_body = first_apply.json()
+    assert first_apply_body["ok"] is True
+    assert first_apply_body["selected_reconstruction_pack_ids"] == [pack_ids[0]]
+    first_receipt_path = Path(first_apply_body["receipt_path"])
+
+    second_dry_run = client.post(
+        "/plugins/capabilities/packs/quality/evidence/remediation/reconstruct",
+        json={**request_body, "dry_run": True},
+    )
+    assert second_dry_run.status_code == 200
+    second_dry_run_body = second_dry_run.json()
+    assert second_dry_run_body["selected_reconstruction_pack_ids"] == [pack_ids[1]]
+
+    second_apply = client.post(
+        "/plugins/capabilities/packs/quality/evidence/remediation/reconstruct",
+        json={
+            **request_body,
+            "dry_run_fingerprint": second_dry_run_body["dry_run_fingerprint"],
+            "meta": {"operator_reconstruction_decision": "approved_for_reconstruction"},
+        },
+    )
+    assert second_apply.status_code == 200
+    second_apply_body = second_apply.json()
+    assert second_apply_body["ok"] is True
+    assert second_apply_body["selected_reconstruction_pack_ids"] == [pack_ids[1]]
+    second_receipt_path = Path(second_apply_body["receipt_path"])
+
+    assert first_apply_body["receipt_id"] != second_apply_body["receipt_id"]
+    assert first_receipt_path != second_receipt_path
+    with open(plugins._filesystem_path(first_receipt_path), encoding="utf-8") as handle:
+        first_receipt = json.load(handle)
+    with open(plugins._filesystem_path(second_receipt_path), encoding="utf-8") as handle:
+        second_receipt = json.load(handle)
+    assert first_receipt["selected_reconstruction_pack_ids"] == [pack_ids[0]]
+    assert second_receipt["selected_reconstruction_pack_ids"] == [pack_ids[1]]
+
+
 def test_plugins_capability_pack_quality_evidence_reconstruction_selects_smallest_budgeted_batch(
     monkeypatch,
     tmp_path: Path,

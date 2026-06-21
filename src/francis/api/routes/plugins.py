@@ -10429,7 +10429,7 @@ def _record_capability_pack_artifact_reconstruction_batch(
     route_path: str,
 ) -> dict[str, list[dict[str, Any]]]:
     recorded_ts = _now_s()
-    batch_id = f"stage17_artifact_reconstruction_batch_{recorded_ts}"
+    batch_id = f"stage17_artifact_reconstruction_batch_{recorded_ts}_{uuid.uuid4().hex[:8]}"
     failed: list[dict[str, Any]] = []
     recorded: list[dict[str, Any]] = []
     changed = False

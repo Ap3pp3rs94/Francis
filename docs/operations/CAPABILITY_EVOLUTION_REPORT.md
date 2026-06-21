@@ -1669,3 +1669,108 @@ Next highest leverage action:
 - Run the next bounded `smallest_full_pack_first` apply, or choose the smallest
   independent Stage 17 gate that can produce receipt-backed before/after
   evidence without touching Orb visuals or unrelated dirty work.
+
+### Cycle 2026-06-21T17:04Z to 2026-06-21T17:12Z
+
+Scope: second Stage 17 live artifact reconstruction apply plus receipt
+integrity hardening for repeated applies.
+
+Active workers:
+
+- Worker 1: repeated-apply route/test receipt integrity.
+- Worker 2: read-only CI/wiring verification for pushed commit `09a2e468`.
+- Worker 3: completion-model readback sufficiency inspection.
+
+Active drones:
+
+- 0 local drones were accepted in this cycle.
+
+Commits produced: pending at report time.
+
+Commits accepted: pending at report time.
+
+Commits rejected: 0.
+
+Validations passed:
+
+- Live reconstruction dry-run through FastAPI `TestClient` returned clean JSON
+  for `legacy.generated.capabilitypromotionreceiptsplugin`,
+  `planned_pack_count=1`, `planned_capability_count=4`, and fingerprint
+  `03b41f8da94c1eacc86f2a755d7a243bbeec2b2a650ee37facbcf462ba5c42be`.
+- Live reconstruction apply through FastAPI `TestClient` returned
+  `ok=true`, `applied=true`, `status=recorded`,
+  `recorded_pack_count=1`, `recorded_capability_count=4`, and
+  `candidate_reduction_count=1`.
+- Live remediation readback returned `remediation_queue_count=14` and
+  `artifact_reconstruction_required_count=14`.
+- `.\scripts\francis-completion-model.ps1` returned clean JSON with
+  `stage17_artifact_reconstruction_evidence` for
+  `stage17_artifact_reconstruction_batch_1782061814_1c931221_receipt`.
+- `py_compile` on `src\francis\api\routes\plugins.py` and
+  `tests\test_api_plugins.py`.
+- Focused pytest:
+  `tests\test_api_plugins.py::test_plugins_capability_pack_quality_evidence_reconstruction_receipts_do_not_collide_same_second`.
+- Focused pytest:
+  `tests\test_api_plugins.py::test_plugins_capability_pack_quality_evidence_reconstruction_dry_run_avoids_registry_persistence`.
+- Focused pytest:
+  `tests\test_api_plugins.py::test_plugins_capability_pack_quality_evidence_reconstruction_selects_smallest_full_pack`.
+- Focused pytest:
+  `tests\test_api_plugins.py::test_plugins_capability_pack_quality_evidence_reconstruction_selects_smallest_budgeted_batch`.
+- `ruff check --no-cache` and `ruff format --check --no-cache` on
+  `src\francis\api\routes\plugins.py` and `tests\test_api_plugins.py`.
+
+Validations failed or blocked:
+
+- Full GitHub CI was not accepted as complete. Worker 2 reported CodeQL action
+  and JavaScript/TypeScript checks succeeded for `09a2e468`, but other checks
+  were still in progress.
+- Full local `.\scripts\check.ps1` was not run.
+
+Receipts generated:
+
+- `data\artifacts\plugins\capability_packs\artifact_reconstructions\stage17_artifact_reconstruction_batch_1782061814_1c931221_receipt.json`.
+- Receipt SHA-256:
+  `048341DA24D9F394B420C5E36312C9AA42FEC42D83A583D6E5F33B5212FE52D1`.
+
+Roadmap items advanced:
+
+- Stage 17 / Capability Economy.
+- Governed quality-evidence artifact reconstruction.
+- Receipt integrity for repeated operator-approved applies.
+- Completion-model receipt readback continuity.
+
+Capability classes advanced:
+
+- Capability Registry
+- Governance
+- Receipts
+- Observability
+- Completion Model
+- API Surface
+- Testing
+- Documentation
+
+New capabilities created or strengthened:
+
+- Repeated artifact reconstruction applies now produce unique batch and receipt
+  IDs even when two applies share the same second.
+- A regression verifies same-second receipt paths do not collide and that each
+  preserved receipt retains its selected pack evidence.
+- The live Stage 17 quality-evidence queue has another receipt-backed
+  reduction: `15 -> 14`.
+
+Most important change:
+
+- Stage 17 now has repeatable reconstruction queue movement without risking
+  same-second receipt overwrite.
+
+Biggest remaining bottleneck:
+
+- Stage 17 still has 14 artifact reconstruction-required packs and unresolved
+  metadata, proposal-review, promotion, enablement/execution, and full-CI gates.
+
+Next highest leverage action:
+
+- Continue bounded `smallest_full_pack_first` applies while the route remains
+  clean, or pause to close the next non-reconstruction Stage 17 gate if the
+  queue stops yielding safe full-pack candidates.

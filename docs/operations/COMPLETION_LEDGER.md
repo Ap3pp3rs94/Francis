@@ -89446,6 +89446,97 @@ Remaining truthful gap:
   `smallest_full_pack_first` apply or close a different documented Stage 17 gap
   with receipt-backed before/after evidence.
 
+### 2026-06-21 17:12Z - Stage 17 repeated reconstruction apply preserves receipt integrity
+
+Current posture: Stage 17 / Capability Economy remains open. This pass ran a
+second bounded live `smallest_full_pack_first` artifact reconstruction apply
+and accepted Worker 1's narrow same-second receipt collision fix. It proves
+repeatable live queue movement with unique durable receipt IDs; it does not
+claim full quality-evidence closure, proposal review closure, promotion
+closure, full CI, or Stage 17 completion.
+
+What changed:
+
+- Artifact reconstruction batch IDs now include an 8-character UUID suffix in
+  addition to the recorded timestamp, preventing same-second repeated applies
+  from colliding on one receipt path.
+- A focused regression forces two reconstruction applies to share the same
+  `_now_s()` timestamp and verifies the resulting receipt IDs and paths remain
+  distinct while preserving per-pack receipt contents.
+- A second bounded live apply selected
+  `legacy.generated.capabilitypromotionreceiptsplugin`, reconstructed 4
+  capabilities, wrote 4 validation receipts and 4 proposal-lineage records, and
+  recorded a durable reconstruction receipt.
+
+Live receipt evidence:
+
+- Receipt:
+  `data\artifacts\plugins\capability_packs\artifact_reconstructions\stage17_artifact_reconstruction_batch_1782061814_1c931221_receipt.json`.
+- Receipt contract:
+  `stage17_capability_pack_artifact_reconstruction_receipt_v1`.
+- Receipt SHA-256:
+  `048341DA24D9F394B420C5E36312C9AA42FEC42D83A583D6E5F33B5212FE52D1`.
+- Dry-run fingerprint:
+  `03b41f8da94c1eacc86f2a755d7a243bbeec2b2a650ee37facbcf462ba5c42be`.
+- Queue movement: `before_remediation_queue_count=15`,
+  `after_remediation_queue_count=14`, `candidate_reduction_count=1`.
+- Reconstruction-required movement:
+  validation receipts `85 -> 81`; proposal lineages `85 -> 81`.
+- Readback after apply:
+  `artifact_reconstruction_required_count=14`,
+  `next_smallest_truthful_gap=stage17_capability_pack_artifact_reconstruction_apply`.
+
+Worker evidence:
+
+- Worker 1 accepted: receipt collision fix and regression in
+  `src\francis\api\routes\plugins.py` and `tests\test_api_plugins.py`.
+- Worker 2 accepted as read-only verification for the prior pushed commit:
+  completion-model and remediation readbacks returned Stage 17 open with 15
+  remaining packs before this second apply. GitHub CodeQL action and
+  JavaScript/TypeScript check-runs for `09a2e468` were reported successful, but
+  full CI was not accepted because other checks were still in progress.
+- Worker 3 accepted as no-change: completion-model readback already exposed
+  enough receipt evidence to drive another bounded reconstruction cycle without
+  claiming completion.
+
+Validation:
+
+- Live dry-run via FastAPI `TestClient` returned `ok=true`,
+  `status=dry_run`, `planned_pack_count=1`, `planned_capability_count=4`, and
+  the fingerprint above.
+- Live apply via FastAPI `TestClient` returned `ok=true`, `applied=true`,
+  `status=recorded`, `recorded_pack_count=1`, `recorded_capability_count=4`,
+  and `candidate_reduction_count=1`.
+- Live remediation readback returned `remediation_queue_count=14` and
+  `artifact_reconstruction_required_count=14`.
+- `.\scripts\francis-completion-model.ps1` returned clean JSON with
+  `stage17_artifact_reconstruction_evidence.receipt_id=
+  stage17_artifact_reconstruction_batch_1782061814_1c931221_receipt`.
+- `.\.venv\Scripts\python.exe -m py_compile
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py` passed.
+- `.\.venv\Scripts\python.exe -m pytest
+  tests\test_api_plugins.py::test_plugins_capability_pack_quality_evidence_reconstruction_receipts_do_not_collide_same_second
+  tests\test_api_plugins.py::test_plugins_capability_pack_quality_evidence_reconstruction_dry_run_avoids_registry_persistence
+  tests\test_api_plugins.py::test_plugins_capability_pack_quality_evidence_reconstruction_selects_smallest_full_pack
+  tests\test_api_plugins.py::test_plugins_capability_pack_quality_evidence_reconstruction_selects_smallest_budgeted_batch
+  -q --tb=short` passed with one existing FastAPI/Starlette TestClient
+  deprecation warning.
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py` passed.
+- `.\.venv\Scripts\python.exe -m ruff format --check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py` passed.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The live queue is reduced but not closed:
+  14 artifact reconstruction-required packs remain.
+- Full quality-evidence closure, metadata apply closure, proposal review queue
+  closure, promotion queue closure, enablement/execution readiness, full CI,
+  and phase movement remain unproven.
+- The next accepted build action should continue bounded reconstruction applies
+  or close another documented Stage 17 gate with receipt-backed before/after
+  evidence and no Orb visual changes.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
