@@ -1954,3 +1954,93 @@ Next highest leverage action:
 - Continue bounded `smallest_full_pack_first` applies while clean candidates
   remain, or shift to the next non-reconstruction Stage 17 gate once the queue
   stops producing safe full-pack candidates.
+
+### Cycle 2026-06-21T17:20Z to 2026-06-21T17:24Z
+
+Scope: bounded three-apply Stage 17 live artifact reconstruction batch through
+the governed route.
+
+Active workers:
+
+- Lead-only live mutation. No worker packets were accepted in this batch cycle.
+
+Active drones:
+
+- 0 local drones were accepted in this cycle.
+
+Commits produced: pending at report time.
+
+Commits accepted: pending at report time.
+
+Commits rejected: 0.
+
+Validations passed:
+
+- Batch iteration 1 dry-run/apply selected
+  `legacy.generated.capabilityqualitytestsplugin`, reconstructed 4
+  capabilities, and moved the queue `12 -> 11`.
+- Batch iteration 2 dry-run/apply selected
+  `legacy.generated.capabilityvalidationreceiptsplugin`, reconstructed 4
+  capabilities, and moved the queue `11 -> 10`.
+- Batch iteration 3 dry-run/apply selected `legacy.generated.catalogplugin`,
+  reconstructed 4 capabilities, and moved the queue `10 -> 9`.
+- Every iteration returned `ok=true`, `applied=true`, `status=recorded`,
+  `recorded_pack_count=1`, `recorded_capability_count=4`,
+  `failed_count=0`, `skipped_count=0`, and `candidate_reduction_count=1`.
+- Live remediation readback returned `remediation_queue_count=9` and
+  `artifact_reconstruction_required_count=9`.
+- `.\scripts\francis-completion-model.ps1` returned clean JSON with the newest
+  receipt `stage17_artifact_reconstruction_batch_1782062632_90b171fc_receipt`.
+
+Validations failed or blocked:
+
+- Full local `.\scripts\check.ps1` was not run.
+- Full GitHub CI was not accepted for this intermediate commit series because
+  rapid pushes can cancel earlier runs; CI remains a final stabilization gate.
+
+Receipts generated:
+
+- `stage17_artifact_reconstruction_batch_1782062524_0fd77876_receipt`;
+  SHA-256 `14B16D804CFF0A0BE2A7562CD60EBFAE1CDB917F5DEC7AED5902A1826829D0BE`.
+- `stage17_artifact_reconstruction_batch_1782062577_603ec279_receipt`;
+  SHA-256 `95D956BC4A04CC470CB9D6203E306B8B2DE9E6A6E4B95A408F64886AE83631D5`.
+- `stage17_artifact_reconstruction_batch_1782062632_90b171fc_receipt`;
+  SHA-256 `94B199381DF36EF4981EC20AAFBAF9EEF372FE324F9AB0C5BAF0AF99CC0AEB57`.
+
+Roadmap items advanced:
+
+- Stage 17 / Capability Economy.
+- Governed quality-evidence artifact reconstruction.
+- Completion-model receipt readback continuity.
+
+Capability classes advanced:
+
+- Capability Registry
+- Governance
+- Receipts
+- Observability
+- Completion Model
+- Documentation
+
+New capabilities created or strengthened:
+
+- The live Stage 17 quality-evidence queue has a bounded batch reduction:
+  `12 -> 9`.
+- The route completed three sequential governed applies without receipt
+  collision, failed records, skipped records, or authority broadening.
+
+Most important change:
+
+- Stage 17 artifact reconstruction-required packs dropped below 10 for the
+  first time in this run.
+
+Biggest remaining bottleneck:
+
+- Stage 17 still has 9 artifact reconstruction-required packs and unresolved
+  metadata, proposal-review, promotion, enablement/execution, and full-CI gates.
+
+Next highest leverage action:
+
+- Continue bounded `smallest_full_pack_first` applies while clean candidates
+  remain, then switch to the next non-reconstruction Stage 17 gate once the
+  queue is exhausted or stops producing safe full-pack candidates.
