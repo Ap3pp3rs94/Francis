@@ -89080,6 +89080,113 @@ Remaining truthful gap:
   17-pack quality-evidence reconstruction queue through the governed batch
   route.
 
+### 2026-06-21 14:00Z - Stage 17 deterministic smallest-pack artifact reconstruction batch
+
+Current posture: Stage 17 / Capability Economy remains open. This worker pass
+advanced the reusable backlog-reduction mechanism for quality-evidence
+artifact reconstruction without adding a new substrate or claiming closure.
+
+What changed:
+
+- `POST /plugins/capabilities/packs/quality/evidence/remediation/reconstruct`
+  now accepts a bounded `selection_strategy`. The default remains
+  `queue_order`; the new opt-in strategy `smallest_full_pack_first`
+  deterministically selects the smallest non-truncated pack from the existing
+  reconstruction queue when no explicit `pack_ids` are supplied.
+- The selected strategy is included in the dry-run fingerprint, dry-run
+  response, blocked response paths, successful apply response, governance
+  readback, and durable artifact reconstruction receipt. This keeps strategy,
+  receipt, permission, and before/after queue evidence attached to the batch.
+- The existing dry-run/apply contract remains intact: applies still require
+  `plugins.write`, dry-run fingerprint confirmation, and an explicit operator
+  reconstruction decision. The route still does not approve proposals, promote
+  packs, enable capabilities, execute capabilities, or write memory.
+- The truncated-pack regression fixture now supplies the dry-run fingerprint on
+  apply, matching the existing confirmation contract already asserted by the
+  adjacent unconfirmed-apply test.
+
+Worker evidence accepted:
+
+- W1 prompt hash:
+  `1D175A744CE975E8E268B8014CA7B2F6629E3C97BF37EB456A7A1B62D9BEC74B`.
+- Focused fixture proof added a reusable selector test where a two-pack queue
+  is reduced by selecting the smallest full pack without explicit `pack_ids`:
+  remediation queue `2 -> 1`, validation reconstruction required `3 -> 2`,
+  proposal lineage reconstruction required `3 -> 2`, and durable receipt
+  `selection_strategy=smallest_full_pack_first`.
+- Live governed quality-evidence apply with `stage17.operator` and
+  `plugins.write` selected
+  `legacy.generated.capabilityoperatorreviewdecisionplugin` via
+  `smallest_full_pack_first` and wrote
+  `data\artifacts\plugins\capability_packs\artifact_reconstructions\stage17_artifact_reconstruction_batch_1782050127_receipt.json`.
+  The apply response reported `recorded_pack_count=1`,
+  `recorded_capability_count=4`, `candidate_reduction_count=1`, selected
+  remediation queue `17 -> 16`, validation reconstruction required `83 -> 79`,
+  and proposal lineage reconstruction required `83 -> 79`.
+- Fresh readback after the live apply reported
+  `remediation_queue_count=16`, `artifact_reconstruction_required_count=16`,
+  `validation_receipt_reconstruction_required_count=2821`,
+  `proposal_lineage_reconstruction_required_count=2821`,
+  `validation_receipt_missing=16`, and `proposal_id_missing=16`.
+- The remaining metadata migration candidate was attempted through the existing
+  bulk metadata receipt route. Dry-run was clean for
+  `legacy.generated.stage17reusableinvocationplugin` with
+  `planned_pack_count=1` and `planned_capability_count=57`; apply returned
+  `internal_api_error` after a Windows registry replace `PermissionError`.
+  Durable evidence is therefore treated as fragile: a fresh readback now reports
+  `migration_candidate_total=0`, and a metadata receipt exists at
+  `data\artifacts\plugins\capability_packs\metadata_receipts\capability_pack_metadata_1782050038_legacy-generated-stage17reusableinvocationplugin.json`,
+  but this pass does not claim a clean metadata route apply response.
+
+Validation:
+
+- `.\.venv\Scripts\python.exe -m py_compile
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py` passed.
+- `.\.venv\Scripts\python.exe -m pytest
+  tests\test_api_plugins.py::test_plugins_capability_pack_quality_evidence_reconstruction_selects_smallest_full_pack
+  -q` passed with one existing FastAPI/Starlette TestClient deprecation
+  warning.
+- `.\.venv\Scripts\python.exe -m pytest
+  tests\test_api_plugins.py::test_plugins_capability_pack_quality_evidence_remediation_reconstructs_missing_artifacts
+  tests\test_api_plugins.py::test_plugins_capability_pack_quality_evidence_remediation_reconstructs_truncated_plan_chunk
+  tests\test_api_plugins.py::test_plugins_capability_pack_quality_evidence_reconstruction_selects_smallest_full_pack
+  -q` passed with one existing FastAPI/Starlette TestClient deprecation
+  warning.
+- Lead validation repaired two artifact-reconstruction fixtures so they no
+  longer depend on filesystem deletion or retained long-path artifact scans:
+  fixture discovery now exposes no pre-existing artifact links before apply and
+  exposes only route-written reconstruction batch links afterward.
+- Lead static validation passed:
+  `.\.venv\Scripts\python.exe -m py_compile
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py
+  tests\test_api_missions.py`,
+  `.\.venv\Scripts\python.exe -m ruff check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py
+  tests\test_api_missions.py`,
+  `.\.venv\Scripts\python.exe -m ruff format --check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py
+  tests\test_api_missions.py`, and
+  `git diff --check -- src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py tests\test_api_missions.py
+  docs\operations\COMPLETION_LEDGER.md`.
+- Lead focused pytest passed for artifact reconstruction durable receipts,
+  truncated chunk reconstruction, deterministic smallest-pack selection,
+  metadata receipt apply revalidation/lifecycle guard behavior, selected batch
+  reporting, durable invocation audit replay, and direct reusable invocation
+  caller-context binding.
+- Fresh FastAPI `TestClient` readback after the live apply reported
+  `migration_candidate_total=0` and `remediation_queue_count=16`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. This pass does not claim full quality-evidence
+  closure, clean metadata apply response closure, proposal review, promotion,
+  enablement, execution, live mission-path proof, full CI, or phase movement.
+- The next build action should investigate the `internal_api_error` /
+  Windows registry replace failure on the metadata receipt apply response, then
+  continue reducing the remaining 16-pack quality-evidence reconstruction queue
+  through bounded selector-backed batches with receipts and before/after counts.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

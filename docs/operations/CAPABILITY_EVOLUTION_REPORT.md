@@ -1181,3 +1181,130 @@ Next highest leverage action:
   quality-evidence reconstruction queue, W2 closing the live metadata migration
   candidate safely, and W3 proving reusable invocation through a mission path
   without adding fake execution claims.
+
+## PM Follow-Up - 2026-06-21T14:15Z
+
+Commit:
+
+- Pending at the time of this entry: deterministic artifact reconstruction
+  selection, metadata receipt apply revalidation, live migration-candidate
+  removal, and lead fixture hardening.
+
+Active workers:
+
+- W1 backlog reduction: accepted deterministic `smallest_full_pack_first`
+  selection on the existing artifact reconstruction route, plus live
+  quality-evidence queue reduction from `17 -> 16`.
+- W2 lifecycle/migration: accepted
+  `stage17_capability_pack_metadata_receipt_apply_revalidation_v1` so metadata
+  receipt apply revalidates lifecycle immediately before registry/receipt
+  writes.
+- W3 reusable invocation/migration: accepted live metadata readback movement
+  from `migration_candidate_total=1` to `0`, while preserving the caveat that
+  one route response returned `internal_api_error` after a Windows registry
+  replace `PermissionError`.
+- W4 remained parked.
+
+Active drones:
+
+- 0 local drones reported by the accepted worker packets.
+
+Commits produced:
+
+- 1 pending coherent Lead Builder integration commit.
+
+Commits accepted:
+
+- 0 pushed at the time of this entry.
+
+Commits rejected:
+
+- 0 complete worker packets rejected.
+- 1 metadata apply success claim was narrowed: durable readback and receipt
+  evidence were accepted, but a clean route-response success was not claimed.
+
+Validations passed:
+
+- Lead `py_compile`, Ruff check, Ruff format check, and `git diff --check`
+  passed on the accepted Stage 17 source/test/docs paths.
+- Lead focused pytest passed for artifact reconstruction receipts, truncated
+  chunk reconstruction, deterministic smallest-pack selection, metadata receipt
+  apply revalidation/lifecycle guard behavior, selected batch reporting,
+  durable invocation audit replay, and direct invocation caller-context binding.
+- Completion-model readback reported latest ledger entry
+  `2026-06-21 14:00Z - Stage 17 deterministic smallest-pack artifact reconstruction batch`,
+  `stage17_status=open`, and `current_phase=Phase 2`.
+- FastAPI `TestClient` readback reported `migration_candidate_total=0`,
+  `remediation_queue_count=16`,
+  `validation_receipt_reconstruction_required_count=2821`, and
+  `proposal_lineage_reconstruction_required_count=2821`.
+
+Validations failed or blocked:
+
+- The initial lead focused pytest run exposed nondeterministic artifact-link
+  fixture behavior; this was repaired and the focused group then passed.
+- Full `scripts\check.ps1`, full plugin suite, and CI were not run.
+- Stage 17 remains open. Full quality-evidence closure, proposal review,
+  promotion, enablement, execution, clean metadata apply response closure, and
+  live mission-path proof remain unproven.
+
+Receipts generated:
+
+- W1 readback:
+  `.francis\worker-terminal-readbacks\worker-1-stage17-backlog-class-reduction.md`.
+- W2 readback:
+  `.francis\worker-terminal-readbacks\worker-2-stage17-metadata-receipt-apply-revalidation-20260621T084445-0500.md`.
+- W3 last-message packet:
+  `.francis\worker-terminal-logs\worker-3-voice-receipts-20260621T1334184704159Z.last-message.md`.
+- Runtime receipt evidence included
+  `stage17_artifact_reconstruction_batch_1782050127_receipt.json` and
+  `capability_pack_metadata_1782050038_legacy-generated-stage17reusableinvocationplugin.json`.
+
+Roadmap items advanced:
+
+- Stage 17 / Capability Economy.
+- Governed artifact reconstruction selection and receipt linkage.
+- Metadata receipt migration lifecycle safety.
+- Capability registry migration posture.
+- Worker-swarm integration discipline.
+
+Capability classes advanced:
+
+- Capability Registry
+- Governance
+- Receipts
+- Missions
+- Observability
+- API Surface
+- Documentation
+- Testing
+
+New capabilities created or strengthened:
+
+- Operators can ask the existing artifact reconstruction route to select the
+  smallest eligible full pack deterministically without hand-picking pack IDs.
+- Artifact reconstruction dry-run/apply fingerprints and receipts now bind the
+  selection strategy and selected pack IDs.
+- Metadata receipt apply now has a named apply-time lifecycle revalidation
+  contract before writes.
+- The live reusable-invocation metadata migration candidate count is now zero
+  in readback, with a truthful caveat about the route-response error.
+
+Most important change:
+
+- Stage 17 now has a reusable governed mechanism for reducing the remaining
+  quality-evidence reconstruction backlog one smallest full pack at a time,
+  with receipts and before/after counts.
+
+Biggest remaining bottleneck:
+
+- Stage 17 remains open with `remediation_queue_count=16` and 2,821
+  validation/proposal reconstruction gaps. The metadata apply
+  `internal_api_error` also needs a bounded repair before that route can be
+  called clean.
+
+Next highest leverage action:
+
+- Investigate and fix the metadata receipt apply Windows registry replacement
+  error, then continue selector-backed quality-evidence reconstruction batches
+  with receipts and before/after readbacks.

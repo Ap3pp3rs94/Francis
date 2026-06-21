@@ -150,6 +150,10 @@ _CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_QUEUE_CONTRACT = (
     "stage17_capability_pack_artifact_reconstruction_batch_queue_evidence_v1"
 )
 _CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_RECEIPT_CONTRACT = "stage17_capability_pack_artifact_reconstruction_receipt_v1"
+_CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_SELECTION_STRATEGIES = {
+    "queue_order",
+    "smallest_full_pack_first",
+}
 _CAPABILITY_PACK_QUALITY_STANDARD_REMEDIATION_SOURCE = "stage17_capability_pack_quality_standard_remediation_apply"
 _CAPABILITY_PACK_QUALITY_STANDARD_REMEDIATION_DRY_RUN_CONTRACT = (
     "stage17_capability_pack_quality_standard_remediation_dry_run_v1"
@@ -159,6 +163,9 @@ _CAPABILITY_PACK_QUALITY_STANDARD_REMEDIATION_QUEUE_CONTRACT = (
 )
 _CAPABILITY_PACK_QUALITY_STANDARD_REMEDIATION_RECEIPT_CONTRACT = (
     "stage17_capability_pack_quality_standard_remediation_receipt_v1"
+)
+_CAPABILITY_PACK_METADATA_RECEIPT_APPLY_REVALIDATION_CONTRACT = (
+    "stage17_capability_pack_metadata_receipt_apply_revalidation_v1"
 )
 _CAPABILITY_LIBRARY_PROPOSAL_EVIDENCE_REMEDIATION_APPLY_ROUTE = (
     "/plugins/capabilities/library/proposal-evidence/remediation/apply"
@@ -2355,7 +2362,46 @@ def _plugin_lifecycle_repair_fingerprint(*, plan: dict[str, Any]) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
-def _capability_pack_artifact_reconstruction_fingerprint(*, planned: list[dict[str, Any]]) -> str:
+def _capability_pack_artifact_reconstruction_selection_strategy(raw: Any) -> str:
+    strategy = _safe_str(raw).strip().lower() or "queue_order"
+    return strategy if strategy in _CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_SELECTION_STRATEGIES else ""
+
+
+def _capability_pack_artifact_reconstruction_selection_key(item: dict[str, Any]) -> tuple[int, int, int, str, str]:
+    plan = (
+        item.get("artifact_reconstruction_plan") if isinstance(item.get("artifact_reconstruction_plan"), dict) else {}
+    )
+    pack_id = _safe_str(item.get("pack_id")).strip()
+    pack_version = _safe_str(item.get("pack_version")).strip()
+    reconstruction_count = _count_value(plan.get("capability_count"))
+    required_artifact_count = _count_value(plan.get("validation_receipt_reconstruction_required_count")) + _count_value(
+        plan.get("proposal_lineage_reconstruction_required_count")
+    )
+    return (
+        1 if bool(plan.get("capabilities_truncated")) else 0,
+        reconstruction_count,
+        required_artifact_count,
+        pack_id,
+        pack_version,
+    )
+
+
+def _capability_pack_artifact_reconstruction_select_queue(
+    queue: list[dict[str, Any]],
+    *,
+    selection_strategy: str,
+    max_pack_count: int,
+) -> list[dict[str, Any]]:
+    if selection_strategy == "smallest_full_pack_first":
+        return sorted(queue, key=_capability_pack_artifact_reconstruction_selection_key)[:max_pack_count]
+    return queue
+
+
+def _capability_pack_artifact_reconstruction_fingerprint(
+    *,
+    planned: list[dict[str, Any]],
+    selection_strategy: str = "queue_order",
+) -> str:
     canonical_packs: list[dict[str, Any]] = []
     for pack in planned:
         raw_capabilities = pack.get("capabilities") if isinstance(pack.get("capabilities"), list) else []
@@ -2382,6 +2428,7 @@ def _capability_pack_artifact_reconstruction_fingerprint(*, planned: list[dict[s
     body = {
         "contract": _CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_DRY_RUN_CONTRACT,
         "route": _CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_ROUTE,
+        "selection_strategy": selection_strategy,
         "planned": canonical_packs,
     }
     raw = json.dumps(body, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -10270,6 +10317,14 @@ def _write_capability_pack_artifact_reconstruction_receipt(
         "reason": redact_governed_value(_safe_str(payload.reason).strip() or "stage17_artifact_reconstruction"),
         "recorded_ts": _now_s(),
         "route": route_path,
+        "selection_strategy": _capability_pack_artifact_reconstruction_selection_strategy(payload.selection_strategy),
+        "selected_reconstruction_pack_ids": sorted(
+            {
+                _safe_str(item.get("pack_id")).strip()
+                for item in recorded
+                if isinstance(item, dict) and _safe_str(item.get("pack_id")).strip()
+            }
+        ),
         "dry_run_confirmation": {
             "required_for_apply": True,
             "fingerprint_matched": True,
@@ -12785,6 +12840,7 @@ class CapabilityPackQualityEvidenceReconstructionApplyIn(BaseModel):
     actor: str = ""
     reason: str = "stage17_artifact_reconstruction"
     pack_ids: list[str] = Field(default_factory=list)
+    selection_strategy: str = "queue_order"
     max_pack_count: int = 5
     max_total_capability_count: int = 100
     max_capability_count_per_pack: int = 50
@@ -14101,6 +14157,15 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
             selected_pack_ids = {_validate_plugin_id(raw_id) for raw_id in _unique_texts(payload.pack_ids, limit=100)}
         except Exception:
             return {"ok": False, "applied": False, "status": "blocked", "error": "invalid_pack_id"}
+        selection_strategy = _capability_pack_artifact_reconstruction_selection_strategy(payload.selection_strategy)
+        if not selection_strategy:
+            return {
+                "ok": False,
+                "applied": False,
+                "status": "blocked",
+                "error": "invalid_reconstruction_selection_strategy",
+                "allowed_selection_strategies": sorted(_CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_SELECTION_STRATEGIES),
+            }
 
         operator_decision = _safe_str((payload.meta or {}).get("operator_reconstruction_decision")).strip().lower()
         operator_decision_approved = operator_decision in {"approve", "approved", "approved_for_reconstruction"}
@@ -14137,11 +14202,22 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
             queue=queue,
             selected_pack_ids=selected_pack_ids,
         )
+        selected_by_strategy = False
+        if not selected_pack_ids and selection_strategy != "queue_order":
+            queue = _capability_pack_artifact_reconstruction_select_queue(
+                queue,
+                selection_strategy=selection_strategy,
+                max_pack_count=safe_max_pack_count,
+            )
+            selected_by_strategy = True
         if not queue:
             return {
                 "ok": True,
                 "applied": False,
                 "status": "no_candidates",
+                "selection_strategy": selection_strategy,
+                "selected_by_strategy": selected_by_strategy,
+                "selected_reconstruction_pack_ids": [],
                 "planned_pack_count": 0,
                 "recorded_pack_count": 0,
                 "recorded_capability_count": 0,
@@ -14170,6 +14246,8 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
                 "governance": {
                     "scope": _PLUGIN_WRITE_SCOPE,
                     "route": request.url.path,
+                    "selection_strategy": selection_strategy,
+                    "selected_by_strategy": selected_by_strategy,
                     "writes_registry_metadata": False,
                     "writes_validation_receipts": False,
                     "writes_proposals": False,
@@ -14188,6 +14266,8 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
                 "applied": False,
                 "status": "blocked",
                 "error": "reconstruction_pack_limit_exceeded",
+                "selection_strategy": selection_strategy,
+                "selected_by_strategy": selected_by_strategy,
                 "candidate_total": len(queue),
                 "limit": safe_max_pack_count,
             }
@@ -14269,12 +14349,22 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
                     "partial_reconstruction": capabilities_truncated,
                 }
             )
+        selected_reconstruction_pack_ids = sorted(
+            {
+                _safe_str(item.get("pack_id")).strip()
+                for item in prepared
+                if isinstance(item, dict) and _safe_str(item.get("pack_id")).strip()
+            }
+        )
         if total_capability_count > safe_max_total_capability_count:
             return {
                 "ok": False,
                 "applied": False,
                 "status": "blocked",
                 "error": "total_capability_limit_exceeded",
+                "selection_strategy": selection_strategy,
+                "selected_by_strategy": selected_by_strategy,
+                "selected_reconstruction_pack_ids": selected_reconstruction_pack_ids,
                 "capability_count": total_capability_count,
                 "limit": safe_max_total_capability_count,
             }
@@ -14284,6 +14374,7 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
                 "pack_id": item["pack_id"],
                 "pack_version": item["pack_version"],
                 "pack_name": item["pack_name"],
+                "selection_strategy": selection_strategy,
                 "capability_count": len(item["capabilities"]),
                 "required_capability_count": int(item.get("required_capability_count") or 0),
                 "capabilities_truncated": bool(item.get("capabilities_truncated")),
@@ -14319,12 +14410,25 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
         ]
         partial_reconstruction_count = sum(1 for item in planned if bool(item.get("partial_reconstruction")))
         planned_capability_count = sum(int(item.get("capability_count") or 0) for item in planned)
-        dry_run_fingerprint = _capability_pack_artifact_reconstruction_fingerprint(planned=planned)
+        selected_reconstruction_pack_ids = sorted(
+            {
+                _safe_str(item.get("pack_id")).strip()
+                for item in planned
+                if isinstance(item, dict) and _safe_str(item.get("pack_id")).strip()
+            }
+        )
+        dry_run_fingerprint = _capability_pack_artifact_reconstruction_fingerprint(
+            planned=planned,
+            selection_strategy=selection_strategy,
+        )
         if not prepared:
             return {
                 "ok": True,
                 "applied": False,
                 "status": "no_supported_artifact_reconstruction",
+                "selection_strategy": selection_strategy,
+                "selected_by_strategy": selected_by_strategy,
+                "selected_reconstruction_pack_ids": selected_reconstruction_pack_ids,
                 "planned_pack_count": 0,
                 "recorded_pack_count": 0,
                 "recorded_capability_count": 0,
@@ -14354,6 +14458,8 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
                 "governance": {
                     "scope": _PLUGIN_WRITE_SCOPE,
                     "route": request.url.path,
+                    "selection_strategy": selection_strategy,
+                    "selected_by_strategy": selected_by_strategy,
                     "writes_registry_metadata": False,
                     "writes_validation_receipts": False,
                     "writes_proposals": False,
@@ -14373,6 +14479,9 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
                 "ok": True,
                 "applied": False,
                 "status": "dry_run",
+                "selection_strategy": selection_strategy,
+                "selected_by_strategy": selected_by_strategy,
+                "selected_reconstruction_pack_ids": selected_reconstruction_pack_ids,
                 "planned_pack_count": len(planned),
                 "planned_capability_count": planned_capability_count,
                 "partial_reconstruction_count": partial_reconstruction_count,
@@ -14412,6 +14521,8 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
                 "governance": {
                     "scope": _PLUGIN_WRITE_SCOPE,
                     "route": request.url.path,
+                    "selection_strategy": selection_strategy,
+                    "selected_by_strategy": selected_by_strategy,
                     "writes_registry_metadata": False,
                     "writes_validation_receipts": False,
                     "writes_proposals": False,
@@ -14432,6 +14543,9 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
                 "applied": False,
                 "status": "blocked",
                 "error": "operator_reconstruction_decision_required",
+                "selection_strategy": selection_strategy,
+                "selected_by_strategy": selected_by_strategy,
+                "selected_reconstruction_pack_ids": selected_reconstruction_pack_ids,
                 "planned_pack_count": len(planned),
                 "planned_capability_count": planned_capability_count,
                 "partial_reconstruction_count": partial_reconstruction_count,
@@ -14469,6 +14583,8 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
                 "governance": {
                     "scope": _PLUGIN_WRITE_SCOPE,
                     "route": request.url.path,
+                    "selection_strategy": selection_strategy,
+                    "selected_by_strategy": selected_by_strategy,
                     "writes_registry_metadata": False,
                     "writes_validation_receipts": False,
                     "writes_proposals": False,
@@ -14492,6 +14608,9 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
                 "applied": False,
                 "status": "blocked",
                 "error": "capability_pack_artifact_reconstruction_dry_run_confirmation_required",
+                "selection_strategy": selection_strategy,
+                "selected_by_strategy": selected_by_strategy,
+                "selected_reconstruction_pack_ids": selected_reconstruction_pack_ids,
                 "planned_pack_count": len(planned),
                 "planned_capability_count": planned_capability_count,
                 "partial_reconstruction_count": partial_reconstruction_count,
@@ -14529,6 +14648,8 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
                 "governance": {
                     "scope": _PLUGIN_WRITE_SCOPE,
                     "route": request.url.path,
+                    "selection_strategy": selection_strategy,
+                    "selected_by_strategy": selected_by_strategy,
                     "writes_registry_metadata": False,
                     "writes_validation_receipts": False,
                     "writes_proposals": False,
@@ -14620,6 +14741,9 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
             "ok": not failed,
             "applied": applied,
             "status": "recorded" if not failed and applied else ("partial" if applied else "blocked"),
+            "selection_strategy": selection_strategy,
+            "selected_by_strategy": selected_by_strategy,
+            "selected_reconstruction_pack_ids": selected_reconstruction_pack_ids,
             "planned_pack_count": len(prepared),
             "recorded_pack_count": len(changed_records),
             "recorded_capability_count": sum(
@@ -14667,6 +14791,8 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
             "governance": {
                 "scope": _PLUGIN_WRITE_SCOPE,
                 "route": request.url.path,
+                "selection_strategy": selection_strategy,
+                "selected_by_strategy": selected_by_strategy,
                 "writes_registry_metadata": applied,
                 "writes_receipts": applied,
                 "writes_batch_reconstruction_receipt": applied,
@@ -18271,6 +18397,74 @@ def _capability_pack_metadata_receipt_lifecycle_pack_guard(
     }
 
 
+def _capability_pack_metadata_receipt_apply_revalidation_guard(
+    *,
+    prepared: list[dict[str, Any]],
+    registry: dict[str, Any],
+) -> dict[str, Any]:
+    packs: list[dict[str, Any]] = []
+    blocked_candidates: list[dict[str, Any]] = []
+    capability_count = 0
+    for item in prepared:
+        pack_id = _safe_str(item.get("pack_id")).strip()
+        pack_version = _safe_str(item.get("pack_version")).strip()
+        capability_ids = _unique_texts(item.get("capability_ids"), limit=10000)
+        capability_count += len(capability_ids)
+        lifecycle_guard = _capability_pack_metadata_receipt_lifecycle_pack_guard(
+            pack_id=pack_id,
+            pack_version=pack_version,
+            capability_ids=capability_ids,
+            registry=registry,
+        )
+        pack = {
+            "pack_id": pack_id,
+            "pack_version": pack_version,
+            "capability_count": len(capability_ids),
+            "status": _safe_str(lifecycle_guard.get("status")).strip(),
+            "blocks_apply": bool(lifecycle_guard.get("blocks_metadata_receipt_apply")),
+            "blocked_capability_count": int(lifecycle_guard.get("blocked_capability_count") or 0),
+            "lifecycle_guard": lifecycle_guard,
+        }
+        packs.append(pack)
+        if bool(lifecycle_guard.get("blocks_metadata_receipt_apply")):
+            blocked_candidates.append(
+                {
+                    "pack_id": pack_id,
+                    "pack_version": pack_version,
+                    "error": "capability_pack_metadata_receipt_apply_revalidation_blocked",
+                    "lifecycle_guard": lifecycle_guard,
+                }
+            )
+
+    blocked = bool(blocked_candidates)
+    return {
+        "contract": _CAPABILITY_PACK_METADATA_RECEIPT_APPLY_REVALIDATION_CONTRACT,
+        "required": True,
+        "status": "blocked" if blocked else "ready",
+        "pack_count": len(packs),
+        "capability_count": capability_count,
+        "blocked_pack_count": len(blocked_candidates),
+        "blocks_apply": blocked,
+        "reason": (
+            "apply_time_lifecycle_state_blocks_metadata_receipt_migration"
+            if blocked
+            else "apply_time_lifecycle_state_allows_metadata_receipt_migration"
+        ),
+        "packs": packs,
+        "blocked_candidates": blocked_candidates,
+        "writes_registry_metadata_if_blocked": False,
+        "writes_receipts_if_blocked": False,
+        "does_not_approve_proposals": True,
+        "does_not_promote_capabilities": True,
+        "does_not_enable_capabilities": True,
+        "does_not_execute_capabilities": True,
+        "promotion_authority": False,
+        "execution_authority": False,
+        "approval_authority": False,
+        "memory_write": False,
+    }
+
+
 def _capability_pack_migration_batch_projection(
     *,
     plan: dict[str, Any],
@@ -18343,6 +18537,9 @@ def _capability_pack_metadata_receipts_bulk_governance(
         "versioned_pack_identity_required": True,
         "lifecycle_guard_contract": "stage17_capability_pack_metadata_receipt_lifecycle_guard_v1",
         "lifecycle_guard_required_before_apply": True,
+        "apply_revalidation_contract": _CAPABILITY_PACK_METADATA_RECEIPT_APPLY_REVALIDATION_CONTRACT,
+        "apply_revalidation_required_before_registry_write": True,
+        "apply_revalidation_required_before_receipt_write": True,
         "writes_registry_metadata": writes_registry_metadata,
         "writes_receipts": writes_receipts,
         "dry_run_required_before_apply": True,
@@ -18569,6 +18766,10 @@ def record_capability_pack_metadata_receipts_from_plan(
                 "limit": safe_max_total_capability_count,
             }
         if blocked_candidates:
+            apply_revalidation = _capability_pack_metadata_receipt_apply_revalidation_guard(
+                prepared=prepared,
+                registry=registry,
+            )
             has_lifecycle_block = any(
                 _safe_str(item.get("error")).strip() == "capability_pack_metadata_receipt_lifecycle_blocked"
                 for item in blocked_candidates
@@ -18605,6 +18806,7 @@ def record_capability_pack_metadata_receipts_from_plan(
                 ),
                 "blocked_candidates": blocked_candidates,
                 "blocked_lifecycle_candidates": blocked_lifecycle_candidates,
+                "apply_revalidation": apply_revalidation,
                 "projection_scope": before_projection["projection_scope"],
                 "global_counts_included": before_projection["global_counts_included"],
                 "projection_generated_at": before_projection["generated_at"],
@@ -18627,6 +18829,8 @@ def record_capability_pack_metadata_receipts_from_plan(
                     "lifecycle_guard_contract": "stage17_capability_pack_metadata_receipt_lifecycle_guard_v1",
                     "metadata_receipt_migration_requires_non_blocking_lifecycle": True,
                     "blocking_or_unknown_lifecycle_states_block_apply": True,
+                    "apply_revalidation_required_before_registry_write": True,
+                    "apply_revalidation_contract": _CAPABILITY_PACK_METADATA_RECEIPT_APPLY_REVALIDATION_CONTRACT,
                 },
                 "governance": _capability_pack_metadata_receipts_bulk_governance(
                     route_path=request.url.path,
@@ -18732,6 +18936,46 @@ def record_capability_pack_metadata_receipts_from_plan(
                 ),
             }
 
+        apply_revalidation = _capability_pack_metadata_receipt_apply_revalidation_guard(
+            prepared=prepared,
+            registry=registry,
+        )
+        if bool(apply_revalidation.get("blocks_apply")):
+            return {
+                "ok": False,
+                "applied": False,
+                "status": "blocked",
+                "error": "capability_pack_metadata_receipt_apply_revalidation_blocked",
+                "planned_pack_count": len(planned),
+                "planned_capability_count": planned_capability_count,
+                "apply_revalidation": apply_revalidation,
+                "projection_scope": before_projection["projection_scope"],
+                "global_counts_included": before_projection["global_counts_included"],
+                "projection_generated_at": before_projection["generated_at"],
+                "projection_evidence": before_projection["projection_evidence"],
+                "before": before_projection,
+                "before_candidate_total": before_projection["candidate_total"],
+                "dry_run_confirmation": {
+                    "required_for_apply": True,
+                    "fingerprint_contract": "stage17_capability_pack_metadata_receipts_bulk_from_plan_dry_run_v1",
+                    "fingerprint_matched": True,
+                    "apply_route": request.url.path,
+                    "reason": "apply_revalidation_blocked",
+                },
+                "planned": planned,
+                "requirements": {
+                    "apply_revalidation_required_before_registry_write": True,
+                    "apply_revalidation_required_before_receipt_write": True,
+                    "apply_revalidation_contract": _CAPABILITY_PACK_METADATA_RECEIPT_APPLY_REVALIDATION_CONTRACT,
+                    "blocking_or_unknown_lifecycle_states_block_apply": True,
+                },
+                "governance": _capability_pack_metadata_receipts_bulk_governance(
+                    route_path=request.url.path,
+                    writes_registry_metadata=False,
+                    writes_receipts=False,
+                ),
+            }
+
         pending_receipts: list[dict[str, Any]] = []
         recorded_ts = _now_s()
         batch_id = f"stage17_metadata_receipts_bulk_{recorded_ts}"
@@ -18822,6 +19066,9 @@ def record_capability_pack_metadata_receipts_from_plan(
                     "lifecycle_guard_blocked_capability_count": int(
                         lifecycle_guard.get("blocked_capability_count") or 0
                     ),
+                    "apply_revalidation_contract": _safe_str(apply_revalidation.get("contract")).strip(),
+                    "apply_revalidation_status": _safe_str(apply_revalidation.get("status")).strip(),
+                    "apply_revalidation_blocked_pack_count": int(apply_revalidation.get("blocked_pack_count") or 0),
                 },
             )
             pending_receipts.append(
@@ -18904,6 +19151,7 @@ def record_capability_pack_metadata_receipts_from_plan(
                 "fingerprint_contract": "stage17_capability_pack_metadata_receipts_bulk_from_plan_dry_run_v1",
                 "apply_route": request.url.path,
             },
+            "apply_revalidation": apply_revalidation,
             "recorded_pack_count": len(recorded),
             "recorded_capability_count": sum(int(item.get("capability_count") or 0) for item in recorded),
             "recorded": recorded,

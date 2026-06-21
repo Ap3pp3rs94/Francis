@@ -65,6 +65,85 @@ def _isolate_generated_plugin_root(monkeypatch, plugins_module, tmp_path: Path) 
     monkeypatch.setattr(spec_builder, "_gen_dir", lambda: generated_root)
 
 
+def _empty_artifact_link_candidates(plugins_module, *, scan_limit=None) -> dict[str, object]:
+    safe_scan_limit = int(scan_limit or 0)
+    registry = plugins_module._load_registry()
+    raw_plugins = registry.get("plugins") if isinstance(registry.get("plugins"), dict) else {}
+    validation_by_plugin_id: dict[str, dict[str, object]] = {}
+    proposal_by_plugin_id: dict[str, dict[str, object]] = {}
+    for plugin_id, plugin in raw_plugins.items():
+        if not isinstance(plugin, dict):
+            continue
+        meta = plugin.get("meta") if isinstance(plugin.get("meta"), dict) else {}
+        if not str(meta.get("artifact_reconstruction_batch_id") or "").strip():
+            continue
+        validation_id = str(meta.get("validation_receipt_id") or "").strip()
+        validation_path = str(meta.get("validation_receipt_path") or "").strip()
+        if validation_id and validation_path:
+            validation_by_plugin_id[str(plugin_id)] = {
+                "plugin_id": str(plugin_id),
+                "validation_receipt_id": validation_id,
+                "validation_receipt_path": validation_path,
+                "claim_scope": "existing_pack_specific_plugin_validation_receipt",
+                "pack_specific_plugin_match": True,
+                "writes_artifact": False,
+            }
+        proposal_id = str(meta.get("proposal_id") or "").strip()
+        proposal_path = str(meta.get("proposal_path") or "").strip()
+        if proposal_id and proposal_path:
+            proposal_by_plugin_id[str(plugin_id)] = {
+                "plugin_id": str(plugin_id),
+                "proposal_id": proposal_id,
+                "proposal_path": proposal_path,
+                "claim_scope": "existing_plugin_proposal_lineage_only_not_approval",
+                "pack_specific_plugin_match": True,
+                "writes_artifact": False,
+            }
+
+    def candidates(by_plugin_id: dict[str, dict[str, object]]) -> dict[str, object]:
+        return {
+            "by_plugin_id": by_plugin_id,
+            "candidate_count": len(by_plugin_id),
+            "ambiguous_plugin_id_count": 0,
+            "invalid_or_unusable_artifact_count": 0,
+            "artifact_body_max_bytes": plugins_module._PLUGIN_ARTIFACT_LINK_BODY_MAX_BYTES,
+            "artifact_scan_limit": safe_scan_limit,
+            "artifact_scan_limited": False,
+            "total_artifact_count": len(by_plugin_id),
+            "scanned_artifact_count": len(by_plugin_id),
+            "unscanned_artifact_count": 0,
+            "oversized_artifact_count": 0,
+            "unreadable_artifact_count": 0,
+        }
+
+    return {
+        "validation_receipts": candidates(validation_by_plugin_id),
+        "proposals": candidates(proposal_by_plugin_id),
+        "selection_policy": "fixture_reconstructed_artifact_links_only",
+        "artifact_body_max_bytes": plugins_module._PLUGIN_ARTIFACT_LINK_BODY_MAX_BYTES,
+        "artifact_scan_limit": safe_scan_limit,
+        "artifact_scan_limited": False,
+        "validation_artifact_total_count": len(validation_by_plugin_id),
+        "validation_artifact_scanned_count": len(validation_by_plugin_id),
+        "proposal_artifact_total_count": len(proposal_by_plugin_id),
+        "proposal_artifact_scanned_count": len(proposal_by_plugin_id),
+        "skips_oversized_artifacts": True,
+        "reads_validation_receipt_bodies_for_plugin_id_match": True,
+        "reads_proposal_bodies_for_plugin_id_match": True,
+        "writes_validation_receipts": False,
+        "writes_proposals": False,
+        "proposal_lineage_does_not_claim_approval": True,
+    }
+
+
+def _disable_existing_artifact_link_candidates(monkeypatch, plugins_module) -> None:
+    monkeypatch.setattr(
+        plugins_module,
+        "_capability_pack_existing_artifact_link_candidates",
+        lambda *, scan_limit=None: _empty_artifact_link_candidates(plugins_module, scan_limit=scan_limit),
+    )
+
+
 def _contains_key(value: object, key: str) -> bool:
     if isinstance(value, dict):
         return key in value or any(_contains_key(item, key) for item in value.values())
@@ -3314,10 +3393,21 @@ def test_plugins_capability_pack_metadata_receipts_bulk_from_migration_plan(
     assert recorded_body["dry_run_fingerprint"] == dry_run_body["dry_run_fingerprint"]
     assert recorded_body["dry_run_confirmation"]["required_for_apply"] is True
     assert recorded_body["dry_run_confirmation"]["fingerprint_matched"] is True
+    apply_revalidation = recorded_body["apply_revalidation"]
+    assert apply_revalidation["contract"] == ("stage17_capability_pack_metadata_receipt_apply_revalidation_v1")
+    assert apply_revalidation["status"] == "ready"
+    assert apply_revalidation["blocks_apply"] is False
+    assert apply_revalidation["pack_count"] == 1
+    assert apply_revalidation["blocked_pack_count"] == 0
     assert recorded_body["recorded_pack_count"] == 1
     assert recorded_body["recorded_capability_count"] == candidate["capability_count"]
     assert recorded_body["remaining_candidate_total"] < plan["candidate_total"]
     assert recorded_body["governance"]["dry_run_required_before_apply"] is True
+    assert recorded_body["governance"]["apply_revalidation_contract"] == (
+        "stage17_capability_pack_metadata_receipt_apply_revalidation_v1"
+    )
+    assert recorded_body["governance"]["apply_revalidation_required_before_registry_write"] is True
+    assert recorded_body["governance"]["apply_revalidation_required_before_receipt_write"] is True
     assert recorded_body["governance"]["writes_registry_metadata"] is True
     assert recorded_body["governance"]["writes_receipts"] is True
     assert recorded_body["governance"]["promotion_authority"] is False
@@ -3357,6 +3447,11 @@ def test_plugins_capability_pack_metadata_receipts_bulk_from_migration_plan(
     )
     assert receipt["metadata_context"]["lifecycle_guard_status"] == "ready"
     assert receipt["metadata_context"]["lifecycle_guard_blocked_capability_count"] == 0
+    assert receipt["metadata_context"]["apply_revalidation_contract"] == (
+        "stage17_capability_pack_metadata_receipt_apply_revalidation_v1"
+    )
+    assert receipt["metadata_context"]["apply_revalidation_status"] == "ready"
+    assert receipt["metadata_context"]["apply_revalidation_blocked_pack_count"] == 0
 
 
 def test_plugins_capability_pack_metadata_receipts_bulk_dry_run_and_unconfirmed_apply_do_not_persist(
@@ -3749,12 +3844,23 @@ def test_plugins_capability_pack_metadata_receipts_bulk_blocks_blocking_lifecycl
     assert blocked_body["dry_run_confirmation"]["required_for_apply"] is True
     assert blocked_body["dry_run_confirmation"]["fingerprint_available"] is False
     assert blocked_body["requirements"]["lifecycle_guard_required_before_apply"] is True
+    assert blocked_body["requirements"]["apply_revalidation_contract"] == (
+        "stage17_capability_pack_metadata_receipt_apply_revalidation_v1"
+    )
+    assert blocked_body["requirements"]["apply_revalidation_required_before_registry_write"] is True
     assert blocked_body["governance"]["writes_registry_metadata"] is False
     assert blocked_body["governance"]["writes_receipts"] is False
     assert blocked_body["governance"]["lifecycle_guard_required_before_apply"] is True
+    assert blocked_body["governance"]["apply_revalidation_required_before_registry_write"] is True
+    assert blocked_body["governance"]["apply_revalidation_required_before_receipt_write"] is True
     assert not receipt_dir.exists()
     assert sorted(path.name for path in lifecycle_dir.glob("*.json")) == lifecycle_receipt_names
 
+    blocked_revalidation = blocked_body["apply_revalidation"]
+    assert blocked_revalidation["contract"] == ("stage17_capability_pack_metadata_receipt_apply_revalidation_v1")
+    assert blocked_revalidation["status"] == "blocked"
+    assert blocked_revalidation["blocks_apply"] is True
+    assert blocked_revalidation["blocked_pack_count"] == 1
     lifecycle_block = blocked_body["blocked_lifecycle_candidates"][0]["lifecycle_guard"]
     assert lifecycle_block["contract"] == "stage17_capability_pack_metadata_receipt_lifecycle_guard_v1"
     assert lifecycle_block["status"] == "blocked"
@@ -3781,6 +3887,8 @@ def test_plugins_capability_pack_metadata_receipts_bulk_blocks_blocking_lifecycl
     assert blocked_apply_body["applied"] is False
     assert blocked_apply_body["error"] == "capability_pack_metadata_receipt_lifecycle_blocked"
     assert blocked_apply_body["dry_run_confirmation"]["fingerprint_available"] is False
+    assert blocked_apply_body["apply_revalidation"]["status"] == "blocked"
+    assert blocked_apply_body["apply_revalidation"]["blocked_pack_count"] == 1
     assert not receipt_dir.exists()
 
     after_quarantined = client.get(f"/plugins/get?id={quarantined_plugin_id}").json()["item"]
@@ -3826,6 +3934,8 @@ def test_plugins_capability_pack_metadata_receipts_bulk_blocks_blocking_lifecycl
     assert unknown_body["ok"] is False
     assert unknown_body["applied"] is False
     assert unknown_body["error"] == "capability_pack_metadata_receipt_lifecycle_blocked"
+    assert unknown_body["apply_revalidation"]["status"] == "blocked"
+    assert unknown_body["apply_revalidation"]["blocked_pack_count"] == 1
     unknown_lifecycle_block = unknown_body["blocked_lifecycle_candidates"][0]["lifecycle_guard"]
     assert unknown_lifecycle_block["status"] == "blocked"
     unknown_capability = unknown_lifecycle_block["blocked_capabilities"][0]
@@ -3836,6 +3946,74 @@ def test_plugins_capability_pack_metadata_receipts_bulk_blocks_blocking_lifecycl
     after_unknown = client.get(f"/plugins/get?id={unknown_plugin_id}").json()["item"]
     assert after_unknown["meta"]["lifecycle_status"] == "operator_review_limbo"
     assert "pack_metadata_receipt_id" not in after_unknown["meta"]
+
+
+def test_plugins_capability_pack_metadata_receipt_apply_revalidation_guard_classifies_lifecycle_states() -> None:
+    from francis.api.routes import plugins
+
+    registry: dict[str, object] = {"plugins": {}}
+    plugin_states = {
+        "stage17.apply.revalidation.allowed": {},
+        "stage17.apply.revalidation.quarantined": {"lifecycle_status": "quarantined"},
+        "stage17.apply.revalidation.unknown": {"lifecycle_status": "operator_review_limbo"},
+    }
+    for plugin_id, meta in plugin_states.items():
+        plugins._write_plugin(
+            registry,
+            plugins._normalize_plugin_record(
+                plugin_id,
+                {
+                    "id": plugin_id,
+                    "name": plugin_id,
+                    "status": "staged",
+                    "enabled": False,
+                    "meta": dict(meta),
+                },
+            ),
+        )
+
+    guard = plugins._capability_pack_metadata_receipt_apply_revalidation_guard(
+        prepared=[
+            {
+                "pack_id": "ops.apply_revalidation_allowed",
+                "pack_version": "1.0.0",
+                "capability_ids": ["stage17.apply.revalidation.allowed"],
+            },
+            {
+                "pack_id": "ops.apply_revalidation_quarantined",
+                "pack_version": "1.0.0",
+                "capability_ids": ["stage17.apply.revalidation.quarantined"],
+            },
+            {
+                "pack_id": "ops.apply_revalidation_unknown",
+                "pack_version": "1.0.0",
+                "capability_ids": ["stage17.apply.revalidation.unknown"],
+            },
+        ],
+        registry=registry,
+    )
+
+    assert guard["contract"] == "stage17_capability_pack_metadata_receipt_apply_revalidation_v1"
+    assert guard["status"] == "blocked"
+    assert guard["pack_count"] == 3
+    assert guard["capability_count"] == 3
+    assert guard["blocked_pack_count"] == 2
+    assert guard["writes_registry_metadata_if_blocked"] is False
+    assert guard["writes_receipts_if_blocked"] is False
+    assert guard["does_not_promote_capabilities"] is True
+    assert guard["does_not_execute_capabilities"] is True
+
+    packs_by_id = {item["pack_id"]: item for item in guard["packs"]}
+    assert packs_by_id["ops.apply_revalidation_allowed"]["status"] == "ready"
+    assert packs_by_id["ops.apply_revalidation_allowed"]["blocks_apply"] is False
+    assert packs_by_id["ops.apply_revalidation_quarantined"]["status"] == "blocked"
+    quarantined_lifecycle = packs_by_id["ops.apply_revalidation_quarantined"]["lifecycle_guard"]
+    assert quarantined_lifecycle["blocked_capabilities"][0]["status"] == "quarantined"
+    assert quarantined_lifecycle["blocked_capabilities"][0]["error"] == "plugin_quarantined"
+    assert packs_by_id["ops.apply_revalidation_unknown"]["status"] == "blocked"
+    unknown_lifecycle = packs_by_id["ops.apply_revalidation_unknown"]["lifecycle_guard"]
+    assert unknown_lifecycle["blocked_capabilities"][0]["status"] == "operator_review_limbo"
+    assert unknown_lifecycle["blocked_capabilities"][0]["error"] == "plugin_lifecycle_state_unknown"
 
 
 def test_plugins_capability_pack_metadata_receipts_bulk_selected_batch_reports_before_after_counts(
@@ -5715,6 +5893,7 @@ def test_plugins_capability_pack_quality_evidence_remediation_reconstructs_trunc
         plugin["meta"] = meta
         plugins._write_plugin(registry, plugins._normalize_plugin_record(plugin_id, plugin))
     plugins._save_registry_and_catalog(registry)
+    _disable_existing_artifact_link_candidates(monkeypatch, plugins)
 
     before = client.get("/plugins/capabilities/packs/quality/evidence/remediation").json()
     before_item = next(item for item in before["remediation_queue"] if item["pack_id"] == pack_id)
@@ -5756,6 +5935,7 @@ def test_plugins_capability_pack_quality_evidence_remediation_reconstructs_trunc
         "/plugins/capabilities/packs/quality/evidence/remediation/reconstruct",
         json={
             **request_body,
+            "dry_run_fingerprint": dry_run_body["dry_run_fingerprint"],
             "meta": {"operator_reconstruction_decision": "approved_for_reconstruction"},
         },
     )
@@ -5799,6 +5979,179 @@ def test_plugins_capability_pack_quality_evidence_remediation_reconstructs_trunc
     assert remaining_plan["required"] is True
     assert remaining_plan["capability_count"] == 1
     assert remaining_plan["capabilities_truncated"] is False
+
+
+def test_plugins_capability_pack_quality_evidence_reconstruction_selects_smallest_full_pack(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
+    client = TestClient(create_app())
+    built_plugin_ids: list[str] = []
+    for index in range(3):
+        built = client.post(
+            "/plugins/build",
+            json={
+                "name": f"Capability Artifact Reconstruction Strategy Plugin {index}",
+                "description": "Stage 17 deterministic reconstruction strategy coverage",
+                "actor": _PLUGIN_ACTOR,
+                "meta": _forge_promotion_meta(f"capability_artifact_reconstruction_strategy_{index}"),
+            },
+        )
+        assert built.status_code == 200
+        built_body = built.json()
+        assert built_body["ok"] is True
+        built_plugin_ids.append(str(built_body["plugin_id"]))
+
+    large_pack_id = "ops.reconstruction_strategy_large"
+    small_pack_id = "ops.reconstruction_strategy_small"
+
+    def record_pack(pack_id: str, capability_ids: list[str]) -> None:
+        recorded = client.post(
+            "/plugins/capabilities/packs/metadata/receipts",
+            json={
+                "actor": _PLUGIN_ACTOR,
+                "reason": f"record reviewed metadata before {pack_id} reconstruction",
+                "pack_id": pack_id,
+                "pack_version": "1.0.0",
+                "pack_name": pack_id.replace(".", " ").title(),
+                "capability_ids": capability_ids,
+                "promotion_rules": [
+                    "metadata_receipt_before_promotion",
+                    "quality_standards_before_promotion",
+                    "operator_review_before_promotion",
+                ],
+                "pack_governance": {
+                    "risk_tier": "normal",
+                    "scope": "build_dev",
+                    "operator_review_required": True,
+                    "requires_validation_receipt": True,
+                },
+            },
+        )
+        assert recorded.status_code == 200
+        assert recorded.json()["ok"] is True
+
+    record_pack(large_pack_id, built_plugin_ids[:2])
+    record_pack(small_pack_id, built_plugin_ids[2:])
+
+    for artifact_dir in (
+        data_root / "artifacts" / "plugins" / "validations",
+        data_root / "artifacts" / "plugins" / "proposals",
+    ):
+        for artifact_path in artifact_dir.glob("*.json"):
+            artifact_path.unlink(missing_ok=True)
+
+    registry = plugins._load_registry()
+    for plugin_id in built_plugin_ids:
+        plugin = plugins._read_plugin(registry, plugin_id)
+        assert plugin is not None
+        meta = dict(plugin.get("meta") or {})
+        for key in (
+            "proposal_id",
+            "forge_proposal_id",
+            "proposal_path",
+            "validation_receipt_id",
+            "validation_receipt_path",
+        ):
+            meta.pop(key, None)
+        meta["quality"] = {
+            "tests": ["tests/test_api_plugins.py"],
+            "docs": ["README.md", "docs/operations/COMPLETION_LEDGER.md"],
+            "claim_scope": "explicit_reconstruction_strategy_fixture_quality_references",
+            "pack_specific_coverage_claimed": False,
+        }
+        plugin["meta"] = meta
+        plugins._write_plugin(registry, plugins._normalize_plugin_record(plugin_id, plugin))
+    plugins._save_registry_and_catalog(registry)
+    _disable_existing_artifact_link_candidates(monkeypatch, plugins)
+
+    before = client.get("/plugins/capabilities/packs/quality/evidence/remediation").json()
+    assert before["remediation_queue_count"] == 2
+    large_item = next(item for item in before["remediation_queue"] if item["pack_id"] == large_pack_id)
+    small_item = next(item for item in before["remediation_queue"] if item["pack_id"] == small_pack_id)
+    assert large_item["artifact_reconstruction_plan"]["capability_count"] == 2
+    assert small_item["artifact_reconstruction_plan"]["capability_count"] == 1
+
+    request_body = {
+        "actor": _PLUGIN_ACTOR,
+        "reason": "operator approved deterministic smallest reconstruction batch",
+        "selection_strategy": "smallest_full_pack_first",
+        "max_pack_count": 1,
+        "max_total_capability_count": 1,
+        "max_capability_count_per_pack": 1,
+    }
+    dry_run = client.post(
+        "/plugins/capabilities/packs/quality/evidence/remediation/reconstruct",
+        json={**request_body, "dry_run": True},
+    )
+    assert dry_run.status_code == 200
+    dry_run_body = dry_run.json()
+    assert dry_run_body["ok"] is True
+    assert dry_run_body["status"] == "dry_run"
+    assert dry_run_body["selection_strategy"] == "smallest_full_pack_first"
+    assert dry_run_body["selected_by_strategy"] is True
+    assert dry_run_body["selected_reconstruction_pack_ids"] == [small_pack_id]
+    assert dry_run_body["planned_pack_count"] == 1
+    assert dry_run_body["planned_capability_count"] == 1
+    assert dry_run_body["planned"][0]["pack_id"] == small_pack_id
+    assert dry_run_body["projection_scope"] == "full_library"
+    assert dry_run_body["global_counts_included"] is True
+    assert dry_run_body["before_remediation_queue_count"] == 2
+    assert dry_run_body["after_remediation_queue_count"] == 2
+    assert dry_run_body["before_validation_receipt_reconstruction_required_count"] == 3
+    assert dry_run_body["before_proposal_lineage_reconstruction_required_count"] == 3
+    assert dry_run_body["governance"]["selection_strategy"] == "smallest_full_pack_first"
+
+    applied = client.post(
+        "/plugins/capabilities/packs/quality/evidence/remediation/reconstruct",
+        json={
+            **request_body,
+            "dry_run_fingerprint": dry_run_body["dry_run_fingerprint"],
+            "meta": {"operator_reconstruction_decision": "approved_for_reconstruction"},
+        },
+    )
+    assert applied.status_code == 200
+    applied_body = applied.json()
+    assert applied_body["ok"] is True
+    assert applied_body["applied"] is True
+    assert applied_body["status"] == "recorded"
+    assert applied_body["selection_strategy"] == "smallest_full_pack_first"
+    assert applied_body["selected_by_strategy"] is True
+    assert applied_body["selected_reconstruction_pack_ids"] == [small_pack_id]
+    assert applied_body["recorded_pack_count"] == 1
+    assert applied_body["recorded_capability_count"] == 1
+    assert applied_body["recorded"][0]["pack_id"] == small_pack_id
+    assert applied_body["before_remediation_queue_count"] == 2
+    assert applied_body["after_remediation_queue_count"] == 1
+    assert applied_body["candidate_reduction_count"] == 1
+    assert applied_body["before_validation_receipt_reconstruction_required_count"] == 3
+    assert applied_body["after_validation_receipt_reconstruction_required_count"] == 2
+    assert applied_body["before_proposal_lineage_reconstruction_required_count"] == 3
+    assert applied_body["after_proposal_lineage_reconstruction_required_count"] == 2
+    assert applied_body["governance"]["writes_batch_reconstruction_receipt"] is True
+    assert applied_body["governance"]["selection_strategy"] == "smallest_full_pack_first"
+
+    receipt = applied_body["receipt"]
+    assert receipt["contract"] == "stage17_capability_pack_artifact_reconstruction_receipt_v1"
+    assert receipt["selection_strategy"] == "smallest_full_pack_first"
+    assert receipt["selected_reconstruction_pack_ids"] == [small_pack_id]
+    assert receipt["candidate_reduction_count"] == 1
+    assert receipt["before_validation_receipt_reconstruction_required_count"] == 3
+    assert receipt["after_validation_receipt_reconstruction_required_count"] == 2
+
+    after = client.get("/plugins/capabilities/packs/quality/evidence/remediation").json()
+    after_pack_ids = [item["pack_id"] for item in after["remediation_queue"]]
+    assert small_pack_id not in after_pack_ids
+    assert large_pack_id in after_pack_ids
 
 
 def test_plugins_capability_pack_quality_evidence_remediation_apply_backfills_candidate_refs(
