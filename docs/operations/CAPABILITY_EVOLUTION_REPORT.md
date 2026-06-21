@@ -48,18 +48,18 @@ Baseline: report initialized after the four-worker pass completed on
 | Lens | 4 | Lens observation contracts gained unmapped-coordinate refusal coverage, invalid-dimension refusal, and command-palette proof readbacks. |
 | Voice | 4 | Voice receipts now separate acoustic proof source, gate mode, provider receipt modes, and embedded provider-boundary evidence. |
 | Memory | 0 | No memory contract advancement in this cycle. |
-| Governance | 11 | Refusal/no-authority boundaries strengthened for acoustic proof, provider receipts, Stage 17 worker-readback/publication handoff claims, invalid coordinates, generated-spec compatibility, pack-selection binding, activity-vs-progress reporting, and worker liveness truth. |
-| Receipts | 11 | New receipt/readback fields for acoustic proof rejection, provider mode state/linkage, worker-readback and worker/publication handoff requirements, capability-evolution worker packets, worker execution liveness, metadata receipt batch evidence, and invocation pack-selection receipts. |
-| Missions | 1 | Stage 17 mission-linked invocation audit now rejects tampered embedded pack-selection bindings. |
+| Governance | 14 | Refusal/no-authority boundaries strengthened for acoustic proof, provider receipts, Stage 17 worker-readback/publication handoff claims, invalid coordinates, generated-spec compatibility, lifecycle history readback compatibility, unsupported invocation receipt rejection, quality-standard dry-run/apply receipt gates, pack-selection binding, activity-vs-progress reporting, and worker liveness truth. |
+| Receipts | 14 | New receipt/readback fields for acoustic proof rejection, provider mode state/linkage, worker-readback and worker/publication handoff requirements, capability-evolution worker packets, worker execution liveness, metadata receipt batch evidence, quality-standard remediation batch receipts, lifecycle history compatibility evidence, and invocation pack-selection/rejection receipts. |
+| Missions | 2 | Stage 17 mission-linked invocation audit rejects tampered embedded pack-selection bindings and now surfaces unsupported operation-capability receipts as rejected evidence. |
 | Overlay | 4 | Overlay-related proof now requires local overlay speech source, exposes manual proof mode, and blocked/invalid coordinate cases stay before screen/session readback. |
-| Observability | 10 | Added diagnostics for acoustic proof, provider mode/linkage disambiguation, Stage 17 readback and handoff guard state, build capability evolution, Exec worker liveness, and publication-marker prompt matching. |
+| Observability | 12 | Added diagnostics for acoustic proof, provider mode/linkage disambiguation, Stage 17 readback and handoff guard state, quality-standard after-sync queue honesty, unsupported invocation rejection visibility, build capability evolution, Exec worker liveness, and publication-marker prompt matching. |
 | Completion Model | 2 | Completion model now rejects selected Stage 17 gaps as worker-readback proof and worker/publication handoff proof. |
-| Capability Registry | 3 | Stage 17 now has generated-spec compatibility binding, catalog lifecycle provenance projection, and selected live metadata-receipt backlog reduction evidence. |
+| Capability Registry | 5 | Stage 17 now has generated-spec compatibility binding, catalog lifecycle provenance projection, selected live metadata-receipt backlog reduction evidence, receipt-backed quality-standard backlog reduction, and lifecycle-history compatibility readback evidence. |
 | Swarm Infrastructure | 4 | Completion model now requires worker readback/handoff evidence, coordinator prompts require capability-evolution packet fields, and active Exec workers are no longer treated as stale. |
 | Operator Controls | 2 | Manual acoustic Orb movement proof now has source-specific next-step diagnostics and explicit manual-proof-required state. |
-| API Surface | 5 | Monitor route sanitizer, ChatGPT voice contract/receipt surfaces, plugin promotion readiness, plugin runtime execution guards, and invocation audit readbacks expose stricter fields. |
-| Documentation | 5 | Completion model docs, worker prompt docs, Stage 17 closure matrix, ledger entries, and this evolution report record durable operating rules. |
-| Testing | 13 | Added or expanded focused tests across worker lanes, coordinator prompt contracts, worker liveness status, plugin compatibility, metadata receipt batching, and invocation audit binding. |
+| API Surface | 8 | Monitor route sanitizer, ChatGPT voice contract/receipt surfaces, plugin promotion readiness, plugin runtime execution guards, quality-standard remediation receipts, lifecycle-history compatibility readbacks, and invocation audit readbacks expose stricter fields. |
+| Documentation | 7 | Completion model docs, worker prompt docs, Stage 17 closure matrix, ledger entries, and this evolution report record durable operating rules and current Stage 17 blockers. |
+| Testing | 16 | Added or expanded focused tests across worker lanes, coordinator prompt contracts, worker liveness status, plugin compatibility, metadata receipt batching, quality-standard receipt/after-sync behavior, lifecycle history compatibility, and invocation audit binding. |
 
 ## Cycle Log
 
@@ -715,3 +715,108 @@ Next highest leverage action:
 
 - Restart the three-worker coordinator and continue into quality-evidence /
   proposal closure or the next accepted worker packet.
+
+## PM Follow-Up - 2026-06-21T11:50Z
+
+Commit:
+
+- `4b7a2a6c` - `fix(stage17): receipt quality and invocation evidence`.
+
+Active workers:
+
+- W1 quality-standard backlog class reduction: accepted lane readback.
+- W2 lifecycle behavior: accepted lane readback.
+- W3 reusable invocation proof: accepted lane readback.
+- W4 parked to preserve usage.
+
+Commits produced:
+
+- 1 coherent Lead Builder integration commit.
+
+Commits accepted:
+
+- 1 pushed commit on `main`: `4b7a2a6c`.
+
+Commits rejected:
+
+- 0 complete worker packets rejected.
+
+Validations passed:
+
+- `py_compile` for `src\francis\api\routes\plugins.py`,
+  `tests\test_api_plugins.py`, and `tests\test_api_missions.py`.
+- Ruff check for the three accepted Python files.
+- Ruff format check for the three accepted Python files.
+- `git diff --check` for the accepted Stage 17 source/test files.
+- Combined focused pytest selection covering quality-standard receipt/after-sync
+  behavior, lifecycle history compatibility readback, durable invocation audit
+  replay, and mission-linked invocation proof.
+
+Validations failed:
+
+- None in the accepted integration packet.
+- Full `scripts\check.ps1` was not run in this bounded cycle; the known broad
+  CI/wiring gate remains outside this accepted packet.
+
+Receipts generated:
+
+- W1 readback:
+  `.francis\worker-terminal-readbacks\worker-1-stage17-backlog-class-reduction.md`.
+- W2 readback:
+  `.francis\worker-terminal-readbacks\worker-2-stage17-lifecycle-history-compatibility-guard-20260621T113336Z.md`.
+- W3 readback:
+  `.francis\worker-terminal-coordinator\readbacks\worker-3-voice-receipts.md`.
+- W1 live route apply wrote two ignored runtime receipts:
+  `stage17_quality_standard_remediation_batch_1782041640_receipt.json` and
+  `stage17_quality_standard_remediation_batch_1782042062_receipt.json`.
+- Lead Builder post-validation cleanup wrote ignored runtime receipt
+  `stage17_quality_standard_remediation_batch_1782042862_receipt.json` after
+  the combined focused test run reintroduced one generated quality-standard
+  candidate.
+
+Roadmap items advanced:
+
+- Stage 17 / Capability Economy.
+- Governed quality-standard remediation and receipt evidence.
+- Lifecycle repair-history readback/apply consistency.
+- Reusable invocation proof truthfulness.
+
+Capability classes advanced:
+
+- Capability Registry
+- Governance
+- Receipts
+- Missions
+- Observability
+- API Surface
+- Documentation
+- Testing
+
+New capabilities created or strengthened:
+
+- Quality-standard remediation now writes durable batch receipts and reports
+  generated-sync-aware after counts.
+- Lifecycle repair history no longer advertises repair availability when
+  generated-spec/core compatibility would block the apply route.
+- Invocation audit now exposes unsupported operation-capability receipts as
+  rejected evidence instead of silently skipping embedded invocation receipts.
+
+Most important change:
+
+- The current live quality-standard tests/docs backlog class moved from 18
+  packs to 0 through the existing governed route, with dedicated receipts and a
+  regression preventing after-count overclaims when generated sync adds a new
+  candidate. A lead-level post-validation cleanup proved the same route can
+  clear a newly reintroduced generated-sync candidate with a separate receipt.
+
+Biggest remaining bottleneck:
+
+- Stage 17 remains open. Final readback still reports
+  `migration_candidate_total=1`, `validation_receipt_missing=18`, and
+  `proposal_id_missing=18`; full CI/wiring trust is also still not green.
+
+Next highest leverage action:
+
+- Reduce the remaining migration candidate through the existing metadata
+  receipt/operator-review path, then use governed remediation to attach
+  validation receipts and proposal lineage for the 18 still-blocked packs.
