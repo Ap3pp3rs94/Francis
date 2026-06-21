@@ -615,3 +615,103 @@ Next highest leverage action:
   governed readback/apply path or build the smallest missing governed path that
   can prove before/after quality-standard evidence without promotion,
   enablement, execution, memory write, or Stage 17 closure overclaim.
+
+## PM Follow-Up - 2026-06-20T23:30Z
+
+Commit:
+
+- `8dd00569` - `fix(stage17): harden quality and reuse safety gates`.
+
+Active workers:
+
+- W1 backlog class reduction: accepted packet for quality-standard batch
+  evidence.
+- W2 lifecycle behavior: accepted packet for rollback source-receipt safety.
+- W3 reusable invocation proof: accepted packet for failed-status reuse
+  rejection.
+- W4 CI/wiring: parked to preserve usage; not part of the three-worker pass.
+
+Commits produced:
+
+- 1 coherent Stage 17 integration commit.
+
+Commits accepted:
+
+- 1 pushed commit on `main`: `8dd00569`.
+
+Commits rejected:
+
+- 0 complete worker packets rejected. No fresh worker packets were available for
+  this cycle.
+
+Validations passed:
+
+- `py_compile` for `src\francis\api\routes\plugins.py` and
+  `tests\test_api_plugins.py`.
+- Focused invocation audit test for failed-status rejection.
+- Focused lifecycle rollback tests for safe source receipts and tampered source
+  refusal.
+- Focused quality-standard remediation test for dry-run fingerprinting,
+  unconfirmed no-write refusal, selected queue count reduction, and selected
+  two-pack batch reduction.
+- Ruff check for the touched Python files.
+- Ruff format check for the touched Python files.
+- `git diff --check` for the committed Stage 17 files.
+- Completion-model readback after the change still reports Stage 17 open.
+
+Validations failed:
+
+- An initial combined pytest invocation exited without useful output while the
+  same tests were still being diagnosed. The Lead Builder split validation by
+  lane; the focused lane checks passed.
+
+Receipts generated:
+
+- Completion ledger entry for Stage 17 quality standard and reuse safety gates.
+- Worker publication markers for W1/W2/W3 point at `8dd00569` before
+  re-prompting those lanes.
+
+Roadmap items advanced:
+
+- Stage 17 / Capability Economy.
+- Governed quality-standard remediation.
+- Receipt-bound lifecycle rollback.
+- Reusable invocation proof truthfulness.
+
+Capability classes advanced:
+
+- Capability Registry
+- Governance
+- Receipts
+- Missions
+- API Surface
+- Documentation
+- Testing
+- Observability
+
+New capabilities created or strengthened:
+
+- Quality-standard remediation now requires an echoed dry-run fingerprint before
+  registry mutation and reports selected/full-library queue-count evidence.
+- Lifecycle rollback now safety-checks the current lifecycle source receipt
+  before fingerprinting or mutation and refuses tampered governance/state
+  evidence.
+- Invocation audit reuse proof now rejects failed operation, invocation, or
+  dispatch status records.
+
+Most important change:
+
+- The next `stage17_capability_pack_quality_standards` blocker now has a
+  governed dry-run/apply boundary with queue-count evidence instead of a
+  mutation-capable plain apply.
+
+Biggest remaining bottleneck:
+
+- Stage 17 remains open. Quality-evidence/proposal closure, full-library/global
+  projection proof, publication for future worker packets, and full CI/wiring
+  trust remain open.
+
+Next highest leverage action:
+
+- Restart the three-worker coordinator and continue into quality-evidence /
+  proposal closure or the next accepted worker packet.
