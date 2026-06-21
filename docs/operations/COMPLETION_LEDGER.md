@@ -89615,6 +89615,67 @@ Remaining truthful gap:
   while clean full-pack candidates remain, or switch to another documented
   Stage 17 gate if the reconstruction queue stops yielding safe candidates.
 
+### 2026-06-21 17:20Z - Stage 17 fourth reconstruction apply reaches 12 remaining packs
+
+Current posture: Stage 17 / Capability Economy remains open. This pass ran a
+fourth bounded live `smallest_full_pack_first` artifact reconstruction apply.
+It proves the governed reconstruction loop continues to reduce the queue with
+durable receipt evidence; it does not claim full quality-evidence closure, full
+CI, or Stage 17 completion.
+
+What changed:
+
+- A fourth bounded live apply selected
+  `legacy.generated.capabilityqualitystandardsplugin`, reconstructed 4
+  capabilities, wrote 4 validation receipts and 4 proposal-lineage records, and
+  recorded a unique durable reconstruction receipt.
+- No runtime code changed in this cycle.
+- Completion-model and remediation readbacks both reflected the new receipt and
+  the reduced live queue.
+
+Live receipt evidence:
+
+- Receipt:
+  `data\artifacts\plugins\capability_packs\artifact_reconstructions\stage17_artifact_reconstruction_batch_1782062370_b0f0ddd6_receipt.json`.
+- Receipt contract:
+  `stage17_capability_pack_artifact_reconstruction_receipt_v1`.
+- Receipt SHA-256:
+  `12162F7AB67689F324145AC86EEA92C6E67B247DCD57D792FCD330DCD9BFF2E0`.
+- Dry-run fingerprint:
+  `7b91a8195cf17ae0ce9d629b6fd516d983bfb448408e3877ae9fc4c5198ec59b`.
+- Queue movement: `before_remediation_queue_count=13`,
+  `after_remediation_queue_count=12`, `candidate_reduction_count=1`.
+- Reconstruction-required movement:
+  validation receipts `77 -> 73`; proposal lineages `77 -> 73`.
+- Readback after apply:
+  `artifact_reconstruction_required_count=12`,
+  `next_smallest_truthful_gap=stage17_capability_pack_artifact_reconstruction_apply`.
+
+Validation:
+
+- Live dry-run via FastAPI `TestClient` returned `ok=true`,
+  `status=dry_run`, `planned_pack_count=1`, `planned_capability_count=4`, and
+  the fingerprint above.
+- Live apply via FastAPI `TestClient` returned `ok=true`, `applied=true`,
+  `status=recorded`, `recorded_pack_count=1`, `recorded_capability_count=4`,
+  and `candidate_reduction_count=1`.
+- Live remediation readback returned `remediation_queue_count=12` and
+  `artifact_reconstruction_required_count=12`.
+- `.\scripts\francis-completion-model.ps1` returned clean JSON with
+  `stage17_artifact_reconstruction_evidence.receipt_id=
+  stage17_artifact_reconstruction_batch_1782062370_b0f0ddd6_receipt`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The live queue is reduced but not closed:
+  12 artifact reconstruction-required packs remain.
+- Full quality-evidence closure, metadata apply closure, proposal review queue
+  closure, promotion queue closure, enablement/execution readiness, full CI,
+  and phase movement remain unproven.
+- The next accepted build action should continue bounded reconstruction applies
+  while clean full-pack candidates remain, with the same receipt-backed evidence
+  requirements.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
