@@ -249,8 +249,12 @@ flowchart LR
   Route["GET /completion-model/status"]:::readback
   Decision["next_continue_decision<br/>selects latest open Stage 17 gap"]:::readback
   Denial["selected-gap contract<br/>writes_repo=false<br/>writes_data=false<br/>execution and mutation authority denied"]:::denied
-  Stage17["Stage 17 / Capability Economy<br/>live quality-evidence reconstruction queue remains open"]:::future
-  GovernedApply["Future Stage 17 progress must use existing governed routes<br/>dry-run confirmation, bounded scope, focused validation"]:::future
+  Evidence["Capability pack evidence<br/>metadata, quality standards, validation receipts, proposal lineage"]:::readback
+  Review["Operator review decisions<br/>closed by fingerprinted receipt-only apply"]:::readback
+  ProposalEvidence["Proposal evidence readiness<br/>stage17_capability_library_promotion_readiness"]:::future
+  ProposalReview["Capability library proposal review<br/>blocked until proposal evidence is ready"]:::future
+  Promotion["Capability library promotion<br/>blocked until readiness and review pass"]:::future
+  Closure["Stage 17 closure matrix<br/>criteria 1-5 ready, criterion 6 partial"]:::future
 
   Ledger --> Model
   Manifest --> Model
@@ -259,17 +263,30 @@ flowchart LR
   Route --> Decision
   Script --> Decision
   Decision --> Denial
-  Denial --> Stage17
-  Stage17 --> GovernedApply
+  Denial --> Evidence
+  Evidence --> Review
+  Review --> ProposalEvidence
+  ProposalEvidence --> ProposalReview
+  ProposalReview --> Promotion
+  Promotion --> Closure
 ```
 
 Current completion-model readback truth:
 
 - `current_phase` is `Phase 2`.
 - `stage17_status.status` is `open`.
-- The selected Stage 17 gap is the bounded live `smallest_full_pack_first`
-  artifact reconstruction apply requiring clean JSON, before/after queue counts,
-  and a durable `stage17_capability_pack_artifact_reconstruction_receipt_v1`.
+- The artifact reconstruction queue is closed again: latest durable receipt
+  `stage17_artifact_reconstruction_batch_1782065757_43749ec7_receipt` moved the
+  reopened reconstruction queue `1 -> 0` for
+  `legacy.generated.capabilityoperatorreviewdecisionplugin`.
+- Pack operator review decisions are receipt-backed and closed for the current
+  ready surface after fingerprinted bulk applies.
+- The capability library operator surface is ready for explicit promotion with
+  50 ready packs and 2,438 staged capabilities.
+- Promotion remains blocked by `stage17_capability_library_promotion_readiness`:
+  1,263 capabilities still lack proposal evidence and proposal review.
+- The closure matrix reports criteria 1 through 5 ready and criterion 6 partial;
+  this is not a Stage 17 closure claim.
 - The selected Stage 17 gap is read-only worker routing, not apply authority.
 - The selected gap is not queue-count evidence.
 - The selected gap is not proposal-evidence reference proof.

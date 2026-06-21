@@ -7974,6 +7974,138 @@ def test_plugins_capability_pack_operator_review_decision_receipt_gates_pack_pro
     assert promotion_receipt["governance"]["explicit"] is True
 
 
+def test_plugins_capability_pack_operator_review_decision_does_not_approve_or_promote(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
+    client = TestClient(create_app())
+    pack_id = "ops.operator_review_decision_boundary"
+    pack_version = "1.0.0"
+    meta = {
+        **_forge_promotion_meta("capability_operator_review_decision_boundary"),
+        "pack_id": pack_id,
+        "pack_version": pack_version,
+        "pack_name": "Ops Operator Review Decision Boundary Pack",
+        "promotion_rules": [
+            "metadata_receipt_before_promotion",
+            "quality_standards_before_promotion",
+            "operator_review_before_promotion",
+        ],
+        "pack_governance": {
+            "risk_tier": "normal",
+            "scope": "build_dev",
+            "operator_review_required": True,
+        },
+    }
+    built = client.post(
+        "/plugins/build",
+        json={
+            "name": "Capability Operator Review Decision Boundary Plugin",
+            "description": "Stage 17 operator review decision boundary coverage",
+            "actor": _PLUGIN_ACTOR,
+            "meta": meta,
+        },
+    )
+    assert built.status_code == 200
+    built_body = built.json()
+    assert built_body["ok"] is True
+    plugin_id = str(built_body["plugin_id"])
+    proposal_id = str(built_body["proposal_id"])
+
+    dry_run = client.post(
+        "/plugins/capabilities/packs/operator/review/decisions/bulk-from-surface",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "action": "approve",
+            "reason": "dry run pack review decision boundary",
+            "pack_ids": [pack_id],
+            "max_pack_count": 1,
+            "max_total_capability_count": 1,
+            "dry_run": True,
+        },
+    )
+    assert dry_run.status_code == 200
+    dry_run_body = dry_run.json()
+    assert dry_run_body["ok"] is True
+    assert dry_run_body["applied"] is False
+    assert dry_run_body["status"] == "dry_run"
+    assert dry_run_body["planned"][0]["writes_receipt"] is False
+    assert dry_run_body["governance"]["writes_receipts"] is False
+    assert dry_run_body["governance"]["does_not_approve_proposals"] is True
+    assert dry_run_body["governance"]["does_not_promote_capabilities"] is True
+    assert dry_run_body["governance"]["does_not_enable_capabilities"] is True
+    assert dry_run_body["governance"]["does_not_execute_capabilities"] is True
+
+    proposal_after_dry_run = client.get(f"/forge/proposals/get?id={proposal_id}").json()["item"]
+    assert proposal_after_dry_run["status"] == "staged"
+    plugin_after_dry_run = client.get(f"/plugins/get?id={plugin_id}").json()["item"]
+    assert plugin_after_dry_run["status"] == "staged"
+    assert plugin_after_dry_run["enabled"] is False
+
+    approved = client.post(
+        "/plugins/capabilities/packs/operator/review/decisions",
+        json={
+            "pack_id": pack_id,
+            "pack_version": pack_version,
+            "action": "approve",
+            "actor": _PLUGIN_ACTOR,
+            "reason": "approve pack review without proposal approval authority",
+            "capability_ids": [plugin_id],
+        },
+    )
+    assert approved.status_code == 200
+    approved_body = approved.json()
+    assert approved_body["ok"] is True
+    assert approved_body["applied"] is True
+    assert approved_body["status"] == "approved"
+    receipt = approved_body["receipt"]
+    assert receipt["kind"] == "plugin.capability_pack.operator_review.decision_receipt"
+    assert receipt["capability_ids"] == [plugin_id]
+    assert receipt["governance"]["writes_receipt"] is True
+    assert receipt["governance"]["does_not_mutate_registry"] is True
+    assert receipt["governance"]["does_not_approve_proposals"] is True
+    assert receipt["governance"]["does_not_promote_capabilities"] is True
+    assert receipt["governance"]["does_not_enable_capabilities"] is True
+    assert receipt["governance"]["does_not_execute_capabilities"] is True
+    assert receipt["governance"]["promotion_authority"] is False
+    assert receipt["governance"]["execution_authority"] is False
+    assert receipt["governance"]["approval_authority"] is False
+    assert receipt["governance"]["memory_write"] is False
+    assert approved_body["governance"]["promotion_authority"] is False
+    assert approved_body["governance"]["execution_authority"] is False
+
+    proposal_after_review = client.get(f"/forge/proposals/get?id={proposal_id}").json()["item"]
+    assert proposal_after_review["status"] == "staged"
+    plugin_after_review = client.get(f"/plugins/get?id={plugin_id}").json()["item"]
+    assert plugin_after_review["status"] == "staged"
+    assert plugin_after_review["enabled"] is False
+
+    blocked = client.post(
+        "/plugins/enable",
+        json={
+            "id": plugin_id,
+            "reason": "pack review alone must not satisfy proposal review",
+            "actor": _PLUGIN_ACTOR,
+        },
+    )
+    assert blocked.status_code == 200
+    blocked_body = blocked.json()
+    assert blocked_body["ok"] is False
+    assert blocked_body["error"] == "promotion_readiness_blocked"
+    assert "proposal_review" in blocked_body["readiness"]["missing_requirements"]
+    assert blocked_body["readiness"]["requirements"]["pack_operator_review"] is True
+    assert blocked_body["readiness"]["requirements"]["proposal_review"] is False
+
+
 def test_plugins_capability_pack_operator_review_bulk_from_surface_dry_runs_and_records_receipts(
     monkeypatch,
     tmp_path: Path,
@@ -8039,8 +8171,15 @@ def test_plugins_capability_pack_operator_review_bulk_from_surface_dry_runs_and_
     assert dry_run_body["status"] == "dry_run"
     assert dry_run_body["planned_pack_count"] == 2
     assert dry_run_body["planned_capability_count"] == 2
+    assert len(dry_run_body["dry_run_fingerprint"]) == 64
+    assert dry_run_body["dry_run_confirmation"]["required_for_apply"] is True
+    assert dry_run_body["dry_run_confirmation"]["fingerprint"] == dry_run_body["dry_run_fingerprint"]
+    assert dry_run_body["dry_run_confirmation"]["fingerprint_contract"] == (
+        "stage17_capability_pack_operator_review_bulk_decision_dry_run_v1"
+    )
     assert dry_run_body["planned"][0]["writes_receipt"] is False
     assert dry_run_body["governance"]["dry_run_default"] is True
+    assert dry_run_body["governance"]["dry_run_required_before_apply"] is True
     assert dry_run_body["governance"]["writes_receipts"] is False
     assert dry_run_body["governance"]["does_not_mutate_registry"] is True
     assert dry_run_body["governance"]["does_not_approve_proposals"] is True
@@ -8053,6 +8192,35 @@ def test_plugins_capability_pack_operator_review_bulk_from_surface_dry_runs_and_
     assert no_receipts.status_code == 200
     assert no_receipts.json()["total"] == 0
 
+    blocked_without_confirmation = client.post(
+        "/plugins/capabilities/packs/operator/review/decisions/bulk-from-surface",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "action": "approve",
+            "reason": "attempt bulk operator review approval without dry run confirmation",
+            "pack_ids": pack_ids,
+            "max_pack_count": 2,
+            "max_total_capability_count": 2,
+            "dry_run": False,
+        },
+    )
+    assert blocked_without_confirmation.status_code == 200
+    blocked_without_confirmation_body = blocked_without_confirmation.json()
+    assert blocked_without_confirmation_body["ok"] is False
+    assert blocked_without_confirmation_body["applied"] is False
+    assert blocked_without_confirmation_body["status"] == "blocked"
+    assert (
+        blocked_without_confirmation_body["error"]
+        == "capability_pack_operator_review_bulk_decision_dry_run_confirmation_required"
+    )
+    assert blocked_without_confirmation_body["dry_run_confirmation"]["required_for_apply"] is True
+    assert blocked_without_confirmation_body["dry_run_confirmation"]["fingerprint_matched"] is False
+    assert blocked_without_confirmation_body["governance"]["writes_receipts"] is False
+
+    no_receipts_after_block = client.get("/plugins/capabilities/packs/operator/review/decisions", params={"limit": 10})
+    assert no_receipts_after_block.status_code == 200
+    assert no_receipts_after_block.json()["total"] == 0
+
     applied = client.post(
         "/plugins/capabilities/packs/operator/review/decisions/bulk-from-surface",
         json={
@@ -8063,6 +8231,7 @@ def test_plugins_capability_pack_operator_review_bulk_from_surface_dry_runs_and_
             "max_pack_count": 2,
             "max_total_capability_count": 2,
             "dry_run": False,
+            "dry_run_fingerprint": dry_run_body["dry_run_fingerprint"],
             "meta": {"operator_review_batch_test": True},
         },
     )
@@ -8072,6 +8241,8 @@ def test_plugins_capability_pack_operator_review_bulk_from_surface_dry_runs_and_
     assert applied_body["ok"] is True
     assert applied_body["applied"] is True
     assert applied_body["status"] == "recorded"
+    assert applied_body["dry_run_fingerprint"] == dry_run_body["dry_run_fingerprint"]
+    assert applied_body["dry_run_confirmation"]["fingerprint_matched"] is True
     assert applied_body["recorded_pack_count"] == 2
     assert applied_body["recorded_capability_count"] == 2
     assert applied_body["promotion_discipline"]["ready_pack_count"] == 2
@@ -8151,6 +8322,22 @@ def test_plugins_capability_pack_operator_review_bulk_reopens_stale_capability_c
     assert first.status_code == 200
     assert first.json()["ok"] is True
 
+    first_dry_run = client.post(
+        "/plugins/capabilities/packs/operator/review/decisions/bulk-from-surface",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "action": "approve",
+            "reason": "dry run first pack shape",
+            "pack_ids": [pack_id],
+            "max_pack_count": 1,
+            "max_total_capability_count": 1,
+            "dry_run": True,
+        },
+    )
+    assert first_dry_run.status_code == 200
+    first_dry_run_body = first_dry_run.json()
+    assert first_dry_run_body["ok"] is True
+
     first_approval = client.post(
         "/plugins/capabilities/packs/operator/review/decisions/bulk-from-surface",
         json={
@@ -8161,6 +8348,7 @@ def test_plugins_capability_pack_operator_review_bulk_reopens_stale_capability_c
             "max_pack_count": 1,
             "max_total_capability_count": 1,
             "dry_run": False,
+            "dry_run_fingerprint": first_dry_run_body["dry_run_fingerprint"],
         },
     )
     assert first_approval.status_code == 200
@@ -8226,6 +8414,7 @@ def test_plugins_capability_pack_operator_review_bulk_reopens_stale_capability_c
             "max_pack_count": 1,
             "max_total_capability_count": 2,
             "dry_run": False,
+            "dry_run_fingerprint": reopened_body["dry_run_fingerprint"],
         },
     )
     assert applied.status_code == 200

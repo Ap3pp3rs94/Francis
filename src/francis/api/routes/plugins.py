@@ -151,6 +151,9 @@ _CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_QUEUE_CONTRACT = (
     "stage17_capability_pack_artifact_reconstruction_batch_queue_evidence_v1"
 )
 _CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_RECEIPT_CONTRACT = "stage17_capability_pack_artifact_reconstruction_receipt_v1"
+_CAPABILITY_PACK_OPERATOR_REVIEW_BULK_DRY_RUN_CONTRACT = (
+    "stage17_capability_pack_operator_review_bulk_decision_dry_run_v1"
+)
 _CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_SELECTION_STRATEGIES = {
     "queue_order",
     "smallest_full_pack_first",
@@ -1224,6 +1227,34 @@ def _capability_pack_operator_review_decision_covers(
 ) -> bool:
     required = set(_unique_texts(capability_ids, limit=500))
     return bool(required) and required.issubset(coverage.get((pack_id, pack_version), set()))
+
+
+def _capability_pack_operator_review_bulk_decision_fingerprint(
+    *,
+    planned: list[dict[str, Any]],
+    action: str,
+    decided_status: str,
+) -> str:
+    canonical_planned: list[dict[str, Any]] = []
+    for item in planned:
+        raw_capability_ids = item.get("capability_ids") if isinstance(item.get("capability_ids"), list) else []
+        canonical_planned.append(
+            {
+                "pack_id": _safe_str(item.get("pack_id")).strip(),
+                "pack_version": _safe_str(item.get("pack_version")).strip(),
+                "action": action,
+                "decision_status": decided_status,
+                "capability_ids": sorted(_unique_texts(raw_capability_ids, limit=10000)),
+            }
+        )
+    canonical_planned.sort(key=lambda item: (item["pack_id"], item["pack_version"]))
+    body = {
+        "contract": _CAPABILITY_PACK_OPERATOR_REVIEW_BULK_DRY_RUN_CONTRACT,
+        "route": "/plugins/capabilities/packs/operator/review/decisions/bulk-from-surface",
+        "planned": canonical_planned,
+    }
+    raw = json.dumps(body, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
 
 
 def _read_capability_pack_metadata_receipts(*, limit: int = 20) -> list[dict[str, Any]]:
@@ -12878,6 +12909,7 @@ class CapabilityPackOperatorReviewBulkDecisionFromSurfaceIn(BaseModel):
     max_pack_count: int = 10
     max_total_capability_count: int = 5000
     dry_run: bool = True
+    dry_run_fingerprint: str = ""
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -17679,6 +17711,11 @@ def decide_capability_pack_operator_review_bulk_from_surface(
             }
             for item in prepared
         ]
+        dry_run_fingerprint = _capability_pack_operator_review_bulk_decision_fingerprint(
+            planned=prepared,
+            action=action,
+            decided_status=decided_status,
+        )
         if payload.dry_run:
             return {
                 "ok": True,
@@ -17688,6 +17725,15 @@ def decide_capability_pack_operator_review_bulk_from_surface(
                 "dry_run": True,
                 "planned_pack_count": len(prepared),
                 "planned_capability_count": total_capability_count,
+                "dry_run_fingerprint": dry_run_fingerprint,
+                "dry_run_confirmation": {
+                    "required_for_apply": True,
+                    "fingerprint": dry_run_fingerprint,
+                    "fingerprint_contract": _CAPABILITY_PACK_OPERATOR_REVIEW_BULK_DRY_RUN_CONTRACT,
+                    "planned_pack_count": len(prepared),
+                    "planned_capability_count": total_capability_count,
+                    "apply_route": request.url.path,
+                },
                 "planned": planned,
                 "skipped": skipped,
                 "before": {
@@ -17699,6 +17745,50 @@ def decide_capability_pack_operator_review_bulk_from_surface(
                     "scope": _PLUGIN_WRITE_SCOPE,
                     "route": request.url.path,
                     "dry_run_default": True,
+                    "dry_run_required_before_apply": True,
+                    "writes_receipts": False,
+                    "does_not_mutate_registry": True,
+                    "does_not_approve_proposals": True,
+                    "does_not_promote_capabilities": True,
+                    "does_not_enable_capabilities": True,
+                    "does_not_execute_capabilities": True,
+                    "promotion_authority": False,
+                    "execution_authority": False,
+                    "approval_authority": False,
+                    "memory_write": False,
+                },
+            }
+
+        provided_dry_run_fingerprint = _safe_str(payload.dry_run_fingerprint).strip()
+        if provided_dry_run_fingerprint != dry_run_fingerprint:
+            return {
+                "ok": False,
+                "applied": False,
+                "kind": "plugin.capability_pack.operator_review.bulk_decision",
+                "status": "blocked",
+                "error": "capability_pack_operator_review_bulk_decision_dry_run_confirmation_required",
+                "dry_run": False,
+                "planned_pack_count": len(prepared),
+                "planned_capability_count": total_capability_count,
+                "dry_run_fingerprint": dry_run_fingerprint,
+                "dry_run_confirmation": {
+                    "required_for_apply": True,
+                    "fingerprint_contract": _CAPABILITY_PACK_OPERATOR_REVIEW_BULK_DRY_RUN_CONTRACT,
+                    "fingerprint_matched": False,
+                    "apply_route": request.url.path,
+                },
+                "planned": planned,
+                "skipped": skipped,
+                "before": {
+                    "operator_review_status": _safe_str(review.get("status")).strip(),
+                    "review_queue_count": _count_value(review.get("review_queue_count")),
+                    "decision_recorded_pack_count": len(already_decided),
+                },
+                "governance": {
+                    "scope": _PLUGIN_WRITE_SCOPE,
+                    "route": request.url.path,
+                    "dry_run_default": True,
+                    "dry_run_required_before_apply": True,
                     "writes_receipts": False,
                     "does_not_mutate_registry": True,
                     "does_not_approve_proposals": True,
@@ -17775,6 +17865,13 @@ def decide_capability_pack_operator_review_bulk_from_surface(
             "status": "recorded" if applied and not failed else ("partial" if applied else "blocked"),
             "dry_run": False,
             "batch_id": batch_id,
+            "dry_run_fingerprint": dry_run_fingerprint,
+            "dry_run_confirmation": {
+                "required_for_apply": True,
+                "fingerprint_matched": True,
+                "fingerprint_contract": _CAPABILITY_PACK_OPERATOR_REVIEW_BULK_DRY_RUN_CONTRACT,
+                "apply_route": request.url.path,
+            },
             "planned_pack_count": len(prepared),
             "planned_capability_count": total_capability_count,
             "recorded_pack_count": len(recorded),
@@ -17797,6 +17894,7 @@ def decide_capability_pack_operator_review_bulk_from_surface(
                 "scope": _PLUGIN_WRITE_SCOPE,
                 "route": request.url.path,
                 "dry_run_default": True,
+                "dry_run_required_before_apply": True,
                 "writes_receipts": applied,
                 "receipt_write_count": len(recorded),
                 "does_not_mutate_registry": True,

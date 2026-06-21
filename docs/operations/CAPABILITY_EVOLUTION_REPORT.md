@@ -2420,3 +2420,126 @@ Next highest leverage action:
 
 - Use the operator surface bulk decision path to review the ready packs, then
   re-read promotion and closure matrices before attempting any promotion work.
+
+### Cycle 2026-06-21T18:00Z to 2026-06-21T18:22Z
+
+Scope: Stage 17 operator-review decision closure for the current surface,
+fingerprint hardening for bulk operator-review apply, reopened
+operator-review-decision pack evidence repair, and promotion-readiness
+reprojection.
+
+Active workers:
+
+- 3 worker lanes active.
+- Worker 1 accepted route hardening for the bulk operator-review dry-run
+  fingerprint contract.
+- Worker 2 accepted focused review-decision boundary coverage.
+- Worker 3 accepted a docs-only wiring diagram update.
+
+Active drones:
+
+- 0 local drones were accepted in this cycle.
+
+Commits produced: pending at report time.
+
+Commits accepted: pending at report time.
+
+Commits rejected: 0.
+
+Validations passed:
+
+- Unconfirmed live bulk operator-review apply was blocked before writes with
+  `capability_pack_operator_review_bulk_decision_dry_run_confirmation_required`.
+- Fingerprinted live bulk operator-review apply recorded 18 review-decision
+  receipts for 2,015 staged capabilities.
+- Metadata dry-run/apply recorded metadata for reopened
+  `legacy.generated.capabilityoperatorreviewdecisionplugin`, 22 capabilities,
+  and reduced migration candidates `1 -> 0`.
+- Quality-standard dry-run/apply recorded candidate test/doc refs for 2 missing
+  capabilities and reduced quality-standard blockers `1 -> 0`.
+- Artifact reconstruction dry-run/apply reconstructed the final 2 validation
+  receipts and 2 proposal lineage records after the explicit
+  `operator_reconstruction_decision=approved_for_reconstruction`.
+- Final fingerprinted operator-review apply recorded 1 review-decision receipt
+  for 22 staged capabilities.
+- Live quality-evidence remediation readback returned
+  `status=ready`, `remediation_queue_count=0`, and
+  `artifact_reconstruction_required_count=0`.
+- Live operator surface readback returned `status=ready_for_explicit_promotion`,
+  remediation backlog `open_count=0`, and `pending_review_queue_count=0`.
+- Live library operator surface readback returned
+  `status=ready_for_explicit_promotion`, `ready_pack_count=50`, and
+  `ready_staged_capability_count=2438`.
+- Live promotion plan readback returned `status=blocked`,
+  `candidate_capability_count=2438`, `promotable_capability_count=1175`, and
+  `missing_requirement_counts={proposal_evidence: 1263, proposal_review: 1263}`.
+- Live proposal-review plan readback returned `status=blocked`,
+  `proposal_review_missing_count=1263`, and `reviewable_capability_count=0`.
+- Focused route/test validation passed for operator-review decision boundaries,
+  bulk dry-run fingerprints, stale coverage reopening, and operator surface
+  handoff.
+
+Validations failed or blocked:
+
+- Full local `.\scripts\check.ps1` was not run.
+- Full GitHub CI remains unproven for this checkpoint.
+- Proposal evidence and proposal review are still not ready for 1,263
+  capabilities.
+- Promotion and execution readiness remain unproven.
+
+Receipts generated:
+
+- `capability_pack_metadata_1782065465_legacy-generated-capabilityoperatorreviewdecisionplugin`;
+  SHA-256 `C58EF57ECC442BD95CA534F117FA45879E3894B5B04AE27E9949B8C1A0519494`.
+- `stage17_quality_standard_remediation_batch_1782065566_receipt`;
+  SHA-256 `512BFEA0A78B830C33E9319EFDDE2802F1FBEABBB0D6AB8D7CB29C8A2FB64378`.
+- `stage17_artifact_reconstruction_batch_1782065757_43749ec7_receipt`;
+  SHA-256 `5B474121BDA40F231637AEA7F3DD938184FFBFAD17CBAF3B425406C8F68BF3B5`.
+- 18 bulk operator-review decision receipts with timestamp `1782065069`;
+  sample `capability_pack_operator_review_1782065069_legacy-generated-stage17reusableinvocationplugin_267400`,
+  SHA-256 `C9D64328A4631F0BD5F9D71E670AB14E8EB0A5D5C2563EF80064C8928D12831B`.
+- `capability_pack_operator_review_1782065980_legacy-generated-capabilityoperatorreviewdecisionplugin_623700`;
+  SHA-256 `B5C5262AD0142ED7A4E0C71A5802104987617860BD8AB9BA969C5F21C053BCD2`.
+
+Roadmap items advanced:
+
+- Stage 17 / Capability Economy.
+- Operator-review decision receipt coverage.
+- Dry-run fingerprint enforcement for bulk operator-review apply.
+- Promotion-readiness projection.
+- Capability-evidence repair for the reopened operator-review-decision pack.
+
+Capability classes advanced:
+
+- Capability Registry
+- Governance
+- Receipts
+- Observability
+- Completion Model
+- Documentation
+- Testing
+
+New capabilities created or strengthened:
+
+- Bulk operator-review decisions now require dry-run fingerprint confirmation
+  before writing receipts.
+- Pack operator-review decisions are proven separate from proposal approval,
+  promotion, enablement, execution, registry mutation, and memory writes.
+- The current pack operator surface reached `ready_for_explicit_promotion`.
+- Promotion readiness now names the next blocker precisely: proposal evidence
+  and proposal review for 1,263 capabilities.
+
+Most important change:
+
+- Operator-review decision receipts are closed for the current Stage 17 surface
+  while preserving the separate proposal-review and promotion gates.
+
+Biggest remaining bottleneck:
+
+- Proposal evidence is missing for 1,263 capabilities, which leaves proposal
+  review non-reviewable and promotion blocked.
+
+Next highest leverage action:
+
+- Use the existing proposal-evidence readiness/remediation surfaces to reduce
+  `proposal_evidence` missing counts before applying proposal review.

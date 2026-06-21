@@ -90075,6 +90075,131 @@ Remaining truthful gap:
 - Full local `.\scripts\check.ps1` and GitHub CI remain unproven for this
   checkpoint.
 
+### 2026-06-21 18:22Z - Stage 17 operator review receipts close current surface
+
+Current posture: Stage 17 / Capability Economy remains open. This pass accepted
+the governed bulk operator-review dry-run fingerprint contract, applied
+receipt-only operator review decisions for the current ready pack surface, then
+handled one reopened operator-review-decision pack through existing metadata,
+quality-standard, artifact reconstruction, and review-decision routes. It does
+not claim proposal evidence closure, proposal review approval, promotion,
+execution readiness, reuse leverage, full CI, or Stage 17 completion.
+
+What changed:
+
+- Hardened
+  `POST /plugins/capabilities/packs/operator/review/decisions/bulk-from-surface`
+  so live bulk apply requires the matching dry-run fingerprint before any
+  operator-review receipt is written.
+- Added focused regression coverage proving pack operator-review decisions do
+  not approve proposals, promote, enable, execute, mutate registry state, or
+  satisfy proposal review.
+- Applied the fingerprinted bulk operator-review route for 18 current pack
+  shapes, recording 18 review-decision receipts for 2,015 staged capabilities.
+- Repaired reopened
+  `legacy.generated.capabilityoperatorreviewdecisionplugin` evidence with the
+  existing governed metadata, quality-standard, and artifact reconstruction
+  routes.
+- Applied one final fingerprinted operator-review decision for
+  `legacy.generated.capabilityoperatorreviewdecisionplugin`, recording one
+  review-decision receipt for 22 staged capabilities.
+
+Live receipt evidence:
+
+- Metadata receipt:
+  `data\artifacts\plugins\capability_packs\metadata_receipts\capability_pack_metadata_1782065465_legacy-generated-capabilityoperatorreviewdecisionplugin.json`.
+  SHA-256:
+  `C58EF57ECC442BD95CA534F117FA45879E3894B5B04AE27E9949B8C1A0519494`.
+  Dry-run fingerprint:
+  `3278d362dbce2797d9e0253aa05f400073699dad335f9ad3946753b681e275c0`.
+- Quality-standard remediation receipt:
+  `data\artifacts\plugins\capability_packs\quality_standard_remediations\stage17_quality_standard_remediation_batch_1782065566_receipt.json`.
+  SHA-256:
+  `512BFEA0A78B830C33E9319EFDDE2802F1FBEABBB0D6AB8D7CB29C8A2FB64378`.
+  Dry-run fingerprint:
+  `e08e7e37563b4e0e8a539639ca74648306d24cebd39f459face0e4d71caf9b39`.
+- Artifact reconstruction receipt:
+  `data\artifacts\plugins\capability_packs\artifact_reconstructions\stage17_artifact_reconstruction_batch_1782065757_43749ec7_receipt.json`.
+  SHA-256:
+  `5B474121BDA40F231637AEA7F3DD938184FFBFAD17CBAF3B425406C8F68BF3B5`.
+  Dry-run fingerprint:
+  `c9a37cb3f89b0f0e3ce45348f8845eb9a25d0986d40f1c676a7d50c51347a67c`.
+- Bulk operator-review decision receipts:
+  `18` individual receipt files with timestamp `1782065069`, batch
+  `capability_pack_operator_review_batch_1782065069_ccb518af`, dry-run
+  fingerprint
+  `b4a5e00bb161e6f91d518346ce6c9dfb99787d238ae83e8463e688c7efd88121`.
+  Sample receipt:
+  `data\artifacts\plugins\capability_packs\operator_review_decisions\capability_pack_operator_review_1782065069_legacy-generated-stage17reusableinvocationplugin_267400.json`.
+  SHA-256:
+  `C9D64328A4631F0BD5F9D71E670AB14E8EB0A5D5C2563EF80064C8928D12831B`.
+- Final operator-review receipt:
+  `data\artifacts\plugins\capability_packs\operator_review_decisions\capability_pack_operator_review_1782065980_legacy-generated-capabilityoperatorreviewdecisionplugin_623700.json`.
+  SHA-256:
+  `B5C5262AD0142ED7A4E0C71A5802104987617860BD8AB9BA969C5F21C053BCD2`.
+  Dry-run fingerprint:
+  `67b4a82168cf82c1c3b66d7793503b99106a1f760e888e392632de0a343e065e`.
+
+Validation:
+
+- Unconfirmed live bulk operator-review apply returned
+  `error=capability_pack_operator_review_bulk_decision_dry_run_confirmation_required`
+  and `writes_receipts=false`.
+- Fingerprinted bulk operator-review apply returned `ok=true`,
+  `applied=true`, `status=recorded`, `recorded_pack_count=18`,
+  `recorded_capability_count=2015`, `receipt_write_count=18`, and
+  `dry_run_fingerprint_matched=true`.
+- Reopened metadata apply returned `ok=true`, `applied=true`,
+  `status=recorded`, `recorded_pack_count=1`,
+  `recorded_capability_count=22`, `candidate_reduction_count=1`, and
+  `remaining_candidate_total=0`.
+- Reopened quality-standard apply returned `ok=true`, `applied=true`,
+  `status=recorded`, `recorded_pack_count=1`,
+  `recorded_capability_count=2`, `candidate_reduction_count=1`, and
+  `remaining_quality_standard_queue_count=0`.
+- Reopened artifact reconstruction first refused apply with
+  `operator_reconstruction_decision_required`; the follow-up apply with
+  `meta.operator_reconstruction_decision=approved_for_reconstruction` returned
+  `ok=true`, `applied=true`, `status=recorded`,
+  `recorded_capability_count=2`,
+  `after_remediation_queue_count=0`,
+  `after_validation_receipt_reconstruction_required_count=0`, and
+  `after_proposal_lineage_reconstruction_required_count=0`.
+- Final fingerprinted operator-review apply returned `ok=true`,
+  `applied=true`, `status=recorded`, `recorded_pack_count=1`,
+  `recorded_capability_count=22`, and `receipt_write_count=1`.
+- Live quality-evidence remediation readback returned
+  `status=ready`, `remediation_queue_count=0`, and
+  `artifact_reconstruction_required_count=0`.
+- Live operator surface readback returned
+  `status=ready_for_explicit_promotion`, remediation backlog `open_count=0`,
+  `pending_review_queue_count=0`, and promotion-discipline
+  `blocked_pack_count=0`.
+- Live library operator surface readback returned
+  `status=ready_for_explicit_promotion`, `ready_pack_count=50`, and
+  `ready_staged_capability_count=2438`.
+- Live promotion plan readback returned `status=blocked`,
+  `candidate_pack_count=47`, `candidate_capability_count=2438`,
+  `promotable_capability_count=1175`, `blocked_capability_count=1263`, and
+  `missing_requirement_counts={proposal_evidence: 1263, proposal_review: 1263}`.
+- Live proposal-review plan readback returned `status=blocked`,
+  `proposal_review_missing_count=1263`, and `reviewable_capability_count=0`.
+- Focused validations reported by workers:
+  `.venv\Scripts\python.exe -m pytest tests\test_api_plugins.py::test_plugins_capability_pack_operator_surface_projects_stage17_review_handoff tests\test_api_plugins.py::test_plugins_capability_pack_operator_review_bulk_from_surface_dry_runs_and_records_receipts tests\test_api_plugins.py::test_plugins_capability_pack_operator_review_bulk_reopens_stale_capability_coverage tests\test_api_plugins.py::test_plugins_capability_pack_operator_review_decision_does_not_approve_or_promote -q --tb=short`;
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\api\routes\plugins.py tests\test_api_plugins.py`;
+  `.venv\Scripts\python.exe -m ruff format --check --no-cache src\francis\api\routes\plugins.py tests\test_api_plugins.py`;
+  and `git diff --check -- src/francis/api/routes/plugins.py tests/test_api_plugins.py`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. Pack operator-review decisions are closed for the
+  current surface, but proposal evidence, proposal review, promotion, execution
+  readiness, reuse leverage, full local check, and GitHub CI remain unproven.
+- The next smallest readback gap is
+  `stage17_capability_library_promotion_readiness`: 1,263 capabilities lack
+  proposal evidence and proposal review, and the proposal-review plan has
+  `reviewable_capability_count=0` until proposal evidence is repaired.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
