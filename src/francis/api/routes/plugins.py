@@ -146,6 +146,12 @@ _CAPABILITY_PACK_QUALITY_DOC_REFERENCE_CANDIDATES = (
 _CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_ROUTE = "/plugins/capabilities/packs/quality/evidence/remediation/reconstruct"
 _CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_SOURCE = "stage17_capability_pack_artifact_reconstruction_apply"
 _CAPABILITY_PACK_QUALITY_STANDARD_REMEDIATION_SOURCE = "stage17_capability_pack_quality_standard_remediation_apply"
+_CAPABILITY_PACK_QUALITY_STANDARD_REMEDIATION_DRY_RUN_CONTRACT = (
+    "stage17_capability_pack_quality_standard_remediation_dry_run_v1"
+)
+_CAPABILITY_PACK_QUALITY_STANDARD_REMEDIATION_QUEUE_CONTRACT = (
+    "stage17_capability_pack_quality_standard_remediation_batch_queue_evidence_v1"
+)
 _CAPABILITY_LIBRARY_PROPOSAL_EVIDENCE_REMEDIATION_APPLY_ROUTE = (
     "/plugins/capabilities/library/proposal-evidence/remediation/apply"
 )
@@ -2428,6 +2434,88 @@ def _plugin_lifecycle_receipt_summary(receipt: dict[str, Any]) -> dict[str, Any]
     return redacted if isinstance(redacted, dict) else {}
 
 
+def _plugin_lifecycle_rollback_source_receipt_safety(
+    receipt: dict[str, Any],
+    *,
+    current_lifecycle_status: str,
+) -> dict[str, Any]:
+    current = receipt.get("current") if isinstance(receipt.get("current"), dict) else {}
+    governance = receipt.get("governance") if isinstance(receipt.get("governance"), dict) else {}
+    source_action = _safe_str(receipt.get("action")).strip()
+    source_lifecycle_status = _safe_str(receipt.get("lifecycle_status")).strip()
+    normalized_source_lifecycle = _normalize_lifecycle_state(source_lifecycle_status)
+    normalized_current_lifecycle = _normalize_lifecycle_state(current_lifecycle_status)
+    normalized_receipt_current_lifecycle = _normalize_lifecycle_state(current.get("lifecycle_status"))
+    normalized_receipt_current_status = _normalize_lifecycle_state(current.get("status"))
+    checks = {
+        "source_action_is_disable_lifecycle": source_action in _PLUGIN_DISABLE_LIFECYCLE_ACTIONS,
+        "source_lifecycle_matches_current": normalized_source_lifecycle == normalized_current_lifecycle,
+        "receipt_current_lifecycle_matches_source": (
+            normalized_receipt_current_lifecycle == normalized_source_lifecycle
+        ),
+        "receipt_current_registry_status_disabled": normalized_receipt_current_status == "disabled",
+        "receipt_current_enabled_false": not bool(current.get("enabled", False)),
+        "governance_gate_is_plugin_lifecycle_disable": (
+            _safe_str(governance.get("gate")).strip() == "plugin_lifecycle_disable"
+        ),
+        "governance_route_is_plugins_disable": _safe_str(governance.get("route")).strip() == "/plugins/disable",
+        "governance_scope_is_plugins_write": _safe_str(governance.get("scope")).strip() == _PLUGIN_WRITE_SCOPE,
+        "governance_writes_registry_metadata": bool(governance.get("writes_registry_metadata", False)),
+        "governance_writes_lifecycle_receipt": bool(governance.get("writes_lifecycle_receipt", False)),
+        "governance_no_promotion_authority": not bool(governance.get("promotion_authority", False)),
+        "governance_no_execution_authority": not bool(governance.get("execution_authority", False)),
+        "governance_no_approval_authority": not bool(governance.get("approval_authority", False)),
+        "governance_no_memory_write": not bool(governance.get("memory_write", False)),
+    }
+    failed_checks = [name for name, passed in checks.items() if not passed]
+    safe_to_apply = not failed_checks
+    return {
+        "contract": "plugin.lifecycle.rollback_source_receipt_safety_v1",
+        "status": "ready" if safe_to_apply else "blocked",
+        "safe_to_apply": safe_to_apply,
+        "reason": (
+            "source_receipt_governance_and_disabled_state_bound"
+            if safe_to_apply
+            else "source_receipt_failed_rollback_safety_checks"
+        ),
+        "failed_checks": failed_checks,
+        "checks": checks,
+        "expected": {
+            "kind": "plugin.lifecycle.receipt",
+            "source_route": "/plugins/disable",
+            "source_gate": "plugin_lifecycle_disable",
+            "source_scope": _PLUGIN_WRITE_SCOPE,
+            "current_enabled": False,
+            "current_registry_status": "disabled",
+            "promotion_authority": False,
+            "execution_authority": False,
+            "approval_authority": False,
+            "memory_write": False,
+        },
+        "observed": {
+            "action": source_action,
+            "lifecycle_status": source_lifecycle_status,
+            "current_lifecycle_status": _safe_str(current_lifecycle_status).strip(),
+            "receipt_current": {
+                "status": _safe_str(current.get("status")).strip(),
+                "enabled": bool(current.get("enabled", False)),
+                "lifecycle_status": _safe_str(current.get("lifecycle_status")).strip(),
+            },
+            "governance": {
+                "gate": _safe_str(governance.get("gate")).strip(),
+                "route": _safe_str(governance.get("route")).strip(),
+                "scope": _safe_str(governance.get("scope")).strip(),
+                "writes_registry_metadata": bool(governance.get("writes_registry_metadata", False)),
+                "writes_lifecycle_receipt": bool(governance.get("writes_lifecycle_receipt", False)),
+                "promotion_authority": bool(governance.get("promotion_authority", False)),
+                "execution_authority": bool(governance.get("execution_authority", False)),
+                "approval_authority": bool(governance.get("approval_authority", False)),
+                "memory_write": bool(governance.get("memory_write", False)),
+            },
+        },
+    }
+
+
 def _plugin_lifecycle_rollback_source_receipt(
     *,
     plugin_id: str,
@@ -2481,12 +2569,25 @@ def _plugin_lifecycle_rollback_source_receipt(
             "receipt": _plugin_lifecycle_receipt_summary(source),
         }
 
+    source_safety = _plugin_lifecycle_rollback_source_receipt_safety(
+        source,
+        current_lifecycle_status=current_lifecycle_status,
+    )
+    if not bool(source_safety.get("safe_to_apply")):
+        return None, {
+            **base,
+            "reason": "current_lifecycle_receipt_not_safe_for_rollback",
+            "receipt": _plugin_lifecycle_receipt_summary(source),
+            "source_safety": source_safety,
+        }
+
     return source, {
         **base,
         "found": True,
         "status": "ready",
         "reason": "current_lifecycle_receipt_bound",
         "receipt": _plugin_lifecycle_receipt_summary(source),
+        "source_safety": source_safety,
     }
 
 
@@ -9178,12 +9279,132 @@ def _quality_standard_missing_capability_ids(
     return (_unique_texts(missing_tests, limit=500), _unique_texts(missing_docs, limit=500))
 
 
+def _capability_pack_quality_standard_queue(standards: dict[str, Any]) -> list[dict[str, Any]]:
+    raw_packs = standards.get("packs") if isinstance(standards.get("packs"), list) else []
+    return [
+        item
+        for item in raw_packs
+        if isinstance(item, dict)
+        and any(
+            blocker in _unique_texts(item.get("blockers"), limit=50) for blocker in ("tests_missing", "docs_missing")
+        )
+    ]
+
+
+def _capability_pack_quality_standard_queue_evidence(
+    *,
+    standards: dict[str, Any],
+    queue: list[dict[str, Any]],
+    selected_pack_ids: set[str],
+) -> dict[str, object]:
+    global_queue = _capability_pack_quality_standard_queue(standards)
+    selected_queue_ids = {
+        _safe_str(item.get("pack_id")).strip() for item in queue if _safe_str(item.get("pack_id")).strip()
+    }
+    projection_scope = "selected_packs" if selected_pack_ids else "full_library"
+    global_counts_included = not bool(selected_pack_ids)
+    projection = _stage17_projection_evidence(
+        projection_scope=projection_scope,
+        global_counts_included=global_counts_included,
+        selected_pack_ids=selected_pack_ids or selected_queue_ids,
+    )
+    projection_evidence = (
+        dict(projection.get("projection_evidence")) if isinstance(projection.get("projection_evidence"), dict) else {}
+    )
+    scoped_queue_count = len(queue) if selected_pack_ids else len(global_queue)
+    global_queue_count = len(global_queue)
+    queue_pack_ids = sorted(_unique_texts([item.get("pack_id") for item in queue], limit=1000))
+    queue_capability_count = sum(_count_value(item.get("capability_count")) for item in queue)
+    projection_evidence.update(
+        {
+            "queue_count_contract": _CAPABILITY_PACK_QUALITY_STANDARD_REMEDIATION_QUEUE_CONTRACT,
+            "quality_standard_queue_count": scoped_queue_count,
+            "global_quality_standard_queue_count": global_queue_count,
+            "candidate_pack_count": len(queue_pack_ids),
+            "candidate_pack_ids": queue_pack_ids,
+            "candidate_capability_count": queue_capability_count,
+        }
+    )
+    return {
+        **projection,
+        "projection_evidence": projection_evidence,
+        "projection_scope": projection_scope,
+        "global_counts_included": global_counts_included,
+        "quality_standard_queue_count": scoped_queue_count,
+        "global_quality_standard_queue_count": global_queue_count,
+        "candidate_pack_count": len(queue_pack_ids),
+        "candidate_pack_ids": queue_pack_ids,
+        "candidate_capability_count": queue_capability_count,
+        "next_smallest_truthful_gap": _safe_str(standards.get("next_smallest_truthful_gap")).strip(),
+    }
+
+
+def _capability_pack_quality_standard_remediation_fingerprint(*, prepared: list[dict[str, Any]]) -> str:
+    canonical_packs: list[dict[str, Any]] = []
+    for item in prepared:
+        canonical_packs.append(
+            {
+                "pack_id": _safe_str(item.get("pack_id")).strip(),
+                "pack_version": _safe_str(item.get("pack_version")).strip(),
+                "capability_ids": sorted(_unique_texts(item.get("capability_ids"), limit=10000)),
+                "missing_test_capability_ids": sorted(
+                    _unique_texts(item.get("missing_test_capability_ids"), limit=10000)
+                ),
+                "missing_doc_capability_ids": sorted(
+                    _unique_texts(item.get("missing_doc_capability_ids"), limit=10000)
+                ),
+                "test_refs": sorted(_unique_texts(item.get("test_refs"), limit=200)),
+                "doc_refs": sorted(_unique_texts(item.get("doc_refs"), limit=200)),
+                "quality_blockers": sorted(_unique_texts(item.get("quality_blockers"), limit=50)),
+            }
+        )
+    canonical_packs.sort(key=lambda item: (item["pack_id"], item["pack_version"]))
+    body = {
+        "contract": _CAPABILITY_PACK_QUALITY_STANDARD_REMEDIATION_DRY_RUN_CONTRACT,
+        "route": "/plugins/capabilities/packs/quality/standards/remediation/apply",
+        "planned": canonical_packs,
+    }
+    raw = json.dumps(body, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _capability_pack_quality_standard_remediation_governance(
+    *,
+    route_path: str,
+    writes_registry_metadata: bool,
+) -> dict[str, object]:
+    return {
+        "scope": _PLUGIN_WRITE_SCOPE,
+        "route": route_path,
+        "lifecycle_operation": "capability_pack_quality_standard_remediation",
+        "policy_gate": _PLUGIN_WRITE_SCOPE,
+        "queue_count_contract": _CAPABILITY_PACK_QUALITY_STANDARD_REMEDIATION_QUEUE_CONTRACT,
+        "writes_registry_metadata": writes_registry_metadata,
+        "writes_receipts": False,
+        "dry_run_required_before_apply": True,
+        "quality_reference_backfill_only": True,
+        "candidate_references_do_not_claim_pack_specific_coverage": True,
+        "does_not_write_validation_receipts": True,
+        "does_not_write_proposals": True,
+        "does_not_approve_proposals": True,
+        "does_not_promote_capabilities": True,
+        "does_not_enable_capabilities": True,
+        "does_not_execute_capabilities": True,
+        "promotion_authority": False,
+        "execution_authority": False,
+        "approval_authority": False,
+        "memory_write": False,
+        "mutates_generated_artifacts": False,
+    }
+
+
 def _record_capability_pack_quality_standard_remediation_batch(
     *,
     registry: dict[str, Any],
     prepared: list[dict[str, Any]],
 ) -> dict[str, list[dict[str, Any]]]:
     recorded_ts = _now_s()
+    batch_id = f"stage17_quality_standard_remediation_batch_{recorded_ts}"
     failed: list[dict[str, Any]] = []
     recorded: list[dict[str, Any]] = []
     changed = False
@@ -9231,6 +9452,8 @@ def _record_capability_pack_quality_standard_remediation_batch(
                 meta["quality"] = quality
                 meta["quality_standard_remediation_source"] = _CAPABILITY_PACK_QUALITY_STANDARD_REMEDIATION_SOURCE
                 meta["quality_reference_remediation_source"] = _CAPABILITY_PACK_QUALITY_STANDARD_REMEDIATION_SOURCE
+                meta["quality_standard_remediation_batch_id"] = batch_id
+                meta["quality_standard_remediation_applied_ts"] = recorded_ts
             if meta == before_meta:
                 continue
             current["meta"] = meta
@@ -9241,6 +9464,7 @@ def _record_capability_pack_quality_standard_remediation_batch(
 
         recorded.append(
             {
+                "batch_id": batch_id,
                 "pack_id": pack_id,
                 "pack_version": pack_version,
                 "capability_count": len(capability_ids),
@@ -10145,6 +10369,8 @@ _MISSION_OPERATION_CONTEXT_BY_CAPABILITY = {
     "plugin.run": "mission_linked_operation",
     "plugin.tool.run": "mission_linked_tool_operation",
 }
+_CAPABILITY_PACK_INVOCATION_REUSABLE_OPERATION_STATUSES = {"complete", "completed", "dry_run", "ok", "succeeded"}
+_CAPABILITY_PACK_INVOCATION_REUSABLE_DISPATCH_STATUSES = {"completed", "dry_run", "ok", "succeeded"}
 
 
 def _capability_pack_invocation_selection(
@@ -10301,10 +10527,13 @@ def _capability_pack_invocation_receipt(
 def _capability_pack_invocation_routing_guard(
     *,
     operation_capability: str,
+    operation_status: str,
     invocation: dict[str, Any],
     input_meta: dict[str, Any] | None = None,
 ) -> dict[str, object]:
     capability = _safe_str(operation_capability).strip()
+    normalized_operation_status = _safe_str(operation_status).strip().lower()
+    invocation_status = _safe_str(invocation.get("status")).strip().lower()
     caller_context = _safe_str(invocation.get("caller_context")).strip()
     input_context_meta = input_meta if isinstance(input_meta, dict) else {}
     input_caller_context = _safe_str(input_context_meta.get("caller_context")).strip()
@@ -10383,11 +10612,15 @@ def _capability_pack_invocation_routing_guard(
         else None
     )
     dispatch_receipt_present = _to_bool(receipt_linkage.get("dispatch_receipt_present"))
+    dispatch_status = _safe_str(receipt_linkage.get("dispatch_status")).strip().lower()
     dispatch_run_id_present = bool(_safe_str(receipt_linkage.get("run_id")).strip())
     dispatch_trace_id_present = bool(_safe_str(receipt_linkage.get("trace_id")).strip())
     dispatch_receipt_linkage_complete = (
         dispatch_receipt_present and dispatch_run_id_present and dispatch_trace_id_present
     )
+    operation_status_reusable = normalized_operation_status in _CAPABILITY_PACK_INVOCATION_REUSABLE_OPERATION_STATUSES
+    invocation_status_reusable = invocation_status in _CAPABILITY_PACK_INVOCATION_REUSABLE_DISPATCH_STATUSES
+    dispatch_status_reusable = dispatch_status in _CAPABILITY_PACK_INVOCATION_REUSABLE_DISPATCH_STATUSES
     uses_existing_plugin_dispatcher = _to_bool(governance.get("uses_existing_plugin_dispatcher"))
     new_authority_granted_by_receipt = _to_bool(governance.get("new_authority_granted_by_receipt"))
     promotes_capabilities = not _to_bool(governance.get("does_not_promote_capabilities"))
@@ -10436,6 +10669,12 @@ def _capability_pack_invocation_routing_guard(
         reject_reasons.append("pack_selection_supported_contexts_missing")
     if not dispatch_receipt_linkage_complete:
         reject_reasons.append("dispatch_receipt_linkage_missing")
+    if not operation_status_reusable:
+        reject_reasons.append("operation_status_not_reusable")
+    if not invocation_status_reusable:
+        reject_reasons.append("invocation_status_not_reusable")
+    if not dispatch_status_reusable:
+        reject_reasons.append("dispatch_status_not_reusable")
     if not governance_bound:
         reject_reasons.append("governance_boundary_missing")
 
@@ -10443,6 +10682,12 @@ def _capability_pack_invocation_routing_guard(
         "contract": _CAPABILITY_PACK_INVOCATION_ROUTING_GUARD_CONTRACT,
         "operation_input_context_contract": _STAGE17_OPERATION_INVOCATION_CALLER_CONTEXT_CONTRACT,
         "operation_capability": capability,
+        "operation_status": normalized_operation_status,
+        "operation_status_reusable": operation_status_reusable,
+        "invocation_status": invocation_status,
+        "invocation_status_reusable": invocation_status_reusable,
+        "dispatch_status": dispatch_status,
+        "dispatch_status_reusable": dispatch_status_reusable,
         "caller_context": caller_context,
         "input_caller_context_present": bool(input_caller_context),
         "input_caller_context": input_caller_context or None,
@@ -10562,6 +10807,7 @@ def _capability_pack_invocation_audit_projection(
         input_meta = inputs.get("meta") if isinstance(inputs.get("meta"), dict) else {}
         routing_guard = _capability_pack_invocation_routing_guard(
             operation_capability=operation_capability,
+            operation_status=_safe_str(task.get("status")).strip(),
             invocation=invocation,
             input_meta=input_meta,
         )
@@ -10799,6 +11045,9 @@ def _capability_pack_invocation_audit_projection(
             "mission_linked_reuse_requires_both_mission_contexts": True,
             "mission_shape_reuse_requires_plugin_run_and_plugin_tool_run": True,
             "receipt_linked_mission_shape_reuse_requires_dispatch_run_and_trace_ids": True,
+            "reusable_operation_statuses": sorted(_CAPABILITY_PACK_INVOCATION_REUSABLE_OPERATION_STATUSES),
+            "reusable_dispatch_statuses": sorted(_CAPABILITY_PACK_INVOCATION_REUSABLE_DISPATCH_STATUSES),
+            "failed_or_blocked_statuses_do_not_count_as_reuse_proof": True,
             "does_not_infer_missing_direct_route_receipts": True,
         },
         "governance": {
@@ -11989,6 +12238,7 @@ class CapabilityPackQualityStandardRemediationApplyIn(BaseModel):
     max_total_capability_count: int = 1000
     max_capability_count_per_pack: int = 500
     dry_run: bool = False
+    dry_run_fingerprint: str = ""
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -12514,24 +12764,21 @@ def apply_capability_pack_quality_standard_remediation(
 
         registry = _load_registry()
         _sync_generated_plugins(registry)
-        catalog = _save_registry_and_catalog(registry)
-        runtime_catalog = _read_runtime_catalog_payload(catalog)
+        # Plan from the in-memory generated-plugin sync; only confirmed apply
+        # may persist registry/catalog state.
+        runtime_catalog = _runtime_catalog_payload_from_registry(registry)
         marketplace = marketplace_from_plugin_catalog(runtime_catalog)
         entries = marketplace.catalog()
         standards = analyze_capability_pack_quality_standards(entries)
         references = _quality_standard_reference_candidates()
-        raw_packs = standards.get("packs") if isinstance(standards.get("packs"), list) else []
-        queue = [
-            item
-            for item in raw_packs
-            if isinstance(item, dict)
-            and any(
-                blocker in _unique_texts(item.get("blockers"), limit=50)
-                for blocker in ("tests_missing", "docs_missing")
-            )
-        ]
+        queue = _capability_pack_quality_standard_queue(standards)
         if selected_pack_ids:
             queue = [item for item in queue if _safe_str(item.get("pack_id")).strip() in selected_pack_ids]
+        before_evidence = _capability_pack_quality_standard_queue_evidence(
+            standards=standards,
+            queue=queue,
+            selected_pack_ids=selected_pack_ids,
+        )
         if not queue:
             return {
                 "ok": True,
@@ -12540,24 +12787,19 @@ def apply_capability_pack_quality_standard_remediation(
                 "planned_pack_count": 0,
                 "recorded_pack_count": 0,
                 "recorded_capability_count": 0,
+                "queue_count_contract": _CAPABILITY_PACK_QUALITY_STANDARD_REMEDIATION_QUEUE_CONTRACT,
+                "projection_scope": before_evidence["projection_scope"],
+                "global_counts_included": before_evidence["global_counts_included"],
+                "before_quality_standard_queue_count": before_evidence["quality_standard_queue_count"],
+                "before_global_quality_standard_queue_count": before_evidence["global_quality_standard_queue_count"],
+                "after_quality_standard_queue_count": before_evidence["quality_standard_queue_count"],
+                "candidate_reduction_count": 0,
+                "projection_evidence": before_evidence["projection_evidence"],
                 "before": standards,
-                "governance": {
-                    "scope": _PLUGIN_WRITE_SCOPE,
-                    "route": request.url.path,
-                    "writes_registry_metadata": False,
-                    "writes_receipts": False,
-                    "does_not_write_validation_receipts": True,
-                    "does_not_write_proposals": True,
-                    "does_not_approve_proposals": True,
-                    "does_not_promote_capabilities": True,
-                    "does_not_enable_capabilities": True,
-                    "does_not_execute_capabilities": True,
-                    "promotion_authority": False,
-                    "execution_authority": False,
-                    "approval_authority": False,
-                    "memory_write": False,
-                    "mutates_generated_artifacts": False,
-                },
+                "governance": _capability_pack_quality_standard_remediation_governance(
+                    route_path=request.url.path,
+                    writes_registry_metadata=False,
+                ),
             }
         if len(queue) > safe_max_pack_count:
             return {
@@ -12566,6 +12808,12 @@ def apply_capability_pack_quality_standard_remediation(
                 "status": "blocked",
                 "error": "quality_standard_pack_limit_exceeded",
                 "candidate_total": len(queue),
+                "queue_count_contract": _CAPABILITY_PACK_QUALITY_STANDARD_REMEDIATION_QUEUE_CONTRACT,
+                "projection_scope": before_evidence["projection_scope"],
+                "global_counts_included": before_evidence["global_counts_included"],
+                "before_quality_standard_queue_count": before_evidence["quality_standard_queue_count"],
+                "before_global_quality_standard_queue_count": before_evidence["global_quality_standard_queue_count"],
+                "projection_evidence": before_evidence["projection_evidence"],
                 "limit": safe_max_pack_count,
             }
 
@@ -12635,6 +12883,12 @@ def apply_capability_pack_quality_standard_remediation(
                 "status": "blocked",
                 "error": "total_capability_limit_exceeded",
                 "capability_count": total_capability_count,
+                "queue_count_contract": _CAPABILITY_PACK_QUALITY_STANDARD_REMEDIATION_QUEUE_CONTRACT,
+                "projection_scope": before_evidence["projection_scope"],
+                "global_counts_included": before_evidence["global_counts_included"],
+                "before_quality_standard_queue_count": before_evidence["quality_standard_queue_count"],
+                "before_global_quality_standard_queue_count": before_evidence["global_quality_standard_queue_count"],
+                "projection_evidence": before_evidence["projection_evidence"],
                 "limit": safe_max_total_capability_count,
             }
         if not prepared:
@@ -12646,26 +12900,22 @@ def apply_capability_pack_quality_standard_remediation(
                 "recorded_pack_count": 0,
                 "recorded_capability_count": 0,
                 "skipped": skipped,
+                "queue_count_contract": _CAPABILITY_PACK_QUALITY_STANDARD_REMEDIATION_QUEUE_CONTRACT,
+                "projection_scope": before_evidence["projection_scope"],
+                "global_counts_included": before_evidence["global_counts_included"],
+                "before_quality_standard_queue_count": before_evidence["quality_standard_queue_count"],
+                "before_global_quality_standard_queue_count": before_evidence["global_quality_standard_queue_count"],
+                "after_quality_standard_queue_count": before_evidence["quality_standard_queue_count"],
+                "candidate_reduction_count": 0,
+                "projection_evidence": before_evidence["projection_evidence"],
                 "before": standards,
-                "governance": {
-                    "scope": _PLUGIN_WRITE_SCOPE,
-                    "route": request.url.path,
-                    "writes_registry_metadata": False,
-                    "writes_receipts": False,
-                    "does_not_write_validation_receipts": True,
-                    "does_not_write_proposals": True,
-                    "does_not_approve_proposals": True,
-                    "does_not_promote_capabilities": True,
-                    "does_not_enable_capabilities": True,
-                    "does_not_execute_capabilities": True,
-                    "promotion_authority": False,
-                    "execution_authority": False,
-                    "approval_authority": False,
-                    "memory_write": False,
-                    "mutates_generated_artifacts": False,
-                },
+                "governance": _capability_pack_quality_standard_remediation_governance(
+                    route_path=request.url.path,
+                    writes_registry_metadata=False,
+                ),
             }
 
+        dry_run_fingerprint = _capability_pack_quality_standard_remediation_fingerprint(prepared=prepared)
         planned = [
             {
                 "pack_id": item["pack_id"],
@@ -12691,28 +12941,63 @@ def apply_capability_pack_quality_standard_remediation(
                 "status": "dry_run",
                 "planned_pack_count": len(planned),
                 "planned_capability_count": sum(int(item.get("capability_count") or 0) for item in planned),
+                "dry_run_fingerprint": dry_run_fingerprint,
+                "queue_count_contract": _CAPABILITY_PACK_QUALITY_STANDARD_REMEDIATION_QUEUE_CONTRACT,
+                "projection_scope": before_evidence["projection_scope"],
+                "global_counts_included": before_evidence["global_counts_included"],
+                "before_quality_standard_queue_count": before_evidence["quality_standard_queue_count"],
+                "before_global_quality_standard_queue_count": before_evidence["global_quality_standard_queue_count"],
+                "after_quality_standard_queue_count": before_evidence["quality_standard_queue_count"],
+                "candidate_reduction_count": 0,
+                "dry_run_confirmation": {
+                    "required_for_apply": True,
+                    "fingerprint": dry_run_fingerprint,
+                    "fingerprint_contract": _CAPABILITY_PACK_QUALITY_STANDARD_REMEDIATION_DRY_RUN_CONTRACT,
+                    "planned_pack_count": len(planned),
+                    "planned_capability_count": sum(int(item.get("capability_count") or 0) for item in planned),
+                    "apply_route": request.url.path,
+                },
                 "planned": planned,
                 "skipped": skipped,
+                "projection_evidence": before_evidence["projection_evidence"],
                 "before": standards,
-                "governance": {
-                    "scope": _PLUGIN_WRITE_SCOPE,
-                    "route": request.url.path,
-                    "writes_registry_metadata": False,
-                    "writes_receipts": False,
-                    "quality_reference_backfill_only": True,
-                    "candidate_references_do_not_claim_pack_specific_coverage": True,
-                    "does_not_write_validation_receipts": True,
-                    "does_not_write_proposals": True,
-                    "does_not_approve_proposals": True,
-                    "does_not_promote_capabilities": True,
-                    "does_not_enable_capabilities": True,
-                    "does_not_execute_capabilities": True,
-                    "promotion_authority": False,
-                    "execution_authority": False,
-                    "approval_authority": False,
-                    "memory_write": False,
-                    "mutates_generated_artifacts": False,
+                "governance": _capability_pack_quality_standard_remediation_governance(
+                    route_path=request.url.path,
+                    writes_registry_metadata=False,
+                ),
+            }
+
+        provided_dry_run_fingerprint = _safe_str(payload.dry_run_fingerprint).strip()
+        if provided_dry_run_fingerprint != dry_run_fingerprint:
+            return {
+                "ok": False,
+                "applied": False,
+                "status": "blocked",
+                "error": "capability_pack_quality_standard_remediation_dry_run_confirmation_required",
+                "planned_pack_count": len(planned),
+                "planned_capability_count": sum(int(item.get("capability_count") or 0) for item in planned),
+                "dry_run_fingerprint": dry_run_fingerprint,
+                "queue_count_contract": _CAPABILITY_PACK_QUALITY_STANDARD_REMEDIATION_QUEUE_CONTRACT,
+                "projection_scope": before_evidence["projection_scope"],
+                "global_counts_included": before_evidence["global_counts_included"],
+                "before_quality_standard_queue_count": before_evidence["quality_standard_queue_count"],
+                "before_global_quality_standard_queue_count": before_evidence["global_quality_standard_queue_count"],
+                "after_quality_standard_queue_count": before_evidence["quality_standard_queue_count"],
+                "candidate_reduction_count": 0,
+                "dry_run_confirmation": {
+                    "required_for_apply": True,
+                    "fingerprint_contract": _CAPABILITY_PACK_QUALITY_STANDARD_REMEDIATION_DRY_RUN_CONTRACT,
+                    "fingerprint_matched": False,
+                    "apply_route": request.url.path,
                 },
+                "planned": planned,
+                "skipped": skipped,
+                "projection_evidence": before_evidence["projection_evidence"],
+                "before": standards,
+                "governance": _capability_pack_quality_standard_remediation_governance(
+                    route_path=request.url.path,
+                    writes_registry_metadata=False,
+                ),
             }
 
         batch = _record_capability_pack_quality_standard_remediation_batch(
@@ -12727,14 +13012,23 @@ def apply_capability_pack_quality_standard_remediation(
         refreshed_runtime_catalog = _read_runtime_catalog_payload(refreshed_catalog)
         refreshed_marketplace = marketplace_from_plugin_catalog(refreshed_runtime_catalog)
         after = analyze_capability_pack_quality_standards(refreshed_marketplace.catalog())
+        after_queue = _capability_pack_quality_standard_queue(after)
         selected_after_queue = [
             item
-            for item in after.get("packs", [])
+            for item in after_queue
             if isinstance(item, dict)
-            and _safe_str(item.get("pack_id")).strip()
-            in {_safe_str(record.get("pack_id")).strip() for record in recorded}
-            and item.get("status") != "ready"
+            and (not selected_pack_ids or _safe_str(item.get("pack_id")).strip() in selected_pack_ids)
         ]
+        after_evidence = _capability_pack_quality_standard_queue_evidence(
+            standards=after,
+            queue=selected_after_queue,
+            selected_pack_ids=selected_pack_ids,
+        )
+        candidate_reduction_count = max(
+            _count_value(before_evidence.get("quality_standard_queue_count"))
+            - _count_value(after_evidence.get("quality_standard_queue_count")),
+            0,
+        )
         applied = bool(changed_records)
         return {
             "ok": not failed,
@@ -12748,28 +13042,31 @@ def apply_capability_pack_quality_standard_remediation(
             "recorded": recorded,
             "failed": failed,
             "skipped": skipped,
+            "dry_run_fingerprint": dry_run_fingerprint,
+            "dry_run_confirmation": {
+                "required_for_apply": True,
+                "fingerprint_matched": True,
+                "fingerprint_contract": _CAPABILITY_PACK_QUALITY_STANDARD_REMEDIATION_DRY_RUN_CONTRACT,
+                "apply_route": request.url.path,
+            },
+            "queue_count_contract": _CAPABILITY_PACK_QUALITY_STANDARD_REMEDIATION_QUEUE_CONTRACT,
+            "projection_scope": before_evidence["projection_scope"],
+            "global_counts_included": before_evidence["global_counts_included"],
+            "before_quality_standard_queue_count": before_evidence["quality_standard_queue_count"],
+            "before_global_quality_standard_queue_count": before_evidence["global_quality_standard_queue_count"],
+            "after_quality_standard_queue_count": after_evidence["quality_standard_queue_count"],
+            "after_global_quality_standard_queue_count": after_evidence["global_quality_standard_queue_count"],
+            "candidate_reduction_count": candidate_reduction_count,
+            "before_queue_evidence": before_evidence,
+            "after_queue_evidence": after_evidence,
+            "projection_evidence": after_evidence["projection_evidence"],
             "remaining_quality_standard_queue": selected_after_queue,
             "remaining_quality_standard_queue_count": len(selected_after_queue),
             "next_smallest_truthful_gap": _safe_str(after.get("next_smallest_truthful_gap")).strip(),
-            "governance": {
-                "scope": _PLUGIN_WRITE_SCOPE,
-                "route": request.url.path,
-                "writes_registry_metadata": applied,
-                "writes_receipts": False,
-                "quality_reference_backfill_only": True,
-                "candidate_references_do_not_claim_pack_specific_coverage": True,
-                "does_not_write_validation_receipts": True,
-                "does_not_write_proposals": True,
-                "does_not_approve_proposals": True,
-                "does_not_promote_capabilities": True,
-                "does_not_enable_capabilities": True,
-                "does_not_execute_capabilities": True,
-                "promotion_authority": False,
-                "execution_authority": False,
-                "approval_authority": False,
-                "memory_write": False,
-                "mutates_generated_artifacts": False,
-            },
+            "governance": _capability_pack_quality_standard_remediation_governance(
+                route_path=request.url.path,
+                writes_registry_metadata=applied,
+            ),
         }
     except Exception as exc:
         return {

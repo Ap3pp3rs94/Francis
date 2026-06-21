@@ -88615,6 +88615,143 @@ Remaining truthful gap:
 - This slice does not close a ledger-backed phase gate and does not move the
   Phase 2 posture.
 
+### 2026-06-20 - Stage 17 invocation audit status-bound reuse guard
+
+Roadmap area: Stage 17 / Capability Economy, reusable governed invocation,
+mission-shape reuse proof, receipt-linked invocation auditability, and failed
+dispatch exclusion.
+
+This pass tightened the existing read-only invocation audit so failed or blocked
+operation/dispatch records cannot count as reusable capability-pack leverage:
+
+- `_capability_pack_invocation_routing_guard` now receives the persisted
+  operation status and exposes `operation_status_reusable`,
+  `invocation_status_reusable`, and `dispatch_status_reusable` in the routing
+  guard readback.
+- `/plugins/capabilities/library/invocations/audit` now requires reusable
+  operation status, invocation status, and dispatch status before a persisted
+  operation contributes to reuse proof. Reusable operation statuses are bounded
+  to the existing successful/dry-run Francis shapes: `complete`, `completed`,
+  `dry_run`, `ok`, and `succeeded`.
+- The durable fixture replay test now adds a same-pack, same-context,
+  receipt-linked failed operation and verifies it is rejected with
+  `operation_status_not_reusable`, `invocation_status_not_reusable`, and
+  `dispatch_status_not_reusable` while the three valid mission-shaped records
+  still prove one pack reuse key across `plugin.run`, `plugin.tool.run`, and two
+  mission ids.
+- A read-only projection over mission-test operation records generated before
+  this fix confirmed the existing live operation shape uses `status=complete`;
+  after the guard allowlist was corrected, the projection returned
+  `ready 3 5 True True` for status, accepted invocation count, rejected count,
+  mission-shape reuse, and receipt-linked mission-shape reuse.
+- No production dispatch path, Orb visual behavior, registry mutation,
+  capability promotion, capability enablement, receipt writer, memory writer, or
+  execution authority was added. The route remains read-only audit over existing
+  operation records with embedded invocation receipts.
+- Worker prompt hash for this status-bound guard pass:
+  `ca229eaede3264da180b64d65c0f65aa0fb1de154290b1fc370a1fa766da0118`.
+
+Validation:
+
+- `.\.venv\Scripts\python.exe -m py_compile
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py` passed.
+- `.\.venv\Scripts\python.exe -m pytest
+  tests\test_api_plugins.py::test_plugins_invocation_audit_reads_durable_fixture_records_without_execution
+  -q` passed with one existing FastAPI/TestClient deprecation warning.
+- `.\.venv\Scripts\python.exe -c "..._capability_pack_invocation_audit_projection(...)"`
+  against the mission-generated operation records returned
+  `ready 3 5 True True`.
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py` passed.
+- `.\.venv\Scripts\python.exe -m ruff format --check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py` passed with
+  `2 files already formatted`.
+- `git diff --check -- src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py` reported no whitespace errors.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. This pass does not claim full reusable invocation
+  closure, process a live Stage 17 queue chunk, promote, enable, execute, write
+  a publication marker, commit, push, or close the Stage 17 capability-economy
+  queue.
+- This pass removes only the status-boundary gap where failed or blocked
+  operation/dispatch records could satisfy the structural receipt-linkage and
+  pack-selection checks for reusable invocation audit proof.
+- Broader live backlog reduction, global projection freshness,
+  proposal-review/proposal-evidence closure scope, publication-marker evidence,
+  and full capability-lifecycle closure remain open.
+- This slice does not close a ledger-backed phase gate and does not move the
+  Phase 2 posture.
+
+### 2026-06-20 - Stage 17 quality standard and reuse safety gates
+
+Roadmap area: Stage 17 / Capability Economy, governed quality-standard
+remediation, lifecycle rollback safety, reusable invocation proof truthfulness,
+queue-count evidence, and dry-run/apply boundary enforcement.
+
+This pass tightened three Stage 17 capability-pack safety and reuse paths without
+creating a parallel capability substrate:
+
+- `POST /plugins/capabilities/packs/quality/standards/remediation/apply` now
+  requires an echoed dry-run fingerprint before it mutates registry metadata.
+  Dry-run and unconfirmed apply plan from the in-memory generated-plugin sync
+  and remain truthfully no-write for registry/catalog persistence.
+- Quality-standard remediation responses now expose
+  `stage17_capability_pack_quality_standard_remediation_dry_run_v1` and
+  `stage17_capability_pack_quality_standard_remediation_batch_queue_evidence_v1`
+  evidence, including selected/full-library projection scope, before/after
+  quality-standard queue counts, and candidate reduction counts.
+- Quality-standard apply still backfills only candidate reference metadata. It
+  does not claim pack-specific proof, write validation receipts, write proposals,
+  approve proposals, promote, enable, execute, mutate generated artifacts, or
+  write memory.
+- Lifecycle rollback now checks the current lifecycle receipt with
+  `plugin.lifecycle.rollback_source_receipt_safety_v1` before dry-run
+  fingerprinting or mutation. Tampered source receipts with inconsistent
+  disabled-state or governance evidence are refused before registry metadata or
+  lifecycle receipts are written.
+- Invocation audit reuse proof now rejects operation records whose operation,
+  invocation, or dispatch status is not reusable. Failed records no longer count
+  toward cross-context or multi-mission reuse proof even when the rest of the
+  embedded receipt shape is valid.
+
+Validation:
+
+- `.\.venv\Scripts\python.exe -m py_compile
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py` passed.
+- `.\.venv\Scripts\python.exe -m pytest
+  tests\test_api_plugins.py::test_plugins_invocation_audit_reads_durable_fixture_records_without_execution
+  -vv` passed.
+- `.\.venv\Scripts\python.exe -m pytest
+  tests\test_api_plugins.py::test_plugins_lifecycle_rollback_restores_staged_candidate_without_promoting
+  tests\test_api_plugins.py::test_plugins_lifecycle_rollback_requires_current_source_receipt
+  -vv` passed.
+- `.\.venv\Scripts\python.exe -m pytest
+  tests\test_api_plugins.py::test_plugins_lifecycle_rollback_refuses_tampered_source_receipt_before_dry_run
+  -q` passed.
+- `.\.venv\Scripts\python.exe -m pytest
+  tests\test_api_plugins.py::test_plugins_capability_pack_quality_standard_remediation_backfills_candidate_refs
+  -vv` passed.
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py` passed.
+- `.\.venv\Scripts\python.exe -m ruff format --check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py` passed.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. This pass does not claim full quality-standard
+  closure, quality-evidence closure, proposal/review closure, promotion,
+  enablement, execution, publication-marker coverage for active worker lanes,
+  global/full-library queue closure, full CI, or phase movement.
+- This pass removes the quality-standard apply boundary where candidate
+  reference backfill could mutate without dry-run confirmation, the rollback
+  source-receipt ambiguity where tampered lifecycle receipts were not
+  independently safety-checked, and the invocation-audit ambiguity where failed
+  operation records were not explicitly excluded from reuse proof.
+- This slice does not close a ledger-backed phase gate and does not move the
+  Phase 2 posture.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
