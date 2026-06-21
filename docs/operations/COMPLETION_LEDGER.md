@@ -89825,6 +89825,80 @@ Remaining truthful gap:
   or move to the next smallest Stage 17 gate once reconstruction candidates are
   exhausted.
 
+### 2026-06-21 17:33Z - Stage 17 third reconstruction batch reaches 3 remaining packs
+
+Current posture: Stage 17 / Capability Economy remains open. This pass ran a
+third bounded batch of three sequential live `smallest_full_pack_first`
+artifact reconstruction applies. Each apply used its own dry-run fingerprint,
+operator decision, durable receipt, and before/after queue evidence. The batch
+stopped after the configured three applies. It does not claim full
+quality-evidence closure, full CI, or Stage 17 completion.
+
+What changed:
+
+- Batch iteration 1 selected `legacy.generated.opsmemoryreceiptplugin`,
+  reconstructed 4 capabilities, and reduced the queue `6 -> 5`.
+- Batch iteration 2 selected `legacy.generated.opsplugin`, reconstructed 4
+  capabilities, and reduced the queue `5 -> 4`.
+- Batch iteration 3 selected `legacy.generated.opstoolplugin`, reconstructed 4
+  capabilities, and reduced the queue `4 -> 3`.
+- No runtime code changed in this cycle.
+
+Live receipt evidence:
+
+- Iteration 1 receipt:
+  `data\artifacts\plugins\capability_packs\artifact_reconstructions\stage17_artifact_reconstruction_batch_1782063044_74e8e2b4_receipt.json`.
+  SHA-256:
+  `A30F03D7BA82E51D5240311566C25AC7578D5C705EFDBCDC662C1E66B7FF02E3`.
+  Dry-run fingerprint:
+  `2bd3adbf3862408851f07d3ac33f632a16363c45936319ae0528241c2b1042a2`.
+- Iteration 2 receipt:
+  `data\artifacts\plugins\capability_packs\artifact_reconstructions\stage17_artifact_reconstruction_batch_1782063102_1c2acc2f_receipt.json`.
+  SHA-256:
+  `1C251FFBB365F727FC55866B0F361997AE3D52B6A730CF053724CFA2468CAA85`.
+  Dry-run fingerprint:
+  `51f547f8a50fae2540d1088b855fd704e9d406e380ac6dc74b9d9b9c3ea8d3f3`.
+- Iteration 3 receipt:
+  `data\artifacts\plugins\capability_packs\artifact_reconstructions\stage17_artifact_reconstruction_batch_1782063151_727c7a71_receipt.json`.
+  SHA-256:
+  `348F7E64BB9D8A8227DB5596CFDB7CB9535B4800728BF9A63707C14A241A58AD`.
+  Dry-run fingerprint:
+  `43412f0361234dbc8fb3cf1cfba7bf39d637e761824b0bba43833ccac380066c`.
+- Batch queue movement:
+  `before_remediation_queue_count=6`,
+  `after_remediation_queue_count=3`.
+- Reconstruction-required movement:
+  validation receipts `49 -> 37`; proposal lineages `49 -> 37`.
+- Readback after batch:
+  `artifact_reconstruction_required_count=3`,
+  `next_smallest_truthful_gap=stage17_capability_pack_artifact_reconstruction_apply`.
+
+Validation:
+
+- Each batch iteration's live dry-run returned `ok=true`, `status=dry_run`, a
+  single selected pack, `planned_pack_count=1`, `planned_capability_count=4`,
+  and a unique fingerprint.
+- Each batch iteration's live apply returned `ok=true`, `applied=true`,
+  `status=recorded`, `recorded_pack_count=1`,
+  `recorded_capability_count=4`, `failed_count=0`, `skipped_count=0`, and
+  `candidate_reduction_count=1`.
+- Live remediation readback returned `remediation_queue_count=3` and
+  `artifact_reconstruction_required_count=3`.
+- `.\scripts\francis-completion-model.ps1` returned clean JSON with the newest
+  receipt:
+  `stage17_artifact_reconstruction_batch_1782063151_727c7a71_receipt`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The live queue is reduced but not closed:
+  3 artifact reconstruction-required packs remain.
+- Full quality-evidence closure, metadata apply closure, proposal review queue
+  closure, promotion queue closure, enablement/execution readiness, full CI,
+  and phase movement remain unproven.
+- The next accepted build action should run a smaller bounded apply batch for
+  the remaining three reconstruction candidates, then re-read the next smallest
+  Stage 17 gap instead of assuming completion.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
