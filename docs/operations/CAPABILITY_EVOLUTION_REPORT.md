@@ -2766,3 +2766,104 @@ Next highest leverage action:
   readiness, run it through existing governed dry-run dispatch, then verify the
   resulting invocation receipt through
   `/plugins/capabilities/library/invocations/audit`.
+
+### Cycle 2026-06-21T19:34Z to 2026-06-21T21:00Z
+
+Scope: Stage 17 governed dry-run execution probe, mission-linked dry-run
+operation audit proof, and CI/wiring triage after the execution-readiness
+checkpoint.
+
+Active workers:
+
+- 3 worker lanes active.
+- Worker 1 implemented the governed dry-run probe through existing `/plugins/run`.
+- Worker 2 extended mission-linked operation audit proof for dry-run
+  `plugin.run` and `plugin.tool.run` records.
+- Worker 3 updated the closure matrix and triaged the red full-check posture.
+- Lead reconciled the shared Stage 17 route/test state and validated the
+  combined focused path.
+
+Active drones:
+
+- 0 local drones were accepted in this cycle.
+
+Commits produced: pending at report time.
+
+Commits accepted: pending at report time.
+
+Commits rejected: 0.
+
+Validations passed:
+
+- Focused pytest passed for the dry-run probe, blocked probe paths,
+  execution-readiness readback, mission-linked invocation audit proof, durable
+  invocation-audit fixture, and direct dry-run invocation binding.
+- Worker CI triage targeted
+  `tests\test_lens_command_palette_monitor_script.py` and it passed.
+- Completion-model readback stayed read-only, reported Phase 2, reported
+  `stage17_status.status=open`, and granted no execution or mutation authority.
+
+Validations failed or blocked:
+
+- Full local `.\scripts\check.ps1` remains red/unproven from the earlier
+  attempt. The known risk cluster remains broader Lens runtime/proof-script
+  behavior, not the focused Stage 17 dry-run probe.
+- GitHub CI remains unproven for this checkpoint until the accepted work is
+  pushed and remote checks complete.
+
+Receipts generated:
+
+- No durable runtime receipts were written by the direct dry-run probe route
+  itself beyond the response receipt returned by existing `/plugins/run`.
+- Test evidence proves mission-linked dry-run operation records embed the
+  `capability_pack_invocation` receipt and are consumed by
+  `/plugins/capabilities/library/invocations/audit`.
+
+Roadmap items advanced:
+
+- Stage 17 / Capability Economy.
+- Governed execution readiness.
+- Mission-linked reusable invocation proof.
+- Invocation audit readback.
+- CI/wiring truthfulness.
+
+Capability classes advanced:
+
+- Capability Registry
+- Governance
+- Receipts
+- Missions
+- Observability
+- API Surface
+- Documentation
+- Testing
+
+New capabilities created or strengthened:
+
+- `POST /plugins/capabilities/library/execution/dry-run-probe` can dispatch one
+  selected promoted capability through existing plugin runtime in dry-run mode
+  with explicit bounds and governance readback.
+- The probe refuses non-dry-run, approval-required, trust-blocked, and
+  non-routeable execution paths without requesting approvals or creating a
+  second executor.
+- Mission-linked dry-run operation records now prove reuse through the same
+  invocation audit chain as live-dispatch operation records while preserving
+  dry-run status.
+- The closure matrix now names CI/wiring trust as the weakest criterion and
+  stops pointing to stale proposal/review/promotion blockers.
+
+Most important change:
+
+- Stage 17 moved from read-only execution readiness to a governed dry-run probe
+  through the existing dispatcher, with operation-audit proof for dry-run
+  mission contexts.
+
+Biggest remaining bottleneck:
+
+- Full project validation remains red/unproven because of the broader Lens
+  runtime/proof-script cluster.
+
+Next highest leverage action:
+
+- Run the targeted Lens runtime cluster probe named in the closure matrix, fix
+  or classify that cluster, then rerun full `.\scripts\check.ps1`.

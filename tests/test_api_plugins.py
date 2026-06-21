@@ -781,6 +781,57 @@ def test_plugins_invocation_receipts_bind_pack_selection_across_direct_dry_run_c
     }
 
 
+def _write_stage17_execution_probe_plugin(
+    plugins,
+    registry: dict[str, object],
+    *,
+    plugin_id: str,
+    action: str,
+    approval_required: bool = False,
+    enabled: bool = True,
+    promoted: bool = True,
+) -> None:
+    plugins._write_plugin(
+        registry,
+        plugins._normalize_plugin_record(
+            plugin_id,
+            {
+                "id": plugin_id,
+                "name": plugin_id,
+                "version": "1.0.0",
+                "status": "enabled" if enabled else "staged",
+                "enabled": enabled,
+                "source_kind": "registry",
+                "source_ref": f"tests.{plugin_id}",
+                "capabilities": [
+                    {
+                        "id": f"{plugin_id}.{action}",
+                        "kind": "tool",
+                        "name": action,
+                        "action": action,
+                        "description": "Promoted Stage 17 execution probe fixture.",
+                        "meta": {
+                            "risk_tier": "normal",
+                            "required_trust": 0,
+                            "approvals_required": approval_required,
+                            "tool_name": f"stage17.{plugin_id}.{action}",
+                        },
+                    }
+                ],
+                "meta": {
+                    "pack_id": "ops.stage17_execution_probe",
+                    "pack_version": "1.0.0",
+                    "pack_name": "Stage 17 Execution Probe",
+                    "promotion_status": "promoted" if promoted else "staged",
+                    "promotion_receipt_id": f"promotion_{plugin_id}" if promoted else "",
+                    "proposal_review_receipt_id": f"review_{plugin_id}" if promoted else "",
+                    "validation_receipt_id": f"validation_{plugin_id}" if promoted else "",
+                },
+            },
+        ),
+    )
+
+
 def test_plugins_capability_library_execution_readiness_is_read_only_after_promotion(
     monkeypatch,
     tmp_path: Path,
@@ -888,6 +939,244 @@ def test_plugins_capability_library_execution_readiness_is_read_only_after_promo
         "stage17_ready_approval",
     }
     assert all(item["routeable_through_existing_dispatcher"] is True for item in body["capabilities"])
+
+
+def test_plugins_capability_library_execution_dry_run_probe_uses_existing_dispatcher(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    monkeypatch.setattr(plugins, "_sync_generated_plugins", lambda registry: 0)
+
+    registry = plugins._default_registry()
+    plugin_id = "stage17_probe_ready"
+    action = "summarize"
+    _write_stage17_execution_probe_plugin(
+        plugins,
+        registry,
+        plugin_id=plugin_id,
+        action=action,
+        approval_required=False,
+    )
+    _write_stage17_execution_probe_plugin(
+        plugins,
+        registry,
+        plugin_id="stage17_probe_approval",
+        action="deploy",
+        approval_required=True,
+    )
+    plugins._save_registry(registry)
+
+    approval_requests: list[object] = []
+
+    def fail_approval_request(*args, **kwargs):  # noqa: ANN002, ANN003
+        approval_requests.append((args, kwargs))
+        raise AssertionError("dry-run probe must not request approvals")
+
+    run_calls: list[object] = []
+    real_run_plugin = plugins.run_plugin
+
+    def spy_run_plugin(payload):
+        run_calls.append(payload)
+        return real_run_plugin(payload)
+
+    dispatch_calls: list[dict[str, object]] = []
+    real_dispatch = plugins.PluginDispatcher.dispatch_with_receipt
+
+    def spy_dispatch(self, handler, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003
+        dispatch_calls.append(dict(kwargs))
+        return real_dispatch(self, handler, *args, **kwargs)
+
+    monkeypatch.setattr(plugins, "_request_plugin_approval", fail_approval_request)
+    monkeypatch.setattr(plugins, "run_plugin", spy_run_plugin)
+    monkeypatch.setattr(plugins.PluginDispatcher, "dispatch_with_receipt", spy_dispatch)
+
+    client = TestClient(create_app())
+    response = client.post(
+        "/plugins/capabilities/library/execution/dry-run-probe",
+        json={"plugin_id": plugin_id, "input": {"probe": "stage17"}},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["kind"] == "plugin.capability_library.execution_dry_run_probe"
+    assert body["contract"] == "stage17_capability_library_execution_dry_run_probe_v1"
+    assert body["status"] == "dry_run"
+    assert body["dry_run"] is True
+    assert body["selection"]["selected"]["plugin_id"] == plugin_id
+    assert body["selection"]["selected"]["action"] == action
+    assert body["selection"]["selected"]["promotion_status"] == "promoted"
+    assert body["selection"]["selected"]["promotion_receipt_id"] == f"promotion_{plugin_id}"
+    assert body["selection"]["selected"]["approval_required"] is False
+    assert body["dispatch"]["attempted"] is True
+    assert body["dispatch"]["route"] == "/plugins/run"
+    assert body["dispatch"]["used_existing_run_route"] is True
+    assert body["dispatch"]["used_existing_dispatcher"] is True
+    assert body["dispatch"]["status"] == "dry_run"
+    assert body["dispatch"]["approval_requested"] is False
+    assert len(run_calls) == 1
+    run_payload = run_calls[0]
+    assert run_payload.id == plugin_id
+    assert run_payload.action == action
+    assert run_payload.approval_id is None
+    assert run_payload.meta["dry_run"] is True
+    assert run_payload.meta["caller_context"] == "direct_plugin_route"
+    assert run_payload.meta["probe_contract"] == "stage17_capability_library_execution_dry_run_probe_v1"
+    assert "force" not in run_payload.meta
+    assert len(dispatch_calls) == 1
+    assert dispatch_calls[0]["plugin_id"] == plugin_id
+    assert dispatch_calls[0]["dry_run"] is True
+
+    receipt = body["receipt"]
+    assert receipt["ok"] is True
+    assert receipt["status"] == "dry_run"
+    assert receipt["run_id"]
+    assert receipt["trace_id"]
+    assert receipt["sandbox"]["status"] == "dry_run"
+    assert body["output"]["payload_size"] >= 0
+    invocation = body["capability_pack_invocation"]
+    assert invocation["kind"] == "plugin.capability_pack.invocation_receipt"
+    assert invocation["contract"] == "stage17_capability_pack_reusable_invocation_receipt_v1"
+    assert invocation["status"] == "dry_run"
+    assert invocation["dry_run"] is True
+    assert invocation["caller_context"] == "direct_plugin_route"
+    assert invocation["plugin_id"] == plugin_id
+    assert invocation["capability_id"] == f"{plugin_id}.{action}"
+    assert invocation["evidence"]["promotion_status"] == "promoted"
+    assert invocation["evidence"]["promotion_receipt_id"] == f"promotion_{plugin_id}"
+    assert invocation["receipt_linkage"]["dispatch_receipt_present"] is True
+    assert invocation["receipt_linkage"]["dispatch_status"] == "dry_run"
+    assert invocation["receipt_linkage"]["run_id"] == receipt["run_id"]
+    assert invocation["governance"]["uses_existing_plugin_dispatcher"] is True
+    assert invocation["governance"]["new_authority_granted_by_receipt"] is False
+    assert invocation["governance"]["does_not_promote_capabilities"] is True
+    assert invocation["governance"]["does_not_enable_capabilities"] is True
+    auditability = body["auditability"]
+    assert auditability["receipt_present"] is True
+    assert auditability["capability_pack_invocation_present"] is True
+    assert auditability["dispatch_receipt_present"] is True
+    assert auditability["run_id"] == receipt["run_id"]
+    assert auditability["trace_id"] == receipt["trace_id"]
+    assert auditability["invocation_audit_route"] == "/plugins/capabilities/library/invocations/audit"
+    assert auditability["direct_route_receipts_counted_by_operation_audit"] is False
+    assert auditability["operation_record_required_for_invocation_audit"] is True
+    assert body["governance"]["dry_run_only"] is True
+    assert body["governance"]["does_not_request_approvals"] is True
+    assert body["governance"]["does_not_consume_approvals"] is True
+    assert body["governance"]["does_not_promote_capabilities"] is True
+    assert body["governance"]["does_not_enable_capabilities"] is True
+    assert body["governance"]["live_execution_authority"] is False
+    assert approval_requests == []
+    pending_dir = data_root / "approvals" / "pending"
+    assert not pending_dir.exists() or not list(pending_dir.glob("*.json"))
+
+    fetched = client.get(f"/plugins/get?id={plugin_id}")
+    assert fetched.status_code == 200
+    fetched_item = fetched.json()["item"]
+    assert fetched_item["status"] == "enabled"
+    assert fetched_item["enabled"] is True
+    assert fetched_item["meta"]["promotion_status"] == "promoted"
+    assert fetched_item["meta"]["promotion_receipt_id"] == f"promotion_{plugin_id}"
+
+
+def test_plugins_capability_library_execution_dry_run_probe_blocks_unbounded_or_approval_paths(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    monkeypatch.setattr(plugins, "_sync_generated_plugins", lambda registry: 0)
+
+    registry = plugins._default_registry()
+    plugin_id = "stage17_probe_approval_only"
+    _write_stage17_execution_probe_plugin(
+        plugins,
+        registry,
+        plugin_id=plugin_id,
+        action="deploy",
+        approval_required=True,
+    )
+    plugins._save_registry(registry)
+
+    dispatch_attempts: list[object] = []
+
+    def fail_run_plugin(payload):
+        dispatch_attempts.append(payload)
+        raise AssertionError("blocked execution probe path must not dispatch")
+
+    monkeypatch.setattr(plugins, "run_plugin", fail_run_plugin)
+
+    client = TestClient(create_app())
+    live_requested = client.post(
+        "/plugins/capabilities/library/execution/dry-run-probe",
+        json={"plugin_id": plugin_id, "dry_run": False},
+    )
+    assert live_requested.status_code == 200
+    live_body = live_requested.json()
+    assert live_body["ok"] is False
+    assert live_body["status"] == "blocked"
+    assert live_body["error"] == "execution_probe_is_dry_run_only"
+    assert live_body["dry_run_required"] is True
+    assert live_body["governance"]["dispatch_attempted"] is False
+    assert live_body["governance"]["does_not_request_approvals"] is True
+
+    invalid_bound = client.post(
+        "/plugins/capabilities/library/execution/dry-run-probe",
+        json={"plugin_id": plugin_id, "max_candidate_scan": 0},
+    )
+    assert invalid_bound.status_code == 200
+    invalid_bound_body = invalid_bound.json()
+    assert invalid_bound_body["ok"] is False
+    assert invalid_bound_body["status"] == "blocked"
+    assert invalid_bound_body["error"] == "invalid_execution_probe_bound"
+    assert invalid_bound_body["candidate_scan_limit"] == 0
+    assert invalid_bound_body["governance"]["dispatch_attempted"] is False
+
+    approval_blocked = client.post(
+        "/plugins/capabilities/library/execution/dry-run-probe",
+        json={"plugin_id": plugin_id},
+    )
+    assert approval_blocked.status_code == 200
+    approval_body = approval_blocked.json()
+    assert approval_body["ok"] is False
+    assert approval_body["status"] == "blocked"
+    assert approval_body["error"] == "selected_capability_not_probeable"
+    assert approval_body["dry_run"] is True
+    assert approval_body["dispatch"]["attempted"] is False
+    assert approval_body["dispatch"]["route"] == "/plugins/run"
+    assert approval_body["selection"]["selected"] == {}
+    assert approval_body["selection"]["rejected"][0]["plugin_id"] == plugin_id
+    assert approval_body["selection"]["rejected"][0]["approval_required"] is True
+    assert approval_body["selection"]["rejected"][0]["reject_reasons"] == ["approval_required"]
+    assert approval_body["governance"]["does_not_request_approvals"] is True
+    assert approval_body["governance"]["does_not_consume_approvals"] is True
+    assert approval_body["governance"]["does_not_promote_capabilities"] is True
+    assert approval_body["governance"]["does_not_enable_capabilities"] is True
+    assert dispatch_attempts == []
+    pending_dir = data_root / "approvals" / "pending"
+    assert not pending_dir.exists() or not list(pending_dir.glob("*.json"))
+
+    fetched = client.get(f"/plugins/get?id={plugin_id}")
+    assert fetched.status_code == 200
+    fetched_item = fetched.json()["item"]
+    assert fetched_item["status"] == "enabled"
+    assert fetched_item["enabled"] is True
+    assert fetched_item["meta"]["promotion_status"] == "promoted"
+    assert fetched_item["meta"]["promotion_receipt_id"] == f"promotion_{plugin_id}"
 
 
 def test_plugins_atomic_write_json_uses_unique_temp_siblings(monkeypatch, tmp_path: Path) -> None:

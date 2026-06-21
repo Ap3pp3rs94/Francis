@@ -223,6 +223,9 @@ _CAPABILITY_LIBRARY_PROPOSAL_REVIEW_APPLY_ROUTE = "/plugins/capabilities/library
 _CAPABILITY_LIBRARY_EXPLICIT_PROMOTION_APPLY_ROUTE = "/plugins/capabilities/library/promotion/apply"
 _CAPABILITY_LIBRARY_EXECUTION_READINESS_ROUTE = "/plugins/capabilities/library/execution/readiness"
 _CAPABILITY_LIBRARY_EXECUTION_READINESS_CONTRACT = "stage17_capability_library_execution_readiness_readback_v1"
+_CAPABILITY_LIBRARY_EXECUTION_DRY_RUN_PROBE_ROUTE = "/plugins/capabilities/library/execution/dry-run-probe"
+_CAPABILITY_LIBRARY_EXECUTION_DRY_RUN_PROBE_CONTRACT = "stage17_capability_library_execution_dry_run_probe_v1"
+_CAPABILITY_LIBRARY_EXECUTION_DRY_RUN_PROBE_MAX_SCAN = 500
 _PLUGIN_LIFECYCLE_REPAIR_ROUTE = "/plugins/lifecycle/repair"
 _PLUGIN_LIFECYCLE_REPAIR_HISTORY_ROUTE = "/plugins/lifecycle/repair/history"
 _CAPABILITY_LIBRARY_PROPOSAL_REVIEW_DECISIONS = {
@@ -4771,6 +4774,7 @@ def _capability_library_execution_readiness_projection(
         "routes": {
             "execution_route": "/plugins/run",
             "tool_execution_route": "/plugins/tools/run",
+            "execution_dry_run_probe_route": _CAPABILITY_LIBRARY_EXECUTION_DRY_RUN_PROBE_ROUTE,
             "invocation_audit_route": "/plugins/capabilities/library/invocations/audit",
             "operator_surface_route": "/plugins/capabilities/library/operator/surface",
             "promotion_receipts_route": "/plugins/capabilities/packs/promotion/receipts",
@@ -4805,6 +4809,181 @@ def _capability_library_execution_readiness_projection(
             "memory_write": False,
         },
         "next_smallest_truthful_gap": next_gap,
+    }
+
+
+def _capability_library_execution_probe_selection(
+    *,
+    registry: dict[str, Any],
+    plugin_id: str,
+    capability_id: str,
+    action: str,
+    max_candidate_scan: int,
+) -> dict[str, Any]:
+    filter_plugin_id = _safe_str(plugin_id).strip()
+    filter_capability_id = _safe_str(capability_id).strip()
+    filter_action = _safe_str(action).strip()
+    scan_limit = max(1, min(int(max_candidate_scan), _CAPABILITY_LIBRARY_EXECUTION_DRY_RUN_PROBE_MAX_SCAN))
+    plugins = registry.get("plugins") if isinstance(registry.get("plugins"), dict) else {}
+    current_trust = _current_trust_level()
+    selected: dict[str, Any] = {}
+    rejected: list[dict[str, Any]] = []
+    scanned = 0
+    truncated = False
+    exact_selection_requested = bool(filter_plugin_id or filter_capability_id or filter_action)
+
+    for raw_plugin_id, raw in sorted(plugins.items()):
+        if not isinstance(raw, dict):
+            continue
+        candidate_plugin_id = _safe_str(raw_plugin_id).strip()
+        if filter_plugin_id and candidate_plugin_id != filter_plugin_id:
+            continue
+        plugin = _normalize_plugin_record(candidate_plugin_id, raw)
+        plugin_meta = dict(plugin.get("meta") or {}) if isinstance(plugin.get("meta"), dict) else {}
+        promotion_status = _safe_str(plugin_meta.get("promotion_status")).strip().lower()
+        lifecycle = _plugin_lifecycle_state(plugin, {"caller_context": "direct_plugin_route"})
+        compatibility = _plugin_effective_core_compatibility(plugin["id"], plugin, plugin_meta)
+        promotion_receipt_id = _safe_str(plugin_meta.get("promotion_receipt_id")).strip()
+        pack_id = _safe_str(plugin_meta.get("pack_id") or plugin_meta.get("capability_pack_id")).strip()
+        pack_version = _safe_str(plugin_meta.get("pack_version") or plugin_meta.get("capability_pack_version")).strip()
+
+        for capability in _capabilities_for_plugin(plugin["id"], plugin.get("capabilities")):
+            raw_action = _safe_str(capability.get("action")).strip() or _safe_str(capability.get("name")).strip()
+            resolved_action = _resolve_plugin_action(plugin, raw_action)
+            probe_action = resolved_action or raw_action
+            candidate_capability_id = (
+                _safe_str(capability.get("id")).strip() or f"{plugin['id']}.{probe_action or 'run'}"
+            )
+            if filter_capability_id and candidate_capability_id != filter_capability_id:
+                continue
+            if filter_action and filter_action not in {raw_action, resolved_action, probe_action}:
+                continue
+            if scanned >= scan_limit:
+                truncated = True
+                break
+            scanned += 1
+
+            cap_meta = capability.get("meta") if isinstance(capability.get("meta"), dict) else {}
+            risk_tier = _safe_str(cap_meta.get("risk_tier")).strip().lower() or "normal"
+            required_trust = _required_trust_for_capability(capability, risk_tier)
+            approval_required = _approval_required_for_capability(capability, risk_tier)
+            blockers: list[str] = []
+            if promotion_status != "promoted":
+                blockers.append("not_promoted")
+            if not bool(plugin.get("enabled")) or _safe_str(plugin.get("status")).strip() != "enabled":
+                blockers.append("plugin_not_enabled")
+            if not promotion_receipt_id:
+                blockers.append("promotion_receipt_missing")
+            if bool(lifecycle.get("blocks_execution")):
+                blockers.append("lifecycle_blocks_execution")
+            if not bool(compatibility.get("compatible")):
+                blockers.append("core_compatibility_blocked")
+            if not probe_action:
+                blockers.append("action_not_routable")
+            if approval_required:
+                blockers.append("approval_required")
+            if current_trust < required_trust:
+                blockers.append("current_trust_below_required")
+
+            item = {
+                "plugin_id": plugin["id"],
+                "capability_id": candidate_capability_id,
+                "action": probe_action,
+                "pack_id": pack_id,
+                "pack_version": pack_version,
+                "promotion_status": promotion_status,
+                "promotion_receipt_id": promotion_receipt_id,
+                "enabled": bool(plugin.get("enabled")),
+                "lifecycle_status": _safe_str(lifecycle.get("status")).strip(),
+                "core_compatibility_status": _safe_str(compatibility.get("status")).strip(),
+                "risk_tier": risk_tier,
+                "required_trust": required_trust,
+                "current_trust": current_trust,
+                "approval_required": approval_required,
+                "routeable_through_existing_dispatcher": not any(
+                    blocker
+                    in {
+                        "not_promoted",
+                        "plugin_not_enabled",
+                        "promotion_receipt_missing",
+                        "lifecycle_blocks_execution",
+                        "core_compatibility_blocked",
+                        "action_not_routable",
+                    }
+                    for blocker in blockers
+                ),
+                "reject_reasons": blockers,
+            }
+            if not blockers:
+                selected = {
+                    **item,
+                    "reject_reasons": [],
+                    "plugin": plugin,
+                    "capability": capability,
+                }
+                break
+            if exact_selection_requested or len(rejected) < 10:
+                rejected.append(item)
+        if selected or truncated:
+            break
+
+    if selected:
+        status = "selected"
+        error = ""
+    elif truncated:
+        status = "blocked"
+        error = "execution_probe_scan_limit_exhausted"
+    elif exact_selection_requested:
+        status = "blocked"
+        error = "selected_capability_not_probeable"
+    else:
+        status = "blocked"
+        error = "no_routeable_no_approval_promoted_capability"
+
+    selected_public = {key: value for key, value in selected.items() if key not in {"plugin", "capability"}}
+    return {
+        "status": status,
+        "error": error,
+        "selected": selected_public,
+        "selected_plugin": selected.get("plugin") if selected else None,
+        "selected_action": _safe_str(selected.get("action")).strip() if selected else "",
+        "rejected": rejected,
+        "candidate_scan_limit": scan_limit,
+        "candidate_scan_truncated": truncated,
+        "scanned_candidate_count": scanned,
+        "filters": {
+            "plugin_id": filter_plugin_id,
+            "capability_id": filter_capability_id,
+            "action": filter_action,
+        },
+    }
+
+
+def _capability_library_execution_probe_governance(
+    *,
+    dispatch_attempted: bool,
+    dispatch_status: str = "",
+) -> dict[str, object]:
+    return {
+        "plane": "P3_GOVERNANCE",
+        "stage": "Stage 17 / Capability Economy",
+        "dry_run_only": True,
+        "dry_run_default": True,
+        "dispatch_attempted": dispatch_attempted,
+        "dispatch_status": _safe_str(dispatch_status).strip(),
+        "uses_existing_plugin_dispatcher": dispatch_attempted,
+        "uses_existing_plugins_run_route": dispatch_attempted,
+        "dispatch_route": "/plugins/run",
+        "does_not_request_approvals": True,
+        "does_not_consume_approvals": True,
+        "does_not_promote_capabilities": True,
+        "does_not_enable_capabilities": True,
+        "does_not_grant_execution_authority": True,
+        "does_not_grant_mutation_authority": True,
+        "live_execution_authority": False,
+        "approval_authority": False,
+        "promotion_authority": False,
+        "memory_write": False,
     }
 
 
@@ -13170,6 +13349,17 @@ class PluginReloadIn(BaseModel):
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
+class CapabilityLibraryExecutionDryRunProbeIn(BaseModel):
+    plugin_id: str = ""
+    capability_id: str = ""
+    action: str = ""
+    input: Any = None
+    reason: str = "stage17_governed_execution_dry_run_probe"
+    dry_run: bool = True
+    max_candidate_scan: int = 100
+    meta: dict[str, Any] = Field(default_factory=dict)
+
+
 class CapabilityPackMetadataReceiptIn(BaseModel):
     actor: str = ""
     reason: str = "requested"
@@ -15411,6 +15601,180 @@ def capability_library_execution_readiness() -> dict[str, object]:
         }
     except Exception as exc:
         return {"ok": False, "kind": "plugin.capability_library.execution_readiness", "error": api_error_message(exc)}
+
+
+@router.post("/capabilities/library/execution/dry-run-probe")
+def capability_library_execution_dry_run_probe(
+    payload: CapabilityLibraryExecutionDryRunProbeIn,
+    request: Request,
+) -> dict[str, object]:
+    try:
+        if not payload.dry_run:
+            return {
+                "ok": False,
+                "kind": "plugin.capability_library.execution_dry_run_probe",
+                "stage": "Stage 17 / Capability Economy",
+                "contract": _CAPABILITY_LIBRARY_EXECUTION_DRY_RUN_PROBE_CONTRACT,
+                "status": "blocked",
+                "error": "execution_probe_is_dry_run_only",
+                "dry_run": False,
+                "dry_run_required": True,
+                "governance": _capability_library_execution_probe_governance(dispatch_attempted=False),
+            }
+        if int(payload.max_candidate_scan) < 1:
+            return {
+                "ok": False,
+                "kind": "plugin.capability_library.execution_dry_run_probe",
+                "stage": "Stage 17 / Capability Economy",
+                "contract": _CAPABILITY_LIBRARY_EXECUTION_DRY_RUN_PROBE_CONTRACT,
+                "status": "blocked",
+                "error": "invalid_execution_probe_bound",
+                "dry_run": True,
+                "candidate_scan_limit": payload.max_candidate_scan,
+                "governance": _capability_library_execution_probe_governance(dispatch_attempted=False),
+            }
+
+        requested_plugin_id = _safe_str(payload.plugin_id).strip()
+        if requested_plugin_id:
+            _validate_plugin_id(requested_plugin_id)
+        registry = _load_registry()
+        selection = _capability_library_execution_probe_selection(
+            registry=registry,
+            plugin_id=requested_plugin_id,
+            capability_id=payload.capability_id,
+            action=payload.action,
+            max_candidate_scan=payload.max_candidate_scan,
+        )
+        selected = selection.get("selected") if isinstance(selection.get("selected"), dict) else {}
+        if not selected:
+            return {
+                "ok": False,
+                "kind": "plugin.capability_library.execution_dry_run_probe",
+                "stage": "Stage 17 / Capability Economy",
+                "contract": _CAPABILITY_LIBRARY_EXECUTION_DRY_RUN_PROBE_CONTRACT,
+                "status": "blocked",
+                "error": _safe_str(selection.get("error")).strip() or "execution_probe_candidate_not_found",
+                "dry_run": True,
+                "selection": selection,
+                "dispatch": {
+                    "attempted": False,
+                    "route": "/plugins/run",
+                    "reason": "no_promoted_routeable_no_approval_capability_selected",
+                },
+                "governance": _capability_library_execution_probe_governance(dispatch_attempted=False),
+            }
+
+        raw_meta = dict(payload.meta or {}) if isinstance(payload.meta, dict) else {}
+        for control_key in ("approval_id", "caller_context", "dry_run", "force"):
+            raw_meta.pop(control_key, None)
+        run_payload = PluginRunIn(
+            id=_safe_str(selected.get("plugin_id")).strip(),
+            action=_safe_str(selected.get("action")).strip(),
+            input=payload.input,
+            reason=_safe_str(payload.reason).strip() or "stage17_governed_execution_dry_run_probe",
+            approval_id=None,
+            idempotency_key=None,
+            meta={
+                **raw_meta,
+                "dry_run": True,
+                "caller_context": "direct_plugin_route",
+                "stage17_execution_dry_run_probe": True,
+                "probe_contract": _CAPABILITY_LIBRARY_EXECUTION_DRY_RUN_PROBE_CONTRACT,
+                "probe_route": request.url.path,
+            },
+        )
+        dispatch_result = run_plugin(run_payload)
+        dispatch_status = _safe_str(dispatch_result.get("status") if isinstance(dispatch_result, dict) else "").strip()
+        receipt = dispatch_result.get("receipt") if isinstance(dispatch_result.get("receipt"), dict) else {}
+        invocation = (
+            dispatch_result.get("capability_pack_invocation")
+            if isinstance(dispatch_result.get("capability_pack_invocation"), dict)
+            else {}
+        )
+        receipt_linkage = (
+            invocation.get("receipt_linkage") if isinstance(invocation.get("receipt_linkage"), dict) else {}
+        )
+        approval_requested = bool(
+            isinstance(dispatch_result, dict)
+            and (_safe_str(dispatch_result.get("approval_id")).strip() or dispatch_status == "pending")
+        )
+        probe_ok = (
+            isinstance(dispatch_result, dict)
+            and bool(dispatch_result.get("ok"))
+            and dispatch_status == "dry_run"
+            and bool(receipt)
+            and bool(invocation)
+            and not approval_requested
+        )
+        return {
+            "ok": probe_ok,
+            "kind": "plugin.capability_library.execution_dry_run_probe",
+            "stage": "Stage 17 / Capability Economy",
+            "contract": _CAPABILITY_LIBRARY_EXECUTION_DRY_RUN_PROBE_CONTRACT,
+            "status": "dry_run" if probe_ok else dispatch_status or "error",
+            "error": ""
+            if probe_ok
+            else _safe_str(dispatch_result.get("error") if isinstance(dispatch_result, dict) else "").strip(),
+            "dry_run": True,
+            "selection": {
+                "status": _safe_str(selection.get("status")).strip(),
+                "selected": selected,
+                "candidate_scan_limit": selection.get("candidate_scan_limit"),
+                "candidate_scan_truncated": bool(selection.get("candidate_scan_truncated")),
+                "scanned_candidate_count": selection.get("scanned_candidate_count"),
+                "filters": selection.get("filters"),
+            },
+            "dispatch": {
+                "attempted": True,
+                "route": "/plugins/run",
+                "used_existing_run_route": True,
+                "used_existing_dispatcher": bool(
+                    invocation.get("governance", {}).get("uses_existing_plugin_dispatcher")
+                    if isinstance(invocation.get("governance"), dict)
+                    else False
+                ),
+                "status": dispatch_status,
+                "approval_requested": approval_requested,
+            },
+            "output": dispatch_result.get("output") if isinstance(dispatch_result, dict) else None,
+            "receipt": receipt,
+            "capability_pack_invocation": invocation,
+            "auditability": {
+                "receipt_present": bool(receipt),
+                "capability_pack_invocation_present": bool(invocation),
+                "invocation_receipt_contract": _safe_str(invocation.get("contract")).strip(),
+                "receipt_linkage_present": bool(receipt_linkage),
+                "dispatch_receipt_present": _to_bool(receipt_linkage.get("dispatch_receipt_present")),
+                "dispatch_status": _safe_str(receipt_linkage.get("dispatch_status")).strip(),
+                "run_id": _safe_str(receipt_linkage.get("run_id") or receipt.get("run_id")).strip(),
+                "trace_id": _safe_str(receipt_linkage.get("trace_id") or receipt.get("trace_id")).strip(),
+                "sandbox_status": _safe_str(receipt_linkage.get("sandbox_status")).strip(),
+                "invocation_audit_route": "/plugins/capabilities/library/invocations/audit",
+                "direct_route_receipts_counted_by_operation_audit": False,
+                "operation_record_required_for_invocation_audit": True,
+            },
+            "requirements": {
+                "promoted_capability_required": True,
+                "promotion_receipt_required": True,
+                "routeable_through_existing_dispatcher": True,
+                "no_approval_capability_required": True,
+                "dry_run_only": True,
+                "existing_dispatch_route_required": "/plugins/run",
+                "does_not_bypass_trust_gate": True,
+                "does_not_bypass_approval_gate": True,
+            },
+            "governance": _capability_library_execution_probe_governance(
+                dispatch_attempted=True,
+                dispatch_status=dispatch_status,
+            ),
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "kind": "plugin.capability_library.execution_dry_run_probe",
+            "status": "error",
+            "error": api_error_message(exc),
+        }
 
 
 @router.get("/capabilities/library/promotion/plan")

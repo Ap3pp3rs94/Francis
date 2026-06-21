@@ -90355,6 +90355,53 @@ Remaining truthful gap:
   verification of that probe, full local `.\scripts\check.ps1`, GitHub CI, and
   final closure reconciliation.
 
+### 2026-06-21 21:00Z - Stage 17 governed dry-run probe and invocation-audit proof
+
+Current posture: Stage 17 / Capability Economy remains open. This pass adds a
+bounded governed dry-run probe for the promoted capability library and extends
+mission-linked invocation-audit proof for dry-run operation records. It does not
+claim live execution, full local `.\scripts\check.ps1`, GitHub CI, or Stage 17
+completion.
+
+What changed:
+
+- Added `POST /plugins/capabilities/library/execution/dry-run-probe` to select
+  or accept one promoted, enabled, promotion-receipted, trust-ready,
+  no-approval capability and dispatch it through the existing `/plugins/run`
+  path with `meta.dry_run=true`.
+- The dry-run probe blocks non-dry-run requests, invalid scan bounds, missing
+  or non-routeable candidates, approval-required candidates, and trust-blocked
+  candidates before dispatch.
+- The dry-run probe response exposes dispatcher status, receipt metadata,
+  `capability_pack_invocation`, promotion evidence, run/trace ids, auditability
+  fields, and governance boundaries. It does not create a parallel executor,
+  promote/enable capabilities, consume approvals, or touch Orb visual files.
+- Extended mission-linked operation coverage so `plugin.run` and
+  `plugin.tool.run` dry-run operation records are embedded in durable operation
+  output and verified through `/plugins/capabilities/library/invocations/audit`.
+- Updated the closure matrix so the weakest current closure criterion is CI and
+  wiring trust rather than stale proposal/review/promotion blockers.
+
+Validation:
+
+- Focused pytest passed:
+  `.venv\Scripts\python.exe -m pytest tests\test_api_plugins.py::test_plugins_capability_library_execution_dry_run_probe_uses_existing_dispatcher tests\test_api_plugins.py::test_plugins_capability_library_execution_dry_run_probe_blocks_unbounded_or_approval_paths tests\test_api_plugins.py::test_plugins_capability_library_execution_readiness_is_read_only_after_promotion tests\test_api_missions.py::test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_mission_contexts tests\test_api_plugins.py::test_plugins_invocation_audit_reads_durable_fixture_records_without_execution tests\test_api_plugins.py::test_plugins_invocation_receipts_bind_pack_selection_across_direct_dry_run_contexts -q --tb=short`.
+- Worker CI triage passed targeted command-palette monitor pytest:
+  `.venv\Scripts\python.exe -m pytest tests\test_lens_command_palette_monitor_script.py -q --tb=short --maxfail=1`.
+- Worker CI triage verified completion-model readback still reports
+  `current_phase=Phase 2`, `stage17_status.status=open`, read-only contract,
+  and no execution or mutation authority.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The promoted capability library now has a governed
+  dry-run probe and invocation-audit proof for mission-linked dry-run operation
+  records, but full local `.\scripts\check.ps1`, GitHub CI, final closure
+  reconciliation, and any live execution claim remain unproven.
+- The known full-check risk remains the broader Lens runtime/proof-script
+  cluster. The next CI action is a targeted Lens runtime cluster probe before
+  repeating the full suite.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

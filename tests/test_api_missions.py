@@ -1066,6 +1066,97 @@ def test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_missio
     assert mission.status_code == 200
     mission_id = str(mission.json()["mission_id"])
 
+    dry_run_created = client.post(
+        "/operations/create",
+        json={
+            "action": "plugin.run",
+            "reason": "mission-linked reusable invocation dry-run proof",
+            "mission_id": mission_id,
+            "input": {
+                "id": plugin_id,
+                "action": "run",
+                "input": "mission dry-run invocation proof",
+                "meta": {"dry_run": True},
+            },
+        },
+    )
+    assert dry_run_created.status_code == 200
+    dry_run_operation_id = str(dry_run_created.json()["operation_id"])
+
+    dry_run_executed = client.post(f"/operations/{dry_run_operation_id}/run", json={"worker_id": "test.missions.trace"})
+    assert dry_run_executed.status_code == 200
+    dry_run_executed_body = dry_run_executed.json()
+    assert dry_run_executed_body["ok"] is True
+    assert dry_run_executed_body["status"] == "succeeded"
+    dry_run_output = dry_run_executed_body["operation"]["output"]
+    assert dry_run_output["ok"] is True
+    assert dry_run_output["status"] == "dry_run"
+    dry_run_invocation = dry_run_output["capability_pack_invocation"]
+    assert dry_run_invocation["kind"] == "plugin.capability_pack.invocation_receipt"
+    assert dry_run_invocation["invocation_mode"] == "dry_run"
+    assert dry_run_invocation["dry_run"] is True
+    assert dry_run_invocation["caller_context"] == "mission_linked_operation"
+    assert dry_run_invocation["pack_id"] == pack_id
+    assert dry_run_invocation["pack_version"] == pack_version
+    assert dry_run_invocation["pack_reuse_key"] == direct_invocation["pack_reuse_key"]
+    assert dry_run_invocation["pack_selection"] == direct_invocation["pack_selection"]
+    assert dry_run_invocation["receipt_linkage"]["dispatch_status"] == "dry_run"
+    assert dry_run_invocation["receipt_linkage"]["run_id"] == dry_run_output["receipt"]["run_id"]
+    assert dry_run_invocation["receipt_linkage"]["trace_id"] == dry_run_output["receipt"]["trace_id"]
+    assert dry_run_invocation["governance"]["uses_existing_plugin_dispatcher"] is True
+    assert dry_run_invocation["governance"]["new_authority_granted_by_receipt"] is False
+    assert dry_run_invocation["governance"]["does_not_promote_capabilities"] is True
+    assert dry_run_invocation["governance"]["does_not_enable_capabilities"] is True
+    assert dry_run_invocation["governance"]["memory_write"] is False
+
+    dry_run_created_tool = client.post(
+        "/operations/create",
+        json={
+            "action": "tool.run",
+            "reason": "mission-linked reusable tool invocation dry-run proof",
+            "mission_id": mission_id,
+            "input": {
+                "id": tool_id,
+                "input": "mission tool dry-run invocation proof",
+                "meta": {"dry_run": True},
+            },
+        },
+    )
+    assert dry_run_created_tool.status_code == 200
+    dry_run_tool_operation_id = str(dry_run_created_tool.json()["operation_id"])
+
+    dry_run_executed_tool = client.post(
+        f"/operations/{dry_run_tool_operation_id}/run",
+        json={"worker_id": "test.missions.trace"},
+    )
+    assert dry_run_executed_tool.status_code == 200
+    dry_run_executed_tool_body = dry_run_executed_tool.json()
+    assert dry_run_executed_tool_body["ok"] is True
+    assert dry_run_executed_tool_body["status"] == "succeeded"
+    dry_run_tool_output = dry_run_executed_tool_body["operation"]["output"]
+    assert dry_run_tool_output["ok"] is True
+    assert dry_run_tool_output["status"] == "dry_run"
+    assert dry_run_tool_output["tool_id"] == tool_id
+    dry_run_tool_invocation = dry_run_tool_output["capability_pack_invocation"]
+    assert dry_run_tool_invocation["kind"] == "plugin.capability_pack.invocation_receipt"
+    assert dry_run_tool_invocation["invocation_mode"] == "dry_run"
+    assert dry_run_tool_invocation["dry_run"] is True
+    assert dry_run_tool_invocation["caller_context"] == "mission_linked_tool_operation"
+    assert dry_run_tool_invocation["pack_id"] == pack_id
+    assert dry_run_tool_invocation["pack_version"] == pack_version
+    assert dry_run_tool_invocation["pack_reuse_key"] == direct_invocation["pack_reuse_key"]
+    assert dry_run_tool_invocation["pack_selection"] == direct_invocation["pack_selection"]
+    assert dry_run_tool_invocation["receipt_linkage"]["dispatch_status"] == "dry_run"
+    assert dry_run_tool_invocation["receipt_linkage"]["run_id"] == dry_run_tool_output["receipt"]["run_id"]
+    assert dry_run_tool_invocation["receipt_linkage"]["trace_id"] == dry_run_tool_output["receipt"]["trace_id"]
+    assert dry_run_tool_invocation["reuse"]["operation_tool_capability"] == "plugin.tool.run"
+    assert dry_run_tool_invocation["reuse"]["mission_tool_context"] == "mission_linked_tool_operation"
+    assert dry_run_tool_invocation["governance"]["uses_existing_plugin_dispatcher"] is True
+    assert dry_run_tool_invocation["governance"]["new_authority_granted_by_receipt"] is False
+    assert dry_run_tool_invocation["governance"]["does_not_promote_capabilities"] is True
+    assert dry_run_tool_invocation["governance"]["does_not_enable_capabilities"] is True
+    assert dry_run_tool_invocation["governance"]["memory_write"] is False
+
     created = client.post(
         "/operations/create",
         json={
@@ -1421,9 +1512,9 @@ def test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_missio
     assert audit_body["status"] == "ready"
     assert audit_body["readback_scope"] == "operation_outputs_with_embedded_capability_pack_invocation_receipts"
     assert audit_body["filters"]["pack_id"] == pack_id
-    assert audit_body["total_invocation_count"] == 3
+    assert audit_body["total_invocation_count"] == 5
     assert audit_body["rejected_invocation_count"] == 7
-    assert audit_body["returned_invocation_count"] == 3
+    assert audit_body["returned_invocation_count"] == 5
     assert audit_body["returned_rejected_invocation_count"] == 7
     assert audit_body["pack_count"] == 1
     assert audit_body["context_count"] == 2
@@ -1523,13 +1614,81 @@ def test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_missio
     assert audit_body["requirements"]["receipt_linked_mission_shape_reuse_requires_dispatch_run_and_trace_ids"] is True
     assert audit_body["requirements"]["reuse_proof_counts_only_supported_mission_operation_capabilities"] is True
     assert audit_body["requirements"]["unsupported_operation_capability_receipts_are_rejected"] is True
+    assert audit_body["requirements"]["direct_route_contexts_declared_but_not_counted_by_operation_audit"] == [
+        "direct_plugin_route",
+        "plugin_tool_route",
+    ]
     assert audit_body["requirements"]["does_not_infer_missing_direct_route_receipts"] is True
     audit_items = {item["operation_id"]: item for item in audit_body["items"]}
-    assert set(audit_items) == {operation_id, tool_operation_id, second_operation_id}
+    assert set(audit_items) == {
+        dry_run_operation_id,
+        dry_run_tool_operation_id,
+        operation_id,
+        tool_operation_id,
+        second_operation_id,
+    }
+    audit_dry_run_item = audit_items[dry_run_operation_id]
+    assert audit_dry_run_item["operation_id"] == dry_run_operation_id
+    assert audit_dry_run_item["operation_status"] == "complete"
+    assert audit_dry_run_item["operation_capability"] == "plugin.run"
+    assert audit_dry_run_item["mission_id"] == mission_id
+    assert audit_dry_run_item["invocation_mode"] == "dry_run"
+    assert audit_dry_run_item["dispatch_status"] == "dry_run"
+    assert audit_dry_run_item["caller_context"] == "mission_linked_operation"
+    assert audit_dry_run_item["pack_reuse_key"] == direct_invocation["pack_reuse_key"]
+    assert audit_dry_run_item["run_id"] == dry_run_invocation["receipt_linkage"]["run_id"]
+    assert audit_dry_run_item["trace_id"] == dry_run_invocation["receipt_linkage"]["trace_id"]
+    assert audit_dry_run_item["receipt_linkage"]["dispatch_status"] == "dry_run"
+    assert audit_dry_run_item["routing_guard"]["expected_caller_context"] == "mission_linked_operation"
+    assert audit_dry_run_item["routing_guard"]["caller_context_matches_operation_capability"] is True
+    assert audit_dry_run_item["routing_guard"]["dispatch_receipt_linkage_complete"] is True
+    assert audit_dry_run_item["routing_guard"]["eligible_for_reuse_proof"] is True
+    assert audit_dry_run_item["routing_guard"]["reject_reasons"] == []
+    assert audit_dry_run_item["operation_caller_context_readback"]["status"] == "derived"
+    assert (
+        audit_dry_run_item["operation_caller_context_readback"]["receipt_backing"][
+            "actual_invocation_receipt_required_for_execution_audit"
+        ]
+        is True
+    )
+    assert audit_dry_run_item["operation_caller_context_bound"] is True
+    assert audit_dry_run_item["governance"]["uses_existing_plugin_dispatcher"] is True
+    assert audit_dry_run_item["governance"]["new_authority_granted_by_receipt"] is False
+    assert audit_dry_run_item["governance"]["memory_write"] is False
+    audit_dry_run_tool_item = audit_items[dry_run_tool_operation_id]
+    assert audit_dry_run_tool_item["operation_id"] == dry_run_tool_operation_id
+    assert audit_dry_run_tool_item["operation_status"] == "complete"
+    assert audit_dry_run_tool_item["operation_capability"] == "plugin.tool.run"
+    assert audit_dry_run_tool_item["mission_id"] == mission_id
+    assert audit_dry_run_tool_item["invocation_mode"] == "dry_run"
+    assert audit_dry_run_tool_item["dispatch_status"] == "dry_run"
+    assert audit_dry_run_tool_item["caller_context"] == "mission_linked_tool_operation"
+    assert audit_dry_run_tool_item["pack_reuse_key"] == direct_invocation["pack_reuse_key"]
+    assert audit_dry_run_tool_item["run_id"] == dry_run_tool_invocation["receipt_linkage"]["run_id"]
+    assert audit_dry_run_tool_item["trace_id"] == dry_run_tool_invocation["receipt_linkage"]["trace_id"]
+    assert audit_dry_run_tool_item["receipt_linkage"]["dispatch_status"] == "dry_run"
+    assert audit_dry_run_tool_item["routing_guard"]["expected_caller_context"] == "mission_linked_tool_operation"
+    assert audit_dry_run_tool_item["routing_guard"]["caller_context_matches_operation_capability"] is True
+    assert audit_dry_run_tool_item["routing_guard"]["dispatch_receipt_linkage_complete"] is True
+    assert audit_dry_run_tool_item["routing_guard"]["eligible_for_reuse_proof"] is True
+    assert audit_dry_run_tool_item["routing_guard"]["reject_reasons"] == []
+    assert audit_dry_run_tool_item["operation_caller_context_readback"]["status"] == "derived"
+    assert (
+        audit_dry_run_tool_item["operation_caller_context_readback"]["receipt_backing"][
+            "actual_invocation_receipt_required_for_execution_audit"
+        ]
+        is True
+    )
+    assert audit_dry_run_tool_item["operation_caller_context_bound"] is True
+    assert audit_dry_run_tool_item["governance"]["uses_existing_plugin_dispatcher"] is True
+    assert audit_dry_run_tool_item["governance"]["new_authority_granted_by_receipt"] is False
+    assert audit_dry_run_tool_item["governance"]["memory_write"] is False
     audit_item = audit_items[operation_id]
     assert audit_item["operation_id"] == operation_id
     assert audit_item["operation_capability"] == "plugin.run"
     assert audit_item["mission_id"] == mission_id
+    assert audit_item["invocation_mode"] == "live_dispatch"
+    assert audit_item["dispatch_status"] != "dry_run"
     assert audit_item["receipt_kind"] == "plugin.capability_pack.invocation_receipt"
     assert audit_item["receipt_contract"] == "stage17_capability_pack_reusable_invocation_receipt_v1"
     assert audit_item["receipt_embedded_in_operation_output"] is True
@@ -1574,6 +1733,7 @@ def test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_missio
     assert second_audit_item["operation_id"] == second_operation_id
     assert second_audit_item["operation_capability"] == "plugin.run"
     assert second_audit_item["mission_id"] == second_mission_id
+    assert second_audit_item["invocation_mode"] == "live_dispatch"
     assert second_audit_item["caller_context"] == "mission_linked_operation"
     assert second_audit_item["pack_reuse_key"] == direct_invocation["pack_reuse_key"]
     assert second_audit_item["routing_guard"]["expected_caller_context"] == "mission_linked_operation"
@@ -1588,6 +1748,8 @@ def test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_missio
     assert audit_tool_item["operation_id"] == tool_operation_id
     assert audit_tool_item["operation_capability"] == "plugin.tool.run"
     assert audit_tool_item["mission_id"] == mission_id
+    assert audit_tool_item["invocation_mode"] == "live_dispatch"
+    assert audit_tool_item["dispatch_status"] != "dry_run"
     assert audit_tool_item["receipt_kind"] == "plugin.capability_pack.invocation_receipt"
     assert audit_tool_item["receipt_contract"] == "stage17_capability_pack_reusable_invocation_receipt_v1"
     assert audit_tool_item["receipt_embedded_in_operation_output"] is True
@@ -1622,7 +1784,13 @@ def test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_missio
     assert audit_tool_item["governance"]["uses_existing_plugin_dispatcher"] is True
     assert audit_tool_item["governance"]["new_authority_granted_by_receipt"] is False
     assert audit_tool_item["governance"]["memory_write"] is False
-    for selected_item in (audit_item, second_audit_item, audit_tool_item):
+    for selected_item in (
+        audit_dry_run_item,
+        audit_dry_run_tool_item,
+        audit_item,
+        second_audit_item,
+        audit_tool_item,
+    ):
         assert selected_item["pack_selection_binding"] == expected_selection_binding
         assert selected_item["routing_guard"]["pack_selection_binding"] == expected_selection_binding
         assert selected_item["routing_guard"]["pack_selection_contract_supported"] is True
