@@ -470,6 +470,138 @@ def test_plugins_invocation_audit_reads_durable_fixture_records_without_executio
     ]
 
 
+def test_plugins_invocation_receipts_bind_pack_selection_across_direct_dry_run_contexts(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    monkeypatch.setattr(plugins, "_sync_generated_plugins", lambda registry: 0)
+
+    plugin_id = "stage17_context_binding_plugin"
+    capability_id = f"{plugin_id}.run"
+    pack_id = "ops.stage17_context_binding"
+    pack_version = "1.0.0"
+    expected_contexts = [
+        "direct_plugin_route",
+        "plugin_tool_route",
+        "mission_linked_operation",
+        "mission_linked_tool_operation",
+    ]
+    registry = plugins._default_registry()
+    plugins._write_plugin(
+        registry,
+        plugins._normalize_plugin_record(
+            plugin_id,
+            {
+                "id": plugin_id,
+                "name": "Stage 17 Context Binding Plugin",
+                "version": pack_version,
+                "status": "enabled",
+                "enabled": True,
+                "source_kind": "registry",
+                "source_ref": "tests.stage17.context_binding",
+                "capabilities": [
+                    {
+                        "id": capability_id,
+                        "kind": "tool",
+                        "name": "run",
+                        "action": "run",
+                        "description": "Dry-run capability for Stage 17 context binding proof.",
+                        "meta": {
+                            "risk_tier": "normal",
+                            "required_trust": 0,
+                            "approvals_required": False,
+                            "tool_name": "stage17.context_binding.run",
+                        },
+                        "input_schema": {"type": "object", "additionalProperties": True},
+                        "output_schema": {"type": "object", "additionalProperties": True},
+                    }
+                ],
+                "meta": {
+                    "pack_id": pack_id,
+                    "pack_version": pack_version,
+                    "pack_name": "Stage 17 Context Binding Pack",
+                    "promotion_status": "promoted",
+                    "promotion_receipt_id": "promotion_stage17_context_binding",
+                    "proposal_review_receipt_id": "review_stage17_context_binding",
+                    "validation_receipt_id": "validation_stage17_context_binding",
+                },
+            },
+        ),
+    )
+    plugins._save_registry_and_catalog(registry)
+
+    client = TestClient(create_app())
+
+    direct = client.post(
+        "/plugins/run",
+        json={
+            "id": plugin_id,
+            "action": "run",
+            "input": "direct dry-run context binding proof",
+            "meta": {"dry_run": True},
+        },
+    )
+    assert direct.status_code == 200
+    direct_body = direct.json()
+    assert direct_body["ok"] is True
+    assert direct_body["status"] == "dry_run"
+    direct_invocation = direct_body["capability_pack_invocation"]
+    direct_binding = direct_invocation["caller_context_binding"]
+    assert direct_invocation["caller_context"] == "direct_plugin_route"
+    assert direct_invocation["invocation_mode"] == "dry_run"
+    assert direct_invocation["dry_run"] is True
+    assert direct_invocation["pack_selection"]["supported_caller_contexts"] == expected_contexts
+    assert direct_binding["contract"] == "stage17_capability_pack_invocation_caller_context_binding_v1"
+    assert direct_binding["source"] == "invocation_receipt_pack_selection"
+    assert direct_binding["caller_context"] == "direct_plugin_route"
+    assert direct_binding["caller_context_supported_by_pack_selection"] is True
+    assert direct_binding["supported_caller_contexts"] == expected_contexts
+    assert direct_binding["pack_reuse_key"] == direct_invocation["pack_reuse_key"]
+    assert direct_binding["governance"]["writes_receipts"] is False
+    assert direct_binding["governance"]["executes_capabilities"] is False
+    assert direct_body["receipt"]["capability_pack_invocation"]["caller_context_binding"] == direct_binding
+
+    tools = client.get(f"/plugins/tools/list?plugin_id={plugin_id}")
+    assert tools.status_code == 200
+    tool_id = str(tools.json()["items"][0]["id"])
+    direct_tool = client.post(
+        "/plugins/tools/run",
+        json={
+            "id": tool_id,
+            "input": "tool dry-run context binding proof",
+            "meta": {"dry_run": True},
+        },
+    )
+    assert direct_tool.status_code == 200
+    direct_tool_body = direct_tool.json()
+    assert direct_tool_body["ok"] is True
+    assert direct_tool_body["status"] == "dry_run"
+    tool_invocation = direct_tool_body["capability_pack_invocation"]
+    tool_binding = tool_invocation["caller_context_binding"]
+    assert tool_invocation["caller_context"] == "plugin_tool_route"
+    assert tool_invocation["pack_reuse_key"] == direct_invocation["pack_reuse_key"]
+    assert tool_invocation["pack_selection"] == direct_invocation["pack_selection"]
+    assert tool_invocation["governance"]["uses_existing_plugin_dispatcher"] is True
+    assert tool_invocation["governance"]["new_authority_granted_by_receipt"] is False
+    assert tool_binding["caller_context"] == "plugin_tool_route"
+    assert tool_binding["caller_context_supported_by_pack_selection"] is True
+    assert tool_binding["pack_reuse_key"] == direct_binding["pack_reuse_key"]
+    assert tool_binding["supported_caller_contexts"] == expected_contexts
+    assert direct_tool_body["receipt"]["capability_pack_invocation"]["caller_context_binding"] == tool_binding
+    assert {direct_binding["caller_context"], tool_binding["caller_context"]} == {
+        "direct_plugin_route",
+        "plugin_tool_route",
+    }
+
+
 def test_plugins_atomic_write_json_uses_unique_temp_siblings(monkeypatch, tmp_path: Path) -> None:
     from francis.api.routes import plugins
 
@@ -3108,10 +3240,16 @@ def test_plugins_capability_pack_metadata_receipts_bulk_from_migration_plan(
         "pack_version_present": True,
         "blocks_apply_if_missing": True,
     }
+    lifecycle_guard = dry_run_body["planned"][0]["lifecycle_guard"]
+    assert lifecycle_guard["contract"] == "stage17_capability_pack_metadata_receipt_lifecycle_guard_v1"
+    assert lifecycle_guard["status"] == "ready"
+    assert lifecycle_guard["blocks_metadata_receipt_apply"] is False
+    assert lifecycle_guard["blocked_capability_count"] == 0
     assert dry_run_body["planned"][0]["writes_registry_metadata"] is False
     assert dry_run_body["planned"][0]["writes_receipt"] is False
     assert dry_run_body["governance"]["dry_run_required_before_apply"] is True
     assert dry_run_body["governance"]["versioned_pack_identity_required"] is True
+    assert dry_run_body["governance"]["lifecycle_guard_required_before_apply"] is True
     assert dry_run_body["governance"]["writes_registry_metadata"] is False
     assert dry_run_body["governance"]["writes_receipts"] is False
     assert dry_run_body["governance"]["promotion_authority"] is False
@@ -3214,6 +3352,11 @@ def test_plugins_capability_pack_metadata_receipts_bulk_from_migration_plan(
         f"{candidate['pack_id']}@{candidate['pack_version']}"
     )
     assert receipt["metadata_context"]["migration_pack_version_present"] is True
+    assert receipt["metadata_context"]["lifecycle_guard_contract"] == (
+        "stage17_capability_pack_metadata_receipt_lifecycle_guard_v1"
+    )
+    assert receipt["metadata_context"]["lifecycle_guard_status"] == "ready"
+    assert receipt["metadata_context"]["lifecycle_guard_blocked_capability_count"] == 0
 
 
 def test_plugins_capability_pack_metadata_receipts_bulk_dry_run_and_unconfirmed_apply_do_not_persist(
@@ -3537,6 +3680,162 @@ def test_plugins_capability_pack_metadata_receipts_bulk_blocks_unversioned_pack_
 
     fetched = client.get(f"/plugins/get?id={plugin_id}").json()["item"]
     assert "pack_metadata_receipt_id" not in fetched["meta"]
+
+
+def test_plugins_capability_pack_metadata_receipts_bulk_blocks_blocking_lifecycle_candidates(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
+    client = TestClient(create_app())
+    built_quarantined = client.post(
+        "/plugins/build",
+        json={
+            "name": "Migration Lifecycle Quarantined",
+            "description": "Stage 17 migration lifecycle guard quarantine coverage",
+            "actor": _PLUGIN_ACTOR,
+            "meta": _forge_promotion_meta("migration_lifecycle_quarantined"),
+        },
+    )
+    assert built_quarantined.status_code == 200
+    quarantined_plugin_id = str(built_quarantined.json()["plugin_id"])
+
+    quarantined = client.post(
+        "/plugins/disable",
+        json={
+            "id": quarantined_plugin_id,
+            "actor": _PLUGIN_ACTOR,
+            "reason": "quarantine before metadata receipt migration",
+            "meta": {"lifecycle_action": "quarantine"},
+        },
+    )
+    assert quarantined.status_code == 200
+    quarantined_body = quarantined.json()
+    assert quarantined_body["ok"] is True
+    assert quarantined_body["lifecycle_status"] == "quarantined"
+
+    plan = client.get("/plugins/capabilities/packs/migration/plan").json()
+    quarantined_candidate = next(
+        item for item in plan["candidates"] if quarantined_plugin_id in item["capability_ids_sample"]
+    )
+    receipt_dir = data_root / "artifacts" / "plugins" / "capability_packs" / "metadata_receipts"
+    lifecycle_dir = data_root / "artifacts" / "plugins" / "lifecycle"
+    lifecycle_receipt_names = sorted(path.name for path in lifecycle_dir.glob("*.json"))
+
+    blocked = client.post(
+        "/plugins/capabilities/packs/metadata/receipts/bulk-from-plan",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "attempt metadata receipt migration while quarantined",
+            "pack_ids": [quarantined_candidate["pack_id"]],
+        },
+    )
+
+    assert blocked.status_code == 200
+    blocked_body = blocked.json()
+    assert blocked_body["ok"] is False
+    assert blocked_body["applied"] is False
+    assert blocked_body["status"] == "blocked"
+    assert blocked_body["error"] == "capability_pack_metadata_receipt_lifecycle_blocked"
+    assert blocked_body["before_candidate_total"] == 1
+    assert blocked_body["dry_run_confirmation"]["required_for_apply"] is True
+    assert blocked_body["dry_run_confirmation"]["fingerprint_available"] is False
+    assert blocked_body["requirements"]["lifecycle_guard_required_before_apply"] is True
+    assert blocked_body["governance"]["writes_registry_metadata"] is False
+    assert blocked_body["governance"]["writes_receipts"] is False
+    assert blocked_body["governance"]["lifecycle_guard_required_before_apply"] is True
+    assert not receipt_dir.exists()
+    assert sorted(path.name for path in lifecycle_dir.glob("*.json")) == lifecycle_receipt_names
+
+    lifecycle_block = blocked_body["blocked_lifecycle_candidates"][0]["lifecycle_guard"]
+    assert lifecycle_block["contract"] == "stage17_capability_pack_metadata_receipt_lifecycle_guard_v1"
+    assert lifecycle_block["status"] == "blocked"
+    assert lifecycle_block["blocks_metadata_receipt_apply"] is True
+    assert lifecycle_block["blocked_capability_count"] == 1
+    blocked_capability = lifecycle_block["blocked_capabilities"][0]
+    assert blocked_capability["capability_id"] == quarantined_plugin_id
+    assert blocked_capability["status"] == "quarantined"
+    assert blocked_capability["error"] == "plugin_quarantined"
+
+    blocked_apply = client.post(
+        "/plugins/capabilities/packs/metadata/receipts/bulk-from-plan",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "attempt confirmed metadata receipt migration while quarantined",
+            "pack_ids": [quarantined_candidate["pack_id"]],
+            "dry_run": False,
+            "dry_run_fingerprint": "x" * 64,
+        },
+    )
+    assert blocked_apply.status_code == 200
+    blocked_apply_body = blocked_apply.json()
+    assert blocked_apply_body["ok"] is False
+    assert blocked_apply_body["applied"] is False
+    assert blocked_apply_body["error"] == "capability_pack_metadata_receipt_lifecycle_blocked"
+    assert blocked_apply_body["dry_run_confirmation"]["fingerprint_available"] is False
+    assert not receipt_dir.exists()
+
+    after_quarantined = client.get(f"/plugins/get?id={quarantined_plugin_id}").json()["item"]
+    assert after_quarantined["meta"]["lifecycle_status"] == "quarantined"
+    assert "pack_metadata_receipt_id" not in after_quarantined["meta"]
+
+    built_unknown = client.post(
+        "/plugins/build",
+        json={
+            "name": "Migration Lifecycle Unknown",
+            "description": "Stage 17 migration lifecycle guard unknown-state coverage",
+            "actor": _PLUGIN_ACTOR,
+            "meta": _forge_promotion_meta("migration_lifecycle_unknown"),
+        },
+    )
+    assert built_unknown.status_code == 200
+    unknown_plugin_id = str(built_unknown.json()["plugin_id"])
+
+    registry = plugins._load_registry()
+    unknown = plugins._read_plugin(registry, unknown_plugin_id)
+    assert unknown is not None
+    unknown_meta = dict(unknown.get("meta") or {})
+    unknown_meta["lifecycle_status"] = "operator_review_limbo"
+    unknown["meta"] = unknown_meta
+    plugins._write_plugin(registry, plugins._normalize_plugin_record(unknown_plugin_id, unknown))
+    plugins._save_registry_and_catalog(registry)
+
+    unknown_plan = client.get("/plugins/capabilities/packs/migration/plan").json()
+    unknown_candidate = next(
+        item for item in unknown_plan["candidates"] if unknown_plugin_id in item["capability_ids_sample"]
+    )
+    unknown_blocked = client.post(
+        "/plugins/capabilities/packs/metadata/receipts/bulk-from-plan",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "attempt metadata receipt migration with ambiguous lifecycle",
+            "pack_ids": [unknown_candidate["pack_id"]],
+        },
+    )
+
+    assert unknown_blocked.status_code == 200
+    unknown_body = unknown_blocked.json()
+    assert unknown_body["ok"] is False
+    assert unknown_body["applied"] is False
+    assert unknown_body["error"] == "capability_pack_metadata_receipt_lifecycle_blocked"
+    unknown_lifecycle_block = unknown_body["blocked_lifecycle_candidates"][0]["lifecycle_guard"]
+    assert unknown_lifecycle_block["status"] == "blocked"
+    unknown_capability = unknown_lifecycle_block["blocked_capabilities"][0]
+    assert unknown_capability["capability_id"] == unknown_plugin_id
+    assert unknown_capability["status"] == "operator_review_limbo"
+    assert unknown_capability["error"] == "plugin_lifecycle_state_unknown"
+
+    after_unknown = client.get(f"/plugins/get?id={unknown_plugin_id}").json()["item"]
+    assert after_unknown["meta"]["lifecycle_status"] == "operator_review_limbo"
+    assert "pack_metadata_receipt_id" not in after_unknown["meta"]
 
 
 def test_plugins_capability_pack_metadata_receipts_bulk_selected_batch_reports_before_after_counts(
@@ -5029,11 +5328,7 @@ def test_plugins_capability_pack_quality_evidence_remediation_reconstructs_missi
         data_root / "artifacts" / "plugins" / "proposals",
     ):
         for artifact_path in artifact_dir.glob("*.json"):
-            try:
-                if plugin_id in artifact_path.read_text(encoding="utf-8", errors="ignore"):
-                    artifact_path.unlink(missing_ok=True)
-            except OSError:
-                continue
+            artifact_path.unlink(missing_ok=True)
     for key in (
         "proposal_id",
         "forge_proposal_id",
@@ -5051,18 +5346,54 @@ def test_plugins_capability_pack_quality_evidence_remediation_reconstructs_missi
     plugin["meta"] = meta
     plugins._write_plugin(registry, plugins._normalize_plugin_record(plugin_id, plugin))
     plugins._save_registry_and_catalog(registry)
-    for artifact_dir in (
-        data_root / "artifacts" / "plugins" / "validations",
-        data_root / "artifacts" / "plugins" / "proposals",
-    ):
-        for artifact_path in artifact_dir.glob("*.json"):
-            try:
-                if plugin_id in artifact_path.read_text(encoding="utf-8", errors="ignore"):
-                    artifact_path.unlink(missing_ok=True)
-            except OSError:
-                continue
+
+    def no_existing_artifact_link_candidates(*, scan_limit=None):
+        safe_scan_limit = int(scan_limit or 0)
+
+        def empty_candidates() -> dict[str, object]:
+            return {
+                "by_plugin_id": {},
+                "candidate_count": 0,
+                "ambiguous_plugin_id_count": 0,
+                "invalid_or_unusable_artifact_count": 0,
+                "artifact_body_max_bytes": plugins._PLUGIN_ARTIFACT_LINK_BODY_MAX_BYTES,
+                "artifact_scan_limit": safe_scan_limit,
+                "artifact_scan_limited": False,
+                "total_artifact_count": 0,
+                "scanned_artifact_count": 0,
+                "unscanned_artifact_count": 0,
+                "oversized_artifact_count": 0,
+                "unreadable_artifact_count": 0,
+            }
+
+        return {
+            "validation_receipts": empty_candidates(),
+            "proposals": empty_candidates(),
+            "selection_policy": "fixture_no_existing_artifact_links",
+            "artifact_body_max_bytes": plugins._PLUGIN_ARTIFACT_LINK_BODY_MAX_BYTES,
+            "artifact_scan_limit": safe_scan_limit,
+            "artifact_scan_limited": False,
+            "validation_artifact_total_count": 0,
+            "validation_artifact_scanned_count": 0,
+            "proposal_artifact_total_count": 0,
+            "proposal_artifact_scanned_count": 0,
+            "skips_oversized_artifacts": True,
+            "reads_validation_receipt_bodies_for_plugin_id_match": True,
+            "reads_proposal_bodies_for_plugin_id_match": True,
+            "writes_validation_receipts": False,
+            "writes_proposals": False,
+            "proposal_lineage_does_not_claim_approval": True,
+        }
+
+    monkeypatch.setattr(
+        plugins,
+        "_capability_pack_existing_artifact_link_candidates",
+        no_existing_artifact_link_candidates,
+    )
 
     before = client.get("/plugins/capabilities/packs/quality/evidence/remediation").json()
+    assert before["artifact_link_candidates"]["validation_receipts"]["candidate_count"] == 0
+    assert before["artifact_link_candidates"]["proposals"]["candidate_count"] == 0
     before_item = next(item for item in before["remediation_queue"] if item["pack_id"] == pack_id)
     reconstruction = before_item["artifact_reconstruction_plan"]
     assert reconstruction["required"] is True
@@ -5070,7 +5401,7 @@ def test_plugins_capability_pack_quality_evidence_remediation_reconstructs_missi
     assert reconstruction["writer_route"] == "/plugins/capabilities/packs/quality/evidence/remediation/reconstruct"
     capability_plan = reconstruction["capabilities"][0]
     assert capability_plan["capability"] == plugin_id
-    assert capability_plan["needs_validation_receipt"] is False
+    assert capability_plan["needs_validation_receipt"] is True
     assert capability_plan["needs_proposal_lineage"] is True
     assert "quality_test_references" not in capability_plan["missing_inputs"]
     assert "quality_doc_references" not in capability_plan["missing_inputs"]
@@ -5104,11 +5435,11 @@ def test_plugins_capability_pack_quality_evidence_remediation_reconstructs_missi
     assert dry_run_body["before_remediation_queue_count"] == 1
     assert dry_run_body["after_remediation_queue_count"] == 1
     assert dry_run_body["candidate_reduction_count"] == 0
-    assert dry_run_body["before_validation_receipt_reconstruction_required_count"] == 0
-    assert dry_run_body["after_validation_receipt_reconstruction_required_count"] == 0
+    assert dry_run_body["before_validation_receipt_reconstruction_required_count"] == 1
+    assert dry_run_body["after_validation_receipt_reconstruction_required_count"] == 1
     assert dry_run_body["before_proposal_lineage_reconstruction_required_count"] == 1
     assert dry_run_body["after_proposal_lineage_reconstruction_required_count"] == 1
-    assert dry_run_body["planned"][0]["validation_receipts"]["count"] == 0
+    assert dry_run_body["planned"][0]["validation_receipts"]["count"] == 1
     assert dry_run_body["planned"][0]["validation_receipts"]["writes_validation_receipts"] is False
     assert dry_run_body["planned"][0]["proposal_lineages"]["count"] == 1
     assert dry_run_body["planned"][0]["proposal_lineages"]["writes_proposals"] is False
@@ -5195,14 +5526,19 @@ def test_plugins_capability_pack_quality_evidence_remediation_reconstructs_missi
     assert applied_body["projection_scope"] == "selected_packs"
     assert applied_body["global_counts_included"] is False
     assert applied_body["before_remediation_queue_count"] == 1
-    assert applied_body["after_remediation_queue_count"] == 1
-    assert applied_body["candidate_reduction_count"] == 0
-    assert applied_body["before_validation_receipt_reconstruction_required_count"] == 0
+    assert applied_body["after_remediation_queue_count"] == 0
+    assert applied_body["candidate_reduction_count"] == 1
+    assert applied_body["before_validation_receipt_reconstruction_required_count"] == 1
     assert applied_body["after_validation_receipt_reconstruction_required_count"] == 0
     assert applied_body["before_proposal_lineage_reconstruction_required_count"] == 1
     assert applied_body["after_proposal_lineage_reconstruction_required_count"] == 0
     assert applied_body["governance"]["writes_registry_metadata"] is True
-    assert applied_body["governance"]["writes_validation_receipts"] is False
+    assert applied_body["governance"]["writes_receipts"] is True
+    assert applied_body["governance"]["writes_batch_reconstruction_receipt"] is True
+    assert applied_body["governance"]["receipt_contract"] == (
+        "stage17_capability_pack_artifact_reconstruction_receipt_v1"
+    )
+    assert applied_body["governance"]["writes_validation_receipts"] is True
     assert applied_body["governance"]["writes_proposals"] is True
     assert applied_body["governance"]["operator_reconstruction_decision_captured"] is True
     assert applied_body["governance"]["proposal_lineage_does_not_approve_proposals"] is True
@@ -5210,42 +5546,86 @@ def test_plugins_capability_pack_quality_evidence_remediation_reconstructs_missi
     assert applied_body["governance"]["does_not_execute_capabilities"] is True
 
     recorded_item = applied_body["recorded"][0]
+    assert applied_body["receipt_id"] == f"{recorded_item['batch_id']}_receipt"
+    assert applied_body["receipt_path"]
+    receipt_path = Path(applied_body["receipt_path"])
+    assert plugins.os.path.exists(plugins._filesystem_path(receipt_path))
+    with open(plugins._filesystem_path(receipt_path), encoding="utf-8") as handle:
+        receipt = json.load(handle)
+    assert receipt["kind"] == "plugin.capability_pack.artifact_reconstruction.receipt"
+    assert receipt["contract"] == "stage17_capability_pack_artifact_reconstruction_receipt_v1"
+    assert receipt["receipt_id"] == applied_body["receipt_id"]
+    assert receipt["batch_id"] == recorded_item["batch_id"]
+    assert receipt["queue_count_contract"] == (
+        "stage17_capability_pack_artifact_reconstruction_batch_queue_evidence_v1"
+    )
+    assert receipt["dry_run_confirmation"]["fingerprint_matched"] is True
+    assert receipt["before_remediation_queue_count"] == 1
+    assert receipt["after_remediation_queue_count"] == 0
+    assert receipt["candidate_reduction_count"] == 1
+    assert receipt["before_validation_receipt_reconstruction_required_count"] == 1
+    assert receipt["after_validation_receipt_reconstruction_required_count"] == 0
+    assert receipt["before_proposal_lineage_reconstruction_required_count"] == 1
+    assert receipt["after_proposal_lineage_reconstruction_required_count"] == 0
+    assert receipt["recorded_pack_count"] == 1
+    assert receipt["recorded_capability_count"] == 1
+    assert receipt["validation_receipt_write_count"] == 1
+    assert receipt["proposal_lineage_write_count"] == 1
+    assert receipt["governance"]["writes_receipt"] is True
+    assert receipt["governance"]["writes_batch_reconstruction_receipt"] is True
+    assert receipt["governance"]["writes_validation_receipts"] is True
+    assert receipt["governance"]["writes_proposals"] is True
+    assert receipt["governance"]["proposal_lineage_does_not_approve_proposals"] is True
+    assert receipt["governance"]["does_not_approve_proposals"] is True
+    assert receipt["governance"]["does_not_promote_capabilities"] is True
+    assert receipt["governance"]["does_not_execute_capabilities"] is True
+
     assert recorded_item["pack_id"] == pack_id
     assert recorded_item["reconstructed_capability_count"] == 1
-    assert recorded_item["validation_receipts"] == []
+    validation_record = recorded_item["validation_receipts"][0]
+    validation_id = validation_record["validation_receipt_id"]
+    validation_path = data_root / "artifacts" / "plugins" / "validations" / f"{validation_id}.json"
+    assert plugins.os.path.exists(plugins._filesystem_path(validation_path))
     proposal_record = recorded_item["proposal_lineages"][0]
     proposal_id = proposal_record["proposal_id"]
     proposal_path = data_root / "artifacts" / "plugins" / "proposals" / f"{proposal_id}.json"
-    assert proposal_path.exists()
+    assert plugins.os.path.exists(plugins._filesystem_path(proposal_path))
 
-    proposal_payload = json.loads(proposal_path.read_text(encoding="utf-8"))
+    with open(plugins._filesystem_path(proposal_path), encoding="utf-8") as handle:
+        proposal_payload = json.load(handle)
     assert proposal_payload["kind"] == "plugin.proposal"
     assert proposal_payload["plugin_id"] == plugin_id
     assert proposal_payload["status"] == "reconstructed_lineage"
     assert proposal_payload["review"]["approval_claimed"] is False
     assert proposal_payload["governance"]["does_not_approve_proposals"] is True
+    with open(plugins._filesystem_path(validation_path), encoding="utf-8") as handle:
+        validation_payload = json.load(handle)
+    assert validation_payload["kind"] == "plugin.validation.receipt"
+    assert validation_payload["plugin_id"] == plugin_id
+    assert validation_payload["proposal_id"] == proposal_id
+    assert validation_payload["status"] == "passed"
+    assert validation_payload["validation"]["new_test_execution_claimed"] is False
+    assert validation_payload["governance"]["does_not_execute_capabilities"] is True
 
     post_apply_plugin = plugins._read_plugin(plugins._load_registry(), plugin_id)
     assert post_apply_plugin is not None
     stored_meta = dict(post_apply_plugin.get("meta") or {})
-    assert "validation_receipt_id" not in stored_meta
-    assert "validation_receipt_path" not in stored_meta
+    assert stored_meta["validation_receipt_id"] == validation_id
+    assert stored_meta["validation_receipt_path"] == f"data/artifacts/plugins/validations/{validation_id}.json"
     assert stored_meta["proposal_id"] == proposal_id
     assert stored_meta["proposal_path"] == f"data/artifacts/plugins/proposals/{proposal_id}.json"
     assert stored_meta["proposal_lineage_approval_claimed"] is False
     assert stored_meta["proposal_status"] == "reconstructed_lineage_unreviewed"
     assert stored_meta["artifact_reconstruction_source"] == "stage17_capability_pack_artifact_reconstruction_apply"
+    assert stored_meta["artifact_reconstruction_batch_id"] == recorded_item["batch_id"]
     stored_quality = stored_meta["quality"]
-    assert stored_quality.get("validation_receipt_written") in {None, False}
+    assert stored_quality["validation_receipt_written"] is True
     assert stored_quality["proposal_lineage_written"] is True
     assert stored_quality["pack_specific_coverage_claimed"] is False
 
     after = client.get("/plugins/capabilities/packs/quality/evidence/remediation").json()
-    after_item = next(item for item in after["remediation_queue"] if item["pack_id"] == pack_id)
-    assert "proposal_id_missing" not in after_item["blockers"]
-    assert "validation_receipt_missing" in after_item["blockers"]
-    after_reconstruction = after_item["artifact_reconstruction_plan"]
-    assert after_reconstruction["proposal_lineage_reconstruction_required_count"] == 0
+    after_queue = [item for item in after["remediation_queue"] if item["pack_id"] == pack_id]
+    assert after_queue == []
 
 
 def test_plugins_capability_pack_quality_evidence_remediation_reconstructs_truncated_plan_chunk(

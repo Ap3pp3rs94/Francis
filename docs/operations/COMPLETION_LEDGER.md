@@ -88984,6 +88984,102 @@ Remaining truthful gap:
 - This slice does not close a ledger-backed phase gate and does not move the
   Phase 2 posture.
 
+### 2026-06-21 13:30Z - Stage 17 worker cycle 54 artifact receipts, lifecycle migration guard, and invocation caller-context binding
+
+Current posture: Stage 17 / Capability Economy remains open. This pass
+accepted the next three active worker packets from the 3-worker cycle and kept
+worker 4 parked to preserve usage.
+
+What changed:
+
+- `POST /plugins/capabilities/packs/quality/evidence/remediation/reconstruct`
+  now writes a durable batch receipt for successful governed artifact
+  reconstruction applies. The receipt uses contract
+  `stage17_capability_pack_artifact_reconstruction_receipt_v1`, links to the
+  existing dry-run fingerprint contract, records before/after selected queue
+  evidence, records validation/proposal write counts, and states that the route
+  does not approve proposals, promote packs, enable capabilities, execute
+  capabilities, or write memory.
+- Artifact reconstruction apply responses now expose `receipt_id`,
+  `receipt_path`, the redacted receipt body, and governance fields
+  `writes_receipts` and `writes_batch_reconstruction_receipt`.
+- Capability pack metadata receipt bulk migration now refuses selected packs
+  whose lifecycle is `quarantined`, `deprecated`, `retired`, `archived`, or
+  `unknown` before dry-run fingerprinting, registry metadata writes, or receipt
+  writes. The refusal uses
+  `capability_pack_metadata_receipt_lifecycle_blocked` and contract
+  `stage17_capability_pack_metadata_receipt_lifecycle_guard_v1`.
+- Reusable invocation receipts now include `caller_context_binding` with
+  contract `stage17_capability_pack_invocation_caller_context_binding_v1`,
+  binding the receipt caller context to the existing pack selection, supported
+  contexts, pack reuse key, plugin/capability/action identity, and read-only
+  no-authority governance.
+
+Worker evidence accepted:
+
+- W1 prompt hash:
+  `a87e5c6964abdac203a6db9b0a7940507ff9dabbacc5f98a02b9f09bcd9f4019`.
+  Accepted artifact reconstruction batch receipt source/test work. The worker
+  live runtime proof reduced one selected legacy generated pack from
+  `36 -> 11` required artifacts by writing 25 validation receipts and 25
+  proposal lineage receipts, but did not close the full quality-evidence queue.
+- W2 prompt hash:
+  `d34a38b8569c7b3d0cd30096de1fa5fcac930d496afd48946b3c0533aa4fc505`.
+  Accepted metadata receipt lifecycle guard source/test work.
+- W3 prompt hash:
+  `516f60acd3ebdd7550e29d3a55ed4f453ca65b04e0cf1b4d9e2ab8989d67120f`.
+  Accepted invocation caller-context binding source/test work.
+
+Validation:
+
+- `.\.venv\Scripts\python.exe -m py_compile
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py
+  tests\test_api_missions.py` passed.
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py
+  tests\test_api_missions.py` passed.
+- `.\.venv\Scripts\python.exe -m ruff format --check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py
+  tests\test_api_missions.py` passed.
+- `git diff --check -- src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py tests\test_api_missions.py` passed.
+- Focused pytest selection passed for artifact reconstruction durable receipts,
+  metadata receipt lifecycle guard behavior, metadata migration selection
+  regression coverage, durable invocation audit replay, and direct reusable
+  invocation caller-context binding:
+  `tests\test_api_plugins.py::test_plugins_capability_pack_quality_evidence_remediation_reconstructs_missing_artifacts`,
+  `tests\test_api_plugins.py::test_plugins_capability_pack_migration_plan_projects_review_candidates`,
+  `tests\test_api_plugins.py::test_plugins_capability_pack_metadata_receipts_bulk_from_migration_plan`,
+  `tests\test_api_plugins.py::test_plugins_capability_pack_metadata_receipts_bulk_dry_run_and_unconfirmed_apply_do_not_persist`,
+  `tests\test_api_plugins.py::test_plugins_capability_pack_metadata_receipts_bulk_blocks_ambiguous_pack_versions`,
+  `tests\test_api_plugins.py::test_plugins_capability_pack_metadata_receipts_bulk_blocks_unversioned_pack_identity`,
+  `tests\test_api_plugins.py::test_plugins_capability_pack_metadata_receipts_bulk_blocks_blocking_lifecycle_candidates`,
+  `tests\test_api_plugins.py::test_plugins_capability_pack_metadata_receipts_bulk_selected_batch_reports_before_after_counts`,
+  `tests\test_api_plugins.py::test_plugins_invocation_audit_reads_durable_fixture_records_without_execution`,
+  and
+  `tests\test_api_plugins.py::test_plugins_invocation_receipts_bind_pack_selection_across_direct_dry_run_contexts`.
+- Completion-model readback after the change reports `current_phase=Phase 2`,
+  `stage17_status=open`, and
+  `next_smallest_truthful_gap=select_from_latest_stage17_remaining_truthful_gap`.
+- FastAPI `TestClient` readback after the change reports
+  `migration_candidate_total=1` for
+  `legacy.generated.stage17reusableinvocationplugin`,
+  `remediation_queue_count=17`,
+  `artifact_reconstruction_required_count=17`,
+  `validation_receipt_reconstruction_required_count=2830`,
+  `proposal_lineage_reconstruction_required_count=2830`,
+  `validation_receipt_missing=17`, and `proposal_id_missing=17`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. This pass does not claim migration-candidate closure,
+  full quality-evidence closure, proposal review, promotion, enablement, live
+  mission-path proof, full CI, or phase movement.
+- The next build action should target the remaining migration candidate
+  `legacy.generated.stage17reusableinvocationplugin` and continue reducing the
+  17-pack quality-evidence reconstruction queue through the governed batch
+  route.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

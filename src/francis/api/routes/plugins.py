@@ -149,6 +149,7 @@ _CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_DRY_RUN_CONTRACT = "stage17_capability_
 _CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_QUEUE_CONTRACT = (
     "stage17_capability_pack_artifact_reconstruction_batch_queue_evidence_v1"
 )
+_CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_RECEIPT_CONTRACT = "stage17_capability_pack_artifact_reconstruction_receipt_v1"
 _CAPABILITY_PACK_QUALITY_STANDARD_REMEDIATION_SOURCE = "stage17_capability_pack_quality_standard_remediation_apply"
 _CAPABILITY_PACK_QUALITY_STANDARD_REMEDIATION_DRY_RUN_CONTRACT = (
     "stage17_capability_pack_quality_standard_remediation_dry_run_v1"
@@ -1041,6 +1042,10 @@ def _capability_pack_metadata_receipt_path(receipt_id: str) -> Path:
 
 def _capability_pack_quality_standard_remediation_receipt_path(receipt_id: str) -> Path:
     return _art_dir() / "capability_packs" / "quality_standard_remediations" / f"{_safe_str(receipt_id).strip()}.json"
+
+
+def _capability_pack_artifact_reconstruction_receipt_path(receipt_id: str) -> Path:
+    return _art_dir() / "capability_packs" / "artifact_reconstructions" / f"{_safe_str(receipt_id).strip()}.json"
 
 
 def _capability_pack_operator_review_receipt_id(pack_id: str, decided_ts: int) -> str:
@@ -10232,6 +10237,108 @@ def _write_reconstructed_proposal_lineage(
     return out
 
 
+def _write_capability_pack_artifact_reconstruction_receipt(
+    *,
+    batch_id: str,
+    receipt_id: str,
+    receipt_path: Path,
+    payload: "CapabilityPackQualityEvidenceReconstructionApplyIn",
+    route_path: str,
+    dry_run_fingerprint: str,
+    before_evidence: dict[str, object],
+    after_evidence: dict[str, object],
+    recorded: list[dict[str, Any]],
+    failed: list[dict[str, Any]],
+    skipped: list[dict[str, Any]],
+    candidate_reduction_count: int,
+) -> dict[str, Any]:
+    changed_records = [item for item in recorded if item.get("status") == "recorded"]
+    validation_write_count = sum(
+        len(item.get("validation_receipts") or []) for item in changed_records if isinstance(item, dict)
+    )
+    proposal_write_count = sum(
+        len(item.get("proposal_lineages") or []) for item in changed_records if isinstance(item, dict)
+    )
+    partial_reconstruction_count = sum(1 for item in recorded if bool(item.get("partial_reconstruction")))
+    receipt = {
+        "kind": "plugin.capability_pack.artifact_reconstruction.receipt",
+        "contract": _CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_RECEIPT_CONTRACT,
+        "receipt_id": receipt_id,
+        "batch_id": batch_id,
+        "status": "recorded" if not failed else "partial",
+        "actor": redact_governed_value(_safe_str(payload.actor).strip()),
+        "reason": redact_governed_value(_safe_str(payload.reason).strip() or "stage17_artifact_reconstruction"),
+        "recorded_ts": _now_s(),
+        "route": route_path,
+        "dry_run_confirmation": {
+            "required_for_apply": True,
+            "fingerprint_matched": True,
+            "fingerprint": dry_run_fingerprint,
+            "fingerprint_contract": _CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_DRY_RUN_CONTRACT,
+        },
+        "queue_count_contract": _CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_QUEUE_CONTRACT,
+        "projection_scope": _safe_str(before_evidence.get("projection_scope")).strip(),
+        "global_counts_included": bool(before_evidence.get("global_counts_included")),
+        "before_remediation_queue_count": _count_value(before_evidence.get("remediation_queue_count")),
+        "before_global_remediation_queue_count": _count_value(before_evidence.get("global_remediation_queue_count")),
+        "after_remediation_queue_count": _count_value(after_evidence.get("remediation_queue_count")),
+        "after_global_remediation_queue_count": _count_value(after_evidence.get("global_remediation_queue_count")),
+        "candidate_reduction_count": candidate_reduction_count,
+        "before_validation_receipt_reconstruction_required_count": _count_value(
+            before_evidence.get("validation_receipt_reconstruction_required_count")
+        ),
+        "after_validation_receipt_reconstruction_required_count": _count_value(
+            after_evidence.get("validation_receipt_reconstruction_required_count")
+        ),
+        "before_proposal_lineage_reconstruction_required_count": _count_value(
+            before_evidence.get("proposal_lineage_reconstruction_required_count")
+        ),
+        "after_proposal_lineage_reconstruction_required_count": _count_value(
+            after_evidence.get("proposal_lineage_reconstruction_required_count")
+        ),
+        "recorded_pack_count": len(changed_records),
+        "recorded_capability_count": sum(
+            int(item.get("reconstructed_capability_count") or 0) for item in changed_records
+        ),
+        "validation_receipt_write_count": validation_write_count,
+        "proposal_lineage_write_count": proposal_write_count,
+        "partial_reconstruction_count": partial_reconstruction_count,
+        "recorded": recorded,
+        "failed": failed,
+        "skipped": skipped,
+        "payload_meta": redact_governed_metadata(payload.meta),
+        "governance": {
+            "gate": "permission_gate",
+            "scope": _PLUGIN_WRITE_SCOPE,
+            "route": route_path,
+            "writes_registry_metadata": True,
+            "writes_receipt": True,
+            "writes_batch_reconstruction_receipt": True,
+            "writes_validation_receipts": validation_write_count > 0,
+            "writes_proposals": proposal_write_count > 0,
+            "requires_operator_reconstruction_decision": True,
+            "operator_reconstruction_decision_captured": True,
+            "partial_reconstruction_count": partial_reconstruction_count,
+            "partial_reconstruction_does_not_claim_pack_complete": partial_reconstruction_count > 0,
+            "validation_claim_scope": "pack_specific_validation_receipt_reconstructed_from_registry_evidence",
+            "proposal_lineage_claim_scope": "reconstructed_plugin_proposal_lineage_only_not_approval",
+            "proposal_lineage_does_not_approve_proposals": True,
+            "does_not_approve_proposals": True,
+            "does_not_promote_capabilities": True,
+            "does_not_enable_capabilities": True,
+            "does_not_execute_capabilities": True,
+            "promotion_authority": False,
+            "execution_authority": False,
+            "approval_authority": False,
+            "memory_write": False,
+        },
+        "path": str(receipt_path),
+    }
+    redacted_receipt = _redact_plugin_receipt(receipt)
+    _atomic_write_display_json(receipt_path, redacted_receipt)
+    return redacted_receipt
+
+
 def _record_capability_pack_artifact_reconstruction_batch(
     *,
     registry: dict[str, Any],
@@ -10240,6 +10347,7 @@ def _record_capability_pack_artifact_reconstruction_batch(
     route_path: str,
 ) -> dict[str, list[dict[str, Any]]]:
     recorded_ts = _now_s()
+    batch_id = f"stage17_artifact_reconstruction_batch_{recorded_ts}"
     failed: list[dict[str, Any]] = []
     recorded: list[dict[str, Any]] = []
     changed = False
@@ -10356,6 +10464,7 @@ def _record_capability_pack_artifact_reconstruction_batch(
                 meta["artifact_reconstruction_source"] = _CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_SOURCE
                 meta["artifact_reconstruction_route"] = route_path
                 meta["artifact_reconstruction_ts"] = recorded_ts
+                meta["artifact_reconstruction_batch_id"] = batch_id
                 meta["artifact_reconstruction_decision"] = "approved_for_reconstruction"
                 if partial_reconstruction:
                     meta["artifact_reconstruction_partial_pack"] = True
@@ -10369,6 +10478,7 @@ def _record_capability_pack_artifact_reconstruction_batch(
 
         recorded.append(
             {
+                "batch_id": batch_id,
                 "pack_id": pack_id,
                 "pack_version": pack_version,
                 "capability_count": len(capabilities),
@@ -10587,6 +10697,9 @@ _CAPABILITY_PACK_INVOCATION_SELECTION_CONTRACT = "stage17_capability_pack_invoca
 _CAPABILITY_PACK_INVOCATION_SELECTION_SOURCE = "plugin_registry_metadata"
 _CAPABILITY_PACK_INVOCATION_RECEIPT_CONTRACT = "stage17_capability_pack_reusable_invocation_receipt_v1"
 _CAPABILITY_PACK_INVOCATION_ROUTING_GUARD_CONTRACT = "stage17_capability_pack_invocation_routing_guard_v1"
+_CAPABILITY_PACK_INVOCATION_CALLER_CONTEXT_BINDING_CONTRACT = (
+    "stage17_capability_pack_invocation_caller_context_binding_v1"
+)
 _STAGE17_OPERATION_INVOCATION_CALLER_CONTEXT_CONTRACT = "stage17_operation_invocation_caller_context_readback_v1"
 _CAPABILITY_PACK_INVOCATION_SUPPORTED_CALLER_CONTEXTS = [
     "direct_plugin_route",
@@ -10631,6 +10744,43 @@ def _capability_pack_invocation_selection(
         "pack_reuse_key": pack_reuse_key,
         "supported_caller_contexts": list(_CAPABILITY_PACK_INVOCATION_SUPPORTED_CALLER_CONTEXTS),
         "duplicates_plugin_execution_logic": False,
+    }
+
+
+def _capability_pack_invocation_caller_context_binding(
+    *,
+    selection: dict[str, object],
+    caller_context: str,
+) -> dict[str, object]:
+    raw_contexts = selection.get("supported_caller_contexts")
+    supported_contexts = []
+    if isinstance(raw_contexts, list):
+        supported_contexts = [_safe_str(item).strip() for item in raw_contexts if _safe_str(item).strip()]
+    normalized_context = _safe_str(caller_context).strip()
+    return {
+        "contract": _CAPABILITY_PACK_INVOCATION_CALLER_CONTEXT_BINDING_CONTRACT,
+        "stage": "Stage 17 / Capability Economy",
+        "source": "invocation_receipt_pack_selection",
+        "caller_context": normalized_context,
+        "caller_context_supported_by_pack_selection": normalized_context in set(supported_contexts),
+        "supported_caller_contexts": supported_contexts,
+        "pack_selection_contract": _safe_str(selection.get("contract")).strip(),
+        "pack_selection_source": _safe_str(selection.get("source")).strip(),
+        "pack_reuse_key": _safe_str(selection.get("pack_reuse_key")).strip(),
+        "plugin_id": _safe_str(selection.get("plugin_id")).strip(),
+        "capability_id": _safe_str(selection.get("capability_id")).strip(),
+        "action": _safe_str(selection.get("action")).strip(),
+        "duplicates_plugin_execution_logic": False,
+        "governance": {
+            "read_only": True,
+            "writes_repo": False,
+            "writes_data": False,
+            "writes_receipts": False,
+            "executes_capabilities": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+            "memory_write": False,
+        },
     }
 
 
@@ -10679,7 +10829,11 @@ def _capability_pack_invocation_receipt(
     pack_name = _safe_str(selection.get("pack_name")).strip()
     pack_reuse_key = _safe_str(selection.get("pack_reuse_key")).strip()
     sandbox = receipt.get("sandbox") if isinstance(receipt.get("sandbox"), dict) else {}
-    caller_context = redact_governed_value(_safe_str(payload_meta.get("caller_context")).strip())
+    caller_context = _safe_str(redact_governed_value(_safe_str(payload_meta.get("caller_context")).strip())).strip()
+    caller_context_binding = _capability_pack_invocation_caller_context_binding(
+        selection=selection,
+        caller_context=caller_context,
+    )
     promotion_receipt_id = _safe_str(plugin_meta.get("promotion_receipt_id")).strip()
     proposal_review_receipt_id = _safe_str(plugin_meta.get("proposal_review_receipt_id")).strip()
     pack_operator_review_receipt_id = _safe_str(plugin_meta.get("pack_operator_review_receipt_id")).strip()
@@ -10705,6 +10859,7 @@ def _capability_pack_invocation_receipt(
         "pack_name": pack_name,
         "pack_reuse_key": pack_reuse_key,
         "pack_selection": selection,
+        "caller_context_binding": caller_context_binding,
         "receipt_linkage": {
             "dispatch_receipt_present": True,
             "dispatch_status": _safe_str(receipt.get("status")).strip(),
@@ -11404,6 +11559,10 @@ def _capability_pack_invocation_audit_projection(
             "operation_input_caller_context_must_match_when_present": True,
             "reuse_metadata_must_bind_operation_capability": True,
             "reuse_metadata_must_bind_mission_caller_context": True,
+            "invocation_receipt_caller_context_binding_contract": (
+                _CAPABILITY_PACK_INVOCATION_CALLER_CONTEXT_BINDING_CONTRACT
+            ),
+            "invocation_receipt_caller_context_binding_source": "invocation_receipt_pack_selection",
             "pack_selection_contract_required": _CAPABILITY_PACK_INVOCATION_SELECTION_CONTRACT,
             "pack_selection_source_required": _CAPABILITY_PACK_INVOCATION_SELECTION_SOURCE,
             "pack_selection_must_bind_pack_reuse_key": True,
@@ -14435,6 +14594,28 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
             - _count_value(after_evidence.get("remediation_queue_count")),
         )
         applied = bool(changed_records)
+        receipt: dict[str, Any] = {}
+        receipt_id = ""
+        receipt_path = ""
+        if applied:
+            batch_id = _safe_str(changed_records[0].get("batch_id")).strip()
+            receipt_id = f"{batch_id}_receipt"
+            resolved_receipt_path = _capability_pack_artifact_reconstruction_receipt_path(receipt_id)
+            receipt = _write_capability_pack_artifact_reconstruction_receipt(
+                batch_id=batch_id,
+                receipt_id=receipt_id,
+                receipt_path=resolved_receipt_path,
+                payload=payload,
+                route_path=request.url.path,
+                dry_run_fingerprint=dry_run_fingerprint,
+                before_evidence=before_evidence,
+                after_evidence=after_evidence,
+                recorded=recorded,
+                failed=failed,
+                skipped=skipped,
+                candidate_reduction_count=candidate_reduction_count,
+            )
+            receipt_path = str(resolved_receipt_path)
         return {
             "ok": not failed,
             "applied": applied,
@@ -14448,6 +14629,9 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
             "recorded": recorded,
             "failed": failed,
             "skipped": skipped,
+            "receipt_id": receipt_id,
+            "receipt_path": receipt_path,
+            "receipt": receipt,
             "dry_run_fingerprint": dry_run_fingerprint,
             "dry_run_confirmation": {
                 "required_for_apply": True,
@@ -14484,6 +14668,9 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
                 "scope": _PLUGIN_WRITE_SCOPE,
                 "route": request.url.path,
                 "writes_registry_metadata": applied,
+                "writes_receipts": applied,
+                "writes_batch_reconstruction_receipt": applied,
+                "receipt_contract": _CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_RECEIPT_CONTRACT,
                 "writes_validation_receipts": validation_write_count > 0,
                 "writes_proposals": proposal_write_count > 0,
                 "validation_receipt_write_count": validation_write_count,
@@ -18026,6 +18213,64 @@ def _capability_pack_migration_identity(*, pack_id: str, pack_version: str) -> d
     }
 
 
+def _capability_pack_metadata_receipt_lifecycle_pack_guard(
+    *,
+    pack_id: str,
+    pack_version: str,
+    capability_ids: list[str],
+    registry: dict[str, Any],
+) -> dict[str, Any]:
+    capability_lifecycle: list[dict[str, Any]] = []
+    blocked_capabilities: list[dict[str, Any]] = []
+    for capability_id in capability_ids:
+        current = _read_plugin(registry, capability_id)
+        if current is None:
+            continue
+        lifecycle = _plugin_lifecycle_state(current, {})
+        blocks_apply = bool(lifecycle.get("blocks_promotion")) or bool(lifecycle.get("blocks_execution"))
+        item = {
+            "capability_id": capability_id,
+            "status": _safe_str(lifecycle.get("status")).strip(),
+            "source": _safe_str(lifecycle.get("source")).strip(),
+            "error": _safe_str(lifecycle.get("error")).strip(),
+            "blocks_metadata_receipt_apply": blocks_apply,
+            "lifecycle": redact_governed_display_value(lifecycle),
+        }
+        capability_lifecycle.append(item)
+        if blocks_apply:
+            blocked_capabilities.append(item)
+
+    blocked = bool(blocked_capabilities)
+    return {
+        "contract": "stage17_capability_pack_metadata_receipt_lifecycle_guard_v1",
+        "required": True,
+        "status": "blocked" if blocked else "ready",
+        "pack_id": _safe_str(pack_id).strip(),
+        "pack_version": _safe_str(pack_version).strip(),
+        "capability_count": len(capability_ids),
+        "observed_capability_count": len(capability_lifecycle),
+        "blocked_capability_count": len(blocked_capabilities),
+        "blocks_metadata_receipt_apply": blocked,
+        "reason": (
+            "blocking_or_unknown_lifecycle_state_blocks_metadata_receipt_migration"
+            if blocked
+            else "lifecycle_state_allows_metadata_receipt_migration"
+        ),
+        "capabilities": capability_lifecycle,
+        "blocked_capabilities": blocked_capabilities,
+        "writes_registry_metadata_if_blocked": False,
+        "writes_receipts_if_blocked": False,
+        "does_not_approve_proposals": True,
+        "does_not_promote_capabilities": True,
+        "does_not_enable_capabilities": True,
+        "does_not_execute_capabilities": True,
+        "promotion_authority": False,
+        "execution_authority": False,
+        "approval_authority": False,
+        "memory_write": False,
+    }
+
+
 def _capability_pack_migration_batch_projection(
     *,
     plan: dict[str, Any],
@@ -18096,6 +18341,8 @@ def _capability_pack_metadata_receipts_bulk_governance(
         "queue_count_contract": "stage17_capability_pack_metadata_receipts_batch_queue_evidence_v1",
         "versioned_pack_identity_contract": "stage17_capability_pack_migration_versioned_identity_v1",
         "versioned_pack_identity_required": True,
+        "lifecycle_guard_contract": "stage17_capability_pack_metadata_receipt_lifecycle_guard_v1",
+        "lifecycle_guard_required_before_apply": True,
         "writes_registry_metadata": writes_registry_metadata,
         "writes_receipts": writes_receipts,
         "dry_run_required_before_apply": True,
@@ -18288,12 +18535,28 @@ def record_capability_pack_metadata_receipts_from_plan(
                         "limit": safe_max_capability_count_per_pack,
                     }
                 )
+            lifecycle_guard = _capability_pack_metadata_receipt_lifecycle_pack_guard(
+                pack_id=pack_id,
+                pack_version=pack_version,
+                capability_ids=capability_ids,
+                registry=registry,
+            )
+            if bool(lifecycle_guard.get("blocks_metadata_receipt_apply")):
+                blocked_candidates.append(
+                    {
+                        "pack_id": pack_id,
+                        "pack_version": pack_version,
+                        "error": "capability_pack_metadata_receipt_lifecycle_blocked",
+                        "lifecycle_guard": lifecycle_guard,
+                    }
+                )
             prepared.append(
                 {
                     "candidate": candidate,
                     "pack_id": pack_id,
                     "pack_version": pack_version,
                     "capability_ids": capability_ids,
+                    "lifecycle_guard": lifecycle_guard,
                 }
             )
         if total_capability_count > safe_max_total_capability_count:
@@ -18306,12 +18569,70 @@ def record_capability_pack_metadata_receipts_from_plan(
                 "limit": safe_max_total_capability_count,
             }
         if blocked_candidates:
+            has_lifecycle_block = any(
+                _safe_str(item.get("error")).strip() == "capability_pack_metadata_receipt_lifecycle_blocked"
+                for item in blocked_candidates
+            )
+            blocked_lifecycle_candidates = [
+                item
+                for item in blocked_candidates
+                if _safe_str(item.get("error")).strip() == "capability_pack_metadata_receipt_lifecycle_blocked"
+            ]
+            blocked_capability_ids = {
+                _safe_str(capability.get("capability_id")).strip()
+                for item in blocked_candidates
+                for capability in (
+                    item.get("lifecycle_guard", {}).get("blocked_capabilities", [])
+                    if isinstance(item.get("lifecycle_guard"), dict)
+                    else []
+                )
+                if _safe_str(capability.get("capability_id")).strip()
+            }
+            before_projection = _capability_pack_migration_batch_projection(
+                plan=plan,
+                candidates=candidates,
+                selected_pack_ids=selected_pack_ids,
+                selected_capability_ids=blocked_capability_ids,
+            )
             return {
                 "ok": False,
                 "applied": False,
                 "status": "blocked",
-                "error": "candidate_preflight_failed",
+                "error": (
+                    "capability_pack_metadata_receipt_lifecycle_blocked"
+                    if has_lifecycle_block
+                    else "candidate_preflight_failed"
+                ),
                 "blocked_candidates": blocked_candidates,
+                "blocked_lifecycle_candidates": blocked_lifecycle_candidates,
+                "projection_scope": before_projection["projection_scope"],
+                "global_counts_included": before_projection["global_counts_included"],
+                "projection_generated_at": before_projection["generated_at"],
+                "projection_evidence": before_projection["projection_evidence"],
+                "before": before_projection,
+                "before_candidate_total": before_projection["candidate_total"],
+                "dry_run_confirmation": {
+                    "required_for_apply": True,
+                    "fingerprint_available": False,
+                    "fingerprint_contract": "stage17_capability_pack_metadata_receipts_bulk_from_plan_dry_run_v1",
+                    "apply_route": request.url.path,
+                    "reason": (
+                        "capability_pack_metadata_receipt_lifecycle_blocked"
+                        if has_lifecycle_block
+                        else "candidate_preflight_failed"
+                    ),
+                },
+                "requirements": {
+                    "lifecycle_guard_required_before_apply": True,
+                    "lifecycle_guard_contract": "stage17_capability_pack_metadata_receipt_lifecycle_guard_v1",
+                    "metadata_receipt_migration_requires_non_blocking_lifecycle": True,
+                    "blocking_or_unknown_lifecycle_states_block_apply": True,
+                },
+                "governance": _capability_pack_metadata_receipts_bulk_governance(
+                    route_path=request.url.path,
+                    writes_registry_metadata=False,
+                    writes_receipts=False,
+                ),
             }
 
         planned: list[dict[str, Any]] = []
@@ -18333,6 +18654,7 @@ def record_capability_pack_metadata_receipts_from_plan(
                         pack_id=item["pack_id"],
                         pack_version=item["pack_version"],
                     ),
+                    "lifecycle_guard": item.get("lifecycle_guard", {}),
                     "writes_registry_metadata": not payload.dry_run,
                     "writes_receipt": not payload.dry_run,
                 }
@@ -18429,6 +18751,7 @@ def record_capability_pack_metadata_receipts_from_plan(
             promotion_rules = _unique_texts(candidate.get("suggested_promotion_rules"), limit=50)
             pack_governance = dict(candidate.get("suggested_pack_governance") or {})
             previous_metadata: dict[str, dict[str, Any]] = {}
+            lifecycle_guard = item.get("lifecycle_guard") if isinstance(item.get("lifecycle_guard"), dict) else {}
             for capability_id in capability_ids:
                 current = _read_plugin(registry, capability_id)
                 if current is None:
@@ -18445,6 +18768,8 @@ def record_capability_pack_metadata_receipts_from_plan(
                     "pack_version": _safe_str(meta.get("pack_version")).strip(),
                     "pack_metadata_source": _safe_str(meta.get("pack_metadata_source")).strip(),
                     "pack_metadata_receipt_id": _safe_str(meta.get("pack_metadata_receipt_id")).strip(),
+                    "lifecycle_status": _safe_str(meta.get("lifecycle_status")).strip(),
+                    "lifecycle_receipt_id": _safe_str(meta.get("lifecycle_receipt_id")).strip(),
                 }
                 meta.update(
                     {
@@ -18492,6 +18817,11 @@ def record_capability_pack_metadata_receipts_from_plan(
                     "migration_identity_contract": "stage17_capability_pack_migration_versioned_identity_v1",
                     "migration_versioned_pack_identity": f"{pack_id}@{pack_version}",
                     "migration_pack_version_present": bool(pack_version),
+                    "lifecycle_guard_contract": _safe_str(lifecycle_guard.get("contract")).strip(),
+                    "lifecycle_guard_status": _safe_str(lifecycle_guard.get("status")).strip(),
+                    "lifecycle_guard_blocked_capability_count": int(
+                        lifecycle_guard.get("blocked_capability_count") or 0
+                    ),
                 },
             )
             pending_receipts.append(

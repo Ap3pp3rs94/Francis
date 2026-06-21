@@ -1053,3 +1053,131 @@ Next highest leverage action:
   block visibility into an operator-readable selected-scope readback, and W3
   isolating the mission-linked invocation proof hang without modifying mission
   assertions until the command finishes.
+
+## PM Follow-Up - 2026-06-21T13:30Z
+
+Commit:
+
+- Pending at the time of this entry: Stage 17 artifact reconstruction batch
+  receipts, metadata migration lifecycle guard, and invocation caller-context
+  binding.
+
+Active workers:
+
+- W1 quality-evidence artifact reconstruction: accepted durable batch receipt
+  contract and API response linkage for governed artifact reconstruction apply.
+- W2 lifecycle and migration guard: accepted selected lifecycle blocking for
+  metadata receipt migration before dry-run fingerprinting or writes.
+- W3 reusable invocation proof: accepted caller-context binding in reusable
+  invocation receipts across direct dry-run contexts.
+- W4 parked to preserve usage.
+
+Active drones:
+
+- 0 local drones reported by the accepted worker packets. Local drones remain
+  available for the next cycle as narrow inspection/validation packets verified
+  by each worker.
+
+Commits produced:
+
+- 1 pending coherent Lead Builder integration commit.
+
+Commits accepted:
+
+- 0 pushed at the time of this entry.
+
+Commits rejected:
+
+- 0 complete worker packets rejected.
+- 1 brittle lead-side test assumption was rejected and replaced with
+  long-path-safe filesystem verification for the accepted artifact receipt test.
+
+Validations passed:
+
+- Single focused reconstruction receipt pytest passed after the lead fixture
+  repair.
+- 10-test focused Stage 17 selection passed for reconstruction receipts,
+  metadata receipt lifecycle guard coverage, metadata migration regressions,
+  durable invocation audit replay, and direct invocation caller-context binding.
+- `py_compile` passed for `src\francis\api\routes\plugins.py`,
+  `tests\test_api_plugins.py`, and `tests\test_api_missions.py`.
+- Ruff check passed for the same three files.
+- Ruff format check passed for the same three files.
+- `git diff --check` passed for the same Stage 17 source/test files.
+- Completion-model readback kept Stage 17 open.
+- FastAPI `TestClient` readback reported `migration_candidate_total=1`,
+  `remediation_queue_count=17`,
+  `validation_receipt_reconstruction_required_count=2830`, and
+  `proposal_lineage_reconstruction_required_count=2830`.
+
+Validations failed or blocked:
+
+- Full `scripts\check.ps1` was not run in this bounded integration cycle.
+- Stage 17 did not close. Migration, quality-evidence backlog closure,
+  proposal review, promotion, enablement, live mission-path proof, and full CI
+  remain unproven.
+
+Receipts generated:
+
+- W1 readback:
+  `.francis\worker-terminal-coordinator\readbacks\worker-1-orb-voice-proof.md`.
+- W2 readback:
+  `.francis\worker-terminal-coordinator\readbacks\worker-2-lens-overlay-spatial.md`.
+- W3 readback:
+  `.francis\worker-terminal-coordinator\readbacks\worker-3-voice-receipts.md`.
+- W1 live route proof wrote ignored runtime receipt artifacts including
+  `stage17_artifact_reconstruction_batch_1782047557_receipt.json`, 25
+  validation receipts, and 25 proposal lineage receipts for the selected legacy
+  generated pack. This evidence was treated as local runtime proof, not source
+  truth.
+
+Roadmap items advanced:
+
+- Stage 17 / Capability Economy.
+- Receipt-backed artifact reconstruction.
+- Executable lifecycle migration safety.
+- Reusable invocation receipt truthfulness.
+- Worker-swarm integration discipline.
+
+Capability classes advanced:
+
+- Capability Registry
+- Governance
+- Receipts
+- Missions
+- Observability
+- API Surface
+- Documentation
+- Testing
+
+New capabilities created or strengthened:
+
+- Artifact reconstruction apply now leaves a durable receipt that explains the
+  batch, fingerprint confirmation, queue before/after counts, artifacts written,
+  and authority boundaries.
+- Metadata receipt migration cannot proceed for selected lifecycle-blocked packs
+  before the dry-run/apply path records that refusal.
+- Reusable invocation receipts bind caller context to pack selection without
+  granting execution or mutation authority.
+- Stage 17 readback now has stronger evidence separating applied source
+  contracts, live runtime proof, and remaining blockers.
+
+Most important change:
+
+- Stage 17 reconstruction moved from response-only proof to durable,
+  receipt-backed batch evidence while preserving dry-run confirmation and
+  authority limits.
+
+Biggest remaining bottleneck:
+
+- Stage 17 remains open. Current readback reports
+  `migration_candidate_total=1`, `remediation_queue_count=17`, and 2,830
+  validation/proposal reconstruction gaps. The remaining generated invocation
+  pack and quality-evidence backlog are the highest leverage targets.
+
+Next highest leverage action:
+
+- Launch the next three-worker cycle with W1 reducing the remaining
+  quality-evidence reconstruction queue, W2 closing the live metadata migration
+  candidate safely, and W3 proving reusable invocation through a mission path
+  without adding fake execution claims.
