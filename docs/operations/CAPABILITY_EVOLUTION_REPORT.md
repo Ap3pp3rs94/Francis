@@ -1685,9 +1685,9 @@ Active drones:
 
 - 0 local drones were accepted in this cycle.
 
-Commits produced: pending at report time.
+Commits produced: `41471603 fix(stage17): preserve reconstruction receipt integrity`.
 
-Commits accepted: pending at report time.
+Commits accepted: `41471603 fix(stage17): preserve reconstruction receipt integrity`.
 
 Commits rejected: 0.
 
@@ -1774,3 +1774,100 @@ Next highest leverage action:
 - Continue bounded `smallest_full_pack_first` applies while the route remains
   clean, or pause to close the next non-reconstruction Stage 17 gate if the
   queue stops yielding safe full-pack candidates.
+
+### Cycle 2026-06-21T17:12Z to 2026-06-21T17:16Z
+
+Scope: third Stage 17 live artifact reconstruction apply through the governed
+route after receipt-integrity hardening.
+
+Active workers:
+
+- Worker 1: read-only repeat-apply integrity inspection.
+- Worker 2: read-only GitHub/check-run and local readback verification.
+- Worker 3: ledger/evolution evidence checklist and prior-cycle correction.
+
+Active drones:
+
+- 0 local drones were accepted in this cycle.
+
+Commits produced: pending at report time.
+
+Commits accepted: pending at report time.
+
+Commits rejected: 0.
+
+Validations passed:
+
+- Live reconstruction dry-run through FastAPI `TestClient` returned clean JSON
+  for `legacy.generated.capabilityqualitydocsplugin`,
+  `planned_pack_count=1`, `planned_capability_count=4`, and fingerprint
+  `fdafcbbc8cf31cf83862fdf831d319d042258a684e3f69501c598a004bb47d2f`.
+- Live reconstruction apply through FastAPI `TestClient` returned
+  `ok=true`, `applied=true`, `status=recorded`,
+  `recorded_pack_count=1`, `recorded_capability_count=4`, and
+  `candidate_reduction_count=1`.
+- Live remediation readback returned `remediation_queue_count=13` and
+  `artifact_reconstruction_required_count=13`.
+- `.\scripts\francis-completion-model.ps1` returned clean JSON with
+  `stage17_artifact_reconstruction_evidence` for
+  `stage17_artifact_reconstruction_batch_1782062155_d792f162_receipt`.
+- Worker 1 reported `py_compile` pass for
+  `src\francis\api\routes\plugins.py` and `tests\test_api_plugins.py`.
+- Worker 1 reported the four focused reconstruction tests passed.
+- Worker 3 reported `git diff --check -- docs\operations\CAPABILITY_EVOLUTION_REPORT.md`
+  passed after correcting the prior cycle's commit-status lines.
+
+Validations failed or blocked:
+
+- Full GitHub CI was not accepted as complete. Worker 2 reported CodeQL checks
+  and CI for `41471603` were still in progress.
+- Full local `.\scripts\check.ps1` was not run.
+- Worker 2 rejected `09a2e468` as complete CI proof because CI matrix jobs were
+  cancelled despite CodeQL success.
+
+Receipts generated:
+
+- `data\artifacts\plugins\capability_packs\artifact_reconstructions\stage17_artifact_reconstruction_batch_1782062155_d792f162_receipt.json`.
+- Receipt SHA-256:
+  `522F79E50E9DA7678094990D70A2AE42085716A2047D8A44CAF813310C4968D7`.
+
+Roadmap items advanced:
+
+- Stage 17 / Capability Economy.
+- Governed quality-evidence artifact reconstruction.
+- Completion-model receipt readback continuity.
+- Worker packet verification and evidence discipline.
+
+Capability classes advanced:
+
+- Capability Registry
+- Governance
+- Receipts
+- Observability
+- Completion Model
+- Documentation
+
+New capabilities created or strengthened:
+
+- The live Stage 17 quality-evidence queue has another receipt-backed
+  reduction: `14 -> 13`.
+- Completion-model status continued to select the newest durable artifact
+  reconstruction receipt without implying closure or authority.
+- The evolution report now records pushed commit `41471603` as produced and
+  accepted in the prior cycle instead of leaving that cycle pending.
+
+Most important change:
+
+- The governed reconstruction route has now produced three consecutive
+  receipt-backed live queue reductions.
+
+Biggest remaining bottleneck:
+
+- Stage 17 still has 13 artifact reconstruction-required packs and unresolved
+  metadata, proposal-review, promotion, enablement/execution, and full-CI gates.
+
+Next highest leverage action:
+
+- Continue bounded `smallest_full_pack_first` applies while clean candidates
+  remain, with each accepted movement backed by dry-run fingerprint, apply
+  response, receipt hash, readback, and focused validation.

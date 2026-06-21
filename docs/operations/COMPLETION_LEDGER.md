@@ -89537,6 +89537,84 @@ Remaining truthful gap:
   or close another documented Stage 17 gate with receipt-backed before/after
   evidence and no Orb visual changes.
 
+### 2026-06-21 17:16Z - Stage 17 third reconstruction apply continues receipt-backed queue reduction
+
+Current posture: Stage 17 / Capability Economy remains open. This pass ran a
+third bounded live `smallest_full_pack_first` artifact reconstruction apply
+after the receipt-integrity fix was pushed. It proves continued live queue
+movement through the same governed route; it does not claim full
+quality-evidence closure, full CI, or Stage 17 completion.
+
+What changed:
+
+- A third bounded live apply selected
+  `legacy.generated.capabilityqualitydocsplugin`, reconstructed 4
+  capabilities, wrote 4 validation receipts and 4 proposal-lineage records, and
+  recorded a unique durable reconstruction receipt.
+- No runtime code changed in this cycle after the prior receipt-integrity fix.
+- The completion-model readback followed the latest receipt and continued to
+  report Stage 17 as open without granting write, approval, promotion,
+  execution, or memory authority.
+
+Live receipt evidence:
+
+- Receipt:
+  `data\artifacts\plugins\capability_packs\artifact_reconstructions\stage17_artifact_reconstruction_batch_1782062155_d792f162_receipt.json`.
+- Receipt contract:
+  `stage17_capability_pack_artifact_reconstruction_receipt_v1`.
+- Receipt SHA-256:
+  `522F79E50E9DA7678094990D70A2AE42085716A2047D8A44CAF813310C4968D7`.
+- Dry-run fingerprint:
+  `fdafcbbc8cf31cf83862fdf831d319d042258a684e3f69501c598a004bb47d2f`.
+- Queue movement: `before_remediation_queue_count=14`,
+  `after_remediation_queue_count=13`, `candidate_reduction_count=1`.
+- Reconstruction-required movement:
+  validation receipts `81 -> 77`; proposal lineages `81 -> 77`.
+- Readback after apply:
+  `artifact_reconstruction_required_count=13`,
+  `next_smallest_truthful_gap=stage17_capability_pack_artifact_reconstruction_apply`.
+
+Worker evidence:
+
+- Worker 1 accepted as no-change inspection: the repeat-apply path still has
+  permission, dry-run fingerprint, operator-decision, and unique receipt-ID
+  gates after the UUID batch-id fix.
+- Worker 2 accepted as read-only verification: local readbacks showed the prior
+  `41471603` state with 14 remaining packs; GitHub checks for `41471603` were
+  still in progress and are not accepted as full CI proof.
+- Worker 3 accepted: it corrected the prior evolution report cycle to record
+  pushed commit `41471603` as produced and accepted.
+
+Validation:
+
+- Live dry-run via FastAPI `TestClient` returned `ok=true`,
+  `status=dry_run`, `planned_pack_count=1`, `planned_capability_count=4`, and
+  the fingerprint above.
+- Live apply via FastAPI `TestClient` returned `ok=true`, `applied=true`,
+  `status=recorded`, `recorded_pack_count=1`, `recorded_capability_count=4`,
+  and `candidate_reduction_count=1`.
+- Live remediation readback returned `remediation_queue_count=13` and
+  `artifact_reconstruction_required_count=13`.
+- `.\scripts\francis-completion-model.ps1` returned clean JSON with
+  `stage17_artifact_reconstruction_evidence.receipt_id=
+  stage17_artifact_reconstruction_batch_1782062155_d792f162_receipt`.
+- Worker 1 re-ran `py_compile` for `src\francis\api\routes\plugins.py` and
+  `tests\test_api_plugins.py`, plus the four focused reconstruction tests, and
+  reported pass.
+- Worker 3 ran `git diff --check -- docs\operations\CAPABILITY_EVOLUTION_REPORT.md`
+  after correcting the prior commit-status lines and reported pass.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The live queue is reduced but not closed:
+  13 artifact reconstruction-required packs remain.
+- Full quality-evidence closure, metadata apply closure, proposal review queue
+  closure, promotion queue closure, enablement/execution readiness, full CI,
+  and phase movement remain unproven.
+- The next accepted build action should continue bounded reconstruction applies
+  while clean full-pack candidates remain, or switch to another documented
+  Stage 17 gate if the reconstruction queue stops yielding safe candidates.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
