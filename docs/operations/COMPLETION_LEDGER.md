@@ -88833,6 +88833,70 @@ Remaining truthful gap:
 - This slice does not close a ledger-backed phase gate and does not move the
   Phase 2 posture.
 
+### 2026-06-21 - Stage 17 invocation proof readiness readback
+
+Roadmap area: Stage 17 / Capability Economy, reusable governed invocation,
+mission-shape reuse proof, receipt-linked auditability, and worker publication
+handoff.
+
+This pass tightened the existing read-only invocation audit without creating a
+parallel capability substrate:
+
+- `/plugins/capabilities/library/invocations/audit` now returns
+  `proof_readiness` with contract
+  `stage17_capability_pack_governed_invocation_proof_readiness_v1`.
+  The readiness summary names the strongest accepted evidence as
+  `receipt_linked_selection_consistent_mission_shape_reuse` and reports whether
+  a pack has met that condition.
+- Proof readiness is true only when the existing audit has accepted embedded
+  invocation receipts that are routing-guard eligible, status-reusable,
+  dispatch-receipt linked, pack-selection consistent, and present across both
+  mission operation shapes (`plugin.run` and `plugin.tool.run`). It does not
+  infer missing direct-route receipts or broaden supported operation
+  capabilities.
+- The readiness summary explicitly reports `read_only=true`,
+  `writes_repo=false`, `writes_data=false`, `writes_receipts=false`,
+  `executes_capabilities=false`, `grants_execution_authority=false`, and
+  `grants_mutation_authority=false`.
+- Focused tests now assert that the durable fixture replay surfaces the
+  readiness contract while preserving rejected invalid records.
+- Worker prompt hash for this pass:
+  `fb0ec3ba188795e43f77e5a8decb09fc9057ae10365929e49e1b3607c994c6ae`.
+
+Validation:
+
+- `.\.venv\Scripts\python.exe -m py_compile
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py
+  tests\test_api_missions.py` passed.
+- `.\.venv\Scripts\python.exe -m pytest
+  tests\test_api_plugins.py::test_plugins_invocation_audit_reads_durable_fixture_records_without_execution
+  -q` passed with one existing FastAPI/TestClient deprecation warning.
+- `.\.venv\Scripts\python.exe -m ruff check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py
+  tests\test_api_missions.py` passed.
+- `.\.venv\Scripts\python.exe -m ruff format --check --no-cache
+  src\francis\api\routes\plugins.py tests\test_api_plugins.py
+  tests\test_api_missions.py` passed with `3 files already formatted`.
+- `git diff --check -- src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py tests\test_api_missions.py` passed.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. This pass does not claim validation-receipt closure,
+  proposal-lineage closure, migration-candidate closure, proposal review,
+  promotion, enablement, execution, full CI, publication-marker closure, or
+  phase movement.
+- Lead-level validation attempted
+  `tests\test_api_missions.py::test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_mission_contexts`
+  twice, including a longer bounded isolated run, and it did not finish in this
+  workspace. No new assertions from this slice were kept in that test.
+- This pass strengthens only the read-only proof-readiness contract for existing
+  operation-output invocation receipts. It does not create a new receipt writer,
+  mutate registry metadata, process the remaining live Stage 17 queue, or
+  record a PM-owned publication marker.
+- This slice does not close a ledger-backed phase gate and does not move the
+  Phase 2 posture.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -11060,6 +11060,8 @@ def _capability_pack_invocation_audit_projection(
     receipt_linked_selection_consistent_mission_shape_reuse_keys = [
         key for key in receipt_linked_mission_shape_reuse_keys if key in selection_consistent_reuse_keys
     ]
+    governed_reuse_proof_keys = receipt_linked_selection_consistent_mission_shape_reuse_keys
+    governed_reuse_proof_ready = bool(governed_reuse_proof_keys)
     return {
         "ok": True,
         "kind": "plugin.capability_library.invocations.audit",
@@ -11082,6 +11084,31 @@ def _capability_pack_invocation_audit_projection(
         "context_count": len(contexts),
         "contexts": contexts,
         "pack_reuse_keys": pack_reuse_keys,
+        "proof_readiness": {
+            "contract": "stage17_capability_pack_governed_invocation_proof_readiness_v1",
+            "status": "reuse_proof_ready" if governed_reuse_proof_ready else "reuse_proof_incomplete",
+            "ready": governed_reuse_proof_ready,
+            "strongest_evidence": "receipt_linked_selection_consistent_mission_shape_reuse",
+            "pack_reuse_keys": governed_reuse_proof_keys,
+            "accepted_invocation_count": len(items),
+            "rejected_invocation_count": len(rejected_items),
+            "requires_embedded_invocation_receipts": True,
+            "requires_routing_guard_eligibility": True,
+            "requires_reusable_operation_and_dispatch_status": True,
+            "requires_dispatch_receipt_linkage": True,
+            "requires_pack_selection_consistency": True,
+            "requires_mission_plugin_and_tool_operation_shapes": True,
+            "missing_evidence": []
+            if governed_reuse_proof_ready
+            else ["receipt_linked_selection_consistent_mission_shape_reuse"],
+            "read_only": True,
+            "writes_repo": False,
+            "writes_data": False,
+            "writes_receipts": False,
+            "executes_capabilities": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
         "reuse_proof": {
             "contract": "stage17_capability_pack_invocation_audit_reuse_proof_v1",
             "minimum_contexts_per_reuse_key": 2,
@@ -11144,6 +11171,8 @@ def _capability_pack_invocation_audit_projection(
             "receipt_linked_mission_shape_reuse_requires_dispatch_run_and_trace_ids": True,
             "reuse_proof_counts_only_supported_mission_operation_capabilities": True,
             "unsupported_operation_capability_receipts_are_rejected": True,
+            "proof_readiness_contract": "stage17_capability_pack_governed_invocation_proof_readiness_v1",
+            "proof_readiness_requires_receipt_linked_selection_consistent_mission_shape_reuse": True,
             "reusable_operation_statuses": sorted(_CAPABILITY_PACK_INVOCATION_REUSABLE_OPERATION_STATUSES),
             "reusable_dispatch_statuses": sorted(_CAPABILITY_PACK_INVOCATION_REUSABLE_DISPATCH_STATUSES),
             "failed_or_blocked_statuses_do_not_count_as_reuse_proof": True,
@@ -17505,6 +17534,38 @@ def _capability_pack_ambiguous_version_selections(candidates: list[dict[str, Any
     return out
 
 
+def _capability_pack_unversioned_selections(candidates: list[dict[str, Any]]) -> list[dict[str, object]]:
+    out: list[dict[str, object]] = []
+    for candidate in candidates:
+        pack_id = _safe_str(candidate.get("pack_id")).strip()
+        pack_version = _safe_str(candidate.get("pack_version")).strip()
+        if not pack_id or pack_version:
+            continue
+        out.append(
+            {
+                "pack_id": pack_id,
+                "pack_version": "",
+                "candidate_count": 1,
+                "capability_count": _count_value(candidate.get("capability_count")),
+                "reason": "pack_version_missing_for_metadata_receipt_migration",
+            }
+        )
+    return out
+
+
+def _capability_pack_migration_identity(*, pack_id: str, pack_version: str) -> dict[str, object]:
+    safe_pack_id = _safe_str(pack_id).strip()
+    safe_pack_version = _safe_str(pack_version).strip()
+    return {
+        "contract": "stage17_capability_pack_migration_versioned_identity_v1",
+        "pack_id": safe_pack_id,
+        "pack_version": safe_pack_version,
+        "versioned_pack_identity": f"{safe_pack_id}@{safe_pack_version}" if safe_pack_version else "",
+        "pack_version_present": bool(safe_pack_version),
+        "blocks_apply_if_missing": True,
+    }
+
+
 def _capability_pack_migration_batch_projection(
     *,
     plan: dict[str, Any],
@@ -17573,6 +17634,8 @@ def _capability_pack_metadata_receipts_bulk_governance(
         "policy_gate": _PLUGIN_WRITE_SCOPE,
         "receipt_contract": "plugin.capability_pack.metadata_receipt",
         "queue_count_contract": "stage17_capability_pack_metadata_receipts_batch_queue_evidence_v1",
+        "versioned_pack_identity_contract": "stage17_capability_pack_migration_versioned_identity_v1",
+        "versioned_pack_identity_required": True,
         "writes_registry_metadata": writes_registry_metadata,
         "writes_receipts": writes_receipts,
         "dry_run_required_before_apply": True,
@@ -17657,6 +17720,49 @@ def record_capability_pack_metadata_receipts_from_plan(
                     "one_pack_version_per_pack_id_per_batch": True,
                     "receipt_identity_contract": "capability_pack_metadata_receipt_id_v1",
                     "reason": "metadata receipt ids are keyed by pack_id and timestamp",
+                },
+                "governance": _capability_pack_metadata_receipts_bulk_governance(
+                    route_path=request.url.path,
+                    writes_registry_metadata=False,
+                    writes_receipts=False,
+                ),
+            }
+        unversioned_selections = _capability_pack_unversioned_selections(candidates)
+        if unversioned_selections:
+            selected_capability_ids = {
+                capability_id
+                for candidate in candidates
+                for capability_id in _capability_ids_for_pack(
+                    entries,
+                    pack_id=_safe_str(candidate.get("pack_id")).strip(),
+                    pack_version=_safe_str(candidate.get("pack_version")).strip(),
+                )
+            }
+            before_projection = _capability_pack_migration_batch_projection(
+                plan=plan,
+                candidates=candidates,
+                selected_pack_ids=selected_pack_ids,
+                selected_capability_ids=selected_capability_ids,
+            )
+            return {
+                "ok": False,
+                "applied": False,
+                "status": "blocked",
+                "error": "pack_version_required_for_migration_receipt",
+                "unversioned_pack_selections": unversioned_selections,
+                "candidate_total": len(candidates),
+                "projection_scope": before_projection["projection_scope"],
+                "global_counts_included": before_projection["global_counts_included"],
+                "projection_generated_at": before_projection["generated_at"],
+                "projection_evidence": before_projection["projection_evidence"],
+                "before": before_projection,
+                "requirements": {
+                    "versioned_pack_identity_required": True,
+                    "pack_version_required": True,
+                    "one_pack_version_per_pack_id_per_batch": True,
+                    "receipt_identity_contract": "capability_pack_metadata_receipt_id_v1",
+                    "migration_identity_contract": "stage17_capability_pack_migration_versioned_identity_v1",
+                    "reason": "metadata receipt migrations must bind pack_id and pack_version before apply",
                 },
                 "governance": _capability_pack_metadata_receipts_bulk_governance(
                     route_path=request.url.path,
@@ -17763,6 +17869,10 @@ def record_capability_pack_metadata_receipts_from_plan(
                     "capability_ids": capability_ids,
                     "promotion_rules": promotion_rules,
                     "pack_governance": redact_governed_display_value(pack_governance),
+                    "migration_identity": _capability_pack_migration_identity(
+                        pack_id=item["pack_id"],
+                        pack_version=item["pack_version"],
+                    ),
                     "writes_registry_metadata": not payload.dry_run,
                     "writes_receipt": not payload.dry_run,
                 }
@@ -17919,6 +18029,9 @@ def record_capability_pack_metadata_receipts_from_plan(
                     "source_candidate_blockers": candidate.get("blockers")
                     if isinstance(candidate.get("blockers"), list)
                     else [],
+                    "migration_identity_contract": "stage17_capability_pack_migration_versioned_identity_v1",
+                    "migration_versioned_pack_identity": f"{pack_id}@{pack_version}",
+                    "migration_pack_version_present": bool(pack_version),
                 },
             )
             pending_receipts.append(

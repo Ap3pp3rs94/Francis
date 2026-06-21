@@ -48,18 +48,18 @@ Baseline: report initialized after the four-worker pass completed on
 | Lens | 4 | Lens observation contracts gained unmapped-coordinate refusal coverage, invalid-dimension refusal, and command-palette proof readbacks. |
 | Voice | 4 | Voice receipts now separate acoustic proof source, gate mode, provider receipt modes, and embedded provider-boundary evidence. |
 | Memory | 0 | No memory contract advancement in this cycle. |
-| Governance | 14 | Refusal/no-authority boundaries strengthened for acoustic proof, provider receipts, Stage 17 worker-readback/publication handoff claims, invalid coordinates, generated-spec compatibility, lifecycle history readback compatibility, unsupported invocation receipt rejection, quality-standard dry-run/apply receipt gates, pack-selection binding, activity-vs-progress reporting, and worker liveness truth. |
-| Receipts | 14 | New receipt/readback fields for acoustic proof rejection, provider mode state/linkage, worker-readback and worker/publication handoff requirements, capability-evolution worker packets, worker execution liveness, metadata receipt batch evidence, quality-standard remediation batch receipts, lifecycle history compatibility evidence, and invocation pack-selection/rejection receipts. |
+| Governance | 16 | Refusal/no-authority boundaries strengthened for acoustic proof, provider receipts, Stage 17 worker-readback/publication handoff claims, invalid coordinates, generated-spec compatibility, lifecycle history readback compatibility, unsupported invocation receipt rejection, quality-standard dry-run/apply receipt gates, pack-selection binding, activity-vs-progress reporting, worker liveness truth, unversioned migration refusal, and read-only invocation proof readiness. |
+| Receipts | 16 | New receipt/readback fields for acoustic proof rejection, provider mode state/linkage, worker-readback and worker/publication handoff requirements, capability-evolution worker packets, worker execution liveness, metadata receipt batch evidence, quality-standard remediation batch receipts, lifecycle history compatibility evidence, invocation pack-selection/rejection receipts, migration identity, and proof-readiness linkage. |
 | Missions | 2 | Stage 17 mission-linked invocation audit rejects tampered embedded pack-selection bindings and now surfaces unsupported operation-capability receipts as rejected evidence. |
 | Overlay | 4 | Overlay-related proof now requires local overlay speech source, exposes manual proof mode, and blocked/invalid coordinate cases stay before screen/session readback. |
-| Observability | 12 | Added diagnostics for acoustic proof, provider mode/linkage disambiguation, Stage 17 readback and handoff guard state, quality-standard after-sync queue honesty, unsupported invocation rejection visibility, build capability evolution, Exec worker liveness, and publication-marker prompt matching. |
+| Observability | 14 | Added diagnostics for acoustic proof, provider mode/linkage disambiguation, Stage 17 readback and handoff guard state, quality-standard after-sync queue honesty, unsupported invocation rejection visibility, build capability evolution, Exec worker liveness, publication-marker prompt matching, migration identity readback, and invocation proof readiness. |
 | Completion Model | 2 | Completion model now rejects selected Stage 17 gaps as worker-readback proof and worker/publication handoff proof. |
-| Capability Registry | 5 | Stage 17 now has generated-spec compatibility binding, catalog lifecycle provenance projection, selected live metadata-receipt backlog reduction evidence, receipt-backed quality-standard backlog reduction, and lifecycle-history compatibility readback evidence. |
+| Capability Registry | 6 | Stage 17 now has generated-spec compatibility binding, catalog lifecycle provenance projection, selected live metadata-receipt backlog reduction evidence, receipt-backed quality-standard backlog reduction, lifecycle-history compatibility readback evidence, and versioned migration identity enforcement. |
 | Swarm Infrastructure | 4 | Completion model now requires worker readback/handoff evidence, coordinator prompts require capability-evolution packet fields, and active Exec workers are no longer treated as stale. |
 | Operator Controls | 2 | Manual acoustic Orb movement proof now has source-specific next-step diagnostics and explicit manual-proof-required state. |
-| API Surface | 8 | Monitor route sanitizer, ChatGPT voice contract/receipt surfaces, plugin promotion readiness, plugin runtime execution guards, quality-standard remediation receipts, lifecycle-history compatibility readbacks, and invocation audit readbacks expose stricter fields. |
-| Documentation | 7 | Completion model docs, worker prompt docs, Stage 17 closure matrix, ledger entries, and this evolution report record durable operating rules and current Stage 17 blockers. |
-| Testing | 16 | Added or expanded focused tests across worker lanes, coordinator prompt contracts, worker liveness status, plugin compatibility, metadata receipt batching, quality-standard receipt/after-sync behavior, lifecycle history compatibility, and invocation audit binding. |
+| API Surface | 10 | Monitor route sanitizer, ChatGPT voice contract/receipt surfaces, plugin promotion readiness, plugin runtime execution guards, quality-standard remediation receipts, lifecycle-history compatibility readbacks, migration identity refusal, and invocation audit readbacks expose stricter fields. |
+| Documentation | 8 | Completion model docs, worker prompt docs, Stage 17 closure matrix, ledger entries, and this evolution report record durable operating rules and current Stage 17 blockers. |
+| Testing | 18 | Added or expanded focused tests across worker lanes, coordinator prompt contracts, worker liveness status, plugin compatibility, metadata receipt batching, quality-standard receipt/after-sync behavior, lifecycle history compatibility, migration identity refusal, and invocation audit binding. |
 
 ## Cycle Log
 
@@ -820,3 +820,110 @@ Next highest leverage action:
 - Reduce the remaining migration candidate through the existing metadata
   receipt/operator-review path, then use governed remediation to attach
   validation receipts and proposal lineage for the 18 still-blocked packs.
+
+## PM Follow-Up - 2026-06-21T12:25Z
+
+Commit:
+
+- Pending at the time of this entry: Stage 17 migration identity and invocation
+  proof-readiness integration.
+
+Active workers:
+
+- W1 metadata-receipt backlog reduction: accepted as runtime evidence only; the
+  current lead readback still reports `migration_candidate_total=1`.
+- W2 lifecycle/promotion lane: accepted source change for versioned migration
+  identity enforcement.
+- W3 reusable invocation proof lane: accepted read-only proof-readiness API and
+  fixture coverage; mission-linked test assertions were rejected because the
+  lead machine could not complete that test.
+- W4 parked to preserve usage.
+
+Commits produced:
+
+- 1 pending coherent Lead Builder integration commit.
+
+Commits accepted:
+
+- 0 pushed at the time of this entry.
+
+Commits rejected:
+
+- 0 complete worker packets rejected.
+- 1 worker sub-output rejected: W3 mission-linked assertion additions were not
+  kept because the lead validation command did not finish in this workspace.
+
+Validations passed:
+
+- `py_compile` for `src\francis\api\routes\plugins.py`,
+  `tests\test_api_plugins.py`, and `tests\test_api_missions.py`.
+- Focused plugin pytest selection covering metadata receipt migration planning,
+  dry-run/no-write behavior, ambiguous version blocking, unversioned migration
+  identity blocking, selected before/after counts, and durable invocation audit
+  proof-readiness.
+- Ruff check and Ruff format check for the accepted Python files.
+- `git diff --check` for the accepted source, test, and ledger files.
+- Completion-model readback selected the latest Stage 17 ledger entry and kept
+  Stage 17 open.
+
+Validations failed or blocked:
+
+- `tests\test_api_missions.py::test_stage17_capability_pack_invocation_reuses_pack_across_direct_and_mission_contexts`
+  did not finish in two lead-level isolated attempts, including a longer bounded
+  run. No new assertions from this cycle remain in that test.
+- Full `scripts\check.ps1` was not run in this bounded cycle.
+
+Receipts generated:
+
+- W1 readback:
+  `.francis\worker-terminal-coordinator\readbacks\worker-1-orb-voice-proof.md`.
+- W2 readback:
+  `.francis\worker-terminal-coordinator\readbacks\worker-2-stage17-lifecycle-promotion.md`.
+- W3 readback:
+  `.francis\worker-terminal-coordinator\readbacks\worker-3-voice-receipts.md`.
+- W1 live route apply wrote ignored runtime receipt
+  `capability_pack_metadata_1782043295_legacy-generated-stage17reusableinvocationplugin.json`.
+
+Roadmap items advanced:
+
+- Stage 17 / Capability Economy.
+- Governed migration metadata identity.
+- Reusable invocation proof readback.
+- Receipt-linked auditability.
+
+Capability classes advanced:
+
+- Capability Registry
+- Governance
+- Receipts
+- Observability
+- API Surface
+- Documentation
+- Testing
+
+New capabilities created or strengthened:
+
+- Metadata-receipt migration now blocks unversioned pack candidates before dry
+  run fingerprinting, registry mutation, or receipt writes.
+- Successful migration metadata receipts now carry a versioned migration
+  identity contract.
+- Invocation audit now exposes an authority-denying `proof_readiness` summary
+  that names the strongest accepted reuse evidence and missing evidence.
+
+Most important change:
+
+- Stage 17 gained stricter migration identity governance and a coordinator-
+  consumable invocation proof-readiness readback without adding execution
+  authority or a parallel capability substrate.
+
+Biggest remaining bottleneck:
+
+- Stage 17 remains open. Current lead readback reports
+  `migration_candidate_total=1`; validation/proposal closure and full CI remain
+  unproven.
+
+Next highest leverage action:
+
+- Have the next three-worker cycle target the still-live migration candidate,
+  the 18 validation/proposal blockers, and the mission test hang as separate
+  lanes, with local drones limited to narrow analysis packets.

@@ -368,11 +368,38 @@ def test_plugins_invocation_audit_reads_durable_fixture_records_without_executio
     assert body["rejected_invocation_count"] == 2
     assert body["contexts"] == ["mission_linked_operation", "mission_linked_tool_operation"]
     assert body["pack_reuse_keys"] == [reuse_key]
+    proof_readiness = body["proof_readiness"]
+    assert proof_readiness["contract"] == "stage17_capability_pack_governed_invocation_proof_readiness_v1"
+    assert proof_readiness["status"] == "reuse_proof_ready"
+    assert proof_readiness["ready"] is True
+    assert proof_readiness["strongest_evidence"] == "receipt_linked_selection_consistent_mission_shape_reuse"
+    assert proof_readiness["pack_reuse_keys"] == [reuse_key]
+    assert proof_readiness["accepted_invocation_count"] == 3
+    assert proof_readiness["rejected_invocation_count"] == 2
+    assert proof_readiness["requires_embedded_invocation_receipts"] is True
+    assert proof_readiness["requires_routing_guard_eligibility"] is True
+    assert proof_readiness["requires_reusable_operation_and_dispatch_status"] is True
+    assert proof_readiness["requires_dispatch_receipt_linkage"] is True
+    assert proof_readiness["requires_pack_selection_consistency"] is True
+    assert proof_readiness["requires_mission_plugin_and_tool_operation_shapes"] is True
+    assert proof_readiness["missing_evidence"] == []
+    assert proof_readiness["read_only"] is True
+    assert proof_readiness["writes_data"] is False
+    assert proof_readiness["writes_receipts"] is False
+    assert proof_readiness["executes_capabilities"] is False
+    assert proof_readiness["grants_execution_authority"] is False
+    assert proof_readiness["grants_mutation_authority"] is False
     assert body["governance"]["read_only"] is True
     assert body["governance"]["writes_data"] is False
     assert body["governance"]["writes_receipts"] is False
     assert body["governance"]["executes_capabilities"] is False
     assert body["governance"]["route"] == "/plugins/capabilities/library/invocations/audit"
+    assert body["requirements"]["proof_readiness_contract"] == (
+        "stage17_capability_pack_governed_invocation_proof_readiness_v1"
+    )
+    assert (
+        body["requirements"]["proof_readiness_requires_receipt_linked_selection_consistent_mission_shape_reuse"] is True
+    )
     assert body["requirements"]["failed_or_blocked_statuses_do_not_count_as_reuse_proof"] is True
     assert "failed" not in body["requirements"]["reusable_operation_statuses"]
     assert "failed" not in body["requirements"]["reusable_dispatch_statuses"]
@@ -2895,9 +2922,18 @@ def test_plugins_capability_pack_metadata_receipts_bulk_from_migration_plan(
         "stage17_capability_pack_metadata_receipts_bulk_from_plan_dry_run_v1"
     )
     assert dry_run_body["planned"][0]["pack_id"] == candidate["pack_id"]
+    assert dry_run_body["planned"][0]["migration_identity"] == {
+        "contract": "stage17_capability_pack_migration_versioned_identity_v1",
+        "pack_id": candidate["pack_id"],
+        "pack_version": candidate["pack_version"],
+        "versioned_pack_identity": f"{candidate['pack_id']}@{candidate['pack_version']}",
+        "pack_version_present": True,
+        "blocks_apply_if_missing": True,
+    }
     assert dry_run_body["planned"][0]["writes_registry_metadata"] is False
     assert dry_run_body["planned"][0]["writes_receipt"] is False
     assert dry_run_body["governance"]["dry_run_required_before_apply"] is True
+    assert dry_run_body["governance"]["versioned_pack_identity_required"] is True
     assert dry_run_body["governance"]["writes_registry_metadata"] is False
     assert dry_run_body["governance"]["writes_receipts"] is False
     assert dry_run_body["governance"]["promotion_authority"] is False
@@ -2993,6 +3029,13 @@ def test_plugins_capability_pack_metadata_receipts_bulk_from_migration_plan(
     assert receipt["governance"]["route"] == "/plugins/capabilities/packs/metadata/receipts/bulk-from-plan"
     assert receipt["expanded_from_migration_plan"] is False
     assert receipt["metadata_context"]["bulk_from_migration_plan"] is True
+    assert receipt["metadata_context"]["migration_identity_contract"] == (
+        "stage17_capability_pack_migration_versioned_identity_v1"
+    )
+    assert receipt["metadata_context"]["migration_versioned_pack_identity"] == (
+        f"{candidate['pack_id']}@{candidate['pack_version']}"
+    )
+    assert receipt["metadata_context"]["migration_pack_version_present"] is True
 
 
 def test_plugins_capability_pack_metadata_receipts_bulk_dry_run_and_unconfirmed_apply_do_not_persist(
@@ -3208,6 +3251,7 @@ def test_plugins_capability_pack_metadata_receipts_bulk_blocks_ambiguous_pack_ve
     assert ambiguous_body["requirements"]["receipt_identity_contract"] == "capability_pack_metadata_receipt_id_v1"
     assert ambiguous_body["governance"]["writes_registry_metadata"] is False
     assert ambiguous_body["governance"]["writes_receipts"] is False
+    assert ambiguous_body["governance"]["versioned_pack_identity_required"] is True
     ambiguous_selection = ambiguous_body["ambiguous_pack_selections"][0]
     assert ambiguous_selection["pack_id"] == shared_pack_id
     assert ambiguous_selection["pack_versions"] == ["1.0.0", "2.0.0"]
@@ -3222,6 +3266,99 @@ def test_plugins_capability_pack_metadata_receipts_bulk_blocks_ambiguous_pack_ve
     for plugin_id in built_plugin_ids:
         fetched = client.get(f"/plugins/get?id={plugin_id}").json()["item"]
         assert "pack_metadata_receipt_id" not in fetched["meta"]
+
+
+def test_plugins_capability_pack_metadata_receipts_bulk_blocks_unversioned_pack_identity(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
+    client = TestClient(create_app())
+    pack_id = "ops.unversioned_migration"
+    built = client.post(
+        "/plugins/build",
+        json={
+            "name": "Unversioned Migration Guard Plugin",
+            "description": "Stage 17 migration versioned identity refusal coverage",
+            "actor": _PLUGIN_ACTOR,
+            "meta": {
+                **_forge_promotion_meta("unversioned_migration_guard"),
+                "pack_id": pack_id,
+                "pack_name": "Unversioned Migration Guard Pack",
+            },
+        },
+    )
+    assert built.status_code == 200
+    built_body = built.json()
+    assert built_body["ok"] is True
+    plugin_id = str(built_body["plugin_id"])
+
+    registry = plugins._load_registry()
+    current = plugins._read_plugin(registry, plugin_id)
+    assert current is not None
+    meta = dict(current.get("meta") or {})
+    meta.update(
+        {
+            "pack_id": pack_id,
+            "pack_version": "",
+            "pack_name": "Unversioned Migration Guard Pack",
+            "pack_metadata_source": "legacy_generated_projection",
+        }
+    )
+    current["meta"] = meta
+    plugins._write_plugin(registry, plugins._normalize_plugin_record(plugin_id, current))
+    plugins._save_registry_and_catalog(registry)
+
+    plan = client.get("/plugins/capabilities/packs/migration/plan").json()
+    candidate = next(item for item in plan["candidates"] if str(item.get("pack_id")) == pack_id)
+    assert candidate["pack_version"] == ""
+    receipt_dir = data_root / "artifacts" / "plugins" / "capability_packs" / "metadata_receipts"
+
+    blocked = client.post(
+        "/plugins/capabilities/packs/metadata/receipts/bulk-from-plan",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "attempt unversioned migration receipt",
+            "pack_ids": [pack_id],
+        },
+    )
+
+    assert blocked.status_code == 200
+    blocked_body = blocked.json()
+    assert blocked_body["ok"] is False
+    assert blocked_body["applied"] is False
+    assert blocked_body["status"] == "blocked"
+    assert blocked_body["error"] == "pack_version_required_for_migration_receipt"
+    assert blocked_body["projection_scope"] == "selected_packs"
+    assert blocked_body["global_counts_included"] is False
+    assert blocked_body["before"]["candidate_total"] == 1
+    assert blocked_body["requirements"]["versioned_pack_identity_required"] is True
+    assert blocked_body["requirements"]["pack_version_required"] is True
+    assert blocked_body["requirements"]["migration_identity_contract"] == (
+        "stage17_capability_pack_migration_versioned_identity_v1"
+    )
+    assert blocked_body["governance"]["writes_registry_metadata"] is False
+    assert blocked_body["governance"]["writes_receipts"] is False
+    assert blocked_body["governance"]["versioned_pack_identity_required"] is True
+    assert not receipt_dir.exists()
+
+    selection = blocked_body["unversioned_pack_selections"][0]
+    assert selection["pack_id"] == pack_id
+    assert selection["pack_version"] == ""
+    assert selection["reason"] == "pack_version_missing_for_metadata_receipt_migration"
+    assert blocked_body["before"]["projection_evidence"]["selected_pack_ids"] == [pack_id]
+    assert blocked_body["before"]["projection_evidence"]["selected_capability_ids"] == [plugin_id]
+
+    fetched = client.get(f"/plugins/get?id={plugin_id}").json()["item"]
+    assert "pack_metadata_receipt_id" not in fetched["meta"]
 
 
 def test_plugins_capability_pack_metadata_receipts_bulk_selected_batch_reports_before_after_counts(
