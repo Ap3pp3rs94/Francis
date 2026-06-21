@@ -3667,11 +3667,24 @@ def _capability_pack_artifact_reconstruction_plan(
         )
 
     required_count = len(missing_capability_ids)
+    unsupported_missing_input_counts: dict[str, int] = {}
+    for capability in capabilities:
+        unsupported_inputs = [
+            value
+            for value in _unique_texts(capability.get("missing_inputs"), limit=25)
+            if value != "explicit_proposal_lineage_source_or_operator_reconstruction_decision"
+        ]
+        for missing_input in unsupported_inputs:
+            _count_label(unsupported_missing_input_counts, missing_input)
+    apply_supported = required_count > 0 and not unsupported_missing_input_counts
     return {
         "required": required_count > 0,
         "read_only": True,
         "writer_implemented": True,
         "writer_route": _CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_ROUTE,
+        "apply_supported": apply_supported,
+        "unsupported_missing_input_counts": dict(sorted(unsupported_missing_input_counts.items())),
+        "unsupported_reconstruction_inputs_present": bool(unsupported_missing_input_counts),
         "selection_policy": "missing_pack_specific_artifact_after_existing_link_scan",
         "validation_receipt_reconstruction_required_count": len(validation_missing),
         "proposal_lineage_reconstruction_required_count": len(proposal_missing),
@@ -3683,9 +3696,35 @@ def _capability_pack_artifact_reconstruction_plan(
         "does_not_approve_proposals": True,
         "does_not_promote_capabilities": True,
         "next_smallest_truthful_gap": (
-            "stage17_capability_pack_artifact_reconstruction_apply" if required_count else ""
+            "stage17_capability_pack_artifact_reconstruction_apply" if apply_supported else ""
         ),
     }
+
+
+def _capability_pack_artifact_reconstruction_apply_supported(item: dict[str, Any]) -> bool:
+    plan = (
+        item.get("artifact_reconstruction_plan") if isinstance(item.get("artifact_reconstruction_plan"), dict) else {}
+    )
+    return bool(plan.get("required")) and bool(plan.get("apply_supported"))
+
+
+def _capability_pack_artifact_reconstruction_missing_input_counts(
+    items: list[dict[str, Any]],
+) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for item in items:
+        plan = (
+            item.get("artifact_reconstruction_plan")
+            if isinstance(item.get("artifact_reconstruction_plan"), dict)
+            else {}
+        )
+        raw_counts = plan.get("unsupported_missing_input_counts")
+        plan_counts = raw_counts if isinstance(raw_counts, dict) else {}
+        for key, value in plan_counts.items():
+            missing_input = _safe_str(key).strip()
+            if missing_input:
+                counts[missing_input] = counts.get(missing_input, 0) + _count_value(value)
+    return dict(sorted(counts.items()))
 
 
 def _capability_pack_quality_remediation_next_action(
@@ -3713,7 +3752,8 @@ def _capability_pack_quality_remediation_next_gap(
     quality_backfill_candidate_count: int,
     validation_receipt_link_candidate_count: int = 0,
     proposal_lineage_link_candidate_count: int = 0,
-    artifact_reconstruction_required_count: int = 0,
+    artifact_reconstruction_apply_supported_count: int = 0,
+    artifact_reconstruction_missing_input_counts: dict[str, int] | None = None,
     blocker_counts: dict[str, int],
     fallback: str,
 ) -> str:
@@ -3723,8 +3763,15 @@ def _capability_pack_quality_remediation_next_gap(
         or proposal_lineage_link_candidate_count
     ):
         return "stage17_capability_pack_quality_evidence_remediation_apply"
-    if artifact_reconstruction_required_count:
+    if artifact_reconstruction_apply_supported_count:
         return "stage17_capability_pack_artifact_reconstruction_apply"
+    missing_inputs = artifact_reconstruction_missing_input_counts or {}
+    if missing_inputs.get("quality_test_references", 0) > 0:
+        return "stage17_capability_pack_quality_tests"
+    if missing_inputs.get("quality_doc_references", 0) > 0:
+        return "stage17_capability_pack_quality_docs"
+    if missing_inputs.get("pack_metadata_receipt", 0) > 0:
+        return "stage17_capability_pack_metadata_receipt_operator_review"
     for blocker, gap in (
         ("tests_missing", "stage17_capability_pack_quality_tests"),
         ("docs_missing", "stage17_capability_pack_quality_docs"),
@@ -3942,6 +3989,14 @@ def _capability_pack_quality_evidence_remediation_projection(
             ).get("required")
         )
     )
+    artifact_reconstruction_apply_supported_count = sum(
+        1 for item in items if _capability_pack_artifact_reconstruction_apply_supported(item)
+    )
+    artifact_reconstruction_unsupported_count = max(
+        0,
+        artifact_reconstruction_required_count - artifact_reconstruction_apply_supported_count,
+    )
+    artifact_reconstruction_missing_input_counts = _capability_pack_artifact_reconstruction_missing_input_counts(items)
     validation_receipt_reconstruction_required_count = sum(
         int(
             (
@@ -3979,6 +4034,9 @@ def _capability_pack_quality_evidence_remediation_projection(
         "validation_receipt_link_candidate_count": validation_receipt_link_candidate_count,
         "proposal_lineage_link_candidate_count": proposal_lineage_link_candidate_count,
         "artifact_reconstruction_required_count": artifact_reconstruction_required_count,
+        "artifact_reconstruction_apply_supported_count": artifact_reconstruction_apply_supported_count,
+        "artifact_reconstruction_unsupported_count": artifact_reconstruction_unsupported_count,
+        "artifact_reconstruction_missing_input_counts": artifact_reconstruction_missing_input_counts,
         "validation_receipt_reconstruction_required_count": validation_receipt_reconstruction_required_count,
         "proposal_lineage_reconstruction_required_count": proposal_lineage_reconstruction_required_count,
         "validation_receipt_backfill_required_count": sum(
@@ -4071,7 +4129,8 @@ def _capability_pack_quality_evidence_remediation_projection(
                 quality_backfill_candidate_count=quality_backfill_candidate_count,
                 validation_receipt_link_candidate_count=validation_receipt_link_candidate_count,
                 proposal_lineage_link_candidate_count=proposal_lineage_link_candidate_count,
-                artifact_reconstruction_required_count=artifact_reconstruction_required_count,
+                artifact_reconstruction_apply_supported_count=artifact_reconstruction_apply_supported_count,
+                artifact_reconstruction_missing_input_counts=artifact_reconstruction_missing_input_counts,
                 blocker_counts=blocker_counts,
                 fallback=_safe_str(promotion_remediation.get("next_smallest_truthful_gap")).strip(),
             )

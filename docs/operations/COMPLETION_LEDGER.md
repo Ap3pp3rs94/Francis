@@ -89977,6 +89977,104 @@ Remaining truthful gap:
   closure, promotion queue closure, enablement/execution readiness, full CI,
   and phase movement remain unproven.
 
+### 2026-06-21 17:56Z - Stage 17 artifact reconstruction queue reaches zero
+
+Current posture: Stage 17 / Capability Economy remains open. This pass repaired
+the final reusable-invocation pack through existing governed Stage 17 routes,
+then accepted a route/readback contract hardening that prevents future
+unsupported reconstruction candidates from being presented as immediately
+applyable. It does not claim proposal review, promotion, execution readiness,
+reuse leverage, full CI, or Stage 17 completion.
+
+What changed:
+
+- Applied the existing governed metadata receipt bulk route for
+  `legacy.generated.stage17reusableinvocationplugin`, recording metadata for
+  67 capabilities and reducing migration-plan candidates `1 -> 0`.
+- Applied the existing governed quality-standard remediation route for the same
+  pack, adding candidate test/doc references for 16 missing capabilities and
+  reducing quality-standard blockers `1 -> 0`.
+- Applied the existing governed artifact reconstruction route for the same pack,
+  reconstructing 22 validation receipts and 22 proposal lineage records, and
+  reducing the artifact reconstruction queue `1 -> 0`.
+- Hardened the quality-evidence readback contract so
+  reconstruction-required and reconstruction-apply-supported are separate
+  states. Unsupported reconstruction candidates now expose missing prerequisite
+  counts and route the next gap to quality tests/docs/metadata before
+  reconstruction apply.
+
+Live receipt evidence:
+
+- Metadata receipt:
+  `data\artifacts\plugins\capability_packs\metadata_receipts\capability_pack_metadata_1782064217_legacy-generated-stage17reusableinvocationplugin.json`.
+  SHA-256:
+  `FAC8612CFFDB0C8224B9DDCC2910342D00386D38832E0262F6BE13497B99D4C0`.
+  Dry-run fingerprint:
+  `e7aeff81c51c385555d7ec040f1f923628338a7f78b71824b147d2f7ed55f570`.
+- Quality-standard remediation receipt:
+  `data\artifacts\plugins\capability_packs\quality_standard_remediations\stage17_quality_standard_remediation_batch_1782064290_receipt.json`.
+  SHA-256:
+  `2B40D1A1010C478151FD9E4E1D5CD9E5C7BE652FB2DDCD26E280A7C344F96E0E`.
+  Dry-run fingerprint:
+  `d913c827f64d8a033fcd9a66e6926ff9d55ac318e24adc60bbfcb8109253f27c`.
+- Artifact reconstruction receipt:
+  `data\artifacts\plugins\capability_packs\artifact_reconstructions\stage17_artifact_reconstruction_batch_1782064354_16479c94_receipt.json`.
+  SHA-256:
+  `3E6E3AF83BE5F20AD486575ED6BCB66378D37CF7AC509592A10FF3D2A27D8D6A`.
+  Dry-run fingerprint:
+  `7385cf79d046d39a627f5415e72930069b2600c0703aeaf5d1f8466272e47263`.
+
+Validation:
+
+- Metadata apply returned `ok=true`, `applied=true`, `status=recorded`,
+  `recorded_pack_count=1`, `recorded_capability_count=67`,
+  `candidate_reduction_count=1`, and `remaining_candidate_total=0`.
+- Quality-standard apply returned `ok=true`, `applied=true`,
+  `status=recorded`, `recorded_pack_count=1`,
+  `recorded_capability_count=16`, `candidate_reduction_count=1`, and
+  `remaining_quality_standard_queue_count=0`.
+- Artifact reconstruction apply returned `ok=true`, `applied=true`,
+  `status=recorded`, `recorded_pack_count=1`,
+  `recorded_capability_count=22`, `candidate_reduction_count=1`,
+  `after_remediation_queue_count=0`,
+  `after_validation_receipt_reconstruction_required_count=0`, and
+  `after_proposal_lineage_reconstruction_required_count=0`.
+- Live quality-evidence remediation readback returned
+  `remediation_queue_count=0`,
+  `artifact_reconstruction_required_count=0`,
+  `artifact_reconstruction_apply_supported_count=0`,
+  `artifact_reconstruction_unsupported_count=0`,
+  `artifact_reconstruction_missing_input_counts={}`, and
+  `next_smallest_truthful_gap=stage17_capability_pack_operator_surface`.
+- Live migration-plan readback returned `candidate_total=0`.
+- Live quality-standard readback returned `blocked_pack_count=0`.
+- Live operator surface readback returned
+  `status=ready_for_operator_review` and
+  `next_smallest_truthful_gap=stage17_capability_pack_review_decisions`.
+- Live closure matrix now reports Stage 17 criteria 1 through 5 as ready and
+  criterion 6 as partial, with blocker
+  `multi_context_reuse_receipts_not_proven_by_catalog_readback`.
+- Focused validation for the readback contract hardening:
+  `.venv\Scripts\python.exe -m pytest tests\test_api_plugins.py::test_plugins_capability_pack_quality_evidence_readback_does_not_select_unsupported_reconstruction tests\test_api_plugins.py::test_plugins_capability_pack_quality_evidence_remediation_projects_artifact_reconstruction_plan tests\test_api_plugins.py::test_plugins_capability_pack_quality_evidence_remediation_reconstructs_missing_artifacts -q --tb=short`.
+- Formatting/lint validation:
+  `.venv\Scripts\python.exe -m ruff check --no-cache src\francis\api\routes\plugins.py tests\test_api_plugins.py`,
+  `.venv\Scripts\python.exe -m ruff format --check --no-cache src\francis\api\routes\plugins.py tests\test_api_plugins.py`,
+  and `git diff --check -- src/francis/api/routes/plugins.py tests/test_api_plugins.py`.
+
+Remaining truthful gap:
+
+- Stage 17 remains open. The artifact reconstruction queue is closed, but
+  proposal review decisions and promotion are not closed.
+- Pack operator surface is ready for operator review and now names
+  `stage17_capability_pack_review_decisions` as the next smallest truthful gap.
+- Capability library promotion plan remains blocked pending review decisions;
+  readback shows `candidate_pack_count=29`,
+  `candidate_capability_count=421`, and `promotable_capability_count=421`.
+- Closure matrix criterion 6 remains partial until reuse leverage is proven
+  across multiple real contexts.
+- Full local `.\scripts\check.ps1` and GitHub CI remain unproven for this
+  checkpoint.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

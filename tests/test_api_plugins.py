@@ -5529,6 +5529,8 @@ def test_plugins_capability_pack_quality_evidence_remediation_projects_artifact_
         "docs",
         "documentation",
         "quality",
+        "pack_metadata_receipt_id",
+        "pack_metadata_receipt_path",
         "proposal_id",
         "forge_proposal_id",
         "proposal_path",
@@ -5554,8 +5556,14 @@ def test_plugins_capability_pack_quality_evidence_remediation_projects_artifact_
     assert body["governance"]["artifact_reconstruction_plan_only"] is True
     assert body["governance"]["artifact_reconstruction_writer_implemented"] is True
     assert body["artifact_reconstruction_required_count"] >= 1
+    assert body["artifact_reconstruction_apply_supported_count"] == 0
+    assert body["artifact_reconstruction_unsupported_count"] >= 1
+    assert body["artifact_reconstruction_missing_input_counts"]["quality_doc_references"] >= 1
+    assert body["artifact_reconstruction_missing_input_counts"]["quality_test_references"] >= 1
+    assert body["artifact_reconstruction_missing_input_counts"]["pack_metadata_receipt"] >= 1
     assert body["validation_receipt_reconstruction_required_count"] >= 1
     assert body["proposal_lineage_reconstruction_required_count"] >= 1
+    assert body["next_smallest_truthful_gap"] == "stage17_capability_pack_quality_tests"
 
     item = next(entry for entry in body["remediation_queue"] if entry["pack_id"] == pack_id)
     assert item["pack_version"] == pack_version
@@ -5571,24 +5579,32 @@ def test_plugins_capability_pack_quality_evidence_remediation_projects_artifact_
     assert reconstruction["read_only"] is True
     assert reconstruction["writer_implemented"] is True
     assert reconstruction["writer_route"] == "/plugins/capabilities/packs/quality/evidence/remediation/reconstruct"
+    assert reconstruction["apply_supported"] is False
+    assert reconstruction["unsupported_reconstruction_inputs_present"] is True
+    assert reconstruction["unsupported_missing_input_counts"] == {
+        "pack_metadata_receipt": 1,
+        "quality_doc_references": 1,
+        "quality_test_references": 1,
+    }
     assert reconstruction["selection_policy"] == "missing_pack_specific_artifact_after_existing_link_scan"
     assert reconstruction["validation_receipt_reconstruction_required_count"] == 1
     assert reconstruction["proposal_lineage_reconstruction_required_count"] == 1
     assert reconstruction["does_not_write_validation_receipts"] is True
     assert reconstruction["does_not_write_proposals"] is True
     assert reconstruction["does_not_approve_proposals"] is True
-    assert reconstruction["next_smallest_truthful_gap"] == ("stage17_capability_pack_artifact_reconstruction_apply")
+    assert reconstruction["next_smallest_truthful_gap"] == ""
 
     capability_plan = reconstruction["capabilities"][0]
     assert capability_plan["capability"] == plugin_id
     assert capability_plan["needs_validation_receipt"] is True
     assert capability_plan["needs_proposal_lineage"] is True
     assert capability_plan["available_inputs"]["registry_metadata"] is True
-    assert capability_plan["available_inputs"]["pack_metadata_receipt"] is True
+    assert capability_plan["available_inputs"]["pack_metadata_receipt"] is False
     assert capability_plan["available_inputs"]["existing_validation_receipt_link"] is False
     assert capability_plan["available_inputs"]["existing_proposal_lineage_link"] is False
     assert "quality_test_references" in capability_plan["missing_inputs"]
     assert "quality_doc_references" in capability_plan["missing_inputs"]
+    assert "pack_metadata_receipt" in capability_plan["missing_inputs"]
     assert "explicit_proposal_lineage_source_or_operator_reconstruction_decision" in (capability_plan["missing_inputs"])
     assert (
         "create_or_attach_pack_specific_validation_receipt_after_validation"
@@ -5607,6 +5623,127 @@ def test_plugins_capability_pack_quality_evidence_remediation_projects_artifact_
     assert "validation_receipt_id" not in post_meta
     assert not validation_path.exists()
     assert not proposal_path.exists()
+
+
+def test_plugins_capability_pack_quality_evidence_readback_does_not_select_unsupported_reconstruction(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
+    client = TestClient(create_app())
+    pack_id = "legacy.generated.unsupportedreconstructionplugin"
+    pack_version = "1.0.0"
+    plugin_ids: list[str] = []
+    for index in range(2):
+        built = client.post(
+            "/plugins/build",
+            json={
+                "name": f"Unsupported Reconstruction Prerequisite Plugin {index}",
+                "description": "Stage 17 unsupported reconstruction prerequisite fixture",
+                "actor": _PLUGIN_ACTOR,
+                "meta": {
+                    **_forge_promotion_meta(f"unsupported_reconstruction_prerequisite_{index}"),
+                    "pack_id": pack_id,
+                    "pack_version": pack_version,
+                    "pack_name": "Unsupported Reconstruction Prerequisite Pack",
+                },
+            },
+        )
+        assert built.status_code == 200
+        built_body = built.json()
+        assert built_body["ok"] is True
+        plugin_ids.append(str(built_body["plugin_id"]))
+
+    for artifact_dir in (
+        data_root / "artifacts" / "plugins" / "validations",
+        data_root / "artifacts" / "plugins" / "proposals",
+    ):
+        for artifact_path in artifact_dir.glob("*.json"):
+            artifact_path.unlink(missing_ok=True)
+
+    registry = plugins._load_registry()
+    for plugin_id in plugin_ids:
+        plugin = plugins._read_plugin(registry, plugin_id)
+        assert plugin is not None
+        meta = dict(plugin.get("meta") or {})
+        for key in (
+            "tests",
+            "test_refs",
+            "docs",
+            "documentation",
+            "quality",
+            "pack_metadata_receipt_id",
+            "pack_metadata_receipt_path",
+            "proposal_id",
+            "forge_proposal_id",
+            "proposal_path",
+            "validation_receipt_id",
+            "validation_receipt_path",
+        ):
+            meta.pop(key, None)
+        plugin["meta"] = meta
+        plugins._write_plugin(registry, plugins._normalize_plugin_record(plugin_id, plugin))
+    plugins._save_registry_and_catalog(registry)
+    _disable_existing_artifact_link_candidates(monkeypatch, plugins)
+
+    readback = client.get("/plugins/capabilities/packs/quality/evidence/remediation")
+    assert readback.status_code == 200
+    readback_body = readback.json()
+    assert readback_body["ok"] is True
+    assert readback_body["status"] == "blocked"
+    assert readback_body["artifact_reconstruction_required_count"] == 1
+    assert readback_body["quality_reference_backfill_candidate_count"] == 0
+    assert readback_body["next_smallest_truthful_gap"] != "stage17_capability_pack_artifact_reconstruction_apply"
+
+    item = next(entry for entry in readback_body["remediation_queue"] if entry["pack_id"] == pack_id)
+    assert item["pack_metadata_receipts_present"] is False
+    assert item["quality_reference_backfill_candidate"] is False
+    reconstruction = item["artifact_reconstruction_plan"]
+    assert reconstruction["required"] is True
+    assert reconstruction["capability_count"] == 2
+    assert reconstruction["writer_implemented"] is True
+    assert reconstruction["writer_route"] == "/plugins/capabilities/packs/quality/evidence/remediation/reconstruct"
+    assert reconstruction["next_smallest_truthful_gap"] != ("stage17_capability_pack_artifact_reconstruction_apply")
+    for capability in reconstruction["capabilities"]:
+        assert {
+            "quality_test_references",
+            "quality_doc_references",
+            "pack_metadata_receipt",
+        }.issubset(set(capability["missing_inputs"]))
+
+    dry_run = client.post(
+        "/plugins/capabilities/packs/quality/evidence/remediation/reconstruct",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "dry run must not fabricate unsupported reconstruction",
+            "pack_ids": [pack_id],
+            "dry_run": True,
+        },
+    )
+    assert dry_run.status_code == 200
+    dry_run_body = dry_run.json()
+    assert dry_run_body["ok"] is True
+    assert dry_run_body["applied"] is False
+    assert dry_run_body["status"] == "no_supported_artifact_reconstruction"
+    assert dry_run_body["planned_pack_count"] == 0
+    assert dry_run_body["recorded_capability_count"] == 0
+    assert dry_run_body["candidate_reduction_count"] == 0
+    assert dry_run_body["before_remediation_queue_count"] == 1
+    assert dry_run_body["after_remediation_queue_count"] == 1
+    skipped = dry_run_body["skipped"][0]
+    assert skipped["pack_id"] == pack_id
+    assert skipped["error"] == "required_reconstruction_inputs_missing"
+    assert dry_run_body["governance"]["writes_registry_metadata"] is False
+    assert dry_run_body["governance"]["writes_validation_receipts"] is False
+    assert dry_run_body["governance"]["writes_proposals"] is False
 
 
 def test_plugins_capability_pack_quality_evidence_reconstruction_dry_run_avoids_registry_persistence(
