@@ -190,8 +190,10 @@ function New-GateEvidenceDetails {
     pilot_identity_continuity_reference_fingerprint = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['pilot_identity_continuity_reference_fingerprint']) { '' } else { [string]$Payload.pilot_identity_continuity_reference_fingerprint }
     next_required_physical_input = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['next_required_physical_input']) { '' } else { [string]$Payload.next_required_physical_input }
     measurement_capture_plan_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['measurement_capture_plan_contract']) { '' } else { [string]$Payload.measurement_capture_plan_contract }
+    measurement_capture_plan_status_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['measurement_capture_plan_status_contract']) { '' } else { [string]$Payload.measurement_capture_plan_status_contract }
     measurement_capture_plan_not_completion_evidence = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['measurement_capture_plan_not_completion_evidence']) { $false } else { [bool]$Payload.measurement_capture_plan_not_completion_evidence }
     measurement_capture_plan = @(Get-PayloadObjectArrayProperty -Payload $Payload -Name 'measurement_capture_plan')
+    measurement_capture_plan_status = @(Get-PayloadObjectArrayProperty -Payload $Payload -Name 'measurement_capture_plan_status')
     next_actions = @(Get-PayloadArrayProperty -Payload $Payload -Name 'next_actions')
   }
 }

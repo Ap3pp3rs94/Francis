@@ -181,6 +181,17 @@ def test_fr017_measurement_intake_reports_template_as_pending() -> None:
     assert "left_right_independence.values_not_copied_between_sides" in safety_step["required_fields"]
     assert "safety_screen.loss_of_grip_strength" in safety_step["required_fields"]
     assert "any_safety_screen_symptom_is_true" in safety_step["stop_if"]
+    assert "intake readiness only" in payload["measurement_capture_plan_status_contract"]
+    capture_plan_status = payload["measurement_capture_plan_status"]
+    assert isinstance(capture_plan_status, list)
+    assert [step["id"] for step in capture_plan_status] == [step["id"] for step in capture_plan]
+    assert all(step["status"] == "pending_required_fields" for step in capture_plan_status)
+    assert all(step["ready_for_measurement_intake"] is False for step in capture_plan_status)
+    assert "evidence.date" in capture_plan_status[0]["missing_fields"]
+    assert "repeatability.left.max_delta_mm" in capture_plan_status[1]["missing_fields"]
+    assert "repeatability.right.max_delta_mm" in capture_plan_status[2]["missing_fields"]
+    assert "marked_zones.left.wrist_bone_boundary" in capture_plan_status[3]["missing_fields"]
+    assert "safety_screen.loss_of_grip_strength" in capture_plan_status[4]["missing_fields"]
     assert "evidence.date" in payload["missing_fields"]
     assert "evidence.pilot_id" in payload["missing_fields"]
     assert "evidence.measurement_tool" in payload["missing_fields"]
@@ -295,6 +306,15 @@ def test_fr017_measurement_intake_accepts_complete_symptom_free_input(tmp_path: 
     assert payload["landmark_confirmation_blockers"] == []
     assert payload["measurement_note_blockers"] == []
     assert payload["safety_blockers"] == []
+    assert "intake readiness only" in payload["measurement_capture_plan_status_contract"]
+    assert [step["status"] for step in payload["measurement_capture_plan_status"]] == [
+        "ready_for_measurement_intake_review",
+        "ready_for_measurement_intake_review",
+        "ready_for_measurement_intake_review",
+        "ready_for_measurement_intake_review",
+        "ready_for_measurement_intake_review",
+    ]
+    assert all(step["ready_for_measurement_intake"] is True for step in payload["measurement_capture_plan_status"])
     assert payload["measurement_bounds_mm"]["wrist_clearance_gap"]["min"] == 10
     assert "YYYY-MM-DD" in payload["evidence_date_contract"]
     assert "metric" in payload["measurement_tool_contract"]
@@ -819,6 +839,11 @@ def test_fr017_measurement_intake_blocks_symptom_positive_input(tmp_path: Path) 
     assert result["physical_validation_complete"] is False
     assert result["fr018_implementation_cleared"] is False
     assert result["safety_blockers"] == ["tingling"]
+    capture_status = {step["id"]: step for step in result["measurement_capture_plan_status"]}
+    safety_status = capture_status["left_right_independence_and_safety_screen"]
+    assert safety_status["status"] == "failed_stop_condition_or_blocking_signal"
+    assert safety_status["ready_for_measurement_intake"] is False
+    assert safety_status["blocking_signals"] == ["safety_screen.tingling"]
 
 
 def test_fr017_measurement_intake_safety_symptom_overrides_pending_measurement_fields(

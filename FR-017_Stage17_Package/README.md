@@ -67,4 +67,4 @@ Any numbness, tingling, cold fingers, discoloration, hand weakness, wrist pain, 
 
 ## First Physical-Input Handoff
 
-Run `scripts/fr017-measurement-intake.ps1 -Mode Status` before entering pilot data. The returned `measurement_capture_plan` is the operator-facing capture order for the first FR-017 physical-input gate. It is not completion evidence; it cannot mark physical validation complete, clear powered or frame-coupled testing, or clear FR-018.
+Run `scripts/fr017-measurement-intake.ps1 -Mode Status` before entering pilot data. The returned `measurement_capture_plan` is the operator-facing capture order for the first FR-017 physical-input gate, and `measurement_capture_plan_status` reports which capture groups are still pending, invalid, or blocked for the supplied record. These fields are not completion evidence; they cannot mark physical validation complete, clear powered or frame-coupled testing, or clear FR-018.

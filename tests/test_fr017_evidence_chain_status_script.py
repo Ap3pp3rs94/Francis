@@ -65,12 +65,19 @@ def test_fr017_evidence_chain_status_stops_at_measurement_template() -> None:
     )
     assert payload["first_blocking_details"]["measurement_capture_plan_not_completion_evidence"] is True
     assert "not physical validation evidence" in payload["first_blocking_details"]["measurement_capture_plan_contract"]
+    assert "intake readiness only" in payload["first_blocking_details"]["measurement_capture_plan_status_contract"]
     capture_plan = payload["first_blocking_details"]["measurement_capture_plan"]
     assert isinstance(capture_plan, list)
     assert capture_plan[0]["id"] == "setup_and_safety_brief"
     assert "evidence.measurement_tool" in capture_plan[0]["required_fields"]
     assert capture_plan[-1]["id"] == "left_right_independence_and_safety_screen"
     assert "any_safety_screen_symptom_is_true" in capture_plan[-1]["stop_if"]
+    capture_plan_status = payload["first_blocking_details"]["measurement_capture_plan_status"]
+    assert isinstance(capture_plan_status, list)
+    assert [step["id"] for step in capture_plan_status] == [step["id"] for step in capture_plan]
+    assert all(step["status"] == "pending_required_fields" for step in capture_plan_status)
+    assert "evidence.date" in capture_plan_status[0]["missing_fields"]
+    assert "safety_screen.loss_of_grip_strength" in capture_plan_status[-1]["missing_fields"]
     assert "evidence.date" in payload["first_blocking_details"]["missing_fields"]
     assert "sides.left.wrist_clearance_gap" in payload["first_blocking_details"]["missing_fields"]
     missing_fields = payload["first_blocking_details"]["missing_fields"]

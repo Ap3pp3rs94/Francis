@@ -542,6 +542,99 @@ function Add-IdenticalLeftRightMeasurementProfileCheck {
   }
 }
 
+function Add-UniqueString {
+  param(
+    [System.Collections.Generic.List[string]]$Target,
+    [object]$Value
+  )
+
+  if ($null -eq $Value) {
+    return
+  }
+  $Text = ([string]$Value).Trim()
+  if ([string]::IsNullOrWhiteSpace($Text)) {
+    return
+  }
+  if (-not $Target.Contains($Text)) {
+    $Target.Add($Text) | Out-Null
+  }
+}
+
+function Test-SignalMatchesPrefix {
+  param(
+    [string]$Signal,
+    [string]$Prefix
+  )
+
+  if ([string]::Equals($Signal, $Prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+    return $true
+  }
+  return $Signal.StartsWith($Prefix + '.', [System.StringComparison]::OrdinalIgnoreCase) -or
+    $Signal.StartsWith($Prefix + '_', [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+function Get-CaptureStepSignals {
+  param(
+    [string[]]$Signals,
+    [string[]]$RequiredFields,
+    [string[]]$SignalPrefixes
+  )
+
+  $Result = New-Object System.Collections.Generic.List[string]
+  foreach ($Signal in (ConvertTo-StringArray -Value $Signals)) {
+    foreach ($Field in $RequiredFields) {
+      if (Test-SignalMatchesPrefix -Signal $Signal -Prefix $Field) {
+        Add-UniqueString -Target $Result -Value $Signal
+      }
+    }
+    foreach ($Prefix in $SignalPrefixes) {
+      if (Test-SignalMatchesPrefix -Signal $Signal -Prefix $Prefix) {
+        Add-UniqueString -Target $Result -Value $Signal
+      }
+    }
+  }
+  return @($Result.ToArray())
+}
+
+function New-CapturePlanStatus {
+  param(
+    [object[]]$CapturePlan,
+    [string[]]$MissingFields,
+    [string[]]$InvalidFields,
+    [string[]]$BlockingSignals
+  )
+
+  $Result = New-Object System.Collections.Generic.List[object]
+  foreach ($Step in $CapturePlan) {
+    $RequiredFields = @(ConvertTo-StringArray -Value $Step.required_fields)
+    $SignalPrefixes = @(ConvertTo-StringArray -Value $Step.blocking_signal_prefixes)
+    $StepMissing = @(Get-CaptureStepSignals -Signals $MissingFields -RequiredFields $RequiredFields -SignalPrefixes @())
+    $StepInvalid = @(Get-CaptureStepSignals -Signals $InvalidFields -RequiredFields $RequiredFields -SignalPrefixes @())
+    $StepBlockingSignals = @(Get-CaptureStepSignals -Signals $BlockingSignals -RequiredFields $RequiredFields -SignalPrefixes $SignalPrefixes)
+
+    $Status = 'ready_for_measurement_intake_review'
+    if ($StepBlockingSignals.Count -gt 0) {
+      $Status = 'failed_stop_condition_or_blocking_signal'
+    } elseif ($StepInvalid.Count -gt 0) {
+      $Status = 'invalid_required_fields'
+    } elseif ($StepMissing.Count -gt 0) {
+      $Status = 'pending_required_fields'
+    }
+
+    $Result.Add([ordered]@{
+        id = [string]$Step.id
+        status = $Status
+        validation_state = [string]$Step.validation_state
+        ready_for_measurement_intake = ($StepMissing.Count -eq 0 -and $StepInvalid.Count -eq 0 -and $StepBlockingSignals.Count -eq 0)
+        missing_fields = @($StepMissing)
+        invalid_fields = @($StepInvalid)
+        blocking_signals = @($StepBlockingSignals)
+        required_action = [string]$Step.required_action
+      }) | Out-Null
+  }
+  return @($Result.ToArray())
+}
+
 $RequiredMeasurementFields = @(
   'forearm_circumference_25mm_below_elbow_crease',
   'forearm_circumference_mid_forearm',
@@ -685,6 +778,12 @@ $MeasurementCapturePlan = @(
       'method_requires_tissue_or_wrist_bone_compression',
       'pilot_reports_pain_tingling_numbness_cold_fingers_discoloration_weakness_wrist_pain_sharp_pressure_reduced_motion_or_grip_loss'
     )
+    blocking_signal_prefixes = @(
+      'evidence.measurement_tool',
+      'evidence.method',
+      'evidence.posture',
+      'measurement_conditions'
+    )
   },
   [ordered]@{
     id = 'left_arm_numeric_measurement_passes'
@@ -711,6 +810,10 @@ $MeasurementCapturePlan = @(
       'left_repeatability_delta_exceeds_5mm',
       'any_safety_screen_symptom_is_true'
     )
+    blocking_signal_prefixes = @(
+      'sides.left',
+      'repeatability.left'
+    )
   },
   [ordered]@{
     id = 'right_arm_numeric_measurement_passes'
@@ -736,6 +839,10 @@ $MeasurementCapturePlan = @(
       'second_pass_not_completed',
       'right_repeatability_delta_exceeds_5mm',
       'any_safety_screen_symptom_is_true'
+    )
+    blocking_signal_prefixes = @(
+      'sides.right',
+      'repeatability.right'
     )
   },
   [ordered]@{
@@ -773,6 +880,10 @@ $MeasurementCapturePlan = @(
       'quick_release_or_glove_removal_path_not_confirmed',
       'left_right_zone_reference_is_copied_or_ambiguous'
     )
+    blocking_signal_prefixes = @(
+      'marked_zones',
+      'landmark_confirmation'
+    )
   },
   [ordered]@{
     id = 'left_right_independence_and_safety_screen'
@@ -802,6 +913,10 @@ $MeasurementCapturePlan = @(
       'left_and_right_references_are_not_distinct',
       'complete_left_right_numeric_profiles_are_identical_without_recheck',
       'any_safety_screen_symptom_is_true'
+    )
+    blocking_signal_prefixes = @(
+      'left_right_independence',
+      'safety_screen'
     )
   }
 )
@@ -980,6 +1095,32 @@ if ($ParseOk) {
   }
 }
 
+$SafetyScreenBlockingSignals = @(
+  $SafetyBlockers.ToArray() | ForEach-Object {
+    'safety_screen.' + ([string]$_)
+  }
+)
+
+$AllBlockingSignals = @(
+  Get-UniqueStringArray -Value @(
+    $MeasurementConsistencyViolations.ToArray()
+    $MarkedZoneSpecificityViolations.ToArray()
+    $RepeatabilityBlockers.ToArray()
+    $LeftRightIndependenceBlockers.ToArray()
+    $MeasurementConditionBlockers.ToArray()
+    $LandmarkConfirmationBlockers.ToArray()
+    $MeasurementNoteBlockers.ToArray()
+    $SafetyScreenBlockingSignals
+  )
+)
+$MeasurementCapturePlanStatus = @(
+  New-CapturePlanStatus `
+    -CapturePlan $MeasurementCapturePlan `
+    -MissingFields (Get-UniqueStringArray -Value $MissingFields.ToArray()) `
+    -InvalidFields (Get-UniqueStringArray -Value $InvalidFields.ToArray()) `
+    -BlockingSignals $AllBlockingSignals
+)
+
 $Output = [ordered]@{
   kind = 'francis.fr017.measurement_intake'
   mode = $Mode
@@ -1016,9 +1157,11 @@ $Output = [ordered]@{
   repeatability_max_delta_mm = $RepeatabilityMaxDeltaMm
   safety_screen_value_contract = 'Use unquoted JSON boolean false for absent symptoms. Use true only when the symptom is observed; any true symptom blocks FR-017 progression. Any string value such as yes/no/1/0/"true"/"false" is invalid.'
   measurement_capture_plan_contract = 'Read-only operator capture plan for the first physical-input gate. It lists required evidence groups and stop conditions, but it is not physical validation evidence and cannot mark FR-017 complete or clear FR-018.'
+  measurement_capture_plan_status_contract = 'Dynamic read-only status for each measurement_capture_plan group. A group is ready_for_measurement_intake only when its required fields have no missing values, no invalid values, and no matching blocking signals. This is intake readiness only, not physical validation completion.'
   measurement_capture_plan_not_completion_evidence = $true
   next_required_physical_input = 'complete_real_left_right_measurement_record_at_FR-017-MEASUREMENTS-INPUT-TEMPLATE.json'
   measurement_capture_plan = @($MeasurementCapturePlan)
+  measurement_capture_plan_status = @($MeasurementCapturePlanStatus)
   required_measurement_fields = $RequiredMeasurementFields
   required_marked_zone_fields = $RequiredMarkedZoneFields
   required_repeatability_fields = $RequiredRepeatabilityFields
