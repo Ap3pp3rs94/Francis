@@ -182,6 +182,15 @@ def test_fr017_measurement_intake_reports_template_as_pending() -> None:
     assert "safety_screen.loss_of_grip_strength" in safety_step["required_fields"]
     assert "any_safety_screen_symptom_is_true" in safety_step["stop_if"]
     assert "intake readiness only" in payload["measurement_capture_plan_status_contract"]
+    assert "not physical validation evidence" in payload["measurement_capture_summary_contract"]
+    assert payload["measurement_capture_total_groups"] == 5
+    assert payload["measurement_capture_ready_groups"] == 0
+    assert payload["measurement_capture_pending_groups"] == 5
+    assert payload["measurement_capture_invalid_groups"] == 0
+    assert payload["measurement_capture_failed_groups"] == 0
+    assert payload["measurement_capture_first_blocking_group_id"] == "setup_and_safety_brief"
+    assert payload["measurement_capture_first_blocking_group_status"] == "pending_required_fields"
+    assert "brief stop conditions" in payload["measurement_capture_first_blocking_group_action"]
     capture_plan_status = payload["measurement_capture_plan_status"]
     assert isinstance(capture_plan_status, list)
     assert [step["id"] for step in capture_plan_status] == [step["id"] for step in capture_plan]
@@ -307,6 +316,14 @@ def test_fr017_measurement_intake_accepts_complete_symptom_free_input(tmp_path: 
     assert payload["measurement_note_blockers"] == []
     assert payload["safety_blockers"] == []
     assert "intake readiness only" in payload["measurement_capture_plan_status_contract"]
+    assert payload["measurement_capture_total_groups"] == 5
+    assert payload["measurement_capture_ready_groups"] == 5
+    assert payload["measurement_capture_pending_groups"] == 0
+    assert payload["measurement_capture_invalid_groups"] == 0
+    assert payload["measurement_capture_failed_groups"] == 0
+    assert payload["measurement_capture_first_blocking_group_id"] == ""
+    assert payload["measurement_capture_first_blocking_group_status"] == ""
+    assert payload["measurement_capture_first_blocking_group_action"] == ""
     assert [step["status"] for step in payload["measurement_capture_plan_status"]] == [
         "ready_for_measurement_intake_review",
         "ready_for_measurement_intake_review",
@@ -839,6 +856,11 @@ def test_fr017_measurement_intake_blocks_symptom_positive_input(tmp_path: Path) 
     assert result["physical_validation_complete"] is False
     assert result["fr018_implementation_cleared"] is False
     assert result["safety_blockers"] == ["tingling"]
+    assert result["measurement_capture_total_groups"] == 5
+    assert result["measurement_capture_ready_groups"] == 4
+    assert result["measurement_capture_failed_groups"] == 1
+    assert result["measurement_capture_first_blocking_group_id"] == "left_right_independence_and_safety_screen"
+    assert result["measurement_capture_first_blocking_group_status"] == "failed_stop_condition_or_blocking_signal"
     capture_status = {step["id"]: step for step in result["measurement_capture_plan_status"]}
     safety_status = capture_status["left_right_independence_and_safety_screen"]
     assert safety_status["status"] == "failed_stop_condition_or_blocking_signal"

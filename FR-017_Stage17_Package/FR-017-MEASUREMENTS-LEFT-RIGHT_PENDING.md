@@ -30,7 +30,7 @@ REQUIRES MEASUREMENT
 - Marked-zone evidence references must be side-specific. Do not reuse the same reference text for left and right on a zone unless the reference itself names distinct left and right labels or anchors.
 - The measurement-intake JSON requires explicit left/right independence evidence: left arm measured separately, right arm measured separately, side labels verified, values not copied between sides, and distinct left/right measurement references.
 - If every required left/right numeric measurement is exactly identical, the intake gate treats the record as requiring a left/right recheck before progression.
-- Before entering real pilot data, run `scripts/fr017-measurement-intake.ps1 -Mode Status` and follow the returned `measurement_capture_plan`. After entering a partial record, rerun the same command and use `measurement_capture_plan_status` to locate pending, invalid, or blocked capture groups. These readbacks are guidance for the first physical-input gate and are not physical validation evidence.
+- Before entering real pilot data, run `scripts/fr017-measurement-intake.ps1 -Mode Status` and follow the returned `measurement_capture_plan`. After entering a partial record, rerun the same command and use `measurement_capture_plan_status` plus `measurement_capture_first_blocking_group_id` to locate pending, invalid, or blocked capture groups. These readbacks are guidance for the first physical-input gate and are not physical validation evidence.
 
 ## Required Measurements
 

@@ -635,6 +635,48 @@ function New-CapturePlanStatus {
   return @($Result.ToArray())
 }
 
+function New-CapturePlanSummary {
+  param([object[]]$CapturePlanStatus)
+
+  $ReadyCount = 0
+  $PendingCount = 0
+  $InvalidCount = 0
+  $FailedCount = 0
+  $FirstBlockingGroupId = ''
+  $FirstBlockingGroupStatus = ''
+  $FirstBlockingGroupAction = ''
+
+  foreach ($Step in $CapturePlanStatus) {
+    $StepStatus = [string]$Step.status
+    if ($StepStatus -eq 'ready_for_measurement_intake_review') {
+      $ReadyCount += 1
+    } elseif ($StepStatus -eq 'pending_required_fields') {
+      $PendingCount += 1
+    } elseif ($StepStatus -eq 'invalid_required_fields') {
+      $InvalidCount += 1
+    } elseif ($StepStatus -eq 'failed_stop_condition_or_blocking_signal') {
+      $FailedCount += 1
+    }
+
+    if ([string]::IsNullOrWhiteSpace($FirstBlockingGroupId) -and $StepStatus -ne 'ready_for_measurement_intake_review') {
+      $FirstBlockingGroupId = [string]$Step.id
+      $FirstBlockingGroupStatus = $StepStatus
+      $FirstBlockingGroupAction = [string]$Step.required_action
+    }
+  }
+
+  return [ordered]@{
+    total_groups = @($CapturePlanStatus).Count
+    ready_groups = $ReadyCount
+    pending_groups = $PendingCount
+    invalid_groups = $InvalidCount
+    failed_groups = $FailedCount
+    first_blocking_group_id = $FirstBlockingGroupId
+    first_blocking_group_status = $FirstBlockingGroupStatus
+    first_blocking_group_action = $FirstBlockingGroupAction
+  }
+}
+
 $RequiredMeasurementFields = @(
   'forearm_circumference_25mm_below_elbow_crease',
   'forearm_circumference_mid_forearm',
@@ -1120,6 +1162,7 @@ $MeasurementCapturePlanStatus = @(
     -InvalidFields (Get-UniqueStringArray -Value $InvalidFields.ToArray()) `
     -BlockingSignals $AllBlockingSignals
 )
+$MeasurementCapturePlanSummary = New-CapturePlanSummary -CapturePlanStatus $MeasurementCapturePlanStatus
 
 $Output = [ordered]@{
   kind = 'francis.fr017.measurement_intake'
@@ -1158,10 +1201,19 @@ $Output = [ordered]@{
   safety_screen_value_contract = 'Use unquoted JSON boolean false for absent symptoms. Use true only when the symptom is observed; any true symptom blocks FR-017 progression. Any string value such as yes/no/1/0/"true"/"false" is invalid.'
   measurement_capture_plan_contract = 'Read-only operator capture plan for the first physical-input gate. It lists required evidence groups and stop conditions, but it is not physical validation evidence and cannot mark FR-017 complete or clear FR-018.'
   measurement_capture_plan_status_contract = 'Dynamic read-only status for each measurement_capture_plan group. A group is ready_for_measurement_intake only when its required fields have no missing values, no invalid values, and no matching blocking signals. This is intake readiness only, not physical validation completion.'
+  measurement_capture_summary_contract = 'Scalar read-only summary of measurement_capture_plan_status for operator triage. The first blocking group points to the next capture group requiring work, but this is not physical validation evidence and does not clear fabrication, powered testing, or FR-018.'
   measurement_capture_plan_not_completion_evidence = $true
   next_required_physical_input = 'complete_real_left_right_measurement_record_at_FR-017-MEASUREMENTS-INPUT-TEMPLATE.json'
   measurement_capture_plan = @($MeasurementCapturePlan)
   measurement_capture_plan_status = @($MeasurementCapturePlanStatus)
+  measurement_capture_total_groups = [int]$MeasurementCapturePlanSummary.total_groups
+  measurement_capture_ready_groups = [int]$MeasurementCapturePlanSummary.ready_groups
+  measurement_capture_pending_groups = [int]$MeasurementCapturePlanSummary.pending_groups
+  measurement_capture_invalid_groups = [int]$MeasurementCapturePlanSummary.invalid_groups
+  measurement_capture_failed_groups = [int]$MeasurementCapturePlanSummary.failed_groups
+  measurement_capture_first_blocking_group_id = [string]$MeasurementCapturePlanSummary.first_blocking_group_id
+  measurement_capture_first_blocking_group_status = [string]$MeasurementCapturePlanSummary.first_blocking_group_status
+  measurement_capture_first_blocking_group_action = [string]$MeasurementCapturePlanSummary.first_blocking_group_action
   required_measurement_fields = $RequiredMeasurementFields
   required_marked_zone_fields = $RequiredMarkedZoneFields
   required_repeatability_fields = $RequiredRepeatabilityFields

@@ -67,6 +67,15 @@ def test_fr017_final_physical_gate_reports_default_templates_as_pending() -> Non
     )
     assert payload["upstream_measurement_capture_plan_not_completion_evidence"] is True
     assert "intake readiness only" in payload["upstream_measurement_capture_plan_status_contract"]
+    assert "not physical validation evidence" in payload["upstream_measurement_capture_summary_contract"]
+    assert payload["upstream_measurement_capture_total_groups"] == 5
+    assert payload["upstream_measurement_capture_ready_groups"] == 0
+    assert payload["upstream_measurement_capture_pending_groups"] == 5
+    assert payload["upstream_measurement_capture_invalid_groups"] == 0
+    assert payload["upstream_measurement_capture_failed_groups"] == 0
+    assert payload["upstream_measurement_capture_first_blocking_group_id"] == "setup_and_safety_brief"
+    assert payload["upstream_measurement_capture_first_blocking_group_status"] == "pending_required_fields"
+    assert "brief stop conditions" in payload["upstream_measurement_capture_first_blocking_group_action"]
     capture_status = payload["upstream_measurement_capture_plan_status"]
     assert isinstance(capture_status, list)
     assert [step["id"] for step in capture_status] == [
@@ -462,6 +471,13 @@ def test_fr017_final_physical_gate_exposes_measurement_safety_blocker(tmp_path: 
     assert result["upstream_mockup_status"] == "failed_requires_redesign_or_medical_review"
     assert result["upstream_measurement_intake_status"] == "failed_requires_redesign_or_medical_review"
     assert result["upstream_safety_blockers"] == ["tingling"]
+    assert result["upstream_measurement_capture_total_groups"] == 5
+    assert result["upstream_measurement_capture_ready_groups"] == 4
+    assert result["upstream_measurement_capture_failed_groups"] == 1
+    assert result["upstream_measurement_capture_first_blocking_group_id"] == "left_right_independence_and_safety_screen"
+    assert (
+        result["upstream_measurement_capture_first_blocking_group_status"] == "failed_stop_condition_or_blocking_signal"
+    )
     capture_status = {step["id"]: step for step in result["upstream_measurement_capture_plan_status"]}
     safety_status = capture_status["left_right_independence_and_safety_screen"]
     assert safety_status["status"] == "failed_stop_condition_or_blocking_signal"
