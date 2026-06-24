@@ -1,0 +1,108 @@
+{
+  "kind": "francis.fr017.pilot_static_fit.v1",
+  "component": "FR-017 Forearm Cuffs",
+  "evidence": {
+    "date": "PENDING",
+    "observer": "PENDING",
+    "pilot_id": "PENDING",
+    "prototype_revision": "PENDING",
+    "measurement_record_path": "PENDING",
+    "mockup_build_record_path": "PENDING",
+    "mannequin_interface_record_path": "PENDING",
+    "test_duration_minutes": "PENDING"
+  },
+  "field_contract": {
+    "evidence_date": "Use an ISO 8601 calendar date in YYYY-MM-DD format for evidence.date. Future-dated pilot static-fit evidence is invalid because it cannot be completed evidence.",
+    "placeholder_values": "Placeholder text such as PENDING is treated as missing evidence case-insensitively and after trimming. Lowercase, padded, or whitespace-only placeholders cannot satisfy required FR-017 pilot static-fit fields.",
+    "pilot_identity_linkage": "evidence.pilot_id must match evidence.pilot_id in the linked measurement record. Do not use static-fit evidence for one pilot with measurements collected from another pilot.",
+    "record_linkage": "measurement_record_path, mockup_build_record_path, and mannequin_interface_record_path must resolve to the same records passed into the pilot static-fit gate. Do not point static-fit evidence at stale, copied, or unrelated upstream records.",
+    "evidence_chronology": "Pilot static-fit evidence.date must be the same as or later than the linked measurement, mockup, and mannequin evidence dates. Do not fabricate or backdate static-fit evidence before upstream evidence exists.",
+    "test_duration": "Use an unquoted JSON number greater than 0 for evidence.test_duration_minutes. Quoted numeric strings are invalid. PENDING is treated as missing evidence.",
+    "required_pass_checks": "Use unquoted JSON boolean true only when the static-fit condition is directly verified. Use false for a verified failure; false blocks progression.",
+    "symptoms": "Use false only when the symptom is absent. Use true when observed; true blocks progression. Do not use yes/no/1/0 or quoted true/false strings."
+  },
+  "preconditions": {
+    "non_powered_only": "PENDING",
+    "no_frame_or_power_coupling": "PENDING",
+    "observer_present": "PENDING",
+    "emergency_release_briefed": "PENDING",
+    "stop_on_symptoms": "PENDING",
+    "pilot_can_self_remove_or_abort": "PENDING"
+  },
+  "sides": {
+    "left": {
+      "baseline": {
+        "fingers_warm_before_donning": "PENDING",
+        "normal_color_before_donning": "PENDING",
+        "baseline_grip_present": "PENDING"
+      },
+      "static_checks": {
+        "cuff_below_elbow_crease": "PENDING",
+        "lower_cuff_above_wrist_bones": "PENDING",
+        "upper_strap_broad_non_compressive": "PENDING",
+        "lower_strap_broad_non_compressive": "PENDING",
+        "inner_forearm_clear": "PENDING",
+        "bone_relief_present": "PENDING",
+        "quick_release_visible_tactile_reachable": "PENDING",
+        "cuff_stable_without_migration": "PENDING",
+        "glove_removal_path_open": "PENDING",
+        "wrist_assembly_removal_path_open": "PENDING",
+        "cable_route_static_no_snag": "PENDING"
+      },
+      "post_doff": {
+        "fingers_warm_after_doffing": "PENDING",
+        "normal_color_after_doffing": "PENDING",
+        "grip_strength_unchanged": "PENDING"
+      },
+      "symptoms": {
+        "pain": "PENDING",
+        "tingling": "PENDING",
+        "numbness": "PENDING",
+        "cold_fingers": "PENDING",
+        "discoloration": "PENDING",
+        "hand_weakness": "PENDING",
+        "wrist_pain": "PENDING",
+        "sharp_pressure": "PENDING",
+        "reduced_finger_motion": "PENDING",
+        "loss_of_grip_strength": "PENDING"
+      }
+    },
+    "right": {
+      "baseline": {
+        "fingers_warm_before_donning": "PENDING",
+        "normal_color_before_donning": "PENDING",
+        "baseline_grip_present": "PENDING"
+      },
+      "static_checks": {
+        "cuff_below_elbow_crease": "PENDING",
+        "lower_cuff_above_wrist_bones": "PENDING",
+        "upper_strap_broad_non_compressive": "PENDING",
+        "lower_strap_broad_non_compressive": "PENDING",
+        "inner_forearm_clear": "PENDING",
+        "bone_relief_present": "PENDING",
+        "quick_release_visible_tactile_reachable": "PENDING",
+        "cuff_stable_without_migration": "PENDING",
+        "glove_removal_path_open": "PENDING",
+        "wrist_assembly_removal_path_open": "PENDING",
+        "cable_route_static_no_snag": "PENDING"
+      },
+      "post_doff": {
+        "fingers_warm_after_doffing": "PENDING",
+        "normal_color_after_doffing": "PENDING",
+        "grip_strength_unchanged": "PENDING"
+      },
+      "symptoms": {
+        "pain": "PENDING",
+        "tingling": "PENDING",
+        "numbness": "PENDING",
+        "cold_fingers": "PENDING",
+        "discoloration": "PENDING",
+        "hand_weakness": "PENDING",
+        "wrist_pain": "PENDING",
+        "sharp_pressure": "PENDING",
+        "reduced_finger_motion": "PENDING",
+        "loss_of_grip_strength": "PENDING"
+      }
+    }
+  }
+}

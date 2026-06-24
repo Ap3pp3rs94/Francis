@@ -1,0 +1,54 @@
+{
+  "kind": "francis.fr017.engineering_review.v1",
+  "component": "FR-017 Forearm Cuffs",
+  "evidence": {
+    "date": "PENDING",
+    "reviewer": "PENDING",
+    "reviewer_role": "PENDING",
+    "reviewer_credential_reference": "PENDING",
+    "pilot_id": "PENDING",
+    "quick_release_cable_snag_record_path": "PENDING",
+    "review_scope": "non-powered FR-017 forearm cuff physical-validation evidence review only"
+  },
+  "field_contract": {
+    "evidence_date": "Use an ISO 8601 calendar date in YYYY-MM-DD format for evidence.date. Future-dated engineering-review evidence is invalid because it cannot be completed evidence.",
+    "placeholder_values": "Placeholder text such as PENDING is treated as missing evidence case-insensitively and after trimming. Lowercase, padded, or whitespace-only placeholders cannot satisfy required FR-017 engineering-review fields.",
+    "pilot_identity_linkage": "evidence.pilot_id must match evidence.pilot_id in the linked quick-release/cable-snag record. Do not use engineering-review evidence for one pilot with release/cable evidence collected from another pilot.",
+    "evidence_chronology": "Engineering-review evidence.date must be the same as or later than the linked quick-release/cable-snag evidence.date. Do not fabricate or backdate engineering-review evidence before release/cable evidence exists.",
+    "required_pass_checks": "Use unquoted JSON boolean true only when the review item is directly verified and accepted. Use false for verified rejection or unmet criteria; false blocks progression.",
+    "required_false_checks": "Use unquoted JSON boolean false only when the prohibited clearance or redesign condition is not present. Use true when present; true blocks progression. Do not use yes/no/1/0 or quoted true/false strings.",
+    "record_linkage": "evidence.quick_release_cable_snag_record_path must resolve to the same quick-release/cable-snag record path passed into scripts/fr017-engineering-review-gate.ps1. Stale, copied, or unrelated release/cable evidence blocks progression.",
+    "review_scope": "evidence.review_scope must remain exactly \"non-powered FR-017 forearm cuff physical-validation evidence review only\". Broader powered, load-bearing, frame-coupled, FR-018, or general exosystem review scope is invalid for this gate."
+  },
+  "review_constraints": {
+    "documentation_package_reviewed": "PENDING",
+    "measurement_record_reviewed": "PENDING",
+    "mockup_record_reviewed": "PENDING",
+    "mannequin_record_reviewed": "PENDING",
+    "pilot_static_record_reviewed": "PENDING",
+    "pilot_movement_record_reviewed": "PENDING",
+    "quick_release_cable_record_reviewed": "PENDING",
+    "no_load_bearing_claim_approved": "PENDING",
+    "no_powered_testing_cleared": "PENDING",
+    "no_frame_coupled_testing_cleared": "PENDING",
+    "fr018_implementation_not_cleared": "PENDING",
+    "redesign_items_closed_or_blocked": "PENDING"
+  },
+  "safety_review": {
+    "circulation_nerve_risk_reviewed": "PENDING",
+    "quick_release_access_reviewed": "PENDING",
+    "glove_wrist_removal_reviewed": "PENDING",
+    "cable_route_reviewed": "PENDING",
+    "symptom_fail_conditions_reviewed": "PENDING",
+    "stop_conditions_preserved": "PENDING"
+  },
+  "review_decision": {
+    "non_powered_fr017_physical_validation_accepted": "PENDING",
+    "requires_redesign": "PENDING",
+    "load_bearing_use_approved": "PENDING",
+    "powered_testing_approved": "PENDING",
+    "frame_coupled_testing_approved": "PENDING",
+    "fr018_implementation_cleared": "PENDING",
+    "engineering_review_notes": "PENDING"
+  }
+}

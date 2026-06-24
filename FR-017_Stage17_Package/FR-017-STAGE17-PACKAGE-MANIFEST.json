@@ -1,0 +1,177 @@
+{
+  "package_id": "FR-017-STAGE17",
+  "component": "FR-017 Forearm Cuffs",
+  "date": "2026-06-23",
+  "status": {
+    "documentation": "complete",
+    "evidence_containers": "complete",
+    "physical_validation": "not_complete",
+    "powered_or_frame_coupled_testing": "not_cleared",
+    "fr_018_implementation": "not_cleared"
+  },
+  "source_basis": {
+    "governing_source": "active Pilot prompt",
+    "prior_fr017_source_found": false,
+    "excluded_collision": "Repository Stage 17 Capability Economy records are not FR-017 forearm-cuff source material."
+  },
+  "records": [
+    {
+      "path": "../FRANCIS_FR-017_Forearm_Cuffs_v1.0",
+      "kind": "master_manual",
+      "status": "complete"
+    },
+    {
+      "path": "README.md",
+      "kind": "package_index",
+      "status": "complete"
+    },
+    {
+      "path": "FR-017-MEASUREMENTS-LEFT-RIGHT_PENDING.md",
+      "kind": "measurement_record",
+      "status": "requires_measurement"
+    },
+    {
+      "path": "FR-017-MEASUREMENTS-INPUT-TEMPLATE.json",
+      "kind": "measurement_input_template",
+      "status": "complete"
+    },
+    {
+      "path": "FR-017-MOCKUP-BUILD-INPUT-TEMPLATE.json",
+      "kind": "mockup_build_input_template",
+      "status": "complete"
+    },
+    {
+      "path": "FR-017-MAPS-AND-LAYOUTS.md",
+      "kind": "maps_layouts_rollup",
+      "status": "complete"
+    },
+    {
+      "path": "FR-017-ADJUSTMENT-WORKSHEET_PENDING.md",
+      "kind": "adjustment_worksheet",
+      "status": "requires_pilot_static_test"
+    },
+    {
+      "path": "FR-017-FIT-2026-06-23-LEFT_PENDING.md",
+      "kind": "left_fit_record",
+      "status": "requires_pilot_static_and_movement_test"
+    },
+    {
+      "path": "FR-017-FIT-2026-06-23-RIGHT_PENDING.md",
+      "kind": "right_fit_record",
+      "status": "requires_pilot_static_and_movement_test"
+    },
+    {
+      "path": "FR-017-PILOT-STATIC-FIT-INPUT-TEMPLATE.json",
+      "kind": "pilot_static_fit_input_template",
+      "status": "complete"
+    },
+    {
+      "path": "FR-017-PILOT-MOVEMENT-INPUT-TEMPLATE.json",
+      "kind": "pilot_movement_input_template",
+      "status": "complete"
+    },
+    {
+      "path": "FR-017-MANNEQUIN-INTERFACE-TEST_PENDING.md",
+      "kind": "mannequin_interface_test",
+      "status": "requires_mannequin_test"
+    },
+    {
+      "path": "FR-017-MANNEQUIN-INTERFACE-INPUT-TEMPLATE.json",
+      "kind": "mannequin_interface_input_template",
+      "status": "complete"
+    },
+    {
+      "path": "FR-017-QUICK-RELEASE-TEST_PENDING.md",
+      "kind": "quick_release_test",
+      "status": "requires_pilot_static_and_mannequin_test"
+    },
+    {
+      "path": "FR-017-QUICK-RELEASE-CABLE-SNAG-INPUT-TEMPLATE.json",
+      "kind": "quick_release_cable_snag_input_template",
+      "status": "complete"
+    },
+    {
+      "path": "FR-017-ENGINEERING-REVIEW_PENDING.md",
+      "kind": "engineering_review_record",
+      "status": "requires_professional_engineering_review"
+    },
+    {
+      "path": "FR-017-ENGINEERING-REVIEW-INPUT-TEMPLATE.json",
+      "kind": "engineering_review_input_template",
+      "status": "complete"
+    },
+    {
+      "path": "FR-017-VALIDATION-GATE-CHAIN.md",
+      "kind": "validation_gate_chain_runbook",
+      "status": "complete"
+    },
+    {
+      "path": "FR-017-INTERFACE-MATRIX.md",
+      "kind": "interface_matrix",
+      "status": "complete"
+    },
+    {
+      "path": "FR-017-COMPLETION-GATE-2026-06-23.md",
+      "kind": "completion_gate",
+      "status": "complete_physical_gate_blocked"
+    },
+    {
+      "path": "FR-IMG-017_PROMPT.md",
+      "kind": "image_prompt",
+      "status": "complete"
+    },
+    {
+      "path": "FR-017-STAGE17-FINAL-AUDIT-2026-06-23.md",
+      "kind": "final_audit",
+      "status": "complete_physical_gate_blocked"
+    }
+  ],
+  "custom_records": [
+    "FR-017-CUSTOM-001",
+    "FR-017-CUSTOM-002",
+    "FR-017-CUSTOM-003",
+    "FR-017-CUSTOM-004",
+    "FR-017-CUSTOM-005",
+    "FR-017-CUSTOM-006",
+    "FR-017-CUSTOM-007",
+    "FR-017-CUSTOM-008",
+    "FR-017-CUSTOM-009",
+    "FR-017-CUSTOM-010",
+    "FR-017-CUSTOM-011",
+    "FR-017-CUSTOM-012",
+    "FR-017-CUSTOM-013",
+    "FR-017-CUSTOM-014",
+    "FR-017-CUSTOM-015",
+    "FR-017-CUSTOM-016",
+    "FR-017-CUSTOM-017",
+    "FR-017-CUSTOM-018",
+    "FR-017-CUSTOM-019"
+  ],
+  "blocked_inputs": [
+    "left_right_forearm_measurements",
+    "safety_critical_landmark_confirmation",
+    "soft_cuff_prototype_or_mockup",
+    "mannequin_or_arm_form",
+    "future_interface_mock_geometry",
+    "cable_sleeve_mock",
+    "pilot_static_fit_session",
+    "pilot_movement_session",
+    "quick_release_test_session",
+    "professional_engineering_review"
+  ],
+  "safety_fail_conditions": [
+    "numbness",
+    "tingling",
+    "cold_fingers",
+    "discoloration",
+    "hand_weakness",
+    "wrist_pain",
+    "sharp_pressure",
+    "reduced_finger_motion",
+    "loss_of_grip_strength",
+    "unconfirmed_landmark_boundaries",
+    "unreachable_release",
+    "trapped_glove_or_wrist_assembly",
+    "cable_crossing_palm_grip_wrist_bones_or_inner_elbow"
+  ]
+}

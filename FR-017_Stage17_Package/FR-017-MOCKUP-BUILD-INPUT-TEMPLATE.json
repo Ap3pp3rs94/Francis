@@ -1,0 +1,63 @@
+{
+  "kind": "francis.fr017.mockup_build.v1",
+  "component": "FR-017 Forearm Cuffs",
+  "evidence": {
+    "date": "PENDING",
+    "observer": "PENDING",
+    "build_method": "non-powered soft or semi-rigid cuff mockup only",
+    "measurement_record_path": "PENDING"
+  },
+  "field_contract": {
+    "evidence_date": "Use an ISO 8601 calendar date in YYYY-MM-DD format for evidence.date. Future-dated mockup evidence is invalid because it cannot be completed evidence.",
+    "placeholder_values": "Placeholder text such as PENDING is treated as missing evidence case-insensitively and after trimming. Lowercase, padded, or whitespace-only placeholders cannot satisfy required FR-017 mockup fields.",
+    "evidence_chronology": "Mockup evidence.date must be the same as or later than the linked measurement evidence.date. Do not fabricate or backdate mockup evidence before measurement evidence exists.",
+    "build_method": "Mockup evidence.build_method must explicitly state a non-powered soft or semi-rigid cuff mockup. Build-method text that omits non-powered or omits soft/semi-rigid construction is invalid because FR-017 cuffs are not powered joints, frames, armor, or load-bearing structures.",
+    "record_linkage": "evidence.measurement_record_path must resolve to the same measurement record path passed into the mockup readiness gate. Do not point a mockup record at stale, copied, or unrelated measurements.",
+    "materials": "Use specific material/component descriptions, not generic approval text.",
+    "constraints": "Use unquoted JSON boolean true only when the mockup condition is directly verified. Use false for a verified failure; false blocks progression. Do not use yes/no/1/0 or quoted true/false strings.",
+    "side_checks": "Use true only when the left/right mockup check is directly verified against the completed measurement record."
+  },
+  "materials": {
+    "padding_layer": "PENDING",
+    "semi_rigid_outer_layer": "PENDING",
+    "upper_forearm_strap": "PENDING",
+    "lower_forearm_strap": "PENDING",
+    "quick_release": "PENDING",
+    "outer_forearm_cable_sleeve": "PENDING",
+    "non_load_bearing_alignment_tabs": "PENDING",
+    "sensor_placeholder_blanks": "PENDING"
+  },
+  "constraints": {
+    "non_powered_only": "PENDING",
+    "no_load_bearing_claim": "PENDING",
+    "no_hard_inner_forearm_buckles": "PENDING",
+    "no_inner_elbow_crossing": "PENDING",
+    "no_wrist_bone_pressure": "PENDING",
+    "releases_visible_and_reachable": "PENDING",
+    "glove_removal_path_preserved": "PENDING",
+    "outer_forearm_cable_route_only": "PENDING",
+    "stop_on_symptoms": "PENDING"
+  },
+  "sides": {
+    "left": {
+      "upper_strap_width_matches_measurement": "PENDING",
+      "lower_strap_width_matches_measurement": "PENDING",
+      "bone_relief_channel_present": "PENDING",
+      "inner_forearm_no_pressure_zone_marked": "PENDING",
+      "wrist_clearance_kept": "PENDING",
+      "quick_release_installed_outer_or_lateral": "PENDING",
+      "alignment_tabs_non_load_bearing": "PENDING",
+      "cable_sleeve_outer_route_only": "PENDING"
+    },
+    "right": {
+      "upper_strap_width_matches_measurement": "PENDING",
+      "lower_strap_width_matches_measurement": "PENDING",
+      "bone_relief_channel_present": "PENDING",
+      "inner_forearm_no_pressure_zone_marked": "PENDING",
+      "wrist_clearance_kept": "PENDING",
+      "quick_release_installed_outer_or_lateral": "PENDING",
+      "alignment_tabs_non_load_bearing": "PENDING",
+      "cable_sleeve_outer_route_only": "PENDING"
+    }
+  }
+}

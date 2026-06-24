@@ -1,0 +1,538 @@
+# FRANCIS_FR-017_Forearm_Cuffs_v1.0
+
+FRANCIS ONLINE.
+Stage 17 loaded: FR-017 Forearm Cuffs.
+Continuity audit initiated.
+
+## A. FRANCIS STATUS SUMMARY
+
+FRANCIS status: Stage 17 documentation packet is complete as a provisional technical-manual section. Physical validation is not complete.
+
+- Current state: FR-017 forearm cuffs are defined as left/right-specific, padded, adjustable, removable, inspectable pilot-interface components.
+- Recovered source material: no prior FR-017 forearm-cuff document, image, checklist, or draft was found in the accessible local workspace. This packet uses the active prompt as the governing fallback specification.
+- Documentation completion percentage: 25/25 required Stage 17 packet deliverables documented, 100 percent documentation coverage.
+- Evidence-container completion percentage: 22/22 support records created in `FR-017_Stage17_Package`, including measurement intake template, safety-critical landmark confirmation fields, mockup build template, mannequin interface input template, pilot static fit input template, pilot movement input template, quick-release/cable-snag input template, engineering review input template, validation gate chain runbook, final audit, and manifest; physical evidence remains pending.
+- Physical validation completion percentage: 0 percent. No measurements, mannequin tests, pilot static tests, pilot movement tests, load tests, or professional engineering review records were available.
+- Highest-risk unresolved issue: neurovascular compression or movement restriction caused by cuff strap placement, padding shape, cable routing, or hidden releases.
+- Next concrete action: mark and confirm safety-critical landmarks, collect left/right forearm measurements, complete the non-powered mockup build record, complete the mannequin interface test record, complete pilot static and movement fit records, complete quick-release/cable-snag evidence, then obtain professional engineering review before any final physical completion audit, powered test, or frame-coupled test.
+
+Stage 17 is not complete for physical use until all failed or unvalidated fit, release, circulation, nerve, wrist, elbow, glove-removal, and cable-snag conditions are closed by evidence.
+
+## B. CONTINUITY AUDIT
+
+| Requirement | Existing status | Evidence or source | Gap | Action taken | Validation state |
+| --- | --- | --- | --- | --- | --- |
+| Left forearm cuff layout | Missing | Workspace search found no FR-017 forearm packet | Needs left-specific layout | Added FR-017-CUSTOM-001 and left layout | PROVISIONALLY DEFINED |
+| Right forearm cuff layout | Missing | Workspace search found no FR-017 forearm packet | Needs right-specific layout | Added FR-017-CUSTOM-002 and right layout | PROVISIONALLY DEFINED |
+| Upper forearm strap layout | Missing | Fallback specification | Needs safe proximal strap | Added FR-017-CUSTOM-003 | PROVISIONALLY DEFINED |
+| Lower forearm strap layout | Missing | Fallback specification | Needs wrist-safe distal strap | Added FR-017-CUSTOM-004 | PROVISIONALLY DEFINED |
+| Elbow-clearance map | Missing | Fallback specification | Must avoid inner elbow crease | Added FR-017-CUSTOM-005 | REQUIRES PILOT MOVEMENT TEST |
+| Wrist-clearance map | Missing | Fallback specification | Must avoid wrist bones and wrist joint removal path | Added FR-017-CUSTOM-006 | REQUIRES PILOT MOVEMENT TEST |
+| Circulation and nerve-safety map | Missing | Fallback specification | Needs symptom-based failure criteria | Added FR-017-CUSTOM-007 | REQUIRES PILOT STATIC TEST |
+| Forearm bone pressure-relief map | Missing | Fallback specification | Must avoid ulna/radius ridge pressure | Added FR-017-CUSTOM-008 | REQUIRES PILOT STATIC TEST |
+| Outer-forearm load-zone map | Missing | Fallback specification | Needs provisional low-force zone | Added FR-017-CUSTOM-009 | REQUIRES PROFESSIONAL ENGINEERING REVIEW |
+| Inner-forearm no-pressure-zone map | Missing | Fallback specification | Must avoid vessels, nerves, and tender tissue | Added FR-017-CUSTOM-010 | DOCUMENTED |
+| Grip and dexterity clearance map | Missing | Fallback specification | Needs hand open/close clearance | Added FR-017-CUSTOM-011 | REQUIRES PILOT MOVEMENT TEST |
+| Cuff-to-forearm-frame alignment map | Missing | Interface list | Must align with FR-032/FR-033 without bearing frame loads | Added FR-017-CUSTOM-012 | REQUIRES MANNEQUIN TEST |
+| Cuff-to-wrist-assembly relationship map | Missing | Interface list | Must preserve FR-045/FR-046 removal path | Added FR-017-CUSTOM-013 | REQUIRES MANNEQUIN TEST |
+| Cuff-to-glove relationship map | Missing | Interface list | Must preserve FR-066/FR-067 glove removal | Added FR-017-CUSTOM-014 | REQUIRES PILOT MOVEMENT TEST |
+| Left/right quick-release layouts | Missing | Interface list and safety rule | Must remain visible and reachable | Added FR-017-CUSTOM-015 | REQUIRES PILOT STATIC TEST |
+| Padding map | Missing | Fallback specification | Needs pressure zoning | Added FR-017-CUSTOM-016 | REQUIRES PILOT STATIC TEST |
+| Latch-sensor placeholder map | Missing | FR-149 interface | Must not locate sensors in pressure zones | Added FR-017-CUSTOM-017 | PROVISIONALLY DEFINED |
+| Pressure-sensor placeholder map | Missing | FR-145 interface | Must not create new pressure points | Added FR-017-CUSTOM-018 | PROVISIONALLY DEFINED |
+| Outer-forearm cable-sleeve route | Missing | FR-163 interface | Must avoid inner elbow, wrist bones, palm, and grip path | Added FR-017-CUSTOM-019 | REQUIRES PILOT MOVEMENT TEST |
+| Material options | Missing | Fallback specification | Needs soft/semi-rigid options | Added materials section | DOCUMENTED |
+| COTS component options | Missing | Fallback specification | Needs off-the-shelf options without safety claims | Added COTS section | DOCUMENTED |
+| Custom fabrication options | Missing | Fallback specification | Needs build paths without load claims | Added fabrication section | DOCUMENTED |
+| Future R&D options | Missing | Fallback specification | Needs non-claimed future options | Added R&D section | DOCUMENTED |
+| Fit-test worksheet | Missing | Fallback specification | Needs pass/fail evidence fields | Added worksheet | DOCUMENTED |
+| FR-IMG-017 technical image prompt | Missing | Fallback specification | Needs final illustration prompt | Added image prompt | DOCUMENTED |
+
+Conflict review: no recovered FR-017 source conflicted with this packet. The only naming collision found was local repository Stage 17 Capability Economy material, which is unrelated to FR-017 Forearm Cuffs and was not used as cuff evidence.
+
+## C. COMPLETED FR-017 DESIGN PACKET
+
+### 1. Scope
+
+FR-017 defines the left and right forearm cuffs for the compact defensive FRANCIS Tactical Adaptive Protective Exosystem. The cuffs stabilize the pilot lower arms and provide soft/semi-rigid interface geometry for future forearm frames, elbow joints, wrist assemblies, glove bases, palm interface, finger-sensor routing, grip-assist placeholders, forearm armor, upper-body wiring, and emergency release.
+
+The cuffs are not armor, powered joints, wrist joints, gloves, unvalidated load-bearing structures, or autonomous restraints. They must never trap, overpower, or prevent emergency egress by the pilot.
+
+### 2. Project Constants
+
+- Pilot reference height: 5'5".
+- Maximum external suit height: 5'7".
+- Suit posture: human-wearable, compact, matte-black, segmented, buildable proportions.
+- System constants: center-chest Orb-Core, rear Power Spine, no weapons, no ant logo, no insect branding, no giant mech proportions, no fantasy technology presented as completed engineering.
+
+### 3. Conservative Assumptions
+
+These assumptions allow documentation to proceed while measurements remain missing.
+
+- Left and right arms may differ in circumference, taper, sensitivity, range of motion, and preferred release reach.
+- FR-017 cuffs must support alignment and stabilization only. They must not be treated as structural lifting, impact, or load-bearing members.
+- Strap tension must be distributed over broad padded zones and must be loosenable quickly by the pilot.
+- A first prototype is limited to non-powered fit testing and interface mockup review.
+
+### 4. Missing Measurement Inputs
+
+Collect separate left and right values before fabrication.
+
+- Forearm circumference 25 mm below elbow crease: `L-FC-PROX-CIRC` / `R-FC-PROX-CIRC`.
+- Forearm circumference at mid-forearm: `L-FC-MID-CIRC` / `R-FC-MID-CIRC`.
+- Forearm circumference 40 mm above wrist crease: `L-FC-DIST-CIRC` / `R-FC-DIST-CIRC`.
+- Forearm length from elbow crease to wrist crease: `L-FC-LEN` / `R-FC-LEN`.
+- Sensitive bone ridge zones marked on skin-safe tracing: `L-FC-BONE-ZONES` / `R-FC-BONE-ZONES`.
+- Elbow flexion/extension comfort envelope with cuff mockup: `L-FC-ELBOW-ROM` / `R-FC-ELBOW-ROM`.
+- Wrist flexion, extension, radial deviation, and ulnar deviation envelope with cuff mockup: `L-FC-WRIST-ROM` / `R-FC-WRIST-ROM`.
+- Glove-removal clearance with mock glove base: `L-FC-GLOVE-REMOVE` / `R-FC-GLOVE-REMOVE`.
+
+### 5. FR-017-CUSTOM Records
+
+#### FR-017-CUSTOM-001 - Left Forearm Cuff Layout
+
+The left cuff is a low-profile wrap with a broad outer-forearm interface panel, a soft inner-forearm relief panel, and two primary strap bands. It is shaped to the left forearm, not copied from the right side.
+
+- Primary orientation mark: `LEFT OUTER FOREARM`.
+- Outer panel: receives frame-alignment tabs, cable sleeve, sensor placeholders, and future armor clearance markers.
+- Inner panel: soft relief zone only; no hard buckle, hard tab, cable crossing, or sensor pressure node.
+- Proximal end: stops below the elbow crease with a clear flexion pocket.
+- Distal end: stops above wrist bones and wrist crease with a clear wrist-removal gap.
+
+Validation state: PROVISIONALLY DEFINED, requires left-arm measurement and pilot static/movement fit test.
+
+#### FR-017-CUSTOM-002 - Right Forearm Cuff Layout
+
+The right cuff mirrors the functional zones of the left cuff but must be patterned from right-arm measurements and right-hand release reach.
+
+- Primary orientation mark: `RIGHT OUTER FOREARM`.
+- Outer panel: cable sleeve may route differently if upper-body wiring approaches the right side.
+- Inner panel: same no-pressure rule as left cuff.
+- Release orientation: must be reachable by the pilot's opposite hand and, where practical, by the same-side thumb or fingers without forced wrist posture.
+
+Validation state: PROVISIONALLY DEFINED, requires right-arm measurement and pilot static/movement fit test.
+
+#### FR-017-CUSTOM-003 - Upper Forearm Strap Layout
+
+The upper strap sits on the proximal forearm below the elbow crease and above the main forearm taper transition. It must avoid the inner elbow crease completely.
+
+- Strap type: broad, padded, low-profile, adjustable band.
+- Preferred closure location: outer or outer-dorsal forearm.
+- Forbidden location: inner forearm, inner elbow crease, direct bone ridge.
+- Tension rule: stabilizing contact only, never tourniquet-like compression.
+- Clearance: elbow full flexion/extension must remain free.
+
+Validation state: REQUIRES PILOT MOVEMENT TEST.
+
+#### FR-017-CUSTOM-004 - Lower Forearm Strap Layout
+
+The lower strap sits on the distal forearm above the wrist crease and wrist bones. It must preserve wrist joint movement and glove/wrist assembly removal.
+
+- Strap type: broad, padded, low-profile, adjustable band.
+- Preferred closure location: outer forearm or outer-dorsal forearm.
+- Forbidden location: direct pressure over wrist bones, palm path, or grip path.
+- Clearance: wrist flexion, extension, radial deviation, ulnar deviation, and hand opening must remain free.
+
+Validation state: REQUIRES PILOT MOVEMENT TEST.
+
+#### FR-017-CUSTOM-005 - Elbow-Clearance Map
+
+Maintain a soft open clearance pocket between the upper strap and the elbow crease.
+
+- No strap crosses the inner elbow crease.
+- No cable crosses the inner elbow crease.
+- No hard tab sits at the elbow fold.
+- No sensor sits where elbow flexion compresses tissue.
+- Future FR-043/FR-044 elbow joints must float outside the cuff envelope and must not use the cuff as a structural hinge mount without engineering review.
+
+Validation state: REQUIRES PILOT MOVEMENT TEST.
+
+#### FR-017-CUSTOM-006 - Wrist-Clearance Map
+
+Maintain a distal clearance band above the wrist crease and wrist bones.
+
+- No strap crosses the wrist crease.
+- No cable crosses wrist bones.
+- No cuff edge presses into the radial or ulnar wrist prominence.
+- FR-045/FR-046 wrist assemblies must remain removable without cutting or dismantling the cuff.
+- Hand opening, thumb opposition, and grip formation must remain clear.
+
+Validation state: REQUIRES PILOT MOVEMENT TEST.
+
+#### FR-017-CUSTOM-007 - Circulation and Nerve-Safety Map
+
+Any numbness, tingling, cold fingers, discoloration, hand weakness, wrist pain, sharp pressure, reduced finger motion, or loss of grip strength is a failed fit condition.
+
+- High-risk zones: inner forearm, inner elbow, wrist bones, direct bone ridges, and narrow strap edges.
+- Required relief: broad padding, tapered strap edges, no hard closure on inner forearm, no sensor pad in compression zone.
+- Fit check interval: initial donning, 2 minutes static, 5 minutes static, after elbow movement, after wrist movement, after grip sequence, after quick-release test.
+
+Validation state: REQUIRES PILOT STATIC TEST and PILOT MOVEMENT TEST.
+
+#### FR-017-CUSTOM-008 - Forearm Bone Pressure-Relief Map
+
+The cuff must relieve the radius and ulna ridges rather than clamp directly onto them.
+
+- Use soft relief channels along prominent bone ridges.
+- Use broad load-spreading foam around, not on, ridge peaks.
+- Hard tabs must be isolated from bone ridges by compliant padding and edge radius.
+- First prototype may use removable foam shims to tune relief, but shim position must be recorded.
+
+Validation state: REQUIRES PILOT STATIC TEST.
+
+#### FR-017-CUSTOM-009 - Outer-Forearm Load-Zone Map
+
+The only provisional force-management zone is the outer/dorsal forearm panel. It is a stabilization and alignment zone, not a certified load-bearing structure.
+
+- Acceptable: light alignment tabs, soft cable sleeve, sensor placeholders, mock frame contact patch.
+- Not acceptable: lifting loads, fall arrest, powered joint torque transfer, impact certification claims.
+- Future load use requires professional engineering review, test fixtures, and documented limits.
+
+Validation state: REQUIRES PROFESSIONAL ENGINEERING REVIEW.
+
+#### FR-017-CUSTOM-010 - Inner-Forearm No-Pressure-Zone Map
+
+The inner forearm is a no-pressure, no-hardware, no-cable-crossing zone.
+
+- No hard buckle.
+- No hard latch.
+- No sensor node.
+- No cable sleeve.
+- No narrow strap edge.
+- No armor edge.
+- Soft textile overlap is allowed only if it does not compress or wrinkle into a pressure ridge.
+
+Validation state: DOCUMENTED; physical verification still required.
+
+#### FR-017-CUSTOM-011 - Grip and Dexterity Clearance Map
+
+FR-017 must not interfere with hand opening, grip formation, thumb opposition, finger spread, glove base removal, or future palm interface work.
+
+- Keep the cuff proximal to the wrist and clear of the palm.
+- Keep cables off the palm and grip path.
+- Keep distal strap tension below the threshold that reduces finger motion or grip strength.
+- Test with open hand, closed fist, pinch grip, tool-handle grip mockup, glove-base removal, and emergency release.
+
+Validation state: REQUIRES PILOT MOVEMENT TEST.
+
+#### FR-017-CUSTOM-012 - Cuff-to-Forearm-Frame Alignment Map
+
+FR-032 and FR-033 future forearm frames align to the cuff through non-load-bearing locator tabs on the outer forearm.
+
+- Locator tabs are orientation references, not structural anchors.
+- Tabs must be low-profile and removable.
+- Tabs must not force cuff rotation on the arm.
+- Frame mockup must be able to detach without disturbing circulation or quick-release access.
+
+Validation state: REQUIRES MANNEQUIN TEST, then PILOT STATIC TEST.
+
+#### FR-017-CUSTOM-013 - Cuff-to-Wrist-Assembly Relationship Map
+
+FR-045 and FR-046 wrist joints sit distal to the cuff. The cuff must preserve assembly installation and removal.
+
+- Maintain a wrist-clearance gap.
+- No cable sleeve crosses the wrist joint removal path.
+- No lower strap tail can snag in wrist articulation.
+- Wrist joint mockup must be removable while cuff remains donned and while cuff is released.
+
+Validation state: REQUIRES MANNEQUIN TEST and PILOT MOVEMENT TEST.
+
+#### FR-017-CUSTOM-014 - Cuff-to-Glove Relationship Map
+
+FR-066 and FR-067 glove bases and FR-068 palm interface ring must attach and detach without cuff interference.
+
+- Glove cuff overlap, if any, must sit outside the pressure zones.
+- Glove removal path must not pass under a closed forearm strap.
+- Finger sensor routes from FR-069 must not pass under strap compression points.
+- FR-070 grip-assist placeholders must not cross the palm or grip path from the forearm cuff.
+
+Validation state: REQUIRES PILOT MOVEMENT TEST.
+
+#### FR-017-CUSTOM-015 - Left and Right Quick-Release Layouts
+
+Each cuff requires a visible, tactile quick-release path.
+
+- Release control location: outer or outer-dorsal forearm, never hidden by frame or armor.
+- Release action: one deliberate pull or press that loosens the cuff enough for removal.
+- Release marking: high-contrast tactile pull tab or raised marker.
+- Left/right access: reachable by opposite hand; same-side access preferred but not required until tested.
+- Failure rule: if release cannot be reached with glove base installed, the layout fails.
+
+Validation state: REQUIRES PILOT STATIC TEST and MANNEQUIN TEST with frame/armor mockups.
+
+#### FR-017-CUSTOM-016 - Padding Map
+
+Padding is zoned, removable, inspectable, and replaceable.
+
+- Broad comfort padding: around upper and lower strap bands.
+- Relief padding: adjacent to bone ridges, not directly concentrated on ridge peaks.
+- Edge padding: all cuff edges near elbow and wrist clearance gaps.
+- Spacer layer: breathable textile or spacer mesh against skin or undersuit.
+- Service rule: all pads must be removable for inspection, cleaning, and replacement.
+
+Validation state: REQUIRES PILOT STATIC TEST.
+
+#### FR-017-CUSTOM-017 - Latch-Sensor Placeholder Map
+
+FR-149 harness latch sensor placeholders are allowed only as non-compressive future locations.
+
+- Placeholder location: outer forearm near quick-release housing, not under strap tension.
+- Function: future open/closed status sensing only.
+- Current status: placeholder only, no safety interlock claim.
+- Wiring: route toward outer-forearm cable sleeve.
+
+Validation state: PROVISIONALLY DEFINED.
+
+#### FR-017-CUSTOM-018 - Pressure-Sensor Placeholder Map
+
+FR-145 pressure/force sensor placeholders may be located under broad outer strap pads for future fit monitoring.
+
+- No pressure sensor may create a raised hard spot.
+- No pressure sensor may sit on inner forearm, wrist bones, inner elbow, or bone ridge peaks.
+- Current status: placeholder only, no validated pressure threshold.
+- Future thresholds require calibration and professional review.
+
+Validation state: PROVISIONALLY DEFINED.
+
+#### FR-017-CUSTOM-019 - Outer-Forearm Cable-Sleeve Route
+
+FR-163 upper-body wiring routes along the outer forearm.
+
+- Route starts near proximal outer forearm and exits toward future upper-body wiring harness.
+- Distal branch may point toward wrist/glove interfaces but must not cross wrist bones, palm, or grip path.
+- Cable sleeve must be flexible, removable, and inspectable.
+- Cable slack loop must not enter inner elbow crease.
+- Cable retention must release or separate during emergency cuff removal.
+
+Validation state: REQUIRES PILOT MOVEMENT TEST.
+
+### 6. Interface Review
+
+| Interface | FR-017 relationship | Compatibility rule | Validation state |
+| --- | --- | --- | --- |
+| FR-011 Main Pilot Harness | Upstream body support and routing context | Cuffs must not transfer torso loads into forearms | REQUIRES PROFESSIONAL ENGINEERING REVIEW |
+| FR-012 Shoulder Harness | Upper-body routing and shoulder/arm motion context | Cuffs must not restrict shoulder-driven arm movement | REQUIRES PILOT MOVEMENT TEST |
+| FR-018 Emergency Release System | Future release architecture | Cuff releases must stay visible, tactile, and not hidden by frame/armor | REQUIRES MANNEQUIN TEST |
+| FR-032/FR-033 Forearm Frames | Future external frame alignment | Locator tabs only until engineered; no load-bearing claim | REQUIRES MANNEQUIN TEST |
+| FR-043/FR-044 Elbow Joints | Future elbow articulation | Elbow clearance pocket must remain open | REQUIRES PILOT MOVEMENT TEST |
+| FR-045/FR-046 Wrist Joints | Future wrist articulation/removal | Wrist clearance and removal path must remain open | REQUIRES PILOT MOVEMENT TEST |
+| FR-066/FR-067 Glove Bases | Future glove connection | Glove must attach/remove without strap release failure | REQUIRES PILOT MOVEMENT TEST |
+| FR-068 Palm Interface Ring | Future palm interface | No cuff/cable path crosses palm or grip path | REQUIRES PILOT MOVEMENT TEST |
+| FR-069 Finger Sensor System | Future sensor routing | Finger sensor wiring must avoid pressure zones | PROVISIONALLY DEFINED |
+| FR-070 Grip Assist Placeholder | Future grip assist envelope | No grip assist component may use cuff as powered anchor without review | REQUIRES PROFESSIONAL ENGINEERING REVIEW |
+| FR-145 Load/Force Sensors | Future sensing | Placeholder only; no load threshold claims | PROVISIONALLY DEFINED |
+| FR-149 Harness Latch Sensors | Future latch state sensing | Placeholder only; must not become pressure point | PROVISIONALLY DEFINED |
+| FR-163 Upper-Body Wiring Harness | Cable route continuation | Route outer forearm, avoid inner elbow/wrist/palm | REQUIRES PILOT MOVEMENT TEST |
+| FR-184 Forearm Armor | Future armor shell | Armor must not hide releases or compress cuff | REQUIRES MANNEQUIN TEST |
+
+### 7. Material Options
+
+Permitted provisional material families:
+
+- Skin-side layer: breathable spacer mesh, athletic lining textile, moisture-resistant soft sleeve, or removable washable liner.
+- Padding: EVA foam, Poron-style impact/compression foam, neoprene foam, or layered removable foam shims.
+- Semi-rigid support: thermoformed polyethylene, flexible TPU, thin composite-safe plastic, or 3D printed nylon/TPU blend for non-load-bearing shells.
+- Straps: broad nylon webbing, elastic-limited webbing, hook-and-loop wrap bands, or low-profile textile ladder adjustment.
+- Release tabs: textile pull loops, low-profile polymer buckle tabs, or guarded pull-cord release.
+
+Material exclusions for first prototype:
+
+- Sharp carbon edges against pilot-facing zones.
+- Hard metal buckles on inner forearm.
+- Narrow cord tension bands.
+- Adhesive-only retention where release is safety-critical.
+- Any material that claims ballistic, powered, or structural performance without test evidence.
+
+### 8. COTS Component Options
+
+Allowed COTS candidates for non-powered mockup:
+
+- Broad webbing straps, 38 mm to 50 mm class, subject to fit testing.
+- Low-profile side-release buckles placed on outer forearm only.
+- Hook-and-loop panels with rounded ends and anti-scratch edge binding.
+- Removable foam pad inserts.
+- Sewn pull tabs with tactile identification.
+- Flexible cable sleeve or textile wire channel.
+- Low-profile snaps or non-load-bearing alignment markers.
+
+COTS caution: no purchased component is considered certified for FRANCIS use until its documentation, fit behavior, failure mode, and release behavior are reviewed.
+
+### 9. Custom Fabrication Options
+
+Custom fabrication may include:
+
+- Patterned left/right textile cuff sleeves.
+- Sewn outer cable sleeve with removable retention loops.
+- Thermoformed outer forearm locator panel.
+- 3D printed non-load-bearing alignment tabs with rounded edges.
+- Replaceable padding kit with labeled thicknesses.
+- Quick-release pull-tab housing that remains exposed after frame/armor mockup installation.
+- Pressure-mapping test inserts for development only.
+
+Fabrication rule: every custom part must preserve inspection, cleaning, removal, and emergency release.
+
+### 10. Future R&D Options
+
+Future options are not current validated capability:
+
+- Distributed soft pressure sensing for fit monitoring.
+- Latch state sensing tied to FR-149.
+- Cable-disconnect detection for FR-163.
+- Glove/wrist assembly removal interlock readback.
+- Mannequin-mounted motion capture for elbow/wrist clearance.
+- Instrumented strap tension logging.
+- Comparative left/right asymmetry fit library.
+
+## D. FIT AND SAFETY WORKSHEET
+
+Test record ID: `FR-017-FIT-____`
+
+Date: `____`
+
+Pilot: `____`
+
+Test article: `left cuff / right cuff / pair`
+
+Prototype revision: `____`
+
+Tester/observer: `____`
+
+| Check | Pass criteria | Result | Notes |
+| --- | --- | --- | --- |
+| Circulation baseline | Fingers warm, normal color before donning | PASS / FAIL / NOT TESTED | |
+| Circulation after 2 min | No cold fingers, discoloration, swelling, or throbbing | PASS / FAIL / NOT TESTED | |
+| Circulation after 5 min | Same as baseline | PASS / FAIL / NOT TESTED | |
+| Nerve symptoms | No numbness, tingling, electric sensation, hand weakness, or sharp pressure | PASS / FAIL / NOT TESTED | |
+| Finger temperature and color | No visible change from baseline | PASS / FAIL / NOT TESTED | |
+| Grip strength | No noticeable loss versus baseline hand squeeze and tool-grip mockup | PASS / FAIL / NOT TESTED | |
+| Elbow flexion | Full comfortable bend, no strap/cable in inner elbow crease | PASS / FAIL / NOT TESTED | |
+| Elbow extension | Full comfortable extension, no cuff migration | PASS / FAIL / NOT TESTED | |
+| Wrist flexion | No distal cuff edge pressure or strap interference | PASS / FAIL / NOT TESTED | |
+| Wrist extension | No distal cuff edge pressure or strap interference | PASS / FAIL / NOT TESTED | |
+| Wrist lateral movement | Radial/ulnar deviation remains comfortable | PASS / FAIL / NOT TESTED | |
+| Hand opening | Full hand open, no palm or finger route snag | PASS / FAIL / NOT TESTED | |
+| Grip formation | Fist and tool-handle mock grip clear | PASS / FAIL / NOT TESTED | |
+| Glove removal | FR-066/FR-067 mock glove base can be removed without trapped strap/cable | PASS / FAIL / NOT TESTED | |
+| Wrist assembly removal | FR-045/FR-046 mock wrist path remains clear | PASS / FAIL / NOT TESTED | |
+| Quick-release access | Release visible, tactile, reachable, and effective | PASS / FAIL / NOT TESTED | |
+| Cable snagging | Cable sleeve does not snag during elbow/wrist/hand motion | PASS / FAIL / NOT TESTED | |
+| Cuff migration | Cuff does not rotate or slide into elbow/wrist clearance zones | PASS / FAIL / NOT TESTED | |
+| Left/right asymmetry | Differences recorded; neither side forced into mirrored fit | PASS / FAIL / NOT TESTED | |
+| Pressure points | No hard point, ridge pressure, strap edge bite, or inner-forearm compression | PASS / FAIL / NOT TESTED | |
+
+Immediate fail conditions:
+
+- Numbness.
+- Tingling.
+- Cold fingers.
+- Discoloration.
+- Hand weakness.
+- Wrist pain.
+- Sharp pressure.
+- Reduced finger motion.
+- Loss of grip strength.
+- Quick release unreachable.
+- Glove or wrist assembly trapped by cuff.
+- Cable crossing palm, grip path, wrist bones, or inner elbow.
+
+## E. FR-017 COMPLETION GATE
+
+| Criterion | Status | Evidence | Remaining action |
+| --- | --- | --- | --- |
+| All 25 packet deliverables documented | DOCUMENTED | This FR-017 v1.0 packet | None for documentation pass |
+| FR-017-CUSTOM-001 through 019 preserved/completed | DOCUMENTED | Custom records section | None for documentation pass |
+| Left/right specific layouts | PROVISIONALLY DEFINED | CUSTOM-001 and CUSTOM-002 | Measure and fit left/right arms separately |
+| Straps avoid inner elbow/wrist bones | PROVISIONALLY DEFINED | CUSTOM-003 through CUSTOM-006 | Pilot movement test |
+| Circulation and nerve safety criteria defined | DOCUMENTED | CUSTOM-007 and worksheet | Pilot static and movement test |
+| Bone relief defined | PROVISIONALLY DEFINED | CUSTOM-008 | Pilot static pressure check |
+| Frame, wrist, glove, sensor, wiring interfaces reviewed | PROVISIONALLY DEFINED | Interface review table | Mannequin and pilot interface tests |
+| Quick releases visible and reachable | PROVISIONALLY DEFINED | CUSTOM-015 | Static test with mock frame/armor/glove |
+| Cable route avoids unsafe zones | PROVISIONALLY DEFINED | CUSTOM-019 | Movement test with cable mockup |
+| Materials/options listed without unsupported claims | DOCUMENTED | Materials/COTS/fabrication sections | Supplier/spec review before build |
+| Physical fit validated | NOT COMPLETE | No physical evidence available | Measurement, mockup, pilot tests required |
+| Engineering review evidence container ready | DOCUMENTED | `FR-017-ENGINEERING-REVIEW_PENDING.md` and input template | Populate after quick-release/cable-snag gate passes |
+| Professional engineering review completed | NOT COMPLETE | No review evidence entered | Required before final physical gate, load-bearing, or powered use |
+| Stage 17 cleared for powered/frame-coupled testing | NOT COMPLETE | No physical validation available | Do not proceed |
+
+Completion gate decision: Stage 17 documentation packet is complete. Stage 17 physical completion is not cleared.
+
+## F. FR-IMG-017 IMAGE PROMPT
+
+Create a dark engineering-manual technical plate for FRANCIS Stage 17, FR-017 Forearm Cuffs, showing front, side, and rear views of both left and right forearm cuffs on human-scale forearms. The design is compact, matte-black, segmented, low-profile, and wearable, with no weapons, no ant logo, no insect branding, no giant mech proportions, and no fantasy armor. Include clean readable labels and callouts for upper forearm strap, lower forearm strap, broad padding zones, forearm bone-relief channels, inner-forearm no-pressure zone, inner-elbow clearance pocket, wrist-bone clearance gap, left and right quick-release pull tabs, outer-forearm cable sleeve route, non-load-bearing frame-alignment tabs, latch-sensor placeholders, pressure-sensor placeholders, elbow movement arc, wrist movement arc, open-hand clearance, grip-formation clearance, glove-removal path, and ghosted future interfaces for forearm frame, forearm armor, elbow joint, wrist assembly, glove base, palm interface ring, finger-sensor routing, grip-assist placeholder, upper-body wiring harness, and emergency-release system. Use front, lateral side, and rear/outer views with precise leader lines, high-contrast labels, and a technical-manual layout.
+
+## G. HANDOFF
+
+Completed Stage 17 decisions:
+
+- FR-017 cuffs are pilot-interface components only.
+- Left and right cuffs are separate patterns.
+- Upper straps sit below the elbow crease.
+- Lower straps sit above the wrist bones and wrist crease.
+- Inner forearm is a no-pressure/no-hardware/no-cable route.
+- Outer forearm is the only provisional alignment/cable/sensor zone.
+- Quick releases stay visible and reachable, not hidden by frame or armor.
+- Sensors are placeholders only.
+- Cable routing stays on the outer forearm and avoids inner elbow, wrist bones, palm, and grip path.
+- First prototype is limited to non-powered fit and interface mockup testing.
+
+Unresolved physical inputs:
+
+- Left/right forearm measurements.
+- Safety-critical landmark confirmation evidence.
+- Non-powered mockup build record.
+- Mannequin interface test input record.
+- Pilot static fit input record.
+- Pilot movement fit input record.
+- Quick-release/cable-snag input record.
+- Left/right bone ridge and sensitivity maps.
+- Pilot wrist and elbow range-of-motion evidence.
+- Glove-base removal clearance evidence.
+- Wrist assembly removal clearance evidence.
+- Quick-release reach evidence with mock frame/armor.
+- Cable-snag evidence.
+- Professional engineering review for any load-bearing or powered interface.
+
+Tests still required:
+
+- Measurement capture.
+- Safety-critical landmark confirmation before measurement use.
+- Non-powered mockup build readiness gate.
+- Mannequin interface gate with ghosted frame, wrist, glove, armor, release, and cable geometry.
+- Pilot static fit gate with circulation, nerve, release, glove-removal, wrist-removal, and static cable-snag checks.
+- Pilot movement gate with elbow, wrist, hand, grip, glove-removal, wrist-removal, cuff-migration, release-reach, and cable-snag checks.
+- Quick-release/cable-snag gate with release visibility, tactile reach, removal, no-tools egress, cable route, and no-go-zone checks.
+- Soft mockup fit test.
+- Mannequin interface test with ghosted frame, wrist, glove, armor, and release geometry.
+- Pilot static fit test.
+- Pilot movement test.
+- Cable sleeve snag test.
+- Quick-release test with gloves and mock future interfaces.
+- Professional engineering review before any structural, powered, or load-bearing use.
+
+Files or records that should be saved:
+
+- `FRANCIS_FR-017_Forearm_Cuffs_v1.0`
+- `FR-017_Stage17_Package/README.md`
+- `FR-017_Stage17_Package/FR-017-MEASUREMENTS-LEFT-RIGHT_PENDING.md`
+- `FR-017_Stage17_Package/FR-017-MEASUREMENTS-INPUT-TEMPLATE.json`
+- `FR-017_Stage17_Package/FR-017-MOCKUP-BUILD-INPUT-TEMPLATE.json`
+- `FR-017_Stage17_Package/FR-017-MAPS-AND-LAYOUTS.md`
+- `FR-017_Stage17_Package/FR-017-ADJUSTMENT-WORKSHEET_PENDING.md`
+- `FR-017_Stage17_Package/FR-017-FIT-2026-06-23-LEFT_PENDING.md`
+- `FR-017_Stage17_Package/FR-017-FIT-2026-06-23-RIGHT_PENDING.md`
+- `FR-017_Stage17_Package/FR-017-MANNEQUIN-INTERFACE-TEST_PENDING.md`
+- `FR-017_Stage17_Package/FR-017-MANNEQUIN-INTERFACE-INPUT-TEMPLATE.json`
+- `FR-017_Stage17_Package/FR-017-PILOT-STATIC-FIT-INPUT-TEMPLATE.json`
+- `FR-017_Stage17_Package/FR-017-PILOT-MOVEMENT-INPUT-TEMPLATE.json`
+- `FR-017_Stage17_Package/FR-017-QUICK-RELEASE-TEST_PENDING.md`
+- `FR-017_Stage17_Package/FR-017-QUICK-RELEASE-CABLE-SNAG-INPUT-TEMPLATE.json`
+- `FR-017_Stage17_Package/FR-017-ENGINEERING-REVIEW_PENDING.md`
+- `FR-017_Stage17_Package/FR-017-ENGINEERING-REVIEW-INPUT-TEMPLATE.json`
+- `FR-017_Stage17_Package/FR-017-VALIDATION-GATE-CHAIN.md`
+- `FR-017_Stage17_Package/FR-017-INTERFACE-MATRIX.md`
+- `FR-017_Stage17_Package/FR-017-COMPLETION-GATE-2026-06-23.md`
+- `FR-017_Stage17_Package/FR-017-STAGE17-FINAL-AUDIT-2026-06-23.md`
+- `FR-017_Stage17_Package/FR-017-STAGE17-PACKAGE-MANIFEST.json`
+- `FR-017_Stage17_Package/FR-IMG-017_PROMPT.md`
+
+FR-018 cleared to begin: Not cleared for implementation. FR-018 may receive this packet as an interface handoff only after the pilot accepts the Stage 17 documentation package and records the missing physical validation plan.

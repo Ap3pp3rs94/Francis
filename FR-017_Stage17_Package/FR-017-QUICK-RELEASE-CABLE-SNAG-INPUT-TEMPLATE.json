@@ -1,0 +1,109 @@
+{
+  "kind": "francis.fr017.quick_release_cable_snag.v1",
+  "component": "FR-017 Forearm Cuffs",
+  "evidence": {
+    "date": "PENDING",
+    "observer": "PENDING",
+    "pilot_id": "PENDING",
+    "prototype_revision": "PENDING",
+    "pilot_movement_record_path": "PENDING",
+    "test_duration_minutes": "PENDING"
+  },
+  "field_contract": {
+    "evidence_date": "Use an ISO 8601 calendar date in YYYY-MM-DD format for evidence.date. Future-dated quick-release/cable-snag evidence is invalid because it cannot be completed evidence.",
+    "placeholder_values": "Placeholder text such as PENDING is treated as missing evidence case-insensitively and after trimming. Lowercase, padded, or whitespace-only placeholders cannot satisfy required FR-017 quick-release/cable-snag fields.",
+    "pilot_identity_linkage": "evidence.pilot_id must match evidence.pilot_id in the linked pilot movement record. Do not use release/cable evidence for one pilot with movement evidence collected from another pilot.",
+    "record_linkage": "pilot_movement_record_path must resolve to the same movement record path passed into the quick-release/cable-snag gate. Do not point release/cable evidence at stale, copied, or unrelated movement records.",
+    "evidence_chronology": "Quick-release/cable-snag evidence.date must be the same as or later than the linked pilot movement evidence.date. Do not fabricate or backdate release/cable evidence before movement evidence exists.",
+    "test_duration": "Use an unquoted JSON number greater than 0 for evidence.test_duration_minutes. Quoted numeric strings are invalid. PENDING is treated as missing evidence.",
+    "required_pass_checks": "Use unquoted JSON boolean true only when the release or cable condition is directly verified. Use false for a verified failure; false blocks progression.",
+    "fail_observations": "Use false only when the fail condition is not observed. Use true when observed; true blocks progression. Do not use yes/no/1/0 or quoted true/false strings."
+  },
+  "preconditions": {
+    "non_powered_only": "PENDING",
+    "no_frame_or_power_coupling": "PENDING",
+    "pilot_movement_gate_passed": "PENDING",
+    "observer_present": "PENDING",
+    "emergency_release_briefed": "PENDING",
+    "stop_on_symptoms": "PENDING",
+    "pilot_can_self_remove_or_abort": "PENDING"
+  },
+  "sides": {
+    "left": {
+      "release_checks": {
+        "bare_cuff_release_visible_tactile_reachable": "PENDING",
+        "glove_base_mockup_release_visible_tactile_reachable": "PENDING",
+        "wrist_assembly_mockup_release_visible_tactile_reachable": "PENDING",
+        "forearm_frame_mockup_release_visible_tactile_reachable": "PENDING",
+        "forearm_armor_mockup_release_visible_tactile_reachable": "PENDING",
+        "populated_cable_sleeve_release_visible_tactile_reachable": "PENDING",
+        "post_movement_release_visible_tactile_reachable": "PENDING",
+        "opposite_hand_release_reachable": "PENDING",
+        "same_side_reach_recorded": "PENDING",
+        "release_loosens_upper_strap": "PENDING",
+        "release_loosens_lower_strap": "PENDING",
+        "cuff_removable_without_tools": "PENDING",
+        "no_painful_wrist_posture_required": "PENDING",
+        "glove_and_wrist_paths_not_trapped": "PENDING"
+      },
+      "cable_sleeve_checks": {
+        "outer_forearm_route_preserved": "PENDING",
+        "no_inner_elbow_crossing": "PENDING",
+        "no_wrist_bone_crossing": "PENDING",
+        "no_palm_or_grip_crossing": "PENDING",
+        "no_release_handle_obstruction": "PENDING",
+        "no_snag_during_release": "PENDING",
+        "no_snag_after_elbow_wrist_motion": "PENDING",
+        "cable_not_trapped_after_release": "PENDING"
+      },
+      "fail_observations": {
+        "release_hidden": "PENDING",
+        "release_not_found_by_touch": "PENDING",
+        "release_blocked_by_glove_or_armor": "PENDING",
+        "release_fails_to_loosen": "PENDING",
+        "cuff_not_removable_without_tools": "PENDING",
+        "painful_wrist_posture_required": "PENDING",
+        "cable_trapped_after_release": "PENDING",
+        "cable_crossed_no_go_zone": "PENDING"
+      }
+    },
+    "right": {
+      "release_checks": {
+        "bare_cuff_release_visible_tactile_reachable": "PENDING",
+        "glove_base_mockup_release_visible_tactile_reachable": "PENDING",
+        "wrist_assembly_mockup_release_visible_tactile_reachable": "PENDING",
+        "forearm_frame_mockup_release_visible_tactile_reachable": "PENDING",
+        "forearm_armor_mockup_release_visible_tactile_reachable": "PENDING",
+        "populated_cable_sleeve_release_visible_tactile_reachable": "PENDING",
+        "post_movement_release_visible_tactile_reachable": "PENDING",
+        "opposite_hand_release_reachable": "PENDING",
+        "same_side_reach_recorded": "PENDING",
+        "release_loosens_upper_strap": "PENDING",
+        "release_loosens_lower_strap": "PENDING",
+        "cuff_removable_without_tools": "PENDING",
+        "no_painful_wrist_posture_required": "PENDING",
+        "glove_and_wrist_paths_not_trapped": "PENDING"
+      },
+      "cable_sleeve_checks": {
+        "outer_forearm_route_preserved": "PENDING",
+        "no_inner_elbow_crossing": "PENDING",
+        "no_wrist_bone_crossing": "PENDING",
+        "no_palm_or_grip_crossing": "PENDING",
+        "no_release_handle_obstruction": "PENDING",
+        "no_snag_during_release": "PENDING",
+        "no_snag_after_elbow_wrist_motion": "PENDING",
+        "cable_not_trapped_after_release": "PENDING"
+      },
+      "fail_observations": {
+        "release_hidden": "PENDING",
+        "release_not_found_by_touch": "PENDING",
+        "release_blocked_by_glove_or_armor": "PENDING",
+        "release_fails_to_loosen": "PENDING",
+        "cuff_not_removable_without_tools": "PENDING",
+        "painful_wrist_posture_required": "PENDING",
+        "cable_trapped_after_release": "PENDING",
+        "cable_crossed_no_go_zone": "PENDING"
+      }
+    }
+  }
+}

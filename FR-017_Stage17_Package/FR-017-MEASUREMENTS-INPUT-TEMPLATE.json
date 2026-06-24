@@ -1,0 +1,131 @@
+{
+  "kind": "francis.fr017.measurements.v1",
+  "component": "FR-017 Forearm Cuffs",
+  "units": "mm",
+  "evidence": {
+    "date": "PENDING",
+    "observer": "PENDING",
+    "pilot_id": "PENDING",
+    "measurement_tool": "PENDING",
+    "method": "flexible tape, no tissue compression",
+    "posture": "arm relaxed, palm neutral unless otherwise noted"
+  },
+  "field_contract": {
+    "units": "Top-level units must remain exactly \"mm\". Do not convert FR-017 measurement evidence to inches, centimeters, or mixed units.",
+    "evidence_date": "Use an ISO 8601 calendar date in YYYY-MM-DD format for evidence.date. Future-dated measurement evidence is invalid because it cannot be completed evidence.",
+    "measurement_tool": "Measurement evidence.measurement_tool must identify a metric or millimeter-capable measuring tool and must not claim inch, imperial, non-metric, or mixed-unit collection. Tool text that omits metric/mm/millimeter capability or includes imperial/negated metric wording is invalid because FR-017 measurement units are millimeters.",
+    "measurement_tool_exclusions": "Reject measurement_tool text that claims inch, imperial, non-metric, or mixed-unit collection even if metric/mm/millimeter text is also present.",
+    "measurement_method": "Measurement evidence.method must preserve flexible measuring-tool language and explicitly state no tissue compression. Method text that omits flexible collection or no tissue compression is invalid.",
+    "measurement_method_exclusions": "Measurement evidence.method must not include caliper, hard/rigid measuring tool, compressive, with-compression, or under-compression collection language. These conditions make FR-017 measurement evidence unsafe or unreliable even if flexible/no-compression wording is also present.",
+    "measurement_posture": "Measurement evidence.posture must preserve arm relaxed and palm neutral language. Posture exceptions must be recorded without removing relaxed/neutral baseline wording.",
+    "measurement_posture_exclusions": "Measurement evidence.posture must not include loaded, weighted, forced, clenched, gripping, or under-load collection language. These conditions make FR-017 measurement evidence unsafe or unreliable even if relaxed/neutral baseline text is also present.",
+    "placeholder_values": "Placeholder text such as PENDING is treated as missing evidence case-insensitively and after trimming. Lowercase, padded, or whitespace-only placeholders cannot satisfy required FR-017 measurement fields.",
+    "numeric_measurements": "Use unquoted JSON numbers and positive millimeter values only. Quoted numeric strings are invalid.",
+    "measurement_bounds": "The intake gate applies broad human-scale sanity bounds. Passing bounds does not approve fit, fabrication, load-bearing use, powered testing, or FR-018 implementation.",
+    "measurement_consistency": "The intake gate rejects contradictory dimensions such as panel length, relief length, strap band width, or wrist clearance gap greater than the measured forearm length. Passing consistency checks is not fit approval.",
+    "marked_zone_specificity": "Left and right marked-zone evidence references must be distinct for each required zone. Shared photo sets are allowed only when each side has a separately identifiable label or anchor.",
+    "left_right_independence": "Left and right arms must be measured independently with side labels verified. Do not copy values between sides. Left and right measurement references must be distinct. An exactly identical complete left/right numeric profile requires recheck before progression.",
+    "measurement_conditions": "Use unquoted JSON boolean true only when the measurement condition is directly verified: no tissue compression, no wrist-bone compression, metric tool used, neutral posture or recorded exception, and stop conditions briefed.",
+    "landmark_confirmation": "Use unquoted JSON boolean true only after the safety-critical landmarks are visibly confirmed with skin-safe markings: inner elbow crease boundary, wrist-bone boundary, radius/ulna relief paths, outer cable route, quick-release reach zone, and glove-removal path.",
+    "measurement_notes": "Notes must be specific enough for audit. independence_notes must mention separate left/right collection and side labels; condition_notes must mention no-tissue/no-wrist-bone compression, metric tooling, and stop briefing; landmark_notes must mention inner elbow, wrist, radius/ulna, cable route, quick release, glove path, and skin-safe marking.",
+    "repeatability": "Measure each required left/right field twice. Use unquoted JSON boolean true only after the second pass is complete, and use an unquoted JSON number for max_delta_mm. max_delta_mm must be 0 through 5 mm inclusive.",
+    "safety_screen": "Use unquoted JSON boolean false for absent symptoms. Use true only when a symptom is observed; any true symptom blocks FR-017 progression. Do not use yes/no/1/0 or quoted true/false strings."
+  },
+  "sides": {
+    "left": {
+      "forearm_circumference_25mm_below_elbow_crease": "PENDING",
+      "forearm_circumference_mid_forearm": "PENDING",
+      "forearm_circumference_40mm_above_wrist_crease": "PENDING",
+      "forearm_length_elbow_crease_to_wrist_crease": "PENDING",
+      "outer_forearm_usable_panel_length": "PENDING",
+      "upper_strap_allowed_band_width": "PENDING",
+      "lower_strap_allowed_band_width": "PENDING",
+      "bone_ridge_relief_length": "PENDING",
+      "inner_forearm_no_pressure_zone_width": "PENDING",
+      "wrist_clearance_gap": "PENDING"
+    },
+    "right": {
+      "forearm_circumference_25mm_below_elbow_crease": "PENDING",
+      "forearm_circumference_mid_forearm": "PENDING",
+      "forearm_circumference_40mm_above_wrist_crease": "PENDING",
+      "forearm_length_elbow_crease_to_wrist_crease": "PENDING",
+      "outer_forearm_usable_panel_length": "PENDING",
+      "upper_strap_allowed_band_width": "PENDING",
+      "lower_strap_allowed_band_width": "PENDING",
+      "bone_ridge_relief_length": "PENDING",
+      "inner_forearm_no_pressure_zone_width": "PENDING",
+      "wrist_clearance_gap": "PENDING"
+    }
+  },
+  "marked_zones": {
+    "left": {
+      "inner_elbow_crease_boundary": "PENDING",
+      "wrist_bone_boundary": "PENDING",
+      "radius_ridge_relief": "PENDING",
+      "ulna_ridge_relief": "PENDING",
+      "outer_forearm_cable_route": "PENDING",
+      "quick_release_reach_zone": "PENDING",
+      "glove_removal_path": "PENDING"
+    },
+    "right": {
+      "inner_elbow_crease_boundary": "PENDING",
+      "wrist_bone_boundary": "PENDING",
+      "radius_ridge_relief": "PENDING",
+      "ulna_ridge_relief": "PENDING",
+      "outer_forearm_cable_route": "PENDING",
+      "quick_release_reach_zone": "PENDING",
+      "glove_removal_path": "PENDING"
+    }
+  },
+  "left_right_independence": {
+    "left_arm_measured_separately": "PENDING",
+    "right_arm_measured_separately": "PENDING",
+    "side_labels_verified": "PENDING",
+    "values_not_copied_between_sides": "PENDING",
+    "left_measurement_reference": "PENDING",
+    "right_measurement_reference": "PENDING",
+    "independence_notes": "PENDING"
+  },
+  "measurement_conditions": {
+    "no_tissue_compression_used": "PENDING",
+    "no_wrist_bone_compression_used": "PENDING",
+    "metric_tool_used": "PENDING",
+    "arm_relaxed_palm_neutral_or_exception_recorded": "PENDING",
+    "stop_conditions_briefed": "PENDING",
+    "condition_notes": "PENDING"
+  },
+  "landmark_confirmation": {
+    "inner_elbow_crease_boundary_confirmed": "PENDING",
+    "wrist_bone_boundary_confirmed": "PENDING",
+    "radius_ulna_relief_paths_confirmed": "PENDING",
+    "outer_forearm_cable_route_confirmed": "PENDING",
+    "quick_release_reach_zone_confirmed": "PENDING",
+    "glove_removal_path_confirmed": "PENDING",
+    "skin_safe_marking_used": "PENDING",
+    "landmark_notes": "PENDING"
+  },
+  "repeatability": {
+    "left": {
+      "second_pass_completed": "PENDING",
+      "max_delta_mm": "PENDING",
+      "all_required_measurements_within_5mm": "PENDING"
+    },
+    "right": {
+      "second_pass_completed": "PENDING",
+      "max_delta_mm": "PENDING",
+      "all_required_measurements_within_5mm": "PENDING"
+    }
+  },
+  "safety_screen": {
+    "pain": "PENDING",
+    "tingling": "PENDING",
+    "numbness": "PENDING",
+    "cold_fingers": "PENDING",
+    "discoloration": "PENDING",
+    "hand_weakness": "PENDING",
+    "wrist_pain": "PENDING",
+    "sharp_pressure": "PENDING",
+    "reduced_finger_motion": "PENDING",
+    "loss_of_grip_strength": "PENDING"
+  }
+}

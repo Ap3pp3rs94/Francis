@@ -1,0 +1,101 @@
+{
+  "kind": "francis.fr017.pilot_movement_fit.v1",
+  "component": "FR-017 Forearm Cuffs",
+  "evidence": {
+    "date": "PENDING",
+    "observer": "PENDING",
+    "pilot_id": "PENDING",
+    "prototype_revision": "PENDING",
+    "pilot_static_fit_record_path": "PENDING",
+    "test_duration_minutes": "PENDING"
+  },
+  "field_contract": {
+    "evidence_date": "Use an ISO 8601 calendar date in YYYY-MM-DD format for evidence.date. Future-dated pilot movement evidence is invalid because it cannot be completed evidence.",
+    "placeholder_values": "Placeholder text such as PENDING is treated as missing evidence case-insensitively and after trimming. Lowercase, padded, or whitespace-only placeholders cannot satisfy required FR-017 pilot movement fields.",
+    "pilot_identity_linkage": "evidence.pilot_id must match evidence.pilot_id in the linked pilot static-fit record. Do not use movement evidence for one pilot with static-fit evidence collected from another pilot.",
+    "record_linkage": "pilot_static_fit_record_path must resolve to the same static-fit record path passed into the pilot movement gate. Do not point movement evidence at stale, copied, or unrelated static-fit records.",
+    "evidence_chronology": "Pilot movement evidence.date must be the same as or later than the linked pilot static-fit evidence.date. Do not fabricate or backdate movement evidence before static-fit evidence exists.",
+    "test_duration": "Use an unquoted JSON number greater than 0 for evidence.test_duration_minutes. Quoted numeric strings are invalid. PENDING is treated as missing evidence.",
+    "required_pass_checks": "Use unquoted JSON boolean true only when the movement condition is directly verified. Use false for a verified failure; false blocks progression.",
+    "symptoms": "Use false only when the symptom is absent. Use true when observed; true blocks progression. Do not use yes/no/1/0 or quoted true/false strings."
+  },
+  "preconditions": {
+    "non_powered_only": "PENDING",
+    "no_frame_or_power_coupling": "PENDING",
+    "pilot_static_fit_gate_passed": "PENDING",
+    "observer_present": "PENDING",
+    "emergency_release_briefed": "PENDING",
+    "stop_on_symptoms": "PENDING",
+    "pilot_can_self_remove_or_abort": "PENDING"
+  },
+  "sides": {
+    "left": {
+      "movement_checks": {
+        "elbow_flexion_no_crease_compression": "PENDING",
+        "elbow_extension_no_cuff_migration": "PENDING",
+        "wrist_flexion_no_distal_edge_pressure": "PENDING",
+        "wrist_extension_no_distal_edge_pressure": "PENDING",
+        "wrist_lateral_no_strap_or_cable_interference": "PENDING",
+        "hand_opening_full": "PENDING",
+        "grip_formation_clear": "PENDING",
+        "glove_removal_not_trapped": "PENDING",
+        "wrist_assembly_removal_not_blocked": "PENDING",
+        "outer_cable_route_no_snag": "PENDING",
+        "quick_release_reachable_during_motion": "PENDING",
+        "cuff_returns_to_safe_position_after_motion": "PENDING"
+      },
+      "post_movement": {
+        "fingers_warm_after_motion": "PENDING",
+        "normal_color_after_motion": "PENDING",
+        "grip_strength_unchanged": "PENDING",
+        "no_new_pressure_marks": "PENDING"
+      },
+      "symptoms": {
+        "pain": "PENDING",
+        "tingling": "PENDING",
+        "numbness": "PENDING",
+        "cold_fingers": "PENDING",
+        "discoloration": "PENDING",
+        "hand_weakness": "PENDING",
+        "wrist_pain": "PENDING",
+        "sharp_pressure": "PENDING",
+        "reduced_finger_motion": "PENDING",
+        "loss_of_grip_strength": "PENDING"
+      }
+    },
+    "right": {
+      "movement_checks": {
+        "elbow_flexion_no_crease_compression": "PENDING",
+        "elbow_extension_no_cuff_migration": "PENDING",
+        "wrist_flexion_no_distal_edge_pressure": "PENDING",
+        "wrist_extension_no_distal_edge_pressure": "PENDING",
+        "wrist_lateral_no_strap_or_cable_interference": "PENDING",
+        "hand_opening_full": "PENDING",
+        "grip_formation_clear": "PENDING",
+        "glove_removal_not_trapped": "PENDING",
+        "wrist_assembly_removal_not_blocked": "PENDING",
+        "outer_cable_route_no_snag": "PENDING",
+        "quick_release_reachable_during_motion": "PENDING",
+        "cuff_returns_to_safe_position_after_motion": "PENDING"
+      },
+      "post_movement": {
+        "fingers_warm_after_motion": "PENDING",
+        "normal_color_after_motion": "PENDING",
+        "grip_strength_unchanged": "PENDING",
+        "no_new_pressure_marks": "PENDING"
+      },
+      "symptoms": {
+        "pain": "PENDING",
+        "tingling": "PENDING",
+        "numbness": "PENDING",
+        "cold_fingers": "PENDING",
+        "discoloration": "PENDING",
+        "hand_weakness": "PENDING",
+        "wrist_pain": "PENDING",
+        "sharp_pressure": "PENDING",
+        "reduced_finger_motion": "PENDING",
+        "loss_of_grip_strength": "PENDING"
+      }
+    }
+  }
+}

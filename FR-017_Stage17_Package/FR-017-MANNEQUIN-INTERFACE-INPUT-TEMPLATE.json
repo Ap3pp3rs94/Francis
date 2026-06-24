@@ -1,0 +1,101 @@
+{
+  "kind": "francis.fr017.mannequin_interface_test.v1",
+  "component": "FR-017 Forearm Cuffs",
+  "evidence": {
+    "date": "PENDING",
+    "observer": "PENDING",
+    "mockup_readiness_record_path": "PENDING",
+    "mannequin_or_arm_form_id": "PENDING",
+    "future_interface_mock_geometry_revision": "PENDING",
+    "cable_sleeve_mock_id": "PENDING"
+  },
+  "field_contract": {
+    "evidence_date": "Use an ISO 8601 calendar date in YYYY-MM-DD format for evidence.date. Future-dated mannequin interface evidence is invalid because it cannot be completed evidence.",
+    "placeholder_values": "Placeholder text such as PENDING is treated as missing evidence case-insensitively and after trimming. Lowercase, padded, or whitespace-only placeholders cannot satisfy required FR-017 mannequin interface fields.",
+    "test_subject": "Mannequin interface evidence.mannequin_or_arm_form_id must identify a non-human mannequin or arm-form test subject. Any text that identifies a pilot, human, or wearer is invalid because this gate is not a pilot test.",
+    "record_linkage": "evidence.mockup_readiness_record_path must resolve to the same mockup record path passed into the mannequin interface gate. Do not point a mannequin record at stale, copied, or unrelated mockup evidence.",
+    "evidence_chronology": "Mannequin interface evidence.date must be the same as or later than the linked mockup evidence.date. Do not fabricate or backdate mannequin interface evidence before mockup evidence exists.",
+    "required_pass_checks": "Use unquoted JSON boolean true only when the mannequin/interface condition is directly verified. Use false for a verified failure; false blocks progression.",
+    "fail_observations": "Use false only when the fail condition is not observed. Use true when observed; true blocks progression. Do not use yes/no/1/0 or quoted true/false strings."
+  },
+  "test_article": {
+    "left_cuff_revision": "PENDING",
+    "right_cuff_revision": "PENDING",
+    "non_powered_only": "PENDING"
+  },
+  "interfaces": {
+    "fr032_left_forearm_frame": {
+      "mock_installed": "PENDING",
+      "clearance_passed": "PENDING",
+      "notes": "PENDING"
+    },
+    "fr033_right_forearm_frame": {
+      "mock_installed": "PENDING",
+      "clearance_passed": "PENDING",
+      "notes": "PENDING"
+    },
+    "fr043_left_elbow_joint": {
+      "mock_installed": "PENDING",
+      "clearance_passed": "PENDING",
+      "notes": "PENDING"
+    },
+    "fr044_right_elbow_joint": {
+      "mock_installed": "PENDING",
+      "clearance_passed": "PENDING",
+      "notes": "PENDING"
+    },
+    "fr045_left_wrist_joint": {
+      "mock_installed": "PENDING",
+      "clearance_passed": "PENDING",
+      "notes": "PENDING"
+    },
+    "fr046_right_wrist_joint": {
+      "mock_installed": "PENDING",
+      "clearance_passed": "PENDING",
+      "notes": "PENDING"
+    },
+    "fr066_left_glove_base": {
+      "mock_installed": "PENDING",
+      "clearance_passed": "PENDING",
+      "notes": "PENDING"
+    },
+    "fr067_right_glove_base": {
+      "mock_installed": "PENDING",
+      "clearance_passed": "PENDING",
+      "notes": "PENDING"
+    },
+    "fr068_palm_interface_ring": {
+      "mock_installed": "PENDING",
+      "clearance_passed": "PENDING",
+      "notes": "PENDING"
+    },
+    "fr184_forearm_armor": {
+      "mock_installed": "PENDING",
+      "clearance_passed": "PENDING",
+      "notes": "PENDING"
+    }
+  },
+  "cable_sensor_checks": {
+    "fr163_outer_route_only": "PENDING",
+    "fr069_no_pressure_or_palm_crossing": "PENDING",
+    "fr070_no_powered_anchoring": "PENDING",
+    "fr145_no_raised_hard_spot": "PENDING",
+    "fr149_no_pressure_zone_placement": "PENDING"
+  },
+  "release_checks": {
+    "left_release_visible_and_reachable": "PENDING",
+    "right_release_visible_and_reachable": "PENDING",
+    "armor_does_not_hide_release": "PENDING",
+    "glove_and_wrist_removal_paths_open": "PENDING"
+  },
+  "fail_observations": {
+    "snag_detected": "PENDING",
+    "compression_detected": "PENDING",
+    "release_hidden": "PENDING",
+    "wrist_path_blocked": "PENDING",
+    "glove_path_blocked": "PENDING",
+    "cable_inner_elbow_crossing": "PENDING",
+    "cable_wrist_bone_crossing": "PENDING",
+    "cable_palm_or_grip_crossing": "PENDING"
+  }
+}
