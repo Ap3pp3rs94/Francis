@@ -157,6 +157,30 @@ def test_fr017_measurement_intake_reports_template_as_pending() -> None:
     assert payload["writes_data"] is False
     assert payload["grants_execution_authority"] is False
     assert payload["grants_mutation_authority"] is False
+    assert payload["measurement_capture_plan_not_completion_evidence"] is True
+    assert "not physical validation evidence" in payload["measurement_capture_plan_contract"]
+    assert (
+        payload["next_required_physical_input"]
+        == "complete_real_left_right_measurement_record_at_FR-017-MEASUREMENTS-INPUT-TEMPLATE.json"
+    )
+    capture_plan = payload["measurement_capture_plan"]
+    assert isinstance(capture_plan, list)
+    assert [step["id"] for step in capture_plan] == [
+        "setup_and_safety_brief",
+        "left_arm_numeric_measurement_passes",
+        "right_arm_numeric_measurement_passes",
+        "safety_critical_landmark_and_zone_references",
+        "left_right_independence_and_safety_screen",
+    ]
+    setup_step = capture_plan[0]
+    assert setup_step["validation_state"] == "REQUIRES_MEASUREMENT"
+    assert "evidence.measurement_tool" in setup_step["required_fields"]
+    assert "measurement_conditions.stop_conditions_briefed" in setup_step["required_fields"]
+    assert "tool_is_not_metric_or_millimeter_capable" in setup_step["stop_if"]
+    safety_step = capture_plan[-1]
+    assert "left_right_independence.values_not_copied_between_sides" in safety_step["required_fields"]
+    assert "safety_screen.loss_of_grip_strength" in safety_step["required_fields"]
+    assert "any_safety_screen_symptom_is_true" in safety_step["stop_if"]
     assert "evidence.date" in payload["missing_fields"]
     assert "evidence.pilot_id" in payload["missing_fields"]
     assert "evidence.measurement_tool" in payload["missing_fields"]

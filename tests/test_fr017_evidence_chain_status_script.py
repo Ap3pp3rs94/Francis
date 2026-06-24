@@ -59,6 +59,18 @@ def test_fr017_evidence_chain_status_stops_at_measurement_template() -> None:
     assert payload["first_blocking_gate"] == "measurement_intake"
     assert payload["first_blocking_status"] == "pending_measurements"
     assert payload["next_required_input"] == "FR-017-MEASUREMENTS-INPUT-TEMPLATE.json"
+    assert (
+        payload["first_blocking_details"]["next_required_physical_input"]
+        == "complete_real_left_right_measurement_record_at_FR-017-MEASUREMENTS-INPUT-TEMPLATE.json"
+    )
+    assert payload["first_blocking_details"]["measurement_capture_plan_not_completion_evidence"] is True
+    assert "not physical validation evidence" in payload["first_blocking_details"]["measurement_capture_plan_contract"]
+    capture_plan = payload["first_blocking_details"]["measurement_capture_plan"]
+    assert isinstance(capture_plan, list)
+    assert capture_plan[0]["id"] == "setup_and_safety_brief"
+    assert "evidence.measurement_tool" in capture_plan[0]["required_fields"]
+    assert capture_plan[-1]["id"] == "left_right_independence_and_safety_screen"
+    assert "any_safety_screen_symptom_is_true" in capture_plan[-1]["stop_if"]
     assert "evidence.date" in payload["first_blocking_details"]["missing_fields"]
     assert "sides.left.wrist_clearance_gap" in payload["first_blocking_details"]["missing_fields"]
     missing_fields = payload["first_blocking_details"]["missing_fields"]

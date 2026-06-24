@@ -19,6 +19,7 @@ It packages FR-017 Forearm Cuffs as a documentation-ready and test-record-ready 
 ## Read-Only Gate Commands
 
 - `scripts/fr017-stage17-validation-gate.ps1 -Mode Status`: package and manifest structure.
+- `scripts/fr017-measurement-intake.ps1 -Mode Status`: measurement intake status plus the read-only `measurement_capture_plan` for the first physical-input gate.
 - `scripts/fr017-evidence-chain-status.ps1 -Mode Status`: first blocking FR-017 evidence gate and next required input.
 - `scripts/fr017-engineering-review-gate.ps1 -Mode Status`: professional review evidence after quick-release/cable-snag evidence.
 - `scripts/fr017-final-physical-gate.ps1 -Mode Status`: final aggregate gate; does not mark physical validation complete or clear FR-018 by itself.
@@ -63,3 +64,7 @@ Do not convert any `PENDING` record to `PASS` unless the record contains:
 - explicit remaining limitations
 
 Any numbness, tingling, cold fingers, discoloration, hand weakness, wrist pain, sharp pressure, reduced finger motion, loss of grip strength, trapped glove/wrist assembly, or unreachable release is `FAILED / REQUIRES REDESIGN`.
+
+## First Physical-Input Handoff
+
+Run `scripts/fr017-measurement-intake.ps1 -Mode Status` before entering pilot data. The returned `measurement_capture_plan` is the operator-facing capture order for the first FR-017 physical-input gate. It is not completion evidence; it cannot mark physical validation complete, clear powered or frame-coupled testing, or clear FR-018.

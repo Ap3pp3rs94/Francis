@@ -661,6 +661,151 @@ $RequiredLandmarkConfirmationNoteFragments = @(
   'safe'
 )
 
+$MeasurementCapturePlan = @(
+  [ordered]@{
+    id = 'setup_and_safety_brief'
+    validation_state = 'REQUIRES_MEASUREMENT'
+    required_fields = @(
+      'evidence.date',
+      'evidence.observer',
+      'evidence.pilot_id',
+      'evidence.measurement_tool',
+      'evidence.method',
+      'evidence.posture',
+      'measurement_conditions.no_tissue_compression_used',
+      'measurement_conditions.no_wrist_bone_compression_used',
+      'measurement_conditions.metric_tool_used',
+      'measurement_conditions.arm_relaxed_palm_neutral_or_exception_recorded',
+      'measurement_conditions.stop_conditions_briefed',
+      'measurement_conditions.condition_notes'
+    )
+    required_action = 'brief stop conditions, confirm a flexible metric tool, and establish relaxed arm/palm-neutral posture before any dimensions are recorded'
+    stop_if = @(
+      'tool_is_not_metric_or_millimeter_capable',
+      'method_requires_tissue_or_wrist_bone_compression',
+      'pilot_reports_pain_tingling_numbness_cold_fingers_discoloration_weakness_wrist_pain_sharp_pressure_reduced_motion_or_grip_loss'
+    )
+  },
+  [ordered]@{
+    id = 'left_arm_numeric_measurement_passes'
+    validation_state = 'REQUIRES_MEASUREMENT'
+    required_fields = @(
+      'sides.left.forearm_circumference_25mm_below_elbow_crease',
+      'sides.left.forearm_circumference_mid_forearm',
+      'sides.left.forearm_circumference_40mm_above_wrist_crease',
+      'sides.left.forearm_length_elbow_crease_to_wrist_crease',
+      'sides.left.outer_forearm_usable_panel_length',
+      'sides.left.upper_strap_allowed_band_width',
+      'sides.left.lower_strap_allowed_band_width',
+      'sides.left.bone_ridge_relief_length',
+      'sides.left.inner_forearm_no_pressure_zone_width',
+      'sides.left.wrist_clearance_gap',
+      'repeatability.left.second_pass_completed',
+      'repeatability.left.max_delta_mm',
+      'repeatability.left.all_required_measurements_within_5mm'
+    )
+    required_action = 'measure the left forearm as its own side-labeled record, repeat every required field, and keep max_delta_mm at or below 5 mm'
+    stop_if = @(
+      'left_side_label_not_visible',
+      'second_pass_not_completed',
+      'left_repeatability_delta_exceeds_5mm',
+      'any_safety_screen_symptom_is_true'
+    )
+  },
+  [ordered]@{
+    id = 'right_arm_numeric_measurement_passes'
+    validation_state = 'REQUIRES_MEASUREMENT'
+    required_fields = @(
+      'sides.right.forearm_circumference_25mm_below_elbow_crease',
+      'sides.right.forearm_circumference_mid_forearm',
+      'sides.right.forearm_circumference_40mm_above_wrist_crease',
+      'sides.right.forearm_length_elbow_crease_to_wrist_crease',
+      'sides.right.outer_forearm_usable_panel_length',
+      'sides.right.upper_strap_allowed_band_width',
+      'sides.right.lower_strap_allowed_band_width',
+      'sides.right.bone_ridge_relief_length',
+      'sides.right.inner_forearm_no_pressure_zone_width',
+      'sides.right.wrist_clearance_gap',
+      'repeatability.right.second_pass_completed',
+      'repeatability.right.max_delta_mm',
+      'repeatability.right.all_required_measurements_within_5mm'
+    )
+    required_action = 'measure the right forearm as its own side-labeled record, repeat every required field, and keep max_delta_mm at or below 5 mm'
+    stop_if = @(
+      'right_side_label_not_visible',
+      'second_pass_not_completed',
+      'right_repeatability_delta_exceeds_5mm',
+      'any_safety_screen_symptom_is_true'
+    )
+  },
+  [ordered]@{
+    id = 'safety_critical_landmark_and_zone_references'
+    validation_state = 'REQUIRES_MEASUREMENT'
+    required_fields = @(
+      'marked_zones.left.inner_elbow_crease_boundary',
+      'marked_zones.left.wrist_bone_boundary',
+      'marked_zones.left.radius_ridge_relief',
+      'marked_zones.left.ulna_ridge_relief',
+      'marked_zones.left.outer_forearm_cable_route',
+      'marked_zones.left.quick_release_reach_zone',
+      'marked_zones.left.glove_removal_path',
+      'marked_zones.right.inner_elbow_crease_boundary',
+      'marked_zones.right.wrist_bone_boundary',
+      'marked_zones.right.radius_ridge_relief',
+      'marked_zones.right.ulna_ridge_relief',
+      'marked_zones.right.outer_forearm_cable_route',
+      'marked_zones.right.quick_release_reach_zone',
+      'marked_zones.right.glove_removal_path',
+      'landmark_confirmation.inner_elbow_crease_boundary_confirmed',
+      'landmark_confirmation.wrist_bone_boundary_confirmed',
+      'landmark_confirmation.radius_ulna_relief_paths_confirmed',
+      'landmark_confirmation.outer_forearm_cable_route_confirmed',
+      'landmark_confirmation.quick_release_reach_zone_confirmed',
+      'landmark_confirmation.glove_removal_path_confirmed',
+      'landmark_confirmation.skin_safe_marking_used',
+      'landmark_confirmation.landmark_notes'
+    )
+    required_action = 'record side-specific marked-zone references for left and right safety landmarks before using any cuff dimensions downstream'
+    stop_if = @(
+      'inner_elbow_boundary_not_marked',
+      'wrist_bone_boundary_not_marked',
+      'radius_or_ulna_relief_path_not_marked',
+      'quick_release_or_glove_removal_path_not_confirmed',
+      'left_right_zone_reference_is_copied_or_ambiguous'
+    )
+  },
+  [ordered]@{
+    id = 'left_right_independence_and_safety_screen'
+    validation_state = 'REQUIRES_MEASUREMENT'
+    required_fields = @(
+      'left_right_independence.left_arm_measured_separately',
+      'left_right_independence.right_arm_measured_separately',
+      'left_right_independence.side_labels_verified',
+      'left_right_independence.values_not_copied_between_sides',
+      'left_right_independence.left_measurement_reference',
+      'left_right_independence.right_measurement_reference',
+      'left_right_independence.independence_notes',
+      'safety_screen.pain',
+      'safety_screen.tingling',
+      'safety_screen.numbness',
+      'safety_screen.cold_fingers',
+      'safety_screen.discoloration',
+      'safety_screen.hand_weakness',
+      'safety_screen.wrist_pain',
+      'safety_screen.sharp_pressure',
+      'safety_screen.reduced_finger_motion',
+      'safety_screen.loss_of_grip_strength'
+    )
+    required_action = 'confirm left/right independence, record distinct evidence references, and complete every symptom screen before rerunning the intake gate'
+    stop_if = @(
+      'left_and_right_values_were_copied',
+      'left_and_right_references_are_not_distinct',
+      'complete_left_right_numeric_profiles_are_identical_without_recheck',
+      'any_safety_screen_symptom_is_true'
+    )
+  }
+)
+
 $ExcludedMeasurementMethodPatterns = @(
   '\bcalipers?\b',
   'hard\s+calipers?',
@@ -870,6 +1015,10 @@ $Output = [ordered]@{
   repeatability_value_contract = 'Use unquoted JSON boolean true for second-pass confirmation fields and an unquoted JSON number for max_delta_mm. max_delta_mm must be 0 through 5 mm inclusive. PENDING is allowed only in templates and is treated as missing evidence.'
   repeatability_max_delta_mm = $RepeatabilityMaxDeltaMm
   safety_screen_value_contract = 'Use unquoted JSON boolean false for absent symptoms. Use true only when the symptom is observed; any true symptom blocks FR-017 progression. Any string value such as yes/no/1/0/"true"/"false" is invalid.'
+  measurement_capture_plan_contract = 'Read-only operator capture plan for the first physical-input gate. It lists required evidence groups and stop conditions, but it is not physical validation evidence and cannot mark FR-017 complete or clear FR-018.'
+  measurement_capture_plan_not_completion_evidence = $true
+  next_required_physical_input = 'complete_real_left_right_measurement_record_at_FR-017-MEASUREMENTS-INPUT-TEMPLATE.json'
+  measurement_capture_plan = @($MeasurementCapturePlan)
   required_measurement_fields = $RequiredMeasurementFields
   required_marked_zone_fields = $RequiredMarkedZoneFields
   required_repeatability_fields = $RequiredRepeatabilityFields
