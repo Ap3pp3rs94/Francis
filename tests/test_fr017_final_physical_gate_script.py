@@ -61,6 +61,24 @@ def test_fr017_final_physical_gate_reports_default_templates_as_pending() -> Non
     assert payload["engineering_review_gate_status"] == "pending_quick_release_cable_snag_gate"
     assert payload["engineering_review_gate_ready"] is False
     assert payload["upstream_measurement_intake_status"] == "pending_measurements"
+    assert (
+        payload["upstream_next_required_physical_input"]
+        == "complete_real_left_right_measurement_record_at_FR-017-MEASUREMENTS-INPUT-TEMPLATE.json"
+    )
+    assert payload["upstream_measurement_capture_plan_not_completion_evidence"] is True
+    assert "intake readiness only" in payload["upstream_measurement_capture_plan_status_contract"]
+    capture_status = payload["upstream_measurement_capture_plan_status"]
+    assert isinstance(capture_status, list)
+    assert [step["id"] for step in capture_status] == [
+        "setup_and_safety_brief",
+        "left_arm_numeric_measurement_passes",
+        "right_arm_numeric_measurement_passes",
+        "safety_critical_landmark_and_zone_references",
+        "left_right_independence_and_safety_screen",
+    ]
+    assert all(step["status"] == "pending_required_fields" for step in capture_status)
+    assert "evidence.date" in capture_status[0]["missing_fields"]
+    assert "safety_screen.loss_of_grip_strength" in capture_status[-1]["missing_fields"]
     assert payload["documentation_complete"] is True
     assert payload["evidence_containers_complete"] is True
     assert payload["physical_validation_evidence_chain_complete"] is False
@@ -444,6 +462,11 @@ def test_fr017_final_physical_gate_exposes_measurement_safety_blocker(tmp_path: 
     assert result["upstream_mockup_status"] == "failed_requires_redesign_or_medical_review"
     assert result["upstream_measurement_intake_status"] == "failed_requires_redesign_or_medical_review"
     assert result["upstream_safety_blockers"] == ["tingling"]
+    capture_status = {step["id"]: step for step in result["upstream_measurement_capture_plan_status"]}
+    safety_status = capture_status["left_right_independence_and_safety_screen"]
+    assert safety_status["status"] == "failed_stop_condition_or_blocking_signal"
+    assert safety_status["ready_for_measurement_intake"] is False
+    assert safety_status["blocking_signals"] == ["safety_screen.tingling"]
     assert result["physical_validation_evidence_chain_complete"] is False
     assert result["stage17_physical_completion_decision_ready"] is False
     assert result["physical_validation_complete"] is False

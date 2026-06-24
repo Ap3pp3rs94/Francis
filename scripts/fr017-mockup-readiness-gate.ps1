@@ -93,6 +93,22 @@ function Add-UniqueStrings {
   }
 }
 
+function Get-ObjectArrayProperty {
+  param(
+    [object]$Payload,
+    [string]$Name
+  )
+
+  $Value = Get-PropertyValue -Payload $Payload -Name $Name
+  if ($null -eq $Value) {
+    return @()
+  }
+  if ($Value -is [System.Array]) {
+    return @($Value)
+  }
+  return @($Value)
+}
+
 function Test-PositiveNumber {
   param([object]$Value)
 
@@ -579,6 +595,10 @@ $Output = [ordered]@{
   upstream_measurement_intake_exit_code = [int]$MeasurementIntake.exit_code
   upstream_measurement_intake_parse_ok = [bool]$MeasurementIntake.parse_ok
   upstream_measurement_intake_ready = $MeasurementIntakeReady
+  measurement_capture_plan_status_contract = if ([bool]$MeasurementIntake.parse_ok) { [string](Get-PropertyValue -Payload $MeasurementIntake.payload -Name 'measurement_capture_plan_status_contract' -Default '') } else { '' }
+  measurement_capture_plan_not_completion_evidence = if ([bool]$MeasurementIntake.parse_ok) { [bool](Get-PropertyValue -Payload $MeasurementIntake.payload -Name 'measurement_capture_plan_not_completion_evidence' -Default $false) } else { $false }
+  next_required_physical_input = if ([bool]$MeasurementIntake.parse_ok) { [string](Get-PropertyValue -Payload $MeasurementIntake.payload -Name 'next_required_physical_input' -Default '') } else { '' }
+  measurement_capture_plan_status = @(Get-ObjectArrayProperty -Payload $MeasurementIntake.payload -Name 'measurement_capture_plan_status')
   mockup_parse_ok = $MockupParseOk
   read_only_contract = $true
   writes_repo = $false

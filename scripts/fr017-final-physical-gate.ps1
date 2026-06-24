@@ -136,6 +136,22 @@ function Get-GateArrayProperty {
   return @(ConvertTo-StringArray -Value (Get-GateProperty -Payload $Payload -Name $Name))
 }
 
+function Get-GateObjectArrayProperty {
+  param(
+    [object]$Payload,
+    [string]$Name
+  )
+
+  $Value = Get-GateProperty -Payload $Payload -Name $Name
+  if ($null -eq $Value) {
+    return @()
+  }
+  if ($Value -is [System.Array]) {
+    return @($Value)
+  }
+  return @($Value)
+}
+
 function Read-EvidenceDateRecord {
   param(
     [string]$Id,
@@ -501,6 +517,10 @@ $Output = [ordered]@{
   upstream_mannequin_gate_ready = if ([bool]$EngineeringGate.parse_ok) { [bool](Get-GateProperty -Payload $EngineeringGate.payload -Name 'upstream_mannequin_gate_ready' -Default $false) } else { $false }
   upstream_mockup_status = if ([bool]$EngineeringGate.parse_ok) { [string](Get-GateProperty -Payload $EngineeringGate.payload -Name 'upstream_mockup_status' -Default '') } else { '' }
   upstream_measurement_intake_status = if ([bool]$EngineeringGate.parse_ok) { [string](Get-GateProperty -Payload $EngineeringGate.payload -Name 'upstream_measurement_intake_status' -Default '') } else { '' }
+  upstream_next_required_physical_input = if ([bool]$EngineeringGate.parse_ok) { [string](Get-GateProperty -Payload $EngineeringGate.payload -Name 'upstream_next_required_physical_input' -Default '') } else { '' }
+  upstream_measurement_capture_plan_status_contract = if ([bool]$EngineeringGate.parse_ok) { [string](Get-GateProperty -Payload $EngineeringGate.payload -Name 'upstream_measurement_capture_plan_status_contract' -Default '') } else { '' }
+  upstream_measurement_capture_plan_not_completion_evidence = if ([bool]$EngineeringGate.parse_ok) { [bool](Get-GateProperty -Payload $EngineeringGate.payload -Name 'upstream_measurement_capture_plan_not_completion_evidence' -Default $false) } else { $false }
+  upstream_measurement_capture_plan_status = @(Get-GateObjectArrayProperty -Payload $EngineeringGate.payload -Name 'upstream_measurement_capture_plan_status')
   upstream_measurement_invalid_fields = @(Get-GateArrayProperty -Payload $EngineeringGate.payload -Name 'upstream_measurement_invalid_fields')
   upstream_measurement_consistency_violations = @(Get-GateArrayProperty -Payload $EngineeringGate.payload -Name 'upstream_measurement_consistency_violations')
   upstream_marked_zone_specificity_violations = @(Get-GateArrayProperty -Payload $EngineeringGate.payload -Name 'upstream_marked_zone_specificity_violations')

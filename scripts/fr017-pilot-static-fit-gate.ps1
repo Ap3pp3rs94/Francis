@@ -320,6 +320,22 @@ function Get-UpstreamArrayProperty {
   return @(ConvertTo-StringArray -Value (Get-PropertyValue -Payload $Payload -Name $Name))
 }
 
+function Get-UpstreamObjectArrayProperty {
+  param(
+    [object]$Payload,
+    [string]$Name
+  )
+
+  $Value = Get-PropertyValue -Payload $Payload -Name $Name
+  if ($null -eq $Value) {
+    return @()
+  }
+  if ($Value -is [System.Array]) {
+    return @($Value)
+  }
+  return @($Value)
+}
+
 function Invoke-MannequinInterfaceGate {
   param(
     [string]$ResolvedMeasurementPath,
@@ -560,6 +576,10 @@ $Output = [ordered]@{
   upstream_mockup_status = if ([bool]$Upstream.parse_ok) { [string](Get-PropertyValue -Payload $Upstream.payload -Name 'upstream_mockup_status' -Default '') } else { '' }
   upstream_mockup_gate_ready = if ([bool]$Upstream.parse_ok) { [bool](Get-PropertyValue -Payload $Upstream.payload -Name 'upstream_mockup_gate_ready' -Default $false) } else { $false }
   upstream_measurement_intake_status = if ([bool]$Upstream.parse_ok) { [string](Get-PropertyValue -Payload $Upstream.payload -Name 'upstream_measurement_intake_status' -Default '') } else { '' }
+  upstream_next_required_physical_input = if ([bool]$Upstream.parse_ok) { [string](Get-PropertyValue -Payload $Upstream.payload -Name 'upstream_next_required_physical_input' -Default '') } else { '' }
+  upstream_measurement_capture_plan_status_contract = if ([bool]$Upstream.parse_ok) { [string](Get-PropertyValue -Payload $Upstream.payload -Name 'upstream_measurement_capture_plan_status_contract' -Default '') } else { '' }
+  upstream_measurement_capture_plan_not_completion_evidence = if ([bool]$Upstream.parse_ok) { [bool](Get-PropertyValue -Payload $Upstream.payload -Name 'upstream_measurement_capture_plan_not_completion_evidence' -Default $false) } else { $false }
+  upstream_measurement_capture_plan_status = @(Get-UpstreamObjectArrayProperty -Payload $Upstream.payload -Name 'upstream_measurement_capture_plan_status')
   upstream_measurement_invalid_fields = @(Get-UpstreamArrayProperty -Payload $Upstream.payload -Name 'upstream_measurement_invalid_fields')
   upstream_measurement_consistency_violations = @(Get-UpstreamArrayProperty -Payload $Upstream.payload -Name 'upstream_measurement_consistency_violations')
   upstream_marked_zone_specificity_violations = @(Get-UpstreamArrayProperty -Payload $Upstream.payload -Name 'upstream_marked_zone_specificity_violations')
