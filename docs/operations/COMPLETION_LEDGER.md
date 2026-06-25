@@ -94230,6 +94230,51 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, and unrelated full-repo suites were not run
   for this bounded developer-bridge/Chat UI slice.
 
+### 2026-06-25 19:20Z - Communication UI surfaces session and toggle proof
+
+Current posture: Phase 2 / the Communication UI now shows bounded session
+context and participant toggle proof directly on the operator-visible
+collaboration surface before the operator opens receipt-heavy history.
+
+What changed:
+
+- The Live Conversation panel now shows the current session summary from the
+  existing `developer_bridge.collaboration_sessions` readback: message count,
+  latest direction, latest objective, latest bounded preview, participants,
+  direction counts, and latest receipt id.
+- Chat UI session readback now requests the existing bounded maximum
+  `item_limit=50` so the session summary can describe the broader session while
+  the visible live transcript remains capped separately.
+- Participant cards now show each agent's latest toggle receipt, actor, prior
+  state, new state, receipt id, and no-authority proof flags.
+- The technical toggle receipt archive remains available under the existing
+  technical receipts section.
+
+Validation:
+
+- Full Chat UI test script passed: `cd apps\chat_ui; npm run test` with 278
+  tests.
+- Chat UI production build passed: `cd apps\chat_ui; npm run build`.
+- `git diff --check` passed.
+- Live session readback at
+  `/developer-bridge/collaboration-sessions?limit=5&item_limit=50` returned a
+  33-message bounded session summary with participants, direction counts,
+  latest preview, `stores_full_transcript=false`, and no execution, mutation, or
+  memory-write authority.
+- Browser proof captured `http://127.0.0.1:5173/` after readback settlement and
+  showed the Live Conversation session summary plus Codex/Ollama last-toggle
+  receipts with execute/model/memory-write flags false.
+
+Remaining truthful gap:
+
+- This is a UI visibility and bounded-readback wiring change only. It does not
+  change relay timing, model prompts, participant enablement policy, transcript
+  persistence, execution authority, model authority, or memory-write authority.
+- Session summaries are still bounded previews from relay receipts, not a raw
+  transcript store.
+- `.\scripts\check.ps1`, GitHub CI, and unrelated backend suites were not run
+  for this Chat UI-only slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

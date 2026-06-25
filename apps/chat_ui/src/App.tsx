@@ -36,6 +36,7 @@ import {
   setCollaborationAgentEnabled,
   type CollaborationAgent,
   type CollaborationAgentsStatus,
+  type CollaborationAgentToggleReceipt,
   type CollaborationLearning,
   type CollaborationReview,
   type CollaborationRuntimeHealth,
@@ -99,6 +100,7 @@ const COLLABORATION_PANEL_POLL_MS = 15000;
 const LENS_MCP_STATUS_TIMEOUT_MS = 5000;
 const COLLABORATION_READBACK_TIMEOUT_MS = 9000;
 const COLLABORATION_TRANSCRIPT_LIMIT = 8;
+const COLLABORATION_SESSION_ITEM_LIMIT = 50;
 const COLLABORATION_REVIEW_LIMIT = 20;
 const COLLABORATION_LEARNING_LIMIT = 4;
 const FRANCIS_TRUST_LADDER_LIMIT = 8;
@@ -1086,6 +1088,24 @@ function collaborationSessionLabel(item: CollaborationTranscriptEntry): string {
   return `${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
 }
 
+function collaborationDirectionCountsText(counts: Record<string, number>): string {
+  const parts = Object.entries(counts)
+    .filter(([, count]) => count > 0)
+    .map(([direction, count]) => `${direction} ${count}`);
+  return parts.length ? parts.join(" / ") : "unknown";
+}
+
+function latestToggleReceiptForAgent(
+  receipts: CollaborationAgentToggleReceipt[],
+  agentId: string,
+): CollaborationAgentToggleReceipt | null {
+  for (let index = receipts.length - 1; index >= 0; index -= 1) {
+    const receipt = receipts[index];
+    if (receipt?.agent === agentId) return receipt;
+  }
+  return null;
+}
+
 function buildCollaborationSessions(items: CollaborationTranscriptEntry[]): CollaborationUiSession[] {
   const chronological = [...items]
     .sort((left, right) => collaborationTimestamp(left) - collaborationTimestamp(right));
@@ -1176,7 +1196,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
           fetchCollaborationSessions({
             baseUrl: props.baseUrl,
             limit: 5,
-            itemLimit: COLLABORATION_TRANSCRIPT_LIMIT,
+            itemLimit: COLLABORATION_SESSION_ITEM_LIMIT,
             signal: readbackSignal,
           }),
         );
@@ -1284,7 +1304,8 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
   const agents = status?.agents ?? [];
   const activeCount = agents.filter((agent) => agent.enabled).length;
   const operatorConsole = status?.operatorConsole;
-  const latestToggleReceipts = [...(status?.receipts ?? [])].slice(-4).reverse();
+  const toggleReceipts = status?.receipts ?? [];
+  const latestToggleReceipts = [...toggleReceipts].slice(-4).reverse();
   const transcriptItems = transcript?.items ?? [];
   const transcriptAuditSummary = useMemo(() => collaborationTranscriptAuditSummary(transcriptItems), [transcriptItems]);
   const sessionSourceItems = showAuditReceipts ? transcriptItems : transcriptAuditSummary.conversationItems;
@@ -1331,6 +1352,9 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
   const visibleTranscriptItems = selectedSession?.items ?? [];
   const liveTranscriptItems = visibleTranscriptItems.slice(-6);
   const latestSessionId = sessions[0]?.id ?? "";
+  const selectedSessionReadback =
+    sessionSummaries.find((session) => session.id === selectedSession?.id) ??
+    (followLatest ? sessionSummaries[0] ?? null : null);
   const latestLiveMessageId = liveTranscriptItems[liveTranscriptItems.length - 1]?.id ?? "";
   const latestMessageId = visibleTranscriptItems[visibleTranscriptItems.length - 1]?.id ?? "";
 
@@ -1502,6 +1526,39 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
                 {session.label} ({session.items.length})
               </button>
             ))}
+          </div>
+        ) : null}
+        {selectedSessionReadback ? (
+          <div
+            style={{
+              background: "rgba(15, 23, 42, 0.48)",
+              border: "1px solid rgba(125, 211, 252, 0.26)",
+              borderRadius: 12,
+              marginTop: 12,
+              padding: "10px 12px",
+            }}
+          >
+            <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 10 }}>
+              <span style={{ color: "#a7f3d0", fontSize: 12, fontWeight: 700, textTransform: "uppercase" }}>Session</span>
+              <span style={{ color: "#93c5fd", fontSize: 13 }}>{selectedSessionReadback.messageCount} messages</span>
+              <span style={{ color: "#93c5fd", fontSize: 13 }}>{selectedSessionReadback.latestDirection || "unknown direction"}</span>
+              <span style={{ color: "#94a3b8", fontSize: 13 }}>
+                {selectedSessionReadback.endedAt
+                  ? collaborationTimeText({ createdAt: selectedSessionReadback.endedAt } as CollaborationTranscriptEntry)
+                  : "unknown time"}
+              </span>
+            </div>
+            <p style={{ color: "#e2e8f0", margin: "8px 0 0", overflowWrap: "anywhere" }}>
+              {selectedSessionReadback.latestObjective || "No session objective."}
+            </p>
+            {selectedSessionReadback.latestPreview ? (
+              <p style={{ color: "#cbd5e1", margin: "6px 0 0", overflowWrap: "anywhere" }}>{selectedSessionReadback.latestPreview}</p>
+            ) : null}
+            <div style={{ color: "#94a3b8", display: "flex", flexWrap: "wrap", fontSize: 12, gap: 10, marginTop: 8 }}>
+              <span>participants {selectedSessionReadback.participants.join(", ") || "unknown"}</span>
+              <span>directions {collaborationDirectionCountsText(selectedSessionReadback.directionCounts)}</span>
+              <span>latest {collaborationShortId(selectedSessionReadback.latestItemId)}</span>
+            </div>
           </div>
         ) : null}
         <div
@@ -1905,6 +1962,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
       <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", marginTop: 18 }}>
         {agents.map((agent) => {
           const busy = busyAgent === agent.agent;
+          const latestToggle = latestToggleReceiptForAgent(toggleReceipts, agent.agent);
           return (
             <article
               key={agent.agent}
@@ -1938,7 +1996,23 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
                   <dt style={{ color: "#94a3b8" }}>Runner</dt>
                   <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{agent.localRunner || "external client"}</dd>
                 </div>
+                {latestToggle ? (
+                  <div>
+                    <dt style={{ color: "#94a3b8" }}>Last Toggle</dt>
+                    <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
+                      {boolText(latestToggle.previousEnabled)} {"->"} {boolText(latestToggle.enabled)} by{" "}
+                      {latestToggle.actor || "unknown"} ({collaborationShortId(latestToggle.receiptId)})
+                    </dd>
+                  </div>
+                ) : null}
               </dl>
+              {latestToggle ? (
+                <div style={{ color: "#94a3b8", display: "flex", flexWrap: "wrap", fontSize: 12, gap: 8, marginTop: 10 }}>
+                  <span>execute {boolText(Boolean(latestToggle.governance.executes_prompt))}</span>
+                  <span>model {boolText(Boolean(latestToggle.governance.calls_model))}</span>
+                  <span>memory write {boolText(Boolean(latestToggle.governance.grants_memory_write_authority))}</span>
+                </div>
+              ) : null}
             </article>
           );
         })}
