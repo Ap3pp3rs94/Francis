@@ -4,6 +4,7 @@ import json
 import os
 
 from fastapi.routing import APIRoute
+from fastapi.testclient import TestClient
 import pytest
 
 from francis.chat.continuity.ledger import append
@@ -128,6 +129,24 @@ def test_developer_bridge_routes_are_mounted() -> None:
     assert "/developer-bridge/collaboration-agents/toggle" in routes
     assert "/developer-bridge/francis-body-map" in routes
     assert "/developer-bridge/francis-trust-ladder" in routes
+
+
+def test_developer_bridge_agent_toggle_is_classified_in_authority_matrix() -> None:
+    from francis.api.app import create_app
+
+    matrix = TestClient(create_app()).get("/system/mutating-route-authority-matrix").json()
+    entries = {
+        (entry["method"], entry["path"]): entry
+        for entry in matrix["entries"]
+        if entry["path"] == "/developer-bridge/collaboration-agents/toggle"
+    }
+
+    assert matrix["missing"] == []
+    entry = entries[("POST", "/developer-bridge/collaboration-agents/toggle")]
+    assert entry["family"] == "developer_bridge"
+    assert entry["required_actor"] == "payload.actor or chat_ui.system default"
+    assert entry["required_scope"] == "developer_bridge.operator_console_control"
+    assert entry["governance_maturity"] == "bounded_operator_control_receipt"
 
 
 def test_francis_body_map_exposes_whole_body_without_authority(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]

@@ -330,6 +330,20 @@ _RULES: tuple[AuthorityRule, ...] = (
         ),
     ),
     AuthorityRule(
+        family="developer_bridge",
+        prefixes=("/developer-bridge/collaboration-agents/toggle",),
+        required_actor="payload.actor or chat_ui.system default",
+        required_scope="developer_bridge.operator_console_control",
+        approval_requirement="not_required_operator_console_control_receipt",
+        receipt_behavior="developer_bridge.collaboration_agent_toggle_receipt and bounded agent-control state",
+        denial_behavior="unknown agent returns DeveloperBridgeError before state or receipt write",
+        governance_maturity="bounded_operator_control_receipt",
+        notes=(
+            "Toggle changes only known collaboration participant enablement; it does not execute prompts, call "
+            "models, run tools, or grant execution/mutation authority."
+        ),
+    ),
+    AuthorityRule(
         family="attachments",
         prefixes=("/attachments/upload",),
         required_actor="multipart request_actor, actor, or api.attachments default",
