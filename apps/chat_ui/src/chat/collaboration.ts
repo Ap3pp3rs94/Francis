@@ -747,6 +747,14 @@ function textBetween(value: string, start: string, endMarkers: string[]): string
   return value.slice(afterStart, endIndex).replace(/\s+/g, " ").trim();
 }
 
+function firstTextBetween(value: string, starts: string[], endMarkers: string[]): string {
+  for (const start of starts) {
+    const text = textBetween(value, start, endMarkers);
+    if (text) return text;
+  }
+  return "";
+}
+
 function compactGuardFallbackReceipt(raw: string, item: CollaborationTranscriptItem): CollaborationRelayDisplay | null {
   if (!raw.startsWith("Francis1 output guard fallback:")) return null;
   const drift = textBetween(raw, "Drift terms:", [". Topic:", ". Review artifact:", ". Issue/gap/risk:"]);
@@ -781,7 +789,7 @@ export function formatCollaborationRelayMessage(item: CollaborationTranscriptIte
     item.sourceAgent === "codex" &&
     item.targetAgent === "ollama" &&
     item.objective.toLowerCase().startsWith("francis1 collaboration driver turn") &&
-    raw.startsWith("Francis1 collab turn ");
+    (raw.startsWith("Francis1 collab turn ") || raw.startsWith("Francis1 turn "));
   if (!isDriverPrompt) {
     const technicalText = [item.objective ? `Objective: ${item.objective}` : "", item.context ? `Context: ${item.context}` : ""]
       .filter(Boolean)
@@ -797,11 +805,26 @@ export function formatCollaborationRelayMessage(item: CollaborationTranscriptIte
     };
   }
 
-  const turn = textBetween(raw, "Francis1 collab turn ", [". Contract", ". Topic"]);
+  const turn = firstTextBetween(raw, ["Francis1 collab turn ", "Francis1 turn "], [
+    ". Contract",
+    ". contract",
+    ". francis1-collaboration",
+    ". Topic",
+  ]);
   const topic = textBetween(raw, "Topic:", [" Reply:", ". Reply:", " Current artifact:", ". Current artifact:"]);
+  const bodyMap = textBetween(raw, "Body map:", [" Trust:", ". Trust:", " Current artifact:", ". Current artifact:"]);
+  const trust = textBetween(raw, "Trust:", [" Current artifact:", ". Current artifact:", " Prior check:", ". Prior check:"]);
   const artifact = textBetween(raw, "Current artifact:", [". Prior check:", " Prior check:", ". Codex response:", " Codex response:"]);
   const priorCheck = textBetween(raw, "Prior check:", [". Codex response:", " Codex response:", ". Body map:", " Body map:"]);
-  const codexResponse = textBetween(raw, "Codex response:", [". Body map:", " Body map:", ". Trust:", " Trust:"]);
+  const codexResponse = textBetween(raw, "Codex response:", [
+    ". Guard note:",
+    " Guard note:",
+    ". Body map:",
+    " Body map:",
+    ". Trust:",
+    " Trust:",
+  ]);
+  const guardNote = textBetween(raw, "Guard note:", []);
   const lines = [
     turn ? `Turn ${turn}` : item.objective,
     topic ? `Topic: ${topic}` : "",
@@ -810,8 +833,11 @@ export function formatCollaborationRelayMessage(item: CollaborationTranscriptIte
   const conversationLines = [topic ? `Topic: ${topic}` : "", codexResponse ? `Codex response: ${codexResponse}` : ""].filter(Boolean);
   const technicalLines = [
     turn ? `Turn ${turn}` : item.objective,
+    bodyMap ? `Body map: ${bodyMap}` : "",
+    trust ? `Trust: ${trust}` : "",
     artifact ? `Artifact: ${artifact}` : "",
     priorCheck ? `Prior check: ${priorCheck}` : "",
+    guardNote ? `Guard note: ${guardNote}` : "",
     item.context ? `Context: ${item.context}` : "",
   ].filter(Boolean);
 

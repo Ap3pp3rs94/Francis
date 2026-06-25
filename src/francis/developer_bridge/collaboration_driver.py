@@ -63,6 +63,17 @@ _LOOP_MARKERS = (
     ("clarification_dependency", "clarify"),
 )
 
+_OUTPUT_GUARD_TERM_ALLOWLIST = {
+    "advisory_output_boundary",
+    "clarification_dependency",
+    "executable_code_boundary",
+    "local_model_reconciliation_loop",
+    "missing_surface_fallback",
+    "protocol_wrapper_reply",
+    "unauthorized_artifact_review_claim",
+    "user_confirmation_fallback",
+}
+
 
 def drive_once(
     *,
@@ -214,10 +225,11 @@ def read_collaboration_learning_events(
             continue
         if clean_session_id and str(event.get("session_id") or "") != clean_session_id:
             continue
+        event = _learning_event_with_latest_signal(event, latest_signal)
         repeated_terms = [str(item) for item in _list(event.get("repeated_terms")) if str(item)]
         if clean_term and clean_term not in {_topic_key(item) for item in repeated_terms}:
             continue
-        records.append(_learning_event_with_latest_signal(event, latest_signal))
+        records.append(event)
 
     records.sort(
         key=lambda item: (
@@ -725,6 +737,7 @@ def _learning_event_with_latest_signal(
         )
         merged["current_signal_observed"] = bool(latest_signal.get("observed"))
         merged["current_signal_recent_turn_count"] = _safe_int(latest_signal.get("recent_turn_count"), default=0)
+        merged["repeated_terms"] = _merge_terms(event.get("repeated_terms"), latest_signal.get("repeated_terms"))
     else:
         merged["current_signal_observed"] = False
         merged["current_signal_recent_turn_count"] = len(_list(event.get("recent_turns")))
@@ -739,6 +752,16 @@ def _learning_event_latest_turn(event: dict[str, object]) -> int:
         if isinstance(item, dict):
             latest_turn = max(latest_turn, _safe_int(item.get("turn"), default=0))
     return latest_turn
+
+
+def _merge_terms(*values: object) -> list[str]:
+    terms: list[str] = []
+    for value in values:
+        for item in _list(value):
+            term = _bounded_text(item, limit=80)
+            if term and term not in terms:
+                terms.append(term)
+    return terms[:16]
 
 
 def _learning_recent_turn_readback(item: dict[str, object]) -> dict[str, object]:
@@ -883,16 +906,19 @@ def _loop_signal(state: dict[str, object]) -> dict[str, object]:
 def _guard_saturation_signal(state: dict[str, object]) -> dict[str, object]:
     recent = _recent_turn_notes(state, limit=6)
     hit_turns: list[dict[str, object]] = []
+    repeated_terms: list[str] = []
     for item in recent:
         note = str(item.get("note_summary") or "").lower()
         if "francis1 output guard" not in note and "output guard" not in note:
             continue
+        matched = _guard_matched_terms(note)
+        repeated_terms = _merge_terms(repeated_terms, matched)
         hit_turns.append(
             {
                 "turn": item.get("turn", ""),
                 "note_id": item.get("note_id", ""),
                 "ollama_prompt_id": item.get("ollama_prompt_id", ""),
-                "matched_terms": ["output_guard_drift"],
+                "matched_terms": matched,
             }
         )
     detected = len(hit_turns) >= 2
@@ -901,7 +927,7 @@ def _guard_saturation_signal(state: dict[str, object]) -> dict[str, object]:
         signature = "output_guard_drift|continuous_saturation"
     return {
         "detected": detected,
-        "repeated_terms": ["output_guard_drift"] if detected else [],
+        "repeated_terms": repeated_terms if detected else [],
         "recent_turns": hit_turns[-6:],
         "signature": signature,
         "failure_type": "output_guard_drift",
@@ -917,6 +943,20 @@ def _guard_saturation_signal(state: dict[str, object]) -> dict[str, object]:
             "move to the next concrete topic and cite the relevant review artifact instead of repeating guarded drift"
         ),
     }
+
+
+def _guard_matched_terms(note: str) -> list[str]:
+    terms = ["output_guard_drift"]
+    marker = "drift terms:"
+    start = note.find(marker)
+    if start < 0:
+        return terms
+    raw_terms = note[start + len(marker) :].split(".", 1)[0]
+    for raw_term in raw_terms.split(","):
+        term = "".join(ch for ch in raw_term.strip() if ch.isalnum() or ch == "_")
+        if term in _OUTPUT_GUARD_TERM_ALLOWLIST and term not in terms:
+            terms.append(term)
+    return terms
 
 
 def _bounded_summary(value: object, *, limit: int = 420) -> str:

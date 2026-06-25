@@ -94168,6 +94168,68 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, and unrelated backend/UI suites were not
   run for this bounded developer-bridge/Chat UI slice.
 
+### 2026-06-25 19:14Z - Learning receipts preserve specific guard drift terms
+
+Current posture: Phase 2 / collaboration learning receipts now preserve bounded,
+specific guard-drift terms from Francis1 output-guard summaries and the
+Communication UI compacts the current Francis1 driver prompt grammar instead of
+showing the full technical wrapper in the live conversation.
+
+What changed:
+
+- Added an allowlisted guard-drift term readback path for repeated Francis1
+  output-guard receipts, preserving terms such as
+  `local_model_reconciliation_loop`, `clarification_dependency`, and
+  `unauthorized_artifact_review_claim` without storing raw model text.
+- Learning event readback now merges the current `latest_learning_signal`
+  repeated terms into the matching bounded event before term filtering, so a
+  specific term can be queried through the read-only route.
+- Recent guard-saturation turn readbacks now show specific matched terms per
+  turn while keeping `output_guard_drift` as the primary failure type.
+- The Chat UI relay formatter now recognizes the current `Francis1 turn ...`
+  driver prompt grammar and keeps body-map, trust, prior-check, guard-note, and
+  context details under `Technical receipt` instead of the visible conversation
+  text.
+
+Validation:
+
+- Live runtime readback returned `status=healthy`, turn `1121`, three bounded
+  helper worker pairs, and current learning signal terms
+  `output_guard_drift`, `local_model_reconciliation_loop`,
+  `clarification_dependency`, and `unauthorized_artifact_review_claim`.
+- Live learning-events readback for `failure_type=output_guard_drift` returned
+  the current signal merged into the bounded event with no training, execution,
+  mutation, approval, or memory-write authority.
+- Direct guard-saturation readback over current state found the same specific
+  drift terms on recent turns without raw transcript storage.
+- Focused backend tests passed:
+  `.\.venv\Scripts\python.exe -m pytest -q
+  tests/test_developer_bridge.py::test_collaboration_driver_rotates_topics_after_repeated_output_guard_receipts
+  tests/test_developer_bridge.py::test_collaboration_learning_events_readback_is_bounded_and_read_only`.
+- Full developer-bridge backend test file passed:
+  `.\.venv\Scripts\python.exe -m pytest -q tests/test_developer_bridge.py`.
+- Full Chat UI test script passed: `cd apps\chat_ui; npm run test` with 278
+  tests, including the current Francis1 driver grammar formatter regression.
+- Chat UI production build passed: `cd apps\chat_ui; npm run build`.
+- Ruff passed for `src\francis\developer_bridge\collaboration_driver.py` and
+  `tests\test_developer_bridge.py`.
+- Mypy passed for `src\francis\developer_bridge\collaboration_driver.py`.
+- `git diff --check` passed.
+- Browser proof captured `http://127.0.0.1:5173/` after readback settlement and
+  showed the Live Conversation panel rendering current driver messages as
+  compact conversation text with technical details collapsed.
+
+Remaining truthful gap:
+
+- This is still receipt readback and UI presentation only; it does not tune,
+  train, or retag the local model.
+- The allowlist intentionally drops unknown drift tokens rather than preserving
+  arbitrary model output.
+- The Communication UI still depends on bounded transcript/session readbacks and
+  remains a visibility surface, not a raw transcript store or execution surface.
+- `.\scripts\check.ps1`, GitHub CI, and unrelated full-repo suites were not run
+  for this bounded developer-bridge/Chat UI slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

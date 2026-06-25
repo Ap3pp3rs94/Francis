@@ -1024,6 +1024,60 @@ test("formatCollaborationRelayMessage compacts driver prompts without dropping r
   assert.deepEqual(display.receiptFields, ["objective", "prompt", "context"]);
 });
 
+test("formatCollaborationRelayMessage compacts current Francis1 driver prompt grammar", () => {
+  const transcript = parseCollaborationTranscript({
+    ok: true,
+    mode: "read_only",
+    relay_root: "integrations/developer_bridge/collaboration_prompts",
+    count: 1,
+    truncated: false,
+    filters: { limit: 1 },
+    items: [
+      {
+        id: "collab_driver_current",
+        created_at: "2026-06-25T19:12:53Z",
+        updated_at: "2026-06-25T19:12:53Z",
+        status: "queued",
+        source_agent: "codex",
+        target_agent: "ollama",
+        direction: "codex->ollama",
+        objective: "Francis1 collaboration driver turn 1122",
+        prompt:
+          "Francis1 turn 1122. francis1-collaboration-compact-contract-v1. Topic: how to prove a local-model response is advice only before any Francis action-readiness claim. Reply: issue/gap/risk; artifact. Body map: Francis1 can see whole-body surfaces; authority remain false. Trust: classify needs; no capability authority. Current artifact: ollama participant and action-readiness receipts. Prior check: Review candidate insight-collab-alpha: surface=api.routes.chat.mission_ingress; verified=existing; build_or_wire=false. Codex response: I am inspecting that surface before edits; continue from it, do not request user confirmation or a missing surface. Guard note: repeated guarded drift was stored as learning receipts; answer the current topic, not the prior drift.",
+        context: "session=driver-alpha; turn=1122; no_action_authority=true.",
+        governance: {
+          executes_prompt: false,
+          grants_mutation_authority: false,
+          requires_operator_review: true,
+        },
+      },
+    ],
+    governance: {
+      executes_prompt: false,
+    },
+  });
+
+  const display = formatCollaborationRelayMessage(transcript.items[0]!);
+
+  assert.equal(display.compacted, true);
+  assert.equal(display.summary.includes("Turn 1122"), true);
+  assert.equal(display.summary.includes("Topic: how to prove a local-model response"), true);
+  assert.equal(display.summary.includes("Artifact: ollama participant and action-readiness receipts"), true);
+  assert.equal(display.conversationText.includes("Topic: how to prove a local-model response"), true);
+  assert.equal(display.conversationText.includes("Codex response: I am inspecting that surface"), true);
+  assert.equal(display.conversationText.includes("Body map:"), false);
+  assert.equal(display.conversationText.includes("Trust:"), false);
+  assert.equal(display.conversationText.includes("Prior check:"), false);
+  assert.equal(display.conversationText.includes("Guard note:"), false);
+  assert.equal(display.technicalText.includes("Body map: Francis1 can see whole-body surfaces"), true);
+  assert.equal(display.technicalText.includes("Trust: classify needs"), true);
+  assert.equal(display.technicalText.includes("Prior check: Review candidate"), true);
+  assert.equal(display.technicalText.includes("Guard note: repeated guarded drift"), true);
+  assert.equal(display.technicalText.includes("Context: session=driver-alpha"), true);
+  assert.equal(display.tone, "driver");
+  assert.deepEqual(display.receiptFields, ["objective", "prompt", "context"]);
+});
+
 test("formatCollaborationRelayMessage compacts output-guard fallback receipts", () => {
   const transcript = parseCollaborationTranscript({
     ok: true,

@@ -1702,13 +1702,19 @@ def test_collaboration_driver_rotates_topics_after_repeated_output_guard_receipt
     assert readback["count"] == 1
     event = readback["items"][0]
     assert event["failure_type"] == "output_guard_drift"
-    assert event["repeated_terms"] == ["output_guard_drift"]
+    assert event["repeated_terms"] == [
+        "output_guard_drift",
+        "user_confirmation_fallback",
+        "advisory_output_boundary",
+        "executable_code_boundary",
+    ]
     assert event["recent_turn_count"] == 2
     assert event["latest_turn"] >= event["turn"]
     assert event["latest_observed_at"]
     assert event["current_signal_observed"] is True
     assert event["current_signal_recent_turn_count"] == 2
-    assert all(item["matched_terms"] == ["output_guard_drift"] for item in event["recent_turns"])
+    assert all("output_guard_drift" in item["matched_terms"] for item in event["recent_turns"])
+    assert all("user_confirmation_fallback" in item["matched_terms"] for item in event["recent_turns"])
     assert "raw model text" in event["learning"]["memory_value"]
     assert event["writer_governance"]["stores_full_transcript"] is False
     assert event["writer_governance"]["grants_execution_authority"] is False
@@ -1717,7 +1723,12 @@ def test_collaboration_driver_rotates_topics_after_repeated_output_guard_receipt
     state = json.loads(state_path.read_text(encoding="utf-8"))
     signal = state["latest_learning_signal"]
     assert signal["failure_type"] == "output_guard_drift"
-    assert signal["repeated_terms"] == ["output_guard_drift"]
+    assert signal["repeated_terms"] == [
+        "output_guard_drift",
+        "user_confirmation_fallback",
+        "advisory_output_boundary",
+        "executable_code_boundary",
+    ]
     assert signal["recent_turn_count"] == 2
     assert signal["learning_event_id"] == event["id"]
     assert signal["stores_full_transcript"] is False
@@ -1743,8 +1754,10 @@ def test_collaboration_driver_rotates_topics_after_repeated_output_guard_receipt
     assert follow_up_readback["count"] == 1
     follow_up_event = follow_up_readback["items"][0]
     assert follow_up_event["id"] == event["id"]
+    assert "user_confirmation_fallback" in follow_up_event["repeated_terms"]
     assert follow_up_event["current_signal_observed"] is True
     assert follow_up_event["current_signal_recent_turn_count"] == 3
+    assert read_collaboration_learning_events(limit=5, term="user_confirmation_fallback")["count"] == 1
     state = json.loads(state_path.read_text(encoding="utf-8"))
     signal = state["latest_learning_signal"]
     assert signal["failure_type"] == "output_guard_drift"
