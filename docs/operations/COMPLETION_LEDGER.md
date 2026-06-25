@@ -95083,6 +95083,52 @@ Remaining truthful gap:
   proof, and unrelated UI flows were not run for this bounded session-readback
   slice.
 
+### 2026-06-25 21:08Z - Body surfaces show exposure boundary and evidence
+
+Current posture: Phase 2 / developer bridge collaboration support now renders
+Francis body-map surfaces with their current boundary, evidence paths, and
+authority denial. This follows the Francis1/Codex body-map signal that whole-body
+surfaces can be visible while capability exposure remains trust-gated and
+review-backed.
+
+What changed:
+
+- Added `francisBodySurfaceExposureSummary()` so each body surface has a tested
+  display contract for boundary, evidence, authority, access mode, next trust
+  gate, and no-authority fields.
+- The Chat UI Francis Body Map surface cards now render `Boundary`, `Evidence`,
+  and `Authority` before compact detail chips.
+- The focused body-map contract test verifies that a visible body surface keeps
+  its current boundary, observed evidence path, authority-denial line, and next
+  trust requirement visible.
+
+Validation:
+
+- Chat UI contract run passed:
+  `npm run test -- --test-name-pattern=parseFrancisBodyMap`
+  (`279` passing tests in the selected run).
+- Chat UI production build passed with `npm run build`.
+- `git diff --check` passed.
+- Live URL proof: `GET http://127.0.0.1:5173/` returned HTTP 200.
+- Live collaboration runtime health remained `healthy` with `helpers=3/3`, turn
+  `1237`, Codex enabled, Ollama enabled, and Claude disabled.
+- Live body-map readback reported `full_body_visible=true`,
+  `full_body_authority_granted=false`, `trust_ladder_enforced=true`,
+  `coverage_complete=true`, `capability_complete=false`, `open_gap_count=11`,
+  and no execution, mutation, approval, memory-write, or training authority.
+- Live body-surface proof showed the first four surfaces carrying current
+  boundaries, evidence paths, trust requirements, and no authority grants.
+
+Remaining truthful gap:
+
+- This does not expose new capability use, promote any surface beyond its current
+  access mode, close body-map coverage gaps, or grant authority.
+- This does not grant execution, mutation, approval, training, memory-write, or
+  main-build prompt authority.
+- `.\scripts\check.ps1`, GitHub CI, full backend test suite, browser screenshot
+  proof, and unrelated UI flows were not run for this bounded body-map visibility
+  slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

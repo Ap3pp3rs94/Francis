@@ -34,6 +34,7 @@ import {
   collaborationRuntimeLearningSignalSummary,
   collaborationRuntimeReviewReceiptSummary,
   collaborationSubstrateChecklistSummary,
+  francisBodySurfaceExposureSummary,
   formatCollaborationRelayMessage,
   isCollaborationAuditReceipt,
   preserveCollaborationReadbackDuringWarming,
@@ -2372,7 +2373,9 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
           }}
         >
           {bodyMapSurfaces.length ? (
-            bodyMapSurfaces.map((surface) => (
+            bodyMapSurfaces.map((surface) => {
+              const surfaceExposure = francisBodySurfaceExposureSummary(surface);
+              return (
               <article
                 key={surface.id}
                 style={{
@@ -2384,18 +2387,33 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
               >
                 <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "space-between" }}>
                   <strong style={{ color: "#e2e8f0" }}>{surface.label}</strong>
-                  <span style={{ color: "#93c5fd", fontSize: 12 }}>{surface.accessMode}</span>
+                  <span style={{ color: surfaceExposure.tone === "blocked" ? "#fecaca" : "#93c5fd", fontSize: 12 }}>
+                    {surfaceExposure.badge}
+                  </span>
                 </div>
                 <p style={{ color: "#cbd5e1", margin: "8px 0 0", overflowWrap: "anywhere" }}>{surface.description}</p>
+                <dl style={{ color: "#cbd5e1", display: "grid", gap: 6, margin: "8px 0 0" }}>
+                  <div>
+                    <dt style={{ color: "#94a3b8" }}>Boundary</dt>
+                    <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{surfaceExposure.boundary}</dd>
+                  </div>
+                  <div>
+                    <dt style={{ color: "#94a3b8" }}>Evidence</dt>
+                    <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{surfaceExposure.evidenceLine}</dd>
+                  </div>
+                  <div>
+                    <dt style={{ color: "#94a3b8" }}>Authority</dt>
+                    <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{surfaceExposure.authorityLine}</dd>
+                  </div>
+                </dl>
                 <div style={{ color: "#94a3b8", display: "flex", flexWrap: "wrap", fontSize: 12, gap: 8, marginTop: 8 }}>
-                  <span>{surface.connectionState}</span>
-                  <span>next {surface.trustRequiredForNextMode || "review"}</span>
-                  <span>execute {boolText(surface.grantsExecutionAuthority)}</span>
-                  <span>memory write {boolText(surface.grantsMemoryWriteAuthority)}</span>
-                  <span>training {boolText(surface.grantsTrainingAuthority)}</span>
+                  {surfaceExposure.detail.map((line) => (
+                    <span key={line}>{line}</span>
+                  ))}
                 </div>
               </article>
-            ))
+              );
+            })
           ) : (
             <div style={{ border: "1px solid rgba(148, 163, 184, 0.22)", borderRadius: 12, color: "#94a3b8", padding: 14 }}>
               No body-map surfaces returned.

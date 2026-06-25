@@ -18,6 +18,7 @@ import {
   collaborationSessionReviewGateSummary,
   collaborationSubstrateChecklistSummary,
   collaborationTranscriptAuditSummary,
+  francisBodySurfaceExposureSummary,
   formatCollaborationRelayMessage,
   isCollaborationAuditReceipt,
   parseCollaborationAgentsStatus,
@@ -450,6 +451,25 @@ test("parseFrancisBodyMap preserves whole-body awareness and quest boundaries", 
   assert.equal(bodyMap.surfaces[0]?.accessMode, "read");
   assert.equal(bodyMap.surfaces[0]?.grantsExecutionAuthority, false);
   assert.equal(bodyMap.surfaces[0]?.evidence[0]?.observed, true);
+  const surfaceExposure = francisBodySurfaceExposureSummary(bodyMap.surfaces[0]!);
+  assert.equal(surfaceExposure.badge, "read only");
+  assert.equal(surfaceExposure.tone, "ready");
+  assert.equal(surfaceExposure.boundary, "conversation output is not authority");
+  assert.equal(surfaceExposure.evidenceLine, "src/francis/developer_bridge/collaboration.py observed");
+  assert.equal(
+    surfaceExposure.authorityLine,
+    "execute false / mutation false / approve false / memory write false / training false",
+  );
+  assert.deepEqual(surfaceExposure.detail, [
+    "state connected",
+    "access read",
+    "next trust request",
+    "execute false",
+    "mutation false",
+    "approve false",
+    "memory write false",
+    "training false",
+  ]);
   assert.equal(bodyMap.governance.grants_training_authority, false);
 });
 

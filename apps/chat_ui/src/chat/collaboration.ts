@@ -318,6 +318,15 @@ export type FrancisBodySurface = {
   grantsTrainingAuthority: boolean;
 };
 
+export type FrancisBodySurfaceDisplay = {
+  badge: string;
+  tone: CollaborationReviewTone;
+  boundary: string;
+  evidenceLine: string;
+  authorityLine: string;
+  detail: string[];
+};
+
 export type FrancisBodyCoverageItem = {
   planeId: string;
   planeName: string;
@@ -1164,6 +1173,41 @@ export function collaborationSessionReviewGateSummary(gate: CollaborationSession
       `approve ${actionBoundaryBool(gate.grantsApprovalAuthority)}`,
       `memory write ${actionBoundaryBool(gate.grantsMemoryWriteAuthority)}`,
       `full transcript ${actionBoundaryBool(gate.storesFullTranscript)}`,
+    ],
+  };
+}
+
+export function francisBodySurfaceExposureSummary(surface: FrancisBodySurface): FrancisBodySurfaceDisplay {
+  const unsafeAuthority =
+    surface.grantsExecutionAuthority ||
+    surface.grantsMutationAuthority ||
+    surface.grantsApprovalAuthority ||
+    surface.grantsMemoryWriteAuthority ||
+    surface.grantsTrainingAuthority;
+  const evidenceItems = surface.evidence
+    .filter((item) => item.path)
+    .map((item) => `${item.path} ${item.observed ? "observed" : "missing"}`);
+  const evidenceLine = evidenceItems.length ? evidenceItems.slice(0, 3).join(" / ") : "no evidence paths reported";
+  const boundary = surface.currentBoundary || "capability exposure requires trust-gated review";
+  return {
+    badge: unsafeAuthority ? "authority visible" : `${surface.accessMode || "observe"} only`,
+    tone: unsafeAuthority ? "blocked" : "ready",
+    boundary,
+    evidenceLine: evidenceItems.length > 3 ? `${evidenceLine} / +${evidenceItems.length - 3} more` : evidenceLine,
+    authorityLine: `execute ${actionBoundaryBool(surface.grantsExecutionAuthority)} / mutation ${actionBoundaryBool(
+      surface.grantsMutationAuthority,
+    )} / approve ${actionBoundaryBool(surface.grantsApprovalAuthority)} / memory write ${actionBoundaryBool(
+      surface.grantsMemoryWriteAuthority,
+    )} / training ${actionBoundaryBool(surface.grantsTrainingAuthority)}`,
+    detail: [
+      `state ${surface.connectionState || "unknown"}`,
+      `access ${surface.accessMode || "observe"}`,
+      `next trust ${surface.trustRequiredForNextMode || "review"}`,
+      `execute ${actionBoundaryBool(surface.grantsExecutionAuthority)}`,
+      `mutation ${actionBoundaryBool(surface.grantsMutationAuthority)}`,
+      `approve ${actionBoundaryBool(surface.grantsApprovalAuthority)}`,
+      `memory write ${actionBoundaryBool(surface.grantsMemoryWriteAuthority)}`,
+      `training ${actionBoundaryBool(surface.grantsTrainingAuthority)}`,
     ],
   };
 }
