@@ -48,7 +48,7 @@ def test_fr017_stage17_package_manifest_resolves_all_records() -> None:
 
     assert manifest["package_id"] == "FR-017-STAGE17"
     assert manifest["component"] == "FR-017 Forearm Cuffs"
-    assert len(records) == 23
+    assert len(records) == 24
     assert len(manifest["custom_records"]) == 19
 
     for record in records:
@@ -74,6 +74,7 @@ def test_fr017_stage17_manifest_preserves_no_fake_validation_gate() -> None:
     assert any(record["kind"] == "engineering_review_record" for record in manifest["records"])
     assert any(record["kind"] == "engineering_review_input_template" for record in manifest["records"])
     assert any(record["kind"] == "final_physical_decision_input_template" for record in manifest["records"])
+    assert any(record["kind"] == "completion_ledger_handoff_template" for record in manifest["records"])
     assert any(record["kind"] == "validation_gate_chain_runbook" for record in manifest["records"])
     assert "unconfirmed_landmark_boundaries" in manifest["safety_fail_conditions"]
     assert "unreachable_release" in manifest["safety_fail_conditions"]
@@ -93,6 +94,7 @@ def test_fr017_stage17_final_audit_blocks_physical_and_fr018_claims() -> None:
     assert "Physical validation: NOT COMPLETE." in package_index
     assert "FR-018 implementation: NOT CLEARED." in package_index
     assert "FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json" in package_index
+    assert "FR-017-COMPLETION-LEDGER-HANDOFF-TEMPLATE.md" in package_index
     assert "fr017-completion-ledger-gate.ps1" in package_index
 
 
@@ -139,6 +141,7 @@ def test_fr017_validation_gate_chain_preserves_gate_order_and_no_fake_validation
     assert "fr018_implementation_cleared" in runbook
     assert "FR-018 implementation is NOT CLEARED." in runbook
     assert "FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json" in runbook
+    assert "FR-017-COMPLETION-LEDGER-HANDOFF-TEMPLATE.md" in runbook
     assert "ready_for_completion_ledger_review" in runbook
     assert "ready_for_operator_completion_ledger_update" in runbook
     assert "A blank or" in runbook

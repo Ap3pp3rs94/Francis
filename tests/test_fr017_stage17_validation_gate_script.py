@@ -82,7 +82,7 @@ def test_fr017_stage17_validation_gate_reports_documented_but_physically_blocked
     assert payload["writes_data"] is False
     assert payload["grants_execution_authority"] is False
     assert payload["grants_mutation_authority"] is False
-    assert payload["record_count"] == 23
+    assert payload["record_count"] == 24
     assert payload["custom_record_count"] == 19
     assert payload["required_gate_scripts"] == REQUIRED_GATE_SCRIPTS
     assert payload["missing_gate_scripts"] == []
@@ -104,6 +104,7 @@ def test_fr017_stage17_validation_gate_reports_documented_but_physically_blocked
     assert payload["missing_engineering_template_fields"] == []
     assert payload["missing_final_decision_template_contracts"] == []
     assert payload["missing_final_decision_template_fields"] == []
+    assert payload["missing_completion_ledger_template_terms"] == []
     assert "safety_critical_landmark_confirmation" in payload["blocked_inputs"]
     assert "pilot_static_fit_session" in payload["blocked_inputs"]
     assert "professional_engineering_review" in payload["blocked_inputs"]
@@ -243,6 +244,29 @@ def test_fr017_stage17_validation_gate_fails_closed_if_final_decision_template_c
     assert payload["status"] == "failed_contract"
     assert "final_decision_input_template_contracts" in payload["failed_checks"]
     assert payload["missing_final_decision_template_contracts"] == ["completion_decision_notes"]
+    assert payload["physical_validation_complete"] is False
+    assert payload["fr018_implementation_cleared"] is False
+
+
+def test_fr017_stage17_validation_gate_fails_closed_if_completion_ledger_template_terms_are_missing(
+    tmp_path: Path,
+) -> None:
+    manifest_path = _copy_stage17_package(tmp_path)
+    package_root = manifest_path.parent
+    ledger_template_path = package_root / "FR-017-COMPLETION-LEDGER-HANDOFF-TEMPLATE.md"
+    template = ledger_template_path.read_text(encoding="utf-8").replace(
+        "physical_validation_complete: false",
+        "physical validation status pending",
+    )
+    ledger_template_path.write_text(template, encoding="utf-8")
+
+    proc = _run_gate("-Mode", "Status", "-ManifestPath", str(manifest_path))
+
+    assert proc.returncode == 1
+    payload = _payload(proc.stdout)
+    assert payload["status"] == "failed_contract"
+    assert "completion_ledger_handoff_template_terms" in payload["failed_checks"]
+    assert payload["missing_completion_ledger_template_terms"] == ["physical_validation_complete: false"]
     assert payload["physical_validation_complete"] is False
     assert payload["fr018_implementation_cleared"] is False
 

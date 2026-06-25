@@ -29,7 +29,7 @@ It packages FR-017 Forearm Cuffs as a documentation-ready and test-record-ready 
 - `scripts/fr017-evidence-chain-status.ps1 -Mode Status`: first blocking FR-017 evidence gate, next required input, and the current measurement/mockup/mannequin/static-fit/movement/release-cable/engineering-review capture summary where applicable.
 - `scripts/fr017-final-physical-gate.ps1 -Mode Status`: final evidence-chain aggregate status plus the read-only `final_physical_decision_plan`; does not mark physical validation complete or clear FR-018 by itself.
 - `scripts/fr017-final-decision-record-gate.ps1 -Mode Status`: human final decision record validation after final physical gate readiness; does not mark physical validation complete, permit a Stage 17 completion claim, or clear FR-018 by itself.
-- `scripts/fr017-completion-ledger-gate.ps1 -Mode Status`: read-only candidate completion-ledger entry review after final decision readiness; does not write the ledger, mark physical validation complete, permit a Stage 17 completion claim, or clear FR-018 by itself.
+- `scripts/fr017-completion-ledger-gate.ps1 -Mode Status`: read-only candidate completion-ledger entry review after final decision readiness using `FR-017-COMPLETION-LEDGER-HANDOFF-TEMPLATE.md`; does not write the ledger, mark physical validation complete, permit a Stage 17 completion claim, or clear FR-018 by itself.
 
 ## Files
 
@@ -51,6 +51,7 @@ It packages FR-017 Forearm Cuffs as a documentation-ready and test-record-ready 
 | `FR-017-ENGINEERING-REVIEW_PENDING.md` | Professional engineering review record | REQUIRES PROFESSIONAL ENGINEERING REVIEW |
 | `FR-017-ENGINEERING-REVIEW-INPUT-TEMPLATE.json` | Structured engineering review input template | COMPLETE |
 | `FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json` | Structured human final physical decision input template | COMPLETE, REQUIRES REAL RECORD REVIEW |
+| `FR-017-COMPLETION-LEDGER-HANDOFF-TEMPLATE.md` | Candidate completion-ledger handoff template | COMPLETE TEMPLATE, NOT EVIDENCE |
 | `FR-017-VALIDATION-GATE-CHAIN.md` | Read-only gate order and no-fake-validation runbook | COMPLETE |
 | `FR-017-INTERFACE-MATRIX.md` | Adjacent FR interface compatibility review | PROVISIONALLY DEFINED |
 | `FR-017-COMPLETION-GATE-2026-06-23.md` | Stage 17 completion decision record | DOCUMENTED, PHYSICAL GATE BLOCKED |

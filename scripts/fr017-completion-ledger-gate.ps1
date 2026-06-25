@@ -30,7 +30,7 @@ $ErrorActionPreference = 'Stop'
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $FinalDecisionGateScript = Join-Path $PSScriptRoot 'fr017-final-decision-record-gate.ps1'
 $ExpectedFinalDecisionStatus = 'ready_for_completion_ledger_review'
-$ExpectedNextLedgerInput = 'draft_operator_reviewed_FR-017_completion_ledger_entry_referencing_final_decision_record'
+$ExpectedNextLedgerInput = 'copy_and_complete_FR-017-COMPLETION-LEDGER-HANDOFF-TEMPLATE.md_with_operator_reviewed_final_decision_evidence'
 
 function Resolve-GatePath {
   param([string]$Path)
@@ -207,6 +207,9 @@ if ($FinalDecisionGateReady) {
 }
 
 if ($FinalDecisionGateReady -and $LedgerEntryReadOk) {
+  if ($LedgerEntryText.IndexOf('PENDING', [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+    $MissingFields.Add('ledger_entry.template_placeholders') | Out-Null
+  }
   Add-RequiredLedgerText -Missing $MissingFields -Field 'ledger_entry.stage17_scope' -Text $LedgerEntryText -RequiredTerms @('Stage 17', 'FR-017', 'Forearm Cuffs')
   Add-RequiredLedgerText -Missing $MissingFields -Field 'ledger_entry.final_decision_status' -Text $LedgerEntryText -RequiredTerms @($ExpectedFinalDecisionStatus)
   Add-RequiredLedgerText -Missing $MissingFields -Field 'ledger_entry.final_decision_record_path' -Text $LedgerEntryText -RequiredTerms @($ResolvedFinalDecisionPath)

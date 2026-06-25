@@ -106,8 +106,39 @@ def test_fr017_completion_ledger_gate_requires_ledger_entry_after_final_decision
     assert payload["ledger_entry_review_ready"] is False
     assert payload["missing_fields"] == ["ledger_entry_path"]
     assert payload["next_required_ledger_input"] == (
-        "draft_operator_reviewed_FR-017_completion_ledger_entry_referencing_final_decision_record"
+        "copy_and_complete_FR-017-COMPLETION-LEDGER-HANDOFF-TEMPLATE.md_with_operator_reviewed_final_decision_evidence"
     )
+    assert payload["physical_validation_complete"] is False
+    assert payload["stage17_completion_claim_allowed"] is False
+    assert payload["fr018_implementation_cleared"] is False
+
+
+def test_fr017_completion_ledger_gate_reports_default_template_as_pending(
+    tmp_path: Path,
+) -> None:
+    paths, final_decision_path = _write_ready_final_decision(tmp_path)
+    ledger_entry_path = tmp_path / "pending-ledger-handoff.md"
+    ledger_entry_path.write_text(
+        (ROOT / "FR-017_Stage17_Package" / "FR-017-COMPLETION-LEDGER-HANDOFF-TEMPLATE.md").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+
+    proc = _run_gate(
+        "-Mode",
+        "Status",
+        *_ready_args(paths),
+        "-FinalDecisionPath",
+        str(final_decision_path),
+        "-LedgerEntryPath",
+        str(ledger_entry_path),
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = _payload(proc.stdout)
+    assert payload["status"] == "pending_completion_ledger_entry"
+    assert payload["final_decision_record_ready"] is True
+    assert payload["ledger_entry_review_ready"] is False
+    assert "ledger_entry.template_placeholders" in payload["missing_fields"]
     assert payload["physical_validation_complete"] is False
     assert payload["stage17_completion_claim_allowed"] is False
     assert payload["fr018_implementation_cleared"] is False

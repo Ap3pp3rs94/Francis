@@ -733,10 +733,10 @@ def test_fr017_evidence_chain_status_blocks_on_completion_ledger_after_final_dec
     assert payload["status"] == "blocked_on_completion_ledger"
     assert payload["first_blocking_gate"] == "completion_ledger"
     assert payload["first_blocking_status"] == "pending_completion_ledger_entry"
-    assert payload["next_required_input"] == "candidate-FR-017-completion-ledger-entry.md"
+    assert payload["next_required_input"] == "FR-017-COMPLETION-LEDGER-HANDOFF-TEMPLATE.md"
     assert (
         payload["next_command"]
-        == "draft_operator_reviewed_FR-017_completion_ledger_entry_referencing_final_decision_record"
+        == "copy_and_complete_FR-017-COMPLETION-LEDGER-HANDOFF-TEMPLATE.md_with_operator_reviewed_final_decision_evidence"
     )
     assert payload["gates_ran"] == 11
     assert payload["gate_count"] == 11

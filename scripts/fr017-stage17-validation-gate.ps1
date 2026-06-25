@@ -168,6 +168,7 @@ $MissingEngineeringTemplateContracts = New-Object System.Collections.Generic.Lis
 $MissingEngineeringTemplateFields = New-Object System.Collections.Generic.List[string]
 $MissingFinalDecisionTemplateContracts = New-Object System.Collections.Generic.List[string]
 $MissingFinalDecisionTemplateFields = New-Object System.Collections.Generic.List[string]
+$MissingCompletionLedgerTemplateTerms = New-Object System.Collections.Generic.List[string]
 $MissingGateScripts = New-Object System.Collections.Generic.List[string]
 $InvalidGateScripts = New-Object System.Collections.Generic.List[string]
 $BlockedInputs = @()
@@ -205,7 +206,7 @@ if ($null -ne $Manifest) {
   $Checks.Add((New-GateCheck -Id 'evidence_containers_complete' -Passed ([string]$Manifest.status.evidence_containers -eq 'complete') -Evidence ([string]$Manifest.status.evidence_containers))) | Out-Null
   $Checks.Add((New-GateCheck -Id 'physical_validation_blocked' -Passed ($PhysicalValidation -eq 'not_complete') -Evidence $PhysicalValidation -Reason 'Physical validation must remain blocked until measurement, mannequin, pilot, release, cable, and engineering evidence exists.')) | Out-Null
   $Checks.Add((New-GateCheck -Id 'fr018_not_cleared' -Passed ($Fr018Status -eq 'not_cleared') -Evidence $Fr018Status -Reason 'FR-018 implementation must remain blocked until FR-017 physical blockers are evidence-cleared.')) | Out-Null
-  $Checks.Add((New-GateCheck -Id 'record_count' -Passed ($RecordCount -eq 23) -Evidence ([string]$RecordCount))) | Out-Null
+  $Checks.Add((New-GateCheck -Id 'record_count' -Passed ($RecordCount -eq 24) -Evidence ([string]$RecordCount))) | Out-Null
   $Checks.Add((New-GateCheck -Id 'custom_record_count' -Passed ($CustomRecordCount -eq 19) -Evidence ([string]$CustomRecordCount))) | Out-Null
 
   foreach ($Record in $Records) {
@@ -237,6 +238,7 @@ if ($null -ne $Manifest) {
   $ReleaseCableTemplateRecord = @($Records | Where-Object { [string]$_.kind -eq 'quick_release_cable_snag_input_template' } | Select-Object -First 1)
   $EngineeringTemplateRecord = @($Records | Where-Object { [string]$_.kind -eq 'engineering_review_input_template' } | Select-Object -First 1)
   $FinalDecisionTemplateRecord = @($Records | Where-Object { [string]$_.kind -eq 'final_physical_decision_input_template' } | Select-Object -First 1)
+  $CompletionLedgerTemplateRecord = @($Records | Where-Object { [string]$_.kind -eq 'completion_ledger_handoff_template' } | Select-Object -First 1)
   $ManualPath = if ($ManualRecord.Count -gt 0) { [System.IO.Path]::GetFullPath((Join-Path $PackageRoot ([string]$ManualRecord[0].path))) } else { '' }
   $MapsPath = if ($MapsRecord.Count -gt 0) { [System.IO.Path]::GetFullPath((Join-Path $PackageRoot ([string]$MapsRecord[0].path))) } else { '' }
   $MeasurementTemplatePath = if ($MeasurementTemplateRecord.Count -gt 0) { [System.IO.Path]::GetFullPath((Join-Path $PackageRoot ([string]$MeasurementTemplateRecord[0].path))) } else { '' }
@@ -247,6 +249,7 @@ if ($null -ne $Manifest) {
   $ReleaseCableTemplatePath = if ($ReleaseCableTemplateRecord.Count -gt 0) { [System.IO.Path]::GetFullPath((Join-Path $PackageRoot ([string]$ReleaseCableTemplateRecord[0].path))) } else { '' }
   $EngineeringTemplatePath = if ($EngineeringTemplateRecord.Count -gt 0) { [System.IO.Path]::GetFullPath((Join-Path $PackageRoot ([string]$EngineeringTemplateRecord[0].path))) } else { '' }
   $FinalDecisionTemplatePath = if ($FinalDecisionTemplateRecord.Count -gt 0) { [System.IO.Path]::GetFullPath((Join-Path $PackageRoot ([string]$FinalDecisionTemplateRecord[0].path))) } else { '' }
+  $CompletionLedgerTemplatePath = if ($CompletionLedgerTemplateRecord.Count -gt 0) { [System.IO.Path]::GetFullPath((Join-Path $PackageRoot ([string]$CompletionLedgerTemplateRecord[0].path))) } else { '' }
   $CustomRecordText = (Read-GateText -Path $ManualPath) + "`n" + (Read-GateText -Path $MapsPath)
   foreach ($Index in 1..19) {
     $ExpectedId = 'FR-017-CUSTOM-{0:D3}' -f $Index
@@ -996,6 +999,28 @@ if ($null -ne $Manifest) {
   Add-MissingObjectProperties -Target $MissingFinalDecisionTemplateFields -Payload $FinalDecisionNoFakeLockPayload -Prefix 'no_fake_validation_lock' -Fields $RequiredFinalDecisionNoFakeLockFields
   $Checks.Add((New-GateCheck -Id 'final_decision_input_template_required_fields' -Passed ($MissingFinalDecisionTemplateFields.Count -eq 0) -Evidence (($MissingFinalDecisionTemplateFields.ToArray() -join ', ')) -Reason 'Human final decision template must keep every field required by the final physical completion-decision handoff.')) | Out-Null
 
+  $CompletionLedgerTemplateText = Read-GateText -Path $CompletionLedgerTemplatePath
+  foreach ($RequiredTerm in @(
+      'FR-017 Completion Ledger Handoff Template',
+      'Final decision record path: PENDING_FINAL_DECISION_RECORD_PATH',
+      'ready_for_completion_ledger_review',
+      'physical_validation_complete: false',
+      'stage17_completion_claim_allowed: false',
+      'fr018_implementation_cleared: false',
+      'Powered testing: not cleared.',
+      'Frame-coupled testing: not cleared.',
+      'Load-bearing use: not approved.',
+      'FR-018 implementation remains blocked and not cleared.',
+      'This template is not physical validation evidence.',
+      'This template does not write `docs/operations/COMPLETION_LEDGER.md`.',
+      'This template does not clear FR-018.'
+    )) {
+    if ($CompletionLedgerTemplateText.IndexOf($RequiredTerm, [System.StringComparison]::OrdinalIgnoreCase) -lt 0) {
+      $MissingCompletionLedgerTemplateTerms.Add($RequiredTerm) | Out-Null
+    }
+  }
+  $Checks.Add((New-GateCheck -Id 'completion_ledger_handoff_template_terms' -Passed ($MissingCompletionLedgerTemplateTerms.Count -eq 0) -Evidence (($MissingCompletionLedgerTemplateTerms.ToArray() -join ', ')) -Reason 'Completion-ledger handoff template must preserve final decision linkage, false clearance flags, and no-fake-validation language.')) | Out-Null
+
   $RequiredBlockedInputs = @(
     'left_right_forearm_measurements',
     'safety_critical_landmark_confirmation',
@@ -1092,6 +1117,7 @@ $Payload = [ordered]@{
   missing_engineering_template_fields = @($MissingEngineeringTemplateFields.ToArray())
   missing_final_decision_template_contracts = @($MissingFinalDecisionTemplateContracts.ToArray())
   missing_final_decision_template_fields = @($MissingFinalDecisionTemplateFields.ToArray())
+  missing_completion_ledger_template_terms = @($MissingCompletionLedgerTemplateTerms.ToArray())
   failed_checks = @($FailedChecks | ForEach-Object { [string]$_.id })
   checks = @($Checks.ToArray())
   next_actions = @(
