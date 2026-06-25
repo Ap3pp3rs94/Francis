@@ -7,6 +7,7 @@ import {
   collaborationActionIntakeSummary,
   collaborationBuildDirectionGateSummary,
   collaborationImplementationReviewSummary,
+  collaborationLearningGuardSummary,
   collaborationReviewBadge,
   collaborationReviewNextAction,
   collaborationReviewTone,
@@ -1662,6 +1663,25 @@ test("parseCollaborationLearning preserves bounded no-authority learning receipt
   assert.equal(item.writerGovernance.stores_full_transcript, false);
   assert.equal(learning.governance.grants_execution_authority, false);
   assert.equal(learning.governance.grants_memory_write_authority, false);
+
+  const guard = collaborationLearningGuardSummary(learning, null);
+  assert.equal(guard.badge, "prompt guard active");
+  assert.equal(guard.tone, "ready");
+  assert.equal(guard.failureType, "repetitive_meta_loop");
+  assert.equal(guard.latestTurn, 419);
+  assert.equal(guard.promptPolicy, "ask for a concrete build surface instead of another identity argument");
+  assert.deepEqual(guard.detail, [
+    "failure repetitive_meta_loop",
+    "latest turn 419",
+    "recent turns 4",
+    "learning receipt learning-driver-alpha",
+    "full transcript false",
+    "training false",
+    "execute false",
+    "mutation false",
+    "approve false",
+    "memory write false",
+  ]);
 });
 
 test("collaborationReviewBadge surfaces model drift review items", () => {

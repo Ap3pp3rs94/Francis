@@ -95129,6 +95129,52 @@ Remaining truthful gap:
   proof, and unrelated UI flows were not run for this bounded body-map visibility
   slice.
 
+### 2026-06-25 21:14Z - Communication UI surfaces current learning guard
+
+Current posture: Phase 2 / developer bridge collaboration support now shows the
+current local-model learning guard near the top of the Chat UI collaboration
+panel. This makes the active drift class, latest learning turn, bounded next
+prompt policy, and no-authority fields visible before the operator opens heavier
+technical receipt sections.
+
+What changed:
+
+- Added `collaborationLearningGuardSummary()` as a tested display contract for
+  current collaboration learning receipts and runtime learning signals.
+- The Chat UI collaboration panel now renders a compact `Current Learning Guard`
+  card above substrate readiness, using the existing learning receipt and
+  runtime-health readbacks.
+- The guard card explicitly shows that the learning receipt does not store full
+  transcripts and does not grant training, execution, mutation, approval, or
+  memory-write authority.
+
+Validation:
+
+- Chat UI contract run passed:
+  `node --test --experimental-strip-types src/chat/index.test.ts`
+  (`22` passing tests in the selected run).
+- Chat UI production build passed with `npm run build`.
+- `git diff --check` passed.
+- Live URL proof: `GET http://127.0.0.1:5173/` returned HTTP 200.
+- Browser proof captured the loaded localhost page at
+  `output/playwright/francis-chat-ui-learning-guard-loaded.png`; the new card
+  showed prompt guard policy, `failure output_guard_drift`, no full transcript,
+  no training, no execution, no mutation, no approval, and no memory write.
+- Live collaboration readback after the edit reported runtime `healthy`,
+  `helpers=3/3`, turn `1246`, Codex enabled, Ollama enabled, Claude disabled,
+  and learning receipt `learning-driver-906d79591645-9143df3714064f2d` with
+  `stores_full_transcript=false`, `grants_execution_authority=false`, and
+  `grants_memory_write_authority=false`.
+
+Remaining truthful gap:
+
+- This does not tune the local model, promote learning receipts into long-term
+  memory, or grant any model or collaboration participant new authority.
+- This does not close the substrate main-build prompt gate; open ORB and phase
+  posture review gaps still keep the main build prompt candidate-only.
+- `.\scripts\check.ps1`, GitHub CI, full backend test suite, and unrelated UI
+  flows were not run for this bounded Communication UI cleanup slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -14,6 +14,7 @@ import {
   collaborationActionIntakeSummary,
   collaborationBuildDirectionGateSummary,
   collaborationImplementationReviewSummary,
+  collaborationLearningGuardSummary,
   collaborationTranscriptAuditSummary,
   fetchCollaborationAgentsStatus,
   fetchCollaborationLearning,
@@ -1350,6 +1351,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
   const reviewReceiptProof = collaborationRuntimeReviewReceiptSummary(runtimeHealth);
   const learningReceiptProof = collaborationRuntimeLearningReceiptSummary(runtimeHealth);
   const learningSignalProof = collaborationRuntimeLearningSignalSummary(runtimeHealth);
+  const learningGuardProof = collaborationLearningGuardSummary(learning, runtimeHealth);
   const runtimeEffectiveWorkers = runtimeHealth?.helpers.reduce((sum, helper) => sum + helper.effectiveWorkerCount, 0) ?? 0;
   const runtimeProcessCount = runtimeHealth?.helpers.reduce((sum, helper) => sum + helper.processCount, 0) ?? 0;
   const runtimeProcessModels = Array.from(new Set((runtimeHealth?.helpers ?? []).map((helper) => helper.processModel).filter(Boolean)));
@@ -1494,6 +1496,62 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
           value={boolText(Boolean(operatorConsole?.clientIsAutomaticExecutionAuthority))}
           tone={operatorConsole?.clientIsAutomaticExecutionAuthority ? "blocked" : "ready"}
         />
+      </div>
+
+      <div
+        style={{
+          background:
+            learningGuardProof.tone === "blocked" ? "rgba(69, 10, 10, 0.26)" : "rgba(8, 47, 73, 0.28)",
+          border: `1px solid ${
+            learningGuardProof.tone === "blocked" ? "rgba(252, 165, 165, 0.58)" : "rgba(125, 211, 252, 0.4)"
+          }`,
+          borderRadius: 14,
+          marginTop: 18,
+          padding: 16,
+        }}
+      >
+        <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "space-between" }}>
+          <div style={{ minWidth: 0 }}>
+            <h3 style={{ fontSize: 20, margin: 0 }}>Current Learning Guard</h3>
+            <p style={{ color: "#e2e8f0", margin: "8px 0 0", overflowWrap: "anywhere" }}>
+              {learningGuardProof.promptPolicy}
+            </p>
+          </div>
+          <span
+            style={{
+              border: `1px solid ${learningGuardProof.tone === "blocked" ? "#fca5a5" : "#67e8f9"}`,
+              borderRadius: 999,
+              color: learningGuardProof.tone === "blocked" ? "#fecaca" : "#cffafe",
+              fontSize: 12,
+              fontWeight: 700,
+              padding: "4px 8px",
+            }}
+          >
+            {learningGuardProof.badge}
+          </span>
+        </div>
+        <div style={{ color: "#93c5fd", display: "flex", flexWrap: "wrap", fontSize: 13, gap: 10, marginTop: 10 }}>
+          <span>failure {learningGuardProof.failureType}</span>
+          <span>latest turn {learningGuardProof.latestTurn || "unknown"}</span>
+          <span>topic {runtimeHealth?.collaborationLoop.latestTurn.topic || "unknown"}</span>
+        </div>
+        <div style={{ color: "#94a3b8", display: "flex", flexWrap: "wrap", fontSize: 12, gap: 8, marginTop: 10 }}>
+          {learningGuardProof.detail.map((line) => (
+            <span
+              key={line}
+              style={{
+                background: "rgba(15, 23, 42, 0.62)",
+                border: "1px solid rgba(148, 163, 184, 0.2)",
+                borderRadius: 999,
+                maxWidth: "100%",
+                overflowWrap: "anywhere",
+                padding: "4px 8px",
+              }}
+            >
+              {line}
+            </span>
+          ))}
+        </div>
       </div>
 
       <div

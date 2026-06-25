@@ -289,6 +289,15 @@ export type CollaborationRuntimeLocalModelResponseDisplay = {
   detail: string[];
 };
 
+export type CollaborationLearningGuardDisplay = {
+  badge: string;
+  tone: CollaborationReviewTone;
+  failureType: string;
+  latestTurn: number;
+  promptPolicy: string;
+  detail: string[];
+};
+
 export type CollaborationSubstrateChecklistDisplay = {
   badge: string;
   tone: CollaborationReviewTone;
@@ -1152,6 +1161,10 @@ function actionBoundaryBool(value: boolean): string {
   return value ? "true" : "false";
 }
 
+function governanceFlag(governance: Record<string, unknown>, key: string): boolean {
+  return safeBoolean(governance[key]);
+}
+
 export function collaborationSessionReviewGateSummary(gate: CollaborationSessionReviewGate): CollaborationSessionReviewGateDisplay {
   const unsafeAuthority =
     gate.grantsExecutionAuthority ||
@@ -1538,6 +1551,54 @@ export function collaborationRuntimeLocalModelResponseSummary(
       `age ${ageText(response.ageSeconds)}`,
       `training ${actionBoundaryBool(response.grantsTrainingAuthority)}`,
       `memory write ${actionBoundaryBool(response.grantsMemoryWriteAuthority)}`,
+    ],
+  };
+}
+
+export function collaborationLearningGuardSummary(
+  learning: CollaborationLearning | null | undefined,
+  health: CollaborationRuntimeHealth | null | undefined,
+): CollaborationLearningGuardDisplay {
+  const signal = health?.collaborationLoop.currentLearningSignal;
+  const latestLearning = learning?.items.find((item) => item.currentSignalObserved) ?? learning?.items[0];
+  const signalObserved = Boolean(signal?.observed || latestLearning?.currentSignalObserved);
+  const failureType = signal?.failureType || latestLearning?.failureType || "none";
+  const latestTurn = signal?.latestTurn || latestLearning?.latestTurn || latestLearning?.turn || 0;
+  const promptPolicy =
+    latestLearning?.learning.nextPromptPolicy ||
+    "No prompt policy recorded; keep the next exchange bounded to a concrete Francis surface.";
+  const storesFullTranscript =
+    Boolean(signal?.storesFullTranscript) || governanceFlag(latestLearning?.writerGovernance ?? {}, "stores_full_transcript");
+  const grantsTraining =
+    Boolean(signal?.grantsTrainingAuthority) || governanceFlag(latestLearning?.writerGovernance ?? {}, "grants_training_authority");
+  const grantsExecution =
+    Boolean(signal?.grantsExecutionAuthority) || governanceFlag(latestLearning?.writerGovernance ?? {}, "grants_execution_authority");
+  const grantsMutation =
+    Boolean(signal?.grantsMutationAuthority) || governanceFlag(latestLearning?.writerGovernance ?? {}, "grants_mutation_authority");
+  const grantsApproval =
+    Boolean(signal?.grantsApprovalAuthority) || governanceFlag(latestLearning?.writerGovernance ?? {}, "grants_approval_authority");
+  const grantsMemoryWrite =
+    Boolean(signal?.grantsMemoryWriteAuthority) || governanceFlag(latestLearning?.writerGovernance ?? {}, "grants_memory_write_authority");
+  const unsafeAuthority =
+    storesFullTranscript || grantsTraining || grantsExecution || grantsMutation || grantsApproval || grantsMemoryWrite;
+  const recentTurnCount = signal?.recentTurnCount || latestLearning?.recentTurnCount || 0;
+  return {
+    badge: unsafeAuthority ? "learning authority drift" : signalObserved ? "prompt guard active" : "learning guard quiet",
+    tone: unsafeAuthority ? "blocked" : signalObserved ? "ready" : "neutral",
+    failureType,
+    latestTurn,
+    promptPolicy,
+    detail: [
+      `failure ${failureType}`,
+      `latest turn ${latestTurn}`,
+      `recent turns ${recentTurnCount}`,
+      `learning receipt ${signal?.learningEventId || latestLearning?.id || "unknown"}`,
+      `full transcript ${actionBoundaryBool(storesFullTranscript)}`,
+      `training ${actionBoundaryBool(grantsTraining)}`,
+      `execute ${actionBoundaryBool(grantsExecution)}`,
+      `mutation ${actionBoundaryBool(grantsMutation)}`,
+      `approve ${actionBoundaryBool(grantsApproval)}`,
+      `memory write ${actionBoundaryBool(grantsMemoryWrite)}`,
     ],
   };
 }
