@@ -267,6 +267,22 @@ function New-GateEvidenceDetails {
     movement_capture_first_blocking_group_id = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['movement_capture_first_blocking_group_id']) { '' } else { [string]$Payload.movement_capture_first_blocking_group_id }
     movement_capture_first_blocking_group_status = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['movement_capture_first_blocking_group_status']) { '' } else { [string]$Payload.movement_capture_first_blocking_group_status }
     movement_capture_first_blocking_group_action = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['movement_capture_first_blocking_group_action']) { '' } else { [string]$Payload.movement_capture_first_blocking_group_action }
+    release_cable_capture_plan_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['release_cable_capture_plan_contract']) { '' } else { [string]$Payload.release_cable_capture_plan_contract }
+    release_cable_capture_plan_status_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['release_cable_capture_plan_status_contract']) { '' } else { [string]$Payload.release_cable_capture_plan_status_contract }
+    release_cable_capture_summary_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['release_cable_capture_summary_contract']) { '' } else { [string]$Payload.release_cable_capture_summary_contract }
+    release_cable_capture_plan_not_completion_evidence = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['release_cable_capture_plan_not_completion_evidence']) { $false } else { [bool]$Payload.release_cable_capture_plan_not_completion_evidence }
+    next_required_release_cable_input = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['next_required_release_cable_input']) { '' } else { [string]$Payload.next_required_release_cable_input }
+    release_cable_capture_plan = @(Get-PayloadObjectArrayProperty -Payload $Payload -Name 'release_cable_capture_plan')
+    release_cable_capture_plan_status = @(Get-PayloadObjectArrayProperty -Payload $Payload -Name 'release_cable_capture_plan_status')
+    release_cable_capture_total_groups = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['release_cable_capture_total_groups']) { 0 } else { [int]$Payload.release_cable_capture_total_groups }
+    release_cable_capture_ready_groups = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['release_cable_capture_ready_groups']) { 0 } else { [int]$Payload.release_cable_capture_ready_groups }
+    release_cable_capture_pending_groups = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['release_cable_capture_pending_groups']) { 0 } else { [int]$Payload.release_cable_capture_pending_groups }
+    release_cable_capture_invalid_groups = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['release_cable_capture_invalid_groups']) { 0 } else { [int]$Payload.release_cable_capture_invalid_groups }
+    release_cable_capture_failed_groups = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['release_cable_capture_failed_groups']) { 0 } else { [int]$Payload.release_cable_capture_failed_groups }
+    release_cable_capture_upstream_blocked_groups = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['release_cable_capture_upstream_blocked_groups']) { 0 } else { [int]$Payload.release_cable_capture_upstream_blocked_groups }
+    release_cable_capture_first_blocking_group_id = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['release_cable_capture_first_blocking_group_id']) { '' } else { [string]$Payload.release_cable_capture_first_blocking_group_id }
+    release_cable_capture_first_blocking_group_status = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['release_cable_capture_first_blocking_group_status']) { '' } else { [string]$Payload.release_cable_capture_first_blocking_group_status }
+    release_cable_capture_first_blocking_group_action = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['release_cable_capture_first_blocking_group_action']) { '' } else { [string]$Payload.release_cable_capture_first_blocking_group_action }
     next_actions = @(Get-PayloadArrayProperty -Payload $Payload -Name 'next_actions')
   }
 }

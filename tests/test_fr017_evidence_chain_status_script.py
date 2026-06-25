@@ -384,6 +384,84 @@ def test_fr017_evidence_chain_status_moves_blocker_after_static_fit_ready(tmp_pa
     assert payload["fr018_implementation_cleared"] is False
 
 
+def test_fr017_evidence_chain_status_moves_blocker_after_movement_ready(tmp_path: Path) -> None:
+    measurement_path, mockup_path, mannequin_path, static_fit_path, movement_path = _write_movement_ready_records(
+        tmp_path
+    )
+
+    proc = _run_gate(
+        "-Mode",
+        "Status",
+        "-MeasurementPath",
+        str(measurement_path),
+        "-MockupPath",
+        str(mockup_path),
+        "-MannequinPath",
+        str(mannequin_path),
+        "-StaticFitPath",
+        str(static_fit_path),
+        "-MovementPath",
+        str(movement_path),
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = _payload(proc.stdout)
+    assert payload["status"] == "blocked_on_quick_release_cable_snag"
+    assert payload["first_blocking_gate"] == "quick_release_cable_snag"
+    assert payload["first_blocking_status"] == "pending_quick_release_cable_snag_test"
+    assert payload["next_required_input"] == "FR-017-QUICK-RELEASE-CABLE-SNAG-INPUT-TEMPLATE.json"
+    assert "evidence.date" in payload["first_blocking_details"]["missing_fields"]
+    assert payload["first_blocking_details"]["invalid_fields"] == []
+    assert payload["first_blocking_details"]["release_cable_capture_plan_not_completion_evidence"] is True
+    assert (
+        "not physical validation evidence" in payload["first_blocking_details"]["release_cable_capture_plan_contract"]
+    )
+    assert (
+        "quick-release/cable-snag capture readiness only"
+        in payload["first_blocking_details"]["release_cable_capture_plan_status_contract"]
+    )
+    assert (
+        "not physical validation evidence"
+        in payload["first_blocking_details"]["release_cable_capture_summary_contract"]
+    )
+    assert (
+        payload["first_blocking_details"]["next_required_release_cable_input"]
+        == "complete_non_powered_quick_release_cable_snag_record_at_FR-017-QUICK-RELEASE-CABLE-SNAG-INPUT-TEMPLATE.json"
+    )
+    assert payload["first_blocking_details"]["release_cable_capture_total_groups"] == 6
+    assert payload["first_blocking_details"]["release_cable_capture_ready_groups"] == 0
+    assert payload["first_blocking_details"]["release_cable_capture_pending_groups"] == 6
+    assert payload["first_blocking_details"]["release_cable_capture_invalid_groups"] == 0
+    assert payload["first_blocking_details"]["release_cable_capture_failed_groups"] == 0
+    assert payload["first_blocking_details"]["release_cable_capture_upstream_blocked_groups"] == 0
+    assert payload["first_blocking_details"]["release_cable_capture_first_blocking_group_id"] == (
+        "release_cable_evidence_and_linkage"
+    )
+    assert payload["first_blocking_details"]["release_cable_capture_first_blocking_group_status"] == (
+        "pending_required_fields"
+    )
+    assert (
+        "linked movement record path"
+        in payload["first_blocking_details"]["release_cable_capture_first_blocking_group_action"]
+    )
+    capture_status = {
+        step["id"]: step for step in payload["first_blocking_details"]["release_cable_capture_plan_status"]
+    }
+    assert "evidence.date" in capture_status["release_cable_evidence_and_linkage"]["missing_fields"]
+    assert "preconditions.non_powered_only" in capture_status["release_cable_safety_preconditions"]["missing_fields"]
+    assert (
+        "sides.left.release_checks.opposite_hand_release_reachable"
+        in capture_status["left_quick_release_access"]["missing_fields"]
+    )
+    assert (
+        "sides.right.cable_sleeve_checks.no_wrist_bone_crossing"
+        in capture_status["right_cable_route_and_fail_observations"]["missing_fields"]
+    )
+    assert payload["gates_ran"] == 7
+    assert payload["physical_validation_complete"] is False
+    assert payload["fr018_implementation_cleared"] is False
+
+
 def test_fr017_evidence_chain_status_surfaces_package_template_drift(tmp_path: Path) -> None:
     manifest_path = _copy_stage17_package(tmp_path)
     package_root = manifest_path.parent

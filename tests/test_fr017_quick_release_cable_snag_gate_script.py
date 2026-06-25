@@ -41,6 +41,10 @@ def _payload(stdout: str) -> dict[str, Any]:
     return json.loads(stdout)
 
 
+def _capture_status_by_id(payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {step["id"]: step for step in payload["release_cable_capture_plan_status"]}
+
+
 def _write_movement_ready_records(tmp_path: Path) -> tuple[Path, Path, Path, Path, Path]:
     measurement_path, mockup_path, mannequin_path, static_fit_path = _write_static_ready_records(tmp_path)
     movement_path = tmp_path / "ready-movement.json"
@@ -139,6 +143,42 @@ def test_fr017_release_cable_gate_reports_default_templates_as_pending_upstream(
     assert payload["quick_release_and_cable_snag_test_complete"] is False
     assert payload["engineering_review_or_final_physical_gate_audit_ready"] is False
     assert payload["fr018_implementation_cleared"] is False
+    assert payload["release_cable_capture_plan_not_completion_evidence"] is True
+    assert "not physical validation evidence" in payload["release_cable_capture_plan_contract"]
+    assert "quick-release/cable-snag capture readiness only" in payload["release_cable_capture_plan_status_contract"]
+    assert "not physical validation evidence" in payload["release_cable_capture_summary_contract"]
+    assert (
+        payload["next_required_release_cable_input"]
+        == "complete_non_powered_quick_release_cable_snag_record_at_FR-017-QUICK-RELEASE-CABLE-SNAG-INPUT-TEMPLATE.json"
+    )
+    assert payload["release_cable_capture_total_groups"] == 6
+    assert payload["release_cable_capture_ready_groups"] == 0
+    assert payload["release_cable_capture_pending_groups"] == 0
+    assert payload["release_cable_capture_invalid_groups"] == 0
+    assert payload["release_cable_capture_failed_groups"] == 0
+    assert payload["release_cable_capture_upstream_blocked_groups"] == 6
+    assert payload["release_cable_capture_first_blocking_group_id"] == "release_cable_evidence_and_linkage"
+    assert payload["release_cable_capture_first_blocking_group_status"] == "blocked_by_upstream_pilot_movement"
+    assert "pilot movement" in payload["release_cable_capture_first_blocking_group_action"]
+    assert [step["id"] for step in payload["release_cable_capture_plan"]] == [
+        "release_cable_evidence_and_linkage",
+        "release_cable_safety_preconditions",
+        "left_quick_release_access",
+        "right_quick_release_access",
+        "left_cable_route_and_fail_observations",
+        "right_cable_route_and_fail_observations",
+    ]
+    required_fields = [field for step in payload["release_cable_capture_plan"] for field in step["required_fields"]]
+    assert "evidence.pilot_movement_record_path" in required_fields
+    assert "preconditions.pilot_movement_gate_passed" in required_fields
+    assert "sides.left.release_checks.opposite_hand_release_reachable" in required_fields
+    assert "sides.right.fail_observations.cable_crossed_no_go_zone" in required_fields
+    assert all(
+        step["status"] == "blocked_by_upstream_pilot_movement" for step in payload["release_cable_capture_plan_status"]
+    )
+    assert all(
+        not step["ready_for_release_cable_record_review"] for step in payload["release_cable_capture_plan_status"]
+    )
     assert payload["read_only_contract"] is True
     assert payload["writes_repo"] is False
     assert payload["grants_mutation_authority"] is False
@@ -172,6 +212,33 @@ def test_fr017_release_cable_gate_requires_record_after_movement_ready(tmp_path:
     assert "evidence.date" in payload["missing_fields"]
     assert payload["quick_release_and_cable_snag_test_complete"] is False
     assert payload["fr018_implementation_cleared"] is False
+    assert payload["release_cable_capture_total_groups"] == 6
+    assert payload["release_cable_capture_ready_groups"] == 0
+    assert payload["release_cable_capture_pending_groups"] == 6
+    assert payload["release_cable_capture_invalid_groups"] == 0
+    assert payload["release_cable_capture_failed_groups"] == 0
+    assert payload["release_cable_capture_upstream_blocked_groups"] == 0
+    assert payload["release_cable_capture_first_blocking_group_id"] == "release_cable_evidence_and_linkage"
+    assert payload["release_cable_capture_first_blocking_group_status"] == "pending_required_fields"
+    capture_status = _capture_status_by_id(payload)
+    assert "evidence.date" in capture_status["release_cable_evidence_and_linkage"]["missing_fields"]
+    assert "preconditions.non_powered_only" in capture_status["release_cable_safety_preconditions"]["missing_fields"]
+    assert (
+        "sides.left.release_checks.bare_cuff_release_visible_tactile_reachable"
+        in capture_status["left_quick_release_access"]["missing_fields"]
+    )
+    assert (
+        "sides.right.release_checks.opposite_hand_release_reachable"
+        in capture_status["right_quick_release_access"]["missing_fields"]
+    )
+    assert (
+        "sides.left.cable_sleeve_checks.no_inner_elbow_crossing"
+        in capture_status["left_cable_route_and_fail_observations"]["missing_fields"]
+    )
+    assert (
+        "sides.right.fail_observations.cable_crossed_no_go_zone"
+        in capture_status["right_cable_route_and_fail_observations"]["missing_fields"]
+    )
 
 
 def test_fr017_release_cable_gate_treats_lowercase_or_padded_pending_text_as_missing(
@@ -258,6 +325,20 @@ def test_fr017_release_cable_gate_accepts_complete_release_cable_record(tmp_path
     assert payload["engineering_review_or_final_physical_gate_audit_ready"] is True
     assert payload["powered_or_frame_coupled_testing_cleared"] is False
     assert payload["fr018_implementation_cleared"] is False
+    assert payload["release_cable_capture_total_groups"] == 6
+    assert payload["release_cable_capture_ready_groups"] == 6
+    assert payload["release_cable_capture_pending_groups"] == 0
+    assert payload["release_cable_capture_invalid_groups"] == 0
+    assert payload["release_cable_capture_failed_groups"] == 0
+    assert payload["release_cable_capture_upstream_blocked_groups"] == 0
+    assert payload["release_cable_capture_first_blocking_group_id"] == ""
+    assert payload["release_cable_capture_first_blocking_group_status"] == ""
+    assert payload["release_cable_capture_first_blocking_group_action"] == ""
+    assert all(
+        step["status"] == "ready_for_release_cable_record_review"
+        for step in payload["release_cable_capture_plan_status"]
+    )
+    assert all(step["ready_for_release_cable_record_review"] for step in payload["release_cable_capture_plan_status"])
     assert "must resolve to the same movement record path" in payload["record_linkage_contract"]
     assert "must match evidence.pilot_id in the linked movement record" in payload["pilot_identity_linkage_contract"]
     assert "YYYY-MM-DD" in payload["evidence_date_contract"]
@@ -510,6 +591,21 @@ def test_fr017_release_cable_gate_blocks_hidden_release(tmp_path: Path) -> None:
         "sides.left.release_checks.forearm_armor_mockup_release_visible_tactile_reachable"
     ]
     assert result["fail_observations"] == ["sides.left.fail_observations.release_hidden"]
+    assert result["release_cable_capture_total_groups"] == 6
+    assert result["release_cable_capture_ready_groups"] == 4
+    assert result["release_cable_capture_pending_groups"] == 0
+    assert result["release_cable_capture_invalid_groups"] == 0
+    assert result["release_cable_capture_failed_groups"] == 2
+    assert result["release_cable_capture_upstream_blocked_groups"] == 0
+    assert result["release_cable_capture_first_blocking_group_id"] == "left_quick_release_access"
+    assert result["release_cable_capture_first_blocking_group_status"] == "failed_stop_condition_or_blocking_signal"
+    capture_status = _capture_status_by_id(result)
+    assert capture_status["left_quick_release_access"]["blocking_signals"] == [
+        "sides.left.release_checks.forearm_armor_mockup_release_visible_tactile_reachable"
+    ]
+    assert capture_status["left_cable_route_and_fail_observations"]["blocking_signals"] == [
+        "sides.left.fail_observations.release_hidden"
+    ]
     assert result["quick_release_and_cable_snag_test_complete"] is False
     assert result["fr018_implementation_cleared"] is False
 

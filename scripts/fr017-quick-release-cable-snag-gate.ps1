@@ -263,6 +263,150 @@ function Test-PresentText {
   return -not (Test-MissingOrPendingText -Value $Value)
 }
 
+function Add-UniqueString {
+  param(
+    [System.Collections.Generic.List[string]]$Target,
+    [object]$Value
+  )
+
+  if ($null -eq $Value) {
+    return
+  }
+  $Text = ([string]$Value).Trim()
+  if ([string]::IsNullOrWhiteSpace($Text)) {
+    return
+  }
+  if (-not $Target.Contains($Text)) {
+    $Target.Add($Text) | Out-Null
+  }
+}
+
+function Test-SignalMatchesPrefix {
+  param(
+    [string]$Signal,
+    [string]$Prefix
+  )
+
+  if ([string]::Equals($Signal, $Prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+    return $true
+  }
+  return $Signal.StartsWith($Prefix + '.', [System.StringComparison]::OrdinalIgnoreCase) -or
+    $Signal.StartsWith($Prefix + '_', [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+function Get-CaptureStepSignals {
+  param(
+    [string[]]$Signals,
+    [string[]]$RequiredFields,
+    [string[]]$SignalPrefixes
+  )
+
+  $Result = New-Object System.Collections.Generic.List[string]
+  foreach ($Signal in (ConvertTo-StringArray -Value $Signals)) {
+    foreach ($Field in $RequiredFields) {
+      if (Test-SignalMatchesPrefix -Signal $Signal -Prefix $Field) {
+        Add-UniqueString -Target $Result -Value $Signal
+      }
+    }
+    foreach ($Prefix in $SignalPrefixes) {
+      if (Test-SignalMatchesPrefix -Signal $Signal -Prefix $Prefix) {
+        Add-UniqueString -Target $Result -Value $Signal
+      }
+    }
+  }
+  return @($Result.ToArray())
+}
+
+function New-ReleaseCableCapturePlanStatus {
+  param(
+    [object[]]$CapturePlan,
+    [bool]$UpstreamMovementReady,
+    [string[]]$MissingFields,
+    [string[]]$InvalidFields,
+    [string[]]$BlockingSignals
+  )
+
+  $Result = New-Object System.Collections.Generic.List[object]
+  foreach ($Step in $CapturePlan) {
+    $RequiredFields = @(ConvertTo-StringArray -Value $Step.required_fields)
+    $SignalPrefixes = @(ConvertTo-StringArray -Value $Step.blocking_signal_prefixes)
+    $StepMissing = @(Get-CaptureStepSignals -Signals $MissingFields -RequiredFields $RequiredFields -SignalPrefixes @())
+    $StepInvalid = @(Get-CaptureStepSignals -Signals $InvalidFields -RequiredFields $RequiredFields -SignalPrefixes @())
+    $StepBlockingSignals = @(Get-CaptureStepSignals -Signals $BlockingSignals -RequiredFields $RequiredFields -SignalPrefixes $SignalPrefixes)
+
+    $Status = 'ready_for_release_cable_record_review'
+    $RequiredAction = [string]$Step.required_action
+    if (-not $UpstreamMovementReady) {
+      $Status = 'blocked_by_upstream_pilot_movement'
+      $RequiredAction = 'complete measurement intake, mockup, mannequin interface, pilot static-fit, and pilot movement gates before release/cable evidence can be captured or reviewed'
+    } elseif ($StepBlockingSignals.Count -gt 0) {
+      $Status = 'failed_stop_condition_or_blocking_signal'
+    } elseif ($StepInvalid.Count -gt 0) {
+      $Status = 'invalid_required_fields'
+    } elseif ($StepMissing.Count -gt 0) {
+      $Status = 'pending_required_fields'
+    }
+
+    $Result.Add([ordered]@{
+        id = [string]$Step.id
+        status = $Status
+        validation_state = [string]$Step.validation_state
+        ready_for_release_cable_record_review = ($Status -eq 'ready_for_release_cable_record_review')
+        missing_fields = @($StepMissing)
+        invalid_fields = @($StepInvalid)
+        blocking_signals = @($StepBlockingSignals)
+        required_action = $RequiredAction
+      }) | Out-Null
+  }
+  return @($Result.ToArray())
+}
+
+function New-CapturePlanSummary {
+  param([object[]]$CapturePlanStatus)
+
+  $ReadyCount = 0
+  $PendingCount = 0
+  $InvalidCount = 0
+  $FailedCount = 0
+  $UpstreamBlockedCount = 0
+  $FirstBlockingGroupId = ''
+  $FirstBlockingGroupStatus = ''
+  $FirstBlockingGroupAction = ''
+
+  foreach ($Step in $CapturePlanStatus) {
+    $StepStatus = [string]$Step.status
+    if ($StepStatus -eq 'ready_for_release_cable_record_review') {
+      $ReadyCount += 1
+    } elseif ($StepStatus -eq 'pending_required_fields') {
+      $PendingCount += 1
+    } elseif ($StepStatus -eq 'invalid_required_fields') {
+      $InvalidCount += 1
+    } elseif ($StepStatus -eq 'failed_stop_condition_or_blocking_signal') {
+      $FailedCount += 1
+    } elseif ($StepStatus -eq 'blocked_by_upstream_pilot_movement') {
+      $UpstreamBlockedCount += 1
+    }
+
+    if ([string]::IsNullOrWhiteSpace($FirstBlockingGroupId) -and $StepStatus -ne 'ready_for_release_cable_record_review') {
+      $FirstBlockingGroupId = [string]$Step.id
+      $FirstBlockingGroupStatus = $StepStatus
+      $FirstBlockingGroupAction = [string]$Step.required_action
+    }
+  }
+
+  return [ordered]@{
+    total_groups = @($CapturePlanStatus).Count
+    ready_groups = $ReadyCount
+    pending_groups = $PendingCount
+    invalid_groups = $InvalidCount
+    failed_groups = $FailedCount
+    upstream_blocked_groups = $UpstreamBlockedCount
+    first_blocking_group_id = $FirstBlockingGroupId
+    first_blocking_group_status = $FirstBlockingGroupStatus
+    first_blocking_group_action = $FirstBlockingGroupAction
+  }
+}
+
 function Add-PilotIdentityLinkageCheck {
   param(
     [System.Collections.Generic.List[string]]$Invalid,
@@ -413,6 +557,87 @@ $FailObservationFields = @(
   'cable_crossed_no_go_zone'
 )
 
+$ReleaseCableEvidenceFields = @(
+  'evidence.date',
+  'evidence.observer',
+  'evidence.pilot_id',
+  'evidence.prototype_revision',
+  'evidence.pilot_movement_record_path',
+  'evidence.test_duration_minutes'
+)
+
+$ReleaseCablePreconditionFields = @()
+foreach ($Field in $RequiredPreconditions) {
+  $ReleaseCablePreconditionFields += ('preconditions.{0}' -f $Field)
+}
+
+$LeftReleaseCheckFields = @()
+$RightReleaseCheckFields = @()
+foreach ($Field in $RequiredReleaseChecks) {
+  $LeftReleaseCheckFields += ('sides.left.release_checks.{0}' -f $Field)
+  $RightReleaseCheckFields += ('sides.right.release_checks.{0}' -f $Field)
+}
+
+$LeftCableAndFailFields = @()
+$RightCableAndFailFields = @()
+foreach ($Field in $RequiredCableSleeveChecks) {
+  $LeftCableAndFailFields += ('sides.left.cable_sleeve_checks.{0}' -f $Field)
+  $RightCableAndFailFields += ('sides.right.cable_sleeve_checks.{0}' -f $Field)
+}
+foreach ($Field in $FailObservationFields) {
+  $LeftCableAndFailFields += ('sides.left.fail_observations.{0}' -f $Field)
+  $RightCableAndFailFields += ('sides.right.fail_observations.{0}' -f $Field)
+}
+
+$ReleaseCableCapturePlan = @(
+  [ordered]@{
+    id = 'release_cable_evidence_and_linkage'
+    validation_state = 'REQUIRES_QUICK_RELEASE_CABLE_SNAG_TEST_RECORD'
+    required_fields = $ReleaseCableEvidenceFields
+    blocking_signal_prefixes = @(
+      'evidence.pilot_movement_record_path_must_match_movement_path',
+      'evidence.pilot_id_must_match_movement_pilot_id',
+      'evidence.date_before_movement.evidence.date'
+    )
+    required_action = 'record ISO date, observer, matching pilot id, prototype revision, linked movement record path, and an unquoted positive quick-release/cable-snag test duration'
+  },
+  [ordered]@{
+    id = 'release_cable_safety_preconditions'
+    validation_state = 'REQUIRES_QUICK_RELEASE_CABLE_SNAG_TEST'
+    required_fields = $ReleaseCablePreconditionFields
+    blocking_signal_prefixes = @('preconditions')
+    required_action = 'confirm non-powered-only setup, no frame or power coupling, movement gate passed, observer presence, emergency-release briefing, stop-on-symptoms rule, and pilot self-removal or abort authority'
+  },
+  [ordered]@{
+    id = 'left_quick_release_access'
+    validation_state = 'REQUIRES_QUICK_RELEASE_CABLE_SNAG_TEST'
+    required_fields = $LeftReleaseCheckFields
+    blocking_signal_prefixes = @('sides.left.release_checks')
+    required_action = 'record left release visibility, tactile reach, same-side and opposite-hand reach, strap loosening, tool-free cuff removal, wrist posture, and glove/wrist path clearance across bare cuff and future mock interfaces'
+  },
+  [ordered]@{
+    id = 'right_quick_release_access'
+    validation_state = 'REQUIRES_QUICK_RELEASE_CABLE_SNAG_TEST'
+    required_fields = $RightReleaseCheckFields
+    blocking_signal_prefixes = @('sides.right.release_checks')
+    required_action = 'record right release visibility, tactile reach, same-side and opposite-hand reach, strap loosening, tool-free cuff removal, wrist posture, and glove/wrist path clearance across bare cuff and future mock interfaces'
+  },
+  [ordered]@{
+    id = 'left_cable_route_and_fail_observations'
+    validation_state = 'REQUIRES_QUICK_RELEASE_CABLE_SNAG_TEST'
+    required_fields = $LeftCableAndFailFields
+    blocking_signal_prefixes = @('sides.left.cable_sleeve_checks', 'sides.left.fail_observations')
+    required_action = 'record left outer-forearm cable route preservation, no-go-zone avoidance, release-handle clearance, no snag before/after release and motion, and every left release/cable fail observation as absent before advancing'
+  },
+  [ordered]@{
+    id = 'right_cable_route_and_fail_observations'
+    validation_state = 'REQUIRES_QUICK_RELEASE_CABLE_SNAG_TEST'
+    required_fields = $RightCableAndFailFields
+    blocking_signal_prefixes = @('sides.right.cable_sleeve_checks', 'sides.right.fail_observations')
+    required_action = 'record right outer-forearm cable route preservation, no-go-zone avoidance, release-handle clearance, no snag before/after release and motion, and every right release/cable fail observation as absent before advancing'
+  }
+)
+
 $DefaultMeasurementPath = Join-Path $RepoRoot 'FR-017_Stage17_Package\FR-017-MEASUREMENTS-INPUT-TEMPLATE.json'
 $DefaultMockupPath = Join-Path $RepoRoot 'FR-017_Stage17_Package\FR-017-MOCKUP-BUILD-INPUT-TEMPLATE.json'
 $DefaultMannequinPath = Join-Path $RepoRoot 'FR-017_Stage17_Package\FR-017-MANNEQUIN-INTERFACE-INPUT-TEMPLATE.json'
@@ -548,6 +773,22 @@ if (-not [bool]$Upstream.parse_ok -or [int]$Upstream.exit_code -ne 0 -or $Upstre
   }
 }
 
+$AllReleaseCableBlockingSignals = New-Object System.Collections.Generic.List[string]
+foreach ($Signal in @($RecordLinkageViolations.ToArray())) {
+  Add-UniqueString -Target $AllReleaseCableBlockingSignals -Value $Signal
+}
+foreach ($Signal in @($RecordChronologyViolations.ToArray())) {
+  Add-UniqueString -Target $AllReleaseCableBlockingSignals -Value $Signal
+}
+foreach ($Signal in @($ReleaseCableRedesignTriggers.ToArray())) {
+  Add-UniqueString -Target $AllReleaseCableBlockingSignals -Value $Signal
+}
+foreach ($Signal in @($FailObservations.ToArray())) {
+  Add-UniqueString -Target $AllReleaseCableBlockingSignals -Value $Signal
+}
+$ReleaseCableCapturePlanStatus = @(New-ReleaseCableCapturePlanStatus -CapturePlan $ReleaseCableCapturePlan -UpstreamMovementReady $UpstreamReady -MissingFields $MissingFields.ToArray() -InvalidFields $InvalidFields.ToArray() -BlockingSignals $AllReleaseCableBlockingSignals.ToArray())
+$ReleaseCableCapturePlanSummary = New-CapturePlanSummary -CapturePlanStatus $ReleaseCableCapturePlanStatus
+
 $Output = [ordered]@{
   kind = 'francis.fr017.quick_release_cable_snag_gate'
   mode = $Mode
@@ -617,6 +858,22 @@ $Output = [ordered]@{
   required_release_checks = $RequiredReleaseChecks
   required_cable_sleeve_checks = $RequiredCableSleeveChecks
   fail_observation_fields = $FailObservationFields
+  release_cable_capture_plan_contract = 'The release_cable_capture_plan is read-only operator guidance for capturing FR-017 non-powered quick-release and cable-snag evidence. It is not physical validation evidence by itself, does not prove pilot safety, and cannot clear engineering review, powered, frame-coupled, or FR-018 work.'
+  release_cable_capture_plan_status_contract = 'The release_cable_capture_plan_status reports quick-release/cable-snag capture readiness only. A ready group means the supplied record fields passed this script contract; it is not professional certification, medical clearance, or Stage 17 completion.'
+  release_cable_capture_summary_contract = 'The release_cable_capture_* summary identifies the next blocking quick-release/cable-snag evidence group. It is not physical validation evidence and cannot mark Stage 17 complete.'
+  release_cable_capture_plan_not_completion_evidence = $true
+  next_required_release_cable_input = 'complete_non_powered_quick_release_cable_snag_record_at_FR-017-QUICK-RELEASE-CABLE-SNAG-INPUT-TEMPLATE.json'
+  release_cable_capture_plan = @($ReleaseCableCapturePlan)
+  release_cable_capture_plan_status = @($ReleaseCableCapturePlanStatus)
+  release_cable_capture_total_groups = [int]$ReleaseCableCapturePlanSummary.total_groups
+  release_cable_capture_ready_groups = [int]$ReleaseCableCapturePlanSummary.ready_groups
+  release_cable_capture_pending_groups = [int]$ReleaseCableCapturePlanSummary.pending_groups
+  release_cable_capture_invalid_groups = [int]$ReleaseCableCapturePlanSummary.invalid_groups
+  release_cable_capture_failed_groups = [int]$ReleaseCableCapturePlanSummary.failed_groups
+  release_cable_capture_upstream_blocked_groups = [int]$ReleaseCableCapturePlanSummary.upstream_blocked_groups
+  release_cable_capture_first_blocking_group_id = [string]$ReleaseCableCapturePlanSummary.first_blocking_group_id
+  release_cable_capture_first_blocking_group_status = [string]$ReleaseCableCapturePlanSummary.first_blocking_group_status
+  release_cable_capture_first_blocking_group_action = [string]$ReleaseCableCapturePlanSummary.first_blocking_group_action
   record_linkage_contract = 'The quick-release/cable-snag evidence.pilot_movement_record_path must resolve to the same movement record path passed into this gate. A release/cable record cannot advance from stale, copied, or unrelated movement evidence.'
   pilot_identity_linkage_contract = 'The quick-release/cable-snag evidence.pilot_id must match evidence.pilot_id in the linked movement record. A release/cable record cannot advance if it names a different pilot than the completed movement evidence.'
   evidence_date_contract = 'Use an ISO 8601 calendar date in YYYY-MM-DD format for evidence.date. Future-dated quick-release/cable-snag evidence is invalid because it cannot be completed evidence.'
