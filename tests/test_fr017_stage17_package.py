@@ -126,6 +126,7 @@ def test_fr017_validation_gate_chain_preserves_gate_order_and_no_fake_validation
         "fr017-quick-release-cable-snag-gate.ps1",
         "fr017-engineering-review-gate.ps1",
         "fr017-final-physical-gate.ps1",
+        "fr017-final-decision-record-gate.ps1",
     ]
     positions = [runbook.index(item) for item in expected_order]
 
@@ -135,6 +136,7 @@ def test_fr017_validation_gate_chain_preserves_gate_order_and_no_fake_validation
     assert "fr018_implementation_cleared" in runbook
     assert "FR-018 implementation is NOT CLEARED." in runbook
     assert "FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json" in runbook
+    assert "ready_for_completion_ledger_review" in runbook
     assert "A blank or" in runbook
     assert "ready_for_pilot_static_fit_planning" in runbook
     assert "ready_for_pilot_movement_test_planning" in runbook

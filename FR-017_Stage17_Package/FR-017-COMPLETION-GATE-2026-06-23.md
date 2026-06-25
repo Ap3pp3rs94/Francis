@@ -44,6 +44,7 @@ FR-018 implementation clearance: NOT CLEARED.
 | Engineering review record ready | DOCUMENTED | `FR-017-ENGINEERING-REVIEW_PENDING.md` | Obtain professional engineering review after quick-release/cable-snag gate passes |
 | Engineering review input template ready | DOCUMENTED | `FR-017-ENGINEERING-REVIEW-INPUT-TEMPLATE.json` | Populate copy after all non-powered physical evidence is complete |
 | Human final physical decision input template ready | DOCUMENTED | `FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json` | Populate copy only after final physical gate reports decision-ready and real records are accepted by a human reviewer |
+| Human final decision record gate ready | DOCUMENTED | `scripts/fr017-final-decision-record-gate.ps1` | Run after final physical gate readiness with a populated human decision record |
 | Validation gate chain ready | DOCUMENTED | `FR-017-VALIDATION-GATE-CHAIN.md` | Use to run gates in order as physical evidence becomes available |
 | Interface matrix ready | DOCUMENTED | `FR-017-INTERFACE-MATRIX.md` | Validate with mockups |
 | FR-IMG-017 prompt ready | DOCUMENTED | `FR-IMG-017_PROMPT.md` | Generate/review image if needed |

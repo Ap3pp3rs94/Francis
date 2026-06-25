@@ -23,15 +23,19 @@ Run `scripts/fr017-evidence-chain-status.ps1 -Mode Status` at any point to ident
 | 7 | Quick-release/cable-snag gate | `scripts/fr017-quick-release-cable-snag-gate.ps1 -Mode Status -MeasurementPath <measurement-record.json> -MockupPath <mockup-record.json> -MannequinPath <mannequin-record.json> -StaticFitPath <static-fit-record.json> -MovementPath <movement-record.json> -ReleaseCablePath <release-cable-record.json>` | Non-powered quick-release and cable-snag evidence linked to the same movement record | `ready_for_engineering_review_or_final_physical_gate_audit` |
 | 8 | Professional engineering review gate | `scripts/fr017-engineering-review-gate.ps1 -Mode Status -MeasurementPath <measurement-record.json> -MockupPath <mockup-record.json> -MannequinPath <mannequin-record.json> -StaticFitPath <static-fit-record.json> -MovementPath <movement-record.json> -ReleaseCablePath <release-cable-record.json> -EngineeringReviewPath <engineering-review-record.json>` | Professional review of the complete non-powered evidence chain, with the review record linked to the same quick-release/cable-snag record passed into this gate | `ready_for_final_stage17_physical_gate_audit` |
 | 9 | Final physical gate audit | `scripts/fr017-final-physical-gate.ps1 -Mode Status -MeasurementPath <measurement-record.json> -MockupPath <mockup-record.json> -MannequinPath <mannequin-record.json> -StaticFitPath <static-fit-record.json> -MovementPath <movement-record.json> -ReleaseCablePath <release-cable-record.json> -EngineeringReviewPath <engineering-review-record.json>` | Complete evidence chain, package gate pass, non-regressing evidence chronology, and one pilot identity across all pilot-linked records | `ready_for_stage17_final_physical_completion_decision` |
-| 10 | Human final decision record | Populate a copy of `FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json` | Final physical gate output saved, real records reviewed by a human decision reviewer, and no-clearance locks preserved | Ledger-backed Stage 17 completion consideration only |
+| 10 | Human final decision record | `scripts/fr017-final-decision-record-gate.ps1 -Mode Status -MeasurementPath <measurement-record.json> -MockupPath <mockup-record.json> -MannequinPath <mannequin-record.json> -StaticFitPath <static-fit-record.json> -MovementPath <movement-record.json> -ReleaseCablePath <release-cable-record.json> -EngineeringReviewPath <engineering-review-record.json> -FinalDecisionPath <final-decision-record.json>` | Final physical gate output saved, real records reviewed by a human decision reviewer, populated decision record, and no-clearance locks preserved | `ready_for_completion_ledger_review` |
 
 ## No-Fake-Validation Lock
 
 The final physical gate audit is a decision-readiness gate only.
 
-The human final decision template is a record-capture template only. A blank or
-`PENDING` copy is not physical validation evidence, does not certify FR-017,
-and does not clear FR-018.
+`FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json` is a record-capture
+template only. A blank or `PENDING` copy is not physical validation evidence,
+does not certify FR-017, and does not clear FR-018.
+
+The final decision record gate can report `ready_for_completion_ledger_review`.
+That state is a ledger-review handoff only; it still does not mark Stage 17
+complete or clear FR-018.
 
 It must keep these values false unless a separate human-reviewed, ledger-backed completion decision updates the package:
 
