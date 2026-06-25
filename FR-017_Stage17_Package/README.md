@@ -20,7 +20,7 @@ It packages FR-017 Forearm Cuffs as a documentation-ready and test-record-ready 
 
 - `scripts/fr017-stage17-validation-gate.ps1 -Mode Status`: package and manifest structure.
 - `scripts/fr017-measurement-intake.ps1 -Mode Status`: measurement intake status plus the read-only `measurement_capture_plan` for the first physical-input gate.
-- `scripts/fr017-evidence-chain-status.ps1 -Mode Status`: first blocking FR-017 evidence gate and next required input.
+- `scripts/fr017-evidence-chain-status.ps1 -Mode Status`: first blocking FR-017 evidence gate, next required input, and the current measurement-capture summary where applicable.
 - `scripts/fr017-engineering-review-gate.ps1 -Mode Status`: professional review evidence after quick-release/cable-snag evidence.
 - `scripts/fr017-final-physical-gate.ps1 -Mode Status`: final aggregate gate; does not mark physical validation complete or clear FR-018 by itself.
 

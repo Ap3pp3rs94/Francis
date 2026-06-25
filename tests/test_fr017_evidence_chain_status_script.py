@@ -66,6 +66,22 @@ def test_fr017_evidence_chain_status_stops_at_measurement_template() -> None:
     assert payload["first_blocking_details"]["measurement_capture_plan_not_completion_evidence"] is True
     assert "not physical validation evidence" in payload["first_blocking_details"]["measurement_capture_plan_contract"]
     assert "intake readiness only" in payload["first_blocking_details"]["measurement_capture_plan_status_contract"]
+    assert (
+        "not physical validation evidence" in payload["first_blocking_details"]["measurement_capture_summary_contract"]
+    )
+    assert payload["first_blocking_details"]["measurement_capture_total_groups"] == 5
+    assert payload["first_blocking_details"]["measurement_capture_ready_groups"] == 0
+    assert payload["first_blocking_details"]["measurement_capture_pending_groups"] == 5
+    assert payload["first_blocking_details"]["measurement_capture_invalid_groups"] == 0
+    assert payload["first_blocking_details"]["measurement_capture_failed_groups"] == 0
+    assert payload["first_blocking_details"]["measurement_capture_first_blocking_group_id"] == "setup_and_safety_brief"
+    assert (
+        payload["first_blocking_details"]["measurement_capture_first_blocking_group_status"]
+        == "pending_required_fields"
+    )
+    assert (
+        "brief stop conditions" in payload["first_blocking_details"]["measurement_capture_first_blocking_group_action"]
+    )
     capture_plan = payload["first_blocking_details"]["measurement_capture_plan"]
     assert isinstance(capture_plan, list)
     assert capture_plan[0]["id"] == "setup_and_safety_brief"
@@ -113,6 +129,17 @@ def test_fr017_evidence_chain_status_moves_blocker_after_measurement_ready(tmp_p
     assert payload["next_required_input"] == "FR-017-MOCKUP-BUILD-INPUT-TEMPLATE.json"
     assert "evidence.date" in payload["first_blocking_details"]["mockup_missing_fields"]
     assert payload["first_blocking_details"]["mockup_invalid_fields"] == []
+    assert (
+        "not physical validation evidence" in payload["first_blocking_details"]["measurement_capture_summary_contract"]
+    )
+    assert payload["first_blocking_details"]["measurement_capture_total_groups"] == 5
+    assert payload["first_blocking_details"]["measurement_capture_ready_groups"] == 5
+    assert payload["first_blocking_details"]["measurement_capture_pending_groups"] == 0
+    assert payload["first_blocking_details"]["measurement_capture_invalid_groups"] == 0
+    assert payload["first_blocking_details"]["measurement_capture_failed_groups"] == 0
+    assert payload["first_blocking_details"]["measurement_capture_first_blocking_group_id"] == ""
+    assert payload["first_blocking_details"]["measurement_capture_first_blocking_group_status"] == ""
+    assert payload["first_blocking_details"]["measurement_capture_first_blocking_group_action"] == ""
     assert payload["gates_ran"] == 3
     assert payload["physical_validation_complete"] is False
     assert payload["fr018_implementation_cleared"] is False
