@@ -94633,6 +94633,64 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, full backend test suite, and unrelated
   browser flows were not run for this bounded roadmap-alignment readback slice.
 
+### 2026-06-25 20:24Z - Session review gate made visible before raw transcript
+
+Current posture: Phase 2 / developer bridge collaboration support now attaches a
+bounded latest review-gate summary to each collaboration session readback and
+renders that gate in the Live Conversation session header before individual raw
+message cards. This is a readback and operator-visibility improvement for the
+Francis1/Codex question about which session-summary fields should appear before
+opening raw transcript detail; it does not grant build, execution, approval,
+training, or memory-write authority.
+
+What changed:
+
+- `read_collaboration_sessions()` now matches the latest typed review item to a
+  session when that review references a relay prompt id from the session.
+- Each session summary can now expose `latest_review_gate` with observed status,
+  review item id, insight id, turn, topic, build issue code, reviewed surface,
+  required review artifact, build-direction state, Codex/operator review
+  requirement, repo-truth review requirement, next Codex action, and explicit
+  authority denials.
+- The session readback still stores no full transcript text; it uses the
+  existing bounded session preview plus typed review metadata.
+- The Chat UI parser preserves the session review gate, and the Live
+  Conversation session header now shows advisory/blocked gate state before the
+  scrollable message list.
+
+Validation:
+
+- Focused backend session tests passed:
+  `python -m pytest tests/test_developer_bridge.py -k collaboration_sessions`
+  (`3 passed, 65 deselected`).
+- Focused Chat UI parser test passed:
+  `npm run test -- --test-name-pattern=parseCollaborationSessions`
+  (`279` passing tests in the selected run).
+- Chat UI production build passed with `npm run build`.
+- Narrow Python lint passed:
+  `python -m ruff check src\francis\developer_bridge\collaboration.py tests\test_developer_bridge.py`.
+- `git diff --check` passed.
+- Live API proof: `GET /developer-bridge/collaboration-sessions` returned a
+  latest session `latest_review_gate.observed=true`,
+  `build_direction_state=advisory_review_required`, review/repo checks true, and
+  all execution/mutation/approval/memory-write authority flags false.
+- Browser proof captured `http://127.0.0.1:5173/` at
+  `output/playwright/collaboration-session-review-gate.png`; the page returned
+  HTTP 200 and showed the Live Conversation session header with an advisory gate
+  and no-authority chips before raw message cards.
+- Collaboration runtime health remained `healthy` after the API restart, with
+  the three expected helpers running.
+
+Remaining truthful gap:
+
+- This does not make session summaries a memory store or transcript archive; it
+  only attaches bounded review metadata to session readbacks.
+- This does not convert advisory collaboration output into build direction;
+  blocked or advisory review gates still require Codex/operator repo-truth
+  review before implementation.
+- `.\scripts\check.ps1`, GitHub CI, full backend test suite, and unrelated UI
+  flows were not run for this bounded session-readback slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

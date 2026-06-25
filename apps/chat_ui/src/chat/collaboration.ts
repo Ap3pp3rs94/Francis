@@ -610,6 +610,28 @@ export type CollaborationSessionSummary = {
   latestDirection: string;
   latestObjective: string;
   latestPreview: string;
+  latestReviewGate: CollaborationSessionReviewGate;
+};
+
+export type CollaborationSessionReviewGate = {
+  observed: boolean;
+  reviewItemId: string;
+  insightId: string;
+  turn: number;
+  topic: string;
+  buildIssueCode: string;
+  surface: string;
+  requiredReviewArtifact: string;
+  buildDirectionState: string;
+  blocksBuildDirection: boolean;
+  requiresCodexOrOperatorReview: boolean;
+  requiresRepoTruthReview: boolean;
+  nextCodexAction: string;
+  grantsExecutionAuthority: boolean;
+  grantsMutationAuthority: boolean;
+  grantsApprovalAuthority: boolean;
+  grantsMemoryWriteAuthority: boolean;
+  storesFullTranscript: boolean;
 };
 
 export type CollaborationSessions = {
@@ -623,6 +645,7 @@ export type CollaborationSessions = {
   definitions: {
     session: string;
     latestPreview: string;
+    latestReviewGate: string;
   };
   readbackCache: CollaborationReadbackCache;
   governance: Record<string, unknown>;
@@ -1649,6 +1672,31 @@ function parseSessionSummary(raw: unknown): CollaborationSessionSummary {
     latestDirection: safeString(item.latest_direction),
     latestObjective: safeString(item.latest_objective),
     latestPreview: safeString(item.latest_preview),
+    latestReviewGate: parseSessionReviewGate(item.latest_review_gate),
+  };
+}
+
+function parseSessionReviewGate(raw: unknown): CollaborationSessionReviewGate {
+  const item = isRecord(raw) ? raw : {};
+  return {
+    observed: safeBoolean(item.observed),
+    reviewItemId: safeString(item.review_item_id),
+    insightId: safeString(item.insight_id),
+    turn: safeNumber(item.turn),
+    topic: safeString(item.topic),
+    buildIssueCode: safeString(item.build_issue_code),
+    surface: safeString(item.surface),
+    requiredReviewArtifact: safeString(item.required_review_artifact),
+    buildDirectionState: safeString(item.build_direction_state, "advisory_review_required"),
+    blocksBuildDirection: safeBoolean(item.blocks_build_direction),
+    requiresCodexOrOperatorReview: safeBoolean(item.requires_codex_or_operator_review),
+    requiresRepoTruthReview: safeBoolean(item.requires_repo_truth_review),
+    nextCodexAction: safeString(item.next_codex_action),
+    grantsExecutionAuthority: safeBoolean(item.grants_execution_authority),
+    grantsMutationAuthority: safeBoolean(item.grants_mutation_authority),
+    grantsApprovalAuthority: safeBoolean(item.grants_approval_authority),
+    grantsMemoryWriteAuthority: safeBoolean(item.grants_memory_write_authority),
+    storesFullTranscript: safeBoolean(item.stores_full_transcript),
   };
 }
 
@@ -2214,6 +2262,7 @@ export function parseCollaborationSessions(raw: unknown): CollaborationSessions 
     definitions: {
       session: safeString(definitions.session),
       latestPreview: safeString(definitions.latest_preview),
+      latestReviewGate: safeString(definitions.latest_review_gate),
     },
     readbackCache: parseReadbackCache(value.readback_cache),
     governance: isRecord(value.governance) ? value.governance : {},

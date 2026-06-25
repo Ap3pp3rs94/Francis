@@ -1321,6 +1321,7 @@ test("parseCollaborationSessions preserves bounded session summaries and governa
     definitions: {
       session: "Messages grouped by timestamp gap from bounded relay receipts.",
       latest_preview: "A short bounded preview from the latest receipt, not a full transcript store.",
+      latest_review_gate: "The latest typed review gate matched to a session relay receipt.",
     },
     items: [
       {
@@ -1334,6 +1335,26 @@ test("parseCollaborationSessions preserves bounded session summaries and governa
         latest_direction: "ollama->codex",
         latest_objective: "Francis1 reply",
         latest_preview: "My current gap is session recall without raw transcript dumping.",
+        latest_review_gate: {
+          observed: true,
+          review_item_id: "review-session",
+          insight_id: "insight-session",
+          turn: 42,
+          topic: "which session-summary fields should be shown to the operator",
+          build_issue_code: "collaboration_session_recall",
+          surface: "developer_bridge collaboration sessions",
+          required_review_artifact: "developer_bridge collaboration sessions:review_candidate:insight-session",
+          build_direction_state: "advisory_review_required",
+          blocks_build_direction: false,
+          requires_codex_or_operator_review: true,
+          requires_repo_truth_review: true,
+          next_codex_action: "Inspect session grouping before expanding transcript visibility.",
+          grants_execution_authority: false,
+          grants_mutation_authority: false,
+          grants_approval_authority: false,
+          grants_memory_write_authority: false,
+          stores_full_transcript: false,
+        },
       },
     ],
     governance: {
@@ -1349,7 +1370,15 @@ test("parseCollaborationSessions preserves bounded session summaries and governa
   assert.deepEqual(sessions.items[0]?.participants, ["codex", "ollama"]);
   assert.deepEqual(sessions.items[0]?.directionCounts, { "codex->ollama": 1, "ollama->codex": 1 });
   assert.equal(sessions.items[0]?.latestDirection, "ollama->codex");
+  assert.equal(sessions.items[0]?.latestReviewGate.observed, true);
+  assert.equal(sessions.items[0]?.latestReviewGate.buildIssueCode, "collaboration_session_recall");
+  assert.equal(sessions.items[0]?.latestReviewGate.buildDirectionState, "advisory_review_required");
+  assert.equal(sessions.items[0]?.latestReviewGate.requiresCodexOrOperatorReview, true);
+  assert.equal(sessions.items[0]?.latestReviewGate.requiresRepoTruthReview, true);
+  assert.equal(sessions.items[0]?.latestReviewGate.grantsExecutionAuthority, false);
+  assert.equal(sessions.items[0]?.latestReviewGate.storesFullTranscript, false);
   assert.equal(sessions.definitions.latestPreview.includes("not a full transcript"), true);
+  assert.equal(sessions.definitions.latestReviewGate.includes("typed review gate"), true);
   assert.equal(sessions.readbackCache.status, "stale_refreshing");
   assert.equal(sessions.readbackCache.ageMs, 3600);
   assert.equal(sessions.readbackCache.servesFullTranscriptStore, false);

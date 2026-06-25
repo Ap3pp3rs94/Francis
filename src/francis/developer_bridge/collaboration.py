@@ -15,6 +15,7 @@ from francis.governance.redaction import redact_secret_text
 from francis.kernel.paths import data_dir
 
 from .agents import enforce_collaboration_agents_enabled
+from .collaboration_review import read_collaboration_review
 from .repo_tools import DeveloperBridgeError
 
 _AGENT_RE = re.compile(r"^[a-z][a-z0-9_.-]{0,63}$")
@@ -206,7 +207,9 @@ def read_collaboration_sessions(
         status=clean_status,
         limit=clean_item_limit,
     )
-    sessions = _session_summaries(filtered.items)
+    review_readback = read_collaboration_review(limit=min(clean_item_limit, _MAX_LIMIT))
+    review_items = [item for item in _list(review_readback.get("items")) if isinstance(item, dict)]
+    sessions = _session_summaries(filtered.items, review_items=review_items)
     limited_sessions = sessions[:clean_limit]
 
     return {
@@ -229,6 +232,9 @@ def read_collaboration_sessions(
         "definitions": {
             "session": "Messages grouped by timestamp gap from bounded relay receipts.",
             "latest_preview": "A short bounded preview from the latest receipt, not a full transcript store.",
+            "latest_review_gate": (
+                "The latest typed review gate matched to a session relay receipt, without loading raw transcript text."
+            ),
         },
         "governance": {
             **_governance(write=False),
@@ -374,7 +380,11 @@ def _sort_key(record: dict[str, object]) -> tuple[str, str]:
     return (str(record.get("created_at") or ""), str(record.get("id") or ""))
 
 
-def _session_summaries(records: list[dict[str, object]]) -> list[dict[str, object]]:
+def _session_summaries(
+    records: list[dict[str, object]],
+    *,
+    review_items: list[dict[str, object]] | None = None,
+) -> list[dict[str, object]]:
     chronological = [record for record in reversed(records) if not _is_auto_ack_record(record)]
     sessions: list[list[dict[str, object]]] = []
     for record in chronological:
@@ -385,10 +395,18 @@ def _session_summaries(records: list[dict[str, object]]) -> list[dict[str, objec
             sessions.append([record])
         else:
             sessions[-1].append(record)
-    return [_session_summary(index, records) for index, records in enumerate(reversed(sessions), start=1)]
+    return [
+        _session_summary(index, records, review_items=review_items or [])
+        for index, records in enumerate(reversed(sessions), start=1)
+    ]
 
 
-def _session_summary(index: int, records: list[dict[str, object]]) -> dict[str, object]:
+def _session_summary(
+    index: int,
+    records: list[dict[str, object]],
+    *,
+    review_items: list[dict[str, object]],
+) -> dict[str, object]:
     latest = records[-1] if records else {}
     started_at = str(records[0].get("created_at") or "") if records else ""
     ended_at = str(latest.get("created_at") or "")
@@ -413,6 +431,62 @@ def _session_summary(index: int, records: list[dict[str, object]]) -> dict[str, 
         "latest_direction": _record_direction(latest),
         "latest_objective": latest.get("objective", ""),
         "latest_preview": _preview_text(str(latest.get("prompt") or "")),
+        "latest_review_gate": _latest_session_review_gate(records, review_items),
+    }
+
+
+def _latest_session_review_gate(
+    records: list[dict[str, object]],
+    review_items: list[dict[str, object]],
+) -> dict[str, object]:
+    prompt_ids = {str(record.get("id") or "") for record in records if str(record.get("id") or "")}
+    for item in review_items:
+        source = _dict(item.get("source"))
+        source_prompt_ids = {
+            str(source.get("codex_prompt_id") or ""),
+            str(source.get("ollama_prompt_id") or ""),
+        }
+        if not prompt_ids.intersection(source_prompt_ids):
+            continue
+        build_issue = _dict(item.get("build_issue"))
+        build_gate = _dict(item.get("build_direction_gate"))
+        recommendation = _dict(item.get("review_recommendation"))
+        return {
+            "observed": True,
+            "review_item_id": _bounded_optional_text(str(item.get("id") or ""), max_chars=160),
+            "insight_id": _bounded_optional_text(str(item.get("insight_id") or ""), max_chars=160),
+            "turn": _int(item.get("turn")),
+            "topic": _preview_text(str(item.get("topic") or "")),
+            "build_issue_code": _bounded_optional_text(str(build_issue.get("code") or ""), max_chars=120),
+            "surface": _bounded_optional_text(
+                str(build_gate.get("surface_under_review") or item.get("concrete_repo_surface") or ""),
+                max_chars=220,
+            ),
+            "required_review_artifact": _bounded_optional_text(
+                str(build_gate.get("required_review_artifact") or item.get("review_artifact") or ""),
+                max_chars=260,
+            ),
+            "build_direction_state": _bounded_optional_text(
+                str(build_gate.get("state") or "advisory_review_required"),
+                max_chars=120,
+            ),
+            "blocks_build_direction": bool(build_gate.get("blocks_build_direction")),
+            "requires_codex_or_operator_review": bool(build_gate.get("requires_codex_or_operator_review")),
+            "requires_repo_truth_review": bool(build_gate.get("requires_repo_truth_review")),
+            "next_codex_action": _preview_text(str(recommendation.get("next_codex_action") or "")),
+            "grants_execution_authority": bool(build_gate.get("grants_execution_authority")),
+            "grants_mutation_authority": bool(build_gate.get("grants_mutation_authority")),
+            "grants_approval_authority": bool(build_gate.get("grants_approval_authority")),
+            "grants_memory_write_authority": bool(build_gate.get("grants_memory_write_authority")),
+            "stores_full_transcript": False,
+        }
+    return {
+        "observed": False,
+        "stores_full_transcript": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "grants_approval_authority": False,
+        "grants_memory_write_authority": False,
     }
 
 
@@ -503,6 +577,29 @@ def _bounded_text(value: str, *, max_chars: int, field: str) -> str:
 def _bounded_optional_text(value: str, *, max_chars: int) -> str:
     text = str(value if value is not None else "").replace("\x00", "").strip()
     return text[:max_chars]
+
+
+def _dict(value: object) -> dict[str, object]:
+    return value if isinstance(value, dict) else {}
+
+
+def _list(value: object) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _int(value: object, *, default: int = 0) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(float(value))
+        except ValueError:
+            return default
+    return default
 
 
 def _clean_status(value: str, *, default: str) -> str:

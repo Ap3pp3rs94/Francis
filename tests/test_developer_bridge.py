@@ -2048,6 +2048,8 @@ def test_collaboration_transcript_uses_recent_scan_for_large_unfiltered_readback
 
 def test_collaboration_sessions_summarize_without_full_transcript_dump(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+    import francis.developer_bridge.collaboration as collaboration_module
+
     first = submit_collaboration_prompt(
         source_agent="codex",
         target_agent="ollama",
@@ -2067,6 +2069,44 @@ def test_collaboration_sessions_summarize_without_full_transcript_dump(tmp_path,
         objective=f"Francis1 reply via Ollama to {first['prompt_id']}",
         prompt="My current gap is proving session recall without storing the full relay transcript.",
     )
+    monkeypatch.setattr(
+        collaboration_module,
+        "read_collaboration_review",
+        lambda limit=10, session_id="": {
+            "items": [
+                {
+                    "id": "review-session",
+                    "insight_id": "insight-session",
+                    "turn": 42,
+                    "topic": "which session-summary fields should be shown to the operator",
+                    "source": {
+                        "codex_prompt_id": first["prompt_id"],
+                        "ollama_prompt_id": second["prompt_id"],
+                    },
+                    "build_issue": {"code": "collaboration_session_recall"},
+                    "concrete_repo_surface": "developer_bridge collaboration sessions",
+                    "review_artifact": "developer_bridge collaboration sessions:review_candidate:insight-session",
+                    "build_direction_gate": {
+                        "state": "advisory_review_required",
+                        "blocks_build_direction": False,
+                        "requires_codex_or_operator_review": True,
+                        "requires_repo_truth_review": True,
+                        "surface_under_review": "developer_bridge collaboration sessions",
+                        "required_review_artifact": (
+                            "developer_bridge collaboration sessions:review_candidate:insight-session"
+                        ),
+                        "grants_execution_authority": False,
+                        "grants_mutation_authority": False,
+                        "grants_approval_authority": False,
+                        "grants_memory_write_authority": False,
+                    },
+                    "review_recommendation": {
+                        "next_codex_action": "Inspect session grouping before expanding transcript visibility.",
+                    },
+                }
+            ],
+        },
+    )
 
     sessions = read_collaboration_sessions(limit=5, item_limit=10)
 
@@ -2084,7 +2124,16 @@ def test_collaboration_sessions_summarize_without_full_transcript_dump(tmp_path,
     assert session["latest_direction"] == "ollama->codex"
     assert "full relay transcript" in session["latest_preview"]
     assert "Auto-ack" not in session["latest_preview"]
+    assert session["latest_review_gate"]["observed"] is True
+    assert session["latest_review_gate"]["build_issue_code"] == "collaboration_session_recall"
+    assert session["latest_review_gate"]["build_direction_state"] == "advisory_review_required"
+    assert session["latest_review_gate"]["blocks_build_direction"] is False
+    assert session["latest_review_gate"]["requires_codex_or_operator_review"] is True
+    assert session["latest_review_gate"]["requires_repo_truth_review"] is True
+    assert session["latest_review_gate"]["grants_execution_authority"] is False
+    assert session["latest_review_gate"]["stores_full_transcript"] is False
     assert sessions["definitions"]["latest_preview"].startswith("A short bounded preview")
+    assert sessions["definitions"]["latest_review_gate"].startswith("The latest typed review gate")
 
 
 def test_collaboration_transcript_route_returns_explicit_json_response(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
