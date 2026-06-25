@@ -1853,6 +1853,76 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
         </div>
       ) : null}
 
+      {latestImplementationReview ? (
+        <div
+          style={{
+            background: "rgba(8, 15, 26, 0.76)",
+            border: `1px solid ${latestImplementationReview.tone === "blocked" ? "rgba(252, 165, 165, 0.58)" : "rgba(110, 231, 183, 0.42)"}`,
+            borderRadius: 14,
+            marginTop: 22,
+            padding: 16,
+          }}
+        >
+          <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "space-between" }}>
+            <h3 style={{ fontSize: 20, margin: 0 }}>Codex Implementation Preflight</h3>
+            <span
+              style={{
+                border: `1px solid ${latestImplementationReview.tone === "blocked" ? "#fca5a5" : "#6ee7b7"}`,
+                borderRadius: 999,
+                color: latestImplementationReview.tone === "blocked" ? "#fecaca" : "#d1fae5",
+                fontSize: 12,
+                fontWeight: 700,
+                padding: "4px 8px",
+              }}
+            >
+              {latestImplementationReview.badge}
+            </span>
+          </div>
+          <p style={{ color: "#e2e8f0", margin: "10px 0 0", overflowWrap: "anywhere" }}>
+            Read this typed review receipt before editing collaboration code; it remains advisory until Codex or the operator checks repo truth.
+          </p>
+          <div
+            style={{
+              color: "#cbd5e1",
+              display: "grid",
+              gap: 12,
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              marginTop: 12,
+            }}
+          >
+            <div>
+              <div style={{ color: "#94a3b8", fontSize: 12, textTransform: "uppercase" }}>Preflight Receipt</div>
+              <div style={{ overflowWrap: "anywhere" }}>{latestImplementationReview.artifact}</div>
+            </div>
+            <div>
+              <div style={{ color: "#94a3b8", fontSize: 12, textTransform: "uppercase" }}>Surface</div>
+              <div style={{ overflowWrap: "anywhere" }}>{latestImplementationReview.surface}</div>
+            </div>
+            <div>
+              <div style={{ color: "#94a3b8", fontSize: 12, textTransform: "uppercase" }}>Next Codex Action</div>
+              <div style={{ overflowWrap: "anywhere" }}>{latestImplementationReview.nextAction}</div>
+            </div>
+          </div>
+          <div style={{ color: "#94a3b8", display: "flex", flexWrap: "wrap", fontSize: 12, gap: 8, marginTop: 12 }}>
+            {latestImplementationReview.detail.map((line) => (
+              <span
+                key={line}
+                style={{
+                  background: "rgba(15, 23, 42, 0.7)",
+                  border: "1px solid rgba(148, 163, 184, 0.2)",
+                  borderRadius: 999,
+                  maxWidth: "100%",
+                  overflowWrap: "anywhere",
+                  padding: "4px 8px",
+                }}
+              >
+                {line}
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       <div
         style={{
           background: "rgba(8, 15, 26, 0.76)",

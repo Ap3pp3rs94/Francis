@@ -94691,6 +94691,51 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, full backend test suite, and unrelated UI
   flows were not run for this bounded session-readback slice.
 
+### 2026-06-25 20:30Z - Implementation preflight receipt made visible
+
+Current posture: Phase 2 / developer bridge collaboration support now renders
+the latest typed implementation-review receipt in the main operator flow before
+the raw Live Conversation transcript. This is a readback and review-discipline
+improvement for the Francis1/Codex collaboration loop; it does not grant build,
+execution, approval, training, mutation, or memory-write authority.
+
+What changed:
+
+- The Chat UI now shows a `Codex Implementation Preflight` card immediately
+  after the latest build-direction gate and before `Live Conversation`.
+- The card exposes the required preflight receipt, reviewed repo surface, next
+  Codex action, advisory/blocked badge, and review chips before the operator or
+  Codex reads raw conversation cards.
+- The implementation-review summary now includes explicit mutation-authority
+  readback alongside execution, approval, and memory-write authority, so the UI
+  does not imply that a non-execution receipt is automatically non-mutating.
+
+Validation:
+
+- Chat UI contract run passed:
+  `npm run test -- --test-name-pattern=collaborationImplementationReviewSummary`
+  (`279` passing tests in the selected run).
+- Chat UI production build passed with `npm run build`.
+- `git diff --check` passed.
+- Live URL proof: `GET http://127.0.0.1:5173/` returned HTTP 200.
+- Browser proof captured `http://127.0.0.1:5173/` at
+  `output/playwright/collaboration-implementation-preflight.png`; the page
+  showed the new preflight card above `Live Conversation`, with receipt, surface,
+  next action, and authority chips including `mutation false`.
+- Collaboration runtime health remained `healthy`, with Codex and Ollama enabled,
+  Claude disabled, and latest review receipts still advisory with all authority
+  grants false.
+
+Remaining truthful gap:
+
+- This does not make the collaboration review receipt build authority; advisory
+  and blocked gates still require Codex/operator repo-truth review before
+  implementation.
+- This does not change recurrence, model tuning, memory retention, or transcript
+  storage contracts.
+- `.\scripts\check.ps1`, GitHub CI, full backend test suite, and unrelated UI
+  flows were not run for this bounded implementation-preflight slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

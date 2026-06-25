@@ -1044,6 +1044,7 @@ export function collaborationImplementationReviewSummary(item: CollaborationRevi
       `codex review ${actionBoundaryBool(item.buildDirectionGate.requiresCodexOrOperatorReview)}`,
       `repo review ${actionBoundaryBool(item.buildDirectionGate.requiresRepoTruthReview)}`,
       `execute ${actionBoundaryBool(item.actionBoundary.conversationCanExecuteAction || item.buildDirectionGate.grantsExecutionAuthority)}`,
+      `mutation ${actionBoundaryBool(item.buildDirectionGate.grantsMutationAuthority)}`,
       `approve ${actionBoundaryBool(item.actionBoundary.conversationCanApproveAction || item.buildDirectionGate.grantsApprovalAuthority)}`,
       `memory write ${actionBoundaryBool(item.buildDirectionGate.grantsMemoryWriteAuthority)}`,
     ],

@@ -1797,6 +1797,7 @@ test("collaborationImplementationReviewSummary exposes the typed read-before-edi
     "codex review true",
     "repo review true",
     "execute false",
+    "mutation false",
     "approve false",
     "memory write false",
   ]);
@@ -1843,6 +1844,7 @@ test("collaborationImplementationReviewSummary blocks authority drift in review 
   assert.equal(summary.badge, "authority drift");
   assert.equal(summary.tone, "blocked");
   assert.equal(summary.detail.includes("execute true"), true);
+  assert.equal(summary.detail.includes("mutation false"), true);
 });
 
 test("collaborationActionIntakeSummary exposes mission ingress as candidate-only", () => {
