@@ -16,6 +16,7 @@ from tests.test_fr017_final_decision_record_gate_script import (
     _ready_final_decision_payload,
     _write_final_physical_gate_record,
 )
+from tests.test_fr017_completion_ledger_gate_script import _ready_ledger_entry
 from tests.test_fr017_mannequin_interface_gate_script import _ready_mannequin_payload
 from tests.test_fr017_mockup_readiness_gate_script import (
     _ready_measurement_payload,
@@ -46,7 +47,7 @@ def _run_gate(*args: str):
         SCRIPT,
         args,
         cwd=ROOT,
-        timeout_seconds=90,
+        timeout_seconds=140,
     )
 
 
@@ -114,7 +115,7 @@ def test_fr017_evidence_chain_status_stops_at_measurement_template() -> None:
     assert payload["first_blocking_details"]["invalid_fields"] == []
     assert payload["first_blocking_details"]["safety_blockers"] == []
     assert payload["gates_ran"] == 2
-    assert payload["gate_count"] == 10
+    assert payload["gate_count"] == 11
     assert payload["evidence_chain_decision_ready"] is False
     assert payload["physical_validation_complete"] is False
     assert payload["stage17_completion_claim_allowed"] is False
@@ -643,7 +644,7 @@ def test_fr017_evidence_chain_status_blocks_on_final_decision_record_after_final
     assert payload["first_blocking_details"]["missing_fields"] == ["final_decision_path"]
     assert payload["first_blocking_details"]["failed_reasons"] == []
     assert payload["gates_ran"] == 10
-    assert payload["gate_count"] == 10
+    assert payload["gate_count"] == 11
     assert payload["gate_results"][8]["details"]["evidence_chronology_violations"] == []
     assert payload["gate_results"][8]["details"]["pilot_identity_continuity_violations"] == []
     assert payload["gate_results"][8]["details"]["pilot_identity_continuity_reference_record"] == "measurement"
@@ -676,10 +677,10 @@ def test_fr017_evidence_chain_status_blocks_on_final_decision_record_after_final
     assert payload["stage17_completion_claim_allowed"] is False
     assert payload["powered_or_frame_coupled_testing_cleared"] is False
     assert payload["fr018_implementation_cleared"] is False
-    assert "never marks physical_validation_complete" in payload["no_fake_validation_lock"]
+    assert "never writes the ledger" in payload["no_fake_validation_lock"]
 
 
-def test_fr017_evidence_chain_status_ready_for_ledger_review_after_final_decision_record(
+def test_fr017_evidence_chain_status_blocks_on_completion_ledger_after_final_decision_record(
     tmp_path: Path,
 ) -> None:
     measurement_path, mockup_path, mannequin_path, static_fit_path, movement_path, release_cable_path = (
@@ -729,20 +730,175 @@ def test_fr017_evidence_chain_status_ready_for_ledger_review_after_final_decisio
 
     assert proc.returncode == 0, proc.stderr
     payload = _payload(proc.stdout)
-    assert payload["status"] == "ready_for_completion_ledger_review"
-    assert payload["first_blocking_gate"] == ""
-    assert payload["gates_ran"] == 10
-    assert payload["gate_count"] == 10
+    assert payload["status"] == "blocked_on_completion_ledger"
+    assert payload["first_blocking_gate"] == "completion_ledger"
+    assert payload["first_blocking_status"] == "pending_completion_ledger_entry"
+    assert payload["next_required_input"] == "candidate-FR-017-completion-ledger-entry.md"
+    assert (
+        payload["next_command"]
+        == "draft_operator_reviewed_FR-017_completion_ledger_entry_referencing_final_decision_record"
+    )
+    assert payload["gates_ran"] == 11
+    assert payload["gate_count"] == 11
     assert payload["gate_results"][9]["id"] == "final_decision_record"
     assert payload["gate_results"][9]["details"]["final_decision_record_ready"] is True
     assert payload["gate_results"][9]["details"]["ledger_completion_review_ready"] is True
     assert payload["gate_results"][9]["details"]["decision_lock_violations"] == []
     assert payload["gate_results"][9]["details"]["prohibited_clearance_flags"] == []
-    assert payload["evidence_chain_decision_ready"] is True
-    assert payload["ledger_completion_review_ready"] is True
+    assert payload["gate_results"][10]["id"] == "completion_ledger"
+    assert payload["gate_results"][10]["details"]["final_decision_record_ready"] is True
+    assert payload["gate_results"][10]["details"]["ledger_entry_review_ready"] is False
+    assert payload["gate_results"][10]["details"]["missing_fields"] == ["ledger_entry_path"]
+    assert payload["first_blocking_details"]["missing_fields"] == ["ledger_entry_path"]
+    assert payload["evidence_chain_decision_ready"] is False
+    assert payload["ledger_completion_review_ready"] is False
+    assert payload["completion_ledger_handoff_ready"] is False
     assert payload["physical_validation_complete"] is False
     assert payload["stage17_completion_claim_allowed"] is False
     assert payload["powered_or_frame_coupled_testing_cleared"] is False
+    assert payload["fr018_implementation_cleared"] is False
+
+
+def test_fr017_evidence_chain_status_ready_after_completion_ledger_handoff(
+    tmp_path: Path,
+) -> None:
+    measurement_path, mockup_path, mannequin_path, static_fit_path, movement_path, release_cable_path = (
+        _write_release_ready_records(tmp_path)
+    )
+    engineering_review_path = tmp_path / "ready-engineering-review.json"
+    engineering_review_path.write_text(
+        json.dumps(_ready_engineering_review_payload(release_cable_path)),
+        encoding="utf-8",
+    )
+    evidence_paths = (
+        measurement_path,
+        mockup_path,
+        mannequin_path,
+        static_fit_path,
+        movement_path,
+        release_cable_path,
+        engineering_review_path,
+    )
+    final_physical_gate_record_path = _write_final_physical_gate_record(tmp_path, evidence_paths)
+    final_decision_path = tmp_path / "ready-final-decision.json"
+    final_decision_path.write_text(
+        json.dumps(_ready_final_decision_payload(final_physical_gate_record_path)),
+        encoding="utf-8",
+    )
+    ledger_entry_path = tmp_path / "ready-ledger-handoff.md"
+    ledger_entry_path.write_text(_ready_ledger_entry(final_decision_path), encoding="utf-8")
+
+    proc = _run_gate(
+        "-Mode",
+        "Status",
+        "-MeasurementPath",
+        str(measurement_path),
+        "-MockupPath",
+        str(mockup_path),
+        "-MannequinPath",
+        str(mannequin_path),
+        "-StaticFitPath",
+        str(static_fit_path),
+        "-MovementPath",
+        str(movement_path),
+        "-ReleaseCablePath",
+        str(release_cable_path),
+        "-EngineeringReviewPath",
+        str(engineering_review_path),
+        "-FinalDecisionPath",
+        str(final_decision_path),
+        "-LedgerEntryPath",
+        str(ledger_entry_path),
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = _payload(proc.stdout)
+    assert payload["status"] == "ready_for_operator_completion_ledger_update"
+    assert payload["first_blocking_gate"] == ""
+    assert payload["gates_ran"] == 11
+    assert payload["gate_count"] == 11
+    assert payload["gate_results"][10]["id"] == "completion_ledger"
+    assert payload["gate_results"][10]["details"]["ledger_entry_review_ready"] is True
+    assert payload["gate_results"][10]["details"]["ledger_entry_exists"] is True
+    assert payload["gate_results"][10]["details"]["prohibited_clearance_flags"] == []
+    assert payload["evidence_chain_decision_ready"] is True
+    assert payload["ledger_completion_review_ready"] is True
+    assert payload["completion_ledger_handoff_ready"] is True
+    assert payload["physical_validation_complete"] is False
+    assert payload["stage17_completion_claim_allowed"] is False
+    assert payload["powered_or_frame_coupled_testing_cleared"] is False
+    assert payload["fr018_implementation_cleared"] is False
+
+
+def test_fr017_evidence_chain_status_fails_closed_on_unsafe_completion_ledger_handoff(
+    tmp_path: Path,
+) -> None:
+    measurement_path, mockup_path, mannequin_path, static_fit_path, movement_path, release_cable_path = (
+        _write_release_ready_records(tmp_path)
+    )
+    engineering_review_path = tmp_path / "ready-engineering-review.json"
+    engineering_review_path.write_text(
+        json.dumps(_ready_engineering_review_payload(release_cable_path)),
+        encoding="utf-8",
+    )
+    evidence_paths = (
+        measurement_path,
+        mockup_path,
+        mannequin_path,
+        static_fit_path,
+        movement_path,
+        release_cable_path,
+        engineering_review_path,
+    )
+    final_physical_gate_record_path = _write_final_physical_gate_record(tmp_path, evidence_paths)
+    final_decision_path = tmp_path / "ready-final-decision.json"
+    final_decision_path.write_text(
+        json.dumps(_ready_final_decision_payload(final_physical_gate_record_path)),
+        encoding="utf-8",
+    )
+    ledger_entry_path = tmp_path / "unsafe-ledger-handoff.md"
+    ledger_entry_path.write_text(
+        _ready_ledger_entry(final_decision_path).replace(
+            "FR-018 implementation remains blocked and not cleared.",
+            "FR-018 cleared.",
+        ),
+        encoding="utf-8",
+    )
+
+    proc = _run_gate(
+        "-Mode",
+        "Status",
+        "-MeasurementPath",
+        str(measurement_path),
+        "-MockupPath",
+        str(mockup_path),
+        "-MannequinPath",
+        str(mannequin_path),
+        "-StaticFitPath",
+        str(static_fit_path),
+        "-MovementPath",
+        str(movement_path),
+        "-ReleaseCablePath",
+        str(release_cable_path),
+        "-EngineeringReviewPath",
+        str(engineering_review_path),
+        "-FinalDecisionPath",
+        str(final_decision_path),
+        "-LedgerEntryPath",
+        str(ledger_entry_path),
+    )
+
+    assert proc.returncode == 1
+    payload = _payload(proc.stdout)
+    assert payload["status"] == "failed_completion_ledger"
+    assert payload["first_blocking_gate"] == "completion_ledger"
+    assert payload["first_blocking_status"] == "failed_completion_ledger_entry"
+    assert "ledger_entry.FR-018_cleared" in payload["first_blocking_details"]["prohibited_clearance_flags"]
+    assert payload["evidence_chain_decision_ready"] is False
+    assert payload["ledger_completion_review_ready"] is False
+    assert payload["completion_ledger_handoff_ready"] is False
+    assert payload["physical_validation_complete"] is False
+    assert payload["stage17_completion_claim_allowed"] is False
     assert payload["fr018_implementation_cleared"] is False
 
 

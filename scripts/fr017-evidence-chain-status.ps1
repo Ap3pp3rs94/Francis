@@ -19,7 +19,9 @@ param(
 
   [string]$EngineeringReviewPath = '',
 
-  [string]$FinalDecisionPath = ''
+  [string]$FinalDecisionPath = '',
+
+  [string]$LedgerEntryPath = ''
 )
 
 Set-StrictMode -Version 2
@@ -324,6 +326,14 @@ function New-GateEvidenceDetails {
     completion_decision_violations = @(Get-PayloadArrayProperty -Payload $Payload -Name 'completion_decision_violations')
     saved_final_physical_gate_record_status = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['saved_final_physical_gate_record_status']) { '' } else { [string]$Payload.saved_final_physical_gate_record_status }
     next_required_final_decision_input = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['next_required_final_decision_input']) { '' } else { [string]$Payload.next_required_final_decision_input }
+    final_decision_gate_status = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['final_decision_gate_status']) { '' } else { [string]$Payload.final_decision_gate_status }
+    final_decision_record_path = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['final_decision_record_path']) { '' } else { [string]$Payload.final_decision_record_path }
+    ledger_entry_path = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['ledger_entry_path']) { '' } else { [string]$Payload.ledger_entry_path }
+    ledger_entry_exists = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['ledger_entry_exists']) { $false } else { [bool]$Payload.ledger_entry_exists }
+    ledger_entry_read_ok = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['ledger_entry_read_ok']) { $false } else { [bool]$Payload.ledger_entry_read_ok }
+    ledger_entry_review_ready = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['ledger_entry_review_ready']) { $false } else { [bool]$Payload.ledger_entry_review_ready }
+    ledger_entry_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['ledger_entry_contract']) { '' } else { [string]$Payload.ledger_entry_contract }
+    next_required_ledger_input = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['next_required_ledger_input']) { '' } else { [string]$Payload.next_required_ledger_input }
     next_actions = @(Get-PayloadArrayProperty -Payload $Payload -Name 'next_actions')
   }
 }
@@ -434,6 +444,20 @@ Add-OptionalArg -Target $FinalDecisionArgs -Name '-ReleaseCablePath' -Value $Rel
 Add-OptionalArg -Target $FinalDecisionArgs -Name '-EngineeringReviewPath' -Value $EngineeringReviewPath
 Add-OptionalArg -Target $FinalDecisionArgs -Name '-FinalDecisionPath' -Value $FinalDecisionPath
 
+$CompletionLedgerArgs = New-Object System.Collections.Generic.List[string]
+$CompletionLedgerArgs.Add('-Mode') | Out-Null
+$CompletionLedgerArgs.Add('Status') | Out-Null
+Add-OptionalArg -Target $CompletionLedgerArgs -Name '-ManifestPath' -Value $ManifestPath
+Add-OptionalArg -Target $CompletionLedgerArgs -Name '-MeasurementPath' -Value $MeasurementPath
+Add-OptionalArg -Target $CompletionLedgerArgs -Name '-MockupPath' -Value $MockupPath
+Add-OptionalArg -Target $CompletionLedgerArgs -Name '-MannequinPath' -Value $MannequinPath
+Add-OptionalArg -Target $CompletionLedgerArgs -Name '-StaticFitPath' -Value $StaticFitPath
+Add-OptionalArg -Target $CompletionLedgerArgs -Name '-MovementPath' -Value $MovementPath
+Add-OptionalArg -Target $CompletionLedgerArgs -Name '-ReleaseCablePath' -Value $ReleaseCablePath
+Add-OptionalArg -Target $CompletionLedgerArgs -Name '-EngineeringReviewPath' -Value $EngineeringReviewPath
+Add-OptionalArg -Target $CompletionLedgerArgs -Name '-FinalDecisionPath' -Value $FinalDecisionPath
+Add-OptionalArg -Target $CompletionLedgerArgs -Name '-LedgerEntryPath' -Value $LedgerEntryPath
+
 $Gates = @(
   (New-GateDefinition -Id 'stage17_package' -ScriptName 'fr017-stage17-validation-gate.ps1' -ReadyStatus 'blocked_physical_validation' -NextRequiredInput 'FR-017-STAGE17-PACKAGE-MANIFEST.json' -NextCommand 'correct_FR-017_package_manifest_or_records' -Arguments $PackageArgs.ToArray()),
   (New-GateDefinition -Id 'measurement_intake' -ScriptName 'fr017-measurement-intake.ps1' -ReadyStatus 'ready_for_non_powered_mockup_patterning' -NextRequiredInput 'FR-017-MEASUREMENTS-INPUT-TEMPLATE.json' -NextCommand 'complete_left_right_measurement_record_then_rerun_measurement_intake' -Arguments $MeasurementArgs.ToArray()),
@@ -444,7 +468,8 @@ $Gates = @(
   (New-GateDefinition -Id 'quick_release_cable_snag' -ScriptName 'fr017-quick-release-cable-snag-gate.ps1' -ReadyStatus 'ready_for_engineering_review_or_final_physical_gate_audit' -NextRequiredInput 'FR-017-QUICK-RELEASE-CABLE-SNAG-INPUT-TEMPLATE.json' -NextCommand 'complete_quick_release_cable_snag_record_then_rerun_release_cable_gate' -Arguments $ReleaseCableArgs.ToArray()),
   (New-GateDefinition -Id 'engineering_review' -ScriptName 'fr017-engineering-review-gate.ps1' -ReadyStatus 'ready_for_final_stage17_physical_gate_audit' -NextRequiredInput 'FR-017-ENGINEERING-REVIEW-INPUT-TEMPLATE.json' -NextCommand 'complete_professional_engineering_review_record_then_rerun_engineering_review_gate' -Arguments $EngineeringArgs.ToArray()),
   (New-GateDefinition -Id 'final_physical_gate' -ScriptName 'fr017-final-physical-gate.ps1' -ReadyStatus 'ready_for_stage17_final_physical_completion_decision' -NextRequiredInput 'FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json' -NextCommand 'complete_human_final_stage17_completion_decision_record_at_FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json' -Arguments $FinalArgs.ToArray()),
-  (New-GateDefinition -Id 'final_decision_record' -ScriptName 'fr017-final-decision-record-gate.ps1' -ReadyStatus 'ready_for_completion_ledger_review' -NextRequiredInput 'FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json' -NextCommand 'complete_human_final_stage17_completion_decision_record_at_FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json' -Arguments $FinalDecisionArgs.ToArray())
+  (New-GateDefinition -Id 'final_decision_record' -ScriptName 'fr017-final-decision-record-gate.ps1' -ReadyStatus 'ready_for_completion_ledger_review' -NextRequiredInput 'FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json' -NextCommand 'complete_human_final_stage17_completion_decision_record_at_FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json' -Arguments $FinalDecisionArgs.ToArray()),
+  (New-GateDefinition -Id 'completion_ledger' -ScriptName 'fr017-completion-ledger-gate.ps1' -ReadyStatus 'ready_for_operator_completion_ledger_update' -NextRequiredInput 'candidate-FR-017-completion-ledger-entry.md' -NextCommand 'draft_operator_reviewed_FR-017_completion_ledger_entry_referencing_final_decision_record' -Arguments $CompletionLedgerArgs.ToArray())
 )
 
 $GateResults = New-Object System.Collections.Generic.List[object]
@@ -453,7 +478,7 @@ $FirstBlockingStatus = ''
 $NextRequiredInput = ''
 $NextCommand = ''
 $FirstBlockingDetails = New-GateEvidenceDetails -Payload $null
-$Status = 'ready_for_completion_ledger_review'
+$Status = 'ready_for_operator_completion_ledger_update'
 $ExitCode = 0
 
 foreach ($Gate in $Gates) {
@@ -493,14 +518,15 @@ foreach ($Gate in $Gates) {
   }
 }
 
-$EvidenceChainDecisionReady = $Status -eq 'ready_for_completion_ledger_review'
+$EvidenceChainDecisionReady = $Status -eq 'ready_for_operator_completion_ledger_update'
 
 $Output = [ordered]@{
   kind = 'francis.fr017.evidence_chain_status'
   mode = $Mode
   status = $Status
   evidence_chain_decision_ready = $EvidenceChainDecisionReady
-  ledger_completion_review_ready = ($Status -eq 'ready_for_completion_ledger_review')
+  ledger_completion_review_ready = ($Status -eq 'ready_for_operator_completion_ledger_update')
+  completion_ledger_handoff_ready = ($Status -eq 'ready_for_operator_completion_ledger_update')
   physical_validation_complete = $false
   stage17_completion_claim_allowed = $false
   powered_or_frame_coupled_testing_cleared = $false
@@ -518,7 +544,7 @@ $Output = [ordered]@{
   gates_ran = $GateResults.Count
   gate_count = $Gates.Count
   gate_results = @($GateResults.ToArray())
-  no_fake_validation_lock = 'This chain-status command reports evidence readiness only. It never marks physical_validation_complete or clears FR-018.'
+  no_fake_validation_lock = 'This chain-status command reports evidence and completion-ledger handoff readiness only. It never writes the ledger, marks physical_validation_complete, permits a Stage 17 completion claim, or clears FR-018.'
 }
 
 $Output | ConvertTo-Json -Depth 8
