@@ -67,7 +67,7 @@ def test_fr017_final_physical_gate_reports_default_templates_as_pending() -> Non
     assert payload["upstream_measurement_intake_status"] == "pending_measurements"
     assert (
         payload["upstream_next_required_physical_input"]
-        == "complete_real_left_right_measurement_record_at_FR-017-MEASUREMENTS-INPUT-TEMPLATE.json"
+        == "copy_FR-017-MEASUREMENTS-INPUT-TEMPLATE.json_to_FR-017-MEASUREMENTS-YYYY-MM-DD-PILOT-RECORD.json_and_capture_with_FR-017-MEASUREMENT-CAPTURE-RUNBOOK.md"
     )
     assert payload["upstream_measurement_capture_plan_not_completion_evidence"] is True
     assert "intake readiness only" in payload["upstream_measurement_capture_plan_status_contract"]
