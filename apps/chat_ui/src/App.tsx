@@ -1329,6 +1329,11 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
   const reviewItems = review?.items ?? [];
   const blockedReviewItems = reviewItems.filter((item) => item.buildDirectionGate.blocksBuildDirection);
   const latestImplementationReview = reviewItems[0] ? collaborationImplementationReviewSummary(reviewItems[0]) : null;
+  const actionIntakeReviews = reviewItems
+    .map((item) => ({ item, summary: collaborationActionIntakeSummary(item) }))
+    .filter(({ summary }) => summary.applies);
+  const latestActionIntakeReview = actionIntakeReviews[0]?.item ?? null;
+  const latestActionIntakeProof = actionIntakeReviews[0]?.summary ?? null;
   const learningItems = learning?.items ?? [];
   const recurrenceProof = collaborationRuntimeRecurrenceSummary(runtimeHealth);
   const localModelResponseProof = collaborationRuntimeLocalModelResponseSummary(runtimeHealth);
@@ -1613,6 +1618,90 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
           <span>sources {(substrateReadiness?.requiredAlignmentSources ?? []).join(", ") || "unknown"}</span>
         </div>
       </div>
+
+      {latestActionIntakeReview && latestActionIntakeProof ? (
+        <div
+          style={{
+            background: "rgba(8, 15, 26, 0.76)",
+            border: `1px solid ${latestActionIntakeProof.tone === "blocked" ? "rgba(252, 165, 165, 0.5)" : "rgba(110, 231, 183, 0.42)"}`,
+            borderRadius: 14,
+            marginTop: 22,
+            padding: 16,
+          }}
+        >
+          <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "space-between" }}>
+            <h3 style={{ fontSize: 20, margin: 0 }}>Action Intake Boundary</h3>
+            <span
+              style={{
+                border: `1px solid ${latestActionIntakeProof.tone === "blocked" ? "#fca5a5" : "#6ee7b7"}`,
+                borderRadius: 999,
+                color: latestActionIntakeProof.tone === "blocked" ? "#fecaca" : "#d1fae5",
+                fontSize: 12,
+                fontWeight: 700,
+                padding: "4px 8px",
+              }}
+            >
+              {latestActionIntakeProof.badge}
+            </span>
+          </div>
+          <p style={{ color: "#e2e8f0", margin: "12px 0 0", overflowWrap: "anywhere" }}>
+            {latestActionIntakeReview.buildIssue?.statement ||
+              "Typed or spoken operator direction enters Francis as a reviewed action candidate, not direct execution."}
+          </p>
+          <div
+            style={{
+              color: "#cbd5e1",
+              display: "grid",
+              gap: 12,
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              marginTop: 12,
+            }}
+          >
+            <div>
+              <div style={{ color: "#94a3b8", fontSize: 12, textTransform: "uppercase" }}>Surface</div>
+              <div style={{ overflowWrap: "anywhere" }}>{latestActionIntakeReview.concreteRepoSurface || "unknown"}</div>
+            </div>
+            <div>
+              <div style={{ color: "#94a3b8", fontSize: 12, textTransform: "uppercase" }}>Review Artifact</div>
+              <div style={{ overflowWrap: "anywhere" }}>{latestActionIntakeReview.reviewArtifact || "unknown"}</div>
+            </div>
+            <div>
+              <div style={{ color: "#94a3b8", fontSize: 12, textTransform: "uppercase" }}>Gate</div>
+              <div>{latestActionIntakeReview.buildDirectionGate.state || "advisory_review_required"}</div>
+            </div>
+            <div>
+              <div style={{ color: "#94a3b8", fontSize: 12, textTransform: "uppercase" }}>Authority</div>
+              <div>
+                execute {boolText(latestActionIntakeReview.actionBoundary.conversationCanExecuteAction)} / approve{" "}
+                {boolText(latestActionIntakeReview.actionBoundary.conversationCanApproveAction)}
+              </div>
+            </div>
+          </div>
+          <div style={{ color: "#94a3b8", display: "flex", flexWrap: "wrap", fontSize: 12, gap: 8, marginTop: 12 }}>
+            {latestActionIntakeProof.detail.map((line) => (
+              <span
+                key={line}
+                style={{
+                  background: "rgba(15, 23, 42, 0.7)",
+                  border: "1px solid rgba(148, 163, 184, 0.2)",
+                  borderRadius: 999,
+                  maxWidth: "100%",
+                  overflowWrap: "anywhere",
+                  padding: "4px 8px",
+                }}
+              >
+                {line}
+              </span>
+            ))}
+          </div>
+          <div style={{ color: "#93c5fd", fontSize: 13, marginTop: 10, overflowWrap: "anywhere" }}>
+            evidence {latestActionIntakeReview.surfaceVerification?.evidence || "mission ingress review evidence unavailable"}
+          </div>
+          <div style={{ color: "#cbd5e1", fontSize: 13, marginTop: 8, overflowWrap: "anywhere" }}>
+            next {latestActionIntakeReview.reviewRecommendation?.nextCodexAction || "Inspect mission ingress before changing action-intake behavior."}
+          </div>
+        </div>
+      ) : null}
 
       <div
         style={{

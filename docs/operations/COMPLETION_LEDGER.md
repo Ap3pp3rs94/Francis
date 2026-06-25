@@ -94489,6 +94489,46 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, backend tests, and unrelated full-repo
   suites were not run for this bounded Chat UI visibility slice.
 
+### 2026-06-25 20:00Z - Action-intake boundary made operator-visible
+
+Current posture: Phase 2 / developer bridge collaboration support now surfaces
+the latest `api.routes.chat.mission_ingress` action-intake review in the
+operator-visible Chat UI. This is a visibility improvement for the existing
+candidate-only mission-ingress boundary; it does not change mission execution
+behavior, policy, approval, mutation, training, or memory-write authority.
+
+What changed:
+
+- The Chat UI now selects the latest collaboration review item whose surface is
+  `api.routes.chat.mission_ingress` / `mission_ingress_action_boundary`.
+- Added an operator-visible Action Intake Boundary card before Live
+  Conversation so typed or spoken direction is shown as an action candidate, not
+  direct execution.
+- The card shows the reviewed surface, review artifact, advisory gate, execution
+  and approval denial, candidate/repo-review chips, mission-ingress evidence, and
+  the next Codex action from the typed review receipt.
+- The card tolerates sparse review receipts without crashing the UI.
+
+Validation:
+
+- Chat UI tests passed:
+  `npm run test -- --test-name-pattern=collaborationActionIntakeSummary`.
+- Chat UI production build passed with `npm run build`.
+- `git diff --check` passed.
+- Browser proof captured `http://127.0.0.1:5173/` at
+  `output/playwright/collaboration-action-intake-boundary.png`; the page returned
+  HTTP 200 and showed `Action Intake Boundary`, `action candidate only`,
+  `api.routes.chat.mission_ingress`, and `execute false / approve false`.
+
+Remaining truthful gap:
+
+- This does not convert any new spoken or typed input into runtime actions; it
+  only exposes the existing candidate-only review boundary.
+- The actual mission-ingress execution path remains governed by existing
+  operator posture, permission gates, approvals, and mission queue behavior.
+- `.\scripts\check.ps1`, GitHub CI, backend tests, and unrelated full-repo
+  suites were not run for this bounded Chat UI visibility slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
