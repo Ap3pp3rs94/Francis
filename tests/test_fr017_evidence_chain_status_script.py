@@ -68,13 +68,32 @@ def test_fr017_evidence_chain_status_stops_at_measurement_template() -> None:
     assert payload["status"] == "blocked_on_measurement_intake"
     assert payload["first_blocking_gate"] == "measurement_intake"
     assert payload["first_blocking_status"] == "pending_measurements"
-    assert payload["next_required_input"] == "FR-017-MEASUREMENTS-INPUT-TEMPLATE.json"
+    assert (
+        payload["next_required_input"]
+        == "FR-017-MEASUREMENT-CAPTURE-RUNBOOK.md + FR-017-MEASUREMENTS-INPUT-TEMPLATE.json"
+    )
+    assert payload["next_command"] == "copy_template_using_measurement_capture_runbook_then_rerun_measurement_intake"
     assert (
         payload["first_blocking_details"]["next_required_physical_input"]
-        == "complete_real_left_right_measurement_record_at_FR-017-MEASUREMENTS-INPUT-TEMPLATE.json"
+        == "copy_FR-017-MEASUREMENTS-INPUT-TEMPLATE.json_to_FR-017-MEASUREMENTS-YYYY-MM-DD-PILOT-RECORD.json_and_capture_with_FR-017-MEASUREMENT-CAPTURE-RUNBOOK.md"
+    )
+    assert (
+        str(payload["first_blocking_details"]["measurement_input_template_path"])
+        .replace("/", "\\")
+        .endswith("FR-017_Stage17_Package\\FR-017-MEASUREMENTS-INPUT-TEMPLATE.json")
+    )
+    assert (
+        str(payload["first_blocking_details"]["measurement_capture_runbook_path"])
+        .replace("/", "\\")
+        .endswith("FR-017_Stage17_Package\\FR-017-MEASUREMENT-CAPTURE-RUNBOOK.md")
+    )
+    assert (
+        payload["first_blocking_details"]["measurement_working_record_name_pattern"]
+        == "FR-017-MEASUREMENTS-YYYY-MM-DD-PILOT-RECORD.json"
     )
     assert payload["first_blocking_details"]["measurement_capture_plan_not_completion_evidence"] is True
     assert "not physical validation evidence" in payload["first_blocking_details"]["measurement_capture_plan_contract"]
+    assert "not measurement evidence" in payload["first_blocking_details"]["measurement_capture_runbook_contract"]
     assert "intake readiness only" in payload["first_blocking_details"]["measurement_capture_plan_status_contract"]
     assert (
         "not physical validation evidence" in payload["first_blocking_details"]["measurement_capture_summary_contract"]
@@ -969,7 +988,10 @@ def test_fr017_evidence_chain_status_fails_closed_on_measurement_symptom(tmp_pat
     assert result["status"] == "failed_measurement_intake"
     assert result["first_blocking_gate"] == "measurement_intake"
     assert result["first_blocking_status"] == "failed_requires_redesign_or_medical_review"
-    assert result["next_required_input"] == "FR-017-MEASUREMENTS-INPUT-TEMPLATE.json"
+    assert (
+        result["next_required_input"]
+        == "FR-017-MEASUREMENT-CAPTURE-RUNBOOK.md + FR-017-MEASUREMENTS-INPUT-TEMPLATE.json"
+    )
     assert result["first_blocking_details"]["safety_blockers"] == ["tingling"]
     assert result["gate_results"][1]["details"]["safety_blockers"] == ["tingling"]
     assert result["physical_validation_complete"] is False
