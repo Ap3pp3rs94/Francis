@@ -95497,6 +95497,70 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, and unrelated full-system UI flows were not
   run for this bounded body-map capability-exposure slice.
 
+### 2026-06-25 22:17Z - Collaboration agent toggles expose operator proof
+
+Current posture: Phase 2 / developer bridge collaboration-agent control now
+emits an explicit toggle-proof receipt shape for participant enable/disable
+events. Operator-visible agent cards can show which actor changed a participant,
+the previous/current state, whether a reason was recorded, and that the receipt
+does not prove capability, execution, approval, training, or memory-write
+authority.
+
+What changed:
+
+- `developer_bridge.collaboration_agent_toggle_receipt` now includes typed
+  `operator_toggle_proof` with actor/reason observation, previous/current state,
+  state-change status, operator-console status, review requirement, and
+  no-authority booleans.
+- Collaboration-agent governance now explicitly denies approval, training, and
+  capability authority in addition to execution, mutation, and memory-write
+  authority.
+- The collaboration-agent status readback defines `operator_toggle_proof` so the
+  UI and Codex sessions do not need to infer the receipt meaning from raw JSON.
+- The Chat UI parser preserves the proof object and infers a conservative
+  `legacy_receipt_inferred` proof for older saved toggle receipts that already
+  have actor/reason/state fields.
+- The Communication UI agent cards now render a conversational `Toggle Proof`
+  line plus capability/approval chips, while raw technical receipts remain
+  opt-in.
+
+Validation:
+
+- Developer bridge test file passed:
+  `python -m pytest tests/test_developer_bridge.py -q`.
+- Chat UI contract suite passed:
+  `npm run test -- src/chat/index.test.ts`
+  (the package script ran the configured UI suite, `280` passing tests).
+- Chat UI production build passed:
+  `npm run build`.
+- Targeted lint passed:
+  `python -m ruff check src/francis/developer_bridge/agents.py tests/test_developer_bridge.py`.
+- Targeted format check passed:
+  `python -m ruff format --check src/francis/developer_bridge/agents.py tests/test_developer_bridge.py`.
+- `git diff --check` passed.
+- The local Francis API was restarted after the Python readback change. The route
+  `/developer-bridge/collaboration-agents` returned HTTP `200`, included the
+  `operator_toggle_proof` definition, and reported
+  `grants_approval_authority=false` and `grants_capability_authority=false` on
+  the status governance.
+- The local Communication UI at `http://127.0.0.1:5173/` returned HTTP `200`.
+  Playwright screenshot proof captured the populated Communication page with
+  agent-card `Toggle Proof` lines:
+  `output/playwright/collaboration-agent-toggle-proof-final.png`.
+
+Remaining truthful gap:
+
+- This does not toggle any participant, grant any participant capability use, or
+  prove that older legacy receipts were created by the operator beyond their
+  stored actor/reason/state fields.
+- This does not tune Francis1, promote learning receipts into memory, resolve ORB
+  coverage gaps, or close the main-build prompt gate.
+- This does not grant execution, mutation, approval, training, memory-write,
+  capability-use, or main-build authority to Codex, Claude, Francis1, or the
+  relay.
+- `.\scripts\check.ps1`, GitHub CI, and unrelated full-system UI flows were not
+  run for this bounded collaboration-agent toggle-proof slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

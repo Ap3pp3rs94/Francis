@@ -66,6 +66,12 @@ def collaboration_agents_status() -> dict[str, object]:
         "state_path": _display_path(_state_path()),
         "receipts": _list(state.get("receipts"))[-10:],
         "operator_console": dict(_OPERATOR_CONSOLE),
+        "definitions": {
+            "operator_toggle_proof": (
+                "Typed proof that a participant toggle receipt recorded actor, reason, previous/current state, "
+                "operator-console status, and no capability or execution authority grant."
+            )
+        },
         "governance": _governance(write=False),
     }
 
@@ -91,9 +97,12 @@ def set_collaboration_agent_enabled(
     now = _utc_now()
     agents = _state_agents(state)
     previous = _agent_state(agents, clean_agent)
+    previous_enabled = bool(previous.get("enabled", _DEFAULT_ENABLED[clean_agent]))
+    current_enabled = bool(enabled)
+    receipt_governance = _governance(write=True)
     current = {
         **previous,
-        "enabled": bool(enabled),
+        "enabled": current_enabled,
         "updated_at": now,
         "updated_by": redact_secret_text(clean_actor),
         "reason": redact_secret_text(clean_reason),
@@ -105,11 +114,19 @@ def set_collaboration_agent_enabled(
         "receipt_id": f"collab-agent-toggle-{uuid4().hex[:16]}",
         "created_at": now,
         "agent": clean_agent,
-        "enabled": bool(enabled),
-        "previous_enabled": bool(previous.get("enabled", _DEFAULT_ENABLED[clean_agent])),
+        "enabled": current_enabled,
+        "previous_enabled": previous_enabled,
         "actor": redact_secret_text(clean_actor),
         "reason": redact_secret_text(clean_reason),
-        "governance": _governance(write=True),
+        "operator_toggle_proof": _operator_toggle_proof(
+            agent=clean_agent,
+            actor=clean_actor,
+            reason=clean_reason,
+            previous_enabled=previous_enabled,
+            current_enabled=current_enabled,
+            governance=receipt_governance,
+        ),
+        "governance": receipt_governance,
     }
     receipts = _list(state.get("receipts"))
     receipts.append(receipt)
@@ -120,10 +137,10 @@ def set_collaboration_agent_enabled(
         "kind": "developer_bridge.collaboration_agent_toggle",
         "ok": True,
         "agent": clean_agent,
-        "enabled": bool(enabled),
+        "enabled": current_enabled,
         "receipt": receipt,
         "status": collaboration_agents_status(),
-        "governance": _governance(write=True),
+        "governance": receipt_governance,
     }
 
 
@@ -263,6 +280,42 @@ def _display_path(path: Path) -> str:
         return path.as_posix()
 
 
+def _operator_toggle_proof(
+    *,
+    agent: str,
+    actor: str,
+    reason: str,
+    previous_enabled: bool,
+    current_enabled: bool,
+    governance: dict[str, object],
+) -> dict[str, object]:
+    actor_recorded = bool(actor)
+    reason_recorded = bool(reason)
+    operator_console_actor = actor == _OPERATOR_CONSOLE["actor"]
+    return {
+        "kind": "developer_bridge.collaboration_agent_toggle_proof",
+        "proof_status": "operator_console_recorded" if operator_console_actor else "actor_recorded",
+        "agent": agent,
+        "actor_recorded": actor_recorded,
+        "reason_recorded": reason_recorded,
+        "previous_state_observed": True,
+        "current_state_observed": True,
+        "previous_enabled": previous_enabled,
+        "current_enabled": current_enabled,
+        "state_changed": previous_enabled != current_enabled,
+        "operator_console_actor": operator_console_actor,
+        "client_can_be_operator_console": bool(governance["client_can_be_operator_console"]),
+        "client_is_automatic_execution_authority": bool(governance["client_is_automatic_execution_authority"]),
+        "requires_operator_review": bool(governance["requires_operator_review"]),
+        "proves_capability_authority": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "grants_approval_authority": False,
+        "grants_memory_write_authority": False,
+        "grants_training_authority": False,
+    }
+
+
 def _governance(*, write: bool) -> dict[str, object]:
     return {
         "surface": "developer_bridge.collaboration_agents",
@@ -276,6 +329,9 @@ def _governance(*, write: bool) -> dict[str, object]:
         "client_is_automatic_execution_authority": False,
         "grants_execution_authority": False,
         "grants_mutation_authority": False,
+        "grants_approval_authority": False,
         "grants_memory_write_authority": False,
+        "grants_training_authority": False,
+        "grants_capability_authority": False,
         "requires_operator_review": True,
     }

@@ -24,7 +24,29 @@ export type CollaborationAgentToggleReceipt = {
   previousEnabled: boolean;
   actor: string;
   reason: string;
+  operatorToggleProof: CollaborationAgentToggleProof;
   governance: Record<string, unknown>;
+};
+
+export type CollaborationAgentToggleProof = {
+  proofStatus: string;
+  actorRecorded: boolean;
+  reasonRecorded: boolean;
+  previousStateObserved: boolean;
+  currentStateObserved: boolean;
+  previousEnabled: boolean;
+  currentEnabled: boolean;
+  stateChanged: boolean;
+  operatorConsoleActor: boolean;
+  clientCanBeOperatorConsole: boolean;
+  clientIsAutomaticExecutionAuthority: boolean;
+  requiresOperatorReview: boolean;
+  provesCapabilityAuthority: boolean;
+  grantsExecutionAuthority: boolean;
+  grantsMutationAuthority: boolean;
+  grantsApprovalAuthority: boolean;
+  grantsMemoryWriteAuthority: boolean;
+  grantsTrainingAuthority: boolean;
 };
 
 export type CollaborationAgentsStatus = {
@@ -33,6 +55,9 @@ export type CollaborationAgentsStatus = {
   relay: string;
   agents: CollaborationAgent[];
   receipts: CollaborationAgentToggleReceipt[];
+  definitions: {
+    operatorToggleProof: string;
+  };
   operatorConsole: {
     surface: string;
     actor: string;
@@ -1791,16 +1816,64 @@ function parseAgent(raw: unknown): CollaborationAgent {
 
 function parseAgentToggleReceipt(raw: unknown): CollaborationAgentToggleReceipt {
   const item = isRecord(raw) ? raw : {};
+  const enabled = safeBoolean(item.enabled);
+  const previousEnabled = safeBoolean(item.previous_enabled);
+  const actor = safeString(item.actor);
+  const reason = safeString(item.reason);
   return {
     kind: safeString(item.kind, "developer_bridge.collaboration_agent_toggle_receipt"),
     receiptId: safeString(item.receipt_id),
     createdAt: safeString(item.created_at),
     agent: safeString(item.agent, "unknown"),
-    enabled: safeBoolean(item.enabled),
-    previousEnabled: safeBoolean(item.previous_enabled),
-    actor: safeString(item.actor),
-    reason: safeString(item.reason),
+    enabled,
+    previousEnabled,
+    actor,
+    reason,
+    operatorToggleProof: parseAgentToggleProofVerdict(item.operator_toggle_proof, {
+      actor,
+      enabled,
+      previousEnabled,
+      reason,
+      governance: isRecord(item.governance) ? item.governance : {},
+    }),
     governance: isRecord(item.governance) ? item.governance : {},
+  };
+}
+
+function parseAgentToggleProofVerdict(
+  raw: unknown,
+  fallback: { actor: string; enabled: boolean; previousEnabled: boolean; reason: string; governance: Record<string, unknown> },
+): CollaborationAgentToggleProof {
+  const item = isRecord(raw) ? raw : {};
+  const governance = fallback.governance;
+  return {
+    proofStatus: safeString(item.proof_status, isRecord(raw) ? "unknown" : "legacy_receipt_inferred"),
+    actorRecorded: safeBoolean(item.actor_recorded, Boolean(fallback.actor)),
+    reasonRecorded: safeBoolean(item.reason_recorded, Boolean(fallback.reason)),
+    previousStateObserved: safeBoolean(item.previous_state_observed, true),
+    currentStateObserved: safeBoolean(item.current_state_observed, true),
+    previousEnabled: safeBoolean(item.previous_enabled, fallback.previousEnabled),
+    currentEnabled: safeBoolean(item.current_enabled, fallback.enabled),
+    stateChanged: safeBoolean(item.state_changed, fallback.previousEnabled !== fallback.enabled),
+    operatorConsoleActor: safeBoolean(item.operator_console_actor),
+    clientCanBeOperatorConsole: safeBoolean(
+      item.client_can_be_operator_console,
+      safeBoolean(governance.client_can_be_operator_console),
+    ),
+    clientIsAutomaticExecutionAuthority: safeBoolean(
+      item.client_is_automatic_execution_authority,
+      safeBoolean(governance.client_is_automatic_execution_authority),
+    ),
+    requiresOperatorReview: safeBoolean(item.requires_operator_review, safeBoolean(governance.requires_operator_review, true)),
+    provesCapabilityAuthority: safeBoolean(item.proves_capability_authority),
+    grantsExecutionAuthority: safeBoolean(item.grants_execution_authority, safeBoolean(governance.grants_execution_authority)),
+    grantsMutationAuthority: safeBoolean(item.grants_mutation_authority, safeBoolean(governance.grants_mutation_authority)),
+    grantsApprovalAuthority: safeBoolean(item.grants_approval_authority, safeBoolean(governance.grants_approval_authority)),
+    grantsMemoryWriteAuthority: safeBoolean(
+      item.grants_memory_write_authority,
+      safeBoolean(governance.grants_memory_write_authority),
+    ),
+    grantsTrainingAuthority: safeBoolean(item.grants_training_authority, safeBoolean(governance.grants_training_authority)),
   };
 }
 
@@ -2152,12 +2225,16 @@ function parseFrancisBodyCoverageItem(raw: unknown): FrancisBodyCoverageItem {
 export function parseCollaborationAgentsStatus(raw: unknown): CollaborationAgentsStatus {
   const value = isRecord(raw) ? raw : {};
   const operatorConsole = isRecord(value.operator_console) ? value.operator_console : {};
+  const definitions = isRecord(value.definitions) ? value.definitions : {};
   return {
     ok: safeBoolean(value.ok),
     mode: safeString(value.mode, "unknown"),
     relay: safeString(value.relay),
     agents: Array.isArray(value.agents) ? value.agents.map(parseAgent) : [],
     receipts: Array.isArray(value.receipts) ? value.receipts.map(parseAgentToggleReceipt) : [],
+    definitions: {
+      operatorToggleProof: safeString(definitions.operator_toggle_proof),
+    },
     operatorConsole: {
       surface: safeString(operatorConsole.surface),
       actor: safeString(operatorConsole.actor),

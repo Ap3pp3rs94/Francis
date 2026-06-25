@@ -538,6 +538,31 @@ def test_collaboration_agent_toggle_blocks_known_disabled_agent(tmp_path, monkey
     assert toggled["enabled"] is False
     assert toggled["receipt"]["governance"]["client_can_be_operator_console"] is True
     assert toggled["receipt"]["governance"]["client_is_automatic_execution_authority"] is False
+    assert toggled["receipt"]["governance"]["grants_approval_authority"] is False
+    assert toggled["receipt"]["governance"]["grants_training_authority"] is False
+    assert toggled["receipt"]["governance"]["grants_capability_authority"] is False
+    assert toggled["receipt"]["operator_toggle_proof"] == {
+        "kind": "developer_bridge.collaboration_agent_toggle_proof",
+        "proof_status": "operator_console_recorded",
+        "agent": "ollama",
+        "actor_recorded": True,
+        "reason_recorded": True,
+        "previous_state_observed": True,
+        "current_state_observed": True,
+        "previous_enabled": True,
+        "current_enabled": False,
+        "state_changed": True,
+        "operator_console_actor": True,
+        "client_can_be_operator_console": True,
+        "client_is_automatic_execution_authority": False,
+        "requires_operator_review": True,
+        "proves_capability_authority": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "grants_approval_authority": False,
+        "grants_memory_write_authority": False,
+        "grants_training_authority": False,
+    }
 
     with pytest.raises(DeveloperBridgeError) as disabled:
         submit_collaboration_prompt(
@@ -549,6 +574,10 @@ def test_collaboration_agent_toggle_blocks_known_disabled_agent(tmp_path, monkey
     assert disabled.value.code == "collaboration_agent_disabled"
 
     set_collaboration_agent_enabled("ollama", True, actor="chat_ui.system", reason="operator enables local model")
+    status = collaboration_agents_status()
+    assert status["definitions"]["operator_toggle_proof"].startswith("Typed proof that a participant toggle receipt")
+    assert status["receipts"][-1]["operator_toggle_proof"]["current_enabled"] is True
+    assert status["receipts"][-1]["operator_toggle_proof"]["proves_capability_authority"] is False
     submitted = submit_collaboration_prompt(
         source_agent="codex",
         target_agent="ollama",

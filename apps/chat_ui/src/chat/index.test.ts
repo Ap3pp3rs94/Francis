@@ -198,6 +198,10 @@ test("parseCollaborationAgentsStatus preserves operator-console boundaries", () 
       client_can_be_operator_console: true,
       client_is_automatic_execution_authority: false,
     },
+    definitions: {
+      operator_toggle_proof:
+        "Typed proof that a participant toggle receipt recorded actor, reason, previous/current state, operator-console status, and no capability or execution authority grant.",
+    },
     receipts: [
       {
         kind: "developer_bridge.collaboration_agent_toggle_receipt",
@@ -208,12 +212,37 @@ test("parseCollaborationAgentsStatus preserves operator-console boundaries", () 
         previous_enabled: false,
         actor: "chat_ui.system",
         reason: "operator toggled collaboration participant in Chat UI",
+        operator_toggle_proof: {
+          kind: "developer_bridge.collaboration_agent_toggle_proof",
+          proof_status: "operator_console_recorded",
+          agent: "ollama",
+          actor_recorded: true,
+          reason_recorded: true,
+          previous_state_observed: true,
+          current_state_observed: true,
+          previous_enabled: false,
+          current_enabled: true,
+          state_changed: true,
+          operator_console_actor: true,
+          client_can_be_operator_console: true,
+          client_is_automatic_execution_authority: false,
+          requires_operator_review: true,
+          proves_capability_authority: false,
+          grants_execution_authority: false,
+          grants_mutation_authority: false,
+          grants_approval_authority: false,
+          grants_memory_write_authority: false,
+          grants_training_authority: false,
+        },
         governance: {
           executes_prompt: false,
           calls_model: false,
           grants_execution_authority: false,
           grants_mutation_authority: false,
+          grants_approval_authority: false,
           grants_memory_write_authority: false,
+          grants_training_authority: false,
+          grants_capability_authority: false,
           client_can_be_operator_console: true,
           client_is_automatic_execution_authority: false,
         },
@@ -233,13 +262,63 @@ test("parseCollaborationAgentsStatus preserves operator-console boundaries", () 
   assert.equal(status.agents[1]?.grantsExecutionAuthority, false);
   assert.equal(status.operatorConsole.clientCanBeOperatorConsole, true);
   assert.equal(status.operatorConsole.clientIsAutomaticExecutionAuthority, false);
+  assert.equal(status.definitions.operatorToggleProof.startsWith("Typed proof"), true);
   assert.equal(status.receipts.length, 1);
   assert.equal(status.receipts[0]?.receiptId, "collab-agent-toggle-1234");
   assert.equal(status.receipts[0]?.agent, "ollama");
   assert.equal(status.receipts[0]?.previousEnabled, false);
   assert.equal(status.receipts[0]?.enabled, true);
+  assert.equal(status.receipts[0]?.operatorToggleProof.proofStatus, "operator_console_recorded");
+  assert.equal(status.receipts[0]?.operatorToggleProof.actorRecorded, true);
+  assert.equal(status.receipts[0]?.operatorToggleProof.reasonRecorded, true);
+  assert.equal(status.receipts[0]?.operatorToggleProof.previousStateObserved, true);
+  assert.equal(status.receipts[0]?.operatorToggleProof.currentStateObserved, true);
+  assert.equal(status.receipts[0]?.operatorToggleProof.stateChanged, true);
+  assert.equal(status.receipts[0]?.operatorToggleProof.operatorConsoleActor, true);
+  assert.equal(status.receipts[0]?.operatorToggleProof.provesCapabilityAuthority, false);
+  assert.equal(status.receipts[0]?.operatorToggleProof.grantsApprovalAuthority, false);
+  assert.equal(status.receipts[0]?.operatorToggleProof.grantsTrainingAuthority, false);
   assert.equal(status.receipts[0]?.governance.grants_execution_authority, false);
   assert.equal(status.receipts[0]?.governance.grants_memory_write_authority, false);
+});
+
+test("parseCollaborationAgentsStatus infers proof for legacy toggle receipts", () => {
+  const status = parseCollaborationAgentsStatus({
+    ok: true,
+    mode: "read_only",
+    relay: "developer_bridge_collaboration_prompt_relay_v0",
+    agents: [],
+    receipts: [
+      {
+        kind: "developer_bridge.collaboration_agent_toggle_receipt",
+        receipt_id: "collab-agent-toggle-legacy",
+        agent: "codex",
+        enabled: false,
+        previous_enabled: true,
+        actor: "chat_ui.system",
+        reason: "operator toggled collaboration participant in Chat UI",
+        governance: {
+          client_can_be_operator_console: true,
+          client_is_automatic_execution_authority: false,
+          grants_execution_authority: false,
+          grants_mutation_authority: false,
+          grants_memory_write_authority: false,
+          requires_operator_review: true,
+        },
+      },
+    ],
+    operator_console: {},
+    governance: {},
+  });
+
+  assert.equal(status.receipts[0]?.operatorToggleProof.proofStatus, "legacy_receipt_inferred");
+  assert.equal(status.receipts[0]?.operatorToggleProof.actorRecorded, true);
+  assert.equal(status.receipts[0]?.operatorToggleProof.reasonRecorded, true);
+  assert.equal(status.receipts[0]?.operatorToggleProof.previousEnabled, true);
+  assert.equal(status.receipts[0]?.operatorToggleProof.currentEnabled, false);
+  assert.equal(status.receipts[0]?.operatorToggleProof.stateChanged, true);
+  assert.equal(status.receipts[0]?.operatorToggleProof.clientCanBeOperatorConsole, true);
+  assert.equal(status.receipts[0]?.operatorToggleProof.provesCapabilityAuthority, false);
 });
 
 test("parseFrancisBodyMap preserves whole-body awareness and quest boundaries", () => {
