@@ -251,6 +251,22 @@ function New-GateEvidenceDetails {
     static_fit_capture_first_blocking_group_id = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['static_fit_capture_first_blocking_group_id']) { '' } else { [string]$Payload.static_fit_capture_first_blocking_group_id }
     static_fit_capture_first_blocking_group_status = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['static_fit_capture_first_blocking_group_status']) { '' } else { [string]$Payload.static_fit_capture_first_blocking_group_status }
     static_fit_capture_first_blocking_group_action = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['static_fit_capture_first_blocking_group_action']) { '' } else { [string]$Payload.static_fit_capture_first_blocking_group_action }
+    movement_capture_plan_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['movement_capture_plan_contract']) { '' } else { [string]$Payload.movement_capture_plan_contract }
+    movement_capture_plan_status_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['movement_capture_plan_status_contract']) { '' } else { [string]$Payload.movement_capture_plan_status_contract }
+    movement_capture_summary_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['movement_capture_summary_contract']) { '' } else { [string]$Payload.movement_capture_summary_contract }
+    movement_capture_plan_not_completion_evidence = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['movement_capture_plan_not_completion_evidence']) { $false } else { [bool]$Payload.movement_capture_plan_not_completion_evidence }
+    next_required_movement_input = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['next_required_movement_input']) { '' } else { [string]$Payload.next_required_movement_input }
+    movement_capture_plan = @(Get-PayloadObjectArrayProperty -Payload $Payload -Name 'movement_capture_plan')
+    movement_capture_plan_status = @(Get-PayloadObjectArrayProperty -Payload $Payload -Name 'movement_capture_plan_status')
+    movement_capture_total_groups = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['movement_capture_total_groups']) { 0 } else { [int]$Payload.movement_capture_total_groups }
+    movement_capture_ready_groups = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['movement_capture_ready_groups']) { 0 } else { [int]$Payload.movement_capture_ready_groups }
+    movement_capture_pending_groups = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['movement_capture_pending_groups']) { 0 } else { [int]$Payload.movement_capture_pending_groups }
+    movement_capture_invalid_groups = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['movement_capture_invalid_groups']) { 0 } else { [int]$Payload.movement_capture_invalid_groups }
+    movement_capture_failed_groups = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['movement_capture_failed_groups']) { 0 } else { [int]$Payload.movement_capture_failed_groups }
+    movement_capture_upstream_blocked_groups = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['movement_capture_upstream_blocked_groups']) { 0 } else { [int]$Payload.movement_capture_upstream_blocked_groups }
+    movement_capture_first_blocking_group_id = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['movement_capture_first_blocking_group_id']) { '' } else { [string]$Payload.movement_capture_first_blocking_group_id }
+    movement_capture_first_blocking_group_status = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['movement_capture_first_blocking_group_status']) { '' } else { [string]$Payload.movement_capture_first_blocking_group_status }
+    movement_capture_first_blocking_group_action = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['movement_capture_first_blocking_group_action']) { '' } else { [string]$Payload.movement_capture_first_blocking_group_action }
     next_actions = @(Get-PayloadArrayProperty -Payload $Payload -Name 'next_actions')
   }
 }

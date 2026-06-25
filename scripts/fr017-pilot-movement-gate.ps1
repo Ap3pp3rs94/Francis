@@ -261,6 +261,150 @@ function Test-PresentText {
   return -not (Test-MissingOrPendingText -Value $Value)
 }
 
+function Add-UniqueString {
+  param(
+    [System.Collections.Generic.List[string]]$Target,
+    [object]$Value
+  )
+
+  if ($null -eq $Value) {
+    return
+  }
+  $Text = ([string]$Value).Trim()
+  if ([string]::IsNullOrWhiteSpace($Text)) {
+    return
+  }
+  if (-not $Target.Contains($Text)) {
+    $Target.Add($Text) | Out-Null
+  }
+}
+
+function Test-SignalMatchesPrefix {
+  param(
+    [string]$Signal,
+    [string]$Prefix
+  )
+
+  if ([string]::Equals($Signal, $Prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+    return $true
+  }
+  return $Signal.StartsWith($Prefix + '.', [System.StringComparison]::OrdinalIgnoreCase) -or
+    $Signal.StartsWith($Prefix + '_', [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+function Get-CaptureStepSignals {
+  param(
+    [string[]]$Signals,
+    [string[]]$RequiredFields,
+    [string[]]$SignalPrefixes
+  )
+
+  $Result = New-Object System.Collections.Generic.List[string]
+  foreach ($Signal in (ConvertTo-StringArray -Value $Signals)) {
+    foreach ($Field in $RequiredFields) {
+      if (Test-SignalMatchesPrefix -Signal $Signal -Prefix $Field) {
+        Add-UniqueString -Target $Result -Value $Signal
+      }
+    }
+    foreach ($Prefix in $SignalPrefixes) {
+      if (Test-SignalMatchesPrefix -Signal $Signal -Prefix $Prefix) {
+        Add-UniqueString -Target $Result -Value $Signal
+      }
+    }
+  }
+  return @($Result.ToArray())
+}
+
+function New-MovementCapturePlanStatus {
+  param(
+    [object[]]$CapturePlan,
+    [bool]$UpstreamStaticFitReady,
+    [string[]]$MissingFields,
+    [string[]]$InvalidFields,
+    [string[]]$BlockingSignals
+  )
+
+  $Result = New-Object System.Collections.Generic.List[object]
+  foreach ($Step in $CapturePlan) {
+    $RequiredFields = @(ConvertTo-StringArray -Value $Step.required_fields)
+    $SignalPrefixes = @(ConvertTo-StringArray -Value $Step.blocking_signal_prefixes)
+    $StepMissing = @(Get-CaptureStepSignals -Signals $MissingFields -RequiredFields $RequiredFields -SignalPrefixes @())
+    $StepInvalid = @(Get-CaptureStepSignals -Signals $InvalidFields -RequiredFields $RequiredFields -SignalPrefixes @())
+    $StepBlockingSignals = @(Get-CaptureStepSignals -Signals $BlockingSignals -RequiredFields $RequiredFields -SignalPrefixes $SignalPrefixes)
+
+    $Status = 'ready_for_movement_record_review'
+    $RequiredAction = [string]$Step.required_action
+    if (-not $UpstreamStaticFitReady) {
+      $Status = 'blocked_by_upstream_static_fit'
+      $RequiredAction = 'complete measurement intake, mockup, mannequin interface, and pilot static-fit gates before pilot movement evidence can be captured or reviewed'
+    } elseif ($StepBlockingSignals.Count -gt 0) {
+      $Status = 'failed_stop_condition_or_blocking_signal'
+    } elseif ($StepInvalid.Count -gt 0) {
+      $Status = 'invalid_required_fields'
+    } elseif ($StepMissing.Count -gt 0) {
+      $Status = 'pending_required_fields'
+    }
+
+    $Result.Add([ordered]@{
+        id = [string]$Step.id
+        status = $Status
+        validation_state = [string]$Step.validation_state
+        ready_for_movement_record_review = ($Status -eq 'ready_for_movement_record_review')
+        missing_fields = @($StepMissing)
+        invalid_fields = @($StepInvalid)
+        blocking_signals = @($StepBlockingSignals)
+        required_action = $RequiredAction
+      }) | Out-Null
+  }
+  return @($Result.ToArray())
+}
+
+function New-CapturePlanSummary {
+  param([object[]]$CapturePlanStatus)
+
+  $ReadyCount = 0
+  $PendingCount = 0
+  $InvalidCount = 0
+  $FailedCount = 0
+  $UpstreamBlockedCount = 0
+  $FirstBlockingGroupId = ''
+  $FirstBlockingGroupStatus = ''
+  $FirstBlockingGroupAction = ''
+
+  foreach ($Step in $CapturePlanStatus) {
+    $StepStatus = [string]$Step.status
+    if ($StepStatus -eq 'ready_for_movement_record_review') {
+      $ReadyCount += 1
+    } elseif ($StepStatus -eq 'pending_required_fields') {
+      $PendingCount += 1
+    } elseif ($StepStatus -eq 'invalid_required_fields') {
+      $InvalidCount += 1
+    } elseif ($StepStatus -eq 'failed_stop_condition_or_blocking_signal') {
+      $FailedCount += 1
+    } elseif ($StepStatus -eq 'blocked_by_upstream_static_fit') {
+      $UpstreamBlockedCount += 1
+    }
+
+    if ([string]::IsNullOrWhiteSpace($FirstBlockingGroupId) -and $StepStatus -ne 'ready_for_movement_record_review') {
+      $FirstBlockingGroupId = [string]$Step.id
+      $FirstBlockingGroupStatus = $StepStatus
+      $FirstBlockingGroupAction = [string]$Step.required_action
+    }
+  }
+
+  return [ordered]@{
+    total_groups = @($CapturePlanStatus).Count
+    ready_groups = $ReadyCount
+    pending_groups = $PendingCount
+    invalid_groups = $InvalidCount
+    failed_groups = $FailedCount
+    upstream_blocked_groups = $UpstreamBlockedCount
+    first_blocking_group_id = $FirstBlockingGroupId
+    first_blocking_group_status = $FirstBlockingGroupStatus
+    first_blocking_group_action = $FirstBlockingGroupAction
+  }
+}
+
 function Add-PilotIdentityLinkageCheck {
   param(
     [System.Collections.Generic.List[string]]$Invalid,
@@ -404,6 +548,87 @@ $SymptomFields = @(
   'loss_of_grip_strength'
 )
 
+$MovementEvidenceFields = @(
+  'evidence.date',
+  'evidence.observer',
+  'evidence.pilot_id',
+  'evidence.prototype_revision',
+  'evidence.pilot_static_fit_record_path',
+  'evidence.test_duration_minutes'
+)
+
+$MovementPreconditionFields = @()
+foreach ($Field in $RequiredPreconditions) {
+  $MovementPreconditionFields += ('preconditions.{0}' -f $Field)
+}
+
+$LeftMovementCheckFields = @()
+$RightMovementCheckFields = @()
+foreach ($Field in $RequiredMovementChecks) {
+  $LeftMovementCheckFields += ('sides.left.movement_checks.{0}' -f $Field)
+  $RightMovementCheckFields += ('sides.right.movement_checks.{0}' -f $Field)
+}
+
+$LeftPostMovementSymptomFields = @()
+$RightPostMovementSymptomFields = @()
+foreach ($Field in $RequiredPostMovementChecks) {
+  $LeftPostMovementSymptomFields += ('sides.left.post_movement.{0}' -f $Field)
+  $RightPostMovementSymptomFields += ('sides.right.post_movement.{0}' -f $Field)
+}
+foreach ($Field in $SymptomFields) {
+  $LeftPostMovementSymptomFields += ('sides.left.symptoms.{0}' -f $Field)
+  $RightPostMovementSymptomFields += ('sides.right.symptoms.{0}' -f $Field)
+}
+
+$MovementCapturePlan = @(
+  [ordered]@{
+    id = 'movement_evidence_and_linkage'
+    validation_state = 'REQUIRES_PILOT_MOVEMENT_TEST_RECORD'
+    required_fields = $MovementEvidenceFields
+    blocking_signal_prefixes = @(
+      'evidence.pilot_static_fit_record_path_must_match_static_fit_path',
+      'evidence.pilot_id_must_match_static_fit_pilot_id',
+      'evidence.date_before_static_fit.evidence.date'
+    )
+    required_action = 'record ISO date, observer, matching pilot id, prototype revision, linked static-fit record path, and an unquoted positive movement-test duration'
+  },
+  [ordered]@{
+    id = 'movement_safety_preconditions'
+    validation_state = 'REQUIRES_PILOT_MOVEMENT_TEST'
+    required_fields = $MovementPreconditionFields
+    blocking_signal_prefixes = @('preconditions')
+    required_action = 'confirm non-powered-only setup, no frame or power coupling, static-fit gate passed, observer presence, emergency-release briefing, stop-on-symptoms rule, and pilot self-removal or abort authority'
+  },
+  [ordered]@{
+    id = 'left_movement_clearance'
+    validation_state = 'REQUIRES_PILOT_MOVEMENT_TEST'
+    required_fields = $LeftMovementCheckFields
+    blocking_signal_prefixes = @('sides.left.movement_checks')
+    required_action = 'record left elbow, wrist, hand opening, grip, glove removal, wrist assembly removal, outer cable route, quick-release reach, and cuff return checks during non-powered movement'
+  },
+  [ordered]@{
+    id = 'right_movement_clearance'
+    validation_state = 'REQUIRES_PILOT_MOVEMENT_TEST'
+    required_fields = $RightMovementCheckFields
+    blocking_signal_prefixes = @('sides.right.movement_checks')
+    required_action = 'record right elbow, wrist, hand opening, grip, glove removal, wrist assembly removal, outer cable route, quick-release reach, and cuff return checks during non-powered movement'
+  },
+  [ordered]@{
+    id = 'left_post_movement_and_symptoms'
+    validation_state = 'REQUIRES_PILOT_MOVEMENT_TEST'
+    required_fields = $LeftPostMovementSymptomFields
+    blocking_signal_prefixes = @('sides.left.post_movement', 'sides.left.symptoms')
+    required_action = 'record left post-motion warmth, color, grip, pressure marks, and every left-side pain, tingling, numbness, temperature, color, weakness, wrist, pressure, finger-motion, and grip-strength symptom as absent before advancing'
+  },
+  [ordered]@{
+    id = 'right_post_movement_and_symptoms'
+    validation_state = 'REQUIRES_PILOT_MOVEMENT_TEST'
+    required_fields = $RightPostMovementSymptomFields
+    blocking_signal_prefixes = @('sides.right.post_movement', 'sides.right.symptoms')
+    required_action = 'record right post-motion warmth, color, grip, pressure marks, and every right-side pain, tingling, numbness, temperature, color, weakness, wrist, pressure, finger-motion, and grip-strength symptom as absent before advancing'
+  }
+)
+
 $DefaultMeasurementPath = Join-Path $RepoRoot 'FR-017_Stage17_Package\FR-017-MEASUREMENTS-INPUT-TEMPLATE.json'
 $DefaultMockupPath = Join-Path $RepoRoot 'FR-017_Stage17_Package\FR-017-MOCKUP-BUILD-INPUT-TEMPLATE.json'
 $DefaultMannequinPath = Join-Path $RepoRoot 'FR-017_Stage17_Package\FR-017-MANNEQUIN-INTERFACE-INPUT-TEMPLATE.json'
@@ -537,6 +762,22 @@ if (-not [bool]$Upstream.parse_ok -or [int]$Upstream.exit_code -ne 0 -or $Upstre
   }
 }
 
+$AllMovementBlockingSignals = New-Object System.Collections.Generic.List[string]
+foreach ($Signal in @($RecordLinkageViolations.ToArray())) {
+  Add-UniqueString -Target $AllMovementBlockingSignals -Value $Signal
+}
+foreach ($Signal in @($RecordChronologyViolations.ToArray())) {
+  Add-UniqueString -Target $AllMovementBlockingSignals -Value $Signal
+}
+foreach ($Signal in @($MovementRedesignTriggers.ToArray())) {
+  Add-UniqueString -Target $AllMovementBlockingSignals -Value $Signal
+}
+foreach ($Signal in @($SymptomBlockers.ToArray())) {
+  Add-UniqueString -Target $AllMovementBlockingSignals -Value $Signal
+}
+$MovementCapturePlanStatus = @(New-MovementCapturePlanStatus -CapturePlan $MovementCapturePlan -UpstreamStaticFitReady $UpstreamReady -MissingFields $MissingFields.ToArray() -InvalidFields $InvalidFields.ToArray() -BlockingSignals $AllMovementBlockingSignals.ToArray())
+$MovementCapturePlanSummary = New-CapturePlanSummary -CapturePlanStatus $MovementCapturePlanStatus
+
 $Output = [ordered]@{
   kind = 'francis.fr017.pilot_movement_gate'
   mode = $Mode
@@ -600,6 +841,22 @@ $Output = [ordered]@{
   required_movement_checks = $RequiredMovementChecks
   required_post_movement_checks = $RequiredPostMovementChecks
   symptom_fields = $SymptomFields
+  movement_capture_plan_contract = 'The movement_capture_plan is read-only operator guidance for capturing FR-017 non-powered pilot movement evidence. It is not physical validation evidence by itself, does not prove pilot safety, and cannot clear release/cable testing, powered, frame-coupled, or FR-018 work.'
+  movement_capture_plan_status_contract = 'The movement_capture_plan_status reports pilot movement capture readiness only. A ready group means the supplied record fields passed this script contract; it is not professional certification, medical clearance, or quick-release/cable-snag clearance.'
+  movement_capture_summary_contract = 'The movement_capture_* summary identifies the next blocking pilot movement evidence group. It is not physical validation evidence and cannot mark Stage 17 complete.'
+  movement_capture_plan_not_completion_evidence = $true
+  next_required_movement_input = 'complete_non_powered_pilot_movement_record_at_FR-017-PILOT-MOVEMENT-INPUT-TEMPLATE.json'
+  movement_capture_plan = @($MovementCapturePlan)
+  movement_capture_plan_status = @($MovementCapturePlanStatus)
+  movement_capture_total_groups = [int]$MovementCapturePlanSummary.total_groups
+  movement_capture_ready_groups = [int]$MovementCapturePlanSummary.ready_groups
+  movement_capture_pending_groups = [int]$MovementCapturePlanSummary.pending_groups
+  movement_capture_invalid_groups = [int]$MovementCapturePlanSummary.invalid_groups
+  movement_capture_failed_groups = [int]$MovementCapturePlanSummary.failed_groups
+  movement_capture_upstream_blocked_groups = [int]$MovementCapturePlanSummary.upstream_blocked_groups
+  movement_capture_first_blocking_group_id = [string]$MovementCapturePlanSummary.first_blocking_group_id
+  movement_capture_first_blocking_group_status = [string]$MovementCapturePlanSummary.first_blocking_group_status
+  movement_capture_first_blocking_group_action = [string]$MovementCapturePlanSummary.first_blocking_group_action
   record_linkage_contract = 'The pilot movement evidence.pilot_static_fit_record_path must resolve to the same static-fit record path passed into this gate. A movement record cannot advance from stale, copied, or unrelated static-fit evidence.'
   pilot_identity_linkage_contract = 'The pilot movement evidence.pilot_id must match evidence.pilot_id in the linked static-fit record. A movement record cannot advance if it names a different pilot than the completed static-fit evidence.'
   evidence_date_contract = 'Use an ISO 8601 calendar date in YYYY-MM-DD format for evidence.date. Future-dated pilot movement evidence is invalid because it cannot be completed evidence.'

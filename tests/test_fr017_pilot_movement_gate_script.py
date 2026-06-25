@@ -41,6 +41,10 @@ def _payload(stdout: str) -> dict[str, Any]:
     return json.loads(stdout)
 
 
+def _capture_status_by_id(payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {step["id"]: step for step in payload["movement_capture_plan_status"]}
+
+
 def _write_static_ready_records(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
     measurement_path, mockup_path, mannequin_path = _write_upstream_ready_records(tmp_path)
     static_fit_path = tmp_path / "ready-static-fit.json"
@@ -140,6 +144,39 @@ def test_fr017_pilot_movement_gate_reports_default_templates_as_pending_upstream
     assert payload["read_only_contract"] is True
     assert payload["writes_repo"] is False
     assert payload["grants_mutation_authority"] is False
+    assert payload["movement_capture_plan_not_completion_evidence"] is True
+    assert "not physical validation evidence" in payload["movement_capture_plan_contract"]
+    assert "pilot movement capture readiness only" in payload["movement_capture_plan_status_contract"]
+    assert "not physical validation evidence" in payload["movement_capture_summary_contract"]
+    assert payload["next_required_movement_input"] == (
+        "complete_non_powered_pilot_movement_record_at_FR-017-PILOT-MOVEMENT-INPUT-TEMPLATE.json"
+    )
+    assert payload["movement_capture_total_groups"] == 6
+    assert payload["movement_capture_ready_groups"] == 0
+    assert payload["movement_capture_pending_groups"] == 0
+    assert payload["movement_capture_invalid_groups"] == 0
+    assert payload["movement_capture_failed_groups"] == 0
+    assert payload["movement_capture_upstream_blocked_groups"] == 6
+    assert payload["movement_capture_first_blocking_group_id"] == "movement_evidence_and_linkage"
+    assert payload["movement_capture_first_blocking_group_status"] == "blocked_by_upstream_static_fit"
+    assert "static-fit gates" in payload["movement_capture_first_blocking_group_action"]
+    capture_plan = payload["movement_capture_plan"]
+    assert [step["id"] for step in capture_plan] == [
+        "movement_evidence_and_linkage",
+        "movement_safety_preconditions",
+        "left_movement_clearance",
+        "right_movement_clearance",
+        "left_post_movement_and_symptoms",
+        "right_post_movement_and_symptoms",
+    ]
+    assert "evidence.pilot_static_fit_record_path" in capture_plan[0]["required_fields"]
+    assert "preconditions.pilot_static_fit_gate_passed" in capture_plan[1]["required_fields"]
+    assert "sides.left.movement_checks.outer_cable_route_no_snag" in capture_plan[2]["required_fields"]
+    assert "sides.right.symptoms.loss_of_grip_strength" in capture_plan[5]["required_fields"]
+    capture_status = payload["movement_capture_plan_status"]
+    assert [step["id"] for step in capture_status] == [step["id"] for step in capture_plan]
+    assert all(step["status"] == "blocked_by_upstream_static_fit" for step in capture_status)
+    assert all(step["ready_for_movement_record_review"] is False for step in capture_status)
 
 
 def test_fr017_pilot_movement_gate_requires_movement_record_after_static_ready(
@@ -168,6 +205,35 @@ def test_fr017_pilot_movement_gate_requires_movement_record_after_static_ready(
     assert "evidence.date" in payload["missing_fields"]
     assert payload["pilot_movement_test_complete"] is False
     assert payload["fr018_implementation_cleared"] is False
+    assert payload["movement_capture_plan_not_completion_evidence"] is True
+    assert payload["movement_capture_total_groups"] == 6
+    assert payload["movement_capture_ready_groups"] == 0
+    assert payload["movement_capture_pending_groups"] == 6
+    assert payload["movement_capture_invalid_groups"] == 0
+    assert payload["movement_capture_failed_groups"] == 0
+    assert payload["movement_capture_upstream_blocked_groups"] == 0
+    assert payload["movement_capture_first_blocking_group_id"] == "movement_evidence_and_linkage"
+    assert payload["movement_capture_first_blocking_group_status"] == "pending_required_fields"
+    assert "matching pilot id" in payload["movement_capture_first_blocking_group_action"]
+    capture_status = _capture_status_by_id(payload)
+    assert "evidence.date" in capture_status["movement_evidence_and_linkage"]["missing_fields"]
+    assert "preconditions.non_powered_only" in capture_status["movement_safety_preconditions"]["missing_fields"]
+    assert (
+        "sides.left.movement_checks.elbow_flexion_no_crease_compression"
+        in capture_status["left_movement_clearance"]["missing_fields"]
+    )
+    assert (
+        "sides.right.movement_checks.quick_release_reachable_during_motion"
+        in capture_status["right_movement_clearance"]["missing_fields"]
+    )
+    assert (
+        "sides.left.post_movement.no_new_pressure_marks"
+        in capture_status["left_post_movement_and_symptoms"]["missing_fields"]
+    )
+    assert (
+        "sides.right.symptoms.loss_of_grip_strength"
+        in capture_status["right_post_movement_and_symptoms"]["missing_fields"]
+    )
 
 
 def test_fr017_pilot_movement_gate_treats_lowercase_or_padded_pending_text_as_missing(
@@ -244,6 +310,16 @@ def test_fr017_pilot_movement_gate_accepts_complete_movement_record(tmp_path: Pa
     assert payload["quick_release_and_cable_snag_test_planning_ready"] is True
     assert payload["powered_or_frame_coupled_testing_cleared"] is False
     assert payload["fr018_implementation_cleared"] is False
+    assert payload["movement_capture_total_groups"] == 6
+    assert payload["movement_capture_ready_groups"] == 6
+    assert payload["movement_capture_pending_groups"] == 0
+    assert payload["movement_capture_invalid_groups"] == 0
+    assert payload["movement_capture_failed_groups"] == 0
+    assert payload["movement_capture_upstream_blocked_groups"] == 0
+    assert payload["movement_capture_first_blocking_group_id"] == ""
+    assert payload["movement_capture_first_blocking_group_status"] == ""
+    assert payload["movement_capture_first_blocking_group_action"] == ""
+    assert all(step["ready_for_movement_record_review"] is True for step in payload["movement_capture_plan_status"])
     assert "must resolve to the same static-fit record path" in payload["record_linkage_contract"]
     assert "must match evidence.pilot_id in the linked static-fit record" in payload["pilot_identity_linkage_contract"]
     assert "YYYY-MM-DD" in payload["evidence_date_contract"]
@@ -464,6 +540,16 @@ def test_fr017_pilot_movement_gate_blocks_symptom_positive_movement(tmp_path: Pa
     result = _payload(proc.stdout)
     assert result["status"] == "failed_requires_movement_redesign_or_medical_review"
     assert result["symptom_blockers"] == ["sides.right.symptoms.numbness"]
+    assert result["movement_capture_total_groups"] == 6
+    assert result["movement_capture_ready_groups"] == 5
+    assert result["movement_capture_pending_groups"] == 0
+    assert result["movement_capture_invalid_groups"] == 0
+    assert result["movement_capture_failed_groups"] == 1
+    assert result["movement_capture_upstream_blocked_groups"] == 0
+    assert result["movement_capture_first_blocking_group_id"] == "right_post_movement_and_symptoms"
+    assert result["movement_capture_first_blocking_group_status"] == "failed_stop_condition_or_blocking_signal"
+    capture_status = _capture_status_by_id(result)
+    assert capture_status["right_post_movement_and_symptoms"]["blocking_signals"] == ["sides.right.symptoms.numbness"]
     assert result["pilot_movement_test_complete"] is False
     assert result["fr018_implementation_cleared"] is False
 
