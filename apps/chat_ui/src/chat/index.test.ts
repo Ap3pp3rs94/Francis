@@ -1902,6 +1902,8 @@ test("collaborationActionIntakeSummary exposes mission ingress as candidate-only
   assert.equal(summary.applies, true);
   assert.equal(summary.badge, "action candidate only");
   assert.equal(summary.tone, "ready");
+  assert.equal(summary.candidateLine, "candidate true / codex review true / repo review true");
+  assert.equal(summary.directAuthorityLine, "execute false / mutation false / approve false / memory write false");
   assert.deepEqual(summary.detail, [
     "surface api.routes.chat.mission_ingress",
     "candidate true",

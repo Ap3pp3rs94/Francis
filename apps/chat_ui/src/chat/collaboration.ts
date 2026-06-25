@@ -235,6 +235,8 @@ export type CollaborationActionIntakeDisplay = {
   badge: string;
   tone: CollaborationReviewTone;
   detail: string[];
+  candidateLine: string;
+  directAuthorityLine: string;
 };
 
 export type CollaborationImplementationReviewDisplay = {
@@ -1161,30 +1163,41 @@ export function collaborationActionIntakeSummary(item: CollaborationReviewItem):
       badge: "",
       tone: "neutral",
       detail: [],
+      candidateLine: "",
+      directAuthorityLine: "",
     };
   }
   const boundary = item.actionBoundary;
   const gate = item.buildDirectionGate;
+  const canCreateCandidate = boundary.conversationCanCreateActionCandidate;
+  const canExecute = boundary.conversationCanExecuteAction || gate.grantsExecutionAuthority;
+  const canApprove = boundary.conversationCanApproveAction || gate.grantsApprovalAuthority;
+  const canMutate = gate.grantsMutationAuthority;
+  const canWriteMemory = gate.grantsMemoryWriteAuthority;
   const unsafeAuthority =
-    boundary.conversationCanExecuteAction ||
-    boundary.conversationCanApproveAction ||
-    gate.grantsExecutionAuthority ||
-    gate.grantsMutationAuthority ||
-    gate.grantsApprovalAuthority ||
-    gate.grantsMemoryWriteAuthority;
+    canExecute ||
+    canApprove ||
+    canMutate ||
+    canWriteMemory;
   return {
     applies: true,
     badge: unsafeAuthority ? "action authority visible" : "action candidate only",
     tone: unsafeAuthority ? "blocked" : "ready",
+    candidateLine: `candidate ${actionBoundaryBool(canCreateCandidate)} / codex review ${actionBoundaryBool(
+      boundary.requiresCodexOrOperatorReviewBeforeImplementation || gate.requiresCodexOrOperatorReview,
+    )} / repo review ${actionBoundaryBool(boundary.requiresRepoTruthReview)}`,
+    directAuthorityLine: `execute ${actionBoundaryBool(canExecute)} / mutation ${actionBoundaryBool(
+      canMutate,
+    )} / approve ${actionBoundaryBool(canApprove)} / memory write ${actionBoundaryBool(canWriteMemory)}`,
     detail: [
       `surface ${surface || "unknown"}`,
-      `candidate ${actionBoundaryBool(boundary.conversationCanCreateActionCandidate)}`,
+      `candidate ${actionBoundaryBool(canCreateCandidate)}`,
       `codex review ${actionBoundaryBool(boundary.requiresCodexOrOperatorReviewBeforeImplementation || gate.requiresCodexOrOperatorReview)}`,
       `repo review ${actionBoundaryBool(boundary.requiresRepoTruthReview)}`,
-      `execute ${actionBoundaryBool(boundary.conversationCanExecuteAction || gate.grantsExecutionAuthority)}`,
-      `mutation ${actionBoundaryBool(gate.grantsMutationAuthority)}`,
-      `approve ${actionBoundaryBool(boundary.conversationCanApproveAction || gate.grantsApprovalAuthority)}`,
-      `memory write ${actionBoundaryBool(gate.grantsMemoryWriteAuthority)}`,
+      `execute ${actionBoundaryBool(canExecute)}`,
+      `mutation ${actionBoundaryBool(canMutate)}`,
+      `approve ${actionBoundaryBool(canApprove)}`,
+      `memory write ${actionBoundaryBool(canWriteMemory)}`,
       `gate ${item.buildDirectionGate.state || "advisory_review_required"}`,
     ],
   };

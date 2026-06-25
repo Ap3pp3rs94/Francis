@@ -94990,6 +94990,51 @@ Remaining truthful gap:
   proof, and unrelated UI flows were not run for this bounded preflight-display
   slice.
 
+### 2026-06-25 21:00Z - Action intake shows candidate creation boundary
+
+Current posture: Phase 2 / developer bridge collaboration support now makes the
+action-intake boundary show the positive candidate path and the denied direct
+authority path side by side. This follows the Francis1/Codex turn `1225` review
+signal that typed or spoken user direction should become an action candidate,
+not a local-model action-readiness claim.
+
+What changed:
+
+- `collaborationActionIntakeSummary()` now returns a primary candidate-creation
+  line and a primary direct-authority denial line in addition to its existing
+  detail chips.
+- The Chat UI `Action Intake Boundary` card now renders `Candidate Creation`
+  beside `No Direct Authority`, so the operator can see `candidate true` and
+  `execute/mutation/approve/memory write false` without scanning the lower
+  receipt chips.
+- The focused Chat UI action-intake contract test now verifies those primary
+  candidate and direct-authority lines for `api.routes.chat.mission_ingress`.
+
+Validation:
+
+- Chat UI contract run passed:
+  `npm run test -- --test-name-pattern=collaborationActionIntakeSummary`
+  (`279` passing tests in the selected run).
+- Chat UI production build passed with `npm run build`.
+- `git diff --check` passed.
+- Live URL proof: `GET http://127.0.0.1:5173/` returned HTTP 200.
+- Live collaboration runtime health remained `healthy` with `helpers=3/3`, turn
+  `1227`, Codex enabled, Ollama enabled, and Claude disabled.
+- Recent live review proof still included turn `1225`,
+  `build_issue=direction_to_action_boundary`,
+  `surface=api.routes.chat.mission_ingress`, `blocks_build_direction=false`, and
+  execution, mutation, approval, and memory-write authority all false.
+
+Remaining truthful gap:
+
+- This does not change mission-ingress behavior, execute an action, promote a
+  candidate, or create any new authority.
+- This does not grant execution, mutation, approval, training, memory-write, or
+  main-build prompt authority.
+- `.\scripts\check.ps1`, GitHub CI, full backend test suite, browser screenshot
+  proof, and unrelated UI flows were not run for this bounded action-intake
+  readback slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
