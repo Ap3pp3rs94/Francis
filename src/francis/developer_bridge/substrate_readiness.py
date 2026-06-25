@@ -121,11 +121,7 @@ def read_collaboration_substrate_readiness() -> dict[str, object]:
         ),
     ]
 
-    blocking_items = [
-        item
-        for item in checklist
-        if item["blocks_main_build_prompt"] and item["status"] != "passed"
-    ]
+    blocking_items = [item for item in checklist if item["blocks_main_build_prompt"] and item["status"] != "passed"]
     collaboration_substrate_wired = (
         bounded_wiring_percent >= 100
         and bool(body_summary.get("full_body_visible"))

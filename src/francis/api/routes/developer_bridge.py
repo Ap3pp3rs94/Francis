@@ -428,9 +428,7 @@ def _empty_substrate_readiness_payload() -> dict[str, object]:
             "collaboration_substrate_wired": (
                 "The relay, body map, trust ladder, runtime health, and no-authority guard are visible."
             ),
-            "main_build_prompt_allowed": (
-                "Whether this readback allows unsupervised main Francis build prompting."
-            ),
+            "main_build_prompt_allowed": ("Whether this readback allows unsupervised main Francis build prompting."),
             "blocking_items": "Checklist items that block main-build prompting.",
         },
         "source_readbacks": {
