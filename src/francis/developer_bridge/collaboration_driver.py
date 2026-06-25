@@ -32,6 +32,9 @@ _MAX_TURNS = 0
 _DEFAULT_POLL_SECONDS = 2.0
 _DEFAULT_TURN_GAP_SECONDS = 30.0
 _DEFAULT_SUMMARY_EVERY_TURNS = 6
+_MAX_DRIVER_PROMPT_CHARS = 700
+_PROMPT_REVIEW_ID_LIMIT = 36
+_PROMPT_REVIEW_SURFACE_LIMIT = 72
 
 _TOPICS = (
     "the next Communication UI change that would reduce visible relay noise using existing receipt fields",
@@ -330,7 +333,7 @@ def _next_prompt(state: dict[str, object], *, max_turns: int) -> str:
         loop_signal=loop_signal,
         guard_signal=guard_signal,
     )
-    review_line = latest_review_candidate_line()
+    review_line = _compact_review_line(latest_review_candidate_line())
     prior_check = f" Prior check: {review_line}" if review_line else ""
     topic_artifact = _topic_artifact_line(topic)
     codex_response = _codex_response_line(review_line)
@@ -339,22 +342,71 @@ def _next_prompt(state: dict[str, object], *, max_turns: int) -> str:
     trust_line = compact_trust_ladder_prompt_line()
     loop_line = ""
     if guard_signal.get("detected"):
-        loop_line = (
-            " Guard note: repeated guarded drift was stored as learning receipts; "
-            "answer the current topic, not the prior drift."
-        )
+        loop_line = " Guard note: drift stored as learning receipt; answer current topic."
     elif loop_signal.get("detected"):
         repeated_terms = [str(term) for term in _list(loop_signal.get("repeated_terms"))]
         preferred_term = next((term for term in repeated_terms if term == "user_confirmation_fallback"), "")
         terms = preferred_term or (repeated_terms[0] if repeated_terms else "repeated meta terms")
         if len(repeated_terms) > 1:
             terms = f"{terms}, ..."
-        loop_line = f" Loop note: {terms}; use the prior surface, not meta."
+        loop_line = f" Loop note: {terms}; use prior surface, not meta."
     turn_label = _turn_label(turn_number, max_turns)
+    prompt = _compose_driver_prompt(
+        turn_label=turn_label,
+        topic=topic,
+        body_map_line=body_map_line,
+        roadmap_gate_line=roadmap_gate_line,
+        trust_line=trust_line,
+        topic_artifact=topic_artifact,
+        prior_check=prior_check,
+        codex_response=codex_response,
+        loop_line=loop_line,
+    )
+    if len(prompt) <= _MAX_DRIVER_PROMPT_CHARS:
+        return prompt
+    prompt = _compose_driver_prompt(
+        turn_label=turn_label,
+        topic=topic,
+        body_map_line="",
+        roadmap_gate_line=roadmap_gate_line,
+        trust_line=trust_line,
+        topic_artifact=topic_artifact,
+        prior_check=prior_check,
+        codex_response=codex_response,
+        loop_line=loop_line,
+    )
+    if len(prompt) <= _MAX_DRIVER_PROMPT_CHARS:
+        return prompt
+    return _compose_driver_prompt(
+        turn_label=turn_label,
+        topic=_bounded_text(topic, limit=96),
+        body_map_line="",
+        roadmap_gate_line=roadmap_gate_line,
+        trust_line=trust_line,
+        topic_artifact=_topic_artifact_line(topic, surface_limit=96),
+        prior_check=prior_check,
+        codex_response=codex_response,
+        loop_line=loop_line,
+    )
+
+
+def _compose_driver_prompt(
+    *,
+    turn_label: str,
+    topic: str,
+    body_map_line: str,
+    roadmap_gate_line: str,
+    trust_line: str,
+    topic_artifact: str,
+    prior_check: str,
+    codex_response: str,
+    loop_line: str,
+) -> str:
+    body_map = f" {body_map_line}" if body_map_line else ""
     return (
         f"Francis1 {turn_label}. {CONTEXT_CONTRACT_ID}. Topic: {topic}. "
         "Reply: issue/gap/risk; artifact."
-        f" {body_map_line}"
+        f"{body_map}"
         f" {roadmap_gate_line}"
         f" {trust_line}"
         f"{topic_artifact}{prior_check}{codex_response}{loop_line}"
@@ -365,13 +417,42 @@ def _codex_response_line(review_line: str) -> str:
     if not review_line:
         return ""
     if "build_or_wire=false" in review_line:
-        return " Codex response: inspecting cited surface; no user confirmation or missing surface."
+        return " Codex response: inspecting cited surface; no action authority."
     return " Codex response: I am verifying repo truth before build/wiring."
 
 
-def _topic_artifact_line(topic: str) -> str:
+def _compact_review_line(review_line: str) -> str:
+    clean = _bounded_text(review_line, limit=260)
+    if not clean:
+        return ""
+    insight_id = _field_after(clean, "Review candidate ", ":")
+    surface = _field_after(clean, "surface=", ";")
+    verified = _field_after(clean, "verified=", ";")
+    build_or_wire = _field_after(clean, "build_or_wire=", ".")
+    if insight_id and (surface or verified or build_or_wire):
+        return (
+            f"Review candidate {_bounded_text(insight_id, limit=_PROMPT_REVIEW_ID_LIMIT)}: "
+            f"surface={_bounded_text(surface or 'unknown', limit=_PROMPT_REVIEW_SURFACE_LIMIT)}; "
+            f"verified={_bounded_text(verified or 'unknown', limit=20)}; "
+            f"build_or_wire={_bounded_text(build_or_wire or 'unknown', limit=12)}."
+        )
+    return clean
+
+
+def _field_after(value: str, marker: str, end_marker: str) -> str:
+    start = value.find(marker)
+    if start < 0:
+        return ""
+    after_marker = start + len(marker)
+    end = value.find(end_marker, after_marker) if end_marker else -1
+    if end < 0:
+        end = len(value)
+    return value[after_marker:end].strip()
+
+
+def _topic_artifact_line(topic: str, *, surface_limit: int = 140) -> str:
     candidate = _implementation_candidate_for_topic(topic)
-    surface = _bounded_text(candidate.get("surface"), limit=140)
+    surface = _bounded_text(candidate.get("surface"), limit=surface_limit)
     if not surface:
         return ""
     return f" Current artifact: {surface}."

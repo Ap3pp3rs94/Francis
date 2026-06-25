@@ -868,7 +868,7 @@ def test_collaboration_driver_waits_for_ollama_before_next_turn(tmp_path, monkey
     assert "verified=existing" in latest_prompt
     assert "build_or_wire=false" in latest_prompt
     assert "Codex response: inspecting cited surface" in latest_prompt
-    assert "no user confirmation or missing surface" in latest_prompt
+    assert "no action authority" in latest_prompt
     assert "Prior check:" not in prompts[1]
     assert "Current artifact: apps.chat_ui.communication" in prompts[1]
     assert all(len(prompt) < 700 for prompt in prompts)
@@ -1711,11 +1711,11 @@ def test_collaboration_driver_records_meta_loop_as_learning_event(tmp_path, monk
     transcript = read_collaboration_transcript(source_agent="codex", target_agent="ollama", limit=1)
     latest_prompt = str(transcript["items"][0]["prompt"])
     assert "Loop note" in latest_prompt
-    assert "use the prior surface, not meta" in latest_prompt
+    assert "use prior surface, not meta" in latest_prompt
     assert "Review candidate insight-" in latest_prompt
     assert "Codex response: inspecting cited surface" in latest_prompt
-    assert "no user confirmation or missing surface" in latest_prompt
-    assert len(latest_prompt) < 800
+    assert "no action authority" in latest_prompt
+    assert len(latest_prompt) <= 700
 
     learning_root = tmp_path / "data" / "integrations" / "developer_bridge" / "collaboration_driver" / "learning_events"
     events = list(learning_root.glob("learning-*.json"))
@@ -1746,6 +1746,35 @@ def test_collaboration_driver_records_meta_loop_as_learning_event(tmp_path, monk
     assert "surface=developer_bridge.collaboration_driver.learning_events" in next_prompt
     assert "verified=existing" in next_prompt
     assert "build_or_wire=false" in next_prompt
+
+
+def test_collaboration_driver_compacts_long_review_line_into_prompt_budget(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+    import francis.developer_bridge.collaboration_driver as driver
+
+    monkeypatch.setattr(
+        driver,
+        "latest_review_candidate_line",
+        lambda: (
+            "Review candidate insight-live-long-canonical-roadmap-alignment-check-2026-06-25: "
+            "surface=docs/operations/COMPLETION_LEDGER.md + docs/canonical/BUILD_MANIFEST.md + "
+            "docs/canonical/ROADMAP.md; verified=canonical; build_or_wire=false."
+        ),
+    )
+
+    submitted = driver.drive_once(ignore_existing=True, max_turns=0, turn_gap_seconds=0, summary_every_turns=0)
+
+    assert submitted["status"] == "submitted"
+    transcript = read_collaboration_transcript(source_agent="codex", target_agent="ollama", limit=1)
+    prompt = str(transcript["items"][0]["prompt"])
+    assert "Roadmap: ledger first" in prompt
+    assert "main-build candidate-only" in prompt
+    assert "Prior check: Review candidate insight-live-long-canonical-roadma" in prompt
+    assert "surface=docs/operations/COMPLETION_LEDGER.md + docs/canonical/BUILD_MANIFEST.md" in prompt
+    assert "verified=canonical" in prompt
+    assert "build_or_wire=false" in prompt
+    assert "Codex response: inspecting cited surface; no action authority" in prompt
+    assert len(prompt) <= 700
 
 
 def test_collaboration_learning_events_readback_is_bounded_and_read_only(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
@@ -1829,7 +1858,7 @@ def test_collaboration_driver_records_user_confirmation_fallback_as_learning_eve
     latest_prompt = str(transcript["items"][0]["prompt"])
     assert "Loop note" in latest_prompt
     assert "user_confirmation_fallback" in latest_prompt
-    assert "use the prior surface, not meta" in latest_prompt
+    assert "use prior surface, not meta" in latest_prompt
 
     learning_root = tmp_path / "data" / "integrations" / "developer_bridge" / "collaboration_driver" / "learning_events"
     events = list(learning_root.glob("learning-*.json"))
@@ -1874,7 +1903,7 @@ def test_collaboration_driver_rotates_topics_after_repeated_output_guard_receipt
         in latest_prompt
     )
     assert "Current artifact: api.routes.chat.mission_ingress" in latest_prompt
-    assert "Guard note: repeated guarded drift was stored as learning receipts" in latest_prompt
+    assert "Guard note: drift stored as learning receipt" in latest_prompt
     assert "current repetitive meta loop" not in latest_prompt
     assert "Loop note" not in latest_prompt
 

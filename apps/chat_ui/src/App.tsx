@@ -1040,6 +1040,19 @@ function collaborationDirectionText(item: CollaborationTranscriptEntry): string 
   return (item.direction || `${item.sourceAgent}->${item.targetAgent}`).replace("->", " -> ");
 }
 
+function collaborationRelayToneText(display: ReturnType<typeof formatCollaborationRelayMessage>): string {
+  if (display.tone === "driver") return "codex prompt";
+  if (display.tone === "guard") return "guard rewrite";
+  if (display.tone === "audit") return "audit";
+  return "conversation";
+}
+
+function collaborationConversationLayerText(display: ReturnType<typeof formatCollaborationRelayMessage>): string {
+  if (display.tone === "driver") return "Prompt";
+  if (display.tone === "guard") return "Conversation Guard";
+  return "Conversation";
+}
+
 function collaborationTimeText(item: CollaborationTranscriptEntry): string {
   if (!item.createdAt) return "unknown time";
   const timePart = item.createdAt.includes("T") ? item.createdAt.split("T")[1] : item.createdAt;
@@ -1170,84 +1183,83 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
         if (!signal?.aborted) {
           setStatus(nextStatus);
         }
-        const nextBodyMap = await fetchCollaborationReadbackWithTimeout("Body map", signal, (readbackSignal) =>
-          fetchFrancisBodyMap({ baseUrl: props.baseUrl, signal: readbackSignal }),
-        );
+        const [
+          nextBodyMap,
+          nextTrustLadder,
+          nextTranscript,
+          nextSessions,
+          nextReview,
+          nextLearning,
+          nextRuntime,
+          nextSubstrateReadiness,
+        ] = await Promise.all([
+          fetchCollaborationReadbackWithTimeout("Body map", signal, (readbackSignal) =>
+            fetchFrancisBodyMap({ baseUrl: props.baseUrl, signal: readbackSignal }),
+          ),
+          fetchCollaborationReadbackWithTimeout("Trust ladder", signal, (readbackSignal) =>
+            fetchFrancisTrustLadder({ baseUrl: props.baseUrl, limit: FRANCIS_TRUST_LADDER_LIMIT, signal: readbackSignal }),
+          ),
+          fetchCollaborationReadbackWithTimeout("Transcript", signal, (readbackSignal) =>
+            fetchCollaborationTranscript({ baseUrl: props.baseUrl, limit: COLLABORATION_TRANSCRIPT_LIMIT, signal: readbackSignal }),
+          ),
+          fetchCollaborationReadbackWithTimeout("Session", signal, (readbackSignal) =>
+            fetchCollaborationSessions({
+              baseUrl: props.baseUrl,
+              limit: 5,
+              itemLimit: COLLABORATION_SESSION_ITEM_LIMIT,
+              signal: readbackSignal,
+            }),
+          ),
+          fetchCollaborationReadbackWithTimeout("Review", signal, (readbackSignal) =>
+            fetchCollaborationReview({ baseUrl: props.baseUrl, limit: COLLABORATION_REVIEW_LIMIT, signal: readbackSignal }),
+          ),
+          fetchCollaborationReadbackWithTimeout("Learning", signal, (readbackSignal) =>
+            fetchCollaborationLearning({ baseUrl: props.baseUrl, limit: COLLABORATION_LEARNING_LIMIT, signal: readbackSignal }),
+          ),
+          fetchCollaborationReadbackWithTimeout("Runtime", signal, (readbackSignal) =>
+            fetchCollaborationRuntimeHealth({ baseUrl: props.baseUrl, signal: readbackSignal }),
+          ),
+          fetchCollaborationReadbackWithTimeout("Substrate readiness", signal, (readbackSignal) =>
+            fetchCollaborationSubstrateReadiness({ baseUrl: props.baseUrl, signal: readbackSignal }),
+          ),
+        ]);
         if (!signal?.aborted) {
           if (nextBodyMap.ok) {
             setBodyMap(nextBodyMap.value);
           } else {
             readbackWarnings.push(nextBodyMap.message);
           }
-        }
-        const nextTrustLadder = await fetchCollaborationReadbackWithTimeout("Trust ladder", signal, (readbackSignal) =>
-          fetchFrancisTrustLadder({ baseUrl: props.baseUrl, limit: FRANCIS_TRUST_LADDER_LIMIT, signal: readbackSignal }),
-        );
-        if (!signal?.aborted) {
           if (nextTrustLadder.ok) {
             setTrustLadder(nextTrustLadder.value);
           } else {
             readbackWarnings.push(nextTrustLadder.message);
           }
-        }
-        const nextTranscript = await fetchCollaborationReadbackWithTimeout("Transcript", signal, (readbackSignal) =>
-          fetchCollaborationTranscript({ baseUrl: props.baseUrl, limit: COLLABORATION_TRANSCRIPT_LIMIT, signal: readbackSignal }),
-        );
-        if (!signal?.aborted) {
           if (nextTranscript.ok) {
             setTranscript((previous) => preserveCollaborationReadbackDuringWarming(previous, nextTranscript.value));
           } else {
             readbackWarnings.push(nextTranscript.message);
           }
-        }
-        const nextSessions = await fetchCollaborationReadbackWithTimeout("Session", signal, (readbackSignal) =>
-          fetchCollaborationSessions({
-            baseUrl: props.baseUrl,
-            limit: 5,
-            itemLimit: COLLABORATION_SESSION_ITEM_LIMIT,
-            signal: readbackSignal,
-          }),
-        );
-        if (!signal?.aborted) {
           if (nextSessions.ok) {
             setSessionReadback((previous) => preserveCollaborationReadbackDuringWarming(previous, nextSessions.value));
           } else {
             readbackWarnings.push(nextSessions.message);
           }
-        }
-        const nextReview = await fetchCollaborationReadbackWithTimeout("Review", signal, (readbackSignal) =>
-          fetchCollaborationReview({ baseUrl: props.baseUrl, limit: COLLABORATION_REVIEW_LIMIT, signal: readbackSignal }),
-        );
-        if (!signal?.aborted) {
           if (nextReview.ok) {
             setReview((previous) => preserveCollaborationReadbackDuringWarming(previous, nextReview.value));
           } else {
             readbackWarnings.push(nextReview.message);
           }
-        }
-        const nextLearning = await fetchCollaborationReadbackWithTimeout("Learning", signal, (readbackSignal) =>
-          fetchCollaborationLearning({ baseUrl: props.baseUrl, limit: COLLABORATION_LEARNING_LIMIT, signal: readbackSignal }),
-        );
-        if (!signal?.aborted) {
           if (nextLearning.ok) {
             setLearning((previous) => preserveCollaborationReadbackDuringWarming(previous, nextLearning.value));
           } else {
             readbackWarnings.push(nextLearning.message);
           }
-        }
-        const nextRuntime = await fetchCollaborationReadbackWithTimeout("Runtime", signal, (readbackSignal) =>
-          fetchCollaborationRuntimeHealth({ baseUrl: props.baseUrl, signal: readbackSignal }),
-        );
-        if (!signal?.aborted) {
           if (nextRuntime.ok) {
             setRuntimeHealth(nextRuntime.value);
           } else {
             readbackWarnings.push(nextRuntime.message);
           }
         }
-        const nextSubstrateReadiness = await fetchCollaborationReadbackWithTimeout("Substrate readiness", signal, (readbackSignal) =>
-          fetchCollaborationSubstrateReadiness({ baseUrl: props.baseUrl, signal: readbackSignal }),
-        );
         if (!signal?.aborted) {
           if (nextSubstrateReadiness.ok) {
             setSubstrateReadiness(nextSubstrateReadiness.value);
@@ -2188,7 +2200,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
                   <div style={{ color: "#93c5fd", display: "flex", flexWrap: "wrap", fontSize: 13, gap: 10 }}>
                     <span>{collaborationDirectionText(item)}</span>
                     <span>{collaborationTimeText(item)}</span>
-                    <span>{display.tone}</span>
+                    <span>{collaborationRelayToneText(display)}</span>
                     {isCollaborationAuditReceipt(item) ? <span>audit ack</span> : null}
                     {display.compacted ? <span>compact receipt</span> : null}
                   </div>
@@ -2207,7 +2219,9 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
                       paddingLeft: 10,
                     }}
                   >
-                    <div style={{ color: "#a7f3d0", fontSize: 12, fontWeight: 700, textTransform: "uppercase" }}>Conversation</div>
+                    <div style={{ color: "#a7f3d0", fontSize: 12, fontWeight: 700, textTransform: "uppercase" }}>
+                      {collaborationConversationLayerText(display)}
+                    </div>
                     <p style={{ color: "#e2e8f0", margin: "5px 0 0", overflowWrap: "anywhere", whiteSpace: "pre-wrap" }}>
                       {display.conversationText || display.summary}
                     </p>
@@ -3561,7 +3575,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
                   <div style={{ color: "#93c5fd", display: "flex", flexWrap: "wrap", fontSize: 13, gap: 10 }}>
                     <span>{collaborationDirectionText(item)}</span>
                     <span>{collaborationTimeText(item)}</span>
-                    <span>{display.tone}</span>
+                    <span>{collaborationRelayToneText(display)}</span>
                     {isCollaborationAuditReceipt(item) ? <span>audit ack</span> : null}
                     {display.compacted ? <span>compact receipt</span> : null}
                   </div>
@@ -3580,18 +3594,20 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
                       paddingLeft: 10,
                     }}
                   >
-                    <div style={{ color: "#a7f3d0", fontSize: 12, fontWeight: 700, textTransform: "uppercase" }}>Conversation</div>
+                    <div style={{ color: "#a7f3d0", fontSize: 12, fontWeight: 700, textTransform: "uppercase" }}>
+                      {collaborationConversationLayerText(display)}
+                    </div>
                     <p style={{ color: "#e2e8f0", margin: "5px 0 0", overflowWrap: "anywhere", whiteSpace: "pre-wrap" }}>
                       {display.conversationText || display.summary}
                     </p>
                   </div>
                   {display.technicalText ? (
-                    <div style={{ borderLeft: "3px solid rgba(147, 197, 253, 0.52)", marginTop: 10, paddingLeft: 10 }}>
-                      <div style={{ color: "#bfdbfe", fontSize: 12, fontWeight: 700, textTransform: "uppercase" }}>Technical Receipt</div>
-                      <p style={{ color: "#94a3b8", fontSize: 13, margin: "5px 0 0", overflowWrap: "anywhere", whiteSpace: "pre-wrap" }}>
+                    <details style={{ color: "#94a3b8", fontSize: 13, marginTop: 10 }}>
+                      <summary style={{ cursor: "pointer" }}>Technical receipt</summary>
+                      <p style={{ color: "#94a3b8", margin: "8px 0 0", overflowWrap: "anywhere", whiteSpace: "pre-wrap" }}>
                         {display.technicalText}
                       </p>
-                    </div>
+                    </details>
                   ) : null}
                   {display.compacted || display.technicalText ? (
                     <details style={{ color: "#94a3b8", fontSize: 13, marginTop: 10 }}>

@@ -95219,6 +95219,68 @@ Remaining truthful gap:
   `tests/test_developer_bridge.py`, and unrelated UI flows were not run for this
   bounded prompt-contract slice.
 
+### 2026-06-25 21:41Z - Communication live prompt and transcript cleanup
+
+Current posture: Phase 2 / developer bridge collaboration support now keeps live
+Codex -> Francis1 driver prompts inside the compact budget after carrying the
+roadmap gate and a real prior review candidate. The Chat UI Communication surface
+also defaults to a clearer conversation-first transcript view while keeping raw
+and technical receipts available behind disclosure controls.
+
+What changed:
+
+- The collaboration driver compacts carried review candidates, shortens the
+  no-authority Codex response line, and semantically falls back by dropping a
+  repeated body-map reminder before shortening topic/artifact text.
+- Added focused regression coverage for long canonical review-surface prompts so
+  the roadmap gate plus prior review does not recreate bulky live prompts.
+- The Chat UI collaboration panel fetches transcript/session/review/runtime
+  readbacks in parallel instead of serially blocking conversation updates behind
+  slower evidence reads.
+- The Live Conversation and Relay Transcript Archive labels now distinguish
+  Codex prompts, guard rewrites, audit receipts, and ordinary conversation; the
+  archive no longer expands technical receipts inline by default.
+
+Validation:
+
+- Developer bridge test file passed:
+  `python -m pytest tests/test_developer_bridge.py`
+  (`69` passing tests, one existing Starlette deprecation warning).
+- Focused driver subset passed:
+  `python -m pytest tests/test_developer_bridge.py -k "collaboration_driver"`
+  (`10` passing tests, one existing Starlette deprecation warning).
+- Chat UI contract suite passed:
+  `npm run test -- src/chat/index.test.ts`
+  (the package script ran the configured UI suite, `279` passing tests).
+- Chat UI production build passed:
+  `npm run build`.
+- Targeted lint passed:
+  `python -m ruff check src/francis/developer_bridge/collaboration_driver.py tests/test_developer_bridge.py`.
+- Targeted format check passed:
+  `python -m ruff format --check src/francis/developer_bridge/collaboration_driver.py tests/test_developer_bridge.py`.
+- `git diff --check` passed.
+- Communication runtime was restarted after the code change and readback returned
+  `healthy` with all three helpers running and one effective worker each.
+- Vite was restarted on `http://127.0.0.1:5173/`; HTTP readback returned `200`
+  with the root element present, and `/developer-bridge/collaboration-runtime-health`
+  returned `200`, `healthy`, `helper_count=3`, `desired_count=3`.
+- Live restarted prompts `collab-740cab5a9f09eb40-518d13931dbf` and
+  `collab-df95d22b343e6298-3e73d4ba0b0f` were `664` and `667` characters,
+  included `Roadmap: ledger first`, carried a prior review, and preserved
+  `no action authority`.
+
+Remaining truthful gap:
+
+- This does not close the main-build prompt gate, resolve ORB coverage gaps, tune
+  Francis1, or promote collaboration receipts into long-term memory.
+- This does not grant execution, mutation, approval, training, memory-write, or
+  main-build authority to Codex, Claude, Francis1, or the relay.
+- Browser visual automation was limited by the available tool surface in this
+  session; server-level UI and API HTTP proof passed, and Vite reported the local
+  URL ready.
+- `.\scripts\check.ps1`, GitHub CI, and unrelated full-system UI flows were not
+  run for this bounded Communication cleanup slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
