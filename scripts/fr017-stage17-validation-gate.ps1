@@ -3,7 +3,9 @@ param(
   [ValidateSet('Status')]
   [string]$Mode = 'Status',
 
-  [string]$ManifestPath = ''
+  [string]$ManifestPath = '',
+
+  [string]$GateScriptRoot = ''
 )
 
 Set-StrictMode -Version 2
@@ -122,6 +124,11 @@ $ResolvedManifestPath = if ([string]::IsNullOrWhiteSpace($ManifestPath)) {
 } else {
   Resolve-GatePath -Path $ManifestPath
 }
+$ResolvedGateScriptRoot = if ([string]::IsNullOrWhiteSpace($GateScriptRoot)) {
+  $PSScriptRoot
+} else {
+  Resolve-GatePath -Path $GateScriptRoot
+}
 
 $Checks = New-Object System.Collections.Generic.List[object]
 $Manifest = $null
@@ -161,10 +168,25 @@ $MissingEngineeringTemplateContracts = New-Object System.Collections.Generic.Lis
 $MissingEngineeringTemplateFields = New-Object System.Collections.Generic.List[string]
 $MissingFinalDecisionTemplateContracts = New-Object System.Collections.Generic.List[string]
 $MissingFinalDecisionTemplateFields = New-Object System.Collections.Generic.List[string]
+$MissingGateScripts = New-Object System.Collections.Generic.List[string]
+$InvalidGateScripts = New-Object System.Collections.Generic.List[string]
 $BlockedInputs = @()
 $SafetyFailConditions = @()
 $PhysicalValidation = ''
 $Fr018Status = ''
+$RequiredGateScripts = @(
+  'fr017-stage17-validation-gate.ps1',
+  'fr017-measurement-intake.ps1',
+  'fr017-mockup-readiness-gate.ps1',
+  'fr017-mannequin-interface-gate.ps1',
+  'fr017-pilot-static-fit-gate.ps1',
+  'fr017-pilot-movement-gate.ps1',
+  'fr017-quick-release-cable-snag-gate.ps1',
+  'fr017-engineering-review-gate.ps1',
+  'fr017-final-physical-gate.ps1',
+  'fr017-final-decision-record-gate.ps1',
+  'fr017-evidence-chain-status.ps1'
+)
 
 if ($null -ne $Manifest) {
   $PhysicalValidation = [string]$Manifest.status.physical_validation
@@ -1006,6 +1028,23 @@ if ($null -ne $Manifest) {
   $Checks.Add((New-GateCheck -Id 'safety_fail_conditions_preserved' -Passed ($MissingSafetyConditions.Count -eq 0) -Evidence (($MissingSafetyConditions -join ', ')))) | Out-Null
 }
 
+foreach ($GateScript in $RequiredGateScripts) {
+  $GateScriptPath = Join-Path $ResolvedGateScriptRoot $GateScript
+  if (-not (Test-Path -LiteralPath $GateScriptPath -PathType Leaf)) {
+    $MissingGateScripts.Add($GateScript) | Out-Null
+    continue
+  }
+
+  $ParseErrors = $null
+  $ParseTokens = $null
+  [System.Management.Automation.Language.Parser]::ParseFile($GateScriptPath, [ref]$ParseTokens, [ref]$ParseErrors) | Out-Null
+  if ($ParseErrors.Count -gt 0) {
+    $InvalidGateScripts.Add($GateScript) | Out-Null
+  }
+}
+$Checks.Add((New-GateCheck -Id 'required_gate_scripts_exist' -Passed ($MissingGateScripts.Count -eq 0) -Evidence (($MissingGateScripts.ToArray() -join ', ')) -Reason 'Every FR-017 validation-chain gate script must exist before the package can be treated as structurally complete.')) | Out-Null
+$Checks.Add((New-GateCheck -Id 'required_gate_scripts_parse' -Passed ($InvalidGateScripts.Count -eq 0) -Evidence (($InvalidGateScripts.ToArray() -join ', ')) -Reason 'Every FR-017 validation-chain gate script must parse before the package can be treated as structurally complete.')) | Out-Null
+
 $FailedChecks = @($Checks.ToArray() | Where-Object { -not [bool]$_.passed })
 $StructuralGatePassed = $ManifestExists -and $null -ne $Manifest -and $FailedChecks.Count -eq 0
 $Status = if ($StructuralGatePassed) { 'blocked_physical_validation' } else { 'failed_contract' }
@@ -1028,8 +1067,12 @@ $Payload = [ordered]@{
   grants_execution_authority = $false
   grants_mutation_authority = $false
   manifest_path = $ResolvedManifestPath
+  gate_script_root = $ResolvedGateScriptRoot
   record_count = $RecordCount
   custom_record_count = $CustomRecordCount
+  required_gate_scripts = @($RequiredGateScripts)
+  missing_gate_scripts = @($MissingGateScripts.ToArray())
+  invalid_gate_scripts = @($InvalidGateScripts.ToArray())
   blocked_inputs = $BlockedInputs
   safety_fail_conditions = $SafetyFailConditions
   missing_measurement_template_contracts = @($MissingMeasurementTemplateContracts.ToArray())

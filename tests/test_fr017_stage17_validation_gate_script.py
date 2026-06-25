@@ -11,6 +11,19 @@ from tests.powershell_script_runner import run_powershell_script
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "fr017-stage17-validation-gate.ps1"
+REQUIRED_GATE_SCRIPTS = [
+    "fr017-stage17-validation-gate.ps1",
+    "fr017-measurement-intake.ps1",
+    "fr017-mockup-readiness-gate.ps1",
+    "fr017-mannequin-interface-gate.ps1",
+    "fr017-pilot-static-fit-gate.ps1",
+    "fr017-pilot-movement-gate.ps1",
+    "fr017-quick-release-cable-snag-gate.ps1",
+    "fr017-engineering-review-gate.ps1",
+    "fr017-final-physical-gate.ps1",
+    "fr017-final-decision-record-gate.ps1",
+    "fr017-evidence-chain-status.ps1",
+]
 
 
 def _powershell() -> str:
@@ -41,6 +54,14 @@ def _copy_stage17_package(tmp_path: Path) -> Path:
     return package_root / "FR-017-STAGE17-PACKAGE-MANIFEST.json"
 
 
+def _copy_gate_scripts(tmp_path: Path) -> Path:
+    scripts_root = tmp_path / "scripts"
+    scripts_root.mkdir()
+    for script_name in REQUIRED_GATE_SCRIPTS:
+        shutil.copy2(ROOT / "scripts" / script_name, scripts_root / script_name)
+    return scripts_root
+
+
 def test_fr017_stage17_validation_gate_reports_documented_but_physically_blocked() -> None:
     proc = _run_gate("-Mode", "Status")
 
@@ -62,6 +83,9 @@ def test_fr017_stage17_validation_gate_reports_documented_but_physically_blocked
     assert payload["grants_mutation_authority"] is False
     assert payload["record_count"] == 23
     assert payload["custom_record_count"] == 19
+    assert payload["required_gate_scripts"] == REQUIRED_GATE_SCRIPTS
+    assert payload["missing_gate_scripts"] == []
+    assert payload["invalid_gate_scripts"] == []
     assert payload["failed_checks"] == []
     assert payload["missing_measurement_template_contracts"] == []
     assert payload["missing_measurement_template_fields"] == []
@@ -99,6 +123,45 @@ def test_fr017_stage17_validation_gate_fails_closed_when_manifest_missing(tmp_pa
     assert payload["fr018_implementation_cleared"] is False
     assert "manifest_exists" in payload["failed_checks"]
     assert payload["read_only_contract"] is True
+
+
+def test_fr017_stage17_validation_gate_fails_closed_if_required_gate_script_is_missing(
+    tmp_path: Path,
+) -> None:
+    scripts_root = _copy_gate_scripts(tmp_path)
+    (scripts_root / "fr017-final-decision-record-gate.ps1").unlink()
+
+    proc = _run_gate("-Mode", "Status", "-GateScriptRoot", str(scripts_root))
+
+    assert proc.returncode == 1
+    payload = _payload(proc.stdout)
+    assert payload["status"] == "failed_contract"
+    assert "required_gate_scripts_exist" in payload["failed_checks"]
+    assert payload["missing_gate_scripts"] == ["fr017-final-decision-record-gate.ps1"]
+    assert payload["invalid_gate_scripts"] == []
+    assert payload["physical_validation_complete"] is False
+    assert payload["fr018_implementation_cleared"] is False
+
+
+def test_fr017_stage17_validation_gate_fails_closed_if_required_gate_script_is_invalid(
+    tmp_path: Path,
+) -> None:
+    scripts_root = _copy_gate_scripts(tmp_path)
+    (scripts_root / "fr017-final-decision-record-gate.ps1").write_text(
+        "param(\n",
+        encoding="utf-8",
+    )
+
+    proc = _run_gate("-Mode", "Status", "-GateScriptRoot", str(scripts_root))
+
+    assert proc.returncode == 1
+    payload = _payload(proc.stdout)
+    assert payload["status"] == "failed_contract"
+    assert "required_gate_scripts_parse" in payload["failed_checks"]
+    assert payload["missing_gate_scripts"] == []
+    assert payload["invalid_gate_scripts"] == ["fr017-final-decision-record-gate.ps1"]
+    assert payload["physical_validation_complete"] is False
+    assert payload["fr018_implementation_cleared"] is False
 
 
 def test_fr017_stage17_validation_gate_fails_closed_if_fr018_is_cleared(tmp_path: Path) -> None:
