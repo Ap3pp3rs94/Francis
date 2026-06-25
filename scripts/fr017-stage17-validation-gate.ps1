@@ -152,6 +152,7 @@ $CustomRecordCount = 0
 $MissingRecordPaths = New-Object System.Collections.Generic.List[string]
 $FailedPendingRecords = New-Object System.Collections.Generic.List[string]
 $MissingCustomRecords = New-Object System.Collections.Generic.List[string]
+$MissingMeasurementRunbookTerms = New-Object System.Collections.Generic.List[string]
 $MissingMeasurementTemplateContracts = New-Object System.Collections.Generic.List[string]
 $MissingMeasurementTemplateFields = New-Object System.Collections.Generic.List[string]
 $MissingMockupTemplateContracts = New-Object System.Collections.Generic.List[string]
@@ -206,7 +207,7 @@ if ($null -ne $Manifest) {
   $Checks.Add((New-GateCheck -Id 'evidence_containers_complete' -Passed ([string]$Manifest.status.evidence_containers -eq 'complete') -Evidence ([string]$Manifest.status.evidence_containers))) | Out-Null
   $Checks.Add((New-GateCheck -Id 'physical_validation_blocked' -Passed ($PhysicalValidation -eq 'not_complete') -Evidence $PhysicalValidation -Reason 'Physical validation must remain blocked until measurement, mannequin, pilot, release, cable, and engineering evidence exists.')) | Out-Null
   $Checks.Add((New-GateCheck -Id 'fr018_not_cleared' -Passed ($Fr018Status -eq 'not_cleared') -Evidence $Fr018Status -Reason 'FR-018 implementation must remain blocked until FR-017 physical blockers are evidence-cleared.')) | Out-Null
-  $Checks.Add((New-GateCheck -Id 'record_count' -Passed ($RecordCount -eq 24) -Evidence ([string]$RecordCount))) | Out-Null
+  $Checks.Add((New-GateCheck -Id 'record_count' -Passed ($RecordCount -eq 25) -Evidence ([string]$RecordCount))) | Out-Null
   $Checks.Add((New-GateCheck -Id 'custom_record_count' -Passed ($CustomRecordCount -eq 19) -Evidence ([string]$CustomRecordCount))) | Out-Null
 
   foreach ($Record in $Records) {
@@ -231,6 +232,7 @@ if ($null -ne $Manifest) {
   $ManualRecord = @($Records | Where-Object { [string]$_.kind -eq 'master_manual' } | Select-Object -First 1)
   $MapsRecord = @($Records | Where-Object { [string]$_.kind -eq 'maps_layouts_rollup' } | Select-Object -First 1)
   $MeasurementTemplateRecord = @($Records | Where-Object { [string]$_.kind -eq 'measurement_input_template' } | Select-Object -First 1)
+  $MeasurementRunbookRecord = @($Records | Where-Object { [string]$_.kind -eq 'measurement_capture_runbook' } | Select-Object -First 1)
   $MockupTemplateRecord = @($Records | Where-Object { [string]$_.kind -eq 'mockup_build_input_template' } | Select-Object -First 1)
   $MannequinTemplateRecord = @($Records | Where-Object { [string]$_.kind -eq 'mannequin_interface_input_template' } | Select-Object -First 1)
   $StaticFitTemplateRecord = @($Records | Where-Object { [string]$_.kind -eq 'pilot_static_fit_input_template' } | Select-Object -First 1)
@@ -242,6 +244,7 @@ if ($null -ne $Manifest) {
   $ManualPath = if ($ManualRecord.Count -gt 0) { [System.IO.Path]::GetFullPath((Join-Path $PackageRoot ([string]$ManualRecord[0].path))) } else { '' }
   $MapsPath = if ($MapsRecord.Count -gt 0) { [System.IO.Path]::GetFullPath((Join-Path $PackageRoot ([string]$MapsRecord[0].path))) } else { '' }
   $MeasurementTemplatePath = if ($MeasurementTemplateRecord.Count -gt 0) { [System.IO.Path]::GetFullPath((Join-Path $PackageRoot ([string]$MeasurementTemplateRecord[0].path))) } else { '' }
+  $MeasurementRunbookPath = if ($MeasurementRunbookRecord.Count -gt 0) { [System.IO.Path]::GetFullPath((Join-Path $PackageRoot ([string]$MeasurementRunbookRecord[0].path))) } else { '' }
   $MockupTemplatePath = if ($MockupTemplateRecord.Count -gt 0) { [System.IO.Path]::GetFullPath((Join-Path $PackageRoot ([string]$MockupTemplateRecord[0].path))) } else { '' }
   $MannequinTemplatePath = if ($MannequinTemplateRecord.Count -gt 0) { [System.IO.Path]::GetFullPath((Join-Path $PackageRoot ([string]$MannequinTemplateRecord[0].path))) } else { '' }
   $StaticFitTemplatePath = if ($StaticFitTemplateRecord.Count -gt 0) { [System.IO.Path]::GetFullPath((Join-Path $PackageRoot ([string]$StaticFitTemplateRecord[0].path))) } else { '' }
@@ -258,6 +261,29 @@ if ($null -ne $Manifest) {
     }
   }
   $Checks.Add((New-GateCheck -Id 'custom_records_present_in_package_text' -Passed ($MissingCustomRecords.Count -eq 0) -Evidence (($MissingCustomRecords.ToArray() -join ', ')))) | Out-Null
+
+  $MeasurementRunbookText = Read-GateText -Path $MeasurementRunbookPath
+  foreach ($RequiredTerm in @(
+      'FR-017 Measurement Capture Runbook',
+      'fr017-measurement-intake.ps1 -Mode Status',
+      'FR-017-MEASUREMENTS-INPUT-TEMPLATE.json',
+      'measurement_capture_plan',
+      'setup_and_safety_brief',
+      'left_arm_numeric_measurement_passes',
+      'right_arm_numeric_measurement_passes',
+      'safety_critical_landmark_and_zone_references',
+      'left_right_independence_and_safety_screen',
+      'ready_for_non_powered_mockup_patterning',
+      'physical_validation_complete: false',
+      'stage17_completion_claim_allowed: false',
+      'fr018_implementation_cleared: false',
+      'This runbook is not physical validation evidence.'
+    )) {
+    if ($MeasurementRunbookText.IndexOf($RequiredTerm, [System.StringComparison]::OrdinalIgnoreCase) -lt 0) {
+      $MissingMeasurementRunbookTerms.Add($RequiredTerm) | Out-Null
+    }
+  }
+  $Checks.Add((New-GateCheck -Id 'measurement_capture_runbook_terms' -Passed ($MissingMeasurementRunbookTerms.Count -eq 0) -Evidence (($MissingMeasurementRunbookTerms.ToArray() -join ', ')) -Reason 'Measurement capture runbook must preserve the first physical-input capture order, false clearance flags, and no-fake-validation language.')) | Out-Null
 
   $MeasurementTemplate = $null
   $MeasurementTemplateParsed = $false
@@ -1101,6 +1127,7 @@ $Payload = [ordered]@{
   invalid_gate_scripts = @($InvalidGateScripts.ToArray())
   blocked_inputs = $BlockedInputs
   safety_fail_conditions = $SafetyFailConditions
+  missing_measurement_runbook_terms = @($MissingMeasurementRunbookTerms.ToArray())
   missing_measurement_template_contracts = @($MissingMeasurementTemplateContracts.ToArray())
   missing_measurement_template_fields = @($MissingMeasurementTemplateFields.ToArray())
   missing_mockup_template_contracts = @($MissingMockupTemplateContracts.ToArray())

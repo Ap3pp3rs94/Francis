@@ -48,7 +48,7 @@ def test_fr017_stage17_package_manifest_resolves_all_records() -> None:
 
     assert manifest["package_id"] == "FR-017-STAGE17"
     assert manifest["component"] == "FR-017 Forearm Cuffs"
-    assert len(records) == 24
+    assert len(records) == 25
     assert len(manifest["custom_records"]) == 19
 
     for record in records:
@@ -74,6 +74,7 @@ def test_fr017_stage17_manifest_preserves_no_fake_validation_gate() -> None:
     assert any(record["kind"] == "engineering_review_record" for record in manifest["records"])
     assert any(record["kind"] == "engineering_review_input_template" for record in manifest["records"])
     assert any(record["kind"] == "final_physical_decision_input_template" for record in manifest["records"])
+    assert any(record["kind"] == "measurement_capture_runbook" for record in manifest["records"])
     assert any(record["kind"] == "completion_ledger_handoff_template" for record in manifest["records"])
     assert any(record["kind"] == "validation_gate_chain_runbook" for record in manifest["records"])
     assert "unconfirmed_landmark_boundaries" in manifest["safety_fail_conditions"]
@@ -94,6 +95,7 @@ def test_fr017_stage17_final_audit_blocks_physical_and_fr018_claims() -> None:
     assert "Physical validation: NOT COMPLETE." in package_index
     assert "FR-018 implementation: NOT CLEARED." in package_index
     assert "FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json" in package_index
+    assert "FR-017-MEASUREMENT-CAPTURE-RUNBOOK.md" in package_index
     assert "FR-017-COMPLETION-LEDGER-HANDOFF-TEMPLATE.md" in package_index
     assert "fr017-completion-ledger-gate.ps1" in package_index
 
@@ -114,6 +116,25 @@ def test_fr017_stage17_pending_records_keep_evidence_fields() -> None:
         assert "PENDING" in record
         assert "NOT TESTED" in record or "REQUIRES MEASUREMENT" in record
         assert "NOT VALIDATED" in record or "No measurements have been entered." in record
+
+
+def test_fr017_measurement_capture_runbook_preserves_first_physical_input_lock() -> None:
+    runbook = _read(PACKAGE_DIR / "FR-017-MEASUREMENT-CAPTURE-RUNBOOK.md")
+
+    assert "FR-017 Measurement Capture Runbook" in runbook
+    assert "This runbook is not physical validation evidence." in runbook
+    assert "FR-017-MEASUREMENTS-INPUT-TEMPLATE.json" in runbook
+    assert "fr017-measurement-intake.ps1 -Mode Status" in runbook
+    assert "measurement_capture_plan" in runbook
+    assert "setup_and_safety_brief" in runbook
+    assert "left_arm_numeric_measurement_passes" in runbook
+    assert "right_arm_numeric_measurement_passes" in runbook
+    assert "safety_critical_landmark_and_zone_references" in runbook
+    assert "left_right_independence_and_safety_screen" in runbook
+    assert "ready_for_non_powered_mockup_patterning" in runbook
+    assert "physical_validation_complete: false" in runbook
+    assert "stage17_completion_claim_allowed: false" in runbook
+    assert "fr018_implementation_cleared: false" in runbook
 
 
 def test_fr017_validation_gate_chain_preserves_gate_order_and_no_fake_validation() -> None:

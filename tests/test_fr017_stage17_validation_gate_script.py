@@ -82,12 +82,13 @@ def test_fr017_stage17_validation_gate_reports_documented_but_physically_blocked
     assert payload["writes_data"] is False
     assert payload["grants_execution_authority"] is False
     assert payload["grants_mutation_authority"] is False
-    assert payload["record_count"] == 24
+    assert payload["record_count"] == 25
     assert payload["custom_record_count"] == 19
     assert payload["required_gate_scripts"] == REQUIRED_GATE_SCRIPTS
     assert payload["missing_gate_scripts"] == []
     assert payload["invalid_gate_scripts"] == []
     assert payload["failed_checks"] == []
+    assert payload["missing_measurement_runbook_terms"] == []
     assert payload["missing_measurement_template_contracts"] == []
     assert payload["missing_measurement_template_fields"] == []
     assert payload["missing_mockup_template_contracts"] == []
@@ -267,6 +268,29 @@ def test_fr017_stage17_validation_gate_fails_closed_if_completion_ledger_templat
     assert payload["status"] == "failed_contract"
     assert "completion_ledger_handoff_template_terms" in payload["failed_checks"]
     assert payload["missing_completion_ledger_template_terms"] == ["physical_validation_complete: false"]
+    assert payload["physical_validation_complete"] is False
+    assert payload["fr018_implementation_cleared"] is False
+
+
+def test_fr017_stage17_validation_gate_fails_closed_if_measurement_runbook_terms_are_missing(
+    tmp_path: Path,
+) -> None:
+    manifest_path = _copy_stage17_package(tmp_path)
+    package_root = manifest_path.parent
+    runbook_path = package_root / "FR-017-MEASUREMENT-CAPTURE-RUNBOOK.md"
+    runbook = runbook_path.read_text(encoding="utf-8").replace(
+        "This runbook is not physical validation evidence.",
+        "This capture guide is pending review.",
+    )
+    runbook_path.write_text(runbook, encoding="utf-8")
+
+    proc = _run_gate("-Mode", "Status", "-ManifestPath", str(manifest_path))
+
+    assert proc.returncode == 1
+    payload = _payload(proc.stdout)
+    assert payload["status"] == "failed_contract"
+    assert "measurement_capture_runbook_terms" in payload["failed_checks"]
+    assert payload["missing_measurement_runbook_terms"] == ["This runbook is not physical validation evidence."]
     assert payload["physical_validation_complete"] is False
     assert payload["fr018_implementation_cleared"] is False
 

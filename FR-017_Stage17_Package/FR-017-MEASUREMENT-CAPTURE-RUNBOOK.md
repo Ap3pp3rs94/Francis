@@ -1,0 +1,158 @@
+# FR-017 Measurement Capture Runbook
+
+Status: COMPLETE OPERATOR RUNBOOK, NOT EVIDENCE
+Component: FR-017 Forearm Cuffs
+Gate: measurement_intake
+
+## Purpose
+
+This runbook converts the read-only `measurement_capture_plan` from `scripts/fr017-measurement-intake.ps1 -Mode Status` into an operator capture sequence for the first FR-017 physical-input gate.
+
+This runbook is not physical validation evidence. It does not replace `FR-017-MEASUREMENTS-INPUT-TEMPLATE.json`, does not record Pilot measurements, does not approve fabrication, does not approve load-bearing use, and does not clear powered or frame-coupled testing.
+
+Required lock flags:
+
+- `physical_validation_complete: false`
+- `stage17_completion_claim_allowed: false`
+- `fr018_implementation_cleared: false`
+
+## Source Template
+
+Copy `FR-017-MEASUREMENTS-INPUT-TEMPLATE.json` to a dated working record before entering measurements. Do not overwrite the template.
+
+Suggested record name:
+
+`FR-017-MEASUREMENTS-YYYY-MM-DD-PILOT-RECORD.json`
+
+Run the gate before and after editing the working record:
+
+```powershell
+.\scripts\fr017-measurement-intake.ps1 -Mode Status
+.\scripts\fr017-measurement-intake.ps1 -Mode Status -MeasurementPath .\FR-017_Stage17_Package\FR-017-MEASUREMENTS-YYYY-MM-DD-PILOT-RECORD.json
+```
+
+## Capture Order
+
+The capture groups below must remain in the same order as the gate status output.
+
+### 1. setup_and_safety_brief
+
+Capture:
+
+- `evidence.date`
+- `evidence.observer`
+- `evidence.pilot_id`
+- `evidence.measurement_tool`
+- `evidence.method`
+- `evidence.posture`
+- `measurement_conditions.no_tissue_compression_used`
+- `measurement_conditions.no_wrist_bone_compression_used`
+- `measurement_conditions.metric_tool_used`
+- `measurement_conditions.arm_relaxed_palm_neutral_or_exception_recorded`
+- `measurement_conditions.stop_conditions_briefed`
+- `measurement_conditions.condition_notes`
+
+Stop if the tool is not metric or millimeter-capable, if measurement requires tissue or wrist-bone compression, or if the Pilot reports pain, tingling, numbness, cold fingers, discoloration, weakness, wrist pain, sharp pressure, reduced finger motion, or loss of grip strength.
+
+### 2. left_arm_numeric_measurement_passes
+
+Capture the left arm as its own side-labeled record:
+
+- `sides.left.forearm_circumference_25mm_below_elbow_crease`
+- `sides.left.forearm_circumference_mid_forearm`
+- `sides.left.forearm_circumference_40mm_above_wrist_crease`
+- `sides.left.forearm_length_elbow_crease_to_wrist_crease`
+- `sides.left.outer_forearm_usable_panel_length`
+- `sides.left.upper_strap_allowed_band_width`
+- `sides.left.lower_strap_allowed_band_width`
+- `sides.left.bone_ridge_relief_length`
+- `sides.left.inner_forearm_no_pressure_zone_width`
+- `sides.left.wrist_clearance_gap`
+- `repeatability.left.second_pass_completed`
+- `repeatability.left.max_delta_mm`
+- `repeatability.left.all_required_measurements_within_5mm`
+
+Stop if the left side label is not visible, if the second pass is not complete, if repeatability exceeds 5 mm, or if any safety-screen symptom appears.
+
+### 3. right_arm_numeric_measurement_passes
+
+Capture the right arm as its own side-labeled record:
+
+- `sides.right.forearm_circumference_25mm_below_elbow_crease`
+- `sides.right.forearm_circumference_mid_forearm`
+- `sides.right.forearm_circumference_40mm_above_wrist_crease`
+- `sides.right.forearm_length_elbow_crease_to_wrist_crease`
+- `sides.right.outer_forearm_usable_panel_length`
+- `sides.right.upper_strap_allowed_band_width`
+- `sides.right.lower_strap_allowed_band_width`
+- `sides.right.bone_ridge_relief_length`
+- `sides.right.inner_forearm_no_pressure_zone_width`
+- `sides.right.wrist_clearance_gap`
+- `repeatability.right.second_pass_completed`
+- `repeatability.right.max_delta_mm`
+- `repeatability.right.all_required_measurements_within_5mm`
+
+Stop if the right side label is not visible, if the second pass is not complete, if repeatability exceeds 5 mm, or if any safety-screen symptom appears.
+
+### 4. safety_critical_landmark_and_zone_references
+
+Capture side-specific marked-zone references:
+
+- `marked_zones.left.inner_elbow_crease_boundary`
+- `marked_zones.left.wrist_bone_boundary`
+- `marked_zones.left.radius_ridge_relief`
+- `marked_zones.left.ulna_ridge_relief`
+- `marked_zones.left.outer_forearm_cable_route`
+- `marked_zones.left.quick_release_reach_zone`
+- `marked_zones.left.glove_removal_path`
+- `marked_zones.right.inner_elbow_crease_boundary`
+- `marked_zones.right.wrist_bone_boundary`
+- `marked_zones.right.radius_ridge_relief`
+- `marked_zones.right.ulna_ridge_relief`
+- `marked_zones.right.outer_forearm_cable_route`
+- `marked_zones.right.quick_release_reach_zone`
+- `marked_zones.right.glove_removal_path`
+- `landmark_confirmation.inner_elbow_crease_boundary_confirmed`
+- `landmark_confirmation.wrist_bone_boundary_confirmed`
+- `landmark_confirmation.radius_ulna_relief_paths_confirmed`
+- `landmark_confirmation.outer_forearm_cable_route_confirmed`
+- `landmark_confirmation.quick_release_reach_zone_confirmed`
+- `landmark_confirmation.glove_removal_path_confirmed`
+- `landmark_confirmation.skin_safe_marking_used`
+- `landmark_confirmation.landmark_notes`
+
+Stop if the inner elbow boundary, wrist-bone boundary, radius or ulna relief path, quick-release reach zone, or glove-removal path is unmarked or ambiguous.
+
+### 5. left_right_independence_and_safety_screen
+
+Capture:
+
+- `left_right_independence.left_arm_measured_separately`
+- `left_right_independence.right_arm_measured_separately`
+- `left_right_independence.side_labels_verified`
+- `left_right_independence.values_not_copied_between_sides`
+- `left_right_independence.left_measurement_reference`
+- `left_right_independence.right_measurement_reference`
+- `left_right_independence.independence_notes`
+- `safety_screen.pain`
+- `safety_screen.tingling`
+- `safety_screen.numbness`
+- `safety_screen.cold_fingers`
+- `safety_screen.discoloration`
+- `safety_screen.hand_weakness`
+- `safety_screen.wrist_pain`
+- `safety_screen.sharp_pressure`
+- `safety_screen.reduced_finger_motion`
+- `safety_screen.loss_of_grip_strength`
+
+Stop if left and right values were copied, if left and right evidence references are not distinct, if the complete left/right numeric profiles are identical without recheck, or if any symptom is true.
+
+## Gate Interpretation
+
+`ready_for_non_powered_mockup_patterning` means only that the measurement record passed the intake gate. It is not fit approval, fabrication approval, load approval, powered testing approval, frame-coupled testing approval, Stage 17 completion, or FR-018 clearance.
+
+If the gate returns `pending_measurements`, complete the first blocking group reported by `measurement_capture_first_blocking_group_id`.
+
+If the gate returns `invalid_measurement_record`, correct the listed invalid fields or blockers before re-running the gate.
+
+If the gate returns `failed_requires_redesign_or_medical_review`, stop FR-017 progression and do not continue until the failure is resolved by appropriate review.

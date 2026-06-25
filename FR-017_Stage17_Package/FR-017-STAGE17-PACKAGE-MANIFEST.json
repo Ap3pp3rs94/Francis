@@ -36,6 +36,11 @@
       "status": "complete"
     },
     {
+      "path": "FR-017-MEASUREMENT-CAPTURE-RUNBOOK.md",
+      "kind": "measurement_capture_runbook",
+      "status": "complete_not_evidence"
+    },
+    {
       "path": "FR-017-MOCKUP-BUILD-INPUT-TEMPLATE.json",
       "kind": "mockup_build_input_template",
       "status": "complete"
