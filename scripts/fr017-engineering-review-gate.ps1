@@ -184,6 +184,150 @@ function Test-PresentText {
   return -not (Test-MissingOrPendingText -Value $Value)
 }
 
+function Add-UniqueString {
+  param(
+    [System.Collections.Generic.List[string]]$Target,
+    [object]$Value
+  )
+
+  if ($null -eq $Value) {
+    return
+  }
+  $Text = ([string]$Value).Trim()
+  if ([string]::IsNullOrWhiteSpace($Text)) {
+    return
+  }
+  if (-not $Target.Contains($Text)) {
+    $Target.Add($Text) | Out-Null
+  }
+}
+
+function Test-SignalMatchesPrefix {
+  param(
+    [string]$Signal,
+    [string]$Prefix
+  )
+
+  if ([string]::Equals($Signal, $Prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+    return $true
+  }
+  return $Signal.StartsWith($Prefix + '.', [System.StringComparison]::OrdinalIgnoreCase) -or
+    $Signal.StartsWith($Prefix + '_', [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+function Get-CaptureStepSignals {
+  param(
+    [string[]]$Signals,
+    [string[]]$RequiredFields,
+    [string[]]$SignalPrefixes
+  )
+
+  $Result = New-Object System.Collections.Generic.List[string]
+  foreach ($Signal in (ConvertTo-StringArray -Value $Signals)) {
+    foreach ($Field in $RequiredFields) {
+      if (Test-SignalMatchesPrefix -Signal $Signal -Prefix $Field) {
+        Add-UniqueString -Target $Result -Value $Signal
+      }
+    }
+    foreach ($Prefix in $SignalPrefixes) {
+      if (Test-SignalMatchesPrefix -Signal $Signal -Prefix $Prefix) {
+        Add-UniqueString -Target $Result -Value $Signal
+      }
+    }
+  }
+  return @($Result.ToArray())
+}
+
+function New-EngineeringReviewCapturePlanStatus {
+  param(
+    [object[]]$CapturePlan,
+    [bool]$UpstreamReleaseCableReady,
+    [string[]]$MissingFields,
+    [string[]]$InvalidFields,
+    [string[]]$BlockingSignals
+  )
+
+  $Result = New-Object System.Collections.Generic.List[object]
+  foreach ($Step in $CapturePlan) {
+    $RequiredFields = @(ConvertTo-StringArray -Value $Step.required_fields)
+    $SignalPrefixes = @(ConvertTo-StringArray -Value $Step.blocking_signal_prefixes)
+    $StepMissing = @(Get-CaptureStepSignals -Signals $MissingFields -RequiredFields $RequiredFields -SignalPrefixes @())
+    $StepInvalid = @(Get-CaptureStepSignals -Signals $InvalidFields -RequiredFields $RequiredFields -SignalPrefixes @())
+    $StepBlockingSignals = @(Get-CaptureStepSignals -Signals $BlockingSignals -RequiredFields $RequiredFields -SignalPrefixes $SignalPrefixes)
+
+    $Status = 'ready_for_engineering_review_record_review'
+    $RequiredAction = [string]$Step.required_action
+    if (-not $UpstreamReleaseCableReady) {
+      $Status = 'blocked_by_upstream_quick_release_cable_snag'
+      $RequiredAction = 'complete measurement intake, mockup, mannequin interface, pilot static-fit, pilot movement, and quick-release/cable-snag gates before professional engineering review evidence can be captured or reviewed'
+    } elseif ($StepBlockingSignals.Count -gt 0) {
+      $Status = 'failed_stop_condition_or_blocking_signal'
+    } elseif ($StepInvalid.Count -gt 0) {
+      $Status = 'invalid_required_fields'
+    } elseif ($StepMissing.Count -gt 0) {
+      $Status = 'pending_required_fields'
+    }
+
+    $Result.Add([ordered]@{
+        id = [string]$Step.id
+        status = $Status
+        validation_state = [string]$Step.validation_state
+        ready_for_engineering_review_record_review = ($Status -eq 'ready_for_engineering_review_record_review')
+        missing_fields = @($StepMissing)
+        invalid_fields = @($StepInvalid)
+        blocking_signals = @($StepBlockingSignals)
+        required_action = $RequiredAction
+      }) | Out-Null
+  }
+  return @($Result.ToArray())
+}
+
+function New-CapturePlanSummary {
+  param([object[]]$CapturePlanStatus)
+
+  $ReadyCount = 0
+  $PendingCount = 0
+  $InvalidCount = 0
+  $FailedCount = 0
+  $UpstreamBlockedCount = 0
+  $FirstBlockingGroupId = ''
+  $FirstBlockingGroupStatus = ''
+  $FirstBlockingGroupAction = ''
+
+  foreach ($Step in $CapturePlanStatus) {
+    $StepStatus = [string]$Step.status
+    if ($StepStatus -eq 'ready_for_engineering_review_record_review') {
+      $ReadyCount += 1
+    } elseif ($StepStatus -eq 'pending_required_fields') {
+      $PendingCount += 1
+    } elseif ($StepStatus -eq 'invalid_required_fields') {
+      $InvalidCount += 1
+    } elseif ($StepStatus -eq 'failed_stop_condition_or_blocking_signal') {
+      $FailedCount += 1
+    } elseif ($StepStatus -eq 'blocked_by_upstream_quick_release_cable_snag') {
+      $UpstreamBlockedCount += 1
+    }
+
+    if ([string]::IsNullOrWhiteSpace($FirstBlockingGroupId) -and $StepStatus -ne 'ready_for_engineering_review_record_review') {
+      $FirstBlockingGroupId = [string]$Step.id
+      $FirstBlockingGroupStatus = $StepStatus
+      $FirstBlockingGroupAction = [string]$Step.required_action
+    }
+  }
+
+  return [ordered]@{
+    total_groups = @($CapturePlanStatus).Count
+    ready_groups = $ReadyCount
+    pending_groups = $PendingCount
+    invalid_groups = $InvalidCount
+    failed_groups = $FailedCount
+    upstream_blocked_groups = $UpstreamBlockedCount
+    first_blocking_group_id = $FirstBlockingGroupId
+    first_blocking_group_status = $FirstBlockingGroupStatus
+    first_blocking_group_action = $FirstBlockingGroupAction
+  }
+}
+
 function Add-PilotIdentityLinkageCheck {
   param(
     [System.Collections.Generic.List[string]]$Invalid,
@@ -377,6 +521,68 @@ $RequiredFalseReviewDecision = @(
   'fr018_implementation_cleared'
 )
 
+$EngineeringReviewEvidenceFields = @(
+  'evidence.date',
+  'evidence.reviewer',
+  'evidence.reviewer_role',
+  'evidence.reviewer_credential_reference',
+  'evidence.pilot_id',
+  'evidence.quick_release_cable_snag_record_path',
+  'evidence.review_scope'
+)
+
+$EngineeringReviewConstraintFields = @()
+foreach ($Field in $RequiredReviewConstraints) {
+  $EngineeringReviewConstraintFields += ('review_constraints.{0}' -f $Field)
+}
+
+$EngineeringSafetyReviewFields = @()
+foreach ($Field in $RequiredSafetyReview) {
+  $EngineeringSafetyReviewFields += ('safety_review.{0}' -f $Field)
+}
+
+$EngineeringReviewDecisionFields = @('review_decision.non_powered_fr017_physical_validation_accepted')
+foreach ($Field in $RequiredFalseReviewDecision) {
+  $EngineeringReviewDecisionFields += ('review_decision.{0}' -f $Field)
+}
+$EngineeringReviewDecisionFields += 'review_decision.engineering_review_notes'
+
+$EngineeringReviewCapturePlan = @(
+  [ordered]@{
+    id = 'engineering_review_evidence_and_linkage'
+    validation_state = 'REQUIRES_PROFESSIONAL_ENGINEERING_REVIEW_RECORD'
+    required_fields = $EngineeringReviewEvidenceFields
+    blocking_signal_prefixes = @(
+      'evidence.quick_release_cable_snag_record_path_must_match_release_cable_path',
+      'evidence.pilot_id_must_match_release_cable_pilot_id',
+      'evidence.date_before_release_cable.evidence.date',
+      'evidence.review_scope'
+    )
+    required_action = 'record ISO date, reviewer identity, reviewer role, credential reference, matching pilot id, linked quick-release/cable-snag record path, and the exact non-powered FR-017 review scope'
+  },
+  [ordered]@{
+    id = 'engineering_review_constraints'
+    validation_state = 'REQUIRES_PROFESSIONAL_ENGINEERING_REVIEW'
+    required_fields = $EngineeringReviewConstraintFields
+    blocking_signal_prefixes = @('review_constraints')
+    required_action = 'record professional review of documentation, measurement, mockup, mannequin, pilot static, pilot movement, release/cable evidence, and explicit denial of load-bearing, powered, frame-coupled, and FR-018 clearance'
+  },
+  [ordered]@{
+    id = 'engineering_safety_review'
+    validation_state = 'REQUIRES_PROFESSIONAL_ENGINEERING_REVIEW'
+    required_fields = $EngineeringSafetyReviewFields
+    blocking_signal_prefixes = @('safety_review')
+    required_action = 'record professional review of circulation and nerve risk, release access, glove/wrist removal, cable route, symptom fail conditions, and preserved stop conditions'
+  },
+  [ordered]@{
+    id = 'engineering_review_decision_and_limits'
+    validation_state = 'REQUIRES_PROFESSIONAL_ENGINEERING_REVIEW_DECISION'
+    required_fields = $EngineeringReviewDecisionFields
+    blocking_signal_prefixes = @('review_decision')
+    required_action = 'record the bounded non-powered FR-017 acceptance decision, redesign state, prohibited clearance denials, and engineering notes without granting powered, frame-coupled, load-bearing, or FR-018 authority'
+  }
+)
+
 $DefaultMeasurementPath = Join-Path $RepoRoot 'FR-017_Stage17_Package\FR-017-MEASUREMENTS-INPUT-TEMPLATE.json'
 $DefaultMockupPath = Join-Path $RepoRoot 'FR-017_Stage17_Package\FR-017-MOCKUP-BUILD-INPUT-TEMPLATE.json'
 $DefaultMannequinPath = Join-Path $RepoRoot 'FR-017_Stage17_Package\FR-017-MANNEQUIN-INTERFACE-INPUT-TEMPLATE.json'
@@ -510,6 +716,22 @@ if (-not [bool]$Upstream.parse_ok -or [int]$Upstream.exit_code -ne 0 -or $Upstre
   }
 }
 
+$AllEngineeringReviewBlockingSignals = New-Object System.Collections.Generic.List[string]
+foreach ($Signal in @($RecordLinkageViolations.ToArray())) {
+  Add-UniqueString -Target $AllEngineeringReviewBlockingSignals -Value $Signal
+}
+foreach ($Signal in @($RecordChronologyViolations.ToArray())) {
+  Add-UniqueString -Target $AllEngineeringReviewBlockingSignals -Value $Signal
+}
+foreach ($Signal in @($ReviewRedesignTriggers.ToArray())) {
+  Add-UniqueString -Target $AllEngineeringReviewBlockingSignals -Value $Signal
+}
+foreach ($Signal in @($ProhibitedClearanceFlags.ToArray())) {
+  Add-UniqueString -Target $AllEngineeringReviewBlockingSignals -Value $Signal
+}
+$EngineeringReviewCapturePlanStatus = @(New-EngineeringReviewCapturePlanStatus -CapturePlan $EngineeringReviewCapturePlan -UpstreamReleaseCableReady $UpstreamReady -MissingFields $MissingFields.ToArray() -InvalidFields $InvalidFields.ToArray() -BlockingSignals $AllEngineeringReviewBlockingSignals.ToArray())
+$EngineeringReviewCapturePlanSummary = New-CapturePlanSummary -CapturePlanStatus $EngineeringReviewCapturePlanStatus
+
 $Output = [ordered]@{
   kind = 'francis.fr017.engineering_review_gate'
   mode = $Mode
@@ -584,6 +806,22 @@ $Output = [ordered]@{
   required_review_constraints = $RequiredReviewConstraints
   required_safety_review = $RequiredSafetyReview
   required_false_review_decision = $RequiredFalseReviewDecision
+  engineering_review_capture_plan_contract = 'The engineering_review_capture_plan is read-only operator guidance for capturing FR-017 professional engineering review evidence. It is not physical validation evidence by itself, does not prove pilot safety, and cannot clear final physical completion, powered, frame-coupled, load-bearing, or FR-018 work.'
+  engineering_review_capture_plan_status_contract = 'The engineering_review_capture_plan_status reports engineering-review capture readiness only. A ready group means the supplied record fields passed this script contract; it is not professional certification, physical validation completion, or Stage 17 closure.'
+  engineering_review_capture_summary_contract = 'The engineering_review_capture_* summary identifies the next blocking engineering-review evidence group. It is not physical validation evidence and cannot mark Stage 17 complete.'
+  engineering_review_capture_plan_not_completion_evidence = $true
+  next_required_engineering_review_input = 'complete_professional_engineering_review_record_at_FR-017-ENGINEERING-REVIEW-INPUT-TEMPLATE.json'
+  engineering_review_capture_plan = @($EngineeringReviewCapturePlan)
+  engineering_review_capture_plan_status = @($EngineeringReviewCapturePlanStatus)
+  engineering_review_capture_total_groups = [int]$EngineeringReviewCapturePlanSummary.total_groups
+  engineering_review_capture_ready_groups = [int]$EngineeringReviewCapturePlanSummary.ready_groups
+  engineering_review_capture_pending_groups = [int]$EngineeringReviewCapturePlanSummary.pending_groups
+  engineering_review_capture_invalid_groups = [int]$EngineeringReviewCapturePlanSummary.invalid_groups
+  engineering_review_capture_failed_groups = [int]$EngineeringReviewCapturePlanSummary.failed_groups
+  engineering_review_capture_upstream_blocked_groups = [int]$EngineeringReviewCapturePlanSummary.upstream_blocked_groups
+  engineering_review_capture_first_blocking_group_id = [string]$EngineeringReviewCapturePlanSummary.first_blocking_group_id
+  engineering_review_capture_first_blocking_group_status = [string]$EngineeringReviewCapturePlanSummary.first_blocking_group_status
+  engineering_review_capture_first_blocking_group_action = [string]$EngineeringReviewCapturePlanSummary.first_blocking_group_action
   boolean_value_contract = 'Use unquoted JSON booleans only. Strings such as yes/no/1/0/"true"/"false" are invalid. Review acceptance requires true for required reviewed items and false for prohibited clearances or redesign conditions.'
   record_linkage_contract = 'The engineering review evidence.quick_release_cable_snag_record_path must resolve to the same quick-release/cable-snag record path passed into this gate. An engineering review record cannot advance from stale, copied, or unrelated release/cable evidence.'
   pilot_identity_linkage_contract = 'The engineering review evidence.pilot_id must match evidence.pilot_id in the linked quick-release/cable-snag record. An engineering review record cannot advance if it names a different pilot than the completed release/cable evidence.'

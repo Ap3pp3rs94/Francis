@@ -41,6 +41,10 @@ def _payload(stdout: str) -> dict[str, Any]:
     return json.loads(stdout)
 
 
+def _capture_status_by_id(payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {step["id"]: step for step in payload["engineering_review_capture_plan_status"]}
+
+
 def _write_release_ready_records(tmp_path: Path) -> tuple[Path, Path, Path, Path, Path, Path]:
     measurement_path, mockup_path, mannequin_path, static_fit_path, movement_path = _write_movement_ready_records(
         tmp_path
@@ -114,6 +118,47 @@ def test_fr017_engineering_review_gate_reports_default_templates_as_pending_upst
     assert payload["engineering_review_complete"] is False
     assert payload["final_physical_gate_audit_ready"] is False
     assert payload["fr018_implementation_cleared"] is False
+    assert payload["engineering_review_capture_plan_not_completion_evidence"] is True
+    assert "not physical validation evidence" in payload["engineering_review_capture_plan_contract"]
+    assert "engineering-review capture readiness only" in payload["engineering_review_capture_plan_status_contract"]
+    assert "not physical validation evidence" in payload["engineering_review_capture_summary_contract"]
+    assert (
+        payload["next_required_engineering_review_input"]
+        == "complete_professional_engineering_review_record_at_FR-017-ENGINEERING-REVIEW-INPUT-TEMPLATE.json"
+    )
+    assert payload["engineering_review_capture_total_groups"] == 4
+    assert payload["engineering_review_capture_ready_groups"] == 0
+    assert payload["engineering_review_capture_pending_groups"] == 0
+    assert payload["engineering_review_capture_invalid_groups"] == 0
+    assert payload["engineering_review_capture_failed_groups"] == 0
+    assert payload["engineering_review_capture_upstream_blocked_groups"] == 4
+    assert payload["engineering_review_capture_first_blocking_group_id"] == "engineering_review_evidence_and_linkage"
+    assert (
+        payload["engineering_review_capture_first_blocking_group_status"]
+        == "blocked_by_upstream_quick_release_cable_snag"
+    )
+    assert "quick-release/cable-snag" in payload["engineering_review_capture_first_blocking_group_action"]
+    assert [step["id"] for step in payload["engineering_review_capture_plan"]] == [
+        "engineering_review_evidence_and_linkage",
+        "engineering_review_constraints",
+        "engineering_safety_review",
+        "engineering_review_decision_and_limits",
+    ]
+    required_fields = [
+        field for step in payload["engineering_review_capture_plan"] for field in step["required_fields"]
+    ]
+    assert "evidence.quick_release_cable_snag_record_path" in required_fields
+    assert "review_constraints.fr018_implementation_not_cleared" in required_fields
+    assert "safety_review.quick_release_access_reviewed" in required_fields
+    assert "review_decision.powered_testing_approved" in required_fields
+    assert all(
+        step["status"] == "blocked_by_upstream_quick_release_cable_snag"
+        for step in payload["engineering_review_capture_plan_status"]
+    )
+    assert all(
+        not step["ready_for_engineering_review_record_review"]
+        for step in payload["engineering_review_capture_plan_status"]
+    )
     assert payload["read_only_contract"] is True
     assert payload["writes_repo"] is False
     assert payload["grants_mutation_authority"] is False
@@ -152,6 +197,27 @@ def test_fr017_engineering_review_gate_requires_review_after_release_ready(tmp_p
     assert payload["engineering_review_complete"] is False
     assert payload["physical_validation_complete"] is False
     assert payload["fr018_implementation_cleared"] is False
+    assert payload["engineering_review_capture_total_groups"] == 4
+    assert payload["engineering_review_capture_ready_groups"] == 0
+    assert payload["engineering_review_capture_pending_groups"] == 4
+    assert payload["engineering_review_capture_invalid_groups"] == 0
+    assert payload["engineering_review_capture_failed_groups"] == 0
+    assert payload["engineering_review_capture_upstream_blocked_groups"] == 0
+    assert payload["engineering_review_capture_first_blocking_group_id"] == "engineering_review_evidence_and_linkage"
+    assert payload["engineering_review_capture_first_blocking_group_status"] == "pending_required_fields"
+    capture_status = _capture_status_by_id(payload)
+    assert "evidence.date" in capture_status["engineering_review_evidence_and_linkage"]["missing_fields"]
+    assert (
+        "review_constraints.documentation_package_reviewed"
+        in capture_status["engineering_review_constraints"]["missing_fields"]
+    )
+    assert (
+        "safety_review.quick_release_access_reviewed" in capture_status["engineering_safety_review"]["missing_fields"]
+    )
+    assert (
+        "review_decision.engineering_review_notes"
+        in capture_status["engineering_review_decision_and_limits"]["missing_fields"]
+    )
 
 
 def test_fr017_engineering_review_gate_treats_lowercase_or_padded_pending_text_as_missing(
@@ -244,6 +310,22 @@ def test_fr017_engineering_review_gate_accepts_complete_non_powered_review_recor
     assert payload["physical_validation_complete"] is False
     assert payload["powered_or_frame_coupled_testing_cleared"] is False
     assert payload["fr018_implementation_cleared"] is False
+    assert payload["engineering_review_capture_total_groups"] == 4
+    assert payload["engineering_review_capture_ready_groups"] == 4
+    assert payload["engineering_review_capture_pending_groups"] == 0
+    assert payload["engineering_review_capture_invalid_groups"] == 0
+    assert payload["engineering_review_capture_failed_groups"] == 0
+    assert payload["engineering_review_capture_upstream_blocked_groups"] == 0
+    assert payload["engineering_review_capture_first_blocking_group_id"] == ""
+    assert payload["engineering_review_capture_first_blocking_group_status"] == ""
+    assert payload["engineering_review_capture_first_blocking_group_action"] == ""
+    assert all(
+        step["status"] == "ready_for_engineering_review_record_review"
+        for step in payload["engineering_review_capture_plan_status"]
+    )
+    assert all(
+        step["ready_for_engineering_review_record_review"] for step in payload["engineering_review_capture_plan_status"]
+    )
     assert "Use unquoted JSON booleans only" in payload["boolean_value_contract"]
     assert "must resolve to the same quick-release/cable-snag record path" in payload["record_linkage_contract"]
     assert (
@@ -556,6 +638,20 @@ def test_fr017_engineering_review_gate_blocks_powered_testing_clearance(tmp_path
     result = _payload(proc.stdout)
     assert result["status"] == "failed_requires_stage17_redesign_or_review_rejection"
     assert result["prohibited_clearance_flags"] == ["review_decision.powered_testing_approved"]
+    assert result["engineering_review_capture_total_groups"] == 4
+    assert result["engineering_review_capture_ready_groups"] == 3
+    assert result["engineering_review_capture_pending_groups"] == 0
+    assert result["engineering_review_capture_invalid_groups"] == 0
+    assert result["engineering_review_capture_failed_groups"] == 1
+    assert result["engineering_review_capture_upstream_blocked_groups"] == 0
+    assert result["engineering_review_capture_first_blocking_group_id"] == "engineering_review_decision_and_limits"
+    assert (
+        result["engineering_review_capture_first_blocking_group_status"] == "failed_stop_condition_or_blocking_signal"
+    )
+    capture_status = _capture_status_by_id(result)
+    assert capture_status["engineering_review_decision_and_limits"]["blocking_signals"] == [
+        "review_decision.powered_testing_approved"
+    ]
     assert result["engineering_review_complete"] is False
     assert result["fr018_implementation_cleared"] is False
 

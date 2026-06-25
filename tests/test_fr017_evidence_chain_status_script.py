@@ -462,6 +462,89 @@ def test_fr017_evidence_chain_status_moves_blocker_after_movement_ready(tmp_path
     assert payload["fr018_implementation_cleared"] is False
 
 
+def test_fr017_evidence_chain_status_moves_blocker_after_release_cable_ready(tmp_path: Path) -> None:
+    measurement_path, mockup_path, mannequin_path, static_fit_path, movement_path, release_cable_path = (
+        _write_release_ready_records(tmp_path)
+    )
+
+    proc = _run_gate(
+        "-Mode",
+        "Status",
+        "-MeasurementPath",
+        str(measurement_path),
+        "-MockupPath",
+        str(mockup_path),
+        "-MannequinPath",
+        str(mannequin_path),
+        "-StaticFitPath",
+        str(static_fit_path),
+        "-MovementPath",
+        str(movement_path),
+        "-ReleaseCablePath",
+        str(release_cable_path),
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = _payload(proc.stdout)
+    assert payload["status"] == "blocked_on_engineering_review"
+    assert payload["first_blocking_gate"] == "engineering_review"
+    assert payload["first_blocking_status"] == "pending_engineering_review"
+    assert payload["next_required_input"] == "FR-017-ENGINEERING-REVIEW-INPUT-TEMPLATE.json"
+    assert "evidence.date" in payload["first_blocking_details"]["missing_fields"]
+    assert payload["first_blocking_details"]["invalid_fields"] == []
+    assert payload["first_blocking_details"]["engineering_review_capture_plan_not_completion_evidence"] is True
+    assert (
+        "not physical validation evidence"
+        in payload["first_blocking_details"]["engineering_review_capture_plan_contract"]
+    )
+    assert (
+        "engineering-review capture readiness only"
+        in payload["first_blocking_details"]["engineering_review_capture_plan_status_contract"]
+    )
+    assert (
+        "not physical validation evidence"
+        in payload["first_blocking_details"]["engineering_review_capture_summary_contract"]
+    )
+    assert (
+        payload["first_blocking_details"]["next_required_engineering_review_input"]
+        == "complete_professional_engineering_review_record_at_FR-017-ENGINEERING-REVIEW-INPUT-TEMPLATE.json"
+    )
+    assert payload["first_blocking_details"]["engineering_review_capture_total_groups"] == 4
+    assert payload["first_blocking_details"]["engineering_review_capture_ready_groups"] == 0
+    assert payload["first_blocking_details"]["engineering_review_capture_pending_groups"] == 4
+    assert payload["first_blocking_details"]["engineering_review_capture_invalid_groups"] == 0
+    assert payload["first_blocking_details"]["engineering_review_capture_failed_groups"] == 0
+    assert payload["first_blocking_details"]["engineering_review_capture_upstream_blocked_groups"] == 0
+    assert payload["first_blocking_details"]["engineering_review_capture_first_blocking_group_id"] == (
+        "engineering_review_evidence_and_linkage"
+    )
+    assert payload["first_blocking_details"]["engineering_review_capture_first_blocking_group_status"] == (
+        "pending_required_fields"
+    )
+    assert (
+        "linked quick-release/cable-snag record path"
+        in payload["first_blocking_details"]["engineering_review_capture_first_blocking_group_action"]
+    )
+    capture_status = {
+        step["id"]: step for step in payload["first_blocking_details"]["engineering_review_capture_plan_status"]
+    }
+    assert "evidence.date" in capture_status["engineering_review_evidence_and_linkage"]["missing_fields"]
+    assert (
+        "review_constraints.fr018_implementation_not_cleared"
+        in capture_status["engineering_review_constraints"]["missing_fields"]
+    )
+    assert (
+        "safety_review.quick_release_access_reviewed" in capture_status["engineering_safety_review"]["missing_fields"]
+    )
+    assert (
+        "review_decision.powered_testing_approved"
+        in capture_status["engineering_review_decision_and_limits"]["missing_fields"]
+    )
+    assert payload["gates_ran"] == 8
+    assert payload["physical_validation_complete"] is False
+    assert payload["fr018_implementation_cleared"] is False
+
+
 def test_fr017_evidence_chain_status_surfaces_package_template_drift(tmp_path: Path) -> None:
     manifest_path = _copy_stage17_package(tmp_path)
     package_root = manifest_path.parent
