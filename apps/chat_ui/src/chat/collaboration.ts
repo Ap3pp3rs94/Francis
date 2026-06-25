@@ -1090,6 +1090,7 @@ export function collaborationBuildDirectionGateSummary(item: CollaborationReview
       `codex review ${actionBoundaryBool(gate.requiresCodexOrOperatorReview)}`,
       `repo review ${actionBoundaryBool(gate.requiresRepoTruthReview)}`,
       `execute ${actionBoundaryBool(item.actionBoundary.conversationCanExecuteAction || gate.grantsExecutionAuthority)}`,
+      `mutation ${actionBoundaryBool(gate.grantsMutationAuthority)}`,
       `approve ${actionBoundaryBool(item.actionBoundary.conversationCanApproveAction || gate.grantsApprovalAuthority)}`,
       `memory write ${actionBoundaryBool(gate.grantsMemoryWriteAuthority)}`,
     ],

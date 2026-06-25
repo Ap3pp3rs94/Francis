@@ -94736,6 +94736,47 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, full backend test suite, and unrelated UI
   flows were not run for this bounded implementation-preflight slice.
 
+### 2026-06-25 20:34Z - Build-direction gate shows mutation authority
+
+Current posture: Phase 2 / developer bridge collaboration support now exposes
+mutation-authority denial in the main build-direction gate chip list. This
+matches the Francis1/Codex review signal that model advice proposing action must
+show the governance gate before any readiness claim; it remains a readback-only
+UI and contract hardening slice.
+
+What changed:
+
+- `collaborationBuildDirectionGateSummary()` now includes `mutation false` or
+  `mutation true` in the same operator-visible detail list as execution,
+  approval, memory-write, Codex-review, and repo-truth-review state.
+- The existing Chat UI review contract test now proves the build-direction gate
+  preserves mutation denial for source-disagreement review receipts.
+
+Validation:
+
+- Chat UI contract run passed:
+  `npm run test -- --test-name-pattern=parseCollaborationReview`
+  (`279` passing tests in the selected run).
+- Chat UI production build passed with `npm run build`.
+- `git diff --check` passed.
+- Live URL proof: `GET http://127.0.0.1:5173/` returned HTTP 200.
+- Browser proof captured `http://127.0.0.1:5173/` at
+  `output/playwright/collaboration-gate-mutation-authority.png`; the page showed
+  `mutation false` on the latest build-direction gate and implementation
+  preflight cards.
+- Collaboration runtime health remained `healthy`, with Codex and Ollama enabled,
+  Claude disabled, and latest review receipts still advisory with all authority
+  grants false.
+
+Remaining truthful gap:
+
+- This does not add any execution, mutation, approval, training, or memory-write
+  authority; it only exposes the existing authority denial in the operator UI.
+- This does not change participant toggling, recurrence, learning receipts,
+  model tuning, or transcript storage contracts.
+- `.\scripts\check.ps1`, GitHub CI, full backend test suite, and unrelated UI
+  flows were not run for this bounded gate-readback slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

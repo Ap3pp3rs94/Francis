@@ -1517,6 +1517,7 @@ test("parseCollaborationReview preserves advisory candidate boundaries", () => {
   assert.equal(gateSummary.surface, "developer_bridge.collaboration_review.items");
   assert.equal(gateSummary.detail.includes("conflicting sources true"), true);
   assert.equal(gateSummary.detail.includes("source receipts 2"), true);
+  assert.equal(gateSummary.detail.includes("mutation false"), true);
   assert.deepEqual(gateSummary.conflictingSourceLines, [
     "codex: codex-alpha / external_guidance_source",
     "francis1: ollama-alpha / local_model_source / provider ollama",
