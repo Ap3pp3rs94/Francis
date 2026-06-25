@@ -433,8 +433,7 @@ def _topic_projection_override(topic: str) -> dict[str, object]:
             "build_issue": {
                 "code": "francis_body_map_trust_ladder",
                 "statement": (
-                    "Francis1 needs whole-body awareness while capability exposure stays trust-gated and "
-                    "review-backed."
+                    "Francis1 needs whole-body awareness while capability exposure stays trust-gated and review-backed."
                 ),
             },
             "implementation_candidate": {
