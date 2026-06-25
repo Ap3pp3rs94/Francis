@@ -1121,6 +1121,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
   const [followLatest, setFollowLatest] = useState(true);
   const [showAuditReceipts, setShowAuditReceipts] = useState(false);
   const requestInFlight = useRef<{ signal?: AbortSignal } | null>(null);
+  const liveTranscriptScrollRef = useRef<HTMLDivElement | null>(null);
   const transcriptScrollRef = useRef<HTMLDivElement | null>(null);
 
   const loadStatus = useCallback(
@@ -1323,7 +1324,9 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
     );
   const selectedSession = sessions.find((session) => session.id === selectedSessionId) ?? sessions[0] ?? null;
   const visibleTranscriptItems = selectedSession?.items ?? [];
+  const liveTranscriptItems = visibleTranscriptItems.slice(-6);
   const latestSessionId = sessions[0]?.id ?? "";
+  const latestLiveMessageId = liveTranscriptItems[liveTranscriptItems.length - 1]?.id ?? "";
   const latestMessageId = visibleTranscriptItems[visibleTranscriptItems.length - 1]?.id ?? "";
 
   useEffect(() => {
@@ -1341,6 +1344,12 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
     if (!scroller) return;
     scroller.scrollTop = scroller.scrollHeight;
   }, [latestMessageId, selectedSessionId, visibleTranscriptItems.length]);
+
+  useEffect(() => {
+    const scroller = liveTranscriptScrollRef.current;
+    if (!scroller) return;
+    scroller.scrollTop = scroller.scrollHeight;
+  }, [latestLiveMessageId, selectedSessionId, liveTranscriptItems.length]);
 
   return (
     <section
@@ -1412,7 +1421,168 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
         />
       </div>
 
-      <div style={{ marginTop: 22 }}>
+      <div
+        style={{
+          background: "rgba(8, 15, 26, 0.76)",
+          border: "1px solid rgba(125, 211, 252, 0.42)",
+          borderRadius: 14,
+          marginTop: 22,
+          padding: 16,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <h3 style={{ fontSize: 20, margin: 0 }}>Live Conversation</h3>
+          <span style={{ color: "#94a3b8", fontSize: 13 }}>
+            {liveTranscriptItems.length} shown / {visibleTranscriptItems.length} in session
+            {transcriptAuditSummary.auditReceiptCount
+              ? ` / ${transcriptAuditSummary.auditReceiptCount} audit ${showAuditReceipts ? "shown" : "hidden"}`
+              : ""}
+            {collaborationCacheLabel(transcript?.readbackCache)}
+          </span>
+        </div>
+        {sessions.length ? (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
+            <button
+              type="button"
+              onClick={() => {
+                setFollowLatest(true);
+                if (latestSessionId) setSelectedSessionId(latestSessionId);
+              }}
+              style={{
+                background: followLatest ? "#bfdbfe" : "rgba(15, 23, 42, 0.62)",
+                border: "1px solid rgba(147, 197, 253, 0.42)",
+                borderRadius: 10,
+                color: followLatest ? "#0f172a" : "#dbeafe",
+                cursor: "pointer",
+                fontWeight: 700,
+                padding: "7px 10px",
+              }}
+            >
+              Live
+            </button>
+            {transcriptAuditSummary.auditReceiptCount ? (
+              <button
+                type="button"
+                onClick={() => setShowAuditReceipts((current) => !current)}
+                style={{
+                  background: showAuditReceipts ? "rgba(251, 191, 36, 0.26)" : "rgba(15, 23, 42, 0.62)",
+                  border: "1px solid rgba(251, 191, 36, 0.38)",
+                  borderRadius: 10,
+                  color: showAuditReceipts ? "#fde68a" : "#cbd5e1",
+                  cursor: "pointer",
+                  fontWeight: 700,
+                  padding: "7px 10px",
+                }}
+              >
+                Audit ({transcriptAuditSummary.auditReceiptCount})
+              </button>
+            ) : null}
+            {sessions.map((session) => (
+              <button
+                key={`live-${session.id}`}
+                type="button"
+                onClick={() => {
+                  setSelectedSessionId(session.id);
+                  setFollowLatest(session.id === latestSessionId);
+                }}
+                style={{
+                  background: selectedSession?.id === session.id ? "rgba(14, 165, 233, 0.26)" : "rgba(15, 23, 42, 0.62)",
+                  border: "1px solid rgba(148, 163, 184, 0.28)",
+                  borderRadius: 10,
+                  color: "#e2e8f0",
+                  cursor: "pointer",
+                  padding: "7px 10px",
+                }}
+              >
+                {session.label} ({session.items.length})
+              </button>
+            ))}
+          </div>
+        ) : null}
+        <div
+          ref={liveTranscriptScrollRef}
+          style={{
+            display: "grid",
+            gap: 10,
+            marginTop: 12,
+            maxHeight: 520,
+            minHeight: liveTranscriptItems.length ? 260 : 0,
+            overflowY: "auto",
+            paddingRight: 4,
+          }}
+        >
+          {liveTranscriptItems.length ? (
+            liveTranscriptItems.map((item) => {
+              const display = formatCollaborationRelayMessage(item);
+              return (
+                <article
+                  key={`live-message-${item.id}`}
+                  style={{
+                    background: "rgba(15, 23, 42, 0.58)",
+                    border: "1px solid rgba(148, 163, 184, 0.22)",
+                    borderRadius: 12,
+                    padding: "12px 14px",
+                  }}
+                >
+                  <div style={{ color: "#93c5fd", display: "flex", flexWrap: "wrap", fontSize: 13, gap: 10 }}>
+                    <span>{collaborationDirectionText(item)}</span>
+                    <span>{collaborationTimeText(item)}</span>
+                    <span>{display.tone}</span>
+                    {isCollaborationAuditReceipt(item) ? <span>audit ack</span> : null}
+                    {display.compacted ? <span>compact receipt</span> : null}
+                  </div>
+                  <div
+                    style={{
+                      borderLeft: `3px solid ${
+                        display.tone === "guard"
+                          ? "#fbbf24"
+                          : display.tone === "audit"
+                            ? "#94a3b8"
+                            : display.tone === "driver"
+                              ? "#67e8f9"
+                              : "#6ee7b7"
+                      }`,
+                      marginTop: 10,
+                      paddingLeft: 10,
+                    }}
+                  >
+                    <div style={{ color: "#a7f3d0", fontSize: 12, fontWeight: 700, textTransform: "uppercase" }}>Conversation</div>
+                    <p style={{ color: "#e2e8f0", margin: "5px 0 0", overflowWrap: "anywhere", whiteSpace: "pre-wrap" }}>
+                      {display.conversationText || display.summary}
+                    </p>
+                  </div>
+                  {display.technicalText ? (
+                    <details style={{ color: "#94a3b8", fontSize: 13, marginTop: 10 }}>
+                      <summary style={{ cursor: "pointer" }}>Technical receipt</summary>
+                      <p style={{ color: "#94a3b8", margin: "8px 0 0", overflowWrap: "anywhere", whiteSpace: "pre-wrap" }}>
+                        {display.technicalText}
+                      </p>
+                    </details>
+                  ) : null}
+                </article>
+              );
+            })
+          ) : (
+            <div style={{ border: "1px solid rgba(148, 163, 184, 0.22)", borderRadius: 12, color: "#94a3b8", padding: 14 }}>
+              No relay transcript entries returned.
+            </div>
+          )}
+        </div>
+      </div>
+
+      <details
+        style={{
+          border: "1px solid rgba(148, 163, 184, 0.24)",
+          borderRadius: 14,
+          marginTop: 18,
+          padding: "12px 14px",
+        }}
+      >
+        <summary style={{ color: "#dbeafe", cursor: "pointer", fontSize: 16, fontWeight: 700 }}>
+          Francis body map and trust ladder evidence
+        </summary>
+        <div style={{ display: "grid", gap: 22, marginTop: 14 }}>
+      <div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <h3 style={{ fontSize: 18, margin: 0 }}>Francis Body Map</h3>
           <span style={{ color: bodyMapUnsafeAuthority ? "#fca5a5" : "#6ee7b7", fontSize: 13 }}>
@@ -1632,7 +1802,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
         </div>
       </div>
 
-      <div style={{ marginTop: 22 }}>
+      <div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <h3 style={{ fontSize: 18, margin: 0 }}>Francis Trust Ladder</h3>
           <span style={{ color: trustLadderUnsafeAuthority ? "#fca5a5" : "#6ee7b7", fontSize: 13 }}>
@@ -1724,6 +1894,8 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
           )}
         </div>
       </div>
+        </div>
+      </details>
 
       <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", marginTop: 18 }}>
         {agents.map((agent) => {
@@ -1767,7 +1939,19 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
         })}
       </div>
 
-      <div style={{ marginTop: 22 }}>
+      <details
+        style={{
+          border: "1px solid rgba(148, 163, 184, 0.24)",
+          borderRadius: 14,
+          marginTop: 18,
+          padding: "12px 14px",
+        }}
+      >
+        <summary style={{ color: "#dbeafe", cursor: "pointer", fontSize: 16, fontWeight: 700 }}>
+          Technical receipts and review history
+        </summary>
+        <div style={{ display: "grid", gap: 22, marginTop: 14 }}>
+      <div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <h3 style={{ fontSize: 18, margin: 0 }}>Toggle Receipts</h3>
           <span style={{ color: "#94a3b8", fontSize: 13 }}>{latestToggleReceipts.length} latest / read only</span>
@@ -1829,7 +2013,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
         </div>
       </div>
 
-      <div style={{ marginTop: 22 }}>
+      <div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <h3 style={{ fontSize: 18, margin: 0 }}>Runtime Health</h3>
           <span style={{ color: runtimeHealth?.status === "healthy" ? "#6ee7b7" : "#fca5a5", fontSize: 13 }}>
@@ -2074,7 +2258,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
         </div>
       </div>
 
-      <div style={{ marginTop: 22 }}>
+      <div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <h3 style={{ fontSize: 18, margin: 0 }}>Session Readback</h3>
           <span style={{ color: "#94a3b8", fontSize: 13 }}>
@@ -2127,7 +2311,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
       </div>
 
       {blockedReviewItems.length ? (
-        <div style={{ marginTop: 22 }}>
+        <div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
             <h3 style={{ fontSize: 18, margin: 0 }}>Build Direction Gates</h3>
             <span style={{ color: "#fca5a5", fontSize: 13 }}>{blockedReviewItems.length} blocked</span>
@@ -2204,7 +2388,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
       ) : null}
 
       {latestImplementationReview ? (
-        <div style={{ marginTop: 22 }}>
+        <div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
             <h3 style={{ fontSize: 18, margin: 0 }}>Implementation Review Gate</h3>
             <span
@@ -2253,7 +2437,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
         </div>
       ) : null}
 
-      <div style={{ marginTop: 22 }}>
+      <div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <h3 style={{ fontSize: 18, margin: 0 }}>Review Candidates</h3>
           <span style={{ color: "#94a3b8", fontSize: 13 }}>
@@ -2410,7 +2594,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
         </div>
       </div>
 
-      <div style={{ marginTop: 22 }}>
+      <div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <h3 style={{ fontSize: 18, margin: 0 }}>Learning Receipts</h3>
           <span style={{ color: "#94a3b8", fontSize: 13 }}>
@@ -2488,9 +2672,9 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
         </div>
       </div>
 
-      <div style={{ marginTop: 22 }}>
+      <div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-          <h3 style={{ fontSize: 18, margin: 0 }}>Relay Transcript</h3>
+          <h3 style={{ fontSize: 18, margin: 0 }}>Relay Transcript Archive</h3>
           <span style={{ color: "#94a3b8", fontSize: 13 }}>
             {visibleTranscriptItems.length} messages{transcript?.truncated ? " / truncated" : ""}
             {transcriptAuditSummary.auditReceiptCount
@@ -2636,6 +2820,8 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
           )}
         </div>
       </div>
+        </div>
+      </details>
     </section>
   );
 }

@@ -94064,6 +94064,47 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, and live browser proof were not run for
   this backend readback slice.
 
+### 2026-06-25 18:50Z - Communication UI opens on the live conversation
+
+Current posture: Phase 2 / the Communication surface now prioritizes the
+operator-visible Codex/Francis1 relay messages before the receipt-heavy evidence
+sections. Technical receipt readbacks remain available, but they no longer bury
+the live conversation on first page load.
+
+What changed:
+
+- Added a top-level Live Conversation panel backed by the existing bounded
+  collaboration transcript readback.
+- Kept live session selection, the audit-receipt toggle, and auto-scroll behavior
+  for newly dropped relay messages.
+- Collapsed the dense Francis body-map/trust-ladder evidence and the technical
+  receipt/review-history sections behind explicit operator-opened details
+  panels.
+- Left participant toggles visible and unchanged so Codex, Claude, and Ollama
+  remain operator-controlled relay-only participants.
+- Renamed the lower receipt-heavy transcript area to Relay Transcript Archive.
+
+Validation:
+
+- Full Chat UI test suite passed: `cd apps\chat_ui; npm run test` with 277
+  tests.
+- Chat UI production build passed: `cd apps\chat_ui; npm run build`.
+- `git diff --check` passed.
+- Browser proof captured `http://127.0.0.1:5173/` and showed the Live
+  Conversation panel first, technical receipt details collapsed per message,
+  body-map/trust evidence collapsed, visible relay-only participant toggles, and
+  the technical receipt/review-history section collapsed.
+
+Remaining truthful gap:
+
+- This is a UI readability change only. It does not change relay timing,
+  recurrence policy, model prompting, transcript persistence, memory write
+  behavior, approval authority, execution authority, or governed gateway access.
+- The top conversation panel reads from the existing bounded transcript readback;
+  it is not a new raw transcript store.
+- `.\scripts\check.ps1`, GitHub CI, and backend test suites were not rerun for
+  this Chat UI-only slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
