@@ -181,11 +181,30 @@ export async function fetchLensMcpStatus(opts?: {
   baseUrl?: string;
   actor?: string;
   signal?: AbortSignal;
+  timeoutMs?: number;
 }): Promise<LensMcpStatus> {
   const baseUrl = normalizeBaseUrl(opts?.baseUrl);
   const actor = encodeURIComponent(opts?.actor?.trim() || "chat_ui.lens");
   const url = `${baseUrl}/lens/mcp/status?actor=${actor}`;
-  const res = await fetch(url, { method: "GET", signal: opts?.signal });
+  const controller = new AbortController();
+  const abortFromParent = () => controller.abort();
+  if (opts?.signal?.aborted) {
+    controller.abort();
+  } else {
+    opts?.signal?.addEventListener("abort", abortFromParent, { once: true });
+  }
+  const timeoutId =
+    opts?.timeoutMs && opts.timeoutMs > 0
+      ? setTimeout(() => controller.abort(), opts.timeoutMs)
+      : undefined;
+
+  let res: Response;
+  try {
+    res = await fetch(url, { method: "GET", signal: controller.signal });
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
+    opts?.signal?.removeEventListener("abort", abortFromParent);
+  }
   const text = await res.text();
 
   let json: unknown = {};

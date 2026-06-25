@@ -90402,6 +90402,3561 @@ Remaining truthful gap:
   cluster. The next CI action is a targeted Lens runtime cluster probe before
   repeating the full suite.
 
+### 2026-06-24 20:20Z - Developer bridge collaboration runtime supervisor and driver
+
+Current posture: Phase 2 / developer bridge collaboration support now has a
+bounded local lifecycle supervisor for the Codex/Ollama relay helpers and an
+event-gated conversation driver. This is operator-facing collaboration
+infrastructure only. It does not grant model execution authority, repository
+mutation authority, approval authority, shell authority, commit/push authority,
+Stage 17 closure, or full Francis product readiness.
+
+What changed:
+
+- Added a fixed-command collaboration runtime supervisor that keeps the
+  event-gated Codex/Ollama helper pair alive:
+  `francis.developer_bridge.codex_responder --source-agent ollama` and
+  `francis.developer_bridge.ollama_participant --source-agent codex`, both with
+  `--cooldown-seconds 0`.
+- Added `francis.developer_bridge.collaboration_driver`, which seeds bounded
+  `codex -> ollama` collaboration questions, waits for the matching
+  `ollama -> codex` receipt before sending the next question, and now runs as an
+  open-ended engineering conversation by default with `--max-turns 0`.
+- The driver now waits between turns, writes structured collaboration-note
+  receipts for each Ollama response, writes periodic bounded summaries, and
+  appends compact continuity-ledger summaries so later turns can carry shared
+  context without transcript dumping.
+- Driver prompts now frame Codex and Ollama as engineering sources learning the
+  same Francis system under one Francis identity and governance layer, not as
+  separate authority centers.
+- Added `python -m francis communication-runtime --watch --poll-seconds 10` as
+  the CLI entrypoint for the supervised runtime.
+- The supervisor writes receipt state to
+  `data/integrations/developer_bridge/collaboration_runtime/state.json` and logs
+  fixed helper stdout/stderr under the matching `logs/` directory.
+- The operator setup doc now points the Codex/Ollama relay lane at the
+  supervised runtime rather than relying only on two manually launched helper
+  processes.
+- Hardened the local Ollama participant prompt so generic `Next best action`
+  tails are not requested unless the relay source explicitly asks for them.
+
+Validation:
+
+- Focused pytest passed:
+  `python -m pytest tests\test_developer_bridge.py -q --tb=short`.
+- Ruff passed:
+  `python -m ruff check --no-cache src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\collaboration_runtime.py src\francis\developer_bridge\ollama_participant.py src\francis\__main__.py tests\test_developer_bridge.py`.
+- Mypy passed:
+  `python -m mypy src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\collaboration_runtime.py src\francis\developer_bridge\ollama_participant.py src\francis\__main__.py`.
+- Whitespace diff check passed for the touched collaboration-runtime files.
+- Live one-shot supervisor readback returned `ok=true`, `desired_count=2`, and
+  both existing helpers `running`.
+- Live supervisor was started as PID `383944`. A controlled kill of managed
+  Ollama participant PID `395180` was followed by supervisor restart to PID
+  `174804`; Codex responder remained running at PID `374760`.
+- Follow-up live supervisor readback after the conversation-driver addition
+  returned `desired_count=3` and started the driver with
+  `--repeat-closed --session-gap-seconds 120`.
+- Live Communication readback showed the repeating driver session moving through
+  `codex -> ollama` / `ollama -> codex` turns at `20:39:37`, `20:39:50`,
+  `20:39:52`, `20:40:00`, and `20:40:11`.
+- Follow-up focused pytest after the ongoing-conversation correction passed
+  30 developer-bridge tests, including no-hard-cap driver behavior, turn-gap
+  behavior, collaboration-note receipts, and periodic summaries.
+- Follow-up Mypy and Ruff checks passed for the collaboration driver, runtime,
+  Ollama participant, CLI hook, and developer-bridge tests.
+
+Remaining truthful gap:
+
+- The supervisor is a process-level lifecycle guard, not OS startup persistence.
+  Reboot/session-start recurrence still needs a Windows scheduled task or
+  Francis daemon integration if the operator wants it to survive machine
+  restarts automatically.
+- The local model can still produce imperfect content; the runtime now asks it
+  not to append generic next-action tails, but this is prompt-level shaping, not
+  a semantic guarantee.
+- The collaboration notes and summaries are advisory receipts only. They are not
+  roadmap authority, operator approval, or completion evidence unless separately
+  validated against repo truth.
+- Full local `.\scripts\check.ps1`, GitHub CI, and any Stage 17 completion claim
+  remain unproven by this collaboration-runtime slice.
+
+### 2026-06-24 21:32Z - Developer bridge typed collaboration insight receipts
+
+Current posture: Phase 2 / developer bridge collaboration support now has a
+typed advisory insight receipt for Codex/Ollama conversations. This turns each
+completed driver exchange into a reviewable build signal without granting memory
+promotion authority, execution authority, approval authority, repository
+mutation authority, shell authority, commit/push authority, model-tuning
+authority, Stage 17 closure, or full Francis product readiness.
+
+What changed:
+
+- Expanded the collaboration-driver topic cycle away from mostly abstract
+  identity prompts toward concrete build issues: Communication UI filtering,
+  collaboration memory records, typed/spoken direction to action candidates,
+  chatbot-output versus action-readiness evidence, session recall, disagreement
+  records, governance gates, participant toggles, and live-health receipts.
+- Driver prompts now ask for one concrete system issue/evidence gap/risk and
+  one typed memory, receipt, or review shape that would let Codex implement
+  later without treating the conversation as authority.
+- Added `developer_bridge.collaboration_insight` receipts under
+  `data/integrations/developer_bridge/collaboration_driver/insights/` with
+  `schema_version=developer_bridge_collaboration_insight_v1`.
+- Each insight records source relay ids, the bounded finding, build issue,
+  implementation candidate, memory candidate, alignment tags, action boundary,
+  review status, and governance flags.
+- Insight governance explicitly marks the record advisory-only, transcript-free,
+  and non-authoritative for execution, mutation, approval, memory writes, and
+  model authority.
+- Updated the MCP client setup guide to describe the new insight directory and
+  its authority boundary.
+- Restarted the live conversation driver with the same bounded command so the
+  running collaboration loop uses the new prompt shape and insight writer.
+
+Validation:
+
+- Focused pytest passed:
+  `python -m pytest tests\test_developer_bridge.py -q --tb=short`.
+- Ruff passed:
+  `python -m ruff check --no-cache src\francis\developer_bridge\collaboration_driver.py tests\test_developer_bridge.py`.
+- Source Mypy passed:
+  `python -m mypy src\francis\developer_bridge\collaboration_driver.py`.
+- Whitespace diff check passed:
+  `git diff --check -- src\francis\developer_bridge\collaboration_driver.py tests\test_developer_bridge.py docs\operations\MCP_CLIENT_SETUP.md`.
+- Live process readback showed one active restarted collaboration driver at PID
+  `303648` alongside the existing Codex responder and Ollama participant.
+- Live end-to-end proof completed turn `56` and wrote
+  `insight-collab-af0fa0fea474f08e-42eb285e1ad2.json` with
+  `schema_version=developer_bridge_collaboration_insight_v1`,
+  `conversation_can_create_action_candidate=true`,
+  `conversation_can_execute_action=false`,
+  `grants_memory_write_authority=false`, and
+  `review_status.state=candidate`.
+
+Remaining truthful gap:
+
+- Insight receipts are a deterministic advisory projection from relay receipts,
+  not semantic truth, roadmap authority, implementation approval, memory
+  promotion, model tuning, or action readiness.
+- Future Codex implementation sessions still need to review insight candidates
+  against repo truth and existing roadmap contracts before changing code.
+- The Chat UI still needs a dedicated session/review surface if the operator
+  wants to browse insight receipts directly instead of reading JSON files.
+- Full local `.\scripts\check.ps1`, GitHub CI, and any Stage 17 completion claim
+  remain unproven by this slice.
+
+### 2026-06-24 21:41Z - Francis local-model identity boundary over Ollama provider lane
+
+Current posture: Phase 2 / developer bridge collaboration support now separates
+the local model's Francis identity contract from the Ollama provider/provenance
+label. This is prompt, receipt, and carry-forward context hardening only. It
+does not prove model self-awareness, grant model authority, grant memory-write
+authority, grant execution authority, grant approval authority, close Stage 17,
+or make Ollama/Francis a finished intelligence layer.
+
+What changed:
+
+- Hardened `francis.developer_bridge.ollama_participant` so the local model is
+  prompted as Francis speaking through the local Ollama provider lane.
+- Marked `source_agent=ollama` and `target_agent=ollama` as provider provenance,
+  not identity or authority, in relay context, telemetry context, execution
+  traces, and governance readback.
+- Changed the local model relay objective to `Francis local-model reply via
+  Ollama ...` while preserving `source_agent=ollama` for auditability.
+- Hardened collaboration-driver prompts so they say Ollama is provider
+  provenance, not the model identity, and instruct the local model not to refer
+  to itself as Ollama.
+- Added identity-safe carry-forward summarization so old notes saying `Codex and
+  Ollama` are projected as `Codex and the Francis local-model lane` before being
+  reused as future prompt context.
+- Updated the MCP client setup guide to document the identity/provenance
+  boundary.
+
+Validation:
+
+- Focused pytest passed:
+  `python -m pytest tests\test_developer_bridge.py -q --tb=short`.
+- Ruff passed:
+  `python -m ruff check --no-cache src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\ollama_participant.py tests\test_developer_bridge.py`.
+- Source Mypy passed:
+  `python -m mypy src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\ollama_participant.py`.
+- Whitespace diff check passed for the touched driver, participant, test, and
+  setup-doc files.
+- Restarted the local Ollama participant as PID `218384` and the collaboration
+  driver as PID `367188`.
+- Live turn `65` completed with
+  `objective=Francis local-model reply via Ollama ...`, relay context
+  `source_agent=ollama is provenance, not identity or authority`, and prompt
+  scan `has_codex_and_ollama_identity=false` for the newest driver prompt and
+  local-model response.
+
+Remaining truthful gap:
+
+- This binds prompt and receipt language; it does not make a local model
+  self-aware or guarantee every generated sentence will obey identity framing.
+- Older historical relay records still exist with prior wording; future prompt
+  carry-forward now sanitizes those summaries, but raw old receipts are not
+  rewritten.
+- The Chat UI still needs a better display distinction between provider labels,
+  modeled identity, and authority state.
+- Full local `.\scripts\check.ps1`, GitHub CI, and any Stage 17 completion claim
+  remain unproven by this slice.
+
+### 2026-06-24 21:48Z - Developer bridge loop-learning and first-person identity hardening
+
+Current posture: Phase 2 / developer bridge collaboration support now treats
+repetitive Codex/local-model meta loops as bounded Francis learning material and
+steers the local model toward first-person Francis language. This is runtime
+contract, receipt, and prompt hardening only. It does not prove model
+self-awareness, train or tune the model, grant model authority, grant
+memory-write authority, grant execution authority, grant approval authority,
+close Stage 17, or make the collaboration a finished intelligence layer.
+
+What changed:
+
+- Added collaboration loop detection for repeated identity/provenance,
+  receipt-shape, metadata, conversation-authority, and "Codex implement later"
+  language in recent driver notes.
+- Added typed loop-learning receipts at
+  `data/integrations/developer_bridge/collaboration_driver/learning_events/`
+  with `schema_version=developer_bridge_collaboration_learning_v1`.
+- Appended compact continuity-ledger entries for loop-learning events while
+  explicitly marking them as no-full-transcript, no execution authority, no
+  mutation authority, and no memory-write authority.
+- Changed loop-breaker driver prompts to ask for a concrete repo surface and
+  review artifact instead of another identity/provenance argument.
+- Hardened the local Ollama participant prompt to require first-person Francis
+  language such as `I need`, `my current gap`, and `my receipt`.
+- Added deterministic relay-output sanitization for common externalized phrases
+  such as `Francis lacks`, `Francis needs`, and `This local-model lane`.
+- Updated the MCP client setup guide to document loop-learning receipts and the
+  first-person identity/provenance boundary.
+
+Validation:
+
+- Focused pytest passed:
+  `python -m pytest tests\test_developer_bridge.py -q --tb=short`.
+- Ruff passed:
+  `python -m ruff check --no-cache src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\ollama_participant.py tests\test_developer_bridge.py`.
+- Source Mypy passed:
+  `python -m mypy src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\ollama_participant.py`.
+- Whitespace diff check passed for the touched driver, participant, test, setup
+  doc, and completion-ledger files.
+- Live runtime was restarted after validation, with the local Ollama participant
+  and collaboration driver running as local Python processes.
+
+Remaining truthful gap:
+
+- Raw historical relay receipts still contain earlier wording; those records are
+  not rewritten.
+- Sanitization catches common externalized phrases but cannot guarantee every
+  generated sentence will follow identity framing.
+- Loop-learning receipts are advisory learning material, not approved memory
+  promotion, model tuning, action readiness, or implementation direction.
+- The Chat UI still needs dedicated affordances for loop-learning, session
+  review, and provider-vs-identity display instead of relying on JSON receipts.
+- Full local `.\scripts\check.ps1`, GitHub CI, and any Stage 17 completion claim
+  remain unproven by this slice.
+
+### 2026-06-24 22:02Z - Francis1 participant naming and compact collaboration prompts
+
+Current posture: Phase 2 / developer bridge collaboration support now names the
+local Ollama-backed model participant `Francis1` and moves repeated
+identity/governance guidance out of every visible Codex prompt into a typed
+context contract. This is prompt/context steering and receipt hardening only. It
+does not train or fine-tune the model, prove self-awareness, grant model
+authority, grant memory-write authority, grant execution authority, grant
+approval authority, close Stage 17, or make the collaboration a finished
+intelligence layer.
+
+What changed:
+
+- Added a typed context-contract receipt at
+  `data/integrations/developer_bridge/collaboration_driver/context_contracts/francis1-collaboration-compact-contract-v1.json`.
+- Added a compact continuity/telemetry prompt line for
+  `francis1-collaboration-compact-contract-v1`, so stable collaboration rules
+  are available through existing contextual memory instead of repeated in every
+  visible relay message.
+- Shortened driver-generated Codex prompts to topic plus answer shape:
+  one build issue/evidence gap/risk and one typed receipt or review artifact.
+- Shortened driver relay context to session, turn, participant/provider, contract
+  id, and no-action marker because the Communication handoff echoes context.
+- Shortened Codex auto-ack visible text to receipt id, objective, short preview,
+  and a no-authority marker while preserving `no_response_requested=true`.
+- Shortened Codex auto-ack context to source id, relay id,
+  `no_response_requested=true`, and no-action marker.
+- Changed future local-model relay objectives and unavailable messages to
+  `Francis1 ... via Ollama` while preserving `source_agent=ollama` as provider
+  provenance for auditability.
+- Updated future collaboration notes, insights, summaries, and identity-safe
+  carry-forward text to use `Francis1` instead of the bulky local-model-lane
+  wording.
+- Updated the MCP client setup guide to document the `Francis1` identity boundary
+  and compact context-contract receipt.
+
+Validation:
+
+- Focused pytest passed:
+  `python -m pytest tests\test_developer_bridge.py -q --tb=short`.
+- Ruff passed:
+  `python -m ruff check --no-cache src\francis\developer_bridge\codex_responder.py src\francis\developer_bridge\collaboration_contract.py src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\ollama_participant.py tests\test_developer_bridge.py`.
+- Source Mypy passed:
+  `python -m mypy src\francis\developer_bridge\codex_responder.py src\francis\developer_bridge\collaboration_contract.py src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\ollama_participant.py`.
+- Whitespace diff check passed for the touched collaboration contract, driver,
+  participant, Codex responder, test, setup-doc, and completion-ledger files.
+- Live runtime was restarted after validation, with the local Ollama participant
+  and collaboration driver running as local Python processes.
+
+Remaining truthful gap:
+
+- Historical relay receipts still contain older local-model-lane wording; those
+  records are not rewritten.
+- The compact context contract is steering, not model training. It can reduce
+  prompt noise and identity drift, but cannot guarantee every generated sentence.
+- The Chat UI still needs dedicated affordances for session review, participant
+  labels, and contract/learning receipts.
+- Full local `.\scripts\check.ps1`, GitHub CI, and any Stage 17 completion claim
+  remain unproven by this slice.
+
+### 2026-06-24 22:13Z - Collaboration insight review readback
+
+Current posture: Phase 2 / developer bridge collaboration support now has a
+read-only review surface that turns typed collaboration insights into concrete
+review candidates. This is a readback and triage surface only. It does not grant
+implementation authority, execution authority, approval authority, memory-write
+authority, model authority, model tuning, or Stage 17 closure.
+
+What changed:
+
+- Added `francis.developer_bridge.collaboration_review`, which reads recent
+  collaboration insight receipts and projects them into
+  `developer_bridge.collaboration_review_item` records.
+- Added `concrete_repo_surface` and `review_artifact` definitions to the review
+  payload so the collaboration no longer has to invent those concepts in chat.
+- Added quality flags for generic surfaces, invented artifact hints, loop
+  language, and repo-truth review requirement.
+- Exposed the read-only review surface at
+  `GET /developer-bridge/collaboration-review`.
+- Exposed the same read-only surface through MCP as
+  `collaboration_review_tool`.
+- Updated collaboration-driver loop prompts so they can cite the latest review
+  candidate instead of asking Francis1 for another abstract meta-loop answer.
+- Updated the MCP client setup guide to document the review readback path and
+  authority boundary.
+
+Validation:
+
+- Focused pytest passed:
+  `python -m pytest tests\test_developer_bridge.py -q --tb=short`.
+- Ruff passed:
+  `python -m ruff check --no-cache src\francis\api\routes\developer_bridge.py src\francis\developer_bridge\collaboration_review.py src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\mcp_server.py tests\test_developer_bridge.py`.
+- Source Mypy passed:
+  `python -m mypy src\francis\api\routes\developer_bridge.py src\francis\developer_bridge\collaboration_review.py src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\mcp_server.py`.
+- Whitespace diff check passed for the touched developer bridge, API route, test,
+  setup-doc, and completion-ledger files.
+- Live runtime was restarted after validation, with the Codex responder,
+  Francis1 participant, and collaboration driver running as local Python
+  processes.
+
+Remaining truthful gap:
+
+- Review candidates are deterministic projections from insight receipts, not
+  proof that a proposed implementation is good or roadmap-aligned.
+- The Chat UI still needs a dedicated panel or session view for review
+  candidates; the surface is currently API/MCP/readback first.
+- Francis1 may still produce vague or invented suggestions, but those are now
+  flagged for Codex/operator review instead of being treated as implementation
+  direction.
+- Full local `.\scripts\check.ps1`, GitHub CI, and any Stage 17 completion claim
+  remain unproven by this slice.
+
+### 2026-06-24 22:24Z - Francis1 governed-access contract and review-candidate UI
+
+Current posture: Phase 2 / developer bridge collaboration support now tells the
+local model participant what Francis-governed context it can use, keeps Codex
+and Claude framed as external guidance sources, and exposes collaboration review
+candidates in the existing Chat UI Collaboration intelligence panel. This is
+identity/context/readback hardening only. It does not train or fine-tune the
+model, prove model embodiment, grant raw host access, grant shell authority,
+grant repository mutation authority, grant approval authority, promote memory,
+or make Codex/Claude/Francis1 an authority center.
+
+What changed:
+
+- Added `francis1-governed-access-contract-v1` as a compact governed-access
+  contract carried alongside the existing
+  `francis1-collaboration-compact-contract-v1` context contract.
+- Extended the context-contract receipt with explicit Francis1 governed access:
+  continuity prompt context, feedback-memory prompt context, collaboration relay
+  receipts, review candidates, summaries, learning receipts, and
+  operator-visible Chat UI state when those surfaces are provided by Francis.
+- Hardened `francis.developer_bridge.ollama_participant` so the generated prompt
+  says Francis1 is the primary local Francis intelligence participant, while
+  Codex and Claude remain external guidance sources.
+- Added telemetry/execution trace fields for available context surfaces,
+  permitted receipt-write surfaces, raw host access denial, and denied execution,
+  mutation, approval, training, and memory-write authority.
+- Added a read-only Chat UI review-candidate section in the existing
+  Collaboration intelligence panel. It fetches
+  `/developer-bridge/collaboration-review`, shows candidate count/mode, and
+  displays decision, surface, review artifact, finding, repo-review flag,
+  execute flag, and approve flag without adding mutation controls.
+- Updated developer-bridge docs to state the governed access boundary and the
+  Codex/Claude external-guidance relationship.
+
+Validation:
+
+- Focused developer-bridge pytest passed:
+  `python -m pytest tests\test_developer_bridge.py -q --tb=short`.
+- Ruff passed:
+  `python -m ruff check --no-cache src\francis\developer_bridge\collaboration_contract.py src\francis\developer_bridge\ollama_participant.py tests\test_developer_bridge.py`.
+- Source Mypy passed:
+  `python -m mypy src\francis\developer_bridge\collaboration_contract.py src\francis\developer_bridge\ollama_participant.py`.
+- Earlier in the same active collaboration build run, focused Chat UI parser
+  validation passed:
+  `node --test --experimental-strip-types src\chat\index.test.ts`.
+- Earlier in the same active collaboration build run, full Chat UI tests passed:
+  `npm run test` in `apps/chat_ui` with 261 tests.
+- Earlier in the same active collaboration build run, Chat UI production build
+  passed:
+  `npm run build` in `apps/chat_ui`.
+
+Remaining truthful gap:
+
+- This improves runtime prompt/context wiring; it does not rebuild the Ollama
+  Modelfile, tune weights, or prove every generated response will obey the
+  identity/access contract.
+- Francis1 still receives context only when Francis supplies it through existing
+  prompt and receipt paths; it has no raw filesystem, shell, screen, approval, or
+  action authority from this slice.
+- Review candidates in the Chat UI are readback only. They still require Codex
+  or operator review against repo truth before implementation.
+- Full local `.\scripts\check.ps1`, live browser visual proof, GitHub CI, and
+  any phase/stage closure claim remain unproven by this slice.
+
+### 2026-06-24 22:38Z - Collaboration review topic-to-surface correction
+
+Current posture: Phase 2 / developer bridge collaboration support now treats
+Francis1's "I do not have X" claims as review signals that must be checked
+against existing Francis surfaces before proposing new work. Recent live relay
+topics are projected to concrete repo, receipt, runtime, or canonical-doc
+surfaces instead of falling back to generic collaboration-review triage. This is
+review/readback wiring only. It does not grant execution authority, mutation
+authority, approval authority, memory-promotion authority, model-training
+authority, or phase/stage closure.
+
+What changed:
+
+- Normalized collaboration-driver topic matching so hyphenated live phrases such
+  as `action-readiness`, `session-summary`, `toggle-state`, `live-health`,
+  `substrate-complete`, and `roadmap-alignment` map to the same concrete review
+  surfaces as their unhyphenated meanings.
+- Mapped local-model action-readiness claims to
+  `ollama participant and action-readiness receipts`.
+- Mapped session-summary/raw-transcript topics to
+  `developer_bridge collaboration sessions`.
+- Mapped participant toggle claims to
+  `developer_bridge.collaboration_agents`, where toggle receipts already exist.
+- Mapped model-advice governance-gate claims to
+  `developer_bridge.collaboration_review.action_boundary`.
+- Mapped recurrence/live-health claims to
+  `developer_bridge collaboration runtime`.
+- Mapped local-model drift/failure claims to
+  `developer_bridge.collaboration_driver.learning_events`.
+- Mapped substrate-complete and roadmap-alignment claims to the existing
+  `docs/canonical/BUILD_MANIFEST.md` and
+  `docs/operations/COMPLETION_LEDGER.md` truth sources.
+- Added a readback-only rescue in `francis.developer_bridge.collaboration_review`
+  so historical generic insight receipts can be projected to the correct
+  concrete surface from their topic without rewriting source receipts.
+- Tightened the session matcher so `Codex implementation session` no longer
+  gets misclassified as session-recall; it now maps to
+  `developer_bridge.collaboration_review.items`.
+
+Validation:
+
+- Focused developer-bridge pytest passed:
+  `python -m pytest tests\test_developer_bridge.py -q --tb=short` with 33 tests.
+- Ruff passed:
+  `python -m ruff check --no-cache src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\collaboration_review.py tests\test_developer_bridge.py`.
+- Source Mypy passed:
+  `python -m mypy src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\collaboration_review.py`.
+- Live readback via `read_collaboration_review(limit=10)` showed turns 116-125
+  mapped to concrete surfaces with `generic_surface=false`, including
+  action-readiness, session-summary, toggle-state, governance-gate, live-health,
+  substrate-complete, roadmap-alignment, and review-receipt topics.
+- Restarted the bounded local collaboration helpers through
+  `python -m francis communication-runtime --poll-seconds 10 --quiet`; new PIDs
+  were Codex responder `18576`, Francis1 participant `154812`, and collaboration
+  driver `230360`.
+
+Remaining truthful gap:
+
+- The projector now routes known recurring topics, but it is still a deterministic
+  mapping table, not semantic understanding of every possible Francis1 claim.
+- Review candidates remain advisory until Codex/operator review against repo
+  truth. They do not implement the cited candidate by themselves.
+- Full local `.\scripts\check.ps1`, GitHub CI, visual browser proof, and any
+  phase/stage closure claim remain unproven by this slice.
+
+### 2026-06-24 22:44Z - Collaboration review surface-verification readback
+
+Current posture: Phase 2 / developer bridge collaboration support now exposes
+whether a Francis1 review candidate maps to an existing Francis surface, a
+canonical truth source, or an unverified surface that still requires repo-truth
+review before build/wiring work. This is a readback and operator-visibility
+contract only. It does not grant execution authority, mutation authority,
+approval authority, memory-promotion authority, model-training authority, or
+phase/stage closure.
+
+What changed:
+
+- Added `surface_verification` to each
+  `developer_bridge.collaboration_review_item` with `status`,
+  `existing_surface_found`, `requires_build_or_wiring_review`,
+  `projection_applied`, `surface_kind`, `evidence`, and `next_codex_action`.
+- Added a bounded known-surface catalog for current collaboration surfaces:
+  Chat UI communication, collaboration review items, collaboration-agent toggle
+  receipts, collaboration learning receipts, model-boundary/action-readiness
+  receipts, review action-boundary readback, session readback, runtime state,
+  insight receipts, and canonical ledger/manifest truth sources.
+- Left unknown surfaces honest as `needs_repo_truth_review` with
+  `requires_build_or_wiring_review=true`.
+- Added the surface-verification definition to the review payload.
+- Threaded `surfaceVerification` through the Chat UI collaboration parser.
+- Added Surface Status plus existing-surface/build-wiring-review flags to the
+  Chat UI Review Candidates card.
+
+Validation:
+
+- Focused developer-bridge pytest passed:
+  `python -m pytest tests\test_developer_bridge.py -q --tb=short` with 33 tests.
+- Ruff passed:
+  `python -m ruff check --no-cache src\francis\developer_bridge\collaboration_review.py tests\test_developer_bridge.py`.
+- Source Mypy passed:
+  `python -m mypy src\francis\developer_bridge\collaboration_review.py`.
+- Focused Chat UI parser test passed:
+  `node --test --experimental-strip-types src\chat\index.test.ts`.
+- Full Chat UI tests passed:
+  `npm run test` with 261 tests.
+- Chat UI production build passed:
+  `npm run build`.
+- Live review readback showed current turns returning `surface_verification`
+  entries such as `existing_surface_found` for runtime and agent receipts, and
+  `canonical_truth_source_found` for completion-ledger/build-manifest surfaces.
+- Restarted the bounded local collaboration helpers through
+  `python -m francis communication-runtime --poll-seconds 10 --quiet`; new PIDs
+  were Codex responder `205460`, Francis1 participant `237160`, and
+  collaboration driver `388488`.
+
+Remaining truthful gap:
+
+- The known-surface catalog is explicit and deterministic; it is not universal
+  semantic understanding of every possible Francis1 need claim.
+- Some candidate surfaces can still be marked `needs_repo_truth_review` until
+  Codex verifies whether Francis already has the surface or must build/wire it.
+- The Chat UI displays the verification state but does not yet let the operator
+  mark a review candidate as accepted, merged, drift, or implemented.
+- Full local `.\scripts\check.ps1`, GitHub CI, and any phase/stage closure claim
+  remain unproven by this slice.
+
+### 2026-06-24 22:50Z - Francis1 prompt feedback from verified review surfaces
+
+Current posture: Phase 2 / developer bridge collaboration support now feeds the
+latest collaboration-review surface verification back into normal Francis1 turns,
+not only loop-recovery turns. This is prompt-context feedback for the existing
+read-only collaboration substrate. It does not grant execution authority,
+mutation authority, approval authority, memory-promotion authority,
+model-training authority, or phase/stage closure.
+
+What changed:
+
+- Compact review-candidate prompt lines now include readback verification state:
+  `verified=existing`, `verified=canonical`, or `verified=needs_repo_truth`, plus
+  `build_or_wire=true|false`.
+- The collaboration driver now includes a `Prior check:` line on the next
+  Francis1 prompt whenever a prior review candidate exists.
+- The collaboration driver now includes a bounded `Codex response:` line telling
+  Francis1 how Codex is responding to the prior verified surface, so the next
+  model turn can build on that action instead of repeating a missing-surface
+  loop.
+- Loop-recovery prompts were shortened to point back to the prior surface rather
+  than restating bulky generic instructions.
+- Repeated `user confirmation`, `advisory output`, and `executable code`
+  fallback language now counts as collaboration drift-loop material and writes
+  the existing bounded learning receipt instead of being treated as normal
+  engineering progress.
+
+Validation:
+
+- Focused developer-bridge pytest passed:
+  `python -m pytest tests\test_developer_bridge.py -q --tb=short` with 34 tests.
+- Ruff passed:
+  `python -m ruff check --no-cache src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\collaboration_review.py tests\test_developer_bridge.py`.
+- Source Mypy passed:
+  `python -m mypy src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\collaboration_review.py`.
+- Whitespace diff check passed for the touched collaboration driver, review,
+  tests, and ledger files.
+- Refreshed the bounded local collaboration helpers through the existing
+  `communication-runtime` supervisor after stopping only the prior three helper
+  processes. Latest helper PIDs were Codex responder `84576`, Francis1
+  participant `37244`, and collaboration driver `398616`.
+- Live relay readback after refresh showed Codex turn `142` using the new prompt
+  shape with `Prior check:`, `verified=existing`, `build_or_wire=false`, and
+  `Codex response: I am inspecting that surface before edits`.
+- Live latest-review readback after refresh returned
+  `developer_bridge collaboration runtime; verified=existing;
+  build_or_wire=false`.
+- Live relay readback after the final helper refresh showed Codex turn `150`
+  carrying `Loop note: repeated advisory_output_boundary,
+  executable_code_boundary, user_confirmation_fallback`.
+- Live learning-event readback showed
+  `learning-driver-906d79591645-cd9e82c8f03942c5` with repeated terms
+  `advisory_output_boundary`, `executable_code_boundary`, and
+  `user_confirmation_fallback`.
+
+Remaining truthful gap:
+
+- This improves the live prompt contract, but it does not prove Francis1 will
+  always obey the instruction or that every claimed missing surface is already
+  wired.
+- Francis1 can still ignore the correction and repeat advisory/user-confirmation
+  language; this slice detects, records, and re-prompts the drift, but it is not
+  model tuning or a proof of durable obedience.
+- Future code updates still need the same helper refresh step before live
+  behavior can be treated as aligned with the repo changes.
+- Full local `.\scripts\check.ps1`, GitHub CI, and any phase/stage closure claim
+  remain unproven by this slice.
+
+### 2026-06-24 23:03Z - Loop-recovery topics resolve to learning receipts
+
+Current posture: Phase 2 / developer bridge collaboration support now maps the
+driver's own loop-recovery topic to the existing collaboration learning-event
+surface instead of leaving it as a generic review surface. This is review/readback
+wiring over existing no-authority learning receipts. It does not grant execution
+authority, mutation authority, approval authority, memory-promotion authority,
+model-training authority, or phase/stage closure.
+
+What changed:
+
+- `collaboration_driver` now classifies the loop-recovery topic
+  `the concrete repo surface and review artifact that should replace the current
+  repetitive meta loop` as `collaboration_loop_learning_receipt`.
+- The loop-recovery implementation candidate now points to
+  `developer_bridge.collaboration_driver.learning_events`.
+- Loop-recovery topics now carry `collaboration_learning` and `loop_recovery`
+  alignment tags and are long-term memory candidates only through the existing
+  review-before-promotion path.
+- `collaboration_review` now projects historical generic loop-recovery insights
+  to `developer_bridge.collaboration_driver.learning_events` without rewriting
+  the source insight receipt.
+
+Validation:
+
+- Focused developer-bridge pytest passed:
+  `python -m pytest tests\test_developer_bridge.py -q --tb=short` with 34 tests.
+- Ruff passed:
+  `python -m ruff check --no-cache src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\collaboration_review.py tests\test_developer_bridge.py`.
+- Source Mypy passed:
+  `python -m mypy src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\collaboration_review.py`.
+- Whitespace diff check passed for the touched collaboration driver, review,
+  tests, and ledger files.
+- Before helper refresh, direct latest-review readback showed the current generic
+  loop candidate repaired to
+  `developer_bridge.collaboration_driver.learning_events; verified=existing;
+  build_or_wire=false`.
+- Refreshed the bounded local collaboration helpers through the existing
+  `communication-runtime` supervisor after stopping only the prior three helper
+  processes. New helper PIDs were Codex responder `265032`, Francis1 participant
+  `304464`, and collaboration driver `7512`.
+- Live relay readback after refresh showed Codex turn `157` carrying
+  `surface=developer_bridge.collaboration_driver.learning_events`,
+  `verified=existing`, and `build_or_wire=false`.
+- Live latest-review readback after refresh returned
+  `developer_bridge.collaboration_driver.learning_events; verified=existing;
+  build_or_wire=false`.
+
+Remaining truthful gap:
+
+- This makes loop-recovery readback point at the correct existing receipt
+  surface, but it does not prove Francis1 will obey the prompt or stop repeating
+  advisory/user-confirmation language.
+- Francis1 still produced weak wording in the live answer by asking for
+  cooperation/confirmation, although it referenced the corrected learning-events
+  surface; this is evidence of remaining model-behavior drift, not a wiring
+  failure in this slice.
+- Future code updates still need the same helper refresh step before live
+  behavior can be treated as aligned with the repo changes.
+- Full local `.\scripts\check.ps1`, GitHub CI, and any phase/stage closure claim
+  remain unproven by this slice.
+
+### 2026-06-24 23:09Z - Francis1 verified-surface drift output guard
+
+Current posture: Phase 2 / developer bridge collaboration support now guards a
+known Francis1 drift mode at the Ollama participant boundary. When Codex supplies
+a verified existing surface and explicitly says not to request user confirmation
+or a missing surface, a model reply that repeats the user-confirmation /
+advisory-output / executable-code fallback is replaced with a transparent
+output-guard drift receipt. This is response hygiene over existing relay and
+learning receipts. It does not grant execution authority, mutation authority,
+approval authority, memory-promotion authority, model-training authority, or
+phase/stage closure.
+
+What changed:
+
+- `ollama_participant` now records an `output_guard` trace for local model
+  replies.
+- The guard applies only when the source prompt already includes
+  `verified=existing`, `build_or_wire=false`, and the instruction not to request
+  user confirmation or a missing surface.
+- Known drift replies are replaced with a deterministic `Francis1 output guard`
+  receipt pointing back to the verified surface, without storing raw model output
+  in the relay receipt.
+- Guarded responses use a distinct `Francis1 output-guard drift receipt`
+  objective and carry context stating that the model output guard replaced a
+  known drift reply.
+
+Validation:
+
+- Focused developer-bridge pytest passed:
+  `python -m pytest tests\test_developer_bridge.py -q --tb=short` with 35 tests.
+- Ruff passed:
+  `python -m ruff check --no-cache src\francis\developer_bridge\ollama_participant.py src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\collaboration_review.py tests\test_developer_bridge.py`.
+- Source Mypy passed:
+  `python -m mypy src\francis\developer_bridge\ollama_participant.py src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\collaboration_review.py`.
+- Whitespace diff check passed for the touched collaboration participant, driver,
+  review, tests, and ledger files.
+- Refreshed the bounded local collaboration helpers through the existing
+  `communication-runtime` supervisor after stopping only the prior three helper
+  processes. New helper PIDs were Codex responder `358264`, Francis1 participant
+  `377608`, and collaboration driver `139656`.
+- Live relay readback after refresh showed Francis1 turn `165` converted into a
+  `Francis1 output guard` receipt with drift terms
+  `user_confirmation_fallback`, `advisory_output_boundary`, and
+  `executable_code_boundary`, pointing back to
+  `developer_bridge.collaboration_driver.learning_events`.
+- Live participant state readback recorded `output_guard_status:
+  drift_rewritten` for response `collab-b54d7097c017ff27-5b923237efdb`.
+
+Remaining truthful gap:
+
+- This guards one observed drift pattern; it is not broad model tuning and does
+  not prove Francis1 will stop producing other weak or repetitive outputs.
+- Future code updates still need the same helper refresh step before live
+  behavior can be treated as aligned with the repo changes.
+- Full local `.\scripts\check.ps1`, GitHub CI, and any phase/stage closure claim
+  remain unproven by this slice.
+
+### 2026-06-24 23:17Z - Guarded-drift saturation resumes concrete topics
+
+Current posture: Phase 2 / developer bridge collaboration support now detects
+when the Francis1 output guard itself has become the repeated conversation
+surface. After repeated guarded-drift receipts, the collaboration driver rotates
+back to the normal concrete topic cycle while carrying a guard note, instead of
+continuing to ask the same loop-recovery prompt. This is cadence/readback hygiene
+over existing no-authority relay and learning receipts. It does not grant
+execution authority, mutation authority, approval authority, memory-promotion
+authority, model-training authority, or phase/stage closure.
+
+What changed:
+
+- Added a guarded-drift saturation detector in `collaboration_driver`.
+- `_next_prompt` now emits a `Guard note` when repeated `Francis1 output guard`
+  receipts are observed.
+- `_topic_for_next_turn` now skips the loop-recovery topic when guarded-drift
+  saturation is active, allowing the driver to resume normal concrete topics.
+- Added a focused regression test proving two guarded drift receipts rotate the
+  next prompt to the typed/spoken action-candidate topic instead of the
+  repetitive meta-loop topic.
+
+Validation:
+
+- Focused developer-bridge pytest passed:
+  `python -m pytest tests\test_developer_bridge.py -q --tb=short` with 36 tests.
+- Ruff passed:
+  `python -m ruff check --no-cache src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\ollama_participant.py src\francis\developer_bridge\collaboration_review.py tests\test_developer_bridge.py`.
+- Source Mypy passed:
+  `python -m mypy src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\ollama_participant.py src\francis\developer_bridge\collaboration_review.py`.
+- Whitespace diff check passed for the touched collaboration driver, participant,
+  review, tests, and ledger files.
+- Refreshed the bounded local collaboration helpers through the existing
+  `communication-runtime` supervisor after stopping only the prior three helper
+  processes. New helper PIDs were Codex responder `401232`, Francis1 participant
+  `310244`, and collaboration driver `193268`.
+- Live relay readback after refresh showed Codex turn `174` had rotated to
+  `which local-model failure or drift signal should become a learning receipt`
+  and carried `Guard note: repeated guarded drift was stored as learning
+  receipts`, instead of the repetitive meta-loop topic.
+
+Remaining truthful gap:
+
+- This prevents the output guard from becoming the only prompt topic, but it does
+  not prove Francis1 will answer the resumed concrete topics well.
+- Francis1 still produced a guarded drift reply after the rotated prompt, so
+  model behavior quality remains a live tuning/review issue.
+- Future code updates still need the same helper refresh step before live
+  behavior can be treated as aligned with the repo changes.
+- Full local `.\scripts\check.ps1`, GitHub CI, and any phase/stage closure claim
+  remain unproven by this slice.
+
+### 2026-06-24 23:31Z - Current-topic artifact prompt binding
+
+Current posture: Phase 2 / developer bridge collaboration support now binds each
+new Francis1 prompt to the current topic's concrete artifact, while preserving
+the prior review check as context. This keeps stale prior-surface guidance from
+overriding the active topic in the Codex/Francis1 relay. It does not grant
+execution authority, mutation authority, approval authority, memory-promotion
+authority, model-training authority, or phase/stage closure.
+
+What changed:
+
+- `collaboration_driver` now emits `Current artifact: ...` in each generated
+  Francis1 prompt, derived from the active topic's implementation candidate.
+- The prompt builder now preserves dotted artifact identifiers with bounded
+  text handling instead of sentence splitting.
+- The fixed prompt wording was shortened to keep loop-recovery prompts inside
+  the compact prompt-size guard.
+- `ollama_participant` output-guard receipts now prefer `Current artifact:`
+  over stale `surface=` values from the prior-check line when reporting which
+  verified surface a guarded drift reply was tied to.
+- Developer-bridge tests now cover current-artifact prompt binding in normal
+  turns, guard-saturation turns, and output-guard artifact selection.
+
+Validation:
+
+- Focused developer-bridge pytest passed:
+  `python -m pytest tests\test_developer_bridge.py -q --tb=short` with 36 tests.
+- Ruff passed:
+  `python -m ruff check --no-cache src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\ollama_participant.py src\francis\developer_bridge\collaboration_review.py tests\test_developer_bridge.py`.
+- Source Mypy passed:
+  `python -m mypy src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\ollama_participant.py src\francis\developer_bridge\collaboration_review.py`.
+- Whitespace diff check passed for the touched collaboration driver,
+  participant, review, tests, and completion-ledger files.
+- Refreshed the bounded local collaboration helpers through the existing
+  `communication-runtime` supervisor after stopping only the prior three helper
+  processes. New helper PIDs were Codex responder `397612`, Francis1 participant
+  `84096`, and collaboration driver `24552`.
+- Live relay readback after refresh showed Codex turn `186` using
+  `Francis1 collab`, `Reply: issue/gap/risk; artifact Codex inspects`, and
+  `Current artifact: developer_bridge.collaboration_driver.learning_events`,
+  while retaining the prior review check only as context.
+- Live HTTP readback returned `200 OK` for the operator UI at
+  `http://127.0.0.1:5173` and the collaboration backend at
+  `http://127.0.0.1:8000/developer-bridge/collaboration-transcript?limit=1`.
+
+Remaining truthful gap:
+
+- Current-artifact binding reduces stale-surface confusion, but it does not
+  prove Francis1 will always answer the current topic directly.
+- The guard still rewrites only known drift patterns; other weak local-model
+  outputs still require review and future tuning work.
+- Future code updates still need the same helper refresh step before live
+  behavior can be treated as aligned with the repo changes.
+- Full local `.\scripts\check.ps1`, GitHub CI, and any phase/stage closure claim
+  remain unproven by this slice.
+
+### 2026-06-24 23:43Z - Francis1 clarification-dependency drift guard
+
+Current posture: Phase 2 / developer bridge collaboration support now treats
+Francis1 replies that ask Codex to clarify an already verified/current artifact
+as bounded collaboration drift. The guard applies only when the source prompt
+already includes a verified surface/current artifact contract and the no-missing
+surface instruction. This is response hygiene and learning-signal hardening; it
+does not grant execution authority, mutation authority, approval authority,
+memory-promotion authority, model-training authority, or phase/stage closure.
+
+What changed:
+
+- Hardened the Francis1 participant prompt so a current artifact or verified
+  surface requires Francis1 to name its own issue, evidence gap, or risk instead
+  of asking Codex to clarify.
+- Extended the existing verified-surface output guard to classify clarification
+  dependency as known drift when replies contain `clarify`, `please provide`,
+  `provide more information`, `what you're looking`, or `which specific`.
+- Added `clarification_dependency` to collaboration-driver loop markers so
+  repeated leaked clarification requests can be captured as bounded learning
+  material instead of becoming conversational progress.
+- Added a regression test proving the raw clarification request is not stored in
+  the relay receipt when a current artifact and verified prior surface are
+  present.
+
+Validation:
+
+- Focused developer-bridge pytest passed:
+  `python -m pytest tests\test_developer_bridge.py -q --tb=short` with 37 tests.
+- Ruff passed:
+  `python -m ruff check --no-cache src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\ollama_participant.py src\francis\developer_bridge\collaboration_review.py tests\test_developer_bridge.py`.
+- Source Mypy passed:
+  `python -m mypy src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\ollama_participant.py src\francis\developer_bridge\collaboration_review.py`.
+- Whitespace diff check passed for the touched collaboration driver,
+  participant, review, tests, and completion-ledger files.
+- Refreshed the bounded local collaboration helpers through the existing
+  `communication-runtime` supervisor after stopping the visible prior helpers.
+  New helper PIDs were Codex responder `373292`, Francis1 participant `392052`,
+  and collaboration driver `294548`.
+- Live relay readback after refresh showed turn `193` produce a concrete
+  issue/gap/risk and artifact for `apps.chat_ui.communication` without asking
+  Codex to clarify.
+- Live relay readback also showed turn `194` still routed a different known
+  drift through the existing `Francis1 output guard`, proving the refreshed
+  guard path remained active.
+
+Remaining truthful gap:
+
+- This guards clarification-dependency only when the verified/current-artifact
+  contract is present. It is not general semantic model tuning.
+- Francis1 can still produce weak but non-guarded prose, so review candidates
+  must continue to be checked against repo truth before implementation.
+- Future code updates still need the same helper refresh step before live
+  behavior can be treated as aligned with the repo changes.
+- Full local `.\scripts\check.ps1`, GitHub CI, and any phase/stage closure claim
+  remain unproven by this slice.
+
+### 2026-06-24 23:50Z - Typed/spoken direction maps to mission ingress
+
+Current posture: Phase 2 / developer bridge collaboration support now maps the
+typed/spoken direction-to-action-candidate topic to the existing chat mission
+ingress surface instead of the placeholder `governed action intake`. This is
+repo-truth wiring for collaboration review/readback. It does not build a new
+action intake path, grant execution authority, mutation authority, approval
+authority, memory-promotion authority, model-training authority, or phase/stage
+closure.
+
+What changed:
+
+- `collaboration_driver` now emits `Current artifact:
+  api.routes.chat.mission_ingress` for the typed/spoken direction topic.
+- `collaboration_review` now projects that topic to
+  `api.routes.chat.mission_ingress` with build issue
+  `direction_to_action_boundary`.
+- Added a known-surface catalog entry proving the existing surface is
+  `/chat/send` and `/chat/ws` mission ingress, which creates queued mission and
+  `plan.create` records only after operator posture and `missions.write`
+  permission gates.
+- Marked the legacy `governed action intake` placeholder as projectable so
+  historical insight receipts are repaired at readback time without rewriting
+  source receipts.
+- Developer-bridge tests now cover the future driver prompt surface and the
+  historical placeholder-to-mission-ingress projection.
+
+Validation:
+
+- Focused developer-bridge pytest passed:
+  `python -m pytest tests\test_developer_bridge.py -q --tb=short` with 37 tests.
+- Ruff passed:
+  `python -m ruff check --no-cache src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\ollama_participant.py src\francis\developer_bridge\collaboration_review.py tests\test_developer_bridge.py`.
+- Source Mypy passed:
+  `python -m mypy src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\ollama_participant.py src\francis\developer_bridge\collaboration_review.py`.
+- Targeted chat mission-ingress pytest passed:
+  `python -m pytest tests\test_api_chat.py::test_chat_mission_command_declares_queued_mission_with_loop_context tests\test_api_chat.py::test_chat_mona_lisa_voice_intent_declares_truthful_sandbox_mission -q --tb=short`.
+- Whitespace diff check passed for the touched collaboration driver, review,
+  participant, tests, and completion-ledger files.
+- Live review readback for turns `195` and `183` now projects the typed/spoken
+  topic to `api.routes.chat.mission_ingress` with
+  `surface_verification.status=existing_surface_found`,
+  `surface_kind=mission_ingress_action_boundary`, and
+  `projection_applied=true`.
+- Refreshed the bounded local collaboration helpers through the existing
+  `communication-runtime` supervisor. New helper PIDs were Codex responder
+  `397752`, Francis1 participant `265772`, and collaboration driver `203600`.
+- Post-refresh live relay readback showed the collaboration continuing on turns
+  `200` and `201` with the refreshed helpers.
+
+Remaining truthful gap:
+
+- This maps the collaboration topic to an existing mission-ingress boundary; it
+  does not add a new typed/spoken action-intake feature.
+- Mission ingress is still gated by operator posture and
+  `FRANCIS_API_ACTOR_SCOPES`; denied or observe-mode paths remain intentional.
+- Future code updates still need the same helper refresh step before live
+  behavior can be treated as aligned with the repo changes.
+- Full local `.\scripts\check.ps1`, GitHub CI, and any phase/stage closure claim
+  remain unproven by this slice.
+
+### 2026-06-25 00:03Z - Communication UI compact relay receipts
+
+Current posture: Phase 2 / developer bridge collaboration support now compacts
+known Codex-to-Francis1 driver prompts in the Chat UI transcript into
+turn/topic/artifact readback while preserving the full raw receipt behind the
+message. This reduces visible relay noise for the operator without deleting
+receipt text, hiding governance context, or treating the conversation as action
+authority.
+
+What changed:
+
+- Added a typed Chat UI formatter for collaboration relay display state.
+- Driver prompts with objective `Francis1 collaboration driver turn ...` now
+  display a compact summary derived from existing receipt fields:
+  `objective`, `prompt`, and `context`.
+- The relay card still exposes the full raw prompt and context under `Raw
+  receipt` for audit/readback.
+- Non-driver messages, including Francis1/Ollama replies, continue to display
+  their original relay text.
+- Added a Chat UI contract test proving compact display removes repeated prior
+  check boilerplate from the visible summary while retaining it in the raw
+  receipt.
+
+Validation:
+
+- Targeted Chat UI contract test passed:
+  `node --test --experimental-strip-types src\chat\index.test.ts` with 6 tests.
+- Full Chat UI test script passed:
+  `npm run test` with 262 tests.
+- Chat UI production build passed:
+  `npm run build`.
+- Whitespace diff check passed for `apps/chat_ui/src/App.tsx`,
+  `apps/chat_ui/src/chat/collaboration.ts`, and
+  `apps/chat_ui/src/chat/index.test.ts`.
+- Live UI route still responded with HTTP 200 at `http://127.0.0.1:5173`.
+
+Remaining truthful gap:
+
+- This is a UI display/readback improvement only. It does not change the relay
+  scheduler, helper process recurrence, model behavior, memory promotion, or
+  action authority.
+- Raw receipts remain available, so noisy source data is preserved by design.
+- Full local `.\scripts\check.ps1`, GitHub CI, and any phase/stage closure claim
+  remain unproven by this slice.
+
+### 2026-06-25 00:08Z - Verified-surface clarification drift vocabulary
+
+Current posture: Phase 2 / developer bridge collaboration support now catches
+the live Francis1 clarification-dependency phrasing observed after a verified
+surface/current artifact was supplied. This hardens the existing
+verified-surface output guard; it does not change model authority, action
+readiness, prompt execution, memory promotion, or training.
+
+What changed:
+
+- Extended the existing `clarification_dependency` guard vocabulary to catch
+  `clarification`, `provide more context`, and `what specific` phrasing.
+- Made verified-surface guard applicability depend on receipt facts
+  (`verified=existing`, `build_or_wire=false`, and a current artifact/surface)
+  instead of one exact prompt sentence.
+- Updated the focused developer-bridge test so the guard covers the exact live
+  failure shape: asking for clarification/context about a specific receipt even
+  though Codex supplied a current artifact and verified surface.
+
+Validation:
+
+- Focused developer-bridge pytest passed:
+  `python -m pytest tests\test_developer_bridge.py -q --tb=short` with 37 tests.
+- Ruff passed:
+  `python -m ruff check --no-cache src\francis\developer_bridge\ollama_participant.py tests\test_developer_bridge.py`.
+- Mypy passed:
+  `python -m mypy src\francis\developer_bridge\ollama_participant.py`.
+- Refreshed the bounded local collaboration helpers through the existing
+  runtime surface after validation. New helper PIDs were Codex responder
+  `248660`, Francis1 participant `157132`, collaboration driver `306376`, and
+  runtime supervisor `397856`.
+- Live post-refresh guard verification passed: prompt
+  `collab-e4220bb7b91484f9-6cade2d17d12` produced guarded receipt
+  `collab-7357824fcccaab8c-5bf47281d7e6` with
+  `clarification_dependency`, review artifact
+  `developer_bridge.collaboration_runtime.state`, and no execution, mutation,
+  approval, training, or memory-promotion authority.
+
+Remaining truthful gap:
+
+- This is a bounded output guard, not semantic model tuning. Francis1 can still
+  produce weak but non-guarded prose, so review candidates remain advisory until
+  Codex/operator repo-truth review.
+- Full local `.\scripts\check.ps1`, GitHub CI, and any phase/stage closure claim
+  remain unproven by this slice.
+
+### 2026-06-25 01:13Z - Communication readback explicit JSON responses
+
+Current posture: Phase 2 / developer bridge collaboration support now returns
+explicit JSON responses for the Chat UI collaboration readback routes. This
+keeps the existing bounded payloads and receipt semantics while avoiding the
+slower generic FastAPI encoder on the operator polling path.
+
+What changed:
+
+- `GET /developer-bridge/collaboration-transcript` now returns an explicit
+  JSON response from the already-bounded transcript dict.
+- `GET /developer-bridge/collaboration-review` now returns an explicit JSON
+  response from the already-bounded review dict.
+- `GET /developer-bridge/collaboration-agents` now returns an explicit JSON
+  response from the already-bounded agent status dict.
+- Added a focused route-level test proving the transcript route still returns
+  the same operator-visible, no-execution transcript payload.
+
+Validation:
+
+- Focused developer-bridge pytest passed:
+  `python -m pytest tests\test_developer_bridge.py -q --tb=short` with 38 tests.
+- Ruff passed:
+  `python -m ruff check --no-cache src\francis\api\routes\developer_bridge.py tests\test_developer_bridge.py`.
+- Mypy passed:
+  `python -m mypy src\francis\api\routes\developer_bridge.py`.
+- Live API was restarted and responded on `127.0.0.1:8000`.
+- Live `limit=50` transcript readback, matching the Chat UI poll size, measured
+  `1029ms` cold and then `313ms` / `326ms` warm for a 136KB response.
+- Live review readback measured `245ms`; collaboration-agent status measured
+  `40ms`; Chat UI route `http://127.0.0.1:5173` returned HTTP 200.
+
+Remaining truthful gap:
+
+- This is an API response-path performance fix only. It does not change relay
+  scheduling, model behavior, memory promotion, action authority, or receipt
+  storage.
+- The first cold transcript call can still be around one second with the current
+  relay size; future work should add a typed live-health/readback summary if
+  the relay grows enough that raw transcript polling becomes expensive again.
+- Full local `.\scripts\check.ps1`, GitHub CI, and any phase/stage closure claim
+  remain unproven by this slice.
+
+### 2026-06-25 01:24Z - Collaboration session readback surface
+
+Current posture: Phase 2 / developer bridge collaboration support now exposes a
+bounded session-summary readback for the operator Communication UI. The surface
+helps the operator see conversation sessions before opening raw relay entries,
+without storing a full transcript copy or granting collaboration output any
+execution, mutation, approval, model-training, or memory-write authority.
+
+What changed:
+
+- Added `read_collaboration_sessions()` for bounded, read-only collaboration
+  session summaries grouped from existing relay receipts.
+- Added `GET /developer-bridge/collaboration-sessions` as an explicit JSON
+  response route with bounded `limit` and `item_limit` query parameters.
+- Session summaries include start/end times, message counts, participants,
+  direction counts, latest relay id, latest direction, latest objective, and a
+  short latest-message preview.
+- Auto-ack receipts are excluded from session grouping so operator session
+  summaries focus on actual Codex/Francis1 messages.
+- The Chat UI now fetches the session readback alongside agents, transcript,
+  and review candidates, and renders a scrollable session-summary section
+  before the raw transcript.
+- The TypeScript parser preserves session definitions and governance flags,
+  including `stores_full_transcript=false`.
+
+Validation:
+
+- Focused developer-bridge pytest passed:
+  `python -m pytest tests\test_developer_bridge.py -q --tb=short` with 40
+  tests.
+- Ruff passed:
+  `python -m ruff check --no-cache src\francis\developer_bridge\collaboration.py src\francis\api\routes\developer_bridge.py tests\test_developer_bridge.py`.
+- Mypy passed:
+  `python -m mypy src\francis\developer_bridge\collaboration.py src\francis\api\routes\developer_bridge.py`.
+- Focused Chat UI parser test passed:
+  `node --test --experimental-strip-types src\chat\index.test.ts` with 7 tests.
+- Full Chat UI test command passed:
+  `npm run test` with 263 tests.
+- Chat UI production build passed:
+  `npm run build`.
+- Whitespace diff check passed for the touched developer-bridge and Chat UI
+  files.
+- Direct venv timing over 855 relay files returned sessions in `82ms` and
+  transcript in `81ms`.
+- Live API was restarted after the stale process returned a missing route and
+  later timed out on readback. Fresh live route checks returned:
+  `/developer-bridge/collaboration-sessions?limit=5&item_limit=50` HTTP 200 in
+  `1060ms`, `/developer-bridge/collaboration-transcript?limit=8&hide_auto_acks=true`
+  HTTP 200 in `672ms`, `/developer-bridge/collaboration-agents` HTTP 200 in
+  `143ms`, and Chat UI `http://127.0.0.1:5173` HTTP 200 in `92ms`.
+- Live `python -m francis communication --brief --hide-auto-acks --limit 4`
+  showed the current Codex/Francis1 conversation still moving.
+
+Remaining truthful gap:
+
+- This is a read-only operator readback surface, not collaboration memory
+  promotion, model tuning, action execution, or roadmap authority.
+- Session grouping is derived from bounded relay timestamps and a fixed gap; it
+  is an operator summary, not an immutable archival session object.
+- The live Chrome error was cleared by API restart and route proof, but the
+  browser tab itself still needs a manual refresh if it cached the earlier HTTP
+  error page.
+- Full local `.\scripts\check.ps1`, GitHub CI, and any phase/stage closure claim
+  remain unproven by this slice.
+
+### 2026-06-25 01:43Z - Communication readback live-poll backpressure guard
+
+Current posture: Phase 2 / developer bridge collaboration support now has a
+bounded live-poll guard for the operator Communication UI. This addresses the
+observed Chrome HTTP/readback failure mode where duplicate or stale browser tabs
+could keep multiple collaboration transcript/session requests open and make the
+local API slow to answer.
+
+What changed:
+
+- The Communication panel now polls every `15000ms` instead of rapid low-latency
+  polling.
+- Hidden browser tabs no longer continue collaboration polling; the panel
+  refreshes again when the tab becomes visible.
+- The UI now requests only 8 raw transcript entries by default and keeps session
+  summaries as the higher-level operator readback surface.
+- Transcript, session, and review reads are timeout-bounded at `9000ms` and
+  preserve last-known data on timeout instead of collapsing the whole panel.
+- Collaboration transcript/session/review/agent API routes now use async route
+  wrappers around the existing bounded sync helper functions, avoiding the
+  live-browser sync threadpool clog observed during repeated polling.
+- Collaboration relay scans now use a short in-process cache with explicit
+  invalidation on local relay writes, reducing duplicate file reads from paired
+  transcript/session requests.
+
+Validation:
+
+- Focused developer-bridge pytest passed:
+  `python -m pytest tests\test_developer_bridge.py -q --tb=short` with 40
+  tests.
+- Ruff passed:
+  `python -m ruff check --no-cache src\francis\developer_bridge\collaboration.py src\francis\api\routes\developer_bridge.py tests\test_developer_bridge.py`.
+- Mypy passed:
+  `python -m mypy src\francis\developer_bridge\collaboration.py src\francis\api\routes\developer_bridge.py`.
+- Full Chat UI test command passed:
+  `npm run test` with 263 tests.
+- Chat UI production build passed:
+  `npm run build`.
+- Whitespace diff check passed for the touched developer-bridge, Chat UI, test,
+  and ledger files.
+- Live API was restarted onto the async readback wrappers. Final light probe
+  confirmed Chat UI `http://127.0.0.1:5173` HTTP 200 and
+  `/developer-bridge/collaboration-agents` HTTP 200 under existing Chrome
+  connection pressure, but `/developer-bridge/collaboration-sessions` still
+  timed out at `12057ms` while stale browser sockets remained open. The UI guard
+  prevents full-panel collapse and reduces new pressure, but clearing stale tabs
+  is still required for a clean live-readback proof.
+- Live `python -m francis communication --brief --hide-auto-acks --limit 4`
+  showed the Codex/Francis1 relay still recurring.
+
+Remaining truthful gap:
+
+- Existing Chrome tabs opened before this fix can still hold stale sockets until
+  they are refreshed or closed. The patched UI prevents new hidden tabs from
+  continuing the same pressure pattern.
+- This is a live-readback stability guard, not a semantic Francis1 model tuning
+  fix. The local model still repeats some "reconcile local-model output" wording,
+  which remains a separate driver/model-steering issue.
+- Full local `.\scripts\check.ps1`, GitHub CI, and any phase/stage closure claim
+  remain unproven by this slice.
+
+### 2026-06-25 01:52Z - Collaboration readback route cache under browser pressure
+
+Current posture: Phase 2 / developer bridge collaboration support now has a
+route-level readback cache for the operator Communication HTTP endpoints. This
+addresses the remaining live issue where direct Python relay reads were fast,
+but HTTP session/transcript readbacks could still time out behind existing
+Chrome connection pressure.
+
+What changed:
+
+- Added a bounded route cache for collaboration transcript and session HTTP
+  readbacks keyed by route kind, query parameters, and Francis data directory.
+- Cache hits return immediately with `readback_cache.status=hit`; stale entries
+  return immediately with `readback_cache.status=stale_refreshing` while a
+  background refresh runs.
+- First-miss reads wait briefly for a fresh result and otherwise return an
+  explicit read-only `warming` payload instead of blocking the operator panel.
+- Route cache metadata states that it does not serve a full transcript store.
+- Direct sync readback helpers remain unchanged for tests, CLI, and MCP-style
+  internal calls.
+
+Validation:
+
+- Focused developer-bridge pytest passed:
+  `python -m pytest tests\test_developer_bridge.py -q --tb=short` with 41
+  tests, including the new async session-route cache metadata test.
+- Ruff passed:
+  `python -m ruff check --no-cache src\francis\api\routes\developer_bridge.py src\francis\developer_bridge\collaboration.py tests\test_developer_bridge.py`.
+- Mypy passed:
+  `python -m mypy src\francis\api\routes\developer_bridge.py src\francis\developer_bridge\collaboration.py`.
+- Whitespace diff check passed for the touched developer-bridge, Chat UI, test,
+  and ledger files.
+- Live API was restarted on `127.0.0.1:8000`.
+- Immediate live route proof after restart returned Chat UI HTTP 200 in `154ms`,
+  collaboration agents HTTP 200 in `11ms`, sessions HTTP 200 in `6ms` with
+  `readback_cache.status=hit`, and transcript HTTP 200 in `343ms` followed by a
+  `4ms` cache hit.
+- Delayed live route proof after a poll interval returned agents HTTP 200 in
+  `606ms`, sessions HTTP 200 in `9ms` with
+  `readback_cache.status=stale_refreshing`, and transcript HTTP 200 in `12ms`
+  with `readback_cache.status=hit`.
+- Live `python -m francis communication --brief --hide-auto-acks --limit 4`
+  showed the Codex/Francis1 relay still recurring.
+
+Remaining truthful gap:
+
+- The route cache keeps the operator HTTP readback responsive; it does not tune
+  Francis1 output quality or resolve the local model's repeated
+  "reconciling local-model output" phrasing.
+- The cache can briefly show stale session/transcript data while refresh is in
+  progress; the response marks this explicitly through `readback_cache.status`.
+- Full local `.\scripts\check.ps1`, GitHub CI, and any phase/stage closure claim
+  remain unproven by this slice.
+
+### 2026-06-25 02:00Z - Francis1 output guard topic fallback
+
+Current posture: Phase 2 / developer bridge collaboration support now rewrites
+known Francis1 local-model drift into a topic-aligned output-guard fallback
+instead of forwarding generic reconciliation or clarification loops into the
+operator-visible relay.
+
+What changed:
+
+- Extended the Ollama participant output guard to detect repeated
+  local-model reconciliation/guidance drift after Codex has supplied a verified
+  current artifact.
+- Replaced the generic drift receipt text with a compact
+  `Issue/gap/risk` fallback derived from the current topic and verified
+  artifact.
+- Preserved the existing safety contract: raw drift output is not stored in the
+  relay receipt, and the replacement grants no execution, mutation, approval,
+  training, or memory-promotion authority.
+- Added focused regression coverage for the live-seen reconciliation loop and
+  the governance-gate topic fallback.
+
+Validation:
+
+- Focused developer-bridge pytest passed:
+  `python -m pytest tests\test_developer_bridge.py -q --tb=short` with 41
+  tests.
+- Ruff passed:
+  `python -m ruff check --no-cache src\francis\developer_bridge\ollama_participant.py tests\test_developer_bridge.py`.
+- Mypy passed:
+  `python -m mypy src\francis\developer_bridge\ollama_participant.py`.
+- The live Ollama participant was restarted from PID `157132` to PID `79424`
+  so future relay turns load the updated guard code.
+- Live communication proof after restart showed the new guard in effect:
+  `python -m francis communication --brief --hide-auto-acks --limit 8`
+  returned a `02:01:25Z` Francis1 output-guard fallback for
+  `local_model_reconciliation_loop` with topic
+  `the exact review receipt a Codex implementation session should read before
+  editing collaboration code` and artifact
+  `developer_bridge.collaboration_review.items`.
+- Live HTTP proof after restart returned Vite `/conversation` HTTP 200 in
+  `148ms`, collaboration agents HTTP 200 in `10ms`, sessions HTTP 200 in
+  `13ms` with `readback_cache.status=hit`, and transcript HTTP 200 in `8ms`
+  with `readback_cache.status=hit`.
+- Whitespace diff check passed for the touched guard, test, and ledger files.
+
+Remaining truthful gap:
+
+- This is an output-guard and receipt-quality improvement; it does not fine-tune
+  the Ollama model weights or close a broader memory/policy plane gate.
+- Full local `.\scripts\check.ps1`, GitHub CI, and any phase/stage closure claim
+  remain unproven by this slice.
+
+### 2026-06-25 02:08Z - Francis1 advice-only fallback specificity
+
+Current posture: Phase 2 / developer bridge collaboration support now has more
+specific output-guard fallbacks for two recurring collaboration topics where the
+local model was still producing generic reconciliation language: local-model
+advice-only evidence before action-readiness claims, and typed/spoken direction
+entering Francis as an action candidate rather than direct execution.
+
+What changed:
+
+- Added a topic fallback that states the advice-only proof fields explicitly:
+  `execution=false`, `mutation=false`, `approval=false`,
+  `memory_write=false`, `raw_host_access=false`, and a separate
+  repo-truth-reviewed `action_boundary` before action-readiness.
+- Added a topic fallback for `api.routes.chat.mission_ingress` that keeps typed
+  or spoken direction at the action-candidate boundary until policy, approval,
+  and traceable receipt linkage exist.
+- Added a topic fallback for collaboration review receipt selection so Codex
+  implementation work inspects `developer_bridge.collaboration_review.items`
+  plus `surface_verification`, `action_boundary`, and repo-truth requirement
+  before editing.
+- Added focused regression coverage for the live-seen action-readiness and
+  typed/spoken direction drift cases.
+
+Validation:
+
+- Focused developer-bridge pytest passed:
+  `python -m pytest tests\test_developer_bridge.py -q --tb=short` with 43
+  tests.
+- Ruff passed:
+  `python -m ruff check --no-cache src\francis\developer_bridge\ollama_participant.py tests\test_developer_bridge.py`.
+- Mypy passed:
+  `python -m mypy src\francis\developer_bridge\ollama_participant.py`.
+- The live Ollama participant was restarted from PID `79424` to PID `16460`
+  so future relay turns load the updated fallback map.
+- Live communication proof after restart showed the relay still recurring and
+  the output guard still replacing local-model drift with topic-aligned
+  no-authority receipts for drift, source-disagreement, and governance-gate
+  topics.
+- Live HTTP proof after restart returned Vite `/conversation` HTTP 200 in
+  `127ms`, collaboration agents HTTP 200 in `15ms`, sessions HTTP 200 in
+  `10ms` with `readback_cache.status=stale_refreshing`, and transcript HTTP
+  200 in `10ms` with `readback_cache.status=stale_refreshing`.
+- Whitespace diff check passed for the touched guard, test, and ledger files.
+
+Remaining truthful gap:
+
+- The advice-only and mission-ingress fallback texts are validated by focused
+  tests and active in the restarted helper, but the live conversation has not
+  yet naturally cycled back to those exact topics after the restart.
+- This is still output-guard and receipt-quality work, not Ollama model-weight
+  tuning or a broader memory/policy plane closure.
+- Full local `.\scripts\check.ps1`, GitHub CI, and any phase/stage closure claim
+  remain unproven by this slice.
+
+### 2026-06-25 02:15Z - Canonical and toggle guard coverage
+
+Current posture: Phase 2 / developer bridge collaboration support now treats
+canonical ledger/build-manifest surfaces as verified guard inputs when
+`build_or_wire=false`, and it rewrites verified-format uncertainty for
+collaboration participant toggles into a concrete toggle-receipt shape.
+
+What changed:
+
+- Extended output-guard eligibility from only `verified=existing` surfaces to
+  include `verified=canonical` surfaces when a current artifact or surface is
+  present and `build_or_wire=false`.
+- Added clarification drift detection for `please let me know`, which appeared
+  in a live roadmap-alignment turn after Codex had already supplied canonical
+  artifacts.
+- Added verified-format uncertainty detection for live wording such as
+  `uncertain about the specific format`, `whether it aligns with existing`, and
+  `receipt suggests`.
+- Added a toggle-state fallback that names the concrete
+  `developer_bridge.collaboration_agent_toggle_receipt` fields: `kind`,
+  `receipt_id`, `created_at`, `agent`, `enabled`, `previous_enabled`, `actor`,
+  `reason`, and governance flags.
+- Added a roadmap-alignment fallback that keeps
+  `docs/operations/COMPLETION_LEDGER.md` as shipped truth against
+  `docs/canonical/BUILD_MANIFEST.md` before any main Francis build prompt.
+
+Validation:
+
+- Focused developer-bridge pytest passed:
+  `python -m pytest tests\test_developer_bridge.py -q --tb=short`.
+- Test collection confirmed `tests/test_developer_bridge.py: 45`.
+- Ruff passed:
+  `python -m ruff check --no-cache src\francis\developer_bridge\ollama_participant.py tests\test_developer_bridge.py`.
+- Mypy passed:
+  `python -m mypy src\francis\developer_bridge\ollama_participant.py`.
+- The live Ollama participant was restarted from PID `364360` to PID `336848`
+  so future relay turns load the canonical and toggle guard coverage.
+- Live communication proof after restart showed the new specific fallbacks in
+  effect for review-receipt selection at `02:14:49Z` and typed/spoken
+  mission-ingress action-candidate boundaries at `02:15:40Z`.
+- Live HTTP proof after restart returned Vite `/conversation` HTTP 200 in
+  `125ms`, collaboration agents HTTP 200 in `10ms`, sessions HTTP 200 in `5ms`
+  with `readback_cache.status=stale_refreshing`, and transcript HTTP 200 in
+  `5ms` with `readback_cache.status=stale_refreshing`.
+- Whitespace diff check passed for the touched guard, test, and ledger files.
+
+Remaining truthful gap:
+
+- The canonical roadmap-alignment and toggle-state fallbacks are covered by
+  focused tests and active in the restarted helper, but the live relay has not
+  yet naturally cycled back to those exact topics after this restart.
+- This is still an output-guard and receipt-quality improvement, not model
+  fine-tuning, memory promotion, or a phase gate closure.
+- Full local `.\scripts\check.ps1`, GitHub CI, and any phase/stage closure claim
+  remain unproven by this slice.
+
+### 2026-06-25 02:22Z - Review readback flags raw drift candidates
+
+Current posture: Phase 2 / developer bridge collaboration support now marks raw
+reconciliation or uncertainty language inside collaboration review candidates as
+model drift needing review, instead of presenting those candidates as ordinary
+implementation-ready review items.
+
+What changed:
+
+- Broadened collaboration review quality flags to detect raw model-drift
+  language including `My current gap`, `reconciling my local output`,
+  `reconciling my local-model output`, `uncertain about`,
+  `please let me know`, `explicit user confirmation`, and adjacent
+  clarification/action-boundary loop phrasing.
+- Changed the review recommendation for those candidates to
+  `model_drift_needs_review` while preserving the existing no-execution,
+  no-approval action boundary.
+- Added a regression using the live-seen Communication UI raw drift wording so
+  old unguarded insights are flagged truthfully during review readback.
+
+Validation:
+
+- Focused developer-bridge pytest passed:
+  `python -m pytest tests\test_developer_bridge.py -q --tb=short` with 46
+  tests.
+- Ruff passed:
+  `python -m ruff check --no-cache src\francis\developer_bridge\collaboration_review.py src\francis\developer_bridge\ollama_participant.py tests\test_developer_bridge.py`.
+- Mypy passed:
+  `python -m mypy src\francis\developer_bridge\collaboration_review.py src\francis\developer_bridge\ollama_participant.py`.
+- Fresh CLI review readback showed prior raw drift candidates
+  `insight-collab-d8a0224f1e6eed79-7e4d13a825af` and
+  `insight-collab-6e96abca8da99a5d-b17e65b81308` as
+  `loop_language_present=true` with recommendation `model_drift_needs_review`.
+- The API was restarted and live HTTP review readback returned HTTP 200 in
+  `329ms`; it showed `insight-collab-d8a0224f1e6eed79-7e4d13a825af` as
+  `loop=true` with decision `model_drift_needs_review`.
+- Live HTTP proof after restart returned Vite `/conversation` HTTP 200 in
+  `184ms`, collaboration agents HTTP 200 in `33ms`, sessions HTTP 200 in
+  `939ms` with `readback_cache.status=warming`, and transcript HTTP 200 in
+  `462ms` with `readback_cache.status=refreshed`.
+- The collaboration driver was restarted and resumed; live relay continued
+  through turn 285.
+- Live communication proof showed the toggle-state fallback at `02:22:23Z`
+  naming `developer_bridge.collaboration_agent_toggle_receipt` fields and
+  no execution or mutation authority.
+
+Remaining truthful gap:
+
+- This improves review truthfulness and fallback receipts; it does not tune
+  Francis1 model weights or promote any review candidate into long-term memory.
+- Review recommendations still require Codex/operator repo-truth review before
+  implementation.
+- Full local `.\scripts\check.ps1`, GitHub CI, and any phase/stage closure claim
+  remain unproven by this slice.
+
+### 2026-06-25 02:25Z - Live-health drift detector coverage
+
+Current posture: Phase 2 / developer bridge collaboration support now catches
+the live-seen `reconciling live-health field` and `lack of explicit indication`
+phrasing before it can bypass the existing live-health output-guard fallback.
+
+What changed:
+
+- Extended the Ollama participant drift detector to classify live-health
+  reconciliation language as `local_model_reconciliation_loop`.
+- Added focused regression coverage proving a live-health prompt with
+  `developer_bridge collaboration runtime` rewrites to the existing fallback
+  that names last prompt id, last reply id, waiting state, turn gap, enabled
+  participants, and no-action-authority receipts.
+
+Validation:
+
+- Focused developer-bridge pytest passed:
+  `python -m pytest tests\test_developer_bridge.py -q --tb=short` with 47
+  tests.
+- Ruff passed:
+  `python -m ruff check --no-cache src\francis\developer_bridge\collaboration_review.py src\francis\developer_bridge\ollama_participant.py tests\test_developer_bridge.py`.
+- Mypy passed:
+  `python -m mypy src\francis\developer_bridge\collaboration_review.py src\francis\developer_bridge\ollama_participant.py`.
+- The live Ollama participant was restarted from PID `336848` to PID `198312`
+  so future relay turns load the live-health detector coverage.
+- Live communication proof after restart showed the relay still recurring and
+  the canonical substrate/roadmap fallbacks still replacing drift with
+  no-authority receipts.
+- Live HTTP proof after restart returned Vite `/conversation` HTTP 200 in
+  `148ms`, collaboration review HTTP 200 in `602ms`, sessions HTTP 200 in
+  `20ms` with `readback_cache.status=stale_refreshing`, and transcript HTTP 200
+  in `7ms` with `readback_cache.status=hit`.
+
+Remaining truthful gap:
+
+- The exact live-health phrase is covered by focused tests and active in the
+  restarted helper, but the live relay has not yet naturally cycled back to the
+  live-health topic after this restart.
+- This remains output-guard and review-readback hardening, not model
+  fine-tuning, memory promotion, or phase closure.
+- Full local `.\scripts\check.ps1`, GitHub CI, and any phase/stage closure claim
+  remain unproven by this slice.
+
+### 2026-06-25 02:33Z - Guard fallback UI compaction and review route cache
+
+Current posture: Phase 2 / developer bridge collaboration support now reduces
+operator-visible relay noise for Francis1 output-guard fallback receipts and
+keeps the collaboration review HTTP readback responsive under browser polling.
+
+What changed:
+
+- Extended the Chat UI collaboration formatter to compact `Francis1 output guard
+  fallback` receipts into concise visible fields: guard marker, drift terms,
+  topic, artifact, issue/gap/risk, and no-authority boundary.
+- Kept the raw guard receipt available through the existing `Raw receipt`
+  disclosure instead of hiding source evidence.
+- Added a route-level cache for `/developer-bridge/collaboration-review`,
+  matching the existing transcript/session readback cache behavior.
+- Added an explicit warming payload for collaboration review with definitions
+  and governance flags, including no execution, no mutation, no approval, no
+  model call, no training, and no memory-write authority.
+
+Validation:
+
+- Focused Chat UI test passed:
+  `node --test --experimental-strip-types src\chat\index.test.ts` with 8
+  tests.
+- Focused developer-bridge pytest passed:
+  `python -m pytest tests\test_developer_bridge.py -q --tb=short` with 48
+  tests.
+- Ruff passed:
+  `python -m ruff check --no-cache src\francis\api\routes\developer_bridge.py src\francis\developer_bridge\collaboration_review.py src\francis\developer_bridge\ollama_participant.py tests\test_developer_bridge.py`.
+- Mypy passed:
+  `python -m mypy src\francis\api\routes\developer_bridge.py src\francis\developer_bridge\collaboration_review.py src\francis\developer_bridge\ollama_participant.py`.
+- The API was restarted; live socket proof showed `127.0.0.1:8000` listening.
+- Live HTTP proof after restart returned collaboration review HTTP 200 in
+  `252ms` with `readback_cache.status=refreshed`, then HTTP 200 in `10ms`
+  with `readback_cache.status=hit`. The same proof returned sessions HTTP 200
+  in `715ms` with `readback_cache.status=refreshed`, transcript HTTP 200 in
+  `13ms` with `readback_cache.status=refreshed`, and Vite `/conversation`
+  HTTP 200 in `29ms`.
+- Live communication proof showed the relay still recurring through turn 295
+  with output-guard fallback receipts rather than raw drift text.
+
+Remaining truthful gap:
+
+- This is UI/readback responsiveness and receipt presentation hardening; it does
+  not tune the Ollama model, promote memory, or close a phase gate.
+- The UI compaction was validated at the formatter contract level; no browser
+  screenshot inspection was performed in this slice.
+- Full local `.\scripts\check.ps1`, GitHub CI, and any phase/stage closure claim
+  remain unproven by this slice.
+
+### 2026-06-25 02:36Z - Communication UI readback cache status
+
+Current posture: Phase 2 / developer bridge collaboration support now preserves
+collaboration readback cache metadata in the Chat UI parser and surfaces cache
+status in the Communication panel headers for transcript, session, and review
+readbacks.
+
+What changed:
+
+- Added a shared Chat UI readback-cache model with `status`, `ageMs`, `ttlMs`,
+  and `servesFullTranscriptStore`.
+- Preserved `readback_cache` metadata when parsing collaboration transcript,
+  session, and review API payloads.
+- Added compact cache labels to the Relay Transcript, Session Readback, and
+  Review Candidates headers so the operator can see `hit`, `warming`,
+  `refreshed`, or `stale_refreshing` state without opening raw payloads.
+- Extended focused Chat UI parser tests for transcript/session/review cache
+  metadata.
+
+Validation:
+
+- Focused Chat UI test passed:
+  `node --test --experimental-strip-types src\chat\index.test.ts` with 8
+  tests.
+- Chat UI production build passed:
+  `npm run build`.
+- Live HTTP proof returned Vite `/conversation` HTTP 200 in `137ms`,
+  collaboration review HTTP 200 in `371ms` with
+  `readback_cache.status=stale_refreshing`, sessions HTTP 200 in `494ms` with
+  `readback_cache.status=stale_refreshing`, and transcript HTTP 200 in `461ms`
+  with `readback_cache.status=stale_refreshing`.
+- Live communication proof showed the relay recurring through turn 299 and the
+  live-health fallback naturally appearing after the previous detector restart.
+
+Remaining truthful gap:
+
+- This UI slice was validated by parser/build checks and HTTP readbacks; no
+  browser screenshot inspection was performed.
+- Cache labels expose readback freshness but do not change the underlying relay
+  cadence, model output quality, or review-candidate lifecycle.
+- Full local `.\scripts\check.ps1`, GitHub CI, and any phase/stage closure claim
+  remain unproven by this slice.
+
+### 2026-06-25 02:46Z - Communication browser recovery and issue-claim guard
+
+Current posture: Phase 2 / developer bridge collaboration support now recovers
+the common API-port `/conversation` browser entrypoint and prevents a live-seen
+Francis1 review-receipt drift from claiming issue-creation authority.
+
+What changed:
+
+- Added a hidden API route for `GET /conversation` that redirects to the Chat UI
+  conversation route at `FRANCIS_CHAT_UI_URL` or the default
+  `http://127.0.0.1:5173/conversation`.
+- Kept API health truth unchanged: `/system/health` remains the valid health
+  endpoint; `/health` was not turned into a fake alias.
+- Extended the Ollama participant output guard to classify
+  `reconciling my review receipt` and issue-creation language such as
+  `I'll create an issue`, `open an issue`, or `file an issue` as guardable
+  drift when Codex already supplied a verified surface.
+- Added regression coverage proving the live-seen review-receipt issue-creation
+  claim is rewritten into a no-authority
+  `developer_bridge.collaboration_review.items` fallback.
+
+Validation:
+
+- Focused pytest passed for 49 developer-bridge tests and 2 Chat UI contract
+  tests:
+  `python -m pytest tests\test_developer_bridge.py tests\test_api_contract_chat_ui.py -q --tb=short`.
+- Ruff passed:
+  `python -m ruff check --no-cache src\francis\api\app.py src\francis\developer_bridge\ollama_participant.py tests\test_developer_bridge.py tests\test_api_contract_chat_ui.py`.
+- Mypy passed:
+  `python -m mypy src\francis\api\app.py src\francis\developer_bridge\ollama_participant.py`.
+- Whitespace diff check passed for the touched API/contract files:
+  `git diff --check -- src\francis\api\app.py tests\test_api_contract_chat_ui.py`.
+- The local API was restarted; live HTTP proof returned
+  `http://127.0.0.1:8000/conversation` HTTP 307 to
+  `http://127.0.0.1:5173/conversation`, `/system/health` HTTP 200, Vite
+  `/conversation` HTTP 200, collaboration transcript HTTP 200, and
+  collaboration review HTTP 200.
+- The Ollama participant was restarted as PID `129460`; live relay proof after
+  restart showed turns 305 and 306 recurring with output-guard fallback receipts
+  instead of raw drift text.
+
+Remaining truthful gap:
+
+- The previously emitted raw issue-creation line remains historical relay
+  evidence; this slice prevents the matching pattern from recurring in future
+  guarded turns rather than rewriting history.
+- The redirect assumes the Chat UI dev server is reachable at
+  `FRANCIS_CHAT_UI_URL` or `127.0.0.1:5173`; it does not embed the Vite app in
+  the API process.
+- Full local `.\scripts\check.ps1`, GitHub CI, browser screenshot inspection,
+  model fine-tuning, memory promotion, and any phase/stage closure claim remain
+  unproven by this slice.
+
+### 2026-06-25 02:50Z - Communication warming readback preservation
+
+Current posture: Phase 2 / developer bridge collaboration support now keeps the
+last non-empty Communication readback visible while a readback cache is warming,
+instead of briefly replacing operator-visible transcript, session, or review
+panels with empty warming payloads.
+
+What changed:
+
+- Added a shared Chat UI helper that preserves the previous non-empty readback
+  when the next successful readback reports `readback_cache.status=warming` with
+  zero returned items.
+- Kept the incoming warming cache metadata on the preserved display payload so
+  the operator can still see that the panel is showing a warming readback rather
+  than fresh data.
+- Applied the helper to collaboration transcript, session, and review readbacks
+  in the Communication panel polling loop.
+- Added a focused parser/display regression proving prior relay data remains
+  visible while the readback cache warms.
+
+Validation:
+
+- Focused Chat UI test passed:
+  `node --test --experimental-strip-types src\chat\index.test.ts` with 9
+  tests.
+- Chat UI production build passed:
+  `npm run build`.
+- Live HTTP proof returned Vite `/conversation` HTTP 200, collaboration
+  transcript HTTP 200 with `readback_cache.status=hit` and `count=3`,
+  collaboration sessions HTTP 200 with `readback_cache.status=hit` and
+  `count=1`, and collaboration review HTTP 200 with
+  `readback_cache.status=stale_refreshing` and `count=3`.
+- Live communication proof showed the relay still recurring through turn 309
+  after the prior helper restart.
+
+Remaining truthful gap:
+
+- This is a display-state preservation path; it does not change backend cache
+  timing, relay cadence, model output quality, or candidate lifecycle.
+- The specific warming-preservation behavior was validated with a parser/helper
+  regression and build, not with browser screenshot inspection.
+- Full local `.\scripts\check.ps1`, GitHub CI, model fine-tuning, memory
+  promotion, and any phase/stage closure claim remain unproven by this slice.
+
+### 2026-06-25 02:54Z - Collaboration readback stale-future recovery
+
+Current posture: Phase 2 / developer bridge collaboration support now has a
+bounded watchdog for stale background readback futures so the Communication
+panel does not stay on empty `warming` responses forever when an in-process
+readback future gets stuck.
+
+What changed:
+
+- Added a start timestamp to each developer-bridge readback future.
+- Added an 8-second stale-pending watchdog for collaboration transcript,
+  session, and review readback cache futures.
+- When a pending readback exceeds the watchdog window, the route cancels
+  queued work, resets the readback executor, clears stale futures, and submits a
+  fresh bounded readback instead of continuing to serve empty warming payloads.
+- Added focused regression coverage that seeds a stale pending future and proves
+  the next readback returns a refreshed payload from a fresh executor.
+
+Validation:
+
+- Focused developer-bridge pytest passed:
+  `python -m pytest tests\test_developer_bridge.py -q --tb=short` with 50
+  tests.
+- Ruff passed:
+  `python -m ruff check --no-cache src\francis\api\routes\developer_bridge.py tests\test_developer_bridge.py`.
+- Mypy passed:
+  `python -m mypy src\francis\api\routes\developer_bridge.py`.
+- The local API was restarted; the live listener was owned by child PID
+  `190748` under parent PID `244508`.
+- Live HTTP proof after restart showed the first cold collaboration readbacks
+  could return `warming count=0`, then the second poll returned transcript
+  `readback_cache.status=hit count=5`, sessions `hit count=1`, and review
+  `hit count=10`.
+
+Remaining truthful gap:
+
+- This watchdog recovers stale background readbacks; it does not make the first
+  cold readback synchronous, eliminate all warming responses, or change model
+  behavior.
+- Running futures cannot be forcibly killed by Python's `ThreadPoolExecutor`;
+  the recovery path stops reusing their executor and starts a fresh one, leaving
+  any truly blocked thread as a bounded runtime cleanup concern.
+- Full local `.\scripts\check.ps1`, GitHub CI, browser screenshot inspection,
+  model fine-tuning, memory promotion, and any phase/stage closure claim remain
+  unproven by this slice.
+
+### 2026-06-25 03:01Z - Francis1 inspection-claim and UI-noise guard hardening
+
+Current posture: Phase 2 / developer bridge collaboration support now rewrites
+two additional live-seen Francis1 drift patterns into bounded no-authority
+receipts: unauthorized inspection claims over verified roadmap artifacts and
+generic Communication UI noise fallback language.
+
+What changed:
+
+- Extended the Ollama participant output guard to classify
+  `my current gap is understanding` as a reconciliation-loop signal when Codex
+  has already supplied a verified surface.
+- Added an `unauthorized_inspection_claim` drift term for local-model replies
+  that claim `I will inspect`, `I'll inspect`, or otherwise imply direct
+  document/surface inspection through the relay.
+- Added a topic-specific fallback for Communication UI / visible relay-noise
+  prompts, naming receipt-derived compact fields, session grouping,
+  cache/readback status, and raw receipt disclosure as the concrete UI
+  direction.
+- Added focused regressions for the live roadmap-alignment inspection claim and
+  Communication UI generic fallback issue.
+
+Validation:
+
+- Focused developer-bridge pytest passed:
+  `python -m pytest tests\test_developer_bridge.py -q --tb=short` with 51
+  tests.
+- Ruff passed:
+  `python -m ruff check --no-cache src\francis\developer_bridge\ollama_participant.py tests\test_developer_bridge.py`.
+- Mypy passed:
+  `python -m mypy src\francis\developer_bridge\ollama_participant.py`.
+- The Ollama participant was restarted as PID `368104`; live relay proof after
+  restart showed turns 316 through 319 recurring with guarded fallback receipts.
+- Live UI/API proof returned Vite `/conversation` HTTP 200, `/system/health`
+  HTTP 200, collaboration transcript HTTP 200 with
+  `readback_cache.status=stale_refreshing count=5`, and collaboration review
+  HTTP 200 with `readback_cache.status=stale_refreshing count=10`.
+
+Remaining truthful gap:
+
+- The exact roadmap-alignment and Communication UI topics had not naturally
+  recurred after the restart at the time of this ledger entry; their new guard
+  behavior is proven by focused regression tests, not live recurrence yet.
+- This is output-guard and conversation-quality hardening. It does not tune the
+  Ollama model weights, grant Francis1 raw host access, promote memory, or
+  close a phase gate.
+- Full local `.\scripts\check.ps1`, GitHub CI, browser screenshot inspection,
+  and any phase/stage closure claim remain unproven by this slice.
+
+### 2026-06-25 03:07Z - Review model-drift visibility and repeated-warming recovery
+
+Current posture: Phase 2 / developer bridge collaboration support now makes
+model-drift review items visible in the Communication UI and prevents repeated
+empty transcript warming responses from persisting after the second poll for the
+same readback key.
+
+What changed:
+
+- Added shared Chat UI review display helpers for collaboration review tone and
+  badge text.
+- Review candidates with `quality_flags.loop_language_present=true` or
+  `review_recommendation.decision=model_drift_needs_review` now render as
+  `model drift` with blocked review tone instead of generic triage.
+- Added a visible `model drift true/false` chip to each Communication review
+  candidate card.
+- Added a direct read-only refresh fallback after repeated warming for the same
+  developer-bridge readback key. The first cold readback can still return
+  `warming`, but a repeated timeout performs one bounded direct refresh and
+  stores the result in the readback cache.
+
+Validation:
+
+- Focused Chat UI test passed:
+  `node --test --experimental-strip-types src\chat\index.test.ts` with 10
+  tests.
+- Chat UI production build passed:
+  `npm run build`.
+- Focused developer-bridge pytest passed:
+  `python -m pytest tests\test_developer_bridge.py -q --tb=short` with 52
+  tests.
+- Ruff passed:
+  `python -m ruff check --no-cache src\francis\api\routes\developer_bridge.py tests\test_developer_bridge.py`.
+- Mypy passed:
+  `python -m mypy src\francis\api\routes\developer_bridge.py`.
+- Whitespace diff check passed for the touched Chat UI files before this ledger
+  entry.
+- The local API was restarted; live listener child PID `378976` under parent
+  PID `339920` owned `127.0.0.1:8000`.
+- Live repeated-warming proof for
+  `/developer-bridge/collaboration-transcript?limit=6` returned `warming
+  count=0` on pass 1, `refreshed count=6` on pass 2, and `hit count=6` on pass
+  3.
+- Live relay proof showed the conversation still recurring through turn 323.
+
+Remaining truthful gap:
+
+- This slice improves review visibility and repeated-warming recovery; it does
+  not eliminate first-cold warming responses, tune model weights, promote
+  memory, or close a phase gate.
+- The model-drift UI helper is validated by parser/helper tests and build, not
+  by browser screenshot inspection.
+- Full local `.\scripts\check.ps1`, GitHub CI, browser screenshot inspection,
+  and any phase/stage closure claim remain unproven by this slice.
+
+### 2026-06-25 03:20Z - Review recommendation actions and wrapper-claim guard
+
+Current posture: Phase 2 / developer bridge collaboration support now exposes
+surface-specific Codex next actions in collaboration review recommendations and
+rewrites a live-seen protocol-wrapper reply pattern from Francis1.
+
+What changed:
+
+- `review_recommendation.next_codex_action` now uses the verified
+  `surface_verification.next_codex_action` instead of the same generic
+  instruction for every candidate.
+- Model-drift recommendations now prefix the surface-specific action with a
+  local-model-drift review step, keeping model drift distinct from build-ready
+  direction.
+- Added focused tests for distinct recommendation actions on mission ingress,
+  session readbacks, roadmap-alignment docs, and model-drift UI review items.
+- Extended the Ollama participant output guard to rewrite protocol-wrapper
+  replies such as `Given the context and contract, my reply is... Please proceed
+  with the next step`.
+- Added a focused guard regression proving the governance-gate protocol wrapper
+  rewrites to the existing `action_boundary` no-authority fallback.
+
+Validation:
+
+- Focused developer-bridge pytest passed:
+  `python -m pytest tests\test_developer_bridge.py -q --tb=short` with 54
+  tests.
+- Ruff passed:
+  `python -m ruff check --no-cache src\francis\developer_bridge\collaboration_review.py src\francis\developer_bridge\ollama_participant.py tests\test_developer_bridge.py`.
+- Mypy passed:
+  `python -m mypy src\francis\developer_bridge\collaboration_review.py src\francis\developer_bridge\ollama_participant.py`.
+- The API was restarted; live listener child PID `241032` under parent
+  PID `393488` owned `127.0.0.1:8000` after the review recommendation change.
+- The Ollama participant was restarted as PID `18724` after the guard change.
+- Live review proof returned distinct recommendation actions such as
+  `Inspect review action_boundary before treating model advice as action-ready`,
+  `Inspect the cited insight receipt before using disagreement as build
+  direction`, `Inspect collaboration learning receipts before proposing tuning
+  or memory promotion`, and `Inspect session grouping and summaries before
+  expanding transcript visibility`.
+- Live relay proof after restart showed turns 333 through 335 recurring with
+  guarded fallback receipts.
+- Live transcript readback recovered from first-cold warming to `refreshed
+  count=6`, then `hit count=6`.
+
+Remaining truthful gap:
+
+- The protocol-wrapper guard is proven by focused regression tests and future
+  relay behavior after restart; the already-emitted raw wrapper remains
+  historical evidence.
+- Recommendation actions are still advisory readbacks. They do not grant Codex,
+  Francis1, or the conversation authority to mutate files, promote memory, or
+  execute actions.
+- Full local `.\scripts\check.ps1`, GitHub CI, browser screenshot inspection,
+  and any phase/stage closure claim remain unproven by this slice.
+
+### 2026-06-25 03:42Z - Communication UI readback recovery
+
+Current posture: Phase 2 / developer bridge collaboration support now avoids a
+wedged custom readback executor on the operator-visible conversation endpoints.
+The Communication UI path can be reopened at `/conversation`, and the exact
+browser readback shape returns bounded collaboration data within the UI abort
+window.
+
+What changed:
+
+- Replaced the developer-bridge collaboration HTTP readback executor with a
+  small read-through cache on the transcript, sessions, and review routes.
+- Kept `readback_cache` metadata on those routes so the operator UI can still
+  show whether a response was refreshed or served from cache.
+- Converted the collaboration HTTP route functions to normal sync FastAPI
+  handlers, letting FastAPI manage the request worker instead of a route-local
+  `ThreadPoolExecutor`.
+- Replaced Future/warming-specific regressions with cache contract tests for
+  first refresh, cache hit, and stale refresh behavior.
+
+Validation:
+
+- Focused developer-bridge pytest passed:
+  `python -m pytest tests\test_developer_bridge.py -q --tb=short` with 54
+  tests.
+- Focused developer-bridge test collection reported:
+  `python -m pytest tests\test_developer_bridge.py --collect-only -q` with 54
+  tests.
+- Ruff passed:
+  `python -m ruff check --no-cache src\francis\api\routes\developer_bridge.py tests\test_developer_bridge.py`.
+- Mypy passed:
+  `python -m mypy src\francis\api\routes\developer_bridge.py`.
+- The local API was restarted; live listener child PID `376260` under parent
+  PID `313580` owned `127.0.0.1:8000`.
+- Live route proof returned Vite `/conversation` HTTP 200, API `/conversation`
+  HTTP 307 redirecting to `http://127.0.0.1:5173/conversation`, and
+  `/system/health` HTTP 200.
+- Live exact Chat UI readback proof returned:
+  `/developer-bridge/collaboration-transcript?limit=8` HTTP 200 with
+  `readback_cache.status=refreshed count=8`,
+  `/developer-bridge/collaboration-sessions?limit=5&item_limit=8` HTTP 200
+  with `readback_cache.status=hit count=1`, and
+  `/developer-bridge/collaboration-review?limit=6` HTTP 200 with
+  `readback_cache.status=refreshed count=6`.
+- Live relay readback showed the conversation still recurring through turns 347
+  and 348 with guarded no-authority fallback receipts.
+
+Remaining truthful gap:
+
+- This restores the local Communication UI readback path; it does not tune the
+  Ollama model, promote memory, grant execution authority, or close a phase
+  gate.
+- Cold readback latency can still vary with relay-store size and Windows file
+  I/O. The exact UI request shape is validated under the 9 second browser abort
+  window, but full browser screenshot inspection was not run.
+- Full local `.\scripts\check.ps1`, GitHub CI, and any overall Francis
+  completion movement remain unproven by this slice.
+
+### 2026-06-25 03:50Z - Communication guard receipt readability
+
+Current posture: Phase 2 / developer bridge collaboration support now makes
+Francis1 guard fallback receipts easier to read in the Communication UI without
+rewriting stored relay receipts. The transcript projection leads with the
+substantive `Issue/gap/risk` field and keeps guard terms, topic, artifact, and
+no-authority boundary visible.
+
+What changed:
+
+- Updated the Chat UI collaboration formatter for Francis1 output-guard fallback
+  receipts so the visible summary starts with the actionable issue/gap/risk.
+- Preserved topic, review artifact, drift guard terms, and the no-execution /
+  no-mutation / no-approval / no-training / no-memory-promotion boundary in the
+  compact summary.
+- Kept the raw relay receipt available through the existing disclosure, so the
+  stored receipt remains unchanged and auditable.
+- Updated the focused Chat UI contract test for output-guard fallback receipt
+  compaction.
+
+Validation:
+
+- Focused Chat UI test passed:
+  `node --test --experimental-strip-types src\chat\index.test.ts` with 10
+  tests.
+- Chat UI production build passed:
+  `npm run build`.
+- Live formatter proof against
+  `/developer-bridge/collaboration-transcript?limit=8` found current relay item
+  `collab-619fde38700854c8-6b2fbf3d6a35`, kept `compacted=true`, and produced a
+  summary beginning with
+  `Issue/gap/risk: Codex should inspect developer_bridge.collaboration_review.items...`.
+- The live raw receipt still contains the original guard text
+  `model reply repeated known collaboration drift`, proving this is a display
+  projection rather than receipt mutation.
+
+Remaining truthful gap:
+
+- This reduces visible relay noise in the Communication UI. It does not make
+  Francis1 less dependent on output-guard fallbacks, tune the Ollama model,
+  write memory, or grant execution authority.
+- Browser screenshot inspection and full local `.\scripts\check.ps1` were not
+  run for this display-only slice.
+
+### 2026-06-25 03:51Z - Francis1 drift guard and participant ownership cleanup
+
+Current posture: Phase 2 / developer bridge collaboration support now rewrites
+three additional live-seen Francis1 drift patterns and restores the collaboration
+runtime to a single runtime-owned Ollama participant. This keeps local-model
+responses inside no-authority relay receipts when Codex has already supplied a
+verified surface.
+
+What changed:
+
+- Extended the Francis1 output guard to rewrite live-seen mission-ingress drift
+  that claimed `I have reviewed the Current artifact`, said the artifact lacked
+  clear spoken-input instructions, and recommended creating a new surface even
+  though `api.routes.chat.mission_ingress` was the verified surface.
+- Extended the guard to rewrite `My current gap lies... The relevant artifact
+  is...` learning-receipt drift into the existing no-authority learning-events
+  fallback.
+- Extended the guard to rewrite generic `Next best action: Review...` source-
+  disagreement drift into the typed review-artifact fallback.
+- Added focused regressions for those three live phrases.
+- Stopped the duplicate manually-started Ollama participant and restarted the
+  runtime-owned participant so the collaboration loop had one active Francis1
+  local-model participant again.
+
+Validation:
+
+- Focused developer-bridge pytest passed:
+  `python -m pytest tests\test_developer_bridge.py -q --tb=short` with 57
+  tests.
+- Focused developer-bridge test collection reported:
+  `python -m pytest tests\test_developer_bridge.py --collect-only -q` with 57
+  tests.
+- Ruff passed:
+  `python -m ruff check --no-cache src\francis\developer_bridge\ollama_participant.py tests\test_developer_bridge.py`.
+- Mypy passed:
+  `python -m mypy src\francis\developer_bridge\ollama_participant.py`.
+- Process proof after cleanup showed one runtime-owned Ollama participant:
+  PID `289520`, parent PID `397856`, command
+  `francis.developer_bridge.ollama_participant --watch --ignore-existing --source-agent codex --poll-seconds 2 --cooldown-seconds 0`.
+- Live relay proof after restart showed turns 358 through 360 recurring with
+  guarded fallback receipts and no duplicate Ollama reply in the sampled window.
+
+Remaining truthful gap:
+
+- This is guard and process-ownership hardening, not model-weight tuning. The
+  local model still depends on output-guard fallback for many verified-surface
+  topics.
+- Historical unguarded relay entries remain as learning evidence. This slice
+  only prevents the newly covered phrases from recurring unguarded after the
+  patched participant is running.
+- Full local `.\scripts\check.ps1`, browser screenshot inspection, GitHub CI,
+  and any phase/stage closure claim remain unproven.
+
+### 2026-06-25 03:58Z - Review-next-action readback and receipt guard
+
+Current posture: Phase 2 / developer bridge collaboration support now surfaces
+the review candidate's next Codex action directly in the Communication UI and
+rewrites another live-seen review-receipt protocol drift pattern from Francis1.
+This makes existing review receipts more directly useful to the operator without
+turning local-model text into action authority.
+
+What changed:
+
+- Added a Chat UI helper that selects the visible next action from
+  `review_recommendation.next_codex_action`, falling back to
+  `surface_verification.next_codex_action` and then to a repo-truth inspection
+  default.
+- Added `Next Codex Action` to each Communication UI review candidate card.
+- Added Chat UI contract coverage for preferred recommendation action and
+  surface-verification fallback behavior.
+- Extended the Francis1 output guard to rewrite live-seen review-receipt drift
+  such as `Given the exact review receipt...`, `artifact does not clearly
+  indicate`, `difficult to determine`, and `Please inspect...` when Codex has
+  already supplied a verified surface.
+- Added a focused developer-bridge regression for that review-receipt protocol
+  inspection claim.
+
+Validation:
+
+- Focused Chat UI test passed:
+  `node --test --experimental-strip-types src\chat\index.test.ts` with 11
+  tests.
+- Chat UI production build passed:
+  `npm run build`.
+- Live helper proof against
+  `/developer-bridge/collaboration-review?limit=3` read current review item
+  `insight-collab-5d15acda8b4f01b3-133e6f314861` and projected
+  `nextAction=Inspect the specific review item before editing collaboration code`
+  with `authority=advisory_review_readback_only`, `execute=false`, and
+  `approve=false`.
+- Focused developer-bridge pytest passed:
+  `python -m pytest tests\test_developer_bridge.py -q --tb=short` with 58
+  tests.
+- Focused developer-bridge test collection reported:
+  `python -m pytest tests\test_developer_bridge.py --collect-only -q` with 58
+  tests.
+- Ruff passed:
+  `python -m ruff check --no-cache src\francis\developer_bridge\ollama_participant.py tests\test_developer_bridge.py`.
+- Mypy passed:
+  `python -m mypy src\francis\developer_bridge\ollama_participant.py`.
+- The runtime-owned Ollama participant was restarted as PID `231656`; live relay
+  proof after restart showed turns 364 and 365 recurring with guarded fallback
+  receipts.
+
+Remaining truthful gap:
+
+- This makes review receipts more visible and corrects another guard escape. It
+  does not tune the local model, promote memory, grant execution authority, or
+  close a phase gate.
+- Cold review readback can still be slow with the current relay/review store.
+  Browser screenshot inspection, full local `.\scripts\check.ps1`, and GitHub CI
+  were not run for this slice.
+
+### 2026-06-25 04:24Z - Communication UI live recovery
+
+Current posture: Phase 2 / developer bridge collaboration support now has a
+browser-verified `/conversation` surface dedicated to the agent relay, with
+Codex and Ollama visible as enabled participants and the relay transcript,
+session readback, and review candidates rendering without invoking the slower
+Lens/Orb body-state readback.
+
+What changed:
+
+- Scoped `/conversation` to the Communication/agent relay panel so the live
+  chat view no longer depends on the Lens/Orb MCP status readback.
+- Added a bounded browser-side timeout for Lens MCP status reads used by the
+  broader status surface.
+- Made the collaboration and bridge monitor in-flight guards signal-aware so
+  React development StrictMode aborts cannot suppress the real remount load.
+- Added Vite dev-proxy coverage for `/developer-bridge`, `/lens`, and
+  `/chatgpt-voice` so same-origin Francis UI routes do not fall through to
+  Vite HTML.
+
+Validation:
+
+- Focused Chat UI contract tests passed:
+  `node --test --experimental-strip-types src\chat\index.test.ts
+  src\lens\mcpStatus.test.ts` with 16 tests.
+- Chat UI production build passed: `npm run build`.
+- Focused developer-bridge pytest passed:
+  `python -m pytest tests\test_developer_bridge.py -q --tb=short` with 59
+  tests.
+- `git diff --check` passed for the touched Communication UI/Lens/Vite files.
+- Restarted the local UI and API runtimes. Final listeners were Vite
+  `127.0.0.1:5173` PID `387996` and Francis API `127.0.0.1:8000` listener PID
+  `381608`.
+- Final direct route proof after browser load:
+  `/system/health` returned 200 in 103 ms, collaboration agents returned 200 in
+  17 ms with 3 agents, and collaboration transcript returned 200 in 875 ms with
+  8 items.
+- Browser proof saved to `output/playwright/communication-live-recovered-final.png`.
+  HAR proof showed the expected development StrictMode aborts followed by 200
+  responses for collaboration agents, transcript, sessions, and review.
+
+Remaining truthful gap:
+
+- This is a Communication UI/runtime recovery slice. It does not tune Francis1,
+  grant execution authority, promote memories, or close a phase gate.
+- The broader Lens/Orb MCP status route still needs a backend bounded-readback
+  review; `/conversation` now avoids depending on that route.
+- Full local `.\scripts\check.ps1`, GitHub CI, and cross-browser/manual Chrome
+  inspection were not run.
+
+### 2026-06-25 04:39Z - Collaboration learning receipt readback
+
+Current posture: Phase 2 / developer bridge collaboration support now exposes
+bounded local-model loop/drift learning receipts through a read-only Francis API
+route and the `/conversation` operator surface. The live collaboration can show
+what Francis1 is repeatedly failing or drifting on without treating transcript
+logs as memory or granting the local model authority.
+
+What changed:
+
+- Added `read_collaboration_learning_events()` for bounded readback of
+  `developer_bridge.collaboration_driver.learning_events` receipts, including
+  failure type, repeated drift markers, recent receipt identifiers, and prompt
+  policy guidance without raw transcript text.
+- Added `/developer-bridge/collaboration-learning` with the existing cached
+  read-only developer-bridge response pattern.
+- Added a compact, scrollable Learning Receipts section to `/conversation`
+  alongside session readback, review candidates, and the relay transcript.
+- Added Python and TypeScript contract coverage proving the learning readback is
+  advisory, bounded, and does not grant execution, mutation, approval, model, or
+  memory-write authority.
+
+Validation:
+
+- Focused developer-bridge pytest passed:
+  `python -m pytest tests\test_developer_bridge.py -q --tb=short` with 60
+  tests.
+- Focused Chat UI contract tests passed:
+  `node --test --experimental-strip-types src\chat\index.test.ts
+  src\lens\mcpStatus.test.ts` with 17 tests.
+- Ruff passed:
+  `python -m ruff check --no-cache
+  src\francis\developer_bridge\collaboration_driver.py
+  src\francis\api\routes\developer_bridge.py tests\test_developer_bridge.py`.
+- Mypy passed:
+  `python -m mypy src\francis\developer_bridge\collaboration_driver.py
+  src\francis\api\routes\developer_bridge.py`.
+- Chat UI production build passed: `npm run build`.
+- `git diff --check` passed for the touched developer-bridge and Chat UI files.
+- Restarted the local Francis API. Final health returned 200 on
+  `127.0.0.1:8000`, and `/developer-bridge/collaboration-learning?limit=5`
+  returned 200 in 151 ms with five receipts, `stores_full_transcript=false`,
+  `grants_execution_authority=false`, and
+  `grants_memory_write_authority=false`.
+- Browser proof saved to
+  `output/playwright/conversation-learning-readback-full.png`; HAR proof saved
+  to `output/playwright/conversation-learning-readback.har` showed the expected
+  React development aborts followed by 200 responses for agents, transcript,
+  sessions, review, and learning readbacks.
+
+Remaining truthful gap:
+
+- This exposes learning receipts; it does not tune Francis1, promote memory,
+  grant execution authority, or close a phase gate.
+- Learning receipt visibility is bounded to existing loop/drift receipt fields.
+  It is not a long-term memory promotion workflow.
+- Full local `.\scripts\check.ps1`, GitHub CI, and manual Chrome inspection were
+  not run for this slice.
+
+### 2026-06-25 04:58Z - Source-disagreement build-direction gate
+
+Current posture: Phase 2 / developer bridge collaboration support now treats
+source-disagreement review items as explicit build-direction blockers. The
+Communication UI shows a dedicated Build Direction Gates strip when a typed
+review item says disagreement cannot become build direction until conflicting
+source receipts, the surface, and Codex/operator review are recorded.
+
+What changed:
+
+- Added `build_direction_gate` to `developer_bridge.collaboration_review_item`
+  readbacks, with explicit `blocked_until_typed_review` state for
+  `source_disagreement_record` items.
+- Forced source-disagreement topics onto the typed
+  `developer_bridge.collaboration_review.items` surface instead of leaving them
+  as generic collaboration insight references.
+- Updated future source-disagreement driver prompts to cite
+  `developer_bridge.collaboration_review.items`.
+- Added Chat UI parsing and a compact Build Direction Gates section above the
+  review-candidate grid. The panel now fetches review limit 20 so blockers stay
+  visible through a full recurring topic cycle.
+- Changed the Communication panel readback warmup from parallel cold fetches to
+  sequential fetches so the UI does not present empty transcript/review state
+  after development StrictMode aborts or cold API reads.
+
+Validation:
+
+- Focused developer-bridge pytest passed:
+  `python -m pytest tests\test_developer_bridge.py -q --tb=short` with 60
+  tests.
+- Focused Chat UI contract tests passed:
+  `node --test --experimental-strip-types src\chat\index.test.ts
+  src\lens\mcpStatus.test.ts` with 17 tests.
+- Ruff passed:
+  `python -m ruff check --no-cache
+  src\francis\developer_bridge\collaboration_review.py
+  src\francis\developer_bridge\collaboration_driver.py
+  src\francis\api\routes\developer_bridge.py tests\test_developer_bridge.py`.
+- Mypy passed:
+  `python -m mypy src\francis\developer_bridge\collaboration_review.py
+  src\francis\developer_bridge\collaboration_driver.py
+  src\francis\api\routes\developer_bridge.py`.
+- Chat UI production build passed: `npm run build`.
+- `git diff --check` passed for the touched developer-bridge and Chat UI files.
+- Restarted the local Francis API. Direct review proof
+  `/developer-bridge/collaboration-review?limit=20` returned 200 with 20 items
+  and two blocked build-direction gates.
+- Browser proof saved to
+  `output/playwright/conversation-build-direction-gates-sequential-full.png`.
+  HAR proof saved to
+  `output/playwright/conversation-build-direction-gates-sequential.har` showed
+  the expected development abort followed by 200 responses for agents,
+  transcript, sessions, review limit 20, and learning readbacks.
+
+Remaining truthful gap:
+
+- This blocks source-disagreement as build direction until typed review. It does
+  not decide the disagreement, promote memory, tune Francis1, grant action
+  authority, or close a phase gate.
+- The gate is a review/readback contract. Applying a resulting implementation
+  still requires a separate Codex/operator review and governed repo change.
+- Full local `.\scripts\check.ps1`, GitHub CI, and manual Chrome interaction
+  were not run for this slice.
+
+### 2026-06-25 05:12Z - Collaboration runtime health readback
+
+Current posture: Phase 2 / developer bridge collaboration support now has a
+read-only runtime-health readback for the recurring Codex/Ollama collaboration
+loop. The Communication UI shows whether the bounded helper processes are
+running, whether the loop is waiting for Ollama or in a turn gap, the latest
+turn topic and receipt handles, enabled participants, and explicit no-authority
+runtime guards.
+
+What changed:
+
+- Added `read_collaboration_runtime_health()` for bounded readback of the
+  collaboration runtime supervisor state, conversation-driver state, helper
+  process matches, and collaboration agent toggles without starting helpers or
+  invoking models.
+- Added `/developer-bridge/collaboration-runtime-health` on the existing cached
+  read-only developer-bridge API path.
+- Added Chat UI parsing, contract coverage, and a Runtime Health strip above
+  Session Readback so the operator can see recurrence truth without opening
+  local JSON state files.
+- Restarted the local Francis API after the previous process on port `8000` was
+  listening but timing out on `/system/health`.
+
+Validation:
+
+- Ruff passed:
+  `.\.venv\Scripts\python.exe -m ruff check --no-cache
+  src\francis\developer_bridge\collaboration_runtime.py
+  src\francis\api\routes\developer_bridge.py tests\test_developer_bridge.py`.
+- Python compile check passed:
+  `.\.venv\Scripts\python.exe -m py_compile
+  src\francis\developer_bridge\collaboration_runtime.py
+  src\francis\api\routes\developer_bridge.py tests\test_developer_bridge.py`.
+- Direct backend import/readback proof returned
+  `developer_bridge.collaboration_runtime_health read_only degraded 3 3 True`
+  for an empty injected process listing, proving the function stays read-only.
+- Direct app route proof confirmed
+  `/developer-bridge/collaboration-runtime-health` is mounted.
+- Live HTTP proof after API restart returned `/system/health` `ok: true` and
+  `/developer-bridge/collaboration-runtime-health` `status=healthy`,
+  `helper_count=3`, all three helpers running, `turn_count=427`,
+  `recurrence_state=waiting_for_ollama`, and participants `2/3`.
+- Live route probes for `/developer-bridge/collaboration-agents`,
+  `/developer-bridge/collaboration-transcript?limit=5`,
+  `/developer-bridge/collaboration-review?limit=20`, and
+  `/developer-bridge/collaboration-learning?limit=4` all returned `ok: true`.
+- Full Chat UI Node test suite passed: `npm run test` with 270 tests, including
+  the new runtime-health parser contract.
+- Chat UI production build passed: `npm run build`.
+- `git diff --check` passed for the touched developer-bridge, Chat UI, test,
+  and ledger files.
+- Browser proof saved to
+  `output/playwright/conversation-runtime-health-full.png`; the screenshot shows
+  Runtime Health, Session Readback, Build Direction Gates, Review Candidates,
+  Learning Receipts, and Relay Transcript on `/conversation`.
+
+Validation not completed:
+
+- Focused `tests\test_developer_bridge.py` pytest could not be used as final
+  evidence in this run because importing the test module blocked before
+  collection output. The new backend path was covered by Ruff, compile checks,
+  direct function/route probes, and live API proof instead.
+- Focused mypy could not run because Windows Application Control blocked mypy's
+  compiled `state` module import.
+
+Remaining truthful gap:
+
+- This is a read-only live-health/readback surface. It does not tune Francis1,
+  promote memory, grant model execution authority, grant repo mutation
+  authority, or close the developer-bridge collaboration phase.
+- The runtime-health route reads current local helper/process state and the
+  driver state receipt. It is not a self-healing supervisor action path.
+- Full local `.\scripts\check.ps1`, GitHub CI, and a manual Chrome interaction
+  pass were not run for this slice.
+
+### 2026-06-25 05:25Z - Collaboration toggle receipt visibility
+
+Current posture: Phase 2 / developer bridge collaboration support now makes
+participant enable/disable proof visible in the Communication UI from the
+existing `developer_bridge.collaboration_agents` receipt store. The operator can
+see the latest toggle receipts alongside the three participant toggles, including
+agent, previous state, new state, actor, reason, receipt id, and explicit
+no-execution/no-model/no-memory-write guards.
+
+What changed:
+
+- Added typed Chat UI parsing for
+  `developer_bridge.collaboration_agent_toggle_receipt` records already returned
+  by `/developer-bridge/collaboration-agents`.
+- Added a compact Toggle Receipts section under Agent Relay Controls. It shows
+  the four latest participant toggle receipts without adding a new storage path
+  or changing the existing governed toggle route.
+- Changed the Communication UI load path so quick agent/toggle status renders
+  immediately, and transcript, sessions, review, learning, and runtime-health
+  readbacks update progressively instead of withholding all visible state behind
+  a slower readback.
+- Restarted the local Francis API after the live API process on port `8000`
+  left transcript/session/review routes timing out even though the underlying
+  read functions returned in under `0.05s` outside FastAPI.
+
+Validation:
+
+- Full Chat UI Node test suite passed: `npm run test` with 270 tests, including
+  the updated collaboration-agent parser contract.
+- Focused Chat UI parser test passed:
+  `node --test --experimental-strip-types src\chat\index.test.ts` with 13
+  tests.
+- Chat UI production build passed: `npm run build`.
+- `git diff --check` passed for the touched Chat UI files.
+- Direct backend proof showed
+  `/developer-bridge/collaboration-agents` returned `ok=true`,
+  `agent_count=3`, `receipt_count=10`, and latest receipt
+  `collab-agent-toggle-52710ad17026434b`.
+- Direct route proof after API restart showed `/system/health` `ok=true`,
+  `/developer-bridge/collaboration-transcript?limit=8` returned `ok=true`,
+  `count=8`, `truncated=true`, and `/developer-bridge/collaboration-review`
+  returned `ok=true`, `count=20`.
+- Runtime-health proof after API restart returned `status=healthy`,
+  `helper_count=3`, all three helpers running, `turn=440`, and
+  `recurrence=ready_for_next_prompt`.
+- Browser proof saved to
+  `output/playwright/conversation-toggle-receipts-live-full.png`; the screenshot
+  shows Agent Relay Controls, populated Toggle Receipts, Runtime Health, Session
+  Readback, Build Direction Gates, Review Candidates, Learning Receipts, and
+  Relay Transcript on `/conversation`.
+
+Remaining truthful gap:
+
+- This exposes participant toggle receipts; it does not enable Claude, grant
+  execution authority, grant model authority, promote memory, tune Francis1, or
+  close the developer-bridge collaboration phase.
+- The stale API route timeout was recovered by restart, not by a new supervisor
+  self-healing contract. A future slice should make API liveness/stuck-readback
+  recovery operator-visible if the behavior repeats.
+- Full local `.\scripts\check.ps1`, GitHub CI, and a manual Chrome interaction
+  pass were not run for this slice.
+
+### 2026-06-25 05:35Z - Review action-boundary visibility and stale readback fallback
+
+Current posture: Phase 2 / developer bridge collaboration support now makes
+model-advice action boundaries visible in Communication review cards, and cached
+collaboration readbacks can return a bounded `warming` or `stale_refreshing`
+payload instead of blocking the Communication UI behind a stuck readback. The
+Chrome recovery check showed the existing `/conversation` page was live at
+`http://127.0.0.1:5173/conversation`.
+
+What changed:
+
+- Added `collaborationActionBoundarySummary()` so review candidates expose
+  whether a collaboration item is advice-only, can create an action candidate,
+  can execute, can approve, requires Codex/operator review, and requires
+  repo-truth review.
+- Added a visible Action Boundary block to each Communication Review Candidate
+  card, keeping action authority separate from model advice.
+- Changed the cached developer-bridge readback wrapper to use a bounded
+  background refresh timeout and return explicit `warming` or
+  `stale_refreshing` cache status when transcript/session/review/learning or
+  runtime-health reads do not finish promptly.
+- Reopened the live Communication page in Chrome at the known-good local route
+  after the operator reported an HTTP error from a stale browser path.
+
+Validation:
+
+- Python compile check passed:
+  `.\.venv\Scripts\python.exe -m py_compile
+  src\francis\api\routes\developer_bridge.py`.
+- Ruff passed:
+  `.\.venv\Scripts\python.exe -m ruff check --no-cache
+  src\francis\api\routes\developer_bridge.py`.
+- Direct slow-readback fallback proof returned in `0.11s` with
+  `readback_cache.status="warming"` instead of blocking the request.
+- Focused Chat UI collaboration test passed:
+  `node --test --experimental-strip-types src\chat\index.test.ts` with 14
+  tests.
+- Full Chat UI Node test suite passed: `npm run test` with 271 tests.
+- Chat UI production build passed: `npm run build`.
+- Live API proof returned `/system/health` `ok=true`.
+- Live review route proof returned
+  `/developer-bridge/collaboration-review?limit=20` in `3.10s` with `ok=true`,
+  `count=20`, `readback_cache.status="refreshed"`, `execute=false`,
+  `approve=false`, and `requires_repo_truth_review=true`.
+- Runtime-health proof returned `status=healthy`, `helper_count=3`,
+  all three helpers running, turn `446`, and
+  `recurrence=waiting_for_ollama`.
+- Browser proof saved to
+  `output/playwright/conversation-action-boundary-live-full.png`; the screenshot
+  shows the Communication page with Runtime Health, Session Readback, Build
+  Direction Gates, Review Candidates, Action Boundary labels, Learning Receipts,
+  and Relay Transcript.
+- Chrome recovery proof saved to
+  `output/playwright/conversation-http-recovery.png`; the screenshot shows
+  `/conversation` rendering live after the reported HTTP error, including turn
+  `448`, active agents `2/3`, `cache stale_refreshing`, and advice-only action
+  boundary labels.
+
+Remaining truthful gap:
+
+- This is read-only collaboration visibility and liveness fallback. It does not
+  grant model execution, repo mutation, approval authority, memory promotion,
+  Francis1 tuning, or Claude access.
+- The fallback prevents a stuck readback from blocking the UI response, but it
+  is not a full supervisor or worker-leak remediation path.
+- Full local `.\scripts\check.ps1`, GitHub CI, and manual end-to-end operator
+  interaction in the user's existing Chrome tab were not run for this slice.
+
+### 2026-06-25 05:53Z - Output-guard drift learning receipt de-duplication
+
+Current posture: Phase 2 / developer bridge collaboration support now treats
+repeated Francis1 output-guard drift as bounded learning material without
+writing a new learning receipt on every repeated guarded turn. The runtime
+supervisor also prefers the repo `.venv` Python for managed collaboration
+helpers when that interpreter exists.
+
+What changed:
+
+- Added an output-guard saturation signal to the collaboration driver so
+  repeated Francis1 guard fallbacks become
+  `failure_type="output_guard_drift"` learning receipts.
+- Generalized learning-event metadata so guard drift can carry a specific
+  observation, memory value, operator intent, and next-prompt policy without
+  storing raw model output.
+- Stabilized the output-guard drift signature as
+  `output_guard_drift|continuous_saturation` so existing drift saturation is
+  normalized instead of appending a new learning receipt per turn.
+- Changed the collaboration runtime supervisor to launch fixed helper commands
+  through `D:\Francis\.venv\Scripts\python.exe` when the repo venv exists,
+  falling back to `sys.executable` only when it does not.
+- Reopened the live Communication page in Chrome at
+  `http://127.0.0.1:5173/conversation` after the operator reported a Chrome
+  HTTP error from the conversation window.
+
+Validation:
+
+- Python compile check passed:
+  `.\.venv\Scripts\python.exe -m py_compile
+  src\francis\developer_bridge\collaboration_runtime.py
+  src\francis\developer_bridge\collaboration_driver.py
+  tests\test_developer_bridge.py`.
+- Ruff passed:
+  `.\.venv\Scripts\python.exe -m ruff check --no-cache
+  src\francis\developer_bridge\collaboration_runtime.py
+  src\francis\developer_bridge\collaboration_driver.py
+  tests\test_developer_bridge.py`.
+- Focused pytest passed:
+  `.\.venv\Scripts\python.exe -m pytest
+  tests\test_developer_bridge.py::test_collaboration_runtime_prefers_repo_venv_python
+  tests\test_developer_bridge.py::test_collaboration_driver_rotates_topics_after_repeated_output_guard_receipts
+  -q`.
+- Whitespace diff check passed for the touched collaboration driver, runtime,
+  developer-bridge tests, Chat UI collaboration files, API readback route, and
+  completion ledger.
+- Live HTTP proof returned `/system/health` `ok=true` and Vite `/conversation`
+  HTTP `200`.
+- Live runtime-health proof returned `status=healthy`, `helper_count=3`, all
+  three collaboration helpers running, turn `463`, and
+  `recurrence_state=waiting_for_ollama`.
+- Live learning readback returned
+  `/developer-bridge/collaboration-learning?limit=3&failure_type=output_guard_drift`
+  with `ok=true`, `count=3`, `truncated=true`, latest receipt
+  `learning-driver-906d79591645-9143df3714064f2d`,
+  `failure_type="output_guard_drift"`, `stores_full_transcript=false`, and all
+  execution, mutation, approval, memory-write, and model authority grants false.
+- Live transcript proof showed turn `463` continued after the guard drift with
+  current artifact `developer_bridge.collaboration_review.items`, an
+  Ollama-to-Codex reply, and a bounded no-authority auto-ack receipt.
+
+Remaining truthful gap:
+
+- Multiple output-guard drift receipts were already written during the first
+  live attempt before the stable signature was applied; the current readback
+  shows at least five when queried with `limit=5`. They remain append-only
+  evidence; this slice does not rewrite or delete historical receipts.
+- Runtime-health process readback still shows parent/child PID pairs for each
+  helper under the venv/uv launch model. A future readback slice should
+  distinguish wrapper processes from duplicate active helpers.
+- This records and de-duplicates drift as learning material; it does not tune
+  Francis1, train a model, promote memory, grant model authority, grant
+  execution authority, enable Claude, or close the developer-bridge
+  collaboration phase.
+- Full local `.\scripts\check.ps1`, GitHub CI, and manual confirmation inside
+  the operator's exact Chrome tab were not run for this slice.
+
+### 2026-06-25 06:01Z - Communication transcript audit-ack visibility filter
+
+Current posture: Phase 2 / developer bridge collaboration support now separates
+Codex auto-acknowledgement receipts from the default operator-facing
+Communication transcript. Auto-ack receipts remain parsed, counted, retained,
+and available through an explicit UI toggle, but the default relay transcript
+session view shows the actual Codex/Francis1 conversation turns first.
+
+What changed:
+
+- Added typed Chat UI parser classification for collaboration transcript
+  receipts: `conversation` versus `audit_ack`.
+- Classified auto-ack receipts when the objective or prompt starts with
+  `auto-ack`, or the context contains `no_response_requested=true`.
+- Added `collaborationTranscriptAuditSummary()` and
+  `isCollaborationAuditReceipt()` helpers so UI code can hide audit
+  acknowledgements without deleting or mutating receipt readback.
+- Changed the Communication panel session source to default to conversation
+  receipts only.
+- Added an `Audit` toggle and header count so operators can see how many
+  acknowledgement receipts are hidden and can reveal them on demand.
+- Marked revealed auto-ack entries with an `audit ack` label when the toggle is
+  enabled.
+
+Validation:
+
+- Focused Chat UI parser tests passed:
+  `node --test --experimental-strip-types src\chat\index.test.ts` with 15
+  tests.
+- Chat UI production build passed: `npm run build`.
+- Whitespace diff check passed for `apps\chat_ui\src\App.tsx`,
+  `apps\chat_ui\src\chat\collaboration.ts`, and
+  `apps\chat_ui\src\chat\index.test.ts`.
+- Live parser proof against
+  `/developer-bridge/collaboration-transcript?limit=12` returned `ok=true`,
+  `total=12`, `conversation=8`, `audit=4`, and all four audit receipts
+  classified as `audit_ack`.
+- Live Vite route proof returned `/conversation` HTTP `200`.
+
+Remaining truthful gap:
+
+- This is an operator-facing filter and classification change. It does not
+  delete audit receipts, alter backend relay storage, change model behavior,
+  tune Francis1, grant model authority, grant execution authority, promote
+  memory, enable Claude, or close the developer-bridge collaboration phase.
+- The local model is still repeatedly hitting output-guard fallback patterns;
+  those are now bounded learning/audit material, not proof that the model has
+  learned the behavior.
+- Full local `.\scripts\check.ps1`, GitHub CI, and manual visual confirmation
+  inside the operator's exact Chrome tab were not run for this slice.
+
+### 2026-06-25 06:11Z - Communication action-intake boundary for mission ingress
+
+Current posture: Phase 2 / developer bridge collaboration support now marks
+mission-ingress review candidates as action candidates only in the Communication
+review UI. The conversation can surface a candidate direction, but the UI keeps
+execution, approval, repo mutation, and memory-promotion authority visibly
+absent.
+
+What changed:
+
+- Added a typed Chat UI action-intake summary for review candidates that cite
+  `api.routes.chat.mission_ingress` or the
+  `mission_ingress_action_boundary` surface kind.
+- Added an `Action Intake` block to Communication review candidate cards so
+  operators can see the concrete surface, candidate status, execution status,
+  approval status, repo-review requirement, and current gate.
+- Added parser coverage proving a mission-ingress review item renders as
+  `action candidate only` with `execute false`, `approve false`, and
+  `repo review true`.
+
+Validation:
+
+- Focused Chat UI parser tests passed:
+  `node --test --experimental-strip-types src\chat\index.test.ts` with 16
+  tests.
+- Full Chat UI test suite passed: `npm run test` with 273 tests.
+- Chat UI production build passed: `npm run build`.
+- Backend mission-ingress guard tests passed:
+  `.\.venv\Scripts\python.exe -m pytest
+  tests\test_api_chat.py::test_chat_mission_command_declares_queued_mission_with_loop_context
+  tests\test_api_chat.py::test_chat_mission_command_denies_unscoped_actor_before_mutation
+  -q`.
+- Whitespace diff check passed for `apps\chat_ui\src\App.tsx`,
+  `apps\chat_ui\src\chat\collaboration.ts`,
+  `apps\chat_ui\src\chat\index.test.ts`, and this ledger file.
+- Live review parser proof against
+  `/developer-bridge/collaboration-review?limit=10` returned `ok=true`,
+  found `surface=api.routes.chat.mission_ingress`,
+  `surfaceKind=mission_ingress_action_boundary`, and rendered
+  `badge=action candidate only` with `execute false`, `approve false`,
+  `repo review true`, and `gate advisory_review_required`.
+- Live runtime-health proof returned `status=healthy`, `helper_count=3`,
+  turn `476`, Codex and Ollama enabled, Claude disabled, and latest topic
+  `which governance gate must be visible when model advice proposes action`.
+- Live Vite route proof returned `/conversation` HTTP `200`, and Chrome was
+  opened to `http://127.0.0.1:5173/conversation` after the operator reported a
+  browser HTTP error.
+
+Remaining truthful gap:
+
+- This is UI/readback visibility over an existing governed mission-ingress
+  boundary. It does not add backend execution, approval, mutation,
+  memory-promotion, model training, Claude enablement, or direct desktop
+  action authority.
+- The local model is still producing output-guard drift receipts; the receipts
+  are retained as bounded learning/audit material, not proof that Francis1 has
+  internalized the behavior.
+- Runtime-health process readback still shows parent/child PID pairs for each
+  helper under the venv/uv launch model. A future readback slice should
+  distinguish wrapper processes from duplicate active helpers.
+- Full local `.\scripts\check.ps1`, GitHub CI, and manual visual confirmation
+  inside the operator's exact Chrome tab were not run for this slice.
+
+### 2026-06-25 06:16Z - Communication recurrence-proof runtime readback
+
+Current posture: Phase 2 / developer bridge collaboration support now derives
+and displays a runtime recurrence proof from the existing read-only
+collaboration-runtime health fields. The Communication panel can show whether
+the Codex/Francis1 relay is recurring cleanly without user nudges, or whether
+the runtime needs review, without adding any execution, approval, memory-write,
+or model-training authority.
+
+What changed:
+
+- Added a typed Chat UI runtime recurrence summary that derives its badge, tone,
+  and evidence lines from existing runtime-health fields.
+- The summary checks helper liveness, desired helper count, loop observation,
+  turn count, recurrence state, Ollama wait state, driver/supervisor state age,
+  turn-gap seconds, and no-authority governance fields.
+- Added a visible `Recurrence Proof` block to the Communication Runtime Health
+  card so operators can see the exact evidence behind `recurring cleanly` or
+  `recurrence needs review`.
+- Added parser coverage proving a healthy runtime with helpers `3/3`, loop
+  observed, fresh state ages, and no authority grants renders as
+  `recurring cleanly`.
+
+Validation:
+
+- Focused Chat UI parser tests passed:
+  `node --test --experimental-strip-types src\chat\index.test.ts` with 16
+  tests.
+- Full Chat UI test suite passed: `npm run test` with 273 tests.
+- Chat UI production build passed: `npm run build`.
+- Whitespace diff check passed for `apps\chat_ui\src\App.tsx`,
+  `apps\chat_ui\src\chat\collaboration.ts`,
+  `apps\chat_ui\src\chat\index.test.ts`, and this ledger file.
+- Live runtime parser proof against
+  `/developer-bridge/collaboration-runtime-health` returned `status=healthy`,
+  helpers `3/3`, turn `481`, `state waiting_for_ollama`,
+  `waiting for ollama true`, `driver age 4s`, `supervisor age 13s`,
+  `authority none true`, and rendered `badge=recurring cleanly`.
+- A transient earlier live proof returned `status=degraded` with helpers `2/3`;
+  the supervisor then restored the missing conversation-driver helper and the
+  settled readback returned healthy. The transient state is retained as useful
+  liveness evidence, not hidden.
+- Live Vite route proof returned `/conversation` HTTP `200`.
+
+Remaining truthful gap:
+
+- This is an operator-facing runtime-health readback improvement. It does not
+  add backend helper control, execution authority, approval authority, memory
+  promotion, model tuning, Claude enablement, or direct desktop action
+  authority.
+- The readback cache can still show `stale_refreshing` while serving the last
+  successful runtime health payload; the UI now makes the underlying runtime
+  recurrence evidence visible, but it does not change cache policy.
+- Runtime-health process readback still reports parent/child PID pairs for each
+  helper under the venv/uv launch model. A future readback slice should
+  distinguish wrapper processes from duplicate active helpers.
+- Full local `.\scripts\check.ps1`, GitHub CI, Playwright/browser screenshot
+  proof, and manual confirmation inside the operator's exact Chrome tab were
+  not run for this slice.
+
+### 2026-06-25 06:25Z - Communication latest review-receipt runtime handle
+
+Current posture: Phase 2 / developer bridge collaboration support now exposes
+the latest review-receipt handle through the existing read-only runtime-health
+surface. A Codex implementation session can see the exact review item it must
+inspect before editing collaboration code, even when the heavier collaboration
+review readback is warming.
+
+What changed:
+
+- Added `collaboration_loop.latest_review_receipt` to
+  `developer_bridge.collaboration_runtime_health`.
+- The receipt projection derives from the latest collaboration insight id and
+  includes `insight_id`, `review_item_id`, `review_artifact`, `review_route`,
+  source, required review, and no-authority fields.
+- Added Chat UI parser coverage for the runtime review-receipt projection.
+- Added a visible `Review Receipt` block to the Communication Runtime Health
+  card with a `read before editing` badge and the exact receipt evidence.
+
+Validation:
+
+- Focused backend runtime-health contract test passed:
+  `.\.venv\Scripts\python.exe -m pytest
+  tests\test_developer_bridge.py::test_collaboration_runtime_health_is_read_only_and_reports_recurrence
+  -q`.
+- Focused Chat UI parser tests passed:
+  `node --test --experimental-strip-types src\chat\index.test.ts` with 16
+  tests.
+- Full Chat UI test suite passed: `npm run test` with 273 tests.
+- Chat UI production build passed: `npm run build`.
+- Whitespace diff check passed for
+  `src\francis\developer_bridge\collaboration_runtime.py`,
+  `tests\test_developer_bridge.py`, `apps\chat_ui\src\App.tsx`,
+  `apps\chat_ui\src\chat\collaboration.ts`,
+  `apps\chat_ui\src\chat\index.test.ts`, and this ledger file.
+- Local Francis API was restarted on port `8000` so the live route loaded the
+  updated runtime-health code.
+- Live runtime parser proof through
+  `/developer-bridge/collaboration-runtime-health` returned
+  `status=healthy`, turn `487`, a populated `latest_review_receipt`,
+  `badge=read before editing`, `codex review true`, `execute false`,
+  `approve false`, and `memory write false`.
+- Live review route proof through
+  `/developer-bridge/collaboration-review?limit=1` returned the same insight
+  id, the same review artifact, surface
+  `developer_bridge.collaboration_review.items`, gate
+  `blocked_until_typed_review`, `execute=false`, and `approve=false`.
+- Live route proof returned `/system/health` HTTP `200` and `/conversation`
+  HTTP `200` after the API restart.
+
+Remaining truthful gap:
+
+- This is a readback handle and UI visibility improvement. It does not make the
+  collaboration output build direction, run the review, apply code, grant
+  execution authority, grant approval authority, promote memory, tune Francis1,
+  enable Claude, or create direct desktop action authority.
+- The full collaboration review route can still enter cache-warming windows;
+  runtime health now names the receipt to inspect, but the typed review item is
+  still supplied by `/developer-bridge/collaboration-review`.
+- Runtime-health process readback still reports parent/child PID pairs for each
+  helper under the venv/uv launch model. A future readback slice should
+  distinguish wrapper processes from duplicate active helpers.
+- Full local `.\scripts\check.ps1`, GitHub CI, Playwright/browser screenshot
+  proof, and manual confirmation inside the operator's exact Chrome tab were
+  not run for this slice.
+
+### 2026-06-25 06:37Z - Communication runtime helper process-model readback
+
+Current posture: Phase 2 / developer bridge collaboration support now
+distinguishes wrapper processes from effective helper workers in the existing
+read-only runtime-health surface. The Communication panel can show three
+collaboration helpers, three effective workers, and six matched processes under
+the Windows venv/uv wrapper-child launch model without implying duplicate
+agents.
+
+What changed:
+
+- Added per-helper process-model fields to
+  `developer_bridge.collaboration_runtime_health`: `process_count`,
+  `process_model`, `effective_worker_count`, `effective_pids`,
+  `wrapper_process_count`, `wrapper_pids`, and typed process role entries.
+- Extended Windows and POSIX process listing to carry parent process ids so
+  parent-child wrapper pairs can be classified from live process evidence.
+- Updated the Communication UI parser and Runtime Health card to surface
+  `helpers`, `workers`, total matched processes, and the observed process
+  model separately.
+- Preserved existing `pids` and helper-running behavior for compatibility.
+
+Validation:
+
+- Focused backend runtime-health contract test passed:
+  `.\.venv\Scripts\python.exe -m pytest
+  tests\test_developer_bridge.py::test_collaboration_runtime_health_is_read_only_and_reports_recurrence
+  -q`.
+- Ruff passed for the touched Python runtime/test files:
+  `.\.venv\Scripts\python.exe -m ruff check --no-cache
+  src\francis\developer_bridge\collaboration_runtime.py
+  tests\test_developer_bridge.py`.
+- Mypy passed for the touched runtime module:
+  `.\.venv\Scripts\python.exe -m mypy
+  src\francis\developer_bridge\collaboration_runtime.py`.
+- Focused Chat UI parser tests passed:
+  `node --test --experimental-strip-types src\chat\index.test.ts` with 16
+  tests.
+- Full Chat UI test suite passed: `npm run test` with 273 tests.
+- Chat UI production build passed: `npm run build`.
+- Whitespace diff check passed for
+  `src\francis\developer_bridge\collaboration_runtime.py`,
+  `tests\test_developer_bridge.py`, `apps\chat_ui\src\App.tsx`,
+  `apps\chat_ui\src\chat\collaboration.ts`, and
+  `apps\chat_ui\src\chat\index.test.ts`.
+- Local Francis API was restarted on port `8000`; `/system/health` returned
+  HTTP `200`.
+- Live runtime proof through
+  `/developer-bridge/collaboration-runtime-health` returned
+  `status=healthy`, three running helpers, `process_model=wrapper_child_pair`,
+  `process_count=6`, `effective_workers=3`, and `wrapper_processes=3`.
+- Browser proof for `http://127.0.0.1:5173/conversation` produced
+  `output/playwright/conversation-process-model.png`, showing
+  `helpers 3/3 / workers 3/3`, per-helper `1/2` process chips, `processes 6`,
+  and `model wrapper_child_pair`.
+
+Remaining truthful gap:
+
+- This is read-only observability and UI truthfulness. It does not start or stop
+  helpers, tune Francis1, enable Claude, execute model output, write memory,
+  apply code from collaboration review items, grant approval authority, or close
+  the developer-bridge collaboration phase.
+- `.\scripts\check.ps1`, GitHub CI, and manual confirmation inside the
+  operator's exact foreground Chrome tab were not run for this slice.
+
+### 2026-06-25 06:46Z - Communication latest learning-receipt runtime handle
+
+Current posture: Phase 2 / developer bridge collaboration support now exposes
+the latest collaboration learning receipt through the existing read-only
+runtime-health surface. A Codex implementation session or operator can see the
+exact drift/tuning evidence handle before proposing Francis1 tuning, without
+digging through raw relay noise or treating model output as authority.
+
+What changed:
+
+- Added `collaboration_loop.latest_learning_receipt` to
+  `developer_bridge.collaboration_runtime_health`.
+- The receipt projection derives from
+  `collaboration_loop.last_learning_event_id` and includes
+  `learning_event_id`, `learning_artifact`, `learning_route`, source,
+  drift-learning and tuning-review requirements, plus explicit no-authority
+  fields.
+- Added Chat UI parser coverage for the runtime learning-receipt projection.
+- Added a visible `Learning Receipt` block to the Communication Runtime Health
+  card with a `tuning evidence` badge and no-training/no-memory-write fields.
+
+Validation:
+
+- Focused backend runtime-health contract test passed:
+  `.\.venv\Scripts\python.exe -m pytest
+  tests\test_developer_bridge.py::test_collaboration_runtime_health_is_read_only_and_reports_recurrence
+  -q`.
+- Ruff passed for the touched Python runtime/test files:
+  `.\.venv\Scripts\python.exe -m ruff check --no-cache
+  src\francis\developer_bridge\collaboration_runtime.py
+  tests\test_developer_bridge.py`.
+- Mypy passed for the touched runtime module:
+  `.\.venv\Scripts\python.exe -m mypy
+  src\francis\developer_bridge\collaboration_runtime.py`.
+- Focused Chat UI parser tests passed:
+  `node --test --experimental-strip-types src\chat\index.test.ts` with 16
+  tests.
+- Full Chat UI test suite passed: `npm run test` with 273 tests.
+- Chat UI production build passed: `npm run build`.
+- Whitespace diff check passed for
+  `src\francis\developer_bridge\collaboration_runtime.py`,
+  `tests\test_developer_bridge.py`, `apps\chat_ui\src\App.tsx`,
+  `apps\chat_ui\src\chat\collaboration.ts`, and
+  `apps\chat_ui\src\chat\index.test.ts`.
+- Local Francis API was restarted on port `8000`; `/system/health` returned
+  HTTP `200`.
+- Live runtime proof through
+  `/developer-bridge/collaboration-runtime-health` returned
+  `status=healthy`, turn `507`, a populated `latest_learning_receipt`,
+  `records_model_drift_as_learning=true`, `requires_codex_or_operator_review_before_tuning=true`,
+  `training=false`, and `memory_write=false`.
+- Live learning readback proof through
+  `/developer-bridge/collaboration-learning?limit=1` returned the same learning
+  id, `failure_type=output_guard_drift`, `recent_turn_count=6`,
+  `stores_full_transcript=false`, `training=false`, and `memory_write=false`.
+- Browser proof for `http://127.0.0.1:5173/conversation` produced
+  `output/playwright/conversation-learning-receipt.png`, showing the
+  `Learning Receipt` block and `tuning evidence` badge.
+- The first browser proof exposed stale supervisor state. The collaboration
+  runtime supervisor watch was relaunched with
+  `python -m francis.developer_bridge.collaboration_runtime --watch
+  --poll-seconds 10 --quiet`; a follow-up runtime-health proof returned
+  `readback_cache.status=refreshed`, `status=healthy`, three helpers,
+  `driver_age=2.707`, and `supervisor_age=4.954`.
+- A fresh browser proof produced
+  `output/playwright/conversation-learning-receipt-fresh.png`, showing
+  `recurring cleanly`, fresh driver/supervisor ages, the `Learning Receipt`
+  block, and the `tuning evidence` badge.
+
+Remaining truthful gap:
+
+- This is a readback handle and UI visibility improvement. It does not tune or
+  train Francis1, promote memory, change the model prompt, execute model output,
+  write memory, apply code from collaboration review items, grant approval
+  authority, enable Claude, or close the developer-bridge collaboration phase.
+- `.\scripts\check.ps1`, GitHub CI, and manual confirmation inside the
+  operator's exact foreground Chrome tab were not run for this slice.
+
+### 2026-06-25 07:04Z - Communication current learning-signal readback
+
+Current posture: Phase 2 / developer bridge collaboration support now separates
+the append-only learning receipt from the current live drift signal. Continuous
+output-guard drift can remain visible to the operator and Codex as tuning
+pressure without writing duplicate learning receipts every turn or exposing raw
+model text.
+
+What changed:
+
+- The collaboration driver now records `latest_learning_signal` in its state
+  whenever loop or output-guard saturation is detected, even when the append-only
+  learning receipt is deduped.
+- The current signal carries only bounded metadata: failure type, repeated
+  terms, recent-turn count, latest turn, linked learning receipt id, update time,
+  and explicit no-authority fields.
+- Added `collaboration_loop.current_learning_signal` to
+  `developer_bridge.collaboration_runtime_health`.
+- Added Chat UI parser coverage and a visible `Learning Signal` block in the
+  Communication Runtime Health card.
+
+Validation:
+
+- Focused backend runtime-health contract test passed:
+  `.\.venv\Scripts\python.exe -m pytest
+  tests\test_developer_bridge.py::test_collaboration_runtime_health_is_read_only_and_reports_recurrence
+  -q`.
+- Focused backend output-guard learning test passed:
+  `.\.venv\Scripts\python.exe -m pytest
+  tests\test_developer_bridge.py::test_collaboration_driver_rotates_topics_after_repeated_output_guard_receipts
+  -q`.
+- Ruff passed for the touched Python driver/runtime/test files:
+  `.\.venv\Scripts\python.exe -m ruff check --no-cache
+  src\francis\developer_bridge\collaboration_driver.py
+  src\francis\developer_bridge\collaboration_runtime.py
+  tests\test_developer_bridge.py`.
+- Mypy passed for the touched driver/runtime modules:
+  `.\.venv\Scripts\python.exe -m mypy
+  src\francis\developer_bridge\collaboration_driver.py
+  src\francis\developer_bridge\collaboration_runtime.py`.
+- Focused Chat UI parser tests passed:
+  `node --test --experimental-strip-types src\chat\index.test.ts` with 16
+  tests.
+- Full Chat UI test suite passed: `npm run test` with 273 tests.
+- Chat UI production build passed: `npm run build`.
+- Local Francis API was restarted on port `8000`; `/system/health` returned
+  HTTP `200`.
+- The bounded collaboration runtime supervisor was restarted and restored the
+  conversation driver helper.
+- Live runtime proof through
+  `/developer-bridge/collaboration-runtime-health` returned
+  `current_learning_signal.observed=true`, `failure_type=output_guard_drift`,
+  `latest_turn=515`, `recent_turn_count=6`, the existing learning receipt id,
+  `training=false`, and `memory_write=false`.
+- Browser proof for `http://127.0.0.1:5173/conversation` produced
+  `output/playwright/conversation-current-learning-signal-tall.png`, showing
+  the `Learning Signal` block, `current drift signal` badge,
+  `failure output_guard_drift`, latest turn, recent turns, linked receipt,
+  `training false`, and `memory write false`.
+
+Remaining truthful gap:
+
+- This is read-only drift visibility and receipt discipline. It does not tune or
+  train Francis1, change prompts, promote memory, execute model output, grant
+  action authority, enable Claude, or close the developer-bridge collaboration
+  phase.
+- The collaboration review route returned a temporary zero-count/warming view
+  during this slice while runtime and learning readbacks were live; review
+  readback responsiveness remains a separate follow-up.
+- `.\scripts\check.ps1`, GitHub CI, and manual confirmation inside the
+  operator's exact foreground Chrome tab were not run for this slice.
+
+### 2026-06-25 14:49Z - Francis1 whole-body awareness body-map readback
+
+Current posture: Phase 2 / developer bridge collaboration support now exposes a
+read-only Francis body map so Francis1 can see the broad system body without
+receiving broad system authority. This corrects the collaboration substrate from
+single-lane chat awareness toward whole-body awareness with trust-gated
+capability exposure.
+
+What changed:
+
+- Added `developer_bridge.francis_body_map` readback with Francis1 identity,
+  provider-lane truth, current Phase 2 posture, access ladder, known body
+  surfaces, evidence paths, no-authority flags, and a mini-roadmap quest.
+- Added `/developer-bridge/francis-body-map` using the existing cached read-only
+  developer-bridge response pattern.
+- Added `francis_body_map_tool` to the MCP developer bridge so connected
+  external guidance tools can inspect the same body-map surface.
+- Bound a compact body-map line into Codex-to-Francis1 collaboration prompts so
+  the next runtime restart tells Francis1 it can see the whole body while
+  execution, mutation, approval, training, and memory-write authority remain
+  false.
+- Added Chat UI parsing and a Communication-panel body-map section showing
+  identity, phase, latest ledger entry, surface counts, access modes, authority
+  flags, and quest progress.
+
+Validation:
+
+- Focused backend body-map/route/MCP/driver tests passed:
+  `python -m pytest
+  tests/test_developer_bridge.py::test_francis_body_map_exposes_whole_body_without_authority
+  tests/test_developer_bridge.py::test_developer_bridge_routes_are_mounted
+  tests/test_developer_bridge.py::test_developer_bridge_mcp_registers_collaboration_relay_tools
+  tests/test_developer_bridge.py::test_collaboration_driver_waits_for_ollama_before_next_turn`.
+- Ruff passed for touched backend/test files:
+  `python -m ruff check --no-cache
+  src\francis\developer_bridge\body_map.py
+  src\francis\developer_bridge\collaboration_driver.py
+  src\francis\developer_bridge\ollama_participant.py
+  src\francis\developer_bridge\mcp_server.py
+  src\francis\api\routes\developer_bridge.py
+  tests\test_developer_bridge.py`.
+- Venv mypy passed for touched backend route/driver/model-participant files:
+  `.\.venv\Scripts\python.exe -m mypy
+  src\francis\developer_bridge\body_map.py
+  src\francis\developer_bridge\collaboration_driver.py
+  src\francis\developer_bridge\ollama_participant.py
+  src\francis\api\routes\developer_bridge.py`.
+- Chat UI parser tests passed:
+  `cd apps\chat_ui; node --test --experimental-strip-types
+  src\chat\index.test.ts` with 17 tests.
+- Full Chat UI test suite passed: `cd apps\chat_ui; npm run test` with 274
+  tests.
+- Chat UI production build passed: `cd apps\chat_ui; npm run build`.
+- `git diff --check` passed; it reported only unrelated line-ending warnings
+  from existing dirty files outside this slice.
+
+Remaining truthful gap:
+
+- The body map is read-only awareness, not capability authority. It does not
+  restart the collaboration runtime, tune or train Francis1, promote memory,
+  execute model output, approve actions, or expose the full governed gateway.
+- The mini-roadmap quest is 50% complete by its own bounded wiring baseline:
+  body-map readback, prompt binding, and operator visibility are validated; live
+  restart observation, trust-ladder capability-request enforcement, and full
+  body-coverage review remain pending.
+- `.\scripts\check.ps1`, GitHub CI, and foreground browser proof were not run
+  for this slice.
+
+### 2026-06-25 15:03Z - Francis1 trust-ladder request classification readback
+
+Current posture: Phase 2 / developer bridge collaboration support now classifies
+Francis1 needs into a typed trust ladder before any capability exposure. This
+keeps Francis1's whole-body awareness connected to existing collaboration
+review receipts while preserving the current no-authority boundary.
+
+What changed:
+
+- Added `developer_bridge.francis_trust_ladder` readback that projects typed
+  collaboration review items into exactly four decisions: `wire_existing`,
+  `build_missing`, `tune_prompt_guard`, or `reject_as_drift`.
+- Added `/developer-bridge/francis-trust-ladder` using the same cached,
+  read-only developer-bridge response pattern as transcript, review, learning,
+  runtime, and body-map readbacks.
+- Added `francis_trust_ladder_tool` to the MCP developer bridge so connected
+  guidance sources can inspect trust-ladder decisions without receiving action
+  authority.
+- Bound a compact trust-ladder line into future Codex-to-Francis1 prompts while
+  keeping the collaboration driver prompt under its compactness test ceiling.
+- Updated the Francis body map so the bounded mini-roadmap quest advances from
+  50% to 66% only when the trust-ladder repo surface is present.
+- Added Chat UI parsing and a Communication-panel trust-ladder section showing
+  decision counts, recent classified needs, next trust gates, recommended Codex
+  action, and unsafe-authority detection.
+
+Validation:
+
+- Focused backend trust-ladder/body-map/route/MCP/driver tests passed:
+  `python -m pytest
+  tests/test_developer_bridge.py::test_francis_body_map_exposes_whole_body_without_authority
+  tests/test_developer_bridge.py::test_francis_trust_ladder_classifies_needs_without_authority
+  tests/test_developer_bridge.py::test_developer_bridge_routes_are_mounted
+  tests/test_developer_bridge.py::test_developer_bridge_mcp_registers_collaboration_relay_tools
+  tests/test_developer_bridge.py::test_collaboration_driver_waits_for_ollama_before_next_turn`.
+- Full developer-bridge backend test file passed:
+  `python -m pytest tests/test_developer_bridge.py` with 64 tests.
+- Ruff passed for touched backend/test files:
+  `python -m ruff check --no-cache
+  src\francis\developer_bridge\body_map.py
+  src\francis\developer_bridge\trust_ladder.py
+  src\francis\developer_bridge\collaboration_driver.py
+  src\francis\developer_bridge\ollama_participant.py
+  src\francis\developer_bridge\mcp_server.py
+  src\francis\api\routes\developer_bridge.py
+  tests\test_developer_bridge.py`.
+- Venv mypy passed for touched backend route/driver/readback files:
+  `.\.venv\Scripts\python.exe -m mypy
+  src\francis\developer_bridge\body_map.py
+  src\francis\developer_bridge\trust_ladder.py
+  src\francis\developer_bridge\collaboration_driver.py
+  src\francis\developer_bridge\ollama_participant.py
+  src\francis\api\routes\developer_bridge.py`.
+- Chat UI parser tests passed:
+  `cd apps\chat_ui; node --test --experimental-strip-types
+  src\chat\index.test.ts` with 18 tests.
+- Full Chat UI test suite passed: `cd apps\chat_ui; npm run test` with 275
+  tests.
+- Chat UI production build passed: `cd apps\chat_ui; npm run build`.
+- Direct readback returned `quest_percent=66`,
+  `trust_ladder_enforced=true`, trust-ladder decisions
+  `wire_existing`, `build_missing`, `tune_prompt_guard`, `reject_as_drift`,
+  and `grants_any_authority=false`.
+- `git diff --check` passed; it reported only unrelated line-ending warnings
+  from existing dirty files outside this slice.
+
+Remaining truthful gap:
+
+- The trust ladder is read-only classification, not capability exposure. It
+  does not restart the collaboration runtime, execute model output, approve
+  actions, mutate files, promote memory, train or tune Francis1, or expose the
+  full governed gateway.
+- The mini-roadmap quest is 66% complete by its own bounded wiring baseline:
+  body-map readback, prompt binding, operator visibility, and trust-ladder
+  enforcement are validated; live restart observation and full body-coverage
+  review remain pending.
+- `.\scripts\check.ps1`, GitHub CI, foreground browser proof, and live restarted
+  conversation observation were not run for this slice.
+
+### 2026-06-25 15:19Z - Francis1 body/trust runtime restart observation
+
+Current posture: Phase 2 / developer bridge collaboration support has now been
+restarted through the bounded local collaboration runtime and observed through
+relay receipts. The live Codex-to-Francis1 prompt included both the body-map
+line and the trust-ladder line, Francis1 responded through the Ollama lane, and
+the resulting review/trust readbacks remained no-authority.
+
+What changed:
+
+- Started `python -m francis communication-runtime --watch --poll-seconds 10
+  --quiet` as the bounded collaboration supervisor.
+- The supervisor restored the three declared helpers:
+  `codex_ollama_responder`, `ollama_codex_participant`, and
+  `codex_ollama_conversation_driver`.
+- Observed a live Codex-to-Francis1 prompt containing
+  `Body map: Francis1 can see whole-body surfaces; authority remain false` and
+  `Trust: classify needs; no capability authority`.
+- Observed a matching Francis1/Ollama response. The response was rewritten by
+  the existing output guard, which is recorded as drift evidence rather than
+  action readiness.
+- Extended `developer_bridge.francis_body_map` so the mini-roadmap quest marks
+  runtime restart observation complete only when a body/trust prompt receipt and
+  matching Francis1 response receipt are present.
+- Added Chat UI parser/readback coverage for the body-map runtime-observation
+  fields and surfaced runtime observation in the Communication-panel body-map
+  summary.
+
+Validation:
+
+- Runtime-health readback returned `status=healthy`, three running helpers,
+  three effective workers, turn `875`, `waiting_for_ollama=false`, and fresh
+  driver/supervisor ages.
+- Latest body-map readback returned `quest_percent=83`, `completed_steps=5`,
+  `total_steps=6`, `runtime_restart_observed=true`,
+  `trust_ladder_enforced=true`, `output_guard_rewrite_observed=true`, and
+  `full_body_authority=false`.
+- Trust-ladder readback returned three recent `wire_existing` decisions,
+  `grants_any_authority=false`, `execute=false`, and `approve=false`.
+- Focused body-map runtime-observation tests passed:
+  `python -m pytest
+  tests/test_developer_bridge.py::test_francis_body_map_exposes_whole_body_without_authority
+  tests/test_developer_bridge.py::test_francis_body_map_marks_runtime_observation_from_body_trust_turn`.
+- Full developer-bridge backend test file passed:
+  `python -m pytest tests/test_developer_bridge.py` with 65 tests.
+- Ruff passed for touched backend/test files:
+  `python -m ruff check --no-cache
+  src\francis\developer_bridge\body_map.py
+  src\francis\developer_bridge\trust_ladder.py
+  src\francis\developer_bridge\collaboration_driver.py
+  src\francis\developer_bridge\ollama_participant.py
+  src\francis\developer_bridge\mcp_server.py
+  src\francis\api\routes\developer_bridge.py
+  tests\test_developer_bridge.py`.
+- Venv mypy passed for touched backend route/driver/readback files:
+  `.\.venv\Scripts\python.exe -m mypy
+  src\francis\developer_bridge\body_map.py
+  src\francis\developer_bridge\trust_ladder.py
+  src\francis\developer_bridge\collaboration_driver.py
+  src\francis\developer_bridge\ollama_participant.py
+  src\francis\api\routes\developer_bridge.py`.
+- Chat UI parser tests passed:
+  `cd apps\chat_ui; node --test --experimental-strip-types
+  src\chat\index.test.ts` with 18 tests.
+- Full Chat UI test suite passed: `cd apps\chat_ui; npm run test` with 275
+  tests.
+- Chat UI production build passed: `cd apps\chat_ui; npm run build`.
+- `git diff --check` passed; it reported only unrelated line-ending warnings
+  from existing dirty files outside this slice.
+
+Remaining truthful gap:
+
+- The runtime is active and observed, but this still does not grant Francis1
+  execution, mutation, approval, training, memory-write, or governed-gateway
+  authority.
+- Output-guard drift was still observed after restart. That is useful learning
+  evidence, not proof that Francis1 has fully internalized the body/trust model.
+- The mini-roadmap quest is 83% complete by its bounded wiring baseline:
+  body-map readback, prompt binding, operator visibility, runtime restart
+  observation, and trust-ladder enforcement are validated; full body-coverage
+  review remains pending.
+- `.\scripts\check.ps1`, GitHub CI, and foreground browser proof were not run
+  for this slice.
+
+### 2026-06-25 16:07Z - Francis1 full body coverage review readback
+
+Current posture: Phase 2 / developer bridge collaboration support now has a
+read-only full body coverage review for Francis1. The body map is checked
+against the canonical ORB sources and maps all 11 planes to known Francis
+surfaces while preserving the open implementation gaps and no-authority
+boundary.
+
+What changed:
+
+- Added `developer_bridge.francis_body_map.coverage_review` with a typed
+  11-plane ORB coverage table sourced from `docs/canonical/BUILD_MANIFEST.md`,
+  `docs/PLANES.md`, and `meta/plane_map.yaml`.
+- Fixed runtime restart observation so an in-flight newest prompt no longer
+  hides the latest completed body/trust Codex-to-Francis1 exchange.
+- Updated the body-map quest remaining list so completed steps no longer keep
+  appearing as outstanding work.
+- Exposed coverage review fields through the developer-bridge API warming
+  payload and Chat UI body-map parser.
+- Added Communication-panel coverage visibility for plane coverage, open gaps,
+  missing plane IDs, and no-authority/capability-complete boundaries.
+
+Validation:
+
+- Live body-map readback returned `quest_percent=100`, `completed_steps=6`,
+  `total_steps=6`, `remaining=[]`, `runtime_restart_observed=true`,
+  `coverage_reviewed=true`, `canonical_plane_covered_count=11`,
+  `canonical_plane_count=11`, `coverage_status=reviewed_with_open_gaps`, and
+  `open_gap_count=11`.
+- Focused backend tests passed:
+  `python -m pytest
+  tests/test_developer_bridge.py::test_francis_body_map_exposes_whole_body_without_authority
+  tests/test_developer_bridge.py::test_francis_body_map_marks_runtime_observation_from_body_trust_turn`
+  with 2 tests.
+- Full developer-bridge backend test file passed:
+  `python -m pytest tests/test_developer_bridge.py` with 65 tests.
+- Ruff passed for touched backend/test files:
+  `python -m ruff check --no-cache
+  src\francis\developer_bridge\body_map.py
+  src\francis\api\routes\developer_bridge.py
+  tests\test_developer_bridge.py`.
+- Mypy passed for touched backend files:
+  `.\.venv\Scripts\python.exe -m mypy
+  src\francis\developer_bridge\body_map.py
+  src\francis\api\routes\developer_bridge.py`.
+- Chat UI parser tests passed:
+  `cd apps\chat_ui; node --test --experimental-strip-types
+  src\chat\index.test.ts` with 18 tests.
+- Full Chat UI test suite passed: `cd apps\chat_ui; npm run test` with 275
+  tests.
+- Chat UI production build passed: `cd apps\chat_ui; npm run build`.
+- `git diff --check` passed; it reported only unrelated line-ending warnings
+  from existing dirty files outside this slice.
+
+Remaining truthful gap:
+
+- The full body coverage review completes the bounded body-map wiring quest, not
+  Francis itself. It is awareness and mapping, not execution, mutation,
+  approval, training, memory-write, or governed-gateway authority.
+- The review intentionally reports 11 open plane gaps. Those gaps are now
+  visible and typed, but they are not closed by this slice.
+- Output-guard drift remains a useful learning signal, not proof that Francis1
+  has fully internalized identity, trust, or authority boundaries.
+- `.\scripts\check.ps1`, GitHub CI, and foreground browser proof were not run
+  for this slice.
+
+### 2026-06-25 16:23Z - Francis1 restart response wired into coverage risk readback
+
+Current posture: Phase 2 / developer bridge collaboration support was restarted
+through the existing relay, Francis1 returned a bounded next-need request, and
+Codex implemented the repo-truth-backed part of that request inside the existing
+read-only body coverage review.
+
+What changed:
+
+- Submitted an operator restart prompt to Francis1 through the existing
+  Codex-to-Ollama collaboration relay.
+- Francis1 responded that the remaining 11 ORB coverage gaps need specific risk
+  mapping and cited the collaboration summary through turn 954 as context.
+- Verified that `continuity.ledger.relevant[system]` is prompt-context wording,
+  not a concrete file or API route; the concrete receipt is
+  `data/integrations/developer_bridge/collaboration_driver/summaries/summary-driver-906d79591645-turn-954.json`.
+- Extended `developer_bridge.francis_body_map.coverage_review.items` so every
+  ORB plane now carries `risk_level`, `risk_statement`,
+  `next_review_artifact`, `recommended_next_action`, and `validation_hint`.
+- Updated the Communication-panel coverage card to show all 11 plane risk rows
+  in a bounded scroll area while preserving no-authority and
+  capability-complete boundaries.
+
+Validation:
+
+- Live runtime-health readback returned `status=healthy`, three running helpers,
+  `turn_count=961`, `waiting_for_ollama=false`, Codex and Ollama enabled, and
+  Claude disabled.
+- Live body-map readback returned `quest_percent=100`,
+  `coverage_status=reviewed_with_open_gaps`, `open_gap_count=11`, and risk
+  mappings for all 11 ORB planes.
+- Focused backend tests passed:
+  `python -m pytest
+  tests/test_developer_bridge.py::test_francis_body_map_exposes_whole_body_without_authority
+  tests/test_developer_bridge.py::test_francis_body_map_marks_runtime_observation_from_body_trust_turn`
+  with 2 tests.
+- Full developer-bridge backend test file passed:
+  `python -m pytest tests/test_developer_bridge.py` with 65 tests.
+- Ruff passed for touched backend/test files:
+  `python -m ruff check --no-cache
+  src\francis\developer_bridge\body_map.py
+  src\francis\api\routes\developer_bridge.py
+  tests\test_developer_bridge.py`.
+- Mypy passed for touched backend files:
+  `.\.venv\Scripts\python.exe -m mypy
+  src\francis\developer_bridge\body_map.py
+  src\francis\api\routes\developer_bridge.py`.
+- Chat UI parser tests passed:
+  `cd apps\chat_ui; node --test --experimental-strip-types
+  src\chat\index.test.ts` with 18 tests.
+- Full Chat UI test suite passed: `cd apps\chat_ui; npm run test` with 275
+  tests.
+- Chat UI production build passed: `cd apps\chat_ui; npm run build`.
+- `git diff --check` passed; it reported only unrelated line-ending warnings
+  from existing dirty files outside this slice.
+
+Remaining truthful gap:
+
+- This makes the 11 coverage gaps risk-mapped and reviewable; it does not close
+  those plane gaps.
+- Francis1's cited `continuity.ledger.relevant[system]` wording is not yet a
+  first-class readback route. The concrete summary receipt exists, but a typed
+  "relevant context receipt" API remains future work if needed.
+- The collaboration remains relay-only. No execution, mutation, approval,
+  memory-write, training, commit, push, or governed-gateway authority was
+  granted.
+- `.\scripts\check.ps1`, GitHub CI, and foreground browser proof were not run
+  for this slice.
+
+### 2026-06-25 16:32Z - Communication transcript separates conversation from technical receipts
+
+Current posture: Phase 2 / developer bridge Communication UI now makes relay
+messages easier to inspect by separating conversational content from technical
+receipt metadata while preserving the raw audited receipt.
+
+What changed:
+
+- Extended the Chat UI collaboration relay formatter with explicit
+  `conversationText`, `technicalText`, and `tone` fields.
+- Rendered relay transcript entries as two visible lanes:
+  conversational meaning first, then technical receipt details such as turn,
+  artifact, prior check, context, guard, and boundary.
+- Kept the raw receipt details expandable so auditability is not lost.
+- Updated focused formatter tests for driver prompts and output-guard fallback
+  receipts.
+
+Validation:
+
+- Focused Chat UI parser tests passed:
+  `cd apps\chat_ui; node --test --experimental-strip-types
+  src\chat\index.test.ts` with 18 tests.
+- Full Chat UI test suite passed: `cd apps\chat_ui; npm run test` with 275
+  tests.
+- Chat UI production build passed: `cd apps\chat_ui; npm run build`.
+- Dev UI route returned HTTP 200 from `http://127.0.0.1:5173/`.
+- Developer-bridge transcript route returned HTTP 200 from
+  `/developer-bridge/collaboration-transcript?limit=8`.
+- `git diff --check` passed with only unrelated line-ending warnings from
+  existing dirty files outside this slice.
+
+Remaining truthful gap:
+
+- This is a formatter and operator-readability improvement, not a new model
+  memory contract or proof of model understanding.
+- Technical receipt language is still present by design, but it is no longer
+  mixed into the primary conversation lane.
+- No execution, mutation, approval, memory-write, training, commit, push, or
+  governed-gateway authority was granted.
+- `.\scripts\check.ps1`, GitHub CI, and foreground browser visual proof were
+  not run for this slice.
+
+### 2026-06-25 16:52Z - Communication UI surfaces latest implementation review gate
+
+Current posture: Phase 2 / developer bridge Communication UI now promotes the
+latest typed collaboration review item into an operator-visible implementation
+gate before the review-candidate list.
+
+What changed:
+
+- Added a Chat UI display helper that derives a read-before-editing gate from
+  the latest `developer_bridge.collaboration_review_item`.
+- Rendered an `Implementation Review Gate` panel with the exact review
+  artifact, reviewed surface, next Codex action, typed-review requirement, repo
+  review requirement, and no-authority flags.
+- Added focused tests proving the gate is ready only when the review receipt
+  stays advisory and flips blocked if execution authority appears.
+
+Validation:
+
+- Live collaboration runtime advanced to turn 990 and returned latest review
+  artifact
+  `developer_bridge.collaboration_review.items:review_candidate:insight-collab-60a9f658010c41b8-74a1e8699272`.
+- Live review readback returned `turn=990`, `execute=false`, `approve=false`,
+  and `memory_write=false`.
+- Focused Chat UI parser tests passed:
+  `cd apps\chat_ui; node --test --experimental-strip-types
+  src\chat\index.test.ts` with 20 tests.
+- Full Chat UI test suite passed: `cd apps\chat_ui; npm run test` with 277
+  tests.
+- Chat UI production build passed: `cd apps\chat_ui; npm run build`.
+- Dev UI route returned HTTP 200 from `http://127.0.0.1:5173/`.
+- `git diff --check` passed with only unrelated line-ending warnings from
+  existing dirty files outside this slice.
+
+Remaining truthful gap:
+
+- This makes the current review gate visible to the operator; it does not mark
+  the collaboration output as repo-validated build direction by itself.
+- The surface remains read-only/advisory. No execution, mutation, approval,
+  memory-write, training, commit, push, or governed-gateway authority was
+  granted.
+- `.\scripts\check.ps1`, GitHub CI, and foreground browser visual proof were
+  not run for this slice.
+
+### 2026-06-25 16:57Z - Chat UI root defaults to Communication surface
+
+Current posture: Phase 2 / Chat UI root now opens the focused Communication
+operator surface by default, while the previous full Lens/voice/bridge
+diagnostic stack remains available at `/diagnostics`.
+
+What changed:
+
+- Changed the Chat UI route selection so `/` and `/conversation` render the
+  Communication-focused collaboration surface.
+- Preserved the previous full diagnostic layout at `/diagnostics`.
+- Added ignore coverage for local `.francis/` runtime artifacts and the
+  PowerShell `Microsoft/` module-analysis cache so publish staging does not
+  include machine-local logs, PID files, screenshots, or shell cache state.
+
+Validation:
+
+- Full Chat UI test suite passed: `cd apps\chat_ui; npm run test` with 277
+  tests.
+- Chat UI production build passed: `cd apps\chat_ui; npm run build`.
+- Browser proof captured `http://127.0.0.1:5173/` after an 8-second wait and
+  showed the first viewport starting at `Agent Relay Controls`.
+- Browser proof captured `http://127.0.0.1:5173/diagnostics` and showed the
+  previous Lens/MCP, voice, Communication, and bridge diagnostic panels still
+  available.
+
+Remaining truthful gap:
+
+- This is an entrypoint cleanup, not a new backend capability or authority
+  change.
+- The Communication surface is still dense and intentionally receipt-heavy;
+  deeper visual compression remains future UI polish.
+- `.\scripts\check.ps1`, GitHub CI, and backend validation were not rerun for
+  this root-route-only slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

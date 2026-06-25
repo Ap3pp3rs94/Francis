@@ -297,6 +297,7 @@ def _manual_acoustic_orb_position_proof(value: Any) -> dict[str, Any]:
         "proof_diagnostic_summary": _manual_acoustic_proof_diagnostic_summary(raw.get("proof_diagnostic_summary")),
         "proof_source_contract": _manual_acoustic_proof_source_contract(raw.get("proof_source_contract")),
         "proof_rejection_reasons": _manual_acoustic_proof_rejection_reasons(raw.get("proof_rejection_reasons")),
+        "proof_evidence_hint": _manual_acoustic_proof_evidence_hint(raw.get("proof_evidence_hint")),
         "freshness_window_seconds": _safe_int(raw.get("freshness_window_seconds")),
         "manual_acoustic_proof_required": _safe_bool(raw.get("manual_acoustic_proof_required")),
         "voice_input_ready": _safe_bool(raw.get("voice_input_ready")),
@@ -415,6 +416,43 @@ def _manual_acoustic_proof_rejection_reasons(value: Any) -> dict[str, Any]:
         "latest_orb_receipt": _safe_str(raw.get("latest_orb_receipt"), max_length=160),
         "first_failed_requirement": _safe_requirement_key(raw.get("first_failed_requirement")),
         "proof_blocker": _safe_str(raw.get("proof_blocker"), max_length=160),
+    }
+
+
+def _manual_acoustic_proof_evidence_hint(value: Any) -> dict[str, Any]:
+    raw = _as_dict(value)
+    return {
+        "status": _safe_str(raw.get("status"), "not_checked", max_length=80),
+        "first_failed_requirement": _safe_requirement_key(raw.get("first_failed_requirement")),
+        "proof_blocker": _safe_str(raw.get("proof_blocker"), max_length=160),
+        "next_operator_step": _safe_str(raw.get("next_operator_step"), max_length=200),
+        "voice_command_status_path": _safe_str(raw.get("voice_command_status_path"), max_length=240),
+        "microphone_status_path": _safe_str(raw.get("microphone_status_path"), max_length=240),
+        "orb_position_receipt_root": _safe_str(raw.get("orb_position_receipt_root"), max_length=240),
+        "latest_orb_receipt_path": _safe_str(raw.get("latest_orb_receipt_path"), max_length=240),
+        "required_voice_status_fields": _safe_string_list(
+            raw.get("required_voice_status_fields"),
+            limit=12,
+            max_length=120,
+        ),
+        "required_orb_receipt_fields": _safe_string_list(
+            raw.get("required_orb_receipt_fields"),
+            limit=12,
+            max_length=120,
+        ),
+        "accepted_command_source": _safe_str(
+            raw.get("accepted_command_source"),
+            "local_overlay_speech_recognition",
+            max_length=120,
+        ),
+        "rejected_command_sources": _safe_string_list(
+            raw.get("rejected_command_sources"),
+            limit=8,
+            max_length=120,
+        ),
+        "transcript_required": False,
+        "transcript_stored": False,
+        "transcript_redacted": True,
     }
 
 

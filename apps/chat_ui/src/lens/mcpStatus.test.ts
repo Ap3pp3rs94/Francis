@@ -199,3 +199,25 @@ test("fetchLensMcpStatus calls the existing Lens MCP status route read-only", as
     restore();
   }
 });
+
+test("fetchLensMcpStatus aborts a slow Lens readback when timeout is configured", async () => {
+  const restore = installFetch((_url, init) => {
+    const signal = init?.signal;
+    return new Promise<Response>((_resolve, reject) => {
+      signal?.addEventListener(
+        "abort",
+        () => reject(new DOMException("The operation was aborted.", "AbortError")),
+        { once: true },
+      );
+    });
+  });
+
+  try {
+    await assert.rejects(
+      () => fetchLensMcpStatus({ timeoutMs: 1 }),
+      (err: unknown) => err instanceof DOMException && err.name === "AbortError",
+    );
+  } finally {
+    restore();
+  }
+});

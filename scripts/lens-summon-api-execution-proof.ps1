@@ -188,6 +188,44 @@ def _stop_resident(client: Any, *, approval_id: str, actor: str, reason: str) ->
     )
 
 
+def _overlay_started(result: dict[str, Any]) -> bool:
+    return (
+        result.get("status") in {"overlay_window_started", "overlay_window_already_running"}
+        and result.get("executed") is True
+        and result.get("overlay_window") is True
+        and result.get("overlay_runtime_ready") is True
+    )
+
+
+def _start_overlay_with_retry(
+    client: Any,
+    *,
+    approval_id: str,
+    actor: str,
+    reason: str,
+    run_seconds: int,
+) -> tuple[dict[str, Any], int]:
+    payload = {
+        "approval_id": approval_id,
+        "actor": actor,
+        "reason": reason,
+        "mode": "start",
+        "run_seconds": run_seconds,
+    }
+    first = _post(client, "/lens/overlay/execute", payload)
+    if _overlay_started(first) or first.get("status") != "overlay_window_start_failed":
+        return first, 0
+    _stop_overlay(
+        client,
+        approval_id=approval_id,
+        actor=actor,
+        reason="stop overlay runtime before bounded summon API proof retry",
+    )
+    retry_payload = dict(payload)
+    retry_payload["reason"] = f"{reason} after bounded overlay start retry"
+    return _post(client, "/lens/overlay/execute", retry_payload), 1
+
+
 def _dependency_map(plan: dict[str, Any]) -> dict[str, dict[str, Any]]:
     out: dict[str, dict[str, Any]] = {}
     for item in _as_list(plan.get("enablement_dependency_readback")):
@@ -233,7 +271,7 @@ def _run() -> tuple[int, dict[str, Any]]:
     run_seconds = int(os.environ.get("FRANCIS_PROOF_RUN_SECONDS", "5"))
     allow_launch_on_hotkey = os.environ.get("FRANCIS_PROOF_ALLOW_LAUNCH_ON_HOTKEY", "").lower() == "true"
     proof_global_hotkey = os.environ.get("FRANCIS_PROOF_GLOBAL_HOTKEY", "Ctrl+Alt+Shift+F12").strip()
-    # Keep dependent runtimes alive long enough for slower Windows readbacks.
+    # Keep dependency leases within the governed route cap; approvals are granted before leases start.
     dependency_run_seconds = max(run_seconds, 60)
     resident_dependency_run_seconds = dependency_run_seconds
     data_root.mkdir(parents=True, exist_ok=True)
@@ -280,17 +318,6 @@ def _run() -> tuple[int, dict[str, Any]]:
         )
         runtime_receipt = _as_dict(runtime_grant.get("receipt"))
 
-        resident_start = _post(
-            client,
-            "/lens/resident-runtime/execute",
-            {
-                "approval_id": runtime_approval_id,
-                "actor": actor,
-                "reason": "prove governed API path starts resident supervision before summon",
-                "run_seconds": resident_dependency_run_seconds,
-            },
-        )
-
         tray_approval_id, tray_request, tray_decision, tray_grant = _request_approve_grant(
             client,
             request_route="/lens/tray/authority/request",
@@ -301,17 +328,6 @@ def _run() -> tuple[int, dict[str, Any]]:
             grant_reason="grant bounded tray presence authority for isolated summon API proof",
         )
         tray_receipt = _as_dict(tray_grant.get("receipt"))
-        tray_start = _post(
-            client,
-            "/lens/tray/execute",
-            {
-                "approval_id": tray_approval_id,
-                "actor": actor,
-                "reason": "prove governed API path starts tray presence before summon",
-                "mode": "start",
-                "run_seconds": dependency_run_seconds,
-            },
-        )
 
         os_binding_approval_id, os_binding_request, os_binding_decision, os_binding_grant = _request_approve_grant(
             client,
@@ -334,17 +350,6 @@ def _run() -> tuple[int, dict[str, Any]]:
             grant_reason="grant bounded overlay window authority for isolated summon API proof",
         )
         overlay_receipt = _as_dict(overlay_grant.get("receipt"))
-        overlay_start = _post(
-            client,
-            "/lens/overlay/execute",
-            {
-                "approval_id": overlay_approval_id,
-                "actor": actor,
-                "reason": "prove governed API path starts overlay before summon",
-                "mode": "start",
-                "run_seconds": dependency_run_seconds,
-            },
-        )
 
         summon_approval_id, summon_request, summon_decision, summon_grant = _request_approve_grant(
             client,
@@ -357,6 +362,23 @@ def _run() -> tuple[int, dict[str, Any]]:
         )
         summon_receipt = _as_dict(summon_grant.get("receipt"))
 
+        resident_start = _post(
+            client,
+            "/lens/resident-runtime/execute",
+            {
+                "approval_id": runtime_approval_id,
+                "actor": actor,
+                "reason": "prove governed API path starts resident supervision before summon",
+                "run_seconds": resident_dependency_run_seconds,
+            },
+        )
+        overlay_start, overlay_retry_count = _start_overlay_with_retry(
+            client,
+            approval_id=overlay_approval_id,
+            actor=actor,
+            reason="prove governed API path starts overlay before summon",
+            run_seconds=dependency_run_seconds,
+        )
         hotkey_execute_payload = {
             "approval_id": os_binding_approval_id,
             "actor": actor,
@@ -374,6 +396,42 @@ def _run() -> tuple[int, dict[str, Any]]:
             )
         hotkey_start = _post(client, "/lens/os-binding/execute", hotkey_execute_payload)
 
+        tray_start = _post(
+            client,
+            "/lens/tray/execute",
+            {
+                "approval_id": tray_approval_id,
+                "actor": actor,
+                "reason": "prove governed API path starts tray presence before summon",
+                "mode": "start",
+                "run_seconds": dependency_run_seconds,
+            },
+        )
+        if _overlay_started(overlay_start):
+            resident_start = _post(
+                client,
+                "/lens/resident-runtime/execute",
+                {
+                    "approval_id": runtime_approval_id,
+                    "actor": actor,
+                    "reason": "refresh resident supervision lease before summon proof readback",
+                    "run_seconds": resident_dependency_run_seconds,
+                },
+            )
+            tray_start = _post(
+                client,
+                "/lens/tray/execute",
+                {
+                    "approval_id": tray_approval_id,
+                    "actor": actor,
+                    "reason": "refresh tray presence lease before summon proof readback",
+                    "mode": "start",
+                    "run_seconds": dependency_run_seconds,
+                },
+            )
+            hotkey_refresh_payload = dict(hotkey_execute_payload)
+            hotkey_refresh_payload["reason"] = "refresh hotkey lease before summon proof readback"
+            hotkey_start = _post(client, "/lens/os-binding/execute", hotkey_refresh_payload)
         summon_readiness_before_execute = _get(client, "/lens/summon/readiness")
         summon_execute = _post(
             client,
@@ -706,6 +764,7 @@ def _run() -> tuple[int, dict[str, Any]]:
             "global_hotkey": proof_global_hotkey,
             "dependency_run_seconds": dependency_run_seconds,
             "resident_dependency_run_seconds": resident_dependency_run_seconds,
+            "overlay_start_retry_count": overlay_retry_count,
             "host_supervision_approval_id": host_approval_id,
             "resident_runtime_approval_id": runtime_approval_id,
             "tray_presence_approval_id": tray_approval_id,
@@ -779,6 +838,7 @@ def _run() -> tuple[int, dict[str, Any]]:
                 "global_hotkey": proof_global_hotkey,
                 "dependency_run_seconds": dependency_run_seconds,
                 "resident_dependency_run_seconds": resident_dependency_run_seconds,
+                "overlay_start_retry_count": overlay_retry_count,
                 "resident_start_status": str(resident_start.get("status") or ""),
                 "tray_start_status": str(tray_start.get("status") or ""),
                 "hotkey_start_status": str(hotkey_start.get("status") or ""),

@@ -33,6 +33,9 @@ param(
 
   [string]$ChatGptConnectorUrl = '',
 
+  [ValidateRange(1, 65535)]
+  [int]$ChatGptConnectorPort = 8787,
+
   [string]$CloudflaredTunnelName = '',
 
   [string]$CloudflaredHostname = '',
@@ -364,6 +367,84 @@ function Invoke-CommandPaletteHttpProbe {
   }
 }
 
+function Test-OverlayMonitorProcessAlive {
+  param([int]$ProcessId)
+
+  if ($ProcessId -le 0) {
+    return $false
+  }
+  return ($null -ne (Get-Process -Id $ProcessId -ErrorAction SilentlyContinue))
+}
+
+function New-OverlayMonitorVoiceInputReadiness {
+  param([object]$Voice)
+
+  $WakeListening = [bool](Get-PropertyValue -Payload $Voice -Name 'wake_listening' -Default $false)
+  $MicrophoneCapture = [bool](Get-PropertyValue -Payload $Voice -Name 'microphone_capture' -Default $false)
+  $MicrophoneInputEffective = [bool](Get-PropertyValue -Payload $Voice -Name 'microphone_input_effective' -Default $false)
+  $NeedsOperatorAudioInputCheck = [bool](Get-PropertyValue -Payload $Voice -Name 'needs_operator_audio_input_check' -Default $false)
+  $Ok = [bool](Get-PropertyValue -Payload $Voice -Name 'ok' -Default $true)
+  $VoiceStatus = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Voice -Name 'status' -Default '') -MaxLength 120
+  $MicrophoneSignalStatus = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Voice -Name 'microphone_signal_status' -Default 'unknown') -MaxLength 120
+  $AudioSignalProblem = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Voice -Name 'audio_signal_problem' -Default '') -MaxLength 160
+  $AudioLevel = [int](Get-PropertyValue -Payload $Voice -Name 'audio_level' -Default 0)
+
+  $Ready = $false
+  $Status = 'not_listening'
+  $Blocker = 'wake_listener_not_active'
+  $NextOperatorStep = 'start_overlay_with_wake_listener'
+  $Message = 'Wake listener is not active.'
+
+  if ($VoiceStatus -eq 'listen_failed' -or -not $Ok) {
+    $Status = 'blocked'
+    $Blocker = 'wake_listener_failed'
+    $NextOperatorStep = 'inspect_lens_overlay_voice_status'
+    $Message = 'Wake listener failed before usable microphone input was confirmed.'
+  } elseif ($WakeListening -and $MicrophoneCapture) {
+    if ($MicrophoneSignalStatus -eq 'no_signal') {
+      $Status = 'blocked'
+      $Blocker = 'microphone_no_signal'
+      $NextOperatorStep = 'select_or_unmute_default_windows_microphone'
+      $Message = 'Wake listener is attached, but the default Windows microphone is reporting no signal.'
+    } elseif ($MicrophoneSignalStatus -eq 'audio_signal_problem') {
+      $Status = 'blocked'
+      $Blocker = 'microphone_signal_problem'
+      $NextOperatorStep = 'check_windows_microphone_access_and_default_input'
+      $Message = 'Wake listener is attached, but Windows reported an audio signal problem.'
+    } elseif ($MicrophoneInputEffective -or $MicrophoneSignalStatus -eq 'signal_observed') {
+      $Ready = $true
+      $Status = 'ready'
+      $Blocker = ''
+      $NextOperatorStep = 'say_francis_or_hey_francis_with_a_bounded_request'
+      $Message = 'Wake listener has observed microphone signal; direct Francis address and the configured wake phrase are both accepted for bounded voice turns.'
+    } else {
+      $Status = 'waiting_for_audio_signal'
+      $Blocker = ''
+      $NextOperatorStep = 'say_francis_or_hey_francis_to_confirm_default_microphone_signal'
+      $Message = 'Wake listener is attached and waiting to observe microphone signal.'
+    }
+  }
+
+  return [ordered]@{
+    kind = 'lens.overlay.voice_input_readiness'
+    ready = [bool]$Ready
+    status = $Status
+    blocker = $Blocker
+    next_operator_step = $NextOperatorStep
+    message = $Message
+    wake_listening = [bool]$WakeListening
+    microphone_capture = [bool]$MicrophoneCapture
+    microphone_signal_status = $MicrophoneSignalStatus
+    microphone_input_effective = [bool]$MicrophoneInputEffective
+    needs_operator_audio_input_check = [bool]$NeedsOperatorAudioInputCheck
+    audio_signal_problem = $AudioSignalProblem
+    audio_level = $AudioLevel
+    transcript_redacted = $true
+    grants_execution_authority = $false
+    grants_mutation_authority = $false
+  }
+}
+
 function Invoke-OverlayVoiceReadback {
   param(
     [string]$Root,
@@ -372,53 +453,129 @@ function Invoke-OverlayVoiceReadback {
     [string]$RemoteVoiceName
   )
 
-  $Arguments = @(
-    '-NoProfile',
-    '-ExecutionPolicy',
-    'Bypass',
-    '-File',
-    (Join-Path $PSScriptRoot 'lens-overlay-window.ps1'),
-    '-Mode',
-    'Status',
-    '-DataDir',
-    $Root,
-    '-VoiceEnvironmentScope',
-    'All',
-    '-VoiceProvider',
-    $Provider
+  $RuntimeRoot = Join-Path $Root 'runtime\lens-overlay'
+  $StatusPath = Join-Path $RuntimeRoot 'status.json'
+  $PidPath = Join-Path $RuntimeRoot 'lens-overlay.pid'
+  $VoiceStatusPath = Join-Path $RuntimeRoot 'voice-status.json'
+  $VoiceTurnStatusPath = Join-Path $RuntimeRoot 'voice-turn-status.json'
+  $StatusPayload = Read-JsonFile -Path $StatusPath
+  $RuntimeStateExists = Test-Path -LiteralPath $StatusPath -PathType Leaf
+  $PidPresent = Test-Path -LiteralPath $PidPath -PathType Leaf
+  $RuntimePid = 0
+  if ($PidPresent) {
+    try {
+      $RuntimePid = [int]((Get-Content -LiteralPath $PidPath -Raw -ErrorAction Stop).Trim())
+    } catch {
+      $RuntimePid = 0
+    }
+  }
+
+  $StatusKind = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $StatusPayload -Name 'kind' -Default '') -MaxLength 120
+  $StatusValue = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $StatusPayload -Name 'status' -Default 'missing') -MaxLength 120
+  $StatusPid = [int](Get-PropertyValue -Payload $StatusPayload -Name 'pid' -Default 0)
+  $StatusClaimsRunningOverlay = (
+    $StatusKind -eq 'lens.overlay.runtime_state' -and
+    $StatusValue -eq 'overlay_running' -and
+    $StatusPid -gt 0 -and
+    $StatusPid -eq $RuntimePid
   )
-  if (-not [string]::IsNullOrWhiteSpace($RemoteVoiceId)) {
-    $Arguments += @('-ElevenLabsVoiceId', $RemoteVoiceId)
+  $ProcessAlive = if ($StatusClaimsRunningOverlay) { Test-OverlayMonitorProcessAlive -ProcessId $RuntimePid } else { $false }
+  $OverlayVisible = ($ProcessAlive -and [bool](Get-PropertyValue -Payload $StatusPayload -Name 'overlay_window_visible' -Default $false))
+  $AlwaysOnTop = ($OverlayVisible -and [bool](Get-PropertyValue -Payload $StatusPayload -Name 'always_on_top' -Default $false))
+  $Ready = ($OverlayVisible -and $AlwaysOnTop)
+  $VoiceReadbackFile = Read-JsonFile -Path $VoiceStatusPath
+  $VoiceTurnReadbackFile = Read-JsonFile -Path $VoiceTurnStatusPath
+  $Voice = if ($null -ne $VoiceReadbackFile) { $VoiceReadbackFile } else { Get-PropertyValue -Payload $StatusPayload -Name 'voice' -Default $null }
+  $VoiceTurn = if ($null -ne $VoiceTurnReadbackFile) { $VoiceTurnReadbackFile } else { Get-PropertyValue -Payload $StatusPayload -Name 'voice_turn' -Default $null }
+  $OverlayVoice = Get-PropertyValue -Payload $StatusPayload -Name 'overlay_voice' -Default $null
+  $VoiceInputReadiness = Get-PropertyValue -Payload $StatusPayload -Name 'voice_input_readiness' -Default $null
+  if ($null -eq $VoiceInputReadiness) {
+    $VoiceInputReadiness = New-OverlayMonitorVoiceInputReadiness -Voice $OverlayVoice
   }
-  if (-not [string]::IsNullOrWhiteSpace($RemoteVoiceName)) {
-    $Arguments += @('-ElevenLabsVoiceName', $RemoteVoiceName)
+  $VoiceInputReady = [bool](Get-PropertyValue -Payload $StatusPayload -Name 'voice_input_ready' -Default (Get-PropertyValue -Payload $VoiceInputReadiness -Name 'ready' -Default $false))
+  $ProviderReadiness = Get-PropertyValue -Payload $StatusPayload -Name 'voice_provider_readiness' -Default $null
+  if ($null -eq $ProviderReadiness) {
+    $VoiceLabel = if (-not [string]::IsNullOrWhiteSpace($RemoteVoiceName)) {
+      $RemoteVoiceName
+    } else {
+      ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $OverlayVoice -Name 'selected_voice' -Default '') -MaxLength 120
+    }
+    $ProviderReadiness = [ordered]@{
+      kind = 'lens.overlay.voice.provider_readiness'
+      selected_provider = $Provider
+      active_provider_configured = $false
+      elevenlabs = [ordered]@{
+        configured = $false
+        api_key_present = $false
+        voice_id_present = -not [string]::IsNullOrWhiteSpace($RemoteVoiceId)
+        voice_label = $VoiceLabel
+        credential_values_redacted = $true
+        missing_configuration = @('api_key')
+      }
+      stores_secret = $false
+      logs_text_payload = $false
+    }
   }
 
-  $PowerShell = Get-Command powershell -ErrorAction SilentlyContinue
-  if ($null -eq $PowerShell) {
-    $PowerShell = Get-Command pwsh -ErrorAction Stop
+  $Payload = [ordered]@{
+    ok = $true
+    kind = 'lens.overlay.window.runtime'
+    status = if ($Ready) { 'visible' } else { $StatusValue }
+    mode = 'status'
+    ready = [bool]$Ready
+    overlay_window = [bool]$Ready
+    data_root = $Root
+    runtime_state_path = 'data/runtime/lens-overlay/status.json'
+    pid_path = 'data/runtime/lens-overlay/lens-overlay.pid'
+    voice = $Voice
+    voice_turn = $VoiceTurn
+    overlay_voice = $OverlayVoice
+    voice_input_readiness = $VoiceInputReadiness
+    voice_input_ready = [bool]$VoiceInputReady
+    voice_input_status = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $VoiceInputReadiness -Name 'status' -Default '') -MaxLength 120
+    voice_input_blocker = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $VoiceInputReadiness -Name 'blocker' -Default '') -MaxLength 160
+    next_voice_input_step = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $VoiceInputReadiness -Name 'next_operator_step' -Default '') -MaxLength 200
+    voice_provider_readiness = $ProviderReadiness
+    overlay_position = Get-PropertyValue -Payload $StatusPayload -Name 'overlay_position' -Default $null
+    overlay_runtime = [ordered]@{
+      ready = [bool]$Ready
+      process_alive = [bool]$ProcessAlive
+      overlay_window_visible = [bool]$OverlayVisible
+      always_on_top = [bool]$AlwaysOnTop
+      pid = [int]$RuntimePid
+      pid_present = [bool]$PidPresent
+      runtime_state_exists = [bool]$RuntimeStateExists
+      runtime_status = $StatusValue
+      runtime_status_kind = $StatusKind
+      runtime_status_pid = [int]$StatusPid
+      runtime_status_pid_matches_pid_file = ($StatusPid -gt 0 -and $StatusPid -eq $RuntimePid)
+    }
+    governance = [ordered]@{
+      read_only_contract = $true
+      execution_authority = $false
+      approval_decision_authority = $false
+      memory_write = $false
+      overlay_control_authority = $false
+      window_management_authority = $false
+      capture_authority = $false
+      new_sensing_authority = $false
+      summon_authority = $false
+      voice_output_authority = $false
+      microphone_capture_active = [bool](Get-PropertyValue -Payload $OverlayVoice -Name 'microphone_capture' -Default $false)
+      microphone_capture_authority = $false
+      local_process_launch_authority = $false
+      tray_registration_authority = $false
+      service_control_authority = $false
+      mutation_authority_granted = $false
+    }
   }
 
-  $Output = & $PowerShell.Source @Arguments 2>&1
-  $ExitCode = $LASTEXITCODE
-  $Text = ($Output | ForEach-Object { [string]$_ }) -join "`n"
-  try {
-    $Payload = $Text | ConvertFrom-Json -ErrorAction Stop
-    return [ordered]@{
-      ok = ($ExitCode -eq 0)
-      exit_code = $ExitCode
-      payload = $Payload
-      error = ''
-      raw_length = $Text.Length
-    }
-  } catch {
-    return [ordered]@{
-      ok = $false
-      exit_code = $ExitCode
-      payload = $null
-      error = [string]$_.Exception.Message
-      raw_length = $Text.Length
-    }
+  return [ordered]@{
+    ok = $true
+    exit_code = 0
+    payload = $Payload
+    error = ''
+    raw_length = 0
   }
 }
 
@@ -1027,6 +1184,45 @@ function New-ManualAcousticOrbPositionProof {
     first_failed_requirement = $FirstFailedRequirement
     proof_blocker = $ProofBlocker
   }
+  $ProofEvidenceHint = [ordered]@{
+    status = $(if ($ProofObserved) { 'satisfied' } else { 'blocked' })
+    first_failed_requirement = $FirstFailedRequirement
+    proof_blocker = $ProofBlocker
+    next_operator_step = $NextStep
+    voice_command_status_path = 'data/runtime/lens-overlay/status.json'
+    microphone_status_path = 'data/runtime/lens-overlay/voice-status.json'
+    orb_position_receipt_root = $ReceiptRootPath
+    latest_orb_receipt_path = $LatestReceiptPath
+    required_voice_status_fields = @(
+      'voice.status',
+      'voice.local_overlay_command',
+      'voice.voice_orb_command',
+      'voice.overlay_position_command_source',
+      'voice.microphone_recognition_claimed',
+      'voice.wake_phrase_detected',
+      'voice.overlay_position_command_request_id'
+    )
+    required_orb_receipt_fields = @(
+      'status',
+      'applied',
+      'request_id',
+      'command',
+      'command_source',
+      'microphone_recognition_claimed',
+      'wake_phrase_detected',
+      'transcript_redacted',
+      'stores_transcript'
+    )
+    accepted_command_source = $RequiredAcousticCommandSource
+    rejected_command_sources = @(
+      'chatgpt_voice_bridge_file_request',
+      'http_api_text_injection',
+      'mcp_gateway_tool_text_injection'
+    )
+    transcript_required = $false
+    transcript_stored = $false
+    transcript_redacted = $true
+  }
   $ProofDiagnosticSummary = [ordered]@{
     first_failed_requirement = $FirstFailedRequirement
     proof_blocker = $ProofBlocker
@@ -1068,6 +1264,7 @@ function New-ManualAcousticOrbPositionProof {
     proof_diagnostic_summary = $ProofDiagnosticSummary
     proof_source_contract = $ProofSourceContract
     proof_rejection_reasons = $ProofRejectionReasons
+    proof_evidence_hint = $ProofEvidenceHint
     freshness_window_seconds = $FreshnessSeconds
     manual_acoustic_proof_required = [bool]$ManualAcousticProofRequired
     voice_input_ready = [bool]$VoiceInputReady
@@ -1118,6 +1315,7 @@ function Invoke-ChatGptConnectorReadback {
   param(
     [string]$Root,
     [string]$ConnectorUrl,
+    [int]$ConnectorPort,
     [bool]$VerifyConnector,
     [int]$ProbeTimeoutSeconds
   )
@@ -1133,6 +1331,8 @@ function Invoke-ChatGptConnectorReadback {
     'Status',
     '-RuntimeRoot',
     $RuntimeRoot,
+    '-Port',
+    ([string]$ConnectorPort),
     '-ConnectorProbeTimeoutSeconds',
     ([string]$ProbeTimeoutSeconds),
     '-Json'
@@ -1156,6 +1356,7 @@ function Invoke-ChatGptPersistentIngressPlanReadback {
   param(
     [string]$Root,
     [string]$ConnectorUrl,
+    [int]$ConnectorPort,
     [string]$CloudflaredTunnelName,
     [string]$CloudflaredHostname,
     [string]$CloudflaredTokenFile,
@@ -1174,6 +1375,8 @@ function Invoke-ChatGptPersistentIngressPlanReadback {
     'PlanPersistentIngress',
     '-RuntimeRoot',
     $RuntimeRoot,
+    '-Port',
+    ([string]$ConnectorPort),
     '-ConnectorProbeTimeoutSeconds',
     ([string]$ProbeTimeoutSeconds),
     '-Json'
@@ -1206,6 +1409,7 @@ function New-ChatGptPersistentIngressPlanMonitorProjection {
   param(
     [string]$Root,
     [string]$ConnectorUrl,
+    [int]$ConnectorPort,
     [string]$CloudflaredTunnelName,
     [string]$CloudflaredHostname,
     [string]$CloudflaredTokenFile,
@@ -1213,7 +1417,7 @@ function New-ChatGptPersistentIngressPlanMonitorProjection {
     [int]$ProbeTimeoutSeconds
   )
 
-  $Readback = Invoke-ChatGptPersistentIngressPlanReadback -Root $Root -ConnectorUrl $ConnectorUrl -CloudflaredTunnelName $CloudflaredTunnelName -CloudflaredHostname $CloudflaredHostname -CloudflaredTokenFile $CloudflaredTokenFile -VerifyConnector $VerifyConnector -ProbeTimeoutSeconds $ProbeTimeoutSeconds
+  $Readback = Invoke-ChatGptPersistentIngressPlanReadback -Root $Root -ConnectorUrl $ConnectorUrl -ConnectorPort $ConnectorPort -CloudflaredTunnelName $CloudflaredTunnelName -CloudflaredHostname $CloudflaredHostname -CloudflaredTokenFile $CloudflaredTokenFile -VerifyConnector $VerifyConnector -ProbeTimeoutSeconds $ProbeTimeoutSeconds
   $Payload = Get-PropertyValue -Payload $Readback -Name 'payload'
   $ReadbackStatus = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Readback -Name 'status' -Default '') -MaxLength 120
   $Governance = Get-PropertyValue -Payload $Payload -Name 'governance'
@@ -1311,11 +1515,12 @@ function New-ChatGptConnectorMonitorProjection {
   param(
     [string]$Root,
     [string]$ConnectorUrl,
+    [int]$ConnectorPort,
     [bool]$VerifyConnector,
     [int]$ProbeTimeoutSeconds
   )
 
-  $Readback = Invoke-ChatGptConnectorReadback -Root $Root -ConnectorUrl $ConnectorUrl -VerifyConnector $VerifyConnector -ProbeTimeoutSeconds $ProbeTimeoutSeconds
+  $Readback = Invoke-ChatGptConnectorReadback -Root $Root -ConnectorUrl $ConnectorUrl -ConnectorPort $ConnectorPort -VerifyConnector $VerifyConnector -ProbeTimeoutSeconds $ProbeTimeoutSeconds
   $Payload = Get-PropertyValue -Payload $Readback -Name 'payload'
   $ReadbackStatus = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Readback -Name 'status' -Default '') -MaxLength 120
   $ConnectorUrlValue = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $Payload -Name 'connector_url' -Default '') -MaxLength 512
@@ -1643,6 +1848,7 @@ function New-CommandPaletteMonitorProbe {
     [int]$McpProofFreshnessSeconds,
     [bool]$ConnectorChecksEnabled,
     [string]$ConnectorChecksUrl,
+    [int]$ConnectorChecksPort,
     [string]$ConnectorChecksCloudflaredTunnelName,
     [string]$ConnectorChecksCloudflaredHostname,
     [string]$ConnectorChecksCloudflaredTokenFile,
@@ -1660,12 +1866,12 @@ function New-CommandPaletteMonitorProbe {
     [ordered]@{ enabled = $false }
   }
   $ConnectorMonitor = if ($ConnectorChecksEnabled) {
-    New-ChatGptConnectorMonitorProjection -Root $Root -ConnectorUrl $ConnectorChecksUrl -VerifyConnector $ConnectorChecksVerify -ProbeTimeoutSeconds $ConnectorChecksProbeTimeoutSeconds
+    New-ChatGptConnectorMonitorProjection -Root $Root -ConnectorUrl $ConnectorChecksUrl -ConnectorPort $ConnectorChecksPort -VerifyConnector $ConnectorChecksVerify -ProbeTimeoutSeconds $ConnectorChecksProbeTimeoutSeconds
   } else {
     [ordered]@{ enabled = $false }
   }
   $PersistentIngressPlanMonitor = if ($ConnectorChecksEnabled) {
-    New-ChatGptPersistentIngressPlanMonitorProjection -Root $Root -ConnectorUrl $ConnectorChecksUrl -CloudflaredTunnelName $ConnectorChecksCloudflaredTunnelName -CloudflaredHostname $ConnectorChecksCloudflaredHostname -CloudflaredTokenFile $ConnectorChecksCloudflaredTokenFile -VerifyConnector $ConnectorChecksVerify -ProbeTimeoutSeconds $ConnectorChecksProbeTimeoutSeconds
+    New-ChatGptPersistentIngressPlanMonitorProjection -Root $Root -ConnectorUrl $ConnectorChecksUrl -ConnectorPort $ConnectorChecksPort -CloudflaredTunnelName $ConnectorChecksCloudflaredTunnelName -CloudflaredHostname $ConnectorChecksCloudflaredHostname -CloudflaredTokenFile $ConnectorChecksCloudflaredTokenFile -VerifyConnector $ConnectorChecksVerify -ProbeTimeoutSeconds $ConnectorChecksProbeTimeoutSeconds
   } else {
     [ordered]@{ enabled = $false }
   }
@@ -1941,6 +2147,7 @@ if ($Mode -eq 'Probe') {
     McpProofFreshnessSeconds = $ChatGptMcpProofFreshnessSeconds
     ConnectorChecksEnabled = [bool]$EnableChatGptConnectorChecks
     ConnectorChecksUrl = $ChatGptConnectorUrl
+    ConnectorChecksPort = $ChatGptConnectorPort
     ConnectorChecksCloudflaredTunnelName = $CloudflaredTunnelName
     ConnectorChecksCloudflaredHostname = $CloudflaredHostname
     ConnectorChecksCloudflaredTokenFile = $CloudflaredTokenFile
@@ -2036,6 +2243,7 @@ if ($Mode -eq 'Start') {
     if (-not [string]::IsNullOrWhiteSpace($ChatGptConnectorUrl)) {
       $Arguments += @('-ChatGptConnectorUrl', $ChatGptConnectorUrl)
     }
+    $Arguments += @('-ChatGptConnectorPort', ([string]$ChatGptConnectorPort))
     if (-not [string]::IsNullOrWhiteSpace($CloudflaredTunnelName)) {
       $Arguments += @('-CloudflaredTunnelName', $CloudflaredTunnelName)
     }
@@ -2111,6 +2319,7 @@ if ($Mode -eq 'Run') {
       McpProofFreshnessSeconds = $ChatGptMcpProofFreshnessSeconds
       ConnectorChecksEnabled = [bool]$EnableChatGptConnectorChecks
       ConnectorChecksUrl = $ChatGptConnectorUrl
+      ConnectorChecksPort = $ChatGptConnectorPort
       ConnectorChecksCloudflaredTunnelName = $CloudflaredTunnelName
       ConnectorChecksCloudflaredHostname = $CloudflaredHostname
       ConnectorChecksCloudflaredTokenFile = $CloudflaredTokenFile

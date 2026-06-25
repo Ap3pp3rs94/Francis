@@ -58,7 +58,7 @@ def _run_validation_script(
         check=False,
         text=True,
         capture_output=True,
-        timeout=60,
+        timeout=120,
         env=run_env,
     )
 

@@ -4,6 +4,7 @@ import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from francis.api.errors import sanitized_exception_handler
@@ -62,6 +63,7 @@ def create_app() -> FastAPI:
     _configure_cors(app)
 
     _mount_controller_ui(app)
+    _mount_operator_ui_redirects(app)
 
     app.include_router(system.router, prefix="/system", tags=["system"])
     app.include_router(chat.router, prefix="/chat", tags=["chat"])
@@ -130,3 +132,13 @@ def _mount_controller_ui(app: FastAPI) -> None:
     controller_dir = repo_root() / "apps" / "controller_ui"
     if controller_dir.exists():
         app.mount("/controller", StaticFiles(directory=str(controller_dir), html=True), name="controller")
+
+
+def _chat_ui_base_url() -> str:
+    return os.environ.get("FRANCIS_CHAT_UI_URL", "http://127.0.0.1:5173").rstrip("/")
+
+
+def _mount_operator_ui_redirects(app: FastAPI) -> None:
+    @app.get("/conversation", include_in_schema=False)
+    def conversation_ui_redirect() -> RedirectResponse:
+        return RedirectResponse(url=f"{_chat_ui_base_url()}/conversation", status_code=307)

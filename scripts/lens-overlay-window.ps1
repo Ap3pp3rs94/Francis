@@ -1273,6 +1273,20 @@ function Stop-OverlayRuntimeProcess {
   return $false
 }
 
+function Get-OverlayRuntimePidFromFile {
+  param([string]$Root)
+
+  $PidPath = Join-Path (Join-Path $Root 'runtime\lens-overlay') 'lens-overlay.pid'
+  if (-not (Test-Path -LiteralPath $PidPath -PathType Leaf)) {
+    return 0
+  }
+  try {
+    return [int]((Get-Content -LiteralPath $PidPath -Raw -ErrorAction Stop).Trim())
+  } catch {
+    return 0
+  }
+}
+
 function Get-OverlayConfig {
   $ConfigPath = Join-Path $RepoRoot 'config\runtime\lens\overlay.json'
   $Config = Read-JsonFile -Path $ConfigPath
@@ -4600,6 +4614,209 @@ function New-StatusPayload {
   }
 }
 
+function New-OverlayStoppedVoiceInputReadiness {
+  return [ordered]@{
+    kind = 'lens.overlay.voice_input_readiness'
+    ready = $false
+    status = 'not_listening'
+    blocker = 'wake_listener_not_active'
+    next_operator_step = 'start_overlay_with_wake_listener'
+    message = 'Wake listener is not active.'
+    wake_listening = $false
+    microphone_capture = $false
+    microphone_signal_status = 'not_capturing'
+    microphone_input_effective = $false
+    needs_operator_audio_input_check = $false
+    transcript_redacted = $true
+    grants_execution_authority = $false
+    grants_mutation_authority = $false
+  }
+}
+
+function New-OverlayStoppedVoiceProviderReadiness {
+  return [ordered]@{
+    kind = 'lens.overlay.voice_provider_readiness'
+    status = 'not_queried'
+    message = 'Voice provider readiness was not queried during overlay stop cleanup.'
+  }
+}
+
+function Write-OverlayStoppedState {
+  param(
+    [string]$Root,
+    [string]$Message = 'Francis Lens overlay window stopped by operator command.'
+  )
+
+  $Config = Get-OverlayConfig
+  $RuntimeRoot = Join-Path $Root 'runtime\lens-overlay'
+  New-Item -ItemType Directory -Force -Path $RuntimeRoot | Out-Null
+  $StatusPath = Join-Path $RuntimeRoot 'status.json'
+  $McpBodyState = New-McpBodyStateProjection -McpStatusRoute $Config.mcp_status_route -OrbMcpStatusRoute $Config.orb_mcp_status_route
+  $OrbVisual = New-OrbVisualProjection -AutonomousMotion $false
+  $OverlayVoice = New-OverlayRuntimeVoiceProjection
+  $VoiceInputReadiness = New-OverlayStoppedVoiceInputReadiness
+  $Payload = [ordered]@{
+    kind = 'lens.overlay.runtime_state'
+    status = 'overlay_stopped'
+    pid = $PID
+    overlay_name = $Config.overlay_name
+    overlay_scope = $Config.overlay_scope
+    status_route = $Config.status_route
+    mcp_status_route = $Config.mcp_status_route
+    orb_mcp_status_route = $Config.orb_mcp_status_route
+    mcp_body_state = $McpBodyState
+    orb_visual = $OrbVisual
+    voice = $OverlayVoice
+    voice_turn = $null
+    overlay_voice = $OverlayVoice
+    voice_input_readiness = $VoiceInputReadiness
+    voice_input_ready = $false
+    voice_input_status = 'not_listening'
+    voice_input_blocker = 'wake_listener_not_active'
+    next_voice_input_step = 'start_overlay_with_wake_listener'
+    voice_provider_readiness = New-OverlayStoppedVoiceProviderReadiness
+    overlay_window_visible = $false
+    always_on_top = $false
+    overlay_position = New-OverlayWindowPositionProjection -Window $null -MotionState $null -OverlayWindowVisible $false
+    updated_at = [DateTimeOffset]::UtcNow.ToString('o')
+    message = $Message
+    governance = [ordered]@{
+      execution_authority = $false
+      approval_decision_authority = $false
+      memory_write = $false
+      overlay_control_authority = $false
+      window_management_authority = $false
+      capture_authority = $false
+      new_sensing_authority = $false
+      summon_authority = $false
+      tray_registration_authority = $false
+      service_control_authority = $false
+      local_process_launch_authority = $false
+      mutation_authority_granted = $false
+    }
+  }
+  $TempPath = Join-Path $RuntimeRoot ("status.{0}.tmp" -f ([Guid]::NewGuid().ToString('N')))
+  try {
+    $Payload | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $TempPath -Encoding UTF8
+    Move-OverlayRuntimeStateFile -TempPath $TempPath -DestinationPath $StatusPath
+  } finally {
+    Remove-Item -LiteralPath $TempPath -Force -ErrorAction SilentlyContinue
+  }
+}
+
+function New-StoppedStatusPayload {
+  param(
+    [string]$Root,
+    [string]$ModeName
+  )
+
+  $Config = Get-OverlayConfig
+  $RuntimeRoot = Join-Path $Root 'runtime\lens-overlay'
+  $PidPath = Join-Path $RuntimeRoot 'lens-overlay.pid'
+  $StatusPath = Join-Path $RuntimeRoot 'status.json'
+  $Status = Read-JsonFile -Path $StatusPath
+  $RuntimeStateExists = Test-Path -LiteralPath $StatusPath -PathType Leaf
+  $PidPresent = Test-Path -LiteralPath $PidPath -PathType Leaf
+  $RuntimePid = Get-OverlayRuntimePidFromFile -Root $Root
+  $RuntimeProcessAlive = if ($RuntimePid -gt 0) { Test-OverlayRuntimeProcess -ProcessId $RuntimePid } else { $false }
+  $RuntimeStatus = Get-StringProperty -Payload $Status -Name 'status' -Default 'overlay_stopped'
+  $RuntimeStatusKind = Get-StringProperty -Payload $Status -Name 'kind' -Default 'lens.overlay.runtime_state'
+  $RuntimeStatusPid = Get-IntegerProperty -Payload $Status -Name 'pid' -Default 0
+  $McpStatusRoute = Get-StringProperty -Payload $Status -Name 'mcp_status_route' -Default $Config.mcp_status_route
+  $OrbMcpStatusRoute = Get-StringProperty -Payload $Status -Name 'orb_mcp_status_route' -Default $Config.orb_mcp_status_route
+  $McpBodyState = New-McpBodyStateProjection -McpStatusRoute $McpStatusRoute -OrbMcpStatusRoute $OrbMcpStatusRoute
+  $OrbVisual = New-OrbVisualProjection -AutonomousMotion $false
+  $OverlayVoice = New-OverlayRuntimeVoiceProjection
+  $VoiceInputReadiness = New-OverlayStoppedVoiceInputReadiness
+  $VoiceProviderReadiness = New-OverlayStoppedVoiceProviderReadiness
+  $OverlayPosition = New-OverlayWindowPositionProjection -Window $null -MotionState $null -OverlayWindowVisible $false
+  $RuntimeReadback = [ordered]@{
+    ready = $false
+    process_alive = $false
+    runtime_process_alive = $RuntimeProcessAlive
+    overlay_window_visible = $false
+    always_on_top = $false
+    pid = $RuntimePid
+    pid_present = $PidPresent
+    status_path = $StatusPath
+    pid_path = $PidPath
+    runtime_state_exists = $RuntimeStateExists
+    runtime_status = $RuntimeStatus
+    runtime_status_kind = $RuntimeStatusKind
+    runtime_status_pid = $RuntimeStatusPid
+    runtime_status_pid_matches_pid_file = ($RuntimeStatusPid -gt 0 -and $RuntimeStatusPid -eq $RuntimePid)
+    overlay_name = Get-StringProperty -Payload $Status -Name 'overlay_name' -Default $Config.overlay_name
+    expected_overlay_name = $Config.overlay_name
+    overlay_scope = Get-StringProperty -Payload $Status -Name 'overlay_scope' -Default $Config.overlay_scope
+    expected_overlay_scope = $Config.overlay_scope
+    mcp_status_route = $McpStatusRoute
+    orb_mcp_status_route = $OrbMcpStatusRoute
+    mcp_body_state_route = $McpStatusRoute
+    mcp_body_state = $McpBodyState
+    orb_visual = $OrbVisual
+    voice = $OverlayVoice
+    voice_turn = $null
+    overlay_voice = $OverlayVoice
+    voice_input_readiness = $VoiceInputReadiness
+    voice_input_ready = $false
+    voice_input_status = 'not_listening'
+    voice_input_blocker = 'wake_listener_not_active'
+    next_voice_input_step = 'start_overlay_with_wake_listener'
+    voice_provider_readiness = $VoiceProviderReadiness
+    overlay_position = $OverlayPosition
+    requirement_state = if ($RuntimeStateExists -or $PidPresent) { 'stale_or_unverified' } else { 'missing' }
+    blocker = 'overlay_window_runtime_missing'
+  }
+
+  return [ordered]@{
+    ok = $true
+    kind = 'lens.overlay.window.runtime'
+    status = 'stopped'
+    mode = $ModeName
+    ready = $false
+    overlay_window = $false
+    data_root = $Root
+    runtime_state_path = 'data/runtime/lens-overlay/status.json'
+    pid_path = 'data/runtime/lens-overlay/lens-overlay.pid'
+    mcp_status_route = $McpStatusRoute
+    orb_mcp_status_route = $OrbMcpStatusRoute
+    mcp_body_state_route = $McpStatusRoute
+    mcp_body_state = $McpBodyState
+    orb_visual = $OrbVisual
+    voice = $OverlayVoice
+    voice_turn = $null
+    overlay_voice = $OverlayVoice
+    voice_input_readiness = $VoiceInputReadiness
+    voice_input_ready = $false
+    voice_input_status = 'not_listening'
+    voice_input_blocker = 'wake_listener_not_active'
+    next_voice_input_step = 'start_overlay_with_wake_listener'
+    voice_provider_readiness = $VoiceProviderReadiness
+    overlay_position = $OverlayPosition
+    overlay_runtime = $RuntimeReadback
+    next_smallest_truthful_gap = 'overlay_window_runtime'
+    governance = [ordered]@{
+      read_only_contract = $false
+      execution_authority = $false
+      approval_decision_authority = $false
+      memory_write = $false
+      overlay_control_authority = $false
+      window_management_authority = $false
+      capture_authority = $false
+      new_sensing_authority = $false
+      summon_authority = $false
+      voice_output_authority = $false
+      microphone_capture_active = $false
+      microphone_capture_authority = $false
+      local_process_launch_authority = $false
+      tray_registration_authority = $false
+      service_control_authority = $false
+      mutation_authority_granted = $true
+    }
+    message = 'Lens overlay window runtime is not live.'
+  }
+}
+
 $DataRoot = Get-DataRoot -Override $DataDir
 $ModeName = $Mode.ToLowerInvariant()
 $RunningOnWindows = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
@@ -4859,14 +5076,13 @@ if ($Mode -eq 'Status') {
 }
 
 if ($Mode -eq 'Stop') {
-  $Readback = Get-OverlayRuntimeReadback -Root $DataRoot
-  $RuntimePidToStop = [int]$Readback.pid
+  $RuntimePidToStop = Get-OverlayRuntimePidFromFile -Root $DataRoot
   if ($RuntimePidToStop -gt 0) {
     Stop-OverlayRuntimeProcess -ProcessId $RuntimePidToStop | Out-Null
   }
-  Write-OverlayState -Root $DataRoot -Status 'overlay_stopped' -OverlayWindowVisible $false -AlwaysOnTop $false -Message 'Francis Lens overlay window stopped by operator command.'
+  Write-OverlayStoppedState -Root $DataRoot -Message 'Francis Lens overlay window stopped by operator command.'
   Remove-Item -LiteralPath (Join-Path $DataRoot 'runtime\lens-overlay\lens-overlay.pid') -Force -ErrorAction SilentlyContinue
-  New-StatusPayload -Root $DataRoot -ModeName $ModeName -StatusOverride 'stopped' | ConvertTo-Json -Depth 8
+  New-StoppedStatusPayload -Root $DataRoot -ModeName $ModeName | ConvertTo-Json -Depth 8
   exit 0
 }
 

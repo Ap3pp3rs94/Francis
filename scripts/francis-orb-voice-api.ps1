@@ -194,8 +194,51 @@ function Add-ProcessIdIfValid {
   }
 }
 
+function Test-LocalTcpListener {
+  $TargetAddress = if ($HostAddress -in @('0.0.0.0', '::', '')) { '127.0.0.1' } else { $HostAddress }
+  $Socket = [System.Net.Sockets.Socket]::new(
+    [System.Net.Sockets.AddressFamily]::InterNetwork,
+    [System.Net.Sockets.SocketType]::Stream,
+    [System.Net.Sockets.ProtocolType]::Tcp
+  )
+  try {
+    $Socket.Blocking = $false
+    try {
+      $Socket.Connect($TargetAddress, $Port)
+    } catch [System.Net.Sockets.SocketException] {
+      $PendingErrors = @(
+        [System.Net.Sockets.SocketError]::WouldBlock,
+        [System.Net.Sockets.SocketError]::InProgress,
+        [System.Net.Sockets.SocketError]::AlreadyInProgress
+      )
+      if ($_.Exception.SocketErrorCode -notin $PendingErrors) {
+        return $false
+      }
+    }
+    if ($Socket.Connected) {
+      return $true
+    }
+    if (-not $Socket.Poll(250000, [System.Net.Sockets.SelectMode]::SelectWrite)) {
+      return $false
+    }
+    $SocketError = [int]$Socket.GetSocketOption(
+      [System.Net.Sockets.SocketOptionLevel]::Socket,
+      [System.Net.Sockets.SocketOptionName]::Error
+    )
+    return ($SocketError -eq 0)
+  } catch {
+    return $false
+  } finally {
+    $Socket.Dispose()
+  }
+}
+
 function Get-ListeningProcessIds {
   $Ids = New-Object 'System.Collections.Generic.List[int]'
+  if (-not (Test-LocalTcpListener)) {
+    return @($Ids)
+  }
+
   $NetTcpConnectionCommand = Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue
   if ($null -ne $NetTcpConnectionCommand) {
     $Connections = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)

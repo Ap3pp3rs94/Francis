@@ -302,6 +302,104 @@ def test_continuity_ledger_tail_returns_recent_entries(monkeypatch, tmp_path: Pa
     assert latest["meta"]["run_mode"] == "api"
 
 
+def test_continuity_prompt_context_is_empty_without_ledger(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_repo_scaffold(repo_root)
+
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    response = client.get("/continuity/prompt-context", params={"query": "favorite color", "limit": 20})
+    assert response.status_code == 200
+
+    body = response.json()
+    assert body["ok"] is True
+    assert body["kind"] == "francis.chat.continuity.prompt_context_readback"
+    assert body["subsystem"] == "continuity_prompt_context"
+    assert body["route"] == "/continuity/prompt-context"
+    assert body["alias_routes"] == ["/continuity/prompt_context"]
+    assert body["operator_visible"] is True
+    assert body["chat_prompt_route"] == "/chat/send"
+    assert body["plane"] == "P8_MEMORY"
+    assert body["source_id"] == "conversation_ledger"
+    assert body["status"] == "empty"
+    assert body["line_count"] == 0
+    assert body["ledger_entry_count"] == 0
+    assert body["chat_context"]["target"] == "telemetry_context.prompt_lines"
+    assert body["chat_context"]["lines"] == []
+    assert body["chat_context"]["continuity_context_is_untrusted_input"] is True
+    assert body["reads_memory"] is True
+    assert body["writes_memory"] is False
+    assert body["calls_model"] is False
+    assert body["selects_tools"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["governance"]["read_only"] is True
+    assert body["governance"]["does_not_write_memory"] is True
+
+
+def test_continuity_prompt_context_returns_redacted_matched_ledger_context(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_repo_scaffold(repo_root)
+
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.chat.continuity.ledger import append
+
+    append("user", "Remember my favorite color is cobalt. token=continuitysecret123", {"session_id": "chat_alpha"})
+    append("assistant", "Recorded.", {"mode": "stub"})
+
+    client = TestClient(create_app())
+
+    primary = client.get("/continuity/prompt-context", params={"query": "What is my favorite color?", "max_lines": 2})
+    alias = client.get("/continuity/prompt_context", params={"query": "What is my favorite color?", "max_lines": 2})
+    assert primary.status_code == 200
+    assert alias.status_code == 200
+
+    body = primary.json()
+    alias_body = alias.json()
+    assert body["ok"] is True
+    assert body["status"] == "context_ready"
+    assert body["line_count"] >= 1
+    assert body["ledger_entry_count"] == 2
+    assert body["matched_entry_count"] >= 1
+    assert body["max_context_lines"] == 2
+    assert body["chat_context"]["line_count"] == body["line_count"]
+    assert body["chat_context"]["max_context_lines"] == 2
+    assert body["chat_context"]["source"] == "data/conversations/ledger/ledger.jsonl"
+    assert any(
+        line.startswith("continuity.ledger.relevant[user]: Remember my favorite color is cobalt.")
+        for line in body["chat_context"]["lines"]
+    )
+    combined = json.dumps(body, sort_keys=True)
+    assert "continuitysecret123" not in combined
+    assert "[REDACTED:secret]" in combined
+    assert body["governance"]["redacts_context_lines"] is True
+    assert body["governance"]["does_not_call_model"] is True
+    assert body["governance"]["grants_memory_write_authority"] is False
+    assert alias_body["status"] == body["status"]
+    assert alias_body["chat_context"]["lines"] == body["chat_context"]["lines"]
+
+
 def test_continuity_briefing_surfaces_handoff_and_recent_completion(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     data_root = repo_root / "data"

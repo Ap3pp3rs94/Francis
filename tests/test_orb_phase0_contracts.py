@@ -113,6 +113,15 @@ def test_orb_continuum_state_preserves_one_path_wiring_rules() -> None:
     assert "Acceptance criteria for the completed structured observation receipt sub-slice" in state
     assert "Mona Lisa sandbox recognizability scoring now includes a repo-local offline" in state
     assert "Acceptance criteria for the completed offline recognizability fixture sub-slice" in state
+    assert "The latest completed sandbox raster sub-slice writes a deterministic PNG" in state
+    assert "sandbox_operator_primitive_raster_replay" in state
+    assert "mona_lisa_sandbox_preview.png" in state
+    assert "The latest completed post-action observation sub-slice links the sandbox" in state
+    assert "francis.lens.overlay.post_action_observation_receipt" in state
+    assert "optional_post_action_observation_checks" in state
+    assert "The latest completed improvement-channel sub-slice makes sandbox Mona Lisa" in state
+    assert "sandbox_canvas_plan_governed_live_observation_adapter" in state
+    assert "sandbox_canvas_complete_replay_evidence_chain" in state
     assert "Replay/evaluation review scoring now classifies sandbox evaluation history" in state
     assert "Acceptance criteria for the completed multi-run review scoring sub-slice" in state
     assert "LocalTunnel fallback (`localtunnel_fallback_replace_needed`)" in state

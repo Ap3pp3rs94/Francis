@@ -3,8 +3,10 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import struct
 import time
 import uuid
+import zlib
 from datetime import UTC, datetime
 from html import escape
 from pathlib import Path
@@ -114,6 +116,9 @@ def _structured_observation_receipt(
     action_hash: str,
     svg_path: Path,
     svg_hash: str,
+    raster_preview_path: Path,
+    raster_preview_hash: str,
+    raster_preview_evidence: dict[str, Any],
     primitive_count: int,
     dry_run: bool,
 ) -> dict[str, Any]:
@@ -145,12 +150,16 @@ def _structured_observation_receipt(
             "actions_hash": action_hash,
             "artifact_ref": str(svg_path) if svg_hash else "",
             "artifact_hash": svg_hash,
+            "sandbox_raster_preview_ref": str(raster_preview_path) if raster_preview_hash else "",
+            "sandbox_raster_preview_hash": raster_preview_hash,
+            "sandbox_raster_preview_mode": _safe_str(raster_preview_evidence.get("evidence_mode")),
             "content_included": False,
         },
         "inferred_information": {
             "canvas_bounds": actual_region,
             "primitive_count": primitive_count,
             "artifact_created": not dry_run,
+            "sandbox_raster_preview_created": bool(raster_preview_hash),
             "live_desktop_action": False,
             "image_imported": False,
         },
@@ -169,7 +178,107 @@ def _structured_observation_receipt(
             "desktop_control": False,
             "screenshots": False,
             "pixels": False,
+            "sandbox_raster_pixel_replay": bool(raster_preview_hash),
             "ocr": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+    }
+
+
+def _post_action_observation_receipt(
+    *,
+    receipt_id: str,
+    parent_receipt_id: str,
+    trace_id: str,
+    run_id: str,
+    mission_id: str,
+    requested_region: dict[str, Any],
+    mapped_region: dict[str, Any],
+    actual_region: dict[str, Any],
+    manifest_path: Path,
+    manifest_hash: str,
+    action_path: Path,
+    action_hash: str,
+    svg_path: Path,
+    svg_hash: str,
+    raster_preview_path: Path,
+    raster_preview_hash: str,
+    raster_preview_evidence: dict[str, Any],
+    primitive_count: int,
+    dry_run: bool,
+) -> dict[str, Any]:
+    status = "planned" if dry_run else "observed"
+    raster_mode = _safe_str(raster_preview_evidence.get("evidence_mode")) or "sandbox_operator_primitive_raster_replay"
+    return {
+        "kind": "francis.lens.overlay.post_action_observation_receipt",
+        "schema_version": 1,
+        "receipt_id": receipt_id,
+        "parent_receipt_id": parent_receipt_id,
+        "trace_id": trace_id,
+        "run_id": run_id,
+        "mission_id": mission_id,
+        "observation_phase": "post_action_verification",
+        "status": status,
+        "requested_region": requested_region,
+        "mapped_overlay_region": mapped_region,
+        "actual_inspected_region": actual_region,
+        "source": {
+            "name": "sandbox_canvas_post_action_raster_replay",
+            "status": "sandbox_replay_observed" if not dry_run else "sandbox_replay_planned",
+            "mode": raster_mode,
+            "live_simulated_fixture_or_replay": "sandbox",
+            "read_only": True,
+            "uses_existing_overlay_coordinate_model": True,
+            "creates_overlay_application": False,
+        },
+        "action_result_reference": {
+            "manifest_ref": str(manifest_path),
+            "manifest_hash": manifest_hash,
+            "actions_ref": str(action_path),
+            "actions_hash": action_hash,
+            "artifact_ref": str(svg_path) if svg_hash else "",
+            "artifact_hash": svg_hash,
+            "sandbox_raster_preview_ref": str(raster_preview_path) if raster_preview_hash else "",
+            "sandbox_raster_preview_hash": raster_preview_hash,
+            "sandbox_raster_preview_mode": raster_mode,
+            "operator_primitives_count": primitive_count,
+            "content_included": False,
+        },
+        "observed_state": {
+            "expected_result": "mona_lisa_sandbox_artifact_created_from_operator_primitives",
+            "artifact_created": bool(svg_hash),
+            "operator_primitives_observed": primitive_count,
+            "sandbox_raster_preview_observed": bool(raster_preview_hash),
+            "sandbox_pixel_replay_evidence": bool(raster_preview_hash),
+            "live_desktop_capture": False,
+            "desktop_screenshot": False,
+            "visual_similarity_claim": False,
+        },
+        "confidence": 1.0 if not dry_run and raster_preview_hash else 0.8,
+        "unknowns": [
+            "live_desktop_pixels",
+            "external_app_canvas_bounds",
+            "accessibility_tree",
+            "ocr_text",
+            "visual_similarity_to_reference_image",
+        ],
+        "limitations": [
+            "Post-action observation is sandbox primitive replay, not live desktop perception.",
+            "Raster pixels are generated from operator primitives and are not screenshot evidence.",
+            "No visual-similarity or human recognizability score is claimed.",
+        ],
+        "failure_or_refusal_reason": "",
+        "governance": {
+            "read_only": True,
+            "sandbox_only": True,
+            "post_action_observation": True,
+            "desktop_control": False,
+            "screenshots": False,
+            "live_desktop_pixels": False,
+            "sandbox_raster_pixel_replay": bool(raster_preview_hash),
+            "ocr": False,
+            "visual_similarity_claim": False,
             "grants_execution_authority": False,
             "grants_mutation_authority": False,
         },
@@ -440,6 +549,245 @@ def _svg_document(primitives: list[dict[str, Any]], *, width: int, height: int) 
     )
 
 
+def _hex_rgb(value: Any) -> tuple[int, int, int]:
+    text = _safe_str(value).lstrip("#")
+    if len(text) != 6:
+        return (0, 0, 0)
+    try:
+        return (int(text[0:2], 16), int(text[2:4], 16), int(text[4:6], 16))
+    except ValueError:
+        return (0, 0, 0)
+
+
+def _primitive_path_points(
+    primitive: dict[str, Any], *, width: int, height: int, preview_size: int
+) -> list[tuple[int, int]]:
+    points: list[tuple[int, int]] = []
+    for match in _PATH_POINT_RE.finditer(_safe_str(primitive.get("path"))):
+        try:
+            x = round((float(match.group(1)) / max(1, width)) * (preview_size - 1))
+            y = round((float(match.group(2)) / max(1, height)) * (preview_size - 1))
+        except ValueError:
+            continue
+        points.append((max(0, min(preview_size - 1, x)), max(0, min(preview_size - 1, y))))
+    return points
+
+
+def _blend_pixel(pixels: bytearray, *, width: int, x: int, y: int, rgb: tuple[int, int, int], opacity: float) -> None:
+    if x < 0 or y < 0 or x >= width or y >= width:
+        return
+    alpha = max(0.0, min(1.0, opacity))
+    offset = (y * width + x) * 3
+    for channel, source in enumerate(rgb):
+        destination = pixels[offset + channel]
+        pixels[offset + channel] = round((source * alpha) + (destination * (1.0 - alpha)))
+
+
+def _draw_rect(
+    pixels: bytearray,
+    *,
+    preview_size: int,
+    canvas_width: int,
+    canvas_height: int,
+    primitive: dict[str, Any],
+) -> None:
+    rgb = _hex_rgb(primitive.get("fill"))
+    opacity = float(primitive.get("opacity", 1.0) or 1.0)
+    x0 = round((float(primitive.get("x", 0)) / canvas_width) * preview_size)
+    y0 = round((float(primitive.get("y", 0)) / canvas_height) * preview_size)
+    x1 = round(((float(primitive.get("x", 0)) + float(primitive.get("width", 0))) / canvas_width) * preview_size)
+    y1 = round(((float(primitive.get("y", 0)) + float(primitive.get("height", 0))) / canvas_height) * preview_size)
+    for y in range(max(0, y0), min(preview_size, y1)):
+        for x in range(max(0, x0), min(preview_size, x1)):
+            _blend_pixel(pixels, width=preview_size, x=x, y=y, rgb=rgb, opacity=opacity)
+
+
+def _draw_ellipse(
+    pixels: bytearray,
+    *,
+    preview_size: int,
+    canvas_width: int,
+    canvas_height: int,
+    primitive: dict[str, Any],
+) -> None:
+    rgb = _hex_rgb(primitive.get("fill"))
+    opacity = float(primitive.get("opacity", 1.0) or 1.0)
+    cx = (float(primitive.get("cx", 0)) / canvas_width) * preview_size
+    cy = (float(primitive.get("cy", 0)) / canvas_height) * preview_size
+    rx = max(1.0, (float(primitive.get("rx", 0)) / canvas_width) * preview_size)
+    ry = max(1.0, (float(primitive.get("ry", 0)) / canvas_height) * preview_size)
+    for y in range(max(0, round(cy - ry)), min(preview_size, round(cy + ry) + 1)):
+        for x in range(max(0, round(cx - rx)), min(preview_size, round(cx + rx) + 1)):
+            if (((x - cx) ** 2) / (rx**2)) + (((y - cy) ** 2) / (ry**2)) <= 1.0:
+                _blend_pixel(pixels, width=preview_size, x=x, y=y, rgb=rgb, opacity=opacity)
+
+
+def _point_in_polygon(x: int, y: int, points: list[tuple[int, int]]) -> bool:
+    inside = False
+    j = len(points) - 1
+    for i, point in enumerate(points):
+        xi, yi = point
+        xj, yj = points[j]
+        if (yi > y) != (yj > y) and x < (xj - xi) * (y - yi) / max(1e-9, yj - yi) + xi:
+            inside = not inside
+        j = i
+    return inside
+
+
+def _draw_filled_path(
+    pixels: bytearray,
+    *,
+    preview_size: int,
+    canvas_width: int,
+    canvas_height: int,
+    primitive: dict[str, Any],
+) -> None:
+    points = _primitive_path_points(primitive, width=canvas_width, height=canvas_height, preview_size=preview_size)
+    if len(points) < 3:
+        return
+    rgb = _hex_rgb(primitive.get("fill"))
+    opacity = float(primitive.get("opacity", 1.0) or 1.0)
+    xs = [point[0] for point in points]
+    ys = [point[1] for point in points]
+    for y in range(max(0, min(ys)), min(preview_size, max(ys) + 1)):
+        for x in range(max(0, min(xs)), min(preview_size, max(xs) + 1)):
+            if _point_in_polygon(x, y, points):
+                _blend_pixel(pixels, width=preview_size, x=x, y=y, rgb=rgb, opacity=opacity)
+
+
+def _draw_line(
+    pixels: bytearray,
+    *,
+    preview_size: int,
+    start: tuple[int, int],
+    end: tuple[int, int],
+    rgb: tuple[int, int, int],
+    opacity: float,
+    thickness: int,
+) -> None:
+    x0, y0 = start
+    x1, y1 = end
+    steps = max(abs(x1 - x0), abs(y1 - y0), 1)
+    radius = max(0, thickness // 2)
+    for step in range(steps + 1):
+        t = step / steps
+        x = round(x0 + ((x1 - x0) * t))
+        y = round(y0 + ((y1 - y0) * t))
+        for yy in range(y - radius, y + radius + 1):
+            for xx in range(x - radius, x + radius + 1):
+                _blend_pixel(pixels, width=preview_size, x=xx, y=yy, rgb=rgb, opacity=opacity)
+
+
+def _draw_stroke_path(
+    pixels: bytearray,
+    *,
+    preview_size: int,
+    canvas_width: int,
+    canvas_height: int,
+    primitive: dict[str, Any],
+) -> None:
+    points = _primitive_path_points(primitive, width=canvas_width, height=canvas_height, preview_size=preview_size)
+    if len(points) < 2:
+        return
+    rgb = _hex_rgb(primitive.get("stroke"))
+    opacity = float(primitive.get("opacity", 1.0) or 1.0)
+    thickness = max(1, round((float(primitive.get("stroke_width", 1)) / max(1, canvas_width)) * preview_size))
+    for start, end in zip(points, points[1:], strict=False):
+        _draw_line(
+            pixels, preview_size=preview_size, start=start, end=end, rgb=rgb, opacity=opacity, thickness=thickness
+        )
+
+
+def _png_bytes(*, width: int, height: int, pixels: bytearray) -> bytes:
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
+
+    scanlines = b"".join(b"\x00" + bytes(pixels[row * width * 3 : (row + 1) * width * 3]) for row in range(height))
+    return b"".join(
+        [
+            b"\x89PNG\r\n\x1a\n",
+            chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)),
+            chunk(b"IDAT", zlib.compress(scanlines, 9)),
+            chunk(b"IEND", b""),
+        ]
+    )
+
+
+def _sandbox_raster_preview(
+    primitives: list[dict[str, Any]],
+    *,
+    canvas_width: int,
+    canvas_height: int,
+    preview_size: int = 128,
+) -> tuple[bytes, dict[str, Any]]:
+    pixels = bytearray([255, 255, 255] * preview_size * preview_size)
+    for primitive in primitives:
+        action = _safe_str(primitive.get("action"))
+        if action == "fill_rect":
+            _draw_rect(
+                pixels,
+                preview_size=preview_size,
+                canvas_width=canvas_width,
+                canvas_height=canvas_height,
+                primitive=primitive,
+            )
+        elif action == "fill_ellipse":
+            _draw_ellipse(
+                pixels,
+                preview_size=preview_size,
+                canvas_width=canvas_width,
+                canvas_height=canvas_height,
+                primitive=primitive,
+            )
+        elif action == "fill_path":
+            _draw_filled_path(
+                pixels,
+                preview_size=preview_size,
+                canvas_width=canvas_width,
+                canvas_height=canvas_height,
+                primitive=primitive,
+            )
+        elif action == "stroke_path":
+            _draw_stroke_path(
+                pixels,
+                preview_size=preview_size,
+                canvas_width=canvas_width,
+                canvas_height=canvas_height,
+                primitive=primitive,
+            )
+
+    background = bytes(pixels[:3])
+    unique_colors = {bytes(pixels[index : index + 3]) for index in range(0, len(pixels), 3)}
+    non_background_count = sum(
+        1 for index in range(0, len(pixels), 3) if bytes(pixels[index : index + 3]) != background
+    )
+    pixel_count = preview_size * preview_size
+    evidence = {
+        "status": "generated",
+        "evidence_mode": "sandbox_operator_primitive_raster_replay",
+        "format": "png",
+        "width": preview_size,
+        "height": preview_size,
+        "source_canvas_width": canvas_width,
+        "source_canvas_height": canvas_height,
+        "pixel_count": pixel_count,
+        "non_background_pixel_count": non_background_count,
+        "non_background_ratio": round(non_background_count / max(1, pixel_count), 3),
+        "unique_color_count": len(unique_colors),
+        "pixel_evidence": True,
+        "screenshot": False,
+        "live_desktop_capture": False,
+        "visual_similarity_claim": False,
+        "reference_image_used": False,
+        "limitations": [
+            "Raster preview is generated from sandbox operator primitives, not from a desktop screenshot.",
+            "Path commands are approximated from recorded coordinate points for replay evidence.",
+            "No external reference image or visual-similarity comparison is used.",
+        ],
+    }
+    return _png_bytes(width=preview_size, height=preview_size, pixels=pixels), evidence
+
+
 def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.parent / f".tmp_{uuid.uuid4().hex[:12]}.json"
@@ -603,6 +951,70 @@ def _hash_match(path: Path, expected_hash: Any) -> dict[str, Any]:
         "sha256": actual,
         "expected_sha256": expected,
         "matches": bool(expected and actual == expected),
+    }
+
+
+def _png_dimensions(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {"status": "missing", "valid_png": False, "width": 0, "height": 0}
+    try:
+        data = path.read_bytes()[:24]
+    except Exception:
+        return {"status": "unreadable", "valid_png": False, "width": 0, "height": 0}
+    if len(data) < 24 or data[:8] != b"\x89PNG\r\n\x1a\n" or data[12:16] != b"IHDR":
+        return {"status": "invalid_png_header", "valid_png": False, "width": 0, "height": 0}
+    width, height = struct.unpack(">II", data[16:24])
+    return {"status": "parsed", "valid_png": True, "width": int(width), "height": int(height)}
+
+
+def _sandbox_raster_preview_evidence(
+    resolved_dir: Path, manifest: dict[str, Any], receipt: dict[str, Any]
+) -> dict[str, Any]:
+    raster_path_text = (
+        _safe_str(receipt.get("raster_preview_path"))
+        or _safe_str(manifest.get("raster_preview_path"))
+        or str(resolved_dir / "mona_lisa_sandbox_preview.png")
+    )
+    raster_path = Path(raster_path_text)
+    expected_hash = _safe_str(receipt.get("raster_preview_hash")) or _safe_str(manifest.get("raster_preview_hash"))
+    hash_result = _hash_match(raster_path, expected_hash)
+    dimensions = _png_dimensions(raster_path)
+    source_evidence = _dict(receipt.get("sandbox_raster_preview")) or _dict(manifest.get("sandbox_raster_preview"))
+    if not hash_result["exists"]:
+        return {
+            "status": "missing",
+            "path": str(raster_path),
+            "hash": hash_result,
+            "dimensions": dimensions,
+            "pixel_evidence": False,
+            "screenshot": False,
+            "live_desktop_capture": False,
+            "visual_similarity_claim": False,
+            "reference_image_used": False,
+            "limitations": ["No sandbox raster preview artifact was present for this run."],
+        }
+    return {
+        "status": "evaluated",
+        "path": str(raster_path),
+        "hash": hash_result,
+        "dimensions": dimensions,
+        "evidence_mode": _safe_str(source_evidence.get("evidence_mode")) or "sandbox_operator_primitive_raster_replay",
+        "format": _safe_str(source_evidence.get("format")) or "png",
+        "pixel_evidence": True,
+        "screenshot": False,
+        "live_desktop_capture": False,
+        "visual_similarity_claim": False,
+        "reference_image_used": False,
+        "metrics": {
+            "pixel_count": _safe_int(source_evidence.get("pixel_count"), 0),
+            "non_background_pixel_count": _safe_int(source_evidence.get("non_background_pixel_count"), 0),
+            "non_background_ratio": source_evidence.get("non_background_ratio"),
+            "unique_color_count": _safe_int(source_evidence.get("unique_color_count"), 0),
+        },
+        "limitations": [
+            "Sandbox pixel evidence is generated from operator primitives, not captured from the desktop.",
+            "This is not a visual-similarity score or human recognizability proof.",
+        ],
     }
 
 
@@ -815,19 +1227,46 @@ def _improvement_proposals(evaluation: dict[str, Any]) -> list[dict[str, Any]]:
                 ],
             }
         )
-    proposals.append(
-        {
-            "proposal_id": "sandbox_canvas_add_pixel_or_multi_run_review",
-            "kind": "bounded_improvement_proposal",
-            "status": "proposed_not_promoted",
-            "summary": "Add optional truth-labeled pixel evidence or multi-run failure scoring for sandbox output.",
-            "requires_validation": [
-                "pixel evidence is labeled fixture, replay, sandbox, or live",
-                "visual similarity is not claimed unless a real pixel path returns evidence",
-                "proposal promotion remains separate and approval-gated",
-            ],
-        }
-    )
+    raster_evidence = _dict(evaluation.get("sandbox_raster_evidence"))
+    raster_ready = raster_evidence.get("status") == "evaluated" and bool(raster_evidence.get("pixel_evidence"))
+    post_action_checks = _dict(evaluation.get("optional_post_action_observation_checks"))
+    post_action_ready = bool(post_action_checks) and all(bool(value) for value in post_action_checks.values())
+    if not (raster_ready and post_action_ready):
+        proposals.append(
+            {
+                "proposal_id": "sandbox_canvas_complete_replay_evidence_chain",
+                "kind": "bounded_improvement_proposal",
+                "status": "proposed_not_promoted",
+                "summary": (
+                    "Complete the sandbox replay evidence chain with primitive raster evidence and "
+                    "linked post-action observation receipts."
+                ),
+                "requires_validation": [
+                    "sandbox raster evidence is labeled as primitive replay, not screenshot capture",
+                    "post-action observation links to the structured observation receipt",
+                    "visual similarity is not claimed unless a real comparison adapter returns evidence",
+                    "proposal promotion remains separate and approval-gated",
+                ],
+            }
+        )
+    else:
+        proposals.append(
+            {
+                "proposal_id": "sandbox_canvas_plan_governed_live_observation_adapter",
+                "kind": "bounded_improvement_proposal",
+                "status": "proposed_not_promoted",
+                "summary": (
+                    "Plan the governed live observation adapter that could compare a bounded desktop "
+                    "canvas against sandbox replay evidence without bypassing overlay/lens contracts."
+                ),
+                "requires_validation": [
+                    "live target region is approved and bounded by the existing overlay coordinate model",
+                    "capture evidence is labeled live only when a real adapter returns pixels or screenshots",
+                    "visual similarity remains false until a governed reference/comparison path exists",
+                    "operator execution, observation, and promotion remain separate approval-gated steps",
+                ],
+            }
+        )
     return proposals
 
 
@@ -881,8 +1320,20 @@ def evaluate_mona_lisa_sandbox_artifact(
         nested_observation = _dict(_dict(receipt.get("lens_overlay_observation")).get("structured_observation_receipt"))
         if nested_observation:
             structured_observation_receipts.append(nested_observation)
+    post_action_observation_receipts = [
+        item for item in receipt.get("post_action_observation_receipts") or [] if isinstance(item, dict)
+    ]
+    if not post_action_observation_receipts:
+        nested_post_action = _dict(
+            _dict(receipt.get("lens_overlay_observation")).get("post_action_observation_receipt")
+        )
+        if nested_post_action:
+            post_action_observation_receipts.append(nested_post_action)
     first_observation = structured_observation_receipts[0] if structured_observation_receipts else {}
+    first_post_action_observation = post_action_observation_receipts[0] if post_action_observation_receipts else {}
     observation_evidence = _dict(first_observation.get("evidence_reference"))
+    post_action_reference = _dict(first_post_action_observation.get("action_result_reference"))
+    post_action_governance = _dict(first_post_action_observation.get("governance"))
     no_image_import = "<image" not in svg_text.lower()
     created_through_primitives = (
         primitive_count > 0
@@ -895,8 +1346,49 @@ def evaluate_mona_lisa_sandbox_artifact(
     artifact_hash = _hash_match(svg_path, receipt.get("artifact_hash") or manifest.get("artifact_hash"))
     actions_hash = _hash_match(actions_path, receipt.get("actions_hash"))
     manifest_hash = _hash_match(manifest_path, receipt.get("manifest_hash"))
+    sandbox_raster = _sandbox_raster_preview_evidence(resolved_dir, manifest, receipt)
     recognizability = _recognizability_evidence(actions, svg_text)
     offline_fixture = _dict(recognizability.get("offline_fixture_evidence"))
+    sandbox_raster_hash = _dict(sandbox_raster.get("hash"))
+    sandbox_raster_dimensions = _dict(sandbox_raster.get("dimensions"))
+    optional_evidence_checks = {
+        "sandbox_raster_preview_present": sandbox_raster.get("status") == "evaluated",
+        "sandbox_raster_preview_hash_matches_receipt": bool(sandbox_raster_hash.get("matches")),
+        "sandbox_raster_preview_dimensions_valid": bool(sandbox_raster_dimensions.get("valid_png"))
+        and _safe_int(sandbox_raster_dimensions.get("width"), 0) > 0
+        and _safe_int(sandbox_raster_dimensions.get("height"), 0) > 0,
+        "sandbox_raster_preview_no_screenshot_claim": bool(sandbox_raster.get("screenshot")) is False,
+        "sandbox_raster_preview_no_live_desktop_capture_claim": bool(sandbox_raster.get("live_desktop_capture"))
+        is False,
+        "sandbox_raster_preview_no_visual_similarity_claim": bool(sandbox_raster.get("visual_similarity_claim"))
+        is False,
+    }
+    optional_post_action_observation_checks = {
+        "post_action_observation_receipt_present": bool(post_action_observation_receipts),
+        "post_action_observation_links_parent_observation": _safe_str(
+            first_post_action_observation.get("parent_receipt_id")
+        )
+        == _safe_str(first_observation.get("receipt_id")),
+        "post_action_observation_uses_same_mapped_region": _dict(
+            first_post_action_observation.get("mapped_overlay_region")
+        )
+        == _dict(first_observation.get("mapped_overlay_region")),
+        "post_action_observation_references_raster_preview": _safe_str(
+            post_action_reference.get("sandbox_raster_preview_ref")
+        )
+        == _safe_str(sandbox_raster.get("path")),
+        "post_action_observation_raster_hash_matches": _safe_str(
+            post_action_reference.get("sandbox_raster_preview_hash")
+        )
+        == _safe_str(sandbox_raster_hash.get("sha256")),
+        "post_action_observation_no_screenshot_claim": bool(post_action_governance.get("screenshots")) is False,
+        "post_action_observation_no_live_desktop_pixels_claim": bool(post_action_governance.get("live_desktop_pixels"))
+        is False,
+        "post_action_observation_no_visual_similarity_claim": bool(
+            post_action_governance.get("visual_similarity_claim")
+        )
+        is False,
+    }
     checks = {
         "artifact_dir_within_sandbox_root": True,
         "actions_exist": actions_path.exists(),
@@ -950,7 +1442,12 @@ def evaluate_mona_lisa_sandbox_artifact(
             "artifact": artifact_hash,
             "actions": actions_hash,
             "manifest": manifest_hash,
+            "sandbox_raster_preview": sandbox_raster_hash,
         },
+        "sandbox_raster_evidence": sandbox_raster,
+        "optional_evidence_checks": optional_evidence_checks,
+        "post_action_observation_receipts": post_action_observation_receipts,
+        "optional_post_action_observation_checks": optional_post_action_observation_checks,
         "recognizability": recognizability,
         "structured_observation_receipts": structured_observation_receipts,
         "failure_classification": []
@@ -966,16 +1463,19 @@ def evaluate_mona_lisa_sandbox_artifact(
             "writes_receipts": False,
             "runs_operation": False,
             "desktop_control": False,
+            "sandbox_raster_pixel_replay_evidence": sandbox_raster.get("status") == "evaluated",
             "clipboard_paste": False,
             "imports_finished_image": False,
             "approves_proposals": False,
             "promotes_changes": False,
             "visual_similarity_claim": False,
             "live_desktop_perception_claim": False,
+            "post_action_observation_replay_evidence": bool(post_action_observation_receipts),
         },
         "limitations": [
             "Evaluation replays local sandbox artifacts only.",
-            "No live desktop window, screenshot, pixel, OCR, or accessibility evidence was captured.",
+            "No live desktop window, screenshot, OCR, accessibility, or visual-similarity evidence was captured.",
+            "Sandbox raster evidence, when present, is generated from operator primitives.",
             "Improvement proposals are read-only suggestions and are not promoted automatically.",
         ],
     }
@@ -1360,6 +1860,7 @@ def paint_mona_lisa_sandbox(inputs: dict[str, Any], objective: str) -> dict[str,
     action_path = artifact_root / "operator_actions.jsonl"
     manifest_path = artifact_root / "manifest.json"
     svg_path = artifact_root / "mona_lisa_sandbox.svg"
+    raster_preview_path = artifact_root / "mona_lisa_sandbox_preview.png"
     receipt_path = artifact_root / "receipt.json"
 
     action_rows = [
@@ -1377,10 +1878,28 @@ def paint_mona_lisa_sandbox(inputs: dict[str, Any], objective: str) -> dict[str,
 
     svg_written = False
     svg_hash = ""
+    raster_preview_hash = ""
+    raster_preview_evidence: dict[str, Any] = {
+        "status": "not_generated",
+        "evidence_mode": "sandbox_operator_primitive_raster_replay",
+        "pixel_evidence": False,
+        "screenshot": False,
+        "live_desktop_capture": False,
+        "visual_similarity_claim": False,
+    }
     if not dry_run:
         svg_path.write_text(_svg_document(primitives, width=width, height=height), encoding="utf-8")
         svg_hash = _sha256(svg_path)
         svg_written = True
+        raster_bytes, raster_preview_evidence = _sandbox_raster_preview(
+            primitives,
+            canvas_width=width,
+            canvas_height=height,
+        )
+        raster_preview_path.write_bytes(raster_bytes)
+        raster_preview_hash = _sha256(raster_preview_path)
+        raster_preview_evidence["path"] = str(raster_preview_path)
+        raster_preview_evidence["hash"] = raster_preview_hash
 
     action_hash = _sha256(action_path)
     requested_region = _dict(lens_observation.get("requested_region"))
@@ -1402,6 +1921,9 @@ def paint_mona_lisa_sandbox(inputs: dict[str, Any], objective: str) -> dict[str,
         "operator_primitives_count": len(primitives),
         "actions_path": str(action_path),
         "svg_path": str(svg_path) if svg_written else "",
+        "raster_preview_path": str(raster_preview_path) if raster_preview_hash else "",
+        "raster_preview_hash": raster_preview_hash,
+        "sandbox_raster_preview": raster_preview_evidence,
         "dry_run": dry_run,
         "created_at": _now_iso(),
         "no_pasted_image": True,
@@ -1426,6 +1948,30 @@ def paint_mona_lisa_sandbox(inputs: dict[str, Any], objective: str) -> dict[str,
         action_hash=action_hash,
         svg_path=svg_path,
         svg_hash=svg_hash,
+        raster_preview_path=raster_preview_path,
+        raster_preview_hash=raster_preview_hash,
+        raster_preview_evidence=raster_preview_evidence,
+        primitive_count=len(primitives),
+        dry_run=dry_run,
+    )
+    post_action_observation = _post_action_observation_receipt(
+        receipt_id=f"{receipt_id}.post_action_observation.1",
+        parent_receipt_id=structured_observation["receipt_id"],
+        trace_id=trace_id,
+        run_id=run_id,
+        mission_id=mission_id,
+        requested_region=requested_region,
+        mapped_region=mapped_region,
+        actual_region=actual_region,
+        manifest_path=manifest_path,
+        manifest_hash=manifest_hash,
+        action_path=action_path,
+        action_hash=action_hash,
+        svg_path=svg_path,
+        svg_hash=svg_hash,
+        raster_preview_path=raster_preview_path,
+        raster_preview_hash=raster_preview_hash,
+        raster_preview_evidence=raster_preview_evidence,
         primitive_count=len(primitives),
         dry_run=dry_run,
     )
@@ -1466,8 +2012,10 @@ def paint_mona_lisa_sandbox(inputs: dict[str, Any], objective: str) -> dict[str,
             ],
             "failure_or_refusal_reason": "",
             "structured_observation_receipt": structured_observation,
+            "post_action_observation_receipt": post_action_observation,
         },
         "structured_observation_receipts": [structured_observation],
+        "post_action_observation_receipts": [post_action_observation],
         "orb_embodiment": {
             "truth_source": "operation_result",
             "semantic_state": "acting" if not dry_run else "planning",
@@ -1478,11 +2026,14 @@ def paint_mona_lisa_sandbox(inputs: dict[str, Any], objective: str) -> dict[str,
         },
         "artifact_dir": str(artifact_root),
         "artifact_path": str(svg_path) if svg_written else "",
+        "raster_preview_path": str(raster_preview_path) if raster_preview_hash else "",
         "actions_path": str(action_path),
         "manifest_path": str(manifest_path),
         "artifact_hash": svg_hash,
+        "raster_preview_hash": raster_preview_hash,
         "actions_hash": action_hash,
         "manifest_hash": manifest_hash,
+        "sandbox_raster_preview": raster_preview_evidence,
         "operator_primitives_count": len(primitives),
         "created_through_operator_primitives": True,
         "recognizable_lower_complexity_target": "mona_lisa",
@@ -1490,7 +2041,8 @@ def paint_mona_lisa_sandbox(inputs: dict[str, Any], objective: str) -> dict[str,
         "truthful_limitations": [
             "sandbox artifact only; no live desktop paint program was controlled",
             "procedural low-complexity representation; no reference image was pasted or imported",
-            "desktop screenshot, pixel, OCR, and accessibility evidence were not captured by this adapter",
+            "desktop screenshot, OCR, accessibility, and visual-similarity evidence were not captured by this adapter",
+            "sandbox raster preview pixels are generated from operator primitives, not captured from a live desktop",
         ],
         "governance": {
             "sandbox_only": True,
@@ -1517,10 +2069,12 @@ def paint_mona_lisa_sandbox(inputs: dict[str, Any], objective: str) -> dict[str,
         "run_id": run_id,
         "artifact_dir": str(artifact_root),
         "artifact_path": str(svg_path) if svg_written else "",
+        "raster_preview_path": str(raster_preview_path) if raster_preview_hash else "",
         "actions_path": str(action_path),
         "manifest_path": str(manifest_path),
         "receipt_path": str(receipt_path),
         "artifact_hash": svg_hash,
+        "raster_preview_hash": raster_preview_hash,
         "actions_hash": action_hash,
         "manifest_hash": manifest_hash,
         "receipt_hash": receipt_hash,
@@ -1528,6 +2082,7 @@ def paint_mona_lisa_sandbox(inputs: dict[str, Any], objective: str) -> dict[str,
         "operator_primitives_count": len(primitives),
         "created_through_operator_primitives": True,
         "structured_observation_receipts": [structured_observation],
+        "post_action_observation_receipts": [post_action_observation],
         "no_pasted_image": True,
         "imports_finished_image": False,
         "live_desktop_execution": False,
@@ -1536,8 +2091,10 @@ def paint_mona_lisa_sandbox(inputs: dict[str, Any], objective: str) -> dict[str,
             "run_id": run_id,
             "artifact_dir": str(artifact_root),
             "artifact_path": str(svg_path) if svg_written else "",
+            "raster_preview_path": str(raster_preview_path) if raster_preview_hash else "",
             "execution_mode": "dry_run" if dry_run else "sandbox",
             "operator_primitives_count": len(primitives),
+            "sandbox_raster_preview": raster_preview_evidence,
         },
         "receipt": receipt,
         "verification": {

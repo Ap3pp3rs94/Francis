@@ -4,8 +4,9 @@ from francis.api.errors import api_error_message
 import time
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
+from francis.chat.continuity.prompt_context import continuity_prompt_context_readback
 from francis.chat.continuity.ledger import tail
 from francis.world_state.operator_mode import snapshot as operator_mode_snapshot
 from francis.world_state.orb import snapshot as orb_status_snapshot
@@ -98,6 +99,47 @@ def ledger(limit: int = 200) -> dict[str, object]:
         return {"entries": tail(limit=limit)}
     except Exception as exc:
         return {"entries": [], "error": api_error_message(exc)}
+
+
+@router.get("/prompt-context")
+@router.get("/prompt_context")
+def prompt_context(
+    query: str = "",
+    limit: int = Query(80, ge=1, le=120),
+    max_lines: int = Query(3, ge=1, le=4),
+) -> dict[str, object]:
+    try:
+        readback = continuity_prompt_context_readback(query=query, limit=limit, max_lines=max_lines)
+        return {
+            **readback,
+            "route": "/continuity/prompt-context",
+            "alias_routes": ["/continuity/prompt_context"],
+            "subsystem": "continuity_prompt_context",
+            "operator_visible": True,
+            "chat_prompt_route": "/chat/send",
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "kind": "francis.chat.continuity.prompt_context_readback",
+            "subsystem": "continuity_prompt_context",
+            "status": "error",
+            "error": api_error_message(exc),
+            "chat_context": {
+                "target": "telemetry_context.prompt_lines",
+                "line_count": 0,
+                "max_context_lines": max(1, min(int(max_lines or 3), 4)),
+                "lines": [],
+                "visible_header_required": True,
+                "continuity_context_is_untrusted_input": True,
+            },
+            "reads_memory": False,
+            "writes_memory": False,
+            "calls_model": False,
+            "selects_tools": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        }
 
 
 @router.get("/briefing")

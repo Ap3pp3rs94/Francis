@@ -60,7 +60,7 @@ Expected shape:
 Francis MCP smoke
   ok: True
   mcp_sdk_available: True
-  tool_count: 18
+  tool_count: 23
   missing_tools: []
   health_status: ready
   screen_status: ready
@@ -85,13 +85,19 @@ Francis currently has two MCP-facing surfaces:
 
 ### Developer bridge MCP wrapper
 
-The developer bridge is read-only. It is for bounded repo verification and evidence inspection.
+The developer bridge keeps repo verification read-only, adds an append-only
+collaboration prompt relay, exposes a read-only transcript plus chat handoff
+text for those relay receipts, and exposes read-only collaboration-agent status
+for Codex, Claude, and local Ollama. It is for bounded repo verification,
+evidence inspection, and queued Codex/Claude/Ollama prompt handoffs.
 
-Start it with:
+Start the streamable HTTP bridge with:
 
 ```powershell
 cd D:\Francis
 $env:FRANCIS_DEV_BRIDGE_TRANSPORT = "streamable-http"
+$env:FRANCIS_DEV_BRIDGE_HOST = "127.0.0.1"
+$env:FRANCIS_DEV_BRIDGE_PORT = "8788"
 python -m francis.developer_bridge.mcp_server
 ```
 
@@ -99,11 +105,149 @@ Contract boundary:
 
 - can read bounded repo truth
 - can read bounded supervised-exec receipt artifacts
-- cannot write files
+- can append bounded, redacted collaboration prompt envelopes
+- can list bounded collaboration prompt envelopes
+- can read the collaboration relay as a bounded operator-visible transcript
+- can read Codex, Claude, and Ollama collaboration participant status
+- can return chat-ready handoff text that connected agents must echo
+- cannot write repo files
+- cannot write files outside the collaboration prompt relay
 - cannot run arbitrary shell
 - cannot commit or push
 - cannot read secrets
 - cannot operate external accounts
+- cannot execute collaboration prompts
+- cannot train or tune a model
+- cannot treat a model/client as execution authority by default
+
+Operator transcript readback:
+
+```powershell
+cd D:\Francis
+python -m francis Communication --agent claude --limit 20
+python -m francis Communication --brief --hide-auto-acks --watch --new-only --poll-seconds 5 --limit 30
+```
+
+The transcript shows Francis-owned relay receipts only. It does not capture raw
+MCP JSON-RPC traffic, private model conversation state, desktop pixels, or
+external service logs.
+
+Relay submissions and transcript reads return `chat_handoff.chat_text`.
+Connected agents must echo that text in their own chat response when they submit
+or read relay entries, so the operator can see the Codex/Claude handoff in both
+chat panes. Francis cannot silently write into either chat UI from the
+background; visibility is mediated through tool results and agent echo.
+
+Optional bounded Codex responder for a scheduled Claude relay task:
+
+```powershell
+cd D:\Francis
+python -m francis.developer_bridge.codex_responder --watch --ignore-existing --source-agent claude --poll-seconds 5 --cooldown-seconds 15
+python -m francis.developer_bridge.codex_responder --watch --ignore-existing --source-agent ollama --poll-seconds 2 --cooldown-seconds 0
+```
+
+This helper auto-acks new relay entries targeted at Codex for the selected
+source agent, writes at most one Codex relay reply per source id, and records
+local state under Francis data. Codex auto-acks include a
+`no_response_requested=true` marker so the local Ollama participant can show the
+acknowledgement without answering it again. Auto-ack visible text is intentionally
+compact: receipt id, objective, short preview, and no-authority marker only. The
+auto-ack lane is
+event-gated rather than cooldown-gated: Codex watches for completed
+`ollama -> codex` receipts and responds once per source receipt id. It does not
+perform Codex reasoning, execute prompts, mutate repo files, approve actions,
+run shell, commit, push, or contact external services.
+
+Optional bounded Codex/Ollama conversation driver:
+
+```powershell
+cd D:\Francis
+python -m francis.developer_bridge.collaboration_driver --watch --ignore-existing --poll-seconds 5 --max-turns 0 --turn-gap-seconds 30 --summary-every-turns 6 --repeat-closed --session-gap-seconds 10
+```
+
+The conversation driver exists so the Communication window has a clean
+event-gated sequence to show. It submits the next bounded `codex -> ollama`
+question only after the previous matching `ollama -> codex` receipt exists, then
+waits for the configured turn gap before prompting again. `--max-turns 0` means
+there is no hard session cap. The driver writes bounded collaboration-note
+receipts under
+`data/integrations/developer_bridge/collaboration_driver/notes/`, typed
+collaboration-insight receipts under the matching `insights/` directory, typed
+failure/loop learning receipts under `learning_events/`, compact context-contract
+receipts under `context_contracts/`, writes periodic summaries under
+`summaries/`, and appends compact summary entries to the existing continuity
+ledger so later turns can carry shared context without transcript dumping.
+Driver prompts reference `francis1-collaboration-compact-contract-v1` instead of
+restating stable identity/governance text every turn. Insight receipts use
+`schema_version=developer_bridge_collaboration_insight_v1` and project each
+bounded exchange into an advisory review shape: finding, build issue,
+implementation candidate, memory candidate, action boundary, review status, and
+source relay ids. They are a Codex/operator review surface, not a memory
+promotion, approval, execution, model-tuning, or repository-mutation authority.
+The read-only collaboration review surface is available at
+`GET /developer-bridge/collaboration-review` and MCP
+`collaboration_review_tool`; it turns recent insight receipts into concrete
+review candidates with `concrete_repo_surface`, `review_artifact`, quality flags,
+and a `review_recommendation`. Review candidates remain advisory readback and
+must be checked against repo truth before implementation.
+Learning receipts use
+`schema_version=developer_bridge_collaboration_learning_v1` and record repeated
+meta loops as bounded memory material with no full transcript storage and no
+memory-write authority. The local model participant is named `Francis1` and is
+prompted to speak in first person through the Ollama provider lane;
+`source_agent=ollama` remains provider provenance for auditability, not identity.
+The driver does not run shell, mutate the repo, approve actions, commit, push,
+train the model, or turn Codex/Francis1 into an authority center.
+
+Preferred supervised Codex/Ollama runtime:
+
+```powershell
+cd D:\Francis
+python -m francis communication-runtime --watch --poll-seconds 10
+```
+
+The runtime supervisor keeps the event-gated Codex/Ollama helper pair and the
+bounded conversation driver alive, and records its receipt at
+`data/integrations/developer_bridge/collaboration_runtime/state.json`. It only
+starts the fixed local helper commands documented above. It does not start
+arbitrary commands, grant model execution authority, mutate repo files, approve
+actions, commit, push, or contact external services.
+
+Optional local Ollama participant:
+
+```powershell
+cd D:\Francis
+python -m francis.developer_bridge.ollama_participant --watch --ignore-existing --source-agent codex --poll-seconds 2 --cooldown-seconds 0
+```
+
+The Ollama participant watches completed `codex -> ollama` relay receipts,
+reuses the existing Francis chat prompt path, reads existing
+continuity/feedback-memory context, calls the existing local Ollama client,
+writes conversation-ledger and relay receipts, and responds back to Codex once
+per source receipt id. The Codex lane and the Ollama lane are both
+event-gated, not cooldown-gated. If local Ollama returns no text, it records an
+explicit unavailable relay instead of faking a model answer.
+
+Identity boundary: `source_agent=ollama` and `target_agent=ollama` are relay
+provenance and provider-lane labels, not Francis identity. The local model
+participant is named `Francis1`; Ollama is the runtime/provider name. This does
+not make Francis1 Francis's brain or grant authority; it prevents provider
+provenance from becoming the conversation's self-concept.
+
+Governed access boundary: Francis1 is treated as the primary local Francis
+intelligence participant for this collaboration lane, while Codex and Claude are
+external guidance sources. Francis1's available context is only what Francis
+supplies through existing prompt and receipt paths: continuity/feedback-memory
+context, relay receipts, review candidates, summaries, learning receipts, and
+operator-visible Chat UI state when present. Its write path remains limited to
+conversation-ledger and collaboration-relay receipts. It still has no raw host
+access, shell authority, repository mutation authority, approval authority,
+model-training authority, or memory-promotion authority.
+
+The Chat UI can act as the operator console for enabling or disabling Codex,
+Claude, and Ollama relay participation. That operator-console role is explicit:
+`client_can_be_operator_console=true` and
+`client_is_automatic_execution_authority=false`.
 
 ### Governed MCP gateway
 
@@ -117,11 +261,13 @@ The tool registry is validated by:
 python -m francis.mcp_gateway.smoke
 ```
 
-The expected tool count is currently `18`.
+The expected tool count is currently `23`.
 
 ## Client configuration template
 
-Use this shape in MCP-capable clients that support local command-backed servers.
+Use this shape in MCP-capable clients that support local command-backed servers. Command-backed clients such as
+Claude/Cowork speak MCP over stdio to the child process; do not set `streamable-http`
+in that entry.
 
 ```json
 {
@@ -131,7 +277,7 @@ Use this shape in MCP-capable clients that support local command-backed servers.
       "args": ["-m", "francis.developer_bridge.mcp_server"],
       "cwd": "D:\\Francis",
       "env": {
-        "FRANCIS_DEV_BRIDGE_TRANSPORT": "streamable-http"
+        "FRANCIS_DEV_BRIDGE_TRANSPORT": "stdio"
       }
     }
   }
@@ -145,6 +291,8 @@ Keep client configuration local. Do not paste API keys, GitHub tokens, `.env` co
 The safe default is read/propose/refuse, not execute.
 
 The client may ask Francis to propose actions, but Francis must preserve the proposal -> approval -> execution/receipt boundary.
+The client may submit collaboration prompts, but those prompts are queued receipts only and do not grant execution authority.
+The client must echo returned `chat_handoff.chat_text` when using the collaboration relay.
 
 Required defaults:
 
@@ -153,6 +301,7 @@ Required defaults:
 - no raw mouse or keyboard control
 - no credential typing
 - no external side effects without an explicit governed path
+- no autonomous execution from prompt relay messages
 - receipts are checked evidence, not authority
 
 ## Screen/session readback
@@ -288,6 +437,17 @@ If an MCP client asks for broader permissions, refuse the configuration and add 
 ### `mcp_sdk_available: False`
 
 The MCP Python dependency is missing from the active environment. Re-run the dependency setup command and then re-run the smoke check.
+
+### Developer bridge port is already in use
+
+The Francis API often uses `127.0.0.1:8000`. Keep the developer bridge local and choose another free port:
+
+```powershell
+$env:FRANCIS_DEV_BRIDGE_TRANSPORT = "streamable-http"
+$env:FRANCIS_DEV_BRIDGE_HOST = "127.0.0.1"
+$env:FRANCIS_DEV_BRIDGE_PORT = "8788"
+python -m francis.developer_bridge.mcp_server
+```
 
 ### `missing_tools` is not empty
 

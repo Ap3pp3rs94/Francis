@@ -10,6 +10,40 @@ import {
 
 import { fetchLensMcpStatus, type LensMcpStatus } from "./lens/mcpStatus";
 import {
+  collaborationActionBoundarySummary,
+  collaborationActionIntakeSummary,
+  collaborationImplementationReviewSummary,
+  collaborationTranscriptAuditSummary,
+  fetchCollaborationAgentsStatus,
+  fetchCollaborationLearning,
+  fetchCollaborationReview,
+  fetchCollaborationRuntimeHealth,
+  fetchCollaborationSessions,
+  fetchCollaborationTranscript,
+  fetchFrancisBodyMap,
+  fetchFrancisTrustLadder,
+  collaborationReviewBadge,
+  collaborationReviewNextAction,
+  collaborationReviewTone,
+  collaborationRuntimeRecurrenceSummary,
+  collaborationRuntimeLearningReceiptSummary,
+  collaborationRuntimeLearningSignalSummary,
+  collaborationRuntimeReviewReceiptSummary,
+  formatCollaborationRelayMessage,
+  isCollaborationAuditReceipt,
+  preserveCollaborationReadbackDuringWarming,
+  setCollaborationAgentEnabled,
+  type CollaborationAgent,
+  type CollaborationAgentsStatus,
+  type CollaborationLearning,
+  type CollaborationReview,
+  type CollaborationRuntimeHealth,
+  type CollaborationSessions,
+  type CollaborationTranscript,
+  type FrancisBodyMap,
+  type FrancisTrustLadder,
+} from "./chat/collaboration";
+import {
   fetchCommandPaletteMonitorStatus,
   type CommandPaletteMonitorStatus,
 } from "./lens/commandPaletteMonitor";
@@ -60,6 +94,14 @@ type SpeechRecognitionEventLike = {
 };
 
 const BRIDGE_MONITOR_POLL_MS = 15000;
+const COLLABORATION_PANEL_POLL_MS = 15000;
+const LENS_MCP_STATUS_TIMEOUT_MS = 5000;
+const COLLABORATION_READBACK_TIMEOUT_MS = 9000;
+const COLLABORATION_TRANSCRIPT_LIMIT = 8;
+const COLLABORATION_REVIEW_LIMIT = 20;
+const COLLABORATION_LEARNING_LIMIT = 4;
+const FRANCIS_TRUST_LADDER_LIMIT = 8;
+const COLLABORATION_SESSION_GAP_MS = 30 * 60 * 1000;
 
 declare global {
   interface Window {
@@ -960,16 +1002,1635 @@ function joinStatusList(values: string[], fallback = "none"): string {
   return values.length ? values.join(", ") : fallback;
 }
 
+type CollaborationTranscriptEntry = CollaborationTranscript["items"][number];
+type CollaborationReviewEntry = CollaborationReview["items"][number];
+type CollaborationLearningEntry = CollaborationLearning["items"][number];
+type CollaborationReadbackResult<T> = { ok: true; value: T } | { ok: false; message: string };
+
+type CollaborationUiSession = {
+  id: string;
+  label: string;
+  startedAt: string;
+  endedAt: string;
+  items: CollaborationTranscriptEntry[];
+};
+
+function collaborationCacheLabel(cache?: { status: string; ageMs: number | null }): string {
+  if (!cache?.status || cache.status === "not_reported") return "";
+  const age = typeof cache.ageMs === "number" ? ` ${Math.max(0, Math.round(cache.ageMs / 1000))}s` : "";
+  return ` / cache ${cache.status}${age}`;
+}
+
+function collaborationShortId(value: string): string {
+  if (!value) return "unknown";
+  return value.length > 30 ? `${value.slice(0, 18)}...${value.slice(-8)}` : value;
+}
+
+function collaborationDirectionText(item: CollaborationTranscriptEntry): string {
+  return (item.direction || `${item.sourceAgent}->${item.targetAgent}`).replace("->", " -> ");
+}
+
+function collaborationTimeText(item: CollaborationTranscriptEntry): string {
+  if (!item.createdAt) return "unknown time";
+  const timePart = item.createdAt.includes("T") ? item.createdAt.split("T")[1] : item.createdAt;
+  return timePart.split(".")[0] || item.createdAt;
+}
+
+function collaborationTimestamp(item: CollaborationTranscriptEntry): number {
+  const parsed = Date.parse(item.createdAt);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function collaborationLearningTermText(item: CollaborationLearningEntry): string {
+  return item.repeatedTerms.length ? item.repeatedTerms.join(", ") : "unclassified";
+}
+
+function collaborationReadbackErrorMessage(label: string, err: unknown): string {
+  if (isAbortError(err)) return `${label} readback timed out. Showing last known data.`;
+  return err instanceof Error ? `${label} readback failed: ${err.message}` : `${label} readback failed.`;
+}
+
+async function fetchCollaborationReadbackWithTimeout<T>(
+  label: string,
+  parentSignal: AbortSignal | undefined,
+  fetcher: (signal: AbortSignal) => Promise<T>,
+): Promise<CollaborationReadbackResult<T>> {
+  const controller = new AbortController();
+  const abortFromParent = () => controller.abort();
+  if (parentSignal?.aborted) {
+    controller.abort();
+  } else {
+    parentSignal?.addEventListener("abort", abortFromParent, { once: true });
+  }
+  const timeoutId = window.setTimeout(() => controller.abort(), COLLABORATION_READBACK_TIMEOUT_MS);
+  try {
+    return { ok: true, value: await fetcher(controller.signal) };
+  } catch (err) {
+    return { ok: false, message: collaborationReadbackErrorMessage(label, err) };
+  } finally {
+    window.clearTimeout(timeoutId);
+    parentSignal?.removeEventListener("abort", abortFromParent);
+  }
+}
+
+function collaborationSessionLabel(item: CollaborationTranscriptEntry): string {
+  const parsed = Date.parse(item.createdAt);
+  if (!Number.isFinite(parsed)) return item.createdAt || "session";
+  const date = new Date(parsed);
+  return `${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+}
+
+function buildCollaborationSessions(items: CollaborationTranscriptEntry[]): CollaborationUiSession[] {
+  const chronological = [...items]
+    .sort((left, right) => collaborationTimestamp(left) - collaborationTimestamp(right));
+  const sessions: CollaborationUiSession[] = [];
+  for (const item of chronological) {
+    const previous = sessions[sessions.length - 1];
+    const itemTime = collaborationTimestamp(item);
+    const previousTime = previous?.items.length ? collaborationTimestamp(previous.items[previous.items.length - 1]!) : 0;
+    if (!previous || (itemTime && previousTime && itemTime - previousTime > COLLABORATION_SESSION_GAP_MS)) {
+      sessions.push({
+        id: `session-${item.createdAt || item.id}`,
+        label: collaborationSessionLabel(item),
+        startedAt: item.createdAt,
+        endedAt: item.createdAt,
+        items: [item],
+      });
+    } else {
+      previous.items.push(item);
+      previous.endedAt = item.createdAt;
+    }
+  }
+  return sessions.reverse();
+}
+
+function CollaborationAgentsPanel(props: { baseUrl: string }) {
+  const [status, setStatus] = useState<CollaborationAgentsStatus | null>(null);
+  const [transcript, setTranscript] = useState<CollaborationTranscript | null>(null);
+  const [sessionReadback, setSessionReadback] = useState<CollaborationSessions | null>(null);
+  const [review, setReview] = useState<CollaborationReview | null>(null);
+  const [learning, setLearning] = useState<CollaborationLearning | null>(null);
+  const [runtimeHealth, setRuntimeHealth] = useState<CollaborationRuntimeHealth | null>(null);
+  const [bodyMap, setBodyMap] = useState<FrancisBodyMap | null>(null);
+  const [trustLadder, setTrustLadder] = useState<FrancisTrustLadder | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [busyAgent, setBusyAgent] = useState("");
+  const [error, setError] = useState("");
+  const [selectedSessionId, setSelectedSessionId] = useState("");
+  const [followLatest, setFollowLatest] = useState(true);
+  const [showAuditReceipts, setShowAuditReceipts] = useState(false);
+  const requestInFlight = useRef<{ signal?: AbortSignal } | null>(null);
+  const transcriptScrollRef = useRef<HTMLDivElement | null>(null);
+
+  const loadStatus = useCallback(
+    (signal?: AbortSignal, opts: { showLoading?: boolean } = {}) => {
+      if (requestInFlight.current && !requestInFlight.current.signal?.aborted) return;
+      const request = { signal };
+      requestInFlight.current = request;
+      if (opts.showLoading !== false) setLoading(true);
+      setError("");
+      void (async () => {
+        const readbackWarnings: string[] = [];
+        const nextStatus = await fetchCollaborationAgentsStatus({ baseUrl: props.baseUrl, signal });
+        if (!signal?.aborted) {
+          setStatus(nextStatus);
+        }
+        const nextBodyMap = await fetchCollaborationReadbackWithTimeout("Body map", signal, (readbackSignal) =>
+          fetchFrancisBodyMap({ baseUrl: props.baseUrl, signal: readbackSignal }),
+        );
+        if (!signal?.aborted) {
+          if (nextBodyMap.ok) {
+            setBodyMap(nextBodyMap.value);
+          } else {
+            readbackWarnings.push(nextBodyMap.message);
+          }
+        }
+        const nextTrustLadder = await fetchCollaborationReadbackWithTimeout("Trust ladder", signal, (readbackSignal) =>
+          fetchFrancisTrustLadder({ baseUrl: props.baseUrl, limit: FRANCIS_TRUST_LADDER_LIMIT, signal: readbackSignal }),
+        );
+        if (!signal?.aborted) {
+          if (nextTrustLadder.ok) {
+            setTrustLadder(nextTrustLadder.value);
+          } else {
+            readbackWarnings.push(nextTrustLadder.message);
+          }
+        }
+        const nextTranscript = await fetchCollaborationReadbackWithTimeout("Transcript", signal, (readbackSignal) =>
+          fetchCollaborationTranscript({ baseUrl: props.baseUrl, limit: COLLABORATION_TRANSCRIPT_LIMIT, signal: readbackSignal }),
+        );
+        if (!signal?.aborted) {
+          if (nextTranscript.ok) {
+            setTranscript((previous) => preserveCollaborationReadbackDuringWarming(previous, nextTranscript.value));
+          } else {
+            readbackWarnings.push(nextTranscript.message);
+          }
+        }
+        const nextSessions = await fetchCollaborationReadbackWithTimeout("Session", signal, (readbackSignal) =>
+          fetchCollaborationSessions({
+            baseUrl: props.baseUrl,
+            limit: 5,
+            itemLimit: COLLABORATION_TRANSCRIPT_LIMIT,
+            signal: readbackSignal,
+          }),
+        );
+        if (!signal?.aborted) {
+          if (nextSessions.ok) {
+            setSessionReadback((previous) => preserveCollaborationReadbackDuringWarming(previous, nextSessions.value));
+          } else {
+            readbackWarnings.push(nextSessions.message);
+          }
+        }
+        const nextReview = await fetchCollaborationReadbackWithTimeout("Review", signal, (readbackSignal) =>
+          fetchCollaborationReview({ baseUrl: props.baseUrl, limit: COLLABORATION_REVIEW_LIMIT, signal: readbackSignal }),
+        );
+        if (!signal?.aborted) {
+          if (nextReview.ok) {
+            setReview((previous) => preserveCollaborationReadbackDuringWarming(previous, nextReview.value));
+          } else {
+            readbackWarnings.push(nextReview.message);
+          }
+        }
+        const nextLearning = await fetchCollaborationReadbackWithTimeout("Learning", signal, (readbackSignal) =>
+          fetchCollaborationLearning({ baseUrl: props.baseUrl, limit: COLLABORATION_LEARNING_LIMIT, signal: readbackSignal }),
+        );
+        if (!signal?.aborted) {
+          if (nextLearning.ok) {
+            setLearning((previous) => preserveCollaborationReadbackDuringWarming(previous, nextLearning.value));
+          } else {
+            readbackWarnings.push(nextLearning.message);
+          }
+        }
+        const nextRuntime = await fetchCollaborationReadbackWithTimeout("Runtime", signal, (readbackSignal) =>
+          fetchCollaborationRuntimeHealth({ baseUrl: props.baseUrl, signal: readbackSignal }),
+        );
+        if (!signal?.aborted) {
+          if (nextRuntime.ok) {
+            setRuntimeHealth(nextRuntime.value);
+          } else {
+            readbackWarnings.push(nextRuntime.message);
+          }
+        }
+        return readbackWarnings;
+      })()
+        .then((readbackWarnings) => {
+          if (signal?.aborted) return;
+          setError(readbackWarnings.join(" "));
+        })
+        .catch((err: unknown) => {
+          if (signal?.aborted || isAbortError(err)) return;
+          setError(err instanceof Error ? err.message : "Collaboration relay request failed.");
+        })
+        .finally(() => {
+          if (requestInFlight.current !== request) return;
+          requestInFlight.current = null;
+          setLoading(false);
+        });
+    },
+    [props.baseUrl],
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    loadStatus(controller.signal);
+    const pollWhenVisible = () => {
+      if (document.hidden) return;
+      loadStatus(controller.signal, { showLoading: false });
+    };
+    const refreshWhenVisible = () => {
+      if (!document.hidden) loadStatus(controller.signal, { showLoading: false });
+    };
+    const pollId = window.setInterval(() => {
+      pollWhenVisible();
+    }, COLLABORATION_PANEL_POLL_MS);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      controller.abort();
+      window.clearInterval(pollId);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, [loadStatus]);
+
+  const toggleAgent = useCallback(
+    (agent: CollaborationAgent, enabled: boolean) => {
+      const controller = new AbortController();
+      setBusyAgent(agent.agent);
+      setError("");
+      void setCollaborationAgentEnabled({
+        baseUrl: props.baseUrl,
+        agent: agent.agent,
+        enabled,
+        actor: "chat_ui.system",
+        reason: "operator toggled collaboration participant in Chat UI",
+        signal: controller.signal,
+      })
+        .then((nextStatus) => setStatus(nextStatus))
+        .catch((err: unknown) => {
+          if (controller.signal.aborted || isAbortError(err)) return;
+          setError(err instanceof Error ? err.message : "Collaboration agent toggle failed.");
+        })
+        .finally(() => setBusyAgent(""));
+      return () => controller.abort();
+    },
+    [props.baseUrl],
+  );
+
+  const agents = status?.agents ?? [];
+  const activeCount = agents.filter((agent) => agent.enabled).length;
+  const operatorConsole = status?.operatorConsole;
+  const latestToggleReceipts = [...(status?.receipts ?? [])].slice(-4).reverse();
+  const transcriptItems = transcript?.items ?? [];
+  const transcriptAuditSummary = useMemo(() => collaborationTranscriptAuditSummary(transcriptItems), [transcriptItems]);
+  const sessionSourceItems = showAuditReceipts ? transcriptItems : transcriptAuditSummary.conversationItems;
+  const sessions = useMemo(() => buildCollaborationSessions(sessionSourceItems), [sessionSourceItems]);
+  const sessionSummaries = sessionReadback?.items ?? [];
+  const reviewItems = review?.items ?? [];
+  const blockedReviewItems = reviewItems.filter((item) => item.buildDirectionGate.blocksBuildDirection);
+  const latestImplementationReview = reviewItems[0] ? collaborationImplementationReviewSummary(reviewItems[0]) : null;
+  const learningItems = learning?.items ?? [];
+  const recurrenceProof = collaborationRuntimeRecurrenceSummary(runtimeHealth);
+  const reviewReceiptProof = collaborationRuntimeReviewReceiptSummary(runtimeHealth);
+  const learningReceiptProof = collaborationRuntimeLearningReceiptSummary(runtimeHealth);
+  const learningSignalProof = collaborationRuntimeLearningSignalSummary(runtimeHealth);
+  const runtimeEffectiveWorkers = runtimeHealth?.helpers.reduce((sum, helper) => sum + helper.effectiveWorkerCount, 0) ?? 0;
+  const runtimeProcessCount = runtimeHealth?.helpers.reduce((sum, helper) => sum + helper.processCount, 0) ?? 0;
+  const runtimeProcessModels = Array.from(new Set((runtimeHealth?.helpers ?? []).map((helper) => helper.processModel).filter(Boolean)));
+  const runtimeProcessModelLabel =
+    runtimeProcessModels.length === 1 ? runtimeProcessModels[0] : runtimeProcessModels.length > 1 ? runtimeProcessModels.join(", ") : "unknown";
+  const bodyMapSurfaces = bodyMap?.surfaces ?? [];
+  const bodyMapQuest = bodyMap?.quest;
+  const bodyCoverageReview = bodyMap?.coverageReview;
+  const bodyMapUnsafeAuthority =
+    bodyMapSurfaces.some(
+      (surface) =>
+        surface.grantsExecutionAuthority ||
+        surface.grantsMutationAuthority ||
+        surface.grantsApprovalAuthority ||
+        surface.grantsMemoryWriteAuthority ||
+        surface.grantsTrainingAuthority,
+    ) || Boolean(bodyMap?.summary.fullBodyAuthorityGranted);
+  const trustLadderItems = trustLadder?.items ?? [];
+  const trustLadderUnsafeAuthority =
+    Boolean(trustLadder?.summary.grantsAnyAuthority) ||
+    trustLadderItems.some(
+      (item) =>
+        item.actionBoundary.conversationCanExecuteAction ||
+        item.actionBoundary.conversationCanApproveAction ||
+        Boolean(item.governance.grants_execution_authority) ||
+        Boolean(item.governance.grants_mutation_authority) ||
+        Boolean(item.governance.grants_memory_write_authority) ||
+        Boolean(item.governance.grants_training_authority),
+    );
+  const selectedSession = sessions.find((session) => session.id === selectedSessionId) ?? sessions[0] ?? null;
+  const visibleTranscriptItems = selectedSession?.items ?? [];
+  const latestSessionId = sessions[0]?.id ?? "";
+  const latestMessageId = visibleTranscriptItems[visibleTranscriptItems.length - 1]?.id ?? "";
+
+  useEffect(() => {
+    if (!sessions.length) {
+      if (selectedSessionId) setSelectedSessionId("");
+      return;
+    }
+    if (followLatest || !selectedSessionId || !sessions.some((session) => session.id === selectedSessionId)) {
+      setSelectedSessionId(sessions[0].id);
+    }
+  }, [followLatest, selectedSessionId, sessions]);
+
+  useEffect(() => {
+    const scroller = transcriptScrollRef.current;
+    if (!scroller) return;
+    scroller.scrollTop = scroller.scrollHeight;
+  }, [latestMessageId, selectedSessionId, visibleTranscriptItems.length]);
+
+  return (
+    <section
+      style={{
+        background: "rgba(9, 13, 20, 0.92)",
+        border: "1px solid rgba(148, 163, 184, 0.32)",
+        borderRadius: 18,
+        marginTop: 18,
+        padding: 24,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "flex-start", flexWrap: "wrap", justifyContent: "space-between", gap: 14 }}>
+        <div style={{ minWidth: 0 }}>
+          <p style={{ color: "#67e8f9", margin: 0, textTransform: "uppercase", letterSpacing: 1.4 }}>
+            Collaboration intelligence
+          </p>
+          <h2 style={{ fontSize: 24, margin: "8px 0 8px" }}>Agent Relay Controls</h2>
+          <p style={{ color: "#cbd5e1", margin: 0, maxWidth: 820 }}>
+            Operator-visible control for Codex, Claude, and local Ollama on the existing Francis relay.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => loadStatus(undefined)}
+          disabled={loading}
+          style={{
+            background: "#e2e8f0",
+            border: 0,
+            borderRadius: 12,
+            color: "#0f172a",
+            cursor: loading ? "wait" : "pointer",
+            fontWeight: 700,
+            padding: "10px 14px",
+          }}
+        >
+          {loading ? "Refreshing..." : "Refresh"}
+        </button>
+      </div>
+
+      {error ? (
+        <div style={{ border: "1px solid #fca5a5", borderRadius: 12, color: "#fecaca", marginTop: 16, padding: 12 }}>
+          {error}
+        </div>
+      ) : null}
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 18 }}>
+        <Pill label="active" value={`${activeCount}/${agents.length || 3}`} tone={activeCount > 0 ? "ready" : "blocked"} />
+        <Pill label="relay" value={status?.relay || "unknown"} tone="neutral" />
+        <Pill label="client operator" value={boolText(Boolean(operatorConsole?.clientCanBeOperatorConsole))} tone="neutral" />
+        <Pill
+          label="body map"
+          value={bodyMap?.summary.fullBodyVisible ? "visible" : "unknown"}
+          tone={bodyMap?.summary.fullBodyVisible ? "ready" : "neutral"}
+        />
+        <Pill
+          label="trust ladder"
+          value={bodyMap?.summary.trustLadderEnforced ? "enforced" : "pending"}
+          tone={bodyMap?.summary.trustLadderEnforced ? "ready" : "neutral"}
+        />
+        <Pill
+          label="coverage"
+          value={bodyCoverageReview?.status || "unknown"}
+          tone={bodyMap?.summary.coverageReviewed ? "ready" : "neutral"}
+        />
+        <Pill
+          label="client authority"
+          value={boolText(Boolean(operatorConsole?.clientIsAutomaticExecutionAuthority))}
+          tone={operatorConsole?.clientIsAutomaticExecutionAuthority ? "blocked" : "ready"}
+        />
+      </div>
+
+      <div style={{ marginTop: 22 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <h3 style={{ fontSize: 18, margin: 0 }}>Francis Body Map</h3>
+          <span style={{ color: bodyMapUnsafeAuthority ? "#fca5a5" : "#6ee7b7", fontSize: 13 }}>
+            quest {bodyMapQuest?.percentComplete ?? 0}%
+            {collaborationCacheLabel(bodyMap?.readbackCache)}
+          </span>
+        </div>
+        <div
+          style={{
+            display: "grid",
+            gap: 10,
+            gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+            marginTop: 12,
+          }}
+        >
+          <article
+            style={{
+              background: "rgba(15, 23, 42, 0.58)",
+              border: "1px solid rgba(148, 163, 184, 0.22)",
+              borderRadius: 12,
+              padding: "12px 14px",
+            }}
+          >
+            <dl style={{ color: "#cbd5e1", display: "grid", gap: 8, margin: 0 }}>
+              <div>
+                <dt style={{ color: "#94a3b8" }}>Identity</dt>
+                <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
+                  {bodyMap?.identity.localIdentity || "francis1"} via {bodyMap?.identity.providerLane || "unknown"}
+                </dd>
+              </div>
+              <div>
+                <dt style={{ color: "#94a3b8" }}>Phase</dt>
+                <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
+                  {bodyMap?.phase.current || "unknown"} / {bodyMap?.phase.priority || "unknown"}
+                </dd>
+              </div>
+              <div>
+                <dt style={{ color: "#94a3b8" }}>Latest Ledger</dt>
+                <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{bodyMap?.evidence.latestLedgerEntry || "No ledger readback."}</dd>
+              </div>
+            </dl>
+            <div style={{ color: "#94a3b8", display: "flex", flexWrap: "wrap", fontSize: 12, gap: 10, marginTop: 10 }}>
+              <span>surfaces {bodyMap?.summary.surfaceCount ?? 0}</span>
+              <span>connected {bodyMap?.summary.connectedOrPartialCount ?? 0}</span>
+              <span>candidate {bodyMap?.summary.candidateCount ?? 0}</span>
+              <span>runtime observed {boolText(Boolean(bodyMap?.summary.runtimeRestartObserved))}</span>
+              <span>
+                planes {bodyMap?.summary.canonicalPlaneCoveredCount ?? 0}/{bodyMap?.summary.canonicalPlaneCount ?? 0}
+              </span>
+              <span>gaps {bodyMap?.summary.coverageOpenGapCount ?? 0}</span>
+              <span>authority {boolText(Boolean(bodyMap?.summary.fullBodyAuthorityGranted))}</span>
+              <span>unsafe {boolText(bodyMapUnsafeAuthority)}</span>
+            </div>
+          </article>
+          <article
+            style={{
+              background: "rgba(15, 23, 42, 0.58)",
+              border: "1px solid rgba(148, 163, 184, 0.22)",
+              borderRadius: 12,
+              padding: "12px 14px",
+            }}
+          >
+            <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "space-between" }}>
+              <span style={{ color: "#94a3b8", fontSize: 13 }}>Quest</span>
+              <span
+                style={{
+                  border: "1px solid #93c5fd",
+                  borderRadius: 999,
+                  color: "#bfdbfe",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  padding: "4px 8px",
+                }}
+              >
+                {bodyMapQuest?.completedSteps ?? 0}/{bodyMapQuest?.totalSteps ?? 0}
+              </span>
+            </div>
+            <p style={{ color: "#e2e8f0", margin: "8px 0 0", overflowWrap: "anywhere" }}>
+              {bodyMapQuest?.title || "Whole-body awareness quest not loaded."}
+            </p>
+            <p style={{ color: "#94a3b8", margin: "8px 0 0", overflowWrap: "anywhere" }}>
+              {bodyMapQuest?.estimatedTimeline || "No timeline reported."}
+            </p>
+            <div style={{ color: "#cbd5e1", display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+              {(bodyMapQuest?.steps ?? []).slice(0, 6).map((step) => (
+                <span
+                  key={step.id || step.label}
+                  style={{
+                    background: step.status === "completed" ? "rgba(20, 83, 45, 0.32)" : "rgba(71, 85, 105, 0.28)",
+                    border: `1px solid ${step.status === "completed" ? "rgba(110, 231, 183, 0.5)" : "rgba(148, 163, 184, 0.28)"}`,
+                    borderRadius: 999,
+                    fontSize: 12,
+                    maxWidth: "100%",
+                    overflowWrap: "anywhere",
+                    padding: "4px 8px",
+                  }}
+                >
+                  {step.label} / {step.status}
+                </span>
+              ))}
+            </div>
+          </article>
+          <article
+            style={{
+              background: "rgba(15, 23, 42, 0.58)",
+              border: "1px solid rgba(148, 163, 184, 0.22)",
+              borderRadius: 12,
+              padding: "12px 14px",
+            }}
+          >
+            <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "space-between" }}>
+              <span style={{ color: "#94a3b8", fontSize: 13 }}>Coverage</span>
+              <span
+                style={{
+                  border: "1px solid #67e8f9",
+                  borderRadius: 999,
+                  color: "#a5f3fc",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  padding: "4px 8px",
+                }}
+              >
+                {bodyCoverageReview?.coveredPlaneCount ?? 0}/{bodyCoverageReview?.planeCount ?? 0}
+              </span>
+            </div>
+            <p style={{ color: "#e2e8f0", margin: "8px 0 0", overflowWrap: "anywhere" }}>
+              {bodyCoverageReview?.status || "Coverage review not loaded."}
+            </p>
+            <p style={{ color: "#94a3b8", margin: "8px 0 0", overflowWrap: "anywhere" }}>
+              {bodyCoverageReview?.canonicalSource || "No canonical source reported."}
+            </p>
+            <div style={{ color: "#cbd5e1", display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+              <span>open gaps {bodyCoverageReview?.openGapCount ?? 0}</span>
+              <span>capability complete {boolText(Boolean(bodyCoverageReview?.capabilityComplete))}</span>
+              <span>execute {boolText(Boolean(bodyCoverageReview?.grantsExecutionAuthority))}</span>
+              <span>missing {(bodyCoverageReview?.missingPlaneIds ?? []).join(", ") || "none"}</span>
+            </div>
+            <div
+              style={{
+                color: "#94a3b8",
+                display: "grid",
+                gap: 8,
+                marginTop: 10,
+                maxHeight: 210,
+                overflowY: "auto",
+              }}
+            >
+              {(bodyCoverageReview?.items ?? []).map((item) => (
+                <div
+                  key={item.planeId}
+                  style={{
+                    background: "rgba(15, 23, 42, 0.6)",
+                    border: "1px solid rgba(148, 163, 184, 0.22)",
+                    borderRadius: 8,
+                    maxWidth: "100%",
+                    overflowWrap: "anywhere",
+                    padding: "8px 10px",
+                  }}
+                >
+                  <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "space-between" }}>
+                    <strong style={{ color: "#e2e8f0" }}>
+                      {item.planeId} / {item.currentPosture}
+                    </strong>
+                    <span style={{ color: item.riskLevel === "high" ? "#fecaca" : "#fde68a", fontSize: 12 }}>
+                      risk {item.riskLevel || "unknown"}
+                    </span>
+                  </div>
+                  <p style={{ color: "#cbd5e1", margin: "6px 0 0" }}>{item.riskStatement || item.remainingGaps[0] || "No risk statement."}</p>
+                  <p style={{ color: "#94a3b8", fontSize: 12, margin: "6px 0 0" }}>
+                    artifact {item.nextReviewArtifact || item.bodySurfaceId || "unknown"}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </article>
+        </div>
+        <div
+          style={{
+            display: "grid",
+            gap: 10,
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            marginTop: 12,
+            maxHeight: 260,
+            overflowY: "auto",
+          }}
+        >
+          {bodyMapSurfaces.length ? (
+            bodyMapSurfaces.map((surface) => (
+              <article
+                key={surface.id}
+                style={{
+                  background: "rgba(15, 23, 42, 0.48)",
+                  border: "1px solid rgba(148, 163, 184, 0.2)",
+                  borderRadius: 12,
+                  padding: "10px 12px",
+                }}
+              >
+                <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "space-between" }}>
+                  <strong style={{ color: "#e2e8f0" }}>{surface.label}</strong>
+                  <span style={{ color: "#93c5fd", fontSize: 12 }}>{surface.accessMode}</span>
+                </div>
+                <p style={{ color: "#cbd5e1", margin: "8px 0 0", overflowWrap: "anywhere" }}>{surface.description}</p>
+                <div style={{ color: "#94a3b8", display: "flex", flexWrap: "wrap", fontSize: 12, gap: 8, marginTop: 8 }}>
+                  <span>{surface.connectionState}</span>
+                  <span>next {surface.trustRequiredForNextMode || "review"}</span>
+                  <span>execute {boolText(surface.grantsExecutionAuthority)}</span>
+                  <span>memory write {boolText(surface.grantsMemoryWriteAuthority)}</span>
+                  <span>training {boolText(surface.grantsTrainingAuthority)}</span>
+                </div>
+              </article>
+            ))
+          ) : (
+            <div style={{ border: "1px solid rgba(148, 163, 184, 0.22)", borderRadius: 12, color: "#94a3b8", padding: 14 }}>
+              No body-map surfaces returned.
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div style={{ marginTop: 22 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <h3 style={{ fontSize: 18, margin: 0 }}>Francis Trust Ladder</h3>
+          <span style={{ color: trustLadderUnsafeAuthority ? "#fca5a5" : "#6ee7b7", fontSize: 13 }}>
+            {trustLadderItems.length} needs{collaborationCacheLabel(trustLadder?.readbackCache)}
+          </span>
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+          {(trustLadder?.summary.allowedDecisions ?? ["wire_existing", "build_missing", "tune_prompt_guard", "reject_as_drift"]).map(
+            (decision) => (
+              <span
+                key={decision}
+                style={{
+                  background: "rgba(15, 23, 42, 0.58)",
+                  border: "1px solid rgba(148, 163, 184, 0.24)",
+                  borderRadius: 999,
+                  color: "#cbd5e1",
+                  fontSize: 12,
+                  padding: "4px 8px",
+                }}
+              >
+                {decision} {trustLadder?.summary.decisionCounts[decision] ?? 0}
+              </span>
+            ),
+          )}
+          <span
+            style={{
+              background: trustLadderUnsafeAuthority ? "rgba(127, 29, 29, 0.28)" : "rgba(20, 83, 45, 0.24)",
+              border: `1px solid ${trustLadderUnsafeAuthority ? "rgba(252, 165, 165, 0.5)" : "rgba(110, 231, 183, 0.45)"}`,
+              borderRadius: 999,
+              color: trustLadderUnsafeAuthority ? "#fecaca" : "#d1fae5",
+              fontSize: 12,
+              padding: "4px 8px",
+            }}
+          >
+            no authority {boolText(!trustLadderUnsafeAuthority)}
+          </span>
+        </div>
+        <div
+          style={{
+            display: "grid",
+            gap: 10,
+            gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+            marginTop: 12,
+            maxHeight: 320,
+            overflowY: "auto",
+          }}
+        >
+          {trustLadderItems.length ? (
+            trustLadderItems.map((item) => (
+              <article
+                key={item.id || item.sourceReviewItemId}
+                style={{
+                  background: "rgba(15, 23, 42, 0.5)",
+                  border: "1px solid rgba(148, 163, 184, 0.22)",
+                  borderRadius: 12,
+                  padding: "10px 12px",
+                }}
+              >
+                <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "space-between" }}>
+                  <strong style={{ color: "#e2e8f0", overflowWrap: "anywhere" }}>{item.decision || "unclassified"}</strong>
+                  <span style={{ color: "#93c5fd", fontSize: 12 }}>{item.currentAccessMode} {"->"} {item.requestedAccessMode}</span>
+                </div>
+                <p style={{ color: "#cbd5e1", margin: "8px 0 0", overflowWrap: "anywhere" }}>{item.needStatement || item.topic}</p>
+                <dl style={{ color: "#94a3b8", display: "grid", gap: 6, margin: "8px 0 0" }}>
+                  <div>
+                    <dt>Surface</dt>
+                    <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{item.requestedSurface || "unknown"}</dd>
+                  </div>
+                  <div>
+                    <dt>Trust Gate</dt>
+                    <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{item.nextTrustGate || "review required"}</dd>
+                  </div>
+                  <div>
+                    <dt>Codex Action</dt>
+                    <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{item.recommendedNextAction || "Inspect the typed receipt."}</dd>
+                  </div>
+                </dl>
+                <div style={{ color: "#94a3b8", display: "flex", flexWrap: "wrap", fontSize: 12, gap: 8, marginTop: 8 }}>
+                  <span>surface {item.surfaceVerification.status || "unknown"}</span>
+                  <span>execute {boolText(item.actionBoundary.conversationCanExecuteAction)}</span>
+                  <span>approve {boolText(item.actionBoundary.conversationCanApproveAction)}</span>
+                </div>
+              </article>
+            ))
+          ) : (
+            <div style={{ border: "1px solid rgba(148, 163, 184, 0.22)", borderRadius: 12, color: "#94a3b8", padding: 14 }}>
+              No trust-ladder needs returned.
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", marginTop: 18 }}>
+        {agents.map((agent) => {
+          const busy = busyAgent === agent.agent;
+          return (
+            <article
+              key={agent.agent}
+              style={{
+                border: "1px solid rgba(148, 163, 184, 0.28)",
+                borderRadius: 14,
+                padding: 14,
+                background: agent.enabled ? "rgba(20, 83, 45, 0.18)" : "rgba(71, 85, 105, 0.16)",
+              }}
+            >
+              <label style={{ alignItems: "center", display: "flex", gap: 10, justifyContent: "space-between" }}>
+                <span>
+                  <strong>{agent.label}</strong>
+                  <span style={{ color: "#94a3b8", display: "block", fontSize: 13 }}>{agent.participantKind}</span>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={agent.enabled}
+                  disabled={busy}
+                  onChange={(event) => toggleAgent(agent, event.currentTarget.checked)}
+                  aria-label={`${agent.label} collaboration enabled`}
+                  style={{ height: 20, width: 20 }}
+                />
+              </label>
+              <dl style={{ color: "#cbd5e1", display: "grid", gap: 6, margin: "12px 0 0" }}>
+                <div>
+                  <dt style={{ color: "#94a3b8" }}>Authority</dt>
+                  <dd style={{ margin: 0 }}>{agent.authority || "relay_only"}</dd>
+                </div>
+                <div>
+                  <dt style={{ color: "#94a3b8" }}>Runner</dt>
+                  <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{agent.localRunner || "external client"}</dd>
+                </div>
+              </dl>
+            </article>
+          );
+        })}
+      </div>
+
+      <div style={{ marginTop: 22 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <h3 style={{ fontSize: 18, margin: 0 }}>Toggle Receipts</h3>
+          <span style={{ color: "#94a3b8", fontSize: 13 }}>{latestToggleReceipts.length} latest / read only</span>
+        </div>
+        <div
+          style={{
+            display: "grid",
+            gap: 10,
+            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+            marginTop: 12,
+          }}
+        >
+          {latestToggleReceipts.length ? (
+            latestToggleReceipts.map((receipt) => (
+              <article
+                key={receipt.receiptId || `${receipt.agent}-${receipt.createdAt}`}
+                style={{
+                  background: "rgba(15, 23, 42, 0.58)",
+                  border: "1px solid rgba(148, 163, 184, 0.22)",
+                  borderRadius: 12,
+                  padding: "12px 14px",
+                }}
+              >
+                <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  <span
+                    style={{
+                      border: `1px solid ${receipt.enabled ? "#6ee7b7" : "#fca5a5"}`,
+                      borderRadius: 999,
+                      color: receipt.enabled ? "#d1fae5" : "#fecaca",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      padding: "3px 8px",
+                    }}
+                  >
+                    {receipt.agent} {boolText(receipt.previousEnabled)} {"->"} {boolText(receipt.enabled)}
+                  </span>
+                  <span style={{ color: "#93c5fd", fontSize: 12 }}>{collaborationShortId(receipt.receiptId)}</span>
+                </div>
+                <dl style={{ color: "#cbd5e1", display: "grid", gap: 6, margin: "10px 0 0" }}>
+                  <div>
+                    <dt style={{ color: "#94a3b8" }}>Actor</dt>
+                    <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{receipt.actor || "unknown"}</dd>
+                  </div>
+                  <div>
+                    <dt style={{ color: "#94a3b8" }}>Reason</dt>
+                    <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{receipt.reason || "No reason recorded."}</dd>
+                  </div>
+                </dl>
+                <div style={{ color: "#94a3b8", display: "flex", flexWrap: "wrap", fontSize: 12, gap: 10, marginTop: 10 }}>
+                  <span>execute {boolText(Boolean(receipt.governance.executes_prompt))}</span>
+                  <span>model {boolText(Boolean(receipt.governance.calls_model))}</span>
+                  <span>memory write {boolText(Boolean(receipt.governance.grants_memory_write_authority))}</span>
+                </div>
+              </article>
+            ))
+          ) : (
+            <div style={{ color: "#94a3b8" }}>No participant toggle receipts recorded yet.</div>
+          )}
+        </div>
+      </div>
+
+      <div style={{ marginTop: 22 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <h3 style={{ fontSize: 18, margin: 0 }}>Runtime Health</h3>
+          <span style={{ color: runtimeHealth?.status === "healthy" ? "#6ee7b7" : "#fca5a5", fontSize: 13 }}>
+            {runtimeHealth?.status || "unknown"}
+            {collaborationCacheLabel(runtimeHealth?.readbackCache)}
+          </span>
+        </div>
+        <div
+          style={{
+            display: "grid",
+            gap: 10,
+            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+            marginTop: 12,
+          }}
+        >
+          <article
+            style={{
+              background: "rgba(15, 23, 42, 0.58)",
+              border: "1px solid rgba(148, 163, 184, 0.22)",
+              borderRadius: 12,
+              padding: "12px 14px",
+            }}
+          >
+            <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "space-between" }}>
+              <span style={{ color: "#94a3b8", fontSize: 13 }}>Recurrence Proof</span>
+              <span
+                style={{
+                  border: `1px solid ${
+                    recurrenceProof.tone === "ready" ? "#6ee7b7" : recurrenceProof.tone === "blocked" ? "#fca5a5" : "#cbd5e1"
+                  }`,
+                  borderRadius: 999,
+                  color: recurrenceProof.tone === "blocked" ? "#fecaca" : "#d1fae5",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  padding: "4px 8px",
+                }}
+              >
+                {recurrenceProof.badge}
+              </span>
+            </div>
+            <div style={{ color: "#cbd5e1", display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+              {recurrenceProof.detail.map((item) => (
+                <span
+                  key={item}
+                  style={{
+                    background: "rgba(15, 23, 42, 0.7)",
+                    border: "1px solid rgba(148, 163, 184, 0.2)",
+                    borderRadius: 999,
+                    fontSize: 12,
+                    padding: "4px 8px",
+                  }}
+                >
+                  {item}
+                </span>
+              ))}
+            </div>
+            <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "space-between", marginTop: 14 }}>
+              <span style={{ color: "#94a3b8", fontSize: 13 }}>Review Receipt</span>
+              <span
+                style={{
+                  border: `1px solid ${
+                    reviewReceiptProof.tone === "ready" ? "#6ee7b7" : reviewReceiptProof.tone === "blocked" ? "#fca5a5" : "#cbd5e1"
+                  }`,
+                  borderRadius: 999,
+                  color: reviewReceiptProof.tone === "blocked" ? "#fecaca" : "#d1fae5",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  padding: "4px 8px",
+                }}
+              >
+                {reviewReceiptProof.badge}
+              </span>
+            </div>
+            <div style={{ color: "#cbd5e1", display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+              {reviewReceiptProof.detail.map((item) => (
+                <span
+                  key={item}
+                  style={{
+                    background: "rgba(15, 23, 42, 0.7)",
+                    border: "1px solid rgba(148, 163, 184, 0.2)",
+                    borderRadius: 999,
+                    fontSize: 12,
+                    maxWidth: "100%",
+                    overflowWrap: "anywhere",
+                    padding: "4px 8px",
+                  }}
+                >
+                  {item}
+                </span>
+              ))}
+            </div>
+            <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "space-between", marginTop: 14 }}>
+              <span style={{ color: "#94a3b8", fontSize: 13 }}>Learning Receipt</span>
+              <span
+                style={{
+                  border: `1px solid ${
+                    learningReceiptProof.tone === "ready" ? "#6ee7b7" : learningReceiptProof.tone === "blocked" ? "#fca5a5" : "#cbd5e1"
+                  }`,
+                  borderRadius: 999,
+                  color: learningReceiptProof.tone === "blocked" ? "#fecaca" : "#d1fae5",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  padding: "4px 8px",
+                }}
+              >
+                {learningReceiptProof.badge}
+              </span>
+            </div>
+            <div style={{ color: "#cbd5e1", display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+              {learningReceiptProof.detail.map((item) => (
+                <span
+                  key={item}
+                  style={{
+                    background: "rgba(15, 23, 42, 0.7)",
+                    border: "1px solid rgba(148, 163, 184, 0.2)",
+                    borderRadius: 999,
+                    fontSize: 12,
+                    maxWidth: "100%",
+                    overflowWrap: "anywhere",
+                    padding: "4px 8px",
+                  }}
+                >
+                  {item}
+                </span>
+              ))}
+            </div>
+            <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "space-between", marginTop: 14 }}>
+              <span style={{ color: "#94a3b8", fontSize: 13 }}>Learning Signal</span>
+              <span
+                style={{
+                  border: `1px solid ${
+                    learningSignalProof.tone === "ready" ? "#6ee7b7" : learningSignalProof.tone === "blocked" ? "#fca5a5" : "#cbd5e1"
+                  }`,
+                  borderRadius: 999,
+                  color: learningSignalProof.tone === "blocked" ? "#fecaca" : "#d1fae5",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  padding: "4px 8px",
+                }}
+              >
+                {learningSignalProof.badge}
+              </span>
+            </div>
+            <div style={{ color: "#cbd5e1", display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+              {learningSignalProof.detail.map((item) => (
+                <span
+                  key={item}
+                  style={{
+                    background: "rgba(15, 23, 42, 0.7)",
+                    border: "1px solid rgba(148, 163, 184, 0.2)",
+                    borderRadius: 999,
+                    fontSize: 12,
+                    maxWidth: "100%",
+                    overflowWrap: "anywhere",
+                    padding: "4px 8px",
+                  }}
+                >
+                  {item}
+                </span>
+              ))}
+            </div>
+            <dl style={{ color: "#cbd5e1", display: "grid", gap: 8, margin: "12px 0 0" }}>
+              <div>
+                <dt style={{ color: "#94a3b8" }}>Recurrence</dt>
+                <dd style={{ margin: 0 }}>{runtimeHealth?.collaborationLoop.recurrenceState || "unknown"}</dd>
+              </div>
+              <div>
+                <dt style={{ color: "#94a3b8" }}>Turn</dt>
+                <dd style={{ margin: 0 }}>{runtimeHealth?.collaborationLoop.turnCount || 0}</dd>
+              </div>
+              <div>
+                <dt style={{ color: "#94a3b8" }}>Topic</dt>
+                <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
+                  {runtimeHealth?.collaborationLoop.latestTurn.topic || "No runtime topic reported."}
+                </dd>
+              </div>
+            </dl>
+          </article>
+          <article
+            style={{
+              background: "rgba(15, 23, 42, 0.58)",
+              border: "1px solid rgba(148, 163, 184, 0.22)",
+              borderRadius: 12,
+              padding: "12px 14px",
+            }}
+          >
+            <dl style={{ color: "#cbd5e1", display: "grid", gap: 8, margin: 0 }}>
+              <div>
+                <dt style={{ color: "#94a3b8" }}>Last Prompt</dt>
+                <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
+                  {collaborationShortId(runtimeHealth?.collaborationLoop.lastCodexPromptId || "")}
+                </dd>
+              </div>
+              <div>
+                <dt style={{ color: "#94a3b8" }}>Last Reply</dt>
+                <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
+                  {collaborationShortId(runtimeHealth?.collaborationLoop.lastOllamaPromptId || "")}
+                </dd>
+              </div>
+              <div>
+                <dt style={{ color: "#94a3b8" }}>Turn Gap</dt>
+                <dd style={{ margin: 0 }}>{runtimeHealth?.collaborationLoop.turnGapRemainingSeconds ?? 0}s</dd>
+              </div>
+            </dl>
+          </article>
+          <article
+            style={{
+              background: "rgba(15, 23, 42, 0.58)",
+              border: "1px solid rgba(148, 163, 184, 0.22)",
+              borderRadius: 12,
+              padding: "12px 14px",
+            }}
+          >
+            <div style={{ color: "#94a3b8", fontSize: 13, marginBottom: 8 }}>
+              helpers {runtimeHealth?.helpers.filter((helper) => helper.running).length || 0}/{runtimeHealth?.desiredCount || 0}
+              {" / "}workers {runtimeEffectiveWorkers}/{runtimeHealth?.desiredCount || 0}
+            </div>
+            <div style={{ color: "#cbd5e1", display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {(runtimeHealth?.helpers ?? []).map((helper) => (
+                <span
+                  key={helper.name}
+                  style={{
+                    border: `1px solid ${helper.running ? "#6ee7b7" : "#fca5a5"}`,
+                    borderRadius: 999,
+                    color: helper.running ? "#d1fae5" : "#fecaca",
+                    fontSize: 12,
+                    padding: "4px 8px",
+                  }}
+                >
+                  {helper.name.replace("codex_ollama_", "").replace("ollama_codex_", "")} {helper.effectiveWorkerCount}/{helper.processCount}
+                </span>
+              ))}
+            </div>
+            <div style={{ color: "#94a3b8", display: "flex", flexWrap: "wrap", fontSize: 12, gap: 10, marginTop: 10 }}>
+              <span>participants {runtimeHealth?.participants.enabledCount || 0}/{runtimeHealth?.participants.totalCount || 0}</span>
+              <span>processes {runtimeProcessCount}</span>
+              <span>model {runtimeProcessModelLabel}</span>
+              <span>execute {boolText(Boolean(runtimeHealth?.governance.grants_model_execution_authority))}</span>
+              <span>memory write {boolText(Boolean(runtimeHealth?.governance.grants_memory_write_authority))}</span>
+            </div>
+          </article>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 22 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <h3 style={{ fontSize: 18, margin: 0 }}>Session Readback</h3>
+          <span style={{ color: "#94a3b8", fontSize: 13 }}>
+            {sessionSummaries.length} sessions{sessionReadback?.truncated ? " / truncated" : ""}
+            {collaborationCacheLabel(sessionReadback?.readbackCache)}
+          </span>
+        </div>
+        <div
+          style={{
+            display: "grid",
+            gap: 10,
+            gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+            marginTop: 12,
+          }}
+        >
+          {sessionSummaries.length ? (
+            sessionSummaries.map((session) => (
+              <article
+                key={session.id}
+                style={{
+                  background: "rgba(15, 23, 42, 0.58)",
+                  border: "1px solid rgba(148, 163, 184, 0.22)",
+                  borderRadius: 12,
+                  padding: "12px 14px",
+                }}
+              >
+                <div style={{ color: "#93c5fd", display: "flex", flexWrap: "wrap", fontSize: 13, gap: 10 }}>
+                  <span>{session.messageCount} messages</span>
+                  <span>{session.latestDirection || "unknown direction"}</span>
+                  <span>{session.endedAt ? collaborationTimeText({ createdAt: session.endedAt } as CollaborationTranscriptEntry) : "unknown time"}</span>
+                </div>
+                <p style={{ color: "#e2e8f0", margin: "8px 0 0", overflowWrap: "anywhere" }}>
+                  {session.latestObjective || "No session objective."}
+                </p>
+                {session.latestPreview ? (
+                  <p style={{ color: "#cbd5e1", margin: "8px 0 0", overflowWrap: "anywhere" }}>{session.latestPreview}</p>
+                ) : null}
+                <div style={{ color: "#94a3b8", display: "flex", flexWrap: "wrap", fontSize: 12, gap: 10, marginTop: 10 }}>
+                  <span>participants {session.participants.join(", ") || "unknown"}</span>
+                  <span>latest {collaborationShortId(session.latestItemId)}</span>
+                </div>
+              </article>
+            ))
+          ) : (
+            <div style={{ border: "1px solid rgba(148, 163, 184, 0.22)", borderRadius: 12, color: "#94a3b8", padding: 14 }}>
+              No collaboration session summaries returned.
+            </div>
+          )}
+        </div>
+      </div>
+
+      {blockedReviewItems.length ? (
+        <div style={{ marginTop: 22 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+            <h3 style={{ fontSize: 18, margin: 0 }}>Build Direction Gates</h3>
+            <span style={{ color: "#fca5a5", fontSize: 13 }}>{blockedReviewItems.length} blocked</span>
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gap: 10,
+              gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+              marginTop: 12,
+              maxHeight: 220,
+              overflowY: "auto",
+              paddingRight: 4,
+            }}
+          >
+            {blockedReviewItems.map((item) => (
+              <article
+                key={`gate-${item.id || item.insightId}`}
+                style={{
+                  background: "rgba(69, 10, 10, 0.28)",
+                  border: "1px solid rgba(252, 165, 165, 0.62)",
+                  borderRadius: 12,
+                  padding: "12px 14px",
+                }}
+              >
+                <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  <span
+                    style={{
+                      border: "1px solid rgba(252, 165, 165, 0.68)",
+                      borderRadius: 999,
+                      color: "#fecaca",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      padding: "4px 8px",
+                    }}
+                  >
+                    {item.buildDirectionGate.state || "blocked"}
+                  </span>
+                  <span style={{ color: "#93c5fd", fontSize: 13 }}>turn {item.turn || "?"}</span>
+                  <span style={{ color: "#94a3b8", fontSize: 13 }}>{collaborationShortId(item.insightId)}</span>
+                </div>
+                <p style={{ color: "#e2e8f0", margin: "10px 0 0", overflowWrap: "anywhere" }}>
+                  {item.buildDirectionGate.reason || "Typed review is required before build direction."}
+                </p>
+                <div style={{ color: "#94a3b8", display: "flex", flexWrap: "wrap", fontSize: 12, gap: 10, marginTop: 10 }}>
+                  <span>surface {item.buildDirectionGate.surfaceUnderReview || item.concreteRepoSurface || "unknown"}</span>
+                  <span>sources {item.buildDirectionGate.conflictingSources.length}</span>
+                  <span>execute {boolText(item.buildDirectionGate.grantsExecutionAuthority)}</span>
+                  <span>memory write {boolText(item.buildDirectionGate.grantsMemoryWriteAuthority)}</span>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {latestImplementationReview ? (
+        <div style={{ marginTop: 22 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+            <h3 style={{ fontSize: 18, margin: 0 }}>Implementation Review Gate</h3>
+            <span
+              style={{
+                border: `1px solid ${latestImplementationReview.tone === "blocked" ? "#fca5a5" : "#6ee7b7"}`,
+                borderRadius: 999,
+                color: latestImplementationReview.tone === "blocked" ? "#fecaca" : "#d1fae5",
+                fontSize: 12,
+                fontWeight: 700,
+                padding: "4px 8px",
+              }}
+            >
+              {latestImplementationReview.badge}
+            </span>
+          </div>
+          <article
+            style={{
+              background:
+                latestImplementationReview.tone === "blocked" ? "rgba(69, 10, 10, 0.26)" : "rgba(20, 83, 45, 0.18)",
+              border: `1px solid ${latestImplementationReview.tone === "blocked" ? "rgba(252, 165, 165, 0.62)" : "rgba(110, 231, 183, 0.45)"}`,
+              borderRadius: 12,
+              marginTop: 12,
+              padding: "12px 14px",
+            }}
+          >
+            <dl style={{ color: "#cbd5e1", display: "grid", gap: 8, margin: 0 }}>
+              <div>
+                <dt style={{ color: "#94a3b8" }}>Review Artifact</dt>
+                <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{latestImplementationReview.artifact}</dd>
+              </div>
+              <div>
+                <dt style={{ color: "#94a3b8" }}>Surface</dt>
+                <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{latestImplementationReview.surface}</dd>
+              </div>
+              <div>
+                <dt style={{ color: "#94a3b8" }}>Next Codex Action</dt>
+                <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{latestImplementationReview.nextAction}</dd>
+              </div>
+            </dl>
+            <div style={{ color: "#94a3b8", display: "flex", flexWrap: "wrap", fontSize: 12, gap: 10, marginTop: 10 }}>
+              {latestImplementationReview.detail.map((line) => (
+                <span key={line}>{line}</span>
+              ))}
+            </div>
+          </article>
+        </div>
+      ) : null}
+
+      <div style={{ marginTop: 22 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <h3 style={{ fontSize: 18, margin: 0 }}>Review Candidates</h3>
+          <span style={{ color: "#94a3b8", fontSize: 13 }}>
+            {reviewItems.length} candidates{review?.mode ? ` / ${review.mode}` : ""}
+            {collaborationCacheLabel(review?.readbackCache)}
+          </span>
+        </div>
+        <div
+          style={{
+            display: "grid",
+            gap: 10,
+            gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+            marginTop: 12,
+            maxHeight: 360,
+            overflowY: "auto",
+            paddingRight: 4,
+          }}
+        >
+          {reviewItems.length ? (
+            reviewItems.map((item) => {
+              const tone = collaborationReviewTone(item);
+              const border = tone === "ready" ? "#6ee7b7" : tone === "blocked" ? "#fca5a5" : "#cbd5e1";
+              const actionBoundary = collaborationActionBoundarySummary(item);
+              const actionBoundaryBorder =
+                actionBoundary.tone === "ready" ? "#6ee7b7" : actionBoundary.tone === "blocked" ? "#fca5a5" : "#cbd5e1";
+              const actionIntake = collaborationActionIntakeSummary(item);
+              const actionIntakeBorder =
+                actionIntake.tone === "ready" ? "#6ee7b7" : actionIntake.tone === "blocked" ? "#fca5a5" : "#cbd5e1";
+              return (
+                <article
+                  key={item.id || item.insightId}
+                  style={{
+                    background: "rgba(15, 23, 42, 0.58)",
+                    border: `1px solid ${border}`,
+                    borderRadius: 12,
+                    padding: "12px 14px",
+                  }}
+                >
+                  <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    <span
+                      style={{
+                        background: tone === "ready" ? "rgba(20, 83, 45, 0.35)" : "rgba(71, 85, 105, 0.28)",
+                        border: `1px solid ${border}`,
+                        borderRadius: 999,
+                        color: "#e2e8f0",
+                        fontSize: 12,
+                        fontWeight: 700,
+                        padding: "4px 8px",
+                      }}
+                    >
+                      {collaborationReviewBadge(item)}
+                    </span>
+                    <span style={{ color: "#93c5fd", fontSize: 13 }}>turn {item.turn || "?"}</span>
+                    <span style={{ color: "#94a3b8", fontSize: 13 }}>{collaborationShortId(item.insightId)}</span>
+                  </div>
+                  <dl style={{ color: "#cbd5e1", display: "grid", gap: 8, margin: "10px 0 0" }}>
+                    <div>
+                      <dt style={{ color: "#94a3b8" }}>Surface</dt>
+                      <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{item.concreteRepoSurface || "unknown"}</dd>
+                    </div>
+                    <div>
+                      <dt style={{ color: "#94a3b8" }}>Surface Status</dt>
+                      <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
+                        {item.surfaceVerification.status || "unknown"}
+                        {item.surfaceVerification.surfaceKind ? ` / ${item.surfaceVerification.surfaceKind}` : ""}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt style={{ color: "#94a3b8" }}>Artifact</dt>
+                      <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{item.reviewArtifact || "unknown"}</dd>
+                    </div>
+                    <div>
+                      <dt style={{ color: "#94a3b8" }}>Action Boundary</dt>
+                      <dd style={{ margin: 0 }}>
+                        <span
+                          style={{
+                            border: `1px solid ${actionBoundaryBorder}`,
+                            borderRadius: 999,
+                            color: actionBoundary.tone === "blocked" ? "#fecaca" : "#d1fae5",
+                            display: "inline-flex",
+                            fontSize: 12,
+                            fontWeight: 700,
+                            marginBottom: 6,
+                            padding: "3px 8px",
+                          }}
+                        >
+                          {actionBoundary.badge}
+                        </span>
+                        <span style={{ color: "#94a3b8", display: "block", fontSize: 12, overflowWrap: "anywhere" }}>
+                          {actionBoundary.detail.join(" / ")}
+                        </span>
+                      </dd>
+                    </div>
+                    {actionIntake.applies ? (
+                      <div>
+                        <dt style={{ color: "#94a3b8" }}>Action Intake</dt>
+                        <dd style={{ margin: 0 }}>
+                          <span
+                            style={{
+                              border: `1px solid ${actionIntakeBorder}`,
+                              borderRadius: 999,
+                              color: actionIntake.tone === "blocked" ? "#fecaca" : "#d1fae5",
+                              display: "inline-flex",
+                              fontSize: 12,
+                              fontWeight: 700,
+                              marginBottom: 6,
+                              padding: "3px 8px",
+                            }}
+                          >
+                            {actionIntake.badge}
+                          </span>
+                          <span style={{ color: "#94a3b8", display: "block", fontSize: 12, overflowWrap: "anywhere" }}>
+                            {actionIntake.detail.join(" / ")}
+                          </span>
+                        </dd>
+                      </div>
+                    ) : null}
+                    {item.buildDirectionGate.blocksBuildDirection ? (
+                      <div>
+                        <dt style={{ color: "#fca5a5" }}>Build Direction Gate</dt>
+                        <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
+                          {item.buildDirectionGate.state || "blocked"}
+                          {item.buildDirectionGate.reason ? `: ${item.buildDirectionGate.reason}` : ""}
+                        </dd>
+                      </div>
+                    ) : null}
+                    <div>
+                      <dt style={{ color: "#94a3b8" }}>Finding</dt>
+                      <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{item.finding || "No finding text."}</dd>
+                    </div>
+                    <div>
+                      <dt style={{ color: "#94a3b8" }}>Next Codex Action</dt>
+                      <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{collaborationReviewNextAction(item)}</dd>
+                    </div>
+                  </dl>
+                  <div style={{ color: "#94a3b8", display: "flex", flexWrap: "wrap", fontSize: 12, gap: 10, marginTop: 10 }}>
+                    <span>decision {item.reviewRecommendation.decision || "unknown"}</span>
+                    <span>model drift {boolText(item.qualityFlags.loopLanguagePresent)}</span>
+                    <span>repo review {boolText(item.qualityFlags.needsRepoTruthReview)}</span>
+                    <span>existing surface {boolText(item.surfaceVerification.existingSurfaceFound)}</span>
+                    <span>wiring review {boolText(item.surfaceVerification.requiresBuildOrWiringReview)}</span>
+                    <span>build blocked {boolText(item.buildDirectionGate.blocksBuildDirection)}</span>
+                    <span>execute {boolText(item.actionBoundary.conversationCanExecuteAction)}</span>
+                    <span>approve {boolText(item.actionBoundary.conversationCanApproveAction)}</span>
+                  </div>
+                </article>
+              );
+            })
+          ) : (
+            <div style={{ border: "1px solid rgba(148, 163, 184, 0.22)", borderRadius: 12, color: "#94a3b8", padding: 14 }}>
+              No collaboration review candidates returned.
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div style={{ marginTop: 22 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <h3 style={{ fontSize: 18, margin: 0 }}>Learning Receipts</h3>
+          <span style={{ color: "#94a3b8", fontSize: 13 }}>
+            {learningItems.length} receipts{learning?.truncated ? " / truncated" : ""}
+            {collaborationCacheLabel(learning?.readbackCache)}
+          </span>
+        </div>
+        <div
+          style={{
+            display: "grid",
+            gap: 10,
+            gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+            marginTop: 12,
+            maxHeight: 280,
+            overflowY: "auto",
+            paddingRight: 4,
+          }}
+        >
+          {learningItems.length ? (
+            learningItems.map((item) => (
+              <article
+                key={item.id}
+                style={{
+                  background: "rgba(20, 24, 39, 0.72)",
+                  border: "1px solid rgba(125, 211, 252, 0.42)",
+                  borderRadius: 12,
+                  padding: "12px 14px",
+                }}
+              >
+                <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  <span
+                    style={{
+                      border: "1px solid rgba(125, 211, 252, 0.62)",
+                      borderRadius: 999,
+                      color: "#e0f2fe",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      padding: "4px 8px",
+                    }}
+                  >
+                    {item.failureType || "learning"}
+                  </span>
+                  <span style={{ color: "#93c5fd", fontSize: 13 }}>turn {item.turn || "?"}</span>
+                  <span style={{ color: "#94a3b8", fontSize: 13 }}>{collaborationShortId(item.id)}</span>
+                </div>
+                <dl style={{ color: "#cbd5e1", display: "grid", gap: 8, margin: "10px 0 0" }}>
+                  <div>
+                    <dt style={{ color: "#94a3b8" }}>Repeated Terms</dt>
+                    <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{collaborationLearningTermText(item)}</dd>
+                  </div>
+                  <div>
+                    <dt style={{ color: "#94a3b8" }}>Observation</dt>
+                    <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{item.observation || "No observation text."}</dd>
+                  </div>
+                  <div>
+                    <dt style={{ color: "#94a3b8" }}>Next Prompt Policy</dt>
+                    <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
+                      {item.learning.nextPromptPolicy || "No prompt policy recorded."}
+                    </dd>
+                  </div>
+                </dl>
+                <div style={{ color: "#94a3b8", display: "flex", flexWrap: "wrap", fontSize: 12, gap: 10, marginTop: 10 }}>
+                  <span>recent turns {item.recentTurnCount}</span>
+                  <span>full transcript {boolText(Boolean(item.writerGovernance.stores_full_transcript))}</span>
+                  <span>execute {boolText(Boolean(item.writerGovernance.grants_execution_authority))}</span>
+                  <span>memory write {boolText(Boolean(item.writerGovernance.grants_memory_write_authority))}</span>
+                </div>
+              </article>
+            ))
+          ) : (
+            <div style={{ border: "1px solid rgba(148, 163, 184, 0.22)", borderRadius: 12, color: "#94a3b8", padding: 14 }}>
+              No collaboration learning receipts returned.
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div style={{ marginTop: 22 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <h3 style={{ fontSize: 18, margin: 0 }}>Relay Transcript</h3>
+          <span style={{ color: "#94a3b8", fontSize: 13 }}>
+            {visibleTranscriptItems.length} messages{transcript?.truncated ? " / truncated" : ""}
+            {transcriptAuditSummary.auditReceiptCount
+              ? ` / ${transcriptAuditSummary.auditReceiptCount} audit ${showAuditReceipts ? "shown" : "hidden"}`
+              : ""}
+            {collaborationCacheLabel(transcript?.readbackCache)}
+          </span>
+        </div>
+        {sessions.length ? (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
+            <button
+              type="button"
+              onClick={() => {
+                setFollowLatest(true);
+                if (latestSessionId) setSelectedSessionId(latestSessionId);
+              }}
+              style={{
+                background: followLatest ? "#bfdbfe" : "rgba(15, 23, 42, 0.62)",
+                border: "1px solid rgba(147, 197, 253, 0.42)",
+                borderRadius: 10,
+                color: followLatest ? "#0f172a" : "#dbeafe",
+                cursor: "pointer",
+                fontWeight: 700,
+                padding: "7px 10px",
+              }}
+            >
+              Live
+            </button>
+            {transcriptAuditSummary.auditReceiptCount ? (
+              <button
+                type="button"
+                onClick={() => setShowAuditReceipts((current) => !current)}
+                style={{
+                  background: showAuditReceipts ? "rgba(251, 191, 36, 0.26)" : "rgba(15, 23, 42, 0.62)",
+                  border: "1px solid rgba(251, 191, 36, 0.38)",
+                  borderRadius: 10,
+                  color: showAuditReceipts ? "#fde68a" : "#cbd5e1",
+                  cursor: "pointer",
+                  fontWeight: 700,
+                  padding: "7px 10px",
+                }}
+              >
+                Audit ({transcriptAuditSummary.auditReceiptCount})
+              </button>
+            ) : null}
+            {sessions.map((session) => (
+              <button
+                key={session.id}
+                type="button"
+                onClick={() => {
+                  setSelectedSessionId(session.id);
+                  setFollowLatest(session.id === latestSessionId);
+                }}
+                style={{
+                  background: selectedSession?.id === session.id ? "rgba(14, 165, 233, 0.26)" : "rgba(15, 23, 42, 0.62)",
+                  border: "1px solid rgba(148, 163, 184, 0.28)",
+                  borderRadius: 10,
+                  color: "#e2e8f0",
+                  cursor: "pointer",
+                  padding: "7px 10px",
+                }}
+              >
+                {session.label} ({session.items.length})
+              </button>
+            ))}
+          </div>
+        ) : null}
+        <div
+          ref={transcriptScrollRef}
+          style={{
+            display: "grid",
+            gap: 10,
+            marginTop: 12,
+            maxHeight: 420,
+            overflowY: "auto",
+            paddingRight: 4,
+          }}
+        >
+          {visibleTranscriptItems.length ? (
+            visibleTranscriptItems.map((item) => {
+              const display = formatCollaborationRelayMessage(item);
+              return (
+                <article
+                  key={item.id}
+                  style={{
+                    background: "rgba(15, 23, 42, 0.58)",
+                    border: "1px solid rgba(148, 163, 184, 0.22)",
+                    borderRadius: 12,
+                    padding: "12px 14px",
+                  }}
+                >
+                  <div style={{ color: "#93c5fd", display: "flex", flexWrap: "wrap", fontSize: 13, gap: 10 }}>
+                    <span>{collaborationDirectionText(item)}</span>
+                    <span>{collaborationTimeText(item)}</span>
+                    <span>{display.tone}</span>
+                    {isCollaborationAuditReceipt(item) ? <span>audit ack</span> : null}
+                    {display.compacted ? <span>compact receipt</span> : null}
+                  </div>
+                  <div
+                    style={{
+                      borderLeft: `3px solid ${
+                        display.tone === "guard"
+                          ? "#fbbf24"
+                          : display.tone === "audit"
+                            ? "#94a3b8"
+                            : display.tone === "driver"
+                              ? "#67e8f9"
+                              : "#6ee7b7"
+                      }`,
+                      marginTop: 10,
+                      paddingLeft: 10,
+                    }}
+                  >
+                    <div style={{ color: "#a7f3d0", fontSize: 12, fontWeight: 700, textTransform: "uppercase" }}>Conversation</div>
+                    <p style={{ color: "#e2e8f0", margin: "5px 0 0", overflowWrap: "anywhere", whiteSpace: "pre-wrap" }}>
+                      {display.conversationText || display.summary}
+                    </p>
+                  </div>
+                  {display.technicalText ? (
+                    <div style={{ borderLeft: "3px solid rgba(147, 197, 253, 0.52)", marginTop: 10, paddingLeft: 10 }}>
+                      <div style={{ color: "#bfdbfe", fontSize: 12, fontWeight: 700, textTransform: "uppercase" }}>Technical Receipt</div>
+                      <p style={{ color: "#94a3b8", fontSize: 13, margin: "5px 0 0", overflowWrap: "anywhere", whiteSpace: "pre-wrap" }}>
+                        {display.technicalText}
+                      </p>
+                    </div>
+                  ) : null}
+                  {display.compacted || display.technicalText ? (
+                    <details style={{ color: "#94a3b8", fontSize: 13, marginTop: 10 }}>
+                      <summary style={{ cursor: "pointer" }}>Raw receipt</summary>
+                      <p style={{ margin: "8px 0 0", overflowWrap: "anywhere", whiteSpace: "pre-wrap" }}>{display.raw}</p>
+                      {item.context ? (
+                        <p style={{ margin: "8px 0 0", overflowWrap: "anywhere", whiteSpace: "pre-wrap" }}>{item.context}</p>
+                      ) : null}
+                    </details>
+                  ) : null}
+                </article>
+              );
+            })
+          ) : (
+            <div style={{ border: "1px solid rgba(148, 163, 184, 0.22)", borderRadius: 12, color: "#94a3b8", padding: 14 }}>
+              No relay transcript entries returned.
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function BridgeMonitorPanel(props: { baseUrl: string }) {
   const [status, setStatus] = useState<CommandPaletteMonitorStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const statusRequestInFlight = useRef(false);
+  const statusRequestInFlight = useRef<{ signal?: AbortSignal } | null>(null);
 
   const loadStatus = useCallback(
     (signal?: AbortSignal, opts?: { showLoading?: boolean }) => {
-      if (statusRequestInFlight.current) return;
-      statusRequestInFlight.current = true;
+      if (statusRequestInFlight.current && !statusRequestInFlight.current.signal?.aborted) return;
+      const request = { signal };
+      statusRequestInFlight.current = request;
       const showLoading = opts?.showLoading !== false;
       if (showLoading) setLoading(true);
       setError("");
@@ -983,8 +2644,8 @@ function BridgeMonitorPanel(props: { baseUrl: string }) {
           setError(err instanceof Error ? err.message : "Command-palette monitor request failed.");
         })
         .finally(() => {
-          statusRequestInFlight.current = false;
-          if (signal?.aborted) return;
+          if (statusRequestInFlight.current !== request) return;
+          statusRequestInFlight.current = null;
           if (showLoading) setLoading(false);
         });
     },
@@ -1414,6 +3075,12 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const baseUrl = useMemo(() => apiBaseUrl(), []);
+  const surfacePath = useMemo(() => {
+    if (typeof window === "undefined") return "/";
+    return window.location.pathname.replace(/\/+$/, "") || "/";
+  }, []);
+  const diagnosticsOnly = surfacePath === "/diagnostics";
+  const communicationOnly = !diagnosticsOnly;
   const orbOverlayIntent = useMemo(() => {
     if (typeof window === "undefined") return false;
     return shouldOpenLensOrbOverlay(window.location.search, window.location.hash);
@@ -1424,7 +3091,7 @@ export default function App() {
       setLoading(true);
       setError("");
 
-      void fetchLensMcpStatus({ baseUrl, actor: "chat_ui.lens", signal })
+      void fetchLensMcpStatus({ baseUrl, actor: "chat_ui.lens", signal, timeoutMs: LENS_MCP_STATUS_TIMEOUT_MS })
         .then((nextStatus) => {
           setStatus(nextStatus);
         })
@@ -1441,10 +3108,11 @@ export default function App() {
   );
 
   useEffect(() => {
+    if (communicationOnly) return;
     const controller = new AbortController();
     loadStatus(controller.signal);
     return () => controller.abort();
-  }, [loadStatus]);
+  }, [communicationOnly, loadStatus]);
 
   const shell: CSSProperties = {
     background: "radial-gradient(circle at 32% 18%, #070a10 0, #04060a 55%, #030407 100%)",
@@ -1458,10 +3126,19 @@ export default function App() {
     return <OrbOverlaySurface status={status} loading={loading} />;
   }
 
+  if (communicationOnly) {
+    return (
+      <main style={shell}>
+        <CollaborationAgentsPanel baseUrl={baseUrl} />
+      </main>
+    );
+  }
+
   return (
     <main style={shell}>
       <BodyStatePanel status={status} loading={loading} error={error} onRefresh={() => loadStatus()} />
       <VoiceTranscriptionPanel baseUrl={baseUrl} />
+      <CollaborationAgentsPanel baseUrl={baseUrl} />
       <BridgeMonitorPanel baseUrl={baseUrl} />
     </main>
   );

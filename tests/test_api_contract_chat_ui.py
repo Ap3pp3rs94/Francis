@@ -34,6 +34,7 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
     routes = _routes()
 
     endpoints = [
+        ("GET", "/conversation"),
         ("POST", "/chat/send"),
         ("GET", "/approvals/list"),
         ("POST", "/approvals/decision"),
@@ -405,3 +406,15 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
         ("POST", "/swarm/stage-closure-decision"),
     ]
     _assert_has_endpoints(routes, endpoints)
+
+
+def test_api_conversation_route_redirects_to_chat_ui(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("FRANCIS_CHAT_UI_URL", "http://localhost:5174/")
+
+    from fastapi.testclient import TestClient
+    from francis.api.app import create_app
+
+    response = TestClient(create_app()).get("/conversation", follow_redirects=False)
+
+    assert response.status_code == 307
+    assert response.headers["location"] == "http://localhost:5174/conversation"

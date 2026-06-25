@@ -49,6 +49,7 @@ def test_contract_lists_only_read_only_tools_and_claims_not_resident(tmp_path, m
     assert out["overlay_observation"]["reports_region_comparison_readback"] is True
     assert out["overlay_observation"]["reports_requested_region_coordinate_validity"] is True
     assert out["overlay_observation"]["reports_confidence_breakdown"] is True
+    assert out["overlay_observation"]["reports_replay_boundary"] is True
     assert out["overlay_observation"]["reports_replay_manifest"] is True
     assert out["overlay_observation"]["screenshots"] is False
     assert out["overlay_observation"]["pixels"] is False
@@ -656,6 +657,28 @@ def test_overlay_observation_uses_existing_overlay_bounds_and_screen_readback(tm
     assert comparison["unsupported_perception"] == spatial["unsupported_perception"]
     assert comparison["unknowns"] == out["unknown_information"]
     assert comparison["limitations"] == out["limitations"]
+    replay_boundary = spatial["replay_boundary"]
+    assert replay_boundary["boundary"] == "metadata_replay_only_no_visual_replay"
+    assert replay_boundary["metadata_replayable"] is True
+    assert replay_boundary["visual_replayable"] is False
+    assert replay_boundary["geometry_replayable_regions"] == {
+        "requested_region": True,
+        "mapped_overlay_region": True,
+        "actual_inspected_region": True,
+        "actual_observed_region": True,
+        "actual_captured_region": False,
+    }
+    assert set(replay_boundary["visual_replayable_regions"].values()) == {False}
+    assert replay_boundary["actual_capture_region_replayable"] is False
+    assert replay_boundary["actual_capture_absent_reason"] == "capture_adapter_unavailable"
+    assert replay_boundary["source_called"] is True
+    assert replay_boundary["source_status"] == "ready"
+    assert replay_boundary["evidence_content_included"] is False
+    assert replay_boundary["capture_performed"] is False
+    assert replay_boundary["unsupported_perception_claimed"] is False
+    assert "visual_similarity" in replay_boundary["future_adapter_required_for"]
+    assert "visual_similarity_unsupported" in replay_boundary["visual_replay_blockers"]
+    assert replay_boundary["limitations"] == out["limitations"]
     assert spatial["confidence"] == out["confidence"]
     assert spatial["confidence_basis"] == "mcp_metadata_readback_not_visual_perception"
     assert spatial["confidence_breakdown"] == {
@@ -706,6 +729,7 @@ def test_overlay_observation_uses_existing_overlay_bounds_and_screen_readback(tm
     assert replay["region_truth"] == spatial["region_truth"]
     assert replay["region_basis"] == spatial["region_basis"]
     assert replay["region_comparison"] == spatial["region_comparison"]
+    assert replay["replay_boundary"] == replay_boundary
     assert replay["unsupported_perception"] == spatial["unsupported_perception"]
     assert replay["confidence_basis"] == spatial["confidence_basis"]
     assert replay["confidence_breakdown"] == spatial["confidence_breakdown"]
@@ -907,6 +931,19 @@ def test_overlay_observation_blocks_out_of_bounds_region_without_screen_readback
     assert comparison["rows"]["actual_captured_region"]["capture_performed"] is False
     assert "requested_region_outside_overlay_bounds" in comparison["rows"]["actual_captured_region"]["limitations"]
     assert comparison["unsupported_perception"] == spatial["unsupported_perception"]
+    replay_boundary = spatial["replay_boundary"]
+    assert replay_boundary["geometry_replayable_regions"] == {
+        "requested_region": True,
+        "mapped_overlay_region": True,
+        "actual_inspected_region": False,
+        "actual_observed_region": False,
+        "actual_captured_region": False,
+    }
+    assert set(replay_boundary["visual_replayable_regions"].values()) == {False}
+    assert replay_boundary["source_called"] is False
+    assert replay_boundary["source_status"] == "not_called"
+    assert replay_boundary["actual_capture_absent_reason"] == "requested_region_outside_overlay_bounds"
+    assert replay_boundary["failure_or_refusal_reason"] == "requested_region_outside_overlay_bounds"
     assert spatial["confidence"] == 0.0
     assert spatial["confidence_breakdown"]["coordinate_transform"] == {
         "status": "blocked_after_mapping",
@@ -930,6 +967,7 @@ def test_overlay_observation_blocks_out_of_bounds_region_without_screen_readback
     assert replay["region_truth"] == spatial["region_truth"]
     assert replay["region_basis"] == spatial["region_basis"]
     assert replay["region_comparison"] == spatial["region_comparison"]
+    assert replay["replay_boundary"] == replay_boundary
     assert replay["confidence_breakdown"] == spatial["confidence_breakdown"]
     assert replay["failure_or_refusal_reason"] == "requested_region_outside_overlay_bounds"
     assert out["receipt"]["actual_observed_region"] == out["actual_observed_region"]
@@ -1082,6 +1120,8 @@ def test_api_observe_requires_scope_and_overlay_context(tmp_path, monkeypatch) -
     assert body["spatial_contract"]["region_basis"]["actual_observed_region"]["metadata_only"] is True
     assert body["spatial_contract"]["region_comparison"]["summary"]["mapped_region_observed_metadata_only"] is True
     assert body["spatial_contract"]["region_comparison"]["summary"]["mapped_region_captured"] is False
+    assert body["spatial_contract"]["replay_boundary"]["visual_replayable"] is False
+    assert body["spatial_contract"]["replay_boundary"]["actual_capture_absent_reason"] == "capture_adapter_unavailable"
     assert (
         body["spatial_contract"]["region_comparison"]["rows"]["actual_captured_region"]["confidence_basis"]
         == "capture_not_performed"
@@ -1090,8 +1130,10 @@ def test_api_observe_requires_scope_and_overlay_context(tmp_path, monkeypatch) -
     assert receipt["spatial_contract"]["region_truth"] == body["spatial_contract"]["region_truth"]
     assert receipt["spatial_contract"]["region_basis"] == body["spatial_contract"]["region_basis"]
     assert receipt["spatial_contract"]["region_comparison"] == body["spatial_contract"]["region_comparison"]
+    assert receipt["spatial_contract"]["replay_boundary"] == body["spatial_contract"]["replay_boundary"]
     assert receipt["spatial_contract"]["confidence_breakdown"] == body["spatial_contract"]["confidence_breakdown"]
     assert body["replay_manifest"] == body["spatial_contract"]["replay_manifest"]
     assert receipt["replay_manifest"] == body["replay_manifest"]
+    assert receipt["replay_manifest"]["replay_boundary"] == body["spatial_contract"]["replay_boundary"]
     assert receipt["replay_manifest"]["metadata_replayable"] is True
     assert receipt["replay_manifest"]["visual_replayable"] is False

@@ -539,16 +539,18 @@ def test_operations_run_mona_lisa_sandbox_canvas_from_chat_mission(monkeypatch, 
     assert artifact_dir.exists()
     assert data_root.resolve() in artifact_dir.resolve().parents
     svg_path = Path(output["artifact_path"])
+    raster_path = Path(output["raster_preview_path"])
     actions_path = Path(output["actions_path"])
     manifest_path = Path(output["manifest_path"])
     receipt_path = Path(output["receipt_path"])
-    for path in (svg_path, actions_path, manifest_path, receipt_path):
+    for path in (svg_path, raster_path, actions_path, manifest_path, receipt_path):
         assert path.exists()
         assert artifact_dir.resolve() in path.resolve().parents
 
     svg_text = svg_path.read_text(encoding="utf-8")
     assert "<image" not in svg_text
     assert svg_text.count("<path") >= 8
+    assert raster_path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
 
     action_lines = [json.loads(line) for line in actions_path.read_text(encoding="utf-8").splitlines()]
     assert len(action_lines) == output["operator_primitives_count"]
@@ -564,6 +566,9 @@ def test_operations_run_mona_lisa_sandbox_canvas_from_chat_mission(monkeypatch, 
     structured_receipt = receipt["structured_observation_receipts"][0]
     assert structured_receipt == receipt["lens_overlay_observation"]["structured_observation_receipt"]
     assert output["structured_observation_receipts"] == [structured_receipt]
+    post_action_receipt = receipt["post_action_observation_receipts"][0]
+    assert post_action_receipt == receipt["lens_overlay_observation"]["post_action_observation_receipt"]
+    assert output["post_action_observation_receipts"] == [post_action_receipt]
     assert structured_receipt["kind"] == "francis.lens.overlay.structured_observation_receipt"
     assert structured_receipt["status"] == "observed"
     assert structured_receipt["source"]["name"] == "sandbox_canvas_coordinate_model"
@@ -575,14 +580,42 @@ def test_operations_run_mona_lisa_sandbox_canvas_from_chat_mission(monkeypatch, 
     assert structured_receipt["evidence_reference"]["manifest_hash"] == output["manifest_hash"]
     assert structured_receipt["evidence_reference"]["actions_hash"] == output["actions_hash"]
     assert structured_receipt["evidence_reference"]["artifact_hash"] == output["artifact_hash"]
+    assert structured_receipt["evidence_reference"]["sandbox_raster_preview_ref"] == str(raster_path)
+    assert structured_receipt["evidence_reference"]["sandbox_raster_preview_hash"] == output["raster_preview_hash"]
+    assert structured_receipt["evidence_reference"]["sandbox_raster_preview_mode"] == (
+        "sandbox_operator_primitive_raster_replay"
+    )
     assert structured_receipt["inferred_information"]["primitive_count"] == output["operator_primitives_count"]
+    assert structured_receipt["inferred_information"]["sandbox_raster_preview_created"] is True
     assert "desktop_pixels" in structured_receipt["unknowns"]
     assert structured_receipt["failure_or_refusal_reason"] == ""
     assert structured_receipt["governance"]["desktop_control"] is False
+    assert structured_receipt["governance"]["sandbox_raster_pixel_replay"] is True
+    assert post_action_receipt["kind"] == "francis.lens.overlay.post_action_observation_receipt"
+    assert post_action_receipt["parent_receipt_id"] == structured_receipt["receipt_id"]
+    assert post_action_receipt["observation_phase"] == "post_action_verification"
+    assert post_action_receipt["source"]["uses_existing_overlay_coordinate_model"] is True
+    assert post_action_receipt["source"]["creates_overlay_application"] is False
+    assert post_action_receipt["source"]["live_simulated_fixture_or_replay"] == "sandbox"
+    assert post_action_receipt["mapped_overlay_region"] == structured_receipt["mapped_overlay_region"]
+    assert post_action_receipt["action_result_reference"]["sandbox_raster_preview_ref"] == str(raster_path)
+    assert (
+        post_action_receipt["action_result_reference"]["sandbox_raster_preview_hash"] == output["raster_preview_hash"]
+    )
+    assert post_action_receipt["observed_state"]["sandbox_raster_preview_observed"] is True
+    assert post_action_receipt["observed_state"]["desktop_screenshot"] is False
+    assert post_action_receipt["observed_state"]["visual_similarity_claim"] is False
+    assert post_action_receipt["governance"]["post_action_observation"] is True
+    assert post_action_receipt["governance"]["screenshots"] is False
+    assert post_action_receipt["governance"]["live_desktop_pixels"] is False
+    assert post_action_receipt["governance"]["visual_similarity_claim"] is False
     assert receipt["orb_embodiment"]["visual_change"] is False
     assert receipt["orb_embodiment"]["visual_lock_preserved"] is True
     assert receipt["claim_completed_painting"] is True
     assert receipt["governance"]["live_desktop_authority"] is False
+    assert receipt["sandbox_raster_preview"]["pixel_evidence"] is True
+    assert receipt["sandbox_raster_preview"]["screenshot"] is False
+    assert receipt["sandbox_raster_preview"]["visual_similarity_claim"] is False
 
     fetched = client.get(f"/operations/{operation_id}")
     assert fetched.status_code == 200
@@ -614,13 +647,39 @@ def test_operations_run_mona_lisa_sandbox_canvas_from_chat_mission(monkeypatch, 
     assert evaluation_body["hashes"]["artifact"]["matches"] is True
     assert evaluation_body["hashes"]["actions"]["matches"] is True
     assert evaluation_body["hashes"]["manifest"]["matches"] is True
+    assert evaluation_body["hashes"]["sandbox_raster_preview"]["matches"] is True
     assert evaluation_body["checks"]["structured_observation_receipt_present"] is True
     assert evaluation_body["checks"]["structured_observation_evidence_references_manifest"] is True
     assert evaluation_body["checks"]["structured_observation_unknowns_live_desktop_pixels"] is True
+    assert evaluation_body["optional_evidence_checks"]["sandbox_raster_preview_present"] is True
+    assert evaluation_body["optional_evidence_checks"]["sandbox_raster_preview_hash_matches_receipt"] is True
+    assert evaluation_body["optional_evidence_checks"]["sandbox_raster_preview_dimensions_valid"] is True
+    assert evaluation_body["optional_evidence_checks"]["sandbox_raster_preview_no_screenshot_claim"] is True
+    assert evaluation_body["optional_evidence_checks"]["sandbox_raster_preview_no_visual_similarity_claim"] is True
+    raster_evidence = evaluation_body["sandbox_raster_evidence"]
+    assert raster_evidence["status"] == "evaluated"
+    assert raster_evidence["evidence_mode"] == "sandbox_operator_primitive_raster_replay"
+    assert raster_evidence["pixel_evidence"] is True
+    assert raster_evidence["screenshot"] is False
+    assert raster_evidence["live_desktop_capture"] is False
+    assert raster_evidence["visual_similarity_claim"] is False
+    assert raster_evidence["dimensions"] == {"status": "parsed", "valid_png": True, "width": 128, "height": 128}
+    assert raster_evidence["metrics"]["unique_color_count"] > 1
     assert evaluation_body["checks"]["recognizability_offline_fixture_evidence_present"] is True
     assert evaluation_body["checks"]["recognizability_offline_fixture_no_pixel_claim"] is True
     assert evaluation_body["checks"]["recognizability_offline_fixture_no_visual_similarity_claim"] is True
     assert evaluation_body["structured_observation_receipts"] == [structured_receipt]
+    assert evaluation_body["post_action_observation_receipts"] == [post_action_receipt]
+    assert evaluation_body["optional_post_action_observation_checks"] == {
+        "post_action_observation_receipt_present": True,
+        "post_action_observation_links_parent_observation": True,
+        "post_action_observation_uses_same_mapped_region": True,
+        "post_action_observation_references_raster_preview": True,
+        "post_action_observation_raster_hash_matches": True,
+        "post_action_observation_no_screenshot_claim": True,
+        "post_action_observation_no_live_desktop_pixels_claim": True,
+        "post_action_observation_no_visual_similarity_claim": True,
+    }
     assert (
         evaluation_body["recognizability"]["basis"]
         == "operator_primitive_replay_plus_offline_svg_geometry_fixture_not_pixel_similarity"
@@ -641,10 +700,26 @@ def test_operations_run_mona_lisa_sandbox_canvas_from_chat_mission(monkeypatch, 
     assert evaluation_body["governance"]["writes_files"] is False
     assert evaluation_body["governance"]["runs_operation"] is False
     assert evaluation_body["governance"]["desktop_control"] is False
+    assert evaluation_body["governance"]["sandbox_raster_pixel_replay_evidence"] is True
+    assert evaluation_body["governance"]["post_action_observation_replay_evidence"] is True
     assert evaluation_body["governance"]["visual_similarity_claim"] is False
     assert evaluation_body["governance"]["live_desktop_perception_claim"] is False
     assert evaluation_body["improvement_proposals"]
     assert all(item["status"] == "proposed_not_promoted" for item in evaluation_body["improvement_proposals"])
+    proposal_ids = {item["proposal_id"] for item in evaluation_body["improvement_proposals"]}
+    assert "sandbox_canvas_plan_governed_live_observation_adapter" in proposal_ids
+    assert "sandbox_canvas_complete_replay_evidence_chain" not in proposal_ids
+    assert "sandbox_canvas_add_pixel_or_multi_run_review" not in proposal_ids
+    live_adapter_proposal = next(
+        item
+        for item in evaluation_body["improvement_proposals"]
+        if item["proposal_id"] == "sandbox_canvas_plan_governed_live_observation_adapter"
+    )
+    assert "bounded desktop canvas" in live_adapter_proposal["summary"]
+    assert any("existing overlay coordinate model" in item for item in live_adapter_proposal["requires_validation"])
+    assert any(
+        "real adapter returns pixels or screenshots" in item for item in live_adapter_proposal["requires_validation"]
+    )
 
     recorded = client.post(
         "/operations/sandbox-canvas/mona-lisa/evaluation/record",
@@ -750,10 +825,13 @@ def test_operations_run_mona_lisa_sandbox_canvas_from_chat_mission(monkeypatch, 
     assert proposal_body["ok"] is True
     assert proposal_body["governance"]["read_only"] is True
     assert proposal_body["governance"]["promotes_changes"] is False
-    proposal_ids = {item["proposal_record_id"] for item in proposal_body["items"]}
-    assert {item["proposal_record_id"] for item in recorded_body["improvement_proposals"]}.issubset(proposal_ids)
+    proposal_record_ids = {item["proposal_record_id"] for item in proposal_body["items"]}
+    assert {item["proposal_record_id"] for item in recorded_body["improvement_proposals"]}.issubset(proposal_record_ids)
     assert all(item["status"] == "proposed_not_promoted" for item in proposal_body["items"])
     assert all(item["promotion"]["promoted"] is False for item in proposal_body["items"])
+    source_proposal_ids = {item["source_proposal_id"] for item in proposal_body["items"]}
+    assert "sandbox_canvas_plan_governed_live_observation_adapter" in source_proposal_ids
+    assert "sandbox_canvas_add_pixel_or_multi_run_review" not in source_proposal_ids
 
     missing = client.get(
         "/operations/sandbox-canvas/mona-lisa/evaluation",

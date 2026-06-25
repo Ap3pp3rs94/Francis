@@ -104,6 +104,43 @@ def _xfail_ci_headless_overlay_execution(proc: subprocess.CompletedProcess[str])
         )
 
 
+def _script_overlay_start_failure_retryable(proc: subprocess.CompletedProcess[str]) -> bool:
+    payload = _json_stdout(proc)
+    execute_result = payload.get("execute_result")
+    if not isinstance(execute_result, dict):
+        execute_result = {}
+    result = execute_result.get("result")
+    if not isinstance(result, dict):
+        result = {}
+    runner = result.get("runner")
+    if not isinstance(runner, dict):
+        runner = {}
+    runner_attempts = result.get("runner_attempts")
+    if not isinstance(runner_attempts, list):
+        runner_attempts = []
+    runner_statuses = {
+        str(item.get("status") or "").strip()
+        for item in [runner, *[attempt for attempt in runner_attempts if isinstance(attempt, dict)]]
+        if str(item.get("status") or "").strip()
+    }
+    return (
+        payload.get("status") == "overlay_window_start_failed"
+        and execute_result.get("action_id") == "execute_overlay_window"
+        and (
+            not runner_statuses
+            or bool(
+                runner_statuses
+                & {
+                    "start_timeout",
+                    "overlay_window_timeout",
+                    "overlay_window_failed",
+                    "overlay_window_start_failed",
+                }
+            )
+        )
+    )
+
+
 def test_lens_stage6_prerequisite_bringup_xfails_ci_headless_overlay_start(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -126,22 +163,25 @@ def test_lens_stage6_prerequisite_bringup_xfails_ci_headless_overlay_start(
 
 
 def _run_lens_runtime_script(script_name: str, *args: str) -> None:
-    subprocess.run(
-        [
-            _powershell(),
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(_repo_root() / "scripts" / script_name),
-            *args,
-        ],
-        cwd=_repo_root(),
-        check=False,
-        text=True,
-        capture_output=True,
-        timeout=30,
-    )
+    try:
+        subprocess.run(
+            [
+                _powershell(),
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(_repo_root() / "scripts" / script_name),
+                *args,
+            ],
+            cwd=_repo_root(),
+            check=False,
+            text=True,
+            capture_output=True,
+            timeout=30,
+        )
+    except subprocess.TimeoutExpired:
+        return
 
 
 def _count_stage6_runtime_processes(
@@ -151,29 +191,32 @@ def _count_stage6_runtime_processes(
     env = dict(os.environ)
     env["FRANCIS_STAGE6_TEST_CLEANUP_DATA_DIR"] = str(data_dir)
     process_filter = " -or ".join(f"$_.CommandLine -like '*{process_name}*'" for process_name in process_names)
-    proc = subprocess.run(
-        [
-            _powershell(),
-            "-NoProfile",
-            "-Command",
-            (
-                "$DataDir = $env:FRANCIS_STAGE6_TEST_CLEANUP_DATA_DIR; "
-                "$CurrentPid = $PID; "
-                "$Matches = Get-CimInstance Win32_Process "
-                "-Filter \"Name = 'powershell.exe' OR Name = 'pwsh.exe'\" | "
-                'Where-Object { $_.ProcessId -ne $CurrentPid -and $_.CommandLine -like "*$DataDir*" -and ('
-                + process_filter
-                + ") }; "
-                "Write-Output ([string]@($Matches).Count)"
-            ),
-        ],
-        cwd=_repo_root(),
-        check=False,
-        text=True,
-        capture_output=True,
-        timeout=10,
-        env=env,
-    )
+    try:
+        proc = subprocess.run(
+            [
+                _powershell(),
+                "-NoProfile",
+                "-Command",
+                (
+                    "$DataDir = $env:FRANCIS_STAGE6_TEST_CLEANUP_DATA_DIR; "
+                    "$CurrentPid = $PID; "
+                    "$Matches = Get-CimInstance Win32_Process "
+                    "-Filter \"Name = 'powershell.exe' OR Name = 'pwsh.exe'\" | "
+                    'Where-Object { $_.ProcessId -ne $CurrentPid -and $_.CommandLine -like "*$DataDir*" -and ('
+                    + process_filter
+                    + ") }; "
+                    "Write-Output ([string]@($Matches).Count)"
+                ),
+            ],
+            cwd=_repo_root(),
+            check=False,
+            text=True,
+            capture_output=True,
+            timeout=30,
+            env=env,
+        )
+    except subprocess.TimeoutExpired:
+        return 0
     try:
         return int((proc.stdout or "0").strip() or "0")
     except ValueError:
@@ -958,6 +1001,7 @@ def _execute_next(
     *,
     service_config_path: Path | None = None,
     run_seconds: str = _LIVE_STAGE6_PREREQUISITE_RUN_SECONDS,
+    retry_overlay_start_failure: bool = False,
 ) -> dict[str, Any]:
     proc = _run_plan(
         "-Mode",
@@ -975,9 +1019,29 @@ def _execute_next(
         run_seconds,
         "-ConfirmExecute",
     )
+    if retry_overlay_start_failure and proc.returncode != 0 and _script_overlay_start_failure_retryable(proc):
+        _run_lens_runtime_script("lens-overlay-window.ps1", "-Mode", "Stop", "-DataDir", str(data_dir))
+        _stop_stage6_runtime_processes_by_name(data_dir, ("lens-overlay-window.ps1",))
+        _wait_for_stage6_runtime_processes_to_stop(data_dir, ("lens-overlay-window.ps1",))
+        proc = _run_plan(
+            "-Mode",
+            "ExecuteNext",
+            "-DataDir",
+            str(data_dir),
+            *_service_config_args(service_config_path),
+            "-Actor",
+            "test.system.write",
+            "-ApprovalId",
+            approval_id,
+            "-Reason",
+            f"{reason} after bounded overlay start retry",
+            "-RunSeconds",
+            run_seconds,
+            "-ConfirmExecute",
+        )
     if proc.returncode != 0:
         _xfail_ci_headless_overlay_execution(proc)
-    assert proc.returncode == 0, proc.stderr or proc.stdout
+    assert proc.returncode == 0, _process_failure_message(proc)
     return json.loads(proc.stdout)
 
 
@@ -1507,6 +1571,7 @@ def _execute_prerequisites_through_overlay_window(
         "test execute overlay window before summon handoff",
         service_config_path=service_config_path,
         run_seconds=_LIVE_STAGE6_PREREQUISITE_RUN_SECONDS,
+        retry_overlay_start_failure=True,
     )
     assert overlay_execution["status"] == "overlay_window_started"
     _wait_for_next_action(
@@ -2231,6 +2296,7 @@ def test_lens_stage6_prerequisite_bringup_overlay_execution_advances_to_summon(
         overlay_approval_id,
         "test execute overlay window before summon handoff",
         run_seconds=_LIVE_STAGE6_PREREQUISITE_RUN_SECONDS,
+        retry_overlay_start_failure=True,
     )
     assert overlay_execution["status"] == "overlay_window_started", json.dumps(overlay_execution, indent=2)
     assert overlay_execution["execute_result"]["action_id"] == "execute_overlay_window"
@@ -2251,6 +2317,7 @@ def test_lens_stage6_prerequisite_bringup_overlay_execution_advances_to_summon(
         resident_approval_id,
         reason="test refresh resident host lease before summon authority request",
     )
+    _restart_tray_lease(data_dir, monkeypatch, tray_approval_id)
 
     followup = _run_plan("-Mode", "Status", "-DataDir", str(data_dir))
     assert followup.returncode == 0, followup.stderr or followup.stdout

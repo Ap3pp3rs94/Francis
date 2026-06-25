@@ -14,10 +14,6 @@ PARAMETER mirostat 0
 PARAMETER mirostat_tau 5.0
 PARAMETER mirostat_eta 0.1
 
-PARAMETER tfs_z 1.0
-PARAMETER typical_p 1.0
-
-
 SYSTEM """
 # ==============================================================================
 #  FRANCIS — Chat Model System Prompt (francis-chat)

@@ -160,17 +160,40 @@ function Test-LocalTcpListener {
   )
 
   $TargetAddress = if ($Address -in @('0.0.0.0', '::', '')) { '127.0.0.1' } else { $Address }
-  $Client = [System.Net.Sockets.TcpClient]::new()
+  $Socket = [System.Net.Sockets.Socket]::new(
+    [System.Net.Sockets.AddressFamily]::InterNetwork,
+    [System.Net.Sockets.SocketType]::Stream,
+    [System.Net.Sockets.ProtocolType]::Tcp
+  )
   try {
-    $ConnectTask = $Client.ConnectAsync($TargetAddress, $PortValue)
-    if (-not $ConnectTask.Wait(250)) {
+    $Socket.Blocking = $false
+    try {
+      $Socket.Connect($TargetAddress, $PortValue)
+    } catch [System.Net.Sockets.SocketException] {
+      $PendingErrors = @(
+        [System.Net.Sockets.SocketError]::WouldBlock,
+        [System.Net.Sockets.SocketError]::InProgress,
+        [System.Net.Sockets.SocketError]::AlreadyInProgress
+      )
+      if ($_.Exception.SocketErrorCode -notin $PendingErrors) {
+        return $false
+      }
+    }
+    if ($Socket.Connected) {
+      return $true
+    }
+    if (-not $Socket.Poll(250000, [System.Net.Sockets.SelectMode]::SelectWrite)) {
       return $false
     }
-    return [bool]$Client.Connected
+    $SocketError = [int]$Socket.GetSocketOption(
+      [System.Net.Sockets.SocketOptionLevel]::Socket,
+      [System.Net.Sockets.SocketOptionName]::Error
+    )
+    return ($SocketError -eq 0)
   } catch {
     return $false
   } finally {
-    $Client.Dispose()
+    $Socket.Dispose()
   }
 }
 
@@ -186,6 +209,10 @@ function Get-LocalListenerReadback {
     port = $PortValue
     owning_process = 0
     command_line = ''
+  }
+
+  if (-not (Test-LocalTcpListener -Address $Address -PortValue $PortValue)) {
+    return $Readback
   }
 
   $NetTcpConnection = Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue
@@ -210,10 +237,8 @@ function Get-LocalListenerReadback {
     return $Readback
   }
 
-  if (Test-LocalTcpListener -Address $Address -PortValue $PortValue) {
-    $Readback.ready = $true
-    $Readback.address = $Address
-  }
+  $Readback.ready = $true
+  $Readback.address = $Address
   return $Readback
 }
 

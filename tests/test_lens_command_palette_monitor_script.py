@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import shutil
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -21,13 +22,22 @@ def _powershell() -> str:
 
 
 def _run_monitor(*args: str):
+    command_args = list(args)
+    if "-EnableChatGptConnectorChecks" in command_args and "-ChatGptConnectorPort" not in command_args:
+        command_args.extend(["-ChatGptConnectorPort", str(_unused_local_port())])
     return run_powershell_script(
         _powershell(),
         SCRIPT,
-        list(args),
+        command_args,
         cwd=ROOT,
         timeout_seconds=45,
     )
+
+
+def _unused_local_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
 
 
 def _lens_status(*, command_total: int = 2) -> dict[str, object]:
@@ -769,6 +779,21 @@ def test_lens_command_palette_monitor_probe_records_voice_health(tmp_path: Path)
         "first_failed_requirement": "local_overlay_speech_command_observed",
         "proof_blocker": "awaiting_operator_spoken_orb_command",
     }
+    evidence_hint = acoustic_proof["proof_evidence_hint"]
+    assert evidence_hint["status"] == "blocked"
+    assert evidence_hint["first_failed_requirement"] == "local_overlay_speech_command_observed"
+    assert evidence_hint["proof_blocker"] == "awaiting_operator_spoken_orb_command"
+    assert evidence_hint["voice_command_status_path"] == "data/runtime/lens-overlay/status.json"
+    assert evidence_hint["microphone_status_path"] == "data/runtime/lens-overlay/voice-status.json"
+    assert evidence_hint["orb_position_receipt_root"] == "data/runtime/lens-overlay/orb-position-commands"
+    assert evidence_hint["latest_orb_receipt_path"] == ""
+    assert "voice.overlay_position_command_source" in evidence_hint["required_voice_status_fields"]
+    assert "command_source" in evidence_hint["required_orb_receipt_fields"]
+    assert evidence_hint["accepted_command_source"] == "local_overlay_speech_recognition"
+    assert "chatgpt_voice_bridge_file_request" in evidence_hint["rejected_command_sources"]
+    assert evidence_hint["transcript_required"] is False
+    assert evidence_hint["transcript_stored"] is False
+    assert evidence_hint["transcript_redacted"] is True
     assert acoustic_proof["api_injected_text_counts_as_proof"] is False
     assert acoustic_proof["latest_voice_command_counts_as_acoustic_proof"] is False
     assert acoustic_proof["latest_orb_receipt_counts_as_acoustic_proof"] is False
@@ -1027,6 +1052,20 @@ def test_lens_command_palette_monitor_reports_acoustic_orb_position_proof(tmp_pa
         "first_failed_requirement": "none",
         "proof_blocker": "none",
     }
+    evidence_hint = acoustic_proof["proof_evidence_hint"]
+    assert evidence_hint["status"] == "satisfied"
+    assert evidence_hint["first_failed_requirement"] == "none"
+    assert evidence_hint["proof_blocker"] == "none"
+    assert evidence_hint["latest_orb_receipt_path"] == (
+        "data/runtime/lens-overlay/orb-position-commands/local-orb-left-proof.json"
+    )
+    assert "voice.microphone_recognition_claimed" in evidence_hint["required_voice_status_fields"]
+    assert "microphone_recognition_claimed" in evidence_hint["required_orb_receipt_fields"]
+    assert evidence_hint["accepted_command_source"] == "local_overlay_speech_recognition"
+    assert evidence_hint["transcript_required"] is False
+    assert evidence_hint["transcript_stored"] is False
+    assert evidence_hint["transcript_redacted"] is True
+    assert "redacted-hash" not in json.dumps(evidence_hint, sort_keys=True)
     assert acoustic_proof["api_injected_text_counts_as_proof"] is False
     assert "redacted-hash" not in json.dumps(acoustic_proof, sort_keys=True)
     checks = {item["id"]: item for item in payload["checks"]}
@@ -1124,6 +1163,13 @@ def test_lens_command_palette_monitor_can_require_manual_acoustic_orb_proof(tmp_
         "first_failed_requirement": "local_overlay_speech_command_observed",
         "proof_blocker": "awaiting_operator_spoken_orb_command",
     }
+    evidence_hint = acoustic_proof["proof_evidence_hint"]
+    assert evidence_hint["status"] == "blocked"
+    assert evidence_hint["first_failed_requirement"] == "local_overlay_speech_command_observed"
+    assert evidence_hint["latest_orb_receipt_path"] == ""
+    assert evidence_hint["next_operator_step"] == "say_hey_francis_move_left_or_right"
+    assert "voice.overlay_position_command_request_id" in evidence_hint["required_voice_status_fields"]
+    assert "stores_transcript" in evidence_hint["required_orb_receipt_fields"]
     assert acoustic_proof["api_injected_text_counts_as_proof"] is False
     assert acoustic_proof["latest_voice_command_counts_as_acoustic_proof"] is False
     assert acoustic_proof["latest_orb_receipt_counts_as_acoustic_proof"] is False
@@ -1214,6 +1260,14 @@ def test_lens_command_palette_monitor_rejects_bridge_file_orb_receipt_as_acousti
         "latest_orb_receipt_not_microphone_origin"
     )
     assert acoustic_proof["proof_source_contract"]["chatgpt_bridge_file_counts_as_proof"] is False
+    evidence_hint = acoustic_proof["proof_evidence_hint"]
+    assert evidence_hint["status"] == "blocked"
+    assert evidence_hint["latest_orb_receipt_path"] == (
+        "data/runtime/lens-overlay/orb-position-commands/bridge-orb-left.json"
+    )
+    assert "chatgpt_voice_bridge_file_request" in evidence_hint["rejected_command_sources"]
+    assert evidence_hint["accepted_command_source"] == "local_overlay_speech_recognition"
+    assert evidence_hint["transcript_stored"] is False
     assert "voice_manual_acoustic_orb_position_proof" in {item["id"] for item in payload["anomalies"]}
     assert "bridge-file transcript must stay out" not in json.dumps(acoustic_proof, sort_keys=True)
 

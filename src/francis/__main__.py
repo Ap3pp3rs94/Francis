@@ -203,6 +203,43 @@ def cmd_daemon(_args: argparse.Namespace) -> int:
     return int(daemon())
 
 
+def cmd_communication(args: argparse.Namespace) -> int:
+    from francis.developer_bridge.collaboration_log import main as collaboration_log_main
+
+    relay_args: list[str] = ["--limit", str(args.limit), "--poll-seconds", str(args.poll_seconds)]
+    for attr, flag in (
+        ("agent", "--agent"),
+        ("source_agent", "--source-agent"),
+        ("target_agent", "--target-agent"),
+        ("status", "--status"),
+    ):
+        value = str(getattr(args, attr, "") or "")
+        if value:
+            relay_args.extend([flag, value])
+    if bool(getattr(args, "json", False)):
+        relay_args.append("--json")
+    if bool(getattr(args, "brief", False)):
+        relay_args.append("--brief")
+    if bool(getattr(args, "hide_auto_acks", False)):
+        relay_args.append("--hide-auto-acks")
+    if bool(getattr(args, "watch", False)):
+        relay_args.append("--watch")
+    if bool(getattr(args, "new_only", False)):
+        relay_args.append("--new-only")
+    return int(collaboration_log_main(relay_args))
+
+
+def cmd_communication_runtime(args: argparse.Namespace) -> int:
+    from francis.developer_bridge.collaboration_runtime import main as collaboration_runtime_main
+
+    runtime_args: list[str] = ["--poll-seconds", str(args.poll_seconds)]
+    if bool(getattr(args, "watch", False)):
+        runtime_args.append("--watch")
+    if bool(getattr(args, "quiet", False)):
+        runtime_args.append("--quiet")
+    return int(collaboration_runtime_main(runtime_args))
+
+
 def cmd_stage3_readiness_proof(args: argparse.Namespace) -> int:
     from francis.missions.readiness_proof import run_stage3_readiness_proof
 
@@ -1233,6 +1270,55 @@ def main(argv: list[str] | None = None) -> int:
 
     p_daemon = sub.add_parser("daemon", help="Run the daemon loop")
     p_daemon.set_defaults(fn=cmd_daemon)
+
+    p_communication = sub.add_parser(
+        "communication",
+        aliases=["Communication"],
+        help="Read or follow the developer bridge collaboration relay transcript",
+    )
+    p_communication.add_argument("--agent", default="", help="Filter to relay entries involving this agent.")
+    p_communication.add_argument("--source-agent", default="", help="Filter to relay entries from this agent.")
+    p_communication.add_argument("--target-agent", default="", help="Filter to relay entries for this agent.")
+    p_communication.add_argument(
+        "--status",
+        default="",
+        choices=["", "queued", "acknowledged", "delivered", "blocked", "closed"],
+        help="Filter by relay status. Empty means all statuses.",
+    )
+    p_communication.add_argument(
+        "--limit", type=int, default=20, help="Maximum relay entries to display, capped at 50."
+    )
+    p_communication.add_argument("--json", action="store_true", help="Print the bounded transcript payload as JSON.")
+    p_communication.add_argument("--brief", action="store_true", help="Print only the operator-facing messages.")
+    p_communication.add_argument(
+        "--hide-auto-acks", action="store_true", help="Hide generic Codex auto-ack relay entries."
+    )
+    p_communication.add_argument("--watch", action="store_true", help="Poll and print the transcript repeatedly.")
+    p_communication.add_argument(
+        "--new-only",
+        action="store_true",
+        help="With --watch, print only relay entries created after the watcher starts.",
+    )
+    p_communication.add_argument("--poll-seconds", type=float, default=15.0, help="Polling interval for --watch.")
+    p_communication.set_defaults(fn=cmd_communication)
+
+    p_communication_runtime = sub.add_parser(
+        "communication-runtime",
+        aliases=["CommunicationRuntime"],
+        help="Keep the bounded developer bridge Codex/Ollama collaboration helpers alive",
+    )
+    p_communication_runtime.add_argument(
+        "--watch",
+        action="store_true",
+        help="Continuously ensure the Codex/Ollama collaboration helpers are alive.",
+    )
+    p_communication_runtime.add_argument(
+        "--poll-seconds", type=float, default=10.0, help="Supervisor polling interval for --watch."
+    )
+    p_communication_runtime.add_argument(
+        "--quiet", action="store_true", help="Write supervisor receipts without printing each check."
+    )
+    p_communication_runtime.set_defaults(fn=cmd_communication_runtime)
 
     p_stage3 = sub.add_parser(
         "stage3-readiness-proof",

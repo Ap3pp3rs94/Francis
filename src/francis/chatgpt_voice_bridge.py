@@ -376,9 +376,12 @@ def _voice_substrate_proof(
     transcript = _safe_str(payload.get("transcript"))
     decision = _safe_str(payload.get("decision"))
     reason = _safe_str(payload.get("reason"))
+    proof_kind = _safe_str(payload.get("proof_kind"))
+    mcp_connection_proof = proof_kind == "mcp_connection" or bool(orb_voice_bridge.get("mcp_connection_proof"))
     bridge_receipt_present = bool(bridge_receipt_id or bridge_receipt_path)
     virtual_voice_turn_present = bool(voice_turn_receipt_path)
     orb_command_present = bool(command_request)
+    transcript_recorded = decision == "recorded" and bool(transcript) and not mcp_connection_proof
     transcript_state = _transcript_state(decision=decision, reason=reason, transcript=transcript)
     mode_state = _voice_provider_mode_state(provider_receipt_mode, transcript_state=transcript_state)
     return {
@@ -386,18 +389,24 @@ def _voice_substrate_proof(
         "bridge": CHATGPT_VOICE_BRIDGE_VERSION,
         "decision": decision,
         "reason": reason,
+        "proof_kind": proof_kind,
+        "mcp_connection_proof": mcp_connection_proof,
+        "mcp_connection_proof_is_not_voice_turn": mcp_connection_proof,
         "transcript_state": transcript_state,
+        "transcript_recorded": transcript_recorded,
         "transcript_redacted": True,
         "raw_audio": False,
         "accepts_audio_stream": False,
         "voice_enters_francis": True,
-        "voice_turn_is_virtual": True,
+        "voice_turn_is_virtual": virtual_voice_turn_present,
         "bridge_receipt_id": bridge_receipt_id,
         "bridge_receipt_path": bridge_receipt_path,
         "voice_turn_receipt_path": voice_turn_receipt_path,
         "orb_position_command_receipt_path": orb_position_command_receipt_path,
         "structured_receipts": {
-            "bridge_ingress_receipt": bridge_receipt_present,
+            "bridge_receipt": bridge_receipt_present,
+            "bridge_ingress_receipt": bridge_receipt_present and not mcp_connection_proof,
+            "bridge_mcp_connection_proof_receipt": bridge_receipt_present and mcp_connection_proof,
             "virtual_voice_turn_receipt": virtual_voice_turn_present,
             "provider_boundary_receipt": True,
             "orb_position_command_request_receipt": orb_command_present,
@@ -458,14 +467,29 @@ def _receipt_linkage(
     transcript = _safe_str(payload.get("transcript"))
     decision = _safe_str(payload.get("decision"))
     reason = _safe_str(payload.get("reason"))
+    proof_kind = _safe_str(payload.get("proof_kind"))
+    mcp_connection_proof = proof_kind == "mcp_connection" or bool(orb_voice_bridge.get("mcp_connection_proof"))
+    transcript_recorded = decision == "recorded" and bool(transcript) and not mcp_connection_proof
     transcript_state = _transcript_state(decision=decision, reason=reason, transcript=transcript)
     mode_state = _voice_provider_mode_state(provider_receipt_mode, transcript_state=transcript_state)
     return {
         "kind": "francis.voice.receipt_linkage.v1",
+        "proof_kind": proof_kind,
+        "mcp_connection_proof": mcp_connection_proof,
+        "transcript_recorded": transcript_recorded,
         "bridge_receipt": {
             "present": True,
             "id": bridge_receipt_id,
             "path": bridge_receipt_path,
+        },
+        "mcp_connection_proof_receipt": {
+            "present": mcp_connection_proof,
+            "path": bridge_receipt_path if mcp_connection_proof else "",
+            "virtual_voice_turn": False,
+            "transcript_recorded": False,
+            "chat_forwarded": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
         },
         "virtual_voice_turn_receipt": {
             "present": bool(voice_turn_receipt_path),
@@ -875,6 +899,10 @@ def chatgpt_voice_bridge_contract(actor: str = "") -> dict[str, Any]:
             "receipt_readback_redacts_secret_patterns": True,
             "voice_substrate_proof_field": "voice_substrate_proof",
             "receipt_linkage_field": "receipt_linkage",
+            "structured_receipts_bridge_receipt_field": "bridge_receipt",
+            "structured_receipts_bridge_ingress_receipt_field": "bridge_ingress_receipt",
+            "structured_receipts_bridge_mcp_connection_proof_receipt_field": ("bridge_mcp_connection_proof_receipt"),
+            "mcp_connection_proof_is_not_voice_turn": True,
             "voice_output_provider_field": "voice_output_provider",
             "voice_output_provider_status_field": "voice_output_provider_status",
             "voice_provider_state_field": "voice_provider_state",

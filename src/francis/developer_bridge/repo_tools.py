@@ -278,6 +278,7 @@ def _git_lines(root: Path, args: list[str]) -> list[str]:
             cwd=root,
             check=False,
             capture_output=True,
+            stdin=subprocess.DEVNULL,
             text=True,
             timeout=10,
         )

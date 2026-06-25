@@ -586,7 +586,7 @@ function Resolve-ConnectorUrlCandidate {
   }
 
   if ($AllowState -and $State) {
-    $StateConnectorUrl = ConvertTo-BoundedText -Value $State.connector_url -MaxLength 512
+    $StateConnectorUrl = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $State -Name 'connector_url' -Default '') -MaxLength 512
     if (-not [string]::IsNullOrWhiteSpace($StateConnectorUrl)) {
       return [ordered]@{
         url = $StateConnectorUrl
@@ -598,6 +598,185 @@ function Resolve-ConnectorUrlCandidate {
   return [ordered]@{
     url = ''
     source = 'none'
+  }
+}
+
+function Test-ConnectorUrlShape {
+  param(
+    [string]$Value,
+    [string]$ExpectedPath
+  )
+
+  $BoundedUrl = ConvertTo-BoundedText -Value $Value -MaxLength 512
+  $Result = [ordered]@{
+    provided = -not [string]::IsNullOrWhiteSpace($BoundedUrl)
+    url = $BoundedUrl
+    scheme = ''
+    host_present = $false
+    ends_with_mcp_path = $false
+    https = $false
+    shape_valid = $false
+    reachability_verified = $false
+    usable_for_chatgpt = $false
+    reason = 'connector_url_not_provided'
+  }
+  if (-not [bool]$Result.provided) {
+    return $Result
+  }
+
+  try {
+    $Uri = [System.Uri]$BoundedUrl
+  } catch {
+    $Result.reason = 'connector_url_parse_failed'
+    return $Result
+  }
+
+  $PathValue = $Uri.AbsolutePath.TrimEnd('/')
+  $ExpectedPathValue = if ([string]::IsNullOrWhiteSpace($ExpectedPath)) { '/mcp' } else { $ExpectedPath.TrimEnd('/') }
+  $Result.scheme = $Uri.Scheme
+  $Result.host_present = -not [string]::IsNullOrWhiteSpace($Uri.Host)
+  $Result.ends_with_mcp_path = $PathValue.EndsWith($ExpectedPathValue, [System.StringComparison]::OrdinalIgnoreCase)
+  $Result.https = ($Uri.Scheme -eq 'https')
+  $Result.shape_valid = [bool]$Result.https -and [bool]$Result.host_present -and [bool]$Result.ends_with_mcp_path
+  $Result.reason = if ([bool]$Result.shape_valid) { 'connector_url_shape_valid_reachability_not_verified' } elseif (-not [bool]$Result.https) { 'connector_url_must_be_https' } elseif (-not [bool]$Result.ends_with_mcp_path) { 'connector_url_must_end_with_mcp_path' } else { 'connector_url_missing_host' }
+  return $Result
+}
+
+function Add-EndpointConnectorUrlFallback {
+  param(
+    [object]$EndpointStatus,
+    [string]$ConnectorUrl
+  )
+
+  if ($null -eq $EndpointStatus) {
+    $EndpointStatus = [ordered]@{
+      kind = 'francis.chatgpt_voice.mcp.status'
+      ok = $false
+      status = 'status_unavailable'
+      error = 'endpoint_status_unavailable'
+    }
+  }
+
+  $ExistingConnector = Get-PropertyValue -Payload $EndpointStatus -Name 'chatgpt_connector' -Default $null
+  if ($null -ne $ExistingConnector -and $null -ne (Get-PropertyValue -Payload $ExistingConnector -Name 'connector_url' -Default $null)) {
+    return $EndpointStatus
+  }
+
+  $ConnectorShape = Test-ConnectorUrlShape -Value $ConnectorUrl -ExpectedPath $Path
+  $ConnectorPayload = if ($null -ne $ExistingConnector) {
+    $ExistingConnector
+  } else {
+    [ordered]@{
+      requires_https = $true
+      requires_mcp_path = $Path
+      ready = $false
+      ready_to_attempt_link = $false
+      reachability_verified = $false
+      connector_probe_timeout_seconds = $ConnectorProbeTimeoutSeconds
+      probe = $null
+      native_localhost_access_claimed = $false
+      opens_tunnel = $false
+      next_operator_step = 'start_local_chatgpt_voice_mcp_endpoint'
+    }
+  }
+  Set-PropertyValue -Payload $ConnectorPayload -Name 'connector_url' -Value $ConnectorShape
+  Set-PropertyValue -Payload $EndpointStatus -Name 'chatgpt_connector' -Value $ConnectorPayload
+  return $EndpointStatus
+}
+
+function Test-LocalTcpListener {
+  param(
+    [string]$Address,
+    [int]$PortValue
+  )
+
+  $TargetAddress = if ($Address -in @('0.0.0.0', '::', '')) { '127.0.0.1' } else { $Address }
+  $Socket = [System.Net.Sockets.Socket]::new(
+    [System.Net.Sockets.AddressFamily]::InterNetwork,
+    [System.Net.Sockets.SocketType]::Stream,
+    [System.Net.Sockets.ProtocolType]::Tcp
+  )
+  try {
+    $Socket.Blocking = $false
+    try {
+      $Socket.Connect($TargetAddress, $PortValue)
+    } catch [System.Net.Sockets.SocketException] {
+      $PendingErrors = @(
+        [System.Net.Sockets.SocketError]::WouldBlock,
+        [System.Net.Sockets.SocketError]::InProgress,
+        [System.Net.Sockets.SocketError]::AlreadyInProgress
+      )
+      if ($_.Exception.SocketErrorCode -notin $PendingErrors) {
+        return $false
+      }
+    }
+    if ($Socket.Connected) {
+      return $true
+    }
+    if (-not $Socket.Poll(250000, [System.Net.Sockets.SelectMode]::SelectWrite)) {
+      return $false
+    }
+    $SocketError = [int]$Socket.GetSocketOption(
+      [System.Net.Sockets.SocketOptionLevel]::Socket,
+      [System.Net.Sockets.SocketOptionName]::Error
+    )
+    return ($SocketError -eq 0)
+  } catch {
+    return $false
+  } finally {
+    $Socket.Dispose()
+  }
+}
+
+function New-LocalListenerMissingEndpointStatus {
+  param([string]$ConnectorUrl)
+
+  $ConnectorShape = Test-ConnectorUrlShape -Value $ConnectorUrl -ExpectedPath $Path
+  $Blockers = New-Object System.Collections.Generic.List[string]
+  [void]$Blockers.Add('local_mcp_listener_missing')
+  if (-not [bool]$ConnectorShape.shape_valid) {
+    [void]$Blockers.Add([string]$ConnectorShape.reason)
+  }
+
+  return [ordered]@{
+    kind = 'francis.chatgpt_voice.mcp.status'
+    ok = $false
+    status = 'local_listener_missing'
+    local_endpoint = "http://$HostAddress`:$Port$Path"
+    mcp_path = $Path
+    local_listener = [ordered]@{
+      ready = $false
+      address = ''
+      port = [int]$Port
+      owning_process = 0
+      command_line = ''
+    }
+    chatgpt_connector = [ordered]@{
+      requires_https = $true
+      requires_mcp_path = $Path
+      connector_url = $ConnectorShape
+      ready = $false
+      ready_to_attempt_link = $false
+      reachability_verified = $false
+      connector_probe_timeout_seconds = $ConnectorProbeTimeoutSeconds
+      probe = $null
+      native_localhost_access_claimed = $false
+      opens_tunnel = $false
+      next_operator_step = 'start_local_chatgpt_voice_mcp_endpoint'
+    }
+    blockers = [string[]]$Blockers.ToArray()
+    governance = [ordered]@{
+      read_only = $true
+      status_only = $true
+      writes_repo = $false
+      writes_data = $false
+      opens_public_tunnel = $false
+      starts_process = $false
+      grants_execution_authority = $false
+      grants_mutation_authority = $false
+      accepts_audio_stream = $false
+      transcript_only_bridge = $true
+    }
   }
 }
 
@@ -641,6 +820,10 @@ function Get-ProcessReadback {
 function Invoke-EndpointStatus {
   param([string]$ConnectorUrl)
 
+  if (-not (Test-LocalTcpListener -Address $HostAddress -PortValue $Port)) {
+    return New-LocalListenerMissingEndpointStatus -ConnectorUrl $ConnectorUrl
+  }
+
   $Args = @(
     '-NoProfile',
     '-ExecutionPolicy',
@@ -667,12 +850,12 @@ function Invoke-EndpointStatus {
 
   $PowerShellHost = Resolve-PowerShellHost
   if ([string]::IsNullOrWhiteSpace($PowerShellHost)) {
-    return [ordered]@{
-      kind = 'francis.chatgpt_voice.mcp.status'
-      ok = $false
-      status = 'powershell_host_missing'
-      error = 'powershell_host_missing'
-    }
+    return Add-EndpointConnectorUrlFallback -EndpointStatus ([ordered]@{
+        kind = 'francis.chatgpt_voice.mcp.status'
+        ok = $false
+        status = 'powershell_host_missing'
+        error = 'powershell_host_missing'
+      }) -ConnectorUrl $ConnectorUrl
   }
 
   $StatusTimeoutSeconds = [Math]::Max(3, [Math]::Min(90, $ConnectorProbeTimeoutSeconds + 8))
@@ -696,23 +879,23 @@ function Invoke-EndpointStatus {
     $StillRunning = Get-Process -Id $Process.Id -ErrorAction SilentlyContinue
     if ($StillRunning) {
       Stop-Process -Id $Process.Id -Force -ErrorAction SilentlyContinue
-      return [ordered]@{
-        kind = 'francis.chatgpt_voice.mcp.status'
-        ok = $false
-        status = 'status_timeout'
-        error = 'mcp_status_readback_timeout'
-        timeout_seconds = $StatusTimeoutSeconds
-        connector_url = ConvertTo-BoundedText -Value $ConnectorUrl -MaxLength 512
-      }
+      return Add-EndpointConnectorUrlFallback -EndpointStatus ([ordered]@{
+          kind = 'francis.chatgpt_voice.mcp.status'
+          ok = $false
+          status = 'status_timeout'
+          error = 'mcp_status_readback_timeout'
+          timeout_seconds = $StatusTimeoutSeconds
+          connector_url = ConvertTo-BoundedText -Value $ConnectorUrl -MaxLength 512
+        }) -ConnectorUrl $ConnectorUrl
     }
   } catch {
-    return [ordered]@{
-      kind = 'francis.chatgpt_voice.mcp.status'
-      ok = $false
-      status = 'status_start_failed'
-      error = ConvertTo-BoundedText -Value $_.Exception.Message -MaxLength 512
-      connector_url = ConvertTo-BoundedText -Value $ConnectorUrl -MaxLength 512
-    }
+    return Add-EndpointConnectorUrlFallback -EndpointStatus ([ordered]@{
+        kind = 'francis.chatgpt_voice.mcp.status'
+        ok = $false
+        status = 'status_start_failed'
+        error = ConvertTo-BoundedText -Value $_.Exception.Message -MaxLength 512
+        connector_url = ConvertTo-BoundedText -Value $ConnectorUrl -MaxLength 512
+      }) -ConnectorUrl $ConnectorUrl
   }
 
   $Raw = @()
@@ -724,15 +907,15 @@ function Invoke-EndpointStatus {
     $Stderr += Get-Content -LiteralPath $StderrPath -ErrorAction SilentlyContinue
   }
   try {
-    return ($Raw -join "`n") | ConvertFrom-Json -ErrorAction Stop
+    return Add-EndpointConnectorUrlFallback -EndpointStatus (($Raw -join "`n") | ConvertFrom-Json -ErrorAction Stop) -ConnectorUrl $ConnectorUrl
   } catch {
     $Observed = @($Raw) + @($Stderr)
-    return [ordered]@{
-      kind = 'francis.chatgpt_voice.mcp.status'
-      ok = $false
-      status = 'status_parse_failed'
-      error = ConvertTo-BoundedText -Value ($Observed -join "`n") -MaxLength 512
-    }
+    return Add-EndpointConnectorUrlFallback -EndpointStatus ([ordered]@{
+        kind = 'francis.chatgpt_voice.mcp.status'
+        ok = $false
+        status = 'status_parse_failed'
+        error = ConvertTo-BoundedText -Value ($Observed -join "`n") -MaxLength 512
+      }) -ConnectorUrl $ConnectorUrl
   } finally {
     Remove-Item -LiteralPath $StdoutPath -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $StderrPath -Force -ErrorAction SilentlyContinue
@@ -1174,9 +1357,9 @@ function New-StatusPayload {
     $ResolvedConnectorUrlSource = 'none'
   }
   if ($State) {
-    $ConnectorUrl = ConvertTo-BoundedText -Value $State.connector_url -MaxLength 512
-    $McpLauncherPid = [int]($State.mcp_launcher_pid)
-    $TunnelPid = [int]($State.tunnel_pid)
+    $ConnectorUrl = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $State -Name 'connector_url' -Default '') -MaxLength 512
+    $McpLauncherPid = [int](Get-PropertyValue -Payload $State -Name 'mcp_launcher_pid' -Default 0)
+    $TunnelPid = [int](Get-PropertyValue -Payload $State -Name 'tunnel_pid' -Default 0)
     $IngressMode = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $State -Name 'ingress_mode') -MaxLength 96
     $StateConnectorUrlSource = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $State -Name 'connector_url_source' -Default '') -MaxLength 160
     $RequestedTunnelSubdomain = ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $State -Name 'requested_tunnel_subdomain' -Default '') -MaxLength 160
@@ -1187,8 +1370,9 @@ function New-StatusPayload {
       $ResolvedConnectorUrlSource = if ([string]::IsNullOrWhiteSpace($StateConnectorUrlSource)) { 'runtime_state' } else { $StateConnectorUrlSource }
     }
   }
-  if ([string]::IsNullOrWhiteSpace($ConnectorUrl) -and $EndpointStatus -and $EndpointStatus.chatgpt_connector) {
-    $ConnectorUrl = ConvertTo-BoundedText -Value $EndpointStatus.chatgpt_connector.connector_url.url -MaxLength 512
+  $EndpointConnector = Get-PropertyValue -Payload $EndpointStatus -Name 'chatgpt_connector' -Default $null
+  if ([string]::IsNullOrWhiteSpace($ConnectorUrl) -and $null -ne $EndpointConnector) {
+    $ConnectorUrl = ConvertTo-BoundedText -Value (Get-NestedPropertyValue -Payload $EndpointConnector -Path @('connector_url', 'url') -Default '') -MaxLength 512
     if (-not [string]::IsNullOrWhiteSpace($ConnectorUrl) -and $ResolvedConnectorUrlSource -eq 'none') {
       $ResolvedConnectorUrlSource = 'endpoint_status'
     }
@@ -1225,7 +1409,7 @@ function New-StatusPayload {
     $Blockers += 'localtunnel_requested_subdomain_not_honored'
   }
   $Ready = $false
-  if ($EndpointStatus -and [string]$EndpointStatus.status -eq 'ready_for_chatgpt_connector') {
+  if ($EndpointStatus -and [string](Get-PropertyValue -Payload $EndpointStatus -Name 'status' -Default '') -eq 'ready_for_chatgpt_connector') {
     $Ready = $true
   }
   $StateStatus = if ($State) { ConvertTo-BoundedText -Value (Get-PropertyValue -Payload $State -Name 'status' -Default '') -MaxLength 96 } else { '' }

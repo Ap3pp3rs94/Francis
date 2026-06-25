@@ -46,6 +46,13 @@ def test_chatgpt_voice_contract_is_permission_gated(monkeypatch, tmp_path: Path)
     assert body["receipt_contract"]["receipt_readback_redacts_secret_patterns"] is True
     assert body["receipt_contract"]["voice_substrate_proof_field"] == "voice_substrate_proof"
     assert body["receipt_contract"]["receipt_linkage_field"] == "receipt_linkage"
+    assert body["receipt_contract"]["structured_receipts_bridge_receipt_field"] == "bridge_receipt"
+    assert body["receipt_contract"]["structured_receipts_bridge_ingress_receipt_field"] == "bridge_ingress_receipt"
+    assert (
+        body["receipt_contract"]["structured_receipts_bridge_mcp_connection_proof_receipt_field"]
+        == "bridge_mcp_connection_proof_receipt"
+    )
+    assert body["receipt_contract"]["mcp_connection_proof_is_not_voice_turn"] is True
     assert body["receipt_contract"]["voice_output_provider_field"] == "voice_output_provider"
     assert body["receipt_contract"]["voice_output_provider_status_field"] == "voice_output_provider_status"
     assert body["receipt_contract"]["voice_provider_state_field"] == "voice_provider_state"
@@ -259,8 +266,15 @@ def test_chatgpt_voice_ingress_records_without_chat_forward(monkeypatch, tmp_pat
     assert receipt_proof["bridge_receipt_id"] == body["receipt"]["id"]
     assert receipt_proof["bridge_receipt_path"].endswith(f"{body['receipt']['id']}.json")
     assert receipt_proof["voice_turn_receipt_path"] == "data/runtime/lens-overlay/voice-turns/voice-turn-1.json"
+    assert receipt_proof["proof_kind"] == ""
+    assert receipt_proof["mcp_connection_proof"] is False
+    assert receipt_proof["mcp_connection_proof_is_not_voice_turn"] is False
+    assert receipt_proof["voice_turn_is_virtual"] is True
     assert receipt_proof["transcript_state"] == "redacted_transcript_recorded"
+    assert receipt_proof["transcript_recorded"] is True
+    assert receipt_proof["structured_receipts"]["bridge_receipt"] is True
     assert receipt_proof["structured_receipts"]["bridge_ingress_receipt"] is True
+    assert receipt_proof["structured_receipts"]["bridge_mcp_connection_proof_receipt"] is False
     assert receipt_proof["structured_receipts"]["virtual_voice_turn_receipt"] is True
     assert receipt_proof["structured_receipts"]["provider_boundary_receipt"] is True
     assert receipt_proof["structured_receipts"]["orb_position_command_request_receipt"] is False
@@ -294,9 +308,14 @@ def test_chatgpt_voice_ingress_records_without_chat_forward(monkeypatch, tmp_pat
     assert persisted["voice_substrate_proof"]["bridge_receipt_id"] == body["receipt"]["id"]
     linkage = body["receipt"]["receipt_linkage"]
     assert linkage["kind"] == "francis.voice.receipt_linkage.v1"
+    assert linkage["proof_kind"] == ""
+    assert linkage["mcp_connection_proof"] is False
+    assert linkage["transcript_recorded"] is True
     assert linkage["bridge_receipt"]["present"] is True
     assert linkage["bridge_receipt"]["id"] == body["receipt"]["id"]
     assert linkage["bridge_receipt"]["path"].endswith(f"{body['receipt']['id']}.json")
+    assert linkage["mcp_connection_proof_receipt"]["present"] is False
+    assert linkage["mcp_connection_proof_receipt"]["path"] == ""
     assert linkage["virtual_voice_turn_receipt"]["present"] is True
     assert linkage["virtual_voice_turn_receipt"]["path"] == "data/runtime/lens-overlay/voice-turns/voice-turn-1.json"
     assert linkage["provider_boundary_receipt"]["present"] is True
@@ -513,7 +532,26 @@ def test_chatgpt_voice_mcp_proof_records_connection_without_transcript_or_voice_
     assert body["receipt"]["voice_provider_receipt"]["receipt_mode_is_provider_call"] is False
     assert body["receipt"]["voice_provider_receipt"]["elevenlabs"]["bridge_invokes_provider"] is False
     proof_linkage = body["receipt"]["receipt_linkage"]
+    proof_substrate = body["receipt"]["voice_substrate_proof"]
+    assert proof_substrate["proof_kind"] == "mcp_connection"
+    assert proof_substrate["mcp_connection_proof"] is True
+    assert proof_substrate["mcp_connection_proof_is_not_voice_turn"] is True
+    assert proof_substrate["voice_turn_is_virtual"] is False
+    assert proof_substrate["transcript_recorded"] is False
+    assert proof_substrate["structured_receipts"]["bridge_receipt"] is True
+    assert proof_substrate["structured_receipts"]["bridge_ingress_receipt"] is False
+    assert proof_substrate["structured_receipts"]["bridge_mcp_connection_proof_receipt"] is True
+    assert proof_substrate["structured_receipts"]["virtual_voice_turn_receipt"] is False
     assert proof_linkage["bridge_receipt"]["present"] is True
+    assert proof_linkage["proof_kind"] == "mcp_connection"
+    assert proof_linkage["mcp_connection_proof"] is True
+    assert proof_linkage["transcript_recorded"] is False
+    assert proof_linkage["mcp_connection_proof_receipt"]["present"] is True
+    assert proof_linkage["mcp_connection_proof_receipt"]["path"].endswith(f"{body['receipt']['id']}.json")
+    assert proof_linkage["mcp_connection_proof_receipt"]["virtual_voice_turn"] is False
+    assert proof_linkage["mcp_connection_proof_receipt"]["transcript_recorded"] is False
+    assert proof_linkage["mcp_connection_proof_receipt"]["chat_forwarded"] is False
+    assert proof_linkage["mcp_connection_proof_receipt"]["grants_execution_authority"] is False
     assert proof_linkage["virtual_voice_turn_receipt"]["present"] is False
     assert proof_linkage["provider_boundary_receipt"]["embedded"] is True
     assert proof_linkage["provider_boundary_receipt"]["external_provider_receipt_present"] is False

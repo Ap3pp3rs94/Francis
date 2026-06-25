@@ -204,6 +204,37 @@ def test_lens_command_palette_monitor_route_projects_voice_bridge_proof(monkeypa
                             "proof_blocker": "none",
                             "transcript": "do not expose this acoustic transcript",
                         },
+                        "proof_evidence_hint": {
+                            "status": "satisfied",
+                            "first_failed_requirement": "none",
+                            "proof_blocker": "none",
+                            "next_operator_step": "keep_monitoring_or_repeat_for_next_acoustic_orb_move",
+                            "voice_command_status_path": "data/runtime/lens-overlay/status.json",
+                            "microphone_status_path": "data/runtime/lens-overlay/voice-status.json",
+                            "orb_position_receipt_root": "data/runtime/lens-overlay/orb-position-commands",
+                            "latest_orb_receipt_path": (
+                                "data/runtime/lens-overlay/orb-position-commands/local-orb-left-proof.json"
+                            ),
+                            "required_voice_status_fields": [
+                                "voice.status",
+                                "voice.overlay_position_command_source",
+                                "voice.microphone_recognition_claimed",
+                            ],
+                            "required_orb_receipt_fields": [
+                                "status",
+                                "command_source",
+                                "microphone_recognition_claimed",
+                            ],
+                            "accepted_command_source": "local_overlay_speech_recognition",
+                            "rejected_command_sources": [
+                                "chatgpt_voice_bridge_file_request",
+                                "http_api_text_injection",
+                            ],
+                            "transcript_required": True,
+                            "transcript_stored": True,
+                            "transcript_redacted": False,
+                            "transcript": "do not expose this acoustic transcript",
+                        },
                         "voice_input_ready": True,
                         "wake_listening": True,
                         "microphone_signal_observed": True,
@@ -496,6 +527,23 @@ def test_lens_command_palette_monitor_route_projects_voice_bridge_proof(monkeypa
         "first_failed_requirement": "none",
         "proof_blocker": "none",
     }
+    evidence_hint = acoustic_proof["proof_evidence_hint"]
+    assert evidence_hint["status"] == "satisfied"
+    assert evidence_hint["first_failed_requirement"] == "none"
+    assert evidence_hint["proof_blocker"] == "none"
+    assert evidence_hint["voice_command_status_path"] == "data/runtime/lens-overlay/status.json"
+    assert evidence_hint["microphone_status_path"] == "data/runtime/lens-overlay/voice-status.json"
+    assert evidence_hint["orb_position_receipt_root"] == "data/runtime/lens-overlay/orb-position-commands"
+    assert evidence_hint["latest_orb_receipt_path"] == (
+        "data/runtime/lens-overlay/orb-position-commands/local-orb-left-proof.json"
+    )
+    assert "voice.overlay_position_command_source" in evidence_hint["required_voice_status_fields"]
+    assert "command_source" in evidence_hint["required_orb_receipt_fields"]
+    assert "chatgpt_voice_bridge_file_request" in evidence_hint["rejected_command_sources"]
+    assert evidence_hint["transcript_required"] is False
+    assert evidence_hint["transcript_stored"] is False
+    assert evidence_hint["transcript_redacted"] is True
+    assert "do not expose this acoustic transcript" not in json.dumps(evidence_hint, sort_keys=True)
     assert acoustic_proof["latest_voice_command"] == "move_orb_left_side"
     assert acoustic_proof["manual_acoustic_proof_required"] is True
     assert acoustic_proof["latest_voice_command_source"] == "local_overlay_speech_recognition"

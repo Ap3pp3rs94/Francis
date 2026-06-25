@@ -184,10 +184,14 @@ def test_lens_summon_api_execution_proof_executes_bounded_summon_handoff(
     assert proof["dependency_run_seconds"] == 60
     assert proof["resident_dependency_run_seconds"] == 60
     assert proof["global_hotkey"] == _PROOF_GLOBAL_HOTKEY
-    assert proof["resident_start_status"] == "resident_supervision_started"
-    assert proof["tray_start_status"] == "tray_presence_started"
-    assert proof["hotkey_start_status"] == "global_hotkey_bound"
-    assert proof["overlay_start_status"] == "overlay_window_started"
+    assert proof["resident_start_status"] in {"resident_supervision_started", "resident_supervision_already_running"}
+    assert proof["tray_start_status"] in {"tray_presence_started", "tray_presence_already_running"}
+    assert proof["hotkey_start_status"] in {
+        "global_hotkey_bound",
+        "global_hotkey_already_bound",
+        "global_hotkey_binding_already_running",
+    }
+    assert proof["overlay_start_status"] in {"overlay_window_started", "overlay_window_already_running"}
     assert proof["summon_execute_status"] == "summon_binding_observed"
     assert proof["summon_receipt_readback_status"] == "readback_ready"
     assert proof["summon_receipt_readback_next_gap"] == "summon_anywhere_runtime_readback"

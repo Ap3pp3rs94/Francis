@@ -182,6 +182,10 @@ apps/**/plugins/generated/**
 
 # Local Claude/Codex-adjacent agent state
 .claude/
+.francis/
+
+# PowerShell module analysis cache can appear when commands run from repo root.
+/Microsoft/
 
 # Vim swap
 *.swp

@@ -177,6 +177,7 @@ def lens_mcp_perception_contract() -> dict[str, Any]:
             "reports_region_comparison_readback": True,
             "reports_requested_region_coordinate_validity": True,
             "reports_confidence_breakdown": True,
+            "reports_replay_boundary": True,
             "reports_replay_manifest": True,
             "observation_sources": sorted(_OVERLAY_OBSERVATION_TOOLS),
             "screenshots": False,
@@ -1251,6 +1252,68 @@ def _confidence_breakdown_readback(
     }
 
 
+def _replay_boundary_readback(
+    *,
+    region_presence: dict[str, bool],
+    region_truth: dict[str, Any],
+    source_status: str,
+    evidence_reference: dict[str, Any],
+    actual_captured_region: dict[str, Any],
+    capture_performed: bool,
+    unsupported_perception: dict[str, bool],
+    limitations: list[str],
+    failure_or_refusal_reason: str,
+) -> dict[str, Any]:
+    visual_replayable_regions = {
+        "requested_region": False,
+        "mapped_overlay_region": False,
+        "actual_inspected_region": False,
+        "actual_observed_region": False,
+        "actual_captured_region": False,
+    }
+    geometry_replayable_regions = {
+        "requested_region": bool(region_presence.get("requested_region")),
+        "mapped_overlay_region": bool(region_presence.get("mapped_region")),
+        "actual_inspected_region": bool(region_presence.get("actual_inspection_region")),
+        "actual_observed_region": bool(region_presence.get("actual_observation_region")),
+        "actual_captured_region": bool(region_presence.get("actual_capture_region")),
+    }
+    return {
+        "schema_version": 1,
+        "boundary": "metadata_replay_only_no_visual_replay",
+        "metadata_replayable": True,
+        "visual_replayable": False,
+        "geometry_replayable_regions": geometry_replayable_regions,
+        "visual_replayable_regions": visual_replayable_regions,
+        "actual_capture_region_replayable": bool(region_presence.get("actual_capture_region")) and capture_performed,
+        "actual_capture_absent_reason": ""
+        if bool(region_presence.get("actual_capture_region"))
+        else _safe_str(actual_captured_region.get("reason"), "capture_adapter_unavailable"),
+        "source_called": bool(region_truth.get("source_called")),
+        "source_status": _safe_str(source_status, "unknown"),
+        "evidence_content_included": bool(evidence_reference.get("content_included")),
+        "capture_performed": capture_performed,
+        "unsupported_perception_claimed": any(bool(value) for value in unsupported_perception.values()),
+        "unsupported_perception": unsupported_perception,
+        "visual_replay_blockers": [
+            "screenshot_capture_unsupported",
+            "pixel_capture_unsupported",
+            "ocr_unsupported",
+            "accessibility_tree_unsupported",
+            "visual_similarity_unsupported",
+        ],
+        "future_adapter_required_for": [
+            "screenshots",
+            "pixels",
+            "ocr",
+            "accessibility_tree",
+            "visual_similarity",
+        ],
+        "limitations": limitations,
+        "failure_or_refusal_reason": _safe_str(failure_or_refusal_reason),
+    }
+
+
 def _spatial_contract_readback(
     *,
     status: str,
@@ -1351,6 +1414,17 @@ def _spatial_contract_readback(
         actual_captured_region=actual_captured_region,
         capture_performed=capture_performed,
     )
+    replay_boundary = _replay_boundary_readback(
+        region_presence=region_presence,
+        region_truth=region_truth,
+        source_status=source_status,
+        evidence_reference=evidence_reference,
+        actual_captured_region=actual_captured_region,
+        capture_performed=capture_performed,
+        unsupported_perception=unsupported_perception,
+        limitations=limitations,
+        failure_or_refusal_reason=failure_or_refusal_reason,
+    )
     replay_keys = [
         "requested_region",
         "mapped_overlay_region",
@@ -1358,6 +1432,7 @@ def _spatial_contract_readback(
         "actual_observed_region",
         "actual_captured_region",
         "region_comparison",
+        "replay_boundary",
         "source",
         "evidence_reference",
     ]
@@ -1381,6 +1456,7 @@ def _spatial_contract_readback(
         "region_truth": region_truth,
         "region_basis": region_basis,
         "region_comparison": region_comparison,
+        "replay_boundary": replay_boundary,
         "evidence_reference_status": _safe_str(evidence_reference.get("status")),
         "evidence_content_included": bool(evidence_reference.get("content_included")),
         "confidence": confidence,
@@ -1415,6 +1491,7 @@ def _spatial_contract_readback(
         "region_truth": region_truth,
         "region_basis": region_basis,
         "region_comparison": region_comparison,
+        "replay_boundary": replay_boundary,
         "confidence": confidence,
         "confidence_basis": confidence_basis,
         "confidence_breakdown": confidence_breakdown,

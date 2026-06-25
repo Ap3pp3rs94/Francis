@@ -162,6 +162,9 @@ export default defineConfig(({ mode, command }): UserConfig => {
         "/web-learning": buildProxy(proxyTarget, false),
         "/system": buildProxy(proxyTarget, false),
         "/health": buildProxy(proxyTarget, false),
+        "/lens": buildProxy(proxyTarget, false),
+        "/developer-bridge": buildProxy(proxyTarget, false),
+        "/chatgpt-voice": buildProxy(proxyTarget, false),
 
         // Chat websocket + related routes
         "/chat": buildProxy(proxyTarget, true),
