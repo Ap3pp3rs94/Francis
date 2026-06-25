@@ -100,6 +100,167 @@ function ConvertTo-StringArray {
   return @($SingleValue)
 }
 
+function Add-UniqueString {
+  param(
+    [System.Collections.Generic.List[string]]$Target,
+    [object]$Value
+  )
+
+  if ($null -eq $Value) {
+    return
+  }
+  $Text = ([string]$Value).Trim()
+  if ([string]::IsNullOrWhiteSpace($Text)) {
+    return
+  }
+  if (-not $Target.Contains($Text)) {
+    $Target.Add($Text) | Out-Null
+  }
+}
+
+function New-FinalPhysicalDecisionPlanStatus {
+  param(
+    [object[]]$DecisionPlan,
+    [bool]$PackageGateReady,
+    [bool]$EngineeringGateReady,
+    [bool]$EngineeringGateFailed,
+    [string[]]$PackageSignals,
+    [string[]]$EngineeringSignals,
+    [string[]]$EngineeringMissingFields,
+    [string[]]$EngineeringInvalidFields,
+    [string[]]$ChronologySignals,
+    [string[]]$PilotIdentitySignals
+  )
+
+  $Result = New-Object System.Collections.Generic.List[object]
+  foreach ($Step in $DecisionPlan) {
+    $StepId = [string]$Step.id
+    $Status = 'ready_for_final_physical_decision_review'
+    $RequiredAction = [string]$Step.required_action
+    $Missing = @()
+    $Invalid = @()
+    $BlockingSignals = @()
+
+    if ($StepId -eq 'stage17_package_and_manifest_lock') {
+      if (-not $PackageGateReady) {
+        $Status = 'failed_stop_condition_or_blocking_signal'
+        $BlockingSignals = @(ConvertTo-StringArray -Value $PackageSignals)
+      }
+    } elseif ($StepId -eq 'engineering_review_gate_lock') {
+      if (-not $PackageGateReady) {
+        $Status = 'blocked_by_stage17_package_gate'
+        $BlockingSignals = @(ConvertTo-StringArray -Value $PackageSignals)
+      } elseif ($EngineeringGateFailed) {
+        $Status = 'failed_stop_condition_or_blocking_signal'
+        $BlockingSignals = @(ConvertTo-StringArray -Value $EngineeringSignals)
+      } elseif (-not $EngineeringGateReady) {
+        $Status = 'pending_required_engineering_review_gate'
+        $Missing = @(ConvertTo-StringArray -Value $EngineeringMissingFields)
+        $Invalid = @(ConvertTo-StringArray -Value $EngineeringInvalidFields)
+        $BlockingSignals = @(ConvertTo-StringArray -Value $EngineeringSignals)
+      }
+    } elseif ($StepId -eq 'evidence_chronology_audit') {
+      if (-not $PackageGateReady) {
+        $Status = 'blocked_by_stage17_package_gate'
+        $BlockingSignals = @(ConvertTo-StringArray -Value $PackageSignals)
+      } elseif (-not $EngineeringGateReady) {
+        $Status = 'blocked_by_engineering_review_gate'
+        $BlockingSignals = @(ConvertTo-StringArray -Value $EngineeringSignals)
+      } elseif (@($ChronologySignals).Count -gt 0) {
+        $Status = 'failed_stop_condition_or_blocking_signal'
+        $BlockingSignals = @(ConvertTo-StringArray -Value $ChronologySignals)
+      }
+    } elseif ($StepId -eq 'pilot_identity_continuity_audit') {
+      if (-not $PackageGateReady) {
+        $Status = 'blocked_by_stage17_package_gate'
+        $BlockingSignals = @(ConvertTo-StringArray -Value $PackageSignals)
+      } elseif (-not $EngineeringGateReady) {
+        $Status = 'blocked_by_engineering_review_gate'
+        $BlockingSignals = @(ConvertTo-StringArray -Value $EngineeringSignals)
+      } elseif (@($PilotIdentitySignals).Count -gt 0) {
+        $Status = 'failed_stop_condition_or_blocking_signal'
+        $BlockingSignals = @(ConvertTo-StringArray -Value $PilotIdentitySignals)
+      }
+    } elseif ($StepId -eq 'human_final_decision_and_no_clearance_locks') {
+      if (-not $PackageGateReady) {
+        $Status = 'blocked_by_stage17_package_gate'
+        $BlockingSignals = @(ConvertTo-StringArray -Value $PackageSignals)
+      } elseif (-not $EngineeringGateReady) {
+        $Status = 'blocked_by_engineering_review_gate'
+        $BlockingSignals = @(ConvertTo-StringArray -Value $EngineeringSignals)
+      } elseif (@($ChronologySignals).Count -gt 0 -or @($PilotIdentitySignals).Count -gt 0) {
+        $Status = 'blocked_by_evidence_audit_failure'
+        $CombinedSignals = New-Object System.Collections.Generic.List[string]
+        foreach ($Signal in @(ConvertTo-StringArray -Value $ChronologySignals)) {
+          Add-UniqueString -Target $CombinedSignals -Value $Signal
+        }
+        foreach ($Signal in @(ConvertTo-StringArray -Value $PilotIdentitySignals)) {
+          Add-UniqueString -Target $CombinedSignals -Value $Signal
+        }
+        $BlockingSignals = @($CombinedSignals.ToArray())
+      }
+    }
+
+    $Result.Add([ordered]@{
+        id = $StepId
+        status = $Status
+        validation_state = [string]$Step.validation_state
+        ready_for_final_physical_decision_review = ($Status -eq 'ready_for_final_physical_decision_review')
+        missing_fields = @($Missing)
+        invalid_fields = @($Invalid)
+        blocking_signals = @($BlockingSignals)
+        required_action = $RequiredAction
+      }) | Out-Null
+  }
+  return @($Result.ToArray())
+}
+
+function New-CapturePlanSummary {
+  param([object[]]$CapturePlanStatus)
+
+  $ReadyCount = 0
+  $PendingCount = 0
+  $InvalidCount = 0
+  $FailedCount = 0
+  $BlockedCount = 0
+  $FirstBlockingGroupId = ''
+  $FirstBlockingGroupStatus = ''
+  $FirstBlockingGroupAction = ''
+
+  foreach ($Step in $CapturePlanStatus) {
+    $StepStatus = [string]$Step.status
+    if ($StepStatus -eq 'ready_for_final_physical_decision_review') {
+      $ReadyCount += 1
+    } elseif ($StepStatus.StartsWith('pending_')) {
+      $PendingCount += 1
+    } elseif ($StepStatus.StartsWith('invalid_')) {
+      $InvalidCount += 1
+    } elseif ($StepStatus.StartsWith('failed_')) {
+      $FailedCount += 1
+    } elseif ($StepStatus.StartsWith('blocked_')) {
+      $BlockedCount += 1
+    }
+
+    if ([string]::IsNullOrWhiteSpace($FirstBlockingGroupId) -and $StepStatus -ne 'ready_for_final_physical_decision_review') {
+      $FirstBlockingGroupId = [string]$Step.id
+      $FirstBlockingGroupStatus = $StepStatus
+      $FirstBlockingGroupAction = [string]$Step.required_action
+    }
+  }
+
+  return [ordered]@{
+    total_groups = @($CapturePlanStatus).Count
+    ready_groups = $ReadyCount
+    pending_groups = $PendingCount
+    invalid_groups = $InvalidCount
+    failed_groups = $FailedCount
+    blocked_groups = $BlockedCount
+    first_blocking_group_id = $FirstBlockingGroupId
+    first_blocking_group_status = $FirstBlockingGroupStatus
+    first_blocking_group_action = $FirstBlockingGroupAction
+  }
+}
+
 function Test-MissingOrPendingText {
   param([object]$Value)
 
@@ -480,6 +641,96 @@ if (-not $PackageGateReady) {
 
 $BlockedInputs = if ([bool]$PackageGate.parse_ok) { ConvertTo-StringArray -Value $PackageGate.payload.blocked_inputs } else { @() }
 $EngineeringNextActions = if ([bool]$EngineeringGate.parse_ok) { ConvertTo-StringArray -Value $EngineeringGate.payload.next_actions } else { @('rerun_engineering_review_gate_after_parse_failure') }
+$EngineeringMissingFields = @(Get-GateArrayProperty -Payload $EngineeringGate.payload -Name 'missing_fields')
+$EngineeringInvalidFields = @(Get-GateArrayProperty -Payload $EngineeringGate.payload -Name 'invalid_fields')
+$EngineeringReviewRedesignTriggers = @(Get-GateArrayProperty -Payload $EngineeringGate.payload -Name 'review_redesign_triggers')
+$EngineeringReviewProhibitedClearanceFlags = @(Get-GateArrayProperty -Payload $EngineeringGate.payload -Name 'prohibited_clearance_flags')
+$EngineeringGateFailed = (-not [bool]$EngineeringGate.parse_ok) -or [int]$EngineeringGate.exit_code -ne 0 -or $EngineeringGateStatus.StartsWith('failed_')
+
+$PackageDecisionSignals = New-Object System.Collections.Generic.List[string]
+if (-not $PackageGateReady) {
+  Add-UniqueString -Target $PackageDecisionSignals -Value ('stage17_package_gate_status.{0}' -f $PackageGateStatus)
+  foreach ($Signal in @(Get-GateArrayProperty -Payload $PackageGate.payload -Name 'failed_checks')) {
+    Add-UniqueString -Target $PackageDecisionSignals -Value ('stage17_package.failed_checks.{0}' -f $Signal)
+  }
+}
+
+$EngineeringDecisionSignals = New-Object System.Collections.Generic.List[string]
+if (-not [bool]$EngineeringGate.parse_ok) {
+  Add-UniqueString -Target $EngineeringDecisionSignals -Value 'engineering_review_gate_parse_failed'
+} elseif (-not $EngineeringGateReady) {
+  Add-UniqueString -Target $EngineeringDecisionSignals -Value ('engineering_review_gate_status.{0}' -f $EngineeringGateStatus)
+}
+foreach ($Signal in @($EngineeringRecordLinkageViolations)) {
+  Add-UniqueString -Target $EngineeringDecisionSignals -Value $Signal
+}
+foreach ($Signal in @($EngineeringMissingFields)) {
+  Add-UniqueString -Target $EngineeringDecisionSignals -Value $Signal
+}
+foreach ($Signal in @($EngineeringInvalidFields)) {
+  Add-UniqueString -Target $EngineeringDecisionSignals -Value $Signal
+}
+foreach ($Signal in @($EngineeringReviewRedesignTriggers)) {
+  Add-UniqueString -Target $EngineeringDecisionSignals -Value $Signal
+}
+foreach ($Signal in @($EngineeringReviewProhibitedClearanceFlags)) {
+  Add-UniqueString -Target $EngineeringDecisionSignals -Value $Signal
+}
+
+$FinalPhysicalDecisionPlan = @(
+  [ordered]@{
+    id = 'stage17_package_and_manifest_lock'
+    validation_state = 'DOCUMENTED_CONTAINER_GATE_REQUIRED'
+    required_conditions = @(
+      'stage17 package gate parses',
+      'stage17 package gate status remains blocked_physical_validation',
+      'documentation and evidence containers are complete without claiming physical validation'
+    )
+    required_action = 'keep the FR-017 package, manifest, templates, and pending evidence containers intact before evaluating final physical decision readiness'
+  },
+  [ordered]@{
+    id = 'engineering_review_gate_lock'
+    validation_state = 'REQUIRES_PROFESSIONAL_ENGINEERING_REVIEW_GATE_READY'
+    required_conditions = @(
+      'engineering review gate parses',
+      'engineering review gate status is ready_for_final_stage17_physical_gate_audit',
+      'engineering review record linkage contract is present',
+      'engineering review record linkage violations are empty'
+    )
+    required_action = 'complete and link the professional engineering review record without powered, frame-coupled, load-bearing, or FR-018 clearance'
+  },
+  [ordered]@{
+    id = 'evidence_chronology_audit'
+    validation_state = 'REQUIRES_FINAL_EVIDENCE_CHRONOLOGY_AUDIT'
+    required_conditions = @(
+      'measurement through engineering review evidence dates parse as ISO YYYY-MM-DD',
+      'linked evidence dates do not move backward across the FR-017 gate order'
+    )
+    required_action = 'audit linked evidence chronology from measurement through engineering review and correct any backdated, missing, or unparsable record'
+  },
+  [ordered]@{
+    id = 'pilot_identity_continuity_audit'
+    validation_state = 'REQUIRES_FINAL_PILOT_IDENTITY_CONTINUITY_AUDIT'
+    required_conditions = @(
+      'required pilot IDs exist for measurement, pilot static-fit, pilot movement, quick-release/cable-snag, and engineering review',
+      'pilot identity fingerprints remain consistent across required pilot-linked records'
+    )
+    required_action = 'audit redacted pilot identity continuity across all required FR-017 pilot-linked evidence records'
+  },
+  [ordered]@{
+    id = 'human_final_decision_and_no_clearance_locks'
+    validation_state = 'REQUIRES_HUMAN_FINAL_STAGE17_COMPLETION_DECISION'
+    required_conditions = @(
+      'physical_validation_complete remains false in this read-only gate',
+      'stage17_completion_claim_allowed remains false in this read-only gate',
+      'powered_or_frame_coupled_testing_cleared remains false',
+      'fr018_implementation_cleared remains false'
+    )
+    required_action = 'perform a separate human final Stage 17 completion decision against real accepted records before any ledger-backed completion claim; keep FR-018 blocked'
+  }
+)
+$FinalPhysicalDecisionPlanStatus = @(New-FinalPhysicalDecisionPlanStatus -DecisionPlan $FinalPhysicalDecisionPlan -PackageGateReady $PackageGateReady -EngineeringGateReady $EngineeringGateReady -EngineeringGateFailed $EngineeringGateFailed -PackageSignals $PackageDecisionSignals.ToArray() -EngineeringSignals $EngineeringDecisionSignals.ToArray() -EngineeringMissingFields $EngineeringMissingFields -EngineeringInvalidFields $EngineeringInvalidFields -ChronologySignals $EvidenceChronologyViolations -PilotIdentitySignals $PilotIdentityContinuityViolations)
+$FinalPhysicalDecisionPlanSummary = New-CapturePlanSummary -CapturePlanStatus $FinalPhysicalDecisionPlanStatus
 
 $Output = [ordered]@{
   kind = 'francis.fr017.final_physical_gate'
@@ -530,6 +781,22 @@ $Output = [ordered]@{
   upstream_measurement_capture_first_blocking_group_id = if ([bool]$EngineeringGate.parse_ok) { [string](Get-GateProperty -Payload $EngineeringGate.payload -Name 'upstream_measurement_capture_first_blocking_group_id' -Default '') } else { '' }
   upstream_measurement_capture_first_blocking_group_status = if ([bool]$EngineeringGate.parse_ok) { [string](Get-GateProperty -Payload $EngineeringGate.payload -Name 'upstream_measurement_capture_first_blocking_group_status' -Default '') } else { '' }
   upstream_measurement_capture_first_blocking_group_action = if ([bool]$EngineeringGate.parse_ok) { [string](Get-GateProperty -Payload $EngineeringGate.payload -Name 'upstream_measurement_capture_first_blocking_group_action' -Default '') } else { '' }
+  engineering_review_capture_plan_contract = if ([bool]$EngineeringGate.parse_ok) { [string](Get-GateProperty -Payload $EngineeringGate.payload -Name 'engineering_review_capture_plan_contract' -Default '') } else { '' }
+  engineering_review_capture_plan_status_contract = if ([bool]$EngineeringGate.parse_ok) { [string](Get-GateProperty -Payload $EngineeringGate.payload -Name 'engineering_review_capture_plan_status_contract' -Default '') } else { '' }
+  engineering_review_capture_summary_contract = if ([bool]$EngineeringGate.parse_ok) { [string](Get-GateProperty -Payload $EngineeringGate.payload -Name 'engineering_review_capture_summary_contract' -Default '') } else { '' }
+  engineering_review_capture_plan_not_completion_evidence = if ([bool]$EngineeringGate.parse_ok) { [bool](Get-GateProperty -Payload $EngineeringGate.payload -Name 'engineering_review_capture_plan_not_completion_evidence' -Default $false) } else { $false }
+  next_required_engineering_review_input = if ([bool]$EngineeringGate.parse_ok) { [string](Get-GateProperty -Payload $EngineeringGate.payload -Name 'next_required_engineering_review_input' -Default '') } else { '' }
+  engineering_review_capture_plan = @(Get-GateObjectArrayProperty -Payload $EngineeringGate.payload -Name 'engineering_review_capture_plan')
+  engineering_review_capture_plan_status = @(Get-GateObjectArrayProperty -Payload $EngineeringGate.payload -Name 'engineering_review_capture_plan_status')
+  engineering_review_capture_total_groups = if ([bool]$EngineeringGate.parse_ok) { [int](Get-GateProperty -Payload $EngineeringGate.payload -Name 'engineering_review_capture_total_groups' -Default 0) } else { 0 }
+  engineering_review_capture_ready_groups = if ([bool]$EngineeringGate.parse_ok) { [int](Get-GateProperty -Payload $EngineeringGate.payload -Name 'engineering_review_capture_ready_groups' -Default 0) } else { 0 }
+  engineering_review_capture_pending_groups = if ([bool]$EngineeringGate.parse_ok) { [int](Get-GateProperty -Payload $EngineeringGate.payload -Name 'engineering_review_capture_pending_groups' -Default 0) } else { 0 }
+  engineering_review_capture_invalid_groups = if ([bool]$EngineeringGate.parse_ok) { [int](Get-GateProperty -Payload $EngineeringGate.payload -Name 'engineering_review_capture_invalid_groups' -Default 0) } else { 0 }
+  engineering_review_capture_failed_groups = if ([bool]$EngineeringGate.parse_ok) { [int](Get-GateProperty -Payload $EngineeringGate.payload -Name 'engineering_review_capture_failed_groups' -Default 0) } else { 0 }
+  engineering_review_capture_upstream_blocked_groups = if ([bool]$EngineeringGate.parse_ok) { [int](Get-GateProperty -Payload $EngineeringGate.payload -Name 'engineering_review_capture_upstream_blocked_groups' -Default 0) } else { 0 }
+  engineering_review_capture_first_blocking_group_id = if ([bool]$EngineeringGate.parse_ok) { [string](Get-GateProperty -Payload $EngineeringGate.payload -Name 'engineering_review_capture_first_blocking_group_id' -Default '') } else { '' }
+  engineering_review_capture_first_blocking_group_status = if ([bool]$EngineeringGate.parse_ok) { [string](Get-GateProperty -Payload $EngineeringGate.payload -Name 'engineering_review_capture_first_blocking_group_status' -Default '') } else { '' }
+  engineering_review_capture_first_blocking_group_action = if ([bool]$EngineeringGate.parse_ok) { [string](Get-GateProperty -Payload $EngineeringGate.payload -Name 'engineering_review_capture_first_blocking_group_action' -Default '') } else { '' }
   upstream_measurement_invalid_fields = @(Get-GateArrayProperty -Payload $EngineeringGate.payload -Name 'upstream_measurement_invalid_fields')
   upstream_measurement_consistency_violations = @(Get-GateArrayProperty -Payload $EngineeringGate.payload -Name 'upstream_measurement_consistency_violations')
   upstream_marked_zone_specificity_violations = @(Get-GateArrayProperty -Payload $EngineeringGate.payload -Name 'upstream_marked_zone_specificity_violations')
@@ -560,13 +827,29 @@ $Output = [ordered]@{
   pilot_identity_continuity_violations = @($PilotIdentityContinuityViolations)
   pilot_identity_continuity_reference_record = [string]$PilotIdentityContinuityAudit.reference_record
   pilot_identity_continuity_reference_fingerprint = [string]$PilotIdentityContinuityAudit.reference_pilot_id_fingerprint
-  engineering_review_missing_fields = @(Get-GateArrayProperty -Payload $EngineeringGate.payload -Name 'missing_fields')
-  engineering_review_invalid_fields = @(Get-GateArrayProperty -Payload $EngineeringGate.payload -Name 'invalid_fields')
-  engineering_review_redesign_triggers = @(Get-GateArrayProperty -Payload $EngineeringGate.payload -Name 'review_redesign_triggers')
-  engineering_review_prohibited_clearance_flags = @(Get-GateArrayProperty -Payload $EngineeringGate.payload -Name 'prohibited_clearance_flags')
+  engineering_review_missing_fields = @($EngineeringMissingFields)
+  engineering_review_invalid_fields = @($EngineeringInvalidFields)
+  engineering_review_redesign_triggers = @($EngineeringReviewRedesignTriggers)
+  engineering_review_prohibited_clearance_flags = @($EngineeringReviewProhibitedClearanceFlags)
   documentation_complete = $PackageGateReady
   evidence_containers_complete = $PackageGateReady
   physical_validation_evidence_chain_complete = ($PackageGateReady -and $EngineeringGateReady -and $EvidenceChronologyViolations.Count -eq 0 -and $PilotIdentityContinuityViolations.Count -eq 0)
+  final_physical_decision_plan_contract = 'The final_physical_decision_plan is read-only operator guidance for checking FR-017 final physical decision readiness. It is not physical validation evidence by itself, does not accept or certify the cuffs, and cannot clear powered, frame-coupled, load-bearing, or FR-018 work.'
+  final_physical_decision_plan_status_contract = 'The final_physical_decision_plan_status reports final physical decision readiness only. A ready group means the evidence-chain readback passed this script contract; it is not a completion claim, certification, or FR-018 clearance.'
+  final_physical_decision_summary_contract = 'The final_physical_decision_* summary identifies the next blocking final-decision evidence group. It is not physical validation evidence and cannot mark Stage 17 complete.'
+  final_physical_decision_plan_not_completion_evidence = $true
+  next_required_final_physical_input = 'perform_human_final_stage17_completion_decision_against_real_records'
+  final_physical_decision_plan = @($FinalPhysicalDecisionPlan)
+  final_physical_decision_plan_status = @($FinalPhysicalDecisionPlanStatus)
+  final_physical_decision_total_groups = [int]$FinalPhysicalDecisionPlanSummary.total_groups
+  final_physical_decision_ready_groups = [int]$FinalPhysicalDecisionPlanSummary.ready_groups
+  final_physical_decision_pending_groups = [int]$FinalPhysicalDecisionPlanSummary.pending_groups
+  final_physical_decision_invalid_groups = [int]$FinalPhysicalDecisionPlanSummary.invalid_groups
+  final_physical_decision_failed_groups = [int]$FinalPhysicalDecisionPlanSummary.failed_groups
+  final_physical_decision_blocked_groups = [int]$FinalPhysicalDecisionPlanSummary.blocked_groups
+  final_physical_decision_first_blocking_group_id = [string]$FinalPhysicalDecisionPlanSummary.first_blocking_group_id
+  final_physical_decision_first_blocking_group_status = [string]$FinalPhysicalDecisionPlanSummary.first_blocking_group_status
+  final_physical_decision_first_blocking_group_action = [string]$FinalPhysicalDecisionPlanSummary.first_blocking_group_action
   physical_validation_complete = $false
   stage17_physical_completion_decision_ready = ($Status -eq 'ready_for_stage17_final_physical_completion_decision')
   stage17_completion_claim_allowed = $false

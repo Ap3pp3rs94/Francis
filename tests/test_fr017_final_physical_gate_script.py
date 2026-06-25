@@ -50,6 +50,10 @@ def _payload(stdout: str) -> dict[str, Any]:
     return json.loads(stdout)
 
 
+def _decision_status_by_id(payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {step["id"]: step for step in payload["final_physical_decision_plan_status"]}
+
+
 def test_fr017_final_physical_gate_reports_default_templates_as_pending() -> None:
     proc = _run_gate("-Mode", "Status")
 
@@ -94,6 +98,40 @@ def test_fr017_final_physical_gate_reports_default_templates_as_pending() -> Non
     assert payload["physical_validation_complete"] is False
     assert payload["stage17_completion_claim_allowed"] is False
     assert payload["fr018_implementation_cleared"] is False
+    assert payload["final_physical_decision_plan_not_completion_evidence"] is True
+    assert "not physical validation evidence" in payload["final_physical_decision_plan_contract"]
+    assert "final physical decision readiness only" in payload["final_physical_decision_plan_status_contract"]
+    assert "not physical validation evidence" in payload["final_physical_decision_summary_contract"]
+    assert payload["next_required_final_physical_input"] == (
+        "perform_human_final_stage17_completion_decision_against_real_records"
+    )
+    assert [step["id"] for step in payload["final_physical_decision_plan"]] == [
+        "stage17_package_and_manifest_lock",
+        "engineering_review_gate_lock",
+        "evidence_chronology_audit",
+        "pilot_identity_continuity_audit",
+        "human_final_decision_and_no_clearance_locks",
+    ]
+    assert payload["final_physical_decision_total_groups"] == 5
+    assert payload["final_physical_decision_ready_groups"] == 1
+    assert payload["final_physical_decision_pending_groups"] == 1
+    assert payload["final_physical_decision_invalid_groups"] == 0
+    assert payload["final_physical_decision_failed_groups"] == 0
+    assert payload["final_physical_decision_blocked_groups"] == 3
+    assert payload["final_physical_decision_first_blocking_group_id"] == "engineering_review_gate_lock"
+    assert payload["final_physical_decision_first_blocking_group_status"] == (
+        "pending_required_engineering_review_gate"
+    )
+    decision_status = _decision_status_by_id(payload)
+    assert decision_status["stage17_package_and_manifest_lock"]["ready_for_final_physical_decision_review"] is True
+    assert decision_status["engineering_review_gate_lock"]["blocking_signals"] == [
+        "engineering_review_gate_status.pending_quick_release_cable_snag_gate"
+    ]
+    assert decision_status["evidence_chronology_audit"]["status"] == "blocked_by_engineering_review_gate"
+    assert decision_status["pilot_identity_continuity_audit"]["status"] == "blocked_by_engineering_review_gate"
+    assert decision_status["human_final_decision_and_no_clearance_locks"]["status"] == (
+        "blocked_by_engineering_review_gate"
+    )
     assert payload["read_only_contract"] is True
     assert payload["writes_repo"] is False
     assert payload["grants_mutation_authority"] is False
@@ -110,6 +148,20 @@ def test_fr017_final_physical_gate_fails_closed_if_package_gate_fails(tmp_path: 
     assert payload["stage17_package_gate_status"] == "failed_contract"
     assert payload["physical_validation_complete"] is False
     assert payload["fr018_implementation_cleared"] is False
+    assert payload["final_physical_decision_total_groups"] == 5
+    assert payload["final_physical_decision_ready_groups"] == 0
+    assert payload["final_physical_decision_pending_groups"] == 0
+    assert payload["final_physical_decision_failed_groups"] == 1
+    assert payload["final_physical_decision_blocked_groups"] == 4
+    assert payload["final_physical_decision_first_blocking_group_id"] == "stage17_package_and_manifest_lock"
+    assert payload["final_physical_decision_first_blocking_group_status"] == "failed_stop_condition_or_blocking_signal"
+    decision_status = _decision_status_by_id(payload)
+    assert decision_status["stage17_package_and_manifest_lock"]["blocking_signals"] == [
+        "stage17_package_gate_status.failed_contract",
+        "stage17_package.failed_checks.manifest_exists",
+        "stage17_package.failed_checks.manifest_parse",
+    ]
+    assert decision_status["engineering_review_gate_lock"]["status"] == "blocked_by_stage17_package_gate"
     assert "stage17_package_gate_not_clean" in payload["failed_reasons"]
 
 
@@ -224,6 +276,21 @@ def test_fr017_final_physical_gate_ready_state_does_not_claim_completion(tmp_pat
     assert payload["stage17_completion_claim_allowed"] is False
     assert payload["powered_or_frame_coupled_testing_cleared"] is False
     assert payload["fr018_implementation_cleared"] is False
+    assert payload["final_physical_decision_total_groups"] == 5
+    assert payload["final_physical_decision_ready_groups"] == 5
+    assert payload["final_physical_decision_pending_groups"] == 0
+    assert payload["final_physical_decision_failed_groups"] == 0
+    assert payload["final_physical_decision_blocked_groups"] == 0
+    assert payload["final_physical_decision_first_blocking_group_id"] == ""
+    assert payload["final_physical_decision_first_blocking_group_status"] == ""
+    assert payload["final_physical_decision_first_blocking_group_action"] == ""
+    assert all(
+        step["status"] == "ready_for_final_physical_decision_review"
+        for step in payload["final_physical_decision_plan_status"]
+    )
+    assert all(
+        step["ready_for_final_physical_decision_review"] for step in payload["final_physical_decision_plan_status"]
+    )
     assert "does not mark physical_validation_complete" in payload["no_fake_validation_lock"]
 
 
@@ -770,6 +837,22 @@ def test_fr017_final_physical_gate_blocks_failed_engineering_review(tmp_path: Pa
     assert result["engineering_review_gate_status"] == "failed_requires_stage17_redesign_or_review_rejection"
     assert result["engineering_review_missing_fields"] == ["evidence.reviewer"]
     assert result["engineering_review_prohibited_clearance_flags"] == ["review_decision.fr018_implementation_cleared"]
+    assert result["final_physical_decision_total_groups"] == 5
+    assert result["final_physical_decision_ready_groups"] == 1
+    assert result["final_physical_decision_pending_groups"] == 0
+    assert result["final_physical_decision_failed_groups"] == 1
+    assert result["final_physical_decision_blocked_groups"] == 3
+    assert result["final_physical_decision_first_blocking_group_id"] == "engineering_review_gate_lock"
+    assert result["final_physical_decision_first_blocking_group_status"] == "failed_stop_condition_or_blocking_signal"
+    decision_status = _decision_status_by_id(result)
+    assert decision_status["engineering_review_gate_lock"]["blocking_signals"] == [
+        "engineering_review_gate_status.failed_requires_stage17_redesign_or_review_rejection",
+        "evidence.reviewer",
+        "review_decision.fr018_implementation_cleared",
+    ]
+    assert decision_status["human_final_decision_and_no_clearance_locks"]["status"] == (
+        "blocked_by_engineering_review_gate"
+    )
     assert result["physical_validation_complete"] is False
     assert result["stage17_completion_claim_allowed"] is False
     assert result["fr018_implementation_cleared"] is False

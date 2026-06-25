@@ -640,6 +640,25 @@ def test_fr017_evidence_chain_status_ready_state_does_not_claim_completion(tmp_p
     assert payload["gate_results"][8]["details"]["pilot_identity_continuity_violations"] == []
     assert payload["gate_results"][8]["details"]["pilot_identity_continuity_reference_record"] == "measurement"
     assert payload["gate_results"][8]["details"]["pilot_identity_continuity_reference_fingerprint"]
+    assert payload["gate_results"][8]["details"]["final_physical_decision_plan_not_completion_evidence"] is True
+    assert (
+        "not physical validation evidence"
+        in payload["gate_results"][8]["details"]["final_physical_decision_plan_contract"]
+    )
+    assert (
+        "final physical decision readiness only"
+        in payload["gate_results"][8]["details"]["final_physical_decision_plan_status_contract"]
+    )
+    assert payload["gate_results"][8]["details"]["final_physical_decision_total_groups"] == 5
+    assert payload["gate_results"][8]["details"]["final_physical_decision_ready_groups"] == 5
+    assert payload["gate_results"][8]["details"]["final_physical_decision_pending_groups"] == 0
+    assert payload["gate_results"][8]["details"]["final_physical_decision_failed_groups"] == 0
+    assert payload["gate_results"][8]["details"]["final_physical_decision_blocked_groups"] == 0
+    assert payload["gate_results"][8]["details"]["final_physical_decision_first_blocking_group_id"] == ""
+    assert all(
+        step["status"] == "ready_for_final_physical_decision_review"
+        for step in payload["gate_results"][8]["details"]["final_physical_decision_plan_status"]
+    )
     assert payload["evidence_chain_decision_ready"] is True
     assert payload["physical_validation_complete"] is False
     assert payload["stage17_completion_claim_allowed"] is False
