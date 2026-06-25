@@ -842,6 +842,17 @@ def test_collaboration_driver_maps_hyphenated_review_topics_to_concrete_surfaces
     assert live_health_issue["code"] == "collaboration_recurrence_evidence"
     assert live_health_candidate["surface"] == "developer_bridge collaboration runtime"
 
+    body_map_topic = "which Francis body surface is visible but not yet safely exposed to Francis1 capability use"
+    body_map_issue = _issue_for_topic(body_map_topic)
+    body_map_candidate = _implementation_candidate_for_topic(body_map_topic)
+    body_map_tags = _alignment_tags_for_topic(body_map_topic)
+
+    assert body_map_issue["code"] == "francis_body_map_trust_ladder"
+    assert body_map_candidate["surface"] == "developer_bridge.francis_body_map"
+    assert body_map_candidate["requires_operator_or_codex_review"] is True
+    assert "francis_body_map" in body_map_tags
+    assert "trust_gated_capability" in body_map_tags
+
     drift_topic = "which local-model failure or drift signal should become a learning receipt"
     drift_issue = _issue_for_topic(drift_topic)
     drift_candidate = _implementation_candidate_for_topic(drift_topic)
@@ -1012,6 +1023,12 @@ def test_collaboration_review_projects_generic_historical_topics_to_concrete_sur
         "created_at": "2026-06-24T22:34:13+00:00",
         "topic": "which roadmap-alignment check should run before prompting any main Francis build",
     }
+    body_map_insight = {
+        **base_insight,
+        "id": "insight-body-map",
+        "created_at": "2026-06-24T22:34:45+00:00",
+        "topic": "which Francis body surface is visible but not yet safely exposed to Francis1 capability use",
+    }
     loop_insight = {
         **base_insight,
         "id": "insight-loop",
@@ -1029,9 +1046,10 @@ def test_collaboration_review_projects_generic_historical_topics_to_concrete_sur
     (insights_root / "insight-drift.json").write_text(json.dumps(drift_insight), encoding="utf-8")
     (insights_root / "insight-substrate.json").write_text(json.dumps(substrate_insight), encoding="utf-8")
     (insights_root / "insight-roadmap.json").write_text(json.dumps(roadmap_insight), encoding="utf-8")
+    (insights_root / "insight-body-map.json").write_text(json.dumps(body_map_insight), encoding="utf-8")
     (insights_root / "insight-loop.json").write_text(json.dumps(loop_insight), encoding="utf-8")
 
-    review = read_collaboration_review(limit=12)
+    review = read_collaboration_review(limit=13)
 
     items = {str(item["insight_id"]): item for item in review["items"]}
     action_item = items["insight-action"]
@@ -1151,6 +1169,17 @@ def test_collaboration_review_projects_generic_historical_topics_to_concrete_sur
     assert roadmap_item["surface_verification"]["requires_build_or_wiring_review"] is False
     assert roadmap_item["review_recommendation"]["next_codex_action"] == (
         "Read the ledger and manifest before prompting any main Francis build."
+    )
+
+    body_map_item = items["insight-body-map"]
+    assert body_map_item["build_issue"]["code"] == "francis_body_map_trust_ladder"
+    assert body_map_item["concrete_repo_surface"] == "developer_bridge.francis_body_map"
+    assert body_map_item["quality_flags"]["generic_surface"] is False
+    assert body_map_item["surface_verification"]["status"] == "existing_surface_found"
+    assert body_map_item["surface_verification"]["surface_kind"] == "body_map_readback"
+    assert body_map_item["surface_verification"]["requires_build_or_wiring_review"] is False
+    assert body_map_item["review_recommendation"]["next_codex_action"] == (
+        "Inspect the Francis body-map readback and coverage review before exposing any capability use."
     )
 
     loop_item = items["insight-loop"]
@@ -1289,6 +1318,13 @@ def test_francis_trust_ladder_classifies_needs_without_authority(tmp_path, monke
         surface="apps.chat_ui.communication",
     )
     write_insight(
+        "insight-body-map",
+        created_at="2026-06-25T03:00:30+00:00",
+        topic="Francis body surface capability exposure",
+        finding="Francis1 can inspect the body-map readback before any capability exposure.",
+        surface="developer_bridge.francis_body_map",
+    )
+    write_insight(
         "insight-build",
         created_at="2026-06-25T03:01:00+00:00",
         topic="Capability request receipt surface",
@@ -1321,7 +1357,7 @@ def test_francis_trust_ladder_classifies_needs_without_authority(tmp_path, monke
         "reject_as_drift",
     ]
     assert result["summary"]["decision_counts"] == {  # type: ignore[index]
-        "wire_existing": 1,
+        "wire_existing": 2,
         "build_missing": 1,
         "tune_prompt_guard": 1,
         "reject_as_drift": 1,
@@ -1332,6 +1368,16 @@ def test_francis_trust_ladder_classifies_needs_without_authority(tmp_path, monke
     assert items["insight-wire"]["surface_verification"]["existing_surface_found"] is True
     assert items["insight-wire"]["current_access_mode"] == "read"
     assert items["insight-wire"]["requested_access_mode"] == "read"
+
+    assert items["insight-body-map"]["decision"] == "wire_existing"
+    assert items["insight-body-map"]["surface_verification"]["existing_surface_found"] is True
+    assert items["insight-body-map"]["surface_verification"]["surface_kind"] == "body_map_readback"
+    assert items["insight-body-map"]["current_access_mode"] == "read"
+    assert items["insight-body-map"]["requested_access_mode"] == "read"
+    assert (
+        items["insight-body-map"]["recommended_next_action"]
+        == "Inspect the Francis body-map readback and coverage review before exposing any capability use."
+    )
 
     assert items["insight-build"]["decision"] == "build_missing"
     assert items["insight-build"]["surface_verification"]["requires_build_or_wiring_review"] is True

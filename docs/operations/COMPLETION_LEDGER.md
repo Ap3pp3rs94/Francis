@@ -94009,6 +94009,61 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, and the full backend suite were not rerun
   for this UI/readback slice.
 
+### 2026-06-25 18:44Z - Body-map review catalog no longer reports existing surface as missing
+
+Current posture: Phase 2 / the collaboration review catalog now recognizes
+`developer_bridge.francis_body_map` as an existing Francis readback surface. The
+trust ladder no longer treats the body-map review receipt as a missing surface
+when Francis1 asks which visible body surface is not safely exposed for
+capability use.
+
+What changed:
+
+- Added `developer_bridge.francis_body_map` to the known collaboration-review
+  surface catalog as `body_map_readback`.
+- Added a historical-topic projection for body-surface/capability-use review
+  receipts so generic older insights resolve to the existing body-map readback.
+- Added tests proving the review projection, topic mapping, and trust-ladder
+  classification route body-map requests to `wire_existing`, not
+  `build_missing`.
+
+Validation:
+
+- Live review readback for turn `1090` returned
+  `surface_verification.status=existing_surface_found`,
+  `surface_kind=body_map_readback`, and
+  `concrete_repo_surface=developer_bridge.francis_body_map`.
+- Live trust-ladder readback for the same receipt returned
+  `decision=wire_existing`, `requested_surface=developer_bridge.francis_body_map`,
+  `current_access_mode=read`, `requested_access_mode=read`, and no authority
+  grants; the 12-item sample reported `build_missing=0`.
+- Focused developer-bridge tests passed:
+  `.\.venv\Scripts\python.exe -m pytest -q
+  tests/test_developer_bridge.py::test_collaboration_driver_maps_hyphenated_review_topics_to_concrete_surfaces
+  tests/test_developer_bridge.py::test_collaboration_review_projects_generic_historical_topics_to_concrete_surfaces
+  tests/test_developer_bridge.py::test_francis_trust_ladder_classifies_needs_without_authority`.
+- Full developer-bridge backend test file passed:
+  `.\.venv\Scripts\python.exe -m pytest -q tests/test_developer_bridge.py`.
+- Ruff passed:
+  `.\.venv\Scripts\python.exe -m ruff check --no-cache
+  src\francis\developer_bridge\collaboration_review.py
+  tests\test_developer_bridge.py`.
+- Mypy passed:
+  `.\.venv\Scripts\python.exe -m mypy
+  src\francis\developer_bridge\collaboration_review.py
+  src\francis\developer_bridge\trust_ladder.py`.
+
+Remaining truthful gap:
+
+- This is a review/trust catalog correction. It does not expose body-map
+  capability use, grant Francis1 execution authority, mutate files, write
+  memory, approve actions, train a model, or resolve the open ORB plane gaps.
+- Body-map capability exposure still requires Codex or operator review,
+  governed capability request design, and separate validation before any
+  higher access mode.
+- `.\scripts\check.ps1`, GitHub CI, and live browser proof were not run for
+  this backend readback slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

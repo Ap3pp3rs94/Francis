@@ -428,6 +428,25 @@ def _topic_projection_override(topic: str) -> dict[str, object]:
                 "requires_operator_or_codex_review": True,
             },
         }
+    if "body surface" in lower or "whole body" in lower or "capability use" in lower:
+        return {
+            "build_issue": {
+                "code": "francis_body_map_trust_ladder",
+                "statement": (
+                    "Francis1 needs whole-body awareness while capability exposure stays trust-gated and "
+                    "review-backed."
+                ),
+            },
+            "implementation_candidate": {
+                "title": "Inspect Francis whole-body map before capability exposure",
+                "surface": "developer_bridge.francis_body_map",
+                "status": "candidate",
+                "validation_hint": (
+                    "body-map readback test proving capability exposure remains no-authority and review-gated"
+                ),
+                "requires_operator_or_codex_review": True,
+            },
+        }
     if "substrate complete" in lower:
         return {
             "build_issue": {
@@ -569,6 +588,16 @@ def _known_surface_catalog() -> dict[str, dict[str, object]]:
             "surface_kind": "runtime_state",
             "evidence": "The communication runtime supervisor records fixed helper process state and governance flags.",
             "next_codex_action": "Inspect collaboration_runtime state before changing recurrence or liveness behavior.",
+        },
+        "developer bridge francis body map": {
+            "surface_kind": "body_map_readback",
+            "evidence": (
+                "The Francis body-map readback exposes whole-body surfaces, coverage gaps, trust ladder state, "
+                "and no-authority capability boundaries."
+            ),
+            "next_codex_action": (
+                "Inspect the Francis body-map readback and coverage review before exposing any capability use."
+            ),
         },
         "developer bridge collaboration insights": {
             "surface_kind": "typed_receipts",
