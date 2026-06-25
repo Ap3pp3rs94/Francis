@@ -24,6 +24,7 @@ from francis.developer_bridge.collaboration_review import latest_review_candidat
 from francis.developer_bridge.codex_responder import respond_once
 from francis.developer_bridge.mcp_server import _server_bind_options, create_mcp_server
 from francis.developer_bridge.ollama_participant import respond_once as ollama_respond_once
+from francis.developer_bridge.substrate_readiness import read_collaboration_substrate_readiness
 from francis.developer_bridge.trust_ladder import compact_trust_ladder_prompt_line, read_francis_trust_ladder
 from francis.developer_bridge.repo_tools import (
     DeveloperBridgeError,
@@ -125,6 +126,7 @@ def test_developer_bridge_routes_are_mounted() -> None:
     assert "/developer-bridge/collaboration-review" in routes
     assert "/developer-bridge/collaboration-learning" in routes
     assert "/developer-bridge/collaboration-runtime-health" in routes
+    assert "/developer-bridge/collaboration-substrate-readiness" in routes
     assert "/developer-bridge/collaboration-agents" in routes
     assert "/developer-bridge/collaboration-agents/toggle" in routes
     assert "/developer-bridge/francis-body-map" in routes
@@ -224,6 +226,114 @@ def test_francis_body_map_exposes_whole_body_without_authority(tmp_path, monkeyp
     assert "Francis1 can see whole-body surfaces" in prompt_line
     assert "authority remain false" in prompt_line
     assert compact_trust_ladder_prompt_line() == "Trust: classify needs; no capability authority."
+
+
+def test_collaboration_substrate_readiness_blocks_main_build_prompt_for_open_gaps(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    root = tmp_path / "Francis"
+    (root / "docs" / "canonical").mkdir(parents=True)
+    (root / "docs" / "operations").mkdir(parents=True)
+    (root / "meta").mkdir(parents=True)
+    (root / "src" / "francis" / "developer_bridge").mkdir(parents=True)
+    (root / "apps" / "chat_ui" / "src").mkdir(parents=True)
+    (root / "docs" / "canonical" / "BUILD_MANIFEST.md").write_text("# Phase 2\n", encoding="utf-8")
+    (root / "docs" / "PLANES.md").write_text("# Planes\n", encoding="utf-8")
+    (root / "docs" / "operations" / "COMPLETION_LEDGER.md").write_text(
+        "# Ledger\n\n### 2026-06-25 - Existing proof\n",
+        encoding="utf-8",
+    )
+    (root / "meta" / "plane_map.yaml").write_text("planes: []\n", encoding="utf-8")
+    (root / "src" / "francis" / "developer_bridge" / "collaboration.py").write_text("", encoding="utf-8")
+    (root / "src" / "francis" / "developer_bridge" / "collaboration_runtime.py").write_text("", encoding="utf-8")
+    (root / "src" / "francis" / "developer_bridge" / "trust_ladder.py").write_text("", encoding="utf-8")
+    (root / "apps" / "chat_ui" / "src" / "App.tsx").write_text("", encoding="utf-8")
+    monkeypatch.setenv("FRANCIS_ROOT", str(root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+
+    import francis.developer_bridge.substrate_readiness as readiness_module
+
+    monkeypatch.setattr(
+        readiness_module,
+        "read_collaboration_runtime_health",
+        lambda: {
+            "kind": "developer_bridge.collaboration_runtime_health",
+            "ok": True,
+            "mode": "read_only",
+            "status": "healthy",
+            "collaboration_loop": {
+                "turn_count": 12,
+                "current_learning_signal": {
+                    "observed": True,
+                    "stores_full_transcript": False,
+                    "grants_training_authority": False,
+                    "grants_execution_authority": False,
+                    "grants_mutation_authority": False,
+                    "grants_approval_authority": False,
+                    "grants_memory_write_authority": False,
+                },
+            },
+            "governance": {
+                "read_only": True,
+                "calls_model": False,
+                "trains_model": False,
+                "stores_full_transcript": False,
+                "grants_model_execution_authority": False,
+                "grants_repo_mutation_authority": False,
+                "grants_approval_authority": False,
+                "grants_memory_write_authority": False,
+            },
+        },
+    )
+    monkeypatch.setattr(
+        readiness_module,
+        "read_collaboration_learning_events",
+        lambda limit=3: {
+            "kind": "developer_bridge.collaboration_learning_events",
+            "ok": True,
+            "mode": "read_only",
+            "items": [
+                {
+                    "id": "learning-1",
+                    "writer_governance": {
+                        "stores_full_transcript": False,
+                        "grants_execution_authority": False,
+                        "grants_mutation_authority": False,
+                        "grants_approval_authority": False,
+                        "grants_memory_write_authority": False,
+                        "grants_model_authority": False,
+                    },
+                }
+            ],
+            "governance": {
+                "stores_full_transcript": False,
+                "calls_model": False,
+                "trains_model": False,
+                "grants_execution_authority": False,
+                "grants_mutation_authority": False,
+                "grants_approval_authority": False,
+                "grants_memory_write_authority": False,
+            },
+        },
+    )
+
+    result = read_collaboration_substrate_readiness()
+
+    assert result["kind"] == "developer_bridge.collaboration_substrate_readiness"
+    assert result["schema_version"] == "developer_bridge_collaboration_substrate_readiness_v1"
+    assert result["mode"] == "read_only"
+    assert result["status"] == "blocked"
+    assert result["summary"]["main_build_prompt_allowed"] is False  # type: ignore[index]
+    assert result["summary"]["main_build_prompt_gate"] == "blocked_by_open_orb_gaps"  # type: ignore[index]
+    assert result["summary"]["runtime_healthy"] is True  # type: ignore[index]
+    assert result["summary"]["trust_ladder_enforced"] is True  # type: ignore[index]
+    assert result["summary"]["no_authority_granted"] is True  # type: ignore[index]
+    checklist = {item["id"]: item for item in result["checklist"]}  # type: ignore[index]
+    assert checklist["ledger_observed"]["status"] == "passed"
+    assert checklist["manifest_observed"]["status"] == "passed"
+    assert checklist["coverage_gaps_reviewed"]["status"] == "blocked"
+    assert checklist["coverage_gaps_reviewed"]["blocks_main_build_prompt"] is True
+    assert "docs/operations/COMPLETION_LEDGER.md" in result["required_alignment_sources"]  # type: ignore[operator]
+    assert result["governance"]["executes_prompt"] is False  # type: ignore[index]
+    assert result["governance"]["grants_repo_mutation_authority"] is False  # type: ignore[index]
 
 
 def test_francis_body_map_marks_runtime_observation_from_body_trust_turn(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
@@ -3181,3 +3291,4 @@ def test_developer_bridge_mcp_registers_collaboration_relay_tools() -> None:
     assert "collaboration_agents_status_tool" in names
     assert "francis_body_map_tool" in names
     assert "francis_trust_ladder_tool" in names
+    assert "collaboration_substrate_readiness_tool" in names

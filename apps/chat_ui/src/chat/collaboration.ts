@@ -487,6 +487,46 @@ export type FrancisTrustLadder = {
   governance: Record<string, unknown>;
 };
 
+export type CollaborationSubstrateReadinessChecklistItem = {
+  id: string;
+  label: string;
+  status: string;
+  evidence: string;
+  detail: string;
+  blocksMainBuildPrompt: boolean;
+};
+
+export type CollaborationSubstrateReadiness = {
+  ok: boolean;
+  mode: string;
+  surface: string;
+  generatedAt: string;
+  status: string;
+  requiredAlignmentSources: string[];
+  summary: {
+    collaborationSubstrateWired: boolean;
+    boundedWiringPercentComplete: number;
+    mainBuildPromptAllowed: boolean;
+    mainBuildPromptGate: string;
+    coverageOpenGapCount: number;
+    trustLadderEnforced: boolean;
+    runtimeHealthy: boolean;
+    learningReceiptsBounded: boolean;
+    noAuthorityGranted: boolean;
+  };
+  checklist: CollaborationSubstrateReadinessChecklistItem[];
+  blockingItems: string[];
+  nextAction: string;
+  definitions: {
+    collaborationSubstrateWired: string;
+    mainBuildPromptAllowed: string;
+    blockingItems: string;
+  };
+  sourceReadbacks: Record<string, string>;
+  readbackCache: CollaborationReadbackCache;
+  governance: Record<string, unknown>;
+};
+
 export type CollaborationReadbackCache = {
   status: string;
   ageMs: number | null;
@@ -1724,6 +1764,57 @@ export function parseFrancisTrustLadder(raw: unknown): FrancisTrustLadder {
   };
 }
 
+export function parseCollaborationSubstrateReadiness(raw: unknown): CollaborationSubstrateReadiness {
+  const value = isRecord(raw) ? raw : {};
+  const summary = isRecord(value.summary) ? value.summary : {};
+  const definitions = isRecord(value.definitions) ? value.definitions : {};
+  const sourceReadbacks = isRecord(value.source_readbacks) ? value.source_readbacks : {};
+  return {
+    ok: safeBoolean(value.ok),
+    mode: safeString(value.mode, "unknown"),
+    surface: safeString(value.surface),
+    generatedAt: safeString(value.generated_at),
+    status: safeString(value.status, "unknown"),
+    requiredAlignmentSources: Array.isArray(value.required_alignment_sources)
+      ? value.required_alignment_sources.map((item) => safeString(item)).filter(Boolean)
+      : [],
+    summary: {
+      collaborationSubstrateWired: safeBoolean(summary.collaboration_substrate_wired),
+      boundedWiringPercentComplete: safeNumber(summary.bounded_wiring_percent_complete),
+      mainBuildPromptAllowed: safeBoolean(summary.main_build_prompt_allowed),
+      mainBuildPromptGate: safeString(summary.main_build_prompt_gate, "requires_alignment_review"),
+      coverageOpenGapCount: safeNumber(summary.coverage_open_gap_count),
+      trustLadderEnforced: safeBoolean(summary.trust_ladder_enforced),
+      runtimeHealthy: safeBoolean(summary.runtime_healthy),
+      learningReceiptsBounded: safeBoolean(summary.learning_receipts_bounded),
+      noAuthorityGranted: safeBoolean(summary.no_authority_granted),
+    },
+    checklist: Array.isArray(value.checklist) ? value.checklist.map(parseCollaborationSubstrateChecklistItem) : [],
+    blockingItems: Array.isArray(value.blocking_items) ? value.blocking_items.map((item) => safeString(item)).filter(Boolean) : [],
+    nextAction: safeString(value.next_action),
+    definitions: {
+      collaborationSubstrateWired: safeString(definitions.collaboration_substrate_wired),
+      mainBuildPromptAllowed: safeString(definitions.main_build_prompt_allowed),
+      blockingItems: safeString(definitions.blocking_items),
+    },
+    sourceReadbacks: Object.fromEntries(Object.entries(sourceReadbacks).map(([key, item]) => [key, safeString(item)])),
+    readbackCache: parseReadbackCache(value.readback_cache),
+    governance: isRecord(value.governance) ? value.governance : {},
+  };
+}
+
+function parseCollaborationSubstrateChecklistItem(raw: unknown): CollaborationSubstrateReadinessChecklistItem {
+  const value = isRecord(raw) ? raw : {};
+  return {
+    id: safeString(value.id),
+    label: safeString(value.label),
+    status: safeString(value.status, "unknown"),
+    evidence: safeString(value.evidence),
+    detail: safeString(value.detail),
+    blocksMainBuildPrompt: safeBoolean(value.blocks_main_build_prompt),
+  };
+}
+
 function parseFrancisTrustLadderItem(raw: unknown): FrancisTrustLadderItem {
   const value = isRecord(raw) ? raw : {};
   const surfaceVerification = isRecord(value.surface_verification) ? value.surface_verification : {};
@@ -1998,6 +2089,20 @@ export async function fetchFrancisTrustLadder(opts: {
     throw new Error(`Francis trust ladder request failed with HTTP ${response.status}.`);
   }
   return parseFrancisTrustLadder(json);
+}
+
+export async function fetchCollaborationSubstrateReadiness(opts: {
+  baseUrl: string;
+  signal?: AbortSignal;
+}): Promise<CollaborationSubstrateReadiness> {
+  const url = `${opts.baseUrl.replace(/\/$/, "")}/developer-bridge/collaboration-substrate-readiness`;
+  const response = await fetch(url, { method: "GET", signal: opts.signal });
+  const text = await response.text();
+  const json = text ? JSON.parse(text) : {};
+  if (!response.ok) {
+    throw new Error(`Collaboration substrate readiness request failed with HTTP ${response.status}.`);
+  }
+  return parseCollaborationSubstrateReadiness(json);
 }
 
 export async function fetchCollaborationAgentsStatus(opts: {

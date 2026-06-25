@@ -15,6 +15,7 @@ from francis.developer_bridge.collaboration import read_collaboration_sessions, 
 from francis.developer_bridge.collaboration_driver import read_collaboration_learning_events
 from francis.developer_bridge.collaboration_review import read_collaboration_review
 from francis.developer_bridge.collaboration_runtime import read_collaboration_runtime_health
+from francis.developer_bridge.substrate_readiness import read_collaboration_substrate_readiness
 from francis.developer_bridge.trust_ladder import read_francis_trust_ladder
 from francis.developer_bridge.repo_tools import (
     DeveloperBridgeError,
@@ -394,6 +395,69 @@ def _empty_runtime_health_payload() -> dict[str, object]:
     }
 
 
+def _empty_substrate_readiness_payload() -> dict[str, object]:
+    return {
+        "kind": "developer_bridge.collaboration_substrate_readiness",
+        "schema_version": "developer_bridge_collaboration_substrate_readiness_v1",
+        "ok": True,
+        "mode": "read_only",
+        "surface": "developer_bridge.collaboration_substrate_readiness",
+        "generated_at": "",
+        "status": "warming",
+        "required_alignment_sources": [
+            "docs/operations/COMPLETION_LEDGER.md",
+            "docs/canonical/BUILD_MANIFEST.md",
+        ],
+        "summary": {
+            "collaboration_substrate_wired": False,
+            "bounded_wiring_percent_complete": 0,
+            "main_build_prompt_allowed": False,
+            "main_build_prompt_gate": "requires_alignment_review",
+            "coverage_open_gap_count": 0,
+            "trust_ladder_enforced": False,
+            "runtime_healthy": False,
+            "learning_receipts_bounded": False,
+            "no_authority_granted": True,
+        },
+        "checklist": [],
+        "blocking_items": [],
+        "next_action": (
+            "Read the completion ledger and build manifest before treating collaboration output as build direction."
+        ),
+        "definitions": {
+            "collaboration_substrate_wired": (
+                "The relay, body map, trust ladder, runtime health, and no-authority guard are visible."
+            ),
+            "main_build_prompt_allowed": (
+                "Whether this readback allows unsupervised main Francis build prompting."
+            ),
+            "blocking_items": "Checklist items that block main-build prompting.",
+        },
+        "source_readbacks": {
+            "body_map": "developer_bridge.francis_body_map",
+            "runtime_health": "developer_bridge.collaboration_runtime_health",
+            "trust_ladder": "developer_bridge.francis_trust_ladder",
+            "learning": "developer_bridge.collaboration_driver.learning_events",
+        },
+        "governance": {
+            "read_only": True,
+            "derived_from_readbacks": True,
+            "executes_prompt": False,
+            "calls_model": False,
+            "trains_model": False,
+            "stores_full_transcript": False,
+            "writes_memory": False,
+            "writes_files": False,
+            "starts_processes": False,
+            "grants_model_execution_authority": False,
+            "grants_repo_mutation_authority": False,
+            "grants_approval_authority": False,
+            "grants_memory_write_authority": False,
+            "grants_training_authority": False,
+        },
+    }
+
+
 def _empty_body_map_payload() -> dict[str, object]:
     return {
         "kind": "developer_bridge.francis_body_map",
@@ -757,6 +821,15 @@ def collaboration_runtime_health_route() -> Response:
         "developer_bridge.collaboration_runtime_health",
         read_collaboration_runtime_health,
         _empty_runtime_health_payload,
+    )
+
+
+@router.get("/collaboration-substrate-readiness")
+def collaboration_substrate_readiness_route() -> Response:
+    return _cached_read_only_json_response(
+        "developer_bridge.collaboration_substrate_readiness",
+        read_collaboration_substrate_readiness,
+        _empty_substrate_readiness_payload,
     )
 
 

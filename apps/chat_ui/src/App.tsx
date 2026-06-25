@@ -20,6 +20,7 @@ import {
   fetchCollaborationReview,
   fetchCollaborationRuntimeHealth,
   fetchCollaborationSessions,
+  fetchCollaborationSubstrateReadiness,
   fetchCollaborationTranscript,
   fetchFrancisBodyMap,
   fetchFrancisTrustLadder,
@@ -41,6 +42,7 @@ import {
   type CollaborationReview,
   type CollaborationRuntimeHealth,
   type CollaborationSessions,
+  type CollaborationSubstrateReadiness,
   type CollaborationTranscript,
   type FrancisBodyMap,
   type FrancisTrustLadder,
@@ -96,10 +98,10 @@ type SpeechRecognitionEventLike = {
 };
 
 const BRIDGE_MONITOR_POLL_MS = 15000;
-const COLLABORATION_PANEL_POLL_MS = 15000;
+const COLLABORATION_PANEL_POLL_MS = 5000;
 const LENS_MCP_STATUS_TIMEOUT_MS = 5000;
 const COLLABORATION_READBACK_TIMEOUT_MS = 9000;
-const COLLABORATION_TRANSCRIPT_LIMIT = 8;
+const COLLABORATION_TRANSCRIPT_LIMIT = 40;
 const COLLABORATION_SESSION_ITEM_LIMIT = 50;
 const COLLABORATION_REVIEW_LIMIT = 20;
 const COLLABORATION_LEARNING_LIMIT = 4;
@@ -1137,6 +1139,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
   const [review, setReview] = useState<CollaborationReview | null>(null);
   const [learning, setLearning] = useState<CollaborationLearning | null>(null);
   const [runtimeHealth, setRuntimeHealth] = useState<CollaborationRuntimeHealth | null>(null);
+  const [substrateReadiness, setSubstrateReadiness] = useState<CollaborationSubstrateReadiness | null>(null);
   const [bodyMap, setBodyMap] = useState<FrancisBodyMap | null>(null);
   const [trustLadder, setTrustLadder] = useState<FrancisTrustLadder | null>(null);
   const [loading, setLoading] = useState(false);
@@ -1237,6 +1240,16 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
             readbackWarnings.push(nextRuntime.message);
           }
         }
+        const nextSubstrateReadiness = await fetchCollaborationReadbackWithTimeout("Substrate readiness", signal, (readbackSignal) =>
+          fetchCollaborationSubstrateReadiness({ baseUrl: props.baseUrl, signal: readbackSignal }),
+        );
+        if (!signal?.aborted) {
+          if (nextSubstrateReadiness.ok) {
+            setSubstrateReadiness(nextSubstrateReadiness.value);
+          } else {
+            readbackWarnings.push(nextSubstrateReadiness.message);
+          }
+        }
         return readbackWarnings;
       })()
         .then((readbackWarnings) => {
@@ -1324,6 +1337,9 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
   const runtimeProcessModels = Array.from(new Set((runtimeHealth?.helpers ?? []).map((helper) => helper.processModel).filter(Boolean)));
   const runtimeProcessModelLabel =
     runtimeProcessModels.length === 1 ? runtimeProcessModels[0] : runtimeProcessModels.length > 1 ? runtimeProcessModels.join(", ") : "unknown";
+  const substrateSummary = substrateReadiness?.summary;
+  const substrateBlockedItems = substrateReadiness?.checklist.filter((item) => item.blocksMainBuildPrompt && item.status !== "passed") ?? [];
+  const substrateChecklistPreview = substrateReadiness?.checklist.filter((item) => item.status !== "passed").slice(0, 4) ?? [];
   const bodyMapSurfaces = bodyMap?.surfaces ?? [];
   const bodyMapQuest = bodyMap?.quest;
   const bodyCoverageReview = bodyMap?.coverageReview;
@@ -1350,7 +1366,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
     );
   const selectedSession = sessions.find((session) => session.id === selectedSessionId) ?? sessions[0] ?? null;
   const visibleTranscriptItems = selectedSession?.items ?? [];
-  const liveTranscriptItems = visibleTranscriptItems.slice(-6);
+  const liveTranscriptItems = visibleTranscriptItems;
   const latestSessionId = sessions[0]?.id ?? "";
   const selectedSessionReadback =
     sessionSummaries.find((session) => session.id === selectedSession?.id) ??
@@ -1444,10 +1460,95 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
           tone={bodyMap?.summary.coverageReviewed ? "ready" : "neutral"}
         />
         <Pill
+          label="substrate"
+          value={substrateReadiness?.status || "unknown"}
+          tone={substrateSummary?.mainBuildPromptAllowed ? "ready" : substrateBlockedItems.length ? "blocked" : "neutral"}
+        />
+        <Pill
           label="client authority"
           value={boolText(Boolean(operatorConsole?.clientIsAutomaticExecutionAuthority))}
           tone={operatorConsole?.clientIsAutomaticExecutionAuthority ? "blocked" : "ready"}
         />
+      </div>
+
+      <div
+        style={{
+          background: "rgba(8, 15, 26, 0.76)",
+          border: `1px solid ${
+            substrateSummary?.mainBuildPromptAllowed
+              ? "rgba(110, 231, 183, 0.45)"
+              : substrateBlockedItems.length
+                ? "rgba(252, 165, 165, 0.5)"
+                : "rgba(148, 163, 184, 0.28)"
+          }`,
+          borderRadius: 14,
+          marginTop: 18,
+          padding: 16,
+        }}
+      >
+        <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "space-between" }}>
+          <h3 style={{ fontSize: 20, margin: 0 }}>Substrate Readiness</h3>
+          <span style={{ color: substrateSummary?.mainBuildPromptAllowed ? "#6ee7b7" : "#fca5a5", fontSize: 13 }}>
+            main build prompt {boolText(Boolean(substrateSummary?.mainBuildPromptAllowed))}
+            {collaborationCacheLabel(substrateReadiness?.readbackCache)}
+          </span>
+        </div>
+        <div
+          style={{
+            color: "#cbd5e1",
+            display: "grid",
+            gap: 12,
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            marginTop: 12,
+          }}
+        >
+          <div>
+            <div style={{ color: "#94a3b8", fontSize: 12, textTransform: "uppercase" }}>Wiring</div>
+            <div style={{ fontSize: 18, fontWeight: 700 }}>
+              {substrateSummary?.boundedWiringPercentComplete ?? 0}% / {boolText(Boolean(substrateSummary?.collaborationSubstrateWired))}
+            </div>
+          </div>
+          <div>
+            <div style={{ color: "#94a3b8", fontSize: 12, textTransform: "uppercase" }}>Gate</div>
+            <div style={{ overflowWrap: "anywhere" }}>{substrateSummary?.mainBuildPromptGate || "unknown"}</div>
+          </div>
+          <div>
+            <div style={{ color: "#94a3b8", fontSize: 12, textTransform: "uppercase" }}>Open Gaps</div>
+            <div>{substrateSummary?.coverageOpenGapCount ?? 0}</div>
+          </div>
+          <div>
+            <div style={{ color: "#94a3b8", fontSize: 12, textTransform: "uppercase" }}>Authority</div>
+            <div>{boolText(Boolean(substrateSummary?.noAuthorityGranted))}</div>
+          </div>
+        </div>
+        <p style={{ color: "#e2e8f0", margin: "12px 0 0", overflowWrap: "anywhere" }}>
+          {substrateReadiness?.nextAction || "Readiness readback is still loading."}
+        </p>
+        <div style={{ color: "#94a3b8", display: "flex", flexWrap: "wrap", fontSize: 12, gap: 8, marginTop: 12 }}>
+          {(substrateChecklistPreview.length ? substrateChecklistPreview : substrateReadiness?.checklist.slice(0, 4) ?? []).map((item) => (
+            <span
+              key={item.id || item.label}
+              style={{
+                background: item.status === "passed" ? "rgba(20, 83, 45, 0.28)" : "rgba(127, 29, 29, 0.24)",
+                border: `1px solid ${item.status === "passed" ? "rgba(110, 231, 183, 0.42)" : "rgba(252, 165, 165, 0.42)"}`,
+                borderRadius: 999,
+                color: item.status === "passed" ? "#d1fae5" : "#fecaca",
+                maxWidth: "100%",
+                overflowWrap: "anywhere",
+                padding: "4px 8px",
+              }}
+            >
+              {item.label} / {item.status}
+            </span>
+          ))}
+        </div>
+        <div style={{ color: "#94a3b8", display: "flex", flexWrap: "wrap", fontSize: 12, gap: 10, marginTop: 10 }}>
+          <span>runtime {boolText(Boolean(substrateSummary?.runtimeHealthy))}</span>
+          <span>trust {boolText(Boolean(substrateSummary?.trustLadderEnforced))}</span>
+          <span>learning {boolText(Boolean(substrateSummary?.learningReceiptsBounded))}</span>
+          <span>blocks {substrateBlockedItems.length}</span>
+          <span>sources {(substrateReadiness?.requiredAlignmentSources ?? []).join(", ") || "unknown"}</span>
+        </div>
       </div>
 
       <div

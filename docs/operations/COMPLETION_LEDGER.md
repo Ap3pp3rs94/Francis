@@ -94275,6 +94275,72 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, and unrelated backend suites were not run
   for this Chat UI-only slice.
 
+### 2026-06-25 19:34Z - Collaboration substrate readiness gate surfaced
+
+Current posture: Phase 2 / developer bridge collaboration support now separates
+bounded relay wiring from permission to prompt main Francis build work. The
+Communication UI and developer bridge expose a read-only substrate-readiness
+readback that can show the collaboration loop is wired while still blocking
+main-build prompting on open ORB gaps and partial Phase 2 posture.
+
+What changed:
+
+- Added `developer_bridge.collaboration_substrate_readiness`, a derived read-only
+  backend readback that combines Francis body-map, collaboration runtime health,
+  trust-ladder, and learning-event readbacks.
+- Added `/developer-bridge/collaboration-substrate-readiness` and
+  `collaboration_substrate_readiness_tool` so the API, Chat UI, and MCP developer
+  bridge can read the same no-authority readiness contract.
+- The readback distinguishes `collaboration_substrate_wired=true` from
+  `main_build_prompt_allowed=false` and names blockers such as open ORB coverage
+  gaps and partial Phase 2 posture.
+- The Communication UI now shows a Substrate Readiness strip above Live
+  Conversation, refreshes the collaboration panel every 5 seconds, requests 40
+  bounded transcript entries, and renders the full bounded live-session log in a
+  scrollable panel with technical receipts collapsed.
+- UI parser coverage now preserves readiness summary, checklist blockers,
+  alignment sources, source readbacks, cache status, and no-authority governance.
+
+Validation:
+
+- Focused backend pytest passed:
+  `.\.venv\Scripts\python.exe -m pytest -q tests/test_developer_bridge.py -k
+  "substrate_readiness or routes_are_mounted or
+  mcp_registers_collaboration_relay_tools"`.
+- Ruff passed for the touched backend/API/test files:
+  `src\francis\developer_bridge\substrate_readiness.py`,
+  `src\francis\api\routes\developer_bridge.py`,
+  `src\francis\developer_bridge\mcp_server.py`, and
+  `tests\test_developer_bridge.py`.
+- Mypy passed for `src\francis\developer_bridge\substrate_readiness.py`,
+  `src\francis\api\routes\developer_bridge.py`, and
+  `src\francis\developer_bridge\mcp_server.py`.
+- Full Chat UI test script passed: `cd apps\chat_ui; npm run test` with 279
+  tests.
+- Chat UI production build passed: `cd apps\chat_ui; npm run build`.
+- `git diff --check` passed.
+- Live API readback at
+  `/developer-bridge/collaboration-substrate-readiness` returned
+  `collaboration_substrate_wired=true`, `bounded_wiring_percent_complete=100`,
+  `main_build_prompt_allowed=false`, `main_build_prompt_gate=blocked_by_open_orb_gaps`,
+  `coverage_open_gap_count=11`, `runtime_healthy=true`,
+  `trust_ladder_enforced=true`, and all authority grants false.
+- Browser proof captured `http://127.0.0.1:5173/` after readback settlement and
+  showed the Substrate Readiness strip, blocked main-build prompt gate, 11 open
+  gaps, no-authority status, scrollable live conversation log, and collapsed
+  technical receipts without visible overlap.
+
+Remaining truthful gap:
+
+- This is a read-only readiness and UI visibility slice. It does not grant
+  execution, mutation, approval, model, training, or memory-write authority.
+- `main_build_prompt_allowed` remains false while open ORB coverage gaps and
+  partial Phase 2 posture remain true.
+- The collaboration conversation is still advisory receipt input; Codex/operator
+  repo-truth review is required before implementation work.
+- `.\scripts\check.ps1`, GitHub CI, and unrelated full-repo suites were not run
+  for this bounded developer-bridge/Chat UI slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

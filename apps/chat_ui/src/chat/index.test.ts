@@ -22,6 +22,7 @@ import {
   parseCollaborationReview,
   parseCollaborationRuntimeHealth,
   parseCollaborationSessions,
+  parseCollaborationSubstrateReadiness,
   parseCollaborationTranscript,
   parseFrancisBodyMap,
   parseFrancisTrustLadder,
@@ -447,6 +448,85 @@ test("parseFrancisBodyMap preserves whole-body awareness and quest boundaries", 
   assert.equal(bodyMap.surfaces[0]?.grantsExecutionAuthority, false);
   assert.equal(bodyMap.surfaces[0]?.evidence[0]?.observed, true);
   assert.equal(bodyMap.governance.grants_training_authority, false);
+});
+
+test("parseCollaborationSubstrateReadiness preserves main-build prompt gate", () => {
+  const readiness = parseCollaborationSubstrateReadiness({
+    ok: true,
+    mode: "read_only",
+    surface: "developer_bridge.collaboration_substrate_readiness",
+    generated_at: "2026-06-25T19:30:00Z",
+    status: "blocked",
+    required_alignment_sources: ["docs/operations/COMPLETION_LEDGER.md", "docs/canonical/BUILD_MANIFEST.md"],
+    summary: {
+      collaboration_substrate_wired: true,
+      bounded_wiring_percent_complete: 100,
+      main_build_prompt_allowed: false,
+      main_build_prompt_gate: "blocked_by_open_orb_gaps",
+      coverage_open_gap_count: 11,
+      trust_ladder_enforced: true,
+      runtime_healthy: true,
+      learning_receipts_bounded: true,
+      no_authority_granted: true,
+    },
+    checklist: [
+      {
+        id: "coverage_gaps_reviewed",
+        label: "Open ORB coverage gaps reviewed",
+        status: "blocked",
+        evidence: "11 open gaps",
+        detail: "Open coverage gaps block any unsupervised main Francis build prompt.",
+        blocks_main_build_prompt: true,
+      },
+      {
+        id: "ledger_observed",
+        label: "Completion ledger observed",
+        status: "passed",
+        evidence: "2026-06-25 - Communication UI surfaces session and toggle proof",
+        detail: "Read shipped posture before treating conversation output as build direction.",
+        blocks_main_build_prompt: false,
+      },
+    ],
+    blocking_items: ["coverage_gaps_reviewed"],
+    next_action:
+      "Read the completion ledger and build manifest, review open ORB gaps, and keep any main Francis build prompt candidate-only.",
+    definitions: {
+      collaboration_substrate_wired: "The relay, body map, trust ladder, runtime health, and no-authority guard are visible.",
+      main_build_prompt_allowed: "Whether this readback allows unsupervised main Francis build work.",
+      blocking_items: "Checklist items that block main-build prompting.",
+    },
+    source_readbacks: {
+      body_map: "developer_bridge.francis_body_map",
+      runtime_health: "developer_bridge.collaboration_runtime_health",
+    },
+    readback_cache: {
+      status: "refreshed",
+      age_ms: 0,
+      ttl_ms: 3000,
+      serves_full_transcript_store: false,
+    },
+    governance: {
+      read_only: true,
+      executes_prompt: false,
+      calls_model: false,
+      grants_repo_mutation_authority: false,
+      grants_memory_write_authority: false,
+    },
+  });
+
+  assert.equal(readiness.ok, true);
+  assert.equal(readiness.status, "blocked");
+  assert.equal(readiness.summary.collaborationSubstrateWired, true);
+  assert.equal(readiness.summary.mainBuildPromptAllowed, false);
+  assert.equal(readiness.summary.mainBuildPromptGate, "blocked_by_open_orb_gaps");
+  assert.equal(readiness.summary.coverageOpenGapCount, 11);
+  assert.equal(readiness.summary.noAuthorityGranted, true);
+  assert.equal(readiness.checklist[0]?.blocksMainBuildPrompt, true);
+  assert.equal(readiness.blockingItems[0], "coverage_gaps_reviewed");
+  assert.equal(readiness.requiredAlignmentSources.includes("docs/canonical/BUILD_MANIFEST.md"), true);
+  assert.equal(readiness.sourceReadbacks.body_map, "developer_bridge.francis_body_map");
+  assert.equal(readiness.governance.executes_prompt, false);
+  assert.equal(readiness.governance.grants_repo_mutation_authority, false);
 });
 
 test("parseFrancisTrustLadder preserves decisions and no-authority boundaries", () => {
