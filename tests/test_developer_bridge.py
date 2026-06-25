@@ -908,6 +908,7 @@ def test_collaboration_driver_waits_for_ollama_before_next_turn(tmp_path, monkey
     assert review["definitions"]["concrete_repo_surface"]
     assert review["definitions"]["review_artifact"]
     assert review["definitions"]["surface_verification"]
+    assert review["definitions"]["implementation_preflight"].startswith("The exact typed review receipt")
     assert review["count"] == 1
     review_item = review["items"][0]
     assert review_item["kind"] == "developer_bridge.collaboration_review_item"
@@ -921,6 +922,21 @@ def test_collaboration_driver_waits_for_ollama_before_next_turn(tmp_path, monkey
     assert review_item["surface_verification"]["surface_kind"] == "ui_code"
     assert review_item["review_recommendation"]["authority"] == "advisory_review_readback_only"
     assert review_item["action_boundary"]["conversation_can_execute_action"] is False
+    preflight = review_item["implementation_preflight"]
+    assert preflight["must_read_before_editing"] is True
+    assert preflight["review_item_id"] == review_item["id"]
+    assert preflight["insight_id"] == insight["id"]
+    assert str(preflight["review_artifact"]).startswith("apps.chat_ui.communication:review_candidate:")
+    assert preflight["review_route"] == "/developer-bridge/collaboration-review?limit=1"
+    assert preflight["surface_under_review"] == review_item["concrete_repo_surface"]
+    assert preflight["build_direction_state"] == "advisory_review_required"
+    assert preflight["requires_typed_review_artifact"] is True
+    assert preflight["requires_codex_or_operator_review"] is True
+    assert preflight["requires_repo_truth_review"] is True
+    assert preflight["validated_against_repo_truth"] is False
+    assert preflight["grants_execution_authority"] is False
+    assert preflight["grants_mutation_authority"] is False
+    assert preflight["grants_memory_write_authority"] is False
 
     contract_root = (
         tmp_path / "data" / "integrations" / "developer_bridge" / "collaboration_driver" / "context_contracts"

@@ -95379,6 +95379,65 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, and unrelated full-system UI flows were not
   run for this bounded Communication session-disclosure slice.
 
+### 2026-06-25 22:06Z - Collaboration review items expose implementation preflight receipt
+
+Current posture: Phase 2 / developer bridge collaboration support now exposes
+the exact typed review receipt Codex or the operator should read before editing
+collaboration code. The Communication UI no longer reconstructs that preflight
+from loose review fields alone; it receives a typed `implementation_preflight`
+object from the review readback and renders the review item and route directly.
+
+What changed:
+
+- `developer_bridge.collaboration_review` items now include
+  `implementation_preflight` with `must_read_before_editing`, review item id,
+  insight id, review artifact, review route, surface under review, gate state,
+  repo-review requirements, repo-checked state, and no-authority flags.
+- The review readback definitions now document `implementation_preflight` as the
+  exact typed receipt to read before editing collaboration code.
+- The Chat UI parser preserves the preflight object and uses it in
+  `collaborationImplementationReviewSummary`.
+- The Codex Implementation Preflight panels now show the exact Review Item and
+  Review Route alongside the review artifact, surface, next action, and authority
+  chips.
+
+Validation:
+
+- Developer bridge test file passed:
+  `python -m pytest tests/test_developer_bridge.py`
+  (`69` passing tests, one existing Starlette deprecation warning).
+- Chat UI contract suite passed:
+  `npm run test -- src/chat/index.test.ts`
+  (the package script ran the configured UI suite, `279` passing tests).
+- Chat UI production build passed:
+  `npm run build`.
+- Targeted lint passed:
+  `python -m ruff check src/francis/developer_bridge/collaboration_review.py tests/test_developer_bridge.py`.
+- Targeted format check passed:
+  `python -m ruff format --check src/francis/developer_bridge/collaboration_review.py tests/test_developer_bridge.py`
+  (non-blocking `.ruff_cache` access warnings were emitted, but both files were
+  already formatted).
+- `git diff --check` passed.
+- The local Francis API was restarted after the Python readback change. The route
+  `/developer-bridge/collaboration-review?limit=1` returned HTTP `200` with
+  `implementation_preflight.review_route=/developer-bridge/collaboration-review?limit=1`,
+  `must_read_before_editing=true`, the current review item id, and all execution,
+  mutation, approval, and memory-write authority flags false.
+- Delayed Playwright screenshot proof captured the Communication page with the
+  Codex Implementation Preflight panel showing the Review Item and Review Route:
+  `output/playwright/implementation-preflight-final.png`.
+
+Remaining truthful gap:
+
+- This does not make collaboration output self-authorizing; the review remains an
+  advisory preflight until Codex or the operator checks repo truth.
+- This does not tune Francis1, promote learning receipts into memory, resolve ORB
+  coverage gaps, or close the main-build prompt gate.
+- This does not grant execution, mutation, approval, training, memory-write, or
+  main-build authority to Codex, Claude, Francis1, or the relay.
+- `.\scripts\check.ps1`, GitHub CI, and unrelated full-system UI flows were not
+  run for this bounded collaboration-review preflight slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

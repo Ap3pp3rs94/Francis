@@ -1992,6 +1992,18 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
               <div style={{ overflowWrap: "anywhere" }}>{latestImplementationReview.artifact}</div>
             </div>
             <div>
+              <div style={{ color: "#94a3b8", fontSize: 12, textTransform: "uppercase" }}>Review Item</div>
+              <div style={{ overflowWrap: "anywhere" }}>
+                {latestImplementationReview.preflight.reviewItemId || "unknown"}
+              </div>
+            </div>
+            <div>
+              <div style={{ color: "#94a3b8", fontSize: 12, textTransform: "uppercase" }}>Review Route</div>
+              <div style={{ overflowWrap: "anywhere" }}>
+                {latestImplementationReview.preflight.reviewRoute || "/developer-bridge/collaboration-review?limit=1"}
+              </div>
+            </div>
+            <div>
               <div style={{ color: "#94a3b8", fontSize: 12, textTransform: "uppercase" }}>Surface</div>
               <div style={{ overflowWrap: "anywhere" }}>{latestImplementationReview.surface}</div>
             </div>
@@ -3293,6 +3305,18 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
               <div>
                 <dt style={{ color: "#94a3b8" }}>Review Artifact</dt>
                 <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{latestImplementationReview.artifact}</dd>
+              </div>
+              <div>
+                <dt style={{ color: "#94a3b8" }}>Review Item</dt>
+                <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
+                  {latestImplementationReview.preflight.reviewItemId || "unknown"}
+                </dd>
+              </div>
+              <div>
+                <dt style={{ color: "#94a3b8" }}>Review Route</dt>
+                <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
+                  {latestImplementationReview.preflight.reviewRoute || "/developer-bridge/collaboration-review?limit=1"}
+                </dd>
               </div>
               <div>
                 <dt style={{ color: "#94a3b8" }}>Surface</dt>

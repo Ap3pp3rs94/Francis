@@ -46,6 +46,9 @@ def read_collaboration_review(*, limit: int = 10, session_id: str = "") -> dict[
                 "Read-only gate stating whether the review item can be used as build direction or must remain "
                 "blocked until typed review records the required evidence."
             ),
+            "implementation_preflight": (
+                "The exact typed review receipt Codex/operator should read before editing collaboration code."
+            ),
         },
         "governance": _governance(),
     }
@@ -182,7 +185,44 @@ def _review_item(insight: dict[str, object]) -> dict[str, object]:
             "requires_codex_or_operator_review_before_implementation": True,
             "requires_repo_truth_review": True,
         },
+        "implementation_preflight": _implementation_preflight(
+            insight=insight,
+            concrete_surface=concrete_surface,
+            review_artifact=review_artifact,
+            build_direction_gate=build_direction_gate,
+            review_status=review_status,
+        ),
         "governance": _item_governance(),
+    }
+
+
+def _implementation_preflight(
+    *,
+    insight: dict[str, object],
+    concrete_surface: str,
+    review_artifact: str,
+    build_direction_gate: dict[str, object],
+    review_status: dict[str, object],
+) -> dict[str, object]:
+    return {
+        "must_read_before_editing": True,
+        "review_item_id": f"review-{_bounded_text(insight.get('id'), limit=180)}",
+        "insight_id": _bounded_text(insight.get("id"), limit=180),
+        "review_artifact": review_artifact,
+        "review_route": "/developer-bridge/collaboration-review?limit=1",
+        "surface_under_review": concrete_surface,
+        "build_direction_state": _bounded_text(
+            build_direction_gate.get("state") or "advisory_review_required",
+            limit=120,
+        ),
+        "requires_typed_review_artifact": bool(build_direction_gate.get("requires_typed_review_artifact")),
+        "requires_codex_or_operator_review": bool(build_direction_gate.get("requires_codex_or_operator_review")),
+        "requires_repo_truth_review": bool(build_direction_gate.get("requires_repo_truth_review")),
+        "validated_against_repo_truth": bool(review_status.get("validated_against_repo_truth")),
+        "grants_execution_authority": bool(build_direction_gate.get("grants_execution_authority")),
+        "grants_mutation_authority": bool(build_direction_gate.get("grants_mutation_authority")),
+        "grants_approval_authority": bool(build_direction_gate.get("grants_approval_authority")),
+        "grants_memory_write_authority": bool(build_direction_gate.get("grants_memory_write_authority")),
     }
 
 

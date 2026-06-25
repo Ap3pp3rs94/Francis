@@ -1490,6 +1490,7 @@ test("parseCollaborationReview preserves advisory candidate boundaries", () => {
       review_artifact: "The typed receipt or candidate record Codex/operator reviews first.",
       surface_verification: "Whether an existing Francis surface was found.",
       build_direction_gate: "Whether the review item can be used as build direction.",
+      implementation_preflight: "The exact typed review receipt Codex/operator should read.",
     },
     items: [
       {
@@ -1560,6 +1561,23 @@ test("parseCollaborationReview preserves advisory candidate boundaries", () => {
           grants_approval_authority: false,
           grants_memory_write_authority: false,
         },
+        implementation_preflight: {
+          must_read_before_editing: true,
+          review_item_id: "review-insight-alpha",
+          insight_id: "insight-alpha",
+          review_artifact: "developer_bridge.collaboration_review.items:review_candidate:insight-alpha",
+          review_route: "/developer-bridge/collaboration-review?limit=1",
+          surface_under_review: "developer_bridge.collaboration_review.items",
+          build_direction_state: "blocked_until_typed_review",
+          requires_typed_review_artifact: true,
+          requires_codex_or_operator_review: true,
+          requires_repo_truth_review: true,
+          validated_against_repo_truth: false,
+          grants_execution_authority: false,
+          grants_mutation_authority: false,
+          grants_approval_authority: false,
+          grants_memory_write_authority: false,
+        },
         governance: {
           grants_execution_authority: false,
           grants_memory_write_authority: false,
@@ -1577,6 +1595,7 @@ test("parseCollaborationReview preserves advisory candidate boundaries", () => {
   assert.equal(review.definitions.concreteRepoSurface.includes("bounded code"), true);
   assert.equal(review.definitions.surfaceVerification.includes("existing Francis surface"), true);
   assert.equal(review.definitions.buildDirectionGate.includes("build direction"), true);
+  assert.equal(review.definitions.implementationPreflight.includes("exact typed review receipt"), true);
   assert.equal(review.items[0]?.insightId, "insight-alpha");
   assert.equal(review.items[0]?.concreteRepoSurface, "apps.chat_ui.communication");
   assert.equal(review.items[0]?.surfaceVerification.status, "existing_surface_found");
@@ -1598,6 +1617,11 @@ test("parseCollaborationReview preserves advisory candidate boundaries", () => {
   assert.equal(review.items[0]?.buildDirectionGate.conflictingSources[1]?.providerLane, "ollama");
   assert.equal(review.items[0]?.buildDirectionGate.grantsExecutionAuthority, false);
   assert.equal(review.items[0]?.buildDirectionGate.grantsMemoryWriteAuthority, false);
+  assert.equal(review.items[0]?.implementationPreflight.mustReadBeforeEditing, true);
+  assert.equal(review.items[0]?.implementationPreflight.reviewItemId, "review-insight-alpha");
+  assert.equal(review.items[0]?.implementationPreflight.reviewRoute, "/developer-bridge/collaboration-review?limit=1");
+  assert.equal(review.items[0]?.implementationPreflight.validatedAgainstRepoTruth, false);
+  assert.equal(review.items[0]?.implementationPreflight.grantsExecutionAuthority, false);
   const gateSummary = collaborationBuildDirectionGateSummary(review.items[0]!);
   assert.equal(gateSummary.badge, "source disagreement blocked");
   assert.equal(gateSummary.tone, "blocked");
@@ -1613,6 +1637,10 @@ test("parseCollaborationReview preserves advisory candidate boundaries", () => {
   const implementationSummary = collaborationImplementationReviewSummary(review.items[0]!);
   assert.equal(implementationSummary.badge, "build blocked");
   assert.equal(implementationSummary.tone, "blocked");
+  assert.equal(implementationSummary.artifact, "developer_bridge.collaboration_review.items:review_candidate:insight-alpha");
+  assert.equal(implementationSummary.preflight.reviewItemId, "review-insight-alpha");
+  assert.equal(implementationSummary.detail.includes("route /developer-bridge/collaboration-review?limit=1"), true);
+  assert.equal(implementationSummary.detail.includes("repo checked false"), true);
   assert.deepEqual(implementationSummary.conflictingSourceLines, [
     "codex: codex-alpha / external_guidance_source",
     "francis1: ollama-alpha / local_model_source / provider ollama",
@@ -1894,6 +1922,23 @@ test("collaborationImplementationReviewSummary exposes the typed read-before-edi
           grants_approval_authority: false,
           grants_memory_write_authority: false,
         },
+        implementation_preflight: {
+          must_read_before_editing: true,
+          review_item_id: "review-implementation-gate",
+          insight_id: "insight-implementation-gate",
+          review_artifact: "developer_bridge.collaboration_review.items:review_candidate:insight-implementation-gate",
+          review_route: "/developer-bridge/collaboration-review?limit=1",
+          surface_under_review: "developer_bridge.collaboration_review.items",
+          build_direction_state: "advisory_review_required",
+          requires_typed_review_artifact: true,
+          requires_codex_or_operator_review: true,
+          requires_repo_truth_review: true,
+          validated_against_repo_truth: false,
+          grants_execution_authority: false,
+          grants_mutation_authority: false,
+          grants_approval_authority: false,
+          grants_memory_write_authority: false,
+        },
       },
     ],
   });
@@ -1905,12 +1950,19 @@ test("collaborationImplementationReviewSummary exposes the typed read-before-edi
   assert.equal(summary.artifact, "developer_bridge.collaboration_review.items:review_candidate:insight-implementation-gate");
   assert.equal(summary.surface, "developer_bridge.collaboration_review.items");
   assert.equal(summary.nextAction, "Inspect the specific review item before editing collaboration code.");
+  assert.equal(summary.preflight.mustReadBeforeEditing, true);
+  assert.equal(summary.preflight.reviewItemId, "review-implementation-gate");
+  assert.equal(summary.preflight.reviewRoute, "/developer-bridge/collaboration-review?limit=1");
   assert.deepEqual(summary.detail, [
+    "review item review-implementation-gate",
+    "route /developer-bridge/collaboration-review?limit=1",
     "turn 990",
+    "must read true",
     "gate advisory_review_required",
     "typed artifact true",
     "codex review true",
     "repo review true",
+    "repo checked false",
     "execute false",
     "mutation false",
     "approve false",

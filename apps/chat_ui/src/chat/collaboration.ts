@@ -247,6 +247,25 @@ export type CollaborationImplementationReviewDisplay = {
   nextAction: string;
   detail: string[];
   conflictingSourceLines: string[];
+  preflight: CollaborationImplementationPreflight;
+};
+
+export type CollaborationImplementationPreflight = {
+  mustReadBeforeEditing: boolean;
+  reviewItemId: string;
+  insightId: string;
+  reviewArtifact: string;
+  reviewRoute: string;
+  surfaceUnderReview: string;
+  buildDirectionState: string;
+  requiresTypedReviewArtifact: boolean;
+  requiresCodexOrOperatorReview: boolean;
+  requiresRepoTruthReview: boolean;
+  validatedAgainstRepoTruth: boolean;
+  grantsExecutionAuthority: boolean;
+  grantsMutationAuthority: boolean;
+  grantsApprovalAuthority: boolean;
+  grantsMemoryWriteAuthority: boolean;
 };
 
 export type CollaborationBuildDirectionGateDisplay = {
@@ -761,6 +780,7 @@ export type CollaborationReviewItem = {
     grantsApprovalAuthority: boolean;
     grantsMemoryWriteAuthority: boolean;
   };
+  implementationPreflight: CollaborationImplementationPreflight;
   governance: Record<string, unknown>;
 };
 
@@ -776,6 +796,7 @@ export type CollaborationReview = {
     reviewArtifact: string;
     surfaceVerification: string;
     buildDirectionGate: string;
+    implementationPreflight: string;
   };
   readbackCache: CollaborationReadbackCache;
   governance: Record<string, unknown>;
@@ -1109,15 +1130,20 @@ function collaborationConflictingSourceLine(source: CollaborationReviewItem["bui
 }
 
 export function collaborationImplementationReviewSummary(item: CollaborationReviewItem): CollaborationImplementationReviewDisplay {
+  const preflight = item.implementationPreflight;
   const unsafeAuthority =
     item.actionBoundary.conversationCanExecuteAction ||
     item.actionBoundary.conversationCanApproveAction ||
+    preflight.grantsExecutionAuthority ||
+    preflight.grantsMutationAuthority ||
+    preflight.grantsApprovalAuthority ||
+    preflight.grantsMemoryWriteAuthority ||
     item.buildDirectionGate.grantsExecutionAuthority ||
     item.buildDirectionGate.grantsMutationAuthority ||
     item.buildDirectionGate.grantsApprovalAuthority ||
     item.buildDirectionGate.grantsMemoryWriteAuthority;
-  const artifact = item.buildDirectionGate.requiredReviewArtifact || item.reviewArtifact || "unknown";
-  const surface = item.buildDirectionGate.surfaceUnderReview || item.concreteRepoSurface || "unknown";
+  const artifact = preflight.reviewArtifact || item.buildDirectionGate.requiredReviewArtifact || item.reviewArtifact || "unknown";
+  const surface = preflight.surfaceUnderReview || item.buildDirectionGate.surfaceUnderReview || item.concreteRepoSurface || "unknown";
   const conflictingSourceLines = item.buildDirectionGate.conflictingSources.length
     ? item.buildDirectionGate.conflictingSources.map(collaborationConflictingSourceLine)
     : [];
@@ -1132,17 +1158,22 @@ export function collaborationImplementationReviewSummary(item: CollaborationRevi
     surface,
     nextAction: collaborationReviewNextAction(item),
     detail: [
+      `review item ${preflight.reviewItemId || item.id || "unknown"}`,
+      `route ${preflight.reviewRoute || "/developer-bridge/collaboration-review?limit=1"}`,
       `turn ${item.turn || "unknown"}`,
-      `gate ${item.buildDirectionGate.state || "advisory_review_required"}`,
-      `typed artifact ${actionBoundaryBool(item.buildDirectionGate.requiresTypedReviewArtifact)}`,
-      `codex review ${actionBoundaryBool(item.buildDirectionGate.requiresCodexOrOperatorReview)}`,
-      `repo review ${actionBoundaryBool(item.buildDirectionGate.requiresRepoTruthReview)}`,
-      `execute ${actionBoundaryBool(item.actionBoundary.conversationCanExecuteAction || item.buildDirectionGate.grantsExecutionAuthority)}`,
-      `mutation ${actionBoundaryBool(item.buildDirectionGate.grantsMutationAuthority)}`,
-      `approve ${actionBoundaryBool(item.actionBoundary.conversationCanApproveAction || item.buildDirectionGate.grantsApprovalAuthority)}`,
-      `memory write ${actionBoundaryBool(item.buildDirectionGate.grantsMemoryWriteAuthority)}`,
+      `must read ${actionBoundaryBool(preflight.mustReadBeforeEditing || item.buildDirectionGate.requiresTypedReviewArtifact)}`,
+      `gate ${preflight.buildDirectionState || item.buildDirectionGate.state || "advisory_review_required"}`,
+      `typed artifact ${actionBoundaryBool(preflight.requiresTypedReviewArtifact || item.buildDirectionGate.requiresTypedReviewArtifact)}`,
+      `codex review ${actionBoundaryBool(preflight.requiresCodexOrOperatorReview || item.buildDirectionGate.requiresCodexOrOperatorReview)}`,
+      `repo review ${actionBoundaryBool(preflight.requiresRepoTruthReview || item.buildDirectionGate.requiresRepoTruthReview)}`,
+      `repo checked ${actionBoundaryBool(preflight.validatedAgainstRepoTruth || item.reviewRecommendation.validatedAgainstRepoTruth)}`,
+      `execute ${actionBoundaryBool(item.actionBoundary.conversationCanExecuteAction || preflight.grantsExecutionAuthority || item.buildDirectionGate.grantsExecutionAuthority)}`,
+      `mutation ${actionBoundaryBool(preflight.grantsMutationAuthority || item.buildDirectionGate.grantsMutationAuthority)}`,
+      `approve ${actionBoundaryBool(item.actionBoundary.conversationCanApproveAction || preflight.grantsApprovalAuthority || item.buildDirectionGate.grantsApprovalAuthority)}`,
+      `memory write ${actionBoundaryBool(preflight.grantsMemoryWriteAuthority || item.buildDirectionGate.grantsMemoryWriteAuthority)}`,
     ],
     conflictingSourceLines,
+    preflight,
   };
 }
 
@@ -1803,6 +1834,7 @@ function parseReviewItem(raw: unknown): CollaborationReviewItem {
   const recommendation = isRecord(item.review_recommendation) ? item.review_recommendation : {};
   const boundary = isRecord(item.action_boundary) ? item.action_boundary : {};
   const buildGate = isRecord(item.build_direction_gate) ? item.build_direction_gate : {};
+  const implementationPreflight = isRecord(item.implementation_preflight) ? item.implementation_preflight : {};
   return {
     id: safeString(item.id),
     insightId: safeString(item.insight_id),
@@ -1871,7 +1903,29 @@ function parseReviewItem(raw: unknown): CollaborationReviewItem {
       grantsApprovalAuthority: safeBoolean(buildGate.grants_approval_authority),
       grantsMemoryWriteAuthority: safeBoolean(buildGate.grants_memory_write_authority),
     },
+    implementationPreflight: parseImplementationPreflight(implementationPreflight),
     governance: isRecord(item.governance) ? item.governance : {},
+  };
+}
+
+function parseImplementationPreflight(raw: unknown): CollaborationImplementationPreflight {
+  const item = isRecord(raw) ? raw : {};
+  return {
+    mustReadBeforeEditing: safeBoolean(item.must_read_before_editing),
+    reviewItemId: safeString(item.review_item_id),
+    insightId: safeString(item.insight_id),
+    reviewArtifact: safeString(item.review_artifact),
+    reviewRoute: safeString(item.review_route),
+    surfaceUnderReview: safeString(item.surface_under_review),
+    buildDirectionState: safeString(item.build_direction_state, "advisory_review_required"),
+    requiresTypedReviewArtifact: safeBoolean(item.requires_typed_review_artifact),
+    requiresCodexOrOperatorReview: safeBoolean(item.requires_codex_or_operator_review),
+    requiresRepoTruthReview: safeBoolean(item.requires_repo_truth_review),
+    validatedAgainstRepoTruth: safeBoolean(item.validated_against_repo_truth),
+    grantsExecutionAuthority: safeBoolean(item.grants_execution_authority),
+    grantsMutationAuthority: safeBoolean(item.grants_mutation_authority),
+    grantsApprovalAuthority: safeBoolean(item.grants_approval_authority),
+    grantsMemoryWriteAuthority: safeBoolean(item.grants_memory_write_authority),
   };
 }
 
@@ -2559,6 +2613,7 @@ export function parseCollaborationReview(raw: unknown): CollaborationReview {
       reviewArtifact: safeString(definitions.review_artifact),
       surfaceVerification: safeString(definitions.surface_verification),
       buildDirectionGate: safeString(definitions.build_direction_gate),
+      implementationPreflight: safeString(definitions.implementation_preflight),
     },
     readbackCache: parseReadbackCache(value.readback_cache),
     governance: isRecord(value.governance) ? value.governance : {},
