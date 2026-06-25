@@ -1518,7 +1518,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
           }}
         >
           <div>
-            <div style={{ color: "#94a3b8", fontSize: 12, textTransform: "uppercase" }}>Wiring</div>
+            <div style={{ color: "#94a3b8", fontSize: 12, textTransform: "uppercase" }}>Wiring Only</div>
             <div style={{ fontSize: 18, fontWeight: 700 }}>
               {substrateSummary?.boundedWiringPercentComplete ?? 0}% / {boolText(Boolean(substrateSummary?.collaborationSubstrateWired))}
             </div>
@@ -1532,7 +1532,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
             <div>{substrateSummary?.coverageOpenGapCount ?? 0}</div>
           </div>
           <div>
-            <div style={{ color: "#94a3b8", fontSize: 12, textTransform: "uppercase" }}>Authority</div>
+            <div style={{ color: "#94a3b8", fontSize: 12, textTransform: "uppercase" }}>No Authority Granted</div>
             <div>{boolText(Boolean(substrateSummary?.noAuthorityGranted))}</div>
           </div>
         </div>

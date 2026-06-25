@@ -94777,6 +94777,45 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, full backend test suite, and unrelated UI
   flows were not run for this bounded gate-readback slice.
 
+### 2026-06-25 20:37Z - Substrate readiness labels deny authority clearly
+
+Current posture: Phase 2 / developer bridge collaboration support now labels the
+substrate-readiness summary as wiring-only and no-authority-granted in the
+operator UI. This follows the Francis1/Codex review signal that
+`substrate-complete` must read as a checklist against ledger, manifest, receipt,
+and runtime truth, not as an argument for capability or main-build authority.
+
+What changed:
+
+- The Chat UI substrate-readiness card changed the top summary label from
+  `Wiring` to `Wiring Only`.
+- The same card changed the ambiguous `Authority true` presentation to
+  `No Authority Granted true`, preserving the underlying readback value while
+  removing the implication that authority has been granted.
+
+Validation:
+
+- Chat UI production build passed with `npm run build`.
+- `git diff --check` passed.
+- Live URL proof: `GET http://127.0.0.1:5173/` returned HTTP 200.
+- Live substrate-readiness readback remained blocked with
+  `gate=blocked_by_open_orb_gaps`, `wired=true`, `no_authority=true`, and
+  blocking items `coverage_gaps_reviewed` plus `phase_posture_reviewed`.
+- Browser proof captured `http://127.0.0.1:5173/` at
+  `output/playwright/collaboration-substrate-labels.png`; the page showed
+  `Wiring Only` and `No Authority Granted` in the Substrate Readiness card.
+- Collaboration runtime health remained `healthy`, with Codex and Ollama enabled
+  and Claude disabled.
+
+Remaining truthful gap:
+
+- This does not clear the substrate blockers, open ORB coverage gaps, or Phase 2
+  posture review requirement.
+- This does not grant execution, mutation, approval, training, memory-write, or
+  main-build prompt authority.
+- `.\scripts\check.ps1`, GitHub CI, full backend test suite, and unrelated UI
+  flows were not run for this bounded label-truthfulness slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
