@@ -94105,6 +94105,69 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, and backend test suites were not rerun for
   this Chat UI-only slice.
 
+### 2026-06-25 18:59Z - Learning receipts expose latest observed drift turn
+
+Current posture: Phase 2 / collaboration learning receipts now distinguish the
+first recorded learning event from the latest observed occurrence of the same
+deduplicated local-model drift signal. This keeps repeated Francis1 output-guard
+drift visible as current learning evidence without storing raw model text or
+creating duplicate learning receipts.
+
+What changed:
+
+- `read_collaboration_learning_events` now merges the current
+  `latest_learning_signal` into the matching bounded learning event readback.
+- Learning receipt readbacks expose `latest_turn`, `latest_observed_at`,
+  `current_signal_observed`, and `current_signal_recent_turn_count`.
+- Learning receipt sorting now prefers latest observed turn before receipt
+  creation time, so current drift appears first.
+- The Communication UI parser and Learning Receipts panel now show latest
+  observed turn, first observed turn, current-signal status, and current-signal
+  turn count.
+- The receipt remains read-only and no-authority: no transcript storage, model
+  training, execution, mutation, approval, or memory-write authority was added.
+
+Validation:
+
+- Live runtime readback returned `status=healthy`, turn `1112`, and current
+  learning signal `latest_turn=1111`, `recent_turn_count=4`.
+- Live learning-events readback for `failure_type=output_guard_drift` returned
+  the same event first with original `turn=459`, `latest_turn=1111`,
+  `current_signal_observed=true`, `current_signal_recent_turn_count=4`, and no
+  training, execution, or memory-write authority.
+- Focused backend tests passed:
+  `.\.venv\Scripts\python.exe -m pytest -q
+  tests/test_developer_bridge.py::test_collaboration_driver_rotates_topics_after_repeated_output_guard_receipts
+  tests/test_developer_bridge.py::test_collaboration_learning_events_readback_is_bounded_and_read_only`.
+- Full developer-bridge backend test file passed:
+  `.\.venv\Scripts\python.exe -m pytest -q tests/test_developer_bridge.py`.
+- Focused Chat UI parser tests passed:
+  `cd apps\chat_ui; node --test --experimental-strip-types
+  src\chat\index.test.ts` with 20 tests.
+- Full Chat UI test suite passed: `cd apps\chat_ui; npm run test` with 277
+  tests.
+- Chat UI production build passed: `cd apps\chat_ui; npm run build`.
+- Ruff passed for `src\francis\developer_bridge\collaboration_driver.py` and
+  `tests\test_developer_bridge.py`.
+- Mypy passed for `src\francis\developer_bridge\collaboration_driver.py`.
+- `git diff --check` passed.
+- Browser proof captured `http://127.0.0.1:5173/` and showed the Communication
+  page still renders with Live Conversation first and receipt-heavy sections
+  collapsed.
+
+Remaining truthful gap:
+
+- This is a learning-readback freshness fix, not local-model tuning or model
+  training.
+- Existing historical learning receipt files are not rewritten; latest-signal
+  freshness is projected at readback time from the current driver state.
+- The live Learning Receipts panel field was validated by parser tests and live
+  JSON readback; the browser proof covered page rendering/default layout but did
+  not expand the technical receipt section because the available Playwright CLI
+  binary did not expose a require-able automation module in this shell.
+- `.\scripts\check.ps1`, GitHub CI, and unrelated backend/UI suites were not
+  run for this bounded developer-bridge/Chat UI slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

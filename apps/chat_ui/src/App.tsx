@@ -1046,6 +1046,11 @@ function collaborationLearningTermText(item: CollaborationLearningEntry): string
   return item.repeatedTerms.length ? item.repeatedTerms.join(", ") : "unclassified";
 }
 
+function collaborationLearningLatestTurnText(item: CollaborationLearningEntry): string {
+  if (item.latestTurn && item.latestTurn !== item.turn) return `latest turn ${item.latestTurn}`;
+  return `turn ${item.turn || "?"}`;
+}
+
 function collaborationReadbackErrorMessage(label: string, err: unknown): string {
   if (isAbortError(err)) return `${label} readback timed out. Showing last known data.`;
   return err instanceof Error ? `${label} readback failed: ${err.message}` : `${label} readback failed.`;
@@ -2637,7 +2642,11 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
                   >
                     {item.failureType || "learning"}
                   </span>
-                  <span style={{ color: "#93c5fd", fontSize: 13 }}>turn {item.turn || "?"}</span>
+                  <span style={{ color: "#93c5fd", fontSize: 13 }}>{collaborationLearningLatestTurnText(item)}</span>
+                  {item.latestTurn && item.latestTurn !== item.turn ? (
+                    <span style={{ color: "#94a3b8", fontSize: 13 }}>first turn {item.turn || "?"}</span>
+                  ) : null}
+                  {item.currentSignalObserved ? <span style={{ color: "#6ee7b7", fontSize: 13 }}>current signal</span> : null}
                   <span style={{ color: "#94a3b8", fontSize: 13 }}>{collaborationShortId(item.id)}</span>
                 </div>
                 <dl style={{ color: "#cbd5e1", display: "grid", gap: 8, margin: "10px 0 0" }}>
@@ -2658,6 +2667,11 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
                 </dl>
                 <div style={{ color: "#94a3b8", display: "flex", flexWrap: "wrap", fontSize: 12, gap: 10, marginTop: 10 }}>
                   <span>recent turns {item.recentTurnCount}</span>
+                  <span>current signal turns {item.currentSignalRecentTurnCount || item.recentTurnCount}</span>
+                  <span>
+                    latest observed{" "}
+                    {item.latestObservedAt ? collaborationTimeText({ createdAt: item.latestObservedAt } as CollaborationTranscriptEntry) : "unknown"}
+                  </span>
                   <span>full transcript {boolText(Boolean(item.writerGovernance.stores_full_transcript))}</span>
                   <span>execute {boolText(Boolean(item.writerGovernance.grants_execution_authority))}</span>
                   <span>memory write {boolText(Boolean(item.writerGovernance.grants_memory_write_authority))}</span>

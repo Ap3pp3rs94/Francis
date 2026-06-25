@@ -203,6 +203,7 @@ def read_collaboration_learning_events(
     clean_failure_type = _bounded_text(failure_type, limit=80)
     clean_term = _topic_key(_bounded_text(term, limit=80))
     clean_session_id = _bounded_text(session_id, limit=120)
+    latest_signal = _latest_learning_signal_for_readback()
     records: list[dict[str, object]] = []
 
     for path in _learning_root().glob("learning-*.json"):
@@ -216,9 +217,16 @@ def read_collaboration_learning_events(
         repeated_terms = [str(item) for item in _list(event.get("repeated_terms")) if str(item)]
         if clean_term and clean_term not in {_topic_key(item) for item in repeated_terms}:
             continue
-        records.append(event)
+        records.append(_learning_event_with_latest_signal(event, latest_signal))
 
-    records.sort(key=lambda item: (str(item.get("created_at") or ""), str(item.get("id") or "")), reverse=True)
+    records.sort(
+        key=lambda item: (
+            _safe_int(item.get("latest_turn"), default=0),
+            str(item.get("latest_observed_at") or item.get("created_at") or ""),
+            str(item.get("id") or ""),
+        ),
+        reverse=True,
+    )
     items = [_learning_event_readback_item(event) for event in records[:safe_limit]]
     return {
         "kind": "developer_bridge.collaboration_learning_events",
@@ -240,6 +248,7 @@ def read_collaboration_learning_events(
             "failure_type": "The classified failure or drift class recorded by the collaboration driver.",
             "repeated_terms": "Stable drift markers counted across recent relay notes; not raw transcript text.",
             "recent_turns": "Receipt identifiers and matched markers used as evidence without storing full messages.",
+            "latest_turn": "Most recent observed turn for this learning event, including deduplicated drift signals.",
         },
         "governance": _learning_readback_governance(),
     }
@@ -658,6 +667,16 @@ def _learning_event_readback_item(event: dict[str, object]) -> dict[str, object]
         "created_at": _bounded_text(event.get("created_at"), limit=80),
         "session_id": _bounded_text(event.get("session_id"), limit=120),
         "turn": _safe_int(event.get("turn"), default=0),
+        "latest_turn": _safe_int(event.get("latest_turn"), default=_learning_event_latest_turn(event)),
+        "latest_observed_at": _bounded_text(
+            event.get("latest_observed_at") or event.get("created_at"),
+            limit=80,
+        ),
+        "current_signal_observed": bool(event.get("current_signal_observed")),
+        "current_signal_recent_turn_count": _safe_int(
+            event.get("current_signal_recent_turn_count"),
+            default=len(_list(event.get("recent_turns"))),
+        ),
         "failure_type": _bounded_text(event.get("failure_type"), limit=120),
         "observation": _bounded_text(event.get("observation"), limit=420),
         "repeated_terms": [
@@ -682,6 +701,44 @@ def _learning_event_readback_item(event: dict[str, object]) -> dict[str, object]
             "grants_model_authority": bool(writer_governance.get("grants_model_authority")),
         },
     }
+
+
+def _latest_learning_signal_for_readback() -> dict[str, object]:
+    raw = _load_state().get("latest_learning_signal")
+    return cast(dict[str, object], raw) if isinstance(raw, dict) else {}
+
+
+def _learning_event_with_latest_signal(
+    event: dict[str, object],
+    latest_signal: dict[str, object],
+) -> dict[str, object]:
+    merged = dict(event)
+    latest_turn = _learning_event_latest_turn(event)
+    latest_observed_at = _bounded_text(event.get("created_at"), limit=80)
+    signal_event_id = str(latest_signal.get("learning_event_id") or "")
+    if signal_event_id and signal_event_id == str(event.get("id") or ""):
+        signal_latest_turn = _safe_int(latest_signal.get("latest_turn"), default=0)
+        latest_turn = max(latest_turn, signal_latest_turn)
+        latest_observed_at = _bounded_text(
+            latest_signal.get("updated_at") or latest_observed_at,
+            limit=80,
+        )
+        merged["current_signal_observed"] = bool(latest_signal.get("observed"))
+        merged["current_signal_recent_turn_count"] = _safe_int(latest_signal.get("recent_turn_count"), default=0)
+    else:
+        merged["current_signal_observed"] = False
+        merged["current_signal_recent_turn_count"] = len(_list(event.get("recent_turns")))
+    merged["latest_turn"] = latest_turn
+    merged["latest_observed_at"] = latest_observed_at
+    return merged
+
+
+def _learning_event_latest_turn(event: dict[str, object]) -> int:
+    latest_turn = _safe_int(event.get("turn"), default=0)
+    for item in _list(event.get("recent_turns")):
+        if isinstance(item, dict):
+            latest_turn = max(latest_turn, _safe_int(item.get("turn"), default=0))
+    return latest_turn
 
 
 def _learning_recent_turn_readback(item: dict[str, object]) -> dict[str, object]:

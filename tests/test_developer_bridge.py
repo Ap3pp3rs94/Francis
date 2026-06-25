@@ -1704,6 +1704,10 @@ def test_collaboration_driver_rotates_topics_after_repeated_output_guard_receipt
     assert event["failure_type"] == "output_guard_drift"
     assert event["repeated_terms"] == ["output_guard_drift"]
     assert event["recent_turn_count"] == 2
+    assert event["latest_turn"] >= event["turn"]
+    assert event["latest_observed_at"]
+    assert event["current_signal_observed"] is True
+    assert event["current_signal_recent_turn_count"] == 2
     assert all(item["matched_terms"] == ["output_guard_drift"] for item in event["recent_turns"])
     assert "raw model text" in event["learning"]["memory_value"]
     assert event["writer_governance"]["stores_full_transcript"] is False
@@ -1735,12 +1739,19 @@ def test_collaboration_driver_rotates_topics_after_repeated_output_guard_receipt
     follow_up = drive_once(max_turns=0, turn_gap_seconds=0, summary_every_turns=0)
 
     assert follow_up["status"] == "submitted"
-    assert read_collaboration_learning_events(limit=5, failure_type="output_guard_drift")["count"] == 1
+    follow_up_readback = read_collaboration_learning_events(limit=5, failure_type="output_guard_drift")
+    assert follow_up_readback["count"] == 1
+    follow_up_event = follow_up_readback["items"][0]
+    assert follow_up_event["id"] == event["id"]
+    assert follow_up_event["current_signal_observed"] is True
+    assert follow_up_event["current_signal_recent_turn_count"] == 3
     state = json.loads(state_path.read_text(encoding="utf-8"))
     signal = state["latest_learning_signal"]
     assert signal["failure_type"] == "output_guard_drift"
     assert signal["recent_turn_count"] == 3
     assert signal["learning_event_id"] == event["id"]
+    assert follow_up_event["latest_turn"] == signal["latest_turn"]
+    assert follow_up_event["latest_observed_at"] == signal["updated_at"]
     assert signal["records_model_drift_as_learning"] is True
     assert signal["requires_codex_or_operator_review_before_tuning"] is True
 

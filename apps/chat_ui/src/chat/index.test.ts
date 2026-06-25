@@ -1290,6 +1290,7 @@ test("parseCollaborationLearning preserves bounded no-authority learning receipt
       failure_type: "The classified failure or drift class.",
       repeated_terms: "Stable drift markers counted across recent relay notes; not raw transcript text.",
       recent_turns: "Receipt identifiers and matched markers used as evidence.",
+      latest_turn: "Most recent observed turn for this learning event.",
     },
     items: [
       {
@@ -1297,6 +1298,10 @@ test("parseCollaborationLearning preserves bounded no-authority learning receipt
         created_at: "2026-06-25T04:31:00Z",
         session_id: "driver-alpha",
         turn: 394,
+        latest_turn: 419,
+        latest_observed_at: "2026-06-25T04:45:00Z",
+        current_signal_observed: true,
+        current_signal_recent_turn_count: 6,
         failure_type: "repetitive_meta_loop",
         observation: "The collaboration repeated authority-boundary language enough to risk a loop.",
         repeated_terms: ["typed_receipt_shape", "conversation_authority_boundary"],
@@ -1333,9 +1338,15 @@ test("parseCollaborationLearning preserves bounded no-authority learning receipt
   assert.equal(learning.mode, "read_only");
   assert.equal(learning.items.length, 1);
   assert.equal(learning.definitions.repeatedTerms.includes("not raw transcript text"), true);
+  assert.equal(learning.definitions.latestTurn.includes("Most recent observed turn"), true);
   assert.equal(learning.readbackCache.servesFullTranscriptStore, false);
   const item = learning.items[0]!;
   assert.equal(item.failureType, "repetitive_meta_loop");
+  assert.equal(item.turn, 394);
+  assert.equal(item.latestTurn, 419);
+  assert.equal(item.latestObservedAt, "2026-06-25T04:45:00Z");
+  assert.equal(item.currentSignalObserved, true);
+  assert.equal(item.currentSignalRecentTurnCount, 6);
   assert.deepEqual(item.repeatedTerms, ["typed_receipt_shape", "conversation_authority_boundary"]);
   assert.equal(item.recentTurnCount, 4);
   assert.equal(item.recentTurns[0]?.noteId, "note-alpha");

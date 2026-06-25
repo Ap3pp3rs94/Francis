@@ -622,6 +622,10 @@ export type CollaborationLearningEvent = {
   createdAt: string;
   sessionId: string;
   turn: number;
+  latestTurn: number;
+  latestObservedAt: string;
+  currentSignalObserved: boolean;
+  currentSignalRecentTurnCount: number;
   failureType: string;
   observation: string;
   repeatedTerms: string[];
@@ -648,6 +652,7 @@ export type CollaborationLearning = {
     failureType: string;
     repeatedTerms: string;
     recentTurns: string;
+    latestTurn: string;
   };
   readbackCache: CollaborationReadbackCache;
   governance: Record<string, unknown>;
@@ -1386,6 +1391,10 @@ function parseLearningEvent(raw: unknown): CollaborationLearningEvent {
     createdAt: safeString(item.created_at),
     sessionId: safeString(item.session_id),
     turn: safeNumber(item.turn),
+    latestTurn: safeNumber(item.latest_turn),
+    latestObservedAt: safeString(item.latest_observed_at),
+    currentSignalObserved: safeBoolean(item.current_signal_observed),
+    currentSignalRecentTurnCount: safeNumber(item.current_signal_recent_turn_count),
     failureType: safeString(item.failure_type),
     observation: safeString(item.observation),
     repeatedTerms: Array.isArray(item.repeated_terms)
@@ -1928,6 +1937,7 @@ export function parseCollaborationLearning(raw: unknown): CollaborationLearning 
       failureType: safeString(definitions.failure_type),
       repeatedTerms: safeString(definitions.repeated_terms),
       recentTurns: safeString(definitions.recent_turns),
+      latestTurn: safeString(definitions.latest_turn),
     },
     readbackCache: parseReadbackCache(value.readback_cache),
     governance: isRecord(value.governance) ? value.governance : {},
