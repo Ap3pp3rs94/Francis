@@ -117,7 +117,7 @@ def _ready_final_decision_payload(final_physical_gate_record_path: Path) -> dict
             "date": "2026-06-23",
             "decision_reviewer": "Pilot reviewer",
             "reviewer_role": "human_final_decision_reviewer",
-            "pilot_id": "pilot-alpha",
+            "pilot_id": "pilot-reference",
             "final_physical_gate_status": "ready_for_stage17_final_physical_completion_decision",
             "final_physical_gate_record_path": str(final_physical_gate_record_path),
         },
@@ -230,6 +230,9 @@ def test_fr017_final_decision_record_gate_ready_state_remains_read_only(
     assert payload["final_decision_record_ready"] is True
     assert payload["ledger_completion_review_ready"] is True
     assert payload["saved_final_physical_gate_record_status"] == "ready_for_stage17_final_physical_completion_decision"
+    assert "redacted SHA-256-derived" in payload["final_decision_pilot_identity_contract"]
+    assert payload["final_physical_gate_reference_pilot_fingerprint"]
+    assert payload["final_decision_pilot_fingerprint"] == payload["final_physical_gate_reference_pilot_fingerprint"]
     assert payload["missing_fields"] == []
     assert payload["invalid_fields"] == []
     assert payload["decision_lock_violations"] == []
@@ -240,6 +243,30 @@ def test_fr017_final_decision_record_gate_ready_state_remains_read_only(
     assert payload["powered_or_frame_coupled_testing_cleared"] is False
     assert payload["fr018_implementation_cleared"] is False
     assert "does not mark physical_validation_complete" in payload["no_fake_validation_lock"]
+
+
+def test_fr017_final_decision_record_gate_fails_closed_on_pilot_identity_mismatch(
+    tmp_path: Path,
+) -> None:
+    paths = _write_ready_evidence(tmp_path)
+    final_physical_gate_record_path = _write_final_physical_gate_record(tmp_path, paths)
+    decision_payload = _ready_final_decision_payload(final_physical_gate_record_path)
+    decision_payload["evidence"]["pilot_id"] = "different-pilot"
+    decision_path = tmp_path / "pilot-mismatch-final-decision.json"
+    decision_path.write_text(json.dumps(decision_payload), encoding="utf-8")
+
+    proc = _run_gate("-Mode", "Status", *_ready_args(paths), "-FinalDecisionPath", str(decision_path))
+
+    assert proc.returncode == 1
+    payload = _payload(proc.stdout)
+    assert payload["status"] == "failed_final_decision_record"
+    assert "evidence.pilot_id" in payload["invalid_fields"]
+    assert "evidence.pilot_id_must_match_final_physical_gate_reference" in payload["decision_lock_violations"]
+    assert payload["final_physical_gate_reference_pilot_fingerprint"]
+    assert payload["final_decision_pilot_fingerprint"] != payload["final_physical_gate_reference_pilot_fingerprint"]
+    assert payload["physical_validation_complete"] is False
+    assert payload["stage17_completion_claim_allowed"] is False
+    assert payload["fr018_implementation_cleared"] is False
 
 
 def test_fr017_final_decision_record_gate_fails_closed_on_prohibited_clearance(

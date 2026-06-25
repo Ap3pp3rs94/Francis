@@ -116,6 +116,28 @@ function Get-PropertyValue {
   return $Property.Value
 }
 
+function Get-IdentityFingerprint {
+  param([object]$Value)
+
+  if ($null -eq $Value) {
+    return ''
+  }
+  $Text = [string]$Value
+  if ([string]::IsNullOrWhiteSpace($Text)) {
+    return ''
+  }
+
+  $Sha256 = [System.Security.Cryptography.SHA256]::Create()
+  try {
+    $Bytes = [System.Text.Encoding]::UTF8.GetBytes($Text)
+    $Hash = $Sha256.ComputeHash($Bytes)
+    $Hex = -join ($Hash | ForEach-Object { $_.ToString('x2', [System.Globalization.CultureInfo]::InvariantCulture) })
+    return $Hex.Substring(0, 12)
+  } finally {
+    $Sha256.Dispose()
+  }
+}
+
 function Test-MissingOrPendingText {
   param([object]$Value)
 
@@ -238,6 +260,7 @@ $FinalPhysicalGate = Invoke-JsonGate -ScriptPath $FinalPhysicalGateScript -Argum
 $FinalPhysicalGateStatus = if ([bool]$FinalPhysicalGate.parse_ok) { [string](Get-PropertyValue -Payload $FinalPhysicalGate.payload -Name 'status' -Default '') } else { 'failed_gate_parse' }
 $FinalPhysicalGateReady = [bool]$FinalPhysicalGate.parse_ok -and [int]$FinalPhysicalGate.exit_code -eq 0 -and $FinalPhysicalGateStatus -eq $ExpectedFinalPhysicalStatus
 $FinalPhysicalGateFailed = (-not [bool]$FinalPhysicalGate.parse_ok) -or [int]$FinalPhysicalGate.exit_code -ne 0 -or $FinalPhysicalGateStatus.StartsWith('failed_') -or $FinalPhysicalGateStatus.StartsWith('missing_') -or $FinalPhysicalGateStatus.StartsWith('invalid_')
+$FinalPhysicalGateReferencePilotFingerprint = if ([bool]$FinalPhysicalGate.parse_ok) { [string](Get-PropertyValue -Payload $FinalPhysicalGate.payload -Name 'pilot_identity_continuity_reference_fingerprint' -Default '') } else { '' }
 
 $ResolvedFinalDecisionPath = if ([string]::IsNullOrWhiteSpace($FinalDecisionPath)) { '' } else { Resolve-GatePath -Path $FinalDecisionPath }
 $DecisionRecord = $null
@@ -253,6 +276,7 @@ $SavedFinalGateRecordPath = ''
 $SavedFinalGateRecordExists = $false
 $SavedFinalGateRecordParseOk = $false
 $SavedFinalGateStatus = ''
+$FinalDecisionPilotFingerprint = ''
 
 if ($FinalPhysicalGateReady -and [string]::IsNullOrWhiteSpace($ResolvedFinalDecisionPath)) {
   $MissingFields.Add('final_decision_path') | Out-Null
@@ -281,7 +305,17 @@ if ($FinalPhysicalGateReady -and $DecisionRecordParseOk) {
   Add-EvidenceDateCheck -Missing $MissingFields -Invalid $InvalidFields -Field 'evidence.date' -Value (Get-PropertyValue -Payload $Evidence -Name 'date')
   Add-IfMissingText -Target $MissingFields -Field 'evidence.decision_reviewer' -Value (Get-PropertyValue -Payload $Evidence -Name 'decision_reviewer')
   Add-IfMissingText -Target $MissingFields -Field 'evidence.reviewer_role' -Value (Get-PropertyValue -Payload $Evidence -Name 'reviewer_role')
-  Add-IfMissingText -Target $MissingFields -Field 'evidence.pilot_id' -Value (Get-PropertyValue -Payload $Evidence -Name 'pilot_id')
+  $PilotIdValue = Get-PropertyValue -Payload $Evidence -Name 'pilot_id'
+  Add-IfMissingText -Target $MissingFields -Field 'evidence.pilot_id' -Value $PilotIdValue
+  if (-not (Test-MissingOrPendingText -Value $PilotIdValue)) {
+    $FinalDecisionPilotFingerprint = Get-IdentityFingerprint -Value $PilotIdValue
+    if (Test-MissingOrPendingText -Value $FinalPhysicalGateReferencePilotFingerprint) {
+      $InvalidFields.Add('evidence.pilot_id.final_physical_gate_reference_missing') | Out-Null
+    } elseif ($FinalDecisionPilotFingerprint -ne $FinalPhysicalGateReferencePilotFingerprint) {
+      $InvalidFields.Add('evidence.pilot_id') | Out-Null
+      $DecisionLockViolations.Add('evidence.pilot_id_must_match_final_physical_gate_reference') | Out-Null
+    }
+  }
   Add-ExactTextCheck -Missing $MissingFields -Invalid $InvalidFields -Field 'evidence.final_physical_gate_status' -Value (Get-PropertyValue -Payload $Evidence -Name 'final_physical_gate_status') -Expected $ExpectedFinalPhysicalStatus
   $FinalGateRecordPathValue = Get-PropertyValue -Payload $Evidence -Name 'final_physical_gate_record_path'
   Add-IfMissingText -Target $MissingFields -Field 'evidence.final_physical_gate_record_path' -Value $FinalGateRecordPathValue
@@ -396,6 +430,9 @@ $Output = [ordered]@{
   final_decision_record_parse_ok = $DecisionRecordParseOk
   final_decision_record_ready = ($Status -eq 'ready_for_completion_ledger_review')
   final_decision_record_contract = 'This gate validates a populated human final decision record after the final physical gate is decision-ready. It is a ledger-review handoff, not certification, physical validation completion, powered/frame/load clearance, or FR-018 clearance.'
+  final_decision_pilot_identity_contract = 'Final decision evidence.pilot_id must match the final physical gate pilot identity continuity reference by redacted SHA-256-derived fingerprint; raw pilot ID is not emitted.'
+  final_physical_gate_reference_pilot_fingerprint = $FinalPhysicalGateReferencePilotFingerprint
+  final_decision_pilot_fingerprint = $FinalDecisionPilotFingerprint
   saved_final_physical_gate_record_path = $SavedFinalGateRecordPath
   saved_final_physical_gate_record_exists = $SavedFinalGateRecordExists
   saved_final_physical_gate_record_parse_ok = $SavedFinalGateRecordParseOk
