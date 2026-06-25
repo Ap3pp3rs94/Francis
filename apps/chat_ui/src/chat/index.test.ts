@@ -22,6 +22,7 @@ import {
   francisBodySurfaceExposureSummary,
   formatCollaborationRelayMessage,
   isCollaborationAuditReceipt,
+  isCollaborationDriverPrompt,
   parseCollaborationAgentsStatus,
   parseCollaborationLearning,
   parseCollaborationReview,
@@ -1101,6 +1102,7 @@ test("parseCollaborationTranscript classifies auto-ack receipts as hideable audi
   assert.equal(transcript.items[0]?.receiptKind, "audit_ack");
   assert.equal(isCollaborationAuditReceipt(transcript.items[0]!), true);
   assert.equal(transcript.items[1]?.receiptKind, "conversation");
+  assert.equal(isCollaborationDriverPrompt(transcript.items[2]!), true);
   assert.equal(summary.totalCount, 3);
   assert.equal(summary.auditReceiptCount, 1);
   assert.equal(summary.driverPromptCount, 1);
@@ -1112,8 +1114,16 @@ test("parseCollaborationTranscript classifies auto-ack receipts as hideable audi
     ["collab_reply", "collab_driver"],
   );
   assert.deepEqual(
+    summary.operatorConversationItems.map((item) => item.id),
+    ["collab_reply"],
+  );
+  assert.deepEqual(
     summary.auditReceipts.map((item) => item.id),
     ["collab_ack"],
+  );
+  assert.deepEqual(
+    summary.driverPrompts.map((item) => item.id),
+    ["collab_driver"],
   );
 });
 

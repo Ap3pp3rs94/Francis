@@ -864,7 +864,7 @@ export function isCollaborationAuditReceipt(item: CollaborationTranscriptItem): 
   return item.receiptKind === "audit_ack";
 }
 
-function isCollaborationDriverPrompt(item: CollaborationTranscriptItem): boolean {
+export function isCollaborationDriverPrompt(item: CollaborationTranscriptItem): boolean {
   const raw = receiptText(item);
   return (
     item.sourceAgent === "codex" &&
@@ -880,7 +880,9 @@ function isCollaborationGuardReceipt(item: CollaborationTranscriptItem): boolean
 
 export function collaborationTranscriptAuditSummary(items: CollaborationTranscriptItem[]): {
   conversationItems: CollaborationTranscriptItem[];
+  operatorConversationItems: CollaborationTranscriptItem[];
   auditReceipts: CollaborationTranscriptItem[];
+  driverPrompts: CollaborationTranscriptItem[];
   auditReceiptCount: number;
   driverPromptCount: number;
   guardReceiptCount: number;
@@ -889,22 +891,31 @@ export function collaborationTranscriptAuditSummary(items: CollaborationTranscri
   totalCount: number;
 } {
   const conversationItems: CollaborationTranscriptItem[] = [];
+  const operatorConversationItems: CollaborationTranscriptItem[] = [];
   const auditReceipts: CollaborationTranscriptItem[] = [];
+  const driverPrompts: CollaborationTranscriptItem[] = [];
   let driverPromptCount = 0;
   let guardReceiptCount = 0;
   for (const item of items) {
+    const driverPrompt = isCollaborationDriverPrompt(item);
     if (isCollaborationAuditReceipt(item)) {
       auditReceipts.push(item);
     } else {
       conversationItems.push(item);
+      if (!driverPrompt) operatorConversationItems.push(item);
     }
-    if (isCollaborationDriverPrompt(item)) driverPromptCount += 1;
+    if (driverPrompt) {
+      driverPrompts.push(item);
+      driverPromptCount += 1;
+    }
     if (isCollaborationGuardReceipt(item)) guardReceiptCount += 1;
   }
   const relayMechanicCount = auditReceipts.length + driverPromptCount;
   return {
     conversationItems,
+    operatorConversationItems,
     auditReceipts,
+    driverPrompts,
     auditReceiptCount: auditReceipts.length,
     driverPromptCount,
     guardReceiptCount,

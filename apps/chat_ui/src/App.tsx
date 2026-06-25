@@ -38,6 +38,7 @@ import {
   francisBodySurfaceExposureSummary,
   formatCollaborationRelayMessage,
   isCollaborationAuditReceipt,
+  isCollaborationDriverPrompt,
   preserveCollaborationReadbackDuringWarming,
   setCollaborationAgentEnabled,
   type CollaborationAgent,
@@ -1166,6 +1167,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
   const [selectedSessionId, setSelectedSessionId] = useState("");
   const [followLatest, setFollowLatest] = useState(true);
   const [showAuditReceipts, setShowAuditReceipts] = useState(false);
+  const [showRelayPrompts, setShowRelayPrompts] = useState(false);
   const requestInFlight = useRef<{ signal?: AbortSignal } | null>(null);
   const liveTranscriptScrollRef = useRef<HTMLDivElement | null>(null);
   const transcriptScrollRef = useRef<HTMLDivElement | null>(null);
@@ -1338,11 +1340,21 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
   const latestToggleReceipts = [...toggleReceipts].slice(-4).reverse();
   const transcriptItems = transcript?.items ?? [];
   const transcriptAuditSummary = useMemo(() => collaborationTranscriptAuditSummary(transcriptItems), [transcriptItems]);
-  const transcriptFilterText = `${transcriptAuditSummary.substantiveTurnCount} substantive / ${transcriptAuditSummary.driverPromptCount} driver compacted`;
+  const transcriptFilterText = `${transcriptAuditSummary.substantiveTurnCount} substantive / ${transcriptAuditSummary.driverPromptCount} prompts ${
+    showRelayPrompts ? "shown" : "hidden"
+  }`;
   const transcriptAuditText = transcriptAuditSummary.auditReceiptCount
     ? ` / ${transcriptAuditSummary.auditReceiptCount} audit ${showAuditReceipts ? "shown" : "hidden"}`
     : "";
-  const sessionSourceItems = showAuditReceipts ? transcriptItems : transcriptAuditSummary.conversationItems;
+  const sessionSourceItems = useMemo(
+    () =>
+      transcriptItems.filter((item) => {
+        if (!showAuditReceipts && isCollaborationAuditReceipt(item)) return false;
+        if (!showRelayPrompts && isCollaborationDriverPrompt(item)) return false;
+        return true;
+      }),
+    [showAuditReceipts, showRelayPrompts, transcriptItems],
+  );
   const sessions = useMemo(() => buildCollaborationSessions(sessionSourceItems), [sessionSourceItems]);
   const sessionSummaries = sessionReadback?.items ?? [];
   const reviewItems = review?.items ?? [];
@@ -2068,6 +2080,23 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
                 }}
               >
                 Audit ({transcriptAuditSummary.auditReceiptCount})
+              </button>
+            ) : null}
+            {transcriptAuditSummary.driverPromptCount ? (
+              <button
+                type="button"
+                onClick={() => setShowRelayPrompts((current) => !current)}
+                style={{
+                  background: showRelayPrompts ? "rgba(103, 232, 249, 0.24)" : "rgba(15, 23, 42, 0.62)",
+                  border: "1px solid rgba(103, 232, 249, 0.36)",
+                  borderRadius: 10,
+                  color: showRelayPrompts ? "#cffafe" : "#cbd5e1",
+                  cursor: "pointer",
+                  fontWeight: 700,
+                  padding: "7px 10px",
+                }}
+              >
+                Prompts ({transcriptAuditSummary.driverPromptCount})
               </button>
             ) : null}
             {sessions.map((session) => (
@@ -3524,6 +3553,23 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
                 }}
               >
                 Audit ({transcriptAuditSummary.auditReceiptCount})
+              </button>
+            ) : null}
+            {transcriptAuditSummary.driverPromptCount ? (
+              <button
+                type="button"
+                onClick={() => setShowRelayPrompts((current) => !current)}
+                style={{
+                  background: showRelayPrompts ? "rgba(103, 232, 249, 0.24)" : "rgba(15, 23, 42, 0.62)",
+                  border: "1px solid rgba(103, 232, 249, 0.36)",
+                  borderRadius: 10,
+                  color: showRelayPrompts ? "#cffafe" : "#cbd5e1",
+                  cursor: "pointer",
+                  fontWeight: 700,
+                  padding: "7px 10px",
+                }}
+              >
+                Prompts ({transcriptAuditSummary.driverPromptCount})
               </button>
             ) : null}
             {sessions.map((session) => (

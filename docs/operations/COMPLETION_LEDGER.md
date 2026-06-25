@@ -95281,6 +95281,48 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, and unrelated full-system UI flows were not
   run for this bounded Communication cleanup slice.
 
+### 2026-06-25 21:45Z - Communication relay prompts become opt-in noise
+
+Current posture: Phase 2 / developer bridge collaboration support now separates
+substantive Francis1 replies from Codex driver prompts and audit acknowledgements
+using existing relay receipt fields. The Communication UI can still expose Codex
+prompts and raw/technical receipts on demand, but the default live conversation
+view no longer treats repetitive driver prompts as ordinary conversation.
+
+What changed:
+
+- Exported the existing driver-prompt classifier so UI presentation can identify
+  Codex -> Francis1 driver prompts without changing receipt storage.
+- Extended collaboration transcript summary with `operatorConversationItems` and
+  `driverPrompts`, preserving the existing `conversationItems` and audit receipt
+  fields for compatibility.
+- The Live Conversation and Relay Transcript Archive panels now include a
+  `Prompts` toggle. Audit acknowledgements and driver prompts are hidden by
+  default, while substantive replies and guard rewrites remain visible.
+- Header counts now state whether driver prompts are shown or hidden, making the
+  visible relay filter explicit to the operator.
+
+Validation:
+
+- Chat UI contract suite passed:
+  `npm run test -- src/chat/index.test.ts`
+  (the package script ran the configured UI suite, `279` passing tests).
+- Chat UI production build passed:
+  `npm run build`.
+- Vite was restarted on `http://127.0.0.1:5173/`; HTTP readback returned `200`
+  with the root element present, and Vite reported the local URL ready.
+- Collaboration runtime readback after the UI restart returned `healthy`,
+  `helper_count=3`, `desired_count=3`, with the recurring driver at turn `1278`.
+
+Remaining truthful gap:
+
+- This is a presentation filter only; it does not change relay receipt storage,
+  grant authority, tune Francis1, or promote learning receipts into memory.
+- Browser visual automation was not available in this session; server-level UI
+  proof, UI contract tests, and the production build passed.
+- `.\scripts\check.ps1`, GitHub CI, and unrelated full-system UI flows were not
+  run for this bounded Communication presentation slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
