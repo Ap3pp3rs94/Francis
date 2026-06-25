@@ -1323,6 +1323,10 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
   const latestToggleReceipts = [...toggleReceipts].slice(-4).reverse();
   const transcriptItems = transcript?.items ?? [];
   const transcriptAuditSummary = useMemo(() => collaborationTranscriptAuditSummary(transcriptItems), [transcriptItems]);
+  const transcriptFilterText = `${transcriptAuditSummary.substantiveTurnCount} substantive / ${transcriptAuditSummary.driverPromptCount} driver compacted`;
+  const transcriptAuditText = transcriptAuditSummary.auditReceiptCount
+    ? ` / ${transcriptAuditSummary.auditReceiptCount} audit ${showAuditReceipts ? "shown" : "hidden"}`
+    : "";
   const sessionSourceItems = showAuditReceipts ? transcriptItems : transcriptAuditSummary.conversationItems;
   const sessions = useMemo(() => buildCollaborationSessions(sessionSourceItems), [sessionSourceItems]);
   const sessionSummaries = sessionReadback?.items ?? [];
@@ -1937,10 +1941,8 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <h3 style={{ fontSize: 20, margin: 0 }}>Live Conversation</h3>
           <span style={{ color: "#94a3b8", fontSize: 13 }}>
-            {liveTranscriptItems.length} shown / {visibleTranscriptItems.length} in session
-            {transcriptAuditSummary.auditReceiptCount
-              ? ` / ${transcriptAuditSummary.auditReceiptCount} audit ${showAuditReceipts ? "shown" : "hidden"}`
-              : ""}
+            {liveTranscriptItems.length} shown / {transcriptFilterText}
+            {transcriptAuditText}
             {collaborationCacheLabel(transcript?.readbackCache)}
           </span>
         </div>
@@ -3361,10 +3363,9 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <h3 style={{ fontSize: 18, margin: 0 }}>Relay Transcript Archive</h3>
           <span style={{ color: "#94a3b8", fontSize: 13 }}>
-            {visibleTranscriptItems.length} messages{transcript?.truncated ? " / truncated" : ""}
-            {transcriptAuditSummary.auditReceiptCount
-              ? ` / ${transcriptAuditSummary.auditReceiptCount} audit ${showAuditReceipts ? "shown" : "hidden"}`
-              : ""}
+            {visibleTranscriptItems.length} messages / {transcriptFilterText}
+            {transcript?.truncated ? " / truncated" : ""}
+            {transcriptAuditText}
             {collaborationCacheLabel(transcript?.readbackCache)}
           </span>
         </div>

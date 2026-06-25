@@ -94900,6 +94900,50 @@ Remaining truthful gap:
   proof, and unrelated UI flows were not run for this bounded recurrence-readback
   slice.
 
+### 2026-06-25 20:50Z - Communication headers show relay filter counts
+
+Current posture: Phase 2 / developer bridge collaboration support now makes the
+Communication transcript filter posture visible from existing receipt fields.
+This follows the Francis1/Codex review signal that the operator needs to
+distinguish substantive agent turns from relay mechanics without losing the
+underlying audit receipts.
+
+What changed:
+
+- `collaborationTranscriptAuditSummary()` now counts driver prompts, guard
+  receipts, relay mechanics, and substantive turns from existing transcript
+  receipt fields.
+- The Live Conversation and Relay Transcript Archive headers now show
+  substantive-turn count, compacted-driver count, and audit hidden/shown state.
+- The focused Chat UI contract test now verifies those transcript-noise counts
+  while preserving audit receipts and compact driver prompts.
+
+Validation:
+
+- Chat UI contract run passed:
+  `npm run test -- --test-name-pattern=CollaborationTranscript`
+  (`279` passing tests in the selected run).
+- Chat UI production build passed with `npm run build`.
+- `git diff --check` passed.
+- Live URL proof: `GET http://127.0.0.1:5173/` returned HTTP 200.
+- Live transcript readback over the latest 12 receipts reported
+  `audit=4`, `driver=4`, `guard=0`, and `substantive=4`; transcript readback
+  remained truncated rather than claiming full-history coverage.
+- Collaboration runtime health remained `healthy` with `helpers=3/3`, turn
+  `1213`, Codex enabled, Ollama enabled, and Claude disabled.
+
+Remaining truthful gap:
+
+- This does not delete, rewrite, or hide the underlying append-only receipts; it
+  only exposes filter/count posture in the UI.
+- This does not change recurrence timing, model prompting, transcript retention,
+  learning/tuning, or session grouping behavior.
+- This does not grant execution, mutation, approval, training, memory-write, or
+  main-build prompt authority.
+- `.\scripts\check.ps1`, GitHub CI, full backend test suite, browser screenshot
+  proof, and unrelated UI flows were not run for this bounded Communication UI
+  readback slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -834,25 +834,52 @@ export function isCollaborationAuditReceipt(item: CollaborationTranscriptItem): 
   return item.receiptKind === "audit_ack";
 }
 
+function isCollaborationDriverPrompt(item: CollaborationTranscriptItem): boolean {
+  const raw = receiptText(item);
+  return (
+    item.sourceAgent === "codex" &&
+    item.targetAgent === "ollama" &&
+    item.objective.toLowerCase().startsWith("francis1 collaboration driver turn") &&
+    (raw.startsWith("Francis1 collab turn ") || raw.startsWith("Francis1 turn "))
+  );
+}
+
+function isCollaborationGuardReceipt(item: CollaborationTranscriptItem): boolean {
+  return receiptText(item).startsWith("Francis1 output guard fallback:");
+}
+
 export function collaborationTranscriptAuditSummary(items: CollaborationTranscriptItem[]): {
   conversationItems: CollaborationTranscriptItem[];
   auditReceipts: CollaborationTranscriptItem[];
   auditReceiptCount: number;
+  driverPromptCount: number;
+  guardReceiptCount: number;
+  relayMechanicCount: number;
+  substantiveTurnCount: number;
   totalCount: number;
 } {
   const conversationItems: CollaborationTranscriptItem[] = [];
   const auditReceipts: CollaborationTranscriptItem[] = [];
+  let driverPromptCount = 0;
+  let guardReceiptCount = 0;
   for (const item of items) {
     if (isCollaborationAuditReceipt(item)) {
       auditReceipts.push(item);
     } else {
       conversationItems.push(item);
     }
+    if (isCollaborationDriverPrompt(item)) driverPromptCount += 1;
+    if (isCollaborationGuardReceipt(item)) guardReceiptCount += 1;
   }
+  const relayMechanicCount = auditReceipts.length + driverPromptCount;
   return {
     conversationItems,
     auditReceipts,
     auditReceiptCount: auditReceipts.length,
+    driverPromptCount,
+    guardReceiptCount,
+    relayMechanicCount,
+    substantiveTurnCount: Math.max(0, items.length - relayMechanicCount),
     totalCount: items.length,
   };
 }
@@ -907,11 +934,7 @@ export function formatCollaborationRelayMessage(item: CollaborationTranscriptIte
   const guardFallback = compactGuardFallbackReceipt(raw, item);
   if (guardFallback) return guardFallback;
 
-  const isDriverPrompt =
-    item.sourceAgent === "codex" &&
-    item.targetAgent === "ollama" &&
-    item.objective.toLowerCase().startsWith("francis1 collaboration driver turn") &&
-    (raw.startsWith("Francis1 collab turn ") || raw.startsWith("Francis1 turn "));
+  const isDriverPrompt = isCollaborationDriverPrompt(item);
   if (!isDriverPrompt) {
     const technicalText = [item.objective ? `Objective: ${item.objective}` : "", item.context ? `Context: ${item.context}` : ""]
       .filter(Boolean)

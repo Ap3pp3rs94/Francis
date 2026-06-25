@@ -1081,6 +1081,10 @@ test("parseCollaborationTranscript classifies auto-ack receipts as hideable audi
   assert.equal(transcript.items[1]?.receiptKind, "conversation");
   assert.equal(summary.totalCount, 3);
   assert.equal(summary.auditReceiptCount, 1);
+  assert.equal(summary.driverPromptCount, 1);
+  assert.equal(summary.guardReceiptCount, 1);
+  assert.equal(summary.relayMechanicCount, 2);
+  assert.equal(summary.substantiveTurnCount, 1);
   assert.deepEqual(
     summary.conversationItems.map((item) => item.id),
     ["collab_reply", "collab_driver"],
