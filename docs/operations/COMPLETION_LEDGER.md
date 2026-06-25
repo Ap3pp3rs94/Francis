@@ -94816,6 +94816,51 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, full backend test suite, and unrelated UI
   flows were not run for this bounded label-truthfulness slice.
 
+### 2026-06-25 20:41Z - Action intake shows full no-direct-authority boundary
+
+Current posture: Phase 2 / developer bridge collaboration support now renders
+the action-intake boundary with explicit execution, mutation, approval, and
+memory-write denial. This follows the Francis1/Codex review signal that typed or
+spoken direction should enter Francis as a reviewed action candidate before any
+governed runtime action can occur.
+
+What changed:
+
+- `collaborationActionIntakeSummary()` now treats execution, mutation, approval,
+  and memory-write grants as unsafe action authority for mission-ingress review
+  receipts.
+- The action-intake summary now includes Codex-review, repo-truth-review,
+  execute, mutation, approve, and memory-write chips.
+- The Chat UI `Action Intake Boundary` card changed its top authority label to
+  `No Direct Authority` and shows execute/mutation/approve/memory state in the
+  main card summary.
+
+Validation:
+
+- Chat UI contract run passed:
+  `npm run test -- --test-name-pattern=collaborationActionIntakeSummary`
+  (`279` passing tests in the selected run).
+- Chat UI production build passed with `npm run build`.
+- `git diff --check` passed.
+- Live URL proof: `GET http://127.0.0.1:5173/` returned HTTP 200.
+- Live review proof found the `api.routes.chat.mission_ingress` review receipt
+  with `candidate=true`, `execute=false`, `mutation=false`, `approve=false`,
+  `memory=false`, `codex_review=true`, and `repo_review=true`.
+- Browser proof captured `http://127.0.0.1:5173/` at
+  `output/playwright/collaboration-action-intake-authority.png`; the page showed
+  `No Direct Authority` with execute/mutation/approve/memory all false.
+- Collaboration runtime health remained `healthy`, with Codex and Ollama enabled
+  and Claude disabled.
+
+Remaining truthful gap:
+
+- This does not change mission-ingress behavior, create new action authority, or
+  bypass operator posture and `missions.write` gates.
+- This does not grant execution, mutation, approval, training, memory-write, or
+  main-build prompt authority.
+- `.\scripts\check.ps1`, GitHub CI, full backend test suite, and unrelated UI
+  flows were not run for this bounded action-intake readback slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

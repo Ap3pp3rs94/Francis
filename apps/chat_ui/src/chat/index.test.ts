@@ -1870,6 +1870,11 @@ test("collaborationActionIntakeSummary exposes mission ingress as candidate-only
         },
         build_direction_gate: {
           state: "advisory_review_required",
+          requires_codex_or_operator_review: true,
+          grants_execution_authority: false,
+          grants_mutation_authority: false,
+          grants_approval_authority: false,
+          grants_memory_write_authority: false,
         },
       },
     ],
@@ -1883,9 +1888,12 @@ test("collaborationActionIntakeSummary exposes mission ingress as candidate-only
   assert.deepEqual(summary.detail, [
     "surface api.routes.chat.mission_ingress",
     "candidate true",
-    "execute false",
-    "approve false",
+    "codex review true",
     "repo review true",
+    "execute false",
+    "mutation false",
+    "approve false",
+    "memory write false",
     "gate advisory_review_required",
   ]);
 });

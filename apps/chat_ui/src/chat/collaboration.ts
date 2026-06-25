@@ -1134,7 +1134,14 @@ export function collaborationActionIntakeSummary(item: CollaborationReviewItem):
     };
   }
   const boundary = item.actionBoundary;
-  const unsafeAuthority = boundary.conversationCanExecuteAction || boundary.conversationCanApproveAction;
+  const gate = item.buildDirectionGate;
+  const unsafeAuthority =
+    boundary.conversationCanExecuteAction ||
+    boundary.conversationCanApproveAction ||
+    gate.grantsExecutionAuthority ||
+    gate.grantsMutationAuthority ||
+    gate.grantsApprovalAuthority ||
+    gate.grantsMemoryWriteAuthority;
   return {
     applies: true,
     badge: unsafeAuthority ? "action authority visible" : "action candidate only",
@@ -1142,9 +1149,12 @@ export function collaborationActionIntakeSummary(item: CollaborationReviewItem):
     detail: [
       `surface ${surface || "unknown"}`,
       `candidate ${actionBoundaryBool(boundary.conversationCanCreateActionCandidate)}`,
-      `execute ${actionBoundaryBool(boundary.conversationCanExecuteAction)}`,
-      `approve ${actionBoundaryBool(boundary.conversationCanApproveAction)}`,
+      `codex review ${actionBoundaryBool(boundary.requiresCodexOrOperatorReviewBeforeImplementation || gate.requiresCodexOrOperatorReview)}`,
       `repo review ${actionBoundaryBool(boundary.requiresRepoTruthReview)}`,
+      `execute ${actionBoundaryBool(boundary.conversationCanExecuteAction || gate.grantsExecutionAuthority)}`,
+      `mutation ${actionBoundaryBool(gate.grantsMutationAuthority)}`,
+      `approve ${actionBoundaryBool(boundary.conversationCanApproveAction || gate.grantsApprovalAuthority)}`,
+      `memory write ${actionBoundaryBool(gate.grantsMemoryWriteAuthority)}`,
       `gate ${item.buildDirectionGate.state || "advisory_review_required"}`,
     ],
   };

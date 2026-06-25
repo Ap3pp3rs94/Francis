@@ -1736,10 +1736,12 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
               <div>{latestActionIntakeReview.buildDirectionGate.state || "advisory_review_required"}</div>
             </div>
             <div>
-              <div style={{ color: "#94a3b8", fontSize: 12, textTransform: "uppercase" }}>Authority</div>
+              <div style={{ color: "#94a3b8", fontSize: 12, textTransform: "uppercase" }}>No Direct Authority</div>
               <div>
-                execute {boolText(latestActionIntakeReview.actionBoundary.conversationCanExecuteAction)} / approve{" "}
-                {boolText(latestActionIntakeReview.actionBoundary.conversationCanApproveAction)}
+                execute {boolText(latestActionIntakeReview.actionBoundary.conversationCanExecuteAction)} / mutation{" "}
+                {boolText(latestActionIntakeReview.buildDirectionGate.grantsMutationAuthority)} / approve{" "}
+                {boolText(latestActionIntakeReview.actionBoundary.conversationCanApproveAction)} / memory{" "}
+                {boolText(latestActionIntakeReview.buildDirectionGate.grantsMemoryWriteAuthority)}
               </div>
             </div>
           </div>
