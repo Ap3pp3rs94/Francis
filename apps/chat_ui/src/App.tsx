@@ -35,6 +35,7 @@ import {
   collaborationRuntimeLearningSignalSummary,
   collaborationRuntimeReviewReceiptSummary,
   collaborationSubstrateChecklistSummary,
+  collaborationSessionTranscriptDisclosureSummary,
   francisBodySurfaceExposureSummary,
   formatCollaborationRelayMessage,
   isCollaborationAuditReceipt,
@@ -1422,6 +1423,9 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
     selectedSessionReadback?.latestReviewGate.observed
       ? collaborationSessionReviewGateSummary(selectedSessionReadback.latestReviewGate)
       : null;
+  const selectedSessionDisclosureSummary = selectedSessionReadback
+    ? collaborationSessionTranscriptDisclosureSummary(selectedSessionReadback.transcriptDisclosure)
+    : null;
   const latestLiveMessageId = liveTranscriptItems[liveTranscriptItems.length - 1]?.id ?? "";
   const latestMessageId = visibleTranscriptItems[visibleTranscriptItems.length - 1]?.id ?? "";
 
@@ -2147,6 +2151,27 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
             {selectedSessionReadback.latestPreview ? (
               <p style={{ color: "#cbd5e1", margin: "6px 0 0", overflowWrap: "anywhere" }}>{selectedSessionReadback.latestPreview}</p>
             ) : null}
+            {selectedSessionDisclosureSummary ? (
+              <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+                <span
+                  style={{
+                    border: `1px solid ${selectedSessionDisclosureSummary.tone === "blocked" ? "#fca5a5" : "#6ee7b7"}`,
+                    borderRadius: 999,
+                    color: selectedSessionDisclosureSummary.tone === "blocked" ? "#fecaca" : "#bbf7d0",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    padding: "3px 8px",
+                  }}
+                >
+                  {selectedSessionDisclosureSummary.badge}
+                </span>
+                {selectedSessionDisclosureSummary.detail.slice(0, 4).map((line) => (
+                  <span key={`live-disclosure-${line}`} style={{ color: "#94a3b8", fontSize: 12 }}>
+                    {line}
+                  </span>
+                ))}
+              </div>
+            ) : null}
             {selectedSessionReviewGateSummary ? (
               <div
                 style={{
@@ -2300,6 +2325,9 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
             gap: 10,
             gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
             marginTop: 12,
+            maxHeight: 420,
+            overflowY: "auto",
+            paddingRight: 4,
           }}
         >
           <article
@@ -3056,6 +3084,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
               const sessionGateSummary = session.latestReviewGate.observed
                 ? collaborationSessionReviewGateSummary(session.latestReviewGate)
                 : null;
+              const sessionDisclosureSummary = collaborationSessionTranscriptDisclosureSummary(session.transcriptDisclosure);
               return (
               <article
                 key={session.id}
@@ -3077,6 +3106,25 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
                 {session.latestPreview ? (
                   <p style={{ color: "#cbd5e1", margin: "8px 0 0", overflowWrap: "anywhere" }}>{session.latestPreview}</p>
                 ) : null}
+                <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+                  <span
+                    style={{
+                      border: `1px solid ${sessionDisclosureSummary.tone === "blocked" ? "#fca5a5" : "#6ee7b7"}`,
+                      borderRadius: 999,
+                      color: sessionDisclosureSummary.tone === "blocked" ? "#fecaca" : "#bbf7d0",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      padding: "3px 8px",
+                    }}
+                  >
+                    {sessionDisclosureSummary.badge}
+                  </span>
+                  {sessionDisclosureSummary.detail.slice(1, 4).map((line) => (
+                    <span key={`${session.id}-${line}`} style={{ color: "#94a3b8", fontSize: 12 }}>
+                      {line}
+                    </span>
+                  ))}
+                </div>
                 {sessionGateSummary ? (
                   <div
                     style={{

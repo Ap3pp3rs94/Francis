@@ -2173,8 +2173,19 @@ def test_collaboration_sessions_summarize_without_full_transcript_dump(tmp_path,
     assert session["latest_review_gate"]["requires_repo_truth_review"] is True
     assert session["latest_review_gate"]["grants_execution_authority"] is False
     assert session["latest_review_gate"]["stores_full_transcript"] is False
+    assert session["transcript_disclosure"] == {
+        "summary_before_raw_transcript": True,
+        "safe_preview_available": True,
+        "raw_transcript_opened_by_default": False,
+        "raw_receipt_details_opened_by_default": False,
+        "technical_receipts_opened_by_default": False,
+        "stores_full_transcript": False,
+        "operator_review_surface": "developer_bridge.collaboration_sessions",
+        "disclosure_label": "summary first; raw receipt detail remains opt-in",
+    }
     assert sessions["definitions"]["latest_preview"].startswith("A short bounded preview")
     assert sessions["definitions"]["latest_review_gate"].startswith("The latest typed review gate")
+    assert sessions["definitions"]["transcript_disclosure"].startswith("Operator-facing disclosure state")
 
 
 def test_collaboration_transcript_route_returns_explicit_json_response(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
@@ -2217,6 +2228,8 @@ def test_collaboration_sessions_route_returns_explicit_json_response(tmp_path, m
     assert payload["kind"] == "developer_bridge.collaboration_sessions"
     assert payload["ok"] is True
     assert payload["items"][0]["message_count"] == 1
+    assert payload["items"][0]["transcript_disclosure"]["summary_before_raw_transcript"] is True
+    assert payload["items"][0]["transcript_disclosure"]["raw_receipt_details_opened_by_default"] is False
     assert payload["governance"]["stores_full_transcript"] is False
 
 

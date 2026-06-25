@@ -95323,6 +95323,62 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, and unrelated full-system UI flows were not
   run for this bounded Communication presentation slice.
 
+### 2026-06-25 22:00Z - Communication session summaries expose transcript disclosure
+
+Current posture: Phase 2 / developer bridge collaboration support now makes the
+session-level summary-first contract explicit before operators inspect raw relay
+receipt detail. The Communication UI still shows substantive conversation by
+default and keeps driver prompts, audit acknowledgements, and technical receipts
+behind operator disclosure controls.
+
+What changed:
+
+- Collaboration session readback now returns a typed `transcript_disclosure`
+  object for each session with summary-first, safe-preview, raw-open-default,
+  technical-receipt-default, and full-transcript-storage flags.
+- The session readback definition now documents `transcript_disclosure` as the
+  operator-facing summary-first disclosure state.
+- The Chat UI parser preserves the new disclosure object and summarizes it as a
+  `summary-first` or blocked disclosure badge.
+- The Live Conversation selected-session summary and Session Readback cards now
+  show compact disclosure chips, and the Session Readback card area is scrollable
+  so session volume does not expand the whole Communication page indefinitely.
+
+Validation:
+
+- Developer bridge test file passed:
+  `python -m pytest tests/test_developer_bridge.py`
+  (`69` passing tests, one existing Starlette deprecation warning).
+- Chat UI contract suite passed:
+  `npm run test -- src/chat/index.test.ts`
+  (the package script ran the configured UI suite, `279` passing tests).
+- Chat UI production build passed:
+  `npm run build`.
+- `git diff --check` passed.
+- Live session readback returned `transcript_disclosure` with
+  `summary_before_raw_transcript=true`, `raw_transcript_opened_by_default=false`,
+  `raw_receipt_details_opened_by_default=false`,
+  `technical_receipts_opened_by_default=false`, and
+  `stores_full_transcript=false`.
+- The local Francis API was restarted after the Python readback change. The
+  route
+  `/developer-bridge/collaboration-sessions?limit=1&item_limit=12`
+  returned HTTP `200` with the new disclosure object.
+- Vite remained available at `http://127.0.0.1:5173/`; delayed Playwright
+  screenshot proof captured the Communication page with the corrected green
+  `summary-first` badge and scrollable live conversation area:
+  `output/playwright/communication-cleanup-final.png`.
+
+Remaining truthful gap:
+
+- This does not change relay receipt storage, tune Francis1, promote learning
+  receipts into memory, resolve ORB coverage gaps, or close the main-build prompt
+  gate.
+- This does not grant execution, mutation, approval, training, memory-write, or
+  main-build authority to Codex, Claude, Francis1, or the relay.
+- `.\scripts\check.ps1`, GitHub CI, and unrelated full-system UI flows were not
+  run for this bounded Communication session-disclosure slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

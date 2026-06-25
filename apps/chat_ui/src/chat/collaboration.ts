@@ -632,6 +632,18 @@ export type CollaborationSessionSummary = {
   latestObjective: string;
   latestPreview: string;
   latestReviewGate: CollaborationSessionReviewGate;
+  transcriptDisclosure: CollaborationSessionTranscriptDisclosure;
+};
+
+export type CollaborationSessionTranscriptDisclosure = {
+  summaryBeforeRawTranscript: boolean;
+  safePreviewAvailable: boolean;
+  rawTranscriptOpenedByDefault: boolean;
+  rawReceiptDetailsOpenedByDefault: boolean;
+  technicalReceiptsOpenedByDefault: boolean;
+  storesFullTranscript: boolean;
+  operatorReviewSurface: string;
+  disclosureLabel: string;
 };
 
 export type CollaborationSessionReviewGate = {
@@ -664,6 +676,12 @@ export type CollaborationSessionReviewGateDisplay = {
   detail: string[];
 };
 
+export type CollaborationSessionTranscriptDisclosureDisplay = {
+  badge: string;
+  tone: CollaborationReviewTone;
+  detail: string[];
+};
+
 export type CollaborationSessions = {
   ok: boolean;
   mode: string;
@@ -676,6 +694,7 @@ export type CollaborationSessions = {
     session: string;
     latestPreview: string;
     latestReviewGate: string;
+    transcriptDisclosure: string;
   };
   readbackCache: CollaborationReadbackCache;
   governance: Record<string, unknown>;
@@ -1197,6 +1216,29 @@ export function collaborationSessionReviewGateSummary(gate: CollaborationSession
       `approve ${actionBoundaryBool(gate.grantsApprovalAuthority)}`,
       `memory write ${actionBoundaryBool(gate.grantsMemoryWriteAuthority)}`,
       `full transcript ${actionBoundaryBool(gate.storesFullTranscript)}`,
+    ],
+  };
+}
+
+export function collaborationSessionTranscriptDisclosureSummary(
+  disclosure: CollaborationSessionTranscriptDisclosure,
+): CollaborationSessionTranscriptDisclosureDisplay {
+  const rawOpen =
+    disclosure.rawTranscriptOpenedByDefault ||
+    disclosure.rawReceiptDetailsOpenedByDefault ||
+    disclosure.technicalReceiptsOpenedByDefault;
+  const unsafeDisclosure = rawOpen || disclosure.storesFullTranscript || !disclosure.summaryBeforeRawTranscript;
+  return {
+    badge: unsafeDisclosure ? "raw disclosure drift" : "summary-first",
+    tone: unsafeDisclosure ? "blocked" : "ready",
+    detail: [
+      disclosure.disclosureLabel || "summary first; raw receipt detail remains opt-in",
+      `safe preview ${actionBoundaryBool(disclosure.safePreviewAvailable)}`,
+      `raw transcript open ${actionBoundaryBool(disclosure.rawTranscriptOpenedByDefault)}`,
+      `receipt detail open ${actionBoundaryBool(disclosure.rawReceiptDetailsOpenedByDefault)}`,
+      `technical receipts open ${actionBoundaryBool(disclosure.technicalReceiptsOpenedByDefault)}`,
+      `full transcript store ${actionBoundaryBool(disclosure.storesFullTranscript)}`,
+      `surface ${disclosure.operatorReviewSurface || "developer_bridge.collaboration_sessions"}`,
     ],
   };
 }
@@ -1890,6 +1932,21 @@ function parseSessionSummary(raw: unknown): CollaborationSessionSummary {
     latestObjective: safeString(item.latest_objective),
     latestPreview: safeString(item.latest_preview),
     latestReviewGate: parseSessionReviewGate(item.latest_review_gate),
+    transcriptDisclosure: parseSessionTranscriptDisclosure(item.transcript_disclosure),
+  };
+}
+
+function parseSessionTranscriptDisclosure(raw: unknown): CollaborationSessionTranscriptDisclosure {
+  const item = isRecord(raw) ? raw : {};
+  return {
+    summaryBeforeRawTranscript: safeBoolean(item.summary_before_raw_transcript),
+    safePreviewAvailable: safeBoolean(item.safe_preview_available),
+    rawTranscriptOpenedByDefault: safeBoolean(item.raw_transcript_opened_by_default),
+    rawReceiptDetailsOpenedByDefault: safeBoolean(item.raw_receipt_details_opened_by_default),
+    technicalReceiptsOpenedByDefault: safeBoolean(item.technical_receipts_opened_by_default),
+    storesFullTranscript: safeBoolean(item.stores_full_transcript),
+    operatorReviewSurface: safeString(item.operator_review_surface),
+    disclosureLabel: safeString(item.disclosure_label),
   };
 }
 
@@ -2480,6 +2537,7 @@ export function parseCollaborationSessions(raw: unknown): CollaborationSessions 
       session: safeString(definitions.session),
       latestPreview: safeString(definitions.latest_preview),
       latestReviewGate: safeString(definitions.latest_review_gate),
+      transcriptDisclosure: safeString(definitions.transcript_disclosure),
     },
     readbackCache: parseReadbackCache(value.readback_cache),
     governance: isRecord(value.governance) ? value.governance : {},

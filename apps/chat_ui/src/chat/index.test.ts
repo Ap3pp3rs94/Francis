@@ -17,6 +17,7 @@ import {
   collaborationRuntimeRecurrenceSummary,
   collaborationRuntimeReviewReceiptSummary,
   collaborationSessionReviewGateSummary,
+  collaborationSessionTranscriptDisclosureSummary,
   collaborationSubstrateChecklistSummary,
   collaborationTranscriptAuditSummary,
   francisBodySurfaceExposureSummary,
@@ -1364,6 +1365,7 @@ test("parseCollaborationSessions preserves bounded session summaries and governa
       session: "Messages grouped by timestamp gap from bounded relay receipts.",
       latest_preview: "A short bounded preview from the latest receipt, not a full transcript store.",
       latest_review_gate: "The latest typed review gate matched to a session relay receipt.",
+      transcript_disclosure: "Operator-facing disclosure state for summary-first review.",
     },
     items: [
       {
@@ -1397,6 +1399,16 @@ test("parseCollaborationSessions preserves bounded session summaries and governa
           grants_memory_write_authority: false,
           stores_full_transcript: false,
         },
+        transcript_disclosure: {
+          summary_before_raw_transcript: true,
+          safe_preview_available: true,
+          raw_transcript_opened_by_default: false,
+          raw_receipt_details_opened_by_default: false,
+          technical_receipts_opened_by_default: false,
+          stores_full_transcript: false,
+          operator_review_surface: "developer_bridge.collaboration_sessions",
+          disclosure_label: "summary first; raw receipt detail remains opt-in",
+        },
       },
     ],
     governance: {
@@ -1419,6 +1431,11 @@ test("parseCollaborationSessions preserves bounded session summaries and governa
   assert.equal(sessions.items[0]?.latestReviewGate.requiresRepoTruthReview, true);
   assert.equal(sessions.items[0]?.latestReviewGate.grantsExecutionAuthority, false);
   assert.equal(sessions.items[0]?.latestReviewGate.storesFullTranscript, false);
+  assert.equal(sessions.items[0]?.transcriptDisclosure.summaryBeforeRawTranscript, true);
+  assert.equal(sessions.items[0]?.transcriptDisclosure.rawTranscriptOpenedByDefault, false);
+  assert.equal(sessions.items[0]?.transcriptDisclosure.rawReceiptDetailsOpenedByDefault, false);
+  assert.equal(sessions.items[0]?.transcriptDisclosure.technicalReceiptsOpenedByDefault, false);
+  assert.equal(sessions.items[0]?.transcriptDisclosure.storesFullTranscript, false);
   const gateSummary = collaborationSessionReviewGateSummary(sessions.items[0]!.latestReviewGate);
   assert.equal(gateSummary.badge, "advisory gate");
   assert.equal(gateSummary.tone, "ready");
@@ -1435,8 +1452,21 @@ test("parseCollaborationSessions preserves bounded session summaries and governa
     "memory write false",
     "full transcript false",
   ]);
+  const disclosureSummary = collaborationSessionTranscriptDisclosureSummary(sessions.items[0]!.transcriptDisclosure);
+  assert.equal(disclosureSummary.badge, "summary-first");
+  assert.equal(disclosureSummary.tone, "ready");
+  assert.deepEqual(disclosureSummary.detail, [
+    "summary first; raw receipt detail remains opt-in",
+    "safe preview true",
+    "raw transcript open false",
+    "receipt detail open false",
+    "technical receipts open false",
+    "full transcript store false",
+    "surface developer_bridge.collaboration_sessions",
+  ]);
   assert.equal(sessions.definitions.latestPreview.includes("not a full transcript"), true);
   assert.equal(sessions.definitions.latestReviewGate.includes("typed review gate"), true);
+  assert.equal(sessions.definitions.transcriptDisclosure.includes("summary-first"), true);
   assert.equal(sessions.readbackCache.status, "stale_refreshing");
   assert.equal(sessions.readbackCache.ageMs, 3600);
   assert.equal(sessions.readbackCache.servesFullTranscriptStore, false);

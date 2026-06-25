@@ -235,6 +235,9 @@ def read_collaboration_sessions(
             "latest_review_gate": (
                 "The latest typed review gate matched to a session relay receipt, without loading raw transcript text."
             ),
+            "transcript_disclosure": (
+                "Operator-facing disclosure state for summary-first review before opening raw relay receipt detail."
+            ),
         },
         "governance": {
             **_governance(write=False),
@@ -432,6 +435,21 @@ def _session_summary(
         "latest_objective": latest.get("objective", ""),
         "latest_preview": _preview_text(str(latest.get("prompt") or "")),
         "latest_review_gate": _latest_session_review_gate(records, review_items),
+        "transcript_disclosure": _session_transcript_disclosure(latest),
+    }
+
+
+def _session_transcript_disclosure(latest: dict[str, object]) -> dict[str, object]:
+    preview = _preview_text(str(latest.get("prompt") or ""))
+    return {
+        "summary_before_raw_transcript": True,
+        "safe_preview_available": bool(preview),
+        "raw_transcript_opened_by_default": False,
+        "raw_receipt_details_opened_by_default": False,
+        "technical_receipts_opened_by_default": False,
+        "stores_full_transcript": False,
+        "operator_review_surface": "developer_bridge.collaboration_sessions",
+        "disclosure_label": "summary first; raw receipt detail remains opt-in",
     }
 
 
