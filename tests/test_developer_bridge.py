@@ -13,7 +13,11 @@ from francis.developer_bridge.agents import (
     collaboration_agents_status,
     set_collaboration_agent_enabled,
 )
-from francis.developer_bridge.body_map import compact_body_map_prompt_line, read_francis_body_map
+from francis.developer_bridge.body_map import (
+    compact_body_map_prompt_line,
+    compact_roadmap_gate_prompt_line,
+    read_francis_body_map,
+)
 from francis.developer_bridge.collaboration import (
     list_collaboration_prompts,
     read_collaboration_sessions,
@@ -225,6 +229,11 @@ def test_francis_body_map_exposes_whole_body_without_authority(tmp_path, monkeyp
     assert "Body map:" in prompt_line
     assert "Francis1 can see whole-body surfaces" in prompt_line
     assert "authority remain false" in prompt_line
+    roadmap_gate = compact_roadmap_gate_prompt_line()
+    assert "Roadmap:" in roadmap_gate
+    assert "ledger first" in roadmap_gate
+    assert "main-build candidate-only" in roadmap_gate
+    assert "blocked_by_open_orb_gaps" in roadmap_gate
     assert compact_trust_ladder_prompt_line() == "Trust: classify needs; no capability authority."
 
 
@@ -845,6 +854,9 @@ def test_collaboration_driver_waits_for_ollama_before_next_turn(tmp_path, monkey
     assert all("Do not add a 'Next best action' line" not in prompt for prompt in prompts)
     assert all("Body map: Francis1 can see whole-body surfaces" in prompt for prompt in prompts)
     assert all("authority remain false" in prompt for prompt in prompts)
+    assert all("Roadmap: ledger first" in prompt for prompt in prompts)
+    assert all("main-build candidate-only" in prompt for prompt in prompts)
+    assert all("blocked_by_open_orb_gaps" in prompt for prompt in prompts)
     assert all("Trust: classify needs; no capability authority" in prompt for prompt in prompts)
     assert all("francis1-collaboration-compact-contract-v1" in prompt for prompt in prompts)
     assert all("issue/gap/risk" in prompt for prompt in prompts)
@@ -855,8 +867,8 @@ def test_collaboration_driver_waits_for_ollama_before_next_turn(tmp_path, monkey
     assert "surface=apps.chat_ui.communication" in latest_prompt
     assert "verified=existing" in latest_prompt
     assert "build_or_wire=false" in latest_prompt
-    assert "Codex response: I am inspecting that surface before edits" in latest_prompt
-    assert "do not request user confirmation or a missing surface" in latest_prompt
+    assert "Codex response: inspecting cited surface" in latest_prompt
+    assert "no user confirmation or missing surface" in latest_prompt
     assert "Prior check:" not in prompts[1]
     assert "Current artifact: apps.chat_ui.communication" in prompts[1]
     assert all(len(prompt) < 700 for prompt in prompts)
@@ -1701,8 +1713,8 @@ def test_collaboration_driver_records_meta_loop_as_learning_event(tmp_path, monk
     assert "Loop note" in latest_prompt
     assert "use the prior surface, not meta" in latest_prompt
     assert "Review candidate insight-" in latest_prompt
-    assert "Codex response: I am inspecting that surface before edits" in latest_prompt
-    assert "do not request user confirmation or a missing surface" in latest_prompt
+    assert "Codex response: inspecting cited surface" in latest_prompt
+    assert "no user confirmation or missing surface" in latest_prompt
     assert len(latest_prompt) < 800
 
     learning_root = tmp_path / "data" / "integrations" / "developer_bridge" / "collaboration_driver" / "learning_events"

@@ -13,7 +13,7 @@ from francis.chat.continuity.ledger import append
 from francis.governance.redaction import redact_secret_text
 from francis.kernel.paths import data_dir
 
-from .body_map import compact_body_map_prompt_line
+from .body_map import compact_body_map_prompt_line, compact_roadmap_gate_prompt_line
 from .collaboration import read_collaboration_transcript, submit_collaboration_prompt
 from .collaboration_contract import (
     CONTEXT_CONTRACT_ID,
@@ -335,6 +335,7 @@ def _next_prompt(state: dict[str, object], *, max_turns: int) -> str:
     topic_artifact = _topic_artifact_line(topic)
     codex_response = _codex_response_line(review_line)
     body_map_line = compact_body_map_prompt_line()
+    roadmap_gate_line = compact_roadmap_gate_prompt_line()
     trust_line = compact_trust_ladder_prompt_line()
     loop_line = ""
     if guard_signal.get("detected"):
@@ -354,6 +355,7 @@ def _next_prompt(state: dict[str, object], *, max_turns: int) -> str:
         f"Francis1 {turn_label}. {CONTEXT_CONTRACT_ID}. Topic: {topic}. "
         "Reply: issue/gap/risk; artifact."
         f" {body_map_line}"
+        f" {roadmap_gate_line}"
         f" {trust_line}"
         f"{topic_artifact}{prior_check}{codex_response}{loop_line}"
     )
@@ -363,10 +365,7 @@ def _codex_response_line(review_line: str) -> str:
     if not review_line:
         return ""
     if "build_or_wire=false" in review_line:
-        return (
-            " Codex response: I am inspecting that surface before edits; "
-            "continue from it, do not request user confirmation or a missing surface."
-        )
+        return " Codex response: inspecting cited surface; no user confirmation or missing surface."
     return " Codex response: I am verifying repo truth before build/wiring."
 
 

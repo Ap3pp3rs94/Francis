@@ -5,7 +5,7 @@ from .agents import (
     collaboration_agents_status,
     set_collaboration_agent_enabled,
 )
-from .body_map import compact_body_map_prompt_line, read_francis_body_map
+from .body_map import compact_body_map_prompt_line, compact_roadmap_gate_prompt_line, read_francis_body_map
 from .collaboration import (
     list_collaboration_prompts,
     read_collaboration_transcript,
@@ -27,6 +27,7 @@ __all__ = [
     "collaboration_agent_enabled",
     "collaboration_agents_status",
     "compact_body_map_prompt_line",
+    "compact_roadmap_gate_prompt_line",
     "compact_trust_ladder_prompt_line",
     "git_diff_summary",
     "list_collaboration_prompts",

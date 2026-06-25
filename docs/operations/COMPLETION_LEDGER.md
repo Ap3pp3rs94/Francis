@@ -95175,6 +95175,50 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, full backend test suite, and unrelated UI
   flows were not run for this bounded Communication UI cleanup slice.
 
+### 2026-06-25 21:27Z - Driver prompts carry roadmap gate compactly
+
+Current posture: Phase 2 / developer bridge collaboration support now binds the
+ledger-first main-build gate directly into new Francis1 collaboration driver
+prompts. The driver still keeps prompts compact and keeps main Francis build work
+candidate-only while open ORB and phase-posture gaps remain.
+
+What changed:
+
+- Added `compact_roadmap_gate_prompt_line()` as a bounded body-map-derived prompt
+  line for the current ledger-first roadmap gate.
+- The Codex -> Francis1 collaboration driver prompt now includes the compact
+  roadmap line alongside the body-map and trust-ladder lines.
+- The repeated Codex-response wording was shortened so the new gate does not
+  expand driver prompts beyond the existing compactness budget.
+
+Validation:
+
+- Developer bridge test file passed:
+  `python -m pytest tests/test_developer_bridge.py`
+  (`68` passing tests, one existing Starlette deprecation warning).
+- Targeted lint passed:
+  `python -m ruff check src/francis/developer_bridge/body_map.py src/francis/developer_bridge/collaboration_driver.py src/francis/developer_bridge/__init__.py tests/test_developer_bridge.py`.
+- Targeted format check passed:
+  `python -m ruff format --check src/francis/developer_bridge/body_map.py src/francis/developer_bridge/collaboration_driver.py src/francis/developer_bridge/__init__.py tests/test_developer_bridge.py`.
+- `git diff --check` passed.
+- Live communication runtime was restarted after the code change. Health readback
+  returned `healthy` with all three helper specs running, Codex enabled, Ollama
+  enabled, and Claude disabled.
+- Live turn `1258` created prompt
+  `collab-90a672ddeb41ab01-52ab296cafee` with `Roadmap: ledger first`,
+  `main-build candidate-only`, `blocked_by_open_orb_gaps`, the shorter
+  `Codex response: inspecting cited surface` wording, and prompt length `695`.
+
+Remaining truthful gap:
+
+- This does not close the main-build prompt gate, resolve ORB coverage gaps, or
+  promote Francis1 beyond advisory/local-model participation.
+- This does not grant execution, mutation, approval, training, memory-write, or
+  main-build authority.
+- `.\scripts\check.ps1`, GitHub CI, full backend suite beyond
+  `tests/test_developer_bridge.py`, and unrelated UI flows were not run for this
+  bounded prompt-contract slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

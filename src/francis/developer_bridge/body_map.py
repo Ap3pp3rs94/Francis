@@ -175,6 +175,30 @@ def compact_body_map_prompt_line() -> str:
     return _one_line("Body map: Francis1 can see whole-body surfaces; authority remain false.")
 
 
+def compact_roadmap_gate_prompt_line() -> str:
+    """Return the current ledger-first main-build gate as a bounded prompt line."""
+
+    body = read_francis_body_map()
+    summary = _dict(body.get("summary"))
+    phase = _dict(body.get("phase"))
+    evidence = _dict(body.get("evidence"))
+    open_gaps = _safe_int(
+        summary.get("coverage_open_gap_count"), default=_safe_int(evidence.get("coverage_open_gap_count"))
+    )
+    phase_label = _safe_str(phase.get("current")) or "unknown"
+    sources_observed = bool(evidence.get("ledger_observed")) and bool(evidence.get("manifest_observed"))
+    if open_gaps > 0:
+        gate = "blocked_by_open_orb_gaps"
+    elif _phase_blocks_main_build_prompt(current=phase_label, posture=_safe_str(phase.get("posture"))):
+        gate = "blocked_by_partial_phase_posture"
+    elif not sources_observed:
+        gate = "missing_alignment_sources"
+    else:
+        gate = "review_required"
+    main_build = "candidate-only" if gate != "review_required" else "review-required"
+    return _one_line(f"Roadmap: ledger first; main-build {main_build}; {gate}.")
+
+
 def _body_surfaces(root: Path) -> list[dict[str, object]]:
     return [
         _surface(
@@ -723,6 +747,11 @@ def _latest_ledger_entry(root: Path) -> str:
     return ""
 
 
+def _phase_blocks_main_build_prompt(*, current: str, posture: str) -> bool:
+    text = f"{current} {posture}".lower()
+    return "phase 2" in text or "partial" in text or "not yet" in text
+
+
 def _trust_ladder_connected(root: Path) -> bool:
     return _exists(root / "src" / "francis" / "developer_bridge" / "trust_ladder.py")
 
@@ -816,6 +845,25 @@ def _one_line(value: str, *, limit: int = _MAX_LINE_CHARS) -> str:
 
 def _safe_str(value: object) -> str:
     return " ".join(str(value or "").split())
+
+
+def _dict(value: object) -> dict[str, object]:
+    return value if isinstance(value, dict) else {}
+
+
+def _safe_int(value: object, *, default: int = 0) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(float(value))
+        except ValueError:
+            return default
+    return default
 
 
 def _governance() -> dict[str, Any]:
