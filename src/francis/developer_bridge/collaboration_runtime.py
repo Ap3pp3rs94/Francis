@@ -295,6 +295,10 @@ def _collaboration_loop_readback(driver_state: dict[str, object]) -> dict[str, o
     waiting = bool(driver_state.get("waiting_for_ollama"))
     remaining = _turn_gap_remaining_seconds(_safe_str(driver_state.get("next_prompt_after")))
     recurrence_state = "waiting_for_ollama" if waiting else "turn_gap" if remaining > 0 else "ready_for_next_prompt"
+    participant_state = _read_json(
+        _ollama_participant_state_path(),
+        expected_kind="developer_bridge.ollama_participant_state",
+    )
     return {
         "state_observed": bool(driver_state),
         "state_path": _display_path(_driver_state_path()),
@@ -314,6 +318,59 @@ def _collaboration_loop_readback(driver_state: dict[str, object]) -> dict[str, o
         "latest_review_receipt": _latest_review_receipt_readback(driver_state),
         "latest_learning_receipt": _latest_learning_receipt_readback(driver_state),
         "current_learning_signal": _current_learning_signal_readback(driver_state),
+        "latest_local_model_response": _latest_local_model_response_readback(participant_state),
+    }
+
+
+def _latest_local_model_response_readback(participant_state: dict[str, object]) -> dict[str, object]:
+    responses = [item for item in _list(participant_state.get("responses")) if isinstance(item, dict)]
+    if not responses:
+        return {
+            "observed": False,
+            "state_observed": bool(participant_state),
+            "state_path": _display_path(_ollama_participant_state_path()),
+            "source": "ollama_participant.responses[-1]",
+            "created_at": "",
+            "age_seconds": None,
+            "source_prompt_id": "",
+            "response_prompt_id": "",
+            "status": "unobserved",
+            "output_guard_status": "unknown",
+            "model_response_observed": False,
+            "is_passed": False,
+            "is_guard_rewrite": False,
+            "stores_full_transcript": False,
+            "grants_training_authority": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+            "grants_approval_authority": False,
+            "grants_memory_write_authority": False,
+        }
+    latest = responses[-1]
+    output_guard_status = _safe_str(latest.get("output_guard_status")) or "unknown"
+    return {
+        "observed": True,
+        "state_observed": bool(participant_state),
+        "state_path": _display_path(_ollama_participant_state_path()),
+        "source": "ollama_participant.responses[-1]",
+        "created_at": _safe_str(latest.get("created_at")),
+        "age_seconds": _age_seconds(_safe_str(latest.get("created_at"))),
+        "source_prompt_id": _safe_str(latest.get("source_prompt_id")),
+        "response_prompt_id": _safe_str(latest.get("response_prompt_id")),
+        "status": _safe_str(latest.get("status")) or "unknown",
+        "output_guard_status": output_guard_status,
+        "model_response_observed": bool(latest.get("model_response_observed")),
+        "is_passed": output_guard_status == "passed",
+        "is_guard_rewrite": output_guard_status.endswith("_rewritten") or output_guard_status in {
+            "empty_reply",
+            "disabled",
+        },
+        "stores_full_transcript": False,
+        "grants_training_authority": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "grants_approval_authority": False,
+        "grants_memory_write_authority": False,
     }
 
 
@@ -560,6 +617,10 @@ def _state_path() -> Path:
 
 def _driver_state_path() -> Path:
     return data_dir() / "integrations" / "developer_bridge" / "collaboration_driver" / "state.json"
+
+
+def _ollama_participant_state_path() -> Path:
+    return data_dir() / "integrations" / "developer_bridge" / "ollama_participant" / "state.json"
 
 
 def _log_path(spec: RuntimeSpec) -> Path:

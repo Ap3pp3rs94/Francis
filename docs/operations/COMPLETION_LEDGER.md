@@ -94397,6 +94397,59 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, and unrelated full-repo suites were not run
   for this bounded prompt-contract slice.
 
+### 2026-06-25 19:49Z - Local model response guard status surfaced in runtime health
+
+Current posture: Phase 2 / developer bridge collaboration support now exposes
+the latest bounded Francis1/Ollama response guard status through the runtime
+health readback and Chat UI Runtime Health panel. This is an ORB visibility
+improvement for the collaboration surface, not a training, execution, mutation,
+approval, or memory-write authority expansion.
+
+What changed:
+
+- Added a read-only `latest_local_model_response` field to
+  `francis.developer_bridge.collaboration_runtime` sourced from the existing
+  Ollama participant state file.
+- The readback reports whether a local model response was observed, the latest
+  source/reply relay IDs, response status, output-guard status, age, and whether
+  the response passed or was guard-rewritten.
+- The readback explicitly keeps full-transcript storage, training authority,
+  execution authority, mutation authority, approval authority, and memory-write
+  authority false.
+- Extended the Chat UI collaboration parser and Runtime Health panel to display
+  the latest model response as a compact status separate from conversational
+  transcript text and learning receipts.
+
+Validation:
+
+- Ruff passed for `src\francis\developer_bridge\collaboration_runtime.py` and
+  `tests\test_developer_bridge.py`.
+- Mypy passed for `src\francis\developer_bridge\collaboration_runtime.py`.
+- Focused backend pytest passed:
+  `.\.venv\Scripts\python.exe -m pytest -q tests/test_developer_bridge.py -k
+  "collaboration_runtime_health_is_read_only_and_reports_recurrence"`.
+- Chat UI tests passed:
+  `npm run test -- --test-name-pattern=parseCollaborationRuntimeHealth`.
+- Chat UI production build passed with `npm run build`.
+- `git diff --check` passed.
+- Live runtime health after API restart reported
+  `latest_local_model_response.observed=true`,
+  `output_guard_status=drift_rewritten`, and all authority flags false.
+- Browser proof captured `http://127.0.0.1:5173/` at
+  `output/playwright/collaboration-local-model-response.png`; the page returned
+  HTTP 200 and showed the cleaned live conversation surface with technical
+  receipts collapsed by default.
+
+Remaining truthful gap:
+
+- This does not tune or train the local model; it only makes the latest response
+  guard outcome visible to the operator.
+- The collaboration transcript can still contain guarded drift receipts; this
+  slice makes that status easier to distinguish from normal conversation rather
+  than removing the drift.
+- `.\scripts\check.ps1`, GitHub CI, and unrelated full-repo suites were not run
+  for this bounded runtime-health/UI slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

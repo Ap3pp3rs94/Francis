@@ -666,6 +666,29 @@ def test_collaboration_runtime_health_is_read_only_and_reports_recurrence(tmp_pa
         ),
         encoding="utf-8",
     )
+    participant_state_path = (
+        tmp_path / "data" / "integrations" / "developer_bridge" / "ollama_participant" / "state.json"
+    )
+    participant_state_path.parent.mkdir(parents=True)
+    participant_state_path.write_text(
+        json.dumps(
+            {
+                "kind": "developer_bridge.ollama_participant_state",
+                "updated_at": "2099-01-01T00:00:00+00:00",
+                "responses": [
+                    {
+                        "created_at": "2099-01-01T00:00:00+00:00",
+                        "source_prompt_id": "collab-codex-last",
+                        "response_prompt_id": "collab-ollama-last",
+                        "status": "responded",
+                        "output_guard_status": "drift_rewritten",
+                        "model_response_observed": True,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
 
     health = collaboration_runtime.read_collaboration_runtime_health(process_listing=process_listing)
 
@@ -739,6 +762,27 @@ def test_collaboration_runtime_health_is_read_only_and_reports_recurrence(tmp_pa
         "age_seconds": 0.0,
         "records_model_drift_as_learning": True,
         "requires_codex_or_operator_review_before_tuning": True,
+        "stores_full_transcript": False,
+        "grants_training_authority": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "grants_approval_authority": False,
+        "grants_memory_write_authority": False,
+    }
+    assert loop["latest_local_model_response"] == {
+        "observed": True,
+        "state_observed": True,
+        "state_path": "integrations/developer_bridge/ollama_participant/state.json",
+        "source": "ollama_participant.responses[-1]",
+        "created_at": "2099-01-01T00:00:00+00:00",
+        "age_seconds": 0.0,
+        "source_prompt_id": "collab-codex-last",
+        "response_prompt_id": "collab-ollama-last",
+        "status": "responded",
+        "output_guard_status": "drift_rewritten",
+        "model_response_observed": True,
+        "is_passed": False,
+        "is_guard_rewrite": True,
         "stores_full_transcript": False,
         "grants_training_authority": False,
         "grants_execution_authority": False,

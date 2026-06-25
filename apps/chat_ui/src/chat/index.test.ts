@@ -10,6 +10,7 @@ import {
   collaborationReviewBadge,
   collaborationReviewNextAction,
   collaborationReviewTone,
+  collaborationRuntimeLocalModelResponseSummary,
   collaborationRuntimeLearningReceiptSummary,
   collaborationRuntimeLearningSignalSummary,
   collaborationRuntimeRecurrenceSummary,
@@ -762,6 +763,27 @@ test("parseCollaborationRuntimeHealth preserves recurrence and no-authority fiel
         grants_approval_authority: false,
         grants_memory_write_authority: false,
       },
+      latest_local_model_response: {
+        observed: true,
+        state_observed: true,
+        state_path: "integrations/developer_bridge/ollama_participant/state.json",
+        source: "ollama_participant.responses[-1]",
+        created_at: "2026-06-25T05:00:00Z",
+        age_seconds: 3.5,
+        source_prompt_id: "collab-codex",
+        response_prompt_id: "collab-ollama",
+        status: "responded",
+        output_guard_status: "drift_rewritten",
+        model_response_observed: true,
+        is_passed: false,
+        is_guard_rewrite: true,
+        stores_full_transcript: false,
+        grants_training_authority: false,
+        grants_execution_authority: false,
+        grants_mutation_authority: false,
+        grants_approval_authority: false,
+        grants_memory_write_authority: false,
+      },
     },
     participants: {
       enabled_count: 2,
@@ -804,6 +826,10 @@ test("parseCollaborationRuntimeHealth preserves recurrence and no-authority fiel
   assert.equal(health.collaborationLoop.currentLearningSignal.failureType, "output_guard_drift");
   assert.equal(health.collaborationLoop.currentLearningSignal.latestTurn, 418);
   assert.equal(health.collaborationLoop.currentLearningSignal.grantsTrainingAuthority, false);
+  assert.equal(health.collaborationLoop.latestLocalModelResponse.status, "responded");
+  assert.equal(health.collaborationLoop.latestLocalModelResponse.outputGuardStatus, "drift_rewritten");
+  assert.equal(health.collaborationLoop.latestLocalModelResponse.isGuardRewrite, true);
+  assert.equal(health.collaborationLoop.latestLocalModelResponse.grantsTrainingAuthority, false);
   assert.equal(health.participants.enabledCount, 2);
   assert.equal(health.readbackCache.servesFullTranscriptStore, false);
   assert.equal(health.governance.starts_arbitrary_commands, false);
@@ -864,6 +890,20 @@ test("parseCollaborationRuntimeHealth preserves recurrence and no-authority fiel
     "recent turns 6",
     "terms output_guard_drift",
     "receipt learning-ollama",
+    "training false",
+    "memory write false",
+  ]);
+
+  const localModelResponse = collaborationRuntimeLocalModelResponseSummary(health);
+  assert.equal(localModelResponse.badge, "model reply guarded");
+  assert.equal(localModelResponse.tone, "neutral");
+  assert.deepEqual(localModelResponse.detail, [
+    "status responded",
+    "guard drift_rewritten",
+    "model observed true",
+    "source collab-codex",
+    "reply collab-ollama",
+    "age 4s",
     "training false",
     "memory write false",
   ]);

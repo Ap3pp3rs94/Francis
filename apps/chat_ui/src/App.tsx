@@ -28,6 +28,7 @@ import {
   collaborationReviewNextAction,
   collaborationReviewTone,
   collaborationRuntimeRecurrenceSummary,
+  collaborationRuntimeLocalModelResponseSummary,
   collaborationRuntimeLearningReceiptSummary,
   collaborationRuntimeLearningSignalSummary,
   collaborationRuntimeReviewReceiptSummary,
@@ -1329,6 +1330,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
   const latestImplementationReview = reviewItems[0] ? collaborationImplementationReviewSummary(reviewItems[0]) : null;
   const learningItems = learning?.items ?? [];
   const recurrenceProof = collaborationRuntimeRecurrenceSummary(runtimeHealth);
+  const localModelResponseProof = collaborationRuntimeLocalModelResponseSummary(runtimeHealth);
   const reviewReceiptProof = collaborationRuntimeReviewReceiptSummary(runtimeHealth);
   const learningReceiptProof = collaborationRuntimeLearningReceiptSummary(runtimeHealth);
   const learningSignalProof = collaborationRuntimeLearningSignalSummary(runtimeHealth);
@@ -2243,6 +2245,45 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
                     border: "1px solid rgba(148, 163, 184, 0.2)",
                     borderRadius: 999,
                     fontSize: 12,
+                    padding: "4px 8px",
+                  }}
+                >
+                  {item}
+                </span>
+              ))}
+            </div>
+            <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "space-between", marginTop: 14 }}>
+              <span style={{ color: "#94a3b8", fontSize: 13 }}>Latest Model Response</span>
+              <span
+                style={{
+                  border: `1px solid ${
+                    localModelResponseProof.tone === "ready"
+                      ? "#6ee7b7"
+                      : localModelResponseProof.tone === "blocked"
+                        ? "#fca5a5"
+                        : "#cbd5e1"
+                  }`,
+                  borderRadius: 999,
+                  color: localModelResponseProof.tone === "blocked" ? "#fecaca" : "#d1fae5",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  padding: "4px 8px",
+                }}
+              >
+                {localModelResponseProof.badge}
+              </span>
+            </div>
+            <div style={{ color: "#cbd5e1", display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+              {localModelResponseProof.detail.map((item) => (
+                <span
+                  key={item}
+                  style={{
+                    background: "rgba(15, 23, 42, 0.7)",
+                    border: "1px solid rgba(148, 163, 184, 0.2)",
+                    borderRadius: 999,
+                    fontSize: 12,
+                    maxWidth: "100%",
+                    overflowWrap: "anywhere",
                     padding: "4px 8px",
                   }}
                 >

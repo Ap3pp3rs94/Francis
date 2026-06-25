@@ -148,6 +148,27 @@ export type CollaborationRuntimeHealth = {
       grantsApprovalAuthority: boolean;
       grantsMemoryWriteAuthority: boolean;
     };
+    latestLocalModelResponse: {
+      observed: boolean;
+      stateObserved: boolean;
+      statePath: string;
+      source: string;
+      createdAt: string;
+      ageSeconds: number | null;
+      sourcePromptId: string;
+      responsePromptId: string;
+      status: string;
+      outputGuardStatus: string;
+      modelResponseObserved: boolean;
+      isPassed: boolean;
+      isGuardRewrite: boolean;
+      storesFullTranscript: boolean;
+      grantsTrainingAuthority: boolean;
+      grantsExecutionAuthority: boolean;
+      grantsMutationAuthority: boolean;
+      grantsApprovalAuthority: boolean;
+      grantsMemoryWriteAuthority: boolean;
+    };
   };
   participants: {
     enabledCount: number;
@@ -254,6 +275,12 @@ export type CollaborationRuntimeLearningReceiptDisplay = {
 };
 
 export type CollaborationRuntimeLearningSignalDisplay = {
+  badge: string;
+  tone: CollaborationReviewTone;
+  detail: string[];
+};
+
+export type CollaborationRuntimeLocalModelResponseDisplay = {
   badge: string;
   tone: CollaborationReviewTone;
   detail: string[];
@@ -1265,6 +1292,56 @@ export function collaborationRuntimeLearningSignalSummary(
   };
 }
 
+export function collaborationRuntimeLocalModelResponseSummary(
+  health: CollaborationRuntimeHealth | null | undefined,
+): CollaborationRuntimeLocalModelResponseDisplay {
+  const response = health?.collaborationLoop.latestLocalModelResponse;
+  if (!response?.observed) {
+    return {
+      badge: "model response unknown",
+      tone: "neutral",
+      detail: [
+        "status unobserved",
+        "guard unknown",
+        "model observed false",
+        "source prompt unknown",
+        "reply unknown",
+        "training false",
+        "memory write false",
+      ],
+    };
+  }
+  const unsafeAuthority =
+    response.storesFullTranscript ||
+    response.grantsTrainingAuthority ||
+    response.grantsExecutionAuthority ||
+    response.grantsMutationAuthority ||
+    response.grantsApprovalAuthority ||
+    response.grantsMemoryWriteAuthority;
+  const tone = unsafeAuthority ? "blocked" : response.isPassed ? "ready" : response.isGuardRewrite ? "neutral" : "neutral";
+  const badge = unsafeAuthority
+    ? "model authority drift"
+    : response.isPassed
+      ? "model response passed"
+      : response.isGuardRewrite
+        ? "model reply guarded"
+        : "model response observed";
+  return {
+    badge,
+    tone,
+    detail: [
+      `status ${response.status || "unknown"}`,
+      `guard ${response.outputGuardStatus || "unknown"}`,
+      `model observed ${actionBoundaryBool(response.modelResponseObserved)}`,
+      `source ${response.sourcePromptId || "unknown"}`,
+      `reply ${response.responsePromptId || "unknown"}`,
+      `age ${ageText(response.ageSeconds)}`,
+      `training ${actionBoundaryBool(response.grantsTrainingAuthority)}`,
+      `memory write ${actionBoundaryBool(response.grantsMemoryWriteAuthority)}`,
+    ],
+  };
+}
+
 function parseAgent(raw: unknown): CollaborationAgent {
   const item = isRecord(raw) ? raw : {};
   return {
@@ -1866,6 +1943,7 @@ export function parseCollaborationRuntimeHealth(raw: unknown): CollaborationRunt
   const latestReviewReceipt = isRecord(loop.latest_review_receipt) ? loop.latest_review_receipt : {};
   const latestLearningReceipt = isRecord(loop.latest_learning_receipt) ? loop.latest_learning_receipt : {};
   const currentLearningSignal = isRecord(loop.current_learning_signal) ? loop.current_learning_signal : {};
+  const latestLocalModelResponse = isRecord(loop.latest_local_model_response) ? loop.latest_local_model_response : {};
   const participants = isRecord(value.participants) ? value.participants : {};
   return {
     ok: safeBoolean(value.ok),
@@ -1960,6 +2038,27 @@ export function parseCollaborationRuntimeHealth(raw: unknown): CollaborationRunt
         grantsMutationAuthority: safeBoolean(currentLearningSignal.grants_mutation_authority),
         grantsApprovalAuthority: safeBoolean(currentLearningSignal.grants_approval_authority),
         grantsMemoryWriteAuthority: safeBoolean(currentLearningSignal.grants_memory_write_authority),
+      },
+      latestLocalModelResponse: {
+        observed: safeBoolean(latestLocalModelResponse.observed),
+        stateObserved: safeBoolean(latestLocalModelResponse.state_observed),
+        statePath: safeString(latestLocalModelResponse.state_path),
+        source: safeString(latestLocalModelResponse.source),
+        createdAt: safeString(latestLocalModelResponse.created_at),
+        ageSeconds: safeNullableNumber(latestLocalModelResponse.age_seconds),
+        sourcePromptId: safeString(latestLocalModelResponse.source_prompt_id),
+        responsePromptId: safeString(latestLocalModelResponse.response_prompt_id),
+        status: safeString(latestLocalModelResponse.status, "unknown"),
+        outputGuardStatus: safeString(latestLocalModelResponse.output_guard_status, "unknown"),
+        modelResponseObserved: safeBoolean(latestLocalModelResponse.model_response_observed),
+        isPassed: safeBoolean(latestLocalModelResponse.is_passed),
+        isGuardRewrite: safeBoolean(latestLocalModelResponse.is_guard_rewrite),
+        storesFullTranscript: safeBoolean(latestLocalModelResponse.stores_full_transcript),
+        grantsTrainingAuthority: safeBoolean(latestLocalModelResponse.grants_training_authority),
+        grantsExecutionAuthority: safeBoolean(latestLocalModelResponse.grants_execution_authority),
+        grantsMutationAuthority: safeBoolean(latestLocalModelResponse.grants_mutation_authority),
+        grantsApprovalAuthority: safeBoolean(latestLocalModelResponse.grants_approval_authority),
+        grantsMemoryWriteAuthority: safeBoolean(latestLocalModelResponse.grants_memory_write_authority),
       },
     },
     participants: {
