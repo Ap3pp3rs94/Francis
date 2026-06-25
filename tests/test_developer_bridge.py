@@ -854,6 +854,27 @@ def test_collaboration_runtime_health_is_read_only_and_reports_recurrence(tmp_pa
         "grants_mutation_authority": False,
         "grants_approval_authority": False,
         "grants_memory_write_authority": False,
+        "grants_capability_authority": False,
+        "advice_only_proof": {
+            "kind": "developer_bridge.local_model_advice_only_proof",
+            "proof_status": "advice_only_observed",
+            "model_response_observed": True,
+            "source_prompt_id": "collab-codex-last",
+            "response_prompt_id": "collab-ollama-last",
+            "output_guard_status": "drift_rewritten",
+            "output_guard_passed": False,
+            "output_guard_rewrite_observed": True,
+            "response_is_advice_only": True,
+            "action_readiness_claim_allowed": False,
+            "requires_codex_or_operator_review_before_action_readiness": True,
+            "stores_full_transcript": False,
+            "grants_training_authority": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+            "grants_approval_authority": False,
+            "grants_memory_write_authority": False,
+            "grants_capability_authority": False,
+        },
     }
     assert health["participants"]["enabled_count"] == 3
     assert health["governance"]["read_only"] is True

@@ -193,6 +193,8 @@ export type CollaborationRuntimeHealth = {
       grantsMutationAuthority: boolean;
       grantsApprovalAuthority: boolean;
       grantsMemoryWriteAuthority: boolean;
+      grantsCapabilityAuthority: boolean;
+      adviceOnlyProof: CollaborationLocalModelAdviceOnlyProof;
     };
   };
   participants: {
@@ -207,6 +209,26 @@ export type CollaborationRuntimeHealth = {
   };
   readbackCache: CollaborationReadbackCache;
   governance: Record<string, unknown>;
+};
+
+export type CollaborationLocalModelAdviceOnlyProof = {
+  proofStatus: string;
+  modelResponseObserved: boolean;
+  sourcePromptId: string;
+  responsePromptId: string;
+  outputGuardStatus: string;
+  outputGuardPassed: boolean;
+  outputGuardRewriteObserved: boolean;
+  responseIsAdviceOnly: boolean;
+  actionReadinessClaimAllowed: boolean;
+  requiresCodexOrOperatorReviewBeforeActionReadiness: boolean;
+  storesFullTranscript: boolean;
+  grantsTrainingAuthority: boolean;
+  grantsExecutionAuthority: boolean;
+  grantsMutationAuthority: boolean;
+  grantsApprovalAuthority: boolean;
+  grantsMemoryWriteAuthority: boolean;
+  grantsCapabilityAuthority: boolean;
 };
 
 export type CollaborationTranscriptItem = {
@@ -1672,32 +1694,48 @@ export function collaborationRuntimeLocalModelResponseSummary(
       ],
     };
   }
+  const proof = response.adviceOnlyProof;
   const unsafeAuthority =
     response.storesFullTranscript ||
     response.grantsTrainingAuthority ||
     response.grantsExecutionAuthority ||
     response.grantsMutationAuthority ||
     response.grantsApprovalAuthority ||
-    response.grantsMemoryWriteAuthority;
-  const tone = unsafeAuthority ? "blocked" : response.isPassed ? "ready" : response.isGuardRewrite ? "neutral" : "neutral";
+    response.grantsMemoryWriteAuthority ||
+    response.grantsCapabilityAuthority ||
+    proof.storesFullTranscript ||
+    proof.grantsTrainingAuthority ||
+    proof.grantsExecutionAuthority ||
+    proof.grantsMutationAuthority ||
+    proof.grantsApprovalAuthority ||
+    proof.grantsMemoryWriteAuthority ||
+    proof.grantsCapabilityAuthority ||
+    proof.actionReadinessClaimAllowed ||
+    !proof.responseIsAdviceOnly;
+  const tone = unsafeAuthority ? "blocked" : proof.outputGuardPassed ? "ready" : proof.outputGuardRewriteObserved ? "neutral" : "neutral";
   const badge = unsafeAuthority
     ? "model authority drift"
-    : response.isPassed
-      ? "model response passed"
-      : response.isGuardRewrite
+    : proof.outputGuardPassed
+      ? "advice-only proof"
+      : proof.outputGuardRewriteObserved
         ? "model reply guarded"
-        : "model response observed";
+        : "model advice observed";
   return {
     badge,
     tone,
     detail: [
+      `proof ${proof.proofStatus || "unknown"}`,
       `status ${response.status || "unknown"}`,
       `guard ${response.outputGuardStatus || "unknown"}`,
-      `model observed ${actionBoundaryBool(response.modelResponseObserved)}`,
+      `advice only ${actionBoundaryBool(proof.responseIsAdviceOnly)}`,
+      `action readiness ${actionBoundaryBool(proof.actionReadinessClaimAllowed)}`,
+      `review before action ${actionBoundaryBool(proof.requiresCodexOrOperatorReviewBeforeActionReadiness)}`,
+      `model observed ${actionBoundaryBool(proof.modelResponseObserved || response.modelResponseObserved)}`,
       `source ${response.sourcePromptId || "unknown"}`,
       `reply ${response.responsePromptId || "unknown"}`,
       `age ${ageText(response.ageSeconds)}`,
       `training ${actionBoundaryBool(response.grantsTrainingAuthority)}`,
+      `capability ${actionBoundaryBool(response.grantsCapabilityAuthority || proof.grantsCapabilityAuthority)}`,
       `memory write ${actionBoundaryBool(response.grantsMemoryWriteAuthority)}`,
     ],
   };
@@ -2222,6 +2260,53 @@ function parseFrancisBodyCoverageItem(raw: unknown): FrancisBodyCoverageItem {
   };
 }
 
+function parseLocalModelAdviceOnlyProof(
+  raw: unknown,
+  fallback: {
+    modelResponseObserved: boolean;
+    sourcePromptId: string;
+    responsePromptId: string;
+    outputGuardStatus: string;
+    storesFullTranscript: boolean;
+    grantsTrainingAuthority: boolean;
+    grantsExecutionAuthority: boolean;
+    grantsMutationAuthority: boolean;
+    grantsApprovalAuthority: boolean;
+    grantsMemoryWriteAuthority: boolean;
+    grantsCapabilityAuthority: boolean;
+  },
+): CollaborationLocalModelAdviceOnlyProof {
+  const item = isRecord(raw) ? raw : {};
+  const guardStatus = safeString(item.output_guard_status, fallback.outputGuardStatus || "unknown");
+  const guardRewrite =
+    guardStatus.endsWith("_rewritten") ||
+    guardStatus === "empty_reply" ||
+    guardStatus === "disabled" ||
+    safeBoolean(item.output_guard_rewrite_observed);
+  return {
+    proofStatus: safeString(item.proof_status, isRecord(raw) ? "unknown" : "legacy_response_inferred"),
+    modelResponseObserved: safeBoolean(item.model_response_observed, fallback.modelResponseObserved),
+    sourcePromptId: safeString(item.source_prompt_id, fallback.sourcePromptId),
+    responsePromptId: safeString(item.response_prompt_id, fallback.responsePromptId),
+    outputGuardStatus: guardStatus,
+    outputGuardPassed: safeBoolean(item.output_guard_passed, guardStatus === "passed"),
+    outputGuardRewriteObserved: guardRewrite,
+    responseIsAdviceOnly: safeBoolean(item.response_is_advice_only, true),
+    actionReadinessClaimAllowed: safeBoolean(item.action_readiness_claim_allowed),
+    requiresCodexOrOperatorReviewBeforeActionReadiness: safeBoolean(
+      item.requires_codex_or_operator_review_before_action_readiness,
+      true,
+    ),
+    storesFullTranscript: safeBoolean(item.stores_full_transcript, fallback.storesFullTranscript),
+    grantsTrainingAuthority: safeBoolean(item.grants_training_authority, fallback.grantsTrainingAuthority),
+    grantsExecutionAuthority: safeBoolean(item.grants_execution_authority, fallback.grantsExecutionAuthority),
+    grantsMutationAuthority: safeBoolean(item.grants_mutation_authority, fallback.grantsMutationAuthority),
+    grantsApprovalAuthority: safeBoolean(item.grants_approval_authority, fallback.grantsApprovalAuthority),
+    grantsMemoryWriteAuthority: safeBoolean(item.grants_memory_write_authority, fallback.grantsMemoryWriteAuthority),
+    grantsCapabilityAuthority: safeBoolean(item.grants_capability_authority, fallback.grantsCapabilityAuthority),
+  };
+}
+
 export function parseCollaborationAgentsStatus(raw: unknown): CollaborationAgentsStatus {
   const value = isRecord(raw) ? raw : {};
   const operatorConsole = isRecord(value.operator_console) ? value.operator_console : {};
@@ -2678,6 +2763,20 @@ export function parseCollaborationRuntimeHealth(raw: unknown): CollaborationRunt
         grantsMutationAuthority: safeBoolean(latestLocalModelResponse.grants_mutation_authority),
         grantsApprovalAuthority: safeBoolean(latestLocalModelResponse.grants_approval_authority),
         grantsMemoryWriteAuthority: safeBoolean(latestLocalModelResponse.grants_memory_write_authority),
+        grantsCapabilityAuthority: safeBoolean(latestLocalModelResponse.grants_capability_authority),
+        adviceOnlyProof: parseLocalModelAdviceOnlyProof(latestLocalModelResponse.advice_only_proof, {
+          modelResponseObserved: safeBoolean(latestLocalModelResponse.model_response_observed),
+          sourcePromptId: safeString(latestLocalModelResponse.source_prompt_id),
+          responsePromptId: safeString(latestLocalModelResponse.response_prompt_id),
+          outputGuardStatus: safeString(latestLocalModelResponse.output_guard_status, "unknown"),
+          storesFullTranscript: safeBoolean(latestLocalModelResponse.stores_full_transcript),
+          grantsTrainingAuthority: safeBoolean(latestLocalModelResponse.grants_training_authority),
+          grantsExecutionAuthority: safeBoolean(latestLocalModelResponse.grants_execution_authority),
+          grantsMutationAuthority: safeBoolean(latestLocalModelResponse.grants_mutation_authority),
+          grantsApprovalAuthority: safeBoolean(latestLocalModelResponse.grants_approval_authority),
+          grantsMemoryWriteAuthority: safeBoolean(latestLocalModelResponse.grants_memory_write_authority),
+          grantsCapabilityAuthority: safeBoolean(latestLocalModelResponse.grants_capability_authority),
+        }),
       },
     },
     participants: {

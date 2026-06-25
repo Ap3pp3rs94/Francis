@@ -95482,6 +95482,8 @@ Validation:
   `visible_to_francis1=true`, `safe_for_capability_use=false`, and
   `grants_execution_authority=false`.
 - The local Communication UI at `http://127.0.0.1:5173/` returned HTTP `200`.
+- Headless Chrome rendered the local Communication UI with live runtime data and
+  the cleaned `Codex turns` label.
   Playwright screenshot proof captured the cleaned, populated Communication
   page with live conversation and body-map sections:
   `output/playwright/body-map-page-final-wait.png`.
@@ -95560,6 +95562,74 @@ Remaining truthful gap:
   relay.
 - `.\scripts\check.ps1`, GitHub CI, and unrelated full-system UI flows were not
   run for this bounded collaboration-agent toggle-proof slice.
+
+### 2026-06-25 22:26Z - Local-model responses expose advice-only proof
+
+Current posture: Phase 2 / developer bridge collaboration runtime now exposes a
+typed proof that the latest local Francis1 model response is advice-only before
+any Francis action-readiness claim. The proof links the source prompt and model
+reply receipt, records output-guard status, keeps raw transcript storage false,
+requires Codex/operator review before action readiness, and keeps execution,
+mutation, approval, training, memory-write, and capability authority false.
+
+What changed:
+
+- `developer_bridge.collaboration_runtime` now includes
+  `latest_local_model_response.advice_only_proof` with source/reply receipt
+  handles, output-guard fields, advice-only status, action-readiness denial,
+  review-before-action requirement, transcript-storage denial, and no-authority
+  booleans.
+- The latest local-model response readback now explicitly denies capability
+  authority alongside execution, mutation, approval, training, and memory-write
+  authority.
+- The Chat UI parser preserves `advice_only_proof` and infers a conservative
+  `legacy_response_inferred` proof for older runtime responses that lack the new
+  nested object.
+- The Communication runtime summary now displays the proof status, advice-only
+  status, action-readiness denial, review-before-action requirement, and
+  capability authority denial in the Latest Model Response chips.
+- The Communication live stream now defaults to showing compacted Codex turns
+  alongside Francis1 responses while keeping auto-ack audit receipts hidden by
+  default; the operator toggle now says `Codex turns` instead of generic
+  `Prompts`.
+
+Validation:
+
+- Developer bridge test file passed:
+  `python -m pytest tests/test_developer_bridge.py -q`.
+- Chat UI contract suite passed:
+  `npm run test -- src/chat/index.test.ts`
+  (the package script ran the configured UI suite, `280` passing tests).
+- Chat UI production build passed:
+  `npm run build`.
+- Targeted lint passed:
+  `python -m ruff check src/francis/developer_bridge/collaboration_runtime.py tests/test_developer_bridge.py`.
+- Targeted format check passed:
+  `python -m ruff format --check src/francis/developer_bridge/collaboration_runtime.py tests/test_developer_bridge.py`
+  (non-blocking `.ruff_cache` access warnings were emitted, but both files were
+  formatted).
+- `git diff --check` passed.
+- The local Francis API was restarted after the Python readback change. The route
+  `/developer-bridge/collaboration-runtime-health` returned HTTP `200`,
+  `status=healthy`, `advice_only_proof.proof_status=advice_only_observed`,
+  `response_is_advice_only=true`, `action_readiness_claim_allowed=false`,
+  `requires_codex_or_operator_review_before_action_readiness=true`, and
+  `grants_capability_authority=false`.
+- The local Communication UI at `http://127.0.0.1:5173/` returned HTTP `200`.
+
+Remaining truthful gap:
+
+- This does not grant action readiness, execute any action, tune Francis1,
+  promote learning receipts into memory, resolve ORB coverage gaps, or close the
+  main-build prompt gate.
+- This does not prove semantic correctness of local-model advice; it proves the
+  runtime readback remains advice-only and authority-denying before any Codex or
+  operator review.
+- This does not grant execution, mutation, approval, training, memory-write,
+  capability-use, or main-build authority to Codex, Claude, Francis1, or the
+  relay.
+- `.\scripts\check.ps1`, GitHub CI, and unrelated full-system UI flows were not
+  run for this bounded local-model advice-only proof slice.
 
 ## 6. Update rule
 

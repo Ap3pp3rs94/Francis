@@ -1043,14 +1043,14 @@ function collaborationDirectionText(item: CollaborationTranscriptEntry): string 
 }
 
 function collaborationRelayToneText(display: ReturnType<typeof formatCollaborationRelayMessage>): string {
-  if (display.tone === "driver") return "codex prompt";
+  if (display.tone === "driver") return "codex turn";
   if (display.tone === "guard") return "guard rewrite";
   if (display.tone === "audit") return "audit";
   return "conversation";
 }
 
 function collaborationConversationLayerText(display: ReturnType<typeof formatCollaborationRelayMessage>): string {
-  if (display.tone === "driver") return "Prompt";
+  if (display.tone === "driver") return "Codex Turn";
   if (display.tone === "guard") return "Conversation Guard";
   return "Conversation";
 }
@@ -1168,7 +1168,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
   const [selectedSessionId, setSelectedSessionId] = useState("");
   const [followLatest, setFollowLatest] = useState(true);
   const [showAuditReceipts, setShowAuditReceipts] = useState(false);
-  const [showRelayPrompts, setShowRelayPrompts] = useState(false);
+  const [showRelayPrompts, setShowRelayPrompts] = useState(true);
   const requestInFlight = useRef<{ signal?: AbortSignal } | null>(null);
   const liveTranscriptScrollRef = useRef<HTMLDivElement | null>(null);
   const transcriptScrollRef = useRef<HTMLDivElement | null>(null);
@@ -1341,7 +1341,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
   const latestToggleReceipts = [...toggleReceipts].slice(-4).reverse();
   const transcriptItems = transcript?.items ?? [];
   const transcriptAuditSummary = useMemo(() => collaborationTranscriptAuditSummary(transcriptItems), [transcriptItems]);
-  const transcriptFilterText = `${transcriptAuditSummary.substantiveTurnCount} substantive / ${transcriptAuditSummary.driverPromptCount} prompts ${
+  const transcriptFilterText = `${transcriptAuditSummary.substantiveTurnCount} substantive / ${transcriptAuditSummary.driverPromptCount} Codex turns ${
     showRelayPrompts ? "shown" : "hidden"
   }`;
   const transcriptAuditText = transcriptAuditSummary.auditReceiptCount
@@ -2112,7 +2112,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
                   padding: "7px 10px",
                 }}
               >
-                Prompts ({transcriptAuditSummary.driverPromptCount})
+                Codex turns ({transcriptAuditSummary.driverPromptCount})
               </button>
             ) : null}
             {sessions.map((session) => (
@@ -3659,7 +3659,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
                   padding: "7px 10px",
                 }}
               >
-                Prompts ({transcriptAuditSummary.driverPromptCount})
+                Codex turns ({transcriptAuditSummary.driverPromptCount})
               </button>
             ) : null}
             {sessions.map((session) => (

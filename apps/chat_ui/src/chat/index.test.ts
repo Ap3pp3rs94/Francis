@@ -962,6 +962,27 @@ test("parseCollaborationRuntimeHealth preserves recurrence and no-authority fiel
         grants_mutation_authority: false,
         grants_approval_authority: false,
         grants_memory_write_authority: false,
+        grants_capability_authority: false,
+        advice_only_proof: {
+          kind: "developer_bridge.local_model_advice_only_proof",
+          proof_status: "advice_only_observed",
+          model_response_observed: true,
+          source_prompt_id: "collab-codex",
+          response_prompt_id: "collab-ollama",
+          output_guard_status: "drift_rewritten",
+          output_guard_passed: false,
+          output_guard_rewrite_observed: true,
+          response_is_advice_only: true,
+          action_readiness_claim_allowed: false,
+          requires_codex_or_operator_review_before_action_readiness: true,
+          stores_full_transcript: false,
+          grants_training_authority: false,
+          grants_execution_authority: false,
+          grants_mutation_authority: false,
+          grants_approval_authority: false,
+          grants_memory_write_authority: false,
+          grants_capability_authority: false,
+        },
       },
     },
     participants: {
@@ -1009,6 +1030,14 @@ test("parseCollaborationRuntimeHealth preserves recurrence and no-authority fiel
   assert.equal(health.collaborationLoop.latestLocalModelResponse.outputGuardStatus, "drift_rewritten");
   assert.equal(health.collaborationLoop.latestLocalModelResponse.isGuardRewrite, true);
   assert.equal(health.collaborationLoop.latestLocalModelResponse.grantsTrainingAuthority, false);
+  assert.equal(health.collaborationLoop.latestLocalModelResponse.grantsCapabilityAuthority, false);
+  assert.equal(health.collaborationLoop.latestLocalModelResponse.adviceOnlyProof.proofStatus, "advice_only_observed");
+  assert.equal(health.collaborationLoop.latestLocalModelResponse.adviceOnlyProof.responseIsAdviceOnly, true);
+  assert.equal(health.collaborationLoop.latestLocalModelResponse.adviceOnlyProof.actionReadinessClaimAllowed, false);
+  assert.equal(
+    health.collaborationLoop.latestLocalModelResponse.adviceOnlyProof.requiresCodexOrOperatorReviewBeforeActionReadiness,
+    true,
+  );
   assert.equal(health.participants.enabledCount, 2);
   assert.equal(health.readbackCache.servesFullTranscriptStore, false);
   assert.equal(health.governance.starts_arbitrary_commands, false);
@@ -1083,13 +1112,18 @@ test("parseCollaborationRuntimeHealth preserves recurrence and no-authority fiel
   assert.equal(localModelResponse.badge, "model reply guarded");
   assert.equal(localModelResponse.tone, "neutral");
   assert.deepEqual(localModelResponse.detail, [
+    "proof advice_only_observed",
     "status responded",
     "guard drift_rewritten",
+    "advice only true",
+    "action readiness false",
+    "review before action true",
     "model observed true",
     "source collab-codex",
     "reply collab-ollama",
     "age 4s",
     "training false",
+    "capability false",
     "memory write false",
   ]);
 });

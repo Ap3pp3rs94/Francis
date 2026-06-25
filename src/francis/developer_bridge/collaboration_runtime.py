@@ -325,6 +325,12 @@ def _collaboration_loop_readback(driver_state: dict[str, object]) -> dict[str, o
 def _latest_local_model_response_readback(participant_state: dict[str, object]) -> dict[str, object]:
     responses = [item for item in _list(participant_state.get("responses")) if isinstance(item, dict)]
     if not responses:
+        advice_only_proof = _local_model_advice_only_proof(
+            observed=False,
+            source_prompt_id="",
+            response_prompt_id="",
+            output_guard_status="unknown",
+        )
         return {
             "observed": False,
             "state_observed": bool(participant_state),
@@ -345,9 +351,19 @@ def _latest_local_model_response_readback(participant_state: dict[str, object]) 
             "grants_mutation_authority": False,
             "grants_approval_authority": False,
             "grants_memory_write_authority": False,
+            "grants_capability_authority": False,
+            "advice_only_proof": advice_only_proof,
         }
     latest = responses[-1]
     output_guard_status = _safe_str(latest.get("output_guard_status")) or "unknown"
+    source_prompt_id = _safe_str(latest.get("source_prompt_id"))
+    response_prompt_id = _safe_str(latest.get("response_prompt_id"))
+    advice_only_proof = _local_model_advice_only_proof(
+        observed=True,
+        source_prompt_id=source_prompt_id,
+        response_prompt_id=response_prompt_id,
+        output_guard_status=output_guard_status,
+    )
     return {
         "observed": True,
         "state_observed": bool(participant_state),
@@ -355,8 +371,8 @@ def _latest_local_model_response_readback(participant_state: dict[str, object]) 
         "source": "ollama_participant.responses[-1]",
         "created_at": _safe_str(latest.get("created_at")),
         "age_seconds": _age_seconds(_safe_str(latest.get("created_at"))),
-        "source_prompt_id": _safe_str(latest.get("source_prompt_id")),
-        "response_prompt_id": _safe_str(latest.get("response_prompt_id")),
+        "source_prompt_id": source_prompt_id,
+        "response_prompt_id": response_prompt_id,
         "status": _safe_str(latest.get("status")) or "unknown",
         "output_guard_status": output_guard_status,
         "model_response_observed": bool(latest.get("model_response_observed")),
@@ -373,6 +389,42 @@ def _latest_local_model_response_readback(participant_state: dict[str, object]) 
         "grants_mutation_authority": False,
         "grants_approval_authority": False,
         "grants_memory_write_authority": False,
+        "grants_capability_authority": False,
+        "advice_only_proof": advice_only_proof,
+    }
+
+
+def _local_model_advice_only_proof(
+    *,
+    observed: bool,
+    source_prompt_id: str,
+    response_prompt_id: str,
+    output_guard_status: str,
+) -> dict[str, object]:
+    guard_passed = output_guard_status == "passed"
+    guard_rewrite = output_guard_status.endswith("_rewritten") or output_guard_status in {
+        "empty_reply",
+        "disabled",
+    }
+    return {
+        "kind": "developer_bridge.local_model_advice_only_proof",
+        "proof_status": "advice_only_observed" if observed else "unobserved",
+        "model_response_observed": observed,
+        "source_prompt_id": source_prompt_id,
+        "response_prompt_id": response_prompt_id,
+        "output_guard_status": output_guard_status,
+        "output_guard_passed": guard_passed,
+        "output_guard_rewrite_observed": guard_rewrite,
+        "response_is_advice_only": True,
+        "action_readiness_claim_allowed": False,
+        "requires_codex_or_operator_review_before_action_readiness": True,
+        "stores_full_transcript": False,
+        "grants_training_authority": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "grants_approval_authority": False,
+        "grants_memory_write_authority": False,
+        "grants_capability_authority": False,
     }
 
 
