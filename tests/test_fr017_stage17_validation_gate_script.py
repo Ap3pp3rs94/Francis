@@ -22,6 +22,7 @@ REQUIRED_GATE_SCRIPTS = [
     "fr017-engineering-review-gate.ps1",
     "fr017-final-physical-gate.ps1",
     "fr017-final-decision-record-gate.ps1",
+    "fr017-completion-ledger-gate.ps1",
     "fr017-evidence-chain-status.ps1",
 ]
 

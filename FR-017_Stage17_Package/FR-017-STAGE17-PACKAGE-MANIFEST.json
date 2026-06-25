@@ -163,7 +163,8 @@
     "pilot_movement_session",
     "quick_release_test_session",
     "professional_engineering_review",
-    "human_final_stage17_completion_decision"
+    "human_final_stage17_completion_decision",
+    "operator_reviewed_completion_ledger_entry"
   ],
   "safety_fail_conditions": [
     "numbness",

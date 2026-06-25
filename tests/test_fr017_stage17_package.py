@@ -70,6 +70,7 @@ def test_fr017_stage17_manifest_preserves_no_fake_validation_gate() -> None:
     assert "pilot_static_fit_session" in manifest["blocked_inputs"]
     assert "professional_engineering_review" in manifest["blocked_inputs"]
     assert "human_final_stage17_completion_decision" in manifest["blocked_inputs"]
+    assert "operator_reviewed_completion_ledger_entry" in manifest["blocked_inputs"]
     assert any(record["kind"] == "engineering_review_record" for record in manifest["records"])
     assert any(record["kind"] == "engineering_review_input_template" for record in manifest["records"])
     assert any(record["kind"] == "final_physical_decision_input_template" for record in manifest["records"])
@@ -92,6 +93,7 @@ def test_fr017_stage17_final_audit_blocks_physical_and_fr018_claims() -> None:
     assert "Physical validation: NOT COMPLETE." in package_index
     assert "FR-018 implementation: NOT CLEARED." in package_index
     assert "FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json" in package_index
+    assert "fr017-completion-ledger-gate.ps1" in package_index
 
 
 def test_fr017_stage17_pending_records_keep_evidence_fields() -> None:
@@ -127,6 +129,7 @@ def test_fr017_validation_gate_chain_preserves_gate_order_and_no_fake_validation
         "fr017-engineering-review-gate.ps1",
         "fr017-final-physical-gate.ps1",
         "fr017-final-decision-record-gate.ps1",
+        "fr017-completion-ledger-gate.ps1",
     ]
     positions = [runbook.index(item) for item in expected_order]
 
@@ -137,6 +140,7 @@ def test_fr017_validation_gate_chain_preserves_gate_order_and_no_fake_validation
     assert "FR-018 implementation is NOT CLEARED." in runbook
     assert "FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json" in runbook
     assert "ready_for_completion_ledger_review" in runbook
+    assert "ready_for_operator_completion_ledger_update" in runbook
     assert "A blank or" in runbook
     assert "ready_for_pilot_static_fit_planning" in runbook
     assert "ready_for_pilot_movement_test_planning" in runbook
