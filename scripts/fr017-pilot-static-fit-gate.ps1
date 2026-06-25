@@ -259,6 +259,150 @@ function Test-PresentText {
   return -not (Test-MissingOrPendingText -Value $Value)
 }
 
+function Add-UniqueString {
+  param(
+    [System.Collections.Generic.List[string]]$Target,
+    [object]$Value
+  )
+
+  if ($null -eq $Value) {
+    return
+  }
+  $Text = ([string]$Value).Trim()
+  if ([string]::IsNullOrWhiteSpace($Text)) {
+    return
+  }
+  if (-not $Target.Contains($Text)) {
+    $Target.Add($Text) | Out-Null
+  }
+}
+
+function Test-SignalMatchesPrefix {
+  param(
+    [string]$Signal,
+    [string]$Prefix
+  )
+
+  if ([string]::Equals($Signal, $Prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+    return $true
+  }
+  return $Signal.StartsWith($Prefix + '.', [System.StringComparison]::OrdinalIgnoreCase) -or
+    $Signal.StartsWith($Prefix + '_', [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+function Get-CaptureStepSignals {
+  param(
+    [string[]]$Signals,
+    [string[]]$RequiredFields,
+    [string[]]$SignalPrefixes
+  )
+
+  $Result = New-Object System.Collections.Generic.List[string]
+  foreach ($Signal in (ConvertTo-StringArray -Value $Signals)) {
+    foreach ($Field in $RequiredFields) {
+      if (Test-SignalMatchesPrefix -Signal $Signal -Prefix $Field) {
+        Add-UniqueString -Target $Result -Value $Signal
+      }
+    }
+    foreach ($Prefix in $SignalPrefixes) {
+      if (Test-SignalMatchesPrefix -Signal $Signal -Prefix $Prefix) {
+        Add-UniqueString -Target $Result -Value $Signal
+      }
+    }
+  }
+  return @($Result.ToArray())
+}
+
+function New-StaticFitCapturePlanStatus {
+  param(
+    [object[]]$CapturePlan,
+    [bool]$UpstreamMannequinReady,
+    [string[]]$MissingFields,
+    [string[]]$InvalidFields,
+    [string[]]$BlockingSignals
+  )
+
+  $Result = New-Object System.Collections.Generic.List[object]
+  foreach ($Step in $CapturePlan) {
+    $RequiredFields = @(ConvertTo-StringArray -Value $Step.required_fields)
+    $SignalPrefixes = @(ConvertTo-StringArray -Value $Step.blocking_signal_prefixes)
+    $StepMissing = @(Get-CaptureStepSignals -Signals $MissingFields -RequiredFields $RequiredFields -SignalPrefixes @())
+    $StepInvalid = @(Get-CaptureStepSignals -Signals $InvalidFields -RequiredFields $RequiredFields -SignalPrefixes @())
+    $StepBlockingSignals = @(Get-CaptureStepSignals -Signals $BlockingSignals -RequiredFields $RequiredFields -SignalPrefixes $SignalPrefixes)
+
+    $Status = 'ready_for_static_fit_record_review'
+    $RequiredAction = [string]$Step.required_action
+    if (-not $UpstreamMannequinReady) {
+      $Status = 'blocked_by_upstream_mannequin_interface'
+      $RequiredAction = 'complete measurement intake, non-powered mockup readiness, and mannequin interface gates before pilot static-fit evidence can be captured or reviewed'
+    } elseif ($StepBlockingSignals.Count -gt 0) {
+      $Status = 'failed_stop_condition_or_blocking_signal'
+    } elseif ($StepInvalid.Count -gt 0) {
+      $Status = 'invalid_required_fields'
+    } elseif ($StepMissing.Count -gt 0) {
+      $Status = 'pending_required_fields'
+    }
+
+    $Result.Add([ordered]@{
+        id = [string]$Step.id
+        status = $Status
+        validation_state = [string]$Step.validation_state
+        ready_for_static_fit_record_review = ($Status -eq 'ready_for_static_fit_record_review')
+        missing_fields = @($StepMissing)
+        invalid_fields = @($StepInvalid)
+        blocking_signals = @($StepBlockingSignals)
+        required_action = $RequiredAction
+      }) | Out-Null
+  }
+  return @($Result.ToArray())
+}
+
+function New-CapturePlanSummary {
+  param([object[]]$CapturePlanStatus)
+
+  $ReadyCount = 0
+  $PendingCount = 0
+  $InvalidCount = 0
+  $FailedCount = 0
+  $UpstreamBlockedCount = 0
+  $FirstBlockingGroupId = ''
+  $FirstBlockingGroupStatus = ''
+  $FirstBlockingGroupAction = ''
+
+  foreach ($Step in $CapturePlanStatus) {
+    $StepStatus = [string]$Step.status
+    if ($StepStatus -eq 'ready_for_static_fit_record_review') {
+      $ReadyCount += 1
+    } elseif ($StepStatus -eq 'pending_required_fields') {
+      $PendingCount += 1
+    } elseif ($StepStatus -eq 'invalid_required_fields') {
+      $InvalidCount += 1
+    } elseif ($StepStatus -eq 'failed_stop_condition_or_blocking_signal') {
+      $FailedCount += 1
+    } elseif ($StepStatus -eq 'blocked_by_upstream_mannequin_interface') {
+      $UpstreamBlockedCount += 1
+    }
+
+    if ([string]::IsNullOrWhiteSpace($FirstBlockingGroupId) -and $StepStatus -ne 'ready_for_static_fit_record_review') {
+      $FirstBlockingGroupId = [string]$Step.id
+      $FirstBlockingGroupStatus = $StepStatus
+      $FirstBlockingGroupAction = [string]$Step.required_action
+    }
+  }
+
+  return [ordered]@{
+    total_groups = @($CapturePlanStatus).Count
+    ready_groups = $ReadyCount
+    pending_groups = $PendingCount
+    invalid_groups = $InvalidCount
+    failed_groups = $FailedCount
+    upstream_blocked_groups = $UpstreamBlockedCount
+    first_blocking_group_id = $FirstBlockingGroupId
+    first_blocking_group_status = $FirstBlockingGroupStatus
+    first_blocking_group_action = $FirstBlockingGroupAction
+  }
+}
+
 function Add-RecordLinkageCheck {
   param(
     [System.Collections.Generic.List[string]]$Invalid,
@@ -426,6 +570,97 @@ $SymptomFields = @(
   'loss_of_grip_strength'
 )
 
+$StaticFitEvidenceFields = @(
+  'evidence.date',
+  'evidence.observer',
+  'evidence.pilot_id',
+  'evidence.prototype_revision',
+  'evidence.measurement_record_path',
+  'evidence.mockup_build_record_path',
+  'evidence.mannequin_interface_record_path',
+  'evidence.test_duration_minutes'
+)
+
+$StaticFitPreconditionFields = @()
+foreach ($Field in $RequiredPreconditions) {
+  $StaticFitPreconditionFields += ('preconditions.{0}' -f $Field)
+}
+
+$StaticFitLeftCheckFields = @()
+$StaticFitRightCheckFields = @()
+foreach ($Field in $RequiredBaselineChecks) {
+  $StaticFitLeftCheckFields += ('sides.left.baseline.{0}' -f $Field)
+  $StaticFitRightCheckFields += ('sides.right.baseline.{0}' -f $Field)
+}
+foreach ($Field in $RequiredStaticChecks) {
+  $StaticFitLeftCheckFields += ('sides.left.static_checks.{0}' -f $Field)
+  $StaticFitRightCheckFields += ('sides.right.static_checks.{0}' -f $Field)
+}
+
+$StaticFitLeftPostDoffSymptomFields = @()
+$StaticFitRightPostDoffSymptomFields = @()
+foreach ($Field in $RequiredPostDoffChecks) {
+  $StaticFitLeftPostDoffSymptomFields += ('sides.left.post_doff.{0}' -f $Field)
+  $StaticFitRightPostDoffSymptomFields += ('sides.right.post_doff.{0}' -f $Field)
+}
+foreach ($Field in $SymptomFields) {
+  $StaticFitLeftPostDoffSymptomFields += ('sides.left.symptoms.{0}' -f $Field)
+  $StaticFitRightPostDoffSymptomFields += ('sides.right.symptoms.{0}' -f $Field)
+}
+
+$StaticFitCapturePlan = @(
+  [ordered]@{
+    id = 'static_fit_evidence_and_linkage'
+    validation_state = 'REQUIRES_PILOT_STATIC_TEST_RECORD'
+    required_fields = $StaticFitEvidenceFields
+    blocking_signal_prefixes = @(
+      'evidence.measurement_record_path_must_match_measurement_path',
+      'evidence.mockup_build_record_path_must_match_mockup_path',
+      'evidence.mannequin_interface_record_path_must_match_mannequin_path',
+      'evidence.pilot_id_must_match_measurement_pilot_id',
+      'evidence.date_before_measurement.evidence.date',
+      'evidence.date_before_mockup.evidence.date',
+      'evidence.date_before_mannequin.evidence.date'
+    )
+    required_action = 'record ISO date, observer, matching pilot id, prototype revision, linked measurement/mockup/mannequin paths, and an unquoted positive static-fit duration'
+  },
+  [ordered]@{
+    id = 'static_fit_safety_preconditions'
+    validation_state = 'REQUIRES_PILOT_STATIC_TEST'
+    required_fields = $StaticFitPreconditionFields
+    blocking_signal_prefixes = @('preconditions')
+    required_action = 'confirm non-powered-only setup, no frame or power coupling, observer presence, emergency-release briefing, stop-on-symptoms rule, and pilot self-removal or abort authority'
+  },
+  [ordered]@{
+    id = 'left_static_fit_baseline_and_clearance'
+    validation_state = 'REQUIRES_PILOT_STATIC_TEST'
+    required_fields = $StaticFitLeftCheckFields
+    blocking_signal_prefixes = @('sides.left.baseline', 'sides.left.static_checks')
+    required_action = 'record left-hand baseline condition plus left cuff placement, pressure relief, release access, glove/wrist removal path, stability, and static cable-snag clearance'
+  },
+  [ordered]@{
+    id = 'right_static_fit_baseline_and_clearance'
+    validation_state = 'REQUIRES_PILOT_STATIC_TEST'
+    required_fields = $StaticFitRightCheckFields
+    blocking_signal_prefixes = @('sides.right.baseline', 'sides.right.static_checks')
+    required_action = 'record right-hand baseline condition plus right cuff placement, pressure relief, release access, glove/wrist removal path, stability, and static cable-snag clearance'
+  },
+  [ordered]@{
+    id = 'left_static_fit_post_doff_and_symptoms'
+    validation_state = 'REQUIRES_PILOT_STATIC_TEST'
+    required_fields = $StaticFitLeftPostDoffSymptomFields
+    blocking_signal_prefixes = @('sides.left.post_doff', 'sides.left.symptoms')
+    required_action = 'record left post-doff warmth, color, grip, and every left-side pain, tingling, numbness, temperature, color, weakness, wrist, pressure, finger-motion, and grip-strength symptom as absent before advancing'
+  },
+  [ordered]@{
+    id = 'right_static_fit_post_doff_and_symptoms'
+    validation_state = 'REQUIRES_PILOT_STATIC_TEST'
+    required_fields = $StaticFitRightPostDoffSymptomFields
+    blocking_signal_prefixes = @('sides.right.post_doff', 'sides.right.symptoms')
+    required_action = 'record right post-doff warmth, color, grip, and every right-side pain, tingling, numbness, temperature, color, weakness, wrist, pressure, finger-motion, and grip-strength symptom as absent before advancing'
+  }
+)
+
 $DefaultMeasurementPath = Join-Path $RepoRoot 'FR-017_Stage17_Package\FR-017-MEASUREMENTS-INPUT-TEMPLATE.json'
 $DefaultMockupPath = Join-Path $RepoRoot 'FR-017_Stage17_Package\FR-017-MOCKUP-BUILD-INPUT-TEMPLATE.json'
 $DefaultMannequinPath = Join-Path $RepoRoot 'FR-017_Stage17_Package\FR-017-MANNEQUIN-INTERFACE-INPUT-TEMPLATE.json'
@@ -565,6 +800,22 @@ if (-not [bool]$Upstream.parse_ok -or [int]$Upstream.exit_code -ne 0 -or $Upstre
   }
 }
 
+$AllStaticFitBlockingSignals = New-Object System.Collections.Generic.List[string]
+foreach ($Signal in @($RecordLinkageViolations.ToArray())) {
+  Add-UniqueString -Target $AllStaticFitBlockingSignals -Value $Signal
+}
+foreach ($Signal in @($RecordChronologyViolations.ToArray())) {
+  Add-UniqueString -Target $AllStaticFitBlockingSignals -Value $Signal
+}
+foreach ($Signal in @($FitRedesignTriggers.ToArray())) {
+  Add-UniqueString -Target $AllStaticFitBlockingSignals -Value $Signal
+}
+foreach ($Signal in @($SymptomBlockers.ToArray())) {
+  Add-UniqueString -Target $AllStaticFitBlockingSignals -Value $Signal
+}
+$StaticFitCapturePlanStatus = @(New-StaticFitCapturePlanStatus -CapturePlan $StaticFitCapturePlan -UpstreamMannequinReady $UpstreamReady -MissingFields $MissingFields.ToArray() -InvalidFields $InvalidFields.ToArray() -BlockingSignals $AllStaticFitBlockingSignals.ToArray())
+$StaticFitCapturePlanSummary = New-CapturePlanSummary -CapturePlanStatus $StaticFitCapturePlanStatus
+
 $Output = [ordered]@{
   kind = 'francis.fr017.pilot_static_fit_gate'
   mode = $Mode
@@ -626,6 +877,22 @@ $Output = [ordered]@{
   required_static_checks = $RequiredStaticChecks
   required_post_doff_checks = $RequiredPostDoffChecks
   symptom_fields = $SymptomFields
+  static_fit_capture_plan_contract = 'The static_fit_capture_plan is read-only operator guidance for capturing FR-017 non-powered pilot static-fit evidence. It is not physical validation evidence by itself, does not prove pilot safety, and cannot clear pilot movement, powered, frame-coupled, or FR-018 work.'
+  static_fit_capture_plan_status_contract = 'The static_fit_capture_plan_status reports pilot static-fit capture readiness only. A ready group means the supplied record fields passed this script contract; it is not professional certification, medical clearance, or movement-test clearance.'
+  static_fit_capture_summary_contract = 'The static_fit_capture_* summary identifies the next blocking pilot static-fit evidence group. It is not physical validation evidence and cannot mark Stage 17 complete.'
+  static_fit_capture_plan_not_completion_evidence = $true
+  next_required_static_fit_input = 'complete_non_powered_pilot_static_fit_record_at_FR-017-PILOT-STATIC-FIT-INPUT-TEMPLATE.json'
+  static_fit_capture_plan = @($StaticFitCapturePlan)
+  static_fit_capture_plan_status = @($StaticFitCapturePlanStatus)
+  static_fit_capture_total_groups = [int]$StaticFitCapturePlanSummary.total_groups
+  static_fit_capture_ready_groups = [int]$StaticFitCapturePlanSummary.ready_groups
+  static_fit_capture_pending_groups = [int]$StaticFitCapturePlanSummary.pending_groups
+  static_fit_capture_invalid_groups = [int]$StaticFitCapturePlanSummary.invalid_groups
+  static_fit_capture_failed_groups = [int]$StaticFitCapturePlanSummary.failed_groups
+  static_fit_capture_upstream_blocked_groups = [int]$StaticFitCapturePlanSummary.upstream_blocked_groups
+  static_fit_capture_first_blocking_group_id = [string]$StaticFitCapturePlanSummary.first_blocking_group_id
+  static_fit_capture_first_blocking_group_status = [string]$StaticFitCapturePlanSummary.first_blocking_group_status
+  static_fit_capture_first_blocking_group_action = [string]$StaticFitCapturePlanSummary.first_blocking_group_action
   record_linkage_contract = 'The pilot static-fit evidence paths for measurement_record_path, mockup_build_record_path, and mannequin_interface_record_path must resolve to the same records passed into this gate. A static-fit record cannot advance from stale, copied, or unrelated upstream evidence.'
   pilot_identity_linkage_contract = 'The pilot static-fit evidence.pilot_id must match evidence.pilot_id in the linked measurement record. A static-fit record cannot advance if it names a different pilot than the measurements used for cuff sizing.'
   evidence_date_contract = 'Use an ISO 8601 calendar date in YYYY-MM-DD format for evidence.date. Future-dated pilot static-fit evidence is invalid because it cannot be completed evidence.'

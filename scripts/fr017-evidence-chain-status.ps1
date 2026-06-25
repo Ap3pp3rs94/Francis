@@ -235,6 +235,22 @@ function New-GateEvidenceDetails {
     mannequin_capture_first_blocking_group_id = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['mannequin_capture_first_blocking_group_id']) { '' } else { [string]$Payload.mannequin_capture_first_blocking_group_id }
     mannequin_capture_first_blocking_group_status = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['mannequin_capture_first_blocking_group_status']) { '' } else { [string]$Payload.mannequin_capture_first_blocking_group_status }
     mannequin_capture_first_blocking_group_action = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['mannequin_capture_first_blocking_group_action']) { '' } else { [string]$Payload.mannequin_capture_first_blocking_group_action }
+    static_fit_capture_plan_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['static_fit_capture_plan_contract']) { '' } else { [string]$Payload.static_fit_capture_plan_contract }
+    static_fit_capture_plan_status_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['static_fit_capture_plan_status_contract']) { '' } else { [string]$Payload.static_fit_capture_plan_status_contract }
+    static_fit_capture_summary_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['static_fit_capture_summary_contract']) { '' } else { [string]$Payload.static_fit_capture_summary_contract }
+    static_fit_capture_plan_not_completion_evidence = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['static_fit_capture_plan_not_completion_evidence']) { $false } else { [bool]$Payload.static_fit_capture_plan_not_completion_evidence }
+    next_required_static_fit_input = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['next_required_static_fit_input']) { '' } else { [string]$Payload.next_required_static_fit_input }
+    static_fit_capture_plan = @(Get-PayloadObjectArrayProperty -Payload $Payload -Name 'static_fit_capture_plan')
+    static_fit_capture_plan_status = @(Get-PayloadObjectArrayProperty -Payload $Payload -Name 'static_fit_capture_plan_status')
+    static_fit_capture_total_groups = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['static_fit_capture_total_groups']) { 0 } else { [int]$Payload.static_fit_capture_total_groups }
+    static_fit_capture_ready_groups = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['static_fit_capture_ready_groups']) { 0 } else { [int]$Payload.static_fit_capture_ready_groups }
+    static_fit_capture_pending_groups = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['static_fit_capture_pending_groups']) { 0 } else { [int]$Payload.static_fit_capture_pending_groups }
+    static_fit_capture_invalid_groups = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['static_fit_capture_invalid_groups']) { 0 } else { [int]$Payload.static_fit_capture_invalid_groups }
+    static_fit_capture_failed_groups = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['static_fit_capture_failed_groups']) { 0 } else { [int]$Payload.static_fit_capture_failed_groups }
+    static_fit_capture_upstream_blocked_groups = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['static_fit_capture_upstream_blocked_groups']) { 0 } else { [int]$Payload.static_fit_capture_upstream_blocked_groups }
+    static_fit_capture_first_blocking_group_id = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['static_fit_capture_first_blocking_group_id']) { '' } else { [string]$Payload.static_fit_capture_first_blocking_group_id }
+    static_fit_capture_first_blocking_group_status = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['static_fit_capture_first_blocking_group_status']) { '' } else { [string]$Payload.static_fit_capture_first_blocking_group_status }
+    static_fit_capture_first_blocking_group_action = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['static_fit_capture_first_blocking_group_action']) { '' } else { [string]$Payload.static_fit_capture_first_blocking_group_action }
     next_actions = @(Get-PayloadArrayProperty -Payload $Payload -Name 'next_actions')
   }
 }

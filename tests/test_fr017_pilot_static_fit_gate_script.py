@@ -41,6 +41,10 @@ def _payload(stdout: str) -> dict[str, Any]:
     return json.loads(stdout)
 
 
+def _capture_status_by_id(payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {step["id"]: step for step in payload["static_fit_capture_plan_status"]}
+
+
 def _write_upstream_ready_records(tmp_path: Path) -> tuple[Path, Path, Path]:
     measurement_path = tmp_path / "ready-measurements.json"
     mockup_path = tmp_path / "ready-mockup.json"
@@ -152,6 +156,39 @@ def test_fr017_pilot_static_gate_reports_default_templates_as_pending_upstream()
     assert payload["read_only_contract"] is True
     assert payload["writes_repo"] is False
     assert payload["grants_mutation_authority"] is False
+    assert payload["static_fit_capture_plan_not_completion_evidence"] is True
+    assert "not physical validation evidence" in payload["static_fit_capture_plan_contract"]
+    assert "pilot static-fit capture readiness only" in payload["static_fit_capture_plan_status_contract"]
+    assert "not physical validation evidence" in payload["static_fit_capture_summary_contract"]
+    assert payload["next_required_static_fit_input"] == (
+        "complete_non_powered_pilot_static_fit_record_at_FR-017-PILOT-STATIC-FIT-INPUT-TEMPLATE.json"
+    )
+    assert payload["static_fit_capture_total_groups"] == 6
+    assert payload["static_fit_capture_ready_groups"] == 0
+    assert payload["static_fit_capture_pending_groups"] == 0
+    assert payload["static_fit_capture_invalid_groups"] == 0
+    assert payload["static_fit_capture_failed_groups"] == 0
+    assert payload["static_fit_capture_upstream_blocked_groups"] == 6
+    assert payload["static_fit_capture_first_blocking_group_id"] == "static_fit_evidence_and_linkage"
+    assert payload["static_fit_capture_first_blocking_group_status"] == "blocked_by_upstream_mannequin_interface"
+    assert "mannequin interface" in payload["static_fit_capture_first_blocking_group_action"]
+    capture_plan = payload["static_fit_capture_plan"]
+    assert [step["id"] for step in capture_plan] == [
+        "static_fit_evidence_and_linkage",
+        "static_fit_safety_preconditions",
+        "left_static_fit_baseline_and_clearance",
+        "right_static_fit_baseline_and_clearance",
+        "left_static_fit_post_doff_and_symptoms",
+        "right_static_fit_post_doff_and_symptoms",
+    ]
+    assert "evidence.measurement_record_path" in capture_plan[0]["required_fields"]
+    assert "preconditions.stop_on_symptoms" in capture_plan[1]["required_fields"]
+    assert "sides.left.static_checks.quick_release_visible_tactile_reachable" in capture_plan[2]["required_fields"]
+    assert "sides.right.symptoms.loss_of_grip_strength" in capture_plan[5]["required_fields"]
+    capture_status = payload["static_fit_capture_plan_status"]
+    assert [step["id"] for step in capture_status] == [step["id"] for step in capture_plan]
+    assert all(step["status"] == "blocked_by_upstream_mannequin_interface" for step in capture_status)
+    assert all(step["ready_for_static_fit_record_review"] is False for step in capture_status)
 
 
 def test_fr017_pilot_static_gate_requires_static_record_after_upstream_ready(tmp_path: Path) -> None:
@@ -177,6 +214,32 @@ def test_fr017_pilot_static_gate_requires_static_record_after_upstream_ready(tmp
     assert payload["pilot_static_fit_test_complete"] is False
     assert payload["pilot_movement_testing_cleared"] is False
     assert payload["fr018_implementation_cleared"] is False
+    assert payload["static_fit_capture_plan_not_completion_evidence"] is True
+    assert payload["static_fit_capture_total_groups"] == 6
+    assert payload["static_fit_capture_ready_groups"] == 0
+    assert payload["static_fit_capture_pending_groups"] == 6
+    assert payload["static_fit_capture_invalid_groups"] == 0
+    assert payload["static_fit_capture_failed_groups"] == 0
+    assert payload["static_fit_capture_upstream_blocked_groups"] == 0
+    assert payload["static_fit_capture_first_blocking_group_id"] == "static_fit_evidence_and_linkage"
+    assert payload["static_fit_capture_first_blocking_group_status"] == "pending_required_fields"
+    assert "matching pilot id" in payload["static_fit_capture_first_blocking_group_action"]
+    capture_status = _capture_status_by_id(payload)
+    assert "evidence.date" in capture_status["static_fit_evidence_and_linkage"]["missing_fields"]
+    assert "preconditions.non_powered_only" in capture_status["static_fit_safety_preconditions"]["missing_fields"]
+    assert (
+        "sides.left.baseline.fingers_warm_before_donning"
+        in capture_status["left_static_fit_baseline_and_clearance"]["missing_fields"]
+    )
+    assert (
+        "sides.right.static_checks.quick_release_visible_tactile_reachable"
+        in capture_status["right_static_fit_baseline_and_clearance"]["missing_fields"]
+    )
+    assert "sides.left.symptoms.tingling" in capture_status["left_static_fit_post_doff_and_symptoms"]["missing_fields"]
+    assert (
+        "sides.right.symptoms.loss_of_grip_strength"
+        in capture_status["right_static_fit_post_doff_and_symptoms"]["missing_fields"]
+    )
 
 
 def test_fr017_pilot_static_gate_treats_lowercase_or_padded_pending_text_as_missing(
@@ -253,6 +316,16 @@ def test_fr017_pilot_static_gate_accepts_complete_static_fit_record(tmp_path: Pa
     assert payload["pilot_movement_testing_cleared"] is False
     assert payload["powered_or_frame_coupled_testing_cleared"] is False
     assert payload["fr018_implementation_cleared"] is False
+    assert payload["static_fit_capture_total_groups"] == 6
+    assert payload["static_fit_capture_ready_groups"] == 6
+    assert payload["static_fit_capture_pending_groups"] == 0
+    assert payload["static_fit_capture_invalid_groups"] == 0
+    assert payload["static_fit_capture_failed_groups"] == 0
+    assert payload["static_fit_capture_upstream_blocked_groups"] == 0
+    assert payload["static_fit_capture_first_blocking_group_id"] == ""
+    assert payload["static_fit_capture_first_blocking_group_status"] == ""
+    assert payload["static_fit_capture_first_blocking_group_action"] == ""
+    assert all(step["ready_for_static_fit_record_review"] is True for step in payload["static_fit_capture_plan_status"])
     assert "must resolve to the same records passed into this gate" in payload["record_linkage_contract"]
     assert "must match evidence.pilot_id in the linked measurement record" in payload["pilot_identity_linkage_contract"]
     assert "YYYY-MM-DD" in payload["evidence_date_contract"]
@@ -476,6 +549,18 @@ def test_fr017_pilot_static_gate_blocks_symptom_positive_static_fit(tmp_path: Pa
     result = _payload(proc.stdout)
     assert result["status"] == "failed_requires_fit_redesign_or_medical_review"
     assert result["symptom_blockers"] == ["sides.left.symptoms.tingling"]
+    assert result["static_fit_capture_total_groups"] == 6
+    assert result["static_fit_capture_ready_groups"] == 5
+    assert result["static_fit_capture_pending_groups"] == 0
+    assert result["static_fit_capture_invalid_groups"] == 0
+    assert result["static_fit_capture_failed_groups"] == 1
+    assert result["static_fit_capture_upstream_blocked_groups"] == 0
+    assert result["static_fit_capture_first_blocking_group_id"] == "left_static_fit_post_doff_and_symptoms"
+    assert result["static_fit_capture_first_blocking_group_status"] == "failed_stop_condition_or_blocking_signal"
+    capture_status = _capture_status_by_id(result)
+    assert capture_status["left_static_fit_post_doff_and_symptoms"]["blocking_signals"] == [
+        "sides.left.symptoms.tingling"
+    ]
     assert result["pilot_static_fit_test_complete"] is False
     assert result["pilot_movement_testing_cleared"] is False
     assert result["fr018_implementation_cleared"] is False

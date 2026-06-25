@@ -12,6 +12,7 @@ from tests.test_fr017_engineering_review_gate_script import (
     _ready_engineering_review_payload,
     _write_release_ready_records,
 )
+from tests.test_fr017_mannequin_interface_gate_script import _ready_mannequin_payload
 from tests.test_fr017_mockup_readiness_gate_script import (
     _ready_measurement_payload,
     _ready_mockup_payload,
@@ -235,6 +236,75 @@ def test_fr017_evidence_chain_status_moves_blocker_after_mockup_ready(tmp_path: 
     )
     assert "fail_observations.release_hidden" in capture_status["mannequin_fail_observation_screen"]["missing_fields"]
     assert payload["gates_ran"] == 4
+    assert payload["physical_validation_complete"] is False
+    assert payload["fr018_implementation_cleared"] is False
+
+
+def test_fr017_evidence_chain_status_moves_blocker_after_mannequin_ready(tmp_path: Path) -> None:
+    measurement_path = tmp_path / "ready-measurements.json"
+    mockup_path = tmp_path / "ready-mockup.json"
+    mannequin_path = tmp_path / "ready-mannequin.json"
+    measurement_path.write_text(json.dumps(_ready_measurement_payload()), encoding="utf-8")
+    mockup_path.write_text(json.dumps(_ready_mockup_payload(measurement_path)), encoding="utf-8")
+    mannequin_path.write_text(json.dumps(_ready_mannequin_payload(mockup_path)), encoding="utf-8")
+
+    proc = _run_gate(
+        "-Mode",
+        "Status",
+        "-MeasurementPath",
+        str(measurement_path),
+        "-MockupPath",
+        str(mockup_path),
+        "-MannequinPath",
+        str(mannequin_path),
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = _payload(proc.stdout)
+    assert payload["status"] == "blocked_on_pilot_static_fit"
+    assert payload["first_blocking_gate"] == "pilot_static_fit"
+    assert payload["first_blocking_status"] == "pending_pilot_static_fit_test"
+    assert payload["next_required_input"] == "FR-017-PILOT-STATIC-FIT-INPUT-TEMPLATE.json"
+    assert "evidence.date" in payload["first_blocking_details"]["missing_fields"]
+    assert payload["first_blocking_details"]["invalid_fields"] == []
+    assert payload["first_blocking_details"]["static_fit_capture_plan_not_completion_evidence"] is True
+    assert "not physical validation evidence" in payload["first_blocking_details"]["static_fit_capture_plan_contract"]
+    assert (
+        "pilot static-fit capture readiness only"
+        in payload["first_blocking_details"]["static_fit_capture_plan_status_contract"]
+    )
+    assert (
+        "not physical validation evidence" in payload["first_blocking_details"]["static_fit_capture_summary_contract"]
+    )
+    assert (
+        payload["first_blocking_details"]["next_required_static_fit_input"]
+        == "complete_non_powered_pilot_static_fit_record_at_FR-017-PILOT-STATIC-FIT-INPUT-TEMPLATE.json"
+    )
+    assert payload["first_blocking_details"]["static_fit_capture_total_groups"] == 6
+    assert payload["first_blocking_details"]["static_fit_capture_ready_groups"] == 0
+    assert payload["first_blocking_details"]["static_fit_capture_pending_groups"] == 6
+    assert payload["first_blocking_details"]["static_fit_capture_invalid_groups"] == 0
+    assert payload["first_blocking_details"]["static_fit_capture_failed_groups"] == 0
+    assert payload["first_blocking_details"]["static_fit_capture_upstream_blocked_groups"] == 0
+    assert payload["first_blocking_details"]["static_fit_capture_first_blocking_group_id"] == (
+        "static_fit_evidence_and_linkage"
+    )
+    assert payload["first_blocking_details"]["static_fit_capture_first_blocking_group_status"] == (
+        "pending_required_fields"
+    )
+    assert "matching pilot id" in payload["first_blocking_details"]["static_fit_capture_first_blocking_group_action"]
+    capture_status = {step["id"]: step for step in payload["first_blocking_details"]["static_fit_capture_plan_status"]}
+    assert "evidence.date" in capture_status["static_fit_evidence_and_linkage"]["missing_fields"]
+    assert "preconditions.non_powered_only" in capture_status["static_fit_safety_preconditions"]["missing_fields"]
+    assert (
+        "sides.left.static_checks.quick_release_visible_tactile_reachable"
+        in capture_status["left_static_fit_baseline_and_clearance"]["missing_fields"]
+    )
+    assert (
+        "sides.right.symptoms.loss_of_grip_strength"
+        in capture_status["right_static_fit_post_doff_and_symptoms"]["missing_fields"]
+    )
+    assert payload["gates_ran"] == 5
     assert payload["physical_validation_complete"] is False
     assert payload["fr018_implementation_cleared"] is False
 
