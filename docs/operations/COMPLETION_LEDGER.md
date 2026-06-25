@@ -94861,6 +94861,45 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, full backend test suite, and unrelated UI
   flows were not run for this bounded action-intake readback slice.
 
+### 2026-06-25 20:46Z - Recurrence proof shows live receipt trail
+
+Current posture: Phase 2 / developer bridge collaboration support now exposes
+the concrete receipt trail behind the runtime recurrence proof. This follows the
+Francis1/Codex review signal that the recurring loop should prove progress
+without relying on repeated operator nudges or generic health wording.
+
+What changed:
+
+- `collaborationRuntimeRecurrenceSummary()` now shows the latest Codex prompt,
+  Ollama/Francis1 reply, note, insight, and learning receipt IDs already present
+  in the collaboration runtime state.
+- The runtime review-receipt summary now surfaces mutation authority denial
+  beside execution, approval, and memory-write denial.
+- The focused Chat UI contract test now verifies those receipt-trail fields and
+  the expanded no-authority review summary.
+
+Validation:
+
+- Chat UI contract run passed:
+  `npm run test -- --test-name-pattern=parseCollaborationRuntimeHealth`
+  (`279` passing tests in the selected run).
+- Chat UI production build passed with `npm run build`.
+- `git diff --check` passed.
+- Live URL proof: `GET http://127.0.0.1:5173/` returned HTTP 200.
+- Collaboration runtime health remained `healthy` with `helpers=3/3`,
+  `recurrence=turn_gap`, turn `1208`, a current note ID, a current insight ID,
+  Codex enabled, Ollama enabled, and Claude disabled.
+
+Remaining truthful gap:
+
+- This does not change recurrence timing, start or stop helpers, call a model,
+  train a model, or store raw transcript text.
+- This does not grant execution, mutation, approval, training, memory-write, or
+  main-build prompt authority.
+- `.\scripts\check.ps1`, GitHub CI, full backend test suite, browser screenshot
+  proof, and unrelated UI flows were not run for this bounded recurrence-readback
+  slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
