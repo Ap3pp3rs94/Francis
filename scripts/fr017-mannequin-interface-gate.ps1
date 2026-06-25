@@ -244,6 +244,150 @@ function Test-PresentText {
   return -not (Test-MissingOrPendingText -Value $Value)
 }
 
+function Add-UniqueString {
+  param(
+    [System.Collections.Generic.List[string]]$Target,
+    [object]$Value
+  )
+
+  if ($null -eq $Value) {
+    return
+  }
+  $Text = ([string]$Value).Trim()
+  if ([string]::IsNullOrWhiteSpace($Text)) {
+    return
+  }
+  if (-not $Target.Contains($Text)) {
+    $Target.Add($Text) | Out-Null
+  }
+}
+
+function Test-SignalMatchesPrefix {
+  param(
+    [string]$Signal,
+    [string]$Prefix
+  )
+
+  if ([string]::Equals($Signal, $Prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+    return $true
+  }
+  return $Signal.StartsWith($Prefix + '.', [System.StringComparison]::OrdinalIgnoreCase) -or
+    $Signal.StartsWith($Prefix + '_', [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+function Get-CaptureStepSignals {
+  param(
+    [string[]]$Signals,
+    [string[]]$RequiredFields,
+    [string[]]$SignalPrefixes
+  )
+
+  $Result = New-Object System.Collections.Generic.List[string]
+  foreach ($Signal in (ConvertTo-StringArray -Value $Signals)) {
+    foreach ($Field in $RequiredFields) {
+      if (Test-SignalMatchesPrefix -Signal $Signal -Prefix $Field) {
+        Add-UniqueString -Target $Result -Value $Signal
+      }
+    }
+    foreach ($Prefix in $SignalPrefixes) {
+      if (Test-SignalMatchesPrefix -Signal $Signal -Prefix $Prefix) {
+        Add-UniqueString -Target $Result -Value $Signal
+      }
+    }
+  }
+  return @($Result.ToArray())
+}
+
+function New-MannequinCapturePlanStatus {
+  param(
+    [object[]]$CapturePlan,
+    [bool]$UpstreamMockupReady,
+    [string[]]$MissingFields,
+    [string[]]$InvalidFields,
+    [string[]]$BlockingSignals
+  )
+
+  $Result = New-Object System.Collections.Generic.List[object]
+  foreach ($Step in $CapturePlan) {
+    $RequiredFields = @(ConvertTo-StringArray -Value $Step.required_fields)
+    $SignalPrefixes = @(ConvertTo-StringArray -Value $Step.blocking_signal_prefixes)
+    $StepMissing = @(Get-CaptureStepSignals -Signals $MissingFields -RequiredFields $RequiredFields -SignalPrefixes @())
+    $StepInvalid = @(Get-CaptureStepSignals -Signals $InvalidFields -RequiredFields $RequiredFields -SignalPrefixes @())
+    $StepBlockingSignals = @(Get-CaptureStepSignals -Signals $BlockingSignals -RequiredFields $RequiredFields -SignalPrefixes $SignalPrefixes)
+
+    $Status = 'ready_for_mannequin_interface_review'
+    $RequiredAction = [string]$Step.required_action
+    if (-not $UpstreamMockupReady) {
+      $Status = 'blocked_by_upstream_mockup_readiness'
+      $RequiredAction = 'complete measurement intake and non-powered mockup readiness before mannequin-interface evidence can be captured or reviewed'
+    } elseif ($StepBlockingSignals.Count -gt 0) {
+      $Status = 'failed_stop_condition_or_blocking_signal'
+    } elseif ($StepInvalid.Count -gt 0) {
+      $Status = 'invalid_required_fields'
+    } elseif ($StepMissing.Count -gt 0) {
+      $Status = 'pending_required_fields'
+    }
+
+    $Result.Add([ordered]@{
+        id = [string]$Step.id
+        status = $Status
+        validation_state = [string]$Step.validation_state
+        ready_for_mannequin_interface = ($Status -eq 'ready_for_mannequin_interface_review')
+        missing_fields = @($StepMissing)
+        invalid_fields = @($StepInvalid)
+        blocking_signals = @($StepBlockingSignals)
+        required_action = $RequiredAction
+      }) | Out-Null
+  }
+  return @($Result.ToArray())
+}
+
+function New-CapturePlanSummary {
+  param([object[]]$CapturePlanStatus)
+
+  $ReadyCount = 0
+  $PendingCount = 0
+  $InvalidCount = 0
+  $FailedCount = 0
+  $UpstreamBlockedCount = 0
+  $FirstBlockingGroupId = ''
+  $FirstBlockingGroupStatus = ''
+  $FirstBlockingGroupAction = ''
+
+  foreach ($Step in $CapturePlanStatus) {
+    $StepStatus = [string]$Step.status
+    if ($StepStatus -eq 'ready_for_mannequin_interface_review') {
+      $ReadyCount += 1
+    } elseif ($StepStatus -eq 'pending_required_fields') {
+      $PendingCount += 1
+    } elseif ($StepStatus -eq 'invalid_required_fields') {
+      $InvalidCount += 1
+    } elseif ($StepStatus -eq 'failed_stop_condition_or_blocking_signal') {
+      $FailedCount += 1
+    } elseif ($StepStatus -eq 'blocked_by_upstream_mockup_readiness') {
+      $UpstreamBlockedCount += 1
+    }
+
+    if ([string]::IsNullOrWhiteSpace($FirstBlockingGroupId) -and $StepStatus -ne 'ready_for_mannequin_interface_review') {
+      $FirstBlockingGroupId = [string]$Step.id
+      $FirstBlockingGroupStatus = $StepStatus
+      $FirstBlockingGroupAction = [string]$Step.required_action
+    }
+  }
+
+  return [ordered]@{
+    total_groups = @($CapturePlanStatus).Count
+    ready_groups = $ReadyCount
+    pending_groups = $PendingCount
+    invalid_groups = $InvalidCount
+    failed_groups = $FailedCount
+    upstream_blocked_groups = $UpstreamBlockedCount
+    first_blocking_group_id = $FirstBlockingGroupId
+    first_blocking_group_status = $FirstBlockingGroupStatus
+    first_blocking_group_action = $FirstBlockingGroupAction
+  }
+}
+
 function Invoke-MockupReadinessGate {
   param(
     [string]$ResolvedMeasurementPath,
@@ -345,6 +489,85 @@ $RequiredFailObservationFields = @(
   'cable_inner_elbow_crossing',
   'cable_wrist_bone_crossing',
   'cable_palm_or_grip_crossing'
+)
+
+$MannequinEvidenceFields = @(
+  'evidence.date',
+  'evidence.observer',
+  'evidence.mockup_readiness_record_path',
+  'evidence.mannequin_or_arm_form_id',
+  'evidence.future_interface_mock_geometry_revision',
+  'evidence.cable_sleeve_mock_id'
+)
+
+$MannequinTestArticleFields = @(
+  'test_article.left_cuff_revision',
+  'test_article.right_cuff_revision',
+  'test_article.non_powered_only'
+)
+
+$MannequinInterfaceFields = @()
+foreach ($InterfaceId in $RequiredInterfaceIds) {
+  $MannequinInterfaceFields += @(
+    ('interfaces.{0}.mock_installed' -f $InterfaceId),
+    ('interfaces.{0}.clearance_passed' -f $InterfaceId),
+    ('interfaces.{0}.notes' -f $InterfaceId)
+  )
+}
+
+$MannequinCableSensorReleaseFields = @()
+foreach ($Field in $RequiredCableSensorChecks) {
+  $MannequinCableSensorReleaseFields += ('cable_sensor_checks.{0}' -f $Field)
+}
+foreach ($Field in $RequiredReleaseChecks) {
+  $MannequinCableSensorReleaseFields += ('release_checks.{0}' -f $Field)
+}
+
+$MannequinFailObservationFields = @()
+foreach ($Field in $RequiredFailObservationFields) {
+  $MannequinFailObservationFields += ('fail_observations.{0}' -f $Field)
+}
+
+$MannequinCapturePlan = @(
+  [ordered]@{
+    id = 'mannequin_evidence_and_linkage'
+    validation_state = 'REQUIRES_MANNEQUIN_TEST_RECORD'
+    required_fields = $MannequinEvidenceFields
+    blocking_signal_prefixes = @(
+      'evidence.mockup_readiness_record_path_must_match_mockup_path',
+      'evidence.date_before_mockup.evidence.date',
+      'evidence.mannequin_or_arm_form_id'
+    )
+    required_action = 'record ISO date, observer, matching mockup readiness record path, non-human mannequin or arm-form id, future interface mock geometry revision, and cable sleeve mock id'
+  },
+  [ordered]@{
+    id = 'mannequin_test_article'
+    validation_state = 'REQUIRES_MANNEQUIN_TEST_RECORD'
+    required_fields = $MannequinTestArticleFields
+    blocking_signal_prefixes = @('test_article')
+    required_action = 'identify left and right cuff revisions and verify the mannequin interface article is non-powered only'
+  },
+  [ordered]@{
+    id = 'mannequin_future_interface_clearance'
+    validation_state = 'REQUIRES_MANNEQUIN_TEST'
+    required_fields = $MannequinInterfaceFields
+    blocking_signal_prefixes = @('interfaces')
+    required_action = 'check every future forearm frame, elbow, wrist, glove, palm-ring, and armor mock interface for installed mock geometry, clearance pass, and notes'
+  },
+  [ordered]@{
+    id = 'mannequin_cable_sensor_and_release_checks'
+    validation_state = 'REQUIRES_MANNEQUIN_TEST'
+    required_fields = $MannequinCableSensorReleaseFields
+    blocking_signal_prefixes = @('cable_sensor_checks', 'release_checks')
+    required_action = 'verify outer-forearm cable/sensor routing and quick-release/removal access on the non-powered mannequin interface setup'
+  },
+  [ordered]@{
+    id = 'mannequin_fail_observation_screen'
+    validation_state = 'REQUIRES_MANNEQUIN_TEST'
+    required_fields = $MannequinFailObservationFields
+    blocking_signal_prefixes = @('fail_observations')
+    required_action = 'record each snag, compression, hidden-release, wrist/glove path, inner-elbow, wrist-bone, palm, and grip-path stop condition as false before advancing'
+  }
 )
 
 $DefaultMeasurementPath = Join-Path $RepoRoot 'FR-017_Stage17_Package\FR-017-MEASUREMENTS-INPUT-TEMPLATE.json'
@@ -482,6 +705,22 @@ if (-not [bool]$Upstream.parse_ok -or [int]$Upstream.exit_code -ne 0 -or $Upstre
   }
 }
 
+$AllMannequinBlockingSignals = New-Object System.Collections.Generic.List[string]
+foreach ($Signal in @($RecordLinkageViolations.ToArray())) {
+  Add-UniqueString -Target $AllMannequinBlockingSignals -Value $Signal
+}
+foreach ($Signal in @($RecordChronologyViolations.ToArray())) {
+  Add-UniqueString -Target $AllMannequinBlockingSignals -Value $Signal
+}
+foreach ($Signal in @($InterfaceRedesignTriggers.ToArray())) {
+  Add-UniqueString -Target $AllMannequinBlockingSignals -Value $Signal
+}
+foreach ($Signal in @($FailObservations.ToArray())) {
+  Add-UniqueString -Target $AllMannequinBlockingSignals -Value $Signal
+}
+$MannequinCapturePlanStatus = @(New-MannequinCapturePlanStatus -CapturePlan $MannequinCapturePlan -UpstreamMockupReady $UpstreamReady -MissingFields $MissingFields.ToArray() -InvalidFields $InvalidFields.ToArray() -BlockingSignals $AllMannequinBlockingSignals.ToArray())
+$MannequinCapturePlanSummary = New-CapturePlanSummary -CapturePlanStatus $MannequinCapturePlanStatus
+
 $Output = [ordered]@{
   kind = 'francis.fr017.mannequin_interface_gate'
   mode = $Mode
@@ -537,6 +776,22 @@ $Output = [ordered]@{
   required_cable_sensor_checks = $RequiredCableSensorChecks
   required_release_checks = $RequiredReleaseChecks
   required_fail_observation_fields = $RequiredFailObservationFields
+  mannequin_capture_plan_contract = 'The mannequin_capture_plan is read-only operator guidance for capturing FR-017 non-powered mannequin interface evidence. It is not physical validation evidence, does not prove pilot safety, and cannot clear powered, frame-coupled, or FR-018 work.'
+  mannequin_capture_plan_status_contract = 'The mannequin_capture_plan_status reports mannequin interface capture readiness only. A ready group means the supplied record fields passed this script contract; it is not a professional certification or pilot fit validation.'
+  mannequin_capture_summary_contract = 'The mannequin_capture_* summary identifies the next blocking mannequin evidence group. It is not physical validation evidence and cannot mark Stage 17 complete.'
+  mannequin_capture_plan_not_completion_evidence = $true
+  next_required_mannequin_input = 'complete_non_powered_mannequin_interface_record_at_FR-017-MANNEQUIN-INTERFACE-INPUT-TEMPLATE.json'
+  mannequin_capture_plan = @($MannequinCapturePlan)
+  mannequin_capture_plan_status = @($MannequinCapturePlanStatus)
+  mannequin_capture_total_groups = [int]$MannequinCapturePlanSummary.total_groups
+  mannequin_capture_ready_groups = [int]$MannequinCapturePlanSummary.ready_groups
+  mannequin_capture_pending_groups = [int]$MannequinCapturePlanSummary.pending_groups
+  mannequin_capture_invalid_groups = [int]$MannequinCapturePlanSummary.invalid_groups
+  mannequin_capture_failed_groups = [int]$MannequinCapturePlanSummary.failed_groups
+  mannequin_capture_upstream_blocked_groups = [int]$MannequinCapturePlanSummary.upstream_blocked_groups
+  mannequin_capture_first_blocking_group_id = [string]$MannequinCapturePlanSummary.first_blocking_group_id
+  mannequin_capture_first_blocking_group_status = [string]$MannequinCapturePlanSummary.first_blocking_group_status
+  mannequin_capture_first_blocking_group_action = [string]$MannequinCapturePlanSummary.first_blocking_group_action
   evidence_date_contract = 'Use an ISO 8601 calendar date in YYYY-MM-DD format for evidence.date. Future-dated mannequin interface evidence is invalid because it cannot be completed evidence.'
   test_subject_contract = 'Mannequin interface evidence.mannequin_or_arm_form_id must identify a non-human mannequin or arm-form test subject. Any text that identifies a pilot, human, or wearer is invalid because this gate is not a pilot test.'
   record_linkage_contract = 'The mannequin interface evidence.mockup_readiness_record_path must resolve to the same mockup record path passed into this gate. A mannequin test cannot advance from stale, copied, or unrelated mockup evidence.'

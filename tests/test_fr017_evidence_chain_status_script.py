@@ -12,7 +12,10 @@ from tests.test_fr017_engineering_review_gate_script import (
     _ready_engineering_review_payload,
     _write_release_ready_records,
 )
-from tests.test_fr017_mockup_readiness_gate_script import _ready_measurement_payload
+from tests.test_fr017_mockup_readiness_gate_script import (
+    _ready_measurement_payload,
+    _ready_mockup_payload,
+)
 from tests.test_fr017_quick_release_cable_snag_gate_script import (
     _ready_release_cable_payload,
     _write_movement_ready_records,
@@ -165,6 +168,73 @@ def test_fr017_evidence_chain_status_moves_blocker_after_measurement_ready(tmp_p
     assert "materials.padding_layer" in capture_status["mockup_material_stack"]["missing_fields"]
     assert "constraints.non_powered_only" in capture_status["mockup_global_safety_constraints"]["missing_fields"]
     assert payload["gates_ran"] == 3
+    assert payload["physical_validation_complete"] is False
+    assert payload["fr018_implementation_cleared"] is False
+
+
+def test_fr017_evidence_chain_status_moves_blocker_after_mockup_ready(tmp_path: Path) -> None:
+    measurement_path = tmp_path / "ready-measurements.json"
+    mockup_path = tmp_path / "ready-mockup.json"
+    measurement_path.write_text(json.dumps(_ready_measurement_payload()), encoding="utf-8")
+    mockup_path.write_text(json.dumps(_ready_mockup_payload(measurement_path)), encoding="utf-8")
+
+    proc = _run_gate(
+        "-Mode",
+        "Status",
+        "-MeasurementPath",
+        str(measurement_path),
+        "-MockupPath",
+        str(mockup_path),
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = _payload(proc.stdout)
+    assert payload["status"] == "blocked_on_mannequin_interface"
+    assert payload["first_blocking_gate"] == "mannequin_interface"
+    assert payload["first_blocking_status"] == "pending_mannequin_interface_test"
+    assert payload["next_required_input"] == "FR-017-MANNEQUIN-INTERFACE-INPUT-TEMPLATE.json"
+    assert "evidence.date" in payload["first_blocking_details"]["missing_fields"]
+    assert payload["first_blocking_details"]["invalid_fields"] == []
+    assert payload["first_blocking_details"]["mannequin_capture_plan_not_completion_evidence"] is True
+    assert "not physical validation evidence" in payload["first_blocking_details"]["mannequin_capture_plan_contract"]
+    assert (
+        "mannequin interface capture readiness only"
+        in payload["first_blocking_details"]["mannequin_capture_plan_status_contract"]
+    )
+    assert "not physical validation evidence" in payload["first_blocking_details"]["mannequin_capture_summary_contract"]
+    assert (
+        payload["first_blocking_details"]["next_required_mannequin_input"]
+        == "complete_non_powered_mannequin_interface_record_at_FR-017-MANNEQUIN-INTERFACE-INPUT-TEMPLATE.json"
+    )
+    assert payload["first_blocking_details"]["mannequin_capture_total_groups"] == 5
+    assert payload["first_blocking_details"]["mannequin_capture_ready_groups"] == 0
+    assert payload["first_blocking_details"]["mannequin_capture_pending_groups"] == 5
+    assert payload["first_blocking_details"]["mannequin_capture_invalid_groups"] == 0
+    assert payload["first_blocking_details"]["mannequin_capture_failed_groups"] == 0
+    assert payload["first_blocking_details"]["mannequin_capture_upstream_blocked_groups"] == 0
+    assert payload["first_blocking_details"]["mannequin_capture_first_blocking_group_id"] == (
+        "mannequin_evidence_and_linkage"
+    )
+    assert payload["first_blocking_details"]["mannequin_capture_first_blocking_group_status"] == (
+        "pending_required_fields"
+    )
+    assert (
+        "matching mockup readiness record path"
+        in payload["first_blocking_details"]["mannequin_capture_first_blocking_group_action"]
+    )
+    capture_status = {step["id"]: step for step in payload["first_blocking_details"]["mannequin_capture_plan_status"]}
+    assert "evidence.date" in capture_status["mannequin_evidence_and_linkage"]["missing_fields"]
+    assert "test_article.left_cuff_revision" in capture_status["mannequin_test_article"]["missing_fields"]
+    assert (
+        "interfaces.fr032_left_forearm_frame.mock_installed"
+        in capture_status["mannequin_future_interface_clearance"]["missing_fields"]
+    )
+    assert (
+        "cable_sensor_checks.fr163_outer_route_only"
+        in capture_status["mannequin_cable_sensor_and_release_checks"]["missing_fields"]
+    )
+    assert "fail_observations.release_hidden" in capture_status["mannequin_fail_observation_screen"]["missing_fields"]
+    assert payload["gates_ran"] == 4
     assert payload["physical_validation_complete"] is False
     assert payload["fr018_implementation_cleared"] is False
 
