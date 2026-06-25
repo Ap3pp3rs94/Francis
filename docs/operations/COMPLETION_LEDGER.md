@@ -93957,6 +93957,58 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, and backend validation were not rerun for
   this root-route-only slice.
 
+### 2026-06-25 18:30Z - Communication UI exposes source-disagreement receipt evidence
+
+Current posture: Phase 2 / the live collaboration runtime is healthy and the
+latest review receipts include source-disagreement gates. The Communication UI
+now makes those blocked gates auditable by showing the conflicting Codex and
+Francis1/Ollama receipt lines directly in the operator surface.
+
+What changed:
+
+- Added a typed Chat UI display helper for `build_direction_gate` readbacks.
+- Rendered blocked Build Direction Gate cards with review artifact, surface,
+  gate detail, and explicit conflicting source receipt lines.
+- Confirmed the existing `/developer-bridge/collaboration-agents/toggle`
+  mutation authority matrix entry remains bounded operator-console control.
+- Kept the surface read-only: the gate still blocks build direction and grants
+  no execution, mutation, approval, memory-write, or training authority.
+
+Validation:
+
+- Live runtime readback returned `status=healthy`, three running helpers, turn
+  `1086`, `waiting_for_ollama=false`, and a latest source-disagreement review
+  receipt with two conflicting sources.
+- Focused Chat UI parser/display tests passed:
+  `cd apps\chat_ui; node --test --experimental-strip-types
+  src\chat\index.test.ts` with 20 tests.
+- Full Chat UI test suite passed: `cd apps\chat_ui; npm run test` with 277
+  tests.
+- Chat UI production build passed: `cd apps\chat_ui; npm run build`.
+- Focused backend authority-matrix test passed:
+  `.\.venv\Scripts\python.exe -m pytest -q
+  tests/test_developer_bridge.py::test_developer_bridge_agent_toggle_is_classified_in_authority_matrix`.
+- Ruff passed for the authority-matrix file:
+  `.\.venv\Scripts\python.exe -m ruff check --no-cache
+  src\francis\api\mutation_authority_matrix.py`.
+- Mypy passed for the authority-matrix file:
+  `.\.venv\Scripts\python.exe -m mypy
+  src\francis\api\mutation_authority_matrix.py`.
+- Browser proof captured `http://127.0.0.1:5173/` and showed the Build
+  Direction Gates section with blocked source-disagreement cards and the new
+  Conflicting Sources area.
+
+Remaining truthful gap:
+
+- This is an operator-readability improvement for existing typed review
+  receipts, not a new source-disagreement resolution workflow.
+- The collaboration output remains advisory and blocked until Codex or the
+  operator reviews the typed receipt against repo truth.
+- No execution, mutation, approval, memory-write, training, commit, push, or
+  governed-gateway authority was granted.
+- `.\scripts\check.ps1`, GitHub CI, and the full backend suite were not rerun
+  for this UI/readback slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

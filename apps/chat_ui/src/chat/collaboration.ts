@@ -225,6 +225,16 @@ export type CollaborationImplementationReviewDisplay = {
   detail: string[];
 };
 
+export type CollaborationBuildDirectionGateDisplay = {
+  badge: string;
+  tone: CollaborationReviewTone;
+  artifact: string;
+  surface: string;
+  reason: string;
+  detail: string[];
+  conflictingSourceLines: string[];
+};
+
 export type CollaborationRuntimeRecurrenceDisplay = {
   badge: string;
   tone: CollaborationReviewTone;
@@ -884,6 +894,52 @@ export function collaborationImplementationReviewSummary(item: CollaborationRevi
       `approve ${actionBoundaryBool(item.actionBoundary.conversationCanApproveAction || item.buildDirectionGate.grantsApprovalAuthority)}`,
       `memory write ${actionBoundaryBool(item.buildDirectionGate.grantsMemoryWriteAuthority)}`,
     ],
+  };
+}
+
+export function collaborationBuildDirectionGateSummary(item: CollaborationReviewItem): CollaborationBuildDirectionGateDisplay {
+  const gate = item.buildDirectionGate;
+  const unsafeAuthority =
+    gate.grantsExecutionAuthority ||
+    gate.grantsMutationAuthority ||
+    gate.grantsApprovalAuthority ||
+    gate.grantsMemoryWriteAuthority ||
+    item.actionBoundary.conversationCanExecuteAction ||
+    item.actionBoundary.conversationCanApproveAction;
+  const artifact = gate.requiredReviewArtifact || item.reviewArtifact || "unknown";
+  const surface = gate.surfaceUnderReview || item.concreteRepoSurface || "unknown";
+  const reason =
+    gate.reason ||
+    (gate.blocksBuildDirection
+      ? "Typed review is required before this can become build direction."
+      : "Collaboration output remains advisory until reviewed against repo truth.");
+  const conflictingSourceLines = gate.conflictingSources.length
+    ? gate.conflictingSources.map((source) => {
+        const sourceName = source.source || "unknown source";
+        const receipt = source.receiptId || "missing receipt";
+        const role = source.role || "unspecified role";
+        const provider = source.providerLane ? ` / provider ${source.providerLane}` : "";
+        return `${sourceName}: ${receipt} / ${role}${provider}`;
+      })
+    : ["No conflicting source receipts recorded."];
+  return {
+    badge: unsafeAuthority ? "authority drift" : gate.blocksBuildDirection ? "source disagreement blocked" : "advisory gate",
+    tone: unsafeAuthority || gate.blocksBuildDirection ? "blocked" : "ready",
+    artifact,
+    surface,
+    reason,
+    detail: [
+      `gate ${gate.state || "advisory_review_required"}`,
+      `typed artifact ${actionBoundaryBool(gate.requiresTypedReviewArtifact)}`,
+      `conflicting sources ${actionBoundaryBool(gate.requiresConflictingSources)}`,
+      `source receipts ${gate.conflictingSources.length}`,
+      `codex review ${actionBoundaryBool(gate.requiresCodexOrOperatorReview)}`,
+      `repo review ${actionBoundaryBool(gate.requiresRepoTruthReview)}`,
+      `execute ${actionBoundaryBool(item.actionBoundary.conversationCanExecuteAction || gate.grantsExecutionAuthority)}`,
+      `approve ${actionBoundaryBool(item.actionBoundary.conversationCanApproveAction || gate.grantsApprovalAuthority)}`,
+      `memory write ${actionBoundaryBool(gate.grantsMemoryWriteAuthority)}`,
+    ],
+    conflictingSourceLines,
   };
 }
 

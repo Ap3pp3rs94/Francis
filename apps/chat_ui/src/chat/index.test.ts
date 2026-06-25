@@ -5,6 +5,7 @@ import { parseChatEvent, parseChatSendResponse } from "./index.ts";
 import {
   collaborationActionBoundarySummary,
   collaborationActionIntakeSummary,
+  collaborationBuildDirectionGateSummary,
   collaborationImplementationReviewSummary,
   collaborationReviewBadge,
   collaborationReviewNextAction,
@@ -1256,6 +1257,17 @@ test("parseCollaborationReview preserves advisory candidate boundaries", () => {
   assert.equal(review.items[0]?.buildDirectionGate.conflictingSources[1]?.providerLane, "ollama");
   assert.equal(review.items[0]?.buildDirectionGate.grantsExecutionAuthority, false);
   assert.equal(review.items[0]?.buildDirectionGate.grantsMemoryWriteAuthority, false);
+  const gateSummary = collaborationBuildDirectionGateSummary(review.items[0]!);
+  assert.equal(gateSummary.badge, "source disagreement blocked");
+  assert.equal(gateSummary.tone, "blocked");
+  assert.equal(gateSummary.artifact, "developer_bridge.collaboration_review.items:review_candidate:insight-alpha");
+  assert.equal(gateSummary.surface, "developer_bridge.collaboration_review.items");
+  assert.equal(gateSummary.detail.includes("conflicting sources true"), true);
+  assert.equal(gateSummary.detail.includes("source receipts 2"), true);
+  assert.deepEqual(gateSummary.conflictingSourceLines, [
+    "codex: codex-alpha / external_guidance_source",
+    "francis1: ollama-alpha / local_model_source / provider ollama",
+  ]);
   assert.equal(review.readbackCache.status, "refreshed");
   assert.equal(review.readbackCache.servesFullTranscriptStore, false);
 });

@@ -12,6 +12,7 @@ import { fetchLensMcpStatus, type LensMcpStatus } from "./lens/mcpStatus";
 import {
   collaborationActionBoundarySummary,
   collaborationActionIntakeSummary,
+  collaborationBuildDirectionGateSummary,
   collaborationImplementationReviewSummary,
   collaborationTranscriptAuditSummary,
   fetchCollaborationAgentsStatus,
@@ -2142,43 +2143,62 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
               paddingRight: 4,
             }}
           >
-            {blockedReviewItems.map((item) => (
-              <article
-                key={`gate-${item.id || item.insightId}`}
-                style={{
-                  background: "rgba(69, 10, 10, 0.28)",
-                  border: "1px solid rgba(252, 165, 165, 0.62)",
-                  borderRadius: 12,
-                  padding: "12px 14px",
-                }}
-              >
-                <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 8 }}>
-                  <span
-                    style={{
-                      border: "1px solid rgba(252, 165, 165, 0.68)",
-                      borderRadius: 999,
-                      color: "#fecaca",
-                      fontSize: 12,
-                      fontWeight: 700,
-                      padding: "4px 8px",
-                    }}
-                  >
-                    {item.buildDirectionGate.state || "blocked"}
-                  </span>
-                  <span style={{ color: "#93c5fd", fontSize: 13 }}>turn {item.turn || "?"}</span>
-                  <span style={{ color: "#94a3b8", fontSize: 13 }}>{collaborationShortId(item.insightId)}</span>
-                </div>
-                <p style={{ color: "#e2e8f0", margin: "10px 0 0", overflowWrap: "anywhere" }}>
-                  {item.buildDirectionGate.reason || "Typed review is required before build direction."}
-                </p>
-                <div style={{ color: "#94a3b8", display: "flex", flexWrap: "wrap", fontSize: 12, gap: 10, marginTop: 10 }}>
-                  <span>surface {item.buildDirectionGate.surfaceUnderReview || item.concreteRepoSurface || "unknown"}</span>
-                  <span>sources {item.buildDirectionGate.conflictingSources.length}</span>
-                  <span>execute {boolText(item.buildDirectionGate.grantsExecutionAuthority)}</span>
-                  <span>memory write {boolText(item.buildDirectionGate.grantsMemoryWriteAuthority)}</span>
-                </div>
-              </article>
-            ))}
+            {blockedReviewItems.map((item) => {
+              const gateSummary = collaborationBuildDirectionGateSummary(item);
+              return (
+                <article
+                  key={`gate-${item.id || item.insightId}`}
+                  style={{
+                    background: "rgba(69, 10, 10, 0.28)",
+                    border: "1px solid rgba(252, 165, 165, 0.62)",
+                    borderRadius: 12,
+                    padding: "12px 14px",
+                  }}
+                >
+                  <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    <span
+                      style={{
+                        border: "1px solid rgba(252, 165, 165, 0.68)",
+                        borderRadius: 999,
+                        color: "#fecaca",
+                        fontSize: 12,
+                        fontWeight: 700,
+                        padding: "4px 8px",
+                      }}
+                    >
+                      {gateSummary.badge}
+                    </span>
+                    <span style={{ color: "#93c5fd", fontSize: 13 }}>turn {item.turn || "?"}</span>
+                    <span style={{ color: "#94a3b8", fontSize: 13 }}>{collaborationShortId(item.insightId)}</span>
+                  </div>
+                  <p style={{ color: "#e2e8f0", margin: "10px 0 0", overflowWrap: "anywhere" }}>{gateSummary.reason}</p>
+                  <dl style={{ color: "#cbd5e1", display: "grid", gap: 6, margin: "10px 0 0" }}>
+                    <div>
+                      <dt style={{ color: "#94a3b8" }}>Review Artifact</dt>
+                      <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{gateSummary.artifact}</dd>
+                    </div>
+                    <div>
+                      <dt style={{ color: "#94a3b8" }}>Conflicting Sources</dt>
+                      <dd style={{ margin: 0 }}>
+                        <ul style={{ display: "grid", gap: 4, listStyle: "none", margin: 0, padding: 0 }}>
+                          {gateSummary.conflictingSourceLines.map((line) => (
+                            <li key={line} style={{ overflowWrap: "anywhere" }}>
+                              {line}
+                            </li>
+                          ))}
+                        </ul>
+                      </dd>
+                    </div>
+                  </dl>
+                  <div style={{ color: "#94a3b8", display: "flex", flexWrap: "wrap", fontSize: 12, gap: 10, marginTop: 10 }}>
+                    <span>surface {gateSummary.surface}</span>
+                    {gateSummary.detail.map((line) => (
+                      <span key={line}>{line}</span>
+                    ))}
+                  </div>
+                </article>
+              );
+            })}
           </div>
         </div>
       ) : null}
