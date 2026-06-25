@@ -637,6 +637,15 @@ export type CollaborationSessionReviewGate = {
   storesFullTranscript: boolean;
 };
 
+export type CollaborationSessionReviewGateDisplay = {
+  badge: string;
+  tone: CollaborationReviewTone;
+  artifact: string;
+  surface: string;
+  nextAction: string;
+  detail: string[];
+};
+
 export type CollaborationSessions = {
   ok: boolean;
   mode: string;
@@ -1132,6 +1141,31 @@ export function collaborationBuildDirectionGateSummary(item: CollaborationReview
 
 function actionBoundaryBool(value: boolean): string {
   return value ? "true" : "false";
+}
+
+export function collaborationSessionReviewGateSummary(gate: CollaborationSessionReviewGate): CollaborationSessionReviewGateDisplay {
+  const unsafeAuthority =
+    gate.grantsExecutionAuthority ||
+    gate.grantsMutationAuthority ||
+    gate.grantsApprovalAuthority ||
+    gate.grantsMemoryWriteAuthority;
+  return {
+    badge: unsafeAuthority ? "authority drift" : gate.blocksBuildDirection ? "build blocked" : "advisory gate",
+    tone: unsafeAuthority || gate.blocksBuildDirection ? "blocked" : "ready",
+    artifact: gate.requiredReviewArtifact || gate.reviewItemId || "unknown",
+    surface: gate.surface || "unknown",
+    nextAction: gate.nextCodexAction || "Inspect the session review gate before expanding transcript visibility.",
+    detail: [
+      `gate ${gate.buildDirectionState || "advisory_review_required"}`,
+      `codex review ${actionBoundaryBool(gate.requiresCodexOrOperatorReview)}`,
+      `repo review ${actionBoundaryBool(gate.requiresRepoTruthReview)}`,
+      `execute ${actionBoundaryBool(gate.grantsExecutionAuthority)}`,
+      `mutation ${actionBoundaryBool(gate.grantsMutationAuthority)}`,
+      `approve ${actionBoundaryBool(gate.grantsApprovalAuthority)}`,
+      `memory write ${actionBoundaryBool(gate.grantsMemoryWriteAuthority)}`,
+      `full transcript ${actionBoundaryBool(gate.storesFullTranscript)}`,
+    ],
+  };
 }
 
 export function collaborationActionBoundarySummary(item: CollaborationReviewItem): CollaborationActionBoundaryDisplay {

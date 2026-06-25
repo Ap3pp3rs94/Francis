@@ -95035,6 +95035,54 @@ Remaining truthful gap:
   proof, and unrelated UI flows were not run for this bounded action-intake
   readback slice.
 
+### 2026-06-25 21:05Z - Session readback shows review artifact and next action
+
+Current posture: Phase 2 / developer bridge collaboration support now renders
+the latest session review gate with the required review artifact and next Codex
+action before the operator reads the scrollable relay transcript. This follows
+the Francis1/Codex session-recall and source-disagreement signals that session
+summaries should show reviewable typed artifacts before raw transcript inspection
+or build-direction use.
+
+What changed:
+
+- Added `collaborationSessionReviewGateSummary()` so session review gates have a
+  tested display contract for badge, artifact, surface, next action, authority
+  denial, and full-transcript denial.
+- The Live Conversation selected-session summary now renders `Review Artifact`,
+  `Surface`, and `Next Codex Action` above the message list when a session review
+  gate is observed.
+- The Session Readback archive cards use the same session-gate summary and now
+  include `Next Codex Action` beside the review artifact and surface.
+- The focused Chat UI session contract test verifies the session-gate summary
+  keeps the typed review artifact, next action, no-authority fields, and
+  `full transcript false` visible.
+
+Validation:
+
+- Chat UI contract run passed:
+  `npm run test -- --test-name-pattern=parseCollaborationSessions`
+  (`279` passing tests in the selected run).
+- Chat UI production build passed with `npm run build`.
+- `git diff --check` passed.
+- Live URL proof: `GET http://127.0.0.1:5173/` returned HTTP 200.
+- Live collaboration runtime health remained `healthy` with `helpers=3/3`, turn
+  `1233`, Codex enabled, Ollama enabled, and Claude disabled.
+- Live session readback returned one current session with `message_count=11` and
+  a latest review gate carrying a required review artifact, next Codex action,
+  `stores_full_transcript=false`, and all execution, mutation, approval, and
+  memory-write authority grants false.
+
+Remaining truthful gap:
+
+- This does not expand transcript retention, load a full transcript store, resolve
+  source disagreement, or convert a session review gate into build direction.
+- This does not grant execution, mutation, approval, training, memory-write, or
+  main-build prompt authority.
+- `.\scripts\check.ps1`, GitHub CI, full backend test suite, browser screenshot
+  proof, and unrelated UI flows were not run for this bounded session-readback
+  slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

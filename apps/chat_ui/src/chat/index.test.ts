@@ -15,6 +15,7 @@ import {
   collaborationRuntimeLearningSignalSummary,
   collaborationRuntimeRecurrenceSummary,
   collaborationRuntimeReviewReceiptSummary,
+  collaborationSessionReviewGateSummary,
   collaborationSubstrateChecklistSummary,
   collaborationTranscriptAuditSummary,
   formatCollaborationRelayMessage,
@@ -1387,6 +1388,22 @@ test("parseCollaborationSessions preserves bounded session summaries and governa
   assert.equal(sessions.items[0]?.latestReviewGate.requiresRepoTruthReview, true);
   assert.equal(sessions.items[0]?.latestReviewGate.grantsExecutionAuthority, false);
   assert.equal(sessions.items[0]?.latestReviewGate.storesFullTranscript, false);
+  const gateSummary = collaborationSessionReviewGateSummary(sessions.items[0]!.latestReviewGate);
+  assert.equal(gateSummary.badge, "advisory gate");
+  assert.equal(gateSummary.tone, "ready");
+  assert.equal(gateSummary.artifact, "developer_bridge collaboration sessions:review_candidate:insight-session");
+  assert.equal(gateSummary.surface, "developer_bridge collaboration sessions");
+  assert.equal(gateSummary.nextAction, "Inspect session grouping before expanding transcript visibility.");
+  assert.deepEqual(gateSummary.detail, [
+    "gate advisory_review_required",
+    "codex review true",
+    "repo review true",
+    "execute false",
+    "mutation false",
+    "approve false",
+    "memory write false",
+    "full transcript false",
+  ]);
   assert.equal(sessions.definitions.latestPreview.includes("not a full transcript"), true);
   assert.equal(sessions.definitions.latestReviewGate.includes("typed review gate"), true);
   assert.equal(sessions.readbackCache.status, "stale_refreshing");

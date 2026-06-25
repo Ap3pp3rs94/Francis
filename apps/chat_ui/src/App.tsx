@@ -28,6 +28,7 @@ import {
   collaborationReviewNextAction,
   collaborationReviewTone,
   collaborationRuntimeRecurrenceSummary,
+  collaborationSessionReviewGateSummary,
   collaborationRuntimeLocalModelResponseSummary,
   collaborationRuntimeLearningReceiptSummary,
   collaborationRuntimeLearningSignalSummary,
@@ -1390,6 +1391,10 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
   const selectedSessionReadback =
     sessionSummaries.find((session) => session.id === selectedSession?.id) ??
     (followLatest ? sessionSummaries[0] ?? null : null);
+  const selectedSessionReviewGateSummary =
+    selectedSessionReadback?.latestReviewGate.observed
+      ? collaborationSessionReviewGateSummary(selectedSessionReadback.latestReviewGate)
+      : null;
   const latestLiveMessageId = liveTranscriptItems[liveTranscriptItems.length - 1]?.id ?? "";
   const latestMessageId = visibleTranscriptItems[visibleTranscriptItems.length - 1]?.id ?? "";
 
@@ -2042,7 +2047,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
             {selectedSessionReadback.latestPreview ? (
               <p style={{ color: "#cbd5e1", margin: "6px 0 0", overflowWrap: "anywhere" }}>{selectedSessionReadback.latestPreview}</p>
             ) : null}
-            {selectedSessionReadback.latestReviewGate.observed ? (
+            {selectedSessionReviewGateSummary ? (
               <div
                 style={{
                   borderTop: "1px solid rgba(148, 163, 184, 0.18)",
@@ -2053,29 +2058,39 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
                 <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 8 }}>
                   <span
                     style={{
-                      border: `1px solid ${selectedSessionReadback.latestReviewGate.blocksBuildDirection ? "#fca5a5" : "#67e8f9"}`,
+                      border: `1px solid ${selectedSessionReviewGateSummary.tone === "blocked" ? "#fca5a5" : "#67e8f9"}`,
                       borderRadius: 999,
-                      color: selectedSessionReadback.latestReviewGate.blocksBuildDirection ? "#fecaca" : "#cffafe",
+                      color: selectedSessionReviewGateSummary.tone === "blocked" ? "#fecaca" : "#cffafe",
                       fontSize: 12,
                       fontWeight: 700,
                       padding: "3px 8px",
                     }}
                   >
-                    {selectedSessionReadback.latestReviewGate.blocksBuildDirection ? "build blocked" : "advisory gate"}
+                    {selectedSessionReviewGateSummary.badge}
                   </span>
                   <span style={{ color: "#93c5fd", fontSize: 12 }}>turn {selectedSessionReadback.latestReviewGate.turn || "?"}</span>
                   <span style={{ color: "#94a3b8", fontSize: 12 }}>
                     {selectedSessionReadback.latestReviewGate.buildIssueCode || "review gate"}
                   </span>
                 </div>
+                <dl style={{ color: "#cbd5e1", display: "grid", gap: 6, margin: "8px 0 0" }}>
+                  <div>
+                    <dt style={{ color: "#94a3b8" }}>Review Artifact</dt>
+                    <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{selectedSessionReviewGateSummary.artifact}</dd>
+                  </div>
+                  <div>
+                    <dt style={{ color: "#94a3b8" }}>Surface</dt>
+                    <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{selectedSessionReviewGateSummary.surface}</dd>
+                  </div>
+                  <div>
+                    <dt style={{ color: "#94a3b8" }}>Next Codex Action</dt>
+                    <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{selectedSessionReviewGateSummary.nextAction}</dd>
+                  </div>
+                </dl>
                 <div style={{ color: "#94a3b8", display: "flex", flexWrap: "wrap", fontSize: 12, gap: 8, marginTop: 8 }}>
-                  <span>surface {selectedSessionReadback.latestReviewGate.surface || "unknown"}</span>
-                  <span>gate {selectedSessionReadback.latestReviewGate.buildDirectionState}</span>
-                  <span>codex review {boolText(selectedSessionReadback.latestReviewGate.requiresCodexOrOperatorReview)}</span>
-                  <span>repo review {boolText(selectedSessionReadback.latestReviewGate.requiresRepoTruthReview)}</span>
-                  <span>execute {boolText(selectedSessionReadback.latestReviewGate.grantsExecutionAuthority)}</span>
-                  <span>approve {boolText(selectedSessionReadback.latestReviewGate.grantsApprovalAuthority)}</span>
-                  <span>memory write {boolText(selectedSessionReadback.latestReviewGate.grantsMemoryWriteAuthority)}</span>
+                  {selectedSessionReviewGateSummary.detail.map((line) => (
+                    <span key={line}>{line}</span>
+                  ))}
                 </div>
               </div>
             ) : null}
@@ -2918,7 +2933,11 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
           }}
         >
           {sessionSummaries.length ? (
-            sessionSummaries.map((session) => (
+            sessionSummaries.map((session) => {
+              const sessionGateSummary = session.latestReviewGate.observed
+                ? collaborationSessionReviewGateSummary(session.latestReviewGate)
+                : null;
+              return (
               <article
                 key={session.id}
                 style={{
@@ -2939,7 +2958,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
                 {session.latestPreview ? (
                   <p style={{ color: "#cbd5e1", margin: "8px 0 0", overflowWrap: "anywhere" }}>{session.latestPreview}</p>
                 ) : null}
-                {session.latestReviewGate.observed ? (
+                {sessionGateSummary ? (
                   <div
                     style={{
                       borderTop: "1px solid rgba(148, 163, 184, 0.18)",
@@ -2950,15 +2969,15 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
                     <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 8 }}>
                       <span
                         style={{
-                          border: `1px solid ${session.latestReviewGate.blocksBuildDirection ? "#fca5a5" : "#67e8f9"}`,
+                          border: `1px solid ${sessionGateSummary.tone === "blocked" ? "#fca5a5" : "#67e8f9"}`,
                           borderRadius: 999,
-                          color: session.latestReviewGate.blocksBuildDirection ? "#fecaca" : "#cffafe",
+                          color: sessionGateSummary.tone === "blocked" ? "#fecaca" : "#cffafe",
                           fontSize: 12,
                           fontWeight: 700,
                           padding: "3px 8px",
                         }}
                       >
-                        {session.latestReviewGate.blocksBuildDirection ? "build blocked" : "advisory gate"}
+                        {sessionGateSummary.badge}
                       </span>
                       <span style={{ color: "#93c5fd", fontSize: 12 }}>turn {session.latestReviewGate.turn || "?"}</span>
                       <span style={{ color: "#94a3b8", fontSize: 12 }}>{session.latestReviewGate.buildIssueCode || "review gate"}</span>
@@ -2966,22 +2985,21 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
                     <dl style={{ color: "#cbd5e1", display: "grid", gap: 6, margin: "8px 0 0" }}>
                       <div>
                         <dt style={{ color: "#94a3b8" }}>Review Artifact</dt>
-                        <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
-                          {session.latestReviewGate.requiredReviewArtifact || session.latestReviewGate.reviewItemId || "unknown"}
-                        </dd>
+                        <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{sessionGateSummary.artifact}</dd>
                       </div>
                       <div>
                         <dt style={{ color: "#94a3b8" }}>Surface</dt>
-                        <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{session.latestReviewGate.surface || "unknown"}</dd>
+                        <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{sessionGateSummary.surface}</dd>
+                      </div>
+                      <div>
+                        <dt style={{ color: "#94a3b8" }}>Next Codex Action</dt>
+                        <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{sessionGateSummary.nextAction}</dd>
                       </div>
                     </dl>
                     <div style={{ color: "#94a3b8", display: "flex", flexWrap: "wrap", fontSize: 12, gap: 8, marginTop: 8 }}>
-                      <span>gate {session.latestReviewGate.buildDirectionState}</span>
-                      <span>codex review {boolText(session.latestReviewGate.requiresCodexOrOperatorReview)}</span>
-                      <span>repo review {boolText(session.latestReviewGate.requiresRepoTruthReview)}</span>
-                      <span>execute {boolText(session.latestReviewGate.grantsExecutionAuthority)}</span>
-                      <span>approve {boolText(session.latestReviewGate.grantsApprovalAuthority)}</span>
-                      <span>memory write {boolText(session.latestReviewGate.grantsMemoryWriteAuthority)}</span>
+                      {sessionGateSummary.detail.map((line) => (
+                        <span key={line}>{line}</span>
+                      ))}
                     </div>
                   </div>
                 ) : null}
@@ -2990,7 +3008,8 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
                   <span>latest {collaborationShortId(session.latestItemId)}</span>
                 </div>
               </article>
-            ))
+              );
+            })
           ) : (
             <div style={{ border: "1px solid rgba(148, 163, 184, 0.22)", borderRadius: 12, color: "#94a3b8", padding: 14 }}>
               No collaboration session summaries returned.
