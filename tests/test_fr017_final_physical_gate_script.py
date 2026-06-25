@@ -103,7 +103,7 @@ def test_fr017_final_physical_gate_reports_default_templates_as_pending() -> Non
     assert "final physical decision readiness only" in payload["final_physical_decision_plan_status_contract"]
     assert "not physical validation evidence" in payload["final_physical_decision_summary_contract"]
     assert payload["next_required_final_physical_input"] == (
-        "perform_human_final_stage17_completion_decision_against_real_records"
+        "complete_human_final_stage17_completion_decision_record_at_FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json"
     )
     assert [step["id"] for step in payload["final_physical_decision_plan"]] == [
         "stage17_package_and_manifest_lock",
@@ -210,6 +210,8 @@ def test_fr017_final_physical_gate_surfaces_package_pending_contract_text(
     assert payload["stage17_package_gate_status"] == "failed_contract"
     assert "movement_input_template_contracts" in payload["stage17_package_failed_checks"]
     assert payload["stage17_package_missing_movement_template_contracts"] == ["test_duration"]
+    assert payload["stage17_package_missing_final_decision_template_contracts"] == []
+    assert payload["stage17_package_missing_final_decision_template_fields"] == []
     assert payload["physical_validation_evidence_chain_complete"] is False
     assert payload["stage17_physical_completion_decision_ready"] is False
     assert payload["physical_validation_complete"] is False
@@ -284,6 +286,9 @@ def test_fr017_final_physical_gate_ready_state_does_not_claim_completion(tmp_pat
     assert payload["final_physical_decision_first_blocking_group_id"] == ""
     assert payload["final_physical_decision_first_blocking_group_status"] == ""
     assert payload["final_physical_decision_first_blocking_group_action"] == ""
+    assert payload["next_required_final_physical_input"] == (
+        "complete_human_final_stage17_completion_decision_record_at_FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json"
+    )
     assert all(
         step["status"] == "ready_for_final_physical_decision_review"
         for step in payload["final_physical_decision_plan_status"]

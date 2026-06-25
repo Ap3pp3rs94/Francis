@@ -1,0 +1,44 @@
+{
+  "kind": "francis.fr017.final_physical_decision.v1",
+  "component": "FR-017 Forearm Cuffs",
+  "evidence": {
+    "date": "PENDING",
+    "decision_reviewer": "PENDING",
+    "reviewer_role": "PENDING",
+    "pilot_id": "PENDING",
+    "final_physical_gate_status": "PENDING",
+    "final_physical_gate_record_path": "PENDING"
+  },
+  "decision_locks": {
+    "real_records_reviewed": "PENDING",
+    "all_stop_conditions_reviewed": "PENDING",
+    "no_unresolved_safety_fail_conditions": "PENDING",
+    "no_powered_testing_cleared": "PENDING",
+    "no_frame_coupled_testing_cleared": "PENDING",
+    "no_load_bearing_use_approved": "PENDING",
+    "fr018_implementation_not_cleared": "PENDING"
+  },
+  "completion_decision": {
+    "stage17_completion_claim_requested": "PENDING",
+    "physical_validation_accepted_by_human_reviewer": "PENDING",
+    "completion_ledger_update_required": "PENDING",
+    "completion_decision_notes": "PENDING"
+  },
+  "field_contract": {
+    "date": "ISO 8601 YYYY-MM-DD; future dates invalid.",
+    "decision_reviewer": "Named human reviewer; not Codex or an automated process.",
+    "final_physical_gate_status": "Must be ready_for_stage17_final_physical_completion_decision before any Stage 17 completion claim is considered.",
+    "final_physical_gate_record_path": "Path to the saved final physical gate output or record; not a transcript.",
+    "decision_locks": "Use unquoted JSON boolean true only after real records are reviewed and all no-clearance locks are preserved.",
+    "stage17_completion_claim_requested": "Use unquoted JSON boolean true only if a human reviewer is requesting ledger-backed Stage 17 completion consideration.",
+    "physical_validation_accepted_by_human_reviewer": "Use unquoted JSON boolean true only after real physical records are reviewed outside the read-only gate.",
+    "completion_ledger_update_required": "Use unquoted JSON boolean true only if the decision is intended for the completion ledger.",
+    "completion_decision_notes": "Must name remaining limitations and must not claim powered, frame-coupled, load-bearing, or FR-018 clearance."
+  },
+  "no_fake_validation_lock": {
+    "template_is_not_physical_validation": true,
+    "requires_real_records": true,
+    "fr018_implementation_cleared": false,
+    "powered_or_frame_coupled_testing_cleared": false
+  }
+}

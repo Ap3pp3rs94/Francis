@@ -101,6 +101,11 @@
       "status": "complete"
     },
     {
+      "path": "FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json",
+      "kind": "final_physical_decision_input_template",
+      "status": "complete"
+    },
+    {
       "path": "FR-017-VALIDATION-GATE-CHAIN.md",
       "kind": "validation_gate_chain_runbook",
       "status": "complete"
@@ -157,7 +162,8 @@
     "pilot_static_fit_session",
     "pilot_movement_session",
     "quick_release_test_session",
-    "professional_engineering_review"
+    "professional_engineering_review",
+    "human_final_stage17_completion_decision"
   ],
   "safety_fail_conditions": [
     "numbness",

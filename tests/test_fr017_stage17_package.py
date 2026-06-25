@@ -48,7 +48,7 @@ def test_fr017_stage17_package_manifest_resolves_all_records() -> None:
 
     assert manifest["package_id"] == "FR-017-STAGE17"
     assert manifest["component"] == "FR-017 Forearm Cuffs"
-    assert len(records) == 22
+    assert len(records) == 23
     assert len(manifest["custom_records"]) == 19
 
     for record in records:
@@ -69,8 +69,10 @@ def test_fr017_stage17_manifest_preserves_no_fake_validation_gate() -> None:
     assert "safety_critical_landmark_confirmation" in manifest["blocked_inputs"]
     assert "pilot_static_fit_session" in manifest["blocked_inputs"]
     assert "professional_engineering_review" in manifest["blocked_inputs"]
+    assert "human_final_stage17_completion_decision" in manifest["blocked_inputs"]
     assert any(record["kind"] == "engineering_review_record" for record in manifest["records"])
     assert any(record["kind"] == "engineering_review_input_template" for record in manifest["records"])
+    assert any(record["kind"] == "final_physical_decision_input_template" for record in manifest["records"])
     assert any(record["kind"] == "validation_gate_chain_runbook" for record in manifest["records"])
     assert "unconfirmed_landmark_boundaries" in manifest["safety_fail_conditions"]
     assert "unreachable_release" in manifest["safety_fail_conditions"]
@@ -89,6 +91,7 @@ def test_fr017_stage17_final_audit_blocks_physical_and_fr018_claims() -> None:
     assert "FR-018 implementation clearance: NOT CLEARED." in gate
     assert "Physical validation: NOT COMPLETE." in package_index
     assert "FR-018 implementation: NOT CLEARED." in package_index
+    assert "FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json" in package_index
 
 
 def test_fr017_stage17_pending_records_keep_evidence_fields() -> None:
@@ -131,6 +134,8 @@ def test_fr017_validation_gate_chain_preserves_gate_order_and_no_fake_validation
     assert "stage17_completion_claim_allowed" in runbook
     assert "fr018_implementation_cleared" in runbook
     assert "FR-018 implementation is NOT CLEARED." in runbook
+    assert "FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json" in runbook
+    assert "A blank or" in runbook
     assert "ready_for_pilot_static_fit_planning" in runbook
     assert "ready_for_pilot_movement_test_planning" in runbook
     assert "ready_for_non_powered_mockup_patterning" in runbook

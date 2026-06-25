@@ -159,6 +159,8 @@ $MissingReleaseCableTemplateContracts = New-Object System.Collections.Generic.Li
 $MissingReleaseCableTemplateFields = New-Object System.Collections.Generic.List[string]
 $MissingEngineeringTemplateContracts = New-Object System.Collections.Generic.List[string]
 $MissingEngineeringTemplateFields = New-Object System.Collections.Generic.List[string]
+$MissingFinalDecisionTemplateContracts = New-Object System.Collections.Generic.List[string]
+$MissingFinalDecisionTemplateFields = New-Object System.Collections.Generic.List[string]
 $BlockedInputs = @()
 $SafetyFailConditions = @()
 $PhysicalValidation = ''
@@ -180,7 +182,7 @@ if ($null -ne $Manifest) {
   $Checks.Add((New-GateCheck -Id 'evidence_containers_complete' -Passed ([string]$Manifest.status.evidence_containers -eq 'complete') -Evidence ([string]$Manifest.status.evidence_containers))) | Out-Null
   $Checks.Add((New-GateCheck -Id 'physical_validation_blocked' -Passed ($PhysicalValidation -eq 'not_complete') -Evidence $PhysicalValidation -Reason 'Physical validation must remain blocked until measurement, mannequin, pilot, release, cable, and engineering evidence exists.')) | Out-Null
   $Checks.Add((New-GateCheck -Id 'fr018_not_cleared' -Passed ($Fr018Status -eq 'not_cleared') -Evidence $Fr018Status -Reason 'FR-018 implementation must remain blocked until FR-017 physical blockers are evidence-cleared.')) | Out-Null
-  $Checks.Add((New-GateCheck -Id 'record_count' -Passed ($RecordCount -eq 22) -Evidence ([string]$RecordCount))) | Out-Null
+  $Checks.Add((New-GateCheck -Id 'record_count' -Passed ($RecordCount -eq 23) -Evidence ([string]$RecordCount))) | Out-Null
   $Checks.Add((New-GateCheck -Id 'custom_record_count' -Passed ($CustomRecordCount -eq 19) -Evidence ([string]$CustomRecordCount))) | Out-Null
 
   foreach ($Record in $Records) {
@@ -211,6 +213,7 @@ if ($null -ne $Manifest) {
   $MovementTemplateRecord = @($Records | Where-Object { [string]$_.kind -eq 'pilot_movement_input_template' } | Select-Object -First 1)
   $ReleaseCableTemplateRecord = @($Records | Where-Object { [string]$_.kind -eq 'quick_release_cable_snag_input_template' } | Select-Object -First 1)
   $EngineeringTemplateRecord = @($Records | Where-Object { [string]$_.kind -eq 'engineering_review_input_template' } | Select-Object -First 1)
+  $FinalDecisionTemplateRecord = @($Records | Where-Object { [string]$_.kind -eq 'final_physical_decision_input_template' } | Select-Object -First 1)
   $ManualPath = if ($ManualRecord.Count -gt 0) { [System.IO.Path]::GetFullPath((Join-Path $PackageRoot ([string]$ManualRecord[0].path))) } else { '' }
   $MapsPath = if ($MapsRecord.Count -gt 0) { [System.IO.Path]::GetFullPath((Join-Path $PackageRoot ([string]$MapsRecord[0].path))) } else { '' }
   $MeasurementTemplatePath = if ($MeasurementTemplateRecord.Count -gt 0) { [System.IO.Path]::GetFullPath((Join-Path $PackageRoot ([string]$MeasurementTemplateRecord[0].path))) } else { '' }
@@ -220,6 +223,7 @@ if ($null -ne $Manifest) {
   $MovementTemplatePath = if ($MovementTemplateRecord.Count -gt 0) { [System.IO.Path]::GetFullPath((Join-Path $PackageRoot ([string]$MovementTemplateRecord[0].path))) } else { '' }
   $ReleaseCableTemplatePath = if ($ReleaseCableTemplateRecord.Count -gt 0) { [System.IO.Path]::GetFullPath((Join-Path $PackageRoot ([string]$ReleaseCableTemplateRecord[0].path))) } else { '' }
   $EngineeringTemplatePath = if ($EngineeringTemplateRecord.Count -gt 0) { [System.IO.Path]::GetFullPath((Join-Path $PackageRoot ([string]$EngineeringTemplateRecord[0].path))) } else { '' }
+  $FinalDecisionTemplatePath = if ($FinalDecisionTemplateRecord.Count -gt 0) { [System.IO.Path]::GetFullPath((Join-Path $PackageRoot ([string]$FinalDecisionTemplateRecord[0].path))) } else { '' }
   $CustomRecordText = (Read-GateText -Path $ManualPath) + "`n" + (Read-GateText -Path $MapsPath)
   foreach ($Index in 1..19) {
     $ExpectedId = 'FR-017-CUSTOM-{0:D3}' -f $Index
@@ -904,6 +908,71 @@ if ($null -ne $Manifest) {
   Add-MissingObjectProperties -Target $MissingEngineeringTemplateFields -Payload $ReviewDecisionPayload -Prefix 'review_decision' -Fields $RequiredReviewDecisionFields
   $Checks.Add((New-GateCheck -Id 'engineering_input_template_required_fields' -Passed ($MissingEngineeringTemplateFields.Count -eq 0) -Evidence (($MissingEngineeringTemplateFields.ToArray() -join ', ')) -Reason 'Engineering-review template must keep every field required by the engineering gate.')) | Out-Null
 
+  $FinalDecisionTemplate = $null
+  $FinalDecisionTemplateParsed = $false
+  if (-not [string]::IsNullOrWhiteSpace($FinalDecisionTemplatePath) -and (Test-Path -LiteralPath $FinalDecisionTemplatePath -PathType Leaf)) {
+    try {
+      $FinalDecisionTemplate = Get-Content -LiteralPath $FinalDecisionTemplatePath -Raw | ConvertFrom-Json -ErrorAction Stop
+      $FinalDecisionTemplateParsed = $true
+    } catch {
+      $FinalDecisionTemplateParsed = $false
+    }
+  }
+  $Checks.Add((New-GateCheck -Id 'final_decision_input_template_parse' -Passed $FinalDecisionTemplateParsed -Evidence $FinalDecisionTemplatePath -Reason 'The human final decision template must parse before package validation can trust its required field contract.')) | Out-Null
+  $RequiredFinalDecisionTemplateContracts = @(
+    'date',
+    'decision_reviewer',
+    'final_physical_gate_status',
+    'final_physical_gate_record_path',
+    'decision_locks',
+    'stage17_completion_claim_requested',
+    'physical_validation_accepted_by_human_reviewer',
+    'completion_ledger_update_required',
+    'completion_decision_notes'
+  )
+  $FinalDecisionContractPayload = if ($FinalDecisionTemplateParsed) { $FinalDecisionTemplate.field_contract } else { $null }
+  Add-MissingContractTextProperties -Target $MissingFinalDecisionTemplateContracts -Payload $FinalDecisionContractPayload -Fields $RequiredFinalDecisionTemplateContracts
+  $Checks.Add((New-GateCheck -Id 'final_decision_input_template_contracts' -Passed ($MissingFinalDecisionTemplateContracts.Count -eq 0) -Evidence (($MissingFinalDecisionTemplateContracts.ToArray() -join ', ')) -Reason 'Human final decision template must preserve all field contracts required by the final physical completion-decision handoff.')) | Out-Null
+
+  $RequiredFinalDecisionEvidenceFields = @(
+    'date',
+    'decision_reviewer',
+    'reviewer_role',
+    'pilot_id',
+    'final_physical_gate_status',
+    'final_physical_gate_record_path'
+  )
+  $RequiredFinalDecisionLockFields = @(
+    'real_records_reviewed',
+    'all_stop_conditions_reviewed',
+    'no_unresolved_safety_fail_conditions',
+    'no_powered_testing_cleared',
+    'no_frame_coupled_testing_cleared',
+    'no_load_bearing_use_approved',
+    'fr018_implementation_not_cleared'
+  )
+  $RequiredCompletionDecisionFields = @(
+    'stage17_completion_claim_requested',
+    'physical_validation_accepted_by_human_reviewer',
+    'completion_ledger_update_required',
+    'completion_decision_notes'
+  )
+  $RequiredFinalDecisionNoFakeLockFields = @(
+    'template_is_not_physical_validation',
+    'requires_real_records',
+    'fr018_implementation_cleared',
+    'powered_or_frame_coupled_testing_cleared'
+  )
+  $FinalDecisionEvidencePayload = if ($FinalDecisionTemplateParsed) { $FinalDecisionTemplate.evidence } else { $null }
+  $FinalDecisionLocksPayload = if ($FinalDecisionTemplateParsed) { $FinalDecisionTemplate.decision_locks } else { $null }
+  $CompletionDecisionPayload = if ($FinalDecisionTemplateParsed) { $FinalDecisionTemplate.completion_decision } else { $null }
+  $FinalDecisionNoFakeLockPayload = if ($FinalDecisionTemplateParsed) { $FinalDecisionTemplate.no_fake_validation_lock } else { $null }
+  Add-MissingObjectProperties -Target $MissingFinalDecisionTemplateFields -Payload $FinalDecisionEvidencePayload -Prefix 'evidence' -Fields $RequiredFinalDecisionEvidenceFields
+  Add-MissingObjectProperties -Target $MissingFinalDecisionTemplateFields -Payload $FinalDecisionLocksPayload -Prefix 'decision_locks' -Fields $RequiredFinalDecisionLockFields
+  Add-MissingObjectProperties -Target $MissingFinalDecisionTemplateFields -Payload $CompletionDecisionPayload -Prefix 'completion_decision' -Fields $RequiredCompletionDecisionFields
+  Add-MissingObjectProperties -Target $MissingFinalDecisionTemplateFields -Payload $FinalDecisionNoFakeLockPayload -Prefix 'no_fake_validation_lock' -Fields $RequiredFinalDecisionNoFakeLockFields
+  $Checks.Add((New-GateCheck -Id 'final_decision_input_template_required_fields' -Passed ($MissingFinalDecisionTemplateFields.Count -eq 0) -Evidence (($MissingFinalDecisionTemplateFields.ToArray() -join ', ')) -Reason 'Human final decision template must keep every field required by the final physical completion-decision handoff.')) | Out-Null
+
   $RequiredBlockedInputs = @(
     'left_right_forearm_measurements',
     'safety_critical_landmark_confirmation',
@@ -914,7 +983,8 @@ if ($null -ne $Manifest) {
     'pilot_static_fit_session',
     'pilot_movement_session',
     'quick_release_test_session',
-    'professional_engineering_review'
+    'professional_engineering_review',
+    'human_final_stage17_completion_decision'
   )
   $MissingBlockedInputs = @($RequiredBlockedInputs | Where-Object { $BlockedInputs -notcontains $_ })
   $Checks.Add((New-GateCheck -Id 'blocked_inputs_preserved' -Passed ($MissingBlockedInputs.Count -eq 0) -Evidence (($MissingBlockedInputs -join ', ')))) | Out-Null
@@ -976,6 +1046,8 @@ $Payload = [ordered]@{
   missing_release_cable_template_fields = @($MissingReleaseCableTemplateFields.ToArray())
   missing_engineering_template_contracts = @($MissingEngineeringTemplateContracts.ToArray())
   missing_engineering_template_fields = @($MissingEngineeringTemplateFields.ToArray())
+  missing_final_decision_template_contracts = @($MissingFinalDecisionTemplateContracts.ToArray())
+  missing_final_decision_template_fields = @($MissingFinalDecisionTemplateFields.ToArray())
   failed_checks = @($FailedChecks | ForEach-Object { [string]$_.id })
   checks = @($Checks.ToArray())
   next_actions = @(
@@ -986,7 +1058,8 @@ $Payload = [ordered]@{
     'run_pilot_static_fit_test',
     'run_pilot_movement_test',
     'run_quick_release_and_cable_snag_tests',
-    'obtain_professional_engineering_review_before_load_or_powered_use'
+    'obtain_professional_engineering_review_before_load_or_powered_use',
+    'complete_human_final_stage17_completion_decision_record_after_final_physical_gate_readiness'
   )
 }
 

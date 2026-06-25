@@ -17,6 +17,7 @@ FR-018 implementation clearance: NOT CLEARED.
 - FR-017-CUSTOM-001 through FR-017-CUSTOM-019 are present.
 - Support records in `FR-017_Stage17_Package/` have been created as pending evidence containers.
 - Professional engineering review record and input template exist as pending evidence containers.
+- Human final physical decision input template exists as a pending record-capture container.
 - Validation gate chain runbook exists and preserves the no-fake-validation lock.
 - Final audit record `FR-017-STAGE17-FINAL-AUDIT-2026-06-23.md` seals documentation completion while preserving the physical validation block.
 - Manifest `FR-017-STAGE17-PACKAGE-MANIFEST.json` lists the package status and blocked inputs.
@@ -42,6 +43,7 @@ FR-018 implementation clearance: NOT CLEARED.
 | Quick-release/cable-snag input template ready | DOCUMENTED | `FR-017-QUICK-RELEASE-CABLE-SNAG-INPUT-TEMPLATE.json` | Populate copy after pilot-movement gate passes |
 | Engineering review record ready | DOCUMENTED | `FR-017-ENGINEERING-REVIEW_PENDING.md` | Obtain professional engineering review after quick-release/cable-snag gate passes |
 | Engineering review input template ready | DOCUMENTED | `FR-017-ENGINEERING-REVIEW-INPUT-TEMPLATE.json` | Populate copy after all non-powered physical evidence is complete |
+| Human final physical decision input template ready | DOCUMENTED | `FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json` | Populate copy only after final physical gate reports decision-ready and real records are accepted by a human reviewer |
 | Validation gate chain ready | DOCUMENTED | `FR-017-VALIDATION-GATE-CHAIN.md` | Use to run gates in order as physical evidence becomes available |
 | Interface matrix ready | DOCUMENTED | `FR-017-INTERFACE-MATRIX.md` | Validate with mockups |
 | FR-IMG-017 prompt ready | DOCUMENTED | `FR-IMG-017_PROMPT.md` | Generate/review image if needed |
@@ -61,6 +63,7 @@ FR-018 implementation clearance: NOT CLEARED.
 - Pilot movement session.
 - Observer record.
 - Engineering review for any load-bearing, powered, or structural use.
+- Human final Stage 17 completion decision record after final physical gate readiness.
 
 ## Final Decision
 

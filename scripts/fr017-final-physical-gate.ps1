@@ -726,7 +726,7 @@ $FinalPhysicalDecisionPlan = @(
       'powered_or_frame_coupled_testing_cleared remains false',
       'fr018_implementation_cleared remains false'
     )
-    required_action = 'perform a separate human final Stage 17 completion decision against real accepted records before any ledger-backed completion claim; keep FR-018 blocked'
+    required_action = 'complete a separate human final Stage 17 completion decision record using FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json against real accepted records before any ledger-backed completion claim; keep FR-018 blocked'
   }
 )
 $FinalPhysicalDecisionPlanStatus = @(New-FinalPhysicalDecisionPlanStatus -DecisionPlan $FinalPhysicalDecisionPlan -PackageGateReady $PackageGateReady -EngineeringGateReady $EngineeringGateReady -EngineeringGateFailed $EngineeringGateFailed -PackageSignals $PackageDecisionSignals.ToArray() -EngineeringSignals $EngineeringDecisionSignals.ToArray() -EngineeringMissingFields $EngineeringMissingFields -EngineeringInvalidFields $EngineeringInvalidFields -ChronologySignals $EvidenceChronologyViolations -PilotIdentitySignals $PilotIdentityContinuityViolations)
@@ -754,6 +754,8 @@ $Output = [ordered]@{
   stage17_package_missing_release_cable_template_fields = @(Get-GateArrayProperty -Payload $PackageGate.payload -Name 'missing_release_cable_template_fields')
   stage17_package_missing_engineering_template_contracts = @(Get-GateArrayProperty -Payload $PackageGate.payload -Name 'missing_engineering_template_contracts')
   stage17_package_missing_engineering_template_fields = @(Get-GateArrayProperty -Payload $PackageGate.payload -Name 'missing_engineering_template_fields')
+  stage17_package_missing_final_decision_template_contracts = @(Get-GateArrayProperty -Payload $PackageGate.payload -Name 'missing_final_decision_template_contracts')
+  stage17_package_missing_final_decision_template_fields = @(Get-GateArrayProperty -Payload $PackageGate.payload -Name 'missing_final_decision_template_fields')
   engineering_review_gate_status = $EngineeringGateStatus
   engineering_review_gate_exit_code = [int]$EngineeringGate.exit_code
   engineering_review_gate_parse_ok = [bool]$EngineeringGate.parse_ok
@@ -838,7 +840,7 @@ $Output = [ordered]@{
   final_physical_decision_plan_status_contract = 'The final_physical_decision_plan_status reports final physical decision readiness only. A ready group means the evidence-chain readback passed this script contract; it is not a completion claim, certification, or FR-018 clearance.'
   final_physical_decision_summary_contract = 'The final_physical_decision_* summary identifies the next blocking final-decision evidence group. It is not physical validation evidence and cannot mark Stage 17 complete.'
   final_physical_decision_plan_not_completion_evidence = $true
-  next_required_final_physical_input = 'perform_human_final_stage17_completion_decision_against_real_records'
+  next_required_final_physical_input = 'complete_human_final_stage17_completion_decision_record_at_FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json'
   final_physical_decision_plan = @($FinalPhysicalDecisionPlan)
   final_physical_decision_plan_status = @($FinalPhysicalDecisionPlanStatus)
   final_physical_decision_total_groups = [int]$FinalPhysicalDecisionPlanSummary.total_groups
@@ -866,7 +868,7 @@ $Output = [ordered]@{
   failed_reasons = @($FailedReasons.ToArray())
   next_actions = if ($Status -eq 'ready_for_stage17_final_physical_completion_decision') {
     @(
-      'perform_human_final_stage17_completion_decision_against_real_records',
+      'complete_human_final_stage17_completion_decision_record_at_FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json',
       'update_manifest_and_completion_ledger_only_if_real_physical_evidence_is_accepted',
       'keep_FR-018_implementation_blocked_until_FR-017_completion_claim_is_ledger_backed'
     )

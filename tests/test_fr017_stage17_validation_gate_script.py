@@ -60,7 +60,7 @@ def test_fr017_stage17_validation_gate_reports_documented_but_physically_blocked
     assert payload["writes_data"] is False
     assert payload["grants_execution_authority"] is False
     assert payload["grants_mutation_authority"] is False
-    assert payload["record_count"] == 22
+    assert payload["record_count"] == 23
     assert payload["custom_record_count"] == 19
     assert payload["failed_checks"] == []
     assert payload["missing_measurement_template_contracts"] == []
@@ -77,9 +77,12 @@ def test_fr017_stage17_validation_gate_reports_documented_but_physically_blocked
     assert payload["missing_release_cable_template_fields"] == []
     assert payload["missing_engineering_template_contracts"] == []
     assert payload["missing_engineering_template_fields"] == []
+    assert payload["missing_final_decision_template_contracts"] == []
+    assert payload["missing_final_decision_template_fields"] == []
     assert "safety_critical_landmark_confirmation" in payload["blocked_inputs"]
     assert "pilot_static_fit_session" in payload["blocked_inputs"]
     assert "professional_engineering_review" in payload["blocked_inputs"]
+    assert "human_final_stage17_completion_decision" in payload["blocked_inputs"]
     assert "unconfirmed_landmark_boundaries" in payload["safety_fail_conditions"]
     assert "unreachable_release" in payload["safety_fail_conditions"]
 
@@ -130,6 +133,52 @@ def test_fr017_stage17_validation_gate_fails_closed_if_landmark_blocked_input_is
     payload = _payload(proc.stdout)
     assert payload["status"] == "failed_contract"
     assert "blocked_inputs_preserved" in payload["failed_checks"]
+    assert payload["physical_validation_complete"] is False
+    assert payload["fr018_implementation_cleared"] is False
+
+
+def test_fr017_stage17_validation_gate_fails_closed_if_final_decision_template_fields_are_missing(
+    tmp_path: Path,
+) -> None:
+    manifest_path = _copy_stage17_package(tmp_path)
+    package_root = manifest_path.parent
+    final_decision_template_path = package_root / "FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json"
+    template = json.loads(final_decision_template_path.read_text(encoding="utf-8"))
+    del template["decision_locks"]["fr018_implementation_not_cleared"]
+    del template["completion_decision"]["completion_decision_notes"]
+    final_decision_template_path.write_text(json.dumps(template, indent=2), encoding="utf-8")
+
+    proc = _run_gate("-Mode", "Status", "-ManifestPath", str(manifest_path))
+
+    assert proc.returncode == 1
+    payload = _payload(proc.stdout)
+    assert payload["status"] == "failed_contract"
+    assert "final_decision_input_template_required_fields" in payload["failed_checks"]
+    assert payload["missing_final_decision_template_fields"] == [
+        "decision_locks.fr018_implementation_not_cleared",
+        "completion_decision.completion_decision_notes",
+    ]
+    assert payload["physical_validation_complete"] is False
+    assert payload["fr018_implementation_cleared"] is False
+
+
+def test_fr017_stage17_validation_gate_fails_closed_if_final_decision_template_contract_is_missing(
+    tmp_path: Path,
+) -> None:
+    manifest_path = _copy_stage17_package(tmp_path)
+    package_root = manifest_path.parent
+    final_decision_template_path = package_root / "FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json"
+    template = json.loads(final_decision_template_path.read_text(encoding="utf-8"))
+    del template["field_contract"]["completion_decision_notes"]
+    final_decision_template_path.write_text(json.dumps(template, indent=2), encoding="utf-8")
+
+    proc = _run_gate("-Mode", "Status", "-ManifestPath", str(manifest_path))
+
+    assert proc.returncode == 1
+    payload = _payload(proc.stdout)
+    assert payload["status"] == "failed_contract"
+    assert "final_decision_input_template_contracts" in payload["failed_checks"]
+    assert payload["missing_final_decision_template_contracts"] == ["completion_decision_notes"]
     assert payload["physical_validation_complete"] is False
     assert payload["fr018_implementation_cleared"] is False
 
