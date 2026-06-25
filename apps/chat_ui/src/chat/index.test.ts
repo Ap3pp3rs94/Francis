@@ -1532,6 +1532,13 @@ test("parseCollaborationReview preserves advisory candidate boundaries", () => {
     "codex: codex-alpha / external_guidance_source",
     "francis1: ollama-alpha / local_model_source / provider ollama",
   ]);
+  const implementationSummary = collaborationImplementationReviewSummary(review.items[0]!);
+  assert.equal(implementationSummary.badge, "build blocked");
+  assert.equal(implementationSummary.tone, "blocked");
+  assert.deepEqual(implementationSummary.conflictingSourceLines, [
+    "codex: codex-alpha / external_guidance_source",
+    "francis1: ollama-alpha / local_model_source / provider ollama",
+  ]);
   assert.equal(review.readbackCache.status, "refreshed");
   assert.equal(review.readbackCache.servesFullTranscriptStore, false);
 });

@@ -244,6 +244,7 @@ export type CollaborationImplementationReviewDisplay = {
   surface: string;
   nextAction: string;
   detail: string[];
+  conflictingSourceLines: string[];
 };
 
 export type CollaborationBuildDirectionGateDisplay = {
@@ -1040,6 +1041,14 @@ export function collaborationReviewNextAction(item: CollaborationReviewItem): st
   );
 }
 
+function collaborationConflictingSourceLine(source: CollaborationReviewItem["buildDirectionGate"]["conflictingSources"][number]): string {
+  const sourceName = source.source || "unknown source";
+  const receipt = source.receiptId || "missing receipt";
+  const role = source.role || "unspecified role";
+  const provider = source.providerLane ? ` / provider ${source.providerLane}` : "";
+  return `${sourceName}: ${receipt} / ${role}${provider}`;
+}
+
 export function collaborationImplementationReviewSummary(item: CollaborationReviewItem): CollaborationImplementationReviewDisplay {
   const unsafeAuthority =
     item.actionBoundary.conversationCanExecuteAction ||
@@ -1050,6 +1059,9 @@ export function collaborationImplementationReviewSummary(item: CollaborationRevi
     item.buildDirectionGate.grantsMemoryWriteAuthority;
   const artifact = item.buildDirectionGate.requiredReviewArtifact || item.reviewArtifact || "unknown";
   const surface = item.buildDirectionGate.surfaceUnderReview || item.concreteRepoSurface || "unknown";
+  const conflictingSourceLines = item.buildDirectionGate.conflictingSources.length
+    ? item.buildDirectionGate.conflictingSources.map(collaborationConflictingSourceLine)
+    : [];
   return {
     badge: unsafeAuthority
       ? "authority drift"
@@ -1071,6 +1083,7 @@ export function collaborationImplementationReviewSummary(item: CollaborationRevi
       `approve ${actionBoundaryBool(item.actionBoundary.conversationCanApproveAction || item.buildDirectionGate.grantsApprovalAuthority)}`,
       `memory write ${actionBoundaryBool(item.buildDirectionGate.grantsMemoryWriteAuthority)}`,
     ],
+    conflictingSourceLines,
   };
 }
 
@@ -1091,13 +1104,7 @@ export function collaborationBuildDirectionGateSummary(item: CollaborationReview
       ? "Typed review is required before this can become build direction."
       : "Collaboration output remains advisory until reviewed against repo truth.");
   const conflictingSourceLines = gate.conflictingSources.length
-    ? gate.conflictingSources.map((source) => {
-        const sourceName = source.source || "unknown source";
-        const receipt = source.receiptId || "missing receipt";
-        const role = source.role || "unspecified role";
-        const provider = source.providerLane ? ` / provider ${source.providerLane}` : "";
-        return `${sourceName}: ${receipt} / ${role}${provider}`;
-      })
+    ? gate.conflictingSources.map(collaborationConflictingSourceLine)
     : ["No conflicting source receipts recorded."];
   return {
     badge: unsafeAuthority ? "authority drift" : gate.blocksBuildDirection ? "source disagreement blocked" : "advisory gate",

@@ -94944,6 +94944,52 @@ Remaining truthful gap:
   proof, and unrelated UI flows were not run for this bounded Communication UI
   readback slice.
 
+### 2026-06-25 20:54Z - Preflight shows blocking source receipts
+
+Current posture: Phase 2 / developer bridge collaboration support now makes the
+Codex Implementation Preflight card self-contained when a typed review item
+blocks build direction on source disagreement. This follows the Francis1/Codex
+review signal that conflicting Codex and Francis1 source receipts must remain
+visible until Codex or the operator reviews the typed artifact against repo
+truth.
+
+What changed:
+
+- `collaborationImplementationReviewSummary()` now carries conflicting source
+  receipt lines from the existing build-direction gate readback.
+- The Chat UI `Codex Implementation Preflight` card now renders `Blocking Source
+  Receipts` when a review item has conflicting source receipts.
+- The conflicting-source formatter is shared with the existing build-direction
+  gate summary instead of duplicating presentation logic.
+- The focused Chat UI review contract test verifies the preflight remains
+  blocked and lists both Codex and Francis1 source receipts without granting
+  execution, mutation, approval, or memory-write authority.
+
+Validation:
+
+- Chat UI contract run passed:
+  `npm run test -- --test-name-pattern=parseCollaborationReview`
+  (`279` passing tests in the selected run).
+- Chat UI production build passed with `npm run build`.
+- `git diff --check` passed.
+- Live URL proof: `GET http://127.0.0.1:5173/` returned HTTP 200.
+- Live collaboration runtime health remained `healthy` with `helpers=3/3`, turn
+  `1219`, Codex enabled, Ollama enabled, and Claude disabled.
+- The current live review head had advanced to advisory recurrence-evidence work
+  with no conflicting source receipts; the blocking-source display is proven by
+  the parser contract fixture and applies when future typed review items carry a
+  source-disagreement gate.
+
+Remaining truthful gap:
+
+- This does not resolve a source disagreement, approve build direction, or change
+  review-gate behavior.
+- This does not grant execution, mutation, approval, training, memory-write, or
+  main-build prompt authority.
+- `.\scripts\check.ps1`, GitHub CI, full backend test suite, browser screenshot
+  proof, and unrelated UI flows were not run for this bounded preflight-display
+  slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

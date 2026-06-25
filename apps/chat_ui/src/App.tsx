@@ -1908,6 +1908,18 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
               <div style={{ color: "#94a3b8", fontSize: 12, textTransform: "uppercase" }}>Next Codex Action</div>
               <div style={{ overflowWrap: "anywhere" }}>{latestImplementationReview.nextAction}</div>
             </div>
+            {latestImplementationReview.conflictingSourceLines.length ? (
+              <div>
+                <div style={{ color: "#94a3b8", fontSize: 12, textTransform: "uppercase" }}>Blocking Source Receipts</div>
+                <ul style={{ display: "grid", gap: 4, listStyle: "none", margin: 0, padding: 0 }}>
+                  {latestImplementationReview.conflictingSourceLines.map((line) => (
+                    <li key={line} style={{ overflowWrap: "anywhere" }}>
+                      {line}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
           </div>
           <div style={{ color: "#94a3b8", display: "flex", flexWrap: "wrap", fontSize: 12, gap: 8, marginTop: 12 }}>
             {latestImplementationReview.detail.map((line) => (
