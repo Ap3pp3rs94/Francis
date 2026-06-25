@@ -1353,6 +1353,8 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
   const substrateChecklistItems = substrateReadiness?.checklist ?? [];
   const substrateChecklistProof = collaborationSubstrateChecklistSummary(substrateReadiness);
   const substrateBlockedItems = substrateReadiness?.checklist.filter((item) => item.blocksMainBuildPrompt && item.status !== "passed") ?? [];
+  const roadmapAlignment = substrateReadiness?.roadmapAlignment;
+  const roadmapAlignmentBlocked = Boolean(roadmapAlignment?.blocksMainBuildPrompt || roadmapAlignment?.candidateOnlyUntilReview);
   const bodyMapSurfaces = bodyMap?.surfaces ?? [];
   const bodyMapQuest = bodyMap?.quest;
   const bodyCoverageReview = bodyMap?.coverageReview;
@@ -1537,6 +1539,66 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
         <p style={{ color: "#e2e8f0", margin: "12px 0 0", overflowWrap: "anywhere" }}>
           {substrateReadiness?.nextAction || "Readiness readback is still loading."}
         </p>
+        {roadmapAlignment ? (
+          <div
+            style={{
+              borderTop: "1px solid rgba(148, 163, 184, 0.18)",
+              marginTop: 14,
+              paddingTop: 12,
+            }}
+          >
+            <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "space-between" }}>
+              <span style={{ color: "#dbeafe", fontSize: 15, fontWeight: 700 }}>Roadmap Alignment</span>
+              <span
+                style={{
+                  border: `1px solid ${roadmapAlignmentBlocked ? "#fca5a5" : "#6ee7b7"}`,
+                  borderRadius: 999,
+                  color: roadmapAlignmentBlocked ? "#fecaca" : "#d1fae5",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  padding: "4px 8px",
+                }}
+              >
+                {roadmapAlignment.status || "unknown"}
+              </span>
+            </div>
+            <div
+              style={{
+                color: "#cbd5e1",
+                display: "grid",
+                gap: 12,
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                marginTop: 10,
+              }}
+            >
+              <div>
+                <div style={{ color: "#94a3b8", fontSize: 12, textTransform: "uppercase" }}>Source Order</div>
+                <div style={{ overflowWrap: "anywhere" }}>{roadmapAlignment.sourceOrder.join(" -> ") || "unknown"}</div>
+              </div>
+              <div>
+                <div style={{ color: "#94a3b8", fontSize: 12, textTransform: "uppercase" }}>Prompt Gate</div>
+                <div style={{ overflowWrap: "anywhere" }}>{roadmapAlignment.mainBuildPromptGate || "requires_alignment_review"}</div>
+              </div>
+              <div>
+                <div style={{ color: "#94a3b8", fontSize: 12, textTransform: "uppercase" }}>Blocking Items</div>
+                <div style={{ overflowWrap: "anywhere" }}>{roadmapAlignment.blockingItems.join(", ") || "none"}</div>
+              </div>
+            </div>
+            <div style={{ color: "#94a3b8", display: "flex", flexWrap: "wrap", fontSize: 12, gap: 8, marginTop: 10 }}>
+              <span>ledger first {boolText(roadmapAlignment.ledgerFirst)}</span>
+              <span>ledger {boolText(roadmapAlignment.ledgerObserved)}</span>
+              <span>manifest {boolText(roadmapAlignment.manifestObserved)}</span>
+              <span>candidate only {boolText(roadmapAlignment.candidateOnlyUntilReview)}</span>
+              <span>main build prompt {boolText(roadmapAlignment.mainBuildPromptAllowed)}</span>
+              <span>execute {boolText(roadmapAlignment.grantsExecutionAuthority)}</span>
+              <span>approve {boolText(roadmapAlignment.grantsApprovalAuthority)}</span>
+              <span>memory write {boolText(roadmapAlignment.grantsMemoryWriteAuthority)}</span>
+            </div>
+            <div style={{ color: "#93c5fd", fontSize: 13, marginTop: 8, overflowWrap: "anywhere" }}>
+              next {roadmapAlignment.nextCheck || substrateReadiness?.nextAction || "Read ledger and manifest before main build prompting."}
+            </div>
+          </div>
+        ) : null}
         <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "space-between", marginTop: 14 }}>
           <span style={{ color: "#dbeafe", fontSize: 15, fontWeight: 700 }}>Substrate Checklist</span>
           <span

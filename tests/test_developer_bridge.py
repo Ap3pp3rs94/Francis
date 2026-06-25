@@ -326,6 +326,20 @@ def test_collaboration_substrate_readiness_blocks_main_build_prompt_for_open_gap
     assert result["summary"]["runtime_healthy"] is True  # type: ignore[index]
     assert result["summary"]["trust_ladder_enforced"] is True  # type: ignore[index]
     assert result["summary"]["no_authority_granted"] is True  # type: ignore[index]
+    roadmap_alignment = result["roadmap_alignment"]  # type: ignore[index]
+    assert roadmap_alignment["status"] == "blocked_candidate_only"  # type: ignore[index]
+    assert roadmap_alignment["source_order"] == [  # type: ignore[index]
+        "docs/operations/COMPLETION_LEDGER.md",
+        "docs/canonical/BUILD_MANIFEST.md",
+    ]
+    assert roadmap_alignment["ledger_first"] is True  # type: ignore[index]
+    assert roadmap_alignment["ledger_observed"] is True  # type: ignore[index]
+    assert roadmap_alignment["manifest_observed"] is True  # type: ignore[index]
+    assert roadmap_alignment["main_build_prompt_allowed"] is False  # type: ignore[index]
+    assert roadmap_alignment["candidate_only_until_review"] is True  # type: ignore[index]
+    assert roadmap_alignment["blocks_main_build_prompt"] is True  # type: ignore[index]
+    assert roadmap_alignment["grants_execution_authority"] is False  # type: ignore[index]
+    assert roadmap_alignment["grants_memory_write_authority"] is False  # type: ignore[index]
     checklist = {item["id"]: item for item in result["checklist"]}  # type: ignore[index]
     assert checklist["ledger_observed"]["status"] == "passed"
     assert checklist["manifest_observed"]["status"] == "passed"

@@ -94573,6 +94573,66 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, backend tests, and unrelated full-repo
   suites were not run for this bounded Chat UI visibility slice.
 
+### 2026-06-25 20:14Z - Roadmap-alignment check made explicit
+
+Current posture: Phase 2 / developer bridge collaboration support now exposes a
+typed `roadmap_alignment` readback on
+`developer_bridge.collaboration_substrate_readiness` and renders that readback in
+the operator-visible Chat UI. This is a gate/readback improvement for the latest
+Francis1/Codex question about which check must run before prompting any main
+Francis build; it does not grant build authority, execution authority, approval
+authority, model training authority, or memory-write authority.
+
+What changed:
+
+- `read_collaboration_substrate_readiness()` now returns a `roadmap_alignment`
+  object with ledger-first source order, observed ledger/manifest booleans, the
+  current main-build prompt gate, candidate-only state, blocking item ids, next
+  check text, and explicit authority denials.
+- The Chat UI parser preserves the new alignment contract and no-authority flags.
+- The Substrate Readiness card now renders a Roadmap Alignment section before the
+  checklist so the operator can see `blocked_candidate_only`,
+  `docs/operations/COMPLETION_LEDGER.md -> docs/canonical/BUILD_MANIFEST.md`,
+  `blocked_by_open_orb_gaps`, and the current blocking items without opening raw
+  technical receipts.
+- The local API at `127.0.0.1:8000` was restarted after the code change so the
+  live route served the new readback contract.
+
+Validation:
+
+- Focused backend test passed:
+  `python -m pytest tests/test_developer_bridge.py -k collaboration_substrate_readiness`
+  (`1 passed, 67 deselected`).
+- Focused Chat UI parser test passed:
+  `npm run test -- --test-name-pattern=parseCollaborationSubstrateReadiness`
+  (`279` passing tests in the selected run).
+- Chat UI production build passed with `npm run build`.
+- Narrow Python lint passed:
+  `python -m ruff check src\francis\developer_bridge\substrate_readiness.py tests\test_developer_bridge.py`.
+- `git diff --check` passed.
+- Live API proof: `GET
+  /developer-bridge/collaboration-substrate-readiness` returned
+  `roadmap_alignment.status=blocked_candidate_only`,
+  `ledger_first=true`, `main_build_prompt_allowed=false`,
+  `blocking_items=["coverage_gaps_reviewed","phase_posture_reviewed"]`, and
+  all execution/mutation/approval/memory-write authority flags false.
+- Browser proof captured `http://127.0.0.1:5173/` at
+  `output/playwright/collaboration-roadmap-alignment.png`; the page returned
+  HTTP 200 and showed the Roadmap Alignment section with the ledger-first source
+  order, prompt gate, blockers, candidate-only status, and no-authority chips.
+- Collaboration runtime health remained `healthy` after the API restart, with
+  the three expected helpers running.
+
+Remaining truthful gap:
+
+- This does not clear `coverage_gaps_reviewed` or
+  `phase_posture_reviewed`; main Francis build prompting remains
+  candidate-only until Codex/operator review clears those blockers.
+- This does not make Francis1 a build authority or action-readiness authority;
+  local-model responses remain advisory receipts.
+- `.\scripts\check.ps1`, GitHub CI, full backend test suite, and unrelated
+  browser flows were not run for this bounded roadmap-alignment readback slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -533,6 +533,26 @@ export type CollaborationSubstrateReadinessChecklistItem = {
   blocksMainBuildPrompt: boolean;
 };
 
+export type CollaborationRoadmapAlignment = {
+  status: string;
+  requiredSources: string[];
+  sourceOrder: string[];
+  ledgerFirst: boolean;
+  ledgerObserved: boolean;
+  manifestObserved: boolean;
+  sourcesObserved: boolean;
+  mainBuildPromptAllowed: boolean;
+  mainBuildPromptGate: string;
+  candidateOnlyUntilReview: boolean;
+  blocksMainBuildPrompt: boolean;
+  blockingItems: string[];
+  nextCheck: string;
+  grantsExecutionAuthority: boolean;
+  grantsMutationAuthority: boolean;
+  grantsApprovalAuthority: boolean;
+  grantsMemoryWriteAuthority: boolean;
+};
+
 export type CollaborationSubstrateReadiness = {
   ok: boolean;
   mode: string;
@@ -551,6 +571,7 @@ export type CollaborationSubstrateReadiness = {
     learningReceiptsBounded: boolean;
     noAuthorityGranted: boolean;
   };
+  roadmapAlignment: CollaborationRoadmapAlignment;
   checklist: CollaborationSubstrateReadinessChecklistItem[];
   blockingItems: string[];
   nextAction: string;
@@ -558,6 +579,7 @@ export type CollaborationSubstrateReadiness = {
     collaborationSubstrateWired: string;
     mainBuildPromptAllowed: string;
     blockingItems: string;
+    roadmapAlignment: string;
   };
   sourceReadbacks: Record<string, string>;
   readbackCache: CollaborationReadbackCache;
@@ -1899,6 +1921,7 @@ export function parseFrancisTrustLadder(raw: unknown): FrancisTrustLadder {
 export function parseCollaborationSubstrateReadiness(raw: unknown): CollaborationSubstrateReadiness {
   const value = isRecord(raw) ? raw : {};
   const summary = isRecord(value.summary) ? value.summary : {};
+  const roadmapAlignment = isRecord(value.roadmap_alignment) ? value.roadmap_alignment : {};
   const definitions = isRecord(value.definitions) ? value.definitions : {};
   const sourceReadbacks = isRecord(value.source_readbacks) ? value.source_readbacks : {};
   return {
@@ -1921,6 +1944,31 @@ export function parseCollaborationSubstrateReadiness(raw: unknown): Collaboratio
       learningReceiptsBounded: safeBoolean(summary.learning_receipts_bounded),
       noAuthorityGranted: safeBoolean(summary.no_authority_granted),
     },
+    roadmapAlignment: {
+      status: safeString(roadmapAlignment.status, "unknown"),
+      requiredSources: Array.isArray(roadmapAlignment.required_sources)
+        ? roadmapAlignment.required_sources.map((item) => safeString(item)).filter(Boolean)
+        : [],
+      sourceOrder: Array.isArray(roadmapAlignment.source_order)
+        ? roadmapAlignment.source_order.map((item) => safeString(item)).filter(Boolean)
+        : [],
+      ledgerFirst: safeBoolean(roadmapAlignment.ledger_first),
+      ledgerObserved: safeBoolean(roadmapAlignment.ledger_observed),
+      manifestObserved: safeBoolean(roadmapAlignment.manifest_observed),
+      sourcesObserved: safeBoolean(roadmapAlignment.sources_observed),
+      mainBuildPromptAllowed: safeBoolean(roadmapAlignment.main_build_prompt_allowed),
+      mainBuildPromptGate: safeString(roadmapAlignment.main_build_prompt_gate, "requires_alignment_review"),
+      candidateOnlyUntilReview: safeBoolean(roadmapAlignment.candidate_only_until_review),
+      blocksMainBuildPrompt: safeBoolean(roadmapAlignment.blocks_main_build_prompt),
+      blockingItems: Array.isArray(roadmapAlignment.blocking_items)
+        ? roadmapAlignment.blocking_items.map((item) => safeString(item)).filter(Boolean)
+        : [],
+      nextCheck: safeString(roadmapAlignment.next_check),
+      grantsExecutionAuthority: safeBoolean(roadmapAlignment.grants_execution_authority),
+      grantsMutationAuthority: safeBoolean(roadmapAlignment.grants_mutation_authority),
+      grantsApprovalAuthority: safeBoolean(roadmapAlignment.grants_approval_authority),
+      grantsMemoryWriteAuthority: safeBoolean(roadmapAlignment.grants_memory_write_authority),
+    },
     checklist: Array.isArray(value.checklist) ? value.checklist.map(parseCollaborationSubstrateChecklistItem) : [],
     blockingItems: Array.isArray(value.blocking_items) ? value.blocking_items.map((item) => safeString(item)).filter(Boolean) : [],
     nextAction: safeString(value.next_action),
@@ -1928,6 +1976,7 @@ export function parseCollaborationSubstrateReadiness(raw: unknown): Collaboratio
       collaborationSubstrateWired: safeString(definitions.collaboration_substrate_wired),
       mainBuildPromptAllowed: safeString(definitions.main_build_prompt_allowed),
       blockingItems: safeString(definitions.blocking_items),
+      roadmapAlignment: safeString(definitions.roadmap_alignment),
     },
     sourceReadbacks: Object.fromEntries(Object.entries(sourceReadbacks).map(([key, item]) => [key, safeString(item)])),
     readbackCache: parseReadbackCache(value.readback_cache),

@@ -471,6 +471,25 @@ test("parseCollaborationSubstrateReadiness preserves main-build prompt gate", ()
       learning_receipts_bounded: true,
       no_authority_granted: true,
     },
+    roadmap_alignment: {
+      status: "blocked_candidate_only",
+      required_sources: ["docs/operations/COMPLETION_LEDGER.md", "docs/canonical/BUILD_MANIFEST.md"],
+      source_order: ["docs/operations/COMPLETION_LEDGER.md", "docs/canonical/BUILD_MANIFEST.md"],
+      ledger_first: true,
+      ledger_observed: true,
+      manifest_observed: true,
+      sources_observed: true,
+      main_build_prompt_allowed: false,
+      main_build_prompt_gate: "blocked_by_open_orb_gaps",
+      candidate_only_until_review: true,
+      blocks_main_build_prompt: true,
+      blocking_items: ["coverage_gaps_reviewed"],
+      next_check: "Read ledger first, then compare the build manifest before prompting main Francis build work.",
+      grants_execution_authority: false,
+      grants_mutation_authority: false,
+      grants_approval_authority: false,
+      grants_memory_write_authority: false,
+    },
     checklist: [
       {
         id: "coverage_gaps_reviewed",
@@ -496,6 +515,7 @@ test("parseCollaborationSubstrateReadiness preserves main-build prompt gate", ()
       collaboration_substrate_wired: "The relay, body map, trust ladder, runtime health, and no-authority guard are visible.",
       main_build_prompt_allowed: "Whether this readback allows unsupervised main Francis build work.",
       blocking_items: "Checklist items that block main-build prompting.",
+      roadmap_alignment: "Ledger-first readback proving whether a main Francis build prompt must remain candidate-only.",
     },
     source_readbacks: {
       body_map: "developer_bridge.francis_body_map",
@@ -523,6 +543,20 @@ test("parseCollaborationSubstrateReadiness preserves main-build prompt gate", ()
   assert.equal(readiness.summary.mainBuildPromptGate, "blocked_by_open_orb_gaps");
   assert.equal(readiness.summary.coverageOpenGapCount, 11);
   assert.equal(readiness.summary.noAuthorityGranted, true);
+  assert.equal(readiness.roadmapAlignment.status, "blocked_candidate_only");
+  assert.deepEqual(readiness.roadmapAlignment.sourceOrder, [
+    "docs/operations/COMPLETION_LEDGER.md",
+    "docs/canonical/BUILD_MANIFEST.md",
+  ]);
+  assert.equal(readiness.roadmapAlignment.ledgerFirst, true);
+  assert.equal(readiness.roadmapAlignment.ledgerObserved, true);
+  assert.equal(readiness.roadmapAlignment.manifestObserved, true);
+  assert.equal(readiness.roadmapAlignment.mainBuildPromptAllowed, false);
+  assert.equal(readiness.roadmapAlignment.candidateOnlyUntilReview, true);
+  assert.equal(readiness.roadmapAlignment.blocksMainBuildPrompt, true);
+  assert.equal(readiness.roadmapAlignment.blockingItems[0], "coverage_gaps_reviewed");
+  assert.equal(readiness.roadmapAlignment.grantsExecutionAuthority, false);
+  assert.equal(readiness.roadmapAlignment.grantsMemoryWriteAuthority, false);
   assert.equal(readiness.checklist[0]?.blocksMainBuildPrompt, true);
   assert.equal(readiness.blockingItems[0], "coverage_gaps_reviewed");
   assert.equal(readiness.requiredAlignmentSources.includes("docs/canonical/BUILD_MANIFEST.md"), true);

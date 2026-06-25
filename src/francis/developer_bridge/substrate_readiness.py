@@ -130,6 +130,7 @@ def read_collaboration_substrate_readiness() -> dict[str, object]:
         and no_authority_granted
     )
     main_build_prompt_allowed = collaboration_substrate_wired and not blocking_items
+    main_build_prompt_gate = "none" if main_build_prompt_allowed else _main_build_prompt_gate(blocking_items)
     status = _status_for(
         collaboration_substrate_wired=collaboration_substrate_wired,
         main_build_prompt_allowed=main_build_prompt_allowed,
@@ -149,13 +150,20 @@ def read_collaboration_substrate_readiness() -> dict[str, object]:
             "collaboration_substrate_wired": collaboration_substrate_wired,
             "bounded_wiring_percent_complete": bounded_wiring_percent,
             "main_build_prompt_allowed": main_build_prompt_allowed,
-            "main_build_prompt_gate": "none" if main_build_prompt_allowed else _main_build_prompt_gate(blocking_items),
+            "main_build_prompt_gate": main_build_prompt_gate,
             "coverage_open_gap_count": coverage_open_gap_count,
             "trust_ladder_enforced": trust_ladder_enforced,
             "runtime_healthy": runtime_healthy,
             "learning_receipts_bounded": learning_bounded,
             "no_authority_granted": no_authority_granted,
         },
+        "roadmap_alignment": _roadmap_alignment(
+            ledger_observed=bool(body_evidence.get("ledger_observed")),
+            manifest_observed=bool(body_evidence.get("manifest_observed")),
+            main_build_prompt_allowed=main_build_prompt_allowed,
+            main_build_prompt_gate=main_build_prompt_gate,
+            blocking_items=blocking_items,
+        ),
         "checklist": checklist,
         "blocking_items": [item["id"] for item in blocking_items],
         "next_action": (
@@ -170,6 +178,9 @@ def read_collaboration_substrate_readiness() -> dict[str, object]:
                 "Whether this readback allows the collaboration loop to prompt unsupervised main Francis build work."
             ),
             "blocking_items": "Checklist items that block main-build prompting even when the relay wiring is complete.",
+            "roadmap_alignment": (
+                "Ledger-first readback proving whether a main Francis build prompt must remain candidate-only."
+            ),
         },
         "source_readbacks": {
             "body_map": "developer_bridge.francis_body_map",
@@ -223,6 +234,46 @@ def _main_build_prompt_gate(blocking_items: list[dict[str, object]]) -> str:
     if "phase_posture_reviewed" in ids:
         return "blocked_by_partial_phase_posture"
     return "requires_alignment_review"
+
+
+def _roadmap_alignment(
+    *,
+    ledger_observed: bool,
+    manifest_observed: bool,
+    main_build_prompt_allowed: bool,
+    main_build_prompt_gate: str,
+    blocking_items: list[dict[str, object]],
+) -> dict[str, object]:
+    sources_observed = ledger_observed and manifest_observed
+    if main_build_prompt_allowed:
+        status = "aligned_for_main_build_prompt"
+    elif not sources_observed:
+        status = "missing_alignment_sources"
+    else:
+        status = "blocked_candidate_only"
+    return {
+        "status": status,
+        "required_sources": list(_ALIGNMENT_SOURCES),
+        "source_order": list(_ALIGNMENT_SOURCES),
+        "ledger_first": True,
+        "ledger_observed": ledger_observed,
+        "manifest_observed": manifest_observed,
+        "sources_observed": sources_observed,
+        "main_build_prompt_allowed": main_build_prompt_allowed,
+        "main_build_prompt_gate": main_build_prompt_gate,
+        "candidate_only_until_review": not main_build_prompt_allowed,
+        "blocks_main_build_prompt": bool(blocking_items),
+        "blocking_items": [_str(item.get("id")) for item in blocking_items if _str(item.get("id"))],
+        "next_check": (
+            "Read docs/operations/COMPLETION_LEDGER.md first, compare it against "
+            "docs/canonical/BUILD_MANIFEST.md, confirm phase posture and ORB blockers, and keep any main "
+            "Francis build prompt candidate-only unless the gate is clear."
+        ),
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "grants_approval_authority": False,
+        "grants_memory_write_authority": False,
+    }
 
 
 def _phase_blocks_main_build_prompt(*, current: str, posture: str) -> bool:
