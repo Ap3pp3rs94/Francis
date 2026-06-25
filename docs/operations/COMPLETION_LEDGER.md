@@ -94529,6 +94529,50 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, backend tests, and unrelated full-repo
   suites were not run for this bounded Chat UI visibility slice.
 
+### 2026-06-25 20:06Z - Build-direction gate made operator-visible
+
+Current posture: Phase 2 / developer bridge collaboration support now surfaces
+the latest typed build-direction review gate in the operator-visible Chat UI.
+This is a visibility improvement for advisory-vs-blocked collaboration output;
+it does not change build authority, mission execution behavior, policy,
+approval, mutation, training, or memory-write authority.
+
+What changed:
+
+- The Chat UI now derives a visible Latest Build Direction Gate summary from the
+  latest `developer_bridge.collaboration_review.items` readback.
+- The card appears before Live Conversation so the operator can see whether the
+  current collaboration output is advisory or blocked before reading the chat
+  stream.
+- The card shows the turn, review decision, typed review artifact, reviewed
+  surface, source-disagreement receipt count, Codex/operator review requirement,
+  repo-truth review requirement, and execution/approval/memory-write denials.
+- Technical receipts and review history remain collapsed separately so the
+  conversational log stays readable while the governance gate stays visible.
+
+Validation:
+
+- Chat UI tests passed:
+  `npm run test -- --test-name-pattern=collaborationBuildDirectionGateSummary`.
+- Chat UI production build passed with `npm run build`.
+- `git diff --check` passed.
+- Browser proof captured `http://127.0.0.1:5173/` at
+  `output/playwright/collaboration-build-direction-gate.png`; the page returned
+  HTTP 200 and showed `Latest Build Direction Gate`, `advisory gate`, the typed
+  review artifact, reviewed surface, `source receipts 0`, `codex review true`,
+  `repo review true`, `execute false`, `approve false`, and `memory write
+  false`.
+
+Remaining truthful gap:
+
+- This does not let Francis1, Codex, or the chat conversation become build
+  authority; it only exposes the existing review gate.
+- Source disagreements still require typed review before becoming build
+  direction; advisory items remain advisory until Codex/operator repo-truth
+  review.
+- `.\scripts\check.ps1`, GitHub CI, backend tests, and unrelated full-repo
+  suites were not run for this bounded Chat UI visibility slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

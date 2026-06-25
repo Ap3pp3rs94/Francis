@@ -1328,6 +1328,10 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
   const sessionSummaries = sessionReadback?.items ?? [];
   const reviewItems = review?.items ?? [];
   const blockedReviewItems = reviewItems.filter((item) => item.buildDirectionGate.blocksBuildDirection);
+  const latestBuildDirectionReview = reviewItems[0] ?? null;
+  const latestBuildDirectionGate = latestBuildDirectionReview
+    ? collaborationBuildDirectionGateSummary(latestBuildDirectionReview)
+    : null;
   const latestImplementationReview = reviewItems[0] ? collaborationImplementationReviewSummary(reviewItems[0]) : null;
   const actionIntakeReviews = reviewItems
     .map((item) => ({ item, summary: collaborationActionIntakeSummary(item) }))
@@ -1699,6 +1703,90 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
           </div>
           <div style={{ color: "#cbd5e1", fontSize: 13, marginTop: 8, overflowWrap: "anywhere" }}>
             next {latestActionIntakeReview.reviewRecommendation?.nextCodexAction || "Inspect mission ingress before changing action-intake behavior."}
+          </div>
+        </div>
+      ) : null}
+
+      {latestBuildDirectionGate && latestBuildDirectionReview ? (
+        <div
+          style={{
+            background:
+              latestBuildDirectionGate.tone === "blocked" ? "rgba(69, 10, 10, 0.26)" : "rgba(8, 47, 73, 0.28)",
+            border: `1px solid ${
+              latestBuildDirectionGate.tone === "blocked" ? "rgba(252, 165, 165, 0.62)" : "rgba(103, 232, 249, 0.42)"
+            }`,
+            borderRadius: 14,
+            marginTop: 22,
+            padding: 16,
+          }}
+        >
+          <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "space-between" }}>
+            <h3 style={{ fontSize: 20, margin: 0 }}>Latest Build Direction Gate</h3>
+            <span
+              style={{
+                border: `1px solid ${latestBuildDirectionGate.tone === "blocked" ? "#fca5a5" : "#67e8f9"}`,
+                borderRadius: 999,
+                color: latestBuildDirectionGate.tone === "blocked" ? "#fecaca" : "#cffafe",
+                fontSize: 12,
+                fontWeight: 700,
+                padding: "4px 8px",
+              }}
+            >
+              {latestBuildDirectionGate.badge}
+            </span>
+          </div>
+          <div style={{ color: "#93c5fd", display: "flex", flexWrap: "wrap", fontSize: 13, gap: 10, marginTop: 10 }}>
+            <span>turn {latestBuildDirectionReview.turn || "?"}</span>
+            <span>{collaborationShortId(latestBuildDirectionReview.insightId)}</span>
+            <span>{latestBuildDirectionReview.reviewRecommendation.decision || "review pending"}</span>
+          </div>
+          <p style={{ color: "#e2e8f0", margin: "10px 0 0", overflowWrap: "anywhere" }}>{latestBuildDirectionGate.reason}</p>
+          <dl
+            style={{
+              color: "#cbd5e1",
+              display: "grid",
+              gap: 12,
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              margin: "12px 0 0",
+            }}
+          >
+            <div>
+              <dt style={{ color: "#94a3b8", fontSize: 12, textTransform: "uppercase" }}>Review Artifact</dt>
+              <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{latestBuildDirectionGate.artifact}</dd>
+            </div>
+            <div>
+              <dt style={{ color: "#94a3b8", fontSize: 12, textTransform: "uppercase" }}>Surface</dt>
+              <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{latestBuildDirectionGate.surface}</dd>
+            </div>
+            <div>
+              <dt style={{ color: "#94a3b8", fontSize: 12, textTransform: "uppercase" }}>Source Receipts</dt>
+              <dd style={{ margin: 0 }}>
+                <ul style={{ display: "grid", gap: 4, listStyle: "none", margin: 0, padding: 0 }}>
+                  {latestBuildDirectionGate.conflictingSourceLines.map((line) => (
+                    <li key={line} style={{ overflowWrap: "anywhere" }}>
+                      {line}
+                    </li>
+                  ))}
+                </ul>
+              </dd>
+            </div>
+          </dl>
+          <div style={{ color: "#94a3b8", display: "flex", flexWrap: "wrap", fontSize: 12, gap: 8, marginTop: 12 }}>
+            {latestBuildDirectionGate.detail.map((line) => (
+              <span
+                key={line}
+                style={{
+                  background: "rgba(15, 23, 42, 0.7)",
+                  border: "1px solid rgba(148, 163, 184, 0.2)",
+                  borderRadius: 999,
+                  maxWidth: "100%",
+                  overflowWrap: "anywhere",
+                  padding: "4px 8px",
+                }}
+              >
+                {line}
+              </span>
+            ))}
           </div>
         </div>
       ) : null}
