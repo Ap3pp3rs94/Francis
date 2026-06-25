@@ -361,7 +361,9 @@ def _latest_local_model_response_readback(participant_state: dict[str, object]) 
         "output_guard_status": output_guard_status,
         "model_response_observed": bool(latest.get("model_response_observed")),
         "is_passed": output_guard_status == "passed",
-        "is_guard_rewrite": output_guard_status.endswith("_rewritten") or output_guard_status in {
+        "is_guard_rewrite": output_guard_status.endswith("_rewritten")
+        or output_guard_status
+        in {
             "empty_reply",
             "disabled",
         },
