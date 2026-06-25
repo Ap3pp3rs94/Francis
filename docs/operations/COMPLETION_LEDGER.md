@@ -95631,6 +95631,71 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, and unrelated full-system UI flows were not
   run for this bounded local-model advice-only proof slice.
 
+### 2026-06-25 23:50Z - Body-map separates visibility from capability grants
+
+Current posture: Phase 2 / developer bridge body-map readback now explicitly
+separates a Francis surface being visible to Francis1 from that surface being
+connected to the local model or granted for capability use. This closes a drift
+gap where Codex/Francis1 could treat awareness of a capability as if the
+capability had already been connected or granted.
+
+What changed:
+
+- `developer_bridge.francis_body_map.surfaces[*].capability_exposure` now reports
+  `known_surface`, `readback_connected`, `connected_to_local_model`,
+  `capability_granted`, `grant_state`, `grantable_after_trust`,
+  `grant_requires`, `deny_after_grant_supported`, and `revocation_state`.
+- The memory surface now includes a `detached_memory_bin` policy. Stale memory is
+  retained for review, but is not required for current context, is not used by
+  default, is not injected into prompt context, stores no full transcript, grants
+  no memory-write/training authority, and can be denied after the fact for
+  tuning.
+- The compact Francis1 body-map prompt line now says whole-body visibility is not
+  capability connection or grant, and that stale memory detaches.
+- The body-map runtime observation detector accepts both the prior body-map prompt
+  wording and the new compact wording so older relay receipts remain valid
+  evidence.
+- The Chat UI body-map parser and surface summary now preserve and display local
+  model connection state, grant state, grantability-after-trust, revocation
+  status, and detached-memory status.
+
+Validation:
+
+- Developer bridge test file passed:
+  `python -m pytest tests/test_developer_bridge.py -q`.
+- Chat UI contract suite passed:
+  `npm run test -- src/chat/index.test.ts`
+  (the package script ran the configured UI suite, `280` passing tests).
+- Chat UI production build passed:
+  `npm run build`.
+- Targeted lint passed:
+  `python -m ruff check src/francis/developer_bridge/body_map.py tests/test_developer_bridge.py`.
+- Targeted format check passed:
+  `python -m ruff format --check src/francis/developer_bridge/body_map.py tests/test_developer_bridge.py`.
+- `git diff --check` passed.
+- The local Francis API was restarted after the Python readback change. The live
+  route `/developer-bridge/francis-body-map` returned
+  `capability_exposure.connected_to_local_model=false`,
+  `capability_exposure.capability_granted=false`,
+  `capability_exposure.grant_state=not_granted`, memory
+  `detached_memory_bin.status=detach_if_stale`,
+  `required_for_current_context=false`,
+  `injects_into_prompt_context=false`, and
+  `can_deny_after_fact_for_tuning=true`.
+- The local Communication UI at `http://127.0.0.1:5173/` returned HTTP `200`.
+
+Remaining truthful gap:
+
+- This does not grant Ollama/Francis1 any tool, memory, execution, mutation,
+  approval, training, or capability authority.
+- This does not implement a capability-grant mutation route; it records the
+  readback contract that future grants must satisfy through trust-ladder review
+  and governed capability receipts.
+- This does not promote or delete stale memory; it declares stale memory as
+  retained but detached from required context and prompt injection.
+- `.\scripts\check.ps1`, GitHub CI, and unrelated full-system UI flows were not
+  run for this bounded body-map capability-connection proof slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

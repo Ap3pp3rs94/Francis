@@ -173,7 +173,7 @@ def read_francis_body_map() -> dict[str, object]:
 def compact_body_map_prompt_line() -> str:
     """Return a bounded prompt line for Francis1 collaboration turns."""
 
-    return _one_line("Body map: Francis1 can see whole-body surfaces; authority remain false.")
+    return _one_line("Body map: whole-body visible; not capability connection/grant; stale memory detaches.")
 
 
 def compact_roadmap_gate_prompt_line() -> str:
@@ -371,7 +371,9 @@ def _surface(
         "evidence": evidence,
         "current_boundary": current_boundary,
         "capability_exposure": _surface_capability_exposure(
+            surface_id=surface_id,
             access_mode=access_mode,
+            connection_state=connection_state,
             current_boundary=current_boundary,
         ),
         "grants_execution_authority": False,
@@ -382,9 +384,30 @@ def _surface(
     }
 
 
-def _surface_capability_exposure(*, access_mode: str, current_boundary: str) -> dict[str, object]:
+def _surface_capability_exposure(
+    *,
+    surface_id: str,
+    access_mode: str,
+    connection_state: str,
+    current_boundary: str,
+) -> dict[str, object]:
+    readback_connected = connection_state.startswith("connected")
+    detached_memory_bin = _detached_memory_bin(surface_id)
     return {
         "visible_to_francis1": True,
+        "known_surface": True,
+        "readback_connected": readback_connected,
+        "connected_to_local_model": False,
+        "capability_granted": False,
+        "grant_state": "not_granted",
+        "grantable_after_trust": readback_connected,
+        "grant_requires": [
+            "trust_ladder_decision",
+            "codex_or_operator_review",
+            "governed_capability_receipt",
+        ],
+        "deny_after_grant_supported": True,
+        "revocation_state": "revocable_for_tuning",
         "safe_for_capability_use": False,
         "capability_use_status": "not_exposed",
         "current_access_mode": access_mode,
@@ -396,6 +419,26 @@ def _surface_capability_exposure(*, access_mode: str, current_boundary: str) -> 
         "grants_execution_authority": False,
         "grants_mutation_authority": False,
         "grants_approval_authority": False,
+        "grants_memory_write_authority": False,
+        "grants_training_authority": False,
+        "detached_memory_bin": detached_memory_bin,
+    }
+
+
+def _detached_memory_bin(surface_id: str) -> dict[str, object]:
+    applies = surface_id == "memory"
+    return {
+        "applies": applies,
+        "kind": "developer_bridge.detached_memory_bin_policy",
+        "status": "detach_if_stale" if applies else "not_applicable",
+        "retains_memory": applies,
+        "required_for_current_context": False,
+        "used_by_default": False,
+        "injects_into_prompt_context": False,
+        "keeps_stale_memory_out_of_required_context": True,
+        "promotion_requires_review": True,
+        "can_deny_after_fact_for_tuning": True,
+        "stores_full_transcript": False,
         "grants_memory_write_authority": False,
         "grants_training_authority": False,
     }
@@ -787,7 +830,7 @@ def _runtime_restart_observation() -> dict[str, object]:
         for record in records
         if _safe_str(record.get("source_agent")) == "codex"
         and _safe_str(record.get("target_agent")) == "ollama"
-        and "Body map: Francis1 can see whole-body surfaces" in _safe_str(record.get("prompt"))
+        and _has_body_map_prompt_line(_safe_str(record.get("prompt")))
         and "Trust: classify needs; no capability authority" in _safe_str(record.get("prompt"))
     ]
     prompt = prompts[0] if prompts else None
@@ -833,6 +876,10 @@ def _runtime_restart_observation() -> dict[str, object]:
         "grants_memory_write_authority": False,
         "grants_training_authority": False,
     }
+
+
+def _has_body_map_prompt_line(prompt: str) -> bool:
+    return "Body map: whole-body visible" in prompt or "Body map: Francis1 can see whole-body surfaces" in prompt
 
 
 def _relay_records(*, limit: int = 250) -> list[dict[str, object]]:

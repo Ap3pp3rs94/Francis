@@ -396,6 +396,15 @@ export type FrancisBodySurface = {
 
 export type FrancisBodySurfaceCapabilityExposure = {
   visibleToFrancis1: boolean;
+  knownSurface: boolean;
+  readbackConnected: boolean;
+  connectedToLocalModel: boolean;
+  capabilityGranted: boolean;
+  grantState: string;
+  grantableAfterTrust: boolean;
+  grantRequires: string[];
+  denyAfterGrantSupported: boolean;
+  revocationState: string;
   safeForCapabilityUse: boolean;
   capabilityUseStatus: string;
   currentAccessMode: string;
@@ -406,6 +415,23 @@ export type FrancisBodySurfaceCapabilityExposure = {
   grantsExecutionAuthority: boolean;
   grantsMutationAuthority: boolean;
   grantsApprovalAuthority: boolean;
+  grantsMemoryWriteAuthority: boolean;
+  grantsTrainingAuthority: boolean;
+  detachedMemoryBin: FrancisDetachedMemoryBinPolicy;
+};
+
+export type FrancisDetachedMemoryBinPolicy = {
+  applies: boolean;
+  kind: string;
+  status: string;
+  retainsMemory: boolean;
+  requiredForCurrentContext: boolean;
+  usedByDefault: boolean;
+  injectsIntoPromptContext: boolean;
+  keepsStaleMemoryOutOfRequiredContext: boolean;
+  promotionRequiresReview: boolean;
+  canDenyAfterFactForTuning: boolean;
+  storesFullTranscript: boolean;
   grantsMemoryWriteAuthority: boolean;
   grantsTrainingAuthority: boolean;
 };
@@ -1351,6 +1377,12 @@ export function francisBodySurfaceExposureSummary(surface: FrancisBodySurface): 
     surface.capabilityExposure.grantsApprovalAuthority ||
     surface.capabilityExposure.grantsMemoryWriteAuthority ||
     surface.capabilityExposure.grantsTrainingAuthority ||
+    surface.capabilityExposure.connectedToLocalModel ||
+    surface.capabilityExposure.capabilityGranted ||
+    surface.capabilityExposure.detachedMemoryBin.injectsIntoPromptContext ||
+    surface.capabilityExposure.detachedMemoryBin.requiredForCurrentContext ||
+    surface.capabilityExposure.detachedMemoryBin.grantsMemoryWriteAuthority ||
+    surface.capabilityExposure.detachedMemoryBin.grantsTrainingAuthority ||
     surface.capabilityExposure.safeForCapabilityUse;
   const evidenceItems = surface.evidence
     .filter((item) => item.path)
@@ -1374,7 +1406,9 @@ export function francisBodySurfaceExposureSummary(surface: FrancisBodySurface): 
     )} / approve ${actionBoundaryBool(surface.grantsApprovalAuthority)} / memory write ${actionBoundaryBool(
       surface.grantsMemoryWriteAuthority,
     )} / training ${actionBoundaryBool(surface.grantsTrainingAuthority)}`,
-    capabilityLine: `visible ${actionBoundaryBool(surface.capabilityExposure.visibleToFrancis1)} / safe use ${actionBoundaryBool(
+    capabilityLine: `visible ${actionBoundaryBool(surface.capabilityExposure.visibleToFrancis1)} / connected ${actionBoundaryBool(
+      surface.capabilityExposure.connectedToLocalModel,
+    )} / granted ${actionBoundaryBool(surface.capabilityExposure.capabilityGranted)} / safe use ${actionBoundaryBool(
       surface.capabilityExposure.safeForCapabilityUse,
     )} / request ${actionBoundaryBool(surface.capabilityExposure.requiresGovernedRequest)} / codex review ${actionBoundaryBool(
       surface.capabilityExposure.requiresCodexOrOperatorReviewBeforeCapabilityExposure,
@@ -1384,14 +1418,26 @@ export function francisBodySurfaceExposureSummary(surface: FrancisBodySurface): 
       `access ${surface.capabilityExposure.currentAccessMode || surface.accessMode || "observe"}`,
       `next trust ${surface.capabilityExposure.nextTrustGate || surface.trustRequiredForNextMode || "review"}`,
       `capability ${surface.capabilityExposure.capabilityUseStatus || "not_exposed"}`,
+      `grant ${surface.capabilityExposure.grantState || "not_granted"}`,
+      `grantable after trust ${actionBoundaryBool(surface.capabilityExposure.grantableAfterTrust)}`,
+      `deny after grant ${actionBoundaryBool(surface.capabilityExposure.denyAfterGrantSupported)}`,
+      `revocation ${surface.capabilityExposure.revocationState || "revocable_for_tuning"}`,
+      surface.capabilityExposure.detachedMemoryBin.applies
+        ? `detached memory ${surface.capabilityExposure.detachedMemoryBin.status || "detach_if_stale"}`
+        : "",
+      surface.capabilityExposure.detachedMemoryBin.applies
+        ? `memory required ${actionBoundaryBool(surface.capabilityExposure.detachedMemoryBin.requiredForCurrentContext)}`
+        : "",
       `visible ${actionBoundaryBool(surface.capabilityExposure.visibleToFrancis1)}`,
+      `connected ${actionBoundaryBool(surface.capabilityExposure.connectedToLocalModel)}`,
+      `granted ${actionBoundaryBool(surface.capabilityExposure.capabilityGranted)}`,
       `safe use ${actionBoundaryBool(surface.capabilityExposure.safeForCapabilityUse)}`,
       `execute ${actionBoundaryBool(surface.grantsExecutionAuthority)}`,
       `mutation ${actionBoundaryBool(surface.grantsMutationAuthority)}`,
       `approve ${actionBoundaryBool(surface.grantsApprovalAuthority)}`,
       `memory write ${actionBoundaryBool(surface.grantsMemoryWriteAuthority)}`,
       `training ${actionBoundaryBool(surface.grantsTrainingAuthority)}`,
-    ],
+    ].filter(Boolean),
   };
 }
 
@@ -2210,6 +2256,15 @@ function parseFrancisBodySurfaceCapabilityExposure(raw: unknown): FrancisBodySur
   const item = isRecord(raw) ? raw : {};
   return {
     visibleToFrancis1: safeBoolean(item.visible_to_francis1),
+    knownSurface: safeBoolean(item.known_surface, safeBoolean(item.visible_to_francis1)),
+    readbackConnected: safeBoolean(item.readback_connected),
+    connectedToLocalModel: safeBoolean(item.connected_to_local_model),
+    capabilityGranted: safeBoolean(item.capability_granted),
+    grantState: safeString(item.grant_state, "not_granted"),
+    grantableAfterTrust: safeBoolean(item.grantable_after_trust),
+    grantRequires: Array.isArray(item.grant_requires) ? item.grant_requires.map((entry) => safeString(entry)).filter(Boolean) : [],
+    denyAfterGrantSupported: safeBoolean(item.deny_after_grant_supported, true),
+    revocationState: safeString(item.revocation_state, "revocable_for_tuning"),
     safeForCapabilityUse: safeBoolean(item.safe_for_capability_use),
     capabilityUseStatus: safeString(item.capability_use_status, "not_exposed"),
     currentAccessMode: safeString(item.current_access_mode),
@@ -2223,6 +2278,26 @@ function parseFrancisBodySurfaceCapabilityExposure(raw: unknown): FrancisBodySur
     grantsExecutionAuthority: safeBoolean(item.grants_execution_authority),
     grantsMutationAuthority: safeBoolean(item.grants_mutation_authority),
     grantsApprovalAuthority: safeBoolean(item.grants_approval_authority),
+    grantsMemoryWriteAuthority: safeBoolean(item.grants_memory_write_authority),
+    grantsTrainingAuthority: safeBoolean(item.grants_training_authority),
+    detachedMemoryBin: parseDetachedMemoryBinPolicy(item.detached_memory_bin),
+  };
+}
+
+function parseDetachedMemoryBinPolicy(raw: unknown): FrancisDetachedMemoryBinPolicy {
+  const item = isRecord(raw) ? raw : {};
+  return {
+    applies: safeBoolean(item.applies),
+    kind: safeString(item.kind, "developer_bridge.detached_memory_bin_policy"),
+    status: safeString(item.status, "not_applicable"),
+    retainsMemory: safeBoolean(item.retains_memory),
+    requiredForCurrentContext: safeBoolean(item.required_for_current_context),
+    usedByDefault: safeBoolean(item.used_by_default),
+    injectsIntoPromptContext: safeBoolean(item.injects_into_prompt_context),
+    keepsStaleMemoryOutOfRequiredContext: safeBoolean(item.keeps_stale_memory_out_of_required_context, true),
+    promotionRequiresReview: safeBoolean(item.promotion_requires_review, true),
+    canDenyAfterFactForTuning: safeBoolean(item.can_deny_after_fact_for_tuning, true),
+    storesFullTranscript: safeBoolean(item.stores_full_transcript),
     grantsMemoryWriteAuthority: safeBoolean(item.grants_memory_write_authority),
     grantsTrainingAuthority: safeBoolean(item.grants_training_authority),
   };

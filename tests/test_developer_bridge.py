@@ -221,6 +221,14 @@ def test_francis_body_map_exposes_whole_body_without_authority(tmp_path, monkeyp
     assert "model_tuning" in surfaces
     assert surfaces["collaboration"]["access_mode"] == "read"
     assert surfaces["collaboration"]["capability_exposure"]["visible_to_francis1"] is True
+    assert surfaces["collaboration"]["capability_exposure"]["known_surface"] is True
+    assert surfaces["collaboration"]["capability_exposure"]["readback_connected"] is True
+    assert surfaces["collaboration"]["capability_exposure"]["connected_to_local_model"] is False
+    assert surfaces["collaboration"]["capability_exposure"]["capability_granted"] is False
+    assert surfaces["collaboration"]["capability_exposure"]["grant_state"] == "not_granted"
+    assert surfaces["collaboration"]["capability_exposure"]["grantable_after_trust"] is True
+    assert surfaces["collaboration"]["capability_exposure"]["deny_after_grant_supported"] is True
+    assert surfaces["collaboration"]["capability_exposure"]["revocation_state"] == "revocable_for_tuning"
     assert surfaces["collaboration"]["capability_exposure"]["safe_for_capability_use"] is False
     assert surfaces["collaboration"]["capability_exposure"]["capability_use_status"] == "not_exposed"
     assert surfaces["collaboration"]["capability_exposure"]["current_access_mode"] == "read"
@@ -232,6 +240,22 @@ def test_francis_body_map_exposes_whole_body_without_authority(tmp_path, monkeyp
     )
     assert surfaces["collaboration"]["capability_exposure"]["grants_execution_authority"] is False
     assert surfaces["collaboration"]["capability_exposure"]["grants_training_authority"] is False
+    assert surfaces["collaboration"]["capability_exposure"]["detached_memory_bin"]["applies"] is False
+    assert surfaces["memory"]["capability_exposure"]["detached_memory_bin"] == {
+        "applies": True,
+        "kind": "developer_bridge.detached_memory_bin_policy",
+        "status": "detach_if_stale",
+        "retains_memory": True,
+        "required_for_current_context": False,
+        "used_by_default": False,
+        "injects_into_prompt_context": False,
+        "keeps_stale_memory_out_of_required_context": True,
+        "promotion_requires_review": True,
+        "can_deny_after_fact_for_tuning": True,
+        "stores_full_transcript": False,
+        "grants_memory_write_authority": False,
+        "grants_training_authority": False,
+    }
     assert surfaces["action_intake"]["access_mode"] == "request"
     assert surfaces["model_tuning"]["connection_state"] == "candidate"
     assert all(item["grants_execution_authority"] is False for item in result["surfaces"])  # type: ignore[index]
@@ -240,8 +264,9 @@ def test_francis_body_map_exposes_whole_body_without_authority(tmp_path, monkeyp
 
     prompt_line = compact_body_map_prompt_line()
     assert "Body map:" in prompt_line
-    assert "Francis1 can see whole-body surfaces" in prompt_line
-    assert "authority remain false" in prompt_line
+    assert "whole-body visible" in prompt_line
+    assert "not capability connection/grant" in prompt_line
+    assert "stale memory detaches" in prompt_line
     roadmap_gate = compact_roadmap_gate_prompt_line()
     assert "Roadmap:" in roadmap_gate
     assert "ledger first" in roadmap_gate
@@ -404,7 +429,7 @@ def test_francis_body_map_marks_runtime_observation_from_body_trust_turn(tmp_pat
                 "source_agent": "codex",
                 "target_agent": "ollama",
                 "prompt": (
-                    "Body map: Francis1 can see whole-body surfaces; authority remain false. "
+                    "Body map: whole-body visible; not capability connection/grant; stale memory detaches. "
                     "Trust: classify needs; no capability authority."
                 ),
                 "context": "no_action_authority=true.",
@@ -915,8 +940,9 @@ def test_collaboration_driver_waits_for_ollama_before_next_turn(tmp_path, monkey
     prompts = [str(item["prompt"]) for item in transcript["items"]]
     assert len(prompts) == 2
     assert all("Do not add a 'Next best action' line" not in prompt for prompt in prompts)
-    assert all("Body map: Francis1 can see whole-body surfaces" in prompt for prompt in prompts)
-    assert all("authority remain false" in prompt for prompt in prompts)
+    assert all("Body map: whole-body visible" in prompt for prompt in prompts)
+    assert all("not capability connection/grant" in prompt for prompt in prompts)
+    assert all("stale memory detaches" in prompt for prompt in prompts)
     assert all("Roadmap: ledger first" in prompt for prompt in prompts)
     assert all("main-build candidate-only" in prompt for prompt in prompts)
     assert all("blocked_by_open_orb_gaps" in prompt for prompt in prompts)

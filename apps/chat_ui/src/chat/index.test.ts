@@ -352,6 +352,15 @@ test("parseFrancisBodyMap preserves whole-body awareness and quest boundaries", 
         trust_required_for_next_mode: "request",
         capability_exposure: {
           visible_to_francis1: true,
+          known_surface: true,
+          readback_connected: true,
+          connected_to_local_model: false,
+          capability_granted: false,
+          grant_state: "not_granted",
+          grantable_after_trust: true,
+          grant_requires: ["trust_ladder_decision", "codex_or_operator_review", "governed_capability_receipt"],
+          deny_after_grant_supported: true,
+          revocation_state: "revocable_for_tuning",
           safe_for_capability_use: false,
           capability_use_status: "not_exposed",
           current_access_mode: "read",
@@ -364,9 +373,78 @@ test("parseFrancisBodyMap preserves whole-body awareness and quest boundaries", 
           grants_approval_authority: false,
           grants_memory_write_authority: false,
           grants_training_authority: false,
+          detached_memory_bin: {
+            applies: false,
+            kind: "developer_bridge.detached_memory_bin_policy",
+            status: "not_applicable",
+            retains_memory: false,
+            required_for_current_context: false,
+            used_by_default: false,
+            injects_into_prompt_context: false,
+            keeps_stale_memory_out_of_required_context: true,
+            promotion_requires_review: true,
+            can_deny_after_fact_for_tuning: true,
+            stores_full_transcript: false,
+            grants_memory_write_authority: false,
+            grants_training_authority: false,
+          },
         },
         evidence: [{ path: "src/francis/developer_bridge/collaboration.py", observed: true }],
         current_boundary: "conversation output is not authority",
+        grants_execution_authority: false,
+        grants_mutation_authority: false,
+        grants_approval_authority: false,
+        grants_memory_write_authority: false,
+        grants_training_authority: false,
+      },
+      {
+        id: "memory",
+        label: "Continuity and memory receipts",
+        description: "chat continuity ledger",
+        connection_state: "connected_partial",
+        access_mode: "read",
+        trust_required_for_next_mode: "request",
+        capability_exposure: {
+          visible_to_francis1: true,
+          known_surface: true,
+          readback_connected: true,
+          connected_to_local_model: false,
+          capability_granted: false,
+          grant_state: "not_granted",
+          grantable_after_trust: true,
+          grant_requires: ["trust_ladder_decision", "codex_or_operator_review", "governed_capability_receipt"],
+          deny_after_grant_supported: true,
+          revocation_state: "revocable_for_tuning",
+          safe_for_capability_use: false,
+          capability_use_status: "not_exposed",
+          current_access_mode: "read",
+          next_trust_gate: "request",
+          requires_governed_request: true,
+          requires_codex_or_operator_review_before_capability_exposure: true,
+          reason: "Memory exists, but stale memory is detached from required context.",
+          grants_execution_authority: false,
+          grants_mutation_authority: false,
+          grants_approval_authority: false,
+          grants_memory_write_authority: false,
+          grants_training_authority: false,
+          detached_memory_bin: {
+            applies: true,
+            kind: "developer_bridge.detached_memory_bin_policy",
+            status: "detach_if_stale",
+            retains_memory: true,
+            required_for_current_context: false,
+            used_by_default: false,
+            injects_into_prompt_context: false,
+            keeps_stale_memory_out_of_required_context: true,
+            promotion_requires_review: true,
+            can_deny_after_fact_for_tuning: true,
+            stores_full_transcript: false,
+            grants_memory_write_authority: false,
+            grants_training_authority: false,
+          },
+        },
+        evidence: [{ path: "src/francis/chat/continuity/ledger.py", observed: true }],
+        current_boundary: "Memory exists, but stale memory is detached from required context.",
         grants_execution_authority: false,
         grants_mutation_authority: false,
         grants_approval_authority: false,
@@ -547,9 +625,30 @@ test("parseFrancisBodyMap preserves whole-body awareness and quest boundaries", 
   assert.equal(bodyMap.surfaces[0]?.id, "collaboration");
   assert.equal(bodyMap.surfaces[0]?.accessMode, "read");
   assert.equal(bodyMap.surfaces[0]?.capabilityExposure.visibleToFrancis1, true);
+  assert.equal(bodyMap.surfaces[0]?.capabilityExposure.knownSurface, true);
+  assert.equal(bodyMap.surfaces[0]?.capabilityExposure.readbackConnected, true);
+  assert.equal(bodyMap.surfaces[0]?.capabilityExposure.connectedToLocalModel, false);
+  assert.equal(bodyMap.surfaces[0]?.capabilityExposure.capabilityGranted, false);
+  assert.equal(bodyMap.surfaces[0]?.capabilityExposure.grantState, "not_granted");
+  assert.equal(bodyMap.surfaces[0]?.capabilityExposure.grantableAfterTrust, true);
+  assert.deepEqual(bodyMap.surfaces[0]?.capabilityExposure.grantRequires, [
+    "trust_ladder_decision",
+    "codex_or_operator_review",
+    "governed_capability_receipt",
+  ]);
+  assert.equal(bodyMap.surfaces[0]?.capabilityExposure.denyAfterGrantSupported, true);
+  assert.equal(bodyMap.surfaces[0]?.capabilityExposure.revocationState, "revocable_for_tuning");
   assert.equal(bodyMap.surfaces[0]?.capabilityExposure.safeForCapabilityUse, false);
   assert.equal(bodyMap.surfaces[0]?.capabilityExposure.capabilityUseStatus, "not_exposed");
   assert.equal(bodyMap.surfaces[0]?.capabilityExposure.nextTrustGate, "request");
+  assert.equal(bodyMap.surfaces[0]?.capabilityExposure.detachedMemoryBin.applies, false);
+  assert.equal(bodyMap.surfaces[1]?.id, "memory");
+  assert.equal(bodyMap.surfaces[1]?.capabilityExposure.detachedMemoryBin.applies, true);
+  assert.equal(bodyMap.surfaces[1]?.capabilityExposure.detachedMemoryBin.status, "detach_if_stale");
+  assert.equal(bodyMap.surfaces[1]?.capabilityExposure.detachedMemoryBin.retainsMemory, true);
+  assert.equal(bodyMap.surfaces[1]?.capabilityExposure.detachedMemoryBin.requiredForCurrentContext, false);
+  assert.equal(bodyMap.surfaces[1]?.capabilityExposure.detachedMemoryBin.injectsIntoPromptContext, false);
+  assert.equal(bodyMap.surfaces[1]?.capabilityExposure.detachedMemoryBin.canDenyAfterFactForTuning, true);
   assert.equal(bodyMap.surfaces[0]?.grantsExecutionAuthority, false);
   assert.equal(bodyMap.surfaces[0]?.evidence[0]?.observed, true);
   const surfaceExposure = francisBodySurfaceExposureSummary(bodyMap.surfaces[0]!);
@@ -563,14 +662,20 @@ test("parseFrancisBodyMap preserves whole-body awareness and quest boundaries", 
   );
   assert.equal(
     surfaceExposure.capabilityLine,
-    "visible true / safe use false / request true / codex review true",
+    "visible true / connected false / granted false / safe use false / request true / codex review true",
   );
   assert.deepEqual(surfaceExposure.detail, [
     "state connected",
     "access read",
     "next trust request",
     "capability not_exposed",
+    "grant not_granted",
+    "grantable after trust true",
+    "deny after grant true",
+    "revocation revocable_for_tuning",
     "visible true",
+    "connected false",
+    "granted false",
     "safe use false",
     "execute false",
     "mutation false",
