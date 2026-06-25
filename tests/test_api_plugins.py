@@ -69,7 +69,12 @@ def test_plugins_forge_proposal_review_supports_long_windows_artifact_paths(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
-    data_root = tmp_path / "long_path_case" / "francis_data"
+    base_data_root = tmp_path / "long_path_case" / "francis_data"
+    # Keep the generated plugin zip below Windows MAX_PATH while the later
+    # proposal receipt crosses it.
+    extra_chars = max(0, 195 - len(str(base_data_root)))
+    long_path_segment = "long_path_case_" + ("x" * extra_chars)
+    data_root = tmp_path / long_path_segment / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
 
     from fastapi.testclient import TestClient
