@@ -94341,6 +94341,62 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, and unrelated full-repo suites were not run
   for this bounded developer-bridge/Chat UI slice.
 
+### 2026-06-25 19:41Z - Francis1 verified-surface reply contract tightened
+
+Current posture: Phase 2 / developer bridge collaboration support now gives the
+local Francis1/Ollama participant a stricter answer shape when Codex has already
+provided a verified current artifact. This is a prompt-contract improvement for
+the collaboration path, not a model-training or authority expansion change.
+
+What changed:
+
+- Added a verified-surface reply contract to
+  `francis.developer_bridge.ollama_participant` for collaboration relay prompts
+  that say `Reply: issue/gap/risk; artifact` or name a `Current artifact`.
+- The contract asks Francis1 to answer with `Issue/gap/risk:` and `Artifact:`
+  lines, and explicitly forbids clarification requests, inspection/review/create
+  claims, next-step lines, and protocol-mechanics commentary.
+- Added a focused regression test proving a structured verified-surface Francis1
+  reply passes the existing output guard unchanged.
+- Kept the output guard intact: known drift, clarification dependency, and
+  unauthorized action/review claims still rewrite to bounded no-authority drift
+  receipts.
+- Restarted the bounded `ollama_codex_participant` helper so the live local
+  participant picked up the prompt-contract change.
+
+Validation:
+
+- Ruff passed for `src\francis\developer_bridge\ollama_participant.py` and
+  `tests\test_developer_bridge.py`.
+- Mypy passed for `src\francis\developer_bridge\ollama_participant.py`.
+- Focused backend pytest passed:
+  `.\.venv\Scripts\python.exe -m pytest -q tests/test_developer_bridge.py -k
+  "ollama_participant_passes_structured_verified_surface_reply or
+  rewrites_verified_surface_drift or replies_through_existing_memory_prompt_path"`.
+- `git diff --check` passed.
+- Runtime supervisor restarted the bounded Ollama participant and reported all
+  three collaboration helpers running.
+- Live runtime health after restart reported `status=healthy`,
+  `helper_count=3`, and the new Ollama participant process pair running as a
+  wrapper/child pair.
+- Live relay proof after restart showed turn `1147` completed as
+  `Francis1 reply via Ollama` to current artifact `api.routes.chat.mission_ingress`
+  instead of an output-guard drift fallback. The reply still remained advisory
+  and did not grant execution, mutation, approval, training, or memory-write
+  authority.
+
+Remaining truthful gap:
+
+- This does not tune or train the local model; it only narrows the governed
+  prompt contract for verified-surface collaboration turns.
+- The model may still produce imperfect prose, and the output guard remains the
+  safety boundary for drift or authority-claim rewrites.
+- Existing learning receipts still show prior output-guard drift through turn
+  `1146`; this slice only proves the next live turn had a passing reply path
+  after restart.
+- `.\scripts\check.ps1`, GitHub CI, and unrelated full-repo suites were not run
+  for this bounded prompt-contract slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

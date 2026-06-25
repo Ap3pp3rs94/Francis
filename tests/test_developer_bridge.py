@@ -2570,6 +2570,55 @@ def test_ollama_participant_rewrites_verified_surface_drift_without_raw_model_re
     assert "Model output guard replaced a known drift reply" in response["context"]
 
 
+def test_ollama_participant_passes_structured_verified_surface_reply(
+    tmp_path,
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+    source = submit_collaboration_prompt(
+        source_agent="codex",
+        target_agent="ollama",
+        objective="Verified surface prompt",
+        prompt=(
+            "Francis1 turn 12. Topic: the exact review receipt a Codex implementation session should read before "
+            "editing collaboration code. Reply: issue/gap/risk; artifact. Current artifact: "
+            "developer_bridge.collaboration_review.items. Prior check: Review candidate insight-live: "
+            "surface=developer_bridge.collaboration_review.items; verified=existing; build_or_wire=false. "
+            "Codex response: I am inspecting that surface before edits; continue from it, do not request user "
+            "confirmation or a missing surface."
+        ),
+    )
+    captured_prompts: list[str] = []
+
+    def fake_generate(prompt: str) -> str:
+        captured_prompts.append(prompt)
+        return (
+            "Issue/gap/risk: my receipt must stay candidate-only until repo truth confirms the typed review item.\n"
+            "Artifact: developer_bridge.collaboration_review.items"
+        )
+
+    monkeypatch.setattr("francis.developer_bridge.ollama_participant.generate", fake_generate)
+
+    result = ollama_respond_once(cooldown_seconds=0)
+
+    assert result["status"] == "responded"
+    assert result["source_prompt_id"] == source["prompt_id"]
+    assert captured_prompts
+    assert "reply in exactly two lines" in captured_prompts[0]
+    assert "Issue/gap/risk: <one concrete risk tied to the current artifact>" in captured_prompts[0]
+    output_guard = result["execution_trace"]["output_guard"]
+    assert output_guard["status"] == "passed"
+    assert output_guard["verified_surface"] == "developer_bridge.collaboration_review.items"
+    transcript = read_collaboration_transcript(source_agent="ollama", target_agent="codex")
+    assert transcript["count"] == 1
+    response = transcript["items"][0]
+    assert str(response["objective"]).startswith("Francis1 reply via Ollama")
+    assert response["prompt"] == (
+        "Issue/gap/risk: my receipt must stay candidate-only until repo truth confirms the typed review item.\n"
+        "Artifact: developer_bridge.collaboration_review.items"
+    )
+
+
 def test_ollama_participant_rewrites_clarification_dependency_after_current_artifact(
     tmp_path,
     monkeypatch,

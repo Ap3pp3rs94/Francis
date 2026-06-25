@@ -31,6 +31,14 @@ _DEFAULT_COOLDOWN_SECONDS = 120.0
 _ACTOR = "developer_bridge.ollama"
 _AGENT = "ollama"
 _IDENTITY = "francis1"
+_COLLABORATION_REPLY_CONTRACT = (
+    "If the source message says 'Reply: issue/gap/risk; artifact' or names a Current artifact, "
+    "reply in exactly two lines:\n"
+    "Issue/gap/risk: <one concrete risk tied to the current artifact>\n"
+    "Artifact: <the Current artifact value>\n"
+    "Do not ask a question, request clarification, say you will inspect/review/create anything, "
+    "add a next-step line, or discuss protocol mechanics."
+)
 
 
 def respond_once(
@@ -337,6 +345,7 @@ def _build_model_input(item: dict[str, object]) -> str:
         "Do not append a generic 'Next best action' line unless the source explicitly asks for one. "
         "When the source gives a Current artifact or verified surface, do not ask Codex to clarify; "
         "name your issue, evidence gap, or risk from that artifact. "
+        f"{_COLLABORATION_REPLY_CONTRACT} "
         "Do not claim execution, mutation, approval, shell access, commits, pushes, hidden perception, training, or memory-write authority."
     )
 
