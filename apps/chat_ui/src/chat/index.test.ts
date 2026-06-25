@@ -15,6 +15,7 @@ import {
   collaborationRuntimeLearningSignalSummary,
   collaborationRuntimeRecurrenceSummary,
   collaborationRuntimeReviewReceiptSummary,
+  collaborationSubstrateChecklistSummary,
   collaborationTranscriptAuditSummary,
   formatCollaborationRelayMessage,
   isCollaborationAuditReceipt,
@@ -528,6 +529,21 @@ test("parseCollaborationSubstrateReadiness preserves main-build prompt gate", ()
   assert.equal(readiness.sourceReadbacks.body_map, "developer_bridge.francis_body_map");
   assert.equal(readiness.governance.executes_prompt, false);
   assert.equal(readiness.governance.grants_repo_mutation_authority, false);
+
+  const checklistSummary = collaborationSubstrateChecklistSummary(readiness);
+  assert.equal(checklistSummary.badge, "checklist blocked 1");
+  assert.equal(checklistSummary.tone, "blocked");
+  assert.equal(checklistSummary.totalCount, 2);
+  assert.equal(checklistSummary.passedCount, 1);
+  assert.equal(checklistSummary.blockedCount, 1);
+  assert.deepEqual(checklistSummary.detail, [
+    "passed 1/2",
+    "blocking 1",
+    "review 0",
+    "gate blocked_by_open_orb_gaps",
+    "wire 100%",
+    "authority none true",
+  ]);
 });
 
 test("parseFrancisTrustLadder preserves decisions and no-authority boundaries", () => {

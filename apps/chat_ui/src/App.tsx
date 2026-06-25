@@ -32,6 +32,7 @@ import {
   collaborationRuntimeLearningReceiptSummary,
   collaborationRuntimeLearningSignalSummary,
   collaborationRuntimeReviewReceiptSummary,
+  collaborationSubstrateChecklistSummary,
   formatCollaborationRelayMessage,
   isCollaborationAuditReceipt,
   preserveCollaborationReadbackDuringWarming,
@@ -1340,8 +1341,9 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
   const runtimeProcessModelLabel =
     runtimeProcessModels.length === 1 ? runtimeProcessModels[0] : runtimeProcessModels.length > 1 ? runtimeProcessModels.join(", ") : "unknown";
   const substrateSummary = substrateReadiness?.summary;
+  const substrateChecklistItems = substrateReadiness?.checklist ?? [];
+  const substrateChecklistProof = collaborationSubstrateChecklistSummary(substrateReadiness);
   const substrateBlockedItems = substrateReadiness?.checklist.filter((item) => item.blocksMainBuildPrompt && item.status !== "passed") ?? [];
-  const substrateChecklistPreview = substrateReadiness?.checklist.filter((item) => item.status !== "passed").slice(0, 4) ?? [];
   const bodyMapSurfaces = bodyMap?.surfaces ?? [];
   const bodyMapQuest = bodyMap?.quest;
   const bodyCoverageReview = bodyMap?.coverageReview;
@@ -1526,22 +1528,81 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
         <p style={{ color: "#e2e8f0", margin: "12px 0 0", overflowWrap: "anywhere" }}>
           {substrateReadiness?.nextAction || "Readiness readback is still loading."}
         </p>
-        <div style={{ color: "#94a3b8", display: "flex", flexWrap: "wrap", fontSize: 12, gap: 8, marginTop: 12 }}>
-          {(substrateChecklistPreview.length ? substrateChecklistPreview : substrateReadiness?.checklist.slice(0, 4) ?? []).map((item) => (
+        <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "space-between", marginTop: 14 }}>
+          <span style={{ color: "#dbeafe", fontSize: 15, fontWeight: 700 }}>Substrate Checklist</span>
+          <span
+            style={{
+              border: `1px solid ${
+                substrateChecklistProof.tone === "ready" ? "#6ee7b7" : substrateChecklistProof.tone === "blocked" ? "#fca5a5" : "#cbd5e1"
+              }`,
+              borderRadius: 999,
+              color: substrateChecklistProof.tone === "blocked" ? "#fecaca" : "#d1fae5",
+              fontSize: 12,
+              fontWeight: 700,
+              padding: "4px 8px",
+            }}
+          >
+            {substrateChecklistProof.badge}
+          </span>
+        </div>
+        <div style={{ color: "#94a3b8", display: "flex", flexWrap: "wrap", fontSize: 12, gap: 8, marginTop: 10 }}>
+          {substrateChecklistProof.detail.map((item) => (
             <span
-              key={item.id || item.label}
+              key={item}
               style={{
-                background: item.status === "passed" ? "rgba(20, 83, 45, 0.28)" : "rgba(127, 29, 29, 0.24)",
-                border: `1px solid ${item.status === "passed" ? "rgba(110, 231, 183, 0.42)" : "rgba(252, 165, 165, 0.42)"}`,
+                background: "rgba(15, 23, 42, 0.7)",
+                border: "1px solid rgba(148, 163, 184, 0.2)",
                 borderRadius: 999,
-                color: item.status === "passed" ? "#d1fae5" : "#fecaca",
                 maxWidth: "100%",
                 overflowWrap: "anywhere",
                 padding: "4px 8px",
               }}
             >
-              {item.label} / {item.status}
+              {item}
             </span>
+          ))}
+        </div>
+        <div
+          style={{
+            borderTop: "1px solid rgba(148, 163, 184, 0.18)",
+            display: "grid",
+            gap: 0,
+            marginTop: 10,
+            maxHeight: 260,
+            overflowY: "auto",
+          }}
+        >
+          {(substrateChecklistItems.length ? substrateChecklistItems : []).map((item) => (
+            <div
+              key={item.id || item.label}
+              style={{
+                borderBottom: "1px solid rgba(148, 163, 184, 0.16)",
+                display: "grid",
+                gap: 6,
+                padding: "10px 0",
+              }}
+            >
+              <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "space-between" }}>
+                <span style={{ color: "#e2e8f0", fontWeight: 700, overflowWrap: "anywhere" }}>{item.label}</span>
+                <span
+                  style={{
+                    background: item.status === "passed" ? "rgba(20, 83, 45, 0.28)" : "rgba(127, 29, 29, 0.24)",
+                    border: `1px solid ${item.status === "passed" ? "rgba(110, 231, 183, 0.42)" : "rgba(252, 165, 165, 0.42)"}`,
+                    borderRadius: 999,
+                    color: item.status === "passed" ? "#d1fae5" : "#fecaca",
+                    fontSize: 12,
+                    padding: "3px 8px",
+                  }}
+                >
+                  {item.status}
+                </span>
+              </div>
+              <div style={{ color: "#cbd5e1", fontSize: 13, overflowWrap: "anywhere" }}>{item.detail}</div>
+              <div style={{ color: "#93c5fd", fontSize: 12, overflowWrap: "anywhere" }}>evidence {item.evidence}</div>
+              {item.blocksMainBuildPrompt ? (
+                <div style={{ color: "#fecaca", fontSize: 12 }}>blocks main build prompt</div>
+              ) : null}
+            </div>
           ))}
         </div>
         <div style={{ color: "#94a3b8", display: "flex", flexWrap: "wrap", fontSize: 12, gap: 10, marginTop: 10 }}>

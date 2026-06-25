@@ -286,6 +286,16 @@ export type CollaborationRuntimeLocalModelResponseDisplay = {
   detail: string[];
 };
 
+export type CollaborationSubstrateChecklistDisplay = {
+  badge: string;
+  tone: CollaborationReviewTone;
+  totalCount: number;
+  passedCount: number;
+  blockedCount: number;
+  reviewCount: number;
+  detail: string[];
+};
+
 export type FrancisBodySurface = {
   id: string;
   label: string;
@@ -1338,6 +1348,51 @@ export function collaborationRuntimeLocalModelResponseSummary(
       `age ${ageText(response.ageSeconds)}`,
       `training ${actionBoundaryBool(response.grantsTrainingAuthority)}`,
       `memory write ${actionBoundaryBool(response.grantsMemoryWriteAuthority)}`,
+    ],
+  };
+}
+
+export function collaborationSubstrateChecklistSummary(
+  readiness: CollaborationSubstrateReadiness | null | undefined,
+): CollaborationSubstrateChecklistDisplay {
+  const items = readiness?.checklist ?? [];
+  const totalCount = items.length;
+  const passedCount = items.filter((item) => item.status === "passed").length;
+  const blockedCount = items.filter((item) => item.status !== "passed" && item.blocksMainBuildPrompt).length;
+  const reviewCount = items.filter((item) => item.status !== "passed" && !item.blocksMainBuildPrompt).length;
+  if (!totalCount) {
+    return {
+      badge: "checklist unknown",
+      tone: "neutral",
+      totalCount: 0,
+      passedCount: 0,
+      blockedCount: 0,
+      reviewCount: 0,
+      detail: ["passed 0/0", "blocking 0", "review 0", "gate unknown", "authority none false"],
+    };
+  }
+  const authorityNone = Boolean(readiness?.summary.noAuthorityGranted);
+  const tone = blockedCount > 0 ? "blocked" : reviewCount > 0 ? "neutral" : "ready";
+  const badge =
+    blockedCount > 0
+      ? `checklist blocked ${blockedCount}`
+      : reviewCount > 0
+        ? `checklist review ${reviewCount}`
+        : "checklist passed";
+  return {
+    badge,
+    tone,
+    totalCount,
+    passedCount,
+    blockedCount,
+    reviewCount,
+    detail: [
+      `passed ${passedCount}/${totalCount}`,
+      `blocking ${blockedCount}`,
+      `review ${reviewCount}`,
+      `gate ${readiness?.summary.mainBuildPromptGate || "unknown"}`,
+      `wire ${readiness?.summary.boundedWiringPercentComplete ?? 0}%`,
+      `authority none ${actionBoundaryBool(authorityNone)}`,
     ],
   };
 }

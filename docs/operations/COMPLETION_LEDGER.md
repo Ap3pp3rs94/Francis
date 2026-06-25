@@ -94450,6 +94450,45 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, and unrelated full-repo suites were not run
   for this bounded runtime-health/UI slice.
 
+### 2026-06-25 19:55Z - Substrate-complete checklist made operator-visible
+
+Current posture: Phase 2 / developer bridge collaboration support now renders
+the existing substrate-complete checklist explicitly in the Chat UI Substrate
+Readiness surface. This is an operator-visibility improvement for the existing
+read-only checklist; it does not change roadmap direction, main-build prompt
+permission, training, execution, mutation, approval, or memory-write authority.
+
+What changed:
+
+- Added a tested Chat UI checklist summary for the existing
+  `developer_bridge.collaboration_substrate_readiness.checklist` readback.
+- The Substrate Readiness card now shows pass/block/review counts, the active
+  main-build gate, wiring percentage, and authority-none status.
+- The UI now renders checklist items as bounded scrollable rows with label,
+  status, detail, evidence, and whether the item blocks main-build prompting.
+- The backend readiness contract remains unchanged and read-only.
+
+Validation:
+
+- Chat UI tests passed:
+  `npm run test -- --test-name-pattern=parseCollaborationSubstrateReadiness`.
+- Chat UI production build passed with `npm run build`.
+- `git diff --check` passed.
+- Browser proof captured `http://127.0.0.1:5173/` at
+  `output/playwright/collaboration-substrate-checklist.png`; the page returned
+  HTTP 200 and showed the Substrate Checklist with `passed 6/8`, `blocking 2`,
+  `gate blocked_by_open_orb_gaps`, and scrollable checklist rows.
+
+Remaining truthful gap:
+
+- This does not close the two blocking checklist items: open ORB coverage gaps
+  and partial Phase 2 posture still block unsupervised main-build prompting.
+- This does not train or tune the local model; it only makes the existing
+  checklist visible enough for the operator and Francis1 collaboration loop to
+  reason from it.
+- `.\scripts\check.ps1`, GitHub CI, backend tests, and unrelated full-repo
+  suites were not run for this bounded Chat UI visibility slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
