@@ -135,6 +135,7 @@ def read_francis_body_map() -> dict[str, object]:
             "body_surface": "A known Francis subsystem Francis1 may be aware of without receiving authority to use it.",
             "access_mode": "The highest declared interaction mode this readback exposes to Francis1 today.",
             "connection_state": "Whether the surface is wired to this collaboration readback, partially connected elsewhere, candidate-only, blocked, or unknown.",
+            "capability_exposure": "A per-surface verdict separating Francis1 visibility from permission to use that capability.",
             "coverage_review": "A read-only map from canonical ORB planes to known Francis surfaces; it is not capability completion.",
         },
         "evidence": {
@@ -369,6 +370,29 @@ def _surface(
         "trust_required_for_next_mode": _next_trust_mode(access_mode),
         "evidence": evidence,
         "current_boundary": current_boundary,
+        "capability_exposure": _surface_capability_exposure(
+            access_mode=access_mode,
+            current_boundary=current_boundary,
+        ),
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "grants_approval_authority": False,
+        "grants_memory_write_authority": False,
+        "grants_training_authority": False,
+    }
+
+
+def _surface_capability_exposure(*, access_mode: str, current_boundary: str) -> dict[str, object]:
+    return {
+        "visible_to_francis1": True,
+        "safe_for_capability_use": False,
+        "capability_use_status": "not_exposed",
+        "current_access_mode": access_mode,
+        "next_trust_gate": _next_trust_mode(access_mode),
+        "requires_governed_request": True,
+        "requires_codex_or_operator_review_before_capability_exposure": True,
+        "reason": current_boundary
+        or "Surface is visible for awareness only; capability use requires trust-ladder review and governed approval.",
         "grants_execution_authority": False,
         "grants_mutation_authority": False,
         "grants_approval_authority": False,

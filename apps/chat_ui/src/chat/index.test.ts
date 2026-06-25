@@ -271,6 +271,21 @@ test("parseFrancisBodyMap preserves whole-body awareness and quest boundaries", 
         connection_state: "connected",
         access_mode: "read",
         trust_required_for_next_mode: "request",
+        capability_exposure: {
+          visible_to_francis1: true,
+          safe_for_capability_use: false,
+          capability_use_status: "not_exposed",
+          current_access_mode: "read",
+          next_trust_gate: "request",
+          requires_governed_request: true,
+          requires_codex_or_operator_review_before_capability_exposure: true,
+          reason: "conversation output is not authority",
+          grants_execution_authority: false,
+          grants_mutation_authority: false,
+          grants_approval_authority: false,
+          grants_memory_write_authority: false,
+          grants_training_authority: false,
+        },
         evidence: [{ path: "src/francis/developer_bridge/collaboration.py", observed: true }],
         current_boundary: "conversation output is not authority",
         grants_execution_authority: false,
@@ -452,10 +467,14 @@ test("parseFrancisBodyMap preserves whole-body awareness and quest boundaries", 
   assert.equal(bodyMap.quest.singleTimeline[0]?.targetDuration, "30-45 minutes");
   assert.equal(bodyMap.surfaces[0]?.id, "collaboration");
   assert.equal(bodyMap.surfaces[0]?.accessMode, "read");
+  assert.equal(bodyMap.surfaces[0]?.capabilityExposure.visibleToFrancis1, true);
+  assert.equal(bodyMap.surfaces[0]?.capabilityExposure.safeForCapabilityUse, false);
+  assert.equal(bodyMap.surfaces[0]?.capabilityExposure.capabilityUseStatus, "not_exposed");
+  assert.equal(bodyMap.surfaces[0]?.capabilityExposure.nextTrustGate, "request");
   assert.equal(bodyMap.surfaces[0]?.grantsExecutionAuthority, false);
   assert.equal(bodyMap.surfaces[0]?.evidence[0]?.observed, true);
   const surfaceExposure = francisBodySurfaceExposureSummary(bodyMap.surfaces[0]!);
-  assert.equal(surfaceExposure.badge, "read only");
+  assert.equal(surfaceExposure.badge, "not_exposed");
   assert.equal(surfaceExposure.tone, "ready");
   assert.equal(surfaceExposure.boundary, "conversation output is not authority");
   assert.equal(surfaceExposure.evidenceLine, "src/francis/developer_bridge/collaboration.py observed");
@@ -463,10 +482,17 @@ test("parseFrancisBodyMap preserves whole-body awareness and quest boundaries", 
     surfaceExposure.authorityLine,
     "execute false / mutation false / approve false / memory write false / training false",
   );
+  assert.equal(
+    surfaceExposure.capabilityLine,
+    "visible true / safe use false / request true / codex review true",
+  );
   assert.deepEqual(surfaceExposure.detail, [
     "state connected",
     "access read",
     "next trust request",
+    "capability not_exposed",
+    "visible true",
+    "safe use false",
     "execute false",
     "mutation false",
     "approve false",

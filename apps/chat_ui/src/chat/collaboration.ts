@@ -334,11 +334,28 @@ export type FrancisBodySurface = {
   connectionState: string;
   accessMode: string;
   trustRequiredForNextMode: string;
+  capabilityExposure: FrancisBodySurfaceCapabilityExposure;
   evidence: {
     path: string;
     observed: boolean;
   }[];
   currentBoundary: string;
+  grantsExecutionAuthority: boolean;
+  grantsMutationAuthority: boolean;
+  grantsApprovalAuthority: boolean;
+  grantsMemoryWriteAuthority: boolean;
+  grantsTrainingAuthority: boolean;
+};
+
+export type FrancisBodySurfaceCapabilityExposure = {
+  visibleToFrancis1: boolean;
+  safeForCapabilityUse: boolean;
+  capabilityUseStatus: string;
+  currentAccessMode: string;
+  nextTrustGate: string;
+  requiresGovernedRequest: boolean;
+  requiresCodexOrOperatorReviewBeforeCapabilityExposure: boolean;
+  reason: string;
   grantsExecutionAuthority: boolean;
   grantsMutationAuthority: boolean;
   grantsApprovalAuthority: boolean;
@@ -352,6 +369,7 @@ export type FrancisBodySurfaceDisplay = {
   boundary: string;
   evidenceLine: string;
   authorityLine: string;
+  capabilityLine: string;
   detail: string[];
 };
 
@@ -1280,14 +1298,27 @@ export function francisBodySurfaceExposureSummary(surface: FrancisBodySurface): 
     surface.grantsMutationAuthority ||
     surface.grantsApprovalAuthority ||
     surface.grantsMemoryWriteAuthority ||
-    surface.grantsTrainingAuthority;
+    surface.grantsTrainingAuthority ||
+    surface.capabilityExposure.grantsExecutionAuthority ||
+    surface.capabilityExposure.grantsMutationAuthority ||
+    surface.capabilityExposure.grantsApprovalAuthority ||
+    surface.capabilityExposure.grantsMemoryWriteAuthority ||
+    surface.capabilityExposure.grantsTrainingAuthority ||
+    surface.capabilityExposure.safeForCapabilityUse;
   const evidenceItems = surface.evidence
     .filter((item) => item.path)
     .map((item) => `${item.path} ${item.observed ? "observed" : "missing"}`);
   const evidenceLine = evidenceItems.length ? evidenceItems.slice(0, 3).join(" / ") : "no evidence paths reported";
-  const boundary = surface.currentBoundary || "capability exposure requires trust-gated review";
+  const boundary =
+    surface.capabilityExposure.reason ||
+    surface.currentBoundary ||
+    "capability exposure requires trust-gated review";
   return {
-    badge: unsafeAuthority ? "authority visible" : `${surface.accessMode || "observe"} only`,
+    badge: unsafeAuthority
+      ? "authority visible"
+      : surface.capabilityExposure.visibleToFrancis1
+        ? `${surface.capabilityExposure.capabilityUseStatus || "not_exposed"}`
+        : `${surface.accessMode || "observe"} only`,
     tone: unsafeAuthority ? "blocked" : "ready",
     boundary,
     evidenceLine: evidenceItems.length > 3 ? `${evidenceLine} / +${evidenceItems.length - 3} more` : evidenceLine,
@@ -1296,10 +1327,18 @@ export function francisBodySurfaceExposureSummary(surface: FrancisBodySurface): 
     )} / approve ${actionBoundaryBool(surface.grantsApprovalAuthority)} / memory write ${actionBoundaryBool(
       surface.grantsMemoryWriteAuthority,
     )} / training ${actionBoundaryBool(surface.grantsTrainingAuthority)}`,
+    capabilityLine: `visible ${actionBoundaryBool(surface.capabilityExposure.visibleToFrancis1)} / safe use ${actionBoundaryBool(
+      surface.capabilityExposure.safeForCapabilityUse,
+    )} / request ${actionBoundaryBool(surface.capabilityExposure.requiresGovernedRequest)} / codex review ${actionBoundaryBool(
+      surface.capabilityExposure.requiresCodexOrOperatorReviewBeforeCapabilityExposure,
+    )}`,
     detail: [
       `state ${surface.connectionState || "unknown"}`,
-      `access ${surface.accessMode || "observe"}`,
-      `next trust ${surface.trustRequiredForNextMode || "review"}`,
+      `access ${surface.capabilityExposure.currentAccessMode || surface.accessMode || "observe"}`,
+      `next trust ${surface.capabilityExposure.nextTrustGate || surface.trustRequiredForNextMode || "review"}`,
+      `capability ${surface.capabilityExposure.capabilityUseStatus || "not_exposed"}`,
+      `visible ${actionBoundaryBool(surface.capabilityExposure.visibleToFrancis1)}`,
+      `safe use ${actionBoundaryBool(surface.capabilityExposure.safeForCapabilityUse)}`,
       `execute ${actionBoundaryBool(surface.grantsExecutionAuthority)}`,
       `mutation ${actionBoundaryBool(surface.grantsMutationAuthority)}`,
       `approve ${actionBoundaryBool(surface.grantsApprovalAuthority)}`,
@@ -2037,6 +2076,7 @@ function parseFrancisBodySurface(raw: unknown): FrancisBodySurface {
     connectionState: safeString(item.connection_state, "unknown"),
     accessMode: safeString(item.access_mode, "observe"),
     trustRequiredForNextMode: safeString(item.trust_required_for_next_mode),
+    capabilityExposure: parseFrancisBodySurfaceCapabilityExposure(item.capability_exposure),
     evidence: Array.isArray(item.evidence)
       ? item.evidence.map((entry) => {
           const evidence = isRecord(entry) ? entry : {};
@@ -2047,6 +2087,28 @@ function parseFrancisBodySurface(raw: unknown): FrancisBodySurface {
         })
       : [],
     currentBoundary: safeString(item.current_boundary),
+    grantsExecutionAuthority: safeBoolean(item.grants_execution_authority),
+    grantsMutationAuthority: safeBoolean(item.grants_mutation_authority),
+    grantsApprovalAuthority: safeBoolean(item.grants_approval_authority),
+    grantsMemoryWriteAuthority: safeBoolean(item.grants_memory_write_authority),
+    grantsTrainingAuthority: safeBoolean(item.grants_training_authority),
+  };
+}
+
+function parseFrancisBodySurfaceCapabilityExposure(raw: unknown): FrancisBodySurfaceCapabilityExposure {
+  const item = isRecord(raw) ? raw : {};
+  return {
+    visibleToFrancis1: safeBoolean(item.visible_to_francis1),
+    safeForCapabilityUse: safeBoolean(item.safe_for_capability_use),
+    capabilityUseStatus: safeString(item.capability_use_status, "not_exposed"),
+    currentAccessMode: safeString(item.current_access_mode),
+    nextTrustGate: safeString(item.next_trust_gate),
+    requiresGovernedRequest: safeBoolean(item.requires_governed_request, true),
+    requiresCodexOrOperatorReviewBeforeCapabilityExposure: safeBoolean(
+      item.requires_codex_or_operator_review_before_capability_exposure,
+      true,
+    ),
+    reason: safeString(item.reason),
     grantsExecutionAuthority: safeBoolean(item.grants_execution_authority),
     grantsMutationAuthority: safeBoolean(item.grants_mutation_authority),
     grantsApprovalAuthority: safeBoolean(item.grants_approval_authority),

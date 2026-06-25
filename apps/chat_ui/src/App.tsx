@@ -2546,6 +2546,10 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
                     <dt style={{ color: "#94a3b8" }}>Authority</dt>
                     <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{surfaceExposure.authorityLine}</dd>
                   </div>
+                  <div>
+                    <dt style={{ color: "#94a3b8" }}>Capability Exposure</dt>
+                    <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{surfaceExposure.capabilityLine}</dd>
+                  </div>
                 </dl>
                 <div style={{ color: "#94a3b8", display: "flex", flexWrap: "wrap", fontSize: 12, gap: 8, marginTop: 8 }}>
                   {surfaceExposure.detail.map((line) => (

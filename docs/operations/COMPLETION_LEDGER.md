@@ -95438,6 +95438,65 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, and unrelated full-system UI flows were not
   run for this bounded collaboration-review preflight slice.
 
+### 2026-06-25 22:18Z - Francis body-map surfaces expose capability-use verdict
+
+Current posture: Phase 2 / developer bridge body-map support now separates
+Francis1 surface visibility from permission to use those surfaces as
+capabilities. The body map can show Francis1 the whole local body while keeping
+capability use, mutation, execution, approval, memory-write, training, and
+main-build authority explicitly false.
+
+What changed:
+
+- Each developer-bridge body-map surface now includes a typed
+  `capability_exposure` verdict with `visible_to_francis1`,
+  `safe_for_capability_use`, `capability_use_status`, current access mode, next
+  trust gate, governed-request requirement, Codex/operator-review requirement,
+  and authority booleans.
+- The Chat UI body-map parser preserves the capability-exposure verdict and
+  treats any capability-use or authority drift as unsafe.
+- The Communication page now renders the per-surface Capability Exposure line in
+  the body-map card details.
+- Developer-bridge and Chat UI contract tests assert that Francis1 visibility is
+  true while capability use and all authority grants remain false.
+
+Validation:
+
+- Developer bridge test file passed:
+  `python -m pytest tests/test_developer_bridge.py`
+  (`69` passing tests, one existing Starlette/httpx deprecation warning).
+- Chat UI contract suite passed:
+  `npm run test -- src/chat/index.test.ts`
+  (the package script ran the configured UI suite, `279` passing tests).
+- Chat UI production build passed:
+  `npm run build`.
+- Targeted lint passed:
+  `python -m ruff check src/francis/developer_bridge/body_map.py tests/test_developer_bridge.py`.
+- Targeted format check passed after formatting the touched developer-bridge
+  test file:
+  `python -m ruff format --check src/francis/developer_bridge/body_map.py tests/test_developer_bridge.py`.
+- `git diff --check` passed.
+- The local Francis API was restarted after the Python readback change. The route
+  `/developer-bridge/francis-body-map` returned HTTP `200`; the first surface
+  returned `capability_use_status=not_exposed`,
+  `visible_to_francis1=true`, `safe_for_capability_use=false`, and
+  `grants_execution_authority=false`.
+- The local Communication UI at `http://127.0.0.1:5173/` returned HTTP `200`.
+  Playwright screenshot proof captured the cleaned, populated Communication
+  page with live conversation and body-map sections:
+  `output/playwright/body-map-page-final-wait.png`.
+
+Remaining truthful gap:
+
+- This does not expose any Francis body surface for capability use; it only makes
+  the visibility-versus-use boundary inspectable.
+- This does not tune Francis1, promote learning receipts into memory, resolve ORB
+  coverage gaps, or close the main-build prompt gate.
+- This does not grant execution, mutation, approval, training, memory-write, or
+  main-build authority to Codex, Claude, Francis1, or the relay.
+- `.\scripts\check.ps1`, GitHub CI, and unrelated full-system UI flows were not
+  run for this bounded body-map capability-exposure slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -185,6 +185,7 @@ def test_francis_body_map_exposes_whole_body_without_authority(tmp_path, monkeyp
     assert result["identity"]["provider_name_is_identity"] is False  # type: ignore[index]
     assert result["summary"]["full_body_visible"] is True  # type: ignore[index]
     assert result["summary"]["full_body_authority_granted"] is False  # type: ignore[index]
+    assert result["definitions"]["capability_exposure"].startswith("A per-surface verdict")  # type: ignore[index]
     assert result["quest"]["percent_complete"] == 83  # type: ignore[index]
     assert result["summary"]["trust_ladder_enforced"] is True  # type: ignore[index]
     assert result["summary"]["runtime_restart_observed"] is False  # type: ignore[index]
@@ -219,6 +220,18 @@ def test_francis_body_map_exposes_whole_body_without_authority(tmp_path, monkeyp
     assert "action_intake" in surfaces
     assert "model_tuning" in surfaces
     assert surfaces["collaboration"]["access_mode"] == "read"
+    assert surfaces["collaboration"]["capability_exposure"]["visible_to_francis1"] is True
+    assert surfaces["collaboration"]["capability_exposure"]["safe_for_capability_use"] is False
+    assert surfaces["collaboration"]["capability_exposure"]["capability_use_status"] == "not_exposed"
+    assert surfaces["collaboration"]["capability_exposure"]["current_access_mode"] == "read"
+    assert surfaces["collaboration"]["capability_exposure"]["next_trust_gate"] == "request"
+    assert surfaces["collaboration"]["capability_exposure"]["requires_governed_request"] is True
+    assert (
+        surfaces["collaboration"]["capability_exposure"]["requires_codex_or_operator_review_before_capability_exposure"]
+        is True
+    )
+    assert surfaces["collaboration"]["capability_exposure"]["grants_execution_authority"] is False
+    assert surfaces["collaboration"]["capability_exposure"]["grants_training_authority"] is False
     assert surfaces["action_intake"]["access_mode"] == "request"
     assert surfaces["model_tuning"]["connection_state"] == "candidate"
     assert all(item["grants_execution_authority"] is False for item in result["surfaces"])  # type: ignore[index]
