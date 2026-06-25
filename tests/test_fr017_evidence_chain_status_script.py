@@ -140,6 +140,30 @@ def test_fr017_evidence_chain_status_moves_blocker_after_measurement_ready(tmp_p
     assert payload["first_blocking_details"]["measurement_capture_first_blocking_group_id"] == ""
     assert payload["first_blocking_details"]["measurement_capture_first_blocking_group_status"] == ""
     assert payload["first_blocking_details"]["measurement_capture_first_blocking_group_action"] == ""
+    assert payload["first_blocking_details"]["mockup_capture_plan_not_completion_evidence"] is True
+    assert "not physical validation evidence" in payload["first_blocking_details"]["mockup_capture_plan_contract"]
+    assert "mockup readiness only" in payload["first_blocking_details"]["mockup_capture_plan_status_contract"]
+    assert "not physical validation evidence" in payload["first_blocking_details"]["mockup_capture_summary_contract"]
+    assert (
+        payload["first_blocking_details"]["next_required_mockup_input"]
+        == "complete_non_powered_mockup_build_record_at_FR-017-MOCKUP-BUILD-INPUT-TEMPLATE.json"
+    )
+    assert payload["first_blocking_details"]["mockup_capture_total_groups"] == 5
+    assert payload["first_blocking_details"]["mockup_capture_ready_groups"] == 0
+    assert payload["first_blocking_details"]["mockup_capture_pending_groups"] == 5
+    assert payload["first_blocking_details"]["mockup_capture_invalid_groups"] == 0
+    assert payload["first_blocking_details"]["mockup_capture_failed_groups"] == 0
+    assert payload["first_blocking_details"]["mockup_capture_upstream_blocked_groups"] == 0
+    assert payload["first_blocking_details"]["mockup_capture_first_blocking_group_id"] == "mockup_evidence_and_linkage"
+    assert payload["first_blocking_details"]["mockup_capture_first_blocking_group_status"] == "pending_required_fields"
+    assert (
+        "matching measurement record path"
+        in payload["first_blocking_details"]["mockup_capture_first_blocking_group_action"]
+    )
+    capture_status = {step["id"]: step for step in payload["first_blocking_details"]["mockup_capture_plan_status"]}
+    assert "evidence.date" in capture_status["mockup_evidence_and_linkage"]["missing_fields"]
+    assert "materials.padding_layer" in capture_status["mockup_material_stack"]["missing_fields"]
+    assert "constraints.non_powered_only" in capture_status["mockup_global_safety_constraints"]["missing_fields"]
     assert payload["gates_ran"] == 3
     assert payload["physical_validation_complete"] is False
     assert payload["fr018_implementation_cleared"] is False

@@ -20,7 +20,8 @@ It packages FR-017 Forearm Cuffs as a documentation-ready and test-record-ready 
 
 - `scripts/fr017-stage17-validation-gate.ps1 -Mode Status`: package and manifest structure.
 - `scripts/fr017-measurement-intake.ps1 -Mode Status`: measurement intake status plus the read-only `measurement_capture_plan` for the first physical-input gate.
-- `scripts/fr017-evidence-chain-status.ps1 -Mode Status`: first blocking FR-017 evidence gate, next required input, and the current measurement-capture summary where applicable.
+- `scripts/fr017-mockup-readiness-gate.ps1 -Mode Status`: mockup readiness status plus the read-only `mockup_capture_plan` for the non-powered cuff mockup gate.
+- `scripts/fr017-evidence-chain-status.ps1 -Mode Status`: first blocking FR-017 evidence gate, next required input, and the current measurement/mockup capture summary where applicable.
 - `scripts/fr017-engineering-review-gate.ps1 -Mode Status`: professional review evidence after quick-release/cable-snag evidence.
 - `scripts/fr017-final-physical-gate.ps1 -Mode Status`: final aggregate gate; does not mark physical validation complete or clear FR-018 by itself.
 
@@ -68,3 +69,5 @@ Any numbness, tingling, cold fingers, discoloration, hand weakness, wrist pain, 
 ## First Physical-Input Handoff
 
 Run `scripts/fr017-measurement-intake.ps1 -Mode Status` before entering pilot data. The returned `measurement_capture_plan` is the operator-facing capture order for the first FR-017 physical-input gate, `measurement_capture_plan_status` reports which capture groups are still pending, invalid, or blocked for the supplied record, and `measurement_capture_first_blocking_group_id` identifies the next group requiring work. These fields are not completion evidence; they cannot mark physical validation complete, clear powered or frame-coupled testing, or clear FR-018.
+
+After measurement intake reports `ready_for_non_powered_mockup_patterning`, run `scripts/fr017-mockup-readiness-gate.ps1 -Mode Status -MeasurementPath <measurement-record.json>` before building or recording the non-powered mockup. The returned `mockup_capture_plan` groups the mockup evidence, material stack, global safety constraints, and left/right side checks; `mockup_capture_first_blocking_group_id` identifies the next mockup capture group requiring work. These fields are read-only operator guidance and are not mannequin, pilot, powered, frame-coupled, or FR-018 clearance.

@@ -201,6 +201,35 @@ def test_fr017_mockup_gate_reports_default_templates_as_pending_measurement() ->
     assert payload["read_only_contract"] is True
     assert payload["writes_repo"] is False
     assert payload["grants_mutation_authority"] is False
+    assert payload["mockup_capture_plan_not_completion_evidence"] is True
+    assert "not physical validation evidence" in payload["mockup_capture_plan_contract"]
+    assert "mockup readiness only" in payload["mockup_capture_plan_status_contract"]
+    assert "not physical validation evidence" in payload["mockup_capture_summary_contract"]
+    assert (
+        payload["next_required_mockup_input"]
+        == "complete_non_powered_mockup_build_record_at_FR-017-MOCKUP-BUILD-INPUT-TEMPLATE.json"
+    )
+    assert payload["mockup_capture_total_groups"] == 5
+    assert payload["mockup_capture_ready_groups"] == 0
+    assert payload["mockup_capture_pending_groups"] == 0
+    assert payload["mockup_capture_invalid_groups"] == 0
+    assert payload["mockup_capture_failed_groups"] == 0
+    assert payload["mockup_capture_upstream_blocked_groups"] == 5
+    assert payload["mockup_capture_first_blocking_group_id"] == "mockup_evidence_and_linkage"
+    assert payload["mockup_capture_first_blocking_group_status"] == "blocked_by_upstream_measurement_intake"
+    assert "complete measurement intake" in payload["mockup_capture_first_blocking_group_action"]
+    capture_plan = payload["mockup_capture_plan"]
+    assert [step["id"] for step in capture_plan] == [
+        "mockup_evidence_and_linkage",
+        "mockup_material_stack",
+        "mockup_global_safety_constraints",
+        "left_mockup_side_checks",
+        "right_mockup_side_checks",
+    ]
+    assert "evidence.measurement_record_path" in capture_plan[0]["required_fields"]
+    capture_status = payload["mockup_capture_plan_status"]
+    assert all(step["status"] == "blocked_by_upstream_measurement_intake" for step in capture_status)
+    assert all(step["ready_for_mockup_readiness"] is False for step in capture_status)
 
 
 def test_fr017_mockup_gate_requires_mockup_record_after_measurements(tmp_path: Path) -> None:
@@ -215,6 +244,21 @@ def test_fr017_mockup_gate_requires_mockup_record_after_measurements(tmp_path: P
     assert payload["measurement_status"] == "ready_for_non_powered_mockup_patterning"
     assert payload["mockup_status"] == "pending_mockup_build_record"
     assert "evidence.date" in payload["mockup_missing_fields"]
+    assert payload["mockup_capture_total_groups"] == 5
+    assert payload["mockup_capture_ready_groups"] == 0
+    assert payload["mockup_capture_pending_groups"] == 5
+    assert payload["mockup_capture_invalid_groups"] == 0
+    assert payload["mockup_capture_failed_groups"] == 0
+    assert payload["mockup_capture_upstream_blocked_groups"] == 0
+    assert payload["mockup_capture_first_blocking_group_id"] == "mockup_evidence_and_linkage"
+    assert payload["mockup_capture_first_blocking_group_status"] == "pending_required_fields"
+    assert "matching measurement record path" in payload["mockup_capture_first_blocking_group_action"]
+    capture_status = {step["id"]: step for step in payload["mockup_capture_plan_status"]}
+    assert "evidence.date" in capture_status["mockup_evidence_and_linkage"]["missing_fields"]
+    assert "materials.padding_layer" in capture_status["mockup_material_stack"]["missing_fields"]
+    assert "constraints.non_powered_only" in capture_status["mockup_global_safety_constraints"]["missing_fields"]
+    assert "sides.left.wrist_clearance_kept" in capture_status["left_mockup_side_checks"]["missing_fields"]
+    assert "sides.right.wrist_clearance_kept" in capture_status["right_mockup_side_checks"]["missing_fields"]
     assert payload["mannequin_interface_test_ready"] is False
     assert payload["fr018_implementation_cleared"] is False
 
@@ -283,6 +327,16 @@ def test_fr017_mockup_gate_accepts_complete_non_powered_mockup_record(tmp_path: 
     assert payload["mockup_linkage_violations"] == []
     assert payload["mockup_chronology_violations"] == []
     assert payload["mockup_redesign_triggers"] == []
+    assert payload["mockup_capture_total_groups"] == 5
+    assert payload["mockup_capture_ready_groups"] == 5
+    assert payload["mockup_capture_pending_groups"] == 0
+    assert payload["mockup_capture_invalid_groups"] == 0
+    assert payload["mockup_capture_failed_groups"] == 0
+    assert payload["mockup_capture_upstream_blocked_groups"] == 0
+    assert payload["mockup_capture_first_blocking_group_id"] == ""
+    assert payload["mockup_capture_first_blocking_group_status"] == ""
+    assert payload["mockup_capture_first_blocking_group_action"] == ""
+    assert all(step["ready_for_mockup_readiness"] is True for step in payload["mockup_capture_plan_status"])
     assert payload["physical_validation_complete"] is False
     assert payload["mannequin_interface_test_ready"] is True
     assert payload["mannequin_interface_test_complete"] is False
@@ -489,6 +543,15 @@ def test_fr017_mockup_gate_blocks_mockup_constraint_violation(tmp_path: Path) ->
     result = _payload(proc.stdout)
     assert result["status"] == "failed_requires_mockup_redesign"
     assert result["mockup_redesign_triggers"] == ["constraints.no_wrist_bone_pressure"]
+    assert result["mockup_capture_total_groups"] == 5
+    assert result["mockup_capture_ready_groups"] == 4
+    assert result["mockup_capture_failed_groups"] == 1
+    assert result["mockup_capture_first_blocking_group_id"] == "mockup_global_safety_constraints"
+    assert result["mockup_capture_first_blocking_group_status"] == "failed_stop_condition_or_blocking_signal"
+    capture_status = {step["id"]: step for step in result["mockup_capture_plan_status"]}
+    safety_status = capture_status["mockup_global_safety_constraints"]
+    assert safety_status["ready_for_mockup_readiness"] is False
+    assert safety_status["blocking_signals"] == ["constraints.no_wrist_bone_pressure"]
     assert result["mannequin_interface_test_ready"] is False
     assert result["pilot_testing_cleared"] is False
     assert result["fr018_implementation_cleared"] is False

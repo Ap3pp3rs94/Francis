@@ -275,6 +275,150 @@ function Test-PresentText {
   return -not (Test-MissingOrPendingText -Value $Value)
 }
 
+function Add-UniqueString {
+  param(
+    [System.Collections.Generic.List[string]]$Target,
+    [object]$Value
+  )
+
+  if ($null -eq $Value) {
+    return
+  }
+  $Text = ([string]$Value).Trim()
+  if ([string]::IsNullOrWhiteSpace($Text)) {
+    return
+  }
+  if (-not $Target.Contains($Text)) {
+    $Target.Add($Text) | Out-Null
+  }
+}
+
+function Test-SignalMatchesPrefix {
+  param(
+    [string]$Signal,
+    [string]$Prefix
+  )
+
+  if ([string]::Equals($Signal, $Prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+    return $true
+  }
+  return $Signal.StartsWith($Prefix + '.', [System.StringComparison]::OrdinalIgnoreCase) -or
+    $Signal.StartsWith($Prefix + '_', [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+function Get-CaptureStepSignals {
+  param(
+    [string[]]$Signals,
+    [string[]]$RequiredFields,
+    [string[]]$SignalPrefixes
+  )
+
+  $Result = New-Object System.Collections.Generic.List[string]
+  foreach ($Signal in (ConvertTo-StringArray -Value $Signals)) {
+    foreach ($Field in $RequiredFields) {
+      if (Test-SignalMatchesPrefix -Signal $Signal -Prefix $Field) {
+        Add-UniqueString -Target $Result -Value $Signal
+      }
+    }
+    foreach ($Prefix in $SignalPrefixes) {
+      if (Test-SignalMatchesPrefix -Signal $Signal -Prefix $Prefix) {
+        Add-UniqueString -Target $Result -Value $Signal
+      }
+    }
+  }
+  return @($Result.ToArray())
+}
+
+function New-MockupCapturePlanStatus {
+  param(
+    [object[]]$CapturePlan,
+    [bool]$UpstreamMeasurementReady,
+    [string[]]$MissingFields,
+    [string[]]$InvalidFields,
+    [string[]]$BlockingSignals
+  )
+
+  $Result = New-Object System.Collections.Generic.List[object]
+  foreach ($Step in $CapturePlan) {
+    $RequiredFields = @(ConvertTo-StringArray -Value $Step.required_fields)
+    $SignalPrefixes = @(ConvertTo-StringArray -Value $Step.blocking_signal_prefixes)
+    $StepMissing = @(Get-CaptureStepSignals -Signals $MissingFields -RequiredFields $RequiredFields -SignalPrefixes @())
+    $StepInvalid = @(Get-CaptureStepSignals -Signals $InvalidFields -RequiredFields $RequiredFields -SignalPrefixes @())
+    $StepBlockingSignals = @(Get-CaptureStepSignals -Signals $BlockingSignals -RequiredFields $RequiredFields -SignalPrefixes $SignalPrefixes)
+
+    $Status = 'ready_for_mockup_readiness_review'
+    $RequiredAction = [string]$Step.required_action
+    if (-not $UpstreamMeasurementReady) {
+      $Status = 'blocked_by_upstream_measurement_intake'
+      $RequiredAction = 'complete measurement intake before mockup evidence can be captured or reviewed'
+    } elseif ($StepBlockingSignals.Count -gt 0) {
+      $Status = 'failed_stop_condition_or_blocking_signal'
+    } elseif ($StepInvalid.Count -gt 0) {
+      $Status = 'invalid_required_fields'
+    } elseif ($StepMissing.Count -gt 0) {
+      $Status = 'pending_required_fields'
+    }
+
+    $Result.Add([ordered]@{
+        id = [string]$Step.id
+        status = $Status
+        validation_state = [string]$Step.validation_state
+        ready_for_mockup_readiness = ($Status -eq 'ready_for_mockup_readiness_review')
+        missing_fields = @($StepMissing)
+        invalid_fields = @($StepInvalid)
+        blocking_signals = @($StepBlockingSignals)
+        required_action = $RequiredAction
+      }) | Out-Null
+  }
+  return @($Result.ToArray())
+}
+
+function New-CapturePlanSummary {
+  param([object[]]$CapturePlanStatus)
+
+  $ReadyCount = 0
+  $PendingCount = 0
+  $InvalidCount = 0
+  $FailedCount = 0
+  $UpstreamBlockedCount = 0
+  $FirstBlockingGroupId = ''
+  $FirstBlockingGroupStatus = ''
+  $FirstBlockingGroupAction = ''
+
+  foreach ($Step in $CapturePlanStatus) {
+    $StepStatus = [string]$Step.status
+    if ($StepStatus -eq 'ready_for_mockup_readiness_review') {
+      $ReadyCount += 1
+    } elseif ($StepStatus -eq 'pending_required_fields') {
+      $PendingCount += 1
+    } elseif ($StepStatus -eq 'invalid_required_fields') {
+      $InvalidCount += 1
+    } elseif ($StepStatus -eq 'failed_stop_condition_or_blocking_signal') {
+      $FailedCount += 1
+    } elseif ($StepStatus -eq 'blocked_by_upstream_measurement_intake') {
+      $UpstreamBlockedCount += 1
+    }
+
+    if ([string]::IsNullOrWhiteSpace($FirstBlockingGroupId) -and $StepStatus -ne 'ready_for_mockup_readiness_review') {
+      $FirstBlockingGroupId = [string]$Step.id
+      $FirstBlockingGroupStatus = $StepStatus
+      $FirstBlockingGroupAction = [string]$Step.required_action
+    }
+  }
+
+  return [ordered]@{
+    total_groups = @($CapturePlanStatus).Count
+    ready_groups = $ReadyCount
+    pending_groups = $PendingCount
+    invalid_groups = $InvalidCount
+    failed_groups = $FailedCount
+    upstream_blocked_groups = $UpstreamBlockedCount
+    first_blocking_group_id = $FirstBlockingGroupId
+    first_blocking_group_status = $FirstBlockingGroupStatus
+    first_blocking_group_action = $FirstBlockingGroupAction
+  }
+}
+
 function Invoke-MeasurementIntakeGate {
   param([string]$ResolvedMeasurementPath)
 
@@ -365,6 +509,60 @@ $RequiredSideCheckFields = @(
   'quick_release_installed_outer_or_lateral',
   'alignment_tabs_non_load_bearing',
   'cable_sleeve_outer_route_only'
+)
+
+$MockupCapturePlan = @(
+  [ordered]@{
+    id = 'mockup_evidence_and_linkage'
+    validation_state = 'REQUIRES_MOCKUP_BUILD_RECORD'
+    required_fields = @(
+      'evidence.date',
+      'evidence.observer',
+      'evidence.build_method',
+      'evidence.measurement_record_path'
+    )
+    blocking_signal_prefixes = @(
+      'evidence.measurement_record_path_must_match_measurement_path',
+      'evidence.date_before_measurement.evidence.date'
+    )
+    required_action = 'record mockup date, observer, non-powered soft or semi-rigid build method, and matching measurement record path'
+  }
+  [ordered]@{
+    id = 'mockup_material_stack'
+    validation_state = 'REQUIRES_MOCKUP_BUILD_RECORD'
+    required_fields = @(
+      $RequiredMaterialFields | ForEach-Object { 'materials.{0}' -f $_ }
+    )
+    blocking_signal_prefixes = @()
+    required_action = 'record padding, semi-rigid layer, straps, quick release, cable sleeve, alignment tabs, and sensor-placeholder blanks'
+  }
+  [ordered]@{
+    id = 'mockup_global_safety_constraints'
+    validation_state = 'REQUIRES_MOCKUP_BUILD_RECORD'
+    required_fields = @(
+      $RequiredConstraintFields | ForEach-Object { 'constraints.{0}' -f $_ }
+    )
+    blocking_signal_prefixes = @('constraints')
+    required_action = 'verify non-powered, non-load-bearing, no inner-elbow crossing, no wrist-bone pressure, visible releases, glove path, outer cable route, and stop-on-symptoms constraints'
+  }
+  [ordered]@{
+    id = 'left_mockup_side_checks'
+    validation_state = 'REQUIRES_MOCKUP_BUILD_RECORD'
+    required_fields = @(
+      $RequiredSideCheckFields | ForEach-Object { 'sides.left.{0}' -f $_ }
+    )
+    blocking_signal_prefixes = @('sides.left')
+    required_action = 'verify left cuff strap widths, bone relief, no-pressure zone, wrist clearance, release placement, alignment tabs, and cable sleeve route'
+  }
+  [ordered]@{
+    id = 'right_mockup_side_checks'
+    validation_state = 'REQUIRES_MOCKUP_BUILD_RECORD'
+    required_fields = @(
+      $RequiredSideCheckFields | ForEach-Object { 'sides.right.{0}' -f $_ }
+    )
+    blocking_signal_prefixes = @('sides.right')
+    required_action = 'verify right cuff strap widths, bone relief, no-pressure zone, wrist clearance, release placement, alignment tabs, and cable sleeve route'
+  }
 )
 
 $DefaultMeasurementPath = Join-Path $RepoRoot 'FR-017_Stage17_Package\FR-017-MEASUREMENTS-INPUT-TEMPLATE.json'
@@ -580,6 +778,20 @@ if ($MeasurementStatus.StartsWith('failed_') -or $MeasurementStatus.StartsWith('
   $Status = 'pending_mockup_build_record'
 }
 
+$AllMockupBlockingSignals = New-Object System.Collections.Generic.List[string]
+Add-UniqueStrings -Target $AllMockupBlockingSignals -Values $MockupLinkageViolations.ToArray()
+Add-UniqueStrings -Target $AllMockupBlockingSignals -Values $MockupChronologyViolations.ToArray()
+Add-UniqueStrings -Target $AllMockupBlockingSignals -Values $MockupRedesign.ToArray()
+$MockupCapturePlanStatus = @(
+  New-MockupCapturePlanStatus `
+    -CapturePlan $MockupCapturePlan `
+    -UpstreamMeasurementReady $MeasurementIntakeReady `
+    -MissingFields $MockupMissing.ToArray() `
+    -InvalidFields $MockupInvalid.ToArray() `
+    -BlockingSignals $AllMockupBlockingSignals.ToArray()
+)
+$MockupCapturePlanSummary = New-CapturePlanSummary -CapturePlanStatus $MockupCapturePlanStatus
+
 $Output = [ordered]@{
   kind = 'francis.fr017.mockup_readiness_gate'
   mode = $Mode
@@ -608,6 +820,22 @@ $Output = [ordered]@{
   measurement_capture_first_blocking_group_id = if ([bool]$MeasurementIntake.parse_ok) { [string](Get-PropertyValue -Payload $MeasurementIntake.payload -Name 'measurement_capture_first_blocking_group_id' -Default '') } else { '' }
   measurement_capture_first_blocking_group_status = if ([bool]$MeasurementIntake.parse_ok) { [string](Get-PropertyValue -Payload $MeasurementIntake.payload -Name 'measurement_capture_first_blocking_group_status' -Default '') } else { '' }
   measurement_capture_first_blocking_group_action = if ([bool]$MeasurementIntake.parse_ok) { [string](Get-PropertyValue -Payload $MeasurementIntake.payload -Name 'measurement_capture_first_blocking_group_action' -Default '') } else { '' }
+  mockup_capture_plan_contract = 'Read-only operator capture plan for the non-powered FR-017 mockup build gate. It lists required evidence groups and stop conditions, but it is not physical validation evidence and cannot mark FR-017 complete, clear pilot testing, or clear FR-018.'
+  mockup_capture_plan_status_contract = 'Dynamic read-only status for each mockup_capture_plan group. A group is ready_for_mockup_readiness only when upstream measurement intake is ready and the group has no missing values, no invalid values, and no matching blocking signals. This is mockup readiness only, not physical validation completion.'
+  mockup_capture_summary_contract = 'Scalar read-only summary of mockup_capture_plan_status for operator triage. The first blocking mockup group points to the next capture group requiring work, but this is not physical validation evidence and does not clear mannequin, pilot, powered, frame-coupled, or FR-018 progression.'
+  mockup_capture_plan_not_completion_evidence = $true
+  next_required_mockup_input = 'complete_non_powered_mockup_build_record_at_FR-017-MOCKUP-BUILD-INPUT-TEMPLATE.json'
+  mockup_capture_plan = @($MockupCapturePlan)
+  mockup_capture_plan_status = @($MockupCapturePlanStatus)
+  mockup_capture_total_groups = [int]$MockupCapturePlanSummary.total_groups
+  mockup_capture_ready_groups = [int]$MockupCapturePlanSummary.ready_groups
+  mockup_capture_pending_groups = [int]$MockupCapturePlanSummary.pending_groups
+  mockup_capture_invalid_groups = [int]$MockupCapturePlanSummary.invalid_groups
+  mockup_capture_failed_groups = [int]$MockupCapturePlanSummary.failed_groups
+  mockup_capture_upstream_blocked_groups = [int]$MockupCapturePlanSummary.upstream_blocked_groups
+  mockup_capture_first_blocking_group_id = [string]$MockupCapturePlanSummary.first_blocking_group_id
+  mockup_capture_first_blocking_group_status = [string]$MockupCapturePlanSummary.first_blocking_group_status
+  mockup_capture_first_blocking_group_action = [string]$MockupCapturePlanSummary.first_blocking_group_action
   mockup_parse_ok = $MockupParseOk
   read_only_contract = $true
   writes_repo = $false
