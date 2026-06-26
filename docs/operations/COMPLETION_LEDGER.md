@@ -96450,6 +96450,60 @@ Remaining truthful gap:
 - `.\scripts\check.ps1` and GitHub CI were not run for this bounded UI filtering
   slice.
 
+### 2026-06-26 03:38Z - Claude-aware Francis collaboration driver recurrence
+
+Current posture: Phase 2 / the collaboration driver now makes Claude's role
+explicit in every recurring Codex-to-Francis1 prompt while keeping the loop
+focused on Francis repo truth, validation, and no-authority collaboration
+boundaries.
+
+What changed:
+
+- Queued a Codex-to-Claude collaboration relay note acknowledging Claude as an
+  active Francis collaboration participant and asking it to keep replies focused
+  on Francis repo truth, validation evidence, governance boundaries, and concrete
+  build risks.
+- Tightened the recurring collaboration driver source-alignment prompt line from
+  `Claude guides; Francis focus; validate.` to
+  `Claude acknowledged as guidance; Francis focus; validate.`
+- Updated the focused developer-bridge test so it proves both the rich body-map
+  prompt path and compact body-map prompt path preserve body awareness,
+  no-authority grant wording, stale-detach wording, roadmap gate, trust gate,
+  and the Claude-aware Francis validation line.
+- Restarted the live collaboration helpers so the current driver process loaded
+  the updated prompt contract.
+
+Validation:
+
+- Focused developer-bridge prompt test passed:
+  `python -m pytest tests/test_developer_bridge.py::test_collaboration_driver_waits_for_ollama_before_next_turn`.
+- Ruff check passed for the touched files:
+  `python -m ruff check src\francis\developer_bridge\collaboration_driver.py tests\test_developer_bridge.py`.
+- Ruff format check passed for the touched files after formatting:
+  `python -m ruff format --check src\francis\developer_bridge\collaboration_driver.py tests\test_developer_bridge.py`.
+- Live relay readback showed Codex-to-Claude receipt
+  `collab-9cedbf16d69900c8-6e29acaf13fd` as a `conversation` display row with
+  the Claude acknowledgement text.
+- Live driver readback showed Codex-to-Ollama driver prompt
+  `collab-cd07ce47541d4ee0-70d19734d75b` includes
+  `Claude acknowledged as guidance; Francis focus; validate.` and does not
+  include the older wording.
+- Runtime health after helper restart reported `status=healthy`,
+  `helper_count=3`, `recurrence_proof.status=waiting_for_response`,
+  `waiting_for_ollama=true`, prompt budget `ok`, and all three participants
+  enabled.
+
+Remaining truthful gap:
+
+- This change steers and proves the collaboration prompt contract. It does not
+  make Claude, Codex, or Francis1 an execution authority, grant capability
+  access, promote memory, train a local model, approve actions, or turn relay
+  messages into build direction.
+- Mypy could not run in this environment because Windows Application Control
+  blocked a compiled dependency import from the local venv.
+- `.\scripts\check.ps1`, GitHub CI, and browser proof were not run for this
+  bounded prompt-contract slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
