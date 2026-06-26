@@ -530,7 +530,10 @@ def _known_drift_terms(reply: str) -> list[str]:
 def _stale_topic_replay_terms(source_prompt: str, reply: str) -> list[str]:
     lower_reply = " ".join(reply.lower().replace("-", " ").split())
     stale_action_readiness = (
-        "defining and documenting local model responses" in lower_reply
+        (
+            "defining and documenting local model responses" in lower_reply
+            or "documenting local model responses" in lower_reply
+        )
         and "without asserting capability authority" in lower_reply
         and "action readiness claim" in lower_reply
     )

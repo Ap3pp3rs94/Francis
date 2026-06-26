@@ -95987,6 +95987,53 @@ Remaining truthful gap:
   operator data dir, and foreground browser proof were not run for this bounded
   chat-ingress contract slice.
 
+### 2026-06-26 02:14Z - Roadmap-topic stale action-readiness replay guard
+
+Current posture: Phase 2 / developer bridge output guarding now catches the
+shorter live replay phrase Francis1 used on roadmap-alignment turn 1508. A
+roadmap-alignment answer that falls back to "documenting local-model responses
+without asserting capability authority before any action-readiness claim" is now
+recorded as `stale_action_readiness_topic_replay` and rewritten to the
+ledger/manifest roadmap-alignment fallback.
+
+What changed:
+
+- Broadened the local-model output guard's stale action-readiness detector from
+  only `defining and documenting local model responses` to also catch
+  `documenting local model responses`.
+- Added a regression that reproduces the turn-1508 roadmap-alignment drift:
+  current topic is main Francis build alignment, current artifact is
+  `docs/operations/COMPLETION_LEDGER.md + docs/canonical/BUILD_MANIFEST.md`, and
+  the local model replies with stale action-readiness wording.
+- The rewritten response keeps the roadmap fallback anchored to ledger-first
+  build truth and blocks claims that outrun current phase, validated gates, or
+  known gaps.
+
+Validation:
+
+- Focused output-guard tests passed:
+  `python -m pytest tests/test_developer_bridge.py::test_ollama_participant_rewrites_stale_action_readiness_replay_on_roadmap_topic tests/test_developer_bridge.py::test_ollama_participant_rewrites_short_stale_action_readiness_replay_on_roadmap_topic tests/test_developer_bridge.py::test_ollama_participant_rewrites_canonical_roadmap_alignment_drift -q`.
+- Full developer bridge test file passed:
+  `python -m pytest tests/test_developer_bridge.py -q`.
+- Targeted lint passed:
+  `python -m ruff check src/francis/developer_bridge/ollama_participant.py tests/test_developer_bridge.py`.
+  Ruff reported only a `.ruff_cache` access warning after passing.
+- Targeted format check passed:
+  `python -m ruff format --check src/francis/developer_bridge/ollama_participant.py tests/test_developer_bridge.py`.
+  Ruff reported only a `.ruff_cache` access warning after confirming formatting.
+- Targeted typing passed:
+  `python -m mypy src/francis/developer_bridge/ollama_participant.py`.
+
+Remaining truthful gap:
+
+- This is guard tuning, not model training. It does not change model weights,
+  grant Francis1 capability use, execute actions, approve gates, mutate files,
+  write memory, or promote learning receipts automatically.
+- Other stale phrasings may still appear and should be handled only when observed
+  in receipts.
+- `.\scripts\check.ps1`, GitHub CI, live post-restart replay proof, and
+  foreground browser proof were not run for this bounded guard slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

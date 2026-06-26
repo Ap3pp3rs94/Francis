@@ -3647,6 +3647,51 @@ def test_ollama_participant_rewrites_stale_action_readiness_replay_on_roadmap_to
     assert "given reliance on external guidance" not in response["prompt"]
 
 
+def test_ollama_participant_rewrites_short_stale_action_readiness_replay_on_roadmap_topic(
+    tmp_path,
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+    submit_collaboration_prompt(
+        source_agent="codex",
+        target_agent="ollama",
+        objective="Roadmap alignment prompt",
+        prompt=(
+            "Francis1 collab turn 1508. Topic: which roadmap-alignment check should run before prompting any "
+            "main Francis build. Reply: issue/gap/risk; artifact Codex inspects. Current artifact: "
+            "docs/operations/COMPLETION_LEDGER.md + docs/canonical/BUILD_MANIFEST.md. Prior check: Review "
+            "candidate insight-live: surface=docs/canonical/BUILD_MANIFEST.md + "
+            "docs/operations/COMPLETION_LEDGER.md; verified=canonical; build_or_wire=false. Codex response: "
+            "inspecting cited surface; no action authority. Guard note: stale action-readiness replay stored as "
+            "learning receipt; answer current topic only."
+        ),
+    )
+
+    def fake_generate(_prompt: str) -> str:
+        return (
+            "My current gap is documenting local-model responses without asserting capability authority before any "
+            "action-readiness claim, given reliance on external guidance.\n\n"
+            "Artifact: docs/operations/COMPLETION_LEDGER.md + docs/canonical/BUILD_MANIFEST.md."
+        )
+
+    monkeypatch.setattr("francis.developer_bridge.ollama_participant.generate", fake_generate)
+
+    result = ollama_respond_once(cooldown_seconds=0)
+
+    assert result["status"] == "responded"
+    output_guard = result["execution_trace"]["output_guard"]
+    assert output_guard["status"] == "drift_rewritten"
+    assert output_guard["verified_surface"] == "docs/operations/COMPLETION_LEDGER.md + docs/canonical/BUILD_MANIFEST.md"
+    assert output_guard["detected_terms"] == ["stale_action_readiness_topic_replay"]
+    transcript = read_collaboration_transcript(source_agent="ollama", target_agent="codex")
+    response = transcript["items"][0]
+    assert "stale_action_readiness_topic_replay" in response["prompt"]
+    assert "keep the ledger as shipped truth" in response["prompt"]
+    assert "block claims that outrun the current phase" in response["prompt"]
+    assert "documenting local-model responses" not in response["prompt"]
+    assert "given reliance on external guidance" not in response["prompt"]
+
+
 def test_ollama_participant_rewrites_live_health_reconciliation_drift(
     tmp_path,
     monkeypatch,
