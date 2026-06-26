@@ -3213,6 +3213,52 @@ def test_ollama_participant_rewrites_action_readiness_drift_to_advice_only_recei
     assert "continue from the verified artifact" not in response["prompt"]
 
 
+def test_ollama_participant_rewrites_stale_action_readiness_replay_on_advice_only_topic(
+    tmp_path,
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+    submit_collaboration_prompt(
+        source_agent="codex",
+        target_agent="ollama",
+        objective="Action-readiness proof prompt",
+        prompt=(
+            "Francis1 collab turn 1512. Topic: how to prove a local-model response is advice only before any "
+            "Francis action-readiness claim. Reply: issue/gap/risk; artifact Codex inspects. Current artifact: "
+            "ollama participant and action-readiness receipts. Prior check: Review candidate insight-live: "
+            "surface=api.routes.chat.mission_ingress; verified=existing; build_or_wire=false. Codex response: "
+            "inspecting cited surface; no action authority."
+        ),
+    )
+
+    def fake_generate(_prompt: str) -> str:
+        return (
+            "My current gap is documenting local-model responses without asserting capability authority before any "
+            "action-readiness claim, given reliance on external guidance. Artifact: "
+            "ollama-participant-and-action-readiness-replacement-plan-v1."
+        )
+
+    monkeypatch.setattr("francis.developer_bridge.ollama_participant.generate", fake_generate)
+
+    result = ollama_respond_once(cooldown_seconds=0)
+
+    assert result["status"] == "responded"
+    output_guard = result["execution_trace"]["output_guard"]
+    assert output_guard["status"] == "drift_rewritten"
+    assert output_guard["verified_surface"] == "ollama participant and action-readiness receipts"
+    assert output_guard["detected_terms"] == ["stale_action_readiness_topic_replay"]
+    transcript = read_collaboration_transcript(source_agent="ollama", target_agent="codex")
+    response = transcript["items"][0]
+    assert "Francis1 output guard fallback" in response["prompt"]
+    assert "execution=false" in response["prompt"]
+    assert "mutation=false" in response["prompt"]
+    assert "approval=false" in response["prompt"]
+    assert "memory_write=false" in response["prompt"]
+    assert "repo-truth-reviewed action_boundary" in response["prompt"]
+    assert "documenting local-model responses" not in response["prompt"]
+    assert "given reliance on external guidance" not in response["prompt"]
+
+
 def test_ollama_participant_rewrites_direction_topic_to_mission_ingress_boundary(
     tmp_path,
     monkeypatch,

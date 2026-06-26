@@ -527,7 +527,7 @@ def _known_drift_terms(reply: str) -> list[str]:
     return terms
 
 
-def _stale_topic_replay_terms(source_prompt: str, reply: str) -> list[str]:
+def _stale_topic_replay_terms(_source_prompt: str, reply: str) -> list[str]:
     lower_reply = " ".join(reply.lower().replace("-", " ").split())
     stale_action_readiness = (
         (
@@ -539,14 +539,7 @@ def _stale_topic_replay_terms(source_prompt: str, reply: str) -> list[str]:
     )
     if not stale_action_readiness:
         return []
-    lower_topic = _source_topic_from_prompt(source_prompt).lower()
-    topic_is_action_readiness = (
-        "action-readiness" in lower_topic
-        or "action readiness" in lower_topic
-        or "advice only" in lower_topic
-        or "advisory only" in lower_topic
-    )
-    return [] if topic_is_action_readiness else ["stale_action_readiness_topic_replay"]
+    return ["stale_action_readiness_topic_replay"]
 
 
 def _verified_surface_from_prompt(source_prompt: str) -> str:

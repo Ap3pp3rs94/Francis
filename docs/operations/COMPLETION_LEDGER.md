@@ -96034,6 +96034,51 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, live post-restart replay proof, and
   foreground browser proof were not run for this bounded guard slice.
 
+### 2026-06-26 02:22Z - Advice-only stale action-readiness replay guard
+
+Current posture: Phase 2 / developer bridge output guarding now catches the same
+stale action-readiness replay phrase on advice-only proof topics. A Francis1
+reply like "documenting local-model responses without asserting capability
+authority before any action-readiness claim" on the turn-1512 advice-only proof
+topic is now recorded as `stale_action_readiness_topic_replay` and rewritten to
+the receipt-field action-readiness fallback.
+
+What changed:
+
+- Removed the action-readiness/advice-only topic exemption from the stale
+  action-readiness replay detector.
+- Added a regression that reproduces the turn-1512 drift: current topic is
+  advice-only proof before any Francis action-readiness claim, current artifact
+  is `ollama participant and action-readiness receipts`, and the local model
+  replies with stale action-readiness wording.
+- The rewritten response now names the receipt proof fields
+  `execution=false`, `mutation=false`, `approval=false`, `memory_write=false`,
+  `raw_host_access=false`, and requires a separate repo-truth-reviewed
+  `action_boundary`.
+
+Validation:
+
+- Focused output-guard tests passed:
+  `python -m pytest tests/test_developer_bridge.py::test_ollama_participant_rewrites_action_readiness_drift_to_advice_only_receipt tests/test_developer_bridge.py::test_ollama_participant_rewrites_stale_action_readiness_replay_on_advice_only_topic tests/test_developer_bridge.py::test_ollama_participant_rewrites_stale_action_readiness_replay_on_roadmap_topic tests/test_developer_bridge.py::test_ollama_participant_rewrites_short_stale_action_readiness_replay_on_roadmap_topic -q`.
+- Full developer bridge test file passed:
+  `python -m pytest tests/test_developer_bridge.py -q`.
+- Targeted lint passed:
+  `python -m ruff check src/francis/developer_bridge/ollama_participant.py tests/test_developer_bridge.py`.
+- Targeted format check passed:
+  `python -m ruff format --check src/francis/developer_bridge/ollama_participant.py tests/test_developer_bridge.py`.
+- Targeted typing passed:
+  `python -m mypy src/francis/developer_bridge/ollama_participant.py`.
+
+Remaining truthful gap:
+
+- This is guard tuning, not model training. It does not change model weights,
+  grant Francis1 capability use, execute actions, approve gates, mutate files,
+  write memory, or promote learning receipts automatically.
+- Other stale phrasings may still appear and should be handled only when observed
+  in receipts.
+- `.\scripts\check.ps1`, GitHub CI, live post-restart replay proof, and
+  foreground browser proof were not run for this bounded guard slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
