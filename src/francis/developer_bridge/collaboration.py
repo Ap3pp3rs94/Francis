@@ -207,7 +207,8 @@ def read_collaboration_sessions(
         status=clean_status,
         limit=clean_item_limit,
     )
-    review_readback = read_collaboration_review(limit=min(clean_item_limit, _MAX_LIMIT))
+    review_item_limit = _session_review_item_limit(session_limit=clean_limit, item_limit=clean_item_limit)
+    review_readback = read_collaboration_review(limit=review_item_limit)
     review_items = [item for item in _list(review_readback.get("items")) if isinstance(item, dict)]
     sessions = _session_summaries(filtered.items, review_items=review_items)
     limited_sessions = sessions[:clean_limit]
@@ -228,6 +229,7 @@ def read_collaboration_sessions(
             "status": clean_status,
             "limit": clean_limit,
             "item_limit": clean_item_limit,
+            "review_item_limit": review_item_limit,
         },
         "definitions": {
             "session": "Messages grouped by timestamp gap from bounded relay receipts.",
@@ -248,6 +250,10 @@ def read_collaboration_sessions(
             "grants_memory_write_authority": False,
         },
     }
+
+
+def _session_review_item_limit(*, session_limit: int, item_limit: int) -> int:
+    return min(_MAX_LIMIT, item_limit, max(12, session_limit * 2))
 
 
 class _FilteredPrompts:

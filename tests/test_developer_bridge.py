@@ -3198,6 +3198,36 @@ def test_collaboration_sessions_summarize_without_full_transcript_dump(tmp_path,
     assert sessions["definitions"]["transcript_disclosure"].startswith("Operator-facing disclosure state")
 
 
+def test_collaboration_sessions_bound_review_join_separately_from_relay_scan(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+    import francis.developer_bridge.collaboration as collaboration_module
+
+    submit_collaboration_prompt(
+        source_agent="codex",
+        target_agent="ollama",
+        objective="Session bounded join proof",
+        prompt="Session summaries should stay visible while review annotation remains bounded.",
+    )
+    observed_limits: list[int] = []
+
+    def fake_review(*, limit: int = 10, session_id: str = "") -> dict[str, object]:
+        observed_limits.append(limit)
+        return {"items": []}
+
+    monkeypatch.setattr(collaboration_module, "read_collaboration_review", fake_review)
+
+    sessions = read_collaboration_sessions(limit=5, item_limit=50)
+
+    assert sessions["count"] == 1
+    assert sessions["filters"]["item_limit"] == 50
+    assert sessions["filters"]["review_item_limit"] == 12
+    assert observed_limits == [12]
+    assert sessions["items"][0]["message_count"] == 1
+    assert sessions["items"][0]["latest_review_gate"]["observed"] is False
+    assert sessions["governance"]["stores_full_transcript"] is False
+    assert sessions["governance"]["grants_execution_authority"] is False
+
+
 def test_collaboration_transcript_route_returns_explicit_json_response(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
     submit_collaboration_prompt(

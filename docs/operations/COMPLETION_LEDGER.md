@@ -97744,6 +97744,58 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, browser screenshot proof, and full ORB/body
   coverage proof were not run for this bounded source-disagreement proof slice.
 
+### 2026-06-26 06:07Z - Collaboration session summary readback join bound
+
+Current posture: Phase 2 / P1 interface, P8 memory, and P9 observability now keep
+the session-summary readback responsive while preserving a larger relay scan.
+Francis1 can ask which session-summary fields should be shown before raw
+transcript detail, and the operator route can return bounded session summaries
+without forcing a 50-item collaboration-review scan on first load.
+
+What changed:
+
+- `developer_bridge.collaboration.read_collaboration_sessions` now bounds the
+  review annotation join separately from the relay item scan.
+- The relay window can still use `item_limit=50`, while the review join uses a
+  smaller `review_item_limit` derived from the requested session count.
+- Session readback filters now expose `review_item_limit` so the operator can
+  see the join bound used for summary-first recall.
+- A focused regression test proves `limit=5&item_limit=50` uses
+  `review_item_limit=12`, returns the session summary, and does not store a full
+  transcript or grant authority.
+
+Validation:
+
+- Focused backend session tests passed:
+  `python -m pytest tests/test_developer_bridge.py::test_collaboration_sessions_summarize_without_full_transcript_dump tests/test_developer_bridge.py::test_collaboration_sessions_bound_review_join_separately_from_relay_scan tests/test_developer_bridge.py::test_collaboration_sessions_http_route_marks_bounded_readback_cache -q`.
+- Ruff check passed:
+  `python -m ruff check src\francis\developer_bridge\collaboration.py tests\test_developer_bridge.py`.
+- Ruff format check passed:
+  `python -m ruff format --check src\francis\developer_bridge\collaboration.py tests\test_developer_bridge.py`.
+- Targeted mypy passed:
+  `python -m mypy src\francis\developer_bridge\collaboration.py`.
+- Compileall passed:
+  `python -m compileall src\francis\developer_bridge\collaboration.py`.
+- Local direct readback `read_collaboration_sessions(limit=5, item_limit=50)`
+  returned `count=1`, `truncated=true`, `review_item_limit=12`, and completed
+  in about `1.015` seconds.
+- Post-restart live API readback
+  `/developer-bridge/collaboration-sessions?limit=5&item_limit=50` returned
+  `count=1`, `truncated=true`, `readback_cache.status=refreshed`,
+  `review_item_limit=12`, `stores_full_transcript=false`,
+  `grants_execution_authority=false`, and completed in about `0.737` seconds.
+- Post-restart live runtime health readback
+  `/developer-bridge/collaboration-runtime-health` returned `ok=true`,
+  `stores_full_transcript=false`, and no warnings.
+
+Remaining truthful gap:
+
+- This is a readback-responsiveness repair only. It does not change raw
+  transcript disclosure policy, promote memory, tune Francis1, grant authority,
+  or change collaboration recurrence.
+- `.\scripts\check.ps1`, GitHub CI, browser screenshot proof, and full ORB/body
+  coverage proof were not run for this bounded session-summary slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
