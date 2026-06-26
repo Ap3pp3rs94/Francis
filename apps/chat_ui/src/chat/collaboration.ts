@@ -1188,6 +1188,33 @@ export type CollaborationReviewItem = {
     grantsTrainingAuthority: boolean;
     grantsCapabilityAuthority: boolean;
   };
+  capabilityExposureBoundary: {
+    applies: boolean;
+    surface: string;
+    bodySurfaceVisible: boolean;
+    visibilityIsCapabilityGrant: boolean;
+    capabilityUseAllowedByReview: boolean;
+    capabilityGrantedByThisReview: boolean;
+    capabilityUseRequiresGrantReceipt: boolean;
+    requiresTrustLadderDecision: boolean;
+    requiresCapabilityGrantReadback: boolean;
+    requiresCodexOrOperatorReview: boolean;
+    requiresRepoTruthReview: boolean;
+    requiresTypedReviewArtifact: boolean;
+    denyAfterGrantSupported: boolean;
+    staleMemoryDetaches: boolean;
+    allowedGrantModes: string[];
+    requiredProofFields: string[];
+    requiredReadbacks: string[];
+    validationTests: string[];
+    nextCodexAction: string;
+    grantsCapabilityAuthority: boolean;
+    grantsExecutionAuthority: boolean;
+    grantsMutationAuthority: boolean;
+    grantsApprovalAuthority: boolean;
+    grantsMemoryWriteAuthority: boolean;
+    grantsTrainingAuthority: boolean;
+  };
   roadmapAlignmentProof: {
     latestLedgerEntry: string;
     currentPhase: string;
@@ -1313,6 +1340,7 @@ export type CollaborationReview = {
     buildDirectionGate: string;
     implementationPreflight: string;
     sourceDisagreementBoundary: string;
+    capabilityExposureBoundary: string;
     participantToggleBoundary: string;
     modelAdviceGovernanceBoundary: string;
   };
@@ -3037,6 +3065,9 @@ function parseReviewItem(raw: unknown): CollaborationReviewItem {
   const sourceDisagreementProof = isRecord(sourceDisagreementBoundary.current_proof)
     ? sourceDisagreementBoundary.current_proof
     : {};
+  const capabilityExposureBoundary = isRecord(item.capability_exposure_boundary)
+    ? item.capability_exposure_boundary
+    : {};
   const roadmapBoundary = isRecord(item.roadmap_alignment_boundary) ? item.roadmap_alignment_boundary : {};
   const roadmapProof = isRecord(roadmapBoundary.current_proof) ? roadmapBoundary.current_proof : {};
   const toggleBoundary = isRecord(item.participant_toggle_boundary) ? item.participant_toggle_boundary : {};
@@ -3186,6 +3217,41 @@ function parseReviewItem(raw: unknown): CollaborationReviewItem {
       grantsMemoryWriteAuthority: safeBoolean(sourceDisagreementProof.grants_memory_write_authority),
       grantsTrainingAuthority: safeBoolean(sourceDisagreementProof.grants_training_authority),
       grantsCapabilityAuthority: safeBoolean(sourceDisagreementProof.grants_capability_authority),
+    },
+    capabilityExposureBoundary: {
+      applies: safeBoolean(capabilityExposureBoundary.applies),
+      surface: safeString(capabilityExposureBoundary.surface),
+      bodySurfaceVisible: safeBoolean(capabilityExposureBoundary.body_surface_visible),
+      visibilityIsCapabilityGrant: safeBoolean(capabilityExposureBoundary.visibility_is_capability_grant),
+      capabilityUseAllowedByReview: safeBoolean(capabilityExposureBoundary.capability_use_allowed_by_review),
+      capabilityGrantedByThisReview: safeBoolean(capabilityExposureBoundary.capability_granted_by_this_review),
+      capabilityUseRequiresGrantReceipt: safeBoolean(capabilityExposureBoundary.capability_use_requires_grant_receipt),
+      requiresTrustLadderDecision: safeBoolean(capabilityExposureBoundary.requires_trust_ladder_decision),
+      requiresCapabilityGrantReadback: safeBoolean(capabilityExposureBoundary.requires_capability_grant_readback),
+      requiresCodexOrOperatorReview: safeBoolean(capabilityExposureBoundary.requires_codex_or_operator_review),
+      requiresRepoTruthReview: safeBoolean(capabilityExposureBoundary.requires_repo_truth_review),
+      requiresTypedReviewArtifact: safeBoolean(capabilityExposureBoundary.requires_typed_review_artifact),
+      denyAfterGrantSupported: safeBoolean(capabilityExposureBoundary.deny_after_grant_supported),
+      staleMemoryDetaches: safeBoolean(capabilityExposureBoundary.stale_memory_detaches),
+      allowedGrantModes: Array.isArray(capabilityExposureBoundary.allowed_grant_modes)
+        ? capabilityExposureBoundary.allowed_grant_modes.map((entry) => safeString(entry)).filter(Boolean)
+        : [],
+      requiredProofFields: Array.isArray(capabilityExposureBoundary.required_proof_fields)
+        ? capabilityExposureBoundary.required_proof_fields.map((entry) => safeString(entry)).filter(Boolean)
+        : [],
+      requiredReadbacks: Array.isArray(capabilityExposureBoundary.required_readbacks)
+        ? capabilityExposureBoundary.required_readbacks.map((entry) => safeString(entry)).filter(Boolean)
+        : [],
+      validationTests: Array.isArray(capabilityExposureBoundary.validation_tests)
+        ? capabilityExposureBoundary.validation_tests.map((entry) => safeString(entry)).filter(Boolean)
+        : [],
+      nextCodexAction: safeString(capabilityExposureBoundary.next_codex_action),
+      grantsCapabilityAuthority: safeBoolean(capabilityExposureBoundary.grants_capability_authority),
+      grantsExecutionAuthority: safeBoolean(capabilityExposureBoundary.grants_execution_authority),
+      grantsMutationAuthority: safeBoolean(capabilityExposureBoundary.grants_mutation_authority),
+      grantsApprovalAuthority: safeBoolean(capabilityExposureBoundary.grants_approval_authority),
+      grantsMemoryWriteAuthority: safeBoolean(capabilityExposureBoundary.grants_memory_write_authority),
+      grantsTrainingAuthority: safeBoolean(capabilityExposureBoundary.grants_training_authority),
     },
     roadmapAlignmentProof: {
       latestLedgerEntry: safeString(roadmapProof.latest_ledger_entry),
@@ -4401,6 +4467,7 @@ export function parseCollaborationReview(raw: unknown): CollaborationReview {
       buildDirectionGate: safeString(definitions.build_direction_gate),
       implementationPreflight: safeString(definitions.implementation_preflight),
       sourceDisagreementBoundary: safeString(definitions.source_disagreement_boundary),
+      capabilityExposureBoundary: safeString(definitions.capability_exposure_boundary),
       participantToggleBoundary: safeString(definitions.participant_toggle_boundary),
       modelAdviceGovernanceBoundary: safeString(definitions.model_advice_governance_boundary),
     },

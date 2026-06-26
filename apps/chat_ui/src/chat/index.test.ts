@@ -2509,6 +2509,7 @@ test("parseCollaborationReview preserves advisory candidate boundaries", () => {
       build_direction_gate: "Whether the review item can be used as build direction.",
       implementation_preflight: "The exact typed review receipt Codex/operator should read.",
       source_disagreement_boundary: "Typed proof checklist for source disagreements.",
+      capability_exposure_boundary: "Typed proof checklist separating body visibility from capability use.",
     },
     items: [
       {
@@ -2654,6 +2655,40 @@ test("parseCollaborationReview preserves advisory candidate boundaries", () => {
             grants_training_authority: false,
             grants_capability_authority: false,
           },
+        },
+        capability_exposure_boundary: {
+          applies: true,
+          surface: "developer_bridge.francis_body_map",
+          body_surface_visible: true,
+          visibility_is_capability_grant: false,
+          capability_use_allowed_by_review: false,
+          capability_granted_by_this_review: false,
+          capability_use_requires_grant_receipt: true,
+          requires_trust_ladder_decision: true,
+          requires_capability_grant_readback: true,
+          requires_codex_or_operator_review: true,
+          requires_repo_truth_review: true,
+          requires_typed_review_artifact: true,
+          deny_after_grant_supported: true,
+          stale_memory_detaches: true,
+          allowed_grant_modes: ["observe", "read", "request", "propose_plan"],
+          required_proof_fields: [
+            "francis_body_map.summary.full_body_authority_granted=false",
+            "capability_exposure_boundary.grants_capability_authority=false",
+          ],
+          required_readbacks: [
+            "/developer-bridge/francis-body-map summary and surfaces",
+            "/developer-bridge/francis-capability-grants receipt before capability use",
+          ],
+          validation_tests: ["tests/test_developer_bridge.py::test_francis_body_map_exposes_whole_body_without_authority"],
+          next_codex_action:
+            "Inspect the body-map, trust-ladder, and capability-grant readbacks before exposing any Francis body surface.",
+          grants_capability_authority: false,
+          grants_execution_authority: false,
+          grants_mutation_authority: false,
+          grants_approval_authority: false,
+          grants_memory_write_authority: false,
+          grants_training_authority: false,
         },
         roadmap_alignment_boundary: {
           current_proof: {
@@ -2816,6 +2851,7 @@ test("parseCollaborationReview preserves advisory candidate boundaries", () => {
   assert.equal(review.definitions.buildDirectionGate.includes("build direction"), true);
   assert.equal(review.definitions.implementationPreflight.includes("exact typed review receipt"), true);
   assert.equal(review.definitions.sourceDisagreementBoundary.includes("source disagreements"), true);
+  assert.equal(review.definitions.capabilityExposureBoundary.includes("body visibility"), true);
   assert.equal(review.items[0]?.insightId, "insight-alpha");
   assert.equal(review.items[0]?.concreteRepoSurface, "apps.chat_ui.communication");
   assert.equal(review.items[0]?.surfaceVerification.status, "existing_surface_found");
@@ -2890,6 +2926,30 @@ test("parseCollaborationReview preserves advisory candidate boundaries", () => {
   assert.equal(review.items[0]?.sourceDisagreementBoundary.grantsBuildDirectionAuthority, false);
   assert.equal(review.items[0]?.sourceDisagreementBoundary.grantsExecutionAuthority, false);
   assert.equal(review.items[0]?.sourceDisagreementBoundary.grantsCapabilityAuthority, false);
+  assert.equal(review.items[0]?.capabilityExposureBoundary.applies, true);
+  assert.equal(review.items[0]?.capabilityExposureBoundary.surface, "developer_bridge.francis_body_map");
+  assert.equal(review.items[0]?.capabilityExposureBoundary.bodySurfaceVisible, true);
+  assert.equal(review.items[0]?.capabilityExposureBoundary.visibilityIsCapabilityGrant, false);
+  assert.equal(review.items[0]?.capabilityExposureBoundary.capabilityUseAllowedByReview, false);
+  assert.equal(review.items[0]?.capabilityExposureBoundary.capabilityGrantedByThisReview, false);
+  assert.equal(review.items[0]?.capabilityExposureBoundary.capabilityUseRequiresGrantReceipt, true);
+  assert.equal(review.items[0]?.capabilityExposureBoundary.requiresTrustLadderDecision, true);
+  assert.equal(review.items[0]?.capabilityExposureBoundary.requiresCapabilityGrantReadback, true);
+  assert.equal(review.items[0]?.capabilityExposureBoundary.denyAfterGrantSupported, true);
+  assert.equal(review.items[0]?.capabilityExposureBoundary.staleMemoryDetaches, true);
+  assert.deepEqual(review.items[0]?.capabilityExposureBoundary.allowedGrantModes, [
+    "observe",
+    "read",
+    "request",
+    "propose_plan",
+  ]);
+  assert.deepEqual(review.items[0]?.capabilityExposureBoundary.requiredReadbacks, [
+    "/developer-bridge/francis-body-map summary and surfaces",
+    "/developer-bridge/francis-capability-grants receipt before capability use",
+  ]);
+  assert.equal(review.items[0]?.capabilityExposureBoundary.grantsCapabilityAuthority, false);
+  assert.equal(review.items[0]?.capabilityExposureBoundary.grantsExecutionAuthority, false);
+  assert.equal(review.items[0]?.capabilityExposureBoundary.grantsMemoryWriteAuthority, false);
   assert.equal(review.items[0]?.roadmapAlignmentProof.latestLedgerEntry, "2026-06-26 05:24Z - Codex auto-ack source alignment");
   assert.equal(review.items[0]?.roadmapAlignmentProof.currentPhase, "Phase 2");
   assert.equal(review.items[0]?.roadmapAlignmentProof.ledgerObserved, true);

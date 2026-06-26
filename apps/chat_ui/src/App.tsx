@@ -3644,6 +3644,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
               const participantToggle = item.participantToggleBoundary;
               const modelAdvice = item.modelAdviceGovernanceBoundary;
               const sourceDisagreement = item.sourceDisagreementBoundary;
+              const capabilityExposure = item.capabilityExposureBoundary;
               return (
                 <article
                   key={item.id || item.insightId}
@@ -3786,6 +3787,29 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
                               .join(" / ")}
                           </dd>
                         ) : null}
+                      </div>
+                    ) : null}
+                    {capabilityExposure.applies ? (
+                      <div>
+                        <dt style={{ color: "#93c5fd" }}>Capability Exposure</dt>
+                        <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
+                          visible {boolText(capabilityExposure.bodySurfaceVisible)} / visibility grant{" "}
+                          {boolText(capabilityExposure.visibilityIsCapabilityGrant)} / use allowed{" "}
+                          {boolText(capabilityExposure.capabilityUseAllowedByReview)} / granted by review{" "}
+                          {boolText(capabilityExposure.capabilityGrantedByThisReview)}
+                        </dd>
+                        <dd style={{ color: "#94a3b8", margin: "4px 0 0", overflowWrap: "anywhere" }}>
+                          grant receipt {boolText(capabilityExposure.capabilityUseRequiresGrantReceipt)} / trust ladder{" "}
+                          {boolText(capabilityExposure.requiresTrustLadderDecision)} / capability readback{" "}
+                          {boolText(capabilityExposure.requiresCapabilityGrantReadback)} / deny after grant{" "}
+                          {boolText(capabilityExposure.denyAfterGrantSupported)}
+                        </dd>
+                        <dd style={{ color: "#94a3b8", margin: "4px 0 0", overflowWrap: "anywhere" }}>
+                          modes {capabilityExposure.allowedGrantModes.join(", ") || "none"} / stale memory detaches{" "}
+                          {boolText(capabilityExposure.staleMemoryDetaches)} / capability authority{" "}
+                          {boolText(capabilityExposure.grantsCapabilityAuthority)} / execute{" "}
+                          {boolText(capabilityExposure.grantsExecutionAuthority)}
+                        </dd>
                       </div>
                     ) : null}
                     {hasRoadmapProof ? (
