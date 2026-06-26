@@ -1666,19 +1666,50 @@ export function formatCollaborationRelayMessage(item: CollaborationTranscriptIte
     ". Topic",
   ]);
   const topic = textBetween(raw, "Topic:", [" Reply:", ". Reply:", " Current artifact:", ". Current artifact:"]);
-  const bodyMap = textBetween(raw, "Body map:", [" Trust:", ". Trust:", " Current artifact:", ". Current artifact:"]);
-  const trust = textBetween(raw, "Trust:", [" Current artifact:", ". Current artifact:", " Prior check:", ". Prior check:"]);
+  const bodyMap = textBetween(raw, "Body map:", [
+    " Roadmap:",
+    ". Roadmap:",
+    " Trust:",
+    ". Trust:",
+    " Current artifact:",
+    ". Current artifact:",
+  ]);
+  const roadmap = textBetween(raw, "Roadmap:", [" Trust:", ". Trust:", " Current artifact:", ". Current artifact:"]);
+  const trust = textBetween(raw, "Trust:", [
+    " Claude=",
+    ". Claude=",
+    " Current artifact:",
+    ". Current artifact:",
+    " Prior check:",
+    ". Prior check:",
+  ]);
+  const sourceAlignment = raw.includes("Claude=guidance; Francis=subject; validate claims.")
+    ? "Claude=guidance; Francis=subject; validate claims"
+    : textBetween(raw, "Claude acknowledged as guidance;", [" Current artifact:", ". Current artifact:"]);
   const artifact = textBetween(raw, "Current artifact:", [". Prior check:", " Prior check:", ". Codex response:", " Codex response:"]);
-  const priorCheck = textBetween(raw, "Prior check:", [". Codex response:", " Codex response:", ". Body map:", " Body map:"]);
-  const codexResponse = textBetween(raw, "Codex response:", [
+  const priorCheck = textBetween(raw, "Prior check:", [
+    ". Codex response:",
+    " Codex response:",
+    ". Codex:",
+    " Codex:",
     ". Guard note:",
     " Guard note:",
+    ". Guard:",
+    " Guard:",
+    ". Body map:",
+    " Body map:",
+  ]);
+  const codexResponse = firstTextBetween(raw, ["Codex response:", "Codex:"], [
+    ". Guard note:",
+    " Guard note:",
+    ". Guard:",
+    " Guard:",
     ". Body map:",
     " Body map:",
     ". Trust:",
     " Trust:",
   ]);
-  const guardNote = textBetween(raw, "Guard note:", []);
+  const guardNote = firstTextBetween(raw, ["Guard note:", "Guard:"], []);
   const lines = [
     turn ? `Turn ${turn}` : item.objective,
     topic ? `Topic: ${topic}` : "",
@@ -1688,7 +1719,9 @@ export function formatCollaborationRelayMessage(item: CollaborationTranscriptIte
   const technicalLines = [
     turn ? `Turn ${turn}` : item.objective,
     bodyMap ? `Body map: ${bodyMap}` : "",
+    roadmap ? `Roadmap: ${roadmap}` : "",
     trust ? `Trust: ${trust}` : "",
+    sourceAlignment ? `Source alignment: ${sourceAlignment}` : "",
     artifact ? `Artifact: ${artifact}` : "",
     priorCheck ? `Prior check: ${priorCheck}` : "",
     guardNote ? `Guard note: ${guardNote}` : "",

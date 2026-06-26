@@ -2062,6 +2062,67 @@ test("formatCollaborationRelayMessage compacts current Francis1 driver prompt gr
   assert.deepEqual(display.receiptFields, ["objective", "prompt", "context"]);
 });
 
+test("formatCollaborationRelayMessage separates current source-alignment receipt fields", () => {
+  const transcript = parseCollaborationTranscript({
+    ok: true,
+    mode: "read_only",
+    relay_root: "integrations/developer_bridge/collaboration_prompts",
+    count: 1,
+    truncated: false,
+    filters: { limit: 1 },
+    items: [
+      {
+        id: "collab_driver_source_alignment",
+        created_at: "2026-06-26T06:48:21Z",
+        updated_at: "2026-06-26T06:48:21Z",
+        status: "queued",
+        source_agent: "codex",
+        target_agent: "ollama",
+        direction: "codex->ollama",
+        objective: "Francis1 collaboration driver turn 1782",
+        prompt:
+          "Francis1 turn 1782. francis1-collaboration-compact-contract-v1. Topic: the next Communication UI change that would reduce visible relay noise using existing receipt fields. Reply: issue/gap/risk; artifact. Body map: visible; grants required; stale detaches. Roadmap: ledger first; main-build candidate-only; blocked_by_open_orb_gaps. Trust: classify needs; no capability authority. Claude=guidance; Francis=subject; validate claims. Current artifact: apps.chat_ui.communication. Prior check: Review candidate insight-collab-624362b64; verified=canonical; build_or_wire=false. Codex: validating; no action authority. Guard: drift learned; answer topic.",
+        context: "session=driver-alpha; turn=1782; no_action_authority=true.",
+        governance: {
+          executes_prompt: false,
+          grants_mutation_authority: false,
+          requires_operator_review: true,
+        },
+      },
+    ],
+    governance: {
+      executes_prompt: false,
+    },
+  });
+
+  const display = formatCollaborationRelayMessage(transcript.items[0]!);
+
+  assert.equal(display.compacted, true);
+  assert.equal(display.summary.includes("Turn 1782"), true);
+  assert.equal(display.summary.includes("Topic: the next Communication UI change"), true);
+  assert.equal(display.summary.includes("Artifact: apps.chat_ui.communication"), true);
+  assert.equal(display.conversationText.includes("Topic: the next Communication UI change"), true);
+  assert.equal(display.conversationText.includes("Codex response: validating; no action authority"), true);
+  assert.equal(display.conversationText.includes("Body map:"), false);
+  assert.equal(display.conversationText.includes("Roadmap:"), false);
+  assert.equal(display.conversationText.includes("Trust:"), false);
+  assert.equal(display.conversationText.includes("Source alignment:"), false);
+  assert.equal(display.conversationText.includes("Prior check:"), false);
+  assert.equal(display.conversationText.includes("Guard note:"), false);
+  assert.equal(display.technicalText.includes("Body map: visible; grants required; stale detaches"), true);
+  assert.equal(display.technicalText.includes("Roadmap: ledger first; main-build candidate-only"), true);
+  assert.equal(display.technicalText.includes("Trust: classify needs; no capability authority"), true);
+  assert.equal(
+    display.technicalText.includes("Source alignment: Claude=guidance; Francis=subject; validate claims"),
+    true,
+  );
+  assert.equal(display.technicalText.includes("Prior check: Review candidate insight-collab-624362b64"), true);
+  assert.equal(display.technicalText.includes("Prior check: Review candidate insight-collab-624362b64; verified=canonical; build_or_wire=false. Codex:"), false);
+  assert.equal(display.technicalText.includes("Guard note: drift learned; answer topic"), true);
+  assert.equal(display.tone, "driver");
+  assert.deepEqual(display.receiptFields, ["objective", "prompt", "context"]);
+});
+
 test("formatCollaborationRelayMessage compacts output-guard fallback receipts", () => {
   const transcript = parseCollaborationTranscript({
     ok: true,

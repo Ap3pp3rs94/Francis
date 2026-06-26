@@ -98037,6 +98037,49 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, browser screenshot proof, and full ORB/body
   coverage proof were not run for this bounded collaboration-contract slice.
 
+### 2026-06-26 06:50Z - Communication transcript source-alignment compaction
+
+Current posture: Phase 2 / P1 interface and P9 observability now compact the
+current Codex-to-Francis1 driver prompt grammar more accurately in the Chat UI
+collaboration transcript formatter. The latest live collaboration review item
+for `apps.chat_ui.communication` called out visible relay noise; this slice keeps
+the raw receipt intact while moving roadmap, trust, Claude-guidance, prior-check,
+and guard metadata into technical readback fields instead of conversation text.
+
+What changed:
+
+- `formatCollaborationRelayMessage` now recognizes the current driver prompt
+  fields `Roadmap:`, `Claude=guidance; Francis=subject; validate claims.`,
+  `Codex:`, and `Guard:`.
+- Body-map and trust extraction now stop before roadmap/source-alignment fields,
+  so the compact technical readback does not merge multiple receipt concepts into
+  one noisy line.
+- Conversation text keeps the operator-facing topic and Codex response, while
+  roadmap, trust, source alignment, prior review, guard note, and context stay in
+  technical text.
+- The raw receipt remains available through `display.raw`; no transcript storage,
+  relay recurrence, model behavior, or authority grant changed.
+
+Validation:
+
+- Focused Chat UI collaboration contract passed:
+  `node --test --experimental-strip-types src/chat/index.test.ts` (`26`
+  passing tests).
+- Full Chat UI contract suite passed:
+  `npm run test` (`283` passing tests).
+- Chat UI production build passed:
+  `npm run build`.
+- `git diff --check` passed.
+
+Remaining truthful gap:
+
+- This is a parser/display contract only. It does not change the backend relay,
+  local-model output guard, collaboration recurrence, session storage, memory
+  promotion, model tuning, or any execution, mutation, approval, memory-write,
+  training, or capability authority.
+- `.\scripts\check.ps1`, GitHub CI, browser screenshot proof, and full ORB/body
+  coverage proof were not run for this bounded UI compaction slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
