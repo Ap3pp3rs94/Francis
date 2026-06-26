@@ -398,7 +398,7 @@ def _next_prompt(state: dict[str, object], *, max_turns: int) -> str:
     )
     if len(prompt) <= _MAX_DRIVER_PROMPT_CHARS:
         return prompt
-    return _compose_driver_prompt(
+    prompt = _compose_driver_prompt(
         turn_label=turn_label,
         topic=_bounded_text(topic, limit=72),
         body_map_line=_COMPACT_BODY_MAP_PROMPT_LINE,
@@ -406,6 +406,16 @@ def _next_prompt(state: dict[str, object], *, max_turns: int) -> str:
         trust_line=trust_line,
         topic_artifact=_topic_artifact_line(topic, surface_limit=72),
         prior_check=_extra_compact_prior_check(prior_check),
+        codex_response=codex_response,
+        loop_line=loop_line,
+    )
+    return _fit_driver_prompt_to_budget(
+        prompt,
+        turn_label=turn_label,
+        topic=topic,
+        roadmap_gate_line=roadmap_gate_line,
+        trust_line=trust_line,
+        prior_check=prior_check,
         codex_response=codex_response,
         loop_line=loop_line,
     )
@@ -435,6 +445,84 @@ def _compose_driver_prompt(
     )
 
 
+def _fit_driver_prompt_to_budget(
+    prompt: str,
+    *,
+    turn_label: str,
+    topic: str,
+    roadmap_gate_line: str,
+    trust_line: str,
+    prior_check: str,
+    codex_response: str,
+    loop_line: str,
+) -> str:
+    if len(prompt) <= _MAX_DRIVER_PROMPT_CHARS:
+        return prompt
+
+    compact_loop = _extra_compact_loop_line(loop_line)
+    compact_codex = _extra_compact_codex_response_line(codex_response)
+    compact_roadmap = "Roadmap: ledger first; candidate-only."
+    compact_trust = "Trust: no capability authority."
+    attempts = [
+        (
+            64,
+            64,
+            _COMPACT_BODY_MAP_PROMPT_LINE,
+            roadmap_gate_line,
+            trust_line,
+            _extra_compact_prior_check(prior_check),
+            compact_codex,
+            compact_loop,
+        ),
+        (
+            56,
+            56,
+            _COMPACT_BODY_MAP_PROMPT_LINE,
+            compact_roadmap,
+            compact_trust,
+            _extra_compact_prior_check(prior_check),
+            compact_codex,
+            compact_loop,
+        ),
+        (
+            44,
+            44,
+            "",
+            compact_roadmap,
+            compact_trust,
+            _ultra_compact_prior_check(prior_check),
+            compact_codex,
+            compact_loop,
+        ),
+        (
+            32,
+            32,
+            "",
+            compact_roadmap,
+            compact_trust,
+            _ultra_compact_prior_check(prior_check),
+            " Codex: no action authority.",
+            " Guard: issue + artifact." if loop_line else "",
+        ),
+    ]
+    for topic_limit, surface_limit, body_map_line, roadmap_line, trust_line_value, prior, codex, loop in attempts:
+        candidate = _compose_driver_prompt(
+            turn_label=turn_label,
+            topic=_bounded_text(topic, limit=topic_limit),
+            body_map_line=body_map_line,
+            roadmap_gate_line=roadmap_line,
+            trust_line=trust_line_value,
+            topic_artifact=_topic_artifact_line(topic, surface_limit=surface_limit),
+            prior_check=prior,
+            codex_response=codex,
+            loop_line=loop,
+        )
+        if len(candidate) <= _MAX_DRIVER_PROMPT_CHARS:
+            return candidate
+
+    return _bounded_text(candidate, limit=_MAX_DRIVER_PROMPT_CHARS)
+
+
 def _guard_prompt_line(guard_signal: dict[str, object]) -> str:
     terms = [str(term) for term in _list(guard_signal.get("repeated_terms"))]
     if "stale_action_readiness_topic_replay" in terms:
@@ -448,6 +536,14 @@ def _codex_response_line(review_line: str) -> str:
     if "build_or_wire=false" in review_line:
         return " Codex: validating; no action authority."
     return " Codex: verifying repo truth before build."
+
+
+def _extra_compact_codex_response_line(codex_response: str) -> str:
+    if not codex_response:
+        return ""
+    if "no action authority" in codex_response:
+        return " Codex: validates; no action authority."
+    return " Codex: repo truth first."
 
 
 def _compact_review_line(review_line: str) -> str:
@@ -483,17 +579,49 @@ def _extra_compact_prior_check(prior_check: str) -> str:
     if not prior_check:
         return ""
     insight_id = _field_after(prior_check, "Review candidate ", ":")
+    surface = _field_after(prior_check, "surface=", ";")
     verified = _field_after(prior_check, "verified=", ";")
     build_or_wire = _field_after(prior_check, "build_or_wire=", ".")
     if not insight_id:
         return _bounded_text(prior_check, limit=80)
     suffix_parts = []
+    if surface:
+        suffix_parts.append(f"surface={_bounded_text(surface, limit=_PROMPT_REVIEW_SURFACE_LIMIT)}")
     if verified:
         suffix_parts.append(f"verified={verified}")
     if build_or_wire:
         suffix_parts.append(f"build_or_wire={build_or_wire}")
     suffix = f"; {'; '.join(suffix_parts)}" if suffix_parts else ""
     return f" Prior check: Review candidate {_bounded_text(insight_id, limit=_PROMPT_REVIEW_ID_LIMIT)}{suffix}."
+
+
+def _ultra_compact_prior_check(prior_check: str) -> str:
+    if not prior_check:
+        return ""
+    insight_id = _field_after(prior_check, "Review candidate ", ":")
+    verified = _field_after(prior_check, "verified=", ";")
+    build_or_wire = _field_after(prior_check, "build_or_wire=", ".")
+    if not insight_id:
+        return _bounded_text(prior_check, limit=60)
+    parts = [f"Prior check: {_bounded_text(insight_id, limit=_PROMPT_REVIEW_ID_LIMIT)}"]
+    if verified:
+        parts.append(f"verified={_bounded_text(verified, limit=20)}")
+    if build_or_wire:
+        parts.append(f"build_or_wire={_bounded_text(build_or_wire, limit=12)}")
+    return " " + "; ".join(parts) + "."
+
+
+def _extra_compact_loop_line(loop_line: str) -> str:
+    if not loop_line:
+        return ""
+    lower = loop_line.lower()
+    if "stale replay" in lower:
+        return " Guard: stale replay; issue + artifact."
+    if "guard:" in lower:
+        return " Guard: drift learned; issue + artifact."
+    if "loop:" in lower:
+        return " Loop: use prior surface."
+    return " " + _bounded_text(loop_line, limit=60).strip()
 
 
 def _topic_artifact_line(topic: str, *, surface_limit: int = 140) -> str:

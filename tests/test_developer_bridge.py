@@ -2818,6 +2818,57 @@ def test_collaboration_driver_compacts_long_review_line_into_prompt_budget(tmp_p
     assert len(prompt) <= 700
 
 
+def test_collaboration_driver_enforces_prompt_budget_with_guard_context(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+    import francis.developer_bridge.collaboration_driver as driver
+
+    monkeypatch.setattr(
+        driver,
+        "latest_review_candidate_line",
+        lambda: (
+            "Review candidate insight-collab-6ee697595059e91e-a4e030144507: "
+            "surface=developer_bridge.collaboration_review.items; verified=existing; build_or_wire=false."
+        ),
+    )
+    topic = "the exact review receipt a Codex implementation session should read before editing collaboration code"
+    monkeypatch.setattr(driver, "_topic_for_next_turn", lambda *args, **kwargs: topic)
+
+    state = driver._empty_state()
+    state["turn_count"] = 1886
+    state["turns"] = [
+        {
+            "turn": 1885,
+            "note_id": "note-guard-1",
+            "ollama_prompt_id": "collab-guard-1",
+            "note_summary": (
+                "Francis1 output guard fallback: model reply repeated known collaboration drift after Codex "
+                "provided a verified surface. Drift terms: local_model_reconciliation_loop."
+            ),
+        },
+        {
+            "turn": 1886,
+            "note_id": "note-guard-2",
+            "ollama_prompt_id": "collab-guard-2",
+            "note_summary": (
+                "Francis1 output guard fallback: model reply repeated known collaboration drift after Codex "
+                "provided a verified surface. Drift terms: clarification_dependency."
+            ),
+        },
+    ]
+
+    prompt = driver._next_prompt(state, max_turns=0)
+
+    assert len(prompt) <= driver.driver_prompt_max_chars()
+    assert "Claude guidance acknowledged; Francis stays subject; Codex validates repo truth." in prompt
+    assert "Current artifact: developer_bridge.collaboration_review.items" in prompt
+    assert "Prior check:" in prompt
+    assert "insight-collab-6ee697595" in prompt
+    assert "verified=existing" in prompt
+    assert "build_or_wire=false" in prompt
+    assert "no action authority" in prompt
+    assert "Guard:" in prompt
+
+
 def test_collaboration_learning_events_readback_is_bounded_and_read_only(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
     from francis.developer_bridge.collaboration_driver import drive_once, read_collaboration_learning_events

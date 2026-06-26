@@ -98688,6 +98688,57 @@ Remaining truthful gap:
 - Browser screenshot proof, `.\scripts\check.ps1`, GitHub CI, and full ORB/body
   coverage proof were not run for this bounded Communication UI readback slice.
 
+### 2026-06-26 08:33Z - Collaboration driver prompt budget hardening
+
+Current posture: Phase 2 / P9 collaboration runtime now enforces the driver
+prompt budget even when Claude guidance, prior-review receipts, and
+output-guard context are all present. Codex can keep acknowledging Claude as a
+guidance source while keeping Francis as the subject and Francis1/Ollama as
+advisory, no-action-authority participants.
+
+What changed:
+
+- Added a final collaboration-driver budget fitting path after the existing
+  compact prompt attempts so over-budget guard-context prompts are reduced below
+  the configured `700` character contract before submission.
+- Kept the prompt focused on Francis by retaining the Claude acknowledgment,
+  current artifact, prior review id, verified/build-or-wire state, and no-action
+  authority language while compacting body-map, roadmap, trust, Codex, and guard
+  lines only as needed.
+- Updated compact prior-review handling so normal long review prompts still keep
+  the reviewed surface instead of dropping the concrete artifact too early.
+- Added a regression test for the live failure shape: output-guard context plus
+  review receipt plus Claude guidance must still fit within
+  `driver_prompt_max_chars()`.
+
+Validation:
+
+- Focused developer-bridge tests passed:
+  `python -m pytest tests\test_developer_bridge.py::test_collaboration_driver_compacts_long_review_line_into_prompt_budget tests\test_developer_bridge.py::test_collaboration_driver_enforces_prompt_budget_with_guard_context tests\test_developer_bridge.py::test_collaboration_driver_waits_for_ollama_before_next_turn tests\test_developer_bridge.py::test_collaboration_runtime_health_is_read_only_and_reports_recurrence -q`.
+- Ruff lint passed for touched files:
+  `python -m ruff check src\francis\developer_bridge\collaboration_driver.py tests\test_developer_bridge.py`.
+- Ruff format check passed for touched files:
+  `python -m ruff format --check src\francis\developer_bridge\collaboration_driver.py tests\test_developer_bridge.py`.
+- Mypy passed for the touched runtime module:
+  `python -m mypy src\francis\developer_bridge\collaboration_driver.py`.
+- `git diff --check` passed.
+- Live runtime was restarted from PID `26860`; post-restart runtime readback
+  returned `status=healthy`, `helper_count=3`,
+  `live_health_evidence.proof_status=recurring_cleanly`, and latest driver
+  prompt `collab-59cebb3d0df5fad3-9d6dffb17ebd` at length `693` with
+  `latest_prompt_within_budget=true`.
+
+Remaining truthful gap:
+
+- The rolling `driver_prompt_budget.status` still reports `violation` until old
+  pre-fix over-budget prompts age out of the recent 15-prompt observation
+  window; the latest refreshed prompt was within budget.
+- This does not tune Francis1, resolve all output-guard drift, grant Ollama any
+  new capability, execute model advice, or close the broader governed action
+  path.
+- Full `.\scripts\check.ps1`, browser screenshot proof, GitHub CI, and broader
+  ORB/body validation were not run for this bounded driver prompt slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
