@@ -67,6 +67,8 @@ _LOOP_MARKERS = (
     ("advisory_output_boundary", "advisory output"),
     ("executable_code_boundary", "executable code"),
     ("clarification_dependency", "clarify"),
+    ("advice_only_execution_overgeneralization", "advice only before"),
+    ("execution_readiness_overgeneralization", "before it's executed"),
     ("roadmap_alignment_overgeneralization", "readiness.roadmap_alignment"),
     ("main_build_candidate_only_overgeneralization", "main-build candidate-only"),
 )
@@ -532,6 +534,8 @@ def _loop_prompt_line(loop_signal: dict[str, object]) -> str:
     repeated_terms = [str(term) for term in _list(loop_signal.get("repeated_terms"))]
     if "roadmap_alignment_overgeneralization" in repeated_terms:
         return " Loop: roadmap_overgeneralization; answer artifact."
+    if "advice_only_execution_overgeneralization" in repeated_terms:
+        return " Loop: advice_only_execution_drift; answer artifact."
     preferred_term = next((term for term in repeated_terms if term == "user_confirmation_fallback"), "")
     terms = preferred_term or (repeated_terms[0] if repeated_terms else "repeated meta terms")
     if len(repeated_terms) > 1:
@@ -631,6 +635,8 @@ def _extra_compact_loop_line(loop_line: str) -> str:
     if "loop:" in lower:
         if "roadmap_overgeneralization" in lower:
             return " Loop: roadmap_overgeneralization; answer artifact."
+        if "advice_only_execution_drift" in lower:
+            return " Loop: advice_only_execution_drift; answer artifact."
         if "user_confirmation_fallback" in lower:
             return " Loop: user_confirmation_fallback; use prior surface."
         return " Loop: use prior surface."
@@ -1059,6 +1065,8 @@ def _learning_signal_classification(failure_type: str) -> str:
         return "local_model_output_guard_drift"
     if failure_type == "roadmap_alignment_overgeneralization":
         return "local_model_roadmap_overgeneralization"
+    if failure_type == "advice_only_execution_overgeneralization":
+        return "local_model_action_readiness_overgeneralization"
     if failure_type == "repetitive_meta_loop":
         return "collaboration_meta_loop"
     return failure_type or "unknown_learning_signal"
@@ -1071,6 +1079,8 @@ def _learning_signal_impact(failure_type: str) -> str:
         return (
             "Repeated roadmap language can blur the current artifact under review while the roadmap gate remains true."
         )
+    if failure_type == "advice_only_execution_overgeneralization":
+        return "Repeated advice-only execution language can blur action-readiness review across unrelated topics."
     if failure_type == "repetitive_meta_loop":
         return "Repeated meta loops consume collaboration turns without adding repo-truth evidence."
     return "Repeated collaboration failures should remain review evidence before tuning or memory promotion."
@@ -1347,6 +1357,29 @@ def _loop_signal(state: dict[str, object]) -> dict[str, object]:
                 "next_prompt_policy": (
                     "ask Francis1 to answer the current artifact and cite the review receipt instead of "
                     "repeating roadmap-alignment language"
+                ),
+            }
+        )
+    elif "advice_only_execution_overgeneralization" in repeated_terms:
+        signal.update(
+            {
+                "failure_type": "advice_only_execution_overgeneralization",
+                "observation": (
+                    "Francis1 repeatedly reused advice-only/execution-readiness language across different "
+                    "collaboration topics, so the repetition is learning material and not a fresh "
+                    "action-readiness claim."
+                ),
+                "memory_value": (
+                    "advice-only execution wording should be stored as bounded drift evidence unless the current "
+                    "artifact is actually the action-readiness boundary"
+                ),
+                "operator_intent": (
+                    "keep local-model advice separate from governed execution while preserving the current "
+                    "artifact under review"
+                ),
+                "next_prompt_policy": (
+                    "ask Francis1 to answer the current artifact and cite the review receipt instead of "
+                    "repeating advice-only execution language"
                 ),
             }
         )

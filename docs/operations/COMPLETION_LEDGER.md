@@ -98982,6 +98982,58 @@ Remaining truthful gap:
   ORB/body validation remain outside this bounded learning-signal slice until
   separately run.
 
+### 2026-06-26 12:30Z - Advice-only execution drift becomes learning signal
+
+Current posture: Phase 2 / P9 collaboration learning now records repeated
+Francis1 advice-only/execution-readiness wording across unrelated topics as
+bounded drift evidence. The action-readiness boundary remains true; repeated
+reuse of that language is no longer treated as fresh build direction for every
+topic.
+
+What changed:
+
+- Added collaboration-driver loop markers for
+  `advice_only_execution_overgeneralization` and
+  `execution_readiness_overgeneralization`.
+- Added a typed `advice_only_execution_overgeneralization` learning signal with
+  no training, memory-promotion, execution, mutation, or approval authority.
+- Added a compact loop prompt hint that asks Francis1 to answer the current
+  artifact instead of repeating advice-only execution wording.
+- Added regression coverage for the live pattern where several unrelated topics
+  receive the same advice-only-before-execution answer.
+
+Validation:
+
+- Focused learning-signal tests passed:
+  `python -m pytest tests\test_developer_bridge.py::test_collaboration_driver_records_advice_only_execution_drift_as_learning_event tests\test_developer_bridge.py::test_collaboration_driver_records_roadmap_overgeneralization_as_learning_event -q`.
+- Full developer-bridge backend test file passed:
+  `python -m pytest tests\test_developer_bridge.py -q`.
+- Ruff lint passed for touched files:
+  `python -m ruff check src\francis\developer_bridge\collaboration_driver.py tests\test_developer_bridge.py`.
+- Ruff format check passed for touched files:
+  `python -m ruff format --check src\francis\developer_bridge\collaboration_driver.py tests\test_developer_bridge.py`.
+- Mypy passed for the touched backend module:
+  `python -m mypy src\francis\developer_bridge\collaboration_driver.py`.
+- Compile check passed:
+  `python -m compileall src\francis\developer_bridge\collaboration_driver.py`.
+- `git diff --check` passed.
+- Live collaboration helpers were restarted after the code change; runtime
+  readback returned `status=healthy`, `helper_count=3`,
+  `latest_prompt_within_budget=true`, and `manual_nudge_required=false`.
+- Live learning-event readback reported
+  `failure_type=advice_only_execution_overgeneralization`, `latest_turn=2155`,
+  `current_signal_observed=true`, and
+  `classification=local_model_action_readiness_overgeneralization`.
+
+Remaining truthful gap:
+
+- This records and steers around repeated advice-only execution wording; it
+  does not grant execution authority, tune Francis1, promote memory, or execute
+  model advice.
+- `.\scripts\check.ps1`, browser screenshot proof, GitHub CI, and broader
+  ORB/body validation remain outside this bounded learning-signal slice until
+  separately run.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
