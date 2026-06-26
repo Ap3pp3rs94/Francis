@@ -39,6 +39,7 @@ import {
   parseCollaborationSubstrateReadiness,
   parseCollaborationTranscript,
   parseFrancisBodyMap,
+  parseFrancisCapabilityGrantResult,
   parseFrancisCapabilityRequests,
   parseFrancisTrustLadder,
   preserveCollaborationReadbackDuringWarming,
@@ -1445,6 +1446,68 @@ test("parseFrancisCapabilityRequests preserves request gates and no-authority bo
   assert.equal(requests.items[1]?.requestState, "pending_operator_decision");
   assert.equal(requests.items[1]?.grantableNow, true);
   assert.equal(requests.items[1]?.blocked, false);
+});
+
+test("parseFrancisCapabilityGrantResult preserves operator receipt boundaries", () => {
+  const result = parseFrancisCapabilityGrantResult({
+    ok: true,
+    surface_id: "action_intake",
+    decision: "grant",
+    grant: {
+      surface_id: "action_intake",
+      grant_state: "granted",
+      capability_granted: true,
+      connected_to_local_model: true,
+      requested_access_mode: "request",
+      granted_access_mode: "request",
+      capability_use_status: "granted_request",
+      grants_capability_authority: true,
+      grants_execution_authority: false,
+      grants_mutation_authority: false,
+      grants_approval_authority: false,
+      grants_memory_write_authority: false,
+      grants_training_authority: false,
+    },
+    receipt: {
+      receipt_id: "francis-capability-grant-test",
+      decision: "grant",
+      surface_id: "action_intake",
+      requested_access_mode: "request",
+      granted_access_mode: "request",
+      previous_grant_state: "not_granted",
+      current_grant_state: "granted",
+      capability_granted: true,
+      connected_to_local_model: true,
+      operator_grant_proof: {
+        reason_recorded: true,
+        client_can_be_operator_console: true,
+        client_is_automatic_execution_authority: false,
+        grants_execution_authority: false,
+        grants_memory_write_authority: false,
+      },
+    },
+    governance: {
+      client_can_be_operator_console: true,
+      client_is_automatic_execution_authority: false,
+      grants_execution_authority: false,
+      grants_memory_write_authority: false,
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.surfaceId, "action_intake");
+  assert.equal(result.decision, "grant");
+  assert.equal(result.grant.grantState, "granted");
+  assert.equal(result.grant.capabilityGranted, true);
+  assert.equal(result.grant.connectedToLocalModel, true);
+  assert.equal(result.grant.grantedAccessMode, "request");
+  assert.equal(result.grant.grantsCapabilityAuthority, true);
+  assert.equal(result.grant.grantsExecutionAuthority, false);
+  assert.equal(result.grant.grantsMemoryWriteAuthority, false);
+  assert.equal(result.receipt.receiptId, "francis-capability-grant-test");
+  assert.equal(result.receipt.previousGrantState, "not_granted");
+  assert.equal(result.receipt.currentGrantState, "granted");
+  assert.equal(result.receipt.operatorGrantProof.client_is_automatic_execution_authority, false);
 });
 
 test("parseCollaborationRuntimeHealth preserves recurrence and no-authority fields", () => {

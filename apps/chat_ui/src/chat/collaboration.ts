@@ -924,6 +924,42 @@ export type FrancisCapabilityRequest = {
   governance: Record<string, unknown>;
 };
 
+export type FrancisCapabilityGrantDecision = "grant" | "deny" | "revoke";
+
+export type FrancisCapabilityGrantResult = {
+  ok: boolean;
+  surfaceId: string;
+  decision: string;
+  grant: {
+    surfaceId: string;
+    grantState: string;
+    capabilityGranted: boolean;
+    connectedToLocalModel: boolean;
+    requestedAccessMode: string;
+    grantedAccessMode: string;
+    capabilityUseStatus: string;
+    grantsCapabilityAuthority: boolean;
+    grantsExecutionAuthority: boolean;
+    grantsMutationAuthority: boolean;
+    grantsApprovalAuthority: boolean;
+    grantsMemoryWriteAuthority: boolean;
+    grantsTrainingAuthority: boolean;
+  };
+  receipt: {
+    receiptId: string;
+    decision: string;
+    surfaceId: string;
+    requestedAccessMode: string;
+    grantedAccessMode: string;
+    previousGrantState: string;
+    currentGrantState: string;
+    capabilityGranted: boolean;
+    connectedToLocalModel: boolean;
+    operatorGrantProof: Record<string, unknown>;
+  };
+  governance: Record<string, unknown>;
+};
+
 export type FrancisCapabilityRequests = {
   ok: boolean;
   mode: string;
@@ -4242,6 +4278,45 @@ function parseFrancisCapabilityRequest(raw: unknown): FrancisCapabilityRequest {
   };
 }
 
+export function parseFrancisCapabilityGrantResult(raw: unknown): FrancisCapabilityGrantResult {
+  const value = isRecord(raw) ? raw : {};
+  const grant = isRecord(value.grant) ? value.grant : {};
+  const receipt = isRecord(value.receipt) ? value.receipt : {};
+  return {
+    ok: safeBoolean(value.ok),
+    surfaceId: safeString(value.surface_id),
+    decision: safeString(value.decision),
+    grant: {
+      surfaceId: safeString(grant.surface_id),
+      grantState: safeString(grant.grant_state, "not_granted"),
+      capabilityGranted: safeBoolean(grant.capability_granted),
+      connectedToLocalModel: safeBoolean(grant.connected_to_local_model),
+      requestedAccessMode: safeString(grant.requested_access_mode, "observe"),
+      grantedAccessMode: safeString(grant.granted_access_mode, "observe"),
+      capabilityUseStatus: safeString(grant.capability_use_status, "not_exposed"),
+      grantsCapabilityAuthority: safeBoolean(grant.grants_capability_authority),
+      grantsExecutionAuthority: safeBoolean(grant.grants_execution_authority),
+      grantsMutationAuthority: safeBoolean(grant.grants_mutation_authority),
+      grantsApprovalAuthority: safeBoolean(grant.grants_approval_authority),
+      grantsMemoryWriteAuthority: safeBoolean(grant.grants_memory_write_authority),
+      grantsTrainingAuthority: safeBoolean(grant.grants_training_authority),
+    },
+    receipt: {
+      receiptId: safeString(receipt.receipt_id),
+      decision: safeString(receipt.decision),
+      surfaceId: safeString(receipt.surface_id),
+      requestedAccessMode: safeString(receipt.requested_access_mode, "observe"),
+      grantedAccessMode: safeString(receipt.granted_access_mode, "observe"),
+      previousGrantState: safeString(receipt.previous_grant_state, "not_granted"),
+      currentGrantState: safeString(receipt.current_grant_state, "not_granted"),
+      capabilityGranted: safeBoolean(receipt.capability_granted),
+      connectedToLocalModel: safeBoolean(receipt.connected_to_local_model),
+      operatorGrantProof: isRecord(receipt.operator_grant_proof) ? receipt.operator_grant_proof : {},
+    },
+    governance: isRecord(value.governance) ? value.governance : {},
+  };
+}
+
 export function parseCollaborationSubstrateReadiness(raw: unknown): CollaborationSubstrateReadiness {
   const value = isRecord(raw) ? raw : {};
   const summary = isRecord(value.summary) ? value.summary : {};
@@ -4719,6 +4794,41 @@ export async function fetchFrancisCapabilityRequests(opts: {
     throw new Error(`Francis capability requests request failed with HTTP ${response.status}.`);
   }
   return parseFrancisCapabilityRequests(json);
+}
+
+export async function setFrancisCapabilityGrant(opts: {
+  baseUrl: string;
+  surfaceId: string;
+  decision: FrancisCapabilityGrantDecision;
+  requestedAccessMode?: string;
+  actor?: string;
+  reason?: string;
+  sourceReviewItemId?: string;
+  signal?: AbortSignal;
+}): Promise<FrancisCapabilityGrantResult> {
+  const url = `${opts.baseUrl.replace(/\/$/, "")}/developer-bridge/francis-capability-grants`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    signal: opts.signal,
+    body: JSON.stringify({
+      surface_id: opts.surfaceId,
+      decision: opts.decision,
+      requested_access_mode: opts.requestedAccessMode || "read",
+      actor: opts.actor || "chat_ui.system",
+      reason: opts.reason || "",
+      source_review_item_id: opts.sourceReviewItemId || "",
+    }),
+  });
+  const text = await response.text();
+  const json = text ? JSON.parse(text) : {};
+  if (!response.ok) {
+    throw new Error(`Francis capability grant failed with HTTP ${response.status}.`);
+  }
+  if (isRecord(json) && safeBoolean(json.ok, true) === false) {
+    throw new Error(safeString(json.message, "Francis capability grant was denied."));
+  }
+  return parseFrancisCapabilityGrantResult(json);
 }
 
 export async function fetchCollaborationSubstrateReadiness(opts: {

@@ -50,6 +50,7 @@ import {
   isCollaborationGuardReceipt,
   preserveCollaborationReadbackDuringWarming,
   setCollaborationAgentEnabled,
+  setFrancisCapabilityGrant,
   type CollaborationAgent,
   type CollaborationAgentsStatus,
   type CollaborationAgentToggleReceipt,
@@ -60,6 +61,8 @@ import {
   type CollaborationSubstrateReadiness,
   type CollaborationTranscript,
   type FrancisBodyMap,
+  type FrancisCapabilityGrantDecision,
+  type FrancisCapabilityRequest,
   type FrancisCapabilityRequests,
   type FrancisTrustLadder,
 } from "./chat/collaboration";
@@ -1138,6 +1141,28 @@ function latestToggleReceiptForAgent(
   return null;
 }
 
+function capabilityDecisionBusyKey(item: FrancisCapabilityRequest, decision: FrancisCapabilityGrantDecision): string {
+  return `${item.id || item.bodySurfaceId || "capability"}:${decision}`;
+}
+
+function capabilityDecisionReason(
+  item: FrancisCapabilityRequest,
+  decision: FrancisCapabilityGrantDecision,
+): string {
+  const need = item.needStatement || item.topic || "no request statement";
+  return [
+    `Chat UI operator ${decision} for Francis1 capability request.`,
+    `surface=${item.bodySurfaceId || "unknown"}`,
+    `mode=${item.grantableAccessMode || item.requestedAccessMode || "read"}`,
+    `state=${item.requestState || "unknown"}`,
+    `gate=${item.nextTrustGate || "unknown"}`,
+    `turn=${item.turn || "unknown"}`,
+    `need=${need}`,
+  ]
+    .join(" ")
+    .slice(0, 480);
+}
+
 function buildCollaborationSessions(items: CollaborationTranscriptEntry[]): CollaborationUiSession[] {
   const chronological = [...items]
     .sort((left, right) => collaborationTimestamp(left) - collaborationTimestamp(right));
@@ -1175,6 +1200,8 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
   const [capabilityRequests, setCapabilityRequests] = useState<FrancisCapabilityRequests | null>(null);
   const [loading, setLoading] = useState(false);
   const [busyAgent, setBusyAgent] = useState("");
+  const [busyCapabilityRequest, setBusyCapabilityRequest] = useState("");
+  const [capabilityGrantResult, setCapabilityGrantResult] = useState("");
   const [error, setError] = useState("");
   const [selectedSessionId, setSelectedSessionId] = useState("");
   const [followLatest, setFollowLatest] = useState(true);
@@ -1357,6 +1384,45 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
       return () => controller.abort();
     },
     [props.baseUrl],
+  );
+
+  const decideCapabilityRequest = useCallback(
+    (item: FrancisCapabilityRequest, decision: FrancisCapabilityGrantDecision) => {
+      const controller = new AbortController();
+      const busyKey = capabilityDecisionBusyKey(item, decision);
+      const requestedAccessMode =
+        decision === "grant"
+          ? item.grantableAccessMode || item.requestedAccessMode || "read"
+          : item.currentGrant.grantedAccessMode || item.grantableAccessMode || item.requestedAccessMode || "read";
+      setBusyCapabilityRequest(busyKey);
+      setCapabilityGrantResult("");
+      setError("");
+      void setFrancisCapabilityGrant({
+        baseUrl: props.baseUrl,
+        surfaceId: item.bodySurfaceId,
+        decision,
+        requestedAccessMode,
+        actor: "chat_ui.system",
+        reason: capabilityDecisionReason(item, decision),
+        sourceReviewItemId: item.sourceReviewItemId,
+        signal: controller.signal,
+      })
+        .then((result) => {
+          setCapabilityGrantResult(
+            `${result.decision || decision} ${result.surfaceId || item.bodySurfaceId}: ${result.grant.grantState} / receipt ${
+              result.receipt.receiptId || "recorded"
+            }`,
+          );
+          void loadStatus(undefined);
+        })
+        .catch((err: unknown) => {
+          if (controller.signal.aborted || isAbortError(err)) return;
+          setError(err instanceof Error ? err.message : "Francis capability decision failed.");
+        })
+        .finally(() => setBusyCapabilityRequest(""));
+      return () => controller.abort();
+    },
+    [loadStatus, props.baseUrl],
   );
 
   const agents = status?.agents ?? [];
@@ -2987,6 +3053,21 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
             no authority {boolText(!capabilityRequestsUnsafeAuthority)}
           </span>
         </div>
+        {capabilityGrantResult ? (
+          <div
+            style={{
+              background: "rgba(20, 83, 45, 0.2)",
+              border: "1px solid rgba(110, 231, 183, 0.38)",
+              borderRadius: 10,
+              color: "#d1fae5",
+              marginTop: 10,
+              overflowWrap: "anywhere",
+              padding: "8px 10px",
+            }}
+          >
+            {capabilityGrantResult}
+          </div>
+        ) : null}
         <div
           style={{
             display: "grid",
@@ -3002,6 +3083,13 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
               const blocked = item.blocked || item.requestState.includes("blocked") || item.requiresSupervisedActionReview;
               const border = blocked ? "rgba(252, 165, 165, 0.48)" : item.grantableNow ? "rgba(110, 231, 183, 0.45)" : "rgba(148, 163, 184, 0.22)";
               const badgeColor = blocked ? "#fecaca" : item.grantableNow ? "#bbf7d0" : "#cbd5e1";
+              const grantBusyKey = capabilityDecisionBusyKey(item, "grant");
+              const denyBusyKey = capabilityDecisionBusyKey(item, "deny");
+              const revokeBusyKey = capabilityDecisionBusyKey(item, "revoke");
+              const decisionBusy = Boolean(busyCapabilityRequest) && [grantBusyKey, denyBusyKey, revokeBusyKey].includes(busyCapabilityRequest);
+              const canGrant = Boolean(item.bodySurfaceId) && item.grantableNow && !blocked && !capabilityRequestsUnsafeAuthority;
+              const canDeny = Boolean(item.bodySurfaceId) && item.currentGrant.grantState !== "denied";
+              const canRevoke = Boolean(item.bodySurfaceId) && (item.currentGrant.capabilityGranted || item.currentGrant.grantState === "granted");
               return (
                 <article
                   key={item.id || item.sourceReviewItemId}
@@ -3052,6 +3140,59 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
                     <span>operator review {boolText(item.requiresOperatorReview)}</span>
                     <span>repo truth {boolText(item.requiresRepoTruthReview)}</span>
                     <span>supervised action {boolText(item.requiresSupervisedActionReview)}</span>
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+                    <button
+                      type="button"
+                      disabled={!canGrant || decisionBusy}
+                      onClick={() => decideCapabilityRequest(item, "grant")}
+                      title={canGrant ? "Record a bounded grant receipt" : "Grant is blocked until this request is grantable"}
+                      style={{
+                        background: canGrant ? "#86efac" : "rgba(148, 163, 184, 0.18)",
+                        border: "1px solid rgba(148, 163, 184, 0.28)",
+                        borderRadius: 8,
+                        color: canGrant ? "#052e16" : "#94a3b8",
+                        cursor: !canGrant || decisionBusy ? "not-allowed" : "pointer",
+                        fontWeight: 700,
+                        padding: "6px 9px",
+                      }}
+                    >
+                      {busyCapabilityRequest === grantBusyKey ? "Granting..." : "Grant"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!canDeny || decisionBusy}
+                      onClick={() => decideCapabilityRequest(item, "deny")}
+                      title="Record a bounded denial receipt for this surface"
+                      style={{
+                        background: canDeny ? "rgba(127, 29, 29, 0.38)" : "rgba(148, 163, 184, 0.18)",
+                        border: `1px solid ${canDeny ? "rgba(252, 165, 165, 0.45)" : "rgba(148, 163, 184, 0.28)"}`,
+                        borderRadius: 8,
+                        color: canDeny ? "#fecaca" : "#94a3b8",
+                        cursor: !canDeny || decisionBusy ? "not-allowed" : "pointer",
+                        fontWeight: 700,
+                        padding: "6px 9px",
+                      }}
+                    >
+                      {busyCapabilityRequest === denyBusyKey ? "Denying..." : "Deny"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!canRevoke || decisionBusy}
+                      onClick={() => decideCapabilityRequest(item, "revoke")}
+                      title="Record a bounded revoke receipt for an active grant"
+                      style={{
+                        background: canRevoke ? "rgba(234, 179, 8, 0.2)" : "rgba(148, 163, 184, 0.18)",
+                        border: `1px solid ${canRevoke ? "rgba(253, 224, 71, 0.45)" : "rgba(148, 163, 184, 0.28)"}`,
+                        borderRadius: 8,
+                        color: canRevoke ? "#fef08a" : "#94a3b8",
+                        cursor: !canRevoke || decisionBusy ? "not-allowed" : "pointer",
+                        fontWeight: 700,
+                        padding: "6px 9px",
+                      }}
+                    >
+                      {busyCapabilityRequest === revokeBusyKey ? "Revoking..." : "Revoke"}
+                    </button>
                   </div>
                   {item.stopConditions.length ? (
                     <ul style={{ color: "#cbd5e1", margin: "8px 0 0", paddingLeft: 18 }}>

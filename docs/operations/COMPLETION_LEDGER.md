@@ -99394,6 +99394,61 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, broader ORB/body validation, and longer-run
   drift resolution remain outside this bounded UI visibility slice.
 
+### 2026-06-26 15:43Z - Communication UI governed capability decisions
+
+Current posture: Phase 2 / P1 interface, P3 governance, and P9 collaboration
+observability now let the Communication UI act as a bounded operator console for
+the existing Francis capability-grant receipt lane. The request queue can show
+Grant, Deny, and Revoke controls per requested body surface, but Grant is
+disabled unless the typed request is `grantable_now`, not blocked, and the
+readback has not surfaced unsafe authority. Deny and Revoke still write through
+the existing governed receipt route rather than directly changing model,
+execution, mutation, approval, memory-write, or training authority.
+
+What changed:
+
+- `apps/chat_ui/src/chat/collaboration.ts` now parses
+  `developer_bridge.francis_capability_grant_decision` responses and exposes a
+  typed `setFrancisCapabilityGrant` client for the existing
+  `/developer-bridge/francis-capability-grants` route.
+- `apps/chat_ui/src/App.tsx` now records bounded operator decisions from the
+  capability-request cards, includes request surface/state/gate/turn context in
+  the receipt reason, refreshes readbacks after a decision, and shows the latest
+  receipt id/status to the operator.
+- The Communication UI renders Grant/Deny/Revoke controls on capability-request
+  rows. Grant is blocked by UI state for current drift/prompt-review rows;
+  Revoke is only enabled for active grants; Deny remains a bounded stop/tuning
+  decision for the surface.
+- `apps/chat_ui/src/chat/index.test.ts` now covers the grant-decision parser
+  contract, including capability exposure, operator grant proof, and no
+  execution or memory-write authority.
+
+Validation:
+
+- Focused chat UI contract test passed:
+  `node --test --experimental-strip-types src/chat/index.test.ts` with 29
+  tests.
+- Chat UI production build passed:
+  `npm run build`.
+- Focused backend capability-grant route tests passed in isolated temp data:
+  `python -m pytest tests/test_developer_bridge.py::test_capability_grant_api_records_bounded_operator_receipt tests/test_developer_bridge.py::test_capability_grant_api_invalidates_body_map_cache -q`.
+- Whitespace diff check passed:
+  `git diff --check`.
+- Direct live request readback was checked without pressing a UI decision
+  button: the latest three rows remained `blocked_until_prompt_or_drift_review`,
+  `grantable_now=false`, `grant_state=not_granted`, `blocked_count=3`,
+  `grantable_now_count=0`, and all authority grants false.
+
+Remaining truthful gap:
+
+- This wires the UI to the existing governed decision route; it does not make a
+  blocked request grantable and does not grant Francis1/Ollama capability use by
+  itself.
+- Live browser click proof was not captured; the parser, build, backend route,
+  and live no-mutation readback were validated.
+- `.\scripts\check.ps1`, GitHub CI, broader ORB/body validation, and longer-run
+  drift resolution remain outside this bounded operator-control slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
