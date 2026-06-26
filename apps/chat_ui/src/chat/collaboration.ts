@@ -342,6 +342,17 @@ export type CollaborationTranscriptVisibility = {
   hiddenOtherReceiptCount: number;
 };
 
+export type CollaborationTranscriptNoiseReductionDisplay = {
+  badge: string;
+  tone: CollaborationReviewTone;
+  visibleCount: number;
+  totalCount: number;
+  hiddenMechanicCount: number;
+  relayMechanicCount: number;
+  substantiveTurnCount: number;
+  detail: string[];
+};
+
 export type CollaborationRelayDisplay = {
   summary: string;
   conversationText: string;
@@ -1652,6 +1663,37 @@ export function filterCollaborationTranscriptItems(
     hiddenDriverPromptCount,
     hiddenGuardReceiptCount,
     hiddenOtherReceiptCount,
+  };
+}
+
+export function collaborationTranscriptNoiseReductionSummary(
+  items: CollaborationTranscriptItem[],
+  visibility: CollaborationTranscriptVisibility,
+): CollaborationTranscriptNoiseReductionDisplay {
+  const summary = collaborationTranscriptAuditSummary(items);
+  const visibleCount = visibility.items.length;
+  const hiddenMechanicCount = visibility.hiddenMechanicCount;
+  const hiddenByKind = [
+    visibility.hiddenAuditReceiptCount ? `${visibility.hiddenAuditReceiptCount} audit` : "",
+    visibility.hiddenDriverPromptCount ? `${visibility.hiddenDriverPromptCount} driver` : "",
+    visibility.hiddenGuardReceiptCount ? `${visibility.hiddenGuardReceiptCount} guard` : "",
+    visibility.hiddenOtherReceiptCount ? `${visibility.hiddenOtherReceiptCount} other` : "",
+  ].filter(Boolean);
+  return {
+    badge: hiddenMechanicCount ? `${hiddenMechanicCount} hidden` : "unfiltered",
+    tone: hiddenMechanicCount ? "ready" : "neutral",
+    visibleCount,
+    totalCount: summary.totalCount,
+    hiddenMechanicCount,
+    relayMechanicCount: summary.relayMechanicCount,
+    substantiveTurnCount: summary.substantiveTurnCount,
+    detail: [
+      `${visibleCount}/${summary.totalCount} visible`,
+      `${summary.substantiveTurnCount} substantive`,
+      `${summary.relayMechanicCount} relay mechanics`,
+      hiddenByKind.length ? `hidden ${hiddenByKind.join(", ")}` : "nothing hidden",
+      "uses display metadata only",
+    ],
   };
 }
 

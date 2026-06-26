@@ -20,6 +20,7 @@ import {
   collaborationSessionTranscriptDisclosureSummary,
   collaborationSubstrateChecklistSummary,
   collaborationTranscriptAuditSummary,
+  collaborationTranscriptNoiseReductionSummary,
   DEFAULT_SHOW_GUARD_RECEIPTS,
   filterCollaborationTranscriptItems,
   francisBodySurfaceExposureSummary,
@@ -1796,6 +1797,75 @@ test("parseCollaborationTranscript classifies auto-ack receipts as hideable audi
     ["collab_reply"],
   );
   assert.equal(isCollaborationGuardReceipt(transcript.items[1]!), true);
+});
+
+test("collaborationTranscriptNoiseReductionSummary surfaces hidden relay mechanic proof", () => {
+  const transcript = parseCollaborationTranscript({
+    ok: true,
+    mode: "read_only",
+    relay_root: "integrations/developer_bridge/collaboration_prompts",
+    count: 4,
+    truncated: false,
+    filters: { limit: 4 },
+    items: [
+      {
+        id: "collab_ack",
+        created_at: "2026-06-25T05:57:58Z",
+        source_agent: "codex",
+        target_agent: "ollama",
+        objective: "auto-ack ollama relay collab_reply",
+        prompt: "Auto-ack ollama relay collab_reply. Received; no_response_requested=true.",
+        context: "no_response_requested=true.",
+      },
+      {
+        id: "collab_reply",
+        created_at: "2026-06-25T05:57:55Z",
+        source_agent: "ollama",
+        target_agent: "codex",
+        objective: "Francis1 output-guard drift receipt",
+        prompt: "Francis1 output guard fallback: model reply repeated known collaboration drift.",
+      },
+      {
+        id: "collab_driver",
+        created_at: "2026-06-25T05:57:31Z",
+        source_agent: "codex",
+        target_agent: "ollama",
+        objective: "Francis1 collaboration driver turn 467",
+        prompt: "Francis1 turn 467. Topic: substrate complete.",
+      },
+      {
+        id: "collab_message",
+        created_at: "2026-06-25T05:57:20Z",
+        source_agent: "ollama",
+        target_agent: "codex",
+        objective: "Francis1 reply",
+        prompt: "My current artifact is apps.chat_ui.communication.",
+      },
+    ],
+    governance: { executes_prompt: false },
+  });
+  const visibility = filterCollaborationTranscriptItems(transcript.items, {
+    showAuditReceipts: false,
+    showDriverPrompts: false,
+    showGuardReceipts: false,
+  });
+
+  const proof = collaborationTranscriptNoiseReductionSummary(transcript.items, visibility);
+
+  assert.equal(proof.badge, "3 hidden");
+  assert.equal(proof.tone, "ready");
+  assert.equal(proof.visibleCount, 1);
+  assert.equal(proof.totalCount, 4);
+  assert.equal(proof.hiddenMechanicCount, 3);
+  assert.equal(proof.relayMechanicCount, 3);
+  assert.equal(proof.substantiveTurnCount, 1);
+  assert.deepEqual(proof.detail, [
+    "1/4 visible",
+    "1 substantive",
+    "3 relay mechanics",
+    "hidden 1 audit, 1 driver, 1 guard",
+    "uses display metadata only",
+  ]);
 });
 
 test("filterCollaborationTranscriptItems hides guard receipts by operator default when conversation exists", () => {

@@ -98491,6 +98491,56 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, browser screenshot proof, and full ORB/body
   coverage proof were not run for this bounded prompt/readback slice.
 
+### 2026-06-26 08:08Z - Communication UI relay-noise proof strip
+
+Current posture: Phase 2 / P1 interface and P9 observability now make the
+Communication UI's relay-noise reduction visible as a bounded receipt-derived
+proof. The live conversation panel already filtered audit acknowledgements,
+Codex driver prompts, and guard receipts by display metadata; it now shows the
+operator exactly how many mechanics were hidden and which receipt classes were
+reduced.
+
+What changed:
+
+- Added a typed `collaborationTranscriptNoiseReductionSummary` readback helper
+  in the Chat UI collaboration parser. It derives visible count, total count,
+  hidden mechanic count, relay mechanic count, substantive turn count, and a
+  hidden-by-kind breakdown from existing transcript display metadata.
+- Added a compact `Noise ...` proof strip to the live Communication conversation
+  panel showing visible/total messages, substantive turns, relay mechanics, and
+  hidden audit/driver/guard counts.
+- Added a parser contract test proving the proof strip is derived from existing
+  receipt classification and not from raw transcript storage.
+- The change is UI/readback only: it does not change relay retention, store raw
+  model text, execute prompts, grant authority, tune Francis1, or mutate
+  collaboration receipts.
+
+Validation:
+
+- Focused Chat UI collaboration parser contract passed:
+  `node --test --experimental-strip-types src\chat\index.test.ts`.
+- Chat UI production build passed:
+  `npm run build`.
+- Full Chat UI test suite passed:
+  `npm run test` with 284 tests.
+- `git diff --check` passed.
+- The existing Vite dev server at `http://127.0.0.1:5173/` returned HTTP `200`.
+- Live collaboration runtime readback stayed `status=healthy`; turn `1864`
+  completed with `waiting_for_ollama=false`. The latest Francis1 response was
+  guard-rewritten but remained advice-only with execution, mutation, approval,
+  memory-write, training, and capability authority all false.
+
+Remaining truthful gap:
+
+- This makes relay-noise reduction visible in the operator UI; it does not reduce
+  the underlying number of relay receipts, remove historical mechanics from the
+  append-only log, or prove Francis1 will stop producing guard-rewritten drift.
+- Browser-control tooling was not available in this Codex session, so validation
+  used parser tests, the full Chat UI test suite, Vite build, HTTP server
+  availability, and live runtime readback rather than a screenshot proof.
+- `.\scripts\check.ps1`, GitHub CI, and full ORB/body coverage proof were not
+  run for this bounded Communication UI readback slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -16,6 +16,7 @@ import {
   collaborationImplementationReviewSummary,
   collaborationLearningGuardSummary,
   collaborationTranscriptAuditSummary,
+  collaborationTranscriptNoiseReductionSummary,
   DEFAULT_SHOW_GUARD_RECEIPTS,
   fetchCollaborationAgentsStatus,
   fetchCollaborationLearning,
@@ -1363,6 +1364,10 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
       }),
     [showAuditReceipts, showGuardReceipts, showRelayPrompts, transcriptItems],
   );
+  const transcriptNoiseReductionProof = useMemo(
+    () => collaborationTranscriptNoiseReductionSummary(transcriptItems, transcriptVisibility),
+    [transcriptItems, transcriptVisibility],
+  );
   const sessionSourceItems = transcriptVisibility.items;
   const hiddenMechanicText = transcriptVisibility.hiddenMechanicCount
     ? ` / ${transcriptVisibility.hiddenMechanicCount} mechanics hidden`
@@ -2238,6 +2243,40 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
               >
                 {session.label} ({session.items.length})
               </button>
+            ))}
+          </div>
+        ) : null}
+        {transcriptItems.length ? (
+          <div
+            style={{
+              alignItems: "center",
+              background: "rgba(15, 23, 42, 0.48)",
+              border: "1px solid rgba(148, 163, 184, 0.22)",
+              borderRadius: 12,
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 8,
+              marginTop: 12,
+              padding: "9px 12px",
+            }}
+          >
+            <span
+              style={{
+                border: `1px solid ${transcriptNoiseReductionProof.tone === "ready" ? "#6ee7b7" : "#cbd5e1"}`,
+                borderRadius: 999,
+                color: transcriptNoiseReductionProof.tone === "ready" ? "#bbf7d0" : "#cbd5e1",
+                fontSize: 12,
+                fontWeight: 700,
+                padding: "3px 8px",
+                textTransform: "uppercase",
+              }}
+            >
+              Noise {transcriptNoiseReductionProof.badge}
+            </span>
+            {transcriptNoiseReductionProof.detail.map((line) => (
+              <span key={`live-noise-${line}`} style={{ color: "#94a3b8", fontSize: 12 }}>
+                {line}
+              </span>
             ))}
           </div>
         ) : null}
