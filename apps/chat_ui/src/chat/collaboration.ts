@@ -1131,6 +1131,39 @@ export type CollaborationReviewItem = {
     grantsTrainingAuthority: boolean;
     grantsCapabilityAuthority: boolean;
   };
+  modelAdviceGovernanceBoundary: {
+    applies: boolean;
+    surface: string;
+    actionReadinessClaimAllowed: boolean;
+    modelAdviceCanCreateActionCandidate: boolean;
+    modelAdviceCanExecuteAction: boolean;
+    modelAdviceCanApproveAction: boolean;
+    requiresActionBoundaryReadback: boolean;
+    requiresLatestLocalModelAdviceOnlyProof: boolean;
+    requiresPolicy: boolean;
+    requiresApproval: boolean;
+    requiresTraceableReceipt: boolean;
+    requiresActionCandidateBoundary: boolean;
+    proofStatus: string;
+    runtimeStatus: string;
+    modelResponseObserved: boolean;
+    latestResponseStatus: string;
+    sourcePromptId: string;
+    responsePromptId: string;
+    outputGuardStatus: string;
+    outputGuardPassed: boolean;
+    outputGuardRewriteObserved: boolean;
+    responseIsAdviceOnly: boolean;
+    requiredGates: string[];
+    proofSource: string;
+    storesFullTranscript: boolean;
+    grantsExecutionAuthority: boolean;
+    grantsMutationAuthority: boolean;
+    grantsApprovalAuthority: boolean;
+    grantsMemoryWriteAuthority: boolean;
+    grantsTrainingAuthority: boolean;
+    grantsCapabilityAuthority: boolean;
+  };
   implementationPreflight: CollaborationImplementationPreflight;
   governance: Record<string, unknown>;
 };
@@ -1149,6 +1182,7 @@ export type CollaborationReview = {
     buildDirectionGate: string;
     implementationPreflight: string;
     participantToggleBoundary: string;
+    modelAdviceGovernanceBoundary: string;
   };
   readbackCache: CollaborationReadbackCache;
   governance: Record<string, unknown>;
@@ -2495,6 +2529,10 @@ function parseReviewItem(raw: unknown): CollaborationReviewItem {
   const roadmapProof = isRecord(roadmapBoundary.current_proof) ? roadmapBoundary.current_proof : {};
   const toggleBoundary = isRecord(item.participant_toggle_boundary) ? item.participant_toggle_boundary : {};
   const toggleProof = isRecord(toggleBoundary.current_proof) ? toggleBoundary.current_proof : {};
+  const modelAdviceBoundary = isRecord(item.model_advice_governance_boundary)
+    ? item.model_advice_governance_boundary
+    : {};
+  const modelAdviceProof = isRecord(modelAdviceBoundary.current_proof) ? modelAdviceBoundary.current_proof : {};
   const implementationPreflight = isRecord(item.implementation_preflight) ? item.implementation_preflight : {};
   return {
     id: safeString(item.id),
@@ -2653,6 +2691,43 @@ function parseReviewItem(raw: unknown): CollaborationReviewItem {
       grantsMemoryWriteAuthority: safeBoolean(toggleProof.grants_memory_write_authority),
       grantsTrainingAuthority: safeBoolean(toggleProof.grants_training_authority),
       grantsCapabilityAuthority: safeBoolean(toggleProof.grants_capability_authority),
+    },
+    modelAdviceGovernanceBoundary: {
+      applies: safeBoolean(modelAdviceBoundary.applies),
+      surface: safeString(modelAdviceBoundary.surface),
+      actionReadinessClaimAllowed: safeBoolean(modelAdviceBoundary.action_readiness_claim_allowed),
+      modelAdviceCanCreateActionCandidate: safeBoolean(modelAdviceBoundary.model_advice_can_create_action_candidate),
+      modelAdviceCanExecuteAction: safeBoolean(modelAdviceBoundary.model_advice_can_execute_action),
+      modelAdviceCanApproveAction: safeBoolean(modelAdviceBoundary.model_advice_can_approve_action),
+      requiresActionBoundaryReadback: safeBoolean(modelAdviceBoundary.requires_action_boundary_readback),
+      requiresLatestLocalModelAdviceOnlyProof: safeBoolean(
+        modelAdviceBoundary.requires_latest_local_model_advice_only_proof,
+      ),
+      requiresPolicy: safeBoolean(modelAdviceBoundary.requires_policy),
+      requiresApproval: safeBoolean(modelAdviceBoundary.requires_approval),
+      requiresTraceableReceipt: safeBoolean(modelAdviceBoundary.requires_traceable_receipt),
+      requiresActionCandidateBoundary: safeBoolean(modelAdviceBoundary.requires_action_candidate_boundary),
+      proofStatus: safeString(modelAdviceProof.proof_status),
+      runtimeStatus: safeString(modelAdviceProof.runtime_status),
+      modelResponseObserved: safeBoolean(modelAdviceProof.model_response_observed),
+      latestResponseStatus: safeString(modelAdviceProof.latest_response_status),
+      sourcePromptId: safeString(modelAdviceProof.source_prompt_id),
+      responsePromptId: safeString(modelAdviceProof.response_prompt_id),
+      outputGuardStatus: safeString(modelAdviceProof.output_guard_status),
+      outputGuardPassed: safeBoolean(modelAdviceProof.output_guard_passed),
+      outputGuardRewriteObserved: safeBoolean(modelAdviceProof.output_guard_rewrite_observed),
+      responseIsAdviceOnly: safeBoolean(modelAdviceProof.response_is_advice_only),
+      requiredGates: Array.isArray(modelAdviceProof.required_gates)
+        ? modelAdviceProof.required_gates.map((entry) => safeString(entry)).filter(Boolean)
+        : [],
+      proofSource: safeString(modelAdviceProof.proof_source),
+      storesFullTranscript: safeBoolean(modelAdviceProof.stores_full_transcript),
+      grantsExecutionAuthority: safeBoolean(modelAdviceProof.grants_execution_authority),
+      grantsMutationAuthority: safeBoolean(modelAdviceProof.grants_mutation_authority),
+      grantsApprovalAuthority: safeBoolean(modelAdviceProof.grants_approval_authority),
+      grantsMemoryWriteAuthority: safeBoolean(modelAdviceProof.grants_memory_write_authority),
+      grantsTrainingAuthority: safeBoolean(modelAdviceProof.grants_training_authority),
+      grantsCapabilityAuthority: safeBoolean(modelAdviceProof.grants_capability_authority),
     },
     implementationPreflight: parseImplementationPreflight(implementationPreflight),
     governance: isRecord(item.governance) ? item.governance : {},
@@ -3640,6 +3715,7 @@ export function parseCollaborationReview(raw: unknown): CollaborationReview {
       buildDirectionGate: safeString(definitions.build_direction_gate),
       implementationPreflight: safeString(definitions.implementation_preflight),
       participantToggleBoundary: safeString(definitions.participant_toggle_boundary),
+      modelAdviceGovernanceBoundary: safeString(definitions.model_advice_governance_boundary),
     },
     readbackCache: parseReadbackCache(value.readback_cache),
     governance: isRecord(value.governance) ? value.governance : {},

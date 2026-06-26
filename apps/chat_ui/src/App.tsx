@@ -3507,6 +3507,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
                 roadmapProof.latestLedgerEntry || roadmapProof.currentPhase || roadmapProof.mainBuildPromptGate,
               );
               const participantToggle = item.participantToggleBoundary;
+              const modelAdvice = item.modelAdviceGovernanceBoundary;
               return (
                 <article
                   key={item.id || item.insightId}
@@ -3572,6 +3573,23 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
                         </span>
                       </dd>
                     </div>
+                    {modelAdvice.applies ? (
+                      <div>
+                        <dt style={{ color: "#93c5fd" }}>Model Advice Gate</dt>
+                        <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
+                          {modelAdvice.proofStatus || "proof unknown"} / guard{" "}
+                          {modelAdvice.outputGuardStatus || "unknown"} / advice only{" "}
+                          {boolText(modelAdvice.responseIsAdviceOnly)} / action-ready{" "}
+                          {boolText(modelAdvice.actionReadinessClaimAllowed)}
+                        </dd>
+                        <dd style={{ color: "#94a3b8", margin: "4px 0 0", overflowWrap: "anywhere" }}>
+                          gates {modelAdvice.requiredGates.join(", ") || "unknown"} / execute{" "}
+                          {boolText(modelAdvice.modelAdviceCanExecuteAction || modelAdvice.grantsExecutionAuthority)} /
+                          approve {boolText(modelAdvice.modelAdviceCanApproveAction || modelAdvice.grantsApprovalAuthority)} /
+                          memory write {boolText(modelAdvice.grantsMemoryWriteAuthority)}
+                        </dd>
+                      </div>
+                    ) : null}
                     {actionIntake.applies ? (
                       <div>
                         <dt style={{ color: "#94a3b8" }}>Action Intake</dt>

@@ -1998,6 +1998,27 @@ def test_collaboration_review_projects_generic_historical_topics_to_concrete_sur
     assert model_advice_boundary["requires_traceable_receipt"] is True
     assert model_advice_boundary["requires_action_candidate_boundary"] is True
     assert model_advice_boundary["requires_codex_or_operator_review"] is True
+    model_advice_proof = model_advice_boundary["current_proof"]
+    assert model_advice_proof["kind"] == "developer_bridge.local_model_advice_only_proof"
+    assert model_advice_proof["proof_status"] in {"unobserved", "advice_only_observed"}
+    assert model_advice_proof["response_is_advice_only"] is True
+    assert model_advice_proof["action_readiness_claim_allowed"] is False
+    assert model_advice_proof["requires_codex_or_operator_review_before_action_readiness"] is True
+    assert model_advice_proof["required_gates"] == [
+        "action_boundary",
+        "policy",
+        "approval",
+        "traceable_receipt",
+        "action_candidate_boundary",
+        "codex_or_operator_review",
+    ]
+    assert model_advice_proof["proof_source"] == "developer_bridge.ollama_participant_state"
+    assert model_advice_proof["stores_full_transcript"] is False
+    assert model_advice_proof["grants_execution_authority"] is False
+    assert model_advice_proof["grants_mutation_authority"] is False
+    assert model_advice_proof["grants_approval_authority"] is False
+    assert model_advice_proof["grants_memory_write_authority"] is False
+    assert model_advice_proof["grants_capability_authority"] is False
     assert "action_boundary.conversation_can_execute_action=false" in model_advice_boundary["required_proof_fields"]
     assert (
         "latest_local_model_response.advice_only_proof.action_readiness_claim_allowed=false"

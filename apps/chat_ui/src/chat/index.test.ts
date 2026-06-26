@@ -2410,6 +2410,51 @@ test("parseCollaborationReview preserves advisory candidate boundaries", () => {
             grants_capability_authority: false,
           },
         },
+        model_advice_governance_boundary: {
+          applies: true,
+          surface: "developer_bridge.collaboration_review.action_boundary",
+          action_readiness_claim_allowed: false,
+          model_advice_can_create_action_candidate: false,
+          model_advice_can_execute_action: false,
+          model_advice_can_approve_action: false,
+          requires_action_boundary_readback: true,
+          requires_latest_local_model_advice_only_proof: true,
+          requires_policy: true,
+          requires_approval: true,
+          requires_traceable_receipt: true,
+          requires_action_candidate_boundary: true,
+          current_proof: {
+            kind: "developer_bridge.local_model_advice_only_proof",
+            proof_status: "advice_only_observed",
+            runtime_status: "healthy",
+            model_response_observed: true,
+            latest_response_status: "responded",
+            source_prompt_id: "collab-source",
+            response_prompt_id: "collab-response",
+            output_guard_status: "drift_rewritten",
+            output_guard_passed: false,
+            output_guard_rewrite_observed: true,
+            response_is_advice_only: true,
+            action_readiness_claim_allowed: false,
+            requires_codex_or_operator_review_before_action_readiness: true,
+            required_gates: [
+              "action_boundary",
+              "policy",
+              "approval",
+              "traceable_receipt",
+              "action_candidate_boundary",
+              "codex_or_operator_review",
+            ],
+            proof_source: "developer_bridge.ollama_participant_state",
+            stores_full_transcript: false,
+            grants_execution_authority: false,
+            grants_mutation_authority: false,
+            grants_approval_authority: false,
+            grants_memory_write_authority: false,
+            grants_training_authority: false,
+            grants_capability_authority: false,
+          },
+        },
         implementation_preflight: {
           must_read_before_editing: true,
           review_item_id: "review-insight-alpha",
@@ -2494,6 +2539,30 @@ test("parseCollaborationReview preserves advisory candidate boundaries", () => {
   assert.equal(review.items[0]?.participantToggleBoundary.grantsExecutionAuthority, false);
   assert.equal(review.items[0]?.participantToggleBoundary.grantsCapabilityAuthority, false);
   assert.equal(review.items[0]?.participantToggleBoundary.agentProofs[0]?.requiresNewToggleForExplicitOperatorProof, true);
+  assert.equal(review.items[0]?.modelAdviceGovernanceBoundary.applies, true);
+  assert.equal(review.items[0]?.modelAdviceGovernanceBoundary.surface, "developer_bridge.collaboration_review.action_boundary");
+  assert.equal(review.items[0]?.modelAdviceGovernanceBoundary.requiresActionBoundaryReadback, true);
+  assert.equal(review.items[0]?.modelAdviceGovernanceBoundary.requiresLatestLocalModelAdviceOnlyProof, true);
+  assert.equal(review.items[0]?.modelAdviceGovernanceBoundary.requiresPolicy, true);
+  assert.equal(review.items[0]?.modelAdviceGovernanceBoundary.requiresApproval, true);
+  assert.equal(review.items[0]?.modelAdviceGovernanceBoundary.requiresTraceableReceipt, true);
+  assert.equal(review.items[0]?.modelAdviceGovernanceBoundary.requiresActionCandidateBoundary, true);
+  assert.equal(review.items[0]?.modelAdviceGovernanceBoundary.proofStatus, "advice_only_observed");
+  assert.equal(review.items[0]?.modelAdviceGovernanceBoundary.outputGuardStatus, "drift_rewritten");
+  assert.equal(review.items[0]?.modelAdviceGovernanceBoundary.responseIsAdviceOnly, true);
+  assert.equal(review.items[0]?.modelAdviceGovernanceBoundary.actionReadinessClaimAllowed, false);
+  assert.deepEqual(review.items[0]?.modelAdviceGovernanceBoundary.requiredGates, [
+    "action_boundary",
+    "policy",
+    "approval",
+    "traceable_receipt",
+    "action_candidate_boundary",
+    "codex_or_operator_review",
+  ]);
+  assert.equal(review.items[0]?.modelAdviceGovernanceBoundary.proofSource, "developer_bridge.ollama_participant_state");
+  assert.equal(review.items[0]?.modelAdviceGovernanceBoundary.grantsExecutionAuthority, false);
+  assert.equal(review.items[0]?.modelAdviceGovernanceBoundary.grantsApprovalAuthority, false);
+  assert.equal(review.items[0]?.modelAdviceGovernanceBoundary.grantsCapabilityAuthority, false);
   assert.equal(review.items[0]?.implementationPreflight.mustReadBeforeEditing, true);
   assert.equal(review.items[0]?.implementationPreflight.reviewItemId, "review-insight-alpha");
   assert.equal(review.items[0]?.implementationPreflight.reviewRoute, "/developer-bridge/collaboration-review?limit=1");

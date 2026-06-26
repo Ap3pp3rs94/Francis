@@ -97614,6 +97614,72 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, browser screenshot proof, and full ORB/body
   coverage proof were not run for this bounded toggle-proof slice.
 
+### 2026-06-26 05:51Z - Collaboration review model-advice gate proof projection
+
+Current posture: Phase 2 / P1 interface, P3 governance, and P9 observability now
+carry current model-advice gate proof directly inside model-advice collaboration
+review items. Francis1 can ask which governance gate must be visible when model
+advice proposes action, and the review card now answers with the latest
+advice-only proof, output-guard status, required gates, and no-authority flags.
+
+What changed:
+
+- `developer_bridge.collaboration_review` now adds
+  `model_advice_governance_boundary.current_proof` for
+  `developer_bridge.collaboration_review.action_boundary` review items.
+- The proof is derived from the bounded Ollama participant state and includes
+  proof status, latest response status, source/response prompt ids, output guard
+  status, advice-only status, action-readiness denial, required gates, proof
+  source, and no-authority flags.
+- The Chat UI collaboration parser preserves the proof as
+  `modelAdviceGovernanceBoundary`.
+- The Communication review cards render a compact Model Advice Gate block when
+  the boundary applies.
+
+Validation:
+
+- Focused backend review test passed:
+  `python -m pytest tests/test_developer_bridge.py::test_collaboration_review_projects_generic_historical_topics_to_concrete_surfaces -q`.
+- Chat UI contract suite passed:
+  `npm run test -- --runInBand apps/chat_ui/src/chat/index.test.ts`
+  (the package script ran the configured UI suite, `282` passing tests).
+- Ruff check passed:
+  `python -m ruff check src\francis\developer_bridge\collaboration_review.py tests\test_developer_bridge.py`.
+- Ruff format check passed:
+  `python -m ruff format --check src\francis\developer_bridge\collaboration_review.py tests\test_developer_bridge.py`.
+- Targeted mypy passed:
+  `python -m mypy src\francis\developer_bridge\collaboration_review.py`.
+- Compileall passed:
+  `python -m compileall src\francis\developer_bridge\collaboration_review.py`.
+- Chat UI production build passed:
+  `npm run build`.
+- `git diff --check` passed.
+- The local Francis API was restarted as wrapper PID `42124` and worker PID
+  `46184`. Live `/developer-bridge/collaboration-review?limit=30` showed
+  model-advice review `review-insight-collab-0ff942882e962561-95f9ec5490a9`
+  with `proof_status=advice_only_observed`,
+  `runtime_status=participant_state_observed`,
+  `output_guard_status=drift_rewritten`, `response_is_advice_only=true`,
+  `action_readiness_claim_allowed=false`,
+  `required_gates=action_boundary,policy,approval,traceable_receipt,action_candidate_boundary,codex_or_operator_review`,
+  `grants_execution_authority=false`, `grants_approval_authority=false`,
+  `grants_capability_authority=false`, and
+  `proof_source=developer_bridge.ollama_participant_state`.
+- Live `/developer-bridge/collaboration-runtime-health` reported
+  `status=healthy`, `helper_count=3`, `recurrence_state=turn_gap`,
+  `manual_nudge_required=false`, latest prompt within budget, latest output
+  guard `drift_rewritten`, and participants enabled `3/3`.
+
+Remaining truthful gap:
+
+- This is a readback and operator-visibility projection only. It does not make
+  model advice action-ready, grant capability use, tune Francis1, promote
+  memory, or execute/approve anything.
+- The latest local-model response can still be guard-rewritten on some turns;
+  those remain learning receipts, not action-readiness evidence.
+- `.\scripts\check.ps1`, GitHub CI, browser screenshot proof, and full ORB/body
+  coverage proof were not run for this bounded model-advice proof slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

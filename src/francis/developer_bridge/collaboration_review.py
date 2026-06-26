@@ -22,7 +22,8 @@ def read_collaboration_review(*, limit: int = 10, session_id: str = "") -> dict[
     safe_limit = _bounded_int(limit, minimum=1, maximum=_MAX_LIMIT)
     clean_session_id = _bounded_text(session_id, limit=120)
     insights = _latest_insights(limit=max(safe_limit * 3, safe_limit), session_id=clean_session_id)
-    items = [_review_item(insight) for insight in insights[:safe_limit]]
+    projection_context: dict[str, object] = {}
+    items = [_review_item(insight, context=projection_context) for insight in insights[:safe_limit]]
     return {
         "kind": _KIND,
         "schema_version": _SCHEMA_VERSION,
@@ -163,7 +164,7 @@ def _read_insight(path: Path) -> dict[str, object] | None:
     return data
 
 
-def _review_item(insight: dict[str, object]) -> dict[str, object]:
+def _review_item(insight: dict[str, object], *, context: dict[str, object]) -> dict[str, object]:
     memory = _safe_dict(insight.get("conversation_memory"))
     build_issue = _safe_dict(memory.get("build_issue"))
     implementation = _safe_dict(memory.get("implementation_candidate"))
@@ -253,6 +254,7 @@ def _review_item(insight: dict[str, object]) -> dict[str, object]:
         "model_advice_governance_boundary": _model_advice_governance_boundary(
             build_issue=build_issue,
             concrete_surface=concrete_surface,
+            context=context,
         ),
         "local_model_advice_only_boundary": _local_model_advice_only_boundary(
             build_issue=build_issue,
@@ -662,7 +664,12 @@ def _phase_blocks_main_build_prompt(*, current: str, posture: str) -> bool:
     return "phase 2" in text or "partial" in text or "not yet" in text
 
 
-def _model_advice_governance_boundary(*, build_issue: dict[str, object], concrete_surface: str) -> dict[str, object]:
+def _model_advice_governance_boundary(
+    *,
+    build_issue: dict[str, object],
+    concrete_surface: str,
+    context: dict[str, object],
+) -> dict[str, object]:
     code = _bounded_text(build_issue.get("code"), limit=120)
     surface_key = _surface_key(concrete_surface)
     applies = code == "model_advice_governance_gate_visibility" or (
@@ -676,6 +683,7 @@ def _model_advice_governance_boundary(*, build_issue: dict[str, object], concret
         "model_advice_can_execute_action": False,
         "model_advice_can_approve_action": False,
         "action_readiness_claim_allowed": False,
+        "current_proof": {},
         "requires_action_boundary_readback": applies,
         "requires_latest_local_model_advice_only_proof": applies,
         "requires_policy": applies,
@@ -702,6 +710,7 @@ def _model_advice_governance_boundary(*, build_issue: dict[str, object], concret
         }
     return {
         **base,
+        "current_proof": _model_advice_current_proof(context),
         "required_proof_fields": [
             "action_boundary.conversation_can_execute_action=false",
             "action_boundary.conversation_can_approve_action=false",
@@ -725,6 +734,68 @@ def _model_advice_governance_boundary(*, build_issue: dict[str, object], concret
             "advice as action-ready or converting it into an action candidate."
         ),
     }
+
+
+def _model_advice_current_proof(context: dict[str, object]) -> dict[str, object]:
+    participant_state = _ollama_participant_state_context(context)
+    responses = [item for item in _safe_list(participant_state.get("responses")) if isinstance(item, dict)]
+    latest = responses[-1] if responses else {}
+    output_guard_status = _bounded_text(latest.get("output_guard_status"), limit=80) or "unknown"
+    output_guard_passed = output_guard_status == "passed"
+    output_guard_rewritten = output_guard_status.endswith("_rewritten") or output_guard_status in {
+        "empty_reply",
+        "disabled",
+    }
+    model_response_observed = bool(latest)
+    return {
+        "kind": "developer_bridge.local_model_advice_only_proof",
+        "proof_status": "advice_only_observed" if model_response_observed else "unobserved",
+        "runtime_status": "participant_state_observed" if participant_state else "participant_state_unobserved",
+        "model_response_observed": model_response_observed,
+        "latest_response_status": _bounded_text(latest.get("status"), limit=80),
+        "source_prompt_id": _bounded_text(latest.get("source_prompt_id"), limit=120),
+        "response_prompt_id": _bounded_text(latest.get("response_prompt_id"), limit=120),
+        "output_guard_status": output_guard_status,
+        "output_guard_passed": output_guard_passed,
+        "output_guard_rewrite_observed": output_guard_rewritten,
+        "response_is_advice_only": True,
+        "action_readiness_claim_allowed": False,
+        "requires_codex_or_operator_review_before_action_readiness": True,
+        "required_gates": [
+            "action_boundary",
+            "policy",
+            "approval",
+            "traceable_receipt",
+            "action_candidate_boundary",
+            "codex_or_operator_review",
+        ],
+        "proof_source": "developer_bridge.ollama_participant_state",
+        "stores_full_transcript": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "grants_approval_authority": False,
+        "grants_memory_write_authority": False,
+        "grants_training_authority": False,
+        "grants_capability_authority": False,
+    }
+
+
+def _ollama_participant_state_context(context: dict[str, object]) -> dict[str, object]:
+    cached = context.get("ollama_participant_state")
+    if isinstance(cached, dict):
+        return cached
+    try:
+        data = json.loads(_ollama_participant_state_path().read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        data = {}
+    if not isinstance(data, dict) or data.get("kind") != "developer_bridge.ollama_participant_state":
+        data = {}
+    context["ollama_participant_state"] = data
+    return data
+
+
+def _ollama_participant_state_path() -> Path:
+    return data_dir() / "integrations" / "developer_bridge" / "ollama_participant" / "state.json"
 
 
 def _local_model_advice_only_boundary(*, build_issue: dict[str, object], concrete_surface: str) -> dict[str, object]:
@@ -1464,6 +1535,10 @@ def _insights_root() -> Path:
 
 def _safe_dict(value: object) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+def _safe_list(value: object) -> list[object]:
+    return value if isinstance(value, list) else []
 
 
 def _bounded_text_list(value: object, *, limit: int) -> list[str]:
