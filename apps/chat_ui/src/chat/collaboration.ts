@@ -1744,7 +1744,11 @@ export function formatCollaborationRelayMessage(item: CollaborationTranscriptIte
     " Prior check:",
     ". Prior check:",
   ]);
-  const sourceAlignment = raw.includes("Claude=guidance; Francis=subject; validate claims.")
+  const sourceAlignment = raw.includes("Claude guidance acknowledged; Francis subject; Codex validates repo truth.")
+    ? "Claude guidance acknowledged; Francis subject; Codex validates repo truth"
+    : raw.includes("Claude acknowledged as guidance; Francis stays subject; Codex validates repo truth.")
+    ? "Claude acknowledged as guidance; Francis stays subject; Codex validates repo truth"
+    : raw.includes("Claude=guidance; Francis=subject; validate claims.")
     ? "Claude=guidance; Francis=subject; validate claims"
     : textBetween(raw, "Claude acknowledged as guidance;", [" Current artifact:", ". Current artifact:"]);
   const artifact = textBetween(raw, "Current artifact:", [". Prior check:", " Prior check:", ". Codex response:", " Codex response:"]);

@@ -20,7 +20,7 @@ _MAX_TRACKED_IDS = 500
 _MAX_RESPONSES = 500
 _DEFAULT_POLL_SECONDS = 30.0
 _DEFAULT_COOLDOWN_SECONDS = 120.0
-_SOURCE_ALIGNMENT_REPLY = "Claude=guidance; Francis=subject; validate claims."
+_SOURCE_ALIGNMENT_REPLY = "Claude guidance acknowledged; Francis subject; Codex validates repo truth."
 
 
 def respond_once(

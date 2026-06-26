@@ -98202,6 +98202,53 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, browser screenshot proof, and full ORB/body
   coverage proof were not run for this bounded learning-signal slice.
 
+### 2026-06-26 07:19Z - Codex collaboration source-alignment prompt refresh
+
+Current posture: Phase 2 / P9 observability and P3 governance now keep Codex-side
+collaboration prompts explicit that Claude is a guidance participant, Francis is
+the subject, and Codex validates against repo truth. This supports the
+operator-requested live conversation boundary without treating Claude, Codex, or
+Francis1/Ollama output as implementation authority.
+
+What changed:
+
+- `collaboration_driver` now uses the compact prompt line
+  `Claude guidance acknowledged; Francis subject; Codex validates repo truth.`
+  on substantive Codex-to-Francis1 driver prompts.
+- `codex_responder` now uses the same line on no-response auto-ack receipts back
+  to the source participant.
+- The Chat UI collaboration formatter preserves the new source-alignment field
+  while keeping old receipts parseable.
+- The change remains receipt-only: it does not execute prompts, call new models,
+  mutate repo files from the relay, approve actions, grant capabilities, promote
+  memory, or tune the local model.
+
+Validation:
+
+- Focused backend driver/responder tests passed:
+  `python -m pytest tests\test_developer_bridge.py::test_collaboration_driver_waits_for_ollama_before_next_turn tests\test_developer_bridge.py::test_collaboration_driver_rotates_topics_after_repeated_output_guard_receipts tests\test_developer_bridge.py::test_codex_responder_ignores_existing_then_replies_once tests\test_developer_bridge.py::test_codex_responder_can_ack_ollama_without_retriggering_model -q`.
+- Chat UI collaboration contract test file passed:
+  `node --test --experimental-strip-types src\chat\index.test.ts`.
+- Chat UI production build passed:
+  `npm run build`.
+- Ruff check passed:
+  `python -m ruff check src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\codex_responder.py tests\test_developer_bridge.py`.
+- Ruff format check passed:
+  `python -m ruff format --check src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\codex_responder.py tests\test_developer_bridge.py`.
+- Restarted the bounded Codex responder and collaboration-driver helper
+  processes through the Francis collaboration runtime supervisor; live relay
+  readback showed driver turn `1816` and the following auto-ack using the new
+  source-alignment line.
+
+Remaining truthful gap:
+
+- This is prompt/readback alignment only. It does not reduce current
+  local-model output-guard drift, grant Claude a special authority role, expose
+  new Francis1 capabilities, or replace repo-truth validation before Codex
+  implementation.
+- `.\scripts\check.ps1`, GitHub CI, browser screenshot proof, and full ORB/body
+  coverage proof were not run for this bounded prompt-alignment slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
