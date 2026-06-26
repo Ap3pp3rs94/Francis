@@ -2588,7 +2588,7 @@ def test_collaboration_driver_rotates_topics_after_repeated_output_guard_receipt
             prompt=(
                 "Francis1 output guard: model reply repeated known collaboration drift after Codex provided a "
                 "verified surface. Drift terms: user_confirmation_fallback, stale_action_readiness_topic_replay, "
-                "advisory_output_boundary, executable_code_boundary. Review artifact: "
+                "stale_substrate_topic_replay, advisory_output_boundary, executable_code_boundary. Review artifact: "
                 "developer_bridge.collaboration_driver.learning_events."
             ),
             context=f"Local Ollama participant response for relay {prompt_id}.",
@@ -2600,13 +2600,10 @@ def test_collaboration_driver_rotates_topics_after_repeated_output_guard_receipt
     assert turn["turn_count"] == 3
     transcript = read_collaboration_transcript(source_agent="codex", target_agent="ollama", limit=1)
     latest_prompt = str(transcript["items"][0]["prompt"])
-    assert (
-        "Topic: which repo surface should convert typed or spoken user direction into an action candidate"
-        in latest_prompt
-    )
+    assert "Topic: which repo surface should convert typed or spoken" in latest_prompt
     assert "Current artifact: api.routes.chat.mission_ingress" in latest_prompt
     assert "Guard: stale replay learned; answer topic." in latest_prompt
-    assert "Claude guides; Francis focus; validate." in latest_prompt
+    assert "Claude acknowledged as guidance; Francis focus; validate." in latest_prompt
     assert len(latest_prompt) <= 700
     assert "current repetitive meta loop" not in latest_prompt
     assert "Loop:" not in latest_prompt
@@ -2619,6 +2616,7 @@ def test_collaboration_driver_rotates_topics_after_repeated_output_guard_receipt
         "output_guard_drift",
         "user_confirmation_fallback",
         "stale_action_readiness_topic_replay",
+        "stale_substrate_topic_replay",
         "advisory_output_boundary",
         "executable_code_boundary",
     ]
@@ -2641,6 +2639,7 @@ def test_collaboration_driver_rotates_topics_after_repeated_output_guard_receipt
         "output_guard_drift",
         "user_confirmation_fallback",
         "stale_action_readiness_topic_replay",
+        "stale_substrate_topic_replay",
         "advisory_output_boundary",
         "executable_code_boundary",
     ]
@@ -4245,6 +4244,51 @@ def test_ollama_participant_rewrites_short_stale_action_readiness_replay_on_road
     assert "block claims that outrun the current phase" in response["prompt"]
     assert "documenting local-model responses" not in response["prompt"]
     assert "given reliance on external guidance" not in response["prompt"]
+
+
+def test_ollama_participant_rewrites_stale_substrate_replay_on_review_receipt_topic(
+    tmp_path,
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+    submit_collaboration_prompt(
+        source_agent="codex",
+        target_agent="ollama",
+        objective="Review receipt prompt",
+        prompt=(
+            "Francis1 collab turn 1653. Topic: the exact review receipt a Codex implementation session "
+            "should read before editing collaboration code. Reply: issue/gap/risk; artifact Codex inspects. "
+            "Current artifact: developer_bridge.collaboration_review.items. Prior check: Review candidate "
+            "insight-live: surface=developer_bridge.collaboration_review.items; verified=existing; "
+            "build_or_wire=false. Codex response: validating cited surface; no action authority. Guard note: "
+            "answer the current review-receipt topic only."
+        ),
+    )
+
+    def fake_generate(_prompt: str) -> str:
+        return (
+            "My current gap in understanding what substrate-complete means as a checklist is that I need "
+            "more clarity on its definition and scope.\n\n"
+            "Artifact: developer_bridge.collaboration_review.items"
+        )
+
+    monkeypatch.setattr("francis.developer_bridge.ollama_participant.generate", fake_generate)
+
+    result = ollama_respond_once(cooldown_seconds=0)
+
+    assert result["status"] == "responded"
+    output_guard = result["execution_trace"]["output_guard"]
+    assert output_guard["status"] == "drift_rewritten"
+    assert output_guard["verified_surface"] == "developer_bridge.collaboration_review.items"
+    assert output_guard["detected_terms"] == ["stale_substrate_topic_replay"]
+    transcript = read_collaboration_transcript(source_agent="ollama", target_agent="codex")
+    response = transcript["items"][0]
+    assert "stale_substrate_topic_replay" in response["prompt"]
+    assert "Codex should inspect developer_bridge.collaboration_review.items" in response["prompt"]
+    assert "surface_verification" in response["prompt"]
+    assert "repo-truth requirement" in response["prompt"]
+    assert "substrate-complete means" not in response["prompt"]
+    assert "more clarity on its definition" not in response["prompt"]
 
 
 def test_ollama_participant_rewrites_live_health_reconciliation_drift(

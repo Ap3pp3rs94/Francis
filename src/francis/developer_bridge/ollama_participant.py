@@ -527,8 +527,10 @@ def _known_drift_terms(reply: str) -> list[str]:
     return terms
 
 
-def _stale_topic_replay_terms(_source_prompt: str, reply: str) -> list[str]:
+def _stale_topic_replay_terms(source_prompt: str, reply: str) -> list[str]:
+    lower_source = " ".join(source_prompt.lower().replace("-", " ").split())
     lower_reply = " ".join(reply.lower().replace("-", " ").split())
+    terms: list[str] = []
     stale_action_readiness = (
         (
             "defining and documenting local model responses" in lower_reply
@@ -537,9 +539,16 @@ def _stale_topic_replay_terms(_source_prompt: str, reply: str) -> list[str]:
         and "without asserting capability authority" in lower_reply
         and "action readiness claim" in lower_reply
     )
-    if not stale_action_readiness:
-        return []
-    return ["stale_action_readiness_topic_replay"]
+    if stale_action_readiness:
+        terms.append("stale_action_readiness_topic_replay")
+    stale_substrate = (
+        "substrate complete" in lower_reply
+        and "substrate complete" not in lower_source
+        and "current artifact:" in lower_source
+    )
+    if stale_substrate:
+        terms.append("stale_substrate_topic_replay")
+    return terms
 
 
 def _verified_surface_from_prompt(source_prompt: str) -> str:

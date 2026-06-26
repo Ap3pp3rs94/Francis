@@ -97194,6 +97194,63 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, browser proof, and full ORB/body coverage
   proof were not run for this bounded prompt/readback repair.
 
+### 2026-06-26 04:55Z - Francis1 stale-topic guard for substrate replay
+
+Current posture: Phase 2 / P1 interface, P3 governance, P8 memory, and P9
+observability now treat a stale `substrate-complete` answer to a different
+current collaboration topic as local-model drift. The Ollama/Francis1 participant
+rewrites that stale answer into a no-authority guard receipt tied to the current
+artifact instead of letting it appear as clean guidance.
+
+What changed:
+
+- The Ollama participant output guard now adds
+  `stale_substrate_topic_replay` when the current prompt is not about
+  substrate-complete but the model answers as if it is.
+- The collaboration driver learning allowlist now preserves
+  `stale_substrate_topic_replay` from guard receipts so repeated stale-topic
+  drift can stay visible as bounded learning evidence.
+- Focused tests now prove the exact live failure shape: a review-receipt prompt
+  that receives a stale substrate-complete answer is rewritten to the current
+  `developer_bridge.collaboration_review.items` artifact, with no raw stale
+  model text preserved in the relay response.
+
+Validation:
+
+- Focused guard and runtime tests passed:
+  `python -m pytest tests/test_developer_bridge.py::test_ollama_participant_rewrites_stale_substrate_replay_on_review_receipt_topic tests/test_developer_bridge.py::test_ollama_participant_rewrites_short_stale_action_readiness_replay_on_roadmap_topic tests/test_developer_bridge.py::test_collaboration_driver_rotates_topics_after_repeated_output_guard_receipts tests/test_developer_bridge.py::test_collaboration_runtime_health_is_read_only_and_reports_recurrence -q`
+  (`4` passing tests).
+- Broader Ollama rewrite slice passed:
+  `python -m pytest tests/test_developer_bridge.py -k "ollama_participant_rewrites or collaboration_driver_rotates_topics_after_repeated_output_guard_receipts" -q`
+  (`20` passing tests).
+- Ruff check passed:
+  `python -m ruff check src\francis\developer_bridge\ollama_participant.py src\francis\developer_bridge\collaboration_driver.py tests\test_developer_bridge.py`.
+- Ruff format check passed:
+  `python -m ruff format --check src\francis\developer_bridge\ollama_participant.py src\francis\developer_bridge\collaboration_driver.py tests\test_developer_bridge.py`.
+- Targeted mypy passed:
+  `python -m mypy src\francis\developer_bridge\ollama_participant.py src\francis\developer_bridge\collaboration_driver.py`.
+- Compileall passed:
+  `python -m compileall src\francis\developer_bridge\ollama_participant.py src\francis\developer_bridge\collaboration_driver.py`.
+- `git diff --check` passed.
+- The local Francis API and collaboration helper processes were restarted.
+  Live `/developer-bridge/collaboration-runtime-health` reported
+  `status=healthy`, `helper_count=3`, turn `1658`,
+  `recurrence_state=waiting_for_ollama`, `manual_nudge_required=false`, and
+  `latest_prompt_within_budget=true`.
+- Live transcript review showed the prior unguarded stale substrate answer on
+  turn `1655`, and newer guard receipts continued to rewrite local-model drift
+  without granting action authority.
+
+Remaining truthful gap:
+
+- This is a guard/readback repair. It does not tune the local model, write
+  long-term memory, grant capability access, complete substrate readiness, clear
+  ORB coverage gaps, or authorize a main Francis build prompt.
+- The live conversation can still produce other drift classes; those must be
+  handled as typed, bounded receipts before any build or tuning claim.
+- `.\scripts\check.ps1`, GitHub CI, browser proof, and full ORB/body coverage
+  proof were not run for this stale-topic guard slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
