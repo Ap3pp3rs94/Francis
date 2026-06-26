@@ -830,15 +830,42 @@ def _learning_event_readback_item(event: dict[str, object]) -> dict[str, object]
             "operator_intent": _bounded_text(learning.get("operator_intent"), limit=220),
             "next_prompt_policy": _bounded_text(learning.get("next_prompt_policy"), limit=260),
         },
+        "memory_promotion_gate": _learning_memory_promotion_gate(event),
         "writer_governance": {
             "stores_full_transcript": bool(writer_governance.get("stores_full_transcript")),
             "records_failures_as_learning": bool(writer_governance.get("records_failures_as_learning")),
+            "grants_training_authority": bool(writer_governance.get("grants_training_authority")),
             "grants_execution_authority": bool(writer_governance.get("grants_execution_authority")),
             "grants_mutation_authority": bool(writer_governance.get("grants_mutation_authority")),
             "grants_approval_authority": bool(writer_governance.get("grants_approval_authority")),
             "grants_memory_write_authority": bool(writer_governance.get("grants_memory_write_authority")),
             "grants_model_authority": bool(writer_governance.get("grants_model_authority")),
         },
+    }
+
+
+def _learning_memory_promotion_gate(event: dict[str, object]) -> dict[str, object]:
+    event_id = _bounded_text(event.get("id"), limit=160)
+    return {
+        "applies": True,
+        "source_event_id": event_id,
+        "failure_is_learning_evidence": True,
+        "memory_promotion_allowed": False,
+        "long_term_memory_promotion_allowed": False,
+        "model_tuning_allowed": False,
+        "requires_codex_or_operator_review": True,
+        "requires_repo_truth_review": True,
+        "requires_memory_promotion_review": True,
+        "required_review_artifact": (
+            f"developer_bridge.collaboration_driver.learning_events:{event_id}" if event_id else ""
+        ),
+        "next_codex_action": "Review the bounded learning receipt before tuning or memory promotion.",
+        "stores_full_transcript": False,
+        "grants_training_authority": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "grants_approval_authority": False,
+        "grants_memory_write_authority": False,
     }
 
 
@@ -1691,6 +1718,7 @@ def _learning_governance() -> dict[str, object]:
         "derived_from_relay_receipts": True,
         "writes_continuity_summary": True,
         "records_failures_as_learning": True,
+        "grants_training_authority": False,
         "grants_execution_authority": False,
         "grants_mutation_authority": False,
         "grants_approval_authority": False,
@@ -1708,6 +1736,7 @@ def _learning_readback_governance() -> dict[str, object]:
         "stores_full_transcript": False,
         "calls_model": False,
         "trains_model": False,
+        "grants_training_authority": False,
         "grants_execution_authority": False,
         "grants_mutation_authority": False,
         "grants_approval_authority": False,

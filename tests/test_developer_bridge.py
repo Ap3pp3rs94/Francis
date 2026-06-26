@@ -2739,7 +2739,22 @@ def test_collaboration_learning_events_readback_is_bounded_and_read_only(tmp_pat
     assert item["recent_turns"]
     assert set(item["recent_turns"][0]) == {"turn", "note_id", "ollama_prompt_id", "matched_terms"}
     assert "failed or repetitive collaboration turns are learning material" in item["learning"]["memory_value"]
+    gate = item["memory_promotion_gate"]
+    assert gate["applies"] is True
+    assert gate["source_event_id"] == item["id"]
+    assert gate["failure_is_learning_evidence"] is True
+    assert gate["memory_promotion_allowed"] is False
+    assert gate["long_term_memory_promotion_allowed"] is False
+    assert gate["model_tuning_allowed"] is False
+    assert gate["requires_codex_or_operator_review"] is True
+    assert gate["requires_repo_truth_review"] is True
+    assert gate["requires_memory_promotion_review"] is True
+    assert gate["required_review_artifact"].endswith(item["id"])
+    assert gate["stores_full_transcript"] is False
+    assert gate["grants_training_authority"] is False
+    assert gate["grants_memory_write_authority"] is False
     assert item["writer_governance"]["stores_full_transcript"] is False
+    assert item["writer_governance"]["grants_training_authority"] is False
     assert item["writer_governance"]["grants_execution_authority"] is False
     assert item["writer_governance"]["grants_memory_write_authority"] is False
 
@@ -2844,7 +2859,16 @@ def test_collaboration_driver_rotates_topics_after_repeated_output_guard_receipt
     assert all("output_guard_drift" in item["matched_terms"] for item in event["recent_turns"])
     assert all("user_confirmation_fallback" in item["matched_terms"] for item in event["recent_turns"])
     assert "raw model text" in event["learning"]["memory_value"]
+    gate = event["memory_promotion_gate"]
+    assert gate["failure_is_learning_evidence"] is True
+    assert gate["memory_promotion_allowed"] is False
+    assert gate["long_term_memory_promotion_allowed"] is False
+    assert gate["model_tuning_allowed"] is False
+    assert gate["requires_memory_promotion_review"] is True
+    assert gate["grants_training_authority"] is False
+    assert gate["grants_memory_write_authority"] is False
     assert event["writer_governance"]["stores_full_transcript"] is False
+    assert event["writer_governance"]["grants_training_authority"] is False
     assert event["writer_governance"]["grants_execution_authority"] is False
     assert event["writer_governance"]["grants_memory_write_authority"] is False
     state_path = tmp_path / "data" / "integrations" / "developer_bridge" / "collaboration_driver" / "state.json"

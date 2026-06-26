@@ -97843,6 +97843,70 @@ Remaining truthful gap:
 - Browser screenshot proof, `.\scripts\check.ps1`, GitHub CI, and full ORB/body
   coverage proof were not run for this bounded UI-default slice.
 
+### 2026-06-26 06:21Z - Collaboration learning memory-promotion gate
+
+Current posture: Phase 2 / P8 memory and P9 observability now expose a typed
+memory-promotion gate on collaboration learning receipts. The active review
+candidate `review-insight-collab-d4b226507046d003-2ff3bd56126e` identified
+local-model drift as learning material; the readback now makes clear that this
+evidence does not automatically promote memory, tune a model, or grant write
+authority.
+
+What changed:
+
+- `read_collaboration_learning_events` now adds `memory_promotion_gate` to each
+  learning-event readback item.
+- The gate states that the failure is learning evidence while
+  `memory_promotion_allowed=false`, `long_term_memory_promotion_allowed=false`,
+  and `model_tuning_allowed=false`.
+- The gate requires Codex/operator review, repo-truth review, and a memory
+  promotion review before any promotion or tuning claim.
+- Learning-event writer governance now explicitly exposes
+  `grants_training_authority=false`.
+- The Chat UI collaboration parser preserves `memoryPromotionGate`, and the
+  existing learning guard summary treats memory promotion or model tuning claims
+  as authority drift.
+
+Validation:
+
+- Focused developer-bridge learning tests passed:
+  `python -m pytest tests/test_developer_bridge.py::test_collaboration_learning_events_readback_is_bounded_and_read_only tests/test_developer_bridge.py::test_collaboration_driver_records_user_confirmation_fallback_as_learning_event -q`.
+- Full developer-bridge backend test file passed:
+  `python -m pytest tests/test_developer_bridge.py -q`.
+- Focused Chat UI collaboration contract passed:
+  `node --test --experimental-strip-types src/chat/index.test.ts`.
+- Full Chat UI contract suite passed:
+  `npm run test` (`282` passing tests).
+- Ruff check passed:
+  `python -m ruff check src\francis\developer_bridge\collaboration_driver.py tests\test_developer_bridge.py`.
+- Ruff format check passed:
+  `python -m ruff format --check src\francis\developer_bridge\collaboration_driver.py tests\test_developer_bridge.py`.
+- Targeted mypy passed:
+  `python -m mypy src\francis\developer_bridge\collaboration_driver.py`.
+- Compileall passed:
+  `python -m compileall src\francis\developer_bridge\collaboration_driver.py`.
+- Chat UI production build passed:
+  `npm run build`.
+- The local Francis API was restarted as wrapper PID `44976` and worker PID
+  `11672`. Live `/developer-bridge/collaboration-learning?limit=1&failure_type=output_guard_drift`
+  returned `count=1`, `readback_cache.status=refreshed`,
+  `failure_type=output_guard_drift`, `latest_turn=1752`,
+  `memory_promotion_allowed=false`,
+  `long_term_memory_promotion_allowed=false`, `model_tuning_allowed=false`,
+  `requires_memory_promotion_review=true`, `stores_full_transcript=false`,
+  `grants_training_authority=false`, and `grants_memory_write_authority=false`.
+- Live `/developer-bridge/collaboration-runtime-health` returned `status:
+  healthy`, `turn_count=1753`, `recurrence_state=waiting_for_ollama`,
+  `manual_nudge_required=false`, and participants enabled `3`.
+
+Remaining truthful gap:
+
+- This is a readback and UI contract boundary only. It does not implement memory
+  promotion, promote any learning receipt into short- or long-term memory, tune
+  Francis1, grant capability use, or change collaboration recurrence.
+- `.\scripts\check.ps1`, GitHub CI, browser screenshot proof, and full ORB/body
+  coverage proof were not run for this bounded learning-gate slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

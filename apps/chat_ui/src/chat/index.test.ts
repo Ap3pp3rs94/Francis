@@ -2704,8 +2704,28 @@ test("parseCollaborationLearning preserves bounded no-authority learning receipt
           operator_intent: "keep failures in Francis memory without transcript dumping",
           next_prompt_policy: "ask for a concrete build surface instead of another identity argument",
         },
+        memory_promotion_gate: {
+          applies: true,
+          source_event_id: "learning-driver-alpha",
+          failure_is_learning_evidence: true,
+          memory_promotion_allowed: false,
+          long_term_memory_promotion_allowed: false,
+          model_tuning_allowed: false,
+          requires_codex_or_operator_review: true,
+          requires_repo_truth_review: true,
+          requires_memory_promotion_review: true,
+          required_review_artifact: "developer_bridge.collaboration_driver.learning_events:learning-driver-alpha",
+          next_codex_action: "Review the bounded learning receipt before tuning or memory promotion.",
+          stores_full_transcript: false,
+          grants_training_authority: false,
+          grants_execution_authority: false,
+          grants_mutation_authority: false,
+          grants_approval_authority: false,
+          grants_memory_write_authority: false,
+        },
         writer_governance: {
           stores_full_transcript: false,
+          grants_training_authority: false,
           grants_execution_authority: false,
           grants_memory_write_authority: false,
         },
@@ -2736,7 +2756,20 @@ test("parseCollaborationLearning preserves bounded no-authority learning receipt
   assert.equal(item.recentTurnCount, 4);
   assert.equal(item.recentTurns[0]?.noteId, "note-alpha");
   assert.equal(item.learning.operatorIntent.includes("without transcript dumping"), true);
+  assert.equal(item.memoryPromotionGate.failureIsLearningEvidence, true);
+  assert.equal(item.memoryPromotionGate.memoryPromotionAllowed, false);
+  assert.equal(item.memoryPromotionGate.longTermMemoryPromotionAllowed, false);
+  assert.equal(item.memoryPromotionGate.modelTuningAllowed, false);
+  assert.equal(item.memoryPromotionGate.requiresMemoryPromotionReview, true);
+  assert.equal(
+    item.memoryPromotionGate.requiredReviewArtifact,
+    "developer_bridge.collaboration_driver.learning_events:learning-driver-alpha",
+  );
+  assert.equal(item.memoryPromotionGate.storesFullTranscript, false);
+  assert.equal(item.memoryPromotionGate.grantsTrainingAuthority, false);
+  assert.equal(item.memoryPromotionGate.grantsMemoryWriteAuthority, false);
   assert.equal(item.writerGovernance.stores_full_transcript, false);
+  assert.equal(item.writerGovernance.grants_training_authority, false);
   assert.equal(learning.governance.grants_execution_authority, false);
   assert.equal(learning.governance.grants_memory_write_authority, false);
 
@@ -2751,6 +2784,9 @@ test("parseCollaborationLearning preserves bounded no-authority learning receipt
     "latest turn 419",
     "recent turns 4",
     "learning receipt learning-driver-alpha",
+    "memory promotion false",
+    "tuning false",
+    "promotion review true",
     "full transcript false",
     "training false",
     "execute false",

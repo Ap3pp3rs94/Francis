@@ -1245,7 +1245,28 @@ export type CollaborationLearningEvent = {
     operatorIntent: string;
     nextPromptPolicy: string;
   };
+  memoryPromotionGate: CollaborationLearningMemoryPromotionGate;
   writerGovernance: Record<string, unknown>;
+};
+
+export type CollaborationLearningMemoryPromotionGate = {
+  applies: boolean;
+  sourceEventId: string;
+  failureIsLearningEvidence: boolean;
+  memoryPromotionAllowed: boolean;
+  longTermMemoryPromotionAllowed: boolean;
+  modelTuningAllowed: boolean;
+  requiresCodexOrOperatorReview: boolean;
+  requiresRepoTruthReview: boolean;
+  requiresMemoryPromotionReview: boolean;
+  requiredReviewArtifact: string;
+  nextCodexAction: string;
+  storesFullTranscript: boolean;
+  grantsTrainingAuthority: boolean;
+  grantsExecutionAuthority: boolean;
+  grantsMutationAuthority: boolean;
+  grantsApprovalAuthority: boolean;
+  grantsMemoryWriteAuthority: boolean;
 };
 
 export type CollaborationLearning = {
@@ -2288,19 +2309,41 @@ export function collaborationLearningGuardSummary(
     latestLearning?.learning.nextPromptPolicy ||
     "No prompt policy recorded; keep the next exchange bounded to a concrete Francis surface.";
   const storesFullTranscript =
-    Boolean(signal?.storesFullTranscript) || governanceFlag(latestLearning?.writerGovernance ?? {}, "stores_full_transcript");
+    Boolean(signal?.storesFullTranscript) ||
+    Boolean(latestLearning?.memoryPromotionGate.storesFullTranscript) ||
+    governanceFlag(latestLearning?.writerGovernance ?? {}, "stores_full_transcript");
   const grantsTraining =
-    Boolean(signal?.grantsTrainingAuthority) || governanceFlag(latestLearning?.writerGovernance ?? {}, "grants_training_authority");
+    Boolean(signal?.grantsTrainingAuthority) ||
+    Boolean(latestLearning?.memoryPromotionGate.grantsTrainingAuthority) ||
+    governanceFlag(latestLearning?.writerGovernance ?? {}, "grants_training_authority");
   const grantsExecution =
-    Boolean(signal?.grantsExecutionAuthority) || governanceFlag(latestLearning?.writerGovernance ?? {}, "grants_execution_authority");
+    Boolean(signal?.grantsExecutionAuthority) ||
+    Boolean(latestLearning?.memoryPromotionGate.grantsExecutionAuthority) ||
+    governanceFlag(latestLearning?.writerGovernance ?? {}, "grants_execution_authority");
   const grantsMutation =
-    Boolean(signal?.grantsMutationAuthority) || governanceFlag(latestLearning?.writerGovernance ?? {}, "grants_mutation_authority");
+    Boolean(signal?.grantsMutationAuthority) ||
+    Boolean(latestLearning?.memoryPromotionGate.grantsMutationAuthority) ||
+    governanceFlag(latestLearning?.writerGovernance ?? {}, "grants_mutation_authority");
   const grantsApproval =
-    Boolean(signal?.grantsApprovalAuthority) || governanceFlag(latestLearning?.writerGovernance ?? {}, "grants_approval_authority");
+    Boolean(signal?.grantsApprovalAuthority) ||
+    Boolean(latestLearning?.memoryPromotionGate.grantsApprovalAuthority) ||
+    governanceFlag(latestLearning?.writerGovernance ?? {}, "grants_approval_authority");
   const grantsMemoryWrite =
-    Boolean(signal?.grantsMemoryWriteAuthority) || governanceFlag(latestLearning?.writerGovernance ?? {}, "grants_memory_write_authority");
+    Boolean(signal?.grantsMemoryWriteAuthority) ||
+    Boolean(latestLearning?.memoryPromotionGate.grantsMemoryWriteAuthority) ||
+    governanceFlag(latestLearning?.writerGovernance ?? {}, "grants_memory_write_authority");
+  const promotionGate = latestLearning?.memoryPromotionGate;
+  const memoryPromotionAllowed = Boolean(promotionGate?.memoryPromotionAllowed);
+  const modelTuningAllowed = Boolean(promotionGate?.modelTuningAllowed);
   const unsafeAuthority =
-    storesFullTranscript || grantsTraining || grantsExecution || grantsMutation || grantsApproval || grantsMemoryWrite;
+    storesFullTranscript ||
+    grantsTraining ||
+    grantsExecution ||
+    grantsMutation ||
+    grantsApproval ||
+    grantsMemoryWrite ||
+    memoryPromotionAllowed ||
+    modelTuningAllowed;
   const recentTurnCount = signal?.recentTurnCount || latestLearning?.recentTurnCount || 0;
   return {
     badge: unsafeAuthority ? "learning authority drift" : signalObserved ? "prompt guard active" : "learning guard quiet",
@@ -2313,6 +2356,9 @@ export function collaborationLearningGuardSummary(
       `latest turn ${latestTurn}`,
       `recent turns ${recentTurnCount}`,
       `learning receipt ${signal?.learningEventId || latestLearning?.id || "unknown"}`,
+      `memory promotion ${actionBoundaryBool(memoryPromotionAllowed)}`,
+      `tuning ${actionBoundaryBool(modelTuningAllowed)}`,
+      `promotion review ${actionBoundaryBool(promotionGate?.requiresMemoryPromotionReview ?? true)}`,
       `full transcript ${actionBoundaryBool(storesFullTranscript)}`,
       `training ${actionBoundaryBool(grantsTraining)}`,
       `execute ${actionBoundaryBool(grantsExecution)}`,
@@ -2843,11 +2889,38 @@ function parseLearningRecentTurn(raw: unknown): CollaborationLearningRecentTurn 
   };
 }
 
+function parseLearningMemoryPromotionGate(raw: unknown, fallbackEventId: string): CollaborationLearningMemoryPromotionGate {
+  const item = isRecord(raw) ? raw : {};
+  return {
+    applies: safeBoolean(item.applies, true),
+    sourceEventId: safeString(item.source_event_id, fallbackEventId),
+    failureIsLearningEvidence: safeBoolean(item.failure_is_learning_evidence, true),
+    memoryPromotionAllowed: safeBoolean(item.memory_promotion_allowed),
+    longTermMemoryPromotionAllowed: safeBoolean(item.long_term_memory_promotion_allowed),
+    modelTuningAllowed: safeBoolean(item.model_tuning_allowed),
+    requiresCodexOrOperatorReview: safeBoolean(item.requires_codex_or_operator_review, true),
+    requiresRepoTruthReview: safeBoolean(item.requires_repo_truth_review, true),
+    requiresMemoryPromotionReview: safeBoolean(item.requires_memory_promotion_review, true),
+    requiredReviewArtifact: safeString(
+      item.required_review_artifact,
+      fallbackEventId ? `developer_bridge.collaboration_driver.learning_events:${fallbackEventId}` : "",
+    ),
+    nextCodexAction: safeString(item.next_codex_action, "Review the bounded learning receipt before tuning or memory promotion."),
+    storesFullTranscript: safeBoolean(item.stores_full_transcript),
+    grantsTrainingAuthority: safeBoolean(item.grants_training_authority),
+    grantsExecutionAuthority: safeBoolean(item.grants_execution_authority),
+    grantsMutationAuthority: safeBoolean(item.grants_mutation_authority),
+    grantsApprovalAuthority: safeBoolean(item.grants_approval_authority),
+    grantsMemoryWriteAuthority: safeBoolean(item.grants_memory_write_authority),
+  };
+}
+
 function parseLearningEvent(raw: unknown): CollaborationLearningEvent {
   const item = isRecord(raw) ? raw : {};
   const learning = isRecord(item.learning) ? item.learning : {};
+  const id = safeString(item.id);
   return {
-    id: safeString(item.id),
+    id,
     createdAt: safeString(item.created_at),
     sessionId: safeString(item.session_id),
     turn: safeNumber(item.turn),
@@ -2867,6 +2940,7 @@ function parseLearningEvent(raw: unknown): CollaborationLearningEvent {
       operatorIntent: safeString(learning.operator_intent),
       nextPromptPolicy: safeString(learning.next_prompt_policy),
     },
+    memoryPromotionGate: parseLearningMemoryPromotionGate(item.memory_promotion_gate, id),
     writerGovernance: isRecord(item.writer_governance) ? item.writer_governance : {},
   };
 }
