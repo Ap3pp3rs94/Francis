@@ -96794,6 +96794,69 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, and browser proof were not run for this
   bounded backend readback slice.
 
+### 2026-06-26 04:05Z - Local-model advice-only action-readiness boundary
+
+Current posture: Phase 2 / P3 governance, P9 observability, and P1 interface
+review now expose a typed boundary for the live collaboration topic "how to
+prove a local-model response is advice only before any Francis action-readiness
+claim." Local-model output can remain useful collaboration signal, but it must
+point to runtime advice-only proof before it can be discussed as anything more
+than advisory text.
+
+What changed:
+
+- Added `local_model_advice_only_boundary` to
+  `developer_bridge.collaboration_review_item`.
+- For `chat_output_vs_action_readiness` items on
+  `ollama participant and action-readiness receipts`, the boundary now records
+  that local-model output is not action-ready, is not authority, cannot create
+  an action candidate, cannot execute directly, and has no raw host access.
+- The boundary requires
+  `/developer-bridge/collaboration-runtime-health`
+  `latest_local_model_response.advice_only_proof`, output-guard status, and the
+  review item's `action_boundary` before any Francis action-readiness claim
+  based on local-model output.
+- Non-local-model-advice review items receive authority-denying defaults and an
+  empty proof checklist so ordinary collaboration review items do not imply
+  action-readiness proof.
+
+Validation:
+
+- Focused developer-bridge tests passed:
+  `python -m pytest tests/test_developer_bridge.py::test_collaboration_review_projects_generic_historical_topics_to_concrete_surfaces tests/test_developer_bridge.py::test_collaboration_runtime_health_is_read_only_and_reports_recurrence tests/test_developer_bridge.py::test_ollama_participant_rewrites_action_readiness_drift_to_advice_only_receipt`.
+- Ruff check passed:
+  `python -m ruff check src\francis\developer_bridge\collaboration_review.py tests\test_developer_bridge.py`.
+- Ruff format check passed:
+  `python -m ruff format --check src\francis\developer_bridge\collaboration_review.py tests\test_developer_bridge.py`.
+- Targeted mypy passed:
+  `python -m mypy src\francis\developer_bridge\collaboration_review.py`.
+- Compileall passed:
+  `python -m compileall src\francis\developer_bridge\collaboration_review.py`.
+- Live API readback after restart showed
+  `local_model_advice_only_boundary.applies=true`,
+  `local_model_output_is_action_ready=false`,
+  `local_model_output_is_authority=false`,
+  `action_readiness_claim_allowed=false`,
+  `action_candidate_creation_allowed=false`, `direct_execution=false`,
+  `raw_host_access=false`, and all no-authority flags false for review item
+  `insight-collab-c994472d145a297c-edf84392bc09`.
+- Runtime health after API restart reported `status=healthy`,
+  `helper_count=3`, prompt budget `ok`, turn `1605`,
+  `proof_status=advice_only_observed`, `response_is_advice_only=true`,
+  `action_readiness_allowed=false`, and all three collaboration participants
+  enabled.
+
+Remaining truthful gap:
+
+- This is a review/readback contract. It does not grant Francis1, Codex, or
+  Claude action readiness, action-candidate creation authority, execution
+  authority, approval authority, mutation authority, memory-write authority,
+  training authority, capability authority, or host access.
+- Some local-model replies are still output-guard rewrites; those remain
+  learning signals and advice-only receipts, not action-readiness evidence.
+- `.\scripts\check.ps1`, GitHub CI, and browser proof were not run for this
+  bounded backend readback slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

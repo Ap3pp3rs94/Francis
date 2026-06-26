@@ -1658,6 +1658,41 @@ def test_collaboration_review_projects_generic_historical_topics_to_concrete_sur
     assert action_item["surface_verification"]["status"] == "existing_surface_found"
     assert action_item["surface_verification"]["surface_kind"] == "model_boundary_receipts"
     assert action_item["surface_verification"]["projection_applied"] is True
+    local_model_advice_boundary = action_item["local_model_advice_only_boundary"]
+    assert local_model_advice_boundary["applies"] is True
+    assert local_model_advice_boundary["surface"] == "ollama participant and action-readiness receipts"
+    assert local_model_advice_boundary["local_model_output_is_action_ready"] is False
+    assert local_model_advice_boundary["local_model_output_is_authority"] is False
+    assert local_model_advice_boundary["action_readiness_claim_allowed"] is False
+    assert local_model_advice_boundary["action_candidate_creation_allowed"] is False
+    assert local_model_advice_boundary["direct_execution"] is False
+    assert local_model_advice_boundary["raw_host_access"] is False
+    assert local_model_advice_boundary["requires_runtime_advice_only_proof"] is True
+    assert local_model_advice_boundary["requires_output_guard_status"] is True
+    assert local_model_advice_boundary["requires_action_boundary_review"] is True
+    assert local_model_advice_boundary["requires_codex_or_operator_review"] is True
+    assert (
+        "latest_local_model_response.advice_only_proof.response_is_advice_only=true"
+        in local_model_advice_boundary["required_proof_fields"]
+    )
+    assert (
+        "latest_local_model_response.advice_only_proof.action_readiness_claim_allowed=false"
+        in local_model_advice_boundary["required_proof_fields"]
+    )
+    assert (
+        "local_model_advice_only_boundary.action_candidate_creation_allowed=false"
+        in local_model_advice_boundary["required_proof_fields"]
+    )
+    assert (
+        "/developer-bridge/collaboration-runtime-health collaboration_loop.latest_local_model_response.advice_only_proof"
+        in local_model_advice_boundary["required_readbacks"]
+    )
+    assert local_model_advice_boundary["grants_execution_authority"] is False
+    assert local_model_advice_boundary["grants_mutation_authority"] is False
+    assert local_model_advice_boundary["grants_approval_authority"] is False
+    assert local_model_advice_boundary["grants_memory_write_authority"] is False
+    assert local_model_advice_boundary["grants_training_authority"] is False
+    assert local_model_advice_boundary["grants_capability_authority"] is False
 
     direction_item = items["insight-direction"]
     assert direction_item["build_issue"]["code"] == "direction_to_action_boundary"

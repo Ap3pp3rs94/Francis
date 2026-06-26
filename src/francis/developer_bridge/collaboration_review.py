@@ -64,6 +64,10 @@ def read_collaboration_review(*, limit: int = 10, session_id: str = "") -> dict[
                 "Typed proof checklist for collaboration items where model advice proposes action, proving the "
                 "advice remains non-authoritative until action-boundary and advice-only readbacks are reviewed."
             ),
+            "local_model_advice_only_boundary": (
+                "Typed proof checklist for local-model action-readiness claims, requiring runtime advice-only "
+                "proof before model output can be discussed as more than advisory text."
+            ),
             "capability_exposure_boundary": (
                 "Typed proof checklist for body-map collaboration items, separating visibility of Francis body "
                 "surfaces from operator-granted capability use."
@@ -237,6 +241,10 @@ def _review_item(insight: dict[str, object]) -> dict[str, object]:
             concrete_surface=concrete_surface,
         ),
         "model_advice_governance_boundary": _model_advice_governance_boundary(
+            build_issue=build_issue,
+            concrete_surface=concrete_surface,
+        ),
+        "local_model_advice_only_boundary": _local_model_advice_only_boundary(
             build_issue=build_issue,
             concrete_surface=concrete_surface,
         ),
@@ -497,6 +505,73 @@ def _model_advice_governance_boundary(*, build_issue: dict[str, object], concret
         "next_codex_action": (
             "Inspect action_boundary and latest_local_model_response.advice_only_proof before treating model "
             "advice as action-ready or converting it into an action candidate."
+        ),
+    }
+
+
+def _local_model_advice_only_boundary(*, build_issue: dict[str, object], concrete_surface: str) -> dict[str, object]:
+    code = _bounded_text(build_issue.get("code"), limit=120)
+    surface_key = _surface_key(concrete_surface)
+    applies = code == "chat_output_vs_action_readiness" or (
+        surface_key == "ollama participant and action readiness receipts"
+    )
+    base: dict[str, object] = {
+        "applies": applies,
+        "surface": "ollama participant and action-readiness receipts" if applies else concrete_surface,
+        "local_model_output_is_action_ready": False,
+        "local_model_output_is_authority": False,
+        "action_readiness_claim_allowed": False,
+        "action_candidate_creation_allowed": False,
+        "direct_execution": False,
+        "raw_host_access": False,
+        "requires_runtime_advice_only_proof": applies,
+        "requires_output_guard_status": applies,
+        "requires_action_boundary_review": applies,
+        "requires_codex_or_operator_review": True,
+        "requires_repo_truth_review": True,
+        "requires_typed_review_artifact": applies,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "grants_approval_authority": False,
+        "grants_memory_write_authority": False,
+        "grants_training_authority": False,
+        "grants_capability_authority": False,
+    }
+    if not applies:
+        return {
+            **base,
+            "required_proof_fields": [],
+            "required_readbacks": [],
+            "validation_tests": [],
+            "next_codex_action": "Use action_boundary and build_direction_gate for non-local-model-advice review items.",
+        }
+    return {
+        **base,
+        "required_proof_fields": [
+            "latest_local_model_response.advice_only_proof.kind=developer_bridge.local_model_advice_only_proof",
+            "latest_local_model_response.advice_only_proof.response_is_advice_only=true",
+            "latest_local_model_response.advice_only_proof.action_readiness_claim_allowed=false",
+            "latest_local_model_response.advice_only_proof.requires_codex_or_operator_review_before_action_readiness=true",
+            "latest_local_model_response.advice_only_proof.grants_execution_authority=false",
+            "latest_local_model_response.advice_only_proof.grants_mutation_authority=false",
+            "latest_local_model_response.advice_only_proof.grants_approval_authority=false",
+            "latest_local_model_response.output_guard_status",
+            "local_model_advice_only_boundary.local_model_output_is_action_ready=false",
+            "local_model_advice_only_boundary.action_candidate_creation_allowed=false",
+        ],
+        "required_readbacks": [
+            "/developer-bridge/collaboration-runtime-health collaboration_loop.latest_local_model_response.advice_only_proof",
+            "/developer-bridge/collaboration-review item.action_boundary",
+            "/developer-bridge/collaboration-review item.model_advice_governance_boundary when advice proposes action",
+        ],
+        "validation_tests": [
+            "tests/test_developer_bridge.py::test_collaboration_review_projects_generic_historical_topics_to_concrete_surfaces",
+            "tests/test_developer_bridge.py::test_collaboration_runtime_health_is_read_only_and_reports_recurrence",
+            "tests/test_developer_bridge.py::test_ollama_participant_rewrites_action_readiness_drift_to_advice_only_receipt",
+        ],
+        "next_codex_action": (
+            "Inspect latest_local_model_response.advice_only_proof and the review action_boundary before any "
+            "Francis action-readiness claim based on local-model output."
         ),
     }
 
