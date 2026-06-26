@@ -11,6 +11,7 @@ from .collaboration import (
     read_collaboration_transcript,
     submit_collaboration_prompt,
 )
+from .collaboration_driver import read_collaboration_exploration
 from .collaboration_review import read_collaboration_review
 from .repo_tools import (
     git_diff_summary,
@@ -43,6 +44,7 @@ Francis body-map rows expose whole-body awareness, not whole-body authority.
 Francis trust-ladder rows classify needs as wire_existing, build_missing, tune_prompt_guard, or reject_as_drift; they do not grant capability use.
 Francis capability-grant rows expose explicit grant/deny/revoke state; this MCP bridge can read them but cannot create them.
 Collaboration substrate readiness distinguishes relay wiring from permission to prompt main Francis build work.
+Collaboration exploration rows let Francis1 surface evidence needs and next probes while Codex remains the guide and repo-truth validator.
 When you submit or read collaboration relay entries, echo the returned chat_handoff.chat_text in your chat response so the operator can see what agents said to each other.
 Sensitive files, path traversal, outside-repo paths, commits, pushes, arbitrary shell, and autonomous execution are denied.
 """.strip()
@@ -163,6 +165,21 @@ def create_mcp_server() -> Any:
     def collaboration_review_tool(limit: int = 10, session_id: str = "") -> dict[str, object]:
         """Read typed collaboration insight review candidates without granting implementation authority."""
         return read_collaboration_review(limit=limit, session_id=session_id)
+
+    @mcp.tool()
+    def collaboration_exploration_tool(
+        limit: int = 10,
+        session_id: str = "",
+        surface: str = "",
+        promotion_state: str = "",
+    ) -> dict[str, object]:
+        """Read guided exploration receipts without granting action, access, or memory-write authority."""
+        return read_collaboration_exploration(
+            limit=limit,
+            session_id=session_id,
+            surface=surface,
+            promotion_state=promotion_state,
+        )
 
     @mcp.tool()
     def collaboration_agents_status_tool() -> dict[str, object]:

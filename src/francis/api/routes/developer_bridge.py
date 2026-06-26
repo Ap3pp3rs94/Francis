@@ -13,7 +13,10 @@ from francis.developer_bridge.agents import collaboration_agents_status, set_col
 from francis.developer_bridge.body_map import read_francis_body_map
 from francis.developer_bridge.capability_grants import read_francis_capability_grants, set_francis_capability_grant
 from francis.developer_bridge.collaboration import read_collaboration_sessions, read_collaboration_transcript
-from francis.developer_bridge.collaboration_driver import read_collaboration_learning_events
+from francis.developer_bridge.collaboration_driver import (
+    read_collaboration_exploration,
+    read_collaboration_learning_events,
+)
 from francis.developer_bridge.collaboration_review import read_collaboration_review
 from francis.developer_bridge.collaboration_runtime import read_collaboration_runtime_health
 from francis.developer_bridge.substrate_readiness import read_collaboration_substrate_readiness
@@ -375,6 +378,59 @@ def _empty_learning_payload(
     }
 
 
+def _empty_exploration_payload(
+    *,
+    limit: int = 10,
+    session_id: str = "",
+    surface: str = "",
+    promotion_state: str = "",
+) -> dict[str, object]:
+    return {
+        "kind": "developer_bridge.collaboration_exploration",
+        "schema_version": "developer_bridge_collaboration_exploration_v1",
+        "ok": True,
+        "mode": "read_only",
+        "surface": "developer_bridge.collaboration_driver.explorations",
+        "items": [],
+        "count": 0,
+        "truncated": False,
+        "filters": {
+            "limit": limit,
+            "session_id": session_id,
+            "surface": surface,
+            "promotion_state": promotion_state,
+        },
+        "definitions": {
+            "guided_exploration": (
+                "A bounded Francis1-to-Codex evidence-need receipt. It lets Francis1 shape what Codex should "
+                "inspect next without granting action authority."
+            ),
+            "next_probe": "The concrete readback, repo surface, or receipt Codex should inspect before implementation.",
+            "promotion_state": (
+                "Whether the exploration is still field-notes material or can be reviewed as build direction."
+            ),
+            "access_boundary": (
+                "Access may be requested when Francis1 hits a wall, but grants require typed review and remain "
+                "revocable. Exploration alone never grants execution, mutation, approval, or memory-write authority."
+            ),
+        },
+        "governance": {
+            "read_only": True,
+            "reads_collaboration_explorations": True,
+            "writes_files": False,
+            "stores_full_transcript": False,
+            "calls_model": False,
+            "trains_model": False,
+            "grants_training_authority": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+            "grants_approval_authority": False,
+            "grants_memory_write_authority": False,
+            "grants_model_authority": False,
+        },
+    }
+
+
 def _empty_runtime_health_payload() -> dict[str, object]:
     return {
         "kind": "developer_bridge.collaboration_runtime_health",
@@ -480,6 +536,7 @@ def _empty_substrate_readiness_payload() -> dict[str, object]:
             "runtime_health": "developer_bridge.collaboration_runtime_health",
             "trust_ladder": "developer_bridge.francis_trust_ladder",
             "learning": "developer_bridge.collaboration_driver.learning_events",
+            "exploration": "developer_bridge.collaboration_driver.explorations",
         },
         "governance": {
             "read_only": True,
@@ -923,6 +980,21 @@ def collaboration_learning(
     )
 
 
+def collaboration_exploration(
+    limit: int = Query(10, ge=1, le=50),
+    session_id: str = "",
+    surface: str = "",
+    promotion_state: str = "",
+) -> Response:
+    return _read_only_json_response(
+        read_collaboration_exploration,
+        limit=limit,
+        session_id=session_id,
+        surface=surface,
+        promotion_state=promotion_state,
+    )
+
+
 def collaboration_runtime_health() -> Response:
     return _read_only_json_response(read_collaboration_runtime_health)
 
@@ -1010,6 +1082,24 @@ def collaboration_learning_route(
         failure_type=failure_type,
         term=term,
         session_id=session_id,
+    )
+
+
+@router.get("/collaboration-exploration")
+def collaboration_exploration_route(
+    limit: int = Query(10, ge=1, le=50),
+    session_id: str = "",
+    surface: str = "",
+    promotion_state: str = "",
+) -> Response:
+    return _cached_read_only_json_response(
+        "developer_bridge.collaboration_exploration",
+        read_collaboration_exploration,
+        _empty_exploration_payload,
+        limit=limit,
+        session_id=session_id,
+        surface=surface,
+        promotion_state=promotion_state,
     )
 
 

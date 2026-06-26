@@ -21,7 +21,7 @@ CONTEXT_CONTRACT_PROMPT_LINE = (
 FRANCIS1_GOVERNED_ACCESS_PROMPT_LINE = (
     "Francis1 governed-access contract francis1-governed-access-contract-v1: "
     "Francis1 is the primary local Francis intelligence participant; Codex and Claude are external guidance sources; "
-    "available context comes only through Francis-provided continuity, feedback-memory, relay, review, summary, and learning receipts; "
+    "available context comes only through Francis-provided continuity, feedback-memory, relay, review, exploration, summary, and learning receipts; "
     "write access is limited to conversation-ledger and relay receipts through existing governed paths; "
     "no raw shell, repo mutation, approval, model training, memory promotion, or governance bypass."
 )
@@ -90,7 +90,7 @@ def _payload(*, session_id: str) -> dict[str, object]:
             "Francis1 is the local Francis model participant and speaks in first person through a provider lane.",
             "Provider and source-agent labels are provenance and audit fields, not identity or authority.",
             "Francis1 is the primary local Francis intelligence participant; Codex and Claude are external guidance sources.",
-            "Francis1's available context is whatever Francis supplies through continuity, feedback-memory, relay, review, summary, and learning receipts.",
+            "Francis1's available context is whatever Francis supplies through continuity, feedback-memory, relay, review, exploration, summary, and learning receipts.",
             "Codex and local-model replies are advisory build signals until reviewed against repo truth.",
             "Each collaboration reply should name one concrete build issue and one typed receipt or review artifact.",
             "Repeated meta loops become bounded learning receipts instead of repeated debate.",
@@ -104,6 +104,7 @@ def _payload(*, session_id: str) -> dict[str, object]:
                 "feedback_memory_prompt_context",
                 "collaboration_relay_receipts",
                 "collaboration_review_candidates",
+                "collaboration_exploration_receipts",
                 "collaboration_summaries",
                 "collaboration_learning_receipts",
                 "operator_visible_chat_ui_state",

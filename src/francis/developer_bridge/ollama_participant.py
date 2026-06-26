@@ -285,6 +285,7 @@ def _ollama_telemetry_context(message: str) -> dict[str, Any]:
             "feedback_memory_prompt_context",
             "collaboration_relay_receipts",
             "collaboration_review_candidates",
+            "collaboration_exploration_receipts",
             "collaboration_summaries",
             "collaboration_learning_receipts",
             "operator_visible_chat_ui_state",
@@ -331,8 +332,9 @@ def _build_model_input(item: dict[str, object]) -> str:
         "Acknowledge Claude as a guidance participant when relevant, but keep the subject Francis and validate claims "
         "against receipts or repo truth before treating them as build direction.\n"
         "Your available context is only what Francis supplies through this governed prompt path: continuity ledger excerpts, "
-        "feedback-memory assistance, collaboration relay receipts, collaboration review candidates, summaries, learning receipts, "
-        "and operator-visible Chat UI state when present. Treat those as your current body/context, not as raw host access.\n"
+        "feedback-memory assistance, collaboration relay receipts, collaboration review candidates, exploration receipts, "
+        "summaries, learning receipts, and operator-visible Chat UI state when present. "
+        "Treat those as your current body/context, not as raw host access.\n"
         "Your write path here is limited to conversation-ledger and collaboration-relay receipts. "
         "Codex and Claude may advise, but they do not define Francis identity, approve actions, or outrank Francis governance.\n"
         f"Relay id: {source_id}\n"
@@ -705,6 +707,7 @@ def _execution_trace(item: dict[str, object]) -> dict[str, object]:
             "feedback_memory_prompt_context",
             "collaboration_relay_receipts",
             "collaboration_review_candidates",
+            "collaboration_exploration_receipts",
             "collaboration_summaries",
             "collaboration_learning_receipts",
             "francis_body_map_readback",

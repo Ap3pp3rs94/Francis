@@ -28,6 +28,7 @@ from .trust_ladder import compact_trust_ladder_prompt_line
 _STATE_KIND = "developer_bridge.collaboration_driver_state"
 _INSIGHT_SCHEMA_VERSION = "developer_bridge_collaboration_insight_v1"
 _LEARNING_SCHEMA_VERSION = "developer_bridge_collaboration_learning_v1"
+_EXPLORATION_SCHEMA_VERSION = "developer_bridge_collaboration_exploration_v1"
 _MAX_TRACKED_IDS = 500
 _MAX_TURNS = 0
 _DEFAULT_POLL_SECONDS = 2.0
@@ -38,6 +39,7 @@ _PROMPT_REVIEW_ID_LIMIT = 24
 _PROMPT_REVIEW_SURFACE_LIMIT = 72
 _SOURCE_ALIGNMENT_PROMPT_LINE = "Claude guidance acknowledged; Francis stays subject; Codex validates repo truth."
 _COMPACT_BODY_MAP_PROMPT_LINE = "Body map: visible; grants required; stale detaches."
+_GUIDED_EXPLORATION_PROMPT_LINE = "Explore: Codex guides; next_probe; no authority."
 
 _TOPICS = (
     "the next Communication UI change that would reduce visible relay noise using existing receipt fields",
@@ -154,6 +156,15 @@ def drive_once(
             )
             if insight:
                 state["last_insight_id"] = insight["id"]
+                exploration = _record_response_exploration(
+                    state,
+                    response=response,
+                    source_prompt_id=last_codex_prompt_id,
+                    note=note,
+                    insight=insight,
+                )
+                if exploration:
+                    state["last_exploration_id"] = exploration["id"]
         summary = _record_summary_if_due(state, every_turns=clean_summary_every_turns)
         if summary:
             state["last_summary_id"] = summary["id"]
@@ -275,6 +286,71 @@ def read_collaboration_learning_events(
             "latest_turn": "Most recent observed turn for this learning event, including deduplicated drift signals.",
         },
         "governance": _learning_readback_governance(),
+    }
+
+
+def read_collaboration_exploration(
+    *,
+    limit: int = 10,
+    session_id: str = "",
+    surface: str = "",
+    promotion_state: str = "",
+) -> dict[str, object]:
+    safe_limit = min(max(_safe_int(limit, default=10), 1), 50)
+    clean_session_id = _bounded_text(session_id, limit=120)
+    clean_surface = _topic_key(_bounded_text(surface, limit=120))
+    clean_promotion_state = _bounded_text(promotion_state, limit=80)
+    records: list[dict[str, object]] = []
+
+    for path in _exploration_root().glob("exploration-*.json"):
+        item = _read_exploration(path)
+        if item is None:
+            continue
+        if clean_session_id and str(item.get("session_id") or "") != clean_session_id:
+            continue
+        exploration = item.get("guided_exploration")
+        exploration_data = cast(dict[str, object], exploration) if isinstance(exploration, dict) else {}
+        review_status = item.get("review_status")
+        review_data = cast(dict[str, object], review_status) if isinstance(review_status, dict) else {}
+        item_surface = _topic_key(str(exploration_data.get("surface") or ""))
+        if clean_surface and clean_surface not in item_surface:
+            continue
+        if clean_promotion_state and str(review_data.get("promotion_state") or "") != clean_promotion_state:
+            continue
+        records.append(item)
+
+    records.sort(key=lambda item: str(item.get("created_at") or ""), reverse=True)
+    items = [_exploration_readback_item(item) for item in records[:safe_limit]]
+    return {
+        "kind": "developer_bridge.collaboration_exploration",
+        "schema_version": _EXPLORATION_SCHEMA_VERSION,
+        "ok": True,
+        "mode": "read_only",
+        "surface": "developer_bridge.collaboration_driver.explorations",
+        "items": items,
+        "count": len(items),
+        "truncated": len(records) > safe_limit,
+        "filters": {
+            "limit": safe_limit,
+            "session_id": clean_session_id,
+            "surface": _bounded_text(surface, limit=120),
+            "promotion_state": clean_promotion_state,
+        },
+        "definitions": {
+            "guided_exploration": (
+                "A bounded Francis1-to-Codex evidence-need receipt. It lets Francis1 shape what Codex should "
+                "inspect next without granting action authority."
+            ),
+            "next_probe": "The concrete readback, repo surface, or receipt Codex should inspect before implementation.",
+            "promotion_state": (
+                "Whether the exploration is still field-notes material or can be reviewed as build direction."
+            ),
+            "access_boundary": (
+                "Access may be requested when Francis1 hits a wall, but grants require typed review and remain "
+                "revocable. Exploration alone never grants execution, mutation, approval, or memory-write authority."
+            ),
+        },
+        "governance": _exploration_readback_governance(),
     }
 
 
@@ -441,6 +517,7 @@ def _compose_driver_prompt(
         f" {roadmap_gate_line}"
         f" {trust_line}"
         f" {_SOURCE_ALIGNMENT_PROMPT_LINE}"
+        f" {_GUIDED_EXPLORATION_PROMPT_LINE}"
         f"{topic_artifact}{prior_check}{codex_response}{loop_line}"
     )
 
@@ -461,8 +538,8 @@ def _fit_driver_prompt_to_budget(
 
     compact_loop = _extra_compact_loop_line(loop_line)
     compact_codex = _extra_compact_codex_response_line(codex_response)
-    compact_roadmap = "Roadmap: readiness.roadmap_alignment; main-build candidate-only."
-    compact_trust = "Trust: no capability authority."
+    compact_roadmap = "Roadmap: check roadmap_alignment; main-build candidate-only; blocked_by_open_orb_gaps."
+    compact_trust = "Trust: classify needs; no capability authority."
     attempts = [
         (
             64,
@@ -485,9 +562,9 @@ def _fit_driver_prompt_to_budget(
             compact_loop,
         ),
         (
+            32,
             44,
-            44,
-            "",
+            _COMPACT_BODY_MAP_PROMPT_LINE,
             compact_roadmap,
             compact_trust,
             _ultra_compact_prior_check(prior_check),
@@ -495,14 +572,14 @@ def _fit_driver_prompt_to_budget(
             compact_loop,
         ),
         (
+            24,
             32,
-            32,
-            "",
+            _COMPACT_BODY_MAP_PROMPT_LINE,
             compact_roadmap,
             compact_trust,
             _ultra_compact_prior_check(prior_check),
             " Codex: no action authority.",
-            " Guard: issue + artifact." if loop_line else "",
+            " Guard: issue+artifact." if loop_line else "",
         ),
     ]
     for topic_limit, surface_limit, body_map_line, roadmap_line, trust_line_value, prior, codex, loop in attempts:
@@ -612,11 +689,14 @@ def _ultra_compact_prior_check(prior_check: str) -> str:
     if not prior_check:
         return ""
     insight_id = _field_after(prior_check, "Review candidate ", ":")
+    surface = _field_after(prior_check, "surface=", ";")
     verified = _field_after(prior_check, "verified=", ";")
     build_or_wire = _field_after(prior_check, "build_or_wire=", ".")
     if not insight_id:
         return _bounded_text(prior_check, limit=60)
-    parts = [f"Prior check: {_bounded_text(insight_id, limit=_PROMPT_REVIEW_ID_LIMIT)}"]
+    parts = [f"Prior check: Review candidate {_bounded_text(insight_id, limit=_PROMPT_REVIEW_ID_LIMIT)}"]
+    if surface:
+        parts.append(f"surface={_bounded_text(surface, limit=40)}")
     if verified:
         parts.append(f"verified={_bounded_text(verified, limit=20)}")
     if build_or_wire:
@@ -768,6 +848,106 @@ def _record_response_insight(
     _write_json_receipt(_insight_path(insight_id), insight)
     _update_turn_insight(state, source_prompt_id=source_prompt_id, insight=insight)
     return insight
+
+
+def _record_response_exploration(
+    state: dict[str, object],
+    *,
+    response: dict[str, object],
+    source_prompt_id: str,
+    note: dict[str, object],
+    insight: dict[str, object],
+) -> dict[str, object]:
+    response_id = _item_id(response)
+    note_id = str(note.get("id") or "")
+    insight_id = str(insight.get("id") or "")
+    if not response_id or not note_id or not insight_id:
+        return {}
+    existing = _find_turn(state, source_prompt_id)
+    turn_number = _safe_int((existing or {}).get("turn"), default=_turn_count(state))
+    topic = str((existing or {}).get("topic") or note.get("topic") or _topic_for_turn(turn_number))
+    finding = _bounded_summary(note.get("note"), limit=420)
+    memory = insight.get("conversation_memory")
+    memory_data = cast(dict[str, object], memory) if isinstance(memory, dict) else {}
+    issue = memory_data.get("build_issue")
+    issue_data = cast(dict[str, object], issue) if isinstance(issue, dict) else _issue_for_topic(topic)
+    candidate = memory_data.get("implementation_candidate")
+    candidate_data = (
+        cast(dict[str, object], candidate)
+        if isinstance(candidate, dict)
+        else _implementation_candidate_for_topic(topic)
+    )
+    surface = _bounded_text(candidate_data.get("surface"), limit=160)
+    issue_statement = _bounded_text(issue_data.get("statement"), limit=240)
+    exploration_id = f"exploration-{response_id}"
+    next_probe = _exploration_next_probe(topic=topic, surface=surface, candidate=candidate_data)
+    evidence_needed = _exploration_evidence_needed(
+        topic=topic,
+        surface=surface,
+        issue_statement=issue_statement,
+        finding=finding,
+    )
+    exploration = {
+        "kind": "developer_bridge.collaboration_exploration_item",
+        "schema_version": _EXPLORATION_SCHEMA_VERSION,
+        "id": exploration_id,
+        "created_at": _utc_now(),
+        "session_id": _session_id(state),
+        "turn": turn_number,
+        "topic": topic,
+        "source": {
+            "codex_prompt_id": source_prompt_id,
+            "ollama_prompt_id": response_id,
+            "note_id": note_id,
+            "insight_id": insight_id,
+            "derived_from": "developer_bridge.collaboration_insight",
+            "provider_lane": "ollama",
+            "model_identity": "francis1",
+            "stores_full_transcript": False,
+        },
+        "guided_exploration": {
+            "mode": "codex_guided_francis1_exploration",
+            "codex_role": "guide, validate repo truth, and implement only after review",
+            "francis1_role": "surface evidence gaps, walls, and next probes from bounded context",
+            "question": _exploration_question(topic),
+            "hypothesis": issue_statement,
+            "evidence_needed": evidence_needed,
+            "next_probe": next_probe,
+            "surface": surface,
+            "finding": finding,
+        },
+        "access_boundary": {
+            "access_can_be_requested_when_blocked": True,
+            "access_request_status": "not_requested",
+            "grant_requires_typed_review": True,
+            "grant_requires_codex_or_operator_review": True,
+            "grant_requires_capability_grant_receipt": True,
+            "deny_after_grant_supported": True,
+            "revocation_supported": True,
+            "stop_everything_conditions": [
+                "unreviewed mutation request",
+                "execution authority confusion",
+                "memory-write authority confusion",
+                "unsafe or stale capability assumption",
+            ],
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+            "grants_approval_authority": False,
+            "grants_memory_write_authority": False,
+            "grants_model_authority": False,
+        },
+        "review_status": {
+            "promotion_state": "exploratory_field_note",
+            "ready_for_codex_review": True,
+            "ready_for_implementation": False,
+            "validated_against_repo_truth": False,
+            "required_review_artifact": f"developer_bridge.collaboration_driver.explorations:{exploration_id}",
+        },
+        "governance": _exploration_governance(),
+    }
+    _write_json_receipt(_exploration_path(exploration_id), exploration)
+    _update_turn_exploration(state, source_prompt_id=source_prompt_id, exploration=exploration)
+    return exploration
 
 
 def _record_summary_if_due(state: dict[str, object], *, every_turns: int) -> dict[str, object]:
@@ -1213,6 +1393,91 @@ def _learning_recent_turn_readback(item: dict[str, object]) -> dict[str, object]
     }
 
 
+def _read_exploration(path: Path) -> dict[str, object] | None:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, dict) or data.get("kind") != "developer_bridge.collaboration_exploration_item":
+        return None
+    return data
+
+
+def _exploration_readback_item(item: dict[str, object]) -> dict[str, object]:
+    source = item.get("source")
+    source_data = cast(dict[str, object], source) if isinstance(source, dict) else {}
+    exploration = item.get("guided_exploration")
+    exploration_data = cast(dict[str, object], exploration) if isinstance(exploration, dict) else {}
+    access = item.get("access_boundary")
+    access_data = cast(dict[str, object], access) if isinstance(access, dict) else {}
+    review = item.get("review_status")
+    review_data = cast(dict[str, object], review) if isinstance(review, dict) else {}
+    governance = item.get("governance")
+    governance_data = cast(dict[str, object], governance) if isinstance(governance, dict) else {}
+    return {
+        "kind": "developer_bridge.collaboration_exploration_item",
+        "schema_version": _EXPLORATION_SCHEMA_VERSION,
+        "id": _bounded_text(item.get("id"), limit=180),
+        "created_at": _bounded_text(item.get("created_at"), limit=80),
+        "session_id": _bounded_text(item.get("session_id"), limit=120),
+        "turn": _safe_int(item.get("turn"), default=0),
+        "topic": _bounded_text(item.get("topic"), limit=260),
+        "source": {
+            "codex_prompt_id": _bounded_text(source_data.get("codex_prompt_id"), limit=180),
+            "ollama_prompt_id": _bounded_text(source_data.get("ollama_prompt_id"), limit=180),
+            "note_id": _bounded_text(source_data.get("note_id"), limit=180),
+            "insight_id": _bounded_text(source_data.get("insight_id"), limit=180),
+            "derived_from": "developer_bridge.collaboration_insight",
+            "model_identity": _bounded_text(source_data.get("model_identity"), limit=80),
+            "stores_full_transcript": bool(source_data.get("stores_full_transcript")) is True,
+        },
+        "guided_exploration": {
+            "mode": _bounded_text(exploration_data.get("mode"), limit=120),
+            "codex_role": _bounded_text(exploration_data.get("codex_role"), limit=180),
+            "francis1_role": _bounded_text(exploration_data.get("francis1_role"), limit=180),
+            "question": _bounded_text(exploration_data.get("question"), limit=220),
+            "hypothesis": _bounded_text(exploration_data.get("hypothesis"), limit=260),
+            "evidence_needed": _bounded_text(exploration_data.get("evidence_needed"), limit=260),
+            "next_probe": _bounded_text(exploration_data.get("next_probe"), limit=220),
+            "surface": _bounded_text(exploration_data.get("surface"), limit=160),
+            "finding": _bounded_text(exploration_data.get("finding"), limit=420),
+        },
+        "access_boundary": {
+            "access_can_be_requested_when_blocked": bool(access_data.get("access_can_be_requested_when_blocked")),
+            "access_request_status": _bounded_text(access_data.get("access_request_status"), limit=80),
+            "grant_requires_typed_review": bool(access_data.get("grant_requires_typed_review")),
+            "grant_requires_codex_or_operator_review": bool(access_data.get("grant_requires_codex_or_operator_review")),
+            "grant_requires_capability_grant_receipt": bool(access_data.get("grant_requires_capability_grant_receipt")),
+            "deny_after_grant_supported": bool(access_data.get("deny_after_grant_supported")),
+            "revocation_supported": bool(access_data.get("revocation_supported")),
+            "stop_everything_conditions": [
+                _bounded_text(condition, limit=120)
+                for condition in _list(access_data.get("stop_everything_conditions"))[:8]
+                if _bounded_text(condition, limit=120)
+            ],
+            "grants_execution_authority": bool(access_data.get("grants_execution_authority")),
+            "grants_mutation_authority": bool(access_data.get("grants_mutation_authority")),
+            "grants_approval_authority": bool(access_data.get("grants_approval_authority")),
+            "grants_memory_write_authority": bool(access_data.get("grants_memory_write_authority")),
+            "grants_model_authority": bool(access_data.get("grants_model_authority")),
+        },
+        "review_status": {
+            "promotion_state": _bounded_text(review_data.get("promotion_state"), limit=80),
+            "ready_for_codex_review": bool(review_data.get("ready_for_codex_review")),
+            "ready_for_implementation": bool(review_data.get("ready_for_implementation")),
+            "validated_against_repo_truth": bool(review_data.get("validated_against_repo_truth")),
+            "required_review_artifact": _bounded_text(review_data.get("required_review_artifact"), limit=240),
+        },
+        "governance": {
+            "advisory_only": bool(governance_data.get("advisory_only")),
+            "stores_full_transcript": bool(governance_data.get("stores_full_transcript")),
+            "grants_execution_authority": bool(governance_data.get("grants_execution_authority")),
+            "grants_mutation_authority": bool(governance_data.get("grants_mutation_authority")),
+            "grants_memory_write_authority": bool(governance_data.get("grants_memory_write_authority")),
+        },
+    }
+
+
 def _find_turn(state: dict[str, object], source_prompt_id: str) -> dict[str, object]:
     for item in _list(state.get("turns")):
         if isinstance(item, dict) and str(item.get("codex_prompt_id") or "") == source_prompt_id:
@@ -1262,6 +1527,29 @@ def _update_turn_insight(
                 **item,
                 "insight_id": insight.get("id", ""),
                 "insight_summary": finding,
+            }
+        updated.append(item)
+    state["turns"] = updated[-_MAX_TRACKED_IDS:]
+
+
+def _update_turn_exploration(
+    state: dict[str, object],
+    *,
+    source_prompt_id: str,
+    exploration: dict[str, object],
+) -> None:
+    updated: list[object] = []
+    for item in _list(state.get("turns")):
+        if not isinstance(item, dict):
+            updated.append(item)
+            continue
+        if str(item.get("codex_prompt_id") or "") == source_prompt_id:
+            guided = exploration.get("guided_exploration")
+            guided_data = cast(dict[str, object], guided) if isinstance(guided, dict) else {}
+            item = {
+                **item,
+                "exploration_id": exploration.get("id", ""),
+                "exploration_next_probe": guided_data.get("next_probe", ""),
             }
         updated.append(item)
     state["turns"] = updated[-_MAX_TRACKED_IDS:]
@@ -1732,6 +2020,48 @@ def _topic_key(topic: str) -> str:
     return " ".join(str(topic or "").replace("_", " ").replace("-", " ").lower().split())
 
 
+def _exploration_question(topic: str) -> str:
+    return _bounded_text(
+        f"What should Codex verify next so Francis1 can understand {topic} without new authority?", limit=220
+    )
+
+
+def _exploration_evidence_needed(
+    *,
+    topic: str,
+    surface: str,
+    issue_statement: str,
+    finding: str,
+) -> str:
+    lower_topic = _topic_key(topic)
+    lower_finding = _topic_key(finding)
+    if "body surface" in lower_topic or "capability use" in lower_topic:
+        return "Capability wall: read body-map exposure plus capability-grant receipts before any access change."
+    if "source disagreement" in lower_topic:
+        return "Typed disagreement receipt plus repo-truth review before promoting either source into build direction."
+    if "local model failure" in lower_topic or "drift" in lower_topic:
+        return "Bounded learning-event receipt and repeated-term evidence before prompt tuning or memory promotion."
+    if "action" in lower_topic or "execute" in lower_finding or "execution" in lower_finding:
+        return "Action-boundary receipt proving advice remains non-executable until governed action intake approves it."
+    if surface:
+        return _bounded_text(f"Codex should inspect {surface} and compare it to the current review receipt.", limit=260)
+    return _bounded_text(
+        issue_statement or "Codex should identify the next typed receipt before implementation.", limit=260
+    )
+
+
+def _exploration_next_probe(
+    *,
+    topic: str,
+    surface: str,
+    candidate: dict[str, object],
+) -> str:
+    validation_hint = _bounded_text(candidate.get("validation_hint"), limit=160)
+    if surface:
+        return _bounded_text(f"{surface}; {validation_hint}" if validation_hint else surface, limit=220)
+    return _bounded_text(f"developer_bridge.collaboration_review.items; topic={topic}", limit=220)
+
+
 def _loop_recovery_topic(lower_topic_key: str) -> bool:
     return "repetitive meta loop" in lower_topic_key or (
         "prior surface" in lower_topic_key and "meta" in lower_topic_key
@@ -1758,6 +2088,10 @@ def _learning_path(event_id: str) -> Path:
     return _learning_root() / f"{_safe_file_id(event_id)}.json"
 
 
+def _exploration_path(exploration_id: str) -> Path:
+    return _exploration_root() / f"{_safe_file_id(exploration_id)}.json"
+
+
 def _notes_root() -> Path:
     return data_dir() / "integrations" / "developer_bridge" / "collaboration_driver" / "notes"
 
@@ -1772,6 +2106,10 @@ def _insights_root() -> Path:
 
 def _learning_root() -> Path:
     return data_dir() / "integrations" / "developer_bridge" / "collaboration_driver" / "learning_events"
+
+
+def _exploration_root() -> Path:
+    return data_dir() / "integrations" / "developer_bridge" / "collaboration_driver" / "explorations"
 
 
 def _write_json_receipt(path: Path, payload: dict[str, object]) -> None:
@@ -1802,6 +2140,7 @@ def _load_state() -> dict[str, object]:
     data.setdefault("last_ollama_prompt_id", "")
     data.setdefault("last_note_id", "")
     data.setdefault("last_insight_id", "")
+    data.setdefault("last_exploration_id", "")
     data.setdefault("last_learning_event_id", "")
     data.setdefault("last_learning_event_signature", "")
     data.setdefault("latest_learning_signal", {})
@@ -1831,6 +2170,7 @@ def _empty_state() -> dict[str, object]:
         "last_ollama_prompt_id": "",
         "last_note_id": "",
         "last_insight_id": "",
+        "last_exploration_id": "",
         "last_learning_event_id": "",
         "last_learning_event_signature": "",
         "latest_learning_signal": {},
@@ -1983,6 +2323,7 @@ def _governance() -> dict[str, object]:
         "append_only_relay_writes": True,
         "writes_collaboration_notes": True,
         "writes_collaboration_insights": True,
+        "writes_collaboration_explorations": True,
         "writes_collaboration_learning_events": True,
         "writes_collaboration_summaries": True,
         "writes_collaboration_context_contract": True,
@@ -2048,11 +2389,45 @@ def _learning_governance() -> dict[str, object]:
     }
 
 
+def _exploration_governance() -> dict[str, object]:
+    return {
+        "surface": "developer_bridge.collaboration_driver.explorations",
+        "advisory_only": True,
+        "stores_full_transcript": False,
+        "derived_from_relay_receipts": True,
+        "typed_exploration_surface": True,
+        "access_request_only": True,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "grants_approval_authority": False,
+        "grants_memory_write_authority": False,
+        "grants_model_authority": False,
+    }
+
+
 def _learning_readback_governance() -> dict[str, object]:
     return {
         "surface": "developer_bridge.collaboration_driver.learning_events",
         "read_only": True,
         "reads_collaboration_learning_events": True,
+        "writes_files": False,
+        "stores_full_transcript": False,
+        "calls_model": False,
+        "trains_model": False,
+        "grants_training_authority": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "grants_approval_authority": False,
+        "grants_memory_write_authority": False,
+        "grants_model_authority": False,
+    }
+
+
+def _exploration_readback_governance() -> dict[str, object]:
+    return {
+        "surface": "developer_bridge.collaboration_driver.explorations",
+        "read_only": True,
+        "reads_collaboration_explorations": True,
         "writes_files": False,
         "stores_full_transcript": False,
         "calls_model": False,

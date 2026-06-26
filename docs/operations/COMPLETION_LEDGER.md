@@ -99034,6 +99034,72 @@ Remaining truthful gap:
   ORB/body validation remain outside this bounded learning-signal slice until
   separately run.
 
+### 2026-06-26 14:01Z - Guided exploration receipts for Francis1/Codex collaboration
+
+Current posture: Phase 2 / P9 collaboration observability, P8 memory, P3
+governance, and P1 interface now expose a bounded guided-exploration lane for
+the Codex/Francis1 collaboration. Codex remains the guide and repo-truth
+validator; Francis1 can now surface evidence needs, walls, and next probes as
+typed receipts before any access grant, build direction, or implementation
+claim.
+
+What changed:
+
+- Added `developer_bridge.collaboration_exploration` readback over bounded
+  `collaboration_driver.explorations` receipts.
+- The collaboration driver now writes one guided-exploration receipt from each
+  Francis1 response/insight with `question`, `hypothesis`, `evidence_needed`,
+  `next_probe`, access-boundary, and review-status fields.
+- The driver prompt now tells Francis1 that Codex guides while Francis1 should
+  provide the next probe, with no authority grant.
+- Exposed the exploration readback through `/developer-bridge/collaboration-exploration`
+  and `collaboration_exploration_tool`.
+- Updated the Francis1 context contract, Ollama participant context, and
+  substrate-readiness source inventory so exploration receipts are visible as
+  context, not authority.
+- Kept the access boundary explicit: requests may be reviewed when Francis1
+  hits a wall, grants require typed review and capability-grant receipts, and
+  revocation/stop conditions remain visible.
+
+Validation:
+
+- Focused collaboration tests passed:
+  `python -m pytest tests\test_developer_bridge.py::test_developer_bridge_routes_are_mounted tests\test_developer_bridge.py::test_collaboration_driver_waits_for_ollama_before_next_turn tests\test_developer_bridge.py::test_collaboration_exploration_http_route_marks_bounded_readback_cache tests\test_developer_bridge.py::test_collaboration_substrate_readiness_blocks_main_build_prompt_for_open_gaps tests\test_developer_bridge.py::test_ollama_participant_replies_through_existing_memory_prompt_path tests\test_developer_bridge.py::test_developer_bridge_mcp_registers_collaboration_relay_tools -q`.
+- Focused post-budget-tweak tests passed:
+  `python -m pytest tests\test_developer_bridge.py::test_collaboration_driver_waits_for_ollama_before_next_turn tests\test_developer_bridge.py::test_collaboration_exploration_http_route_marks_bounded_readback_cache tests\test_developer_bridge.py::test_collaboration_substrate_readiness_blocks_main_build_prompt_for_open_gaps -q`.
+- Ruff lint passed:
+  `python -m ruff check src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\collaboration_contract.py src\francis\developer_bridge\ollama_participant.py src\francis\developer_bridge\substrate_readiness.py src\francis\developer_bridge\mcp_server.py src\francis\api\routes\developer_bridge.py tests\test_developer_bridge.py`.
+- Ruff format check passed:
+  `python -m ruff format --check src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\collaboration_contract.py src\francis\developer_bridge\ollama_participant.py src\francis\developer_bridge\substrate_readiness.py src\francis\developer_bridge\mcp_server.py src\francis\api\routes\developer_bridge.py tests\test_developer_bridge.py`.
+- Mypy passed:
+  `python -m mypy src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\collaboration_contract.py src\francis\developer_bridge\ollama_participant.py src\francis\developer_bridge\substrate_readiness.py src\francis\developer_bridge\mcp_server.py src\francis\api\routes\developer_bridge.py`.
+- Compile check passed:
+  `python -m compileall src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\collaboration_contract.py src\francis\developer_bridge\ollama_participant.py src\francis\developer_bridge\substrate_readiness.py src\francis\developer_bridge\mcp_server.py src\francis\api\routes\developer_bridge.py`.
+- MCP gateway smoke stayed healthy:
+  `python -m francis.mcp_gateway.smoke` returned `ok: True`,
+  `tool_count: 23`, `unapproved_takeover_refused: True`, and
+  `unapproved_input_refused: True`.
+- Live collaboration helpers were restarted after the code change. Runtime
+  readback returned `status=healthy`, `helper_count=3`,
+  `latest_prompt_within_budget=true`, and
+  `no_action_authority_receipts_observed=true`.
+- The fresh post-restart driver prompt at turn `2206` included
+  `Explore: Codex guides; next_probe; no authority.` while preserving body-map,
+  roadmap, trust, current-artifact, prior-check, no-action-authority fields, and
+  complete guard wording within the `700` character prompt budget.
+
+Remaining truthful gap:
+
+- This adds a guided exploration/readback lane; it does not grant Francis1
+  capability use, execute model advice, tune the local model, promote memory,
+  or clear ORB/main-build blockers.
+- The live driver is still subject to output-guard drift and topic repetition;
+  those remain bounded learning/review inputs until separately tuned or
+  implemented.
+- `.\scripts\check.ps1`, browser UI proof for the Communication window, GitHub
+  CI, and broader ORB/body validation remain outside this bounded slice until
+  separately run.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

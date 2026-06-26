@@ -4,7 +4,10 @@ from datetime import UTC, datetime
 from typing import Any
 
 from francis.developer_bridge.body_map import read_francis_body_map
-from francis.developer_bridge.collaboration_driver import read_collaboration_learning_events
+from francis.developer_bridge.collaboration_driver import (
+    read_collaboration_exploration,
+    read_collaboration_learning_events,
+)
 from francis.developer_bridge.collaboration_runtime import read_collaboration_runtime_health
 from francis.developer_bridge.trust_ladder import read_francis_trust_ladder
 
@@ -25,6 +28,7 @@ def read_collaboration_substrate_readiness() -> dict[str, object]:
     runtime = read_collaboration_runtime_health()
     trust = read_francis_trust_ladder(limit=10)
     learning = read_collaboration_learning_events(limit=3)
+    exploration = read_collaboration_exploration(limit=3)
 
     body_summary = _dict(body.get("summary"))
     body_phase = _dict(body.get("phase"))
@@ -35,6 +39,7 @@ def read_collaboration_substrate_readiness() -> dict[str, object]:
     runtime_learning_signal = _dict(runtime_loop.get("current_learning_signal"))
     trust_summary = _dict(trust.get("summary"))
     learning_items = [item for item in _list(learning.get("items")) if isinstance(item, dict)]
+    exploration_items = [item for item in _list(exploration.get("items")) if isinstance(item, dict)]
 
     coverage_open_gap_count = _int(
         body_summary.get("coverage_open_gap_count"),
@@ -56,6 +61,8 @@ def read_collaboration_substrate_readiness() -> dict[str, object]:
         trust=trust,
         learning=learning,
         learning_items=learning_items,
+        exploration=exploration,
+        exploration_items=exploration_items,
     )
     learning_bounded = _learning_bounded(runtime_learning_signal=runtime_learning_signal, learning_items=learning_items)
 
@@ -103,6 +110,14 @@ def read_collaboration_substrate_readiness() -> dict[str, object]:
             failure_status="warning",
             evidence=f"{len(learning_items)} learning receipts; stores_full_transcript=false; training=false",
             detail="Model drift receipts are review inputs, not automatic memory or training authority.",
+        ),
+        _check(
+            "exploration_receipts_bounded",
+            "Exploration receipts bounded",
+            _exploration_bounded(exploration=exploration, exploration_items=exploration_items),
+            failure_status="warning",
+            evidence=f"{len(exploration_items)} exploration receipts; access request only; execution=false",
+            detail="Francis1 can surface walls and next probes while Codex stays the guide and validator.",
         ),
         _check(
             "coverage_gaps_reviewed",
@@ -207,6 +222,7 @@ def read_collaboration_substrate_readiness() -> dict[str, object]:
             "runtime_health": "developer_bridge.collaboration_runtime_health",
             "trust_ladder": "developer_bridge.francis_trust_ladder",
             "learning": "developer_bridge.collaboration_driver.learning_events",
+            "exploration": "developer_bridge.collaboration_driver.explorations",
             "roadmap_alignment": _PROMPT_CHECK_READBACK,
         },
         "governance": _governance(),
@@ -353,6 +369,21 @@ def _learning_bounded(
     return True
 
 
+def _exploration_bounded(
+    *,
+    exploration: dict[str, object],
+    exploration_items: list[dict[str, object]],
+) -> bool:
+    if not _record_has_no_authority(_dict(exploration.get("governance"))):
+        return False
+    for item in exploration_items:
+        if not _record_has_no_authority(_dict(item.get("governance"))):
+            return False
+        if not _record_has_no_authority(_dict(item.get("access_boundary"))):
+            return False
+    return True
+
+
 def _no_authority_granted(
     *,
     body: dict[str, object],
@@ -360,6 +391,8 @@ def _no_authority_granted(
     trust: dict[str, object],
     learning: dict[str, object],
     learning_items: list[dict[str, object]],
+    exploration: dict[str, object],
+    exploration_items: list[dict[str, object]],
 ) -> bool:
     body_summary = _dict(body.get("summary"))
     if bool(body_summary.get("full_body_authority_granted")):
@@ -377,7 +410,7 @@ def _no_authority_granted(
     return _learning_bounded(
         runtime_learning_signal=_dict(_dict(runtime.get("collaboration_loop")).get("current_learning_signal")),
         learning_items=learning_items,
-    )
+    ) and _exploration_bounded(exploration=exploration, exploration_items=exploration_items)
 
 
 def _record_has_no_authority(record: dict[str, object]) -> bool:

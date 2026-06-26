@@ -25,6 +25,7 @@ from francis.developer_bridge.collaboration import (
     read_collaboration_transcript,
     submit_collaboration_prompt,
 )
+from francis.developer_bridge.collaboration_driver import read_collaboration_exploration
 from francis.developer_bridge.collaboration_review import latest_review_candidate_line, read_collaboration_review
 from francis.developer_bridge.codex_responder import respond_once
 from francis.developer_bridge.mcp_server import _server_bind_options, create_mcp_server
@@ -130,6 +131,7 @@ def test_developer_bridge_routes_are_mounted() -> None:
     assert "/developer-bridge/collaboration-transcript" in routes
     assert "/developer-bridge/collaboration-review" in routes
     assert "/developer-bridge/collaboration-learning" in routes
+    assert "/developer-bridge/collaboration-exploration" in routes
     assert "/developer-bridge/collaboration-runtime-health" in routes
     assert "/developer-bridge/collaboration-substrate-readiness" in routes
     assert "/developer-bridge/collaboration-agents" in routes
@@ -1472,6 +1474,7 @@ def test_collaboration_driver_waits_for_ollama_before_next_turn(tmp_path, monkey
         "Claude guidance acknowledged; Francis stays subject; Codex validates repo truth." in prompt
         for prompt in prompts
     )
+    assert all("Explore: Codex guides; next_probe; no authority." in prompt for prompt in prompts)
     assert all("francis1-collaboration-compact-contract-v1" in prompt for prompt in prompts)
     assert all("issue/gap/risk" in prompt for prompt in prompts)
     assert all("Do not claim execution" not in prompt for prompt in prompts)
@@ -1512,6 +1515,42 @@ def test_collaboration_driver_waits_for_ollama_before_next_turn(tmp_path, monkey
     assert insight["action_boundary"]["conversation_can_execute_action"] is False
     assert insight["governance"]["grants_memory_write_authority"] is False
     assert insight["review_status"]["state"] == "candidate"
+
+    explorations_root = (
+        tmp_path / "data" / "integrations" / "developer_bridge" / "collaboration_driver" / "explorations"
+    )
+    explorations = list(explorations_root.glob("exploration-*.json"))
+    assert len(explorations) == 1
+    exploration = json.loads(explorations[0].read_text(encoding="utf-8"))
+    assert exploration["kind"] == "developer_bridge.collaboration_exploration_item"
+    assert exploration["schema_version"] == "developer_bridge_collaboration_exploration_v1"
+    assert exploration["source"]["note_id"] == note["id"]
+    assert exploration["source"]["insight_id"] == insight["id"]
+    assert exploration["guided_exploration"]["mode"] == "codex_guided_francis1_exploration"
+    assert exploration["guided_exploration"]["codex_role"].startswith("guide")
+    assert exploration["guided_exploration"]["francis1_role"].startswith("surface evidence gaps")
+    assert exploration["guided_exploration"]["evidence_needed"]
+    assert exploration["guided_exploration"]["next_probe"]
+    assert exploration["access_boundary"]["access_can_be_requested_when_blocked"] is True
+    assert exploration["access_boundary"]["grant_requires_capability_grant_receipt"] is True
+    assert exploration["access_boundary"]["revocation_supported"] is True
+    assert exploration["access_boundary"]["grants_execution_authority"] is False
+    assert exploration["access_boundary"]["grants_memory_write_authority"] is False
+    assert exploration["review_status"]["promotion_state"] == "exploratory_field_note"
+    assert exploration["review_status"]["ready_for_implementation"] is False
+    assert exploration["governance"]["stores_full_transcript"] is False
+
+    exploration_readback = read_collaboration_exploration(limit=5)
+    assert exploration_readback["kind"] == "developer_bridge.collaboration_exploration"
+    assert exploration_readback["schema_version"] == "developer_bridge_collaboration_exploration_v1"
+    assert exploration_readback["mode"] == "read_only"
+    assert exploration_readback["governance"]["grants_execution_authority"] is False
+    assert exploration_readback["governance"]["grants_memory_write_authority"] is False
+    exploration_item = exploration_readback["items"][0]
+    assert exploration_item["guided_exploration"]["next_probe"]
+    assert exploration_item["access_boundary"]["access_can_be_requested_when_blocked"] is True
+    assert exploration_item["access_boundary"]["grant_requires_codex_or_operator_review"] is True
+    assert exploration_item["access_boundary"]["grants_execution_authority"] is False
 
     review = read_collaboration_review(limit=5)
     assert review["kind"] == "developer_bridge.collaboration_review"
@@ -1565,6 +1604,7 @@ def test_collaboration_driver_waits_for_ollama_before_next_turn(tmp_path, monkey
     assert contract["governed_access"]["identity"].startswith("Francis1 is the primary local Francis")
     assert contract["governed_access"]["external_guidance_sources"] == ["codex", "claude"]
     assert "collaboration_review_candidates" in contract["governed_access"]["available_context_surfaces"]
+    assert "collaboration_exploration_receipts" in contract["governed_access"]["available_context_surfaces"]
     assert "conversation_ledger_receipts" in contract["governed_access"]["write_surfaces"]
     assert "raw_shell" in contract["governed_access"]["denied_authority"]
     assert contract["visible_prompt_policy"]["avoid_repeating_contract_every_turn"] is True
@@ -3810,6 +3850,88 @@ def test_collaboration_review_http_route_marks_bounded_readback_cache(tmp_path, 
     assert payload["governance"]["stores_full_transcript"] is False
 
 
+def test_collaboration_exploration_http_route_marks_bounded_readback_cache(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+    explorations_root = (
+        tmp_path / "data" / "integrations" / "developer_bridge" / "collaboration_driver" / "explorations"
+    )
+    explorations_root.mkdir(parents=True)
+    exploration = {
+        "kind": "developer_bridge.collaboration_exploration_item",
+        "schema_version": "developer_bridge_collaboration_exploration_v1",
+        "id": "exploration-route-cache",
+        "created_at": "2026-06-26T12:46:00+00:00",
+        "session_id": "exploration-cache",
+        "turn": 1,
+        "topic": "which Francis body surface is visible but not yet safely exposed to Francis1 capability use",
+        "source": {
+            "codex_prompt_id": "codex-exploration-cache",
+            "ollama_prompt_id": "ollama-exploration-cache",
+            "note_id": "note-exploration-cache",
+            "insight_id": "insight-exploration-cache",
+            "model_identity": "francis1",
+            "stores_full_transcript": False,
+        },
+        "guided_exploration": {
+            "mode": "codex_guided_francis1_exploration",
+            "codex_role": "guide, validate repo truth, and implement only after review",
+            "francis1_role": "surface evidence gaps, walls, and next probes from bounded context",
+            "question": "What should Codex verify next?",
+            "hypothesis": "Francis1 needs whole-body awareness while capability exposure stays gated.",
+            "evidence_needed": "Capability wall: read body-map exposure plus capability-grant receipts.",
+            "next_probe": "developer_bridge.francis_body_map",
+            "surface": "developer_bridge.francis_body_map",
+            "finding": "Bounded exploration receipt should not grant access.",
+        },
+        "access_boundary": {
+            "access_can_be_requested_when_blocked": True,
+            "access_request_status": "not_requested",
+            "grant_requires_typed_review": True,
+            "grant_requires_codex_or_operator_review": True,
+            "grant_requires_capability_grant_receipt": True,
+            "deny_after_grant_supported": True,
+            "revocation_supported": True,
+            "stop_everything_conditions": ["execution authority confusion"],
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+            "grants_approval_authority": False,
+            "grants_memory_write_authority": False,
+            "grants_model_authority": False,
+        },
+        "review_status": {
+            "promotion_state": "exploratory_field_note",
+            "ready_for_codex_review": True,
+            "ready_for_implementation": False,
+            "validated_against_repo_truth": False,
+            "required_review_artifact": "developer_bridge.collaboration_driver.explorations:exploration-route-cache",
+        },
+        "governance": {
+            "advisory_only": True,
+            "stores_full_transcript": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+            "grants_memory_write_authority": False,
+        },
+    }
+    (explorations_root / "exploration-route-cache.json").write_text(json.dumps(exploration), encoding="utf-8")
+
+    from francis.api.routes.developer_bridge import collaboration_exploration_route
+
+    response = collaboration_exploration_route(limit=1, surface="body_map")
+    payload = json.loads(response.body.decode("utf-8"))
+
+    assert response.media_type == "application/json"
+    assert payload["kind"] == "developer_bridge.collaboration_exploration"
+    assert payload["ok"] is True
+    assert payload["readback_cache"]["status"] in {"refreshed", "hit", "warming"}
+    assert payload["readback_cache"]["serves_full_transcript_store"] is False
+    assert payload["items"][0]["guided_exploration"]["next_probe"] == "developer_bridge.francis_body_map"
+    assert payload["items"][0]["access_boundary"]["access_can_be_requested_when_blocked"] is True
+    assert payload["items"][0]["access_boundary"]["grants_execution_authority"] is False
+    assert payload["governance"]["grants_execution_authority"] is False
+    assert payload["governance"]["stores_full_transcript"] is False
+
+
 def test_readback_cache_returns_hit_after_read_through_refresh(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
 
@@ -4149,6 +4271,7 @@ def test_ollama_participant_replies_through_existing_memory_prompt_path(tmp_path
     assert "keep the subject Francis and validate claims against receipts or repo truth" in captured_prompts[0]
     assert "continuity ledger excerpts" in captured_prompts[0]
     assert "collaboration relay receipts, collaboration review candidates" in captured_prompts[0]
+    assert "exploration receipts" in captured_prompts[0]
     assert (
         "Your write path here is limited to conversation-ledger and collaboration-relay receipts" in captured_prompts[0]
     )
@@ -4174,6 +4297,7 @@ def test_ollama_participant_replies_through_existing_memory_prompt_path(tmp_path
     assert result["execution_trace"]["primary_local_francis_intelligence"] is True
     assert result["execution_trace"]["codex_and_claude_external_guidance_sources"] is True
     assert "collaboration_review_candidates" in result["execution_trace"]["available_context_surfaces"]
+    assert "collaboration_exploration_receipts" in result["execution_trace"]["available_context_surfaces"]
     assert "conversation_ledger_receipts" in result["execution_trace"]["write_receipt_surfaces"]
     assert result["execution_trace"]["raw_host_access"] is False
     assert result["execution_trace"]["grants_execution_authority"] is False
@@ -5186,6 +5310,7 @@ def test_developer_bridge_mcp_registers_collaboration_relay_tools() -> None:
     assert "list_collaboration_prompts_tool" in names
     assert "collaboration_transcript_tool" in names
     assert "collaboration_review_tool" in names
+    assert "collaboration_exploration_tool" in names
     assert "collaboration_agents_status_tool" in names
     assert "francis_body_map_tool" in names
     assert "francis_trust_ladder_tool" in names
