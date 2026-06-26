@@ -98884,6 +98884,52 @@ Remaining truthful gap:
   ORB/body validation were not run for this bounded review-classification
   slice.
 
+### 2026-06-26 09:21Z - Roadmap finding override covers driver-topic issues
+
+Current posture: Phase 2 / P9 collaboration review now treats Francis1's
+roadmap-alignment finding as the stronger classification signal even when the
+driver's rotating prompt topic had already produced a non-generic build issue
+such as recurrence-health. Forced safety projections and protected
+source-disagreement issues still retain their blocking review gate.
+
+What changed:
+
+- Added explicit review projection selection so a finding-derived
+  roadmap-alignment projection can override non-generic driver-topic issues
+  unless the topic projection is already forced.
+- Protected existing source-disagreement build issues from being weakened by
+  roadmap wording inside the disputed finding.
+- Expanded regression coverage for the live shape where a recurrence-health
+  topic carried a roadmap-alignment/main-build-candidate-only finding and for a
+  protected source-disagreement finding.
+
+Validation:
+
+- Focused collaboration-review regression passed:
+  `python -m pytest tests\test_developer_bridge.py::test_collaboration_review_projects_generic_historical_topics_to_concrete_surfaces -q`.
+- Full developer-bridge backend test file passed:
+  `python -m pytest tests\test_developer_bridge.py -q`.
+- Ruff lint passed for touched files:
+  `python -m ruff check src\francis\developer_bridge\collaboration_review.py tests\test_developer_bridge.py`.
+- Ruff format check passed for touched files:
+  `python -m ruff format --check src\francis\developer_bridge\collaboration_review.py tests\test_developer_bridge.py`.
+- Mypy passed for the touched backend module:
+  `python -m mypy src\francis\developer_bridge\collaboration_review.py`.
+- Compile check passed:
+  `python -m compileall src\francis\developer_bridge\collaboration_review.py`.
+- `git diff --check` passed.
+- Fresh readback from `read_collaboration_review(limit=12)` reclassified the
+  live turn `1934` receipt from recurrence-health to `roadmap_alignment_gate`
+  with `main_build_prompt_candidate_only=true`.
+
+Remaining truthful gap:
+
+- This improves review classification and readback truth only; it does not
+  clear the roadmap-alignment gate, close ORB blockers, grant capability,
+  promote memory, tune Francis1, or execute model advice.
+- `.\scripts\check.ps1`, browser screenshot proof, GitHub CI, and broader
+  ORB/body validation were not run for this bounded classifier slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

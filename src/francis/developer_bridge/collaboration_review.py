@@ -172,8 +172,10 @@ def _review_item(insight: dict[str, object], *, context: dict[str, object]) -> d
     finding = _bounded_text(memory.get("finding"), limit=_MAX_TEXT)
     topic_projection = _topic_projection_override(topic)
     finding_projection = _finding_projection_override(finding)
-    projection = (
-        topic_projection if bool(topic_projection.get("force_projection")) else finding_projection or topic_projection
+    projection = _selected_projection(
+        topic_projection=topic_projection,
+        finding_projection=finding_projection,
+        build_issue=build_issue,
     )
     force_projection = bool(projection.get("force_projection")) if projection else False
     projection_applied = False
@@ -1418,10 +1420,28 @@ def _finding_projection_override(finding: str) -> dict[str, object]:
         or ("main build" in lower and "candidate only" in lower)
     )
     if roadmap_terms:
-        return _topic_projection_override(
+        projection = _topic_projection_override(
             "which roadmap-alignment check should run before prompting any main Francis build"
         )
+        return {**projection, "force_projection": True}
     return {}
+
+
+def _selected_projection(
+    *,
+    topic_projection: dict[str, object],
+    finding_projection: dict[str, object],
+    build_issue: dict[str, object],
+) -> dict[str, object]:
+    if bool(topic_projection.get("force_projection")):
+        return topic_projection
+    if finding_projection and not _protected_build_issue(build_issue):
+        return finding_projection
+    return topic_projection
+
+
+def _protected_build_issue(build_issue: dict[str, object]) -> bool:
+    return _bounded_text(build_issue.get("code"), limit=120) in {"source_disagreement_record"}
 
 
 def _generic_implementation(implementation: dict[str, object]) -> bool:

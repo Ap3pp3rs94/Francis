@@ -1850,6 +1850,30 @@ def test_collaboration_review_projects_generic_historical_topics_to_concrete_sur
             },
         },
     }
+    protected_disagreement_finding_insight = {
+        **base_insight,
+        "id": "insight-protected-disagreement-finding",
+        "created_at": "2026-06-24T22:31:04+00:00",
+        "topic": "which current review artifact should remain blocked until Codex reviews the source conflict",
+        "conversation_memory": {
+            **base_insight["conversation_memory"],
+            "finding": (
+                "The disputed source mentions roadmap alignment and main-build candidate-only status, but the "
+                "source disagreement still needs a typed review before build direction."
+            ),
+            "build_issue": {
+                "code": "source_disagreement_record",
+                "statement": "Disagreement between sources needs a durable review record.",
+            },
+            "implementation_candidate": {
+                "title": "Record source disagreement as a review candidate",
+                "surface": "developer_bridge.collaboration_review.items",
+                "status": "candidate",
+                "validation_hint": "contract test proving disagreement remains advisory until reviewed",
+                "requires_operator_or_codex_review": True,
+            },
+        },
+    }
     live_health_insight = {
         **base_insight,
         "id": "insight-live-health",
@@ -1868,6 +1892,20 @@ def test_collaboration_review_projects_generic_historical_topics_to_concrete_sur
                 "roadmap alignment with main-build candidate-only requirements. Artifact: "
                 "developer_bridge.collaboration_agents."
             ),
+            "build_issue": {
+                "code": "collaboration_recurrence_evidence",
+                "statement": (
+                    "The recurring loop needs health receipts proving progress without relying on repeated "
+                    "operator nudges."
+                ),
+            },
+            "implementation_candidate": {
+                "title": "Expose recurrence health receipts for the collaboration loop",
+                "surface": "developer_bridge collaboration runtime",
+                "status": "candidate",
+                "validation_hint": "runtime state readback showing recent turn, note, and process health",
+                "requires_operator_or_codex_review": True,
+            },
         },
     }
     drift_insight = {
@@ -1911,6 +1949,10 @@ def test_collaboration_review_projects_generic_historical_topics_to_concrete_sur
         json.dumps(orb_blocker_disagreement_insight),
         encoding="utf-8",
     )
+    (insights_root / "insight-protected-disagreement-finding.json").write_text(
+        json.dumps(protected_disagreement_finding_insight),
+        encoding="utf-8",
+    )
     (insights_root / "insight-live-health.json").write_text(json.dumps(live_health_insight), encoding="utf-8")
     (insights_root / "insight-roadmap-finding.json").write_text(
         json.dumps(roadmap_finding_insight),
@@ -1922,7 +1964,7 @@ def test_collaboration_review_projects_generic_historical_topics_to_concrete_sur
     (insights_root / "insight-body-map.json").write_text(json.dumps(body_map_insight), encoding="utf-8")
     (insights_root / "insight-loop.json").write_text(json.dumps(loop_insight), encoding="utf-8")
 
-    review = read_collaboration_review(limit=15)
+    review = read_collaboration_review(limit=16)
 
     items = {str(item["insight_id"]): item for item in review["items"]}
     action_item = items["insight-action"]
@@ -2278,6 +2320,14 @@ def test_collaboration_review_projects_generic_historical_topics_to_concrete_sur
     assert source_disagreement_boundary["grants_approval_authority"] is False
     assert source_disagreement_boundary["grants_memory_write_authority"] is False
     assert disagreement_item["roadmap_alignment_boundary"]["applies"] is False
+
+    protected_disagreement_item = items["insight-protected-disagreement-finding"]
+    assert protected_disagreement_item["build_issue"]["code"] == "source_disagreement_record"
+    assert protected_disagreement_item["concrete_repo_surface"] == "developer_bridge.collaboration_review.items"
+    assert protected_disagreement_item["source_disagreement_boundary"]["applies"] is True
+    assert protected_disagreement_item["source_disagreement_boundary"]["blocks_build_direction"] is True
+    assert protected_disagreement_item["roadmap_alignment_boundary"]["applies"] is True
+    assert protected_disagreement_item["roadmap_alignment_boundary"]["conversation_can_start_main_build"] is False
 
     orb_blocker_item = items["insight-orb-disagreement"]
     assert orb_blocker_item["build_issue"]["code"] == "source_disagreement_record"
