@@ -99454,9 +99454,11 @@ Remaining truthful gap:
 Current posture: Phase 2 / P1 interface, P3 governance, and P9 collaboration
 observability now let the Communication UI write a bounded operator message to
 Codex, Claude, and Francis1/Ollama through the existing collaboration relay.
-The route appends one redacted relay receipt per selected target and returns
-chat handoff text for visible transcript surfaces. This is communication only:
-it does not execute prompts, call a model directly, run tools, mutate repo
+The route appends one redacted relay receipt per selected target, returns chat
+handoff text for visible transcript surfaces, and the local collaboration
+runtime now has operator-source helpers for Codex and Francis1/Ollama. Claude
+remains an external MCP/client participant. This is communication only: the UI
+route does not execute prompts, call a model directly, run tools, mutate repo
 files, write memory, approve capability requests, train a model, or grant
 execution/mutation authority.
 
@@ -99480,11 +99482,21 @@ What changed:
   `apps/chat_ui/src/chat/index.test.ts` now parse and validate the operator
   message response contract, including target handoffs and no-authority
   governance fields.
+- `src/francis/developer_bridge/collaboration_runtime.py` now starts five
+  bounded helper specs: the original Codex/Ollama loop plus
+  `codex_operator_responder` and `ollama_operator_participant` for
+  operator-origin relay entries.
+- `src/francis/developer_bridge/ollama_participant.py` now tracks
+  `ignore-existing` initialization per source agent so the new operator watcher
+  marks old operator backlog seen before answering new operator messages.
+- `tests/test_developer_bridge.py` now covers operator-to-Codex acknowledgement,
+  operator-to-Francis1/Ollama source-scoped initialization, and the five-helper
+  runtime readback.
 
 Validation:
 
-- Focused backend route/helper tests passed:
-  `python -m pytest tests/test_developer_bridge.py::test_developer_bridge_routes_are_mounted tests/test_developer_bridge.py::test_developer_bridge_operator_message_is_classified_in_authority_matrix tests/test_developer_bridge.py::test_operator_collaboration_message_broadcasts_to_all_targets_without_authority tests/test_developer_bridge.py::test_operator_collaboration_message_api_writes_bounded_relay_receipts -q`.
+- Focused backend route/helper/runtime tests passed:
+  `python -m pytest tests/test_developer_bridge.py::test_collaboration_runtime_starts_missing_event_gated_helpers tests/test_developer_bridge.py::test_collaboration_runtime_does_not_duplicate_running_helpers tests/test_developer_bridge.py::test_collaboration_runtime_health_is_read_only_and_reports_recurrence tests/test_developer_bridge.py::test_operator_collaboration_message_broadcasts_to_all_targets_without_authority tests/test_developer_bridge.py::test_operator_collaboration_message_api_writes_bounded_relay_receipts tests/test_developer_bridge.py::test_codex_responder_can_ack_operator_messages tests/test_developer_bridge.py::test_ollama_participant_ignore_existing_is_source_scoped -q`.
 - Focused Chat UI contract test passed:
   `node --test --experimental-strip-types src/chat/index.test.ts` with 30
   tests.
@@ -99499,8 +99511,9 @@ Validation:
 Remaining truthful gap:
 
 - This lets the operator message all three collaboration participants through
-  Francis relay receipts; it does not guarantee that external Claude/Codex app
-  clients have active consumers for those receipts.
+  Francis relay receipts, and gives local Codex/Francis1 helpers an operator
+  consume path; it does not force an external Claude app/client to consume or
+  answer those receipts when Claude is disconnected or usage-limited.
 - No live browser click proof or live operator message write was performed in
   the real data directory; tests used isolated temp data to prove the write
   contract without polluting the active conversation.

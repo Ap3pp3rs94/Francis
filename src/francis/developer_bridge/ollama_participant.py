@@ -62,14 +62,19 @@ def respond_once(
     state = _load_state()
     transcript = read_collaboration_transcript(source_agent=source_agent, target_agent=_AGENT, limit=50)
     items = _items(transcript)
-    if ignore_existing and not state.get("initialized"):
+    source_key = source_agent or "*"
+    initialized_sources = set(str(item) for item in _list(state.get("initialized_sources")) if item)
+    if ignore_existing and source_key not in initialized_sources:
         _mark_seen(state, [_item_id(item) for item in items])
         state["initialized"] = True
+        initialized_sources.add(source_key)
+        state["initialized_sources"] = sorted(initialized_sources)
         _save_state(state)
         return {
             "kind": "developer_bridge.ollama_participant",
             "ok": True,
             "status": "initialized",
+            "source_agent": source_agent,
             "seen_count": len(_list(state.get("seen_source_ids"))),
             "governance": _governance(),
         }
@@ -789,6 +794,7 @@ def _load_state() -> dict[str, object]:
     data.setdefault("seen_source_ids", [])
     data.setdefault("responses", [])
     data.setdefault("initialized", False)
+    data.setdefault("initialized_sources", [])
     return data
 
 
@@ -798,6 +804,7 @@ def _empty_state() -> dict[str, object]:
         "created_at": _utc_now(),
         "updated_at": _utc_now(),
         "initialized": False,
+        "initialized_sources": [],
         "seen_source_ids": [],
         "last_response_at": "",
         "responses": [],
@@ -809,6 +816,7 @@ def _save_state(state: dict[str, object]) -> None:
     path = _state_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     state["updated_at"] = _utc_now()
+    state["initialized_sources"] = _list(state.get("initialized_sources"))[-_MAX_TRACKED_IDS:]
     state["seen_source_ids"] = _list(state.get("seen_source_ids"))[-_MAX_TRACKED_IDS:]
     state["responses"] = _list(state.get("responses"))[-_MAX_RESPONSES:]
     tmp = path.with_name(f".atomic-json-{os.getpid()}-{uuid4().hex[:12]}.tmp")

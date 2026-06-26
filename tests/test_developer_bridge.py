@@ -1158,7 +1158,9 @@ def test_collaboration_runtime_starts_missing_event_gated_helpers(tmp_path, monk
     assert result["ok"] is True
     assert started == [
         "codex_ollama_responder",
+        "codex_operator_responder",
         "ollama_codex_participant",
+        "ollama_operator_participant",
         "codex_ollama_conversation_driver",
     ]
     processes = result["processes"]
@@ -1168,6 +1170,7 @@ def test_collaboration_runtime_starts_missing_event_gated_helpers(tmp_path, monk
     assert any("francis.developer_bridge.codex_responder" in command for command in commands)
     assert any("francis.developer_bridge.ollama_participant" in command for command in commands)
     assert any("francis.developer_bridge.collaboration_driver" in command for command in commands)
+    assert any("--source-agent operator" in command for command in commands)
     assert any("--cooldown-seconds 0" in command for command in commands)
     assert any("--max-turns 0" in command for command in commands)
     assert any("--turn-gap-seconds 30" in command for command in commands)
@@ -1199,7 +1202,7 @@ def test_collaboration_runtime_does_not_duplicate_running_helpers(tmp_path, monk
     processes = result["processes"]
     assert isinstance(processes, list)
     assert {item["status"] for item in processes} == {"running"}
-    assert [item["pids"] for item in processes] == [[51000], [51001], [51002]]
+    assert [item["pids"] for item in processes] == [[51000 + index] for index in range(len(specs))]
 
 
 def test_collaboration_runtime_prefers_repo_venv_python(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
@@ -1336,8 +1339,8 @@ def test_collaboration_runtime_health_is_read_only_and_reports_recurrence(tmp_pa
     assert health["ok"] is True
     assert health["mode"] == "read_only"
     assert health["status"] == "healthy"
-    assert health["desired_count"] == 3
-    assert health["helper_count"] == 3
+    assert health["desired_count"] == 5
+    assert health["helper_count"] == 5
     assert {item["status"] for item in health["helpers"]} == {"running"}
     assert {item["process_model"] for item in health["helpers"]} == {"wrapper_child_pair"}
     assert {item["process_count"] for item in health["helpers"]} == {2}
@@ -1449,9 +1452,9 @@ def test_collaboration_runtime_health_is_read_only_and_reports_recurrence(tmp_pa
     assert live_health["enabled_participant_count"] == health["participants"]["enabled_count"]
     assert live_health["total_participant_count"] == health["participants"]["total_count"]
     assert live_health["all_participants_enabled"] is True
-    assert live_health["running_helper_count"] == 3
-    assert live_health["desired_helper_count"] == 3
-    assert live_health["effective_worker_count"] == 3
+    assert live_health["running_helper_count"] == 5
+    assert live_health["desired_helper_count"] == 5
+    assert live_health["effective_worker_count"] == 5
     assert (
         live_health["latest_review_artifact"]
         == "developer_bridge.collaboration_review.items:review_candidate:insight-last"
@@ -4695,6 +4698,29 @@ def test_codex_responder_can_ack_ollama_without_retriggering_model(tmp_path, mon
     assert ignored["source_prompt_id"] == responded["response_prompt_id"]
 
 
+def test_codex_responder_can_ack_operator_messages(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+    source = submit_collaboration_prompt(
+        source_agent="operator",
+        target_agent="codex",
+        objective="Operator asks Codex to review the communication surface",
+        prompt="Codex, acknowledge this operator relay without executing anything.",
+    )
+
+    responded = respond_once(source_agent="operator", cooldown_seconds=0)
+
+    assert responded["status"] == "responded"
+    assert responded["source_prompt_id"] == source["prompt_id"]
+    transcript = read_collaboration_transcript(source_agent="codex", target_agent="operator")
+    assert transcript["count"] == 1
+    response = transcript["items"][0]
+    assert response["id"] == responded["response_prompt_id"]
+    assert "Auto-ack operator relay" in response["prompt"]
+    assert "Receipt only" in response["prompt"]
+    assert "no_response_requested=true" in response["context"]
+    assert response["governance"]["executes_prompt"] is False
+
+
 def test_ollama_participant_replies_through_existing_memory_prompt_path(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
     append("user", "Francis is local-first and receipts-backed.", {"mode": "test_seed"})
@@ -4763,6 +4789,51 @@ def test_ollama_participant_replies_through_existing_memory_prompt_path(tmp_path
     assert result["execution_trace"]["grants_mutation_authority"] is False
     assert result["execution_trace"]["grants_approval_authority"] is False
     assert result["execution_trace"]["grants_memory_write_authority"] is False
+
+
+def test_ollama_participant_ignore_existing_is_source_scoped(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+    submit_collaboration_prompt(
+        source_agent="operator",
+        target_agent="ollama",
+        objective="Existing operator relay",
+        prompt="This backlog item should be marked seen when the operator source initializes.",
+    )
+
+    codex_initialized = ollama_respond_once(source_agent="codex", ignore_existing=True, cooldown_seconds=0)
+    operator_initialized = ollama_respond_once(source_agent="operator", ignore_existing=True, cooldown_seconds=0)
+
+    assert codex_initialized["status"] == "initialized"
+    assert codex_initialized["source_agent"] == "codex"
+    assert operator_initialized["status"] == "initialized"
+    assert operator_initialized["source_agent"] == "operator"
+    assert read_collaboration_transcript(source_agent="ollama", target_agent="operator")["count"] == 0
+
+    source = submit_collaboration_prompt(
+        source_agent="operator",
+        target_agent="ollama",
+        objective="New operator relay",
+        prompt="Reply: issue/gap/risk; artifact. Current artifact: Communication UI operator relay composer.",
+    )
+
+    def fake_generate(_prompt: str) -> str:
+        return (
+            "Issue/gap/risk: Operator-source replies need source-scoped initialization to avoid backlog noise.\n"
+            "Artifact: Communication UI operator relay composer."
+        )
+
+    monkeypatch.setattr("francis.developer_bridge.ollama_participant.generate", fake_generate)
+
+    responded = ollama_respond_once(source_agent="operator", ignore_existing=True, cooldown_seconds=0)
+
+    assert responded["status"] == "responded"
+    assert responded["source_prompt_id"] == source["prompt_id"]
+    transcript = read_collaboration_transcript(source_agent="ollama", target_agent="operator")
+    assert transcript["count"] == 1
+    response = transcript["items"][0]
+    assert "Issue/gap/risk:" in response["prompt"]
+    assert "Artifact: Communication UI operator relay composer." in response["prompt"]
+    assert response["governance"]["executes_prompt"] is False
 
 
 def test_ollama_participant_rewrites_verified_surface_drift_without_raw_model_reply(
