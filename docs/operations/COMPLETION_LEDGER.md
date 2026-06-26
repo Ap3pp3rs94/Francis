@@ -99216,6 +99216,59 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, browser UI proof, GitHub CI, and broader ORB/body
   validation remain outside this bounded slice until separately run.
 
+### 2026-06-26 15:10Z - Topic-aware roadmap guard for collaboration driver prompts
+
+Current posture: Phase 2 / P9 collaboration observability now reduces an
+upstream prompt source of Francis1 roadmap drift. The driver still exposes the
+real roadmap gate when the active topic is roadmap, substrate-completion,
+manifest, or ledger review, but unrelated collaboration turns now receive a
+neutral build guard that keeps Francis1 on the current artifact without
+repeating `main-build candidate-only` or `blocked_by_open_orb_gaps`.
+
+What changed:
+
+- `collaboration_driver` now chooses the roadmap prompt line by topic.
+- Non-roadmap topics use
+  `Build guard: current artifact only; no phase or build-readiness claims.`
+- Roadmap/substrate topics still use the existing ledger-first roadmap gate
+  line with `roadmap_alignment`, `main-build candidate-only`, and
+  `blocked_by_open_orb_gaps`.
+- Loop-recovery prompts now rewrite roadmap/main-build overgeneralization as
+  `Loop: alignment drift; answer current artifact.` so the recovery prompt
+  does not keep repeating the exact trigger phrase.
+
+Validation:
+
+- Focused collaboration driver tests passed:
+  `pytest tests\test_developer_bridge.py::test_collaboration_driver_waits_for_ollama_before_next_turn tests\test_developer_bridge.py::test_collaboration_driver_compacts_long_review_line_into_prompt_budget tests\test_developer_bridge.py::test_collaboration_driver_uses_roadmap_gate_only_for_roadmap_topics tests\test_developer_bridge.py::test_collaboration_driver_records_roadmap_overgeneralization_as_learning_event -q`.
+- Ruff lint passed:
+  `ruff check src\francis\developer_bridge\collaboration_driver.py tests\test_developer_bridge.py`.
+- Ruff format check passed:
+  `ruff format --check src\francis\developer_bridge\collaboration_driver.py tests\test_developer_bridge.py`.
+- Mypy passed:
+  `mypy src\francis\developer_bridge\collaboration_driver.py`.
+- Compile check passed:
+  `python -m compileall -q src\francis\developer_bridge\collaboration_driver.py`.
+- Whitespace diff check passed:
+  `git diff --check`.
+- Live collaboration helpers were restarted through the existing bounded
+  `francis communication-runtime` supervisor; runtime health returned
+  `status=healthy`, `helper_count=3`, turn `2275`,
+  `latest_prompt_within_budget=true`, and
+  `no_action_authority_receipts_observed=true`.
+- Live prompt readback showed turn `2276` on the Communication UI topic using
+  the neutral build guard with no `main-build candidate-only` or
+  `blocked_by_open_orb_gaps`, while turns `2274` and `2275` on
+  substrate/roadmap topics still used the real roadmap gate.
+
+Remaining truthful gap:
+
+- This reduces a prompt-level cause of roadmap drift; it does not tune Francis1,
+  promote memory, grant capability use, or prove the drift pattern is fully
+  resolved over a longer run.
+- `.\scripts\check.ps1`, browser UI proof, GitHub CI, and broader ORB/body
+  validation remain outside this bounded slice until separately run.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

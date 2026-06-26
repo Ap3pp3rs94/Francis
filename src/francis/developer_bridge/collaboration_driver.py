@@ -40,6 +40,7 @@ _PROMPT_REVIEW_SURFACE_LIMIT = 72
 _SOURCE_ALIGNMENT_PROMPT_LINE = "Claude guidance acknowledged; Francis stays subject; Codex validates repo truth."
 _COMPACT_BODY_MAP_PROMPT_LINE = "Body map: visible; grants required; stale detaches."
 _GUIDED_EXPLORATION_PROMPT_LINE = "Explore: Codex guides; next_probe; no authority."
+_NON_ROADMAP_BUILD_GUARD_PROMPT_LINE = "Build guard: current artifact only; no phase or build-readiness claims."
 _ROADMAP_FINDING_DRIFT_MARKERS = (
     "build manifest",
     "completion ledger",
@@ -451,7 +452,7 @@ def _next_prompt(state: dict[str, object], *, max_turns: int) -> str:
     topic_artifact = _topic_artifact_line(topic)
     codex_response = _codex_response_line(review_line)
     body_map_line = compact_body_map_prompt_line()
-    roadmap_gate_line = compact_roadmap_gate_prompt_line()
+    roadmap_gate_line = _roadmap_gate_prompt_line_for_topic(topic)
     trust_line = compact_trust_ladder_prompt_line()
     loop_line = ""
     if guard_signal.get("detected"):
@@ -562,7 +563,7 @@ def _fit_driver_prompt_to_budget(
 
     compact_loop = _extra_compact_loop_line(loop_line)
     compact_codex = _extra_compact_codex_response_line(codex_response)
-    compact_roadmap = "Roadmap: check roadmap_alignment; main-build candidate-only; blocked_by_open_orb_gaps."
+    compact_roadmap = _compact_roadmap_gate_prompt_line_for_topic(topic)
     compact_trust = "Trust: classify needs; no capability authority."
     attempts = [
         (
@@ -633,8 +634,11 @@ def _guard_prompt_line(guard_signal: dict[str, object]) -> str:
 
 def _loop_prompt_line(loop_signal: dict[str, object]) -> str:
     repeated_terms = [str(term) for term in _list(loop_signal.get("repeated_terms"))]
-    if "roadmap_alignment_overgeneralization" in repeated_terms:
-        return " Loop: roadmap_overgeneralization; answer artifact."
+    if (
+        "roadmap_alignment_overgeneralization" in repeated_terms
+        or "main_build_candidate_only_overgeneralization" in repeated_terms
+    ):
+        return " Loop: alignment drift; answer current artifact."
     if "advice_only_execution_overgeneralization" in repeated_terms:
         return " Loop: advice_only_execution_drift; answer artifact."
     preferred_term = next((term for term in repeated_terms if term == "user_confirmation_fallback"), "")
@@ -642,6 +646,18 @@ def _loop_prompt_line(loop_signal: dict[str, object]) -> str:
     if len(repeated_terms) > 1:
         terms = f"{terms}, ..."
     return f" Loop: {terms}; use prior surface."
+
+
+def _roadmap_gate_prompt_line_for_topic(topic: str) -> str:
+    if _topic_supports_roadmap_gate(topic):
+        return compact_roadmap_gate_prompt_line()
+    return _NON_ROADMAP_BUILD_GUARD_PROMPT_LINE
+
+
+def _compact_roadmap_gate_prompt_line_for_topic(topic: str) -> str:
+    if _topic_supports_roadmap_gate(topic):
+        return "Roadmap: check roadmap_alignment; main-build candidate-only; blocked_by_open_orb_gaps."
+    return _NON_ROADMAP_BUILD_GUARD_PROMPT_LINE
 
 
 def _codex_response_line(review_line: str) -> str:
@@ -737,8 +753,8 @@ def _extra_compact_loop_line(loop_line: str) -> str:
     if "guard:" in lower:
         return " Guard: drift learned; issue + artifact."
     if "loop:" in lower:
-        if "roadmap_overgeneralization" in lower:
-            return " Loop: roadmap_overgeneralization; answer artifact."
+        if "roadmap_overgeneralization" in lower or "alignment drift" in lower:
+            return " Loop: alignment drift; answer current artifact."
         if "advice_only_execution_drift" in lower:
             return " Loop: advice_only_execution_drift; answer artifact."
         if "user_confirmation_fallback" in lower:
@@ -2135,7 +2151,7 @@ def _exploration_quality_flags(*, topic: str, finding: str, surface: str) -> dic
     lower_finding = _topic_key(finding)
     lower_surface = _topic_key(surface)
     finding_repeats_roadmap_gate = any(marker in lower_finding for marker in _ROADMAP_FINDING_DRIFT_MARKERS)
-    topic_supports_roadmap_gate = any(marker in lower_topic for marker in _ROADMAP_TOPIC_MARKERS)
+    topic_supports_roadmap_gate = _topic_supports_roadmap_gate(lower_topic)
     finding_conflicts_with_topic = finding_repeats_roadmap_gate and not topic_supports_roadmap_gate
     if finding_conflicts_with_topic:
         return {
@@ -2162,6 +2178,11 @@ def _exploration_quality_flags(*, topic: str, finding: str, surface: str) -> dic
             limit=240,
         ),
     }
+
+
+def _topic_supports_roadmap_gate(topic: str) -> bool:
+    lower_topic = _topic_key(topic)
+    return any(marker in lower_topic for marker in _ROADMAP_TOPIC_MARKERS)
 
 
 def _loop_recovery_topic(lower_topic_key: str) -> bool:

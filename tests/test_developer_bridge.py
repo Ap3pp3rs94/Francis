@@ -1466,9 +1466,12 @@ def test_collaboration_driver_waits_for_ollama_before_next_turn(tmp_path, monkey
     assert any("Body map: visible; grants required; stale detaches." in prompt for prompt in prompts)
     assert all("capability use requires grant receipt" in prompt or "grants required" in prompt for prompt in prompts)
     assert all("stale memory detaches" in prompt or "stale detaches" in prompt for prompt in prompts)
-    assert all("Roadmap: check" in prompt and "roadmap_alignment" in prompt for prompt in prompts)
-    assert all("main-build candidate-only" in prompt for prompt in prompts)
-    assert all("blocked_by_open_orb_gaps" in prompt for prompt in prompts)
+    assert all(
+        "Build guard: current artifact only; no phase or build-readiness claims." in prompt for prompt in prompts
+    )
+    assert all("Roadmap: check" not in prompt for prompt in prompts)
+    assert all("main-build candidate-only" not in prompt for prompt in prompts)
+    assert all("blocked_by_open_orb_gaps" not in prompt for prompt in prompts)
     assert all("Trust: classify needs; no capability authority" in prompt for prompt in prompts)
     assert all(
         "Claude guidance acknowledged; Francis stays subject; Codex validates repo truth." in prompt
@@ -3152,16 +3155,44 @@ def test_collaboration_driver_compacts_long_review_line_into_prompt_budget(tmp_p
     assert submitted["status"] == "submitted"
     transcript = read_collaboration_transcript(source_agent="codex", target_agent="ollama", limit=1)
     prompt = str(transcript["items"][0]["prompt"])
-    assert "Roadmap:" in prompt
-    assert "roadmap_alignment" in prompt
-    assert "main-build candidate-only" in prompt
+    assert "Build guard: current artifact only; no phase or build-readiness claims." in prompt
+    assert "main-build candidate-only" not in prompt
     assert "Prior check: Review candidate insight-live-long-" in prompt
-    assert "surface=docs/operations/COMPLETION_LEDGER.md + docs/canonical/BUILD_MANIFEST.md" in prompt
+    assert "surface=docs/operations/COMPLETION_LEDGER.md" in prompt
     assert "verified=canonical" in prompt
     assert "build_or_wire=false" in prompt
     assert "Codex:" in prompt
     assert "no action authority" in prompt
     assert len(prompt) <= 700
+
+
+def test_collaboration_driver_uses_roadmap_gate_only_for_roadmap_topics(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+    import francis.developer_bridge.collaboration_driver as driver
+
+    monkeypatch.setattr(driver, "latest_review_candidate_line", lambda: "")
+
+    non_roadmap_state = driver._empty_state()
+    non_roadmap_prompt = driver._next_prompt(non_roadmap_state, max_turns=0)
+
+    assert "Build guard: current artifact only; no phase or build-readiness claims." in non_roadmap_prompt
+    assert "Roadmap: check" not in non_roadmap_prompt
+    assert "main-build candidate-only" not in non_roadmap_prompt
+    assert "blocked_by_open_orb_gaps" not in non_roadmap_prompt
+
+    roadmap_state = driver._empty_state()
+    roadmap_state["turn_count"] = 11
+    roadmap_prompt = driver._next_prompt(roadmap_state, max_turns=0)
+
+    assert "Topic: what substrate-complete means as a checklist, not an argument." in roadmap_prompt
+    assert "Roadmap: check" in roadmap_prompt
+    assert "roadmap_alignment" in roadmap_prompt
+    assert "main-build candidate-only" in roadmap_prompt
+    assert "blocked_by_open_orb_gaps" in roadmap_prompt
+    assert (
+        driver._loop_prompt_line({"repeated_terms": ["main_build_candidate_only_overgeneralization"]})
+        == " Loop: alignment drift; answer current artifact."
+    )
 
 
 def test_collaboration_driver_enforces_prompt_budget_with_guard_context(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
@@ -3369,7 +3400,11 @@ def test_collaboration_driver_records_roadmap_overgeneralization_as_learning_eve
     assert turn["status"] == "submitted"
     transcript = read_collaboration_transcript(source_agent="codex", target_agent="ollama", limit=1)
     latest_prompt = str(transcript["items"][0]["prompt"])
-    assert "Loop: roadmap_overgeneralization; answer artifact." in latest_prompt
+    assert (
+        "Loop: alignment drift; answer current artifact." in latest_prompt or "Guard: issue+artifact." in latest_prompt
+    )
+    assert "main-build candidate-only" not in latest_prompt
+    assert "blocked_by_open_orb_gaps" not in latest_prompt
     assert "Claude guidance acknowledged; Francis stays subject; Codex validates repo truth." in latest_prompt
     assert len(latest_prompt) <= 700
 
