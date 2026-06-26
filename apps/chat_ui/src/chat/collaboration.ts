@@ -1058,6 +1058,36 @@ export type CollaborationReviewItem = {
     grantsApprovalAuthority: boolean;
     grantsMemoryWriteAuthority: boolean;
   };
+  sourceDisagreementBoundary: {
+    applies: boolean;
+    surface: string;
+    proofStatus: string;
+    reviewArtifactObserved: boolean;
+    requiredReviewArtifact: string;
+    surfaceUnderReview: string;
+    conflictingSourceCount: number;
+    conflictingSources: {
+      source: string;
+      receiptId: string;
+      role: string;
+      providerLane: string;
+    }[];
+    blocksBuildDirection: boolean;
+    conversationCanChooseWinner: boolean;
+    conversationCanExecuteResolution: boolean;
+    requiresTypedReviewArtifact: boolean;
+    requiresCodexOrOperatorReview: boolean;
+    requiresRepoTruthReview: boolean;
+    proofSource: string;
+    storesFullTranscript: boolean;
+    grantsBuildDirectionAuthority: boolean;
+    grantsExecutionAuthority: boolean;
+    grantsMutationAuthority: boolean;
+    grantsApprovalAuthority: boolean;
+    grantsMemoryWriteAuthority: boolean;
+    grantsTrainingAuthority: boolean;
+    grantsCapabilityAuthority: boolean;
+  };
   roadmapAlignmentProof: {
     latestLedgerEntry: string;
     currentPhase: string;
@@ -1181,6 +1211,7 @@ export type CollaborationReview = {
     surfaceVerification: string;
     buildDirectionGate: string;
     implementationPreflight: string;
+    sourceDisagreementBoundary: string;
     participantToggleBoundary: string;
     modelAdviceGovernanceBoundary: string;
   };
@@ -2525,6 +2556,12 @@ function parseReviewItem(raw: unknown): CollaborationReviewItem {
   const recommendation = isRecord(item.review_recommendation) ? item.review_recommendation : {};
   const boundary = isRecord(item.action_boundary) ? item.action_boundary : {};
   const buildGate = isRecord(item.build_direction_gate) ? item.build_direction_gate : {};
+  const sourceDisagreementBoundary = isRecord(item.source_disagreement_boundary)
+    ? item.source_disagreement_boundary
+    : {};
+  const sourceDisagreementProof = isRecord(sourceDisagreementBoundary.current_proof)
+    ? sourceDisagreementBoundary.current_proof
+    : {};
   const roadmapBoundary = isRecord(item.roadmap_alignment_boundary) ? item.roadmap_alignment_boundary : {};
   const roadmapProof = isRecord(roadmapBoundary.current_proof) ? roadmapBoundary.current_proof : {};
   const toggleBoundary = isRecord(item.participant_toggle_boundary) ? item.participant_toggle_boundary : {};
@@ -2601,6 +2638,41 @@ function parseReviewItem(raw: unknown): CollaborationReviewItem {
       grantsMutationAuthority: safeBoolean(buildGate.grants_mutation_authority),
       grantsApprovalAuthority: safeBoolean(buildGate.grants_approval_authority),
       grantsMemoryWriteAuthority: safeBoolean(buildGate.grants_memory_write_authority),
+    },
+    sourceDisagreementBoundary: {
+      applies: safeBoolean(sourceDisagreementBoundary.applies),
+      surface: safeString(sourceDisagreementBoundary.surface),
+      proofStatus: safeString(sourceDisagreementProof.proof_status),
+      reviewArtifactObserved: safeBoolean(sourceDisagreementProof.review_artifact_observed),
+      requiredReviewArtifact: safeString(sourceDisagreementProof.required_review_artifact),
+      surfaceUnderReview: safeString(sourceDisagreementProof.surface_under_review),
+      conflictingSourceCount: safeNumber(sourceDisagreementProof.conflicting_source_count),
+      conflictingSources: Array.isArray(sourceDisagreementProof.conflicting_sources)
+        ? sourceDisagreementProof.conflicting_sources.map((source) => {
+            const sourceRecord = isRecord(source) ? source : {};
+            return {
+              source: safeString(sourceRecord.source),
+              receiptId: safeString(sourceRecord.receipt_id),
+              role: safeString(sourceRecord.role),
+              providerLane: safeString(sourceRecord.provider_lane),
+            };
+          })
+        : [],
+      blocksBuildDirection: safeBoolean(sourceDisagreementProof.blocks_build_direction),
+      conversationCanChooseWinner: safeBoolean(sourceDisagreementProof.conversation_can_choose_winner),
+      conversationCanExecuteResolution: safeBoolean(sourceDisagreementProof.conversation_can_execute_resolution),
+      requiresTypedReviewArtifact: safeBoolean(sourceDisagreementProof.requires_typed_review_artifact),
+      requiresCodexOrOperatorReview: safeBoolean(sourceDisagreementProof.requires_codex_or_operator_review),
+      requiresRepoTruthReview: safeBoolean(sourceDisagreementProof.requires_repo_truth_review),
+      proofSource: safeString(sourceDisagreementProof.proof_source),
+      storesFullTranscript: safeBoolean(sourceDisagreementProof.stores_full_transcript),
+      grantsBuildDirectionAuthority: safeBoolean(sourceDisagreementProof.grants_build_direction_authority),
+      grantsExecutionAuthority: safeBoolean(sourceDisagreementProof.grants_execution_authority),
+      grantsMutationAuthority: safeBoolean(sourceDisagreementProof.grants_mutation_authority),
+      grantsApprovalAuthority: safeBoolean(sourceDisagreementProof.grants_approval_authority),
+      grantsMemoryWriteAuthority: safeBoolean(sourceDisagreementProof.grants_memory_write_authority),
+      grantsTrainingAuthority: safeBoolean(sourceDisagreementProof.grants_training_authority),
+      grantsCapabilityAuthority: safeBoolean(sourceDisagreementProof.grants_capability_authority),
     },
     roadmapAlignmentProof: {
       latestLedgerEntry: safeString(roadmapProof.latest_ledger_entry),
@@ -3714,6 +3786,7 @@ export function parseCollaborationReview(raw: unknown): CollaborationReview {
       surfaceVerification: safeString(definitions.surface_verification),
       buildDirectionGate: safeString(definitions.build_direction_gate),
       implementationPreflight: safeString(definitions.implementation_preflight),
+      sourceDisagreementBoundary: safeString(definitions.source_disagreement_boundary),
       participantToggleBoundary: safeString(definitions.participant_toggle_boundary),
       modelAdviceGovernanceBoundary: safeString(definitions.model_advice_governance_boundary),
     },

@@ -2261,6 +2261,7 @@ test("parseCollaborationReview preserves advisory candidate boundaries", () => {
       surface_verification: "Whether an existing Francis surface was found.",
       build_direction_gate: "Whether the review item can be used as build direction.",
       implementation_preflight: "The exact typed review receipt Codex/operator should read.",
+      source_disagreement_boundary: "Typed proof checklist for source disagreements.",
     },
     items: [
       {
@@ -2330,6 +2331,46 @@ test("parseCollaborationReview preserves advisory candidate boundaries", () => {
           grants_mutation_authority: false,
           grants_approval_authority: false,
           grants_memory_write_authority: false,
+        },
+        source_disagreement_boundary: {
+          applies: true,
+          surface: "developer_bridge.collaboration_review.items",
+          current_proof: {
+            kind: "developer_bridge.source_disagreement_build_direction_block",
+            proof_status: "blocked_until_review",
+            review_artifact_observed: true,
+            required_review_artifact: "developer_bridge.collaboration_review.items:review_candidate:insight-alpha",
+            surface_under_review: "developer_bridge.collaboration_review.items",
+            conflicting_source_count: 2,
+            conflicting_sources: [
+              {
+                source: "codex",
+                receipt_id: "codex-alpha",
+                role: "external_guidance_source",
+              },
+              {
+                source: "francis1",
+                receipt_id: "ollama-alpha",
+                role: "local_model_source",
+                provider_lane: "ollama",
+              },
+            ],
+            blocks_build_direction: true,
+            conversation_can_choose_winner: false,
+            conversation_can_execute_resolution: false,
+            requires_typed_review_artifact: true,
+            requires_codex_or_operator_review: true,
+            requires_repo_truth_review: true,
+            proof_source: "developer_bridge.collaboration_review.item",
+            stores_full_transcript: false,
+            grants_build_direction_authority: false,
+            grants_execution_authority: false,
+            grants_mutation_authority: false,
+            grants_approval_authority: false,
+            grants_memory_write_authority: false,
+            grants_training_authority: false,
+            grants_capability_authority: false,
+          },
         },
         roadmap_alignment_boundary: {
           current_proof: {
@@ -2490,6 +2531,7 @@ test("parseCollaborationReview preserves advisory candidate boundaries", () => {
   assert.equal(review.definitions.surfaceVerification.includes("existing Francis surface"), true);
   assert.equal(review.definitions.buildDirectionGate.includes("build direction"), true);
   assert.equal(review.definitions.implementationPreflight.includes("exact typed review receipt"), true);
+  assert.equal(review.definitions.sourceDisagreementBoundary.includes("source disagreements"), true);
   assert.equal(review.items[0]?.insightId, "insight-alpha");
   assert.equal(review.items[0]?.concreteRepoSurface, "apps.chat_ui.communication");
   assert.equal(review.items[0]?.surfaceVerification.status, "existing_surface_found");
@@ -2511,6 +2553,25 @@ test("parseCollaborationReview preserves advisory candidate boundaries", () => {
   assert.equal(review.items[0]?.buildDirectionGate.conflictingSources[1]?.providerLane, "ollama");
   assert.equal(review.items[0]?.buildDirectionGate.grantsExecutionAuthority, false);
   assert.equal(review.items[0]?.buildDirectionGate.grantsMemoryWriteAuthority, false);
+  assert.equal(review.items[0]?.sourceDisagreementBoundary.applies, true);
+  assert.equal(review.items[0]?.sourceDisagreementBoundary.proofStatus, "blocked_until_review");
+  assert.equal(review.items[0]?.sourceDisagreementBoundary.reviewArtifactObserved, true);
+  assert.equal(
+    review.items[0]?.sourceDisagreementBoundary.requiredReviewArtifact,
+    "developer_bridge.collaboration_review.items:review_candidate:insight-alpha",
+  );
+  assert.equal(review.items[0]?.sourceDisagreementBoundary.conflictingSourceCount, 2);
+  assert.equal(review.items[0]?.sourceDisagreementBoundary.conflictingSources[1]?.source, "francis1");
+  assert.equal(review.items[0]?.sourceDisagreementBoundary.conflictingSources[1]?.providerLane, "ollama");
+  assert.equal(review.items[0]?.sourceDisagreementBoundary.blocksBuildDirection, true);
+  assert.equal(review.items[0]?.sourceDisagreementBoundary.conversationCanChooseWinner, false);
+  assert.equal(review.items[0]?.sourceDisagreementBoundary.conversationCanExecuteResolution, false);
+  assert.equal(review.items[0]?.sourceDisagreementBoundary.requiresRepoTruthReview, true);
+  assert.equal(review.items[0]?.sourceDisagreementBoundary.proofSource, "developer_bridge.collaboration_review.item");
+  assert.equal(review.items[0]?.sourceDisagreementBoundary.storesFullTranscript, false);
+  assert.equal(review.items[0]?.sourceDisagreementBoundary.grantsBuildDirectionAuthority, false);
+  assert.equal(review.items[0]?.sourceDisagreementBoundary.grantsExecutionAuthority, false);
+  assert.equal(review.items[0]?.sourceDisagreementBoundary.grantsCapabilityAuthority, false);
   assert.equal(review.items[0]?.roadmapAlignmentProof.latestLedgerEntry, "2026-06-26 05:24Z - Codex auto-ack source alignment");
   assert.equal(review.items[0]?.roadmapAlignmentProof.currentPhase, "Phase 2");
   assert.equal(review.items[0]?.roadmapAlignmentProof.ledgerObserved, true);

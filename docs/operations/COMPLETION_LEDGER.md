@@ -97680,6 +97680,70 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, browser screenshot proof, and full ORB/body
   coverage proof were not run for this bounded model-advice proof slice.
 
+### 2026-06-26 05:57Z - Collaboration review source-disagreement proof projection
+
+Current posture: Phase 2 / P1 interface, P3 governance, and P9 observability now
+carry current source-disagreement proof directly inside source-disagreement
+collaboration review items. Francis1 can ask what artifact blocks build
+direction when sources disagree, and the review card now answers with the
+required review artifact, conflicting source receipts, blocking state, and
+no-authority flags.
+
+What changed:
+
+- `developer_bridge.collaboration_review` now adds
+  `source_disagreement_boundary.current_proof` for
+  `source_disagreement_record` review items.
+- The proof is derived from the bounded review item and includes proof status,
+  required review artifact, surface under review, conflicting source receipts,
+  build-direction block state, required review gates, proof source, and
+  no-authority flags.
+- The Chat UI collaboration parser preserves the proof as
+  `sourceDisagreementBoundary`.
+- The Communication review cards render a compact Source Disagreement block
+  beside the existing Build Direction Gate when the boundary applies.
+
+Validation:
+
+- Focused backend review test passed:
+  `python -m pytest tests/test_developer_bridge.py::test_collaboration_review_projects_generic_historical_topics_to_concrete_surfaces -q`.
+- Chat UI contract suite passed:
+  `npm run test -- --runInBand apps/chat_ui/src/chat/index.test.ts`
+  (the package script ran the configured UI suite, `282` passing tests).
+- Ruff check passed:
+  `python -m ruff check src\francis\developer_bridge\collaboration_review.py tests\test_developer_bridge.py`.
+- Ruff format check passed:
+  `python -m ruff format --check src\francis\developer_bridge\collaboration_review.py tests\test_developer_bridge.py`.
+- Targeted mypy passed:
+  `python -m mypy src\francis\developer_bridge\collaboration_review.py`.
+- Compileall passed:
+  `python -m compileall src\francis\developer_bridge\collaboration_review.py`.
+- Chat UI production build passed:
+  `npm run build`.
+- The local Francis API was restarted as wrapper PID `16328` and worker PID
+  `26080`. Live `/developer-bridge/collaboration-review?limit=50` showed
+  source-disagreement review
+  `review-insight-collab-18132581822f23bd-9d46bddfea2e`, turn `1723`, with
+  `proof_status=blocked_until_review`, `conflicting_source_count=2`,
+  `blocks_build_direction=true`, `conversation_can_choose_winner=false`,
+  `conversation_can_execute_resolution=false`,
+  `proof_source=developer_bridge.collaboration_review.item`,
+  `stores_full_transcript=false`, `grants_execution_authority=false`,
+  `grants_approval_authority=false`, `grants_memory_write_authority=false`, and
+  `grants_capability_authority=false`.
+- Live `/developer-bridge/collaboration-runtime-health` reported
+  `status=healthy`, `helper_count=3`, `recurrence_state=waiting_for_ollama`,
+  `manual_nudge_required=false`, and latest prompt within budget.
+
+Remaining truthful gap:
+
+- This is a readback and operator-visibility projection only. It does not
+  resolve the disagreement, choose a winning source, grant build-direction
+  authority, execute anything, approve anything, promote memory, or tune
+  Francis1.
+- `.\scripts\check.ps1`, GitHub CI, browser screenshot proof, and full ORB/body
+  coverage proof were not run for this bounded source-disagreement proof slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

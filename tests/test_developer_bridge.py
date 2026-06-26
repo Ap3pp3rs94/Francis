@@ -2083,6 +2083,30 @@ def test_collaboration_review_projects_generic_historical_topics_to_concrete_sur
             "provider_lane": "ollama",
         },
     ]
+    disagreement_proof = source_disagreement_boundary["current_proof"]
+    assert disagreement_proof["kind"] == "developer_bridge.source_disagreement_build_direction_block"
+    assert disagreement_proof["proof_status"] == "blocked_until_review"
+    assert disagreement_proof["review_artifact_observed"] is True
+    assert disagreement_proof["required_review_artifact"].startswith(
+        "developer_bridge.collaboration_review.items:review_candidate:insight-disagreement"
+    )
+    assert disagreement_proof["surface_under_review"] == "developer_bridge.collaboration_review.items"
+    assert disagreement_proof["conflicting_source_count"] == 2
+    assert disagreement_proof["conflicting_sources"] == source_disagreement_boundary["conflicting_sources"]
+    assert disagreement_proof["blocks_build_direction"] is True
+    assert disagreement_proof["conversation_can_choose_winner"] is False
+    assert disagreement_proof["conversation_can_execute_resolution"] is False
+    assert disagreement_proof["requires_typed_review_artifact"] is True
+    assert disagreement_proof["requires_codex_or_operator_review"] is True
+    assert disagreement_proof["requires_repo_truth_review"] is True
+    assert disagreement_proof["proof_source"] == "developer_bridge.collaboration_review.item"
+    assert disagreement_proof["stores_full_transcript"] is False
+    assert disagreement_proof["grants_build_direction_authority"] is False
+    assert disagreement_proof["grants_execution_authority"] is False
+    assert disagreement_proof["grants_mutation_authority"] is False
+    assert disagreement_proof["grants_approval_authority"] is False
+    assert disagreement_proof["grants_memory_write_authority"] is False
+    assert disagreement_proof["grants_capability_authority"] is False
     assert source_disagreement_boundary["requires_typed_review_artifact"] is True
     assert source_disagreement_boundary["required_review_artifact"].startswith(
         "developer_bridge.collaboration_review.items:review_candidate:insight-disagreement"
@@ -2091,6 +2115,10 @@ def test_collaboration_review_projects_generic_historical_topics_to_concrete_sur
     assert source_disagreement_boundary["conversation_can_execute_resolution"] is False
     assert source_disagreement_boundary["requires_codex_or_operator_review"] is True
     assert source_disagreement_boundary["requires_repo_truth_review"] is True
+    assert (
+        "source_disagreement_boundary.current_proof.required_review_artifact"
+        in source_disagreement_boundary["required_proof_fields"]
+    )
     assert (
         "source_disagreement_boundary.blocks_build_direction=true"
         in source_disagreement_boundary["required_proof_fields"]

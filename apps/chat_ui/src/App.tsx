@@ -3508,6 +3508,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
               );
               const participantToggle = item.participantToggleBoundary;
               const modelAdvice = item.modelAdviceGovernanceBoundary;
+              const sourceDisagreement = item.sourceDisagreementBoundary;
               return (
                 <article
                   key={item.id || item.insightId}
@@ -3621,6 +3622,35 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
                           {item.buildDirectionGate.state || "blocked"}
                           {item.buildDirectionGate.reason ? `: ${item.buildDirectionGate.reason}` : ""}
                         </dd>
+                      </div>
+                    ) : null}
+                    {sourceDisagreement.applies ? (
+                      <div>
+                        <dt style={{ color: "#fca5a5" }}>Source Disagreement</dt>
+                        <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
+                          {sourceDisagreement.proofStatus || "blocked_until_review"} / sources{" "}
+                          {sourceDisagreement.conflictingSourceCount || sourceDisagreement.conflictingSources.length} /
+                          artifact {sourceDisagreement.requiredReviewArtifact || item.reviewArtifact || "unknown"}
+                        </dd>
+                        <dd style={{ color: "#94a3b8", margin: "4px 0 0", overflowWrap: "anywhere" }}>
+                          choose winner {boolText(sourceDisagreement.conversationCanChooseWinner)} / resolve{" "}
+                          {boolText(sourceDisagreement.conversationCanExecuteResolution)} / repo review{" "}
+                          {boolText(sourceDisagreement.requiresRepoTruthReview)} / build authority{" "}
+                          {boolText(sourceDisagreement.grantsBuildDirectionAuthority)} / execute{" "}
+                          {boolText(sourceDisagreement.grantsExecutionAuthority)}
+                        </dd>
+                        {sourceDisagreement.conflictingSources.length ? (
+                          <dd style={{ color: "#94a3b8", margin: "4px 0 0", overflowWrap: "anywhere" }}>
+                            {sourceDisagreement.conflictingSources
+                              .map(
+                                (source) =>
+                                  `${source.source || "unknown"} ${source.receiptId || "no receipt"}${
+                                    source.providerLane ? ` via ${source.providerLane}` : ""
+                                  }`,
+                              )
+                              .join(" / ")}
+                          </dd>
+                        ) : null}
                       </div>
                     ) : null}
                     {hasRoadmapProof ? (

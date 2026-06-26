@@ -878,6 +878,7 @@ def _source_disagreement_boundary(
     base: dict[str, object] = {
         "applies": applies,
         "surface": concrete_surface,
+        "current_proof": {},
         "blocks_build_direction": applies,
         "requires_conflicting_sources": applies,
         "conflicting_source_count": len(conflicting_sources),
@@ -906,7 +907,15 @@ def _source_disagreement_boundary(
         }
     return {
         **base,
+        "current_proof": _source_disagreement_current_proof(
+            review_artifact=review_artifact,
+            concrete_surface=concrete_surface,
+            conflicting_sources=conflicting_sources,
+        ),
         "required_proof_fields": [
+            "source_disagreement_boundary.current_proof.proof_status=blocked_until_review",
+            "source_disagreement_boundary.current_proof.required_review_artifact",
+            "source_disagreement_boundary.current_proof.conflicting_source_count",
             "source_disagreement_boundary.blocks_build_direction=true",
             "source_disagreement_boundary.conflicting_sources[].source",
             "source_disagreement_boundary.conflicting_sources[].receipt_id",
@@ -927,6 +936,38 @@ def _source_disagreement_boundary(
             "Review the conflicting source receipts and repo surface before using the disagreement as build "
             "direction or recording a resolution."
         ),
+    }
+
+
+def _source_disagreement_current_proof(
+    *,
+    review_artifact: str,
+    concrete_surface: str,
+    conflicting_sources: list[dict[str, object]],
+) -> dict[str, object]:
+    return {
+        "kind": "developer_bridge.source_disagreement_build_direction_block",
+        "proof_status": "blocked_until_review",
+        "review_artifact_observed": bool(review_artifact),
+        "required_review_artifact": review_artifact,
+        "surface_under_review": concrete_surface,
+        "conflicting_source_count": len(conflicting_sources),
+        "conflicting_sources": conflicting_sources,
+        "blocks_build_direction": True,
+        "conversation_can_choose_winner": False,
+        "conversation_can_execute_resolution": False,
+        "requires_typed_review_artifact": True,
+        "requires_codex_or_operator_review": True,
+        "requires_repo_truth_review": True,
+        "proof_source": "developer_bridge.collaboration_review.item",
+        "stores_full_transcript": False,
+        "grants_build_direction_authority": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "grants_approval_authority": False,
+        "grants_memory_write_authority": False,
+        "grants_training_authority": False,
+        "grants_capability_authority": False,
     }
 
 
