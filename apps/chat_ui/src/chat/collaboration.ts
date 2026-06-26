@@ -301,7 +301,7 @@ export type CollaborationTranscriptVisibilityOptions = {
   showOtherHiddenReceipts?: boolean;
 };
 
-export const DEFAULT_SHOW_GUARD_RECEIPTS = true;
+export const DEFAULT_SHOW_GUARD_RECEIPTS = false;
 
 export type CollaborationTranscriptVisibility = {
   items: CollaborationTranscriptItem[];
@@ -1498,6 +1498,7 @@ export function filterCollaborationTranscriptItems(
   options: CollaborationTranscriptVisibilityOptions,
 ): CollaborationTranscriptVisibility {
   const visibleItems: CollaborationTranscriptItem[] = [];
+  const hiddenGuardReceipts: CollaborationTranscriptItem[] = [];
   let hiddenAuditReceiptCount = 0;
   let hiddenDriverPromptCount = 0;
   let hiddenGuardReceiptCount = 0;
@@ -1515,6 +1516,7 @@ export function filterCollaborationTranscriptItems(
       continue;
     }
     if (guardReceipt && !options.showGuardReceipts) {
+      hiddenGuardReceipts.push(item);
       hiddenGuardReceiptCount += 1;
       continue;
     }
@@ -1523,6 +1525,10 @@ export function filterCollaborationTranscriptItems(
       continue;
     }
     visibleItems.push(item);
+  }
+  if (!visibleItems.length && hiddenGuardReceipts.length) {
+    visibleItems.push(...hiddenGuardReceipts);
+    hiddenGuardReceiptCount = 0;
   }
   return {
     items: visibleItems,

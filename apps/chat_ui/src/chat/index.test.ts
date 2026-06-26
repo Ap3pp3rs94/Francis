@@ -1756,7 +1756,7 @@ test("parseCollaborationTranscript classifies auto-ack receipts as hideable audi
   assert.equal(isCollaborationGuardReceipt(transcript.items[1]!), true);
 });
 
-test("filterCollaborationTranscriptItems shows compact guard receipts by operator default", () => {
+test("filterCollaborationTranscriptItems hides guard receipts by operator default when conversation exists", () => {
   const transcript = parseCollaborationTranscript({
     ok: true,
     mode: "read_only",
@@ -1827,12 +1827,12 @@ test("filterCollaborationTranscriptItems shows compact guard receipts by operato
 
   assert.deepEqual(
     defaultVisibility.items.map((item) => item.id),
-    ["collab_reply", "collab_message"],
+    ["collab_message"],
   );
-  assert.equal(defaultVisibility.hiddenMechanicCount, 2);
+  assert.equal(defaultVisibility.hiddenMechanicCount, 3);
   assert.equal(defaultVisibility.hiddenAuditReceiptCount, 1);
   assert.equal(defaultVisibility.hiddenDriverPromptCount, 1);
-  assert.equal(defaultVisibility.hiddenGuardReceiptCount, 0);
+  assert.equal(defaultVisibility.hiddenGuardReceiptCount, 1);
   assert.equal(defaultVisibility.hiddenOtherReceiptCount, 0);
   assert.deepEqual(
     manualGuardHidden.items.map((item) => item.id),
@@ -1896,6 +1896,7 @@ test("filterCollaborationTranscriptItems keeps guard-only conversations visible 
   );
   assert.equal(visibility.hiddenMechanicCount, 2);
   assert.equal(visibility.hiddenGuardReceiptCount, 0);
+  assert.equal(DEFAULT_SHOW_GUARD_RECEIPTS, false);
 });
 
 test("preserveCollaborationReadbackDuringWarming keeps prior non-empty data visible", () => {

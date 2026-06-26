@@ -97796,6 +97796,53 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, browser screenshot proof, and full ORB/body
   coverage proof were not run for this bounded session-summary slice.
 
+### 2026-06-26 06:14Z - Communication transcript guard receipts hidden by default
+
+Current posture: Phase 2 / P1 interface and P9 observability now make the
+Communication transcript more conversation-first without losing guard receipts.
+The active collaboration review candidate
+`review-insight-collab-45b3e13ea61ced82-4c100ee54e60` identified visible relay
+noise in `apps.chat_ui.communication`; the UI now uses existing receipt display
+metadata to hide guard receipts by default when a substantive conversation turn
+exists.
+
+What changed:
+
+- `DEFAULT_SHOW_GUARD_RECEIPTS` is now `false`, so the Communication panel
+  defaults to hiding local-model output-guard receipts alongside auto-acks and
+  Codex driver prompts.
+- `filterCollaborationTranscriptItems` keeps guard-only streams visible as a
+  fallback, so a fully guarded exchange does not become an empty transcript.
+- Chat UI contract tests now prove mixed transcripts show the substantive
+  conversation turn while hiding audit, driver, and guard mechanics by default.
+- The manual Guard toggle remains available; this changes only the initial
+  operator default.
+
+Validation:
+
+- Focused Chat UI collaboration contract passed:
+  `node --test --experimental-strip-types src/chat/index.test.ts`.
+- Full Chat UI contract suite passed:
+  `npm run test` (`282` passing tests).
+- Chat UI production build passed:
+  `npm run build`.
+- Live relay proof using the Chat UI parser against
+  `/developer-bridge/collaboration-transcript?limit=12` returned
+  `defaultShowGuardReceipts=false`, `shown=1`, `hiddenMechanicCount=11`,
+  `hiddenAuditReceiptCount=4`, `hiddenDriverPromptCount=4`,
+  `hiddenGuardReceiptCount=3`, and the visible item was a `conversation`.
+- Local Vite console probe `http://127.0.0.1:5173/` returned HTTP `200` with
+  title `Francis Console`.
+- `git diff --check` passed.
+
+Remaining truthful gap:
+
+- This is a Communication UI display-default change only. It does not change
+  collaboration recurrence, model output guarding, memory promotion, tuning,
+  authority, raw transcript policy, or backend relay receipt creation.
+- Browser screenshot proof, `.\scripts\check.ps1`, GitHub CI, and full ORB/body
+  coverage proof were not run for this bounded UI-default slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
