@@ -884,6 +884,89 @@ export type FrancisTrustLadder = {
   governance: Record<string, unknown>;
 };
 
+export type FrancisCapabilityRequest = {
+  id: string;
+  sourceTrustLadderItemId: string;
+  sourceReviewItemId: string;
+  insightId: string;
+  createdAt: string;
+  sessionId: string;
+  turn: number;
+  topic: string;
+  needStatement: string;
+  requestedSurface: string;
+  bodySurfaceId: string;
+  knownBodySurface: boolean;
+  decision: string;
+  decisionReason: string;
+  requestedAccessMode: string;
+  grantableAccessMode: string;
+  currentAccessMode: string;
+  currentGrant: {
+    grantState: string;
+    capabilityGranted: boolean;
+    connectedToLocalModel: boolean;
+    grantedAccessMode: string;
+    denyAfterGrantSupported: boolean;
+    canDenyAfterFactForTuning: boolean;
+  };
+  requestState: string;
+  grantableNow: boolean;
+  blocked: boolean;
+  requiresOperatorReview: boolean;
+  requiresCodexReview: boolean;
+  requiresRepoTruthReview: boolean;
+  requiresSupervisedActionReview: boolean;
+  nextTrustGate: string;
+  recommendedNextAction: string;
+  stopConditions: string[];
+  reviewReadbacks: string[];
+  governance: Record<string, unknown>;
+};
+
+export type FrancisCapabilityRequests = {
+  ok: boolean;
+  mode: string;
+  surface: string;
+  items: FrancisCapabilityRequest[];
+  count: number;
+  summary: {
+    requestCount: number;
+    grantableNowCount: number;
+    blockedCount: number;
+    alreadyGrantedCount: number;
+    knownSurfaceCount: number;
+    unknownSurfaceCount: number;
+    requiresOperatorReviewCount: number;
+    stopConditionsVisible: boolean;
+    canRevokeAfterGrant: boolean;
+    grantsCapabilityAuthority: boolean;
+    grantsExecutionAuthority: boolean;
+    grantsMutationAuthority: boolean;
+    grantsApprovalAuthority: boolean;
+    grantsMemoryWriteAuthority: boolean;
+    grantsTrainingAuthority: boolean;
+  };
+  filters: Record<string, unknown>;
+  definitions: {
+    capabilityRequest: string;
+    grantableNow: string;
+    blocked: string;
+    stopConditions: string;
+  };
+  operatorControls: {
+    grantOrDenyRoute: string;
+    participantToggleRoute: string;
+    requestReadbackRoute: string;
+    clientCanBeOperatorConsole: boolean;
+    clientIsAutomaticExecutionAuthority: boolean;
+    denyAfterGrantSupported: boolean;
+    revokeAfterGrantSupported: boolean;
+  };
+  readbackCache: CollaborationReadbackCache;
+  governance: Record<string, unknown>;
+};
+
 export type CollaborationSubstrateReadinessChecklistItem = {
   id: string;
   label: string;
@@ -4066,6 +4149,99 @@ export function parseFrancisTrustLadder(raw: unknown): FrancisTrustLadder {
   };
 }
 
+export function parseFrancisCapabilityRequests(raw: unknown): FrancisCapabilityRequests {
+  const value = isRecord(raw) ? raw : {};
+  const summary = isRecord(value.summary) ? value.summary : {};
+  const definitions = isRecord(value.definitions) ? value.definitions : {};
+  const controls = isRecord(value.operator_controls) ? value.operator_controls : {};
+  return {
+    ok: safeBoolean(value.ok),
+    mode: safeString(value.mode, "unknown"),
+    surface: safeString(value.surface),
+    items: Array.isArray(value.items) ? value.items.map(parseFrancisCapabilityRequest) : [],
+    count: safeNumber(value.count),
+    summary: {
+      requestCount: safeNumber(summary.request_count),
+      grantableNowCount: safeNumber(summary.grantable_now_count),
+      blockedCount: safeNumber(summary.blocked_count),
+      alreadyGrantedCount: safeNumber(summary.already_granted_count),
+      knownSurfaceCount: safeNumber(summary.known_surface_count),
+      unknownSurfaceCount: safeNumber(summary.unknown_surface_count),
+      requiresOperatorReviewCount: safeNumber(summary.requires_operator_review_count),
+      stopConditionsVisible: safeBoolean(summary.stop_conditions_visible),
+      canRevokeAfterGrant: safeBoolean(summary.can_revoke_after_grant, true),
+      grantsCapabilityAuthority: safeBoolean(summary.grants_capability_authority),
+      grantsExecutionAuthority: safeBoolean(summary.grants_execution_authority),
+      grantsMutationAuthority: safeBoolean(summary.grants_mutation_authority),
+      grantsApprovalAuthority: safeBoolean(summary.grants_approval_authority),
+      grantsMemoryWriteAuthority: safeBoolean(summary.grants_memory_write_authority),
+      grantsTrainingAuthority: safeBoolean(summary.grants_training_authority),
+    },
+    filters: isRecord(value.filters) ? value.filters : {},
+    definitions: {
+      capabilityRequest: safeString(definitions.capability_request),
+      grantableNow: safeString(definitions.grantable_now),
+      blocked: safeString(definitions.blocked),
+      stopConditions: safeString(definitions.stop_conditions),
+    },
+    operatorControls: {
+      grantOrDenyRoute: safeString(controls.grant_or_deny_route),
+      participantToggleRoute: safeString(controls.participant_toggle_route),
+      requestReadbackRoute: safeString(controls.request_readback_route),
+      clientCanBeOperatorConsole: safeBoolean(controls.client_can_be_operator_console),
+      clientIsAutomaticExecutionAuthority: safeBoolean(controls.client_is_automatic_execution_authority),
+      denyAfterGrantSupported: safeBoolean(controls.deny_after_grant_supported, true),
+      revokeAfterGrantSupported: safeBoolean(controls.revoke_after_grant_supported, true),
+    },
+    readbackCache: parseReadbackCache(value.readback_cache),
+    governance: isRecord(value.governance) ? value.governance : {},
+  };
+}
+
+function parseFrancisCapabilityRequest(raw: unknown): FrancisCapabilityRequest {
+  const item = isRecord(raw) ? raw : {};
+  const currentGrant = isRecord(item.current_grant) ? item.current_grant : {};
+  return {
+    id: safeString(item.id),
+    sourceTrustLadderItemId: safeString(item.source_trust_ladder_item_id),
+    sourceReviewItemId: safeString(item.source_review_item_id),
+    insightId: safeString(item.insight_id),
+    createdAt: safeString(item.created_at),
+    sessionId: safeString(item.session_id),
+    turn: safeNumber(item.turn),
+    topic: safeString(item.topic),
+    needStatement: safeString(item.need_statement),
+    requestedSurface: safeString(item.requested_surface),
+    bodySurfaceId: safeString(item.body_surface_id),
+    knownBodySurface: safeBoolean(item.known_body_surface),
+    decision: safeString(item.decision),
+    decisionReason: safeString(item.decision_reason),
+    requestedAccessMode: safeString(item.requested_access_mode, "observe"),
+    grantableAccessMode: safeString(item.grantable_access_mode, "observe"),
+    currentAccessMode: safeString(item.current_access_mode, "observe"),
+    currentGrant: {
+      grantState: safeString(currentGrant.grant_state, "not_granted"),
+      capabilityGranted: safeBoolean(currentGrant.capability_granted),
+      connectedToLocalModel: safeBoolean(currentGrant.connected_to_local_model),
+      grantedAccessMode: safeString(currentGrant.granted_access_mode, "observe"),
+      denyAfterGrantSupported: safeBoolean(currentGrant.deny_after_grant_supported, true),
+      canDenyAfterFactForTuning: safeBoolean(currentGrant.can_deny_after_fact_for_tuning, true),
+    },
+    requestState: safeString(item.request_state, "unknown"),
+    grantableNow: safeBoolean(item.grantable_now),
+    blocked: safeBoolean(item.blocked),
+    requiresOperatorReview: safeBoolean(item.requires_operator_review, true),
+    requiresCodexReview: safeBoolean(item.requires_codex_review, true),
+    requiresRepoTruthReview: safeBoolean(item.requires_repo_truth_review),
+    requiresSupervisedActionReview: safeBoolean(item.requires_supervised_action_review),
+    nextTrustGate: safeString(item.next_trust_gate),
+    recommendedNextAction: safeString(item.recommended_next_action),
+    stopConditions: Array.isArray(item.stop_conditions) ? item.stop_conditions.map((entry) => safeString(entry)).filter(Boolean) : [],
+    reviewReadbacks: Array.isArray(item.review_readbacks) ? item.review_readbacks.map((entry) => safeString(entry)).filter(Boolean) : [],
+    governance: isRecord(item.governance) ? item.governance : {},
+  };
+}
+
 export function parseCollaborationSubstrateReadiness(raw: unknown): CollaborationSubstrateReadiness {
   const value = isRecord(raw) ? raw : {};
   const summary = isRecord(value.summary) ? value.summary : {};
@@ -4527,6 +4703,22 @@ export async function fetchFrancisTrustLadder(opts: {
     throw new Error(`Francis trust ladder request failed with HTTP ${response.status}.`);
   }
   return parseFrancisTrustLadder(json);
+}
+
+export async function fetchFrancisCapabilityRequests(opts: {
+  baseUrl: string;
+  limit?: number;
+  signal?: AbortSignal;
+}): Promise<FrancisCapabilityRequests> {
+  const url = new URL(`${opts.baseUrl.replace(/\/$/, "")}/developer-bridge/francis-capability-requests`);
+  url.searchParams.set("limit", String(Math.min(Math.max(opts.limit ?? 8, 1), 50)));
+  const response = await fetch(url, { method: "GET", signal: opts.signal });
+  const text = await response.text();
+  const json = text ? JSON.parse(text) : {};
+  if (!response.ok) {
+    throw new Error(`Francis capability requests request failed with HTTP ${response.status}.`);
+  }
+  return parseFrancisCapabilityRequests(json);
 }
 
 export async function fetchCollaborationSubstrateReadiness(opts: {

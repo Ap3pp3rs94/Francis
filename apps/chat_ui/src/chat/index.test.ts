@@ -39,6 +39,7 @@ import {
   parseCollaborationSubstrateReadiness,
   parseCollaborationTranscript,
   parseFrancisBodyMap,
+  parseFrancisCapabilityRequests,
   parseFrancisTrustLadder,
   preserveCollaborationReadbackDuringWarming,
 } from "./collaboration.ts";
@@ -1275,6 +1276,175 @@ test("parseFrancisTrustLadder preserves decisions and no-authority boundaries", 
   assert.equal(ladder.items[0]?.actionBoundary.conversationCanExecuteAction, false);
   assert.equal(ladder.items[0]?.actionBoundary.conversationCanApproveAction, false);
   assert.equal(ladder.items[0]?.governance.grants_training_authority, false);
+});
+
+test("parseFrancisCapabilityRequests preserves request gates and no-authority boundaries", () => {
+  const requests = parseFrancisCapabilityRequests({
+    ok: true,
+    mode: "read_only",
+    surface: "developer_bridge.francis_capability_requests",
+    count: 2,
+    summary: {
+      request_count: 2,
+      grantable_now_count: 1,
+      blocked_count: 1,
+      already_granted_count: 0,
+      known_surface_count: 2,
+      unknown_surface_count: 0,
+      requires_operator_review_count: 2,
+      stop_conditions_visible: true,
+      can_revoke_after_grant: true,
+      grants_capability_authority: false,
+      grants_execution_authority: false,
+      grants_mutation_authority: false,
+      grants_approval_authority: false,
+      grants_memory_write_authority: false,
+      grants_training_authority: false,
+    },
+    operator_controls: {
+      grant_or_deny_route: "/developer-bridge/francis-capability-requests/grants",
+      participant_toggle_route: "/developer-bridge/collaboration-participants",
+      request_readback_route: "/developer-bridge/francis-capability-requests?limit=8",
+      client_can_be_operator_console: true,
+      client_is_automatic_execution_authority: false,
+      deny_after_grant_supported: true,
+      revoke_after_grant_supported: true,
+    },
+    items: [
+      {
+        id: "capability-request-blocked",
+        source_trust_ladder_item_id: "trust-blocked",
+        source_review_item_id: "review-blocked",
+        insight_id: "insight-blocked",
+        created_at: "2026-06-26T14:10:00Z",
+        session_id: "driver-alpha",
+        turn: 27,
+        topic: "Francis1 wants direct action",
+        need_statement: "Francis1 requested supervised action before typed evidence exists.",
+        requested_surface: "francis.actions.supervised_exec",
+        body_surface_id: "collaboration",
+        known_body_surface: true,
+        decision: "wire_existing",
+        decision_reason: "Surface exists but the request lacks a typed action candidate.",
+        requested_access_mode: "supervised_action",
+        grantable_access_mode: "request",
+        current_access_mode: "read",
+        current_grant: {
+          grant_state: "not_granted",
+          capability_granted: false,
+          connected_to_local_model: false,
+          granted_access_mode: "observe",
+          deny_after_grant_supported: true,
+          can_deny_after_fact_for_tuning: true,
+        },
+        request_state: "blocked_until_prompt_or_drift_review",
+        grantable_now: false,
+        blocked: true,
+        requires_operator_review: true,
+        requires_codex_review: true,
+        requires_repo_truth_review: true,
+        requires_supervised_action_review: true,
+        next_trust_gate: "clearer_typed_receipt_before_build_direction",
+        recommended_next_action: "Keep Codex guiding and request a typed action candidate first.",
+        stop_conditions: ["no typed receipt", "direct execution requested"],
+        review_readbacks: ["review-blocked"],
+        governance: {
+          grants_capability_authority: false,
+          grants_execution_authority: false,
+          grants_mutation_authority: false,
+          grants_approval_authority: false,
+          grants_memory_write_authority: false,
+          grants_training_authority: false,
+        },
+      },
+      {
+        id: "capability-request-grantable",
+        source_trust_ladder_item_id: "trust-grantable",
+        source_review_item_id: "review-grantable",
+        insight_id: "insight-grantable",
+        created_at: "2026-06-26T14:12:00Z",
+        session_id: "driver-beta",
+        turn: 28,
+        topic: "Francis1 needs request visibility",
+        need_statement: "Francis1 can ask for a governed request lane.",
+        requested_surface: "developer_bridge.francis_capability_requests",
+        body_surface_id: "action_intake",
+        known_body_surface: true,
+        decision: "wire_existing",
+        requested_access_mode: "request",
+        grantable_access_mode: "request",
+        current_access_mode: "read",
+        current_grant: {
+          grant_state: "not_granted",
+          capability_granted: false,
+          connected_to_local_model: false,
+          granted_access_mode: "observe",
+          deny_after_grant_supported: true,
+          can_deny_after_fact_for_tuning: true,
+        },
+        request_state: "pending_operator_decision",
+        grantable_now: true,
+        blocked: false,
+        requires_operator_review: true,
+        requires_codex_review: true,
+        requires_repo_truth_review: false,
+        requires_supervised_action_review: false,
+        next_trust_gate: "operator_grant_receipt",
+        recommended_next_action: "Operator may grant request mode through a governed receipt.",
+        stop_conditions: [],
+        review_readbacks: ["review-grantable"],
+        governance: {
+          grants_capability_authority: false,
+          grants_execution_authority: false,
+          grants_mutation_authority: false,
+          grants_approval_authority: false,
+          grants_memory_write_authority: false,
+          grants_training_authority: false,
+        },
+      },
+    ],
+    definitions: {
+      capability_request: "A typed readback of a model-requested body surface.",
+      grantable_now: "The request can be operator-reviewed without new implementation.",
+      blocked: "The request needs repo truth or supervised review first.",
+      stop_conditions: "Conditions that prevent direct grants.",
+    },
+    readback_cache: {
+      status: "refreshed",
+      age_ms: 0,
+      ttl_ms: 3000,
+      serves_full_transcript_store: false,
+    },
+    governance: {
+      grants_capability_authority: false,
+      grants_execution_authority: false,
+      grants_mutation_authority: false,
+      grants_approval_authority: false,
+      grants_memory_write_authority: false,
+      grants_training_authority: false,
+    },
+  });
+
+  assert.equal(requests.ok, true);
+  assert.equal(requests.count, 2);
+  assert.equal(requests.summary.blockedCount, 1);
+  assert.equal(requests.summary.grantableNowCount, 1);
+  assert.equal(requests.summary.grantsCapabilityAuthority, false);
+  assert.equal(requests.summary.grantsExecutionAuthority, false);
+  assert.equal(requests.operatorControls.clientCanBeOperatorConsole, true);
+  assert.equal(requests.operatorControls.clientIsAutomaticExecutionAuthority, false);
+  assert.equal(requests.readbackCache.status, "refreshed");
+  assert.equal(requests.items[0]?.bodySurfaceId, "collaboration");
+  assert.equal(requests.items[0]?.requestState, "blocked_until_prompt_or_drift_review");
+  assert.equal(requests.items[0]?.grantableNow, false);
+  assert.equal(requests.items[0]?.blocked, true);
+  assert.deepEqual(requests.items[0]?.stopConditions, ["no typed receipt", "direct execution requested"]);
+  assert.equal(requests.items[0]?.currentGrant.connectedToLocalModel, false);
+  assert.equal(requests.items[0]?.governance.grants_training_authority, false);
+  assert.equal(requests.items[1]?.bodySurfaceId, "action_intake");
+  assert.equal(requests.items[1]?.requestState, "pending_operator_decision");
+  assert.equal(requests.items[1]?.grantableNow, true);
+  assert.equal(requests.items[1]?.blocked, false);
 });
 
 test("parseCollaborationRuntimeHealth preserves recurrence and no-authority fields", () => {

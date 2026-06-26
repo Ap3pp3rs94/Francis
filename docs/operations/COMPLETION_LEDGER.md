@@ -99343,6 +99343,57 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, browser UI proof, GitHub CI, and broader ORB/body
   validation remain outside this bounded slice until separately run.
 
+### 2026-06-26 15:36Z - Communication UI capability-request queue
+
+Current posture: Phase 2 / P1 interface and P9 collaboration observability now
+render the read-only Francis capability-request queue inside the Communication
+UI. The operator can watch blocked, grantable, already-granted, and
+operator-review request counts next to each typed request's current grant state,
+trust gate, Codex next action, and stop conditions. This is visibility only:
+the UI still does not grant, deny, revoke, execute, mutate, approve, write
+memory, train the model, or make Francis1/Ollama the implementation authority.
+
+What changed:
+
+- `apps/chat_ui/src/chat/collaboration.ts` now parses
+  `developer_bridge.francis_capability_requests` readbacks and fetches
+  `/developer-bridge/francis-capability-requests`.
+- `apps/chat_ui/src/App.tsx` loads that readback with the other Communication UI
+  collaboration surfaces and preserves the prior queue during short readback
+  warming windows.
+- The Communication UI now renders a scroll-bounded `Francis Capability
+  Requests` panel after the trust ladder, including blocked/grantable/granted
+  counts, no-authority status, request mode, current grant state, trust gate,
+  recommended Codex action, and stop conditions.
+- `apps/chat_ui/src/chat/index.test.ts` now covers the capability-request parser
+  contract, including a blocked supervised-action request, a grantable request
+  lane, operator-console flags, readback-cache status, and no-authority
+  governance fields.
+
+Validation:
+
+- Focused chat UI contract test passed:
+  `node --test --experimental-strip-types src/chat/index.test.ts`.
+- Chat UI production build passed:
+  `npm run build`.
+- Whitespace diff check passed:
+  `git diff --check`.
+- Direct live request readback passed:
+  `read_francis_capability_requests(limit=3)` returned `ok=true`, `count=3`,
+  `blocked_count=3`, `grantable_now_count=0`, first request state
+  `blocked_until_prompt_or_drift_review`, first trust gate
+  `clearer_typed_receipt_before_build_direction`, and all authority grants
+  false.
+
+Remaining truthful gap:
+
+- This closes the prior UI rendering gap for the request queue, but it does not
+  add operator grant/deny buttons or automatic grants.
+- Runtime/browser proof of the live panel at `http://127.0.0.1:5173/` was not
+  captured in this slice; the parser and build path are validated.
+- `.\scripts\check.ps1`, GitHub CI, broader ORB/body validation, and longer-run
+  drift resolution remain outside this bounded UI visibility slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

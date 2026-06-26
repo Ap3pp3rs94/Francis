@@ -28,6 +28,7 @@ import {
   fetchCollaborationSubstrateReadiness,
   fetchCollaborationTranscript,
   fetchFrancisBodyMap,
+  fetchFrancisCapabilityRequests,
   fetchFrancisTrustLadder,
   collaborationReviewBadge,
   collaborationReviewNextAction,
@@ -59,6 +60,7 @@ import {
   type CollaborationSubstrateReadiness,
   type CollaborationTranscript,
   type FrancisBodyMap,
+  type FrancisCapabilityRequests,
   type FrancisTrustLadder,
 } from "./chat/collaboration";
 import {
@@ -120,6 +122,7 @@ const COLLABORATION_SESSION_ITEM_LIMIT = 50;
 const COLLABORATION_REVIEW_LIMIT = 20;
 const COLLABORATION_LEARNING_LIMIT = 4;
 const FRANCIS_TRUST_LADDER_LIMIT = 8;
+const FRANCIS_CAPABILITY_REQUEST_LIMIT = 8;
 const COLLABORATION_SESSION_GAP_MS = 30 * 60 * 1000;
 
 declare global {
@@ -1169,6 +1172,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
   const [substrateReadiness, setSubstrateReadiness] = useState<CollaborationSubstrateReadiness | null>(null);
   const [bodyMap, setBodyMap] = useState<FrancisBodyMap | null>(null);
   const [trustLadder, setTrustLadder] = useState<FrancisTrustLadder | null>(null);
+  const [capabilityRequests, setCapabilityRequests] = useState<FrancisCapabilityRequests | null>(null);
   const [loading, setLoading] = useState(false);
   const [busyAgent, setBusyAgent] = useState("");
   const [error, setError] = useState("");
@@ -1197,6 +1201,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
         const [
           nextBodyMap,
           nextTrustLadder,
+          nextCapabilityRequests,
           nextTranscript,
           nextSessions,
           nextReview,
@@ -1209,6 +1214,13 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
           ),
           fetchCollaborationReadbackWithTimeout("Trust ladder", signal, (readbackSignal) =>
             fetchFrancisTrustLadder({ baseUrl: props.baseUrl, limit: FRANCIS_TRUST_LADDER_LIMIT, signal: readbackSignal }),
+          ),
+          fetchCollaborationReadbackWithTimeout("Capability requests", signal, (readbackSignal) =>
+            fetchFrancisCapabilityRequests({
+              baseUrl: props.baseUrl,
+              limit: FRANCIS_CAPABILITY_REQUEST_LIMIT,
+              signal: readbackSignal,
+            }),
           ),
           fetchCollaborationReadbackWithTimeout("Transcript", signal, (readbackSignal) =>
             fetchCollaborationTranscript({ baseUrl: props.baseUrl, limit: COLLABORATION_TRANSCRIPT_LIMIT, signal: readbackSignal }),
@@ -1244,6 +1256,11 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
             setTrustLadder(nextTrustLadder.value);
           } else {
             readbackWarnings.push(nextTrustLadder.message);
+          }
+          if (nextCapabilityRequests.ok) {
+            setCapabilityRequests((previous) => preserveCollaborationReadbackDuringWarming(previous, nextCapabilityRequests.value));
+          } else {
+            readbackWarnings.push(nextCapabilityRequests.message);
           }
           if (nextTranscript.ok) {
             setTranscript((previous) => preserveCollaborationReadbackDuringWarming(previous, nextTranscript.value));
@@ -1433,6 +1450,26 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
         item.actionBoundary.conversationCanApproveAction ||
         Boolean(item.governance.grants_execution_authority) ||
         Boolean(item.governance.grants_mutation_authority) ||
+        Boolean(item.governance.grants_memory_write_authority) ||
+        Boolean(item.governance.grants_training_authority),
+    );
+  const capabilityRequestItems = capabilityRequests?.items ?? [];
+  const capabilityRequestsUnsafeAuthority =
+    Boolean(
+      capabilityRequests?.summary.grantsCapabilityAuthority ||
+        capabilityRequests?.summary.grantsExecutionAuthority ||
+        capabilityRequests?.summary.grantsMutationAuthority ||
+        capabilityRequests?.summary.grantsApprovalAuthority ||
+        capabilityRequests?.summary.grantsMemoryWriteAuthority ||
+        capabilityRequests?.summary.grantsTrainingAuthority ||
+        capabilityRequests?.operatorControls.clientIsAutomaticExecutionAuthority,
+    ) ||
+    capabilityRequestItems.some(
+      (item) =>
+        Boolean(item.governance.grants_capability_authority) ||
+        Boolean(item.governance.grants_execution_authority) ||
+        Boolean(item.governance.grants_mutation_authority) ||
+        Boolean(item.governance.grants_approval_authority) ||
         Boolean(item.governance.grants_memory_write_authority) ||
         Boolean(item.governance.grants_training_authority),
     );
@@ -2904,6 +2941,133 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
           ) : (
             <div style={{ border: "1px solid rgba(148, 163, 184, 0.22)", borderRadius: 12, color: "#94a3b8", padding: 14 }}>
               No trust-ladder needs returned.
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <h3 style={{ fontSize: 18, margin: 0 }}>Francis Capability Requests</h3>
+          <span style={{ color: capabilityRequestsUnsafeAuthority ? "#fca5a5" : "#6ee7b7", fontSize: 13 }}>
+            {capabilityRequestItems.length} requests{collaborationCacheLabel(capabilityRequests?.readbackCache)}
+          </span>
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+          {[
+            ["blocked", capabilityRequests?.summary.blockedCount ?? 0],
+            ["grantable", capabilityRequests?.summary.grantableNowCount ?? 0],
+            ["granted", capabilityRequests?.summary.alreadyGrantedCount ?? 0],
+            ["operator review", capabilityRequests?.summary.requiresOperatorReviewCount ?? 0],
+          ].map(([label, value]) => (
+            <span
+              key={label}
+              style={{
+                background: "rgba(15, 23, 42, 0.58)",
+                border: "1px solid rgba(148, 163, 184, 0.24)",
+                borderRadius: 999,
+                color: "#cbd5e1",
+                fontSize: 12,
+                padding: "4px 8px",
+              }}
+            >
+              {label} {value}
+            </span>
+          ))}
+          <span
+            style={{
+              background: capabilityRequestsUnsafeAuthority ? "rgba(127, 29, 29, 0.28)" : "rgba(20, 83, 45, 0.24)",
+              border: `1px solid ${capabilityRequestsUnsafeAuthority ? "rgba(252, 165, 165, 0.5)" : "rgba(110, 231, 183, 0.45)"}`,
+              borderRadius: 999,
+              color: capabilityRequestsUnsafeAuthority ? "#fecaca" : "#d1fae5",
+              fontSize: 12,
+              padding: "4px 8px",
+            }}
+          >
+            no authority {boolText(!capabilityRequestsUnsafeAuthority)}
+          </span>
+        </div>
+        <div
+          style={{
+            display: "grid",
+            gap: 10,
+            gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+            marginTop: 12,
+            maxHeight: 360,
+            overflowY: "auto",
+          }}
+        >
+          {capabilityRequestItems.length ? (
+            capabilityRequestItems.map((item) => {
+              const blocked = item.blocked || item.requestState.includes("blocked") || item.requiresSupervisedActionReview;
+              const border = blocked ? "rgba(252, 165, 165, 0.48)" : item.grantableNow ? "rgba(110, 231, 183, 0.45)" : "rgba(148, 163, 184, 0.22)";
+              const badgeColor = blocked ? "#fecaca" : item.grantableNow ? "#bbf7d0" : "#cbd5e1";
+              return (
+                <article
+                  key={item.id || item.sourceReviewItemId}
+                  style={{
+                    background: blocked ? "rgba(69, 10, 10, 0.22)" : "rgba(15, 23, 42, 0.5)",
+                    border: `1px solid ${border}`,
+                    borderRadius: 12,
+                    padding: "10px 12px",
+                  }}
+                >
+                  <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "space-between" }}>
+                    <strong style={{ color: "#e2e8f0", overflowWrap: "anywhere" }}>{item.bodySurfaceId || "unknown surface"}</strong>
+                    <span style={{ color: badgeColor, fontSize: 12 }}>{item.requestState || "unknown"}</span>
+                  </div>
+                  <p style={{ color: "#cbd5e1", margin: "8px 0 0", overflowWrap: "anywhere" }}>
+                    {item.needStatement || item.topic || "No request statement returned."}
+                  </p>
+                  <dl style={{ color: "#94a3b8", display: "grid", gap: 6, margin: "8px 0 0" }}>
+                    <div>
+                      <dt>Mode</dt>
+                      <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
+                        {item.currentAccessMode || "observe"} {"->"} {item.requestedAccessMode || "observe"} / grantable{" "}
+                        {item.grantableAccessMode || "observe"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Current Grant</dt>
+                      <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
+                        {item.currentGrant.grantState || "not_granted"} / connected{" "}
+                        {boolText(item.currentGrant.connectedToLocalModel)} / capability{" "}
+                        {boolText(item.currentGrant.capabilityGranted)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Trust Gate</dt>
+                      <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{item.nextTrustGate || "review required"}</dd>
+                    </div>
+                    <div>
+                      <dt>Codex Action</dt>
+                      <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
+                        {item.recommendedNextAction || "Review the request against repo truth."}
+                      </dd>
+                    </div>
+                  </dl>
+                  <div style={{ color: "#94a3b8", display: "flex", flexWrap: "wrap", fontSize: 12, gap: 8, marginTop: 8 }}>
+                    <span>turn {item.turn || "unknown"}</span>
+                    <span>grantable {boolText(item.grantableNow)}</span>
+                    <span>operator review {boolText(item.requiresOperatorReview)}</span>
+                    <span>repo truth {boolText(item.requiresRepoTruthReview)}</span>
+                    <span>supervised action {boolText(item.requiresSupervisedActionReview)}</span>
+                  </div>
+                  {item.stopConditions.length ? (
+                    <ul style={{ color: "#cbd5e1", margin: "8px 0 0", paddingLeft: 18 }}>
+                      {item.stopConditions.slice(0, 3).map((condition) => (
+                        <li key={condition} style={{ overflowWrap: "anywhere" }}>
+                          {condition}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </article>
+              );
+            })
+          ) : (
+            <div style={{ border: "1px solid rgba(148, 163, 184, 0.22)", borderRadius: 12, color: "#94a3b8", padding: 14 }}>
+              No capability requests returned.
             </div>
           )}
         </div>
