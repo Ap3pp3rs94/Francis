@@ -96857,6 +96857,74 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, and browser proof were not run for this
   bounded backend readback slice.
 
+### 2026-06-26 04:11Z - Source-disagreement collaboration review boundary
+
+Current posture: Phase 2 / P3 governance, P9 observability, and P1 interface
+review now expose a typed boundary for the live collaboration topic "what
+source-disagreement artifact should block build direction until reviewed."
+Conflicting Codex, Francis1, Claude, or other source receipts can be surfaced as
+evidence, but the conversation cannot pick a winner or turn disagreement into
+build direction without typed Codex/operator review against repo truth.
+
+What changed:
+
+- Added `source_disagreement_boundary` to
+  `developer_bridge.collaboration_review_item`.
+- For `source_disagreement_record` items on
+  `developer_bridge.collaboration_review.items`, the boundary now records the
+  conflicting source receipt ids, blocks build direction, requires a typed
+  review artifact, and requires Codex/operator review plus repo-truth review.
+- The boundary denies conversation winner selection, direct resolution,
+  execution authority, mutation authority, approval authority, memory-write
+  authority, training authority, capability authority, and build-direction
+  authority.
+- Non-source-disagreement review items receive authority-denying defaults and an
+  empty proof checklist so ordinary collaboration review items do not imply this
+  specific disagreement gate.
+- Sent bounded Codex -> Claude relay receipt
+  `collab-81d688f9467a8abd-cb40110a2f2a` to acknowledge Claude as external
+  guidance, keep Francis as the subject, and point disagreement handling back to
+  repo-truth review plus typed receipts.
+
+Validation:
+
+- Focused developer-bridge test passed:
+  `python -m pytest tests/test_developer_bridge.py::test_collaboration_review_projects_generic_historical_topics_to_concrete_surfaces`.
+- Ruff check passed:
+  `python -m ruff check src\francis\developer_bridge\collaboration_review.py tests\test_developer_bridge.py`.
+- Ruff format check passed after formatting the touched test file:
+  `python -m ruff format --check src\francis\developer_bridge\collaboration_review.py tests\test_developer_bridge.py`.
+- Targeted mypy passed:
+  `python -m mypy src\francis\developer_bridge\collaboration_review.py`.
+- Compileall passed:
+  `python -m compileall src\francis\developer_bridge\collaboration_review.py`.
+- Live API readback after restart showed
+  `source_disagreement_boundary.applies=true`,
+  `blocks_build_direction=true`, `requires_conflicting_sources=true`,
+  `conflicting_source_count=2`, Codex and Francis1 receipt ids,
+  `conversation_can_choose_winner=false`,
+  `conversation_can_execute_resolution=false`,
+  `requires_codex_or_operator_review=true`,
+  `requires_repo_truth_review=true`, and all no-authority flags false for
+  review item `insight-collab-eeb692a7b16bdc8b-af549c110e30`.
+- Runtime health after API restart reported `status=healthy`,
+  `helper_count=3`, prompt budget `ok`, turn `1610`, recurrence `turn_gap`,
+  and all three collaboration participants enabled.
+- `/developer-bridge/collaboration-transcript?source_agent=codex&target_agent=claude`
+  showed relay `collab-81d688f9467a8abd-cb40110a2f2a` as operator-visible and
+  queued.
+
+Remaining truthful gap:
+
+- This is a review/readback contract. It does not decide which source is right,
+  apply a resolution, execute actions, approve actions, mutate files, write
+  memory, train a model, grant capability authority, or bypass the typed review
+  artifact requirement.
+- Source disagreement remains a build-direction blocker until conflicting
+  source receipts and the repo surface are reviewed.
+- `.\scripts\check.ps1`, GitHub CI, and browser proof were not run for this
+  bounded backend readback slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

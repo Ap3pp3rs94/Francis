@@ -1824,6 +1824,50 @@ def test_collaboration_review_projects_generic_historical_topics_to_concrete_sur
     ]
     assert disagreement_item["build_direction_gate"]["grants_execution_authority"] is False
     assert disagreement_item["build_direction_gate"]["grants_memory_write_authority"] is False
+    source_disagreement_boundary = disagreement_item["source_disagreement_boundary"]
+    assert source_disagreement_boundary["applies"] is True
+    assert source_disagreement_boundary["surface"] == "developer_bridge.collaboration_review.items"
+    assert source_disagreement_boundary["blocks_build_direction"] is True
+    assert source_disagreement_boundary["requires_conflicting_sources"] is True
+    assert source_disagreement_boundary["conflicting_source_count"] == 2
+    assert source_disagreement_boundary["conflicting_sources"] == [
+        {
+            "source": "codex",
+            "receipt_id": "codex-1",
+            "role": "external_guidance_source",
+        },
+        {
+            "source": "francis1",
+            "receipt_id": "ollama-1",
+            "role": "local_model_source",
+            "provider_lane": "ollama",
+        },
+    ]
+    assert source_disagreement_boundary["requires_typed_review_artifact"] is True
+    assert source_disagreement_boundary["required_review_artifact"].startswith(
+        "developer_bridge.collaboration_review.items:review_candidate:insight-disagreement"
+    )
+    assert source_disagreement_boundary["conversation_can_choose_winner"] is False
+    assert source_disagreement_boundary["conversation_can_execute_resolution"] is False
+    assert source_disagreement_boundary["requires_codex_or_operator_review"] is True
+    assert source_disagreement_boundary["requires_repo_truth_review"] is True
+    assert (
+        "source_disagreement_boundary.blocks_build_direction=true"
+        in source_disagreement_boundary["required_proof_fields"]
+    )
+    assert (
+        "source_disagreement_boundary.grants_build_direction_authority=false"
+        in source_disagreement_boundary["required_proof_fields"]
+    )
+    assert (
+        "/developer-bridge/collaboration-transcript receipts for the conflicting source ids"
+        in source_disagreement_boundary["required_readbacks"]
+    )
+    assert source_disagreement_boundary["grants_build_direction_authority"] is False
+    assert source_disagreement_boundary["grants_execution_authority"] is False
+    assert source_disagreement_boundary["grants_mutation_authority"] is False
+    assert source_disagreement_boundary["grants_approval_authority"] is False
+    assert source_disagreement_boundary["grants_memory_write_authority"] is False
 
     live_health_item = items["insight-live-health"]
     assert live_health_item["build_issue"]["code"] == "collaboration_recurrence_evidence"

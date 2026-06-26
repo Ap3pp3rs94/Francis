@@ -68,6 +68,10 @@ def read_collaboration_review(*, limit: int = 10, session_id: str = "") -> dict[
                 "Typed proof checklist for local-model action-readiness claims, requiring runtime advice-only "
                 "proof before model output can be discussed as more than advisory text."
             ),
+            "source_disagreement_boundary": (
+                "Typed proof checklist for collaboration items where Codex, Francis1, Claude, or another "
+                "source disagrees, blocking build direction until conflicting source receipts are reviewed."
+            ),
             "capability_exposure_boundary": (
                 "Typed proof checklist for body-map collaboration items, separating visibility of Francis body "
                 "surfaces from operator-granted capability use."
@@ -247,6 +251,12 @@ def _review_item(insight: dict[str, object]) -> dict[str, object]:
         "local_model_advice_only_boundary": _local_model_advice_only_boundary(
             build_issue=build_issue,
             concrete_surface=concrete_surface,
+        ),
+        "source_disagreement_boundary": _source_disagreement_boundary(
+            build_issue=build_issue,
+            source=source,
+            concrete_surface=concrete_surface,
+            review_artifact=review_artifact,
         ),
         "capability_exposure_boundary": _capability_exposure_boundary(
             build_issue=build_issue,
@@ -572,6 +582,71 @@ def _local_model_advice_only_boundary(*, build_issue: dict[str, object], concret
         "next_codex_action": (
             "Inspect latest_local_model_response.advice_only_proof and the review action_boundary before any "
             "Francis action-readiness claim based on local-model output."
+        ),
+    }
+
+
+def _source_disagreement_boundary(
+    *,
+    build_issue: dict[str, object],
+    source: dict[str, object],
+    concrete_surface: str,
+    review_artifact: str,
+) -> dict[str, object]:
+    code = _bounded_text(build_issue.get("code"), limit=120)
+    applies = code == "source_disagreement_record"
+    conflicting_sources = _conflicting_source_receipts(source) if applies else []
+    base: dict[str, object] = {
+        "applies": applies,
+        "surface": concrete_surface,
+        "blocks_build_direction": applies,
+        "requires_conflicting_sources": applies,
+        "conflicting_source_count": len(conflicting_sources),
+        "conflicting_sources": conflicting_sources,
+        "requires_typed_review_artifact": applies,
+        "required_review_artifact": review_artifact if applies else "",
+        "conversation_can_choose_winner": False,
+        "conversation_can_execute_resolution": False,
+        "requires_codex_or_operator_review": True,
+        "requires_repo_truth_review": True,
+        "grants_build_direction_authority": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "grants_approval_authority": False,
+        "grants_memory_write_authority": False,
+        "grants_training_authority": False,
+        "grants_capability_authority": False,
+    }
+    if not applies:
+        return {
+            **base,
+            "required_proof_fields": [],
+            "required_readbacks": [],
+            "validation_tests": [],
+            "next_codex_action": "Use build_direction_gate for non-disagreement review items.",
+        }
+    return {
+        **base,
+        "required_proof_fields": [
+            "source_disagreement_boundary.blocks_build_direction=true",
+            "source_disagreement_boundary.conflicting_sources[].source",
+            "source_disagreement_boundary.conflicting_sources[].receipt_id",
+            "source_disagreement_boundary.required_review_artifact",
+            "source_disagreement_boundary.conversation_can_choose_winner=false",
+            "source_disagreement_boundary.grants_build_direction_authority=false",
+            "source_disagreement_boundary.grants_execution_authority=false",
+        ],
+        "required_readbacks": [
+            "/developer-bridge/collaboration-review item.source_disagreement_boundary",
+            "/developer-bridge/collaboration-review item.build_direction_gate.conflicting_sources",
+            "/developer-bridge/collaboration-transcript receipts for the conflicting source ids",
+        ],
+        "validation_tests": [
+            "tests/test_developer_bridge.py::test_collaboration_review_projects_generic_historical_topics_to_concrete_surfaces",
+        ],
+        "next_codex_action": (
+            "Review the conflicting source receipts and repo surface before using the disagreement as build "
+            "direction or recording a resolution."
         ),
     }
 
