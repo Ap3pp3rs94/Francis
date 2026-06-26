@@ -5003,6 +5003,95 @@ def test_ollama_participant_rewrites_clarification_dependency_after_current_arti
     assert "Model output guard replaced a known drift reply" in response["context"]
 
 
+def test_ollama_participant_rewrites_stale_repository_integrity_gap_replay(
+    tmp_path,
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+    submit_collaboration_prompt(
+        source_agent="codex",
+        target_agent="ollama",
+        objective="Current action-boundary artifact prompt",
+        prompt=(
+            "Francis1 collab turn 190. Topic: which governance gate must be visible when model advice proposes "
+            "action. Reply: issue/gap/risk; artifact Codex inspects. Current artifact: "
+            "developer_bridge.collaboration_review.action_boundary. Prior check: Review candidate insight-live: "
+            "surface=developer_bridge.collaboration_review.action_boundary; verified=existing; "
+            "build_or_wire=false. Codex response: I am inspecting that surface before edits; continue from it, "
+            "do not answer stale repository-integrity or action-readiness topics."
+        ),
+    )
+
+    def fake_generate(_prompt: str) -> str:
+        return (
+            "My current gap is the lack of explicit documentation on how to prove local-model repository "
+            "integrity. Artifact: ollama participant and action-readiness receipts."
+        )
+
+    monkeypatch.setattr("francis.developer_bridge.ollama_participant.generate", fake_generate)
+
+    result = ollama_respond_once(cooldown_seconds=0)
+
+    assert result["status"] == "responded"
+    output_guard = result["execution_trace"]["output_guard"]
+    assert output_guard["status"] == "drift_rewritten"
+    assert output_guard["verified_surface"] == "developer_bridge.collaboration_review.action_boundary"
+    assert output_guard["detected_terms"] == ["stale_repository_integrity_gap_replay"]
+    transcript = read_collaboration_transcript(source_agent="ollama", target_agent="codex")
+    assert transcript["count"] == 1
+    response = transcript["items"][0]
+    assert "Francis1 output guard fallback" in response["prompt"]
+    assert "stale_repository_integrity_gap_replay" in response["prompt"]
+    assert "developer_bridge.collaboration_review.action_boundary" in response["prompt"]
+    assert "Issue/gap/risk: model advice that proposes action must expose action_boundary" in response["prompt"]
+    assert "execute=false" in response["prompt"]
+    assert "approve=false" in response["prompt"]
+    assert "local-model repository integrity" not in response["prompt"]
+    assert "ollama participant and action-readiness receipts" not in response["prompt"]
+
+
+def test_ollama_participant_rewrites_stale_repository_integrity_operator_replay(
+    tmp_path,
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+    submit_operator_collaboration_message(
+        message=(
+            "Operator update: the live conversation panel now has the chat composer attached to the watched "
+            "conversation. Reply once with one concrete next thing needed for Francis embodiment using existing "
+            "surfaces only; no execution, mutation, approval, training, or memory-promotion authority is granted."
+        ),
+        target_agents=["ollama"],
+        actor="chat_ui.operator",
+    )
+
+    def fake_generate(_prompt: str) -> str:
+        return (
+            "My current gap is the lack of explicit documentation on how to prove local-model repository "
+            "integrity. Artifact: ollama participant and action-readiness receipts."
+        )
+
+    monkeypatch.setattr("francis.developer_bridge.ollama_participant.generate", fake_generate)
+
+    result = ollama_respond_once(cooldown_seconds=0, source_agent="operator")
+
+    assert result["status"] == "responded"
+    output_guard = result["execution_trace"]["output_guard"]
+    assert output_guard["status"] == "drift_rewritten"
+    assert output_guard["source_has_verified_surface"] is False
+    assert output_guard["verified_surface"] == "developer_bridge.collaboration_operator_message"
+    assert output_guard["detected_terms"] == ["stale_repository_integrity_gap_replay"]
+    transcript = read_collaboration_transcript(source_agent="ollama", target_agent="operator")
+    assert transcript["count"] == 1
+    response = transcript["items"][0]
+    assert "Francis1 output guard fallback" in response["prompt"]
+    assert "after the source prompt asked for a different current topic" in response["prompt"]
+    assert "developer_bridge.collaboration_operator_message" in response["prompt"]
+    assert "operator messages should stay bounded relay receipts" in response["prompt"]
+    assert "local-model repository integrity" not in response["prompt"]
+    assert "ollama participant and action-readiness receipts" not in response["prompt"]
+
+
 def test_ollama_participant_rewrites_protocol_wrapper_next_step_reply(
     tmp_path,
     monkeypatch,

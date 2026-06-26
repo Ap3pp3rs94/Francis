@@ -99626,6 +99626,77 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, broader ORB/body validation, and longer-run
   collaboration drift resolution remain outside this bounded drift-guard slice.
 
+### 2026-06-26 17:26Z - Attached current-conversation chat shell and repository-integrity replay guard
+
+Current posture: Phase 2 / P1 operator interface, P3 governance, and P9
+collaboration observability now keep the operator's chat input attached to the
+watched Live Conversation panel while preserving relay receipts, transcript
+scrolling, no-authority handoffs, and technical receipt disclosure. The live
+Francis1/Ollama output guard also catches the repeated stale
+`local-model repository integrity` gap when Codex has already supplied a
+current artifact.
+
+What changed:
+
+- `apps/chat_ui/src/App.tsx` removed the separate top-level Operator Message
+  card and folds the same governed target selector, textarea, and send action
+  into the Live Conversation shell under the scrollable transcript.
+- The Live Conversation panel now uses a single chat-like surface with a header,
+  bounded scroll region, operator-aligned message bubbles, and a docked composer
+  that writes through the existing operator relay path.
+- `src/francis/developer_bridge/ollama_participant.py` now detects stale
+  repository-integrity replay when the source prompt names a current artifact
+  or when a governed operator message asks for a different current topic.
+- Operator-message guard fallbacks now name
+  `developer_bridge.collaboration_operator_message` instead of pretending the
+  operator supplied a Codex-verified artifact.
+- `tests/test_developer_bridge.py` proves the stale repository-integrity model
+  reply is replaced with a no-authority output-guard receipt tied back to
+  `developer_bridge.collaboration_review.action_boundary`, and separately
+  proves the same stale reply is rewritten on the operator-message path.
+
+Validation:
+
+- Focused Francis1 guard tests passed:
+  `python -m pytest tests/test_developer_bridge.py::test_ollama_participant_rewrites_stale_repository_integrity_gap_replay tests/test_developer_bridge.py::test_ollama_participant_rewrites_stale_repository_integrity_operator_replay tests/test_developer_bridge.py::test_ollama_participant_rewrites_clarification_dependency_after_current_artifact tests/test_developer_bridge.py::test_ollama_participant_rewrites_stale_substrate_replay_on_review_receipt_topic -q`.
+- Python lint, formatting, and compile checks passed:
+  `python -m ruff check src/francis/developer_bridge/ollama_participant.py tests/test_developer_bridge.py`,
+  `python -m ruff format --check src/francis/developer_bridge/ollama_participant.py tests/test_developer_bridge.py`,
+  and `python -m compileall -q src/francis/developer_bridge/ollama_participant.py`.
+- Chat UI contract tests and production build passed:
+  `node --test --experimental-strip-types src/chat/index.test.ts` with 30 tests
+  and `npm run build`.
+- Whitespace diff check passed: `git diff --check`.
+- Runtime was restarted with the API, Vite UI, communication runtime supervisor,
+  and a visible PowerShell 7 follow window. `http://127.0.0.1:5173/` returned
+  HTTP 200; `http://127.0.0.1:8000/docs` returned HTTP 200.
+- Live runtime readback reported `ok=true`, `status=healthy`, `desired_count=5`,
+  `helper_count=5`, `effective_workers=5`, `turn_count=2`, and
+  `recurrence_state=waiting_for_ollama`.
+- The first restarted Francis1/Ollama response was rewritten as
+  `stale_repository_integrity_gap_replay` for the current Communication UI
+  artifact instead of repeating the stale raw gap.
+- A governed operator message was written to Codex, Claude, and Ollama through
+  the existing operator relay path; Codex acknowledged the operator relay.
+- After the final guard reload, the driver-side Codex-to-Ollama path again
+  rewrote stale repository-integrity replay against
+  `developer_bridge.collaboration_review.items`.
+
+Remaining truthful gap:
+
+- This is a UI and output-guard wiring slice, not model training, memory
+  promotion, broad Francis embodiment, or a new authority grant.
+- The operator message was appended for all three participants, but external
+  Claude still depends on the connected Claude client being available.
+- The local operator-to-Ollama lane produced one stale reply before the final
+  guard reload. The final code path is covered by focused tests, but the fresh
+  post-reload operator message did not receive a new local model reply during
+  the validation window. That pickup delay needs a separate bounded runtime
+  follow-up before claiming all operator broadcasts get immediate local model
+  responses.
+- `.\scripts\check.ps1`, GitHub CI, broader ORB/body validation, and longer-run
+  collaboration drift resolution remain outside this bounded slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

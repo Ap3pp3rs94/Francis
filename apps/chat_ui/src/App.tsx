@@ -1715,107 +1715,6 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
 
       <div
         style={{
-          background: "rgba(8, 15, 26, 0.76)",
-          border: "1px solid rgba(125, 211, 252, 0.34)",
-          borderRadius: 14,
-          marginTop: 18,
-          padding: 16,
-        }}
-      >
-        <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "space-between" }}>
-          <div style={{ minWidth: 0 }}>
-            <h3 style={{ fontSize: 20, margin: 0 }}>Operator Message</h3>
-            <p style={{ color: "#94a3b8", margin: "6px 0 0" }}>Receipt-backed / no authority grant</p>
-          </div>
-          <span style={{ color: "#67e8f9", fontSize: 13 }}>operator -&gt; relay</span>
-        </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 12 }}>
-          {COLLABORATION_OPERATOR_TARGETS.map((target) => {
-            const agent = agentById.get(target.id);
-            const enabled = agent?.enabled ?? true;
-            const checked = enabled && operatorTargets.includes(target.id);
-            return (
-              <label
-                key={target.id}
-                style={{
-                  alignItems: "center",
-                  background: checked ? "rgba(14, 116, 144, 0.24)" : "rgba(15, 23, 42, 0.58)",
-                  border: `1px solid ${checked ? "rgba(103, 232, 249, 0.42)" : "rgba(148, 163, 184, 0.22)"}`,
-                  borderRadius: 10,
-                  color: enabled ? "#e2e8f0" : "#94a3b8",
-                  display: "flex",
-                  gap: 8,
-                  padding: "7px 10px",
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  disabled={!enabled || operatorMessageSending}
-                  onChange={(event) => toggleOperatorTarget(target.id, event.currentTarget.checked)}
-                />
-                <span>{target.label}</span>
-                <span style={{ color: enabled ? "#6ee7b7" : "#fca5a5", fontSize: 12 }}>{enabled ? "enabled" : "disabled"}</span>
-              </label>
-            );
-          })}
-        </div>
-        <textarea
-          value={operatorMessage}
-          onChange={(event) => setOperatorMessage(event.currentTarget.value)}
-          placeholder="Message Codex, Claude, and Francis1 through the governed relay..."
-          rows={3}
-          style={{
-            background: "rgba(2, 6, 23, 0.74)",
-            border: "1px solid rgba(148, 163, 184, 0.28)",
-            borderRadius: 10,
-            color: "#e2e8f0",
-            marginTop: 12,
-            padding: 12,
-            resize: "vertical",
-            width: "100%",
-          }}
-        />
-        <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "space-between", marginTop: 10 }}>
-          <div style={{ color: "#94a3b8", fontSize: 13 }}>
-            {selectedOperatorTargets.length ? `targets ${selectedOperatorTargets.join(", ")}` : "select at least one enabled target"}
-          </div>
-          <button
-            type="button"
-            disabled={operatorMessageSending || !operatorMessage.trim() || !selectedOperatorTargets.length}
-            onClick={sendOperatorMessage}
-            style={{
-              background: operatorMessage.trim() && selectedOperatorTargets.length ? "#67e8f9" : "rgba(148, 163, 184, 0.2)",
-              border: 0,
-              borderRadius: 10,
-              color: operatorMessage.trim() && selectedOperatorTargets.length ? "#083344" : "#94a3b8",
-              cursor: operatorMessageSending || !operatorMessage.trim() || !selectedOperatorTargets.length ? "not-allowed" : "pointer",
-              fontWeight: 800,
-              padding: "9px 13px",
-            }}
-          >
-            {operatorMessageSending ? "Sending..." : "Send"}
-          </button>
-        </div>
-        {operatorMessageResult ? (
-          <div
-            style={{
-              background: "rgba(20, 83, 45, 0.2)",
-              border: "1px solid rgba(110, 231, 183, 0.38)",
-              borderRadius: 10,
-              color: "#d1fae5",
-              marginTop: 10,
-              overflowWrap: "anywhere",
-              padding: "8px 10px",
-            }}
-          >
-            {operatorMessageResult}
-          </div>
-        ) : null}
-      </div>
-
-      <div
-        style={{
           background:
             learningGuardProof.tone === "blocked" ? "rgba(69, 10, 10, 0.26)" : "rgba(8, 47, 73, 0.28)",
           border: `1px solid ${
@@ -2747,156 +2646,189 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
             border: "1px solid rgba(103, 232, 249, 0.32)",
             borderRadius: 12,
             marginTop: 12,
-            padding: 12,
+            overflow: "hidden",
           }}
         >
-          <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "space-between" }}>
-            <strong style={{ color: "#e2e8f0" }}>Message Current Conversation</strong>
-            <span style={{ color: "#94a3b8", fontSize: 12 }}>{followLatest ? "Live" : "Archived session selected"}</span>
-          </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
-            {COLLABORATION_OPERATOR_TARGETS.map((target) => {
-              const agent = agentById.get(target.id);
-              const enabled = agent?.enabled ?? true;
-              const checked = enabled && operatorTargets.includes(target.id);
-              return (
-                <label
-                  key={`live-composer-${target.id}`}
-                  style={{
-                    alignItems: "center",
-                    background: checked ? "rgba(14, 116, 144, 0.24)" : "rgba(15, 23, 42, 0.58)",
-                    border: `1px solid ${checked ? "rgba(103, 232, 249, 0.42)" : "rgba(148, 163, 184, 0.22)"}`,
-                    borderRadius: 10,
-                    color: enabled ? "#e2e8f0" : "#94a3b8",
-                    display: "flex",
-                    gap: 7,
-                    padding: "6px 9px",
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    disabled={!enabled || operatorMessageSending}
-                    onChange={(event) => toggleOperatorTarget(target.id, event.currentTarget.checked)}
-                  />
-                  <span>{target.label}</span>
-                </label>
-              );
-            })}
-          </div>
-          <textarea
-            value={operatorMessage}
-            onChange={(event) => setOperatorMessage(event.currentTarget.value)}
-            placeholder="Message Codex, Claude, and Francis1..."
-            rows={3}
+          <div
             style={{
-              background: "rgba(2, 6, 23, 0.82)",
-              border: "1px solid rgba(148, 163, 184, 0.28)",
-              borderRadius: 10,
-              color: "#e2e8f0",
-              marginTop: 10,
-              padding: 12,
-              resize: "vertical",
-              width: "100%",
+              alignItems: "center",
+              borderBottom: "1px solid rgba(148, 163, 184, 0.18)",
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 10,
+              justifyContent: "space-between",
+              padding: "10px 12px",
             }}
-          />
-          <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "space-between", marginTop: 10 }}>
-            <span style={{ color: "#94a3b8", fontSize: 13 }}>
-              {selectedOperatorTargets.length ? `targets ${selectedOperatorTargets.join(", ")}` : "select at least one enabled target"}
+          >
+            <strong style={{ color: "#e2e8f0" }}>Current Conversation</strong>
+            <span style={{ color: followLatest ? "#67e8f9" : "#cbd5e1", fontSize: 12 }}>
+              {followLatest ? "Live" : "Archived session selected"}
             </span>
-            <button
-              type="button"
-              disabled={operatorMessageSending || !operatorMessage.trim() || !selectedOperatorTargets.length}
-              onClick={sendOperatorMessage}
-              style={{
-                background: operatorMessage.trim() && selectedOperatorTargets.length ? "#67e8f9" : "rgba(148, 163, 184, 0.2)",
-                border: 0,
-                borderRadius: 10,
-                color: operatorMessage.trim() && selectedOperatorTargets.length ? "#083344" : "#94a3b8",
-                cursor: operatorMessageSending || !operatorMessage.trim() || !selectedOperatorTargets.length ? "not-allowed" : "pointer",
-                fontWeight: 800,
-                padding: "9px 13px",
-              }}
-            >
-              {operatorMessageSending ? "Sending..." : "Send"}
-            </button>
           </div>
-          {operatorMessageResult ? (
-            <p style={{ color: "#d1fae5", margin: "8px 0 0", overflowWrap: "anywhere" }}>{operatorMessageResult}</p>
-          ) : null}
-        </div>
-        <div
-          ref={liveTranscriptScrollRef}
-          style={{
-            display: "grid",
-            gap: 10,
-            marginTop: 12,
-            maxHeight: 520,
-            minHeight: liveTranscriptItems.length ? 260 : 0,
-            overflowY: "auto",
-            paddingRight: 4,
-          }}
-        >
-          {liveTranscriptItems.length ? (
-            liveTranscriptItems.map((item) => {
-              const display = formatCollaborationRelayMessage(item);
-              return (
-                <article
-                  key={`live-message-${item.id}`}
-                  style={{
-                    background: "rgba(15, 23, 42, 0.58)",
-                    border: "1px solid rgba(148, 163, 184, 0.22)",
-                    borderRadius: 12,
-                    padding: "12px 14px",
-                  }}
-                >
-                  <div style={{ color: "#93c5fd", display: "flex", flexWrap: "wrap", fontSize: 13, gap: 10 }}>
-                    <span>{collaborationDirectionText(item)}</span>
-                    <span>{collaborationTimeText(item)}</span>
-                    <span>{collaborationRelayToneText(display)}</span>
-                    {isCollaborationAuditReceipt(item) ? <span>audit ack</span> : null}
-                    {display.compacted ? <span>compact receipt</span> : null}
-                  </div>
-                  <div
+          <div
+            ref={liveTranscriptScrollRef}
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 10,
+              maxHeight: 520,
+              minHeight: liveTranscriptItems.length ? 320 : 180,
+              overflowY: "auto",
+              padding: 12,
+            }}
+          >
+            {liveTranscriptItems.length ? (
+              liveTranscriptItems.map((item) => {
+                const display = formatCollaborationRelayMessage(item);
+                const fromOperator = item.sourceAgent === "operator";
+                return (
+                  <article
+                    key={`live-message-${item.id}`}
                     style={{
-                      borderLeft: `3px solid ${
-                        display.tone === "guard"
-                          ? "#fbbf24"
-                          : display.tone === "audit"
-                            ? "#94a3b8"
-                            : display.tone === "driver"
-                              ? "#67e8f9"
-                              : "#6ee7b7"
-                      }`,
-                      marginTop: 10,
-                      paddingLeft: 10,
+                      alignSelf: fromOperator ? "flex-end" : "flex-start",
+                      background: fromOperator ? "rgba(14, 116, 144, 0.26)" : "rgba(15, 23, 42, 0.68)",
+                      border: `1px solid ${fromOperator ? "rgba(103, 232, 249, 0.38)" : "rgba(148, 163, 184, 0.22)"}`,
+                      borderRadius: 12,
+                      maxWidth: "min(760px, 94%)",
+                      padding: "12px 14px",
+                      width: "fit-content",
                     }}
                   >
-                    <div style={{ color: "#a7f3d0", fontSize: 12, fontWeight: 700, textTransform: "uppercase" }}>
-                      {collaborationConversationLayerText(display)}
+                    <div style={{ color: fromOperator ? "#a5f3fc" : "#93c5fd", display: "flex", flexWrap: "wrap", fontSize: 13, gap: 10 }}>
+                      <span>{collaborationDirectionText(item)}</span>
+                      <span>{collaborationTimeText(item)}</span>
+                      <span>{collaborationRelayToneText(display)}</span>
+                      {isCollaborationAuditReceipt(item) ? <span>audit ack</span> : null}
+                      {display.compacted ? <span>compact receipt</span> : null}
                     </div>
-                    <p style={{ color: "#e2e8f0", margin: "5px 0 0", overflowWrap: "anywhere", whiteSpace: "pre-wrap" }}>
-                      {display.conversationText || display.summary}
-                    </p>
-                  </div>
-                  {display.technicalText ? (
-                    <details style={{ color: "#94a3b8", fontSize: 13, marginTop: 10 }}>
-                      <summary style={{ cursor: "pointer" }}>Technical receipt</summary>
-                      <p style={{ color: "#94a3b8", margin: "8px 0 0", overflowWrap: "anywhere", whiteSpace: "pre-wrap" }}>
-                        {display.technicalText}
+                    <div
+                      style={{
+                        borderLeft: `3px solid ${
+                          display.tone === "guard"
+                            ? "#fbbf24"
+                            : display.tone === "audit"
+                              ? "#94a3b8"
+                              : display.tone === "driver"
+                                ? "#67e8f9"
+                                : "#6ee7b7"
+                        }`,
+                        marginTop: 10,
+                        paddingLeft: 10,
+                      }}
+                    >
+                      <div style={{ color: "#a7f3d0", fontSize: 12, fontWeight: 700, textTransform: "uppercase" }}>
+                        {collaborationConversationLayerText(display)}
+                      </div>
+                      <p style={{ color: "#e2e8f0", margin: "5px 0 0", overflowWrap: "anywhere", whiteSpace: "pre-wrap" }}>
+                        {display.conversationText || display.summary}
                       </p>
-                    </details>
-                  ) : null}
-                </article>
-              );
-            })
-          ) : (
-            <div style={{ border: "1px solid rgba(148, 163, 184, 0.22)", borderRadius: 12, color: "#94a3b8", padding: 14 }}>
-              {transcriptItems.length && transcriptVisibility.hiddenMechanicCount
-                ? `No conversation entries visible. ${transcriptVisibility.hiddenMechanicCount} relay mechanics hidden by display metadata.`
-                : "No relay transcript entries returned."}
+                    </div>
+                    {display.technicalText ? (
+                      <details style={{ color: "#94a3b8", fontSize: 13, marginTop: 10 }}>
+                        <summary style={{ cursor: "pointer" }}>Technical receipt</summary>
+                        <p style={{ color: "#94a3b8", margin: "8px 0 0", overflowWrap: "anywhere", whiteSpace: "pre-wrap" }}>
+                          {display.technicalText}
+                        </p>
+                      </details>
+                    ) : null}
+                  </article>
+                );
+              })
+            ) : (
+              <div style={{ border: "1px solid rgba(148, 163, 184, 0.22)", borderRadius: 12, color: "#94a3b8", padding: 14 }}>
+                {transcriptItems.length && transcriptVisibility.hiddenMechanicCount
+                  ? `No conversation entries visible. ${transcriptVisibility.hiddenMechanicCount} relay mechanics hidden by display metadata.`
+                  : "No relay transcript entries returned."}
+              </div>
+            )}
+          </div>
+          <div
+            style={{
+              background: "rgba(8, 15, 26, 0.88)",
+              borderTop: "1px solid rgba(148, 163, 184, 0.18)",
+              padding: 12,
+            }}
+          >
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {COLLABORATION_OPERATOR_TARGETS.map((target) => {
+                const agent = agentById.get(target.id);
+                const enabled = agent?.enabled ?? true;
+                const checked = enabled && operatorTargets.includes(target.id);
+                return (
+                  <label
+                    key={`live-composer-${target.id}`}
+                    style={{
+                      alignItems: "center",
+                      background: checked ? "rgba(14, 116, 144, 0.24)" : "rgba(15, 23, 42, 0.58)",
+                      border: `1px solid ${checked ? "rgba(103, 232, 249, 0.42)" : "rgba(148, 163, 184, 0.22)"}`,
+                      borderRadius: 10,
+                      color: enabled ? "#e2e8f0" : "#94a3b8",
+                      display: "flex",
+                      gap: 7,
+                      padding: "6px 9px",
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={!enabled || operatorMessageSending}
+                      onChange={(event) => toggleOperatorTarget(target.id, event.currentTarget.checked)}
+                    />
+                    <span>{target.label}</span>
+                  </label>
+                );
+              })}
             </div>
-          )}
+            <textarea
+              value={operatorMessage}
+              onChange={(event) => setOperatorMessage(event.currentTarget.value)}
+              placeholder="Message Codex, Claude, and Francis1..."
+              rows={3}
+              style={{
+                background: "rgba(2, 6, 23, 0.82)",
+                border: "1px solid rgba(148, 163, 184, 0.28)",
+                borderRadius: 10,
+                color: "#e2e8f0",
+                marginTop: 10,
+                padding: 12,
+                resize: "vertical",
+                width: "100%",
+              }}
+            />
+            <div
+              style={{
+                alignItems: "center",
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 10,
+                justifyContent: "space-between",
+                marginTop: 10,
+              }}
+            >
+              <span style={{ color: "#94a3b8", fontSize: 13 }}>
+                {selectedOperatorTargets.length ? `targets ${selectedOperatorTargets.join(", ")}` : "select at least one enabled target"}
+              </span>
+              <button
+                type="button"
+                disabled={operatorMessageSending || !operatorMessage.trim() || !selectedOperatorTargets.length}
+                onClick={sendOperatorMessage}
+                style={{
+                  background: operatorMessage.trim() && selectedOperatorTargets.length ? "#67e8f9" : "rgba(148, 163, 184, 0.2)",
+                  border: 0,
+                  borderRadius: 10,
+                  color: operatorMessage.trim() && selectedOperatorTargets.length ? "#083344" : "#94a3b8",
+                  cursor: operatorMessageSending || !operatorMessage.trim() || !selectedOperatorTargets.length ? "not-allowed" : "pointer",
+                  fontWeight: 800,
+                  padding: "9px 13px",
+                }}
+              >
+                {operatorMessageSending ? "Sending..." : "Send"}
+              </button>
+            </div>
+            {operatorMessageResult ? (
+              <p style={{ color: "#d1fae5", margin: "8px 0 0", overflowWrap: "anywhere" }}>{operatorMessageResult}</p>
+            ) : null}
+          </div>
         </div>
       </div>
 

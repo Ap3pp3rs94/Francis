@@ -394,12 +394,17 @@ def _guard_model_reply(
         return reply
     terms = ", ".join(str(term) for term in _list(guard.get("detected_terms")))
     surface = str(guard.get("verified_surface") or "developer_bridge.collaboration_driver.learning_events")
+    source_reason = (
+        "after Codex provided a verified surface"
+        if guard.get("source_has_verified_surface")
+        else "after the source prompt asked for a different current topic"
+    )
     topic = _source_topic_from_prompt(str(item.get("prompt") or ""))
     topic_line = f" Topic: {topic}." if topic else ""
     fallback = _guard_topic_fallback(topic=topic, surface=surface)
     return (
-        "Francis1 output guard fallback: model reply repeated known collaboration drift after Codex provided "
-        f"a verified surface. Drift terms: {terms or 'unknown'}.{topic_line} Review artifact: {surface}. "
+        f"Francis1 output guard fallback: model reply repeated known collaboration drift {source_reason}. "
+        f"Drift terms: {terms or 'unknown'}.{topic_line} Review artifact: {surface}. "
         f"{fallback} No execution, mutation, approval, training, or memory-promotion authority was granted."
     )
 
@@ -415,20 +420,37 @@ def _output_guard(item: dict[str, object], reply: str) -> dict[str, object]:
     )
     if not reply:
         return _output_guard_record(status="empty_reply", source_prompt=source_prompt, detected_terms=[])
-    if not _source_prompt_has_verified_surface(source_prompt):
+    source_has_verified_surface = _source_prompt_has_verified_surface(source_prompt)
+    stale_topic_terms = _stale_topic_replay_terms(source_prompt, reply)
+    if not source_has_verified_surface and not stale_topic_terms:
         return _output_guard_record(status="not_applicable", source_prompt=source_prompt, detected_terms=[])
-    terms = [*_known_drift_terms(reply), *_stale_topic_replay_terms(source_prompt, reply)]
+    known_terms = _known_drift_terms(reply) if source_has_verified_surface else []
+    terms = [*known_terms, *stale_topic_terms]
     if not terms:
         return _output_guard_record(status="passed", source_prompt=source_prompt, detected_terms=[])
-    return _output_guard_record(status="drift_rewritten", source_prompt=source_prompt, detected_terms=terms)
+    return _output_guard_record(
+        status="drift_rewritten",
+        source_prompt=source_prompt,
+        detected_terms=terms,
+        source_has_verified_surface=source_has_verified_surface,
+    )
 
 
-def _output_guard_record(*, status: str, source_prompt: str, detected_terms: list[str]) -> dict[str, object]:
+def _output_guard_record(
+    *,
+    status: str,
+    source_prompt: str,
+    detected_terms: list[str],
+    source_has_verified_surface: bool | None = None,
+) -> dict[str, object]:
+    if source_has_verified_surface is None:
+        source_has_verified_surface = _source_prompt_has_verified_surface(source_prompt)
     return {
         "status": status,
         "guard": "verified_surface_drift_guard_v1",
         "detected_terms": detected_terms,
         "verified_surface": _verified_surface_from_prompt(source_prompt),
+        "source_has_verified_surface": source_has_verified_surface,
         "stores_raw_model_output": False,
         "grants_execution_authority": False,
         "grants_mutation_authority": False,
@@ -579,12 +601,20 @@ def _stale_topic_replay_terms(source_prompt: str, reply: str) -> list[str]:
     )
     if stale_substrate:
         terms.append("stale_substrate_topic_replay")
+    stale_repository_integrity = (
+        "local model repository integrity" in lower_reply and "local model repository integrity" not in lower_source
+    )
+    if stale_repository_integrity:
+        terms.append("stale_repository_integrity_gap_replay")
     return terms
 
 
 def _verified_surface_from_prompt(source_prompt: str) -> str:
-    if _has_build_manifest_repo_truth_correction(source_prompt.lower()):
+    lower_source = source_prompt.lower()
+    if _has_build_manifest_repo_truth_correction(lower_source):
         return "docs/canonical/BUILD_MANIFEST.md"
+    if "operator_message=true" in lower_source:
+        return "developer_bridge.collaboration_operator_message"
     current_artifact = _surface_after_marker(source_prompt, "current artifact:")
     if current_artifact != "unknown":
         return current_artifact
@@ -676,6 +706,11 @@ def _guard_topic_fallback(*, topic: str, surface: str) -> str:
         return (
             "Issue/gap/risk: source disagreement should block build direction until a typed review artifact "
             "records conflicting sources, the surface, and required Codex or operator review."
+        )
+    if "collaboration_operator_message" in lower_surface:
+        return (
+            "Issue/gap/risk: operator messages should stay bounded relay receipts with target agents, "
+            "operator_message=true, no_action_authority=true, and no memory-promotion or execution authority."
         )
     if "action_boundary" in lower_surface:
         return (
