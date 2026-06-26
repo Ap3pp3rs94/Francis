@@ -15,6 +15,7 @@ import {
   collaborationBuildDirectionGateSummary,
   collaborationImplementationReviewSummary,
   collaborationLearningGuardSummary,
+  collaborationLiveAdviceReadinessSummary,
   collaborationTranscriptAuditSummary,
   collaborationTranscriptNoiseReductionSummary,
   DEFAULT_SHOW_GUARD_RECEIPTS,
@@ -1389,6 +1390,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
   const learningItems = learning?.items ?? [];
   const recurrenceProof = collaborationRuntimeRecurrenceSummary(runtimeHealth);
   const localModelResponseProof = collaborationRuntimeLocalModelResponseSummary(runtimeHealth);
+  const liveAdviceReadinessProof = collaborationLiveAdviceReadinessSummary(runtimeHealth, latestBuildDirectionReview);
   const reviewReceiptProof = collaborationRuntimeReviewReceiptSummary(runtimeHealth);
   const learningReceiptProof = collaborationRuntimeLearningReceiptSummary(runtimeHealth);
   const learningSignalProof = collaborationRuntimeLearningSignalSummary(runtimeHealth);
@@ -2275,6 +2277,46 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
             </span>
             {transcriptNoiseReductionProof.detail.map((line) => (
               <span key={`live-noise-${line}`} style={{ color: "#94a3b8", fontSize: 12 }}>
+                {line}
+              </span>
+            ))}
+          </div>
+        ) : null}
+        {transcriptItems.length ? (
+          <div
+            style={{
+              alignItems: "center",
+              background: "rgba(15, 23, 42, 0.48)",
+              border: "1px solid rgba(148, 163, 184, 0.22)",
+              borderRadius: 12,
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 8,
+              marginTop: 10,
+              padding: "9px 12px",
+            }}
+          >
+            <span
+              style={{
+                border: `1px solid ${
+                  liveAdviceReadinessProof.tone === "ready"
+                    ? "#6ee7b7"
+                    : liveAdviceReadinessProof.tone === "blocked"
+                      ? "#fca5a5"
+                      : "#cbd5e1"
+                }`,
+                borderRadius: 999,
+                color: liveAdviceReadinessProof.tone === "blocked" ? "#fecaca" : "#d1fae5",
+                fontSize: 12,
+                fontWeight: 700,
+                padding: "3px 8px",
+                textTransform: "uppercase",
+              }}
+            >
+              Action {liveAdviceReadinessProof.badge}
+            </span>
+            {liveAdviceReadinessProof.detail.map((line) => (
+              <span key={`live-action-readiness-${line}`} style={{ color: "#94a3b8", fontSize: 12 }}>
                 {line}
               </span>
             ))}

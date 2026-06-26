@@ -447,6 +447,12 @@ export type CollaborationRuntimeLocalModelResponseDisplay = {
   detail: string[];
 };
 
+export type CollaborationLiveAdviceReadinessDisplay = {
+  badge: string;
+  tone: CollaborationReviewTone;
+  detail: string[];
+};
+
 export type CollaborationLearningGuardDisplay = {
   badge: string;
   tone: CollaborationReviewTone;
@@ -2489,6 +2495,99 @@ export function collaborationRuntimeLocalModelResponseSummary(
       `training ${actionBoundaryBool(response.grantsTrainingAuthority)}`,
       `capability ${actionBoundaryBool(response.grantsCapabilityAuthority || proof.grantsCapabilityAuthority)}`,
       `memory write ${actionBoundaryBool(response.grantsMemoryWriteAuthority)}`,
+    ],
+  };
+}
+
+export function collaborationLiveAdviceReadinessSummary(
+  health: CollaborationRuntimeHealth | null | undefined,
+  latestReviewItem?: CollaborationReviewItem | null,
+): CollaborationLiveAdviceReadinessDisplay {
+  const response = health?.collaborationLoop.latestLocalModelResponse;
+  const proof = response?.adviceOnlyProof;
+  const boundary = latestReviewItem?.modelAdviceGovernanceBoundary;
+  if (!response?.observed && !boundary?.applies) {
+    return {
+      badge: "action proof unknown",
+      tone: "neutral",
+      detail: [
+        "proof unobserved",
+        "guard unknown",
+        "advice only false",
+        "action readiness false",
+        "review before action true",
+        "policy true",
+        "approval true",
+        "traceable receipt true",
+        "execute false",
+        "approve false",
+        "memory write false",
+      ],
+    };
+  }
+
+  const proofStatus = proof?.proofStatus || boundary?.proofStatus || "unobserved";
+  const guardStatus = proof?.outputGuardStatus || boundary?.outputGuardStatus || response?.outputGuardStatus || "unknown";
+  const adviceOnly = Boolean(proof?.responseIsAdviceOnly || boundary?.responseIsAdviceOnly);
+  const actionReadiness = Boolean(proof?.actionReadinessClaimAllowed || boundary?.actionReadinessClaimAllowed);
+  const reviewBeforeAction = Boolean(
+    proof?.requiresCodexOrOperatorReviewBeforeActionReadiness ||
+      boundary?.requiresLatestLocalModelAdviceOnlyProof ||
+      boundary?.requiresActionBoundaryReadback ||
+      !proof?.responseIsAdviceOnly,
+  );
+  const requiresPolicy = boundary?.requiresPolicy ?? true;
+  const requiresApproval = boundary?.requiresApproval ?? true;
+  const requiresTraceableReceipt = boundary?.requiresTraceableReceipt ?? true;
+  const execute = Boolean(
+    boundary?.modelAdviceCanExecuteAction ||
+      boundary?.grantsExecutionAuthority ||
+      response?.grantsExecutionAuthority ||
+      proof?.grantsExecutionAuthority,
+  );
+  const approve = Boolean(
+    boundary?.modelAdviceCanApproveAction ||
+      boundary?.grantsApprovalAuthority ||
+      response?.grantsApprovalAuthority ||
+      proof?.grantsApprovalAuthority,
+  );
+  const memoryWrite = Boolean(
+    boundary?.grantsMemoryWriteAuthority || response?.grantsMemoryWriteAuthority || proof?.grantsMemoryWriteAuthority,
+  );
+  const unsafeAuthority = Boolean(
+    actionReadiness ||
+      execute ||
+      approve ||
+      memoryWrite ||
+      boundary?.grantsMutationAuthority ||
+      boundary?.grantsTrainingAuthority ||
+      boundary?.grantsCapabilityAuthority ||
+      response?.grantsMutationAuthority ||
+      response?.grantsTrainingAuthority ||
+      response?.grantsCapabilityAuthority ||
+      proof?.grantsMutationAuthority ||
+      proof?.grantsTrainingAuthority ||
+      proof?.grantsCapabilityAuthority ||
+      response?.storesFullTranscript ||
+      proof?.storesFullTranscript ||
+      boundary?.storesFullTranscript,
+  );
+
+  return {
+    badge: unsafeAuthority ? "action authority drift" : adviceOnly ? "advice-only before action" : "advice proof pending",
+    tone: unsafeAuthority ? "blocked" : adviceOnly && reviewBeforeAction ? "ready" : "neutral",
+    detail: [
+      `proof ${proofStatus}`,
+      `guard ${guardStatus}`,
+      `advice only ${actionBoundaryBool(adviceOnly)}`,
+      `action readiness ${actionBoundaryBool(actionReadiness)}`,
+      `review before action ${actionBoundaryBool(reviewBeforeAction)}`,
+      `policy ${actionBoundaryBool(requiresPolicy)}`,
+      `approval ${actionBoundaryBool(requiresApproval)}`,
+      `traceable receipt ${actionBoundaryBool(requiresTraceableReceipt)}`,
+      `execute ${actionBoundaryBool(execute)}`,
+      `approve ${actionBoundaryBool(approve)}`,
+      `memory write ${actionBoundaryBool(memoryWrite)}`,
     ],
   };
 }

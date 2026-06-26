@@ -98594,6 +98594,54 @@ Remaining truthful gap:
 - Full `.\scripts\check.ps1`, GitHub CI, browser screenshot proof, and full
   ORB/body coverage proof were not run for this bounded prompt/readback slice.
 
+### 2026-06-26 08:20Z - Communication live action-readiness proof strip
+
+Current posture: Phase 2 / P1 interface and P9 observability now surface the
+latest local-model advice-only proof directly inside the live Communication
+conversation panel. The runtime and review APIs already exposed
+`latestLocalModelResponse.adviceOnlyProof` and `modelAdviceGovernanceBoundary`;
+the operator can now see that proof while watching the conversation rather than
+having to correlate the separate Runtime Health and Review Candidates sections.
+
+What changed:
+
+- Added `collaborationLiveAdviceReadinessSummary()` to derive a compact
+  action-readiness display from existing runtime/review readbacks.
+- Added a live `Action ...` proof strip to the Communication panel showing
+  proof status, output-guard status, advice-only state, action-readiness denial,
+  required review/policy/approval/traceable-receipt gates, and execution,
+  approval, and memory-write denial.
+- Added a Chat UI contract assertion proving the live display reports
+  `advice-only before action`, `action readiness false`, and `review before
+  action true` from existing local-model response receipts.
+- This is UI/readback-only: it does not create action candidates, execute model
+  output, approve actions, write memory, tune Francis1, or change relay/runtime
+  receipt semantics.
+
+Validation:
+
+- Focused Chat UI collaboration parser contract passed:
+  `node --test --experimental-strip-types src\chat\index.test.ts`.
+- Chat UI production build passed: `npm run build`.
+- Full Chat UI test suite passed: `npm run test` with 284 tests.
+- `git diff --check` passed.
+- Existing Vite dev server at `http://127.0.0.1:5173/` returned HTTP `200`.
+- Live runtime readback returned `status=healthy`, `helper_count=3`,
+  `waiting_for_ollama=false`, and the latest local-model response showed
+  `proof_status=advice_only_observed`, `output_guard_passed=true`,
+  `response_is_advice_only=true`, `action_readiness_claim_allowed=false`, and
+  no execution, mutation, approval, training, capability, or memory-write
+  authority.
+
+Remaining truthful gap:
+
+- This makes the action-readiness boundary visible beside the live conversation;
+  it does not itself approve any action, reduce model drift, tune Francis1,
+  close source-disagreement review, or complete the broader action-candidate
+  execution path.
+- Browser screenshot proof, `.\scripts\check.ps1`, GitHub CI, and full ORB/body
+  coverage proof were not run for this bounded Communication UI readback slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

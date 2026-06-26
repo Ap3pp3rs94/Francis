@@ -8,6 +8,7 @@ import {
   collaborationBuildDirectionGateSummary,
   collaborationImplementationReviewSummary,
   collaborationLearningGuardSummary,
+  collaborationLiveAdviceReadinessSummary,
   collaborationReviewBadge,
   collaborationReviewNextAction,
   collaborationReviewTone,
@@ -1606,6 +1607,23 @@ test("parseCollaborationRuntimeHealth preserves recurrence and no-authority fiel
     "age 4s",
     "training false",
     "capability false",
+    "memory write false",
+  ]);
+
+  const liveAdviceReadiness = collaborationLiveAdviceReadinessSummary(health);
+  assert.equal(liveAdviceReadiness.badge, "advice-only before action");
+  assert.equal(liveAdviceReadiness.tone, "ready");
+  assert.deepEqual(liveAdviceReadiness.detail, [
+    "proof advice_only_observed",
+    "guard drift_rewritten",
+    "advice only true",
+    "action readiness false",
+    "review before action true",
+    "policy true",
+    "approval true",
+    "traceable receipt true",
+    "execute false",
+    "approve false",
     "memory write false",
   ]);
 });
