@@ -713,10 +713,75 @@ def test_collaboration_prompt_relay_is_bounded_and_redacted(tmp_path, monkeypatc
     assert listed["ok"] is True
     assert listed["count"] == 1
     assert listed["items"][0]["id"] == submitted["prompt_id"]
+    transcript = read_collaboration_transcript(target_agent="codex")
+    display = transcript["items"][0]["display"]
+    assert display["category"] == "conversation"
+    assert display["priority"] == "primary"
+    assert display["hide_by_default"] is False
+    assert display["reason"] == "agent_message"
+    assert display["operator_label"] == "Conversation message"
+    assert display["raw_transcript_opened_by_default"] is False
+    assert display["stores_full_transcript"] is False
+    assert display["grants_execution_authority"] is False
+    assert display["grants_mutation_authority"] is False
+    assert display["grants_approval_authority"] is False
+    assert display["grants_memory_write_authority"] is False
+    assert display["grants_training_authority"] is False
 
     with pytest.raises(DeveloperBridgeError) as same_agent:
         submit_collaboration_prompt(source_agent="codex", target_agent="codex", prompt="loop")
     assert same_agent.value.code == "same_agent_denied"
+
+
+def test_collaboration_transcript_display_metadata_labels_relay_mechanics(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+
+    driver = submit_collaboration_prompt(
+        source_agent="codex",
+        target_agent="ollama",
+        objective="Francis1 collaboration driver turn 12",
+        prompt="Francis1 turn 12. Topic: prove display metadata.",
+        context="no_action_authority=true.",
+    )
+    guard = submit_collaboration_prompt(
+        source_agent="ollama",
+        target_agent="codex",
+        objective=f"Francis1 output-guard drift receipt via Ollama to {driver['prompt_id']}",
+        prompt="Francis1 output guard fallback: model reply repeated known collaboration drift.",
+        context="raw model output was not stored in the relay receipt.",
+    )
+    ack = submit_collaboration_prompt(
+        source_agent="codex",
+        target_agent="ollama",
+        objective=f"auto-ack ollama relay {guard['prompt_id']}",
+        prompt=f"Auto-ack ollama relay {guard['prompt_id']}. Received; no_response_requested=true.",
+        context=f"source=ollama; relay={guard['prompt_id']}; no_response_requested=true; no_action_authority=true.",
+    )
+
+    transcript = read_collaboration_transcript(limit=10)
+    items = {str(item["id"]): item for item in transcript["items"]}
+
+    assert items[str(driver["prompt_id"])]["display"]["category"] == "driver_prompt"
+    assert items[str(driver["prompt_id"])]["display"]["priority"] == "mechanic"
+    assert items[str(driver["prompt_id"])]["display"]["hide_by_default"] is True
+    assert items[str(driver["prompt_id"])]["display"]["reason"] == "codex_driver_prompt"
+    assert items[str(driver["prompt_id"])]["display"]["operator_label"] == "Codex driver prompt"
+    assert items[str(driver["prompt_id"])]["display"]["stores_full_transcript"] is False
+    assert items[str(driver["prompt_id"])]["display"]["grants_execution_authority"] is False
+
+    assert items[str(guard["prompt_id"])]["display"]["category"] == "guard_receipt"
+    assert items[str(guard["prompt_id"])]["display"]["priority"] == "supporting"
+    assert items[str(guard["prompt_id"])]["display"]["hide_by_default"] is True
+    assert items[str(guard["prompt_id"])]["display"]["reason"] == "local_model_output_guard"
+    assert items[str(guard["prompt_id"])]["display"]["operator_label"] == "Guarded Francis1 response"
+    assert items[str(guard["prompt_id"])]["display"]["grants_memory_write_authority"] is False
+
+    assert items[str(ack["prompt_id"])]["display"]["category"] == "audit_ack"
+    assert items[str(ack["prompt_id"])]["display"]["priority"] == "mechanic"
+    assert items[str(ack["prompt_id"])]["display"]["hide_by_default"] is True
+    assert items[str(ack["prompt_id"])]["display"]["reason"] == "relay_acknowledgement"
+    assert items[str(ack["prompt_id"])]["display"]["operator_label"] == "Auto-ack receipt"
+    assert items[str(ack["prompt_id"])]["display"]["grants_training_authority"] is False
 
 
 def test_collaboration_agent_toggle_blocks_known_disabled_agent(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]

@@ -1293,6 +1293,20 @@ test("parseCollaborationTranscript preserves relay text and governance denial fl
         objective: "verify relay",
         prompt: "Preserve operator review.",
         context: "bounded proof",
+        display: {
+          category: "conversation",
+          priority: "primary",
+          hide_by_default: false,
+          reason: "agent_message",
+          operator_label: "Conversation message",
+          raw_transcript_opened_by_default: false,
+          stores_full_transcript: false,
+          grants_execution_authority: false,
+          grants_mutation_authority: false,
+          grants_approval_authority: false,
+          grants_memory_write_authority: false,
+          grants_training_authority: false,
+        },
         chat_handoff: {
           chat_text: "[Francis relay collab_test] codex -> ollama: Preserve operator review.",
           source_chat_echo_required: true,
@@ -1316,6 +1330,18 @@ test("parseCollaborationTranscript preserves relay text and governance denial fl
   assert.equal(transcript.items[0]?.prompt, "Preserve operator review.");
   assert.equal(transcript.items[0]?.chatText, "[Francis relay collab_test] codex -> ollama: Preserve operator review.");
   assert.equal(transcript.items[0]?.receiptKind, "conversation");
+  assert.equal(transcript.items[0]?.display.category, "conversation");
+  assert.equal(transcript.items[0]?.display.priority, "primary");
+  assert.equal(transcript.items[0]?.display.hideByDefault, false);
+  assert.equal(transcript.items[0]?.display.reason, "agent_message");
+  assert.equal(transcript.items[0]?.display.operatorLabel, "Conversation message");
+  assert.equal(transcript.items[0]?.display.rawTranscriptOpenedByDefault, false);
+  assert.equal(transcript.items[0]?.display.storesFullTranscript, false);
+  assert.equal(transcript.items[0]?.display.grantsExecutionAuthority, false);
+  assert.equal(transcript.items[0]?.display.grantsMutationAuthority, false);
+  assert.equal(transcript.items[0]?.display.grantsApprovalAuthority, false);
+  assert.equal(transcript.items[0]?.display.grantsMemoryWriteAuthority, false);
+  assert.equal(transcript.items[0]?.display.grantsTrainingAuthority, false);
   assert.equal(isCollaborationAuditReceipt(transcript.items[0]!), false);
   assert.equal(transcript.items[0]?.governance.executes_prompt, false);
   assert.equal(transcript.items[0]?.sourceChatEchoRequired, true);
@@ -1379,8 +1405,27 @@ test("parseCollaborationTranscript classifies auto-ack receipts as hideable audi
   const summary = collaborationTranscriptAuditSummary(transcript.items);
 
   assert.equal(transcript.items[0]?.receiptKind, "audit_ack");
+  assert.equal(transcript.items[0]?.display.category, "audit_ack");
+  assert.equal(transcript.items[0]?.display.priority, "mechanic");
+  assert.equal(transcript.items[0]?.display.hideByDefault, true);
+  assert.equal(transcript.items[0]?.display.reason, "relay_acknowledgement");
+  assert.equal(transcript.items[0]?.display.operatorLabel, "Auto-ack receipt");
+  assert.equal(transcript.items[0]?.display.storesFullTranscript, false);
+  assert.equal(transcript.items[0]?.display.grantsExecutionAuthority, false);
   assert.equal(isCollaborationAuditReceipt(transcript.items[0]!), true);
   assert.equal(transcript.items[1]?.receiptKind, "conversation");
+  assert.equal(transcript.items[1]?.display.category, "guard_receipt");
+  assert.equal(transcript.items[1]?.display.priority, "supporting");
+  assert.equal(transcript.items[1]?.display.hideByDefault, true);
+  assert.equal(transcript.items[1]?.display.reason, "local_model_output_guard");
+  assert.equal(transcript.items[1]?.display.operatorLabel, "Guarded Francis1 response");
+  assert.equal(transcript.items[1]?.display.grantsTrainingAuthority, false);
+  assert.equal(transcript.items[2]?.display.category, "driver_prompt");
+  assert.equal(transcript.items[2]?.display.priority, "mechanic");
+  assert.equal(transcript.items[2]?.display.hideByDefault, true);
+  assert.equal(transcript.items[2]?.display.reason, "codex_driver_prompt");
+  assert.equal(transcript.items[2]?.display.operatorLabel, "Codex driver prompt");
+  assert.equal(transcript.items[2]?.display.grantsMemoryWriteAuthority, false);
   assert.equal(isCollaborationDriverPrompt(transcript.items[2]!), true);
   assert.equal(summary.totalCount, 3);
   assert.equal(summary.auditReceiptCount, 1);

@@ -523,6 +523,60 @@ def _is_auto_ack_record(record: dict[str, object]) -> bool:
     )
 
 
+def _is_driver_prompt_record(record: dict[str, object]) -> bool:
+    objective = str(record.get("objective") or "").lower()
+    prompt = str(record.get("prompt") or "")
+    return objective.startswith("francis1 collaboration driver") and (
+        prompt.startswith("Francis1 collab turn ") or prompt.startswith("Francis1 turn ")
+    )
+
+
+def _is_guard_receipt_record(record: dict[str, object]) -> bool:
+    return str(record.get("prompt") or "").startswith("Francis1 output guard fallback:")
+
+
+def _transcript_display_metadata(record: dict[str, object]) -> dict[str, object]:
+    category = "conversation"
+    priority = "primary"
+    hide_by_default = False
+    reason = "agent_message"
+    operator_label = "Conversation message"
+
+    if _is_auto_ack_record(record):
+        category = "audit_ack"
+        priority = "mechanic"
+        hide_by_default = True
+        reason = "relay_acknowledgement"
+        operator_label = "Auto-ack receipt"
+    elif _is_driver_prompt_record(record):
+        category = "driver_prompt"
+        priority = "mechanic"
+        hide_by_default = True
+        reason = "codex_driver_prompt"
+        operator_label = "Codex driver prompt"
+    elif _is_guard_receipt_record(record):
+        category = "guard_receipt"
+        priority = "supporting"
+        hide_by_default = True
+        reason = "local_model_output_guard"
+        operator_label = "Guarded Francis1 response"
+
+    return {
+        "category": category,
+        "priority": priority,
+        "hide_by_default": hide_by_default,
+        "reason": reason,
+        "operator_label": operator_label,
+        "raw_transcript_opened_by_default": False,
+        "stores_full_transcript": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "grants_approval_authority": False,
+        "grants_memory_write_authority": False,
+        "grants_training_authority": False,
+    }
+
+
 def _record_timestamp(record: dict[str, object] | None) -> float:
     if not record:
         return 0.0
@@ -556,6 +610,7 @@ def _transcript_item(record: dict[str, object]) -> dict[str, object]:
         "objective": record.get("objective"),
         "prompt": record.get("prompt"),
         "context": record.get("context"),
+        "display": _transcript_display_metadata(record),
         "chat_handoff": record.get("chat_handoff")
         or _chat_handoff(
             prompt_id=str(record.get("id") or ""),

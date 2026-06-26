@@ -96341,6 +96341,70 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, and browser proof were not run for this
   bounded runtime-health recurrence slice.
 
+### 2026-06-26 03:22Z - Collaboration transcript display metadata
+
+Current posture: Phase 2 / developer bridge collaboration transcript readback now
+classifies relay rows with typed display metadata so the Communication UI can
+distinguish substantive conversation from relay mechanics without deleting or
+rewriting the underlying receipts.
+
+What changed:
+
+- Added `display` metadata to `read_collaboration_transcript` items.
+- The readback labels normal conversation rows as `conversation`, Codex driver
+  prompts as `driver_prompt`, output-guard fallback rows as `guard_receipt`, and
+  auto-ack receipts as `audit_ack`.
+- Display metadata includes priority, hide-by-default intent, an operator label,
+  a reason code, and explicit false authority flags for execution, mutation,
+  approval, memory-write, training, raw-transcript default opening, and full
+  transcript storage.
+- The Chat UI parser now preserves backend-provided display metadata and falls
+  back to the same classification for older relay receipts that do not contain
+  the field.
+- Existing audit, driver-prompt, and guard-receipt helpers now prefer typed
+  display categories before using legacy text heuristics.
+
+Validation:
+
+- Focused backend transcript-display tests passed:
+  `python -m pytest tests\test_developer_bridge.py::test_collaboration_prompt_relay_is_bounded_and_redacted tests\test_developer_bridge.py::test_collaboration_transcript_display_metadata_labels_relay_mechanics -q`.
+- Focused Chat UI parser tests passed:
+  `node --test --experimental-strip-types apps\chat_ui\src\chat\index.test.ts`.
+- Chat UI package test command passed with `280` tests:
+  `cd apps\chat_ui; npm run test -- src/chat/index.test.ts`.
+- Targeted lint passed:
+  `python -m ruff check src\francis\developer_bridge\collaboration.py tests\test_developer_bridge.py`
+  returned all checks passed with a non-fatal Ruff cache write warning.
+- Targeted format check passed:
+  `python -m ruff format --check src\francis\developer_bridge\collaboration.py tests\test_developer_bridge.py`.
+- Targeted typing passed:
+  `python -m mypy src\francis\developer_bridge\collaboration.py`.
+- Direct Python readback showed recent transcript rows classified as
+  `audit_ack`, `conversation`, `driver_prompt`, and `guard_receipt`, all with
+  no execution, mutation, approval, memory-write, or training authority.
+- The local API was restarted; `/chat/health` returned `ok=true`.
+- Live HTTP transcript proof passed:
+  `GET /developer-bridge/collaboration-transcript?limit=6` returned typed
+  display categories for `driver_prompt`, `audit_ack`, `conversation`, and
+  `guard_receipt` rows, with execution and memory-write authority false.
+- Live runtime-health proof passed:
+  `GET /developer-bridge/collaboration-runtime-health` returned
+  `status=healthy`, `helper_count=3`, `recurrence_proof.status=waiting_for_response`,
+  prompt budget `ok`, latest prompt length `688`, and all three participants
+  enabled.
+
+Remaining truthful gap:
+
+- This is display classification for existing relay receipts. It does not hide
+  receipts by itself, delete history, change the conversation driver cadence,
+  train Francis1, promote memory, grant capability authority, execute prompts,
+  approve actions, or mutate collaboration content.
+- The Communication UI can now rely on typed categories, but deeper visual
+  controls such as explicit operator toggles for showing/hiding mechanics remain
+  future UI work.
+- `.\scripts\check.ps1`, GitHub CI, and browser proof were not run for this
+  bounded transcript-display slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

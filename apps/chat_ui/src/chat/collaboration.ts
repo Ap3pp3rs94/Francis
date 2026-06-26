@@ -244,9 +244,25 @@ export type CollaborationTranscriptItem = {
   context: string;
   chatText: string;
   receiptKind: "conversation" | "audit_ack";
+  display: CollaborationTranscriptDisplay;
   sourceChatEchoRequired: boolean;
   targetChatEchoRequired: boolean;
   governance: Record<string, unknown>;
+};
+
+export type CollaborationTranscriptDisplay = {
+  category: string;
+  priority: string;
+  hideByDefault: boolean;
+  reason: string;
+  operatorLabel: string;
+  rawTranscriptOpenedByDefault: boolean;
+  storesFullTranscript: boolean;
+  grantsExecutionAuthority: boolean;
+  grantsMutationAuthority: boolean;
+  grantsApprovalAuthority: boolean;
+  grantsMemoryWriteAuthority: boolean;
+  grantsTrainingAuthority: boolean;
 };
 
 export type CollaborationTranscript = {
@@ -1010,22 +1026,130 @@ function classifyTranscriptReceipt(objective: string, context: string, prompt: s
   return "conversation";
 }
 
+function inferTranscriptDisplay(
+  sourceAgent: string,
+  targetAgent: string,
+  objective: string,
+  context: string,
+  prompt: string,
+): CollaborationTranscriptDisplay {
+  const receiptKind = classifyTranscriptReceipt(objective, context, prompt);
+  const driverPrompt =
+    sourceAgent === "codex" &&
+    targetAgent === "ollama" &&
+    objective.toLowerCase().startsWith("francis1 collaboration driver turn") &&
+    (prompt.startsWith("Francis1 collab turn ") || prompt.startsWith("Francis1 turn "));
+  const guardReceipt = prompt.startsWith("Francis1 output guard fallback:");
+  if (receiptKind === "audit_ack") {
+    return {
+      category: "audit_ack",
+      priority: "mechanic",
+      hideByDefault: true,
+      reason: "relay_acknowledgement",
+      operatorLabel: "Auto-ack receipt",
+      rawTranscriptOpenedByDefault: false,
+      storesFullTranscript: false,
+      grantsExecutionAuthority: false,
+      grantsMutationAuthority: false,
+      grantsApprovalAuthority: false,
+      grantsMemoryWriteAuthority: false,
+      grantsTrainingAuthority: false,
+    };
+  }
+  if (driverPrompt) {
+    return {
+      category: "driver_prompt",
+      priority: "mechanic",
+      hideByDefault: true,
+      reason: "codex_driver_prompt",
+      operatorLabel: "Codex driver prompt",
+      rawTranscriptOpenedByDefault: false,
+      storesFullTranscript: false,
+      grantsExecutionAuthority: false,
+      grantsMutationAuthority: false,
+      grantsApprovalAuthority: false,
+      grantsMemoryWriteAuthority: false,
+      grantsTrainingAuthority: false,
+    };
+  }
+  if (guardReceipt) {
+    return {
+      category: "guard_receipt",
+      priority: "supporting",
+      hideByDefault: true,
+      reason: "local_model_output_guard",
+      operatorLabel: "Guarded Francis1 response",
+      rawTranscriptOpenedByDefault: false,
+      storesFullTranscript: false,
+      grantsExecutionAuthority: false,
+      grantsMutationAuthority: false,
+      grantsApprovalAuthority: false,
+      grantsMemoryWriteAuthority: false,
+      grantsTrainingAuthority: false,
+    };
+  }
+  return {
+    category: "conversation",
+    priority: "primary",
+    hideByDefault: false,
+    reason: "agent_message",
+    operatorLabel: "Conversation message",
+    rawTranscriptOpenedByDefault: false,
+    storesFullTranscript: false,
+    grantsExecutionAuthority: false,
+    grantsMutationAuthority: false,
+    grantsApprovalAuthority: false,
+    grantsMemoryWriteAuthority: false,
+    grantsTrainingAuthority: false,
+  };
+}
+
+function parseTranscriptDisplay(
+  raw: unknown,
+  sourceAgent: string,
+  targetAgent: string,
+  objective: string,
+  context: string,
+  prompt: string,
+): CollaborationTranscriptDisplay {
+  const fallback = inferTranscriptDisplay(sourceAgent, targetAgent, objective, context, prompt);
+  const item = isRecord(raw) ? raw : {};
+  return {
+    category: safeString(item.category, fallback.category),
+    priority: safeString(item.priority, fallback.priority),
+    hideByDefault: safeBoolean(item.hide_by_default, fallback.hideByDefault),
+    reason: safeString(item.reason, fallback.reason),
+    operatorLabel: safeString(item.operator_label, fallback.operatorLabel),
+    rawTranscriptOpenedByDefault: safeBoolean(
+      item.raw_transcript_opened_by_default,
+      fallback.rawTranscriptOpenedByDefault,
+    ),
+    storesFullTranscript: safeBoolean(item.stores_full_transcript, fallback.storesFullTranscript),
+    grantsExecutionAuthority: safeBoolean(item.grants_execution_authority, fallback.grantsExecutionAuthority),
+    grantsMutationAuthority: safeBoolean(item.grants_mutation_authority, fallback.grantsMutationAuthority),
+    grantsApprovalAuthority: safeBoolean(item.grants_approval_authority, fallback.grantsApprovalAuthority),
+    grantsMemoryWriteAuthority: safeBoolean(item.grants_memory_write_authority, fallback.grantsMemoryWriteAuthority),
+    grantsTrainingAuthority: safeBoolean(item.grants_training_authority, fallback.grantsTrainingAuthority),
+  };
+}
+
 export function isCollaborationAuditReceipt(item: CollaborationTranscriptItem): boolean {
-  return item.receiptKind === "audit_ack";
+  return item.display.category === "audit_ack" || item.receiptKind === "audit_ack";
 }
 
 export function isCollaborationDriverPrompt(item: CollaborationTranscriptItem): boolean {
   const raw = receiptText(item);
   return (
-    item.sourceAgent === "codex" &&
-    item.targetAgent === "ollama" &&
-    item.objective.toLowerCase().startsWith("francis1 collaboration driver turn") &&
-    (raw.startsWith("Francis1 collab turn ") || raw.startsWith("Francis1 turn "))
+    item.display.category === "driver_prompt" ||
+    (item.sourceAgent === "codex" &&
+      item.targetAgent === "ollama" &&
+      item.objective.toLowerCase().startsWith("francis1 collaboration driver turn") &&
+      (raw.startsWith("Francis1 collab turn ") || raw.startsWith("Francis1 turn ")))
   );
 }
 
 export function isCollaborationGuardReceipt(item: CollaborationTranscriptItem): boolean {
-  return receiptText(item).startsWith("Francis1 output guard fallback:");
+  return item.display.category === "guard_receipt" || receiptText(item).startsWith("Francis1 output guard fallback:");
 }
 
 export function collaborationTranscriptAuditSummary(items: CollaborationTranscriptItem[]): {
@@ -2030,19 +2154,22 @@ function parseTranscriptItem(raw: unknown): CollaborationTranscriptItem {
   const objective = safeString(item.objective);
   const prompt = safeString(item.prompt);
   const context = safeString(item.context);
+  const sourceAgent = safeString(item.source_agent);
+  const targetAgent = safeString(item.target_agent);
   return {
     id: safeString(item.id),
     createdAt: safeString(item.created_at),
     updatedAt: safeString(item.updated_at),
     status: safeString(item.status),
-    sourceAgent: safeString(item.source_agent),
-    targetAgent: safeString(item.target_agent),
+    sourceAgent,
+    targetAgent,
     direction: safeString(item.direction),
     objective,
     prompt,
     context,
     chatText: safeString(handoff.chat_text),
     receiptKind: classifyTranscriptReceipt(objective, context, prompt),
+    display: parseTranscriptDisplay(item.display, sourceAgent, targetAgent, objective, context, prompt),
     sourceChatEchoRequired: safeBoolean(handoff.source_chat_echo_required),
     targetChatEchoRequired: safeBoolean(handoff.target_chat_echo_required),
     governance: isRecord(item.governance) ? item.governance : {},
