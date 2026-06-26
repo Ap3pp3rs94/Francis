@@ -1701,6 +1701,23 @@ def test_collaboration_driver_maps_hyphenated_review_topics_to_concrete_surfaces
     assert "roadmap_alignment" in roadmap_tags
 
 
+def test_collaboration_driver_summary_preserves_dotted_review_artifacts() -> None:
+    from francis.developer_bridge.collaboration_driver import _bounded_summary
+
+    summary = _bounded_summary(
+        (
+            "I see my current gap in reviewing developer_bridge.collaboration_review.items, which may indicate "
+            "a readiness.roadmap_alignment discrepancy with main-build candidate-only requirements. "
+            "Artifact: developer_bridge.collaboration_review.items"
+        )
+    )
+
+    assert "developer_bridge.collaboration_review.items" in summary
+    assert "readiness.roadmap_alignment" in summary
+    assert "main-build candidate-only" in summary
+    assert "__FRANCIS_DOTTED_" not in summary
+
+
 def test_collaboration_review_projects_generic_historical_topics_to_concrete_surfaces(
     tmp_path,
     monkeypatch,

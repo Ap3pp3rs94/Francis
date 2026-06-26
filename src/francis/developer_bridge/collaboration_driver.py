@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 import json
 import os
 from pathlib import Path
+import re
 import time
 from typing import Any, cast
 from uuid import uuid4
@@ -1372,12 +1373,36 @@ def _bounded_summary(value: object, *, limit: int = 420) -> str:
     text = _identity_safe_text(redact_secret_text(" ".join(str(value or "").split())))
     if not text:
         return "No substantive model text was available for this note."
-    sentences = [part.strip() for part in text.replace("?", ".").replace("!", ".").split(".") if part.strip()]
+    protected_text, protected = _protect_dotted_identifiers(text)
+    sentences = [
+        _restore_dotted_identifiers(part.strip(), protected)
+        for part in protected_text.replace("?", ".").replace("!", ".").split(".")
+        if part.strip()
+    ]
     if sentences:
         text = ". ".join(sentences[:2])
         if text:
             text += "."
     return text[:limit]
+
+
+def _protect_dotted_identifiers(text: str) -> tuple[str, dict[str, str]]:
+    protected: dict[str, str] = {}
+
+    def replace(match: re.Match[str]) -> str:
+        token = match.group(0)
+        placeholder = f"__FRANCIS_DOTTED_{len(protected)}__"
+        protected[placeholder] = token
+        return placeholder
+
+    return re.sub(r"\b[A-Za-z0-9_/\-]+(?:\.[A-Za-z0-9_/\-]+)+\b", replace, text), protected
+
+
+def _restore_dotted_identifiers(text: str, protected: dict[str, str]) -> str:
+    restored = text
+    for placeholder, token in protected.items():
+        restored = restored.replace(placeholder, token)
+    return restored
 
 
 def _bounded_text(value: object, *, limit: int) -> str:
