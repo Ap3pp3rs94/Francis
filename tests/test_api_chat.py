@@ -66,6 +66,21 @@ def test_chat_mission_command_declares_queued_mission_with_loop_context(monkeypa
     assert action_candidate["status"] == "queued_for_governed_review"
     assert action_candidate["surface"] == "api.routes.chat.mission_ingress"
     assert action_candidate["source_mode"] == "typed"
+    assert action_candidate["input_actor"] == "api.chat"
+    assert action_candidate["source_mode_derivation"] == "default_typed_chat_payload"
+    assert action_candidate["source_surface"] == "typed_chat"
+    assert action_candidate["voice_turn_correlation_observed"] is False
+    assert action_candidate["voice_turn_correlation_read_only"] is True
+    assert action_candidate["voice_turn_correlation_grants_execution_authority"] is False
+    assert action_candidate["voice_turn_correlation_grants_mutation_authority"] is False
+    source_mode_proof = action_candidate["source_mode_proof"]
+    assert source_mode_proof["kind"] == "francis.action_candidate.source_mode_proof"
+    assert source_mode_proof["input_actor"] == "api.chat"
+    assert source_mode_proof["source_mode"] == "typed"
+    assert source_mode_proof["source_mode_derivation"] == "default_typed_chat_payload"
+    assert source_mode_proof["voice_turn_correlation_observed"] is False
+    assert source_mode_proof["voice_turn_correlation_read_only"] is True
+    assert source_mode_proof["voice_turn_correlation_grants_execution_authority"] is False
     assert action_candidate["mission_id"] == mission_id
     assert action_candidate["operation_id"] == operation_id
     assert action_candidate["first_operation_id"] == operation_id
@@ -122,6 +137,13 @@ def test_chat_mission_command_declares_queued_mission_with_loop_context(monkeypa
     assert assistant_meta["action_candidate_status"] == "queued_for_governed_review"
     assert assistant_meta["action_candidate_surface"] == "api.routes.chat.mission_ingress"
     assert assistant_meta["action_candidate_source_mode"] == "typed"
+    assert assistant_meta["action_candidate_input_actor"] == "api.chat"
+    assert assistant_meta["action_candidate_source_mode_derivation"] == "default_typed_chat_payload"
+    assert assistant_meta["action_candidate_source_surface"] == "typed_chat"
+    assert assistant_meta["action_candidate_voice_turn_correlation_observed"] is False
+    assert assistant_meta["action_candidate_voice_turn_correlation_read_only"] is True
+    assert assistant_meta["action_candidate_voice_turn_correlation_grants_execution_authority"] is False
+    assert assistant_meta["action_candidate_voice_turn_correlation_grants_mutation_authority"] is False
     assert assistant_meta["action_candidate_mission_id"] == mission_id
     assert assistant_meta["action_candidate_operation_id"] == operation_id
     assert assistant_meta["action_candidate_first_operation_id"] == operation_id
@@ -266,6 +288,24 @@ def test_chat_mona_lisa_voice_intent_declares_truthful_sandbox_mission(monkeypat
     assert sandbox_operation_id != operation_id
     action_candidate = body["action_candidate"]
     assert action_candidate["source_mode"] == "spoken"
+    assert action_candidate["input_actor"] == "lens.overlay.voice"
+    assert action_candidate["source_mode_derivation"] == "voice_surface_actor"
+    assert action_candidate["source_surface"] == "lens_overlay_voice"
+    assert action_candidate["voice_turn_correlation_observed"] is True
+    assert action_candidate["voice_turn_id"] == "voice_turn_mona_01"
+    assert action_candidate["supersedes_voice_turn_id"] == "voice_turn_previous_01"
+    assert action_candidate["voice_turn_correlation_read_only"] is True
+    assert action_candidate["voice_turn_correlation_grants_execution_authority"] is False
+    assert action_candidate["voice_turn_correlation_grants_mutation_authority"] is False
+    source_mode_proof = action_candidate["source_mode_proof"]
+    assert source_mode_proof["kind"] == "francis.action_candidate.source_mode_proof"
+    assert source_mode_proof["input_actor"] == "lens.overlay.voice"
+    assert source_mode_proof["source_mode"] == "spoken"
+    assert source_mode_proof["source_mode_derivation"] == "voice_surface_actor"
+    assert source_mode_proof["source_surface"] == "lens_overlay_voice"
+    assert source_mode_proof["voice_turn_correlation_observed"] is True
+    assert source_mode_proof["voice_turn_correlation_read_only"] is True
+    assert source_mode_proof["voice_turn_correlation_grants_execution_authority"] is False
     assert action_candidate["mission_id"] == mission_id
     assert action_candidate["operation_id"] == sandbox_operation_id
     assert action_candidate["first_operation_id"] == operation_id
@@ -1060,6 +1100,17 @@ def test_chat_websocket_structured_message_declares_mission(monkeypatch, tmp_pat
     assert meta["operation"]["id"] == operation_id
     assert meta["action_candidate"]["kind"] == "francis.action_candidate"
     assert meta["action_candidate"]["source_mode"] == "typed"
+    assert meta["action_candidate"]["input_actor"] == "api.chat"
+    assert meta["action_candidate"]["source_mode_derivation"] == "default_typed_chat_payload"
+    assert meta["action_candidate"]["source_surface"] == "typed_chat"
+    assert meta["action_candidate"]["voice_turn_correlation_observed"] is False
+    assert meta["action_candidate"]["voice_turn_correlation_read_only"] is True
+    assert meta["action_candidate"]["voice_turn_correlation_grants_execution_authority"] is False
+    source_mode_proof = meta["action_candidate"]["source_mode_proof"]
+    assert source_mode_proof["kind"] == "francis.action_candidate.source_mode_proof"
+    assert source_mode_proof["input_actor"] == "api.chat"
+    assert source_mode_proof["source_mode"] == "typed"
+    assert source_mode_proof["source_mode_derivation"] == "default_typed_chat_payload"
     assert meta["action_candidate"]["mission_id"] == mission_id
     assert meta["action_candidate"]["operation_id"] == operation_id
     assert meta["action_candidate"]["direct_execution"] is False

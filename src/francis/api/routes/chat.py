@@ -239,6 +239,29 @@ def _compact_mission_ingress_meta(
                 "action_candidate_status": str(candidate.get("status") or "").strip(),
                 "action_candidate_surface": str(candidate.get("surface") or "").strip(),
                 "action_candidate_source_mode": str(candidate.get("source_mode") or "").strip(),
+                "action_candidate_input_actor": str(candidate.get("input_actor") or "").strip(),
+                "action_candidate_source_mode_derivation": str(candidate.get("source_mode_derivation") or "").strip(),
+                "action_candidate_source_surface": str(candidate.get("source_surface") or "").strip(),
+                "action_candidate_voice_turn_correlation_observed": bool(
+                    candidate.get("voice_turn_correlation_observed")
+                )
+                is True,
+                "action_candidate_voice_turn_id": str(candidate.get("voice_turn_id") or "").strip(),
+                "action_candidate_supersedes_voice_turn_id": str(
+                    candidate.get("supersedes_voice_turn_id") or ""
+                ).strip(),
+                "action_candidate_voice_turn_correlation_read_only": bool(
+                    candidate.get("voice_turn_correlation_read_only")
+                )
+                is True,
+                "action_candidate_voice_turn_correlation_grants_execution_authority": bool(
+                    candidate.get("voice_turn_correlation_grants_execution_authority")
+                )
+                is True,
+                "action_candidate_voice_turn_correlation_grants_mutation_authority": bool(
+                    candidate.get("voice_turn_correlation_grants_mutation_authority")
+                )
+                is True,
                 "action_candidate_mission_id": str(candidate.get("mission_id") or "").strip(),
                 "action_candidate_operation_id": str(candidate.get("operation_id") or "").strip(),
                 "action_candidate_first_operation_id": str(candidate.get("first_operation_id") or "").strip(),
@@ -589,10 +612,40 @@ def _mission_ingress_request_meta(payload: ChatIn, intent_meta: dict[str, Any]) 
 
 
 def _mission_ingress_source_mode(payload: ChatIn) -> str:
-    actor = _chat_actor(payload).strip().lower()
-    if actor in _FRANCIS_VOICE_SURFACE_ACTORS or payload.voice_turn_id or payload.supersedes_voice_turn_id:
-        return "spoken"
-    return "typed"
+    return str(_mission_ingress_source_mode_proof(payload).get("source_mode") or "typed")
+
+
+def _mission_ingress_source_mode_proof(payload: ChatIn) -> dict[str, object]:
+    input_actor = _chat_actor(payload).strip() or "api.chat"
+    actor = input_actor.lower()
+    voice_surface = _FRANCIS_VOICE_SURFACE_ACTORS.get(actor, "")
+    voice_turn_id = _bounded_trace_identifier(payload.voice_turn_id or "")
+    supersedes_voice_turn_id = _bounded_trace_identifier(payload.supersedes_voice_turn_id or "")
+    voice_turn_correlation_observed = bool(voice_turn_id or supersedes_voice_turn_id)
+    source_mode = "spoken" if voice_surface or voice_turn_correlation_observed else "typed"
+    if voice_surface:
+        derivation = "voice_surface_actor"
+        source_surface = voice_surface
+    elif voice_turn_correlation_observed:
+        derivation = "voice_turn_payload"
+        source_surface = "voice_turn_payload"
+    else:
+        derivation = "default_typed_chat_payload"
+        source_surface = "typed_chat"
+    return {
+        "kind": "francis.action_candidate.source_mode_proof",
+        "input_actor": input_actor,
+        "source_mode": source_mode,
+        "source_mode_derivation": derivation,
+        "source_surface": source_surface,
+        "known_voice_surface_actor": bool(voice_surface),
+        "voice_turn_correlation_observed": voice_turn_correlation_observed,
+        "voice_turn_id": voice_turn_id,
+        "supersedes_voice_turn_id": supersedes_voice_turn_id,
+        "voice_turn_correlation_read_only": True,
+        "voice_turn_correlation_grants_execution_authority": False,
+        "voice_turn_correlation_grants_mutation_authority": False,
+    }
 
 
 def _mission_ingress_action_candidate(
@@ -608,13 +661,28 @@ def _mission_ingress_action_candidate(
     operation_name = str(current_task.get("operation_name") or "plan.create").strip()
     operation_plane = str(current_task.get("operation_plane") or "P7_EXECUTION").strip()
     gate = str(current_task.get("gate") or "policy_and_approval").strip()
+    source_mode_proof = _mission_ingress_source_mode_proof(payload)
     return {
         "kind": "francis.action_candidate",
         "schema_version": "francis_action_candidate_v1",
         "status": "queued_for_governed_review",
         "surface": "api.routes.chat.mission_ingress",
         "source": "chat.send",
-        "source_mode": _mission_ingress_source_mode(payload),
+        "source_mode": source_mode_proof["source_mode"],
+        "source_mode_proof": source_mode_proof,
+        "input_actor": source_mode_proof["input_actor"],
+        "source_mode_derivation": source_mode_proof["source_mode_derivation"],
+        "source_surface": source_mode_proof["source_surface"],
+        "voice_turn_correlation_observed": source_mode_proof["voice_turn_correlation_observed"],
+        "voice_turn_id": source_mode_proof["voice_turn_id"],
+        "supersedes_voice_turn_id": source_mode_proof["supersedes_voice_turn_id"],
+        "voice_turn_correlation_read_only": source_mode_proof["voice_turn_correlation_read_only"],
+        "voice_turn_correlation_grants_execution_authority": source_mode_proof[
+            "voice_turn_correlation_grants_execution_authority"
+        ],
+        "voice_turn_correlation_grants_mutation_authority": source_mode_proof[
+            "voice_turn_correlation_grants_mutation_authority"
+        ],
         "route": route,
         "method": method,
         "mission_id": record.mission_id,

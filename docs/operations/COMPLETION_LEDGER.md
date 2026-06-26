@@ -96925,6 +96925,78 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, and browser proof were not run for this
   bounded backend readback slice.
 
+### 2026-06-26 04:21Z - Mission-ingress action-candidate source-mode proof
+
+Current posture: Phase 2 / P1 interface, P3 governance, P7 execution, and P9
+observability now expose explicit source-mode provenance on chat mission-ingress
+action candidates. Typed and spoken operator direction can become queued
+`francis.action_candidate` records, but the candidate now carries a proof of how
+the source mode was derived and keeps voice-turn correlation read-only and
+authority-denying.
+
+What changed:
+
+- Added `francis.action_candidate.source_mode_proof` to
+  `/chat/send` and `/chat/ws` mission-ingress action candidates.
+- Action candidates now read back `input_actor`, `source_mode_derivation`,
+  `source_surface`, `voice_turn_correlation_observed`, voice-turn ids when
+  present, and voice-correlation no-authority flags.
+- The compact mission-ingress conversation-ledger metadata now includes the
+  same bounded source-mode proof fields so operator-visible receipts can show
+  typed/spoken provenance without raw transcript dumping.
+- Updated `developer_bridge.collaboration_review_item.action_candidate_boundary`
+  so collaboration review items require source-mode proof, input actor,
+  derivation, read-only voice correlation, and authority-denying voice
+  correlation before typed/spoken direction is treated as an action-candidate
+  boundary.
+
+Validation:
+
+- Focused chat and developer-bridge tests passed:
+  `python -m pytest tests/test_api_chat.py::test_chat_mission_command_declares_queued_mission_with_loop_context tests/test_api_chat.py::test_chat_mona_lisa_voice_intent_declares_truthful_sandbox_mission tests/test_api_chat.py::test_chat_websocket_structured_message_declares_mission tests/test_developer_bridge.py::test_collaboration_review_projects_generic_historical_topics_to_concrete_surfaces`.
+- Ruff check passed:
+  `python -m ruff check src\francis\api\routes\chat.py src\francis\developer_bridge\collaboration_review.py tests\test_api_chat.py tests\test_developer_bridge.py`.
+- Ruff format check passed after formatting:
+  `python -m ruff format --check src\francis\api\routes\chat.py src\francis\developer_bridge\collaboration_review.py tests\test_api_chat.py tests\test_developer_bridge.py`.
+- Targeted mypy passed:
+  `python -m mypy src\francis\api\routes\chat.py src\francis\developer_bridge\collaboration_review.py`.
+- Compileall passed:
+  `python -m compileall src\francis\api\routes\chat.py src\francis\developer_bridge\collaboration_review.py`.
+- `git diff --check` passed.
+- Live API readback after restart showed the latest
+  `direction_to_action_boundary` review item with
+  `source_mode_proof_required=true`, `input_actor_required=true`,
+  `source_mode_derivation_required=true`,
+  `voice_turn_correlation_read_only=true`,
+  `voice_turn_correlation_grants_execution_authority=false`, and
+  `grants_execution_authority=false`.
+- A temp-data TestClient probe with bounded actor scopes returned queued typed
+  and spoken action candidates. The typed candidate reported
+  `source_mode=typed`, `input_actor=api.chat`,
+  `source_mode_derivation=default_typed_chat_payload`,
+  `source_surface=typed_chat`, and no execution authority. The spoken candidate
+  reported `source_mode=spoken`, `input_actor=lens.overlay.voice`,
+  `source_mode_derivation=voice_surface_actor`,
+  `source_surface=lens_overlay_voice`,
+  `voice_turn_correlation_observed=true`,
+  `voice_turn_correlation_read_only=true`, and no execution authority.
+- Runtime health after API restart reported `status=healthy`, `helper_count=3`,
+  turn `1620`, recurrence `ready_for_next_prompt`, and all three collaboration
+  participants enabled.
+
+Remaining truthful gap:
+
+- This adds provenance/readback proof to queued action candidates. It does not
+  execute the candidate, approve it, bypass policy, mutate outside the existing
+  mission-ingress write path, grant local-model capability authority, write
+  memory outside existing mission/conversation receipts, or make spoken input
+  more authoritative than typed input.
+- The first ad hoc temp-data probe without actor scope correctly hit the
+  permission/posture gate and produced no action candidate; the passing probe
+  used explicit bounded test actor scopes.
+- `.\scripts\check.ps1`, GitHub CI, browser proof, and a live real-data mission
+  declaration were not run for this bounded backend/readback slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

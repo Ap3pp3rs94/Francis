@@ -1707,6 +1707,11 @@ def test_collaboration_review_projects_generic_historical_topics_to_concrete_sur
     assert action_candidate_boundary["action_candidate_kind"] == "francis.action_candidate"
     assert action_candidate_boundary["required_status"] == "queued_for_governed_review"
     assert action_candidate_boundary["source_modes"] == ["typed", "spoken"]
+    assert action_candidate_boundary["source_mode_proof_required"] is True
+    assert action_candidate_boundary["input_actor_required"] is True
+    assert action_candidate_boundary["source_mode_derivation_required"] is True
+    assert action_candidate_boundary["voice_turn_correlation_read_only"] is True
+    assert action_candidate_boundary["voice_turn_correlation_grants_execution_authority"] is False
     assert action_candidate_boundary["conversation_can_create_action_candidate"] is True
     assert action_candidate_boundary["conversation_can_execute_action"] is False
     assert action_candidate_boundary["conversation_can_approve_action"] is False
@@ -1720,6 +1725,19 @@ def test_collaboration_review_projects_generic_historical_topics_to_concrete_sur
     assert action_candidate_boundary["grants_approval_authority"] is False
     assert action_candidate_boundary["grants_memory_write_authority"] is False
     assert "action_candidate.direct_execution=false" in action_candidate_boundary["required_proof_fields"]
+    assert (
+        "action_candidate.source_mode_proof.kind=francis.action_candidate.source_mode_proof"
+        in action_candidate_boundary["required_proof_fields"]
+    )
+    assert "action_candidate.input_actor" in action_candidate_boundary["required_proof_fields"]
+    assert "action_candidate.source_mode_derivation" in action_candidate_boundary["required_proof_fields"]
+    assert (
+        "action_candidate.voice_turn_correlation_read_only=true" in action_candidate_boundary["required_proof_fields"]
+    )
+    assert (
+        "action_candidate.voice_turn_correlation_grants_execution_authority=false"
+        in action_candidate_boundary["required_proof_fields"]
+    )
     assert "action_candidate.grants_execution_authority=false" in action_candidate_boundary["required_proof_fields"]
     assert "/chat/send response.action_candidate" in action_candidate_boundary["required_readbacks"]
     assert "/chat/ws assistant.meta.action_candidate" in action_candidate_boundary["required_readbacks"]
