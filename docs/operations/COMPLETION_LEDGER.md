@@ -96673,6 +96673,63 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, and browser proof were not run for this
   bounded backend readback slice.
 
+### 2026-06-26 03:57Z - Model-advice governance boundary readback
+
+Current posture: Phase 2 / P3 governance, P9 observability, and P1 interface
+review now expose a typed boundary for the live collaboration topic "which
+governance gate must be visible when model advice proposes action." Model advice
+can remain useful as a signal, but the review readback now proves it is not
+action-ready and cannot create, approve, or execute an action by itself.
+
+What changed:
+
+- Added `model_advice_governance_boundary` to
+  `developer_bridge.collaboration_review_item`.
+- For `model_advice_governance_gate_visibility` items on
+  `developer_bridge.collaboration_review.action_boundary`, the boundary now
+  records that model advice is not action-ready, cannot create an action
+  candidate, cannot execute, and cannot approve.
+- The boundary requires the review item's `action_boundary`, the runtime
+  `latest_local_model_response.advice_only_proof`, policy, approval, traceable
+  receipt, and action-candidate boundary evidence before any action-readiness
+  claim.
+- Non-model-advice review items receive authority-denying defaults and an empty
+  proof checklist so ordinary collaboration review items do not imply this
+  specific gate.
+
+Validation:
+
+- Focused developer-bridge tests passed:
+  `python -m pytest tests/test_developer_bridge.py::test_collaboration_review_projects_generic_historical_topics_to_concrete_surfaces tests/test_developer_bridge.py::test_collaboration_runtime_health_is_read_only_and_reports_recurrence`.
+- Ruff check passed:
+  `python -m ruff check src\francis\developer_bridge\collaboration_review.py tests\test_developer_bridge.py`.
+- Ruff format check passed:
+  `python -m ruff format --check src\francis\developer_bridge\collaboration_review.py tests\test_developer_bridge.py`.
+- Targeted mypy passed:
+  `python -m mypy src\francis\developer_bridge\collaboration_review.py`.
+- Compileall passed:
+  `python -m compileall src\francis\developer_bridge\collaboration_review.py`.
+- Live API readback after restart showed
+  `model_advice_governance_boundary.applies=true`,
+  `model_advice_can_create_action_candidate=false`,
+  `model_advice_can_execute_action=false`,
+  `model_advice_can_approve_action=false`,
+  `action_readiness_claim_allowed=false`, and all no-authority flags false for
+  review item `insight-collab-a7127bde8fb30f47-46f7dcc857fb`.
+- Runtime health after API restart reported `status=healthy`,
+  `helper_count=3`, prompt budget `ok`, turn `1597`,
+  `advice_only_allowed=false`, and all three collaboration participants enabled.
+
+Remaining truthful gap:
+
+- This is a review/readback contract. It does not grant Francis1, Codex, or
+  Claude action readiness, execution authority, approval authority, mutation
+  authority, memory-write authority, training authority, or capability authority.
+- The local model is still producing output-guard rewrites on some turns; those
+  remain learning signals, not action-readiness evidence.
+- `.\scripts\check.ps1`, GitHub CI, and browser proof were not run for this
+  bounded backend readback slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

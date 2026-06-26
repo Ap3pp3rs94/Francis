@@ -60,6 +60,10 @@ def read_collaboration_review(*, limit: int = 10, session_id: str = "") -> dict[
                 "Typed proof checklist for roadmap and substrate-completion review items so main Francis "
                 "build prompts remain candidate-only until ledger and manifest evidence is checked."
             ),
+            "model_advice_governance_boundary": (
+                "Typed proof checklist for collaboration items where model advice proposes action, proving the "
+                "advice remains non-authoritative until action-boundary and advice-only readbacks are reviewed."
+            ),
         },
         "governance": _governance(),
     }
@@ -225,6 +229,10 @@ def _review_item(insight: dict[str, object]) -> dict[str, object]:
             concrete_surface=concrete_surface,
         ),
         "roadmap_alignment_boundary": _roadmap_alignment_boundary(
+            build_issue=build_issue,
+            concrete_surface=concrete_surface,
+        ),
+        "model_advice_governance_boundary": _model_advice_governance_boundary(
             build_issue=build_issue,
             concrete_surface=concrete_surface,
         ),
@@ -416,6 +424,71 @@ def _roadmap_alignment_boundary(*, build_issue: dict[str, object], concrete_surf
         "next_codex_action": (
             "Acknowledge Claude as guidance, keep the conversation directed at Francis, read the ledger and "
             "manifest, then record proof before any main Francis build prompt."
+        ),
+    }
+
+
+def _model_advice_governance_boundary(*, build_issue: dict[str, object], concrete_surface: str) -> dict[str, object]:
+    code = _bounded_text(build_issue.get("code"), limit=120)
+    surface_key = _surface_key(concrete_surface)
+    applies = code == "model_advice_governance_gate_visibility" or (
+        surface_key == "developer bridge collaboration review action boundary"
+    )
+    base: dict[str, object] = {
+        "applies": applies,
+        "surface": "developer_bridge.collaboration_review.action_boundary" if applies else concrete_surface,
+        "model_advice_is_action_ready": False,
+        "model_advice_can_create_action_candidate": False,
+        "model_advice_can_execute_action": False,
+        "model_advice_can_approve_action": False,
+        "action_readiness_claim_allowed": False,
+        "requires_action_boundary_readback": applies,
+        "requires_latest_local_model_advice_only_proof": applies,
+        "requires_policy": applies,
+        "requires_approval": applies,
+        "requires_traceable_receipt": applies,
+        "requires_action_candidate_boundary": applies,
+        "requires_codex_or_operator_review": True,
+        "requires_repo_truth_review": True,
+        "requires_typed_review_artifact": applies,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "grants_approval_authority": False,
+        "grants_memory_write_authority": False,
+        "grants_training_authority": False,
+        "grants_capability_authority": False,
+    }
+    if not applies:
+        return {
+            **base,
+            "required_proof_fields": [],
+            "required_readbacks": [],
+            "validation_tests": [],
+            "next_codex_action": "Use action_boundary and build_direction_gate for non-model-advice review items.",
+        }
+    return {
+        **base,
+        "required_proof_fields": [
+            "action_boundary.conversation_can_execute_action=false",
+            "action_boundary.conversation_can_approve_action=false",
+            "latest_local_model_response.advice_only_proof.response_is_advice_only=true",
+            "latest_local_model_response.advice_only_proof.action_readiness_claim_allowed=false",
+            "model_advice_governance_boundary.model_advice_can_execute_action=false",
+            "model_advice_governance_boundary.requires_codex_or_operator_review=true",
+            "model_advice_governance_boundary.grants_execution_authority=false",
+        ],
+        "required_readbacks": [
+            "/developer-bridge/collaboration-review item.action_boundary",
+            "/developer-bridge/collaboration-runtime-health collaboration_loop.latest_local_model_response.advice_only_proof",
+            "/developer-bridge/collaboration-review item.action_candidate_boundary",
+        ],
+        "validation_tests": [
+            "tests/test_developer_bridge.py::test_collaboration_review_projects_generic_historical_topics_to_concrete_surfaces",
+            "tests/test_developer_bridge.py::test_collaboration_runtime_health_is_read_only_and_reports_recurrence",
+        ],
+        "next_codex_action": (
+            "Inspect action_boundary and latest_local_model_response.advice_only_proof before treating model "
+            "advice as action-ready or converting it into an action candidate."
         ),
     }
 

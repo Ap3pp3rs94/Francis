@@ -1729,6 +1729,36 @@ def test_collaboration_review_projects_generic_historical_topics_to_concrete_sur
     assert gate_item["quality_flags"]["generic_surface"] is False
     assert gate_item["surface_verification"]["status"] == "existing_surface_found"
     assert gate_item["surface_verification"]["surface_kind"] == "governance_readback"
+    model_advice_boundary = gate_item["model_advice_governance_boundary"]
+    assert model_advice_boundary["applies"] is True
+    assert model_advice_boundary["surface"] == "developer_bridge.collaboration_review.action_boundary"
+    assert model_advice_boundary["model_advice_is_action_ready"] is False
+    assert model_advice_boundary["model_advice_can_create_action_candidate"] is False
+    assert model_advice_boundary["model_advice_can_execute_action"] is False
+    assert model_advice_boundary["model_advice_can_approve_action"] is False
+    assert model_advice_boundary["action_readiness_claim_allowed"] is False
+    assert model_advice_boundary["requires_action_boundary_readback"] is True
+    assert model_advice_boundary["requires_latest_local_model_advice_only_proof"] is True
+    assert model_advice_boundary["requires_policy"] is True
+    assert model_advice_boundary["requires_approval"] is True
+    assert model_advice_boundary["requires_traceable_receipt"] is True
+    assert model_advice_boundary["requires_action_candidate_boundary"] is True
+    assert model_advice_boundary["requires_codex_or_operator_review"] is True
+    assert "action_boundary.conversation_can_execute_action=false" in model_advice_boundary["required_proof_fields"]
+    assert (
+        "latest_local_model_response.advice_only_proof.action_readiness_claim_allowed=false"
+        in model_advice_boundary["required_proof_fields"]
+    )
+    assert "/developer-bridge/collaboration-review item.action_boundary" in model_advice_boundary["required_readbacks"]
+    assert (
+        "/developer-bridge/collaboration-runtime-health collaboration_loop.latest_local_model_response.advice_only_proof"
+        in model_advice_boundary["required_readbacks"]
+    )
+    assert model_advice_boundary["grants_execution_authority"] is False
+    assert model_advice_boundary["grants_mutation_authority"] is False
+    assert model_advice_boundary["grants_approval_authority"] is False
+    assert model_advice_boundary["grants_memory_write_authority"] is False
+    assert model_advice_boundary["grants_capability_authority"] is False
 
     disagreement_item = items["insight-disagreement"]
     assert disagreement_item["build_issue"]["code"] == "source_disagreement_record"
