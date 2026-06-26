@@ -830,6 +830,7 @@ def _learning_event_readback_item(event: dict[str, object]) -> dict[str, object]
             "operator_intent": _bounded_text(learning.get("operator_intent"), limit=220),
             "next_prompt_policy": _bounded_text(learning.get("next_prompt_policy"), limit=260),
         },
+        "signal_review": _learning_signal_review(event, recent_turns=recent_turns),
         "memory_promotion_gate": _learning_memory_promotion_gate(event),
         "writer_governance": {
             "stores_full_transcript": bool(writer_governance.get("stores_full_transcript")),
@@ -842,6 +843,98 @@ def _learning_event_readback_item(event: dict[str, object]) -> dict[str, object]
             "grants_model_authority": bool(writer_governance.get("grants_model_authority")),
         },
     }
+
+
+def _learning_signal_review(
+    event: dict[str, object],
+    *,
+    recent_turns: list[dict[str, object]],
+) -> dict[str, object]:
+    event_id = _bounded_text(event.get("id"), limit=160)
+    failure_type = _bounded_text(event.get("failure_type"), limit=120)
+    repeated_terms = [
+        _bounded_text(item, limit=80)
+        for item in _list(event.get("repeated_terms"))[:16]
+        if _bounded_text(item, limit=80)
+    ]
+    current_count = _safe_int(
+        event.get("current_signal_recent_turn_count"),
+        default=len(recent_turns),
+    )
+    recent_count = len(recent_turns)
+    priority = _learning_review_priority(
+        failure_type=failure_type,
+        repeated_terms=repeated_terms,
+        current_signal_recent_turn_count=current_count,
+        recent_turn_count=recent_count,
+    )
+    return {
+        "applies": True,
+        "classification": _learning_signal_classification(failure_type),
+        "review_priority": priority,
+        "impact": _learning_signal_impact(failure_type),
+        "failure_type": failure_type,
+        "current_signal_recent_turn_count": current_count,
+        "recent_turn_count": recent_count,
+        "repeated_term_count": len(repeated_terms),
+        "required_review_artifact": (
+            f"developer_bridge.collaboration_driver.learning_events:{event_id}" if event_id else ""
+        ),
+        "recommended_next_action": _learning_signal_next_action(priority=priority),
+        "memory_promotion_allowed": False,
+        "long_term_memory_promotion_allowed": False,
+        "model_tuning_allowed": False,
+        "requires_codex_or_operator_review": True,
+        "requires_repo_truth_review": True,
+        "stores_full_transcript": False,
+        "grants_training_authority": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "grants_approval_authority": False,
+        "grants_memory_write_authority": False,
+    }
+
+
+def _learning_review_priority(
+    *,
+    failure_type: str,
+    repeated_terms: list[str],
+    current_signal_recent_turn_count: int,
+    recent_turn_count: int,
+) -> str:
+    if failure_type == "output_guard_drift" and (
+        current_signal_recent_turn_count >= 3
+        or "stale_substrate_topic_replay" in repeated_terms
+        or "stale_action_readiness_topic_replay" in repeated_terms
+    ):
+        return "high"
+    if current_signal_recent_turn_count >= 4 or recent_turn_count >= 4:
+        return "medium"
+    return "low"
+
+
+def _learning_signal_classification(failure_type: str) -> str:
+    if failure_type == "output_guard_drift":
+        return "local_model_output_guard_drift"
+    if failure_type == "repetitive_meta_loop":
+        return "collaboration_meta_loop"
+    return failure_type or "unknown_learning_signal"
+
+
+def _learning_signal_impact(failure_type: str) -> str:
+    if failure_type == "output_guard_drift":
+        return "Repeated guarded local-model replies can hide drift and stall build-direction review."
+    if failure_type == "repetitive_meta_loop":
+        return "Repeated meta loops consume collaboration turns without adding repo-truth evidence."
+    return "Repeated collaboration failures should remain review evidence before tuning or memory promotion."
+
+
+def _learning_signal_next_action(*, priority: str) -> str:
+    if priority == "high":
+        return "Review repeated terms and recent turns before prompt tuning, memory promotion, or build direction."
+    if priority == "medium":
+        return "Review the bounded learning receipt before changing prompts or memory policy."
+    return "Keep the learning receipt available for trend review; do not tune or promote memory from it alone."
 
 
 def _learning_memory_promotion_gate(event: dict[str, object]) -> dict[str, object]:

@@ -2877,6 +2877,29 @@ test("parseCollaborationLearning preserves bounded no-authority learning receipt
           operator_intent: "keep failures in Francis memory without transcript dumping",
           next_prompt_policy: "ask for a concrete build surface instead of another identity argument",
         },
+        signal_review: {
+          applies: true,
+          classification: "collaboration_meta_loop",
+          review_priority: "medium",
+          impact: "Repeated meta loops consume collaboration turns without adding repo-truth evidence.",
+          failure_type: "repetitive_meta_loop",
+          current_signal_recent_turn_count: 6,
+          recent_turn_count: 4,
+          repeated_term_count: 2,
+          required_review_artifact: "developer_bridge.collaboration_driver.learning_events:learning-driver-alpha",
+          recommended_next_action: "Review the bounded learning receipt before changing prompts or memory policy.",
+          memory_promotion_allowed: false,
+          long_term_memory_promotion_allowed: false,
+          model_tuning_allowed: false,
+          requires_codex_or_operator_review: true,
+          requires_repo_truth_review: true,
+          stores_full_transcript: false,
+          grants_training_authority: false,
+          grants_execution_authority: false,
+          grants_mutation_authority: false,
+          grants_approval_authority: false,
+          grants_memory_write_authority: false,
+        },
         memory_promotion_gate: {
           applies: true,
           source_event_id: "learning-driver-alpha",
@@ -2929,6 +2952,11 @@ test("parseCollaborationLearning preserves bounded no-authority learning receipt
   assert.equal(item.recentTurnCount, 4);
   assert.equal(item.recentTurns[0]?.noteId, "note-alpha");
   assert.equal(item.learning.operatorIntent.includes("without transcript dumping"), true);
+  assert.equal(item.signalReview.classification, "collaboration_meta_loop");
+  assert.equal(item.signalReview.reviewPriority, "medium");
+  assert.equal(item.signalReview.requiredReviewArtifact, "developer_bridge.collaboration_driver.learning_events:learning-driver-alpha");
+  assert.equal(item.signalReview.modelTuningAllowed, false);
+  assert.equal(item.signalReview.grantsTrainingAuthority, false);
   assert.equal(item.memoryPromotionGate.failureIsLearningEvidence, true);
   assert.equal(item.memoryPromotionGate.memoryPromotionAllowed, false);
   assert.equal(item.memoryPromotionGate.longTermMemoryPromotionAllowed, false);
@@ -2951,15 +2979,21 @@ test("parseCollaborationLearning preserves bounded no-authority learning receipt
   assert.equal(guard.tone, "ready");
   assert.equal(guard.failureType, "repetitive_meta_loop");
   assert.equal(guard.latestTurn, 419);
+  assert.equal(guard.reviewPriority, "medium");
+  assert.equal(guard.classification, "collaboration_meta_loop");
   assert.equal(guard.promptPolicy, "ask for a concrete build surface instead of another identity argument");
   assert.deepEqual(guard.detail, [
     "failure repetitive_meta_loop",
+    "classification collaboration_meta_loop",
+    "priority medium",
     "latest turn 419",
     "recent turns 4",
     "learning receipt learning-driver-alpha",
+    "review artifact developer_bridge.collaboration_driver.learning_events:learning-driver-alpha",
     "memory promotion false",
     "tuning false",
     "promotion review true",
+    "codex review true",
     "full transcript false",
     "training false",
     "execute false",

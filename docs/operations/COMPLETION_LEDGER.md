@@ -98140,6 +98140,68 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, browser screenshot proof, and full ORB/body
   coverage proof were not run for this bounded live-health evidence slice.
 
+### 2026-06-26 07:09Z - Collaboration learning signal review priority
+
+Current posture: Phase 2 / P9 observability and P8-adjacent learning readback now
+classify collaboration learning receipts before any prompt-tuning,
+memory-promotion, model-tuning, or build-direction claim. The live Francis1
+conversation asked which local-model drift or failure signal should become a
+learning receipt and how to classify/prioritize it; this slice adds a bounded
+`signal_review` object to `developer_bridge.collaboration_driver.learning_events`
+readback.
+
+What changed:
+
+- `read_collaboration_learning_events()` now includes `signal_review` for each
+  learning event.
+- `signal_review` names a stable classification, review priority, impact,
+  current/recent turn counts, repeated-term count, required review artifact, and
+  recommended next review action.
+- Repeated `output_guard_drift` with stale replay markers is ranked `high`
+  priority and classified as `local_model_output_guard_drift`.
+- Repetitive meta loops are classified as `collaboration_meta_loop` and ranked
+  from the bounded recent-turn counts.
+- The Chat UI learning parser and guard summary preserve and display
+  classification, priority, required review artifact, and no-authority gates.
+- The new readback remains advisory and read-only: memory promotion, long-term
+  memory promotion, model tuning, execution, mutation, approval, training, and
+  memory-write authority all remain false.
+
+Validation:
+
+- Focused backend learning tests passed:
+  `python -m pytest tests/test_developer_bridge.py::test_collaboration_learning_events_readback_is_bounded_and_read_only tests/test_developer_bridge.py::test_collaboration_driver_rotates_topics_after_repeated_output_guard_receipts -q`.
+- Full Chat UI contract suite passed:
+  `npm run test -- --runInBand` (`283` passing tests).
+- Chat UI production build passed:
+  `npm run build`.
+- Ruff check passed:
+  `python -m ruff check src\francis\developer_bridge\collaboration_driver.py tests\test_developer_bridge.py`.
+- Ruff format check passed with cache-write warnings only:
+  `python -m ruff format --check src\francis\developer_bridge\collaboration_driver.py tests\test_developer_bridge.py`.
+- Targeted mypy passed:
+  `python -m mypy src\francis\developer_bridge\collaboration_driver.py`.
+- Compileall passed:
+  `python -m compileall src\francis\developer_bridge\collaboration_driver.py`.
+- `git diff --check` passed.
+- Direct live readback returned the active learning event as
+  `classification=local_model_output_guard_drift`, `review_priority=high`,
+  `model_tuning_allowed=false`, `memory_promotion_allowed=false`, and
+  `grants_execution_authority=false`.
+- Restarted the local Francis API on `127.0.0.1:8000`; HTTP
+  `/developer-bridge/collaboration-learning?limit=1` returned
+  `classification=local_model_output_guard_drift`, `review_priority=high`,
+  `model_tuning_allowed=false`, `memory_promotion_allowed=false`, and
+  `grants_execution_authority=false`.
+
+Remaining truthful gap:
+
+- This is classification and operator review evidence only. It does not tune the
+  local model, promote memory, change prompts, alter output-guard behavior,
+  execute actions, approve actions, or grant model/capability authority.
+- `.\scripts\check.ps1`, GitHub CI, browser screenshot proof, and full ORB/body
+  coverage proof were not run for this bounded learning-signal slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
