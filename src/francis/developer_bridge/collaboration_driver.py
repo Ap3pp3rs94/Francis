@@ -73,6 +73,7 @@ _OUTPUT_GUARD_TERM_ALLOWLIST = {
     "local_model_reconciliation_loop",
     "missing_surface_fallback",
     "protocol_wrapper_reply",
+    "stale_action_readiness_topic_replay",
     "unauthorized_artifact_review_claim",
     "user_confirmation_fallback",
 }

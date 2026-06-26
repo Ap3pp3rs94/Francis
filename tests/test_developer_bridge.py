@@ -2113,8 +2113,9 @@ def test_collaboration_driver_rotates_topics_after_repeated_output_guard_receipt
             objective=f"guarded Francis1 drift {index} to {prompt_id}",
             prompt=(
                 "Francis1 output guard: model reply repeated known collaboration drift after Codex provided a "
-                "verified surface. Drift terms: user_confirmation_fallback, advisory_output_boundary, "
-                "executable_code_boundary. Review artifact: developer_bridge.collaboration_driver.learning_events."
+                "verified surface. Drift terms: user_confirmation_fallback, stale_action_readiness_topic_replay, "
+                "advisory_output_boundary, executable_code_boundary. Review artifact: "
+                "developer_bridge.collaboration_driver.learning_events."
             ),
             context=f"Local Ollama participant response for relay {prompt_id}.",
         )
@@ -2141,6 +2142,7 @@ def test_collaboration_driver_rotates_topics_after_repeated_output_guard_receipt
     assert event["repeated_terms"] == [
         "output_guard_drift",
         "user_confirmation_fallback",
+        "stale_action_readiness_topic_replay",
         "advisory_output_boundary",
         "executable_code_boundary",
     ]
@@ -2162,6 +2164,7 @@ def test_collaboration_driver_rotates_topics_after_repeated_output_guard_receipt
     assert signal["repeated_terms"] == [
         "output_guard_drift",
         "user_confirmation_fallback",
+        "stale_action_readiness_topic_replay",
         "advisory_output_boundary",
         "executable_code_boundary",
     ]
@@ -3541,6 +3544,51 @@ def test_ollama_participant_rewrites_canonical_roadmap_alignment_drift(
     assert "block claims that outrun the current phase" in response["prompt"]
     assert "I will inspect" not in response["prompt"]
     assert "My receipt of the current artifact" not in response["prompt"]
+
+
+def test_ollama_participant_rewrites_stale_action_readiness_replay_on_roadmap_topic(
+    tmp_path,
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+    submit_collaboration_prompt(
+        source_agent="codex",
+        target_agent="ollama",
+        objective="Roadmap alignment prompt",
+        prompt=(
+            "Francis1 collab turn 469. Topic: which roadmap-alignment check should run before prompting any "
+            "main Francis build. Reply: issue/gap/risk; artifact Codex inspects. Current artifact: "
+            "docs/operations/COMPLETION_LEDGER.md + docs/canonical/BUILD_MANIFEST.md. Prior check: Review "
+            "candidate insight-live: surface=docs/canonical/BUILD_MANIFEST.md + "
+            "docs/operations/COMPLETION_LEDGER.md; verified=canonical; build_or_wire=false. Codex response: "
+            "I am inspecting that surface before edits; continue from it, do not answer the prior "
+            "action-readiness topic."
+        ),
+    )
+
+    def fake_generate(_prompt: str) -> str:
+        return (
+            "My current gap is defining and documenting local-model responses without asserting capability "
+            "authority before any action-readiness claim, given reliance on external guidance.\n\n"
+            "Artifact: docs/operations/COMPLETION_LEDGER.md + docs/canonical/BUILD_MANIFEST.md"
+        )
+
+    monkeypatch.setattr("francis.developer_bridge.ollama_participant.generate", fake_generate)
+
+    result = ollama_respond_once(cooldown_seconds=0)
+
+    assert result["status"] == "responded"
+    output_guard = result["execution_trace"]["output_guard"]
+    assert output_guard["status"] == "drift_rewritten"
+    assert output_guard["verified_surface"] == "docs/operations/COMPLETION_LEDGER.md + docs/canonical/BUILD_MANIFEST.md"
+    assert output_guard["detected_terms"] == ["stale_action_readiness_topic_replay"]
+    transcript = read_collaboration_transcript(source_agent="ollama", target_agent="codex")
+    response = transcript["items"][0]
+    assert "stale_action_readiness_topic_replay" in response["prompt"]
+    assert "keep the ledger as shipped truth" in response["prompt"]
+    assert "block claims that outrun the current phase" in response["prompt"]
+    assert "defining and documenting local-model responses" not in response["prompt"]
+    assert "given reliance on external guidance" not in response["prompt"]
 
 
 def test_ollama_participant_rewrites_live_health_reconciliation_drift(

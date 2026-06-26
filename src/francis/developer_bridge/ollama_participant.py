@@ -399,7 +399,7 @@ def _output_guard(item: dict[str, object], reply: str) -> dict[str, object]:
         return _output_guard_record(status="empty_reply", source_prompt=source_prompt, detected_terms=[])
     if not _source_prompt_has_verified_surface(source_prompt):
         return _output_guard_record(status="not_applicable", source_prompt=source_prompt, detected_terms=[])
-    terms = _known_drift_terms(reply)
+    terms = [*_known_drift_terms(reply), *_stale_topic_replay_terms(source_prompt, reply)]
     if not terms:
         return _output_guard_record(status="passed", source_prompt=source_prompt, detected_terms=[])
     return _output_guard_record(status="drift_rewritten", source_prompt=source_prompt, detected_terms=terms)
@@ -525,6 +525,25 @@ def _known_drift_terms(reply: str) -> list[str]:
     if "given the context and contract" in lower or "given the exact review receipt" in lower or "my reply is" in lower:
         terms.append("protocol_wrapper_reply")
     return terms
+
+
+def _stale_topic_replay_terms(source_prompt: str, reply: str) -> list[str]:
+    lower_reply = " ".join(reply.lower().replace("-", " ").split())
+    stale_action_readiness = (
+        "defining and documenting local model responses" in lower_reply
+        and "without asserting capability authority" in lower_reply
+        and "action readiness claim" in lower_reply
+    )
+    if not stale_action_readiness:
+        return []
+    lower_topic = _source_topic_from_prompt(source_prompt).lower()
+    topic_is_action_readiness = (
+        "action-readiness" in lower_topic
+        or "action readiness" in lower_topic
+        or "advice only" in lower_topic
+        or "advisory only" in lower_topic
+    )
+    return [] if topic_is_action_readiness else ["stale_action_readiness_topic_replay"]
 
 
 def _verified_surface_from_prompt(source_prompt: str) -> str:

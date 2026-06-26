@@ -95757,6 +95757,57 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, and unrelated full-system UI flows were not
   run for this bounded capability-grant receipt slice.
 
+### 2026-06-26 01:30Z - Output guard catches stale action-readiness replay
+
+Current posture: Phase 2 / developer bridge local-model guard now detects the
+live failure where Francis1 replays the older action-readiness/capability
+authority answer against unrelated current topics such as roadmap alignment.
+That replay is now rewritten to the current topic's bounded fallback and can be
+counted as a learning signal.
+
+What changed:
+
+- `ollama_participant` now performs source-aware stale-topic detection. When the
+  model reply repeats `defining and documenting local-model responses without
+  asserting capability authority before any action-readiness claim` against a
+  non-action-readiness topic, the output guard marks it as
+  `stale_action_readiness_topic_replay`.
+- The fallback response uses the current topic and verified artifact, so a
+  roadmap-alignment prompt falls back to the ledger/build-manifest gate instead
+  of preserving the stale action-readiness answer.
+- `collaboration_driver` now allowlists
+  `stale_action_readiness_topic_replay` in output-guard learning receipts, so
+  repeated occurrences remain bounded learning material without storing raw
+  model text or granting model authority.
+
+Validation:
+
+- Focused stale-replay and learning saturation tests passed:
+  `python -m pytest tests/test_developer_bridge.py::test_ollama_participant_rewrites_stale_action_readiness_replay_on_roadmap_topic tests/test_developer_bridge.py::test_collaboration_driver_rotates_topics_after_repeated_output_guard_receipts -q`.
+- Developer bridge test file passed:
+  `python -m pytest tests/test_developer_bridge.py -q`.
+- Targeted lint passed:
+  `python -m ruff check src/francis/developer_bridge/ollama_participant.py src/francis/developer_bridge/collaboration_driver.py tests/test_developer_bridge.py`.
+- Targeted format check passed:
+  `python -m ruff format --check src/francis/developer_bridge/ollama_participant.py src/francis/developer_bridge/collaboration_driver.py tests/test_developer_bridge.py`.
+- `git diff --check` passed.
+- The live collaboration helper processes were restarted after the Python guard
+  change so new relay turns load the updated modules.
+- Live runtime proof after restart showed
+  `/developer-bridge/collaboration-runtime-health`
+  `output_guard_status=drift_rewritten`, and
+  `/developer-bridge/collaboration-learning?failure_type=output_guard_drift`
+  reported `latest_turn=1476` with
+  `stale_action_readiness_topic_replay` in `repeated_terms`.
+
+Remaining truthful gap:
+
+- This does not tune the Ollama model weights or create a training dataset.
+- This does not grant Francis1 any new capability, execution, mutation,
+  approval, memory-write, training, or build authority.
+- `.\scripts\check.ps1`, GitHub CI, and unrelated full-system UI flows were not
+  run for this bounded output-guard hardening slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
