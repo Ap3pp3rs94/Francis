@@ -98541,6 +98541,59 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, and full ORB/body coverage proof were not
   run for this bounded Communication UI readback slice.
 
+### 2026-06-26 08:15Z - Communication source-alignment acknowledgment refresh
+
+Current posture: Phase 2 / P9 observability and P1 interface work now make the
+Codex-side collaboration prompt explicitly acknowledge Claude as a guidance
+participant while keeping Francis as the conversation subject and repo/receipt
+validation as the rule. This is a communication contract/readback change only;
+it does not grant Claude, Codex, or Francis1 action authority.
+
+What changed:
+
+- Updated the Codex collaboration driver source-alignment line from shorthand
+  role labels to `Claude guidance acknowledged; Francis stays subject; Codex
+  validates repo truth.`
+- Updated the bounded Codex auto-ack responder to use the same source-alignment
+  line when acknowledging Claude/Ollama relay receipts.
+- Updated the Chat UI collaboration parser to keep the new source-alignment
+  phrase in technical receipt text, not the conversational message body, so the
+  operator can distinguish coordination mechanics from substantive discussion.
+- Updated backend and Chat UI contract tests that assert Codex relay prompts,
+  auto-acks, and source-alignment readbacks.
+
+Validation:
+
+- Focused backend tests passed:
+  `python -m pytest tests/test_developer_bridge.py::test_collaboration_driver_waits_for_ollama_before_next_turn tests/test_developer_bridge.py::test_codex_responder_ignores_existing_then_replies_once tests/test_developer_bridge.py::test_codex_responder_can_ack_ollama_without_retriggering_model -q`.
+- Focused backend stale-guard rotation test passed:
+  `python -m pytest tests/test_developer_bridge.py::test_collaboration_driver_rotates_topics_after_repeated_output_guard_receipts -q`.
+- Chat UI collaboration parser contract passed:
+  `node --test --experimental-strip-types src\chat\index.test.ts`.
+- Chat UI production build passed: `npm run build`.
+- Ruff passed for the touched backend/test files:
+  `python -m ruff check src/francis/developer_bridge/collaboration_driver.py src/francis/developer_bridge/codex_responder.py tests/test_developer_bridge.py`.
+- `git diff --check` passed.
+- No-write prompt readback produced the new line and stayed under the
+  700-character prompt budget (`LEN 614`).
+- Refreshed the live `francis communication-runtime --watch` process and helper
+  set. Runtime health returned `status=healthy`, `helper_count=3`, and live
+  turn `1874` completed with `waiting_for_ollama=false`.
+- Live transcript readback showed turn `1874` from Codex to Francis1 with
+  `Claude guidance acknowledged; Francis stays subject; Codex validates repo
+  truth.` and a Codex auto-ack receipt with the same line. Both remained
+  receipt-only/no-action-authority surfaces.
+
+Remaining truthful gap:
+
+- Historical relay entries remain append-only and still show older shorthand
+  wording where they were emitted before the runtime refresh.
+- This improves source alignment and operator readability; it does not reduce
+  Francis1 model drift, tune the local model, grant Claude/Codex/Francis1 new
+  capability, close ORB/body blockers, or prove main-build readiness.
+- Full `.\scripts\check.ps1`, GitHub CI, browser screenshot proof, and full
+  ORB/body coverage proof were not run for this bounded prompt/readback slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

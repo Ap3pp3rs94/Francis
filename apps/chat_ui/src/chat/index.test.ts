@@ -2193,7 +2193,7 @@ test("formatCollaborationRelayMessage separates current source-alignment receipt
         direction: "codex->ollama",
         objective: "Francis1 collaboration driver turn 1782",
         prompt:
-          "Francis1 turn 1782. francis1-collaboration-compact-contract-v1. Topic: the next Communication UI change that would reduce visible relay noise using existing receipt fields. Reply: issue/gap/risk; artifact. Body map: visible; grants required; stale detaches. Roadmap: ledger first; main-build candidate-only; blocked_by_open_orb_gaps. Trust: classify needs; no capability authority. Claude=guidance; Francis=subject; Codex validates claims. Current artifact: apps.chat_ui.communication. Prior check: Review candidate insight-collab-624362b64; verified=canonical; build_or_wire=false. Codex: validating; no action authority. Guard: drift learned; answer topic.",
+          "Francis1 turn 1782. francis1-collaboration-compact-contract-v1. Topic: the next Communication UI change that would reduce visible relay noise using existing receipt fields. Reply: issue/gap/risk; artifact. Body map: visible; grants required; stale detaches. Roadmap: ledger first; main-build candidate-only; blocked_by_open_orb_gaps. Trust: classify needs; no capability authority. Claude guidance acknowledged; Francis stays subject; Codex validates repo truth. Current artifact: apps.chat_ui.communication. Prior check: Review candidate insight-collab-624362b64; verified=canonical; build_or_wire=false. Codex: validating; no action authority. Guard: drift learned; answer topic.",
         context: "session=driver-alpha; turn=1782; no_action_authority=true.",
         governance: {
           executes_prompt: false,
@@ -2226,7 +2226,7 @@ test("formatCollaborationRelayMessage separates current source-alignment receipt
   assert.equal(display.technicalText.includes("Trust: classify needs; no capability authority"), true);
   assert.equal(
     display.technicalText.includes(
-      "Source alignment: Claude=guidance; Francis=subject; Codex validates claims",
+      "Source alignment: Claude guidance acknowledged; Francis stays subject; Codex validates repo truth",
     ),
     true,
   );

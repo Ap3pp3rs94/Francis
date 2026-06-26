@@ -1782,12 +1782,18 @@ export function formatCollaborationRelayMessage(item: CollaborationTranscriptIte
   const trust = textBetween(raw, "Trust:", [
     " Claude=",
     ". Claude=",
+    " Claude guidance",
+    ". Claude guidance",
+    " Claude acknowledged",
+    ". Claude acknowledged",
     " Current artifact:",
     ". Current artifact:",
     " Prior check:",
     ". Prior check:",
   ]);
-  const sourceAlignment = raw.includes("Claude guidance acknowledged; Francis subject; Codex validates repo truth.")
+  const sourceAlignment = raw.includes("Claude guidance acknowledged; Francis stays subject; Codex validates repo truth.")
+    ? "Claude guidance acknowledged; Francis stays subject; Codex validates repo truth"
+    : raw.includes("Claude guidance acknowledged; Francis subject; Codex validates repo truth.")
     ? "Claude guidance acknowledged; Francis subject; Codex validates repo truth"
     : raw.includes("Claude acknowledged as guidance; Francis stays subject; Codex validates repo truth.")
     ? "Claude acknowledged as guidance; Francis stays subject; Codex validates repo truth"
