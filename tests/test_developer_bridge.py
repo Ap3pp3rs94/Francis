@@ -2386,6 +2386,82 @@ def test_collaboration_transcript_uses_recent_scan_for_large_unfiltered_readback
     assert len(read_paths) == 3
 
 
+def test_collaboration_review_uses_recent_scan_for_large_unfiltered_readback(
+    tmp_path,
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+
+    import francis.developer_bridge.collaboration_review as review_module
+
+    monkeypatch.setattr(review_module, "_RECENT_INSIGHT_SCAN_THRESHOLD", 3)
+    monkeypatch.setattr(review_module, "_RECENT_INSIGHT_SCAN_MIN", 4)
+    monkeypatch.setattr(review_module, "_RECENT_INSIGHT_SCAN_MAX", 5)
+
+    insights_root = tmp_path / "data" / "integrations" / "developer_bridge" / "collaboration_driver" / "insights"
+    insights_root.mkdir(parents=True)
+    for index in range(10):
+        insight_id = f"insight-recent-{index}"
+        insight = {
+            "kind": "developer_bridge.collaboration_insight",
+            "schema_version": "developer_bridge_collaboration_insight_v1",
+            "id": insight_id,
+            "created_at": f"2026-06-25T21:{index:02d}:00+00:00",
+            "session_id": "recent-review",
+            "turn": index,
+            "topic": "which live-health fields prove this collaboration is recurring cleanly without user nudges",
+            "source": {
+                "codex_prompt_id": f"codex-{index}",
+                "ollama_prompt_id": f"ollama-{index}",
+                "note_id": f"note-{index}",
+                "provider_lane": "ollama",
+                "model_identity": "francis1",
+            },
+            "conversation_memory": {
+                "finding": f"Review insight {index}",
+                "build_issue": {
+                    "code": "collaboration_recurrence_evidence",
+                    "statement": "Runtime health should show recurrence evidence.",
+                },
+                "implementation_candidate": {
+                    "title": "Expose recurrence health receipts",
+                    "surface": "developer_bridge collaboration runtime",
+                    "status": "candidate",
+                    "validation_hint": "runtime readback proof",
+                    "requires_operator_or_codex_review": True,
+                },
+            },
+            "action_boundary": {
+                "conversation_can_create_action_candidate": True,
+                "conversation_can_execute_action": False,
+                "conversation_can_approve_action": False,
+            },
+            "review_status": {"state": "candidate", "implemented": False},
+            "governance": {"grants_execution_authority": False},
+        }
+        path = insights_root / f"{insight_id}.json"
+        path.write_text(json.dumps(insight), encoding="utf-8")
+        os.utime(path, (index + 1, index + 1))
+
+    original_read_insight = review_module._read_insight
+    read_paths: list[str] = []
+
+    def counting_read_insight(path):  # type: ignore[no-untyped-def]
+        read_paths.append(path.name)
+        return original_read_insight(path)
+
+    monkeypatch.setattr(review_module, "_read_insight", counting_read_insight)
+
+    review = read_collaboration_review(limit=2)
+
+    assert review["count"] == 2
+    assert [item["insight_id"] for item in review["items"]] == [
+        "insight-recent-9",
+        "insight-recent-8",
+    ]
+    assert len(read_paths) == 5
+
+
 def test_collaboration_sessions_summarize_without_full_transcript_dump(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
     import francis.developer_bridge.collaboration as collaboration_module

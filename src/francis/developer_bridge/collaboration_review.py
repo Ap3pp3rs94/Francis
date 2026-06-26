@@ -11,6 +11,9 @@ _KIND = "developer_bridge.collaboration_review"
 _SCHEMA_VERSION = "developer_bridge_collaboration_review_v1"
 _MAX_LIMIT = 50
 _MAX_TEXT = 420
+_RECENT_INSIGHT_SCAN_THRESHOLD = 250
+_RECENT_INSIGHT_SCAN_MIN = 32
+_RECENT_INSIGHT_SCAN_MAX = 300
 
 
 def read_collaboration_review(*, limit: int = 10, session_id: str = "") -> dict[str, object]:
@@ -84,6 +87,11 @@ def _verification_prompt_status(status: str) -> str:
 
 
 def _latest_insights(*, limit: int, session_id: str) -> list[dict[str, object]]:
+    if not session_id:
+        recent = _recent_unfiltered_insights(limit=limit)
+        if recent is not None:
+            return recent
+
     records: list[dict[str, object]] = []
     for path in _insights_root().glob("insight-*.json"):
         insight = _read_insight(path)
@@ -94,6 +102,25 @@ def _latest_insights(*, limit: int, session_id: str) -> list[dict[str, object]]:
         records.append(insight)
     records.sort(key=lambda item: (str(item.get("created_at") or ""), str(item.get("id") or "")), reverse=True)
     return records[:limit]
+
+
+def _recent_unfiltered_insights(*, limit: int) -> list[dict[str, object]] | None:
+    paths = list(_insights_root().glob("insight-*.json"))
+    if len(paths) <= _RECENT_INSIGHT_SCAN_THRESHOLD:
+        return None
+    scan_limit = min(max(limit + 1, _RECENT_INSIGHT_SCAN_MIN), _RECENT_INSIGHT_SCAN_MAX)
+    recent_paths = sorted(paths, key=_path_sort_key, reverse=True)[:scan_limit]
+    records = [insight for path in recent_paths if (insight := _read_insight(path))]
+    records.sort(key=lambda item: (str(item.get("created_at") or ""), str(item.get("id") or "")), reverse=True)
+    return records[:limit]
+
+
+def _path_sort_key(path: Path) -> tuple[int, str]:
+    try:
+        mtime = path.stat().st_mtime_ns
+    except OSError:
+        mtime = 0
+    return (mtime, path.name)
 
 
 def _read_insight(path: Path) -> dict[str, object] | None:

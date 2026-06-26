@@ -96128,6 +96128,55 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, and browser proof were not run for this
   bounded receipt-readback slice.
 
+### 2026-06-26 02:39Z - Bounded recent-scan collaboration review readback
+
+Current posture: Phase 2 / developer bridge collaboration review readback now
+uses a bounded recent-file scan for large unfiltered review requests. This keeps
+the operator-facing review surface responsive as collaboration insight receipts
+accumulate, without changing the typed review item contract or storing raw
+transcripts.
+
+What changed:
+
+- Added a large-directory fast path to `read_collaboration_review` that sorts
+  recent insight files by filesystem timestamp and reads a bounded window before
+  sorting the candidate insight records by their receipt timestamps.
+- Kept the full scan path for small directories and for `session_id` filtered
+  reads, where correctness requires checking all matching session receipts.
+- Added a regression that lowers the threshold, creates ten insight receipts,
+  and proves a `limit=2` unfiltered review read returns the two newest insight
+  receipts while reading only five files.
+
+Validation:
+
+- Focused review fast-path regression passed:
+  `python -m pytest tests/test_developer_bridge.py::test_collaboration_review_uses_recent_scan_for_large_unfiltered_readback -q`.
+- Full developer bridge test file passed:
+  `python -m pytest tests/test_developer_bridge.py -q`.
+- Targeted lint passed:
+  `python -m ruff check src/francis/developer_bridge/collaboration_review.py tests/test_developer_bridge.py`.
+- Targeted format check passed:
+  `python -m ruff format --check src/francis/developer_bridge/collaboration_review.py tests/test_developer_bridge.py`.
+- Targeted typing passed:
+  `python -m mypy src/francis/developer_bridge/collaboration_review.py`.
+- Post-restart live HTTP review proof passed:
+  `GET /developer-bridge/collaboration-review?limit=4` returned four review
+  items with a refreshed readback cache.
+- Post-restart collaboration runtime health proof passed:
+  `GET /developer-bridge/collaboration-runtime-health` returned `status:
+  healthy`, `helper_count: 3`, and `waiting_for_ollama: false`.
+
+Remaining truthful gap:
+
+- This is readback performance hardening for unfiltered review requests. It does
+  not grant execution, mutation, approval, memory-write, model-training, or
+  capability authority.
+- The bounded fast path relies on filesystem modification time as the first
+  approximation for recent unfiltered review reads; filtered `session_id` reads
+  still use the full scan path.
+- `.\scripts\check.ps1`, GitHub CI, and browser proof were not run for this
+  bounded readback slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
