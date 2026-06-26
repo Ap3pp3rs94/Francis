@@ -1876,6 +1876,34 @@ def test_collaboration_review_projects_generic_historical_topics_to_concrete_sur
     assert body_map_item["review_recommendation"]["next_codex_action"] == (
         "Inspect the Francis body-map readback and coverage review before exposing any capability use."
     )
+    capability_boundary = body_map_item["capability_exposure_boundary"]
+    assert capability_boundary["applies"] is True
+    assert capability_boundary["surface"] == "developer_bridge.francis_body_map"
+    assert capability_boundary["body_surface_visible"] is True
+    assert capability_boundary["visibility_is_capability_grant"] is False
+    assert capability_boundary["capability_use_allowed_by_review"] is False
+    assert capability_boundary["capability_granted_by_this_review"] is False
+    assert capability_boundary["capability_use_requires_grant_receipt"] is True
+    assert capability_boundary["requires_trust_ladder_decision"] is True
+    assert capability_boundary["requires_capability_grant_readback"] is True
+    assert capability_boundary["requires_codex_or_operator_review"] is True
+    assert capability_boundary["deny_after_grant_supported"] is True
+    assert capability_boundary["stale_memory_detaches"] is True
+    assert capability_boundary["allowed_grant_modes"] == ["observe", "read", "request", "propose_plan"]
+    assert "francis_body_map.summary.full_body_authority_granted=false" in capability_boundary["required_proof_fields"]
+    assert (
+        "capability_exposure_boundary.grants_capability_authority=false" in capability_boundary["required_proof_fields"]
+    )
+    assert "/developer-bridge/francis-body-map summary and surfaces" in capability_boundary["required_readbacks"]
+    assert (
+        "/developer-bridge/francis-capability-grants receipt before capability use"
+        in capability_boundary["required_readbacks"]
+    )
+    assert capability_boundary["grants_capability_authority"] is False
+    assert capability_boundary["grants_execution_authority"] is False
+    assert capability_boundary["grants_mutation_authority"] is False
+    assert capability_boundary["grants_approval_authority"] is False
+    assert capability_boundary["grants_memory_write_authority"] is False
 
     loop_item = items["insight-loop"]
     assert loop_item["build_issue"]["code"] == "collaboration_loop_learning_receipt"

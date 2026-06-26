@@ -96730,6 +96730,70 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, and browser proof were not run for this
   bounded backend readback slice.
 
+### 2026-06-26 04:02Z - Body-map capability exposure review boundary
+
+Current posture: Phase 2 / P3 governance, P8 memory, P9 observability, and P1
+interface review now expose a typed boundary for the live collaboration topic
+"which Francis body surface is visible but not yet safely exposed to Francis1
+capability use." Body visibility can remain useful context without becoming
+permission to use the body surface.
+
+What changed:
+
+- Added `capability_exposure_boundary` to
+  `developer_bridge.collaboration_review_item`.
+- For `francis_body_map_trust_ladder` items on
+  `developer_bridge.francis_body_map`, the boundary now records that the body
+  surface is visible but visibility is not a capability grant, the review item
+  itself does not grant capability use, and capability use requires a separate
+  operator grant receipt.
+- The boundary requires Francis body-map, trust-ladder, and capability-grant
+  readbacks before exposing a body surface to local-model capability use.
+- Non-body-map review items receive authority-denying defaults and an empty
+  proof checklist so ordinary collaboration review items do not imply body
+  capability exposure.
+
+Validation:
+
+- Focused developer-bridge tests passed:
+  `python -m pytest tests/test_developer_bridge.py::test_collaboration_review_projects_generic_historical_topics_to_concrete_surfaces tests/test_developer_bridge.py::test_francis_body_map_exposes_whole_body_without_authority tests/test_developer_bridge.py::test_capability_grant_receipt_controls_body_map_exposure`.
+- Ruff check passed:
+  `python -m ruff check src\francis\developer_bridge\collaboration_review.py tests\test_developer_bridge.py`.
+- Ruff format check passed:
+  `python -m ruff format --check src\francis\developer_bridge\collaboration_review.py tests\test_developer_bridge.py`.
+- Targeted mypy passed:
+  `python -m mypy src\francis\developer_bridge\collaboration_review.py`.
+- Compileall passed:
+  `python -m compileall src\francis\developer_bridge\collaboration_review.py`.
+- Live API readback after restart showed
+  `capability_exposure_boundary.applies=true`,
+  `body_surface_visible=true`, `visibility_is_capability_grant=false`,
+  `capability_use_allowed_by_review=false`,
+  `capability_granted_by_this_review=false`,
+  `capability_use_requires_grant_receipt=true`, and all no-authority flags
+  false for review item `insight-collab-17b3f23e062955c0-01799a41e8f9`.
+- `/developer-bridge/francis-body-map` reported `full_body_visible=true`,
+  `full_body_authority_granted=false`, trust-ladder connected, and open coverage
+  gaps still present.
+- `/developer-bridge/francis-capability-grants` reported one active
+  `action_intake` request-mode grant with `grants_execution_authority=false` and
+  `grants_memory_write_authority=false`; this slice did not create, widen, or
+  revoke that grant.
+- Runtime health after API restart reported `status=healthy`,
+  `helper_count=3`, prompt budget `ok`, turn `1601`, and all three
+  collaboration participants enabled.
+
+Remaining truthful gap:
+
+- This is a review/readback contract. It does not grant Francis1, Codex, or
+  Claude capability use, execution authority, approval authority, mutation
+  authority, memory-write authority, training authority, or permission to bypass
+  trust-ladder and operator grant receipts.
+- Body-map coverage still reports open ORB gaps, so whole-body visibility is not
+  whole-body capability completion.
+- `.\scripts\check.ps1`, GitHub CI, and browser proof were not run for this
+  bounded backend readback slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

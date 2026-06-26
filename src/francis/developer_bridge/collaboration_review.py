@@ -64,6 +64,10 @@ def read_collaboration_review(*, limit: int = 10, session_id: str = "") -> dict[
                 "Typed proof checklist for collaboration items where model advice proposes action, proving the "
                 "advice remains non-authoritative until action-boundary and advice-only readbacks are reviewed."
             ),
+            "capability_exposure_boundary": (
+                "Typed proof checklist for body-map collaboration items, separating visibility of Francis body "
+                "surfaces from operator-granted capability use."
+            ),
         },
         "governance": _governance(),
     }
@@ -233,6 +237,10 @@ def _review_item(insight: dict[str, object]) -> dict[str, object]:
             concrete_surface=concrete_surface,
         ),
         "model_advice_governance_boundary": _model_advice_governance_boundary(
+            build_issue=build_issue,
+            concrete_surface=concrete_surface,
+        ),
+        "capability_exposure_boundary": _capability_exposure_boundary(
             build_issue=build_issue,
             concrete_surface=concrete_surface,
         ),
@@ -489,6 +497,71 @@ def _model_advice_governance_boundary(*, build_issue: dict[str, object], concret
         "next_codex_action": (
             "Inspect action_boundary and latest_local_model_response.advice_only_proof before treating model "
             "advice as action-ready or converting it into an action candidate."
+        ),
+    }
+
+
+def _capability_exposure_boundary(*, build_issue: dict[str, object], concrete_surface: str) -> dict[str, object]:
+    code = _bounded_text(build_issue.get("code"), limit=120)
+    surface_key = _surface_key(concrete_surface)
+    applies = code == "francis_body_map_trust_ladder" or surface_key == "developer bridge francis body map"
+    base: dict[str, object] = {
+        "applies": applies,
+        "surface": "developer_bridge.francis_body_map" if applies else concrete_surface,
+        "body_surface_visible": applies,
+        "visibility_is_capability_grant": False,
+        "capability_use_allowed_by_review": False,
+        "capability_granted_by_this_review": False,
+        "capability_use_requires_grant_receipt": applies,
+        "requires_trust_ladder_decision": applies,
+        "requires_capability_grant_readback": applies,
+        "requires_codex_or_operator_review": True,
+        "requires_repo_truth_review": True,
+        "requires_typed_review_artifact": applies,
+        "deny_after_grant_supported": applies,
+        "stale_memory_detaches": applies,
+        "grants_capability_authority": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "grants_approval_authority": False,
+        "grants_memory_write_authority": False,
+        "grants_training_authority": False,
+    }
+    if not applies:
+        return {
+            **base,
+            "required_proof_fields": [],
+            "required_readbacks": [],
+            "validation_tests": [],
+            "next_codex_action": "Use surface_verification and trust_ladder readbacks for non-body-map review items.",
+        }
+    return {
+        **base,
+        "allowed_grant_modes": ["observe", "read", "request", "propose_plan"],
+        "required_proof_fields": [
+            "francis_body_map.summary.full_body_visible=true",
+            "francis_body_map.summary.full_body_authority_granted=false",
+            "francis_body_map.surfaces[].capability_exposure.capability_granted",
+            "francis_body_map.surfaces[].capability_exposure.requires_codex_or_operator_review_before_capability_exposure=true",
+            "francis_body_map.surfaces[].capability_exposure.grants_execution_authority=false",
+            "francis_trust_ladder.items[].decision",
+            "francis_capability_grants.receipts[].operator_grant_proof",
+            "capability_exposure_boundary.capability_use_allowed_by_review=false",
+            "capability_exposure_boundary.grants_capability_authority=false",
+        ],
+        "required_readbacks": [
+            "/developer-bridge/francis-body-map summary and surfaces",
+            "/developer-bridge/francis-trust-ladder item for source_review_item_id",
+            "/developer-bridge/francis-capability-grants receipt before capability use",
+        ],
+        "validation_tests": [
+            "tests/test_developer_bridge.py::test_francis_body_map_exposes_whole_body_without_authority",
+            "tests/test_developer_bridge.py::test_capability_grant_receipt_controls_body_map_exposure",
+            "tests/test_developer_bridge.py::test_collaboration_review_projects_generic_historical_topics_to_concrete_surfaces",
+        ],
+        "next_codex_action": (
+            "Inspect the body-map, trust-ladder, and capability-grant readbacks before exposing any Francis body "
+            "surface to local-model capability use."
         ),
     }
 
