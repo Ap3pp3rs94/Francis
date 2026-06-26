@@ -301,6 +301,8 @@ def _collaboration_loop_readback(driver_state: dict[str, object]) -> dict[str, o
         _ollama_participant_state_path(),
         expected_kind="developer_bridge.ollama_participant_state",
     )
+    prompt_budget = _driver_prompt_budget_readback()
+    latest_local_model_response = _latest_local_model_response_readback(participant_state)
     return {
         "state_observed": bool(driver_state),
         "state_path": _display_path(_driver_state_path()),
@@ -320,8 +322,15 @@ def _collaboration_loop_readback(driver_state: dict[str, object]) -> dict[str, o
         "latest_review_receipt": _latest_review_receipt_readback(driver_state),
         "latest_learning_receipt": _latest_learning_receipt_readback(driver_state),
         "current_learning_signal": _current_learning_signal_readback(driver_state),
-        "driver_prompt_budget": _driver_prompt_budget_readback(),
-        "latest_local_model_response": _latest_local_model_response_readback(participant_state),
+        "driver_prompt_budget": prompt_budget,
+        "recurrence_proof": _recurrence_proof_readback(
+            driver_state,
+            recurrence_state=recurrence_state,
+            turn_gap_remaining_seconds=remaining,
+            prompt_budget=prompt_budget,
+            latest_local_model_response=latest_local_model_response,
+        ),
+        "latest_local_model_response": latest_local_model_response,
     }
 
 
@@ -548,6 +557,100 @@ def _current_learning_signal_readback(driver_state: dict[str, object]) -> dict[s
         "grants_approval_authority": bool(signal.get("grants_approval_authority")),
         "grants_memory_write_authority": bool(signal.get("grants_memory_write_authority")),
     }
+
+
+def _recurrence_proof_readback(
+    driver_state: dict[str, object],
+    *,
+    recurrence_state: str,
+    turn_gap_remaining_seconds: float,
+    prompt_budget: dict[str, object],
+    latest_local_model_response: dict[str, object],
+) -> dict[str, object]:
+    latest_turn = _latest_turn_readback(driver_state)
+    latest_prompt_id = _safe_str(latest_turn.get("codex_prompt_id")) or _safe_str(
+        driver_state.get("last_codex_prompt_id")
+    )
+    response_source_prompt_id = _safe_str(latest_local_model_response.get("source_prompt_id"))
+    response_prompt_id = _safe_str(latest_local_model_response.get("response_prompt_id"))
+    latest_response_matches_prompt = bool(latest_prompt_id and response_source_prompt_id == latest_prompt_id)
+    prompt_budget_prompt_id = _safe_str(prompt_budget.get("latest_prompt_id"))
+    prompt_budget_matches_latest_prompt = bool(latest_prompt_id and prompt_budget_prompt_id == latest_prompt_id)
+    latest_prompt_within_budget = (
+        bool(prompt_budget.get("latest_prompt_within_budget")) if prompt_budget_matches_latest_prompt else False
+    )
+    prompt_budget_status = _safe_str(prompt_budget.get("status")) or "unobserved"
+    observed = bool(driver_state)
+    status = _recurrence_proof_status(
+        observed=observed,
+        recurrence_state=recurrence_state,
+        latest_prompt_id=latest_prompt_id,
+        latest_response_matches_prompt=latest_response_matches_prompt,
+        prompt_budget_prompt_id=prompt_budget_prompt_id,
+        prompt_budget_matches_latest_prompt=prompt_budget_matches_latest_prompt,
+        latest_prompt_within_budget=latest_prompt_within_budget,
+    )
+    return {
+        "observed": observed,
+        "status": status,
+        "recurrence_state": recurrence_state,
+        "turn_count": _safe_int(driver_state.get("turn_count"), default=0),
+        "latest_turn": _safe_int(latest_turn.get("turn"), default=0),
+        "latest_prompt_id": latest_prompt_id,
+        "latest_response_prompt_id": response_prompt_id,
+        "latest_response_matches_prompt": latest_response_matches_prompt,
+        "prompt_budget_prompt_id": prompt_budget_prompt_id,
+        "prompt_budget_matches_latest_prompt": prompt_budget_matches_latest_prompt,
+        "waiting_for_ollama": bool(driver_state.get("waiting_for_ollama")),
+        "turn_gap_remaining_seconds": turn_gap_remaining_seconds,
+        "latest_prompt_within_budget": latest_prompt_within_budget,
+        "prompt_budget_status": prompt_budget_status,
+        "manual_nudge_required": False
+        if status in {"waiting_for_response", "response_observed", "turn_gap", "ready_for_next_prompt"}
+        else None,
+        "evidence_fields": [
+            "collaboration_loop.turn_count",
+            "collaboration_loop.recurrence_state",
+            "collaboration_loop.latest_turn.codex_prompt_id",
+            "collaboration_loop.latest_local_model_response.source_prompt_id",
+            "collaboration_loop.driver_prompt_budget.latest_prompt_within_budget",
+        ],
+        "stores_full_transcript": False,
+        "grants_training_authority": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "grants_approval_authority": False,
+        "grants_memory_write_authority": False,
+    }
+
+
+def _recurrence_proof_status(
+    *,
+    observed: bool,
+    recurrence_state: str,
+    latest_prompt_id: str,
+    latest_response_matches_prompt: bool,
+    prompt_budget_prompt_id: str,
+    prompt_budget_matches_latest_prompt: bool,
+    latest_prompt_within_budget: bool,
+) -> str:
+    if not observed:
+        return "unobserved"
+    if not latest_prompt_id:
+        return "no_prompt_observed"
+    if not prompt_budget_prompt_id:
+        return "prompt_budget_unobserved"
+    if not prompt_budget_matches_latest_prompt:
+        return "prompt_budget_unmatched"
+    if not latest_prompt_within_budget:
+        return "latest_prompt_budget_violation"
+    if recurrence_state == "waiting_for_ollama":
+        return "waiting_for_response"
+    if latest_response_matches_prompt:
+        return "response_observed"
+    if recurrence_state == "turn_gap":
+        return "turn_gap"
+    return "ready_for_next_prompt"
 
 
 def _latest_turn_readback(driver_state: dict[str, object]) -> dict[str, object]:

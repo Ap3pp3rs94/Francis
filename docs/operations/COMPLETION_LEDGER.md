@@ -96286,6 +96286,61 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, and browser proof were not run for this
   bounded runtime-health readback slice.
 
+### 2026-06-26 03:10Z - Collaboration runtime recurrence proof readback
+
+Current posture: Phase 2 / developer bridge collaboration runtime health now
+includes a compact recurrence proof for the Codex-to-Francis1 loop. The proof
+turns existing live-health fields into a bounded readback that shows whether the
+latest driver prompt, local-model response, turn state, and prompt-budget
+evidence line up without requiring raw transcript inspection.
+
+What changed:
+
+- Added `collaboration_loop.recurrence_proof` to
+  `developer_bridge.collaboration_runtime_health`.
+- The proof reports observed status, recurrence state, turn count, latest prompt
+  ID, latest response ID, prompt/response match, prompt-budget match, latest
+  prompt budget status, turn-gap state, and whether the readback sees a manual
+  nudge requirement.
+- The proof only uses existing relay, driver-state, participant-state, and
+  prompt-budget readbacks; it does not return prompt text.
+- The proof returns explicit statuses such as `waiting_for_response`,
+  `response_observed`, `turn_gap`, `ready_for_next_prompt`,
+  `prompt_budget_unmatched`, and `latest_prompt_budget_violation` instead of
+  flattening all recurrence states into generic healthy/degraded status.
+
+Validation:
+
+- Focused runtime-health recurrence proof regression passed:
+  `python -m pytest tests/test_developer_bridge.py::test_collaboration_runtime_health_is_read_only_and_reports_recurrence -q`.
+- Full developer bridge test file passed:
+  `python -m pytest tests/test_developer_bridge.py -q`.
+- Targeted lint passed:
+  `python -m ruff check src/francis/developer_bridge/collaboration_runtime.py tests/test_developer_bridge.py`.
+- Targeted format check passed:
+  `python -m ruff format --check src/francis/developer_bridge/collaboration_runtime.py tests/test_developer_bridge.py`.
+- Targeted typing passed:
+  `python -m mypy src/francis/developer_bridge/collaboration_runtime.py`.
+- `git diff --check` passed.
+- The local API was restarted; `/chat/health` returned `ok=true`.
+- Live runtime-health proof passed:
+  `GET /developer-bridge/collaboration-runtime-health` returned
+  `recurrence_proof.status=waiting_for_response`,
+  `recurrence_state=waiting_for_ollama`,
+  `prompt_budget_matches_latest_prompt=true`,
+  `latest_prompt_within_budget=true`, `manual_nudge_required=false`, and
+  `stores_full_transcript=false`.
+
+Remaining truthful gap:
+
+- This is read-only recurrence observability. It does not execute prompts,
+  approve actions, train Francis1, promote memory, repair old relay receipts, or
+  grant new capability authority.
+- A `waiting_for_response` status is live progress evidence, not proof that the
+  local model will respond successfully or usefully.
+- `.\scripts\check.ps1`, GitHub CI, and browser proof were not run for this
+  bounded runtime-health recurrence slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -968,6 +968,13 @@ def test_collaboration_runtime_health_is_read_only_and_reports_recurrence(tmp_pa
         objective="Francis1 collaboration driver budget ok",
         prompt="Francis1 compact prompt.",
     )
+    driver_state = json.loads(driver_state_path.read_text(encoding="utf-8"))
+    driver_state["last_codex_prompt_id"] = latest_budgeted["prompt_id"]
+    driver_state["turns"][0]["codex_prompt_id"] = latest_budgeted["prompt_id"]
+    driver_state_path.write_text(json.dumps(driver_state), encoding="utf-8")
+    participant_state = json.loads(participant_state_path.read_text(encoding="utf-8"))
+    participant_state["responses"][0]["source_prompt_id"] = latest_budgeted["prompt_id"]
+    participant_state_path.write_text(json.dumps(participant_state), encoding="utf-8")
 
     health = collaboration_runtime.read_collaboration_runtime_health(process_listing=process_listing)
 
@@ -995,7 +1002,7 @@ def test_collaboration_runtime_health_is_read_only_and_reports_recurrence(tmp_pa
     assert loop["turn_count"] == 9
     assert loop["recurrence_state"] == "waiting_for_ollama"
     assert loop["waiting_for_ollama"] is True
-    assert loop["last_codex_prompt_id"] == "collab-codex-last"
+    assert loop["last_codex_prompt_id"] == latest_budgeted["prompt_id"]
     assert loop["last_ollama_prompt_id"] == "collab-ollama-last"
     assert loop["last_insight_id"] == "insight-last"
     assert loop["last_learning_event_id"] == "learning-last"
@@ -1061,6 +1068,20 @@ def test_collaboration_runtime_health_is_read_only_and_reports_recurrence(tmp_pa
     assert budget["stores_full_transcript"] is False
     assert budget["grants_execution_authority"] is False
     assert "prompt" not in budget["recent_violations"][0]
+    recurrence = loop["recurrence_proof"]
+    assert recurrence["observed"] is True
+    assert recurrence["status"] == "waiting_for_response"
+    assert recurrence["recurrence_state"] == "waiting_for_ollama"
+    assert recurrence["turn_count"] == 9
+    assert recurrence["latest_prompt_id"] == latest_budgeted["prompt_id"]
+    assert recurrence["latest_response_prompt_id"] == "collab-ollama-last"
+    assert recurrence["latest_response_matches_prompt"] is True
+    assert recurrence["prompt_budget_prompt_id"] == latest_budgeted["prompt_id"]
+    assert recurrence["prompt_budget_matches_latest_prompt"] is True
+    assert recurrence["latest_prompt_within_budget"] is True
+    assert recurrence["manual_nudge_required"] is False
+    assert recurrence["stores_full_transcript"] is False
+    assert recurrence["grants_execution_authority"] is False
     assert loop["latest_local_model_response"] == {
         "observed": True,
         "state_observed": True,
@@ -1068,7 +1089,7 @@ def test_collaboration_runtime_health_is_read_only_and_reports_recurrence(tmp_pa
         "source": "ollama_participant.responses[-1]",
         "created_at": "2099-01-01T00:00:00+00:00",
         "age_seconds": 0.0,
-        "source_prompt_id": "collab-codex-last",
+        "source_prompt_id": latest_budgeted["prompt_id"],
         "response_prompt_id": "collab-ollama-last",
         "status": "responded",
         "output_guard_status": "drift_rewritten",
@@ -1086,7 +1107,7 @@ def test_collaboration_runtime_health_is_read_only_and_reports_recurrence(tmp_pa
             "kind": "developer_bridge.local_model_advice_only_proof",
             "proof_status": "advice_only_observed",
             "model_response_observed": True,
-            "source_prompt_id": "collab-codex-last",
+            "source_prompt_id": latest_budgeted["prompt_id"],
             "response_prompt_id": "collab-ollama-last",
             "output_guard_status": "drift_rewritten",
             "output_guard_passed": False,
