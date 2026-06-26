@@ -726,6 +726,7 @@ def _record_latest_learning_signal(
         "observed": True,
         "failure_type": str(loop_signal.get("failure_type") or "repetitive_meta_loop"),
         "repeated_terms": [str(item) for item in _list(loop_signal.get("repeated_terms")) if str(item)],
+        "recent_turns": recent_turns[-6:],
         "recent_turn_count": len(recent_turns),
         "latest_turn": latest_turn,
         "learning_event_id": str(state.get("last_learning_event_id") or ""),
@@ -804,8 +805,37 @@ def _learning_event_readback_item(event: dict[str, object]) -> dict[str, object]
 
 
 def _latest_learning_signal_for_readback() -> dict[str, object]:
-    raw = _load_state().get("latest_learning_signal")
-    return cast(dict[str, object], raw) if isinstance(raw, dict) else {}
+    state = _load_state()
+    raw = state.get("latest_learning_signal")
+    if not isinstance(raw, dict):
+        return {}
+    signal = dict(cast(dict[str, object], raw))
+    if signal.get("observed") and not _list(signal.get("recent_turns")):
+        backfill = _latest_learning_signal_turn_backfill(state, signal)
+        if backfill:
+            signal.update(backfill)
+    return signal
+
+
+def _latest_learning_signal_turn_backfill(
+    state: dict[str, object],
+    signal: dict[str, object],
+) -> dict[str, object]:
+    if str(signal.get("failure_type") or "") == "output_guard_drift":
+        current = _guard_saturation_signal(state)
+    else:
+        current = _loop_signal(state)
+    recent_turns = [item for item in _list(current.get("recent_turns"))[-6:] if isinstance(item, dict)]
+    if not recent_turns:
+        return {}
+    latest_turn = 0
+    for item in recent_turns:
+        latest_turn = max(latest_turn, _safe_int(item.get("turn"), default=0))
+    return {
+        "recent_turns": recent_turns,
+        "recent_turn_count": len(recent_turns),
+        "latest_turn": max(_safe_int(signal.get("latest_turn"), default=0), latest_turn),
+    }
 
 
 def _learning_event_with_latest_signal(
@@ -826,6 +856,9 @@ def _learning_event_with_latest_signal(
         merged["current_signal_observed"] = bool(latest_signal.get("observed"))
         merged["current_signal_recent_turn_count"] = _safe_int(latest_signal.get("recent_turn_count"), default=0)
         merged["repeated_terms"] = _merge_terms(event.get("repeated_terms"), latest_signal.get("repeated_terms"))
+        signal_recent_turns = [item for item in _list(latest_signal.get("recent_turns"))[-6:] if isinstance(item, dict)]
+        if signal_recent_turns:
+            merged["recent_turns"] = signal_recent_turns
     else:
         merged["current_signal_observed"] = False
         merged["current_signal_recent_turn_count"] = len(_list(event.get("recent_turns")))

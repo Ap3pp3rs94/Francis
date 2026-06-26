@@ -2260,8 +2260,21 @@ def test_collaboration_driver_rotates_topics_after_repeated_output_guard_receipt
     assert signal["learning_event_id"] == event["id"]
     assert follow_up_event["latest_turn"] == signal["latest_turn"]
     assert follow_up_event["latest_observed_at"] == signal["updated_at"]
+    assert follow_up_event["recent_turn_count"] == signal["recent_turn_count"]
+    assert follow_up_event["recent_turns"] == signal["recent_turns"]
+    assert follow_up_event["recent_turns"][-1]["turn"] == signal["latest_turn"]
     assert signal["records_model_drift_as_learning"] is True
     assert signal["requires_codex_or_operator_review_before_tuning"] is True
+
+    legacy_signal = dict(signal)
+    legacy_signal.pop("recent_turns")
+    state["latest_learning_signal"] = legacy_signal
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+    legacy_readback = read_collaboration_learning_events(limit=5, failure_type="output_guard_drift")
+    legacy_event = legacy_readback["items"][0]
+    assert legacy_event["recent_turn_count"] == signal["recent_turn_count"]
+    assert legacy_event["recent_turns"] == signal["recent_turns"]
+    assert legacy_event["recent_turns"][-1]["turn"] == signal["latest_turn"]
 
 
 def test_collaboration_transcript_is_operator_visible_and_read_only(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]

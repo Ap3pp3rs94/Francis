@@ -96079,6 +96079,55 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, live post-restart replay proof, and
   foreground browser proof were not run for this bounded guard slice.
 
+### 2026-06-26 02:28Z - Current learning-receipt turn evidence readback
+
+Current posture: Phase 2 / developer bridge collaboration learning readback now
+keeps the bounded `recent_turns` evidence aligned with the latest observed drift
+signal. When an existing learning event is reused for continuing output-guard
+drift, the readback now shows the current bounded turn receipts rather than
+leaving stale original turn IDs under a newer `latest_turn`.
+
+What changed:
+
+- Stored the latest learning signal's bounded `recent_turns` receipt list in the
+  collaboration driver state.
+- Updated learning-event readback merging so the matching current signal can
+  replace stale event `recent_turns` with the latest bounded receipt IDs.
+- Added a legacy-state backfill for current learning signals that were written
+  before `recent_turns` was stored in state, reconstructing bounded turn IDs from
+  current driver notes instead of raw transcript text.
+- Tightened the existing repeated-output-guard regression to prove
+  `recent_turn_count`, `recent_turns`, and `latest_turn` all agree after a
+  follow-up drift signal.
+
+Validation:
+
+- Focused learning-receipt regression passed:
+  `python -m pytest tests/test_developer_bridge.py::test_collaboration_driver_rotates_topics_after_repeated_output_guard_receipts -q`.
+- Full developer bridge test file passed:
+  `python -m pytest tests/test_developer_bridge.py -q`.
+- Targeted lint passed:
+  `python -m ruff check src/francis/developer_bridge/collaboration_driver.py tests/test_developer_bridge.py`.
+- Targeted format check passed after formatting:
+  `python -m ruff format --check src/francis/developer_bridge/collaboration_driver.py tests/test_developer_bridge.py`.
+- Targeted typing passed:
+  `python -m mypy src/francis/developer_bridge/collaboration_driver.py`.
+- Live API and collaboration-driver helpers were restarted. `/chat/health`
+  returned `ok=true`, `/developer-bridge/collaboration-runtime-health` returned
+  `status=healthy`, and `/developer-bridge/collaboration-learning?limit=1&failure_type=output_guard_drift`
+  showed current bounded `recent_turns` for turns 1513-1516 instead of the stale
+  original 453-458 evidence list.
+
+Remaining truthful gap:
+
+- This keeps bounded learning evidence current; it does not train the local
+  model, promote memory automatically, grant Francis1 capability use, execute
+  actions, approve gates, or mutate files outside this code slice.
+- Existing older learning-event JSON files are not rewritten in place. Current
+  readback overlays or backfills the latest signal when it matches the event ID.
+- `.\scripts\check.ps1`, GitHub CI, and browser proof were not run for this
+  bounded receipt-readback slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
