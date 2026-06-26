@@ -98843,6 +98843,47 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, browser screenshot proof, GitHub CI, and broader
   ORB/body validation were not run for this bounded UI freshness slice.
 
+### 2026-06-26 09:15Z - Collaboration review honors roadmap findings
+
+Current posture: Phase 2 / P9 collaboration review now lets Francis1's concrete
+finding override a generic turn topic when the finding explicitly names roadmap
+alignment or main-build candidate-only requirements. This keeps live review
+items directed at Francis roadmap truth instead of classifying the item only by
+the driver's rotating prompt topic.
+
+What changed:
+
+- Added a finding-derived projection path for roadmap-alignment signals in
+  `developer_bridge.collaboration_review`.
+- Preserved forced safety projections such as source-disagreement blocking so a
+  roadmap phrase inside a disagreement finding cannot weaken the existing typed
+  review gate.
+- Added regression coverage for the live shape where the turn topic asks about
+  recurrence health but Francis1's finding names roadmap alignment and
+  main-build candidate-only requirements.
+
+Validation:
+
+- Focused collaboration-review regression passed:
+  `python -m pytest tests\test_developer_bridge.py::test_collaboration_review_projects_generic_historical_topics_to_concrete_surfaces -q`.
+- Full developer-bridge backend test file passed:
+  `python -m pytest tests\test_developer_bridge.py -q`.
+- Ruff lint passed for touched files:
+  `python -m ruff check src\francis\developer_bridge\collaboration_review.py tests\test_developer_bridge.py`.
+- Ruff format check passed for touched files:
+  `python -m ruff format --check src\francis\developer_bridge\collaboration_review.py tests\test_developer_bridge.py`.
+- Compile check passed:
+  `python -m compileall src\francis\developer_bridge\collaboration_review.py`.
+
+Remaining truthful gap:
+
+- This improves typed review classification only; it does not clear the
+  roadmap-alignment gate, close ORB blockers, grant Francis1 capability,
+  promote memory, tune the model, or execute model advice.
+- `.\scripts\check.ps1`, browser screenshot proof, GitHub CI, and broader
+  ORB/body validation were not run for this bounded review-classification
+  slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

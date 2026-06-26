@@ -169,7 +169,12 @@ def _review_item(insight: dict[str, object], *, context: dict[str, object]) -> d
     build_issue = _safe_dict(memory.get("build_issue"))
     implementation = _safe_dict(memory.get("implementation_candidate"))
     topic = _bounded_text(insight.get("topic"), limit=220)
-    projection = _topic_projection_override(topic)
+    finding = _bounded_text(memory.get("finding"), limit=_MAX_TEXT)
+    topic_projection = _topic_projection_override(topic)
+    finding_projection = _finding_projection_override(finding)
+    projection = (
+        topic_projection if bool(topic_projection.get("force_projection")) else finding_projection or topic_projection
+    )
     force_projection = bool(projection.get("force_projection")) if projection else False
     projection_applied = False
     if projection and (force_projection or _generic_implementation(implementation)):
@@ -181,7 +186,6 @@ def _review_item(insight: dict[str, object], *, context: dict[str, object]) -> d
     source = _safe_dict(insight.get("source"))
     review_status = _safe_dict(insight.get("review_status"))
     action_boundary = _safe_dict(insight.get("action_boundary"))
-    finding = _bounded_text(memory.get("finding"), limit=_MAX_TEXT)
     concrete_surface = (
         _bounded_text(implementation.get("surface"), limit=160) or "developer_bridge.collaboration_review"
     )
@@ -1403,6 +1407,20 @@ def _topic_projection_override(topic: str) -> dict[str, object]:
                 "requires_operator_or_codex_review": True,
             },
         }
+    return {}
+
+
+def _finding_projection_override(finding: str) -> dict[str, object]:
+    lower = _topic_key(finding)
+    roadmap_terms = (
+        "roadmap alignment" in lower
+        or "main francis build" in lower
+        or ("main build" in lower and "candidate only" in lower)
+    )
+    if roadmap_terms:
+        return _topic_projection_override(
+            "which roadmap-alignment check should run before prompting any main Francis build"
+        )
     return {}
 
 

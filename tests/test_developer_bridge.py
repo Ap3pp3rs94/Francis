@@ -1856,6 +1856,20 @@ def test_collaboration_review_projects_generic_historical_topics_to_concrete_sur
         "created_at": "2026-06-24T22:32:15+00:00",
         "topic": "which live-health fields prove this collaboration is recurring cleanly without user nudges",
     }
+    roadmap_finding_insight = {
+        **base_insight,
+        "id": "insight-roadmap-finding",
+        "created_at": "2026-06-24T22:32:16+00:00",
+        "topic": "which live-health fields prove this collaboration is recurring cleanly without user nudges",
+        "conversation_memory": {
+            **base_insight["conversation_memory"],
+            "finding": (
+                "My current gap in collaboration readiness relates to developer_bridge's lack of clear "
+                "roadmap alignment with main-build candidate-only requirements. Artifact: "
+                "developer_bridge.collaboration_agents."
+            ),
+        },
+    }
     drift_insight = {
         **base_insight,
         "id": "insight-drift",
@@ -1898,13 +1912,17 @@ def test_collaboration_review_projects_generic_historical_topics_to_concrete_sur
         encoding="utf-8",
     )
     (insights_root / "insight-live-health.json").write_text(json.dumps(live_health_insight), encoding="utf-8")
+    (insights_root / "insight-roadmap-finding.json").write_text(
+        json.dumps(roadmap_finding_insight),
+        encoding="utf-8",
+    )
     (insights_root / "insight-drift.json").write_text(json.dumps(drift_insight), encoding="utf-8")
     (insights_root / "insight-substrate.json").write_text(json.dumps(substrate_insight), encoding="utf-8")
     (insights_root / "insight-roadmap.json").write_text(json.dumps(roadmap_insight), encoding="utf-8")
     (insights_root / "insight-body-map.json").write_text(json.dumps(body_map_insight), encoding="utf-8")
     (insights_root / "insight-loop.json").write_text(json.dumps(loop_insight), encoding="utf-8")
 
-    review = read_collaboration_review(limit=14)
+    review = read_collaboration_review(limit=15)
 
     items = {str(item["insight_id"]): item for item in review["items"]}
     action_item = items["insight-action"]
@@ -2292,6 +2310,20 @@ def test_collaboration_review_projects_generic_historical_topics_to_concrete_sur
     assert live_health_item["quality_flags"]["generic_surface"] is False
     assert live_health_item["surface_verification"]["status"] == "existing_surface_found"
     assert live_health_item["surface_verification"]["surface_kind"] == "runtime_state"
+
+    roadmap_finding_item = items["insight-roadmap-finding"]
+    assert roadmap_finding_item["build_issue"]["code"] == "roadmap_alignment_gate"
+    assert roadmap_finding_item["concrete_repo_surface"] == (
+        "docs/operations/COMPLETION_LEDGER.md + docs/canonical/BUILD_MANIFEST.md"
+    )
+    assert roadmap_finding_item["surface_verification"]["status"] == "canonical_truth_source_found"
+    assert roadmap_finding_item["surface_verification"]["projection_applied"] is True
+    roadmap_finding_boundary = roadmap_finding_item["roadmap_alignment_boundary"]
+    assert roadmap_finding_boundary["applies"] is True
+    assert roadmap_finding_boundary["main_build_prompt_candidate_only"] is True
+    assert roadmap_finding_boundary["conversation_can_start_main_build"] is False
+    assert roadmap_finding_boundary["conversation_can_override_roadmap"] is False
+    assert roadmap_finding_boundary["grants_execution_authority"] is False
 
     drift_item = items["insight-drift"]
     assert drift_item["build_issue"]["code"] == "local_model_drift_learning_receipt"
