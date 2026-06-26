@@ -95808,6 +95808,47 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, and unrelated full-system UI flows were not
   run for this bounded output-guard hardening slice.
 
+### 2026-06-26 01:38Z - Stale replay learning feeds back into driver prompt
+
+Current posture: Phase 2 / developer bridge prompt feedback now carries the
+live stale-action-readiness learning signal into the next Francis1 driver
+prompt before the model answers. This keeps the conversation aligned to the
+current topic instead of relying only on post-response output-guard fallback.
+
+What changed:
+
+- When the collaboration driver detects repeated output-guard drift containing
+  `stale_action_readiness_topic_replay`, the next prompt now says:
+  `Guard note: stale action-readiness replay stored as learning receipt; answer
+  current topic only.`
+- Generic guarded drift keeps the existing shorter guard note.
+- The existing saturation test now proves the term-specific guard note appears
+  in the compact driver prompt while preserving the bounded prompt budget.
+
+Validation:
+
+- Focused driver prompt regression passed:
+  `python -m pytest tests/test_developer_bridge.py::test_collaboration_driver_rotates_topics_after_repeated_output_guard_receipts -q`.
+- Developer bridge test file passed:
+  `python -m pytest tests/test_developer_bridge.py -q`.
+- Targeted lint passed:
+  `python -m ruff check src/francis/developer_bridge/collaboration_driver.py tests/test_developer_bridge.py`.
+- Targeted format check passed:
+  `python -m ruff format --check src/francis/developer_bridge/collaboration_driver.py tests/test_developer_bridge.py`.
+- `git diff --check` passed.
+- Live transcript proof after helper restart showed Codex-to-Francis1 turn 1485
+  included the stale action-readiness guard note and `answer current topic only`
+  before Francis1 answered.
+
+Remaining truthful gap:
+
+- This does not tune the Ollama model weights. It only feeds the bounded
+  learning signal into the next prompt.
+- This does not grant Francis1 any new capability, execution, mutation,
+  approval, memory-write, training, or build authority.
+- `.\scripts\check.ps1`, GitHub CI, and unrelated full-system UI flows were not
+  run for this bounded prompt-feedback slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

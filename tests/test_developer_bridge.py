@@ -2131,7 +2131,8 @@ def test_collaboration_driver_rotates_topics_after_repeated_output_guard_receipt
         in latest_prompt
     )
     assert "Current artifact: api.routes.chat.mission_ingress" in latest_prompt
-    assert "Guard note: drift stored as learning receipt" in latest_prompt
+    assert "Guard note: stale action-readiness replay stored as learning receipt" in latest_prompt
+    assert "answer current topic only" in latest_prompt
     assert "current repetitive meta loop" not in latest_prompt
     assert "Loop note" not in latest_prompt
 

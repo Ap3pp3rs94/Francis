@@ -343,7 +343,7 @@ def _next_prompt(state: dict[str, object], *, max_turns: int) -> str:
     trust_line = compact_trust_ladder_prompt_line()
     loop_line = ""
     if guard_signal.get("detected"):
-        loop_line = " Guard note: drift stored as learning receipt; answer current topic."
+        loop_line = _guard_prompt_line(guard_signal)
     elif loop_signal.get("detected"):
         repeated_terms = [str(term) for term in _list(loop_signal.get("repeated_terms"))]
         preferred_term = next((term for term in repeated_terms if term == "user_confirmation_fallback"), "")
@@ -412,6 +412,13 @@ def _compose_driver_prompt(
         f" {trust_line}"
         f"{topic_artifact}{prior_check}{codex_response}{loop_line}"
     )
+
+
+def _guard_prompt_line(guard_signal: dict[str, object]) -> str:
+    terms = [str(term) for term in _list(guard_signal.get("repeated_terms"))]
+    if "stale_action_readiness_topic_replay" in terms:
+        return " Guard note: stale action-readiness replay stored as learning receipt; answer current topic only."
+    return " Guard note: drift stored as learning receipt; answer current topic."
 
 
 def _codex_response_line(review_line: str) -> str:
