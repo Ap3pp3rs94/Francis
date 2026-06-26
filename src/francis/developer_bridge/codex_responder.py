@@ -32,16 +32,17 @@ def respond_once(
 ) -> dict[str, object]:
     """Respond to at most one new relay entry targeted at Codex."""
 
+    governance = _governance(source_agent=source_agent)
     if not collaboration_agent_enabled("codex"):
         return {
             "kind": "developer_bridge.codex_relay_responder",
             "ok": True,
             "status": "disabled",
             "agent": "codex",
-            "governance": _governance(),
+            "governance": governance,
         }
 
-    state = _load_state()
+    state = _load_state(source_agent)
     transcript = read_collaboration_transcript(source_agent=source_agent, target_agent="codex", limit=50)
     items = _items(transcript)
     source_key = source_agent or "*"
@@ -51,25 +52,25 @@ def respond_once(
         state["initialized"] = True
         initialized_sources.add(source_key)
         state["initialized_sources"] = sorted(initialized_sources)
-        _save_state(state)
+        _save_state(state, source_agent)
         return {
             "kind": "developer_bridge.codex_relay_responder",
             "ok": True,
             "status": "initialized",
             "source_agent": source_agent,
             "seen_count": len(_list(state.get("seen_source_ids"))),
-            "governance": _governance(),
+            "governance": governance,
         }
 
     candidate = _next_candidate(items, state)
     if candidate is None:
         state["initialized"] = True
-        _save_state(state)
+        _save_state(state, source_agent)
         return {
             "kind": "developer_bridge.codex_relay_responder",
             "ok": True,
             "status": "idle",
-            "governance": _governance(),
+            "governance": governance,
         }
 
     source = str(candidate.get("source_agent") or "").strip()
@@ -80,20 +81,20 @@ def respond_once(
             "status": "source_disabled",
             "source_agent": source,
             "source_prompt_id": _item_id(candidate),
-            "governance": _governance(),
+            "governance": governance,
         }
 
     remaining = _cooldown_remaining(state, cooldown_seconds)
     if remaining > 0:
         state["initialized"] = True
-        _save_state(state)
+        _save_state(state, source_agent)
         return {
             "kind": "developer_bridge.codex_relay_responder",
             "ok": True,
             "status": "cooldown",
             "source_prompt_id": _item_id(candidate),
             "cooldown_remaining_seconds": remaining,
-            "governance": _governance(),
+            "governance": governance,
         }
 
     prompt = _build_reply(candidate)
@@ -106,7 +107,7 @@ def respond_once(
             "source_prompt_id": _item_id(candidate),
             "planned_prompt": prompt,
             "context": context,
-            "governance": _governance(),
+            "governance": governance,
         }
 
     submitted = submit_collaboration_prompt(
@@ -129,7 +130,7 @@ def respond_once(
         }
     )
     state["responses"] = responses[-_MAX_RESPONSES:]
-    _save_state(state)
+    _save_state(state, source_agent)
 
     return {
         "kind": "developer_bridge.codex_relay_responder",
@@ -138,7 +139,7 @@ def respond_once(
         "source_prompt_id": _item_id(candidate),
         "response_prompt_id": submitted["prompt_id"],
         "chat_handoff": submitted["chat_handoff"],
-        "governance": _governance(),
+        "governance": governance,
     }
 
 
@@ -216,18 +217,22 @@ def _build_reply(item: dict[str, object]) -> str:
     )
 
 
-def _state_path() -> Path:
-    return data_dir() / "integrations" / "developer_bridge" / "codex_responder" / "state.json"
+def _state_path(source_agent: str = "") -> Path:
+    base = data_dir() / "integrations" / "developer_bridge" / "codex_responder"
+    suffix = _state_source_suffix(source_agent)
+    if not suffix or suffix == "claude":
+        return base / "state.json"
+    return base / f"state_{suffix}.json"
 
 
-def _load_state() -> dict[str, object]:
-    path = _state_path()
+def _load_state(source_agent: str = "") -> dict[str, object]:
+    path = _state_path(source_agent)
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return _empty_state()
+        return _empty_state(source_agent)
     if not isinstance(data, dict) or data.get("kind") != _STATE_KIND:
-        return _empty_state()
+        return _empty_state(source_agent)
     data.setdefault("seen_source_ids", [])
     data.setdefault("responses", [])
     data.setdefault("initialized", False)
@@ -235,7 +240,7 @@ def _load_state() -> dict[str, object]:
     return data
 
 
-def _empty_state() -> dict[str, object]:
+def _empty_state(source_agent: str = "") -> dict[str, object]:
     return {
         "kind": _STATE_KIND,
         "created_at": _utc_now(),
@@ -245,21 +250,26 @@ def _empty_state() -> dict[str, object]:
         "seen_source_ids": [],
         "last_response_at": "",
         "responses": [],
-        "governance": _governance(),
+        "governance": _governance(source_agent=source_agent),
     }
 
 
-def _save_state(state: dict[str, object]) -> None:
-    path = _state_path()
+def _save_state(state: dict[str, object], source_agent: str = "") -> None:
+    path = _state_path(source_agent)
     path.parent.mkdir(parents=True, exist_ok=True)
     state["updated_at"] = _utc_now()
-    state["governance"] = _governance()
+    state["governance"] = _governance(source_agent=source_agent)
     state["initialized_sources"] = _list(state.get("initialized_sources"))[-_MAX_TRACKED_IDS:]
     state["seen_source_ids"] = _list(state.get("seen_source_ids"))[-_MAX_TRACKED_IDS:]
     state["responses"] = _list(state.get("responses"))[-_MAX_RESPONSES:]
     tmp = path.with_name(f".atomic-json-{os.getpid()}-{uuid4().hex[:12]}.tmp")
     tmp.write_text(json.dumps(state, indent=2, ensure_ascii=False, sort_keys=True), encoding="utf-8")
     os.replace(tmp, path)
+
+
+def _state_source_suffix(source_agent: str) -> str:
+    text = str(source_agent or "").strip().lower()
+    return "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in text)[:64].strip("._-")
 
 
 def _mark_seen(state: dict[str, object], ids: list[str]) -> None:
@@ -314,13 +324,13 @@ def _utc_now() -> str:
     return datetime.now(UTC).isoformat()
 
 
-def _governance() -> dict[str, object]:
+def _governance(*, source_agent: str = "") -> dict[str, object]:
     return {
         "responder": "developer_bridge_codex_relay_responder_v0",
         "source_filter": "*->codex",
         "reply_target": "source_agent",
         "append_only_relay_writes": True,
-        "state_write": "developer_bridge/codex_responder/state.json",
+        "state_write": f"developer_bridge/codex_responder/{_state_path(source_agent).name}",
         "executes_prompt": False,
         "grants_execution_authority": False,
         "grants_mutation_authority": False,

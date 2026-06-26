@@ -4719,6 +4719,12 @@ def test_codex_responder_can_ack_operator_messages(tmp_path, monkeypatch) -> Non
     assert "Receipt only" in response["prompt"]
     assert "no_response_requested=true" in response["context"]
     assert response["governance"]["executes_prompt"] is False
+    operator_state_path = (
+        tmp_path / "data" / "integrations" / "developer_bridge" / "codex_responder" / "state_operator.json"
+    )
+    assert operator_state_path.exists()
+    operator_state = json.loads(operator_state_path.read_text(encoding="utf-8"))
+    assert operator_state["governance"]["state_write"].endswith("state_operator.json")
 
 
 def test_ollama_participant_replies_through_existing_memory_prompt_path(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
