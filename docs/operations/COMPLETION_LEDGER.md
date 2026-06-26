@@ -98642,6 +98642,52 @@ Remaining truthful gap:
 - Browser screenshot proof, `.\scripts\check.ps1`, GitHub CI, and full ORB/body
   coverage proof were not run for this bounded Communication UI readback slice.
 
+### 2026-06-26 08:24Z - Communication live-health proof strip
+
+Current posture: Phase 2 / P1 interface and P9 observability now surface the
+collaboration runtime's live-health proof directly inside the live Communication
+conversation panel. The runtime already exposed `liveHealthEvidence`; the
+operator can now see the recurrence proof while watching the chat rather than
+correlating the separate Runtime Health section.
+
+What changed:
+
+- Added `collaborationLiveHealthProofSummary()` to derive a compact live-health
+  display from existing `collaboration_loop.live_health_evidence` readback.
+- Added a live `Health ...` proof strip to the Communication panel showing
+  health status, recurrence state, manual-nudge requirement, prompt/reply ids,
+  helper and worker counts, participant counts, no-action receipt proof, and
+  execution/memory-write denial.
+- Added a Chat UI contract assertion proving the display reports
+  `recurring cleanly`, `manual nudge false`, `helpers 3/3`, `workers 3`, and
+  `no-action receipts true` from existing runtime receipts.
+- This is UI/readback-only: it does not start or stop helpers, alter recurrence,
+  submit prompts, call the model, grant authority, write memory, or tune
+  Francis1.
+
+Validation:
+
+- Focused Chat UI collaboration parser contract passed:
+  `node --test --experimental-strip-types src\chat\index.test.ts`.
+- Chat UI production build passed: `npm run build`.
+- Full Chat UI test suite passed: `npm run test` with 284 tests.
+- `git diff --check` passed.
+- Existing Vite dev server at `http://127.0.0.1:5173/` returned HTTP `200`.
+- Live runtime readback returned `status=healthy`, `helper_count=3`,
+  `waiting_for_ollama=false`, and `live_health_evidence.proof_status` of
+  `recurring_cleanly` with `manual_nudge_required=false`,
+  `enabled_participant_count=3`, `running_helper_count=3`,
+  `effective_worker_count=3`, and `no_action_authority_receipts_observed=true`.
+
+Remaining truthful gap:
+
+- This makes recurrence/no-nudge proof visible in the live conversation; it does
+  not itself improve local-model reasoning, reduce output-guard drift, close
+  source-disagreement review, tune Francis1, or complete the broader governed
+  action path.
+- Browser screenshot proof, `.\scripts\check.ps1`, GitHub CI, and full ORB/body
+  coverage proof were not run for this bounded Communication UI readback slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

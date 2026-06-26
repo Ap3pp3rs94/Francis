@@ -9,6 +9,7 @@ import {
   collaborationImplementationReviewSummary,
   collaborationLearningGuardSummary,
   collaborationLiveAdviceReadinessSummary,
+  collaborationLiveHealthProofSummary,
   collaborationReviewBadge,
   collaborationReviewNextAction,
   collaborationReviewTone,
@@ -1548,6 +1549,23 @@ test("parseCollaborationRuntimeHealth preserves recurrence and no-authority fiel
     "driver age 2s",
     "supervisor age 3s",
     "authority none true",
+  ]);
+
+  const liveHealthProof = collaborationLiveHealthProofSummary(health);
+  assert.equal(liveHealthProof.badge, "recurring cleanly");
+  assert.equal(liveHealthProof.tone, "ready");
+  assert.deepEqual(liveHealthProof.detail, [
+    "status healthy",
+    "state turn_gap",
+    "manual nudge false",
+    "prompt collab-codex",
+    "reply collab-ollama",
+    "helpers 3/3",
+    "workers 3",
+    "participants 2/3",
+    "no-action receipts true",
+    "execute false",
+    "memory write false",
   ]);
 
   const reviewReceipt = collaborationRuntimeReviewReceiptSummary(health);

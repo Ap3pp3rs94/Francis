@@ -423,6 +423,12 @@ export type CollaborationRuntimeRecurrenceDisplay = {
   detail: string[];
 };
 
+export type CollaborationLiveHealthProofDisplay = {
+  badge: string;
+  tone: CollaborationReviewTone;
+  detail: string[];
+};
+
 export type CollaborationRuntimeReviewReceiptDisplay = {
   badge: string;
   tone: CollaborationReviewTone;
@@ -2304,6 +2310,65 @@ export function collaborationRuntimeRecurrenceSummary(
       `driver age ${ageText(health.collaborationLoop.ageSeconds)}`,
       `supervisor age ${ageText(health.supervisor.ageSeconds)}`,
       `authority none ${actionBoundaryBool(authorityNone)}`,
+    ],
+  };
+}
+
+export function collaborationLiveHealthProofSummary(
+  health: CollaborationRuntimeHealth | null | undefined,
+): CollaborationLiveHealthProofDisplay {
+  const evidence = health?.collaborationLoop.liveHealthEvidence;
+  if (!evidence?.observed) {
+    return {
+      badge: "health proof unknown",
+      tone: "neutral",
+      detail: [
+        `status ${health?.status || "unknown"}`,
+        "state unknown",
+        "manual nudge unknown",
+        "helpers 0/0",
+        "workers 0",
+        "participants 0/0",
+        "no-action receipts false",
+        "execute false",
+        "memory write false",
+      ],
+    };
+  }
+
+  const unsafeAuthority =
+    evidence.callsModel ||
+    evidence.grantsTrainingAuthority ||
+    evidence.grantsExecutionAuthority ||
+    evidence.grantsMutationAuthority ||
+    evidence.grantsApprovalAuthority ||
+    evidence.grantsMemoryWriteAuthority ||
+    evidence.grantsCapabilityAuthority ||
+    evidence.storesFullTranscript;
+  const recurringCleanly =
+    evidence.proofStatus === "recurring_cleanly" &&
+    health?.status === "healthy" &&
+    evidence.latestPromptWithinBudget &&
+    evidence.manualNudgeRequired === false &&
+    evidence.noActionAuthorityReceiptsObserved &&
+    evidence.runningHelperCount === evidence.desiredHelperCount &&
+    evidence.effectiveWorkerCount === evidence.desiredHelperCount;
+
+  return {
+    badge: unsafeAuthority ? "health authority drift" : recurringCleanly ? "recurring cleanly" : "recurrence needs review",
+    tone: unsafeAuthority ? "blocked" : recurringCleanly ? "ready" : "neutral",
+    detail: [
+      `status ${health?.status || evidence.healthStatus || "unknown"}`,
+      `state ${evidence.waitingState || "unknown"}`,
+      `manual nudge ${evidence.manualNudgeRequired === null ? "unknown" : actionBoundaryBool(evidence.manualNudgeRequired)}`,
+      `prompt ${evidence.latestPromptId || "unknown"}`,
+      `reply ${evidence.latestReplyId || "unknown"}`,
+      `helpers ${evidence.runningHelperCount}/${evidence.desiredHelperCount}`,
+      `workers ${evidence.effectiveWorkerCount}`,
+      `participants ${evidence.enabledParticipantCount}/${evidence.totalParticipantCount}`,
+      `no-action receipts ${actionBoundaryBool(evidence.noActionAuthorityReceiptsObserved)}`,
+      `execute ${actionBoundaryBool(evidence.grantsExecutionAuthority)}`,
+      `memory write ${actionBoundaryBool(evidence.grantsMemoryWriteAuthority)}`,
     ],
   };
 }
