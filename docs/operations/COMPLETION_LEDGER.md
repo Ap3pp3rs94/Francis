@@ -96504,6 +96504,61 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, and browser proof were not run for this
   bounded prompt-contract slice.
 
+### 2026-06-26 03:41Z - Mission-ingress action-candidate review boundary
+
+Current posture: Phase 2 / P1 interface direction, P3 governance boundaries, and
+P9 observability now have a more explicit collaboration-review readback for the
+path where typed or spoken operator direction becomes a governed action
+candidate instead of direct execution.
+
+What changed:
+
+- Added `action_candidate_boundary` to each
+  `developer_bridge.collaboration_review_item`.
+- For the `direction_to_action_boundary` review item on
+  `api.routes.chat.mission_ingress`, the new readback names the required
+  `francis.action_candidate` status, typed/spoken source modes, mission and
+  operation candidate requirements, required proof fields, required readbacks,
+  and focused validation tests.
+- Non-action-intake review items receive authority-denying defaults and an empty
+  proof checklist so they do not imply mission-ingress behavior.
+- Updated the developer-bridge review projection test to prove the mission
+  ingress boundary exposes `direct_execution=false`,
+  `grants_execution_authority=false`, required policy/approval/traceable receipt
+  fields, and the `/chat/send` and `/chat/ws` action-candidate readbacks.
+
+Validation:
+
+- Focused developer-bridge review projection test passed:
+  `python -m pytest tests/test_developer_bridge.py::test_collaboration_review_projects_generic_historical_topics_to_concrete_surfaces`.
+- Focused chat mission-ingress tests passed:
+  `python -m pytest tests/test_api_chat.py::test_chat_mission_command_declares_queued_mission_with_loop_context tests/test_api_chat.py::test_chat_mona_lisa_voice_intent_declares_truthful_sandbox_mission tests/test_api_chat.py::test_chat_websocket_structured_message_declares_mission`.
+- Ruff check passed:
+  `python -m ruff check src\francis\developer_bridge\collaboration_review.py tests\test_developer_bridge.py tests\test_api_chat.py`.
+- Ruff format check passed:
+  `python -m ruff format --check src\francis\developer_bridge\collaboration_review.py tests\test_developer_bridge.py tests\test_api_chat.py`.
+- Compileall passed:
+  `python -m compileall src\francis\developer_bridge\collaboration_review.py`.
+- Live API readback after restart showed
+  `review-insight-collab-88aecdc1165ac93d-59eece35cb69` with
+  `action_candidate_boundary.applies=true`, `direct_execution=false`,
+  `grants_execution_authority=false`, and required proof field
+  `action_candidate.direct_execution=false`.
+- Runtime health after API restart reported `status=healthy`,
+  `helper_count=3`, prompt budget `ok`, and all three collaboration
+  participants enabled.
+
+Remaining truthful gap:
+
+- This is a typed review/readback hardening. It does not execute queued missions,
+  approve operations, consume policy approvals, change mission-ingress runtime
+  behavior, grant Claude/Codex/Francis1 authority, or promote collaboration
+  output into build direction without Codex/operator review.
+- Mypy could not run in this environment because Windows Application Control
+  blocked a compiled dependency import from the local venv.
+- `.\scripts\check.ps1`, GitHub CI, browser proof, and a full Chat UI parser
+  sweep were not run for this bounded backend readback slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

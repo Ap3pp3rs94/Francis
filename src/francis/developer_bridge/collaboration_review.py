@@ -52,6 +52,10 @@ def read_collaboration_review(*, limit: int = 10, session_id: str = "") -> dict[
             "implementation_preflight": (
                 "The exact typed review receipt Codex/operator should read before editing collaboration code."
             ),
+            "action_candidate_boundary": (
+                "Typed proof checklist for collaboration items that route typed or spoken direction into "
+                "mission-ingress action candidates instead of direct execution."
+            ),
         },
         "governance": _governance(),
     }
@@ -212,6 +216,10 @@ def _review_item(insight: dict[str, object]) -> dict[str, object]:
             "requires_codex_or_operator_review_before_implementation": True,
             "requires_repo_truth_review": True,
         },
+        "action_candidate_boundary": _action_candidate_boundary(
+            build_issue=build_issue,
+            concrete_surface=concrete_surface,
+        ),
         "implementation_preflight": _implementation_preflight(
             insight=insight,
             concrete_surface=concrete_surface,
@@ -250,6 +258,78 @@ def _implementation_preflight(
         "grants_mutation_authority": bool(build_direction_gate.get("grants_mutation_authority")),
         "grants_approval_authority": bool(build_direction_gate.get("grants_approval_authority")),
         "grants_memory_write_authority": bool(build_direction_gate.get("grants_memory_write_authority")),
+    }
+
+
+def _action_candidate_boundary(*, build_issue: dict[str, object], concrete_surface: str) -> dict[str, object]:
+    code = _bounded_text(build_issue.get("code"), limit=120)
+    is_mission_ingress = (
+        code == "direction_to_action_boundary" or _surface_key(concrete_surface) == "api routes chat mission ingress"
+    )
+    base: dict[str, object] = {
+        "applies": is_mission_ingress,
+        "surface": "api.routes.chat.mission_ingress" if is_mission_ingress else concrete_surface,
+        "conversation_can_create_action_candidate": is_mission_ingress,
+        "conversation_can_execute_action": False,
+        "conversation_can_approve_action": False,
+        "direct_execution": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "grants_approval_authority": False,
+        "grants_memory_write_authority": False,
+        "grants_training_authority": False,
+    }
+    if not is_mission_ingress:
+        return {
+            **base,
+            "required_proof_fields": [],
+            "required_readbacks": [],
+            "validation_tests": [],
+            "next_codex_action": "Use action_boundary and build_direction_gate for non-action-intake review items.",
+        }
+    return {
+        **base,
+        "action_candidate_kind": "francis.action_candidate",
+        "required_status": "queued_for_governed_review",
+        "source_modes": ["typed", "spoken"],
+        "requires_policy": True,
+        "requires_approval": True,
+        "requires_traceable_receipt": True,
+        "requires_codex_or_operator_review": True,
+        "operation_candidate_required": True,
+        "mission_record_required": True,
+        "first_operation_candidate_required": True,
+        "required_proof_fields": [
+            "action_candidate.kind=francis.action_candidate",
+            "action_candidate.status=queued_for_governed_review",
+            "action_candidate.source_mode in typed,spoken",
+            "action_candidate.operation_id",
+            "action_candidate.first_operation_id",
+            "action_candidate.direct_execution=false",
+            "action_candidate.requires_policy=true",
+            "action_candidate.requires_approval=true",
+            "action_candidate.requires_traceable_receipt=true",
+            "action_candidate.grants_execution_authority=false",
+            "action_candidate.grants_mutation_authority=false",
+            "action_candidate.grants_approval_authority=false",
+            "action_candidate.grants_memory_write_authority=false",
+        ],
+        "required_readbacks": [
+            "/chat/send response.action_candidate",
+            "/chat/ws assistant.meta.action_candidate",
+            "/missions/{mission_id}.current_task",
+            "data/missions/{mission_id}/record.json",
+            "data/tasks/{operation_id}/record.json",
+        ],
+        "validation_tests": [
+            "tests/test_api_chat.py::test_chat_mission_command_declares_queued_mission_with_loop_context",
+            "tests/test_api_chat.py::test_chat_mona_lisa_voice_intent_declares_truthful_sandbox_mission",
+            "tests/test_api_chat.py::test_chat_websocket_structured_message_declares_mission",
+        ],
+        "next_codex_action": (
+            "Verify the action_candidate proof fields and mission/current_task readbacks before changing "
+            "typed or spoken action intake."
+        ),
     }
 
 

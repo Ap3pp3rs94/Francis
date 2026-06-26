@@ -1644,6 +1644,32 @@ def test_collaboration_review_projects_generic_historical_topics_to_concrete_sur
     assert direction_item["surface_verification"]["status"] == "existing_surface_found"
     assert direction_item["surface_verification"]["surface_kind"] == "mission_ingress_action_boundary"
     assert direction_item["surface_verification"]["projection_applied"] is True
+    action_candidate_boundary = direction_item["action_candidate_boundary"]
+    assert action_candidate_boundary["applies"] is True
+    assert action_candidate_boundary["surface"] == "api.routes.chat.mission_ingress"
+    assert action_candidate_boundary["action_candidate_kind"] == "francis.action_candidate"
+    assert action_candidate_boundary["required_status"] == "queued_for_governed_review"
+    assert action_candidate_boundary["source_modes"] == ["typed", "spoken"]
+    assert action_candidate_boundary["conversation_can_create_action_candidate"] is True
+    assert action_candidate_boundary["conversation_can_execute_action"] is False
+    assert action_candidate_boundary["conversation_can_approve_action"] is False
+    assert action_candidate_boundary["direct_execution"] is False
+    assert action_candidate_boundary["requires_policy"] is True
+    assert action_candidate_boundary["requires_approval"] is True
+    assert action_candidate_boundary["requires_traceable_receipt"] is True
+    assert action_candidate_boundary["requires_codex_or_operator_review"] is True
+    assert action_candidate_boundary["grants_execution_authority"] is False
+    assert action_candidate_boundary["grants_mutation_authority"] is False
+    assert action_candidate_boundary["grants_approval_authority"] is False
+    assert action_candidate_boundary["grants_memory_write_authority"] is False
+    assert "action_candidate.direct_execution=false" in action_candidate_boundary["required_proof_fields"]
+    assert "action_candidate.grants_execution_authority=false" in action_candidate_boundary["required_proof_fields"]
+    assert "/chat/send response.action_candidate" in action_candidate_boundary["required_readbacks"]
+    assert "/chat/ws assistant.meta.action_candidate" in action_candidate_boundary["required_readbacks"]
+    assert (
+        "tests/test_api_chat.py::test_chat_mission_command_declares_queued_mission_with_loop_context"
+        in action_candidate_boundary["validation_tests"]
+    )
     assert (
         direction_item["review_recommendation"]["next_codex_action"]
         == "Inspect chat mission ingress and mission queue readbacks before changing action-intake behavior."
