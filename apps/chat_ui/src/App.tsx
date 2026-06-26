@@ -2413,6 +2413,8 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
               <span>exposed {bodyMap?.exposureSummary.connectedToLocalModelCount ?? 0}</span>
               <span>not exposed {bodyMap?.exposureSummary.notExposedSurfaceCount ?? 0}</span>
               <span>review required {bodyMap?.exposureSummary.reviewRequiredSurfaceCount ?? 0}</span>
+              <span>metadata only {boolText(Boolean(bodyMap?.informationSafety.validatedReadback))}</span>
+              <span>sensitive {bodyMap?.informationSafety.sensitiveSurfaceCount ?? 0}</span>
               <span>active grants {bodyMap?.summary.activeCapabilityGrantCount ?? 0}</span>
               <span>denied/revoked {bodyMap?.summary.deniedOrRevokedCapabilityCount ?? 0}</span>
               <span>authority {boolText(Boolean(bodyMap?.summary.fullBodyAuthorityGranted))}</span>

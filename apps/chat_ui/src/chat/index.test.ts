@@ -394,6 +394,36 @@ test("parseFrancisBodyMap preserves whole-body awareness and quest boundaries", 
             grants_training_authority: false,
           },
         },
+        information_safety: {
+          kind: "developer_bridge.francis_body_surface_information_safety",
+          schema_version: "developer_bridge_francis_body_surface_information_safety_v1",
+          surface_id: "collaboration",
+          payload_scope: "metadata_only",
+          exposes_label: true,
+          exposes_description: true,
+          exposes_current_boundary: true,
+          exposes_evidence_paths: true,
+          evidence_path_format: "repo_relative",
+          evidence_path_count: 1,
+          relative_evidence_path_count: 1,
+          absolute_evidence_path_count: 0,
+          sensitive_surface: false,
+          stores_raw_transcript: false,
+          stores_full_transcript: false,
+          stores_file_contents: false,
+          stores_secret_values: false,
+          exposes_absolute_local_paths: false,
+          exposes_environment_values: false,
+          embeds_memory_records: false,
+          embeds_capability_receipts: false,
+          requires_codex_or_operator_review_before_expanding_detail: true,
+          detail_expansion_allowed: false,
+          grants_execution_authority: false,
+          grants_mutation_authority: false,
+          grants_approval_authority: false,
+          grants_memory_write_authority: false,
+          grants_training_authority: false,
+        },
         evidence: [{ path: "src/francis/developer_bridge/collaboration.py", observed: true }],
         current_boundary: "conversation output is not authority",
         grants_execution_authority: false,
@@ -451,6 +481,36 @@ test("parseFrancisBodyMap preserves whole-body awareness and quest boundaries", 
             grants_training_authority: false,
           },
         },
+        information_safety: {
+          kind: "developer_bridge.francis_body_surface_information_safety",
+          schema_version: "developer_bridge_francis_body_surface_information_safety_v1",
+          surface_id: "memory",
+          payload_scope: "metadata_only",
+          exposes_label: true,
+          exposes_description: true,
+          exposes_current_boundary: true,
+          exposes_evidence_paths: true,
+          evidence_path_format: "repo_relative",
+          evidence_path_count: 1,
+          relative_evidence_path_count: 1,
+          absolute_evidence_path_count: 0,
+          sensitive_surface: true,
+          stores_raw_transcript: false,
+          stores_full_transcript: false,
+          stores_file_contents: false,
+          stores_secret_values: false,
+          exposes_absolute_local_paths: false,
+          exposes_environment_values: false,
+          embeds_memory_records: false,
+          embeds_capability_receipts: false,
+          requires_codex_or_operator_review_before_expanding_detail: true,
+          detail_expansion_allowed: false,
+          grants_execution_authority: false,
+          grants_mutation_authority: false,
+          grants_approval_authority: false,
+          grants_memory_write_authority: false,
+          grants_training_authority: false,
+        },
         evidence: [{ path: "src/francis/chat/continuity/ledger.py", observed: true }],
         current_boundary: "Memory exists, but stale memory is detached from required context.",
         grants_execution_authority: false,
@@ -474,6 +534,9 @@ test("parseFrancisBodyMap preserves whole-body awareness and quest boundaries", 
       capability_granted_count: 1,
       not_exposed_surface_count: 9,
       review_required_surface_count: 10,
+      information_safety_validated: true,
+      sensitive_surface_count: 6,
+      absolute_evidence_path_count: 0,
       active_capability_grant_count: 0,
       denied_or_revoked_capability_count: 0,
       trust_ladder_enforced: true,
@@ -522,6 +585,43 @@ test("parseFrancisBodyMap preserves whole-body awareness and quest boundaries", 
         "/developer-bridge/francis-body-map exposure_summary",
         "/developer-bridge/francis-capability-grants",
       ],
+    },
+    information_safety: {
+      kind: "developer_bridge.francis_body_information_safety",
+      schema_version: "developer_bridge_francis_body_information_safety_v1",
+      surface: "developer_bridge.francis_body_map.information_safety",
+      status: "bounded_metadata_only",
+      validated_readback: true,
+      payload_scope: "labels_descriptions_counts_ids_and_relative_evidence_paths",
+      visible_surface_count: 10,
+      sensitive_surface_count: 6,
+      review_required_surface_count: 10,
+      evidence_path_count: 20,
+      relative_evidence_path_count: 20,
+      absolute_evidence_path_count: 0,
+      sensitive_surface_ids: ["memory", "governance", "action_intake"],
+      review_required_surface_ids: ["collaboration", "memory"],
+      exposed_path_format: "repo_relative_only",
+      stores_raw_transcript: false,
+      stores_full_transcript: false,
+      stores_file_contents: false,
+      stores_secret_values: false,
+      exposes_absolute_local_paths: false,
+      exposes_environment_values: false,
+      embeds_capability_receipts: false,
+      embeds_memory_records: false,
+      embeds_model_training_data: false,
+      requires_codex_or_operator_review_before_expanding_detail: true,
+      detail_expansion_allowed: false,
+      body_map_visibility_is_not_prompt_injection_authority: true,
+      grants_capability_authority: false,
+      grants_execution_authority: false,
+      grants_mutation_authority: false,
+      grants_approval_authority: false,
+      grants_memory_write_authority: false,
+      grants_training_authority: false,
+      validation_rule: "Inspect this information_safety object before adding body-map fields.",
+      next_readbacks: ["/developer-bridge/francis-body-map information_safety"],
     },
     quest: {
       id: "francis1-whole-body-awareness-and-trust-gated-capability-v1",
@@ -671,6 +771,9 @@ test("parseFrancisBodyMap preserves whole-body awareness and quest boundaries", 
   assert.equal(bodyMap.summary.capabilityGrantedCount, 1);
   assert.equal(bodyMap.summary.notExposedSurfaceCount, 9);
   assert.equal(bodyMap.summary.reviewRequiredSurfaceCount, 10);
+  assert.equal(bodyMap.summary.informationSafetyValidated, true);
+  assert.equal(bodyMap.summary.sensitiveSurfaceCount, 6);
+  assert.equal(bodyMap.summary.absoluteEvidencePathCount, 0);
   assert.equal(bodyMap.summary.activeCapabilityGrantCount, 0);
   assert.equal(bodyMap.summary.deniedOrRevokedCapabilityCount, 0);
   assert.equal(bodyMap.summary.trustLadderEnforced, true);
@@ -696,6 +799,20 @@ test("parseFrancisBodyMap preserves whole-body awareness and quest boundaries", 
   assert.equal(bodyMap.exposureSummary.grantsCapabilityAuthority, false);
   assert.equal(bodyMap.exposureSummary.grantsExecutionAuthority, false);
   assert.equal(bodyMap.exposureSummary.grantsMemoryWriteAuthority, false);
+  assert.equal(bodyMap.informationSafety.kind, "developer_bridge.francis_body_information_safety");
+  assert.equal(bodyMap.informationSafety.validatedReadback, true);
+  assert.equal(bodyMap.informationSafety.sensitiveSurfaceCount, 6);
+  assert.equal(bodyMap.informationSafety.absoluteEvidencePathCount, 0);
+  assert.deepEqual(bodyMap.informationSafety.sensitiveSurfaceIds, ["memory", "governance", "action_intake"]);
+  assert.equal(bodyMap.informationSafety.storesRawTranscript, false);
+  assert.equal(bodyMap.informationSafety.storesFileContents, false);
+  assert.equal(bodyMap.informationSafety.storesSecretValues, false);
+  assert.equal(bodyMap.informationSafety.detailExpansionAllowed, false);
+  assert.equal(bodyMap.informationSafety.bodyMapVisibilityIsNotPromptInjectionAuthority, true);
+  assert.equal(bodyMap.surfaces[0].informationSafety.payloadScope, "metadata_only");
+  assert.equal(bodyMap.surfaces[0].informationSafety.absoluteEvidencePathCount, 0);
+  assert.equal(bodyMap.surfaces[1].informationSafety.sensitiveSurface, true);
+  assert.equal(bodyMap.surfaces[1].informationSafety.storesRawTranscript, false);
   assert.equal(bodyMap.coverageReview.status, "reviewed_with_open_gaps");
   assert.equal(bodyMap.coverageReview.coveredPlaneCount, 11);
   assert.equal(bodyMap.coverageReview.capabilityComplete, false);

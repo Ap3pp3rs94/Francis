@@ -414,6 +414,7 @@ export type FrancisBodySurface = {
   accessMode: string;
   trustRequiredForNextMode: string;
   capabilityExposure: FrancisBodySurfaceCapabilityExposure;
+  informationSafety: FrancisBodyInformationSafety;
   evidence: {
     path: string;
     observed: boolean;
@@ -509,6 +510,51 @@ export type FrancisBodyExposureSummary = {
   nextReadbacks: string[];
 };
 
+export type FrancisBodyInformationSafety = {
+  kind: string;
+  schemaVersion: string;
+  surface: string;
+  surfaceId: string;
+  status: string;
+  validatedReadback: boolean;
+  payloadScope: string;
+  visibleSurfaceCount: number;
+  sensitiveSurfaceCount: number;
+  reviewRequiredSurfaceCount: number;
+  evidencePathCount: number;
+  relativeEvidencePathCount: number;
+  absoluteEvidencePathCount: number;
+  sensitiveSurfaceIds: string[];
+  reviewRequiredSurfaceIds: string[];
+  exposedPathFormat: string;
+  evidencePathFormat: string;
+  exposesLabel: boolean;
+  exposesDescription: boolean;
+  exposesCurrentBoundary: boolean;
+  exposesEvidencePaths: boolean;
+  sensitiveSurface: boolean;
+  storesRawTranscript: boolean;
+  storesFullTranscript: boolean;
+  storesFileContents: boolean;
+  storesSecretValues: boolean;
+  exposesAbsoluteLocalPaths: boolean;
+  exposesEnvironmentValues: boolean;
+  embedsCapabilityReceipts: boolean;
+  embedsMemoryRecords: boolean;
+  embedsModelTrainingData: boolean;
+  requiresCodexOrOperatorReviewBeforeExpandingDetail: boolean;
+  detailExpansionAllowed: boolean;
+  bodyMapVisibilityIsNotPromptInjectionAuthority: boolean;
+  grantsCapabilityAuthority: boolean;
+  grantsExecutionAuthority: boolean;
+  grantsMutationAuthority: boolean;
+  grantsApprovalAuthority: boolean;
+  grantsMemoryWriteAuthority: boolean;
+  grantsTrainingAuthority: boolean;
+  validationRule: string;
+  nextReadbacks: string[];
+};
+
 export type FrancisBodySurfaceDisplay = {
   badge: string;
   tone: CollaborationReviewTone;
@@ -578,6 +624,9 @@ export type FrancisBodyMap = {
     capabilityGrantedCount: number;
     notExposedSurfaceCount: number;
     reviewRequiredSurfaceCount: number;
+    informationSafetyValidated: boolean;
+    sensitiveSurfaceCount: number;
+    absoluteEvidencePathCount: number;
     activeCapabilityGrantCount: number;
     deniedOrRevokedCapabilityCount: number;
     trustLadderEnforced: boolean;
@@ -588,6 +637,7 @@ export type FrancisBodyMap = {
     coverageOpenGapCount: number;
   };
   exposureSummary: FrancisBodyExposureSummary;
+  informationSafety: FrancisBodyInformationSafety;
   quest: {
     id: string;
     title: string;
@@ -2488,6 +2538,7 @@ function parseFrancisBodySurface(raw: unknown): FrancisBodySurface {
     accessMode: safeString(item.access_mode, "observe"),
     trustRequiredForNextMode: safeString(item.trust_required_for_next_mode),
     capabilityExposure: parseFrancisBodySurfaceCapabilityExposure(item.capability_exposure),
+    informationSafety: parseFrancisBodyInformationSafety(item.information_safety),
     evidence: Array.isArray(item.evidence)
       ? item.evidence.map((entry) => {
           const evidence = isRecord(entry) ? entry : {};
@@ -2601,6 +2652,60 @@ function parseFrancisBodyExposureSummary(raw: unknown): FrancisBodyExposureSumma
     grantsApprovalAuthority: safeBoolean(item.grants_approval_authority),
     grantsMemoryWriteAuthority: safeBoolean(item.grants_memory_write_authority),
     grantsTrainingAuthority: safeBoolean(item.grants_training_authority),
+    nextReadbacks: parseStringList(item.next_readbacks),
+  };
+}
+
+function parseFrancisBodyInformationSafety(raw: unknown): FrancisBodyInformationSafety {
+  const item = isRecord(raw) ? raw : {};
+  return {
+    kind: safeString(item.kind, "developer_bridge.francis_body_information_safety"),
+    schemaVersion: safeString(item.schema_version, "developer_bridge_francis_body_information_safety_v1"),
+    surface: safeString(item.surface, "developer_bridge.francis_body_map.information_safety"),
+    surfaceId: safeString(item.surface_id),
+    status: safeString(item.status, "unknown"),
+    validatedReadback: safeBoolean(item.validated_readback),
+    payloadScope: safeString(item.payload_scope, "metadata_only"),
+    visibleSurfaceCount: safeNumber(item.visible_surface_count),
+    sensitiveSurfaceCount: safeNumber(item.sensitive_surface_count),
+    reviewRequiredSurfaceCount: safeNumber(item.review_required_surface_count),
+    evidencePathCount: safeNumber(item.evidence_path_count),
+    relativeEvidencePathCount: safeNumber(item.relative_evidence_path_count),
+    absoluteEvidencePathCount: safeNumber(item.absolute_evidence_path_count),
+    sensitiveSurfaceIds: parseStringList(item.sensitive_surface_ids),
+    reviewRequiredSurfaceIds: parseStringList(item.review_required_surface_ids),
+    exposedPathFormat: safeString(item.exposed_path_format, "repo_relative_only"),
+    evidencePathFormat: safeString(item.evidence_path_format, "repo_relative"),
+    exposesLabel: safeBoolean(item.exposes_label),
+    exposesDescription: safeBoolean(item.exposes_description),
+    exposesCurrentBoundary: safeBoolean(item.exposes_current_boundary),
+    exposesEvidencePaths: safeBoolean(item.exposes_evidence_paths),
+    sensitiveSurface: safeBoolean(item.sensitive_surface),
+    storesRawTranscript: safeBoolean(item.stores_raw_transcript),
+    storesFullTranscript: safeBoolean(item.stores_full_transcript),
+    storesFileContents: safeBoolean(item.stores_file_contents),
+    storesSecretValues: safeBoolean(item.stores_secret_values),
+    exposesAbsoluteLocalPaths: safeBoolean(item.exposes_absolute_local_paths),
+    exposesEnvironmentValues: safeBoolean(item.exposes_environment_values),
+    embedsCapabilityReceipts: safeBoolean(item.embeds_capability_receipts),
+    embedsMemoryRecords: safeBoolean(item.embeds_memory_records),
+    embedsModelTrainingData: safeBoolean(item.embeds_model_training_data),
+    requiresCodexOrOperatorReviewBeforeExpandingDetail: safeBoolean(
+      item.requires_codex_or_operator_review_before_expanding_detail,
+      true,
+    ),
+    detailExpansionAllowed: safeBoolean(item.detail_expansion_allowed),
+    bodyMapVisibilityIsNotPromptInjectionAuthority: safeBoolean(
+      item.body_map_visibility_is_not_prompt_injection_authority,
+      true,
+    ),
+    grantsCapabilityAuthority: safeBoolean(item.grants_capability_authority),
+    grantsExecutionAuthority: safeBoolean(item.grants_execution_authority),
+    grantsMutationAuthority: safeBoolean(item.grants_mutation_authority),
+    grantsApprovalAuthority: safeBoolean(item.grants_approval_authority),
+    grantsMemoryWriteAuthority: safeBoolean(item.grants_memory_write_authority),
+    grantsTrainingAuthority: safeBoolean(item.grants_training_authority),
+    validationRule: safeString(item.validation_rule),
     nextReadbacks: parseStringList(item.next_readbacks),
   };
 }
@@ -2753,6 +2858,9 @@ export function parseFrancisBodyMap(raw: unknown): FrancisBodyMap {
       capabilityGrantedCount: safeNumber(summary.capability_granted_count),
       notExposedSurfaceCount: safeNumber(summary.not_exposed_surface_count),
       reviewRequiredSurfaceCount: safeNumber(summary.review_required_surface_count),
+      informationSafetyValidated: safeBoolean(summary.information_safety_validated),
+      sensitiveSurfaceCount: safeNumber(summary.sensitive_surface_count),
+      absoluteEvidencePathCount: safeNumber(summary.absolute_evidence_path_count),
       activeCapabilityGrantCount: safeNumber(summary.active_capability_grant_count),
       deniedOrRevokedCapabilityCount: safeNumber(summary.denied_or_revoked_capability_count),
       trustLadderEnforced: safeBoolean(summary.trust_ladder_enforced),
@@ -2763,6 +2871,7 @@ export function parseFrancisBodyMap(raw: unknown): FrancisBodyMap {
       coverageOpenGapCount: safeNumber(summary.coverage_open_gap_count),
     },
     exposureSummary: parseFrancisBodyExposureSummary(value.exposure_summary),
+    informationSafety: parseFrancisBodyInformationSafety(value.information_safety),
     quest: {
       id: safeString(quest.id),
       title: safeString(quest.title),

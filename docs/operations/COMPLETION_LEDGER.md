@@ -97066,6 +97066,80 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, browser proof, and full ORB/body coverage
   proof were not run for this bounded body-map exposure-summary slice.
 
+### 2026-06-26 04:39Z - Francis body-map information-safety proof
+
+Current posture: Phase 2 / P1 interface, P3 governance, P8 memory, and P9
+observability now expose a typed information-safety proof for the Francis body
+map. The Communication surface can show Francis1 and the operator that the body
+map is metadata-only: labels, descriptions, counts, ids, boundaries, and
+repo-relative evidence paths, not raw transcripts, file contents, secret values,
+absolute local paths, memory records, capability receipts, or training data.
+
+What changed:
+
+- `/developer-bridge/francis-body-map` now returns top-level
+  `information_safety` with payload scope, sensitive-surface count, evidence
+  path counts, absolute-path count, sensitive/review-required surface ids, and
+  no raw transcript/file-content/secret/environment exposure flags.
+- Each body-map surface now carries `information_safety` so sensitive subsystems
+  such as memory, governance, action intake, execution, MCP, and model tuning
+  are marked review-required before detail expansion.
+- Body-map `summary` now includes `information_safety_validated`,
+  `sensitive_surface_count`, and `absolute_evidence_path_count` for compact UI
+  readback.
+- The developer-bridge empty/warming payload includes the same
+  `information_safety` shape and definitions so API startup does not weaken the
+  contract.
+- The Communication UI parser preserves the information-safety proof and the
+  body-map card now shows metadata-only and sensitive-surface counts.
+
+Validation:
+
+- Focused developer-bridge tests passed:
+  `python -m pytest tests/test_developer_bridge.py::test_francis_body_map_exposes_whole_body_without_authority tests/test_developer_bridge.py::test_capability_grant_receipt_controls_body_map_exposure tests/test_developer_bridge.py::test_capability_grant_api_invalidates_body_map_cache tests/test_developer_bridge.py::test_collaboration_review_projects_generic_historical_topics_to_concrete_surfaces`
+  (`4` passing tests).
+- Ruff check passed with non-blocking cache-write warnings from `.ruff_cache`
+  access:
+  `python -m ruff check src\francis\developer_bridge\body_map.py src\francis\api\routes\developer_bridge.py tests\test_developer_bridge.py`.
+- Ruff format check passed:
+  `python -m ruff format --check src\francis\developer_bridge\body_map.py src\francis\api\routes\developer_bridge.py tests\test_developer_bridge.py`.
+- Targeted mypy passed:
+  `python -m mypy src\francis\developer_bridge\body_map.py src\francis\api\routes\developer_bridge.py`.
+- Compileall passed:
+  `python -m compileall src\francis\developer_bridge\body_map.py src\francis\api\routes\developer_bridge.py`.
+- Chat UI contract suite passed:
+  `npm run test -- --runInBand apps/chat_ui/src/chat/index.test.ts`
+  (the package script ran the configured UI suite, `282` passing tests).
+- Chat UI production build passed:
+  `npm run build`.
+- `git diff --check` passed.
+- The local Francis API was restarted after the Python readback change. Live
+  `/developer-bridge/francis-body-map` readback showed
+  `information_safety.status=bounded_metadata_only`,
+  `validated_readback=true`, `visible_surface_count=10`,
+  `sensitive_surface_count=6`, `evidence_path_count=29`,
+  `relative_evidence_path_count=29`, `absolute_evidence_path_count=0`,
+  `stores_raw_transcript=false`, `stores_file_contents=false`,
+  `stores_secret_values=false`, `exposes_absolute_local_paths=false`,
+  `detail_expansion_allowed=false`, `grants_memory_write_authority=false`, and
+  `grants_training_authority=false`.
+- Runtime health after API restart reported `status=healthy`, `helper_count=3`,
+  turn `1642`, recurrence `waiting_for_ollama`, and Codex, Claude, and Ollama
+  enabled.
+
+Remaining truthful gap:
+
+- This validates the body-map payload shape. It does not grant Francis1 file
+  reads, transcript access, secret access, memory-write authority, training
+  authority, capability use, execution, mutation, approval, or main-build
+  authority.
+- Sensitive body surfaces are identified for review, but expanding detail beyond
+  metadata still requires Codex/operator review and a future validated contract.
+- This slice does not tune the local model, migrate relay transcripts into
+  memory, complete ORB coverage gaps, or clear the main-build prompt gate.
+- `.\scripts\check.ps1`, GitHub CI, browser proof, and full ORB/body coverage
+  proof were not run for this bounded body-map information-safety slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

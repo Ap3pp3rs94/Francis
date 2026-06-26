@@ -44,6 +44,7 @@ def read_francis_body_map() -> dict[str, object]:
     blocked = sum(1 for surface in surfaces if surface["connection_state"] == "blocked")
     unknown = sum(1 for surface in surfaces if surface["connection_state"] == "unknown")
     exposure_summary = _body_exposure_summary(surfaces)
+    information_safety = _body_information_safety(surfaces)
 
     return {
         "kind": "developer_bridge.francis_body_map",
@@ -90,6 +91,9 @@ def read_francis_body_map() -> dict[str, object]:
             "capability_granted_count": exposure_summary.get("capability_granted_count", 0),
             "not_exposed_surface_count": exposure_summary.get("not_exposed_surface_count", 0),
             "review_required_surface_count": exposure_summary.get("review_required_surface_count", 0),
+            "information_safety_validated": information_safety.get("validated_readback", False),
+            "sensitive_surface_count": information_safety.get("sensitive_surface_count", 0),
+            "absolute_evidence_path_count": information_safety.get("absolute_evidence_path_count", 0),
             "active_capability_grant_count": _safe_int(_dict(capability_grants.get("summary")).get("granted_count")),
             "denied_or_revoked_capability_count": _safe_int(
                 _dict(capability_grants.get("summary")).get("denied_or_revoked_count")
@@ -156,9 +160,11 @@ def read_francis_body_map() -> dict[str, object]:
             "connection_state": "Whether the surface is wired to this collaboration readback, partially connected elsewhere, candidate-only, blocked, or unknown.",
             "capability_exposure": "A per-surface verdict separating Francis1 visibility from permission to use that capability.",
             "exposure_summary": "A compact readback of which visible body surfaces are exposed to Francis1 capability use and which still require review.",
+            "information_safety": "A metadata-only proof of what the body map exposes and what it refuses to expose.",
             "coverage_review": "A read-only map from canonical ORB planes to known Francis surfaces; it is not capability completion.",
         },
         "exposure_summary": exposure_summary,
+        "information_safety": information_safety,
         "evidence": {
             "manifest_observed": _exists(root / "docs" / "canonical" / "BUILD_MANIFEST.md"),
             "ledger_observed": _exists(root / "docs" / "operations" / "COMPLETION_LEDGER.md"),
@@ -417,6 +423,7 @@ def _surface(
         }
         for path in evidence_paths
     ]
+    information_safety = _surface_information_safety(surface_id, evidence_paths)
     return {
         "id": surface_id,
         "label": label,
@@ -426,6 +433,7 @@ def _surface(
         "trust_required_for_next_mode": _next_trust_mode(access_mode),
         "evidence": evidence,
         "current_boundary": current_boundary,
+        "information_safety": information_safety,
         "capability_exposure": _surface_capability_exposure(
             surface_id=surface_id,
             access_mode=access_mode,
@@ -565,6 +573,111 @@ def _body_exposure_summary(surfaces: list[dict[str, object]]) -> dict[str, objec
             "/developer-bridge/francis-capability-grants",
             "/developer-bridge/francis-trust-ladder",
         ],
+    }
+
+
+def _body_information_safety(surfaces: list[dict[str, object]]) -> dict[str, object]:
+    surface_ids: list[str] = []
+    sensitive_surface_ids: list[str] = []
+    review_required_surface_ids: list[str] = []
+    evidence_path_count = 0
+    relative_evidence_path_count = 0
+    absolute_evidence_path_count = 0
+    for surface in surfaces:
+        surface_id = _safe_str(surface.get("id"))
+        if not surface_id:
+            continue
+        surface_ids.append(surface_id)
+        safety = _dict(surface.get("information_safety"))
+        if bool(safety.get("sensitive_surface")):
+            sensitive_surface_ids.append(surface_id)
+        if bool(safety.get("requires_codex_or_operator_review_before_expanding_detail")):
+            review_required_surface_ids.append(surface_id)
+        evidence_path_count += _safe_int(safety.get("evidence_path_count"))
+        relative_evidence_path_count += _safe_int(safety.get("relative_evidence_path_count"))
+        absolute_evidence_path_count += _safe_int(safety.get("absolute_evidence_path_count"))
+    return {
+        "kind": "developer_bridge.francis_body_information_safety",
+        "schema_version": "developer_bridge_francis_body_information_safety_v1",
+        "surface": "developer_bridge.francis_body_map.information_safety",
+        "status": "bounded_metadata_only",
+        "validated_readback": True,
+        "payload_scope": "labels_descriptions_counts_ids_and_relative_evidence_paths",
+        "visible_surface_count": len(surface_ids),
+        "sensitive_surface_count": len(sensitive_surface_ids),
+        "review_required_surface_count": len(review_required_surface_ids),
+        "evidence_path_count": evidence_path_count,
+        "relative_evidence_path_count": relative_evidence_path_count,
+        "absolute_evidence_path_count": absolute_evidence_path_count,
+        "sensitive_surface_ids": sensitive_surface_ids,
+        "review_required_surface_ids": review_required_surface_ids,
+        "exposed_path_format": "repo_relative_only",
+        "stores_raw_transcript": False,
+        "stores_full_transcript": False,
+        "stores_file_contents": False,
+        "stores_secret_values": False,
+        "exposes_absolute_local_paths": absolute_evidence_path_count > 0,
+        "exposes_environment_values": False,
+        "embeds_capability_receipts": False,
+        "embeds_memory_records": False,
+        "embeds_model_training_data": False,
+        "requires_codex_or_operator_review_before_expanding_detail": True,
+        "detail_expansion_allowed": False,
+        "body_map_visibility_is_not_prompt_injection_authority": True,
+        "grants_capability_authority": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "grants_approval_authority": False,
+        "grants_memory_write_authority": False,
+        "grants_training_authority": False,
+        "validation_rule": "Inspect this information_safety object before adding body-map fields or exposing any surface detail to local-model capability use.",
+        "next_readbacks": [
+            "/developer-bridge/francis-body-map information_safety",
+            "/developer-bridge/francis-body-map surfaces[].information_safety",
+            "/developer-bridge/collaboration-review capability_exposure_boundary",
+        ],
+    }
+
+
+def _surface_information_safety(surface_id: str, evidence_paths: list[str]) -> dict[str, object]:
+    sensitive_surface = surface_id in {
+        "action_intake",
+        "execution",
+        "governance",
+        "mcp",
+        "memory",
+        "model_tuning",
+    }
+    absolute_paths = [path for path in evidence_paths if _is_absolute_or_parent_path(path)]
+    return {
+        "kind": "developer_bridge.francis_body_surface_information_safety",
+        "schema_version": "developer_bridge_francis_body_surface_information_safety_v1",
+        "surface_id": surface_id,
+        "payload_scope": "metadata_only",
+        "exposes_label": True,
+        "exposes_description": True,
+        "exposes_current_boundary": True,
+        "exposes_evidence_paths": True,
+        "evidence_path_format": "repo_relative",
+        "evidence_path_count": len(evidence_paths),
+        "relative_evidence_path_count": len(evidence_paths) - len(absolute_paths),
+        "absolute_evidence_path_count": len(absolute_paths),
+        "sensitive_surface": sensitive_surface,
+        "stores_raw_transcript": False,
+        "stores_full_transcript": False,
+        "stores_file_contents": False,
+        "stores_secret_values": False,
+        "exposes_absolute_local_paths": bool(absolute_paths),
+        "exposes_environment_values": False,
+        "embeds_memory_records": False,
+        "embeds_capability_receipts": False,
+        "requires_codex_or_operator_review_before_expanding_detail": True,
+        "detail_expansion_allowed": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "grants_approval_authority": False,
+        "grants_memory_write_authority": False,
+        "grants_training_authority": False,
     }
 
 
@@ -1048,6 +1161,11 @@ def _exists(path: Path) -> bool:
         return path.exists()
     except OSError:
         return False
+
+
+def _is_absolute_or_parent_path(path: str) -> bool:
+    clean = _safe_str(path).replace("\\", "/")
+    return bool(clean) and (Path(clean).is_absolute() or clean.startswith("../") or "/../" in clean)
 
 
 def _one_line(value: str, *, limit: int = _MAX_LINE_CHARS) -> str:

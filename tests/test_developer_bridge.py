@@ -210,8 +210,12 @@ def test_francis_body_map_exposes_whole_body_without_authority(tmp_path, monkeyp
     assert result["summary"]["capability_granted_count"] == 0  # type: ignore[index]
     assert result["summary"]["not_exposed_surface_count"] == result["summary"]["surface_count"]  # type: ignore[index]
     assert result["summary"]["review_required_surface_count"] == result["summary"]["surface_count"]  # type: ignore[index]
+    assert result["summary"]["information_safety_validated"] is True  # type: ignore[index]
+    assert result["summary"]["sensitive_surface_count"] > 0  # type: ignore[index]
+    assert result["summary"]["absolute_evidence_path_count"] == 0  # type: ignore[index]
     assert result["definitions"]["capability_exposure"].startswith("A per-surface verdict")  # type: ignore[index]
     assert result["definitions"]["exposure_summary"].startswith("A compact readback")  # type: ignore[index]
+    assert result["definitions"]["information_safety"].startswith("A metadata-only proof")  # type: ignore[index]
     assert result["quest"]["percent_complete"] == 83  # type: ignore[index]
     assert result["summary"]["trust_ladder_enforced"] is True  # type: ignore[index]
     assert result["summary"]["runtime_restart_observed"] is False  # type: ignore[index]
@@ -255,6 +259,25 @@ def test_francis_body_map_exposes_whole_body_without_authority(tmp_path, monkeyp
     assert exposure_summary["grants_capability_authority"] is False
     assert exposure_summary["grants_execution_authority"] is False
     assert exposure_summary["grants_memory_write_authority"] is False
+    information_safety = result["information_safety"]  # type: ignore[index]
+    assert information_safety["kind"] == "developer_bridge.francis_body_information_safety"
+    assert information_safety["status"] == "bounded_metadata_only"
+    assert information_safety["validated_readback"] is True
+    assert information_safety["visible_surface_count"] == result["summary"]["surface_count"]  # type: ignore[index]
+    assert information_safety["sensitive_surface_count"] > 0
+    assert "memory" in information_safety["sensitive_surface_ids"]
+    assert "execution" in information_safety["sensitive_surface_ids"]
+    assert "model_tuning" in information_safety["sensitive_surface_ids"]
+    assert information_safety["absolute_evidence_path_count"] == 0
+    assert information_safety["exposes_absolute_local_paths"] is False
+    assert information_safety["stores_raw_transcript"] is False
+    assert information_safety["stores_file_contents"] is False
+    assert information_safety["stores_secret_values"] is False
+    assert information_safety["detail_expansion_allowed"] is False
+    assert information_safety["requires_codex_or_operator_review_before_expanding_detail"] is True
+    assert information_safety["body_map_visibility_is_not_prompt_injection_authority"] is True
+    assert information_safety["grants_memory_write_authority"] is False
+    assert information_safety["grants_training_authority"] is False
     surfaces = {item["id"]: item for item in result["surfaces"]}  # type: ignore[index]
     assert "collaboration" in surfaces
     assert "memory" in surfaces
@@ -283,6 +306,14 @@ def test_francis_body_map_exposes_whole_body_without_authority(tmp_path, monkeyp
     assert surfaces["collaboration"]["capability_exposure"]["grants_execution_authority"] is False
     assert surfaces["collaboration"]["capability_exposure"]["grants_training_authority"] is False
     assert surfaces["collaboration"]["capability_exposure"]["detached_memory_bin"]["applies"] is False
+    assert surfaces["collaboration"]["information_safety"]["payload_scope"] == "metadata_only"
+    assert surfaces["collaboration"]["information_safety"]["absolute_evidence_path_count"] == 0
+    assert surfaces["collaboration"]["information_safety"]["stores_file_contents"] is False
+    assert surfaces["collaboration"]["information_safety"]["stores_secret_values"] is False
+    assert surfaces["collaboration"]["information_safety"]["detail_expansion_allowed"] is False
+    assert surfaces["memory"]["information_safety"]["sensitive_surface"] is True
+    assert surfaces["memory"]["information_safety"]["stores_raw_transcript"] is False
+    assert surfaces["memory"]["information_safety"]["requires_codex_or_operator_review_before_expanding_detail"] is True
     assert surfaces["memory"]["capability_exposure"]["detached_memory_bin"] == {
         "applies": True,
         "kind": "developer_bridge.detached_memory_bin_policy",
