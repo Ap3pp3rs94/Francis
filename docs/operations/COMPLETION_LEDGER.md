@@ -95849,6 +95849,43 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, and unrelated full-system UI flows were not
   run for this bounded prompt-feedback slice.
 
+### 2026-06-26 01:46Z - Communication UI hides guard receipts by default
+
+Current posture: Phase 2 / developer bridge Communication UI now separates
+output-guard fallback receipts from the default operator conversation stream.
+The receipts remain counted, preserved, compacted, and revealable, but repeated
+guard fallback messages no longer inflate the visible conversation or session
+view by default.
+
+What changed:
+
+- Exported `isCollaborationGuardReceipt` from the Chat UI collaboration parser.
+- `collaborationTranscriptAuditSummary` now returns `guardReceipts` and counts
+  guard fallbacks as relay mechanics, not substantive conversation turns.
+- The Communication panel hides guard receipts by default alongside the existing
+  audit/driver filtering path and adds a `Guard (n)` toggle to reveal them in
+  both the live conversation and archive views.
+- Raw and technical receipt details remain available when the operator reveals
+  guard receipts; no relay records are deleted or rewritten.
+
+Validation:
+
+- Focused Chat UI parser tests passed:
+  `cd apps\chat_ui; node --test --experimental-strip-types src\chat\index.test.ts`.
+- Full Chat UI test suite passed:
+  `cd apps\chat_ui; npm run test` with 280 tests.
+- Chat UI production build passed:
+  `cd apps\chat_ui; npm run build`.
+
+Remaining truthful gap:
+
+- This changes operator presentation only. It does not stop the local model from
+  producing guarded drift, tune model weights, or alter relay persistence.
+- This does not grant Francis1 capability, execution, mutation, approval,
+  memory-write, training, or build authority.
+- `.\scripts\check.ps1`, GitHub CI, and foreground browser proof were not run
+  for this bounded UI readability slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -1024,7 +1024,7 @@ export function isCollaborationDriverPrompt(item: CollaborationTranscriptItem): 
   );
 }
 
-function isCollaborationGuardReceipt(item: CollaborationTranscriptItem): boolean {
+export function isCollaborationGuardReceipt(item: CollaborationTranscriptItem): boolean {
   return receiptText(item).startsWith("Francis1 output guard fallback:");
 }
 
@@ -1033,6 +1033,7 @@ export function collaborationTranscriptAuditSummary(items: CollaborationTranscri
   operatorConversationItems: CollaborationTranscriptItem[];
   auditReceipts: CollaborationTranscriptItem[];
   driverPrompts: CollaborationTranscriptItem[];
+  guardReceipts: CollaborationTranscriptItem[];
   auditReceiptCount: number;
   driverPromptCount: number;
   guardReceiptCount: number;
@@ -1044,31 +1045,33 @@ export function collaborationTranscriptAuditSummary(items: CollaborationTranscri
   const operatorConversationItems: CollaborationTranscriptItem[] = [];
   const auditReceipts: CollaborationTranscriptItem[] = [];
   const driverPrompts: CollaborationTranscriptItem[] = [];
+  const guardReceipts: CollaborationTranscriptItem[] = [];
   let driverPromptCount = 0;
-  let guardReceiptCount = 0;
   for (const item of items) {
     const driverPrompt = isCollaborationDriverPrompt(item);
+    const guardReceipt = isCollaborationGuardReceipt(item);
     if (isCollaborationAuditReceipt(item)) {
       auditReceipts.push(item);
     } else {
       conversationItems.push(item);
-      if (!driverPrompt) operatorConversationItems.push(item);
+      if (!driverPrompt && !guardReceipt) operatorConversationItems.push(item);
     }
     if (driverPrompt) {
       driverPrompts.push(item);
       driverPromptCount += 1;
     }
-    if (isCollaborationGuardReceipt(item)) guardReceiptCount += 1;
+    if (guardReceipt) guardReceipts.push(item);
   }
-  const relayMechanicCount = auditReceipts.length + driverPromptCount;
+  const relayMechanicCount = auditReceipts.length + driverPromptCount + guardReceipts.length;
   return {
     conversationItems,
     operatorConversationItems,
     auditReceipts,
     driverPrompts,
+    guardReceipts,
     auditReceiptCount: auditReceipts.length,
     driverPromptCount,
-    guardReceiptCount,
+    guardReceiptCount: guardReceipts.length,
     relayMechanicCount,
     substantiveTurnCount: Math.max(0, items.length - relayMechanicCount),
     totalCount: items.length,

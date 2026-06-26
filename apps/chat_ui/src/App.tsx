@@ -40,6 +40,7 @@ import {
   formatCollaborationRelayMessage,
   isCollaborationAuditReceipt,
   isCollaborationDriverPrompt,
+  isCollaborationGuardReceipt,
   preserveCollaborationReadbackDuringWarming,
   setCollaborationAgentEnabled,
   type CollaborationAgent,
@@ -1169,6 +1170,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
   const [followLatest, setFollowLatest] = useState(true);
   const [showAuditReceipts, setShowAuditReceipts] = useState(false);
   const [showRelayPrompts, setShowRelayPrompts] = useState(true);
+  const [showGuardReceipts, setShowGuardReceipts] = useState(false);
   const requestInFlight = useRef<{ signal?: AbortSignal } | null>(null);
   const liveTranscriptScrollRef = useRef<HTMLDivElement | null>(null);
   const transcriptScrollRef = useRef<HTMLDivElement | null>(null);
@@ -1347,14 +1349,18 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
   const transcriptAuditText = transcriptAuditSummary.auditReceiptCount
     ? ` / ${transcriptAuditSummary.auditReceiptCount} audit ${showAuditReceipts ? "shown" : "hidden"}`
     : "";
+  const transcriptGuardText = transcriptAuditSummary.guardReceiptCount
+    ? ` / ${transcriptAuditSummary.guardReceiptCount} guard ${showGuardReceipts ? "shown" : "hidden"}`
+    : "";
   const sessionSourceItems = useMemo(
     () =>
       transcriptItems.filter((item) => {
         if (!showAuditReceipts && isCollaborationAuditReceipt(item)) return false;
         if (!showRelayPrompts && isCollaborationDriverPrompt(item)) return false;
+        if (!showGuardReceipts && isCollaborationGuardReceipt(item)) return false;
         return true;
       }),
-    [showAuditReceipts, showRelayPrompts, transcriptItems],
+    [showAuditReceipts, showGuardReceipts, showRelayPrompts, transcriptItems],
   );
   const sessions = useMemo(() => buildCollaborationSessions(sessionSourceItems), [sessionSourceItems]);
   const sessionSummaries = sessionReadback?.items ?? [];
@@ -2059,6 +2065,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
           <span style={{ color: "#94a3b8", fontSize: 13 }}>
             {liveTranscriptItems.length} shown / {transcriptFilterText}
             {transcriptAuditText}
+            {transcriptGuardText}
             {collaborationCacheLabel(transcript?.readbackCache)}
           </span>
         </div>
@@ -2114,6 +2121,23 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
                 }}
               >
                 Codex turns ({transcriptAuditSummary.driverPromptCount})
+              </button>
+            ) : null}
+            {transcriptAuditSummary.guardReceiptCount ? (
+              <button
+                type="button"
+                onClick={() => setShowGuardReceipts((current) => !current)}
+                style={{
+                  background: showGuardReceipts ? "rgba(251, 191, 36, 0.24)" : "rgba(15, 23, 42, 0.62)",
+                  border: "1px solid rgba(251, 191, 36, 0.36)",
+                  borderRadius: 10,
+                  color: showGuardReceipts ? "#fde68a" : "#cbd5e1",
+                  cursor: "pointer",
+                  fontWeight: 700,
+                  padding: "7px 10px",
+                }}
+              >
+                Guard ({transcriptAuditSummary.guardReceiptCount})
               </button>
             ) : null}
             {sessions.map((session) => (
@@ -3608,6 +3632,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
             {visibleTranscriptItems.length} messages / {transcriptFilterText}
             {transcript?.truncated ? " / truncated" : ""}
             {transcriptAuditText}
+            {transcriptGuardText}
             {collaborationCacheLabel(transcript?.readbackCache)}
           </span>
         </div>
@@ -3663,6 +3688,23 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
                 }}
               >
                 Codex turns ({transcriptAuditSummary.driverPromptCount})
+              </button>
+            ) : null}
+            {transcriptAuditSummary.guardReceiptCount ? (
+              <button
+                type="button"
+                onClick={() => setShowGuardReceipts((current) => !current)}
+                style={{
+                  background: showGuardReceipts ? "rgba(251, 191, 36, 0.24)" : "rgba(15, 23, 42, 0.62)",
+                  border: "1px solid rgba(251, 191, 36, 0.36)",
+                  borderRadius: 10,
+                  color: showGuardReceipts ? "#fde68a" : "#cbd5e1",
+                  cursor: "pointer",
+                  fontWeight: 700,
+                  padding: "7px 10px",
+                }}
+              >
+                Guard ({transcriptAuditSummary.guardReceiptCount})
               </button>
             ) : null}
             {sessions.map((session) => (

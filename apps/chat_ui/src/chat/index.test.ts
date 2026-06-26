@@ -24,6 +24,7 @@ import {
   formatCollaborationRelayMessage,
   isCollaborationAuditReceipt,
   isCollaborationDriverPrompt,
+  isCollaborationGuardReceipt,
   parseCollaborationAgentsStatus,
   parseCollaborationLearning,
   parseCollaborationReview,
@@ -1385,15 +1386,15 @@ test("parseCollaborationTranscript classifies auto-ack receipts as hideable audi
   assert.equal(summary.auditReceiptCount, 1);
   assert.equal(summary.driverPromptCount, 1);
   assert.equal(summary.guardReceiptCount, 1);
-  assert.equal(summary.relayMechanicCount, 2);
-  assert.equal(summary.substantiveTurnCount, 1);
+  assert.equal(summary.relayMechanicCount, 3);
+  assert.equal(summary.substantiveTurnCount, 0);
   assert.deepEqual(
     summary.conversationItems.map((item) => item.id),
     ["collab_reply", "collab_driver"],
   );
   assert.deepEqual(
     summary.operatorConversationItems.map((item) => item.id),
-    ["collab_reply"],
+    [],
   );
   assert.deepEqual(
     summary.auditReceipts.map((item) => item.id),
@@ -1403,6 +1404,11 @@ test("parseCollaborationTranscript classifies auto-ack receipts as hideable audi
     summary.driverPrompts.map((item) => item.id),
     ["collab_driver"],
   );
+  assert.deepEqual(
+    summary.guardReceipts.map((item) => item.id),
+    ["collab_reply"],
+  );
+  assert.equal(isCollaborationGuardReceipt(transcript.items[1]!), true);
 });
 
 test("preserveCollaborationReadbackDuringWarming keeps prior non-empty data visible", () => {
