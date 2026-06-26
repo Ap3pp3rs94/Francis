@@ -1531,6 +1531,9 @@ def test_collaboration_driver_waits_for_ollama_before_next_turn(tmp_path, monkey
     assert exploration["guided_exploration"]["francis1_role"].startswith("surface evidence gaps")
     assert exploration["guided_exploration"]["evidence_needed"]
     assert exploration["guided_exploration"]["next_probe"]
+    assert exploration["quality_flags"]["finding_conflicts_with_topic"] is False
+    assert exploration["quality_flags"]["blocks_promotion"] is False
+    assert exploration["quality_flags"]["status"] == "topic_aligned"
     assert exploration["access_boundary"]["access_can_be_requested_when_blocked"] is True
     assert exploration["access_boundary"]["grant_requires_capability_grant_receipt"] is True
     assert exploration["access_boundary"]["revocation_supported"] is True
@@ -1548,6 +1551,8 @@ def test_collaboration_driver_waits_for_ollama_before_next_turn(tmp_path, monkey
     assert exploration_readback["governance"]["grants_memory_write_authority"] is False
     exploration_item = exploration_readback["items"][0]
     assert exploration_item["guided_exploration"]["next_probe"]
+    assert exploration_item["quality_flags"]["finding_conflicts_with_topic"] is False
+    assert exploration_item["quality_flags"]["blocks_promotion"] is False
     assert exploration_item["access_boundary"]["access_can_be_requested_when_blocked"] is True
     assert exploration_item["access_boundary"]["grant_requires_codex_or_operator_review"] is True
     assert exploration_item["access_boundary"]["grants_execution_authority"] is False
@@ -1610,6 +1615,128 @@ def test_collaboration_driver_waits_for_ollama_before_next_turn(tmp_path, monkey
     assert contract["visible_prompt_policy"]["avoid_repeating_contract_every_turn"] is True
     assert contract["governance"]["stores_full_transcript"] is False
     assert contract["governance"]["grants_memory_write_authority"] is False
+
+
+def test_collaboration_exploration_blocks_roadmap_drift_on_non_roadmap_topic(
+    tmp_path,
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+    from francis.developer_bridge.collaboration_driver import drive_once
+
+    seeded = drive_once(ignore_existing=True, max_turns=2, turn_gap_seconds=0)
+    assert seeded["status"] == "submitted"
+    first_prompt_id = str(seeded["prompt_id"])
+
+    submit_collaboration_prompt(
+        source_agent="ollama",
+        target_agent="codex",
+        objective=f"local Francis1 reply to {first_prompt_id}",
+        prompt=(
+            "My current gap is aligning with the BUILD_MANIFEST.md roadmap, which appears incomplete due to "
+            "blocked_by_open_orb_gaps and main-build candidate-only posture."
+        ),
+        context=f"Local Francis1 participant response for relay {first_prompt_id}.",
+    )
+
+    next_turn = drive_once(max_turns=2, turn_gap_seconds=0)
+    assert next_turn["status"] == "submitted"
+
+    exploration_readback = read_collaboration_exploration(limit=1)
+    assert exploration_readback["count"] == 1
+    item = exploration_readback["items"][0]
+    assert str(item["topic"]).startswith("the next Communication UI change")
+    assert item["review_status"]["promotion_state"] == "needs_topic_alignment_review"
+    assert item["review_status"]["ready_for_implementation"] is False
+    quality = item["quality_flags"]
+    assert quality["finding_repeats_roadmap_gate"] is True
+    assert quality["topic_supports_roadmap_gate"] is False
+    assert quality["finding_conflicts_with_topic"] is True
+    assert quality["blocks_promotion"] is True
+    assert quality["status"] == "needs_topic_alignment_review"
+    assert "drift evidence" in quality["recommended_codex_action"]
+    assert item["access_boundary"]["grants_execution_authority"] is False
+    assert item["access_boundary"]["grants_mutation_authority"] is False
+
+
+def test_collaboration_exploration_readback_blocks_legacy_roadmap_drift(
+    tmp_path,
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+    explorations_root = (
+        tmp_path / "data" / "integrations" / "developer_bridge" / "collaboration_driver" / "explorations"
+    )
+    explorations_root.mkdir(parents=True)
+    exploration = {
+        "kind": "developer_bridge.collaboration_exploration_item",
+        "schema_version": "developer_bridge_collaboration_exploration_v1",
+        "id": "exploration-legacy-roadmap-drift",
+        "created_at": "2026-06-26T14:52:20+00:00",
+        "session_id": "legacy-drift",
+        "turn": 7,
+        "topic": "the concrete repo surface and review artifact that should replace the current repetitive meta loop",
+        "source": {
+            "codex_prompt_id": "codex-legacy-drift",
+            "ollama_prompt_id": "ollama-legacy-drift",
+            "note_id": "note-legacy-drift",
+            "insight_id": "insight-legacy-drift",
+            "model_identity": "francis1",
+            "stores_full_transcript": False,
+        },
+        "guided_exploration": {
+            "mode": "codex_guided_francis1_exploration",
+            "codex_role": "guide, validate repo truth, and implement only after review",
+            "francis1_role": "surface evidence gaps, walls, and next probes from bounded context",
+            "question": "What should Codex verify next?",
+            "hypothesis": "Repeated loops need bounded learning receipts.",
+            "evidence_needed": "Read the learning receipt first.",
+            "next_probe": "developer_bridge.collaboration_driver.learning_events",
+            "surface": "developer_bridge.collaboration_driver.learning_events",
+            "finding": "My current gap is aligning with BUILD_MANIFEST.md roadmap.",
+        },
+        "access_boundary": {
+            "access_can_be_requested_when_blocked": True,
+            "access_request_status": "not_requested",
+            "grant_requires_typed_review": True,
+            "grant_requires_codex_or_operator_review": True,
+            "grant_requires_capability_grant_receipt": True,
+            "deny_after_grant_supported": True,
+            "revocation_supported": True,
+            "stop_everything_conditions": ["execution authority confusion"],
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+            "grants_approval_authority": False,
+            "grants_memory_write_authority": False,
+            "grants_model_authority": False,
+        },
+        "review_status": {
+            "promotion_state": "exploratory_field_note",
+            "ready_for_codex_review": True,
+            "ready_for_implementation": False,
+            "validated_against_repo_truth": False,
+            "required_review_artifact": "developer_bridge.collaboration_driver.explorations:legacy",
+        },
+        "governance": {
+            "advisory_only": True,
+            "stores_full_transcript": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+            "grants_memory_write_authority": False,
+        },
+    }
+    (explorations_root / "exploration-legacy-roadmap-drift.json").write_text(
+        json.dumps(exploration),
+        encoding="utf-8",
+    )
+
+    readback = read_collaboration_exploration(limit=1, promotion_state="needs_topic_alignment_review")
+
+    assert readback["count"] == 1
+    item = readback["items"][0]
+    assert item["review_status"]["promotion_state"] == "needs_topic_alignment_review"
+    assert item["quality_flags"]["blocks_promotion"] is True
+    assert item["quality_flags"]["finding_conflicts_with_topic"] is True
 
 
 def test_collaboration_driver_maps_hyphenated_review_topics_to_concrete_surfaces() -> None:

@@ -99100,6 +99100,60 @@ Remaining truthful gap:
   CI, and broader ORB/body validation remain outside this bounded slice until
   separately run.
 
+### 2026-06-26 14:50Z - Exploration drift promotion gate for Codex/Francis1 guidance
+
+Current posture: Phase 2 / P9 collaboration observability now keeps Codex as
+the implementation guide while marking Francis1 exploration drift before it can
+be mistaken for build direction. This directly supports the operator request
+for slower, higher-quality collaboration where Francis1 can surface needs, but
+Codex must validate topic alignment and repo truth before acting.
+
+What changed:
+
+- Added `quality_flags` to `developer_bridge.collaboration_exploration_item`
+  receipts and readback.
+- Exploration receipts now detect roadmap, manifest, completion-ledger, or
+  main-build language repeated on non-roadmap topics.
+- Drifted exploration items move to
+  `review_status.promotion_state=needs_topic_alignment_review` while staying
+  advisory and available as learning evidence.
+- Readback now exposes a bounded `recommended_codex_action` so Codex treats the
+  finding as drift evidence and inspects the concrete next probe before using it
+  as build direction.
+- Existing access boundaries are unchanged: the exploration lane still grants
+  no execution, mutation, approval, memory-write, or model authority.
+
+Validation:
+
+- Focused collaboration tests passed:
+  `pytest tests\test_developer_bridge.py::test_collaboration_driver_waits_for_ollama_before_next_turn tests\test_developer_bridge.py::test_collaboration_exploration_blocks_roadmap_drift_on_non_roadmap_topic tests\test_developer_bridge.py::test_collaboration_exploration_readback_blocks_legacy_roadmap_drift tests\test_developer_bridge.py::test_collaboration_exploration_http_route_marks_bounded_readback_cache -q`.
+- Ruff lint passed:
+  `ruff check src\francis\developer_bridge\collaboration_driver.py tests\test_developer_bridge.py`.
+- Ruff format check passed:
+  `ruff format --check src\francis\developer_bridge\collaboration_driver.py tests\test_developer_bridge.py`.
+- Mypy passed:
+  `mypy src\francis\developer_bridge\collaboration_driver.py`.
+- Compile check passed:
+  `python -m compileall -q src\francis\developer_bridge\collaboration_driver.py`.
+- Whitespace diff check passed:
+  `git diff --check`.
+- Live collaboration helpers were restarted through
+  `python -m francis communication-runtime --watch --poll-seconds 10 --quiet`;
+  runtime health returned `status=healthy`, `helper_count=3`, turn `2261`,
+  `latest_prompt_within_budget=true`, and
+  `no_action_authority_receipts_observed=true`.
+- Live exploration readback showed aligned substrate/roadmap exploration as
+  `promotion_state=exploratory_field_note` and non-roadmap roadmap-drift
+  receipts filterable under `promotion_state=needs_topic_alignment_review`.
+
+Remaining truthful gap:
+
+- This does not tune Francis1, grant new Francis capabilities, or decide that a
+  drifted finding is wrong; it only prevents topic-mismatched exploration from
+  being promoted until typed review happens.
+- `.\scripts\check.ps1`, browser UI proof, GitHub CI, and broader ORB/body
+  validation remain outside this bounded slice until separately run.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

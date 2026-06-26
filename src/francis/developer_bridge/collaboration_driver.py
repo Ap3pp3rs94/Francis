@@ -40,6 +40,21 @@ _PROMPT_REVIEW_SURFACE_LIMIT = 72
 _SOURCE_ALIGNMENT_PROMPT_LINE = "Claude guidance acknowledged; Francis stays subject; Codex validates repo truth."
 _COMPACT_BODY_MAP_PROMPT_LINE = "Body map: visible; grants required; stale detaches."
 _GUIDED_EXPLORATION_PROMPT_LINE = "Explore: Codex guides; next_probe; no authority."
+_ROADMAP_FINDING_DRIFT_MARKERS = (
+    "build manifest",
+    "completion ledger",
+    "roadmap alignment",
+    "main build candidate only",
+    "main francis build",
+    "blocked by open orb gaps",
+)
+_ROADMAP_TOPIC_MARKERS = (
+    "roadmap",
+    "substrate complete",
+    "main francis build",
+    "build manifest",
+    "completion ledger",
+)
 
 _TOPICS = (
     "the next Communication UI change that would reduce visible relay noise using existing receipt fields",
@@ -312,10 +327,15 @@ def read_collaboration_exploration(
         exploration_data = cast(dict[str, object], exploration) if isinstance(exploration, dict) else {}
         review_status = item.get("review_status")
         review_data = cast(dict[str, object], review_status) if isinstance(review_status, dict) else {}
+        quality_data = _exploration_quality_data(item, exploration_data)
+        item_promotion_state = _exploration_effective_promotion_state(
+            review_data=review_data,
+            quality_data=quality_data,
+        )
         item_surface = _topic_key(str(exploration_data.get("surface") or ""))
         if clean_surface and clean_surface not in item_surface:
             continue
-        if clean_promotion_state and str(review_data.get("promotion_state") or "") != clean_promotion_state:
+        if clean_promotion_state and item_promotion_state != clean_promotion_state:
             continue
         records.append(item)
 
@@ -344,6 +364,10 @@ def read_collaboration_exploration(
             "next_probe": "The concrete readback, repo surface, or receipt Codex should inspect before implementation.",
             "promotion_state": (
                 "Whether the exploration is still field-notes material or can be reviewed as build direction."
+            ),
+            "quality_flags": (
+                "Read-only drift and topic-alignment checks. A flagged item stays useful as evidence, but cannot be "
+                "promoted into build direction until Codex or the operator reviews the mismatch."
             ),
             "access_boundary": (
                 "Access may be requested when Francis1 hits a wall, but grants require typed review and remain "
@@ -887,6 +911,8 @@ def _record_response_exploration(
         issue_statement=issue_statement,
         finding=finding,
     )
+    quality_flags = _exploration_quality_flags(topic=topic, finding=finding, surface=surface)
+    promotion_state = "needs_topic_alignment_review" if quality_flags["blocks_promotion"] else "exploratory_field_note"
     exploration = {
         "kind": "developer_bridge.collaboration_exploration_item",
         "schema_version": _EXPLORATION_SCHEMA_VERSION,
@@ -916,6 +942,7 @@ def _record_response_exploration(
             "surface": surface,
             "finding": finding,
         },
+        "quality_flags": quality_flags,
         "access_boundary": {
             "access_can_be_requested_when_blocked": True,
             "access_request_status": "not_requested",
@@ -937,7 +964,7 @@ def _record_response_exploration(
             "grants_model_authority": False,
         },
         "review_status": {
-            "promotion_state": "exploratory_field_note",
+            "promotion_state": promotion_state,
             "ready_for_codex_review": True,
             "ready_for_implementation": False,
             "validated_against_repo_truth": False,
@@ -1412,6 +1439,11 @@ def _exploration_readback_item(item: dict[str, object]) -> dict[str, object]:
     access_data = cast(dict[str, object], access) if isinstance(access, dict) else {}
     review = item.get("review_status")
     review_data = cast(dict[str, object], review) if isinstance(review, dict) else {}
+    quality_data = _exploration_quality_data(item, exploration_data)
+    promotion_state = _exploration_effective_promotion_state(
+        review_data=review_data,
+        quality_data=quality_data,
+    )
     governance = item.get("governance")
     governance_data = cast(dict[str, object], governance) if isinstance(governance, dict) else {}
     return {
@@ -1442,6 +1474,18 @@ def _exploration_readback_item(item: dict[str, object]) -> dict[str, object]:
             "surface": _bounded_text(exploration_data.get("surface"), limit=160),
             "finding": _bounded_text(exploration_data.get("finding"), limit=420),
         },
+        "quality_flags": {
+            "finding_repeats_roadmap_gate": bool(quality_data.get("finding_repeats_roadmap_gate")),
+            "topic_supports_roadmap_gate": bool(quality_data.get("topic_supports_roadmap_gate")),
+            "finding_conflicts_with_topic": bool(quality_data.get("finding_conflicts_with_topic")),
+            "blocks_promotion": bool(quality_data.get("blocks_promotion")),
+            "status": _bounded_text(quality_data.get("status"), limit=80),
+            "reason": _bounded_text(quality_data.get("reason"), limit=180),
+            "recommended_codex_action": _bounded_text(
+                quality_data.get("recommended_codex_action"),
+                limit=240,
+            ),
+        },
         "access_boundary": {
             "access_can_be_requested_when_blocked": bool(access_data.get("access_can_be_requested_when_blocked")),
             "access_request_status": _bounded_text(access_data.get("access_request_status"), limit=80),
@@ -1462,7 +1506,7 @@ def _exploration_readback_item(item: dict[str, object]) -> dict[str, object]:
             "grants_model_authority": bool(access_data.get("grants_model_authority")),
         },
         "review_status": {
-            "promotion_state": _bounded_text(review_data.get("promotion_state"), limit=80),
+            "promotion_state": promotion_state,
             "ready_for_codex_review": bool(review_data.get("ready_for_codex_review")),
             "ready_for_implementation": bool(review_data.get("ready_for_implementation")),
             "validated_against_repo_truth": bool(review_data.get("validated_against_repo_truth")),
@@ -1476,6 +1520,30 @@ def _exploration_readback_item(item: dict[str, object]) -> dict[str, object]:
             "grants_memory_write_authority": bool(governance_data.get("grants_memory_write_authority")),
         },
     }
+
+
+def _exploration_quality_data(
+    item: dict[str, object],
+    exploration_data: dict[str, object],
+) -> dict[str, object]:
+    quality = item.get("quality_flags")
+    if isinstance(quality, dict):
+        return cast(dict[str, object], quality)
+    return _exploration_quality_flags(
+        topic=_bounded_text(item.get("topic"), limit=260),
+        finding=_bounded_text(exploration_data.get("finding"), limit=420),
+        surface=_bounded_text(exploration_data.get("surface"), limit=160),
+    )
+
+
+def _exploration_effective_promotion_state(
+    *,
+    review_data: dict[str, object],
+    quality_data: dict[str, object],
+) -> str:
+    if bool(quality_data.get("blocks_promotion")):
+        return "needs_topic_alignment_review"
+    return _bounded_text(review_data.get("promotion_state"), limit=80)
 
 
 def _find_turn(state: dict[str, object], source_prompt_id: str) -> dict[str, object]:
@@ -2060,6 +2128,40 @@ def _exploration_next_probe(
     if surface:
         return _bounded_text(f"{surface}; {validation_hint}" if validation_hint else surface, limit=220)
     return _bounded_text(f"developer_bridge.collaboration_review.items; topic={topic}", limit=220)
+
+
+def _exploration_quality_flags(*, topic: str, finding: str, surface: str) -> dict[str, object]:
+    lower_topic = _topic_key(topic)
+    lower_finding = _topic_key(finding)
+    lower_surface = _topic_key(surface)
+    finding_repeats_roadmap_gate = any(marker in lower_finding for marker in _ROADMAP_FINDING_DRIFT_MARKERS)
+    topic_supports_roadmap_gate = any(marker in lower_topic for marker in _ROADMAP_TOPIC_MARKERS)
+    finding_conflicts_with_topic = finding_repeats_roadmap_gate and not topic_supports_roadmap_gate
+    if finding_conflicts_with_topic:
+        return {
+            "finding_repeats_roadmap_gate": True,
+            "topic_supports_roadmap_gate": False,
+            "finding_conflicts_with_topic": True,
+            "blocks_promotion": True,
+            "status": "needs_topic_alignment_review",
+            "reason": "roadmap or manifest finding repeated on a non-roadmap exploration topic",
+            "recommended_codex_action": _bounded_text(
+                f"Treat finding as drift evidence; inspect {surface or 'the next_probe'} before using this as build direction.",
+                limit=240,
+            ),
+        }
+    return {
+        "finding_repeats_roadmap_gate": finding_repeats_roadmap_gate,
+        "topic_supports_roadmap_gate": topic_supports_roadmap_gate,
+        "finding_conflicts_with_topic": False,
+        "blocks_promotion": False,
+        "status": "topic_aligned" if lower_finding or lower_surface else "no_finding_recorded",
+        "reason": "finding does not conflict with the active exploration topic",
+        "recommended_codex_action": _bounded_text(
+            f"Inspect {surface or 'the next_probe'} and keep the receipt advisory until repo truth is reviewed.",
+            limit=240,
+        ),
+    }
 
 
 def _loop_recovery_topic(lower_topic_key: str) -> bool:
