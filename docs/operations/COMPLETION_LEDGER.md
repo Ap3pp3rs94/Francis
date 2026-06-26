@@ -95886,6 +95886,56 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, and foreground browser proof were not run
   for this bounded UI readability slice.
 
+### 2026-06-26 01:55Z - Action-intake grant invalidates dependent readbacks
+
+Current posture: Phase 2 / developer bridge capability grants now refresh
+dependent HTTP readbacks when a governed grant changes. The existing
+`action_intake` body surface was granted to the local-model lane at bounded
+`request` access through the Francis capability-grant route, and the body-map
+HTTP route now reflects that grant after cache refresh instead of serving stale
+not-connected state.
+
+What changed:
+
+- Added readback-cache invalidation for successful
+  `/developer-bridge/francis-capability-grants` POST decisions.
+- The invalidation clears capability-grant, Francis body-map, and collaboration
+  substrate-readiness cached readbacks, including in-flight refreshes that would
+  otherwise re-store stale payloads.
+- Added a regression test that first caches a body-map response, then posts an
+  `action_intake` request-mode grant, then verifies the next body-map HTTP
+  readback shows `connected_to_local_model=true` and `granted_request`.
+- Applied the bounded runtime grant for `action_intake` using source review item
+  `review-insight-collab-c9d43047516b1e6b-aabe120ab4df`.
+
+Validation:
+
+- Focused cache/grant regression passed:
+  `python -m pytest tests/test_developer_bridge.py::test_capability_grant_api_invalidates_body_map_cache tests/test_developer_bridge.py::test_capability_grant_api_records_bounded_operator_receipt tests/test_developer_bridge.py::test_readback_cache_returns_hit_after_read_through_refresh tests/test_developer_bridge.py::test_readback_cache_refreshes_stale_entries_directly -q`.
+- Full developer bridge test file passed:
+  `python -m pytest tests/test_developer_bridge.py -q`.
+- Targeted lint passed:
+  `python -m ruff check src/francis/api/routes/developer_bridge.py tests/test_developer_bridge.py`.
+- Targeted format check passed:
+  `python -m ruff format --check src/francis/api/routes/developer_bridge.py tests/test_developer_bridge.py`.
+- `git diff --check` passed.
+- Live API was restarted after the route change. Live
+  `/developer-bridge/francis-body-map` returned `active_capability_grant_count=1`
+  and `action_intake` `connected_to_local_model=true`,
+  `capability_use_status=granted_request`, `granted_access_mode=request`, while
+  execution, mutation, approval, memory-write, and training authority remained
+  false.
+
+Remaining truthful gap:
+
+- This grants bounded request-mode capability context only. It does not execute
+  missions, approve actions, mutate files, write memory, train Francis1, or
+  expose supervised/approved action modes.
+- The local model may still drift; grant receipts remain reversible and can be
+  denied or revoked for tuning review.
+- `.\scripts\check.ps1`, GitHub CI, and foreground browser proof were not run
+  for this bounded grant/readback-cache slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -82,6 +82,29 @@ def _cache_key(kind: str, kwargs: dict[str, object]) -> str:
     )
 
 
+def _cache_key_kind(key: str) -> str:
+    try:
+        raw = json.loads(key)
+    except json.JSONDecodeError:
+        return ""
+    if not isinstance(raw, dict):
+        return ""
+    return str(raw.get("kind") or "")
+
+
+def _invalidate_readback_cache(*kinds: str) -> None:
+    kind_set = {kind for kind in kinds if kind}
+    if not kind_set:
+        return
+    with _READBACK_LOCK:
+        for key in list(_READBACK_CACHE):
+            if _cache_key_kind(key) in kind_set:
+                _READBACK_CACHE.pop(key, None)
+        for key in list(_READBACK_IN_FLIGHT):
+            if _cache_key_kind(key) in kind_set:
+                _READBACK_IN_FLIGHT.pop(key, None)
+
+
 def _copy_payload(payload: dict[str, object]) -> dict[str, object]:
     return json.loads(json.dumps(payload, ensure_ascii=False, default=str))
 
@@ -124,8 +147,9 @@ def _store_readback_future_result(kind: str, key: str, future: Future[dict[str, 
     except Exception as exc:  # pragma: no cover - defensive boundary
         payload = _readback_error_payload(kind, exc)
     with _READBACK_LOCK:
-        if _READBACK_IN_FLIGHT.get(key) is future:
-            _READBACK_IN_FLIGHT.pop(key, None)
+        if _READBACK_IN_FLIGHT.get(key) is not future:
+            return
+        _READBACK_IN_FLIGHT.pop(key, None)
         _READBACK_CACHE[key] = (monotonic(), payload)
 
 
@@ -985,7 +1009,7 @@ def collaboration_agent_toggle(payload: CollaborationAgentToggleIn) -> dict[str,
 
 @router.post("/francis-capability-grants")
 def francis_capability_grant(payload: FrancisCapabilityGrantIn) -> dict[str, object]:
-    return _call_read_only(
+    result = _call_read_only(
         set_francis_capability_grant,
         payload.surface_id,
         payload.decision,
@@ -994,3 +1018,10 @@ def francis_capability_grant(payload: FrancisCapabilityGrantIn) -> dict[str, obj
         reason=payload.reason,
         source_review_item_id=payload.source_review_item_id,
     )
+    if result.get("ok") is True:
+        _invalidate_readback_cache(
+            "developer_bridge.francis_capability_grants",
+            "developer_bridge.francis_body_map",
+            "developer_bridge.collaboration_substrate_readiness",
+        )
+    return result

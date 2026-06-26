@@ -397,6 +397,61 @@ def test_capability_grant_api_records_bounded_operator_receipt(tmp_path, monkeyp
     assert readback["items"][0]["capability_granted"] is False
 
 
+def test_capability_grant_api_invalidates_body_map_cache(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    from francis.api.app import create_app
+    import francis.api.routes.developer_bridge as route_module
+
+    root = tmp_path / "Francis"
+    (root / "docs" / "canonical").mkdir(parents=True)
+    (root / "docs" / "operations").mkdir(parents=True)
+    (root / "meta").mkdir(parents=True)
+    (root / "src" / "francis" / "api" / "routes").mkdir(parents=True)
+    (root / "src" / "francis" / "missions").mkdir(parents=True)
+    (root / "tests").mkdir(parents=True)
+    (root / "docs" / "canonical" / "BUILD_MANIFEST.md").write_text("# Phase 2\n", encoding="utf-8")
+    (root / "docs" / "PLANES.md").write_text("# Planes\n", encoding="utf-8")
+    (root / "docs" / "operations" / "COMPLETION_LEDGER.md").write_text(
+        "# Ledger\n\n### 2026-06-25 - Existing proof\n",
+        encoding="utf-8",
+    )
+    (root / "meta" / "plane_map.yaml").write_text("planes: []\n", encoding="utf-8")
+    (root / "src" / "francis" / "api" / "routes" / "chat.py").write_text("", encoding="utf-8")
+    (root / "tests" / "test_api_missions.py").write_text("", encoding="utf-8")
+    monkeypatch.setenv("FRANCIS_ROOT", str(root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+    route_module._READBACK_CACHE.clear()
+    route_module._READBACK_IN_FLIGHT.clear()
+    client = TestClient(create_app())
+
+    cached = client.get("/developer-bridge/francis-body-map").json()
+    cached_action_intake = {item["id"]: item for item in cached["surfaces"]}["action_intake"]
+    assert cached["readback_cache"]["status"] == "refreshed"
+    assert cached_action_intake["capability_exposure"]["connected_to_local_model"] is False
+
+    grant = client.post(
+        "/developer-bridge/francis-capability-grants",
+        json={
+            "surface_id": "action_intake",
+            "decision": "grant",
+            "requested_access_mode": "request",
+            "actor": "codex.system",
+            "reason": "Operator allowed a bounded request-mode action-intake test.",
+            "source_review_item_id": "review-insight-action-intake",
+        },
+    ).json()
+    assert grant["ok"] is True
+    assert grant["grant"]["connected_to_local_model"] is True
+    assert grant["receipt"]["operator_grant_proof"]["grants_execution_authority"] is False
+
+    refreshed = client.get("/developer-bridge/francis-body-map").json()
+    refreshed_action_intake = {item["id"]: item for item in refreshed["surfaces"]}["action_intake"]
+    assert refreshed["readback_cache"]["status"] == "refreshed"
+    assert refreshed_action_intake["capability_exposure"]["connected_to_local_model"] is True
+    assert refreshed_action_intake["capability_exposure"]["capability_use_status"] == "granted_request"
+    assert refreshed_action_intake["capability_exposure"]["grants_execution_authority"] is False
+    assert refreshed["summary"]["active_capability_grant_count"] == 1
+
+
 def test_collaboration_substrate_readiness_blocks_main_build_prompt_for_open_gaps(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     root = tmp_path / "Francis"
     (root / "docs" / "canonical").mkdir(parents=True)
