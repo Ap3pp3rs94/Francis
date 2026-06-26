@@ -1058,6 +1058,29 @@ export type CollaborationReviewItem = {
     grantsApprovalAuthority: boolean;
     grantsMemoryWriteAuthority: boolean;
   };
+  roadmapAlignmentProof: {
+    latestLedgerEntry: string;
+    currentPhase: string;
+    currentPhasePosture: string;
+    currentPriorityOrPlaneLine: string;
+    ledgerObserved: boolean;
+    manifestObserved: boolean;
+    sourcesObserved: boolean;
+    sourceOrder: string[];
+    coverageOpenGapCount: number;
+    remainingBlockers: string[];
+    mainBuildPromptAllowed: boolean;
+    mainBuildPromptGate: string;
+    mainBuildPromptCandidateOnly: boolean;
+    conversationCanOverrideRoadmap: boolean;
+    proofSource: string;
+    storesFullTranscript: boolean;
+    grantsExecutionAuthority: boolean;
+    grantsMutationAuthority: boolean;
+    grantsApprovalAuthority: boolean;
+    grantsMemoryWriteAuthority: boolean;
+    grantsTrainingAuthority: boolean;
+  };
   implementationPreflight: CollaborationImplementationPreflight;
   governance: Record<string, unknown>;
 };
@@ -2417,6 +2440,8 @@ function parseReviewItem(raw: unknown): CollaborationReviewItem {
   const recommendation = isRecord(item.review_recommendation) ? item.review_recommendation : {};
   const boundary = isRecord(item.action_boundary) ? item.action_boundary : {};
   const buildGate = isRecord(item.build_direction_gate) ? item.build_direction_gate : {};
+  const roadmapBoundary = isRecord(item.roadmap_alignment_boundary) ? item.roadmap_alignment_boundary : {};
+  const roadmapProof = isRecord(roadmapBoundary.current_proof) ? roadmapBoundary.current_proof : {};
   const implementationPreflight = isRecord(item.implementation_preflight) ? item.implementation_preflight : {};
   return {
     id: safeString(item.id),
@@ -2485,6 +2510,31 @@ function parseReviewItem(raw: unknown): CollaborationReviewItem {
       grantsMutationAuthority: safeBoolean(buildGate.grants_mutation_authority),
       grantsApprovalAuthority: safeBoolean(buildGate.grants_approval_authority),
       grantsMemoryWriteAuthority: safeBoolean(buildGate.grants_memory_write_authority),
+    },
+    roadmapAlignmentProof: {
+      latestLedgerEntry: safeString(roadmapProof.latest_ledger_entry),
+      currentPhase: safeString(roadmapProof.current_phase),
+      currentPhasePosture: safeString(roadmapProof.current_phase_posture),
+      currentPriorityOrPlaneLine: safeString(roadmapProof.current_priority_or_plane_line),
+      ledgerObserved: safeBoolean(roadmapProof.ledger_observed),
+      manifestObserved: safeBoolean(roadmapProof.manifest_observed),
+      sourcesObserved: safeBoolean(roadmapProof.sources_observed),
+      sourceOrder: Array.isArray(roadmapProof.source_order) ? roadmapProof.source_order.map((entry) => safeString(entry)).filter(Boolean) : [],
+      coverageOpenGapCount: safeNumber(roadmapProof.coverage_open_gap_count),
+      remainingBlockers: Array.isArray(roadmapProof.remaining_blockers)
+        ? roadmapProof.remaining_blockers.map((entry) => safeString(entry)).filter(Boolean)
+        : [],
+      mainBuildPromptAllowed: safeBoolean(roadmapProof.main_build_prompt_allowed),
+      mainBuildPromptGate: safeString(roadmapProof.main_build_prompt_gate),
+      mainBuildPromptCandidateOnly: safeBoolean(roadmapProof.main_build_prompt_candidate_only),
+      conversationCanOverrideRoadmap: safeBoolean(roadmapProof.conversation_can_override_roadmap),
+      proofSource: safeString(roadmapProof.proof_source),
+      storesFullTranscript: safeBoolean(roadmapProof.stores_full_transcript),
+      grantsExecutionAuthority: safeBoolean(roadmapProof.grants_execution_authority),
+      grantsMutationAuthority: safeBoolean(roadmapProof.grants_mutation_authority),
+      grantsApprovalAuthority: safeBoolean(roadmapProof.grants_approval_authority),
+      grantsMemoryWriteAuthority: safeBoolean(roadmapProof.grants_memory_write_authority),
+      grantsTrainingAuthority: safeBoolean(roadmapProof.grants_training_authority),
     },
     implementationPreflight: parseImplementationPreflight(implementationPreflight),
     governance: isRecord(item.governance) ? item.governance : {},

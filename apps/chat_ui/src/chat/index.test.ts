@@ -2331,6 +2331,31 @@ test("parseCollaborationReview preserves advisory candidate boundaries", () => {
           grants_approval_authority: false,
           grants_memory_write_authority: false,
         },
+        roadmap_alignment_boundary: {
+          current_proof: {
+            latest_ledger_entry: "2026-06-26 05:24Z - Codex auto-ack source alignment",
+            current_phase: "Phase 2",
+            current_phase_posture: "partial ORB runtime with governed runtime spine stronger than product surface",
+            current_priority_or_plane_line: "whole-body awareness before capability exposure",
+            ledger_observed: true,
+            manifest_observed: true,
+            sources_observed: true,
+            source_order: ["docs/operations/COMPLETION_LEDGER.md", "docs/canonical/BUILD_MANIFEST.md"],
+            coverage_open_gap_count: 11,
+            remaining_blockers: ["blocked_by_open_orb_gaps", "blocked_by_partial_phase_posture"],
+            main_build_prompt_allowed: false,
+            main_build_prompt_gate: "blocked_by_open_orb_gaps",
+            main_build_prompt_candidate_only: true,
+            conversation_can_override_roadmap: false,
+            proof_source: "developer_bridge.francis_body_map",
+            stores_full_transcript: false,
+            grants_execution_authority: false,
+            grants_mutation_authority: false,
+            grants_approval_authority: false,
+            grants_memory_write_authority: false,
+            grants_training_authority: false,
+          },
+        },
         implementation_preflight: {
           must_read_before_editing: true,
           review_item_id: "review-insight-alpha",
@@ -2387,6 +2412,19 @@ test("parseCollaborationReview preserves advisory candidate boundaries", () => {
   assert.equal(review.items[0]?.buildDirectionGate.conflictingSources[1]?.providerLane, "ollama");
   assert.equal(review.items[0]?.buildDirectionGate.grantsExecutionAuthority, false);
   assert.equal(review.items[0]?.buildDirectionGate.grantsMemoryWriteAuthority, false);
+  assert.equal(review.items[0]?.roadmapAlignmentProof.latestLedgerEntry, "2026-06-26 05:24Z - Codex auto-ack source alignment");
+  assert.equal(review.items[0]?.roadmapAlignmentProof.currentPhase, "Phase 2");
+  assert.equal(review.items[0]?.roadmapAlignmentProof.ledgerObserved, true);
+  assert.equal(review.items[0]?.roadmapAlignmentProof.manifestObserved, true);
+  assert.equal(review.items[0]?.roadmapAlignmentProof.coverageOpenGapCount, 11);
+  assert.deepEqual(review.items[0]?.roadmapAlignmentProof.remainingBlockers, [
+    "blocked_by_open_orb_gaps",
+    "blocked_by_partial_phase_posture",
+  ]);
+  assert.equal(review.items[0]?.roadmapAlignmentProof.mainBuildPromptAllowed, false);
+  assert.equal(review.items[0]?.roadmapAlignmentProof.mainBuildPromptGate, "blocked_by_open_orb_gaps");
+  assert.equal(review.items[0]?.roadmapAlignmentProof.conversationCanOverrideRoadmap, false);
+  assert.equal(review.items[0]?.roadmapAlignmentProof.grantsExecutionAuthority, false);
   assert.equal(review.items[0]?.implementationPreflight.mustReadBeforeEditing, true);
   assert.equal(review.items[0]?.implementationPreflight.reviewItemId, "review-insight-alpha");
   assert.equal(review.items[0]?.implementationPreflight.reviewRoute, "/developer-bridge/collaboration-review?limit=1");

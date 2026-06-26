@@ -2080,6 +2080,17 @@ def test_collaboration_review_projects_generic_historical_topics_to_concrete_sur
     assert substrate_boundary["main_build_prompt_allowed"] is False
     assert substrate_boundary["main_build_prompt_candidate_only"] is True
     assert substrate_boundary["conversation_can_override_roadmap"] is False
+    substrate_proof = substrate_boundary["current_proof"]
+    assert substrate_proof["latest_ledger_entry"]
+    assert substrate_proof["current_phase"] == "Phase 2"
+    assert substrate_proof["ledger_observed"] is True
+    assert substrate_proof["manifest_observed"] is True
+    assert substrate_proof["coverage_open_gap_count"] > 0
+    assert "blocked_by_open_orb_gaps" in substrate_proof["remaining_blockers"]
+    assert substrate_proof["main_build_prompt_allowed"] is False
+    assert substrate_proof["conversation_can_override_roadmap"] is False
+    assert substrate_proof["proof_source"] == "developer_bridge.francis_body_map"
+    assert substrate_proof["grants_execution_authority"] is False
     assert substrate_boundary["claude_role"] == "external_guidance_source"
     assert substrate_boundary["francis_focus_required"] is True
     assert substrate_boundary["grants_execution_authority"] is False
@@ -2114,6 +2125,22 @@ def test_collaboration_review_projects_generic_historical_topics_to_concrete_sur
     assert roadmap_boundary["claude_role"] == "external_guidance_source"
     assert roadmap_boundary["codex_role"] == "external_guidance_source"
     assert roadmap_boundary["francis_focus_required"] is True
+    roadmap_proof = roadmap_boundary["current_proof"]
+    assert roadmap_proof["latest_ledger_entry"]
+    assert roadmap_proof["current_phase"] == "Phase 2"
+    assert roadmap_proof["ledger_observed"] is True
+    assert roadmap_proof["manifest_observed"] is True
+    assert roadmap_proof["source_order"] == [
+        "docs/operations/COMPLETION_LEDGER.md",
+        "docs/canonical/BUILD_MANIFEST.md",
+    ]
+    assert roadmap_proof["coverage_open_gap_count"] > 0
+    assert "blocked_by_open_orb_gaps" in roadmap_proof["remaining_blockers"]
+    assert roadmap_proof["main_build_prompt_allowed"] is False
+    assert roadmap_proof["main_build_prompt_candidate_only"] is True
+    assert roadmap_proof["conversation_can_override_roadmap"] is False
+    assert roadmap_proof["stores_full_transcript"] is False
+    assert roadmap_proof["grants_execution_authority"] is False
     assert "roadmap_alignment.latest_ledger_entry" in roadmap_boundary["required_proof_fields"]
     assert "roadmap_alignment.main_build_prompt_allowed=false" in roadmap_boundary["required_proof_fields"]
     assert (

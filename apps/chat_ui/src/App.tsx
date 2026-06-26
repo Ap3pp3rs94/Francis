@@ -3502,6 +3502,10 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
               const actionIntake = collaborationActionIntakeSummary(item);
               const actionIntakeBorder =
                 actionIntake.tone === "ready" ? "#6ee7b7" : actionIntake.tone === "blocked" ? "#fca5a5" : "#cbd5e1";
+              const roadmapProof = item.roadmapAlignmentProof;
+              const hasRoadmapProof = Boolean(
+                roadmapProof.latestLedgerEntry || roadmapProof.currentPhase || roadmapProof.mainBuildPromptGate,
+              );
               return (
                 <article
                   key={item.id || item.insightId}
@@ -3597,6 +3601,22 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
                         <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
                           {item.buildDirectionGate.state || "blocked"}
                           {item.buildDirectionGate.reason ? `: ${item.buildDirectionGate.reason}` : ""}
+                        </dd>
+                      </div>
+                    ) : null}
+                    {hasRoadmapProof ? (
+                      <div>
+                        <dt style={{ color: "#93c5fd" }}>Roadmap Proof</dt>
+                        <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
+                          {roadmapProof.currentPhase || "phase unknown"}
+                          {roadmapProof.currentPhasePosture ? ` / ${roadmapProof.currentPhasePosture}` : ""} / gate{" "}
+                          {roadmapProof.mainBuildPromptGate || "requires_alignment_review"} / ledger{" "}
+                          {roadmapProof.latestLedgerEntry || "unknown"}
+                        </dd>
+                        <dd style={{ color: "#94a3b8", margin: "4px 0 0", overflowWrap: "anywhere" }}>
+                          sources {roadmapProof.sourceOrder.join(" -> ") || "unknown"} / open gaps {roadmapProof.coverageOpenGapCount} /
+                          candidate only {boolText(roadmapProof.mainBuildPromptCandidateOnly)} / override{" "}
+                          {boolText(roadmapProof.conversationCanOverrideRoadmap)} / execute {boolText(roadmapProof.grantsExecutionAuthority)}
                         </dd>
                       </div>
                     ) : null}

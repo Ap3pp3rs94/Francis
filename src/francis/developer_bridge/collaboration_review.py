@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from francis.developer_bridge.body_map import read_francis_body_map
 from francis.governance.redaction import redact_secret_text
 from francis.kernel.paths import data_dir
 
@@ -422,6 +423,7 @@ def _roadmap_alignment_boundary(*, build_issue: dict[str, object], concrete_surf
         "claude_role": "external_guidance_source",
         "codex_role": "external_guidance_source",
         "francis_focus_required": applies,
+        "current_proof": {},
         "grants_execution_authority": False,
         "grants_mutation_authority": False,
         "grants_approval_authority": False,
@@ -438,6 +440,7 @@ def _roadmap_alignment_boundary(*, build_issue: dict[str, object], concrete_surf
         }
     return {
         **base,
+        "current_proof": _roadmap_current_proof(is_roadmap_gate=is_roadmap_gate),
         "required_proof_fields": [
             "roadmap_alignment.latest_ledger_entry",
             "roadmap_alignment.current_phase",
@@ -462,6 +465,62 @@ def _roadmap_alignment_boundary(*, build_issue: dict[str, object], concrete_surf
             "manifest, then record proof before any main Francis build prompt."
         ),
     }
+
+
+def _roadmap_current_proof(*, is_roadmap_gate: bool) -> dict[str, object]:
+    body = read_francis_body_map()
+    summary = _safe_dict(body.get("summary"))
+    phase = _safe_dict(body.get("phase"))
+    evidence = _safe_dict(body.get("evidence"))
+    open_gap_count = _safe_int(
+        summary.get("coverage_open_gap_count"),
+        default=_safe_int(evidence.get("coverage_open_gap_count")),
+    )
+    ledger_observed = bool(evidence.get("ledger_observed"))
+    manifest_observed = bool(evidence.get("manifest_observed"))
+    sources_observed = ledger_observed and manifest_observed
+    phase_label = _bounded_text(phase.get("current"), limit=80) or "unknown"
+    phase_posture = _bounded_text(phase.get("posture"), limit=180)
+    blockers: list[str] = []
+    if open_gap_count > 0:
+        blockers.append("blocked_by_open_orb_gaps")
+    if _phase_blocks_main_build_prompt(current=phase_label, posture=phase_posture):
+        blockers.append("blocked_by_partial_phase_posture")
+    if not sources_observed:
+        blockers.append("missing_alignment_sources")
+    main_build_prompt_gate = blockers[0] if blockers else "requires_alignment_review"
+    return {
+        "latest_ledger_entry": _bounded_text(evidence.get("latest_ledger_entry"), limit=180),
+        "current_phase": phase_label,
+        "current_phase_posture": phase_posture,
+        "current_priority_or_plane_line": _bounded_text(phase.get("priority"), limit=180),
+        "ledger_observed": ledger_observed,
+        "manifest_observed": manifest_observed,
+        "sources_observed": sources_observed,
+        "source_order": (
+            ["docs/operations/COMPLETION_LEDGER.md", "docs/canonical/BUILD_MANIFEST.md"]
+            if is_roadmap_gate
+            else ["docs/canonical/BUILD_MANIFEST.md", "docs/operations/COMPLETION_LEDGER.md"]
+        ),
+        "coverage_open_gap_count": open_gap_count,
+        "remaining_blockers": blockers,
+        "main_build_prompt_allowed": False,
+        "main_build_prompt_gate": main_build_prompt_gate,
+        "main_build_prompt_candidate_only": True,
+        "conversation_can_override_roadmap": False,
+        "proof_source": "developer_bridge.francis_body_map",
+        "stores_full_transcript": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "grants_approval_authority": False,
+        "grants_memory_write_authority": False,
+        "grants_training_authority": False,
+    }
+
+
+def _phase_blocks_main_build_prompt(*, current: str, posture: str) -> bool:
+    text = f"{current} {posture}".lower()
+    return "phase 2" in text or "partial" in text or "not yet" in text
 
 
 def _model_advice_governance_boundary(*, build_issue: dict[str, object], concrete_surface: str) -> dict[str, object]:
@@ -1279,6 +1338,21 @@ def _bounded_int(value: int, *, minimum: int, maximum: int) -> int:
     except (TypeError, ValueError):
         parsed = minimum
     return max(minimum, min(parsed, maximum))
+
+
+def _safe_int(value: object, *, default: int = 0) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(float(value.strip() or str(default)))
+        except ValueError:
+            return default
+    return default
 
 
 def _governance() -> dict[str, object]:

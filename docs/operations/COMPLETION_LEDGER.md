@@ -97479,6 +97479,73 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, browser screenshot proof, and full ORB/body
   coverage proof were not run for this bounded responder slice.
 
+### 2026-06-26 05:30Z - Collaboration review roadmap proof projection
+
+Current posture: Phase 2 / P1 interface, P3 governance, and P9 observability now
+carry current roadmap proof directly inside roadmap/substrate collaboration
+review items. Francis1 can keep raising roadmap-alignment topics, but the review
+surface now shows the latest ledger title, Phase 2 posture, source order, open
+ORB gap count, remaining blockers, and no-authority flags without requiring the
+operator to manually correlate three readbacks.
+
+What changed:
+
+- `developer_bridge.collaboration_review` now adds
+  `roadmap_alignment_boundary.current_proof` for roadmap-alignment and
+  substrate-completion review items.
+- The proof is derived from the existing Francis body-map readback and includes
+  latest ledger entry, current phase/posture/priority, ledger and manifest
+  observed flags, source order, coverage open gap count, remaining blockers,
+  `main_build_prompt_allowed=false`, `main_build_prompt_candidate_only=true`,
+  `conversation_can_override_roadmap=false`, and no-authority flags.
+- The Chat UI collaboration parser preserves the proof as
+  `roadmapAlignmentProof`.
+- The Communication review cards render a compact Roadmap Proof block when the
+  proof is present.
+
+Validation:
+
+- Focused backend review test passed:
+  `python -m pytest tests/test_developer_bridge.py::test_collaboration_review_projects_generic_historical_topics_to_concrete_surfaces -q`.
+- Chat UI contract suite passed:
+  `npm run test -- --runInBand apps/chat_ui/src/chat/index.test.ts`
+  (the package script ran the configured UI suite, `282` passing tests).
+- Ruff check passed:
+  `python -m ruff check src\francis\developer_bridge\collaboration_review.py tests\test_developer_bridge.py`.
+- Ruff format check passed:
+  `python -m ruff format --check src\francis\developer_bridge\collaboration_review.py tests\test_developer_bridge.py`.
+- Targeted mypy passed:
+  `python -m mypy src\francis\developer_bridge\collaboration_review.py`.
+- Compileall passed:
+  `python -m compileall src\francis\developer_bridge\collaboration_review.py`.
+- Chat UI production build passed:
+  `npm run build`.
+- `git diff --check` passed.
+- The local Francis API was restarted. Live
+  `/developer-bridge/collaboration-review?limit=20` showed roadmap review
+  `review-insight-collab-7efc2c63eec24758-e2c0c5f27471` with
+  `latest_ledger_entry=2026-06-26 05:30Z - Collaboration review roadmap proof projection`,
+  `current_phase=Phase 2`, `main_build_prompt_gate=blocked_by_open_orb_gaps`,
+  `coverage_open_gap_count=11`,
+  `remaining_blockers=blocked_by_open_orb_gaps,blocked_by_partial_phase_posture`,
+  `proof_source=developer_bridge.francis_body_map`,
+  `stores_full_transcript=false`, and `grants_execution_authority=false`.
+- Live `/developer-bridge/collaboration-runtime-health` reported
+  `status=healthy`, `helper_count=3`, `recurrence_state=turn_gap`,
+  `manual_nudge_required=false`, latest prompt within budget, and latest local
+  model `output_guard_status=drift_rewritten`.
+
+Remaining truthful gap:
+
+- This is a readback and operator-visibility projection only. It does not clear
+  ORB gaps, authorize main Francis build prompting, make collaboration output
+  authoritative, grant Francis1 capability use, tune the model, promote memory,
+  or execute/approve anything.
+- The local model is still producing output-guard drift on some topics; those
+  remain learning receipts, not action-readiness evidence.
+- `.\scripts\check.ps1`, GitHub CI, browser screenshot proof, and full ORB/body
+  coverage proof were not run for this bounded review-proof slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
