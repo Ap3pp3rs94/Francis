@@ -14,6 +14,8 @@ _ALIGNMENT_SOURCES = [
     "docs/operations/COMPLETION_LEDGER.md",
     "docs/canonical/BUILD_MANIFEST.md",
 ]
+_PROMPT_CHECK_ID = "collaboration_substrate_readiness.roadmap_alignment"
+_PROMPT_CHECK_READBACK = "/developer-bridge/collaboration-substrate-readiness roadmap_alignment"
 
 
 def read_collaboration_substrate_readiness() -> dict[str, object]:
@@ -205,6 +207,7 @@ def read_collaboration_substrate_readiness() -> dict[str, object]:
             "runtime_health": "developer_bridge.collaboration_runtime_health",
             "trust_ladder": "developer_bridge.francis_trust_ladder",
             "learning": "developer_bridge.collaboration_driver.learning_events",
+            "roadmap_alignment": _PROMPT_CHECK_READBACK,
         },
         "governance": _governance(),
     }
@@ -274,6 +277,9 @@ def _roadmap_alignment(
         "status": status,
         "required_sources": list(_ALIGNMENT_SOURCES),
         "source_order": list(_ALIGNMENT_SOURCES),
+        "prompt_check_id": _PROMPT_CHECK_ID,
+        "prompt_check_readback": _PROMPT_CHECK_READBACK,
+        "prompt_check_required": True,
         "ledger_first": True,
         "ledger_observed": ledger_observed,
         "manifest_observed": manifest_observed,
@@ -286,7 +292,7 @@ def _roadmap_alignment(
         "open_orb_gap_count": len(open_orb_gaps),
         "open_orb_gap_plane_ids": [_str(item.get("plane_id")) for item in open_orb_gaps if _str(item.get("plane_id"))],
         "next_check": (
-            "Read docs/operations/COMPLETION_LEDGER.md first, compare it against "
+            f"Run {_PROMPT_CHECK_ID}: read docs/operations/COMPLETION_LEDGER.md first, compare it against "
             "docs/canonical/BUILD_MANIFEST.md, confirm phase posture and ORB blockers, and keep any main "
             "Francis build prompt candidate-only unless the gate is clear."
         ),

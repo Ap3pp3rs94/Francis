@@ -98739,6 +98739,65 @@ Remaining truthful gap:
 - Full `.\scripts\check.ps1`, browser screenshot proof, GitHub CI, and broader
   ORB/body validation were not run for this bounded driver prompt slice.
 
+### 2026-06-26 08:48Z - Roadmap-alignment prompt check surfaced
+
+Current posture: Phase 2 / P9 collaboration observability and P1 operator
+visibility now name the concrete roadmap-alignment check the collaboration
+should use before treating relay conversation as main Francis build direction.
+This responds to the live Francis1 relay gap by wiring existing
+`collaboration_substrate_readiness.roadmap_alignment` truth into the readback,
+driver prompt, and Communication UI without creating a parallel roadmap system.
+
+What changed:
+
+- Added `prompt_check_id`, `prompt_check_readback`, and
+  `prompt_check_required` to
+  `developer_bridge.collaboration_substrate_readiness.roadmap_alignment`.
+- Added the roadmap-alignment readback path to substrate-readiness
+  `source_readbacks`.
+- Updated the compact roadmap prompt line so future Codex-to-Francis1 prompts
+  name `roadmap_alignment` while preserving the main-build candidate-only gate.
+- Updated the Chat UI substrate-readiness parser and Roadmap Alignment display
+  to show the explicit prompt check beside source order, prompt gate, and
+  no-authority flags.
+- Kept compact loop/guard wording from dropping useful learning signals such as
+  `user_confirmation_fallback` and stale-replay handling when prompt budget
+  fitting is required.
+
+Validation:
+
+- Full developer-bridge backend test file passed:
+  `python -m pytest tests\test_developer_bridge.py -q`.
+- Focused Chat UI parser test passed:
+  `cd apps\chat_ui; node --test --experimental-strip-types src\chat\index.test.ts`.
+- Full Chat UI test suite passed:
+  `cd apps\chat_ui; npm run test` with 284 tests.
+- Chat UI production build passed:
+  `cd apps\chat_ui; npm run build`.
+- Ruff lint passed for touched backend files:
+  `python -m ruff check src\francis\developer_bridge\body_map.py src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\substrate_readiness.py tests\test_developer_bridge.py`.
+- Ruff format check passed for touched backend files:
+  `python -m ruff format --check src\francis\developer_bridge\body_map.py src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\substrate_readiness.py tests\test_developer_bridge.py`.
+- Mypy passed for touched backend modules:
+  `python -m mypy src\francis\developer_bridge\body_map.py src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\substrate_readiness.py`.
+- `git diff --check` passed.
+- Live collaboration runtime was restarted from PID `41640`; readback returned
+  `status=healthy`, `helper_count=3`, `driver_prompt_budget.status=ok`,
+  `latest_prompt_length=668`, `latest_prompt_within_budget=true`, and
+  `live_health_evidence.proof_status=recurring_cleanly`.
+- Latest post-restart driver prompt
+  `collab-b967375d16d64125-37580f20cf72` included
+  `Roadmap: readiness.roadmap_alignment; main-build candidate-only`, Claude
+  source acknowledgment, Codex repo-truth validation, and no-action authority.
+
+Remaining truthful gap:
+
+- This names and surfaces the roadmap-alignment check; it does not clear the
+  check, close open ORB gaps, allow unsupervised main Francis build prompting,
+  tune Francis1, grant Ollama capability, or execute model advice.
+- `.\scripts\check.ps1`, browser screenshot proof, GitHub CI, and broader
+  ORB/body validation were not run for this bounded prompt-check slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

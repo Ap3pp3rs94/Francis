@@ -1694,6 +1694,12 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
                 <div style={{ overflowWrap: "anywhere" }}>{roadmapAlignment.sourceOrder.join(" -> ") || "unknown"}</div>
               </div>
               <div>
+                <div style={{ color: "#94a3b8", fontSize: 12, textTransform: "uppercase" }}>Prompt Check</div>
+                <div style={{ overflowWrap: "anywhere" }}>
+                  {roadmapAlignment.promptCheckId || "collaboration_substrate_readiness.roadmap_alignment"}
+                </div>
+              </div>
+              <div>
                 <div style={{ color: "#94a3b8", fontSize: 12, textTransform: "uppercase" }}>Prompt Gate</div>
                 <div style={{ overflowWrap: "anywhere" }}>{roadmapAlignment.mainBuildPromptGate || "requires_alignment_review"}</div>
               </div>
@@ -1706,6 +1712,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
               <span>ledger first {boolText(roadmapAlignment.ledgerFirst)}</span>
               <span>ledger {boolText(roadmapAlignment.ledgerObserved)}</span>
               <span>manifest {boolText(roadmapAlignment.manifestObserved)}</span>
+              <span>check required {boolText(roadmapAlignment.promptCheckRequired)}</span>
               <span>candidate only {boolText(roadmapAlignment.candidateOnlyUntilReview)}</span>
               <span>main build prompt {boolText(roadmapAlignment.mainBuildPromptAllowed)}</span>
               <span>execute {boolText(roadmapAlignment.grantsExecutionAuthority)}</span>

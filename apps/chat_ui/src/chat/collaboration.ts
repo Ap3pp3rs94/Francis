@@ -905,6 +905,9 @@ export type CollaborationRoadmapAlignment = {
   status: string;
   requiredSources: string[];
   sourceOrder: string[];
+  promptCheckId: string;
+  promptCheckReadback: string;
+  promptCheckRequired: boolean;
   ledgerFirst: boolean;
   ledgerObserved: boolean;
   manifestObserved: boolean;
@@ -3994,6 +3997,9 @@ export function parseCollaborationSubstrateReadiness(raw: unknown): Collaboratio
       sourceOrder: Array.isArray(roadmapAlignment.source_order)
         ? roadmapAlignment.source_order.map((item) => safeString(item)).filter(Boolean)
         : [],
+      promptCheckId: safeString(roadmapAlignment.prompt_check_id),
+      promptCheckReadback: safeString(roadmapAlignment.prompt_check_readback),
+      promptCheckRequired: safeBoolean(roadmapAlignment.prompt_check_required),
       ledgerFirst: safeBoolean(roadmapAlignment.ledger_first),
       ledgerObserved: safeBoolean(roadmapAlignment.ledger_observed),
       manifestObserved: safeBoolean(roadmapAlignment.manifest_observed),

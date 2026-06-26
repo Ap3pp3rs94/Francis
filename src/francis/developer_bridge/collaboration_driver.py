@@ -461,7 +461,7 @@ def _fit_driver_prompt_to_budget(
 
     compact_loop = _extra_compact_loop_line(loop_line)
     compact_codex = _extra_compact_codex_response_line(codex_response)
-    compact_roadmap = "Roadmap: ledger first; candidate-only."
+    compact_roadmap = "Roadmap: readiness.roadmap_alignment; main-build candidate-only."
     compact_trust = "Trust: no capability authority."
     attempts = [
         (
@@ -542,7 +542,7 @@ def _extra_compact_codex_response_line(codex_response: str) -> str:
     if not codex_response:
         return ""
     if "no action authority" in codex_response:
-        return " Codex: validates; no action authority."
+        return " Codex: validating; no action authority."
     return " Codex: repo truth first."
 
 
@@ -616,10 +616,12 @@ def _extra_compact_loop_line(loop_line: str) -> str:
         return ""
     lower = loop_line.lower()
     if "stale replay" in lower:
-        return " Guard: stale replay; issue + artifact."
+        return " Guard: stale replay learned; avoid old topic; give issue + artifact."
     if "guard:" in lower:
         return " Guard: drift learned; issue + artifact."
     if "loop:" in lower:
+        if "user_confirmation_fallback" in lower:
+            return " Loop: user_confirmation_fallback; use prior surface."
         return " Loop: use prior surface."
     return " " + _bounded_text(loop_line, limit=60).strip()
 

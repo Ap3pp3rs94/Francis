@@ -248,7 +248,7 @@ def compact_roadmap_gate_prompt_line() -> str:
     else:
         gate = "review_required"
     main_build = "candidate-only" if gate != "review_required" else "review-required"
-    return _one_line(f"Roadmap: ledger first; main-build {main_build}; {gate}.")
+    return _one_line(f"Roadmap: check substrate readiness roadmap_alignment; main-build {main_build}; {gate}.")
 
 
 def _body_surfaces(root: Path, *, grant_by_surface: dict[str, dict[str, object]]) -> list[dict[str, object]]:

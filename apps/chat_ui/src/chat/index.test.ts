@@ -997,6 +997,9 @@ test("parseCollaborationSubstrateReadiness preserves main-build prompt gate", ()
       status: "blocked_candidate_only",
       required_sources: ["docs/operations/COMPLETION_LEDGER.md", "docs/canonical/BUILD_MANIFEST.md"],
       source_order: ["docs/operations/COMPLETION_LEDGER.md", "docs/canonical/BUILD_MANIFEST.md"],
+      prompt_check_id: "collaboration_substrate_readiness.roadmap_alignment",
+      prompt_check_readback: "/developer-bridge/collaboration-substrate-readiness roadmap_alignment",
+      prompt_check_required: true,
       ledger_first: true,
       ledger_observed: true,
       manifest_observed: true,
@@ -1110,6 +1113,12 @@ test("parseCollaborationSubstrateReadiness preserves main-build prompt gate", ()
     "docs/operations/COMPLETION_LEDGER.md",
     "docs/canonical/BUILD_MANIFEST.md",
   ]);
+  assert.equal(readiness.roadmapAlignment.promptCheckId, "collaboration_substrate_readiness.roadmap_alignment");
+  assert.equal(
+    readiness.roadmapAlignment.promptCheckReadback,
+    "/developer-bridge/collaboration-substrate-readiness roadmap_alignment",
+  );
+  assert.equal(readiness.roadmapAlignment.promptCheckRequired, true);
   assert.equal(readiness.roadmapAlignment.ledgerFirst, true);
   assert.equal(readiness.roadmapAlignment.ledgerObserved, true);
   assert.equal(readiness.roadmapAlignment.manifestObserved, true);

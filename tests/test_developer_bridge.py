@@ -343,7 +343,7 @@ def test_francis_body_map_exposes_whole_body_without_authority(tmp_path, monkeyp
     assert "stale memory detaches" in prompt_line
     roadmap_gate = compact_roadmap_gate_prompt_line()
     assert "Roadmap:" in roadmap_gate
-    assert "ledger first" in roadmap_gate
+    assert "check substrate readiness roadmap_alignment" in roadmap_gate
     assert "main-build candidate-only" in roadmap_gate
     assert "blocked_by_open_orb_gaps" in roadmap_gate
     assert compact_trust_ladder_prompt_line() == "Trust: classify needs; no capability authority."
@@ -636,6 +636,11 @@ def test_collaboration_substrate_readiness_blocks_main_build_prompt_for_open_gap
         "docs/operations/COMPLETION_LEDGER.md",
         "docs/canonical/BUILD_MANIFEST.md",
     ]
+    assert roadmap_alignment["prompt_check_id"] == "collaboration_substrate_readiness.roadmap_alignment"  # type: ignore[index]
+    assert roadmap_alignment["prompt_check_readback"] == (  # type: ignore[index]
+        "/developer-bridge/collaboration-substrate-readiness roadmap_alignment"
+    )
+    assert roadmap_alignment["prompt_check_required"] is True  # type: ignore[index]
     assert roadmap_alignment["ledger_first"] is True  # type: ignore[index]
     assert roadmap_alignment["ledger_observed"] is True  # type: ignore[index]
     assert roadmap_alignment["manifest_observed"] is True  # type: ignore[index]
@@ -652,6 +657,9 @@ def test_collaboration_substrate_readiness_blocks_main_build_prompt_for_open_gap
     assert checklist["coverage_gaps_reviewed"]["status"] == "blocked"
     assert checklist["coverage_gaps_reviewed"]["blocks_main_build_prompt"] is True
     assert "docs/operations/COMPLETION_LEDGER.md" in result["required_alignment_sources"]  # type: ignore[operator]
+    assert result["source_readbacks"]["roadmap_alignment"] == (  # type: ignore[index]
+        "/developer-bridge/collaboration-substrate-readiness roadmap_alignment"
+    )
     assert result["governance"]["executes_prompt"] is False  # type: ignore[index]
     assert result["governance"]["grants_repo_mutation_authority"] is False  # type: ignore[index]
 
@@ -1456,7 +1464,7 @@ def test_collaboration_driver_waits_for_ollama_before_next_turn(tmp_path, monkey
     assert any("Body map: visible; grants required; stale detaches." in prompt for prompt in prompts)
     assert all("capability use requires grant receipt" in prompt or "grants required" in prompt for prompt in prompts)
     assert all("stale memory detaches" in prompt or "stale detaches" in prompt for prompt in prompts)
-    assert all("Roadmap: ledger first" in prompt for prompt in prompts)
+    assert all("Roadmap: check" in prompt and "roadmap_alignment" in prompt for prompt in prompts)
     assert all("main-build candidate-only" in prompt for prompt in prompts)
     assert all("blocked_by_open_orb_gaps" in prompt for prompt in prompts)
     assert all("Trust: classify needs; no capability authority" in prompt for prompt in prompts)
@@ -2808,13 +2816,15 @@ def test_collaboration_driver_compacts_long_review_line_into_prompt_budget(tmp_p
     assert submitted["status"] == "submitted"
     transcript = read_collaboration_transcript(source_agent="codex", target_agent="ollama", limit=1)
     prompt = str(transcript["items"][0]["prompt"])
-    assert "Roadmap: ledger first" in prompt
+    assert "Roadmap:" in prompt
+    assert "roadmap_alignment" in prompt
     assert "main-build candidate-only" in prompt
     assert "Prior check: Review candidate insight-live-long-" in prompt
     assert "surface=docs/operations/COMPLETION_LEDGER.md + docs/canonical/BUILD_MANIFEST.md" in prompt
     assert "verified=canonical" in prompt
     assert "build_or_wire=false" in prompt
-    assert "Codex: validating; no action authority" in prompt
+    assert "Codex:" in prompt
+    assert "no action authority" in prompt
     assert len(prompt) <= 700
 
 
