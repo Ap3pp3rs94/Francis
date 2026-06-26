@@ -31,6 +31,7 @@ _RECENT_PROMPT_SCAN_THRESHOLD = 250
 _RECENT_PROMPT_SCAN_MIN = 64
 _RECENT_PROMPT_SCAN_MAX = 500
 _KNOWN_STATUSES = frozenset({"queued", "acknowledged", "delivered", "blocked", "closed"})
+_KNOWN_OPERATOR_TARGETS = ("codex", "claude", "ollama")
 _PROMPT_CACHE_LOCK = Lock()
 _prompt_cache_root: Path | None = None
 _prompt_cache_deadline = 0.0
@@ -99,6 +100,63 @@ def submit_collaboration_prompt(
         "record": record,
         "chat_handoff": record["chat_handoff"],
         "governance": _governance(write=True),
+    }
+
+
+def submit_operator_collaboration_message(
+    message: str,
+    *,
+    target_agents: list[str] | tuple[str, ...] | None = None,
+    actor: str = "chat_ui.system",
+    objective: str = "",
+    context: str = "",
+) -> dict[str, object]:
+    """Append one bounded operator-visible message per selected collaboration participant."""
+
+    clean_message = _bounded_text(message, max_chars=_MAX_PROMPT_CHARS, field="message")
+    clean_actor = _bounded_optional_text(actor, max_chars=96) or "operator"
+    targets = _operator_targets(target_agents)
+    disabled = enforceable_disabled_targets(targets)
+    if disabled:
+        raise DeveloperBridgeError(
+            "collaboration_target_disabled",
+            f"collaboration relay target disabled: {', '.join(disabled)}",
+        )
+    clean_objective = _bounded_optional_text(objective, max_chars=_MAX_OBJECTIVE_CHARS)
+    if not clean_objective:
+        clean_objective = "Operator message to Francis collaboration participants"
+    clean_context = _bounded_optional_text(context, max_chars=_MAX_CONTEXT_CHARS)
+    context_parts = [
+        f"actor={redact_secret_text(clean_actor)}",
+        "operator_message=true",
+        "no_action_authority=true",
+        "no_execution_authority=true",
+        "no_mutation_authority=true",
+        "no_memory_write_authority=true",
+    ]
+    if clean_context:
+        context_parts.append(f"operator_context={clean_context}")
+    submitted = [
+        submit_collaboration_prompt(
+            source_agent="operator",
+            target_agent=target,
+            objective=clean_objective,
+            prompt=clean_message,
+            context="; ".join(context_parts),
+        )
+        for target in targets
+    ]
+    return {
+        "kind": "developer_bridge.collaboration_operator_message",
+        "schema_version": "developer_bridge_collaboration_operator_message_v1",
+        "ok": True,
+        "actor": redact_secret_text(clean_actor),
+        "target_agents": list(targets),
+        "count": len(submitted),
+        "items": submitted,
+        "prompt_ids": [item.get("prompt_id", "") for item in submitted],
+        "chat_handoffs": [item.get("chat_handoff", {}) for item in submitted],
+        "governance": _operator_message_governance(write=True),
     }
 
 
@@ -646,6 +704,34 @@ def _optional_agent_id(value: str, *, field: str) -> str:
     return text
 
 
+def _operator_targets(values: list[str] | tuple[str, ...] | None) -> tuple[str, ...]:
+    raw_values = list(values or ["all"])
+    normalized: list[str] = []
+    for value in raw_values:
+        text = _bounded_optional_text(str(value or ""), max_chars=64).lower().replace("francis1", "ollama")
+        if not text:
+            continue
+        if text == "all":
+            normalized.extend(_KNOWN_OPERATOR_TARGETS)
+            continue
+        if text not in _KNOWN_OPERATOR_TARGETS:
+            raise DeveloperBridgeError(
+                "collaboration_target_denied",
+                f"target agent must be all or one of: {', '.join(_KNOWN_OPERATOR_TARGETS)}",
+            )
+        normalized.append(text)
+    deduped = tuple(dict.fromkeys(normalized))
+    if not deduped:
+        raise DeveloperBridgeError("collaboration_target_required", "at least one collaboration target is required")
+    return deduped
+
+
+def enforceable_disabled_targets(targets: tuple[str, ...]) -> list[str]:
+    from .agents import disabled_collaboration_agents
+
+    return disabled_collaboration_agents("operator", *targets)
+
+
 def _bounded_text(value: str, *, max_chars: int, field: str) -> str:
     text = str(value if value is not None else "").replace("\x00", "").strip()
     if not text:
@@ -762,4 +848,26 @@ def _governance(*, write: bool) -> dict[str, object]:
         "requires_operator_review": True,
         "raw_shell": False,
         "external_network": False,
+    }
+
+
+def _operator_message_governance(*, write: bool) -> dict[str, object]:
+    return {
+        **_governance(write=write),
+        "surface": "developer_bridge.collaboration_operator_message",
+        "operator_message": True,
+        "append_only_relay_writes": write,
+        "writes_prompt_receipt": write,
+        "writes_repo_files": False,
+        "writes_memory": False,
+        "calls_model": False,
+        "trains_model": False,
+        "client_can_be_operator_console": True,
+        "client_is_automatic_execution_authority": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "grants_approval_authority": False,
+        "grants_memory_write_authority": False,
+        "grants_training_authority": False,
+        "grants_capability_authority": False,
     }

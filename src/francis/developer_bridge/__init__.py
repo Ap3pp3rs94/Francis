@@ -12,6 +12,7 @@ from .collaboration import (
     list_collaboration_prompts,
     read_collaboration_transcript,
     submit_collaboration_prompt,
+    submit_operator_collaboration_message,
 )
 from .repo_tools import (
     DeveloperBridgeError,
@@ -46,4 +47,5 @@ __all__ = [
     "set_collaboration_agent_enabled",
     "set_francis_capability_grant",
     "submit_collaboration_prompt",
+    "submit_operator_collaboration_message",
 ]

@@ -84,6 +84,20 @@ export type CollaborationAgentsStatus = {
   governance: Record<string, unknown>;
 };
 
+export type CollaborationOperatorMessageResult = {
+  ok: boolean;
+  actor: string;
+  targetAgents: string[];
+  count: number;
+  promptIds: string[];
+  chatHandoffs: {
+    chatText: string;
+    sourceChatEchoRequired: boolean;
+    targetChatEchoRequired: boolean;
+  }[];
+  governance: Record<string, unknown>;
+};
+
 export type CollaborationRuntimeHelper = {
   name: string;
   status: string;
@@ -3034,6 +3048,28 @@ function parseAgentToggleReceipt(raw: unknown): CollaborationAgentToggleReceipt 
   };
 }
 
+export function parseCollaborationOperatorMessageResult(raw: unknown): CollaborationOperatorMessageResult {
+  const value = isRecord(raw) ? raw : {};
+  return {
+    ok: safeBoolean(value.ok),
+    actor: safeString(value.actor),
+    targetAgents: Array.isArray(value.target_agents) ? value.target_agents.map((entry) => safeString(entry)).filter(Boolean) : [],
+    count: safeNumber(value.count),
+    promptIds: Array.isArray(value.prompt_ids) ? value.prompt_ids.map((entry) => safeString(entry)).filter(Boolean) : [],
+    chatHandoffs: Array.isArray(value.chat_handoffs)
+      ? value.chat_handoffs.map((entry) => {
+          const handoff = isRecord(entry) ? entry : {};
+          return {
+            chatText: safeString(handoff.chat_text),
+            sourceChatEchoRequired: safeBoolean(handoff.source_chat_echo_required),
+            targetChatEchoRequired: safeBoolean(handoff.target_chat_echo_required),
+          };
+        })
+      : [],
+    governance: isRecord(value.governance) ? value.governance : {},
+  };
+}
+
 function parseAgentToggleProofVerdict(
   raw: unknown,
   fallback: { actor: string; enabled: boolean; previousEnabled: boolean; reason: string; governance: Record<string, unknown> },
@@ -4900,6 +4936,39 @@ export async function setCollaborationAgentEnabled(opts: {
   }
   const status = isRecord(json) && isRecord(json.status) ? json.status : json;
   return parseCollaborationAgentsStatus(status);
+}
+
+export async function sendCollaborationOperatorMessage(opts: {
+  baseUrl: string;
+  message: string;
+  targetAgents: string[];
+  actor?: string;
+  objective?: string;
+  context?: string;
+  signal?: AbortSignal;
+}): Promise<CollaborationOperatorMessageResult> {
+  const url = `${opts.baseUrl.replace(/\/$/, "")}/developer-bridge/collaboration-message`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    signal: opts.signal,
+    body: JSON.stringify({
+      message: opts.message,
+      target_agents: opts.targetAgents.length ? opts.targetAgents : ["all"],
+      actor: opts.actor || "chat_ui.system",
+      objective: opts.objective || "Operator message from Communication UI",
+      context: opts.context || "manual operator message; no action authority",
+    }),
+  });
+  const text = await response.text();
+  const json = text ? JSON.parse(text) : {};
+  if (!response.ok) {
+    throw new Error(`Collaboration operator message failed with HTTP ${response.status}.`);
+  }
+  if (isRecord(json) && safeBoolean(json.ok, true) === false) {
+    throw new Error(safeString(json.message, "Collaboration operator message was denied."));
+  }
+  return parseCollaborationOperatorMessageResult(json);
 }
 
 export async function fetchCollaborationTranscript(opts: {

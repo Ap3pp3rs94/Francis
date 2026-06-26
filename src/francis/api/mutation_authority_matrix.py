@@ -345,6 +345,21 @@ _RULES: tuple[AuthorityRule, ...] = (
     ),
     AuthorityRule(
         family="developer_bridge",
+        prefixes=("/developer-bridge/collaboration-message",),
+        required_actor="payload.actor or chat_ui.system default",
+        required_scope="developer_bridge.operator_console_control",
+        approval_requirement="not_required_operator_console_message_receipt",
+        receipt_behavior="developer_bridge.collaboration_prompt receipts, one per selected target",
+        denial_behavior="invalid target, same source/target, disabled target, or empty message returns DeveloperBridgeError before relay write",
+        governance_maturity="bounded_operator_message_receipt",
+        notes=(
+            "Operator messages append bounded relay receipts to Codex, Claude, and/or Francis1/Ollama. "
+            "They do not execute prompts, call models directly, run tools, mutate the repo, write memory, "
+            "approve actions, train a model, or grant execution/mutation authority."
+        ),
+    ),
+    AuthorityRule(
+        family="developer_bridge",
         prefixes=("/developer-bridge/francis-capability-grants",),
         required_actor="payload.actor or chat_ui.system default",
         required_scope="developer_bridge.operator_console_control",

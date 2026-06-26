@@ -7,13 +7,14 @@ from time import monotonic
 
 from fastapi import APIRouter, Query
 from fastapi import Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from francis.developer_bridge.agents import collaboration_agents_status, set_collaboration_agent_enabled
 from francis.developer_bridge.body_map import read_francis_body_map
 from francis.developer_bridge.capability_grants import read_francis_capability_grants, set_francis_capability_grant
 from francis.developer_bridge.capability_requests import read_francis_capability_requests
 from francis.developer_bridge.collaboration import read_collaboration_sessions, read_collaboration_transcript
+from francis.developer_bridge.collaboration import submit_operator_collaboration_message
 from francis.developer_bridge.collaboration_driver import (
     read_collaboration_exploration,
     read_collaboration_learning_events,
@@ -56,6 +57,14 @@ class FrancisCapabilityGrantIn(BaseModel):
     actor: str = "chat_ui.system"
     reason: str = ""
     source_review_item_id: str = ""
+
+
+class CollaborationOperatorMessageIn(BaseModel):
+    message: str
+    target_agents: list[str] = Field(default_factory=lambda: ["all"])
+    actor: str = "chat_ui.system"
+    objective: str = ""
+    context: str = ""
 
 
 def _call_read_only(func, *args, **kwargs) -> dict[str, object]:  # type: ignore[no-untyped-def]
@@ -1274,6 +1283,24 @@ def collaboration_sessions_route(
 @router.get("/collaboration-agents")
 async def collaboration_agents_route() -> Response:
     return collaboration_agents()
+
+
+@router.post("/collaboration-message")
+def collaboration_operator_message(payload: CollaborationOperatorMessageIn) -> dict[str, object]:
+    result = _call_read_only(
+        submit_operator_collaboration_message,
+        payload.message,
+        target_agents=payload.target_agents,
+        actor=payload.actor,
+        objective=payload.objective,
+        context=payload.context,
+    )
+    if result.get("ok") is True:
+        _invalidate_readback_cache(
+            "developer_bridge.collaboration_transcript",
+            "developer_bridge.collaboration_sessions",
+        )
+    return result
 
 
 @router.post("/collaboration-agents/toggle")

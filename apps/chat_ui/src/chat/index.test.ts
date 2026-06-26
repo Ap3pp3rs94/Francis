@@ -33,6 +33,7 @@ import {
   isCollaborationGuardReceipt,
   parseCollaborationAgentsStatus,
   parseCollaborationLearning,
+  parseCollaborationOperatorMessageResult,
   parseCollaborationReview,
   parseCollaborationRuntimeHealth,
   parseCollaborationSessions,
@@ -357,6 +358,44 @@ test("parseCollaborationAgentsStatus preserves operator-console boundaries", () 
   assert.equal(status.receipts[0]?.operatorToggleProof.grantsTrainingAuthority, false);
   assert.equal(status.receipts[0]?.governance.grants_execution_authority, false);
   assert.equal(status.receipts[0]?.governance.grants_memory_write_authority, false);
+});
+
+test("parseCollaborationOperatorMessageResult preserves target handoffs and no-authority governance", () => {
+  const result = parseCollaborationOperatorMessageResult({
+    ok: true,
+    actor: "chat_ui.system",
+    target_agents: ["codex", "claude", "ollama"],
+    count: 3,
+    prompt_ids: ["collab-codex", "collab-claude", "collab-ollama"],
+    chat_handoffs: [
+      {
+        chat_text: "[Francis relay collab-codex] operator -> codex: message=Check current artifact.",
+        source_chat_echo_required: true,
+        target_chat_echo_required: true,
+      },
+    ],
+    governance: {
+      append_only_relay_writes: true,
+      writes_repo_files: false,
+      writes_memory: false,
+      calls_model: false,
+      grants_execution_authority: false,
+      grants_mutation_authority: false,
+      grants_memory_write_authority: false,
+      grants_training_authority: false,
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.actor, "chat_ui.system");
+  assert.deepEqual(result.targetAgents, ["codex", "claude", "ollama"]);
+  assert.equal(result.count, 3);
+  assert.deepEqual(result.promptIds, ["collab-codex", "collab-claude", "collab-ollama"]);
+  assert.equal(result.chatHandoffs[0]?.sourceChatEchoRequired, true);
+  assert.equal(result.chatHandoffs[0]?.targetChatEchoRequired, true);
+  assert.equal(result.chatHandoffs[0]?.chatText.includes("operator -> codex"), true);
+  assert.equal(result.governance.grants_execution_authority, false);
+  assert.equal(result.governance.grants_memory_write_authority, false);
 });
 
 test("parseCollaborationAgentsStatus infers proof for legacy toggle receipts", () => {

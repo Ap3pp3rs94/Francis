@@ -99449,6 +99449,65 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, broader ORB/body validation, and longer-run
   drift resolution remain outside this bounded operator-control slice.
 
+### 2026-06-26 15:55Z - Communication UI operator relay composer
+
+Current posture: Phase 2 / P1 interface, P3 governance, and P9 collaboration
+observability now let the Communication UI write a bounded operator message to
+Codex, Claude, and Francis1/Ollama through the existing collaboration relay.
+The route appends one redacted relay receipt per selected target and returns
+chat handoff text for visible transcript surfaces. This is communication only:
+it does not execute prompts, call a model directly, run tools, mutate repo
+files, write memory, approve capability requests, train a model, or grant
+execution/mutation authority.
+
+What changed:
+
+- `src/francis/developer_bridge/collaboration.py` now exposes
+  `submit_operator_collaboration_message()`, normalizes `all` and `francis1`
+  targets, refuses disabled relay targets, redacts secrets, and writes one
+  append-only `developer_bridge.collaboration_prompt` receipt per target.
+- `/developer-bridge/collaboration-message` now provides the bounded API route
+  for the Communication UI and invalidates transcript/session readback cache
+  after a successful append.
+- The mutation-authority matrix classifies the new route as
+  `bounded_operator_message_receipt` under
+  `developer_bridge.operator_console_control`, explicitly naming the no
+  execution, no mutation, no memory-write, no training, and no approval grants.
+- `apps/chat_ui/src/App.tsx` now renders an `Operator Message` composer with
+  Codex, Claude, and Francis1 target toggles, disabled-agent awareness, send
+  state, and a receipt-backed result line.
+- `apps/chat_ui/src/chat/collaboration.ts` and
+  `apps/chat_ui/src/chat/index.test.ts` now parse and validate the operator
+  message response contract, including target handoffs and no-authority
+  governance fields.
+
+Validation:
+
+- Focused backend route/helper tests passed:
+  `python -m pytest tests/test_developer_bridge.py::test_developer_bridge_routes_are_mounted tests/test_developer_bridge.py::test_developer_bridge_operator_message_is_classified_in_authority_matrix tests/test_developer_bridge.py::test_operator_collaboration_message_broadcasts_to_all_targets_without_authority tests/test_developer_bridge.py::test_operator_collaboration_message_api_writes_bounded_relay_receipts -q`.
+- Focused Chat UI contract test passed:
+  `node --test --experimental-strip-types src/chat/index.test.ts` with 30
+  tests.
+- Chat UI production build passed:
+  `npm run build`.
+- Python lint/format/type/compile checks passed for the touched backend files:
+  `python -m ruff check ...`, `python -m ruff format --check ...`,
+  `python -m mypy ...`, and `python -m compileall -q ...`.
+- Whitespace diff check passed:
+  `git diff --check`.
+
+Remaining truthful gap:
+
+- This lets the operator message all three collaboration participants through
+  Francis relay receipts; it does not guarantee that external Claude/Codex app
+  clients have active consumers for those receipts.
+- No live browser click proof or live operator message write was performed in
+  the real data directory; tests used isolated temp data to prove the write
+  contract without polluting the active conversation.
+- `.\scripts\check.ps1`, GitHub CI, broader ORB/body validation, and longer-run
+  collaboration drift resolution remain outside this bounded communication
+  slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

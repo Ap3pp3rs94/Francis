@@ -49,6 +49,7 @@ import {
   isCollaborationDriverPrompt,
   isCollaborationGuardReceipt,
   preserveCollaborationReadbackDuringWarming,
+  sendCollaborationOperatorMessage,
   setCollaborationAgentEnabled,
   setFrancisCapabilityGrant,
   type CollaborationAgent,
@@ -126,6 +127,11 @@ const COLLABORATION_REVIEW_LIMIT = 20;
 const COLLABORATION_LEARNING_LIMIT = 4;
 const FRANCIS_TRUST_LADDER_LIMIT = 8;
 const FRANCIS_CAPABILITY_REQUEST_LIMIT = 8;
+const COLLABORATION_OPERATOR_TARGETS = [
+  { id: "codex", label: "Codex" },
+  { id: "claude", label: "Claude" },
+  { id: "ollama", label: "Francis1" },
+];
 const COLLABORATION_SESSION_GAP_MS = 30 * 60 * 1000;
 
 declare global {
@@ -1200,6 +1206,10 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
   const [capabilityRequests, setCapabilityRequests] = useState<FrancisCapabilityRequests | null>(null);
   const [loading, setLoading] = useState(false);
   const [busyAgent, setBusyAgent] = useState("");
+  const [operatorMessage, setOperatorMessage] = useState("");
+  const [operatorTargets, setOperatorTargets] = useState<string[]>(["codex", "claude", "ollama"]);
+  const [operatorMessageSending, setOperatorMessageSending] = useState(false);
+  const [operatorMessageResult, setOperatorMessageResult] = useState("");
   const [busyCapabilityRequest, setBusyCapabilityRequest] = useState("");
   const [capabilityGrantResult, setCapabilityGrantResult] = useState("");
   const [error, setError] = useState("");
@@ -1386,6 +1396,53 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
     [props.baseUrl],
   );
 
+  const toggleOperatorTarget = useCallback((target: string, enabled: boolean) => {
+    setOperatorTargets((current) => {
+      const next = new Set(current);
+      if (enabled) {
+        next.add(target);
+      } else {
+        next.delete(target);
+      }
+      return [...next].filter(Boolean);
+    });
+  }, []);
+
+  const sendOperatorMessage = useCallback(() => {
+    const message = operatorMessage.trim();
+    const enabledTargets = operatorTargets.filter((target) => {
+      const agent = status?.agents.find((entry) => entry.agent === target);
+      return agent?.enabled ?? true;
+    });
+    if (!message || operatorMessageSending || !enabledTargets.length) return;
+    const controller = new AbortController();
+    setOperatorMessageSending(true);
+    setOperatorMessageResult("");
+    setError("");
+    void sendCollaborationOperatorMessage({
+      baseUrl: props.baseUrl,
+      message,
+      targetAgents: enabledTargets,
+      actor: "chat_ui.system",
+      objective: "Operator message from Communication UI",
+      context: "manual operator message; no action, execution, mutation, approval, memory-write, or training authority",
+      signal: controller.signal,
+    })
+      .then((result) => {
+        setOperatorMessage("");
+        setOperatorMessageResult(
+          `Sent ${result.count} relay receipt${result.count === 1 ? "" : "s"} to ${result.targetAgents.join(", ")}.`,
+        );
+        void loadStatus(undefined);
+      })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted || isAbortError(err)) return;
+        setError(err instanceof Error ? err.message : "Operator message failed.");
+      })
+      .finally(() => setOperatorMessageSending(false));
+    return () => controller.abort();
+  }, [loadStatus, operatorMessage, operatorMessageSending, operatorTargets, props.baseUrl, status?.agents]);
+
   const decideCapabilityRequest = useCallback(
     (item: FrancisCapabilityRequest, decision: FrancisCapabilityGrantDecision) => {
       const controller = new AbortController();
@@ -1428,6 +1485,8 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
   const agents = status?.agents ?? [];
   const activeCount = agents.filter((agent) => agent.enabled).length;
   const operatorConsole = status?.operatorConsole;
+  const agentById = new Map(agents.map((agent) => [agent.agent, agent]));
+  const selectedOperatorTargets = operatorTargets.filter((target) => agentById.get(target)?.enabled ?? true);
   const toggleReceipts = status?.receipts ?? [];
   const latestToggleReceipts = [...toggleReceipts].slice(-4).reverse();
   const transcriptItems = transcript?.items ?? [];
@@ -1651,6 +1710,107 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
           value={boolText(Boolean(operatorConsole?.clientIsAutomaticExecutionAuthority))}
           tone={operatorConsole?.clientIsAutomaticExecutionAuthority ? "blocked" : "ready"}
         />
+      </div>
+
+      <div
+        style={{
+          background: "rgba(8, 15, 26, 0.76)",
+          border: "1px solid rgba(125, 211, 252, 0.34)",
+          borderRadius: 14,
+          marginTop: 18,
+          padding: 16,
+        }}
+      >
+        <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "space-between" }}>
+          <div style={{ minWidth: 0 }}>
+            <h3 style={{ fontSize: 20, margin: 0 }}>Operator Message</h3>
+            <p style={{ color: "#94a3b8", margin: "6px 0 0" }}>Receipt-backed / no authority grant</p>
+          </div>
+          <span style={{ color: "#67e8f9", fontSize: 13 }}>operator -&gt; relay</span>
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 12 }}>
+          {COLLABORATION_OPERATOR_TARGETS.map((target) => {
+            const agent = agentById.get(target.id);
+            const enabled = agent?.enabled ?? true;
+            const checked = enabled && operatorTargets.includes(target.id);
+            return (
+              <label
+                key={target.id}
+                style={{
+                  alignItems: "center",
+                  background: checked ? "rgba(14, 116, 144, 0.24)" : "rgba(15, 23, 42, 0.58)",
+                  border: `1px solid ${checked ? "rgba(103, 232, 249, 0.42)" : "rgba(148, 163, 184, 0.22)"}`,
+                  borderRadius: 10,
+                  color: enabled ? "#e2e8f0" : "#94a3b8",
+                  display: "flex",
+                  gap: 8,
+                  padding: "7px 10px",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  disabled={!enabled || operatorMessageSending}
+                  onChange={(event) => toggleOperatorTarget(target.id, event.currentTarget.checked)}
+                />
+                <span>{target.label}</span>
+                <span style={{ color: enabled ? "#6ee7b7" : "#fca5a5", fontSize: 12 }}>{enabled ? "enabled" : "disabled"}</span>
+              </label>
+            );
+          })}
+        </div>
+        <textarea
+          value={operatorMessage}
+          onChange={(event) => setOperatorMessage(event.currentTarget.value)}
+          placeholder="Message Codex, Claude, and Francis1 through the governed relay..."
+          rows={3}
+          style={{
+            background: "rgba(2, 6, 23, 0.74)",
+            border: "1px solid rgba(148, 163, 184, 0.28)",
+            borderRadius: 10,
+            color: "#e2e8f0",
+            marginTop: 12,
+            padding: 12,
+            resize: "vertical",
+            width: "100%",
+          }}
+        />
+        <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "space-between", marginTop: 10 }}>
+          <div style={{ color: "#94a3b8", fontSize: 13 }}>
+            {selectedOperatorTargets.length ? `targets ${selectedOperatorTargets.join(", ")}` : "select at least one enabled target"}
+          </div>
+          <button
+            type="button"
+            disabled={operatorMessageSending || !operatorMessage.trim() || !selectedOperatorTargets.length}
+            onClick={sendOperatorMessage}
+            style={{
+              background: operatorMessage.trim() && selectedOperatorTargets.length ? "#67e8f9" : "rgba(148, 163, 184, 0.2)",
+              border: 0,
+              borderRadius: 10,
+              color: operatorMessage.trim() && selectedOperatorTargets.length ? "#083344" : "#94a3b8",
+              cursor: operatorMessageSending || !operatorMessage.trim() || !selectedOperatorTargets.length ? "not-allowed" : "pointer",
+              fontWeight: 800,
+              padding: "9px 13px",
+            }}
+          >
+            {operatorMessageSending ? "Sending..." : "Send"}
+          </button>
+        </div>
+        {operatorMessageResult ? (
+          <div
+            style={{
+              background: "rgba(20, 83, 45, 0.2)",
+              border: "1px solid rgba(110, 231, 183, 0.38)",
+              borderRadius: 10,
+              color: "#d1fae5",
+              marginTop: 10,
+              overflowWrap: "anywhere",
+              padding: "8px 10px",
+            }}
+          >
+            {operatorMessageResult}
+          </div>
+        ) : null}
       </div>
 
       <div

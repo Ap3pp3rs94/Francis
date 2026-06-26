@@ -25,6 +25,7 @@ from francis.developer_bridge.collaboration import (
     read_collaboration_sessions,
     read_collaboration_transcript,
     submit_collaboration_prompt,
+    submit_operator_collaboration_message,
 )
 from francis.developer_bridge.collaboration_driver import read_collaboration_exploration
 from francis.developer_bridge.collaboration_review import latest_review_candidate_line, read_collaboration_review
@@ -136,6 +137,7 @@ def test_developer_bridge_routes_are_mounted() -> None:
     assert "/developer-bridge/collaboration-runtime-health" in routes
     assert "/developer-bridge/collaboration-substrate-readiness" in routes
     assert "/developer-bridge/collaboration-agents" in routes
+    assert "/developer-bridge/collaboration-message" in routes
     assert "/developer-bridge/collaboration-agents/toggle" in routes
     assert "/developer-bridge/francis-body-map" in routes
     assert "/developer-bridge/francis-trust-ladder" in routes
@@ -159,6 +161,24 @@ def test_developer_bridge_agent_toggle_is_classified_in_authority_matrix() -> No
     assert entry["required_actor"] == "payload.actor or chat_ui.system default"
     assert entry["required_scope"] == "developer_bridge.operator_console_control"
     assert entry["governance_maturity"] == "bounded_operator_control_receipt"
+
+
+def test_developer_bridge_operator_message_is_classified_in_authority_matrix() -> None:
+    from francis.api.app import create_app
+
+    matrix = TestClient(create_app()).get("/system/mutating-route-authority-matrix").json()
+    entries = {
+        (entry["method"], entry["path"]): entry
+        for entry in matrix["entries"]
+        if entry["path"] == "/developer-bridge/collaboration-message"
+    }
+
+    assert matrix["missing"] == []
+    entry = entries[("POST", "/developer-bridge/collaboration-message")]
+    assert entry["family"] == "developer_bridge"
+    assert entry["required_actor"] == "payload.actor or chat_ui.system default"
+    assert entry["required_scope"] == "developer_bridge.operator_console_control"
+    assert entry["governance_maturity"] == "bounded_operator_message_receipt"
 
 
 def test_developer_bridge_capability_grant_is_classified_in_authority_matrix() -> None:
@@ -825,6 +845,69 @@ def test_collaboration_prompt_relay_is_bounded_and_redacted(tmp_path, monkeypatc
     with pytest.raises(DeveloperBridgeError) as same_agent:
         submit_collaboration_prompt(source_agent="codex", target_agent="codex", prompt="loop")
     assert same_agent.value.code == "same_agent_denied"
+
+
+def test_operator_collaboration_message_broadcasts_to_all_targets_without_authority(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+
+    result = submit_operator_collaboration_message(
+        "Please help Francis stay on the current artifact. token=supersecretvalue",
+        target_agents=["all"],
+        actor="chat_ui.system",
+        objective="Operator message to all collaboration participants",
+        context="manual operator nudge",
+    )
+
+    assert result["ok"] is True
+    assert result["target_agents"] == ["codex", "claude", "ollama"]
+    assert result["count"] == 3
+    assert result["governance"]["append_only_relay_writes"] is True  # type: ignore[index]
+    assert result["governance"]["writes_repo_files"] is False  # type: ignore[index]
+    assert result["governance"]["grants_execution_authority"] is False  # type: ignore[index]
+    assert result["governance"]["grants_memory_write_authority"] is False  # type: ignore[index]
+    assert len(result["prompt_ids"]) == 3
+    assert all("supersecretvalue" not in item["record"]["prompt"] for item in result["items"])  # type: ignore[index]
+    assert all("[REDACTED:secret]" in item["record"]["prompt"] for item in result["items"])  # type: ignore[index]
+
+    transcript = read_collaboration_transcript(source_agent="operator", target_agent="ollama", limit=5)
+    assert transcript["count"] == 1
+    item = transcript["items"][0]
+    assert item["source_agent"] == "operator"
+    assert item["target_agent"] == "ollama"
+    assert item["display"]["category"] == "conversation"
+    assert item["display"]["hide_by_default"] is False
+    assert item["governance"]["executes_prompt"] is False
+
+
+def test_operator_collaboration_message_api_writes_bounded_relay_receipts(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    from francis.api.app import create_app
+
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/developer-bridge/collaboration-message",
+        json={
+            "message": "Operator note for Codex and Francis1.",
+            "target_agents": ["codex", "francis1"],
+            "actor": "chat_ui.system",
+            "objective": "Operator message smoke test",
+        },
+    )
+
+    body = response.json()
+    assert response.status_code == 200
+    assert body["ok"] is True
+    assert body["target_agents"] == ["codex", "ollama"]
+    assert body["count"] == 2
+    assert body["governance"]["client_can_be_operator_console"] is True
+    assert body["governance"]["client_is_automatic_execution_authority"] is False
+    assert body["governance"]["grants_execution_authority"] is False
+    assert body["governance"]["grants_memory_write_authority"] is False
+
+    transcript = client.get("/developer-bridge/collaboration-transcript?source_agent=operator&limit=5").json()
+    assert transcript["count"] == 2
+    assert {item["target_agent"] for item in transcript["items"]} == {"codex", "ollama"}
 
 
 def test_collaboration_transcript_display_metadata_labels_relay_mechanics(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
