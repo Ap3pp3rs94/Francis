@@ -96559,6 +96559,57 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, browser proof, and a full Chat UI parser
   sweep were not run for this bounded backend readback slice.
 
+### 2026-06-26 03:45Z - Collaboration participant toggle receipt contract
+
+Current posture: Phase 2 / the collaboration participant control surface now
+exposes a typed toggle-receipt contract so Codex, Francis1, Claude, and the
+operator can see what proves a participant was enabled or disabled without
+confusing that receipt for execution or capability authority.
+
+What changed:
+
+- Added `toggle_receipt_contract` to
+  `developer_bridge.collaboration_agents_status`.
+- The contract lists known participants, required receipt fields, required
+  proof fields, the Chat UI operator-console actor, relay-blocking behavior for
+  disabled participants, and explicit no-authority flags.
+- Added `toggle_receipt_summary` for the bounded recent receipt window so the
+  latest toggle proof can be checked without scanning every raw receipt.
+- Updated the focused developer-bridge toggle test to prove the contract, latest
+  summary, disabled-agent relay block, and no execution, approval, capability,
+  training, or memory-write authority.
+
+Validation:
+
+- Focused participant-toggle test passed:
+  `python -m pytest tests/test_developer_bridge.py::test_collaboration_agent_toggle_blocks_known_disabled_agent`.
+- Ruff check passed:
+  `python -m ruff check src\francis\developer_bridge\agents.py tests\test_developer_bridge.py`.
+- Ruff format check passed:
+  `python -m ruff format --check src\francis\developer_bridge\agents.py tests\test_developer_bridge.py`.
+- Compileall passed:
+  `python -m compileall src\francis\developer_bridge\agents.py`.
+- Live API readback after restart showed
+  `toggle_receipt_contract.kind=developer_bridge.collaboration_agent_toggle_receipt_contract`,
+  `disabled_participant_blocks_new_relay_submissions=true`,
+  `client_is_automatic_execution_authority=false`,
+  `grants_execution_authority=false`, and a latest Claude toggle proof summary.
+- Runtime health after API restart reported `status=healthy`,
+  `helper_count=3`, prompt budget `ok`, and all three participants enabled.
+
+Remaining truthful gap:
+
+- This is a status/readback contract. It does not grant participant capability
+  use, execute relay prompts, approve actions, change trust level, promote
+  memory, train a model, or bypass the existing toggle enforcement path.
+- Older legacy toggle receipts in the recent window may not include
+  `operator_toggle_proof`; the summary reports that as legacy receipt count
+  rather than rewriting historical receipts.
+- Mypy could not run in this environment because Windows Application Control
+  blocked a compiled dependency import from the local venv.
+- `.\scripts\check.ps1`, GitHub CI, browser proof, and a full Chat UI parser
+  sweep were not run for this bounded backend readback slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

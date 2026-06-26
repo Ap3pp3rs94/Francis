@@ -794,6 +794,15 @@ def test_collaboration_agent_toggle_blocks_known_disabled_agent(tmp_path, monkey
         "claude": True,
         "ollama": True,
     }
+    assert status["toggle_receipt_contract"]["receipt_kind"] == "developer_bridge.collaboration_agent_toggle_receipt"
+    assert status["toggle_receipt_contract"]["known_agents"] == ["codex", "claude", "ollama"]
+    assert "operator_toggle_proof" in status["toggle_receipt_contract"]["required_receipt_fields"]
+    assert "client_is_automatic_execution_authority=false" in status["toggle_receipt_contract"]["required_proof_fields"]
+    assert status["toggle_receipt_contract"]["disabled_participant_blocks_new_relay_submissions"] is True
+    assert status["toggle_receipt_contract"]["grants_execution_authority"] is False
+    assert status["toggle_receipt_contract"]["grants_approval_authority"] is False
+    assert status["toggle_receipt_contract"]["grants_capability_authority"] is False
+    assert status["toggle_receipt_summary"]["receipt_count"] == 0
 
     toggled = set_collaboration_agent_enabled(
         "ollama",
@@ -843,6 +852,19 @@ def test_collaboration_agent_toggle_blocks_known_disabled_agent(tmp_path, monkey
     set_collaboration_agent_enabled("ollama", True, actor="chat_ui.system", reason="operator enables local model")
     status = collaboration_agents_status()
     assert status["definitions"]["operator_toggle_proof"].startswith("Typed proof that a participant toggle receipt")
+    assert status["definitions"]["toggle_receipt_contract"].startswith("Bounded checklist")
+    assert status["toggle_receipt_summary"]["receipt_count"] == 2
+    assert status["toggle_receipt_summary"]["proof_receipt_count"] == 2
+    assert status["toggle_receipt_summary"]["legacy_receipt_count"] == 0
+    assert status["toggle_receipt_summary"]["latest_agent"] == "ollama"
+    assert status["toggle_receipt_summary"]["latest_previous_enabled"] is False
+    assert status["toggle_receipt_summary"]["latest_enabled"] is True
+    assert status["toggle_receipt_summary"]["latest_has_operator_toggle_proof"] is True
+    assert status["toggle_receipt_summary"]["latest_actor_recorded"] is True
+    assert status["toggle_receipt_summary"]["latest_reason_recorded"] is True
+    assert status["toggle_receipt_summary"]["latest_proves_capability_authority"] is False
+    assert status["toggle_receipt_summary"]["latest_grants_execution_authority"] is False
+    assert status["toggle_receipt_summary"]["latest_grants_memory_write_authority"] is False
     assert status["receipts"][-1]["operator_toggle_proof"]["current_enabled"] is True
     assert status["receipts"][-1]["operator_toggle_proof"]["proves_capability_authority"] is False
     submitted = submit_collaboration_prompt(

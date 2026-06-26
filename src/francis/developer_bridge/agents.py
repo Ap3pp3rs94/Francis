@@ -55,6 +55,7 @@ def collaboration_agents_status() -> dict[str, object]:
 
     state = _load_state()
     agents = _agent_records(state)
+    receipts = _list(state.get("receipts"))[-10:]
     return {
         "kind": "developer_bridge.collaboration_agents_status",
         "ok": True,
@@ -64,13 +65,19 @@ def collaboration_agents_status() -> dict[str, object]:
         "agent_count": len(agents),
         "known_agents": list(_KNOWN_AGENTS),
         "state_path": _display_path(_state_path()),
-        "receipts": _list(state.get("receipts"))[-10:],
+        "receipts": receipts,
+        "toggle_receipt_contract": _toggle_receipt_contract(),
+        "toggle_receipt_summary": _toggle_receipt_summary(receipts),
         "operator_console": dict(_OPERATOR_CONSOLE),
         "definitions": {
             "operator_toggle_proof": (
                 "Typed proof that a participant toggle receipt recorded actor, reason, previous/current state, "
                 "operator-console status, and no capability or execution authority grant."
-            )
+            ),
+            "toggle_receipt_contract": (
+                "Bounded checklist for what a collaboration participant toggle receipt proves before Codex or "
+                "Francis1 can treat a participant as enabled or disabled."
+            ),
         },
         "governance": _governance(write=False),
     }
@@ -314,6 +321,91 @@ def _operator_toggle_proof(
         "grants_memory_write_authority": False,
         "grants_training_authority": False,
     }
+
+
+def _toggle_receipt_contract() -> dict[str, object]:
+    return {
+        "kind": "developer_bridge.collaboration_agent_toggle_receipt_contract",
+        "schema_version": "developer_bridge_collaboration_agent_toggle_receipt_contract_v1",
+        "receipt_kind": "developer_bridge.collaboration_agent_toggle_receipt",
+        "known_agents": list(_KNOWN_AGENTS),
+        "required_receipt_fields": [
+            "receipt_id",
+            "created_at",
+            "agent",
+            "previous_enabled",
+            "enabled",
+            "actor",
+            "reason",
+            "operator_toggle_proof",
+            "governance",
+        ],
+        "required_proof_fields": [
+            "actor_recorded=true",
+            "reason_recorded=true",
+            "previous_state_observed=true",
+            "current_state_observed=true",
+            "previous_enabled",
+            "current_enabled",
+            "client_can_be_operator_console=true",
+            "client_is_automatic_execution_authority=false",
+            "grants_execution_authority=false",
+            "grants_mutation_authority=false",
+            "grants_approval_authority=false",
+            "grants_memory_write_authority=false",
+            "grants_training_authority=false",
+        ],
+        "operator_console_actor": _OPERATOR_CONSOLE["actor"],
+        "operator_console_surface": _OPERATOR_CONSOLE["surface"],
+        "client_can_be_operator_console": True,
+        "client_is_automatic_execution_authority": False,
+        "disabled_participant_blocks_new_relay_submissions": True,
+        "writes_agent_control_state": True,
+        "writes_relay_receipts": False,
+        "executes_prompt": False,
+        "calls_model": False,
+        "trains_model": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "grants_approval_authority": False,
+        "grants_memory_write_authority": False,
+        "grants_training_authority": False,
+        "grants_capability_authority": False,
+        "next_codex_action": (
+            "Read collaboration_agents_status.toggle_receipt_contract and the latest receipt's "
+            "operator_toggle_proof before changing participant-control behavior."
+        ),
+    }
+
+
+def _toggle_receipt_summary(receipts: list[object]) -> dict[str, object]:
+    receipt_dicts = [item for item in receipts if isinstance(item, dict)]
+    latest = receipt_dicts[-1] if receipt_dicts else {}
+    latest_proof = _dict(latest.get("operator_toggle_proof")) if latest else {}
+    proof_count = sum(1 for item in receipt_dicts if isinstance(item.get("operator_toggle_proof"), dict))
+    legacy_count = len(receipt_dicts) - proof_count
+    return {
+        "receipt_count": len(receipt_dicts),
+        "proof_receipt_count": proof_count,
+        "legacy_receipt_count": legacy_count,
+        "latest_receipt_id": latest.get("receipt_id", ""),
+        "latest_agent": latest.get("agent", ""),
+        "latest_previous_enabled": latest.get("previous_enabled", False),
+        "latest_enabled": latest.get("enabled", False),
+        "latest_has_operator_toggle_proof": bool(latest_proof),
+        "latest_actor_recorded": bool(latest_proof.get("actor_recorded")),
+        "latest_reason_recorded": bool(latest_proof.get("reason_recorded")),
+        "latest_proves_capability_authority": bool(latest_proof.get("proves_capability_authority")),
+        "latest_grants_execution_authority": bool(latest_proof.get("grants_execution_authority")),
+        "latest_grants_mutation_authority": bool(latest_proof.get("grants_mutation_authority")),
+        "latest_grants_approval_authority": bool(latest_proof.get("grants_approval_authority")),
+        "latest_grants_memory_write_authority": bool(latest_proof.get("grants_memory_write_authority")),
+        "latest_grants_training_authority": bool(latest_proof.get("grants_training_authority")),
+    }
+
+
+def _dict(value: object) -> dict[str, object]:
+    return value if isinstance(value, dict) else {}
 
 
 def _governance(*, write: bool) -> dict[str, object]:
