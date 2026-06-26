@@ -16,6 +16,7 @@ import {
   collaborationImplementationReviewSummary,
   collaborationLearningGuardSummary,
   collaborationTranscriptAuditSummary,
+  DEFAULT_SHOW_GUARD_RECEIPTS,
   fetchCollaborationAgentsStatus,
   fetchCollaborationLearning,
   fetchCollaborationReview,
@@ -1171,7 +1172,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
   const [followLatest, setFollowLatest] = useState(true);
   const [showAuditReceipts, setShowAuditReceipts] = useState(false);
   const [showRelayPrompts, setShowRelayPrompts] = useState(false);
-  const [showGuardReceipts, setShowGuardReceipts] = useState(false);
+  const [showGuardReceipts, setShowGuardReceipts] = useState(DEFAULT_SHOW_GUARD_RECEIPTS);
   const requestInFlight = useRef<{ signal?: AbortSignal } | null>(null);
   const liveTranscriptScrollRef = useRef<HTMLDivElement | null>(null);
   const transcriptScrollRef = useRef<HTMLDivElement | null>(null);

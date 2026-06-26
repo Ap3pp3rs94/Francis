@@ -301,6 +301,8 @@ export type CollaborationTranscriptVisibilityOptions = {
   showOtherHiddenReceipts?: boolean;
 };
 
+export const DEFAULT_SHOW_GUARD_RECEIPTS = true;
+
 export type CollaborationTranscriptVisibility = {
   items: CollaborationTranscriptItem[];
   hiddenMechanicCount: number;

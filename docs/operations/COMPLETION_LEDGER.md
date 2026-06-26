@@ -97314,6 +97314,53 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, browser screenshot proof, and full ORB/body
   coverage proof were not run for this bounded participant-toggle proof slice.
 
+### 2026-06-26 05:10Z - Collaboration transcript guard receipt default visibility
+
+Current posture: Phase 2 / P1 interface and P9 observability now keep the
+Communication transcript watchable when Francis1 responses are output-guarded.
+The backend still marks guard receipts as compact supporting receipts, but the
+operator UI now shows them by default so the live conversation does not appear
+empty when audit acknowledgements and Codex driver prompts are hidden.
+
+What changed:
+
+- The Chat UI collaboration transcript visibility contract now exposes
+  `DEFAULT_SHOW_GUARD_RECEIPTS=true` as the operator default.
+- The Communication panel initializes the Guard toggle from that contract, so
+  compact guarded Francis1 responses are visible by default while auto-ack
+  receipts and Codex driver prompts remain hidden until toggled.
+- Chat UI contract tests now prove the default keeps guard-only conversations
+  visible and still allows the operator to manually hide guard receipts.
+
+Validation:
+
+- Chat UI contract suite passed:
+  `npm run test -- --runInBand apps/chat_ui/src/chat/index.test.ts`
+  (the package script ran the configured UI suite, `282` passing tests).
+- Chat UI production build passed:
+  `npm run build`.
+- `git diff --check` passed.
+- Read-only completion model reported `current_phase=Phase 2` and kept
+  `overall_project_percent`, `current_build_phase_percent`, and
+  `current_task_percent` as `null` with
+  `movement_allowed_by_this_readback=false`.
+- Live `/developer-bridge/collaboration-runtime-health` remained healthy at
+  turn `1673`, `recurrence_state=turn_gap`, `manual_nudge_required=false`, and
+  latest local-model `output_guard_status=passed`.
+- Live `/developer-bridge/collaboration-transcript?limit=6` showed recent
+  Francis1 `conversation` rows with backend `hidden=false`, while audit
+  acknowledgements and driver prompts remained hidden by backend metadata.
+
+Remaining truthful gap:
+
+- This is an operator UI visibility default only. It does not change backend
+  receipt truth, grant execution/mutation/approval/memory authority, train the
+  local model, clear local-model drift, or close a Phase 2 ORB gate.
+- Guard receipts are still model-drift evidence and tuning inputs, not action
+  readiness or memory-promotion authority.
+- `.\scripts\check.ps1`, GitHub CI, browser screenshot proof, and full ORB/body
+  coverage proof were not run for this bounded UI visibility slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

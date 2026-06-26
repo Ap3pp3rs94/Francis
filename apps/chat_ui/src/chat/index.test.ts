@@ -20,6 +20,7 @@ import {
   collaborationSessionTranscriptDisclosureSummary,
   collaborationSubstrateChecklistSummary,
   collaborationTranscriptAuditSummary,
+  DEFAULT_SHOW_GUARD_RECEIPTS,
   filterCollaborationTranscriptItems,
   francisBodySurfaceExposureSummary,
   formatCollaborationRelayMessage,
@@ -1705,7 +1706,7 @@ test("parseCollaborationTranscript classifies auto-ack receipts as hideable audi
   assert.equal(isCollaborationGuardReceipt(transcript.items[1]!), true);
 });
 
-test("filterCollaborationTranscriptItems hides display-marked relay mechanics by default", () => {
+test("filterCollaborationTranscriptItems shows compact guard receipts by operator default", () => {
   const transcript = parseCollaborationTranscript({
     ok: true,
     mode: "read_only",
@@ -1761,6 +1762,11 @@ test("filterCollaborationTranscriptItems hides display-marked relay mechanics by
   const defaultVisibility = filterCollaborationTranscriptItems(transcript.items, {
     showAuditReceipts: false,
     showDriverPrompts: false,
+    showGuardReceipts: DEFAULT_SHOW_GUARD_RECEIPTS,
+  });
+  const manualGuardHidden = filterCollaborationTranscriptItems(transcript.items, {
+    showAuditReceipts: false,
+    showDriverPrompts: false,
     showGuardReceipts: false,
   });
   const allMechanicsVisible = filterCollaborationTranscriptItems(transcript.items, {
@@ -1771,13 +1777,18 @@ test("filterCollaborationTranscriptItems hides display-marked relay mechanics by
 
   assert.deepEqual(
     defaultVisibility.items.map((item) => item.id),
-    ["collab_message"],
+    ["collab_reply", "collab_message"],
   );
-  assert.equal(defaultVisibility.hiddenMechanicCount, 3);
+  assert.equal(defaultVisibility.hiddenMechanicCount, 2);
   assert.equal(defaultVisibility.hiddenAuditReceiptCount, 1);
   assert.equal(defaultVisibility.hiddenDriverPromptCount, 1);
-  assert.equal(defaultVisibility.hiddenGuardReceiptCount, 1);
+  assert.equal(defaultVisibility.hiddenGuardReceiptCount, 0);
   assert.equal(defaultVisibility.hiddenOtherReceiptCount, 0);
+  assert.deepEqual(
+    manualGuardHidden.items.map((item) => item.id),
+    ["collab_message"],
+  );
+  assert.equal(manualGuardHidden.hiddenGuardReceiptCount, 1);
   assert.deepEqual(
     allMechanicsVisible.items.map((item) => item.id),
     ["collab_ack", "collab_reply", "collab_driver", "collab_message"],
@@ -1785,7 +1796,7 @@ test("filterCollaborationTranscriptItems hides display-marked relay mechanics by
   assert.equal(allMechanicsVisible.hiddenMechanicCount, 0);
 });
 
-test("filterCollaborationTranscriptItems reports an all-mechanics transcript as hidden by default", () => {
+test("filterCollaborationTranscriptItems keeps guard-only conversations visible by operator default", () => {
   const transcript = parseCollaborationTranscript({
     ok: true,
     mode: "read_only",
@@ -1826,11 +1837,15 @@ test("filterCollaborationTranscriptItems reports an all-mechanics transcript as 
   const visibility = filterCollaborationTranscriptItems(transcript.items, {
     showAuditReceipts: false,
     showDriverPrompts: false,
-    showGuardReceipts: false,
+    showGuardReceipts: DEFAULT_SHOW_GUARD_RECEIPTS,
   });
 
-  assert.equal(visibility.items.length, 0);
-  assert.equal(visibility.hiddenMechanicCount, 3);
+  assert.deepEqual(
+    visibility.items.map((item) => item.id),
+    ["collab_reply"],
+  );
+  assert.equal(visibility.hiddenMechanicCount, 2);
+  assert.equal(visibility.hiddenGuardReceiptCount, 0);
 });
 
 test("preserveCollaborationReadbackDuringWarming keeps prior non-empty data visible", () => {
