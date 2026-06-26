@@ -98249,6 +98249,61 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, browser screenshot proof, and full ORB/body
   coverage proof were not run for this bounded prompt-alignment slice.
 
+### 2026-06-26 07:28Z - Substrate readiness top-level contract mirrors
+
+Current posture: Phase 2 / P9 observability and P3 governance now expose the
+collaboration substrate readiness decision at the top level of
+`developer_bridge.collaboration_substrate_readiness`, matching the existing
+nested `summary` readback. This removes ambiguity for MCP/tool clients and
+Francis1 when reading whether the collaboration substrate is wired, whether main
+build prompting is allowed, and which gate still blocks it.
+
+What changed:
+
+- `read_collaboration_substrate_readiness()` now mirrors
+  `collaboration_substrate_wired`, `bounded_wiring_percent_complete`,
+  `main_build_prompt_allowed`, `main_build_prompt_gate`,
+  `coverage_open_gap_count`, `open_orb_gap_plane_ids`,
+  `trust_ladder_enforced`, `runtime_healthy`, `learning_receipts_bounded`, and
+  `no_authority_granted` at the top level.
+- The API warming fallback now returns the same top-level keys with conservative
+  unavailable values.
+- The focused backend substrate-readiness test now proves the top-level fields
+  match the nested `summary` values.
+- The change is readback-only: it does not clear open ORB gaps, allow main build
+  prompting, execute prompts, grant capabilities, promote memory, or tune the
+  local model.
+
+Validation:
+
+- Focused backend substrate-readiness test passed:
+  `python -m pytest tests\test_developer_bridge.py::test_collaboration_substrate_readiness_blocks_main_build_prompt_for_open_gaps -q`.
+- Ruff check passed:
+  `python -m ruff check src\francis\developer_bridge\substrate_readiness.py src\francis\api\routes\developer_bridge.py tests\test_developer_bridge.py`.
+- Ruff format check passed:
+  `python -m ruff format --check src\francis\developer_bridge\substrate_readiness.py src\francis\api\routes\developer_bridge.py tests\test_developer_bridge.py`.
+- Direct live readback returned matching top-level and `summary` values:
+  `collaboration_substrate_wired=true`,
+  `bounded_wiring_percent_complete=100`,
+  `main_build_prompt_allowed=false`,
+  `main_build_prompt_gate=blocked_by_open_orb_gaps`,
+  `coverage_open_gap_count=11`, and `no_authority_granted=true`.
+- Restarted the local Francis API on `127.0.0.1:8000`; HTTP
+  `/developer-bridge/collaboration-substrate-readiness` returned the same
+  top-level and `summary` values after warming completed.
+
+Remaining truthful gap:
+
+- This is a readback contract repair only. It does not change the underlying
+  substrate wiring, reduce output-guard drift, expose new Francis1 capabilities,
+  grant Claude/Codex authority, or clear the `blocked_by_open_orb_gaps` main
+  build gate.
+- Existing app-managed MCP connector processes were not restarted in this slice
+  to avoid interrupting the Claude/Codex conversation; reconnecting those
+  clients may be required before they see the new top-level fields.
+- `.\scripts\check.ps1`, GitHub CI, browser screenshot proof, and full ORB/body
+  coverage proof were not run for this bounded readback-contract slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -606,6 +606,16 @@ def test_collaboration_substrate_readiness_blocks_main_build_prompt_for_open_gap
     assert result["schema_version"] == "developer_bridge_collaboration_substrate_readiness_v1"
     assert result["mode"] == "read_only"
     assert result["status"] == "blocked"
+    assert result["collaboration_substrate_wired"] == result["summary"]["collaboration_substrate_wired"]  # type: ignore[index]
+    assert result["bounded_wiring_percent_complete"] == result["summary"]["bounded_wiring_percent_complete"]  # type: ignore[index]
+    assert result["main_build_prompt_allowed"] == result["summary"]["main_build_prompt_allowed"]  # type: ignore[index]
+    assert result["main_build_prompt_gate"] == result["summary"]["main_build_prompt_gate"]  # type: ignore[index]
+    assert result["coverage_open_gap_count"] == result["summary"]["coverage_open_gap_count"]  # type: ignore[index]
+    assert result["open_orb_gap_plane_ids"] == result["summary"]["open_orb_gap_plane_ids"]  # type: ignore[index]
+    assert result["trust_ladder_enforced"] == result["summary"]["trust_ladder_enforced"]  # type: ignore[index]
+    assert result["runtime_healthy"] == result["summary"]["runtime_healthy"]  # type: ignore[index]
+    assert result["learning_receipts_bounded"] == result["summary"]["learning_receipts_bounded"]  # type: ignore[index]
+    assert result["no_authority_granted"] == result["summary"]["no_authority_granted"]  # type: ignore[index]
     assert result["summary"]["main_build_prompt_allowed"] is False  # type: ignore[index]
     assert result["summary"]["main_build_prompt_gate"] == "blocked_by_open_orb_gaps"  # type: ignore[index]
     assert result["summary"]["runtime_healthy"] is True  # type: ignore[index]
