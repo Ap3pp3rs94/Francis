@@ -1749,6 +1749,8 @@ export function formatCollaborationRelayMessage(item: CollaborationTranscriptIte
     ? "Claude guidance acknowledged; Francis subject; Codex validates repo truth"
     : raw.includes("Claude acknowledged as guidance; Francis stays subject; Codex validates repo truth.")
     ? "Claude acknowledged as guidance; Francis stays subject; Codex validates repo truth"
+    : raw.includes("Claude=guidance; Francis=subject; Codex validates claims.")
+    ? "Claude=guidance; Francis=subject; Codex validates claims"
     : raw.includes("Claude=guidance; Francis=subject; validate claims.")
     ? "Claude=guidance; Francis=subject; validate claims"
     : textBetween(raw, "Claude acknowledged as guidance;", [" Current artifact:", ". Current artifact:"]);

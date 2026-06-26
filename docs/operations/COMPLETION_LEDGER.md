@@ -98430,6 +98430,67 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, browser screenshot proof, and full ORB/body
   coverage proof were not run for this bounded readback/UI projection slice.
 
+### 2026-06-26 08:00Z - Collaboration source-alignment prompt contract
+
+Current posture: Phase 2 / P9 observability, P3 governance, and collaboration
+identity hygiene now make the Codex-authored relay line more explicit and compact:
+Claude is guidance, Francis is the subject, and Codex validates claims before
+build direction. This supports the existing collaboration substrate without
+granting Claude, Codex, or Francis1 new authority.
+
+What changed:
+
+- `collaboration_driver` now emits
+  `Claude=guidance; Francis=subject; Codex validates claims.` in recurring
+  Codex-to-Francis1 prompts.
+- `codex_responder` now emits the same line in Codex auto-ack receipts, so
+  replies to Francis1/Ollama relay output acknowledge Claude as guidance while
+  keeping Francis as the conversation subject.
+- The Chat UI collaboration formatter recognizes and separates the new compact
+  source-alignment line from the rest of the technical prompt text.
+- The change is prompt/readback contract hardening only: it does not grant
+  execution, mutation, approval, memory-write, capability, training, commit, or
+  push authority.
+
+Validation:
+
+- Focused backend collaboration tests passed:
+  `python -m pytest tests\test_developer_bridge.py::test_collaboration_driver_waits_for_ollama_before_next_turn tests\test_developer_bridge.py::test_collaboration_driver_rotates_topics_after_repeated_output_guard_receipts tests\test_developer_bridge.py::test_codex_responder_ignores_existing_then_replies_once tests\test_developer_bridge.py::test_codex_responder_can_ack_ollama_without_retriggering_model -q`.
+- Chat UI collaboration parser contract passed:
+  `node --test --experimental-strip-types src\chat\index.test.ts`.
+- Ruff check passed:
+  `python -m ruff check src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\codex_responder.py tests\test_developer_bridge.py`.
+- Ruff format check passed with cache-write warnings only:
+  `python -m ruff format --check src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\codex_responder.py tests\test_developer_bridge.py`.
+- Targeted mypy passed:
+  `python -m mypy src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\codex_responder.py`.
+- Compileall passed:
+  `python -m compileall src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\codex_responder.py`.
+- Chat UI production build passed:
+  `npm run build`.
+- `git diff --check` passed.
+- No-write driver prompt readback produced the new line and stayed under the
+  700-character prompt budget (`LEN 674`).
+- Refreshed the `francis communication-runtime --watch` supervisor and helper
+  set. Live transcript readback then showed turns `1857` and `1858` with
+  `Claude=guidance; Francis=subject; Codex validates claims.` and the Codex
+  auto-ack lane also showed the same compact line. Runtime health returned
+  `status=healthy`, `waiting_for_ollama=false`, and the latest Francis1 response
+  for turn `1858` was guard-rewritten but still advice-only with execution,
+  mutation, approval, memory-write, training, and capability authority all false.
+
+Remaining truthful gap:
+
+- One relay entry emitted during the first partial helper refresh still contains
+  the previous source-alignment wording; it remains in the append-only transcript
+  as truthful history. Subsequent refreshed turns prove the active runtime now
+  uses the compact line.
+- This reduces source/identity confusion in Codex-authored relay prompts but does
+  not make Claude a source of authority, remove ORB/main-build blockers, tune
+  Francis1, or prove the model will never drift from the Francis subject.
+- `.\scripts\check.ps1`, GitHub CI, browser screenshot proof, and full ORB/body
+  coverage proof were not run for this bounded prompt/readback slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
