@@ -2305,6 +2305,42 @@ test("parseCollaborationReview preserves advisory candidate boundaries", () => {
           requires_codex_or_operator_review_before_implementation: true,
           requires_repo_truth_review: true,
         },
+        action_candidate_boundary: {
+          applies: true,
+          surface: "api.routes.chat.mission_ingress",
+          current_proof: {
+            kind: "developer_bridge.mission_ingress_action_candidate_proof",
+            proof_status: "repo_contract_observed",
+            surface: "api.routes.chat.mission_ingress",
+            proof_source: "tests/test_api_chat.py mission ingress contract",
+            chat_send_action_candidate_readback: true,
+            chat_ws_action_candidate_readback: true,
+            mission_current_task_readback: true,
+            mission_record_receipt: "data/missions/{mission_id}/record.json",
+            task_record_receipt: "data/tasks/{operation_id}/record.json",
+            source_modes_observed_by_tests: ["typed", "spoken"],
+            source_mode_proof_readback: true,
+            input_actor_readback: true,
+            source_mode_derivation_readback: true,
+            voice_turn_correlation_read_only: true,
+            voice_turn_correlation_grants_execution_authority: false,
+            voice_turn_correlation_grants_mutation_authority: false,
+            operation_candidate_required: true,
+            mission_record_required: true,
+            first_operation_candidate_required: true,
+            direct_execution: false,
+            requires_policy: true,
+            requires_approval: true,
+            requires_traceable_receipt: true,
+            stores_full_transcript: false,
+            grants_execution_authority: false,
+            grants_mutation_authority: false,
+            grants_approval_authority: false,
+            grants_memory_write_authority: false,
+            grants_training_authority: false,
+            grants_capability_authority: false,
+          },
+        },
         build_direction_gate: {
           state: "blocked_until_typed_review",
           blocks_build_direction: true,
@@ -2547,6 +2583,40 @@ test("parseCollaborationReview preserves advisory candidate boundaries", () => {
   assert.equal(review.items[0]?.reviewRecommendation.authority, "advisory_review_readback_only");
   assert.equal(collaborationReviewNextAction(review.items[0]!), "Inspect the cited insight against repo truth.");
   assert.equal(review.items[0]?.actionBoundary.conversationCanExecuteAction, false);
+  assert.equal(review.items[0]?.actionCandidateBoundary.applies, true);
+  assert.equal(review.items[0]?.actionCandidateBoundary.surface, "api.routes.chat.mission_ingress");
+  assert.equal(review.items[0]?.actionCandidateBoundary.proofStatus, "repo_contract_observed");
+  assert.equal(
+    review.items[0]?.actionCandidateBoundary.proofSource,
+    "tests/test_api_chat.py mission ingress contract",
+  );
+  assert.equal(review.items[0]?.actionCandidateBoundary.chatSendActionCandidateReadback, true);
+  assert.equal(review.items[0]?.actionCandidateBoundary.chatWsActionCandidateReadback, true);
+  assert.equal(review.items[0]?.actionCandidateBoundary.missionCurrentTaskReadback, true);
+  assert.equal(
+    review.items[0]?.actionCandidateBoundary.missionRecordReceipt,
+    "data/missions/{mission_id}/record.json",
+  );
+  assert.deepEqual(review.items[0]?.actionCandidateBoundary.sourceModesObservedByTests, ["typed", "spoken"]);
+  assert.equal(review.items[0]?.actionCandidateBoundary.sourceModeProofReadback, true);
+  assert.equal(review.items[0]?.actionCandidateBoundary.inputActorReadback, true);
+  assert.equal(review.items[0]?.actionCandidateBoundary.sourceModeDerivationReadback, true);
+  assert.equal(review.items[0]?.actionCandidateBoundary.voiceTurnCorrelationReadOnly, true);
+  assert.equal(review.items[0]?.actionCandidateBoundary.voiceTurnCorrelationGrantsExecutionAuthority, false);
+  assert.equal(review.items[0]?.actionCandidateBoundary.operationCandidateRequired, true);
+  assert.equal(review.items[0]?.actionCandidateBoundary.missionRecordRequired, true);
+  assert.equal(review.items[0]?.actionCandidateBoundary.firstOperationCandidateRequired, true);
+  assert.equal(review.items[0]?.actionCandidateBoundary.directExecution, false);
+  assert.equal(review.items[0]?.actionCandidateBoundary.requiresPolicy, true);
+  assert.equal(review.items[0]?.actionCandidateBoundary.requiresApproval, true);
+  assert.equal(review.items[0]?.actionCandidateBoundary.requiresTraceableReceipt, true);
+  assert.equal(review.items[0]?.actionCandidateBoundary.storesFullTranscript, false);
+  assert.equal(review.items[0]?.actionCandidateBoundary.grantsExecutionAuthority, false);
+  assert.equal(review.items[0]?.actionCandidateBoundary.grantsMutationAuthority, false);
+  assert.equal(review.items[0]?.actionCandidateBoundary.grantsApprovalAuthority, false);
+  assert.equal(review.items[0]?.actionCandidateBoundary.grantsMemoryWriteAuthority, false);
+  assert.equal(review.items[0]?.actionCandidateBoundary.grantsTrainingAuthority, false);
+  assert.equal(review.items[0]?.actionCandidateBoundary.grantsCapabilityAuthority, false);
   assert.equal(review.items[0]?.buildDirectionGate.state, "blocked_until_typed_review");
   assert.equal(review.items[0]?.buildDirectionGate.blocksBuildDirection, true);
   assert.equal(review.items[0]?.buildDirectionGate.requiresConflictingSources, true);

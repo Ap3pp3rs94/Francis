@@ -97907,6 +97907,78 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, browser screenshot proof, and full ORB/body
   coverage proof were not run for this bounded learning-gate slice.
 
+### 2026-06-26 06:33Z - Mission-ingress action-candidate proof projection
+
+Current posture: Phase 2 / P1 interface, P3 governance, P7 execution boundary,
+and P9 observability now project current repo-truth proof for the
+`api.routes.chat.mission_ingress` action-candidate boundary inside
+collaboration review items. The active review candidate
+`review-insight-collab-6c7e37672083dd96-d22dff0a4ca0` asked which surface
+converts typed or spoken user direction into action candidates; the readback now
+shows the existing mission-ingress contract without granting execution
+authority.
+
+What changed:
+
+- `action_candidate_boundary.current_proof` now exposes a bounded
+  `developer_bridge.mission_ingress_action_candidate_proof` for mission ingress
+  review items.
+- The proof records that `/chat/send` and `/chat/ws` action-candidate readbacks,
+  `/missions/{mission_id}.current_task`, mission records, and task records are
+  covered by existing repo contract tests.
+- The proof names typed and spoken source-mode coverage, source-mode proof,
+  input-actor readback, read-only voice-turn correlation, operation candidate,
+  mission record, and first-operation candidate requirements.
+- The proof keeps direct execution, execution authority, mutation authority,
+  approval authority, memory-write authority, training authority, and capability
+  authority false.
+- The Chat UI collaboration parser now preserves the action-candidate proof so
+  operator-facing review summaries can use the typed fields instead of raw JSON.
+
+Validation:
+
+- Focused collaboration-review projection test passed:
+  `python -m pytest tests/test_developer_bridge.py::test_collaboration_review_projects_generic_historical_topics_to_concrete_surfaces -q`.
+- Mission-ingress action-candidate contract tests passed:
+  `python -m pytest tests/test_api_chat.py::test_chat_mission_command_declares_queued_mission_with_loop_context tests/test_api_chat.py::test_chat_mona_lisa_voice_intent_declares_truthful_sandbox_mission tests/test_api_chat.py::test_chat_websocket_structured_message_declares_mission -q`.
+- Full developer-bridge backend test file passed:
+  `python -m pytest tests/test_developer_bridge.py -q`.
+- Ruff check passed:
+  `python -m ruff check src\francis\developer_bridge\collaboration_review.py tests\test_developer_bridge.py`.
+- Ruff format check passed:
+  `python -m ruff format --check src\francis\developer_bridge\collaboration_review.py tests\test_developer_bridge.py`.
+- Targeted mypy passed:
+  `python -m mypy src\francis\developer_bridge\collaboration_review.py`.
+- Compileall passed:
+  `python -m compileall src\francis\developer_bridge\collaboration_review.py`.
+- Focused Chat UI collaboration contract passed:
+  `node --test --experimental-strip-types src/chat/index.test.ts`.
+- Full Chat UI contract suite passed:
+  `npm run test` (`282` passing tests).
+- Chat UI production build passed:
+  `npm run build`.
+- `git diff --check` passed.
+- The local Francis API was restarted as wrapper PID `46068` and worker PID
+  `49284`. Live `/developer-bridge/collaboration-review?limit=20` returned the
+  mission-ingress review item with `proof_status=repo_contract_observed`,
+  `proof_source=tests/test_api_chat.py mission ingress contract`,
+  `/chat/send` action-candidate readback true, `/chat/ws` action-candidate
+  readback true, mission current-task readback true, typed and spoken source
+  modes, `direct_execution=false`, `grants_execution_authority=false`, and
+  `stores_full_transcript=false`.
+- Live `/developer-bridge/collaboration-runtime-health` returned
+  `status=healthy`, `turn_count=1767`, `recurrence_state=waiting_for_ollama`,
+  and participants enabled `3`.
+
+Remaining truthful gap:
+
+- This is a proof projection and UI parser contract only. It does not create a
+  new action-intake path, execute queued operations, approve actions, grant
+  Francis1 capability use, tune the local model, promote memory, or change
+  collaboration recurrence.
+- `.\scripts\check.ps1`, GitHub CI, browser screenshot proof, and full ORB/body
+  coverage proof were not run for this bounded proof-projection slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

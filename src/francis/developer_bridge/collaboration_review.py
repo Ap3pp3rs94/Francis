@@ -336,6 +336,7 @@ def _action_candidate_boundary(*, build_issue: dict[str, object], concrete_surfa
     if not is_mission_ingress:
         return {
             **base,
+            "current_proof": {},
             "required_proof_fields": [],
             "required_readbacks": [],
             "validation_tests": [],
@@ -343,6 +344,7 @@ def _action_candidate_boundary(*, build_issue: dict[str, object], concrete_surfa
         }
     return {
         **base,
+        "current_proof": _action_candidate_current_proof(),
         "action_candidate_kind": "francis.action_candidate",
         "required_status": "queued_for_governed_review",
         "source_modes": ["typed", "spoken"],
@@ -394,6 +396,41 @@ def _action_candidate_boundary(*, build_issue: dict[str, object], concrete_surfa
             "Verify the action_candidate proof fields and mission/current_task readbacks before changing "
             "typed or spoken action intake."
         ),
+    }
+
+
+def _action_candidate_current_proof() -> dict[str, object]:
+    return {
+        "kind": "developer_bridge.mission_ingress_action_candidate_proof",
+        "proof_status": "repo_contract_observed",
+        "surface": "api.routes.chat.mission_ingress",
+        "proof_source": "tests/test_api_chat.py mission ingress contract",
+        "chat_send_action_candidate_readback": True,
+        "chat_ws_action_candidate_readback": True,
+        "mission_current_task_readback": True,
+        "mission_record_receipt": "data/missions/{mission_id}/record.json",
+        "task_record_receipt": "data/tasks/{operation_id}/record.json",
+        "source_modes_observed_by_tests": ["typed", "spoken"],
+        "source_mode_proof_readback": True,
+        "input_actor_readback": True,
+        "source_mode_derivation_readback": True,
+        "voice_turn_correlation_read_only": True,
+        "voice_turn_correlation_grants_execution_authority": False,
+        "voice_turn_correlation_grants_mutation_authority": False,
+        "operation_candidate_required": True,
+        "mission_record_required": True,
+        "first_operation_candidate_required": True,
+        "direct_execution": False,
+        "requires_policy": True,
+        "requires_approval": True,
+        "requires_traceable_receipt": True,
+        "stores_full_transcript": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "grants_approval_authority": False,
+        "grants_memory_write_authority": False,
+        "grants_training_authority": False,
+        "grants_capability_authority": False,
     }
 
 

@@ -1037,6 +1037,38 @@ export type CollaborationReviewItem = {
     requiresCodexOrOperatorReviewBeforeImplementation: boolean;
     requiresRepoTruthReview: boolean;
   };
+  actionCandidateBoundary: {
+    applies: boolean;
+    surface: string;
+    proofStatus: string;
+    proofSource: string;
+    chatSendActionCandidateReadback: boolean;
+    chatWsActionCandidateReadback: boolean;
+    missionCurrentTaskReadback: boolean;
+    missionRecordReceipt: string;
+    taskRecordReceipt: string;
+    sourceModesObservedByTests: string[];
+    sourceModeProofReadback: boolean;
+    inputActorReadback: boolean;
+    sourceModeDerivationReadback: boolean;
+    voiceTurnCorrelationReadOnly: boolean;
+    voiceTurnCorrelationGrantsExecutionAuthority: boolean;
+    voiceTurnCorrelationGrantsMutationAuthority: boolean;
+    operationCandidateRequired: boolean;
+    missionRecordRequired: boolean;
+    firstOperationCandidateRequired: boolean;
+    directExecution: boolean;
+    requiresPolicy: boolean;
+    requiresApproval: boolean;
+    requiresTraceableReceipt: boolean;
+    storesFullTranscript: boolean;
+    grantsExecutionAuthority: boolean;
+    grantsMutationAuthority: boolean;
+    grantsApprovalAuthority: boolean;
+    grantsMemoryWriteAuthority: boolean;
+    grantsTrainingAuthority: boolean;
+    grantsCapabilityAuthority: boolean;
+  };
   buildDirectionGate: {
     state: string;
     blocksBuildDirection: boolean;
@@ -2607,6 +2639,10 @@ function parseReviewItem(raw: unknown): CollaborationReviewItem {
   const verification = isRecord(item.surface_verification) ? item.surface_verification : {};
   const recommendation = isRecord(item.review_recommendation) ? item.review_recommendation : {};
   const boundary = isRecord(item.action_boundary) ? item.action_boundary : {};
+  const actionCandidateBoundary = isRecord(item.action_candidate_boundary) ? item.action_candidate_boundary : {};
+  const actionCandidateProof = isRecord(actionCandidateBoundary.current_proof)
+    ? actionCandidateBoundary.current_proof
+    : {};
   const buildGate = isRecord(item.build_direction_gate) ? item.build_direction_gate : {};
   const sourceDisagreementBoundary = isRecord(item.source_disagreement_boundary)
     ? item.source_disagreement_boundary
@@ -2664,6 +2700,44 @@ function parseReviewItem(raw: unknown): CollaborationReviewItem {
         boundary.requires_codex_or_operator_review_before_implementation,
       ),
       requiresRepoTruthReview: safeBoolean(boundary.requires_repo_truth_review),
+    },
+    actionCandidateBoundary: {
+      applies: safeBoolean(actionCandidateBoundary.applies),
+      surface: safeString(actionCandidateBoundary.surface),
+      proofStatus: safeString(actionCandidateProof.proof_status),
+      proofSource: safeString(actionCandidateProof.proof_source),
+      chatSendActionCandidateReadback: safeBoolean(actionCandidateProof.chat_send_action_candidate_readback),
+      chatWsActionCandidateReadback: safeBoolean(actionCandidateProof.chat_ws_action_candidate_readback),
+      missionCurrentTaskReadback: safeBoolean(actionCandidateProof.mission_current_task_readback),
+      missionRecordReceipt: safeString(actionCandidateProof.mission_record_receipt),
+      taskRecordReceipt: safeString(actionCandidateProof.task_record_receipt),
+      sourceModesObservedByTests: Array.isArray(actionCandidateProof.source_modes_observed_by_tests)
+        ? actionCandidateProof.source_modes_observed_by_tests.map((entry) => safeString(entry)).filter(Boolean)
+        : [],
+      sourceModeProofReadback: safeBoolean(actionCandidateProof.source_mode_proof_readback),
+      inputActorReadback: safeBoolean(actionCandidateProof.input_actor_readback),
+      sourceModeDerivationReadback: safeBoolean(actionCandidateProof.source_mode_derivation_readback),
+      voiceTurnCorrelationReadOnly: safeBoolean(actionCandidateProof.voice_turn_correlation_read_only),
+      voiceTurnCorrelationGrantsExecutionAuthority: safeBoolean(
+        actionCandidateProof.voice_turn_correlation_grants_execution_authority,
+      ),
+      voiceTurnCorrelationGrantsMutationAuthority: safeBoolean(
+        actionCandidateProof.voice_turn_correlation_grants_mutation_authority,
+      ),
+      operationCandidateRequired: safeBoolean(actionCandidateProof.operation_candidate_required),
+      missionRecordRequired: safeBoolean(actionCandidateProof.mission_record_required),
+      firstOperationCandidateRequired: safeBoolean(actionCandidateProof.first_operation_candidate_required),
+      directExecution: safeBoolean(actionCandidateProof.direct_execution),
+      requiresPolicy: safeBoolean(actionCandidateProof.requires_policy),
+      requiresApproval: safeBoolean(actionCandidateProof.requires_approval),
+      requiresTraceableReceipt: safeBoolean(actionCandidateProof.requires_traceable_receipt),
+      storesFullTranscript: safeBoolean(actionCandidateProof.stores_full_transcript),
+      grantsExecutionAuthority: safeBoolean(actionCandidateProof.grants_execution_authority),
+      grantsMutationAuthority: safeBoolean(actionCandidateProof.grants_mutation_authority),
+      grantsApprovalAuthority: safeBoolean(actionCandidateProof.grants_approval_authority),
+      grantsMemoryWriteAuthority: safeBoolean(actionCandidateProof.grants_memory_write_authority),
+      grantsTrainingAuthority: safeBoolean(actionCandidateProof.grants_training_authority),
+      grantsCapabilityAuthority: safeBoolean(actionCandidateProof.grants_capability_authority),
     },
     buildDirectionGate: {
       state: safeString(buildGate.state, "advisory_review_required"),

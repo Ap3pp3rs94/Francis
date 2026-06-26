@@ -1886,6 +1886,34 @@ def test_collaboration_review_projects_generic_historical_topics_to_concrete_sur
     assert action_candidate_boundary["grants_mutation_authority"] is False
     assert action_candidate_boundary["grants_approval_authority"] is False
     assert action_candidate_boundary["grants_memory_write_authority"] is False
+    action_candidate_proof = action_candidate_boundary["current_proof"]
+    assert action_candidate_proof["kind"] == "developer_bridge.mission_ingress_action_candidate_proof"
+    assert action_candidate_proof["proof_status"] == "repo_contract_observed"
+    assert action_candidate_proof["surface"] == "api.routes.chat.mission_ingress"
+    assert action_candidate_proof["proof_source"] == "tests/test_api_chat.py mission ingress contract"
+    assert action_candidate_proof["chat_send_action_candidate_readback"] is True
+    assert action_candidate_proof["chat_ws_action_candidate_readback"] is True
+    assert action_candidate_proof["mission_current_task_readback"] is True
+    assert action_candidate_proof["source_modes_observed_by_tests"] == ["typed", "spoken"]
+    assert action_candidate_proof["source_mode_proof_readback"] is True
+    assert action_candidate_proof["input_actor_readback"] is True
+    assert action_candidate_proof["source_mode_derivation_readback"] is True
+    assert action_candidate_proof["voice_turn_correlation_read_only"] is True
+    assert action_candidate_proof["voice_turn_correlation_grants_execution_authority"] is False
+    assert action_candidate_proof["operation_candidate_required"] is True
+    assert action_candidate_proof["mission_record_required"] is True
+    assert action_candidate_proof["first_operation_candidate_required"] is True
+    assert action_candidate_proof["direct_execution"] is False
+    assert action_candidate_proof["requires_policy"] is True
+    assert action_candidate_proof["requires_approval"] is True
+    assert action_candidate_proof["requires_traceable_receipt"] is True
+    assert action_candidate_proof["stores_full_transcript"] is False
+    assert action_candidate_proof["grants_execution_authority"] is False
+    assert action_candidate_proof["grants_mutation_authority"] is False
+    assert action_candidate_proof["grants_approval_authority"] is False
+    assert action_candidate_proof["grants_memory_write_authority"] is False
+    assert action_candidate_proof["grants_training_authority"] is False
+    assert action_candidate_proof["grants_capability_authority"] is False
     assert "action_candidate.direct_execution=false" in action_candidate_boundary["required_proof_fields"]
     assert (
         "action_candidate.source_mode_proof.kind=francis.action_candidate.source_mode_proof"
