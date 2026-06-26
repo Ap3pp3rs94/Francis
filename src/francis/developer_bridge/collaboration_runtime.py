@@ -14,6 +14,8 @@ import time
 from francis.kernel.paths import data_dir, repo_root
 
 from .agents import collaboration_agents_status
+from .collaboration import read_collaboration_transcript
+from .collaboration_driver import driver_prompt_max_chars
 
 
 ProcessInfo = dict[str, object]
@@ -318,6 +320,7 @@ def _collaboration_loop_readback(driver_state: dict[str, object]) -> dict[str, o
         "latest_review_receipt": _latest_review_receipt_readback(driver_state),
         "latest_learning_receipt": _latest_learning_receipt_readback(driver_state),
         "current_learning_signal": _current_learning_signal_readback(driver_state),
+        "driver_prompt_budget": _driver_prompt_budget_readback(),
         "latest_local_model_response": _latest_local_model_response_readback(participant_state),
     }
 
@@ -561,6 +564,67 @@ def _latest_turn_readback(driver_state: dict[str, object]) -> dict[str, object]:
         "note_id": _safe_str(latest.get("note_id")),
         "insight_id": _safe_str(latest.get("insight_id")),
         "created_at": _safe_str(latest.get("created_at")),
+    }
+
+
+def _driver_prompt_budget_readback(*, limit: int = 30) -> dict[str, object]:
+    max_chars = driver_prompt_max_chars()
+    try:
+        transcript = read_collaboration_transcript(source_agent="codex", target_agent="ollama", limit=limit)
+    except Exception:
+        return {
+            "observed": False,
+            "status": "unavailable",
+            "max_chars": max_chars,
+            "recent_driver_prompt_count": 0,
+            "recent_violation_count": 0,
+            "latest_prompt_id": "",
+            "latest_prompt_length": 0,
+            "latest_prompt_within_budget": False,
+            "latest_violation_prompt_id": "",
+            "latest_violation_length": 0,
+            "stores_full_transcript": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+            "grants_memory_write_authority": False,
+        }
+    items = [
+        item
+        for item in _list(transcript.get("items"))
+        if isinstance(item, dict) and _safe_str(item.get("prompt")).startswith("Francis1 ")
+    ]
+    prompt_items = [_driver_prompt_budget_item(item, max_chars=max_chars) for item in items]
+    violations = [item for item in prompt_items if not bool(item.get("within_budget"))]
+    latest = prompt_items[0] if prompt_items else {}
+    latest_violation = violations[0] if violations else {}
+    return {
+        "observed": bool(prompt_items),
+        "status": "violation" if violations else "ok" if prompt_items else "unobserved",
+        "max_chars": max_chars,
+        "recent_driver_prompt_count": len(prompt_items),
+        "recent_violation_count": len(violations),
+        "latest_prompt_id": _safe_str(latest.get("prompt_id")),
+        "latest_prompt_length": _safe_int(latest.get("prompt_length"), default=0),
+        "latest_prompt_within_budget": bool(latest.get("within_budget")),
+        "latest_violation_prompt_id": _safe_str(latest_violation.get("prompt_id")),
+        "latest_violation_length": _safe_int(latest_violation.get("prompt_length"), default=0),
+        "recent_violations": violations[:3],
+        "stores_full_transcript": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "grants_memory_write_authority": False,
+    }
+
+
+def _driver_prompt_budget_item(item: dict[str, object], *, max_chars: int) -> dict[str, object]:
+    prompt = _safe_str(item.get("prompt"))
+    prompt_length = len(prompt)
+    return {
+        "prompt_id": _safe_str(item.get("id")),
+        "created_at": _safe_str(item.get("created_at")),
+        "objective": _safe_str(item.get("objective")),
+        "prompt_length": prompt_length,
+        "within_budget": prompt_length <= max_chars,
     }
 
 

@@ -96230,6 +96230,62 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, and browser proof were not run for this
   bounded prompt-contract slice.
 
+### 2026-06-26 03:04Z - Collaboration runtime prompt-budget health readback
+
+Current posture: Phase 2 / developer bridge collaboration runtime health now
+surfaces recent Codex-to-Francis1 driver prompt-budget compliance. This makes
+the prompt compactness contract observable from the normal runtime-health route
+instead of requiring manual transcript inspection.
+
+What changed:
+
+- Added `driver_prompt_max_chars()` as the collaboration driver's single
+  readback source for the 700-character prompt budget.
+- Added `collaboration_loop.driver_prompt_budget` to
+  `developer_bridge.collaboration_runtime_health`.
+- The new readback reports latest driver prompt length, whether the latest
+  prompt is within budget, recent driver prompt count, recent violation count,
+  latest violation ID and length, and up to three bounded violation metadata
+  rows.
+- The readback intentionally does not return prompt text or grant any execution,
+  mutation, approval, or memory-write authority.
+- Added a runtime-health regression that seeds one over-budget and one
+  in-budget driver prompt, then proves the health readback flags the recent
+  violation without exposing raw prompt text.
+
+Validation:
+
+- Focused runtime-health prompt-budget regression passed:
+  `python -m pytest tests/test_developer_bridge.py::test_collaboration_runtime_health_is_read_only_and_reports_recurrence -q`.
+- Full developer bridge test file passed:
+  `python -m pytest tests/test_developer_bridge.py -q`.
+- Targeted lint passed:
+  `python -m ruff check src/francis/developer_bridge/collaboration_runtime.py src/francis/developer_bridge/collaboration_driver.py tests/test_developer_bridge.py`.
+- Targeted format check passed:
+  `python -m ruff format --check src/francis/developer_bridge/collaboration_runtime.py src/francis/developer_bridge/collaboration_driver.py tests/test_developer_bridge.py`.
+- Targeted typing passed:
+  `python -m mypy src/francis/developer_bridge/collaboration_runtime.py src/francis/developer_bridge/collaboration_driver.py`.
+- `git diff --check` passed.
+- The local API was restarted; `/chat/health` returned `ok=true`.
+- Live runtime-health proof passed:
+  `GET /developer-bridge/collaboration-runtime-health` returned
+  `driver_prompt_budget.status=violation`, `max_chars=700`,
+  `recent_driver_prompt_count=15`, `recent_violation_count=2`,
+  `latest_prompt_length=635`, `latest_prompt_within_budget=true`, and
+  `latest_violation_length=755`, with `stores_full_transcript=false`.
+
+Remaining truthful gap:
+
+- This is read-only observability for prompt-budget drift. It does not repair old
+  relay receipts, suppress existing transcript entries, execute actions, approve
+  gates, train Francis1, promote memory, or grant any participant new
+  capabilities.
+- The live readback intentionally reports `status=violation` while recent
+  historical over-budget prompts remain inside the bounded lookback window, even
+  though the latest prompt is within budget.
+- `.\scripts\check.ps1`, GitHub CI, and browser proof were not run for this
+  bounded runtime-health readback slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

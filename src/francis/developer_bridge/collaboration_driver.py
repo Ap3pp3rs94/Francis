@@ -272,6 +272,10 @@ def read_collaboration_learning_events(
     }
 
 
+def driver_prompt_max_chars() -> int:
+    return _MAX_DRIVER_PROMPT_CHARS
+
+
 def _submit_next_prompt(state: dict[str, object], *, max_turns: int) -> dict[str, object]:
     turn_number = _turn_count(state) + 1
     _ensure_session_context_contract(state)

@@ -956,6 +956,18 @@ def test_collaboration_runtime_health_is_read_only_and_reports_recurrence(tmp_pa
         ),
         encoding="utf-8",
     )
+    over_budget = submit_collaboration_prompt(
+        source_agent="codex",
+        target_agent="ollama",
+        objective="Francis1 collaboration driver budget violation",
+        prompt="Francis1 " + ("x" * 705),
+    )
+    latest_budgeted = submit_collaboration_prompt(
+        source_agent="codex",
+        target_agent="ollama",
+        objective="Francis1 collaboration driver budget ok",
+        prompt="Francis1 compact prompt.",
+    )
 
     health = collaboration_runtime.read_collaboration_runtime_health(process_listing=process_listing)
 
@@ -1036,6 +1048,19 @@ def test_collaboration_runtime_health_is_read_only_and_reports_recurrence(tmp_pa
         "grants_approval_authority": False,
         "grants_memory_write_authority": False,
     }
+    budget = loop["driver_prompt_budget"]
+    assert budget["observed"] is True
+    assert budget["status"] == "violation"
+    assert budget["max_chars"] == 700
+    assert budget["recent_driver_prompt_count"] == 2
+    assert budget["recent_violation_count"] == 1
+    assert budget["latest_prompt_id"] == latest_budgeted["prompt_id"]
+    assert budget["latest_prompt_within_budget"] is True
+    assert budget["latest_violation_prompt_id"] == over_budget["prompt_id"]
+    assert budget["latest_violation_length"] > budget["max_chars"]
+    assert budget["stores_full_transcript"] is False
+    assert budget["grants_execution_authority"] is False
+    assert "prompt" not in budget["recent_violations"][0]
     assert loop["latest_local_model_response"] == {
         "observed": True,
         "state_observed": True,
