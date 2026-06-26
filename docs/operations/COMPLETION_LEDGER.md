@@ -96610,6 +96610,69 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, browser proof, and a full Chat UI parser
   sweep were not run for this bounded backend readback slice.
 
+### 2026-06-26 03:53Z - Roadmap-alignment collaboration review boundary
+
+Current posture: Phase 2 / P3 governance, P9 observability, P8 memory, and P1
+interface work now have an explicit collaboration-review boundary for
+roadmap-alignment and substrate-completion conversation items. The shared
+conversation can acknowledge Claude as guidance while still keeping Francis as
+the subject and keeping main-build prompts candidate-only until ledger and
+manifest evidence is checked.
+
+What changed:
+
+- Added `roadmap_alignment_boundary` to
+  `developer_bridge.collaboration_review_item`.
+- Roadmap-alignment review items now name `docs/operations/COMPLETION_LEDGER.md`
+  and `docs/canonical/BUILD_MANIFEST.md` as required sources, require ledger
+  first for main-build prompts, and expose `main_build_prompt_allowed=false`.
+- Substrate-completion review items now expose the same no-authority boundary
+  while preserving manifest-plus-ledger source order for checklist review.
+- The boundary records Claude and Codex as external guidance sources, requires
+  Francis focus, and denies execution, mutation, approval, memory-write, and
+  training authority.
+- Sent a bounded Codex -> Claude relay receipt
+  `collab-996f250475ac4083-3b2dc186f5b4` so the visible conversation picks up
+  the validation-first Francis steering without adding a repeating prompt loop.
+
+Validation:
+
+- Focused developer-bridge tests passed:
+  `python -m pytest tests/test_developer_bridge.py::test_collaboration_review_projects_generic_historical_topics_to_concrete_surfaces tests/test_developer_bridge.py::test_collaboration_substrate_readiness_blocks_main_build_prompt_for_open_gaps`.
+- Ruff check passed:
+  `python -m ruff check src\francis\developer_bridge\collaboration_review.py tests\test_developer_bridge.py`.
+- Ruff format check passed:
+  `python -m ruff format --check src\francis\developer_bridge\collaboration_review.py tests\test_developer_bridge.py`.
+- Targeted mypy passed:
+  `python -m mypy src\francis\developer_bridge\collaboration_review.py`.
+- Compileall passed:
+  `python -m compileall src\francis\developer_bridge\collaboration_review.py`.
+- Live API readback after restart showed roadmap review items with
+  `roadmap_alignment_boundary.applies=true`,
+  `ledger_first_for_main_build_prompt=true`,
+  `main_build_prompt_allowed=false`, `claude_role=external_guidance_source`,
+  `francis_focus_required=true`, and all no-authority flags false.
+- `/developer-bridge/collaboration-substrate-readiness` reported
+  `roadmap_alignment.status=blocked_candidate_only`,
+  `main_build_prompt_allowed=false`, `candidate_only_until_review=true`, and
+  `main_build_prompt_gate=blocked_by_open_orb_gaps`.
+- Runtime health after API restart reported `status=healthy`,
+  `helper_count=3`, prompt budget `ok`, turn `1592`, and all three
+  collaboration participants enabled.
+- `/developer-bridge/collaboration-transcript?source_agent=codex&target_agent=claude`
+  showed the new Codex -> Claude receipt as operator-visible and queued.
+
+Remaining truthful gap:
+
+- This is a review/readback and relay-steering boundary. It does not grant
+  Claude, Codex, or Francis1 execution authority, capability authority, approval
+  authority, memory-write authority, training authority, or permission to bypass
+  Francis roadmap evidence.
+- Main Francis build prompts remain candidate-only because current substrate
+  readiness still reports open ORB coverage and phase-posture blockers.
+- `.\scripts\check.ps1`, GitHub CI, and browser proof were not run for this
+  bounded backend readback slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

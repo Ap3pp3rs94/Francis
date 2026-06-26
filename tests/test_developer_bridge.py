@@ -1782,6 +1782,19 @@ def test_collaboration_review_projects_generic_historical_topics_to_concrete_sur
     assert substrate_item["quality_flags"]["generic_surface"] is False
     assert substrate_item["surface_verification"]["status"] == "canonical_truth_source_found"
     assert substrate_item["surface_verification"]["surface_kind"] == "canonical_docs"
+    substrate_boundary = substrate_item["roadmap_alignment_boundary"]
+    assert substrate_boundary["applies"] is True
+    assert substrate_boundary["source_order"] == [
+        "docs/canonical/BUILD_MANIFEST.md",
+        "docs/operations/COMPLETION_LEDGER.md",
+    ]
+    assert substrate_boundary["main_build_prompt_allowed"] is False
+    assert substrate_boundary["main_build_prompt_candidate_only"] is True
+    assert substrate_boundary["conversation_can_override_roadmap"] is False
+    assert substrate_boundary["claude_role"] == "external_guidance_source"
+    assert substrate_boundary["francis_focus_required"] is True
+    assert substrate_boundary["grants_execution_authority"] is False
+    assert substrate_boundary["grants_memory_write_authority"] is False
 
     roadmap_item = items["insight-roadmap"]
     assert roadmap_item["build_issue"]["code"] == "roadmap_alignment_gate"
@@ -1794,6 +1807,34 @@ def test_collaboration_review_projects_generic_historical_topics_to_concrete_sur
     assert roadmap_item["review_recommendation"]["next_codex_action"] == (
         "Read the ledger and manifest before prompting any main Francis build."
     )
+    roadmap_boundary = roadmap_item["roadmap_alignment_boundary"]
+    assert roadmap_boundary["applies"] is True
+    assert roadmap_boundary["required_sources"] == [
+        "docs/operations/COMPLETION_LEDGER.md",
+        "docs/canonical/BUILD_MANIFEST.md",
+    ]
+    assert roadmap_boundary["source_order"] == [
+        "docs/operations/COMPLETION_LEDGER.md",
+        "docs/canonical/BUILD_MANIFEST.md",
+    ]
+    assert roadmap_boundary["ledger_first_for_main_build_prompt"] is True
+    assert roadmap_boundary["main_build_prompt_allowed"] is False
+    assert roadmap_boundary["main_build_prompt_candidate_only"] is True
+    assert roadmap_boundary["conversation_can_start_main_build"] is False
+    assert roadmap_boundary["conversation_can_override_roadmap"] is False
+    assert roadmap_boundary["claude_role"] == "external_guidance_source"
+    assert roadmap_boundary["codex_role"] == "external_guidance_source"
+    assert roadmap_boundary["francis_focus_required"] is True
+    assert "roadmap_alignment.latest_ledger_entry" in roadmap_boundary["required_proof_fields"]
+    assert "roadmap_alignment.main_build_prompt_allowed=false" in roadmap_boundary["required_proof_fields"]
+    assert (
+        "/developer-bridge/collaboration-substrate-readiness roadmap_alignment"
+        in roadmap_boundary["required_readbacks"]
+    )
+    assert roadmap_boundary["grants_execution_authority"] is False
+    assert roadmap_boundary["grants_mutation_authority"] is False
+    assert roadmap_boundary["grants_approval_authority"] is False
+    assert roadmap_boundary["grants_memory_write_authority"] is False
 
     body_map_item = items["insight-body-map"]
     assert body_map_item["build_issue"]["code"] == "francis_body_map_trust_ladder"

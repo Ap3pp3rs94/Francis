@@ -56,6 +56,10 @@ def read_collaboration_review(*, limit: int = 10, session_id: str = "") -> dict[
                 "Typed proof checklist for collaboration items that route typed or spoken direction into "
                 "mission-ingress action candidates instead of direct execution."
             ),
+            "roadmap_alignment_boundary": (
+                "Typed proof checklist for roadmap and substrate-completion review items so main Francis "
+                "build prompts remain candidate-only until ledger and manifest evidence is checked."
+            ),
         },
         "governance": _governance(),
     }
@@ -220,6 +224,10 @@ def _review_item(insight: dict[str, object]) -> dict[str, object]:
             build_issue=build_issue,
             concrete_surface=concrete_surface,
         ),
+        "roadmap_alignment_boundary": _roadmap_alignment_boundary(
+            build_issue=build_issue,
+            concrete_surface=concrete_surface,
+        ),
         "implementation_preflight": _implementation_preflight(
             insight=insight,
             concrete_surface=concrete_surface,
@@ -329,6 +337,85 @@ def _action_candidate_boundary(*, build_issue: dict[str, object], concrete_surfa
         "next_codex_action": (
             "Verify the action_candidate proof fields and mission/current_task readbacks before changing "
             "typed or spoken action intake."
+        ),
+    }
+
+
+def _roadmap_alignment_boundary(*, build_issue: dict[str, object], concrete_surface: str) -> dict[str, object]:
+    code = _bounded_text(build_issue.get("code"), limit=120)
+    surface_key = _surface_key(concrete_surface)
+    is_substrate_check = (
+        code == "substrate_completion_checklist"
+        or surface_key == "docs canonical build manifest md docs operations completion ledger md"
+    )
+    is_roadmap_gate = (
+        code == "roadmap_alignment_gate"
+        or surface_key == "docs operations completion ledger md docs canonical build manifest md"
+    )
+    applies = is_substrate_check or is_roadmap_gate
+    source_order = (
+        ["docs/operations/COMPLETION_LEDGER.md", "docs/canonical/BUILD_MANIFEST.md"]
+        if is_roadmap_gate
+        else ["docs/canonical/BUILD_MANIFEST.md", "docs/operations/COMPLETION_LEDGER.md"]
+    )
+    required_sources = [
+        "docs/operations/COMPLETION_LEDGER.md",
+        "docs/canonical/BUILD_MANIFEST.md",
+    ]
+    base: dict[str, object] = {
+        "applies": applies,
+        "surface": concrete_surface,
+        "required_sources": required_sources if applies else [],
+        "source_order": source_order if applies else [],
+        "ledger_first_for_main_build_prompt": is_roadmap_gate,
+        "main_build_prompt_allowed": False,
+        "main_build_prompt_candidate_only": applies,
+        "requires_codex_or_operator_review": True,
+        "requires_repo_truth_review": True,
+        "requires_typed_review_artifact": applies,
+        "conversation_can_start_main_build": False,
+        "conversation_can_override_roadmap": False,
+        "claude_role": "external_guidance_source",
+        "codex_role": "external_guidance_source",
+        "francis_focus_required": applies,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "grants_approval_authority": False,
+        "grants_memory_write_authority": False,
+        "grants_training_authority": False,
+    }
+    if not applies:
+        return {
+            **base,
+            "required_proof_fields": [],
+            "required_readbacks": [],
+            "validation_tests": [],
+            "next_codex_action": "Use surface_verification and build_direction_gate for non-roadmap review items.",
+        }
+    return {
+        **base,
+        "required_proof_fields": [
+            "roadmap_alignment.latest_ledger_entry",
+            "roadmap_alignment.current_phase",
+            "roadmap_alignment.current_priority_or_plane_line",
+            "roadmap_alignment.remaining_blockers",
+            "roadmap_alignment.main_build_prompt_allowed=false",
+            "roadmap_alignment.main_build_prompt_candidate_only=true",
+            "roadmap_alignment.conversation_can_override_roadmap=false",
+            "roadmap_alignment.grants_execution_authority=false",
+        ],
+        "required_readbacks": [
+            "docs/operations/COMPLETION_LEDGER.md latest shipped-state entry",
+            "docs/canonical/BUILD_MANIFEST.md current phase and plane gates",
+            "/developer-bridge/collaboration-substrate-readiness roadmap_alignment",
+        ],
+        "validation_tests": [
+            "tests/test_developer_bridge.py::test_collaboration_substrate_readiness_blocks_main_build_prompt_for_open_gaps",
+            "tests/test_developer_bridge.py::test_collaboration_review_projects_generic_historical_topics_to_concrete_surfaces",
+        ],
+        "next_codex_action": (
+            "Acknowledge Claude as guidance, keep the conversation directed at Francis, read the ledger and "
+            "manifest, then record proof before any main Francis build prompt."
         ),
     }
 
