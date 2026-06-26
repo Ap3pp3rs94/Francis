@@ -1162,6 +1162,7 @@ export type CollaborationReviewItem = {
     sourcesObserved: boolean;
     sourceOrder: string[];
     coverageOpenGapCount: number;
+    openOrbGapPlaneIds: string[];
     remainingBlockers: string[];
     mainBuildPromptAllowed: boolean;
     mainBuildPromptGate: string;
@@ -2939,6 +2940,9 @@ function parseReviewItem(raw: unknown): CollaborationReviewItem {
       sourcesObserved: safeBoolean(roadmapProof.sources_observed),
       sourceOrder: Array.isArray(roadmapProof.source_order) ? roadmapProof.source_order.map((entry) => safeString(entry)).filter(Boolean) : [],
       coverageOpenGapCount: safeNumber(roadmapProof.coverage_open_gap_count),
+      openOrbGapPlaneIds: Array.isArray(roadmapProof.open_orb_gap_plane_ids)
+        ? roadmapProof.open_orb_gap_plane_ids.map((entry) => safeString(entry)).filter(Boolean)
+        : [],
       remainingBlockers: Array.isArray(roadmapProof.remaining_blockers)
         ? roadmapProof.remaining_blockers.map((entry) => safeString(entry)).filter(Boolean)
         : [],

@@ -250,6 +250,8 @@ def _review_item(insight: dict[str, object], *, context: dict[str, object]) -> d
         "roadmap_alignment_boundary": _roadmap_alignment_boundary(
             build_issue=build_issue,
             concrete_surface=concrete_surface,
+            topic=topic,
+            finding=finding,
         ),
         "model_advice_governance_boundary": _model_advice_governance_boundary(
             build_issue=build_issue,
@@ -434,9 +436,16 @@ def _action_candidate_current_proof() -> dict[str, object]:
     }
 
 
-def _roadmap_alignment_boundary(*, build_issue: dict[str, object], concrete_surface: str) -> dict[str, object]:
+def _roadmap_alignment_boundary(
+    *,
+    build_issue: dict[str, object],
+    concrete_surface: str,
+    topic: str,
+    finding: str,
+) -> dict[str, object]:
     code = _bounded_text(build_issue.get("code"), limit=120)
     surface_key = _surface_key(concrete_surface)
+    signal_key = _topic_key(f"{topic} {finding} {concrete_surface}")
     is_substrate_check = (
         code == "substrate_completion_checklist"
         or surface_key == "docs canonical build manifest md docs operations completion ledger md"
@@ -445,7 +454,13 @@ def _roadmap_alignment_boundary(*, build_issue: dict[str, object], concrete_surf
         code == "roadmap_alignment_gate"
         or surface_key == "docs operations completion ledger md docs canonical build manifest md"
     )
-    applies = is_substrate_check or is_roadmap_gate
+    has_main_build_or_orb_blocker = (
+        "open orb gaps" in signal_key
+        or "blocked by open orb gaps" in signal_key
+        or ("main build" in signal_key and "roadmap" in signal_key)
+        or "main build candidate only" in signal_key
+    )
+    applies = is_substrate_check or is_roadmap_gate or has_main_build_or_orb_blocker
     source_order = (
         ["docs/operations/COMPLETION_LEDGER.md", "docs/canonical/BUILD_MANIFEST.md"]
         if is_roadmap_gate
@@ -463,6 +478,7 @@ def _roadmap_alignment_boundary(*, build_issue: dict[str, object], concrete_surf
         "ledger_first_for_main_build_prompt": is_roadmap_gate,
         "main_build_prompt_allowed": False,
         "main_build_prompt_candidate_only": applies,
+        "open_orb_gap_review_required": has_main_build_or_orb_blocker or is_substrate_check or is_roadmap_gate,
         "requires_codex_or_operator_review": True,
         "requires_repo_truth_review": True,
         "requires_typed_review_artifact": applies,
@@ -494,6 +510,7 @@ def _roadmap_alignment_boundary(*, build_issue: dict[str, object], concrete_surf
             "roadmap_alignment.current_phase",
             "roadmap_alignment.current_priority_or_plane_line",
             "roadmap_alignment.remaining_blockers",
+            "roadmap_alignment.open_orb_gap_plane_ids",
             "roadmap_alignment.main_build_prompt_allowed=false",
             "roadmap_alignment.main_build_prompt_candidate_only=true",
             "roadmap_alignment.conversation_can_override_roadmap=false",
@@ -520,10 +537,14 @@ def _roadmap_current_proof(*, is_roadmap_gate: bool) -> dict[str, object]:
     summary = _safe_dict(body.get("summary"))
     phase = _safe_dict(body.get("phase"))
     evidence = _safe_dict(body.get("evidence"))
+    coverage_review = _safe_dict(body.get("coverage_review"))
     open_gap_count = _safe_int(
         summary.get("coverage_open_gap_count"),
-        default=_safe_int(evidence.get("coverage_open_gap_count")),
+        default=_safe_int(
+            coverage_review.get("open_gap_count"), default=_safe_int(evidence.get("coverage_open_gap_count"))
+        ),
     )
+    open_orb_gap_plane_ids = _open_orb_gap_plane_ids(coverage_review)
     ledger_observed = bool(evidence.get("ledger_observed"))
     manifest_observed = bool(evidence.get("manifest_observed"))
     sources_observed = ledger_observed and manifest_observed
@@ -551,6 +572,7 @@ def _roadmap_current_proof(*, is_roadmap_gate: bool) -> dict[str, object]:
             else ["docs/canonical/BUILD_MANIFEST.md", "docs/operations/COMPLETION_LEDGER.md"]
         ),
         "coverage_open_gap_count": open_gap_count,
+        "open_orb_gap_plane_ids": open_orb_gap_plane_ids,
         "remaining_blockers": blockers,
         "main_build_prompt_allowed": False,
         "main_build_prompt_gate": main_build_prompt_gate,
@@ -564,6 +586,23 @@ def _roadmap_current_proof(*, is_roadmap_gate: bool) -> dict[str, object]:
         "grants_memory_write_authority": False,
         "grants_training_authority": False,
     }
+
+
+def _open_orb_gap_plane_ids(coverage_review: dict[str, object]) -> list[str]:
+    plane_ids: list[str] = []
+    items = coverage_review.get("items")
+    if not isinstance(items, list):
+        return plane_ids
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        remaining_gaps = item.get("remaining_gaps")
+        if not isinstance(remaining_gaps, list) or not remaining_gaps:
+            continue
+        plane_id = _bounded_text(item.get("plane_id"), limit=80)
+        if plane_id and plane_id not in plane_ids:
+            plane_ids.append(plane_id)
+    return plane_ids
 
 
 def _participant_toggle_boundary(*, build_issue: dict[str, object], concrete_surface: str) -> dict[str, object]:

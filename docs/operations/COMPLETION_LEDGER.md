@@ -98364,6 +98364,72 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, browser screenshot proof, and full ORB/body
   coverage proof were not run for this bounded prompt-contract slice.
 
+### 2026-06-26 07:50Z - Collaboration review ORB blocker proof projection
+
+Current posture: Phase 2 / P9 observability, P3 governance, and P1 interface
+readback now project open ORB/main-build blocker proof directly into
+collaboration review items when the review finding itself mentions
+`open_orb_gaps`, `blocked_by_open_orb_gaps`, or main-build roadmap blocking. This
+uses existing body-map/substrate evidence instead of creating a new authority
+surface.
+
+What changed:
+
+- `collaboration_review` now passes review topic and finding text into the
+  roadmap-alignment boundary projection.
+- Review items that mention open ORB gaps or main-build roadmap blockers now get
+  `roadmap_alignment_boundary.applies=true`,
+  `open_orb_gap_review_required=true`, and a `current_proof` containing
+  `open_orb_gap_plane_ids`, `coverage_open_gap_count`,
+  `main_build_prompt_gate=blocked_by_open_orb_gaps`, and
+  `main_build_prompt_allowed=false`.
+- Plain source-disagreement review items remain source-disagreement only; the
+  roadmap proof is attached only when the item text carries ORB/main-build
+  blocker content.
+- The Chat UI collaboration parser preserves
+  `roadmapAlignmentProof.openOrbGapPlaneIds`, and the Review Candidates
+  Roadmap Proof row now shows those plane ids next to the open-gap count.
+- The change is readback/UI preservation only: it does not clear ORB gaps,
+  allow main-build prompting, execute prompts, grant authority, promote memory,
+  or tune Francis1.
+
+Validation:
+
+- Focused backend collaboration-review projection test passed:
+  `python -m pytest tests\test_developer_bridge.py::test_collaboration_review_projects_generic_historical_topics_to_concrete_surfaces -q`.
+- Ruff check passed:
+  `python -m ruff check src\francis\developer_bridge\collaboration_review.py tests\test_developer_bridge.py`.
+- Ruff format check passed:
+  `python -m ruff format --check src\francis\developer_bridge\collaboration_review.py tests\test_developer_bridge.py`.
+- Targeted mypy passed:
+  `python -m mypy src\francis\developer_bridge\collaboration_review.py`.
+- Compileall passed:
+  `python -m compileall src\francis\developer_bridge\collaboration_review.py`.
+- Chat UI collaboration parser contract passed:
+  `node --test --experimental-strip-types src\chat\index.test.ts`.
+- Chat UI production build passed:
+  `npm run build`.
+- `git diff --check` passed.
+- Restarted the local Francis API on `127.0.0.1:8000`; HTTP
+  `/developer-bridge/collaboration-review?limit=50` returned live turn `1840`
+  with `source_disagreement=true`, `roadmap_applies=true`,
+  `open_orb_gap_review_required=true`,
+  `main_build_prompt_gate=blocked_by_open_orb_gaps`, all 11 open ORB plane ids,
+  and `grants_execution_authority=false`.
+- Live collaboration runtime health remained `healthy`, with one wrapper and one
+  effective worker each for the Codex responder, Francis1 participant, and
+  collaboration driver.
+
+Remaining truthful gap:
+
+- This makes the blocker proof visible in the review item and UI parser, but it
+  does not remove the 11 open ORB plane gaps or the partial Phase 2 posture.
+- Main Francis build prompts remain candidate-only and blocked by
+  `blocked_by_open_orb_gaps` until Codex/operator review closes the underlying
+  coverage gaps.
+- `.\scripts\check.ps1`, GitHub CI, browser screenshot proof, and full ORB/body
+  coverage proof were not run for this bounded readback/UI projection slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -2525,6 +2525,7 @@ test("parseCollaborationReview preserves advisory candidate boundaries", () => {
             sources_observed: true,
             source_order: ["docs/operations/COMPLETION_LEDGER.md", "docs/canonical/BUILD_MANIFEST.md"],
             coverage_open_gap_count: 11,
+            open_orb_gap_plane_ids: ["P1_INTERFACE", "P8_MEMORY"],
             remaining_blockers: ["blocked_by_open_orb_gaps", "blocked_by_partial_phase_posture"],
             main_build_prompt_allowed: false,
             main_build_prompt_gate: "blocked_by_open_orb_gaps",
@@ -2753,6 +2754,7 @@ test("parseCollaborationReview preserves advisory candidate boundaries", () => {
   assert.equal(review.items[0]?.roadmapAlignmentProof.ledgerObserved, true);
   assert.equal(review.items[0]?.roadmapAlignmentProof.manifestObserved, true);
   assert.equal(review.items[0]?.roadmapAlignmentProof.coverageOpenGapCount, 11);
+  assert.deepEqual(review.items[0]?.roadmapAlignmentProof.openOrbGapPlaneIds, ["P1_INTERFACE", "P8_MEMORY"]);
   assert.deepEqual(review.items[0]?.roadmapAlignmentProof.remainingBlockers, [
     "blocked_by_open_orb_gaps",
     "blocked_by_partial_phase_posture",

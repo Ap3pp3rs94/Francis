@@ -3663,7 +3663,9 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
                           {roadmapProof.latestLedgerEntry || "unknown"}
                         </dd>
                         <dd style={{ color: "#94a3b8", margin: "4px 0 0", overflowWrap: "anywhere" }}>
-                          sources {roadmapProof.sourceOrder.join(" -> ") || "unknown"} / open gaps {roadmapProof.coverageOpenGapCount} /
+                          sources {roadmapProof.sourceOrder.join(" -> ") || "unknown"} / open gaps{" "}
+                          {roadmapProof.coverageOpenGapCount}{" "}
+                          {roadmapProof.openOrbGapPlaneIds.length ? `(${roadmapProof.openOrbGapPlaneIds.join(", ")})` : ""} /
                           candidate only {boolText(roadmapProof.mainBuildPromptCandidateOnly)} / override{" "}
                           {boolText(roadmapProof.conversationCanOverrideRoadmap)} / execute {boolText(roadmapProof.grantsExecutionAuthority)}
                         </dd>
