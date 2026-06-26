@@ -33,8 +33,10 @@ _DEFAULT_POLL_SECONDS = 2.0
 _DEFAULT_TURN_GAP_SECONDS = 30.0
 _DEFAULT_SUMMARY_EVERY_TURNS = 6
 _MAX_DRIVER_PROMPT_CHARS = 700
-_PROMPT_REVIEW_ID_LIMIT = 36
+_PROMPT_REVIEW_ID_LIMIT = 24
 _PROMPT_REVIEW_SURFACE_LIMIT = 72
+_SOURCE_ALIGNMENT_PROMPT_LINE = "Claude guides; Francis focus; validate."
+_COMPACT_BODY_MAP_PROMPT_LINE = "Body map: visible; grants required; stale detaches."
 
 _TOPICS = (
     "the next Communication UI change that would reduce visible relay noise using existing receipt fields",
@@ -350,7 +352,7 @@ def _next_prompt(state: dict[str, object], *, max_turns: int) -> str:
         terms = preferred_term or (repeated_terms[0] if repeated_terms else "repeated meta terms")
         if len(repeated_terms) > 1:
             terms = f"{terms}, ..."
-        loop_line = f" Loop note: {terms}; use prior surface, not meta."
+        loop_line = f" Loop: {terms}; use prior surface."
     turn_label = _turn_label(turn_number, max_turns)
     prompt = _compose_driver_prompt(
         turn_label=turn_label,
@@ -368,7 +370,7 @@ def _next_prompt(state: dict[str, object], *, max_turns: int) -> str:
     prompt = _compose_driver_prompt(
         turn_label=turn_label,
         topic=topic,
-        body_map_line="",
+        body_map_line=_COMPACT_BODY_MAP_PROMPT_LINE,
         roadmap_gate_line=roadmap_gate_line,
         trust_line=trust_line,
         topic_artifact=topic_artifact,
@@ -378,14 +380,27 @@ def _next_prompt(state: dict[str, object], *, max_turns: int) -> str:
     )
     if len(prompt) <= _MAX_DRIVER_PROMPT_CHARS:
         return prompt
-    return _compose_driver_prompt(
+    prompt = _compose_driver_prompt(
         turn_label=turn_label,
         topic=_bounded_text(topic, limit=96),
-        body_map_line="",
+        body_map_line=_COMPACT_BODY_MAP_PROMPT_LINE,
         roadmap_gate_line=roadmap_gate_line,
         trust_line=trust_line,
         topic_artifact=_topic_artifact_line(topic, surface_limit=96),
         prior_check=prior_check,
+        codex_response=codex_response,
+        loop_line=loop_line,
+    )
+    if len(prompt) <= _MAX_DRIVER_PROMPT_CHARS:
+        return prompt
+    return _compose_driver_prompt(
+        turn_label=turn_label,
+        topic=_bounded_text(topic, limit=72),
+        body_map_line=_COMPACT_BODY_MAP_PROMPT_LINE,
+        roadmap_gate_line=roadmap_gate_line,
+        trust_line=trust_line,
+        topic_artifact=_topic_artifact_line(topic, surface_limit=72),
+        prior_check=_extra_compact_prior_check(prior_check),
         codex_response=codex_response,
         loop_line=loop_line,
     )
@@ -410,6 +425,7 @@ def _compose_driver_prompt(
         f"{body_map}"
         f" {roadmap_gate_line}"
         f" {trust_line}"
+        f" {_SOURCE_ALIGNMENT_PROMPT_LINE}"
         f"{topic_artifact}{prior_check}{codex_response}{loop_line}"
     )
 
@@ -417,16 +433,16 @@ def _compose_driver_prompt(
 def _guard_prompt_line(guard_signal: dict[str, object]) -> str:
     terms = [str(term) for term in _list(guard_signal.get("repeated_terms"))]
     if "stale_action_readiness_topic_replay" in terms:
-        return " Guard note: stale action-readiness replay stored as learning receipt; answer current topic only."
-    return " Guard note: drift stored as learning receipt; answer current topic."
+        return " Guard: stale replay learned; answer topic."
+    return " Guard: drift learned; answer topic."
 
 
 def _codex_response_line(review_line: str) -> str:
     if not review_line:
         return ""
     if "build_or_wire=false" in review_line:
-        return " Codex response: inspecting cited surface; no action authority."
-    return " Codex response: I am verifying repo truth before build/wiring."
+        return " Codex: validating; no action authority."
+    return " Codex: verifying repo truth before build."
 
 
 def _compact_review_line(review_line: str) -> str:
@@ -456,6 +472,23 @@ def _field_after(value: str, marker: str, end_marker: str) -> str:
     if end < 0:
         end = len(value)
     return value[after_marker:end].strip()
+
+
+def _extra_compact_prior_check(prior_check: str) -> str:
+    if not prior_check:
+        return ""
+    insight_id = _field_after(prior_check, "Review candidate ", ":")
+    verified = _field_after(prior_check, "verified=", ";")
+    build_or_wire = _field_after(prior_check, "build_or_wire=", ".")
+    if not insight_id:
+        return _bounded_text(prior_check, limit=80)
+    suffix_parts = []
+    if verified:
+        suffix_parts.append(f"verified={verified}")
+    if build_or_wire:
+        suffix_parts.append(f"build_or_wire={build_or_wire}")
+    suffix = f"; {'; '.join(suffix_parts)}" if suffix_parts else ""
+    return f" Prior check: Review candidate {_bounded_text(insight_id, limit=_PROMPT_REVIEW_ID_LIMIT)}{suffix}."
 
 
 def _topic_artifact_line(topic: str, *, surface_limit: int = 140) -> str:

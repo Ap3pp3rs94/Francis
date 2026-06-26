@@ -96177,6 +96177,59 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, and browser proof were not run for this
   bounded readback slice.
 
+### 2026-06-26 02:48Z - Claude-aware Francis-focused collaboration prompt
+
+Current posture: Phase 2 / developer bridge collaboration driver now tells the
+Codex-to-Francis1 relay to acknowledge Claude as an external guidance source
+while keeping the conversation focused on Francis and validation before build
+action.
+
+What changed:
+
+- Added a compact prompt line: `Claude guides; Francis focus; validate.`
+- Kept the existing body-map, roadmap-gate, trust-ladder, review-artifact, and
+  no-authority prompt context under the existing 700-character driver prompt
+  ceiling.
+- Shortened prompt-only review IDs, guard/loop notes, and Codex response wording
+  so Claude acknowledgment does not crowd out Francis body or validation
+  context. Full receipt IDs remain in the underlying review receipts.
+- Added a compact body-map fallback and extra-compact prior-check fallback for
+  guard or loop turns that would otherwise exceed the prompt budget.
+- Added a regression assertion that recurring Codex prompts carry the Claude
+  guidance, Francis focus, and validation line.
+
+Validation:
+
+- Focused collaboration prompt contract passed:
+  `python -m pytest tests/test_developer_bridge.py::test_collaboration_driver_waits_for_ollama_before_next_turn -q`.
+- Focused prompt-budget guard group passed:
+  `python -m pytest tests/test_developer_bridge.py::test_collaboration_driver_waits_for_ollama_before_next_turn tests/test_developer_bridge.py::test_collaboration_driver_records_meta_loop_as_learning_event tests/test_developer_bridge.py::test_collaboration_driver_rotates_topics_after_repeated_output_guard_receipts tests/test_developer_bridge.py::test_collaboration_driver_compacts_long_review_line_into_prompt_budget -q`.
+- Full developer bridge test file passed:
+  `python -m pytest tests/test_developer_bridge.py -q`.
+- Prompt-length probes generated Codex-to-Francis1 prompts at 696, 506, and 690
+  characters; each kept `Body map:` and `Claude guides; Francis focus; validate.`
+- Targeted lint passed:
+  `python -m ruff check src/francis/developer_bridge/collaboration_driver.py tests/test_developer_bridge.py`.
+- Targeted format check passed:
+  `python -m ruff format --check src/francis/developer_bridge/collaboration_driver.py tests/test_developer_bridge.py`.
+- Targeted typing passed:
+  `python -m mypy src/francis/developer_bridge/collaboration_driver.py`.
+- Post-refresh live runtime proof passed:
+  `GET /developer-bridge/collaboration-runtime-health` returned `status:
+  healthy`, `helper_count: 3`, and one effective worker for each helper.
+- Post-refresh live relay proof passed:
+  `GET /developer-bridge/collaboration-transcript?source_agent=codex&target_agent=ollama&limit=30`
+  found a driver prompt with `Claude guides; Francis focus; validate.`,
+  `Body map:`, `Trust: classify needs`, and length 619 characters.
+
+Remaining truthful gap:
+
+- This is relay prompt guidance only. It does not grant Claude, Codex, or
+  Francis1 execution, mutation, approval, memory-write, model-training, or
+  capability authority.
+- `.\scripts\check.ps1`, GitHub CI, and browser proof were not run for this
+  bounded prompt-contract slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

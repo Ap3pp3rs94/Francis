@@ -1124,6 +1124,7 @@ def test_collaboration_driver_waits_for_ollama_before_next_turn(tmp_path, monkey
     assert all("main-build candidate-only" in prompt for prompt in prompts)
     assert all("blocked_by_open_orb_gaps" in prompt for prompt in prompts)
     assert all("Trust: classify needs; no capability authority" in prompt for prompt in prompts)
+    assert all("Claude guides; Francis focus; validate." in prompt for prompt in prompts)
     assert all("francis1-collaboration-compact-contract-v1" in prompt for prompt in prompts)
     assert all("issue/gap/risk" in prompt for prompt in prompts)
     assert all("Do not claim execution" not in prompt for prompt in prompts)
@@ -1133,7 +1134,7 @@ def test_collaboration_driver_waits_for_ollama_before_next_turn(tmp_path, monkey
     assert "surface=apps.chat_ui.communication" in latest_prompt
     assert "verified=existing" in latest_prompt
     assert "build_or_wire=false" in latest_prompt
-    assert "Codex response: inspecting cited surface" in latest_prompt
+    assert "Codex: validating" in latest_prompt
     assert "no action authority" in latest_prompt
     assert "Prior check:" not in prompts[1]
     assert "Current artifact: apps.chat_ui.communication" in prompts[1]
@@ -1992,10 +1993,10 @@ def test_collaboration_driver_records_meta_loop_as_learning_event(tmp_path, monk
     assert turn["turn_count"] == 5
     transcript = read_collaboration_transcript(source_agent="codex", target_agent="ollama", limit=1)
     latest_prompt = str(transcript["items"][0]["prompt"])
-    assert "Loop note" in latest_prompt
-    assert "use prior surface, not meta" in latest_prompt
+    assert "Loop:" in latest_prompt
+    assert "use prior surface" in latest_prompt
     assert "Review candidate insight-" in latest_prompt
-    assert "Codex response: inspecting cited surface" in latest_prompt
+    assert "Codex: validating" in latest_prompt
     assert "no action authority" in latest_prompt
     assert len(latest_prompt) <= 700
 
@@ -2025,7 +2026,7 @@ def test_collaboration_driver_records_meta_loop_as_learning_event(tmp_path, monk
     assert next_turn["status"] == "submitted"
     transcript = read_collaboration_transcript(source_agent="codex", target_agent="ollama", limit=1)
     next_prompt = str(transcript["items"][0]["prompt"])
-    assert "surface=developer_bridge.collaboration_driver.learning_events" in next_prompt
+    assert "Current artifact: developer_bridge.collaboration_driver.learning_events" in next_prompt
     assert "verified=existing" in next_prompt
     assert "build_or_wire=false" in next_prompt
 
@@ -2051,11 +2052,11 @@ def test_collaboration_driver_compacts_long_review_line_into_prompt_budget(tmp_p
     prompt = str(transcript["items"][0]["prompt"])
     assert "Roadmap: ledger first" in prompt
     assert "main-build candidate-only" in prompt
-    assert "Prior check: Review candidate insight-live-long-canonical-roadma" in prompt
+    assert "Prior check: Review candidate insight-live-long-" in prompt
     assert "surface=docs/operations/COMPLETION_LEDGER.md + docs/canonical/BUILD_MANIFEST.md" in prompt
     assert "verified=canonical" in prompt
     assert "build_or_wire=false" in prompt
-    assert "Codex response: inspecting cited surface; no action authority" in prompt
+    assert "Codex: validating; no action authority" in prompt
     assert len(prompt) <= 700
 
 
@@ -2138,9 +2139,9 @@ def test_collaboration_driver_records_user_confirmation_fallback_as_learning_eve
     assert turn["status"] == "submitted"
     transcript = read_collaboration_transcript(source_agent="codex", target_agent="ollama", limit=1)
     latest_prompt = str(transcript["items"][0]["prompt"])
-    assert "Loop note" in latest_prompt
+    assert "Loop:" in latest_prompt
     assert "user_confirmation_fallback" in latest_prompt
-    assert "use prior surface, not meta" in latest_prompt
+    assert "use prior surface" in latest_prompt
 
     learning_root = tmp_path / "data" / "integrations" / "developer_bridge" / "collaboration_driver" / "learning_events"
     events = list(learning_root.glob("learning-*.json"))
@@ -2186,10 +2187,11 @@ def test_collaboration_driver_rotates_topics_after_repeated_output_guard_receipt
         in latest_prompt
     )
     assert "Current artifact: api.routes.chat.mission_ingress" in latest_prompt
-    assert "Guard note: stale action-readiness replay stored as learning receipt" in latest_prompt
-    assert "answer current topic only" in latest_prompt
+    assert "Guard: stale replay learned; answer topic." in latest_prompt
+    assert "Claude guides; Francis focus; validate." in latest_prompt
+    assert len(latest_prompt) <= 700
     assert "current repetitive meta loop" not in latest_prompt
-    assert "Loop note" not in latest_prompt
+    assert "Loop:" not in latest_prompt
 
     readback = read_collaboration_learning_events(limit=5, failure_type="output_guard_drift")
     assert readback["count"] == 1
