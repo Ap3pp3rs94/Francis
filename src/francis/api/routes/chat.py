@@ -170,6 +170,7 @@ def _mission_ingress_ws_event(payload: dict[str, object]) -> str:
             "receipt_summary",
             "memory_receipt_count",
             "latest_memory_receipt",
+            "action_candidate",
             "governance",
         )
         if key in payload
@@ -193,8 +194,10 @@ def _compact_mission_ingress_meta(
     loop_state: dict[str, object],
     current_task: dict[str, object],
     receipt_summary: dict[str, object],
+    action_candidate: dict[str, object] | None = None,
 ) -> dict[str, object]:
     handoff = _safe_dict(loop_state.get("handoff"))
+    candidate = action_candidate if isinstance(action_candidate, dict) else {}
     meta: dict[str, object] = {
         "mode": "mission_ingress",
         "status": record.status.value,
@@ -229,6 +232,31 @@ def _compact_mission_ingress_meta(
         "run_ledger_count": _safe_int(receipt_summary.get("run_ledger_count") or 0),
         "memory_receipt_count": _safe_int(receipt_summary.get("memory_receipt_count") or 0),
     }
+    if candidate:
+        meta.update(
+            {
+                "action_candidate_kind": str(candidate.get("kind") or "").strip(),
+                "action_candidate_status": str(candidate.get("status") or "").strip(),
+                "action_candidate_surface": str(candidate.get("surface") or "").strip(),
+                "action_candidate_source_mode": str(candidate.get("source_mode") or "").strip(),
+                "action_candidate_mission_id": str(candidate.get("mission_id") or "").strip(),
+                "action_candidate_operation_id": str(candidate.get("operation_id") or "").strip(),
+                "action_candidate_first_operation_id": str(candidate.get("first_operation_id") or "").strip(),
+                "action_candidate_operation_name": str(candidate.get("operation_name") or "").strip(),
+                "action_candidate_gate": str(candidate.get("gate") or "").strip(),
+                "action_candidate_requires_policy": bool(candidate.get("requires_policy")) is True,
+                "action_candidate_requires_approval": bool(candidate.get("requires_approval")) is True,
+                "action_candidate_requires_traceable_receipt": bool(candidate.get("requires_traceable_receipt"))
+                is True,
+                "action_candidate_grants_execution_authority": bool(candidate.get("grants_execution_authority"))
+                is True,
+                "action_candidate_grants_mutation_authority": bool(candidate.get("grants_mutation_authority")) is True,
+                "action_candidate_grants_approval_authority": bool(candidate.get("grants_approval_authority")) is True,
+                "action_candidate_grants_memory_write_authority": bool(candidate.get("grants_memory_write_authority"))
+                is True,
+                "action_candidate_grants_training_authority": bool(candidate.get("grants_training_authority")) is True,
+            }
+        )
     return {key: value for key, value in meta.items() if value not in {"", None}}
 
 
@@ -560,6 +588,58 @@ def _mission_ingress_request_meta(payload: ChatIn, intent_meta: dict[str, Any]) 
     return meta
 
 
+def _mission_ingress_source_mode(payload: ChatIn) -> str:
+    actor = _chat_actor(payload).strip().lower()
+    if actor in _FRANCIS_VOICE_SURFACE_ACTORS or payload.voice_turn_id or payload.supersedes_voice_turn_id:
+        return "spoken"
+    return "typed"
+
+
+def _mission_ingress_action_candidate(
+    *,
+    payload: ChatIn,
+    record: mission_store.MissionRecord,
+    operation_id: str,
+    current_task: dict[str, object],
+    route: str,
+    method: str,
+) -> dict[str, object]:
+    candidate_operation_id = str(current_task.get("operation_id") or operation_id).strip()
+    operation_name = str(current_task.get("operation_name") or "plan.create").strip()
+    operation_plane = str(current_task.get("operation_plane") or "P7_EXECUTION").strip()
+    gate = str(current_task.get("gate") or "policy_and_approval").strip()
+    return {
+        "kind": "francis.action_candidate",
+        "schema_version": "francis_action_candidate_v1",
+        "status": "queued_for_governed_review",
+        "surface": "api.routes.chat.mission_ingress",
+        "source": "chat.send",
+        "source_mode": _mission_ingress_source_mode(payload),
+        "route": route,
+        "method": method,
+        "mission_id": record.mission_id,
+        "operation_id": candidate_operation_id,
+        "first_operation_id": operation_id,
+        "operation_name": operation_name,
+        "operation_plane": operation_plane,
+        "gate": gate,
+        "candidate_created": bool(candidate_operation_id),
+        "creates_mission": True,
+        "creates_first_operation_candidate": bool(operation_id),
+        "direct_execution": False,
+        "requires_policy": True,
+        "requires_approval": True,
+        "requires_traceable_receipt": True,
+        "requires_codex_or_operator_review": True,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "grants_approval_authority": False,
+        "grants_memory_write_authority": False,
+        "grants_training_authority": False,
+        "next_step": str(current_task.get("next_step") or "review_or_approve_queued_operation").strip(),
+    }
+
+
 def _mission_orb_embodiment_projection(
     *,
     record: mission_store.MissionRecord,
@@ -779,6 +859,14 @@ def _mission_ingress_reply(
     action = str(handoff.get("action") or "link_operation").strip()
     advance = _compact_mission_advance_result(advance_result)
     operation_id = str(advance.get("operation_id") or "").strip()
+    action_candidate = _mission_ingress_action_candidate(
+        payload=payload,
+        record=projected_record,
+        operation_id=operation_id,
+        current_task=current_task,
+        route=route,
+        method=method,
+    )
     if bool(advance.get("applied")) and operation_id:
         reply = (
             f"Mission {projected_record.mission_id} declared. First operation {operation_id} queued. Next: {action}."
@@ -796,6 +884,7 @@ def _mission_ingress_reply(
             loop_state=loop_state,
             current_task=current_task,
             receipt_summary=receipt_summary,
+            action_candidate=action_candidate,
         ),
     )
 
@@ -807,6 +896,7 @@ def _mission_ingress_reply(
         "mission_id": projected_record.mission_id,
         "mission": mission_routes._serialize_mission(projected_record, queue_item),
         "advance": advance,
+        "action_candidate": action_candidate,
     }
     if operation_id:
         response["operation_id"] = operation_id

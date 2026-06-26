@@ -61,6 +61,25 @@ def test_chat_mission_command_declares_queued_mission_with_loop_context(monkeypa
     assert body["current_task"]["operation_plane"] == "P7_EXECUTION"
     assert body["current_task"]["advance_action"] == "create_first_operation"
     assert body["current_task"]["handoff_action"] == "run_linked_operation"
+    action_candidate = body["action_candidate"]
+    assert action_candidate["kind"] == "francis.action_candidate"
+    assert action_candidate["status"] == "queued_for_governed_review"
+    assert action_candidate["surface"] == "api.routes.chat.mission_ingress"
+    assert action_candidate["source_mode"] == "typed"
+    assert action_candidate["mission_id"] == mission_id
+    assert action_candidate["operation_id"] == operation_id
+    assert action_candidate["first_operation_id"] == operation_id
+    assert action_candidate["operation_name"] == "plan.create"
+    assert action_candidate["candidate_created"] is True
+    assert action_candidate["direct_execution"] is False
+    assert action_candidate["requires_policy"] is True
+    assert action_candidate["requires_approval"] is True
+    assert action_candidate["requires_traceable_receipt"] is True
+    assert action_candidate["grants_execution_authority"] is False
+    assert action_candidate["grants_mutation_authority"] is False
+    assert action_candidate["grants_approval_authority"] is False
+    assert action_candidate["grants_memory_write_authority"] is False
+    assert action_candidate["grants_training_authority"] is False
 
     fetched = client.get(f"/missions/{mission_id}")
     assert fetched.status_code == 200
@@ -99,6 +118,22 @@ def test_chat_mission_command_declares_queued_mission_with_loop_context(monkeypa
     assert assistant_meta["current_task_operation_plane"] == "P7_EXECUTION"
     assert assistant_meta["current_task_advance_action"] == "create_first_operation"
     assert assistant_meta["current_task_next_step"] == body["current_task"]["next_step"]
+    assert assistant_meta["action_candidate_kind"] == "francis.action_candidate"
+    assert assistant_meta["action_candidate_status"] == "queued_for_governed_review"
+    assert assistant_meta["action_candidate_surface"] == "api.routes.chat.mission_ingress"
+    assert assistant_meta["action_candidate_source_mode"] == "typed"
+    assert assistant_meta["action_candidate_mission_id"] == mission_id
+    assert assistant_meta["action_candidate_operation_id"] == operation_id
+    assert assistant_meta["action_candidate_first_operation_id"] == operation_id
+    assert assistant_meta["action_candidate_operation_name"] == "plan.create"
+    assert assistant_meta["action_candidate_requires_policy"] is True
+    assert assistant_meta["action_candidate_requires_approval"] is True
+    assert assistant_meta["action_candidate_requires_traceable_receipt"] is True
+    assert assistant_meta["action_candidate_grants_execution_authority"] is False
+    assert assistant_meta["action_candidate_grants_mutation_authority"] is False
+    assert assistant_meta["action_candidate_grants_approval_authority"] is False
+    assert assistant_meta["action_candidate_grants_memory_write_authority"] is False
+    assert assistant_meta["action_candidate_grants_training_authority"] is False
     assert assistant_meta["linked_operation_count"] == 1
     assert assistant_meta["run_ledger_count"] == 1
     assert assistant_meta["memory_receipt_count"] == 0
@@ -229,6 +264,17 @@ def test_chat_mona_lisa_voice_intent_declares_truthful_sandbox_mission(monkeypat
     sandbox_operation_id = str(body["sandbox_operation_id"])
     assert sandbox_operation_id.startswith("tsk_")
     assert sandbox_operation_id != operation_id
+    action_candidate = body["action_candidate"]
+    assert action_candidate["source_mode"] == "spoken"
+    assert action_candidate["mission_id"] == mission_id
+    assert action_candidate["operation_id"] == sandbox_operation_id
+    assert action_candidate["first_operation_id"] == operation_id
+    assert action_candidate["operation_name"] == "sandbox.canvas.paint_mona_lisa"
+    assert action_candidate["direct_execution"] is False
+    assert action_candidate["requires_policy"] is True
+    assert action_candidate["requires_approval"] is True
+    assert action_candidate["grants_execution_authority"] is False
+    assert action_candidate["grants_mutation_authority"] is False
     assert body["sandbox_operation_queued"] is True
     assert body["advance"]["linked_operation_id"] == sandbox_operation_id
     assert body["advance"]["linked_operation_action"] == "sandbox.canvas.paint_mona_lisa"
@@ -1012,6 +1058,13 @@ def test_chat_websocket_structured_message_declares_mission(monkeypatch, tmp_pat
     assert meta["advance"]["action"] == "create_first_operation"
     assert meta["advance"]["operation_id"] == operation_id
     assert meta["operation"]["id"] == operation_id
+    assert meta["action_candidate"]["kind"] == "francis.action_candidate"
+    assert meta["action_candidate"]["source_mode"] == "typed"
+    assert meta["action_candidate"]["mission_id"] == mission_id
+    assert meta["action_candidate"]["operation_id"] == operation_id
+    assert meta["action_candidate"]["direct_execution"] is False
+    assert meta["action_candidate"]["grants_execution_authority"] is False
+    assert meta["action_candidate"]["grants_mutation_authority"] is False
     assert meta["queue_item"]["recommended_action"] == "run_linked_operation"
     assert meta["queue_item"]["action_target_id"] == operation_id
     assert meta["loop_state"]["active_stage"] == "execute"

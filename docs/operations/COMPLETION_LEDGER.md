@@ -95936,6 +95936,57 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, and foreground browser proof were not run
   for this bounded grant/readback-cache slice.
 
+### 2026-06-26 02:05Z - Chat mission ingress exposes action-candidate boundary
+
+Current posture: Phase 2 / chat mission ingress now returns a typed
+`francis.action_candidate` contract when typed or spoken operator direction is
+converted into a queued mission operation. This gives Francis1, Codex review, and
+operator-facing UI/readbacks a concrete candidate boundary instead of relying on
+generic mission-ingress wording.
+
+What changed:
+
+- Added a bounded action-candidate projection to
+  `api.routes.chat.mission_ingress`.
+- The candidate identifies the ingress surface, source mode (`typed` or
+  `spoken`), mission id, current queued operation id, first planning operation
+  id, operation name, gate, and next step.
+- The candidate contract states that the ingress creates queued mission/operation
+  candidates only and grants no execution, mutation, approval, memory-write, or
+  training authority.
+- Threaded the candidate into `/chat/send` responses, `/chat/ws` structured
+  mission events, and compact conversation-ledger metadata.
+- Covered the single-operation typed `/mission` path and the multi-operation
+  spoken Mona Lisa sandbox path, where the current candidate is the sandbox
+  operation while `first_operation_id` remains the `plan.create` operation.
+
+Validation:
+
+- Focused chat mission-ingress tests passed:
+  `python -m pytest tests/test_api_chat.py::test_chat_mission_command_declares_queued_mission_with_loop_context tests/test_api_chat.py::test_chat_mona_lisa_voice_intent_declares_truthful_sandbox_mission tests/test_api_chat.py::test_chat_websocket_structured_message_declares_mission -q`.
+- Full chat API test file passed:
+  `python -m pytest tests/test_api_chat.py -q` with 12 tests.
+- Targeted lint passed:
+  `python -m ruff check src/francis/api/routes/chat.py tests/test_api_chat.py`.
+- Targeted format check passed:
+  `python -m ruff format --check src/francis/api/routes/chat.py tests/test_api_chat.py`.
+- Targeted typing passed:
+  `python -m mypy src/francis/api/routes/chat.py`.
+- Live API was restarted after the route change. `/chat/health` returned
+  `ok=true`, and `/developer-bridge/collaboration-runtime-health` remained
+  `status=healthy` with three effective collaboration helpers running.
+
+Remaining truthful gap:
+
+- This is a response/readback contract for queued action candidates. It does not
+  run queued operations, approve gates, mutate files, write memory, train
+  Francis1, or grant the local model direct tool use.
+- The collaboration loop may still produce output-guard drift; this slice gives
+  the loop a clearer existing surface to cite, but it is not model tuning.
+- `.\scripts\check.ps1`, GitHub CI, live mission-creation proof against the
+  operator data dir, and foreground browser proof were not run for this bounded
+  chat-ingress contract slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
