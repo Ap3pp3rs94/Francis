@@ -480,6 +480,16 @@ export type CollaborationSubstrateChecklistDisplay = {
   detail: string[];
 };
 
+export type CollaborationReadbackFreshnessDisplay = {
+  badge: string;
+  tone: CollaborationReviewTone;
+  status: string;
+  ageSeconds: number | null;
+  ttlSeconds: number | null;
+  stale: boolean;
+  detail: string[];
+};
+
 export type FrancisBodySurface = {
   id: string;
   label: string;
@@ -2789,6 +2799,36 @@ export function collaborationSubstrateChecklistSummary(
       `gate ${readiness?.summary.mainBuildPromptGate || "unknown"}`,
       `wire ${readiness?.summary.boundedWiringPercentComplete ?? 0}%`,
       `authority none ${actionBoundaryBool(authorityNone)}`,
+    ],
+  };
+}
+
+export function collaborationReadbackFreshnessSummary(
+  cache: CollaborationReadbackCache | null | undefined,
+  label = "readback",
+): CollaborationReadbackFreshnessDisplay {
+  const status = cache?.status || "unknown";
+  const ageSeconds = typeof cache?.ageMs === "number" ? Math.max(0, Math.round(cache.ageMs / 1000)) : null;
+  const ttlSeconds = typeof cache?.ttlMs === "number" ? Math.max(0, Math.round(cache.ttlMs / 1000)) : null;
+  const staleByAge = ageSeconds !== null && ttlSeconds !== null && ageSeconds > ttlSeconds;
+  const warming = status === "warming";
+  const stale = status === "stale_refreshing" || staleByAge;
+  const current = status === "hit" || status === "refreshed";
+  const tone: CollaborationReviewTone = stale ? "blocked" : warming || !current ? "neutral" : "ready";
+  const badge = stale ? `${label} stale` : warming ? `${label} warming` : current ? `${label} fresh` : `${label} unknown`;
+  return {
+    badge,
+    tone,
+    status,
+    ageSeconds,
+    ttlSeconds,
+    stale,
+    detail: [
+      `status ${status}`,
+      `age ${ageSeconds ?? "unknown"}s`,
+      `ttl ${ttlSeconds ?? "unknown"}s`,
+      `stale ${actionBoundaryBool(stale)}`,
+      `full transcript ${actionBoundaryBool(Boolean(cache?.servesFullTranscriptStore))}`,
     ],
   };
 }

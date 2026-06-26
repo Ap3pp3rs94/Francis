@@ -10,6 +10,7 @@ import {
   collaborationLearningGuardSummary,
   collaborationLiveAdviceReadinessSummary,
   collaborationLiveHealthProofSummary,
+  collaborationReadbackFreshnessSummary,
   collaborationReviewBadge,
   collaborationReviewNextAction,
   collaborationReviewTone,
@@ -1158,6 +1159,31 @@ test("parseCollaborationSubstrateReadiness preserves main-build prompt gate", ()
     "wire 100%",
     "authority none true",
   ]);
+
+  const freshness = collaborationReadbackFreshnessSummary(readiness.readbackCache, "readiness");
+  assert.equal(freshness.badge, "readiness fresh");
+  assert.equal(freshness.tone, "ready");
+  assert.equal(freshness.stale, false);
+  assert.deepEqual(freshness.detail, [
+    "status refreshed",
+    "age 0s",
+    "ttl 3s",
+    "stale false",
+    "full transcript false",
+  ]);
+
+  const staleFreshness = collaborationReadbackFreshnessSummary(
+    {
+      status: "stale_refreshing",
+      ageMs: 4200,
+      ttlMs: 3000,
+      servesFullTranscriptStore: false,
+    },
+    "roadmap",
+  );
+  assert.equal(staleFreshness.badge, "roadmap stale");
+  assert.equal(staleFreshness.tone, "blocked");
+  assert.equal(staleFreshness.stale, true);
 });
 
 test("parseFrancisTrustLadder preserves decisions and no-authority boundaries", () => {

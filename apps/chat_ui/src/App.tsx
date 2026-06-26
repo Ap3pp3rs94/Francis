@@ -38,6 +38,7 @@ import {
   collaborationRuntimeLearningReceiptSummary,
   collaborationRuntimeLearningSignalSummary,
   collaborationRuntimeReviewReceiptSummary,
+  collaborationReadbackFreshnessSummary,
   collaborationSubstrateChecklistSummary,
   collaborationSessionTranscriptDisclosureSummary,
   filterCollaborationTranscriptItems,
@@ -1405,6 +1406,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
   const substrateSummary = substrateReadiness?.summary;
   const substrateChecklistItems = substrateReadiness?.checklist ?? [];
   const substrateChecklistProof = collaborationSubstrateChecklistSummary(substrateReadiness);
+  const substrateFreshnessProof = collaborationReadbackFreshnessSummary(substrateReadiness?.readbackCache, "readiness");
   const substrateBlockedItems = substrateReadiness?.checklist.filter((item) => item.blocksMainBuildPrompt && item.status !== "passed") ?? [];
   const substrateOpenOrbGaps = substrateReadiness?.openOrbGaps ?? [];
   const roadmapAlignment = substrateReadiness?.roadmapAlignment;
@@ -1704,6 +1706,12 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
                 <div style={{ overflowWrap: "anywhere" }}>{roadmapAlignment.mainBuildPromptGate || "requires_alignment_review"}</div>
               </div>
               <div>
+                <div style={{ color: "#94a3b8", fontSize: 12, textTransform: "uppercase" }}>UI Freshness</div>
+                <div style={{ color: substrateFreshnessProof.tone === "blocked" ? "#fecaca" : "#cbd5e1", overflowWrap: "anywhere" }}>
+                  {substrateFreshnessProof.badge}
+                </div>
+              </div>
+              <div>
                 <div style={{ color: "#94a3b8", fontSize: 12, textTransform: "uppercase" }}>Blocking Items</div>
                 <div style={{ overflowWrap: "anywhere" }}>{roadmapAlignment.blockingItems.join(", ") || "none"}</div>
               </div>
@@ -1713,6 +1721,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
               <span>ledger {boolText(roadmapAlignment.ledgerObserved)}</span>
               <span>manifest {boolText(roadmapAlignment.manifestObserved)}</span>
               <span>check required {boolText(roadmapAlignment.promptCheckRequired)}</span>
+              <span>ui stale {boolText(substrateFreshnessProof.stale)}</span>
               <span>candidate only {boolText(roadmapAlignment.candidateOnlyUntilReview)}</span>
               <span>main build prompt {boolText(roadmapAlignment.mainBuildPromptAllowed)}</span>
               <span>execute {boolText(roadmapAlignment.grantsExecutionAuthority)}</span>

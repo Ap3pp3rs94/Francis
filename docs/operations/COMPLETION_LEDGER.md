@@ -98798,6 +98798,51 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, browser screenshot proof, GitHub CI, and broader
   ORB/body validation were not run for this bounded prompt-check slice.
 
+### 2026-06-26 08:53Z - Roadmap-readiness UI freshness surfaced
+
+Current posture: Phase 2 / P1 Communication UI now makes substrate-readiness
+freshness part of the Roadmap Alignment display. This responds to the live
+Francis1 relay gap about stale UI components during readiness roadmap
+alignment by using the existing readback-cache contract instead of inventing a
+new freshness source.
+
+What changed:
+
+- Added `collaborationReadbackFreshnessSummary()` for collaboration readbacks,
+  deriving `fresh`, `warming`, `stale`, or `unknown` from existing
+  `readback_cache.status`, `age_ms`, and `ttl_ms`.
+- Added Chat UI parser coverage proving refreshed readbacks show
+  `readiness fresh` and stale-refreshing readbacks show `roadmap stale`.
+- Added `UI Freshness` and `ui stale` indicators inside the Communication
+  panel's Roadmap Alignment block, tied to
+  `collaboration_substrate_readiness.readback_cache`.
+- This is display/readback-only: it does not alter substrate-readiness truth,
+  clear roadmap blockers, start helpers, call models, execute actions, grant
+  authority, or promote memory.
+
+Validation:
+
+- Focused Chat UI parser test passed:
+  `cd apps\chat_ui; node --test --experimental-strip-types src\chat\index.test.ts`.
+- Full Chat UI test suite passed:
+  `cd apps\chat_ui; npm run test` with 284 tests.
+- Chat UI production build passed:
+  `cd apps\chat_ui; npm run build`.
+- `git diff --check` passed.
+- Existing local Chat UI dev server returned HTTP `200` at
+  `http://127.0.0.1:5173/`.
+- Live collaboration runtime remained healthy before this UI-only slice:
+  `status=healthy`, `helper_count=3`,
+  `driver_prompt_budget.status=ok`, and latest prompt within budget.
+
+Remaining truthful gap:
+
+- This makes stale/warming substrate-readiness UI state visible; it does not
+  prove the browser rendered the new field by screenshot, clear ORB blockers,
+  tune Francis1, grant Ollama capability, or execute model advice.
+- `.\scripts\check.ps1`, browser screenshot proof, GitHub CI, and broader
+  ORB/body validation were not run for this bounded UI freshness slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
