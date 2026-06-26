@@ -18,9 +18,10 @@ def read_francis_body_map() -> dict[str, object]:
 
     root = repo_root()
     capability_grants = read_francis_capability_grants()
+    raw_grant_items = capability_grants.get("items")
     grant_items = [
         _dict(item)
-        for item in capability_grants.get("items", [])
+        for item in (raw_grant_items if isinstance(raw_grant_items, list) else [])
         if isinstance(item, dict) and _safe_str(item.get("surface_id"))
     ]
     grant_by_surface = {_safe_str(item.get("surface_id")): item for item in grant_items}
@@ -42,6 +43,7 @@ def read_francis_body_map() -> dict[str, object]:
     candidate = sum(1 for surface in surfaces if surface["connection_state"] == "candidate")
     blocked = sum(1 for surface in surfaces if surface["connection_state"] == "blocked")
     unknown = sum(1 for surface in surfaces if surface["connection_state"] == "unknown")
+    exposure_summary = _body_exposure_summary(surfaces)
 
     return {
         "kind": "developer_bridge.francis_body_map",
@@ -83,6 +85,11 @@ def read_francis_body_map() -> dict[str, object]:
             "default_access_mode": "observe",
             "full_body_visible": True,
             "full_body_authority_granted": False,
+            "visible_surface_count": exposure_summary.get("visible_surface_count", 0),
+            "connected_to_local_model_count": exposure_summary.get("connected_to_local_model_count", 0),
+            "capability_granted_count": exposure_summary.get("capability_granted_count", 0),
+            "not_exposed_surface_count": exposure_summary.get("not_exposed_surface_count", 0),
+            "review_required_surface_count": exposure_summary.get("review_required_surface_count", 0),
             "active_capability_grant_count": _safe_int(_dict(capability_grants.get("summary")).get("granted_count")),
             "denied_or_revoked_capability_count": _safe_int(
                 _dict(capability_grants.get("summary")).get("denied_or_revoked_count")
@@ -148,8 +155,10 @@ def read_francis_body_map() -> dict[str, object]:
             "access_mode": "The highest declared interaction mode this readback exposes to Francis1 today.",
             "connection_state": "Whether the surface is wired to this collaboration readback, partially connected elsewhere, candidate-only, blocked, or unknown.",
             "capability_exposure": "A per-surface verdict separating Francis1 visibility from permission to use that capability.",
+            "exposure_summary": "A compact readback of which visible body surfaces are exposed to Francis1 capability use and which still require review.",
             "coverage_review": "A read-only map from canonical ORB planes to known Francis surfaces; it is not capability completion.",
         },
+        "exposure_summary": exposure_summary,
         "evidence": {
             "manifest_observed": _exists(root / "docs" / "canonical" / "BUILD_MANIFEST.md"),
             "ledger_observed": _exists(root / "docs" / "operations" / "COMPLETION_LEDGER.md"),
@@ -201,7 +210,15 @@ def read_francis_body_map() -> dict[str, object]:
 def compact_body_map_prompt_line() -> str:
     """Return a bounded prompt line for Francis1 collaboration turns."""
 
-    return _one_line("Body map: whole-body visible; capability use requires grant receipt; stale memory detaches.")
+    body = read_francis_body_map()
+    exposure = _dict(body.get("exposure_summary"))
+    visible = _safe_int(exposure.get("visible_surface_count"))
+    exposed = _safe_int(exposure.get("connected_to_local_model_count"))
+    not_exposed = _safe_int(exposure.get("not_exposed_surface_count"))
+    return _one_line(
+        f"Body map: {visible} visible; {exposed} exposed; {not_exposed} not exposed; "
+        "capability use requires grant receipt; stale memory detaches."
+    )
 
 
 def compact_roadmap_gate_prompt_line() -> str:
@@ -472,6 +489,82 @@ def _surface_capability_exposure(
         "grants_training_authority": False,
         "grants_capability_authority": capability_granted,
         "detached_memory_bin": detached_memory_bin,
+    }
+
+
+def _body_exposure_summary(surfaces: list[dict[str, object]]) -> dict[str, object]:
+    visible: list[str] = []
+    readback_connected: list[str] = []
+    connected_to_local_model: list[str] = []
+    granted: list[str] = []
+    safe_for_capability_use: list[str] = []
+    not_exposed: list[str] = []
+    review_required: list[str] = []
+    grant_required: list[str] = []
+    detached_memory: list[str] = []
+    for surface in surfaces:
+        surface_id = _safe_str(surface.get("id"))
+        if not surface_id:
+            continue
+        exposure = _dict(surface.get("capability_exposure"))
+        if bool(exposure.get("visible_to_francis1")):
+            visible.append(surface_id)
+        if bool(exposure.get("readback_connected")):
+            readback_connected.append(surface_id)
+        if bool(exposure.get("connected_to_local_model")):
+            connected_to_local_model.append(surface_id)
+        if bool(exposure.get("capability_granted")):
+            granted.append(surface_id)
+        if bool(exposure.get("safe_for_capability_use")):
+            safe_for_capability_use.append(surface_id)
+        if _safe_str(exposure.get("capability_use_status")) == "not_exposed":
+            not_exposed.append(surface_id)
+        if bool(exposure.get("requires_codex_or_operator_review_before_capability_exposure")):
+            review_required.append(surface_id)
+        if not bool(exposure.get("capability_granted")):
+            grant_required.append(surface_id)
+        if bool(_dict(exposure.get("detached_memory_bin")).get("applies")):
+            detached_memory.append(surface_id)
+    return {
+        "kind": "developer_bridge.francis_body_exposure_summary",
+        "schema_version": "developer_bridge_francis_body_exposure_summary_v1",
+        "surface": "developer_bridge.francis_body_map.exposure_summary",
+        "status": "visible_with_trust_gated_exposure",
+        "francis1_can_see_body": True,
+        "francis1_can_use_all_visible_surfaces": False,
+        "visible_surface_count": len(visible),
+        "readback_connected_surface_count": len(readback_connected),
+        "connected_to_local_model_count": len(connected_to_local_model),
+        "capability_granted_count": len(granted),
+        "safe_for_capability_use_count": len(safe_for_capability_use),
+        "not_exposed_surface_count": len(not_exposed),
+        "review_required_surface_count": len(review_required),
+        "grant_required_before_use_count": len(grant_required),
+        "detached_memory_surface_count": len(detached_memory),
+        "visible_surface_ids": visible,
+        "readback_connected_surface_ids": readback_connected,
+        "connected_to_local_model_surface_ids": connected_to_local_model,
+        "granted_surface_ids": granted,
+        "safe_for_capability_use_surface_ids": safe_for_capability_use,
+        "not_exposed_surface_ids": not_exposed,
+        "review_required_surface_ids": review_required,
+        "grant_required_before_use_surface_ids": grant_required,
+        "detached_memory_surface_ids": detached_memory,
+        "operator_review_required_before_new_exposure": True,
+        "capability_grant_receipt_required_before_use": True,
+        "deny_after_grant_supported": True,
+        "stores_full_transcript": False,
+        "grants_capability_authority": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "grants_approval_authority": False,
+        "grants_memory_write_authority": False,
+        "grants_training_authority": False,
+        "next_readbacks": [
+            "/developer-bridge/francis-body-map exposure_summary",
+            "/developer-bridge/francis-capability-grants",
+            "/developer-bridge/francis-trust-ladder",
+        ],
     }
 
 

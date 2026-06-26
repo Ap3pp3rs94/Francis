@@ -96997,6 +96997,75 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, browser proof, and a live real-data mission
   declaration were not run for this bounded backend/readback slice.
 
+### 2026-06-26 04:31Z - Francis body-map exposure summary readback
+
+Current posture: Phase 2 / P1 interface, P3 governance, P8 memory, and P9
+observability now expose a compact Francis body-map exposure summary for the
+Communication surface. Francis1 and the operator can see how many known body
+surfaces are visible, connected to the local model by grant, not exposed, and
+still review-required without treating visibility as permission to use a
+capability.
+
+What changed:
+
+- `/developer-bridge/francis-body-map` now returns top-level
+  `exposure_summary` with visible, readback-connected, local-model-connected,
+  granted, safe-for-use, not-exposed, review-required, grant-required, and
+  detached-memory surface counts and ids.
+- Body-map `summary` now repeats the compact exposure counts so the operator UI
+  can show the trust posture without scanning every surface.
+- The compact body-map collaboration prompt line now reports visible, exposed,
+  and not-exposed counts while preserving the grant-receipt and stale-memory
+  warnings.
+- The developer-bridge empty/warming payload now includes the same
+  `exposure_summary` shape and definitions so UI readback remains stable during
+  API warming.
+- The Communication UI parser preserves the exposure summary and the body-map
+  card displays visible, exposed, not-exposed, and review-required counts.
+
+Validation:
+
+- Focused developer-bridge tests passed:
+  `python -m pytest tests/test_developer_bridge.py::test_francis_body_map_exposes_whole_body_without_authority tests/test_developer_bridge.py::test_capability_grant_receipt_controls_body_map_exposure tests/test_developer_bridge.py::test_capability_grant_api_invalidates_body_map_cache tests/test_developer_bridge.py::test_collaboration_review_projects_generic_historical_topics_to_concrete_surfaces`
+  (`4` passing tests).
+- Ruff check passed:
+  `python -m ruff check src\francis\developer_bridge\body_map.py src\francis\api\routes\developer_bridge.py tests\test_developer_bridge.py`.
+- Ruff format check passed:
+  `python -m ruff format --check src\francis\developer_bridge\body_map.py src\francis\api\routes\developer_bridge.py tests\test_developer_bridge.py`.
+- Targeted mypy passed:
+  `python -m mypy src\francis\developer_bridge\body_map.py src\francis\api\routes\developer_bridge.py`.
+- Compileall passed:
+  `python -m compileall src\francis\developer_bridge\body_map.py src\francis\api\routes\developer_bridge.py`.
+- Chat UI contract suite passed:
+  `npm run test -- --runInBand apps/chat_ui/src/chat/index.test.ts`
+  (the package script ran the configured UI suite, `282` passing tests).
+- Chat UI production build passed:
+  `npm run build`.
+- `git diff --check` passed.
+- The local Francis API was restarted after the Python readback change. Live
+  `/developer-bridge/francis-body-map` readback showed
+  `visible_surface_count=10`, `connected_to_local_model_count=1`,
+  `capability_granted_count=1`, `not_exposed_surface_count=9`,
+  `review_required_surface_count=10`,
+  `grants_execution_authority=false`, and
+  `grants_memory_write_authority=false`.
+- Runtime health after API restart reported `status=healthy`, `helper_count=3`,
+  turn `1632`, recurrence `turn_gap`, and Codex, Claude, and Ollama enabled.
+
+Remaining truthful gap:
+
+- This is a readback and UI contract. It does not grant new capability use,
+  execution, mutation, approval, memory-write, training, or main-build
+  authority to Francis1, Codex, Claude, Ollama, or the relay.
+- Only one body surface is currently connected to the local model by an active
+  grant; the remaining visible surfaces stay not exposed until reviewed and
+  granted through receipts.
+- The detached-memory distinction is surfaced, but this slice does not tune the
+  local model, migrate transcripts into memory, or complete the broader memory
+  subsystem contract.
+- `.\scripts\check.ps1`, GitHub CI, browser proof, and full ORB/body coverage
+  proof were not run for this bounded body-map exposure-summary slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

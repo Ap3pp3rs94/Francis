@@ -469,6 +469,11 @@ test("parseFrancisBodyMap preserves whole-body awareness and quest boundaries", 
       default_access_mode: "observe",
       full_body_visible: true,
       full_body_authority_granted: false,
+      visible_surface_count: 10,
+      connected_to_local_model_count: 1,
+      capability_granted_count: 1,
+      not_exposed_surface_count: 9,
+      review_required_surface_count: 10,
       active_capability_grant_count: 0,
       denied_or_revoked_capability_count: 0,
       trust_ladder_enforced: true,
@@ -477,6 +482,46 @@ test("parseFrancisBodyMap preserves whole-body awareness and quest boundaries", 
       canonical_plane_count: 11,
       canonical_plane_covered_count: 11,
       coverage_open_gap_count: 11,
+    },
+    exposure_summary: {
+      kind: "developer_bridge.francis_body_exposure_summary",
+      schema_version: "developer_bridge_francis_body_exposure_summary_v1",
+      surface: "developer_bridge.francis_body_map.exposure_summary",
+      status: "visible_with_trust_gated_exposure",
+      francis1_can_see_body: true,
+      francis1_can_use_all_visible_surfaces: false,
+      visible_surface_count: 10,
+      readback_connected_surface_count: 9,
+      connected_to_local_model_count: 1,
+      capability_granted_count: 1,
+      safe_for_capability_use_count: 1,
+      not_exposed_surface_count: 9,
+      review_required_surface_count: 10,
+      grant_required_before_use_count: 9,
+      detached_memory_surface_count: 1,
+      visible_surface_ids: ["collaboration", "memory"],
+      readback_connected_surface_ids: ["collaboration", "memory"],
+      connected_to_local_model_surface_ids: ["action_intake"],
+      granted_surface_ids: ["action_intake"],
+      safe_for_capability_use_surface_ids: ["action_intake"],
+      not_exposed_surface_ids: ["collaboration", "memory"],
+      review_required_surface_ids: ["collaboration", "memory", "action_intake"],
+      grant_required_before_use_surface_ids: ["collaboration", "memory"],
+      detached_memory_surface_ids: ["memory"],
+      operator_review_required_before_new_exposure: true,
+      capability_grant_receipt_required_before_use: true,
+      deny_after_grant_supported: true,
+      stores_full_transcript: false,
+      grants_capability_authority: false,
+      grants_execution_authority: false,
+      grants_mutation_authority: false,
+      grants_approval_authority: false,
+      grants_memory_write_authority: false,
+      grants_training_authority: false,
+      next_readbacks: [
+        "/developer-bridge/francis-body-map exposure_summary",
+        "/developer-bridge/francis-capability-grants",
+      ],
     },
     quest: {
       id: "francis1-whole-body-awareness-and-trust-gated-capability-v1",
@@ -621,6 +666,11 @@ test("parseFrancisBodyMap preserves whole-body awareness and quest boundaries", 
   assert.equal(bodyMap.identity.providerNameIsIdentity, false);
   assert.equal(bodyMap.summary.fullBodyVisible, true);
   assert.equal(bodyMap.summary.fullBodyAuthorityGranted, false);
+  assert.equal(bodyMap.summary.visibleSurfaceCount, 10);
+  assert.equal(bodyMap.summary.connectedToLocalModelCount, 1);
+  assert.equal(bodyMap.summary.capabilityGrantedCount, 1);
+  assert.equal(bodyMap.summary.notExposedSurfaceCount, 9);
+  assert.equal(bodyMap.summary.reviewRequiredSurfaceCount, 10);
   assert.equal(bodyMap.summary.activeCapabilityGrantCount, 0);
   assert.equal(bodyMap.summary.deniedOrRevokedCapabilityCount, 0);
   assert.equal(bodyMap.summary.trustLadderEnforced, true);
@@ -633,6 +683,19 @@ test("parseFrancisBodyMap preserves whole-body awareness and quest boundaries", 
   assert.equal(bodyMap.evidence.bodyCoverageReviewObserved, true);
   assert.equal(bodyMap.evidence.missingCanonicalPlaneIds.length, 0);
   assert.equal(bodyMap.evidence.latestRuntimePromptId, "collab-1111111111111111-222222222222");
+  assert.equal(bodyMap.exposureSummary.kind, "developer_bridge.francis_body_exposure_summary");
+  assert.equal(bodyMap.exposureSummary.francis1CanSeeBody, true);
+  assert.equal(bodyMap.exposureSummary.francis1CanUseAllVisibleSurfaces, false);
+  assert.equal(bodyMap.exposureSummary.visibleSurfaceCount, 10);
+  assert.equal(bodyMap.exposureSummary.connectedToLocalModelCount, 1);
+  assert.deepEqual(bodyMap.exposureSummary.connectedToLocalModelSurfaceIds, ["action_intake"]);
+  assert.deepEqual(bodyMap.exposureSummary.notExposedSurfaceIds, ["collaboration", "memory"]);
+  assert.deepEqual(bodyMap.exposureSummary.detachedMemorySurfaceIds, ["memory"]);
+  assert.equal(bodyMap.exposureSummary.operatorReviewRequiredBeforeNewExposure, true);
+  assert.equal(bodyMap.exposureSummary.capabilityGrantReceiptRequiredBeforeUse, true);
+  assert.equal(bodyMap.exposureSummary.grantsCapabilityAuthority, false);
+  assert.equal(bodyMap.exposureSummary.grantsExecutionAuthority, false);
+  assert.equal(bodyMap.exposureSummary.grantsMemoryWriteAuthority, false);
   assert.equal(bodyMap.coverageReview.status, "reviewed_with_open_gaps");
   assert.equal(bodyMap.coverageReview.coveredPlaneCount, 11);
   assert.equal(bodyMap.coverageReview.capabilityComplete, false);

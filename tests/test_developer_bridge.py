@@ -205,7 +205,13 @@ def test_francis_body_map_exposes_whole_body_without_authority(tmp_path, monkeyp
     assert result["identity"]["provider_name_is_identity"] is False  # type: ignore[index]
     assert result["summary"]["full_body_visible"] is True  # type: ignore[index]
     assert result["summary"]["full_body_authority_granted"] is False  # type: ignore[index]
+    assert result["summary"]["visible_surface_count"] == result["summary"]["surface_count"]  # type: ignore[index]
+    assert result["summary"]["connected_to_local_model_count"] == 0  # type: ignore[index]
+    assert result["summary"]["capability_granted_count"] == 0  # type: ignore[index]
+    assert result["summary"]["not_exposed_surface_count"] == result["summary"]["surface_count"]  # type: ignore[index]
+    assert result["summary"]["review_required_surface_count"] == result["summary"]["surface_count"]  # type: ignore[index]
     assert result["definitions"]["capability_exposure"].startswith("A per-surface verdict")  # type: ignore[index]
+    assert result["definitions"]["exposure_summary"].startswith("A compact readback")  # type: ignore[index]
     assert result["quest"]["percent_complete"] == 83  # type: ignore[index]
     assert result["summary"]["trust_ladder_enforced"] is True  # type: ignore[index]
     assert result["summary"]["runtime_restart_observed"] is False  # type: ignore[index]
@@ -233,6 +239,22 @@ def test_francis_body_map_exposes_whole_body_without_authority(tmp_path, monkeyp
         "reject_as_drift",
     ]
     assert result["evidence"]["latest_ledger_entry"] == "2026-06-25 - Existing proof"  # type: ignore[index]
+    exposure_summary = result["exposure_summary"]  # type: ignore[index]
+    assert exposure_summary["kind"] == "developer_bridge.francis_body_exposure_summary"
+    assert exposure_summary["francis1_can_see_body"] is True
+    assert exposure_summary["francis1_can_use_all_visible_surfaces"] is False
+    assert exposure_summary["visible_surface_count"] == result["summary"]["surface_count"]  # type: ignore[index]
+    assert exposure_summary["connected_to_local_model_count"] == 0
+    assert exposure_summary["capability_granted_count"] == 0
+    assert exposure_summary["not_exposed_surface_count"] == result["summary"]["surface_count"]  # type: ignore[index]
+    assert "collaboration" in exposure_summary["visible_surface_ids"]
+    assert "collaboration" in exposure_summary["not_exposed_surface_ids"]
+    assert "memory" in exposure_summary["detached_memory_surface_ids"]
+    assert exposure_summary["operator_review_required_before_new_exposure"] is True
+    assert exposure_summary["capability_grant_receipt_required_before_use"] is True
+    assert exposure_summary["grants_capability_authority"] is False
+    assert exposure_summary["grants_execution_authority"] is False
+    assert exposure_summary["grants_memory_write_authority"] is False
     surfaces = {item["id"]: item for item in result["surfaces"]}  # type: ignore[index]
     assert "collaboration" in surfaces
     assert "memory" in surfaces
@@ -284,7 +306,8 @@ def test_francis_body_map_exposes_whole_body_without_authority(tmp_path, monkeyp
 
     prompt_line = compact_body_map_prompt_line()
     assert "Body map:" in prompt_line
-    assert "whole-body visible" in prompt_line
+    assert "visible" in prompt_line
+    assert "not exposed" in prompt_line
     assert "capability use requires grant receipt" in prompt_line
     assert "stale memory detaches" in prompt_line
     roadmap_gate = compact_roadmap_gate_prompt_line()
@@ -346,6 +369,11 @@ def test_capability_grant_receipt_controls_body_map_exposure(tmp_path, monkeypat
     assert exposure["grants_execution_authority"] is False  # type: ignore[index]
     assert exposure["grants_mutation_authority"] is False  # type: ignore[index]
     assert granted_body["summary"]["active_capability_grant_count"] == 1  # type: ignore[index]
+    assert granted_body["exposure_summary"]["connected_to_local_model_count"] == 1  # type: ignore[index]
+    assert granted_body["exposure_summary"]["capability_granted_count"] == 1  # type: ignore[index]
+    assert granted_body["exposure_summary"]["connected_to_local_model_surface_ids"] == ["collaboration"]  # type: ignore[index]
+    assert granted_body["exposure_summary"]["granted_surface_ids"] == ["collaboration"]  # type: ignore[index]
+    assert granted_body["exposure_summary"]["grants_execution_authority"] is False  # type: ignore[index]
 
     revoke = set_francis_capability_grant(
         "collaboration",
@@ -363,6 +391,8 @@ def test_capability_grant_receipt_controls_body_map_exposure(tmp_path, monkeypat
     assert revoked_exposure["connected_to_local_model"] is False  # type: ignore[index]
     assert revoked_body["summary"]["active_capability_grant_count"] == 0  # type: ignore[index]
     assert revoked_body["summary"]["denied_or_revoked_capability_count"] == 1  # type: ignore[index]
+    assert revoked_body["exposure_summary"]["connected_to_local_model_count"] == 0  # type: ignore[index]
+    assert revoked_body["exposure_summary"]["capability_granted_count"] == 0  # type: ignore[index]
 
 
 def test_capability_grant_api_records_bounded_operator_receipt(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]

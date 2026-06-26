@@ -471,6 +471,44 @@ export type FrancisDetachedMemoryBinPolicy = {
   grantsTrainingAuthority: boolean;
 };
 
+export type FrancisBodyExposureSummary = {
+  kind: string;
+  schemaVersion: string;
+  surface: string;
+  status: string;
+  francis1CanSeeBody: boolean;
+  francis1CanUseAllVisibleSurfaces: boolean;
+  visibleSurfaceCount: number;
+  readbackConnectedSurfaceCount: number;
+  connectedToLocalModelCount: number;
+  capabilityGrantedCount: number;
+  safeForCapabilityUseCount: number;
+  notExposedSurfaceCount: number;
+  reviewRequiredSurfaceCount: number;
+  grantRequiredBeforeUseCount: number;
+  detachedMemorySurfaceCount: number;
+  visibleSurfaceIds: string[];
+  readbackConnectedSurfaceIds: string[];
+  connectedToLocalModelSurfaceIds: string[];
+  grantedSurfaceIds: string[];
+  safeForCapabilityUseSurfaceIds: string[];
+  notExposedSurfaceIds: string[];
+  reviewRequiredSurfaceIds: string[];
+  grantRequiredBeforeUseSurfaceIds: string[];
+  detachedMemorySurfaceIds: string[];
+  operatorReviewRequiredBeforeNewExposure: boolean;
+  capabilityGrantReceiptRequiredBeforeUse: boolean;
+  denyAfterGrantSupported: boolean;
+  storesFullTranscript: boolean;
+  grantsCapabilityAuthority: boolean;
+  grantsExecutionAuthority: boolean;
+  grantsMutationAuthority: boolean;
+  grantsApprovalAuthority: boolean;
+  grantsMemoryWriteAuthority: boolean;
+  grantsTrainingAuthority: boolean;
+  nextReadbacks: string[];
+};
+
 export type FrancisBodySurfaceDisplay = {
   badge: string;
   tone: CollaborationReviewTone;
@@ -535,6 +573,11 @@ export type FrancisBodyMap = {
     defaultAccessMode: string;
     fullBodyVisible: boolean;
     fullBodyAuthorityGranted: boolean;
+    visibleSurfaceCount: number;
+    connectedToLocalModelCount: number;
+    capabilityGrantedCount: number;
+    notExposedSurfaceCount: number;
+    reviewRequiredSurfaceCount: number;
     activeCapabilityGrantCount: number;
     deniedOrRevokedCapabilityCount: number;
     trustLadderEnforced: boolean;
@@ -544,6 +587,7 @@ export type FrancisBodyMap = {
     canonicalPlaneCoveredCount: number;
     coverageOpenGapCount: number;
   };
+  exposureSummary: FrancisBodyExposureSummary;
   quest: {
     id: string;
     title: string;
@@ -2516,6 +2560,51 @@ function parseDetachedMemoryBinPolicy(raw: unknown): FrancisDetachedMemoryBinPol
   };
 }
 
+function parseStringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.map((item) => safeString(item)).filter(Boolean) : [];
+}
+
+function parseFrancisBodyExposureSummary(raw: unknown): FrancisBodyExposureSummary {
+  const item = isRecord(raw) ? raw : {};
+  return {
+    kind: safeString(item.kind, "developer_bridge.francis_body_exposure_summary"),
+    schemaVersion: safeString(item.schema_version, "developer_bridge_francis_body_exposure_summary_v1"),
+    surface: safeString(item.surface, "developer_bridge.francis_body_map.exposure_summary"),
+    status: safeString(item.status, "unknown"),
+    francis1CanSeeBody: safeBoolean(item.francis1_can_see_body),
+    francis1CanUseAllVisibleSurfaces: safeBoolean(item.francis1_can_use_all_visible_surfaces),
+    visibleSurfaceCount: safeNumber(item.visible_surface_count),
+    readbackConnectedSurfaceCount: safeNumber(item.readback_connected_surface_count),
+    connectedToLocalModelCount: safeNumber(item.connected_to_local_model_count),
+    capabilityGrantedCount: safeNumber(item.capability_granted_count),
+    safeForCapabilityUseCount: safeNumber(item.safe_for_capability_use_count),
+    notExposedSurfaceCount: safeNumber(item.not_exposed_surface_count),
+    reviewRequiredSurfaceCount: safeNumber(item.review_required_surface_count),
+    grantRequiredBeforeUseCount: safeNumber(item.grant_required_before_use_count),
+    detachedMemorySurfaceCount: safeNumber(item.detached_memory_surface_count),
+    visibleSurfaceIds: parseStringList(item.visible_surface_ids),
+    readbackConnectedSurfaceIds: parseStringList(item.readback_connected_surface_ids),
+    connectedToLocalModelSurfaceIds: parseStringList(item.connected_to_local_model_surface_ids),
+    grantedSurfaceIds: parseStringList(item.granted_surface_ids),
+    safeForCapabilityUseSurfaceIds: parseStringList(item.safe_for_capability_use_surface_ids),
+    notExposedSurfaceIds: parseStringList(item.not_exposed_surface_ids),
+    reviewRequiredSurfaceIds: parseStringList(item.review_required_surface_ids),
+    grantRequiredBeforeUseSurfaceIds: parseStringList(item.grant_required_before_use_surface_ids),
+    detachedMemorySurfaceIds: parseStringList(item.detached_memory_surface_ids),
+    operatorReviewRequiredBeforeNewExposure: safeBoolean(item.operator_review_required_before_new_exposure, true),
+    capabilityGrantReceiptRequiredBeforeUse: safeBoolean(item.capability_grant_receipt_required_before_use, true),
+    denyAfterGrantSupported: safeBoolean(item.deny_after_grant_supported, true),
+    storesFullTranscript: safeBoolean(item.stores_full_transcript),
+    grantsCapabilityAuthority: safeBoolean(item.grants_capability_authority),
+    grantsExecutionAuthority: safeBoolean(item.grants_execution_authority),
+    grantsMutationAuthority: safeBoolean(item.grants_mutation_authority),
+    grantsApprovalAuthority: safeBoolean(item.grants_approval_authority),
+    grantsMemoryWriteAuthority: safeBoolean(item.grants_memory_write_authority),
+    grantsTrainingAuthority: safeBoolean(item.grants_training_authority),
+    nextReadbacks: parseStringList(item.next_readbacks),
+  };
+}
+
 function parseFrancisBodyCoverageItem(raw: unknown): FrancisBodyCoverageItem {
   const item = isRecord(raw) ? raw : {};
   return {
@@ -2659,6 +2748,11 @@ export function parseFrancisBodyMap(raw: unknown): FrancisBodyMap {
       defaultAccessMode: safeString(summary.default_access_mode, "observe"),
       fullBodyVisible: safeBoolean(summary.full_body_visible),
       fullBodyAuthorityGranted: safeBoolean(summary.full_body_authority_granted),
+      visibleSurfaceCount: safeNumber(summary.visible_surface_count),
+      connectedToLocalModelCount: safeNumber(summary.connected_to_local_model_count),
+      capabilityGrantedCount: safeNumber(summary.capability_granted_count),
+      notExposedSurfaceCount: safeNumber(summary.not_exposed_surface_count),
+      reviewRequiredSurfaceCount: safeNumber(summary.review_required_surface_count),
       activeCapabilityGrantCount: safeNumber(summary.active_capability_grant_count),
       deniedOrRevokedCapabilityCount: safeNumber(summary.denied_or_revoked_capability_count),
       trustLadderEnforced: safeBoolean(summary.trust_ladder_enforced),
@@ -2668,6 +2762,7 @@ export function parseFrancisBodyMap(raw: unknown): FrancisBodyMap {
       canonicalPlaneCoveredCount: safeNumber(summary.canonical_plane_covered_count),
       coverageOpenGapCount: safeNumber(summary.coverage_open_gap_count),
     },
+    exposureSummary: parseFrancisBodyExposureSummary(value.exposure_summary),
     quest: {
       id: safeString(quest.id),
       title: safeString(quest.title),
@@ -2708,9 +2803,7 @@ export function parseFrancisBodyMap(raw: unknown): FrancisBodyMap {
       bodyCoverageReviewObserved: safeBoolean(evidence.body_coverage_review_observed),
       canonicalPlaneCount: safeNumber(evidence.canonical_plane_count),
       canonicalPlaneCoveredCount: safeNumber(evidence.canonical_plane_covered_count),
-      missingCanonicalPlaneIds: Array.isArray(evidence.missing_canonical_plane_ids)
-        ? evidence.missing_canonical_plane_ids.map((item) => safeString(item)).filter(Boolean)
-        : [],
+      missingCanonicalPlaneIds: parseStringList(evidence.missing_canonical_plane_ids),
       coverageOpenGapCount: safeNumber(evidence.coverage_open_gap_count),
       latestRuntimePromptId: safeString(evidence.latest_runtime_prompt_id),
       latestRuntimeResponseId: safeString(evidence.latest_runtime_response_id),
@@ -2728,9 +2821,7 @@ export function parseFrancisBodyMap(raw: unknown): FrancisBodyMap {
       canonicalSourcesObserved: safeBoolean(coverageReview.canonical_sources_observed),
       planeCount: safeNumber(coverageReview.plane_count),
       coveredPlaneCount: safeNumber(coverageReview.covered_plane_count),
-      missingPlaneIds: Array.isArray(coverageReview.missing_plane_ids)
-        ? coverageReview.missing_plane_ids.map((item) => safeString(item)).filter(Boolean)
-        : [],
+      missingPlaneIds: parseStringList(coverageReview.missing_plane_ids),
       openGapCount: safeNumber(coverageReview.open_gap_count),
       items: Array.isArray(coverageReview.items) ? coverageReview.items.map(parseFrancisBodyCoverageItem) : [],
       grantsExecutionAuthority: safeBoolean(coverageReview.grants_execution_authority),
