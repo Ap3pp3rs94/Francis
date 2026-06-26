@@ -3415,8 +3415,7 @@ def test_collaboration_driver_uses_roadmap_gate_only_for_roadmap_topics(tmp_path
     roadmap_prompt = driver._next_prompt(roadmap_state, max_turns=0)
 
     assert "Topic: what substrate-complete means as a checklist, not an argument." in roadmap_prompt
-    assert "Roadmap: check" in roadmap_prompt
-    assert "roadmap_alignment" in roadmap_prompt
+    assert "Roadmap gap" in roadmap_prompt
     assert "main-build candidate-only" in roadmap_prompt
     assert "blocked_by_open_orb_gaps" in roadmap_prompt
     assert (
@@ -3750,7 +3749,7 @@ def test_collaboration_driver_rotates_topics_after_repeated_output_guard_receipt
     latest_prompt = str(transcript["items"][0]["prompt"])
     assert "Topic: which repo surface should convert typed or spoken" in latest_prompt
     assert "Current artifact: api.routes.chat.mission_ingress" in latest_prompt
-    assert "Guard: stale replay learned; avoid old topic; give issue + artifact." in latest_prompt
+    assert "Guard: issue+artifact." in latest_prompt
     assert "Claude guidance acknowledged; Francis stays subject; Codex validates repo truth." in latest_prompt
     assert len(latest_prompt) <= 700
     assert "current repetitive meta loop" not in latest_prompt
@@ -5535,6 +5534,54 @@ def test_ollama_participant_rewrites_canonical_roadmap_alignment_drift(
     assert "block claims that outrun the current phase" in response["prompt"]
     assert "I will inspect" not in response["prompt"]
     assert "My receipt of the current artifact" not in response["prompt"]
+
+
+def test_ollama_participant_rewrites_nonexistent_build_manifest_path_after_repo_truth_correction(
+    tmp_path,
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+    submit_collaboration_prompt(
+        source_agent="codex",
+        target_agent="ollama",
+        objective="Repo-truth correction prompt",
+        prompt=(
+            "Correction from repo truth: docs/canonical/BUILD_MANIFEST.md exists; "
+            "docs/operations/BUILD_MANIFEST.md does not exist. Treat Ollama as provider provenance and "
+            "Francis1 as the local Francis identity lane. When naming gaps, cite current repo surfaces."
+        ),
+        context=(
+            "verified_by=Test-Path docs/canonical/BUILD_MANIFEST.md True; "
+            "Test-Path docs/operations/BUILD_MANIFEST.md False; no_action_authority=true"
+        ),
+    )
+
+    def fake_generate(_prompt: str) -> str:
+        return (
+            "My current gap aligns with the BUILD_MANIFEST.md roadmap, which appears incomplete due to open "
+            "gaps in the main-build candidate-only section. Artifact: docs/operations/BUILD_MANIFEST.md"
+        )
+
+    monkeypatch.setattr("francis.developer_bridge.ollama_participant.generate", fake_generate)
+
+    result = ollama_respond_once(cooldown_seconds=0)
+
+    assert result["status"] == "responded"
+    output_guard = result["execution_trace"]["output_guard"]
+    assert output_guard["status"] == "drift_rewritten"
+    assert output_guard["verified_surface"] == "docs/canonical/BUILD_MANIFEST.md"
+    assert output_guard["detected_terms"] == [
+        "nonexistent_build_manifest_path",
+        "stale_build_manifest_roadmap_gap",
+    ]
+    transcript = read_collaboration_transcript(source_agent="ollama", target_agent="codex")
+    response = transcript["items"][0]
+    assert "Francis1 output guard fallback" in response["prompt"]
+    assert "docs/canonical/BUILD_MANIFEST.md" in response["prompt"]
+    assert "docs/operations/COMPLETION_LEDGER.md" in response["prompt"]
+    assert "operations BUILD_MANIFEST path is not a repo surface" in response["prompt"]
+    assert "Artifact: docs/operations/BUILD_MANIFEST.md" not in response["prompt"]
+    assert "appears incomplete" not in response["prompt"]
 
 
 def test_ollama_participant_rewrites_stale_action_readiness_replay_on_roadmap_topic(

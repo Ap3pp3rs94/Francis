@@ -99529,6 +99529,103 @@ Remaining truthful gap:
   collaboration drift resolution remain outside this bounded communication
   slice.
 
+### 2026-06-26 16:26Z - Communication UI current-conversation composer
+
+Current posture: Phase 2 / P1 interface, P3 governance, and P9 collaboration
+observability now connect the operator's chat box directly to the visible Live
+Conversation panel. The existing bounded operator-message route remains the only
+write path: the UI change does not add model execution, repo mutation, memory
+write, approval, training, or capability-grant authority.
+
+What changed:
+
+- `apps/chat_ui/src/App.tsx` now embeds a `Message Current Conversation`
+  composer inside the Live Conversation panel, reusing the same Codex, Claude,
+  and Francis1 target toggles as the operator relay composer.
+- Successful sends now force `followLatest=true`, so a message from an archived
+  session view returns the operator to the current live conversation instead of
+  leaving the UI pointed at stale readback.
+
+Validation:
+
+- Focused Chat UI contract test passed:
+  `node --test --experimental-strip-types src/chat/index.test.ts` with 30
+  tests.
+- Chat UI production build passed:
+  `npm run build`.
+- Whitespace diff check passed:
+  `git diff --check`.
+
+Remaining truthful gap:
+
+- This connects the visible chat box to the current conversation relay. It does
+  not force external Claude participation when the external client is
+  disconnected or usage-limited.
+- Live driver restart and fresh-response proof are operational validation for
+  the current machine session, not a new repo capability.
+- `.\scripts\check.ps1`, GitHub CI, broader ORB/body validation, and longer-run
+  collaboration drift resolution remain outside this bounded UI slice.
+
+### 2026-06-26 16:34Z - Francis1 build-manifest path drift guard
+
+Current posture: Phase 2 / P3 governance and P9 collaboration observability now
+catch a concrete Francis1/Ollama drift observed during the live restart:
+repeating `docs/operations/BUILD_MANIFEST.md` as a repo surface after Codex had
+verified that the real manifest is `docs/canonical/BUILD_MANIFEST.md`. The
+guard replaces that reply with a bounded output-guard receipt and does not treat
+the model output as build direction, memory, training data, approval, execution,
+or mutation authority.
+
+What changed:
+
+- `src/francis/developer_bridge/ollama_participant.py` now applies the existing
+  verified-surface output guard to explicit repo-truth correction prompts, using
+  the source prompt plus context instead of prompt text alone.
+- The guard now detects the nonexistent operations build-manifest path and stale
+  `BUILD_MANIFEST.md roadmap appears incomplete` loop language, then falls back
+  to canonical manifest plus completion-ledger repo-truth wording.
+- `src/francis/developer_bridge/body_map.py` now exposes a compact rotating
+  roadmap-gap prompt line so roadmap-alignment turns can point Francis1 at one
+  concrete ORB coverage gap instead of encouraging generic roadmap-incomplete
+  language.
+- `src/francis/developer_bridge/collaboration_driver.py` now uses that compact
+  gap line for roadmap-supported topics while preserving prompt-budget space for
+  the actual topic, current artifact, and guard line.
+- `tests/test_developer_bridge.py` now reproduces the exact drift and proves the
+  raw bad path response is replaced by a no-authority guard receipt, with driver
+  tests updated to prove the compact roadmap-gap prompt does not truncate the
+  current topic or artifact.
+
+Validation:
+
+- Focused developer-bridge tests passed for the drift guard and driver prompt
+  budget:
+  `python -m pytest tests/test_developer_bridge.py::test_ollama_participant_rewrites_nonexistent_build_manifest_path_after_repo_truth_correction tests/test_developer_bridge.py::test_ollama_participant_rewrites_canonical_roadmap_alignment_drift tests/test_developer_bridge.py::test_ollama_participant_passes_structured_verified_surface_reply -q`.
+- Combined focused developer-bridge tests passed:
+  `python -m pytest tests/test_developer_bridge.py::test_ollama_participant_rewrites_nonexistent_build_manifest_path_after_repo_truth_correction tests/test_developer_bridge.py::test_ollama_participant_rewrites_canonical_roadmap_alignment_drift tests/test_developer_bridge.py::test_ollama_participant_passes_structured_verified_surface_reply tests/test_developer_bridge.py::test_collaboration_substrate_readiness_blocks_main_build_prompt_for_open_gaps tests/test_developer_bridge.py::test_collaboration_driver_uses_roadmap_gate_only_for_roadmap_topics tests/test_developer_bridge.py::test_collaboration_driver_records_roadmap_overgeneralization_as_learning_event tests/test_developer_bridge.py::test_collaboration_driver_rotates_topics_after_repeated_output_guard_receipts -q`.
+- Python lint and formatting checks passed:
+  `python -m ruff check src/francis/developer_bridge/ollama_participant.py src/francis/developer_bridge/body_map.py src/francis/developer_bridge/collaboration_driver.py tests/test_developer_bridge.py`
+  and `python -m ruff format --check src/francis/developer_bridge/ollama_participant.py src/francis/developer_bridge/body_map.py src/francis/developer_bridge/collaboration_driver.py tests/test_developer_bridge.py`.
+- Focused Chat UI contract test passed:
+  `node --test --experimental-strip-types src/chat/index.test.ts` with 30
+  tests.
+- Chat UI production build passed:
+  `npm run build`.
+- Syntax compile and whitespace diff checks passed:
+  `python -m compileall -q src/francis/developer_bridge/ollama_participant.py src/francis/developer_bridge/body_map.py src/francis/developer_bridge/collaboration_driver.py`
+  and `git diff --check`.
+
+Remaining truthful gap:
+
+- This is a guard/receipt fix for one observed drift class, not fine-tuning,
+  retraining, memory promotion, or a claim that Francis1 now fully understands
+  every roadmap surface.
+- The live runtime was restarted after this patch and local Codex plus
+  Francis1/Ollama acknowledgements were observed; external Claude still depends
+  on the connected Claude client being available.
+- `.\scripts\check.ps1`, GitHub CI, broader ORB/body validation, and longer-run
+  collaboration drift resolution remain outside this bounded drift-guard slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

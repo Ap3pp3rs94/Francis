@@ -1430,6 +1430,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
     })
       .then((result) => {
         setOperatorMessage("");
+        setFollowLatest(true);
         setOperatorMessageResult(
           `Sent ${result.count} relay receipt${result.count === 1 ? "" : "s"} to ${result.targetAgents.join(", ")}.`,
         );
@@ -2740,6 +2741,90 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
             </div>
           </div>
         ) : null}
+        <div
+          style={{
+            background: "rgba(2, 6, 23, 0.72)",
+            border: "1px solid rgba(103, 232, 249, 0.32)",
+            borderRadius: 12,
+            marginTop: 12,
+            padding: 12,
+          }}
+        >
+          <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "space-between" }}>
+            <strong style={{ color: "#e2e8f0" }}>Message Current Conversation</strong>
+            <span style={{ color: "#94a3b8", fontSize: 12 }}>{followLatest ? "Live" : "Archived session selected"}</span>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+            {COLLABORATION_OPERATOR_TARGETS.map((target) => {
+              const agent = agentById.get(target.id);
+              const enabled = agent?.enabled ?? true;
+              const checked = enabled && operatorTargets.includes(target.id);
+              return (
+                <label
+                  key={`live-composer-${target.id}`}
+                  style={{
+                    alignItems: "center",
+                    background: checked ? "rgba(14, 116, 144, 0.24)" : "rgba(15, 23, 42, 0.58)",
+                    border: `1px solid ${checked ? "rgba(103, 232, 249, 0.42)" : "rgba(148, 163, 184, 0.22)"}`,
+                    borderRadius: 10,
+                    color: enabled ? "#e2e8f0" : "#94a3b8",
+                    display: "flex",
+                    gap: 7,
+                    padding: "6px 9px",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    disabled={!enabled || operatorMessageSending}
+                    onChange={(event) => toggleOperatorTarget(target.id, event.currentTarget.checked)}
+                  />
+                  <span>{target.label}</span>
+                </label>
+              );
+            })}
+          </div>
+          <textarea
+            value={operatorMessage}
+            onChange={(event) => setOperatorMessage(event.currentTarget.value)}
+            placeholder="Message Codex, Claude, and Francis1..."
+            rows={3}
+            style={{
+              background: "rgba(2, 6, 23, 0.82)",
+              border: "1px solid rgba(148, 163, 184, 0.28)",
+              borderRadius: 10,
+              color: "#e2e8f0",
+              marginTop: 10,
+              padding: 12,
+              resize: "vertical",
+              width: "100%",
+            }}
+          />
+          <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "space-between", marginTop: 10 }}>
+            <span style={{ color: "#94a3b8", fontSize: 13 }}>
+              {selectedOperatorTargets.length ? `targets ${selectedOperatorTargets.join(", ")}` : "select at least one enabled target"}
+            </span>
+            <button
+              type="button"
+              disabled={operatorMessageSending || !operatorMessage.trim() || !selectedOperatorTargets.length}
+              onClick={sendOperatorMessage}
+              style={{
+                background: operatorMessage.trim() && selectedOperatorTargets.length ? "#67e8f9" : "rgba(148, 163, 184, 0.2)",
+                border: 0,
+                borderRadius: 10,
+                color: operatorMessage.trim() && selectedOperatorTargets.length ? "#083344" : "#94a3b8",
+                cursor: operatorMessageSending || !operatorMessage.trim() || !selectedOperatorTargets.length ? "not-allowed" : "pointer",
+                fontWeight: 800,
+                padding: "9px 13px",
+              }}
+            >
+              {operatorMessageSending ? "Sending..." : "Send"}
+            </button>
+          </div>
+          {operatorMessageResult ? (
+            <p style={{ color: "#d1fae5", margin: "8px 0 0", overflowWrap: "anywhere" }}>{operatorMessageResult}</p>
+          ) : null}
+        </div>
         <div
           ref={liveTranscriptScrollRef}
           style={{

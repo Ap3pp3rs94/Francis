@@ -405,7 +405,14 @@ def _guard_model_reply(
 
 
 def _output_guard(item: dict[str, object], reply: str) -> dict[str, object]:
-    source_prompt = str(item.get("prompt") or "")
+    source_prompt = "\n".join(
+        part
+        for part in (
+            str(item.get("prompt") or ""),
+            str(item.get("context") or ""),
+        )
+        if part
+    )
     if not reply:
         return _output_guard_record(status="empty_reply", source_prompt=source_prompt, detected_terms=[])
     if not _source_prompt_has_verified_surface(source_prompt):
@@ -431,11 +438,20 @@ def _output_guard_record(*, status: str, source_prompt: str, detected_terms: lis
 
 def _source_prompt_has_verified_surface(source_prompt: str) -> bool:
     lower = source_prompt.lower()
+    if _has_build_manifest_repo_truth_correction(lower):
+        return True
     if "build_or_wire=false" not in lower:
         return False
     if "verified=existing" not in lower and "verified=canonical" not in lower:
         return False
     return "current artifact:" in lower or "surface=" in lower
+
+
+def _has_build_manifest_repo_truth_correction(lower_source_prompt: str) -> bool:
+    return (
+        "docs/canonical/build_manifest.md exists" in lower_source_prompt
+        and "docs/operations/build_manifest.md does not exist" in lower_source_prompt
+    )
 
 
 def _known_drift_terms(reply: str) -> list[str]:
@@ -535,6 +551,10 @@ def _known_drift_terms(reply: str) -> list[str]:
         terms.append("clarification_dependency")
     if "given the context and contract" in lower or "given the exact review receipt" in lower or "my reply is" in lower:
         terms.append("protocol_wrapper_reply")
+    if "docs/operations/build_manifest.md" in lower:
+        terms.append("nonexistent_build_manifest_path")
+    if "build_manifest.md roadmap" in lower and ("appears incomplete" in lower or "open gaps" in lower):
+        terms.append("stale_build_manifest_roadmap_gap")
     return terms
 
 
@@ -563,6 +583,8 @@ def _stale_topic_replay_terms(source_prompt: str, reply: str) -> list[str]:
 
 
 def _verified_surface_from_prompt(source_prompt: str) -> str:
+    if _has_build_manifest_repo_truth_correction(source_prompt.lower()):
+        return "docs/canonical/BUILD_MANIFEST.md"
     current_artifact = _surface_after_marker(source_prompt, "current artifact:")
     if current_artifact != "unknown":
         return current_artifact
@@ -633,6 +655,12 @@ def _guard_topic_fallback(*, topic: str, surface: str) -> str:
             "Issue/gap/risk: before any main Francis build prompt, Codex should compare "
             "docs/operations/COMPLETION_LEDGER.md against docs/canonical/BUILD_MANIFEST.md, keep the ledger as "
             "shipped truth, and block claims that outrun the current phase, validated gates, or known gaps."
+        )
+    if "docs/canonical/build_manifest.md" in lower_surface:
+        return (
+            "Issue/gap/risk: roadmap posture must cite docs/canonical/BUILD_MANIFEST.md and "
+            "docs/operations/COMPLETION_LEDGER.md as repo-truth sources; the operations BUILD_MANIFEST path is "
+            "not a repo surface."
         )
     if "session-summary" in lower_topic:
         return (

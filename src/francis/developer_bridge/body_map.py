@@ -251,6 +251,37 @@ def compact_roadmap_gate_prompt_line() -> str:
     return _one_line(f"Roadmap: check substrate readiness roadmap_alignment; main-build {main_build}; {gate}.")
 
 
+def roadmap_gap_focus_line(turn: int = 0) -> str:
+    """Return one specific open ORB coverage gap (rotating by turn) as a bounded prompt line.
+
+    Replaces the generic open-gap summary so the local model is asked about a
+    concrete plane gap and its review artifact instead of restating that the
+    roadmap is incomplete. Returns "" when no coverage gaps remain so callers
+    can fall back to the compact gate line.
+    """
+
+    coverage_review = _body_coverage_review(repo_root())
+    raw_items = coverage_review.get("items")
+    open_items: list[dict[str, object]] = []
+    if isinstance(raw_items, list):
+        for item in raw_items:
+            entry = _dict(item)
+            if entry.get("remaining_gaps"):
+                open_items.append(entry)
+    if not open_items:
+        return ""
+    index = max(int(turn), 0) % len(open_items)
+    selected = open_items[index]
+    plane = _safe_str(selected.get("plane_id")) or "ORB_plane"
+    remaining = selected.get("remaining_gaps")
+    gap_text = _safe_str(remaining[0]) if isinstance(remaining, list) and remaining else "open coverage gap"
+    artifact = _safe_str(selected.get("next_review_artifact")) or "review artifact"
+    return _one_line(
+        f"Roadmap gap {index + 1}/{len(open_items)} {plane}: {gap_text[:28]}; "
+        f"artifact={artifact[:32]}; gate=blocked_by_open_orb_gaps; main-build candidate-only."
+    )
+
+
 def _body_surfaces(root: Path, *, grant_by_surface: dict[str, dict[str, object]]) -> list[dict[str, object]]:
     return [
         _surface(

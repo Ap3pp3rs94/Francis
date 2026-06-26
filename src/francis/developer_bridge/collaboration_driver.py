@@ -14,7 +14,11 @@ from francis.chat.continuity.ledger import append
 from francis.governance.redaction import redact_secret_text
 from francis.kernel.paths import data_dir
 
-from .body_map import compact_body_map_prompt_line, compact_roadmap_gate_prompt_line
+from .body_map import (
+    compact_body_map_prompt_line,
+    compact_roadmap_gate_prompt_line,
+    roadmap_gap_focus_line,
+)
 from .collaboration import read_collaboration_transcript, submit_collaboration_prompt
 from .collaboration_contract import (
     CONTEXT_CONTRACT_ID,
@@ -452,7 +456,7 @@ def _next_prompt(state: dict[str, object], *, max_turns: int) -> str:
     topic_artifact = _topic_artifact_line(topic)
     codex_response = _codex_response_line(review_line)
     body_map_line = compact_body_map_prompt_line()
-    roadmap_gate_line = _roadmap_gate_prompt_line_for_topic(topic)
+    roadmap_gate_line = _roadmap_gate_prompt_line_for_topic(topic, turn_number)
     trust_line = compact_trust_ladder_prompt_line()
     loop_line = ""
     if guard_signal.get("detected"):
@@ -567,8 +571,8 @@ def _fit_driver_prompt_to_budget(
     compact_trust = "Trust: surface+mode request; no self-grant."
     attempts = [
         (
-            64,
-            64,
+            96,
+            80,
             _COMPACT_BODY_MAP_PROMPT_LINE,
             roadmap_gate_line,
             trust_line,
@@ -577,8 +581,8 @@ def _fit_driver_prompt_to_budget(
             compact_loop,
         ),
         (
-            56,
-            56,
+            84,
+            72,
             _COMPACT_BODY_MAP_PROMPT_LINE,
             compact_roadmap,
             compact_trust,
@@ -587,9 +591,9 @@ def _fit_driver_prompt_to_budget(
             compact_loop,
         ),
         (
-            32,
-            44,
-            _COMPACT_BODY_MAP_PROMPT_LINE,
+            64,
+            56,
+            "",
             compact_roadmap,
             compact_trust,
             _ultra_compact_prior_check(prior_check),
@@ -597,11 +601,11 @@ def _fit_driver_prompt_to_budget(
             compact_loop,
         ),
         (
-            24,
-            32,
-            _COMPACT_BODY_MAP_PROMPT_LINE,
+            56,
+            44,
+            "",
             compact_roadmap,
-            compact_trust,
+            "Trust: no self-grant.",
             _ultra_compact_prior_check(prior_check),
             " Codex: no action authority.",
             " Guard: issue+artifact." if loop_line else "",
@@ -648,10 +652,10 @@ def _loop_prompt_line(loop_signal: dict[str, object]) -> str:
     return f" Loop: {terms}; use prior surface."
 
 
-def _roadmap_gate_prompt_line_for_topic(topic: str) -> str:
-    if _topic_supports_roadmap_gate(topic):
-        return compact_roadmap_gate_prompt_line()
-    return _NON_ROADMAP_BUILD_GUARD_PROMPT_LINE
+def _roadmap_gate_prompt_line_for_topic(topic: str, turn_number: int = 0) -> str:
+    if not _topic_supports_roadmap_gate(topic):
+        return _NON_ROADMAP_BUILD_GUARD_PROMPT_LINE
+    return roadmap_gap_focus_line(turn_number) or compact_roadmap_gate_prompt_line()
 
 
 def _compact_roadmap_gate_prompt_line_for_topic(topic: str) -> str:
