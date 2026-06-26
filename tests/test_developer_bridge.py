@@ -1312,7 +1312,7 @@ def test_collaboration_driver_waits_for_ollama_before_next_turn(tmp_path, monkey
     assert len(prompts) == 2
     assert all("Do not add a 'Next best action' line" not in prompt for prompt in prompts)
     assert all("Body map:" in prompt for prompt in prompts)
-    assert any("Body map: whole-body visible" in prompt for prompt in prompts)
+    assert any(" visible;" in prompt and " exposed;" in prompt and " not exposed;" in prompt for prompt in prompts)
     assert any("Body map: visible; grants required; stale detaches." in prompt for prompt in prompts)
     assert all("capability use requires grant receipt" in prompt or "grants required" in prompt for prompt in prompts)
     assert all("stale memory detaches" in prompt or "stale detaches" in prompt for prompt in prompts)

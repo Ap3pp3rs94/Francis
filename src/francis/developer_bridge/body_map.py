@@ -1135,7 +1135,13 @@ def _runtime_restart_observation() -> dict[str, object]:
 
 
 def _has_body_map_prompt_line(prompt: str) -> bool:
-    return "Body map: whole-body visible" in prompt or "Body map: Francis1 can see whole-body surfaces" in prompt
+    if "Body map:" not in prompt:
+        return False
+    if "Body map: whole-body visible" in prompt or "Body map: Francis1 can see whole-body surfaces" in prompt:
+        return True
+    if "capability use requires grant receipt" in prompt and "stale memory detaches" in prompt:
+        return "visible" in prompt and "not exposed" in prompt
+    return "Body map: visible; grants required; stale detaches." in prompt
 
 
 def _relay_records(*, limit: int = 250) -> list[dict[str, object]]:

@@ -97140,6 +97140,60 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, browser proof, and full ORB/body coverage
   proof were not run for this bounded body-map information-safety slice.
 
+### 2026-06-26 04:47Z - Collaboration prompt source-alignment readback repair
+
+Current posture: Phase 2 / P1 interface, P3 governance, P8 memory, and P9
+observability now keep the Francis1 collaboration prompt proof aligned with the
+current compact body-map wording. The Codex driver prompt acknowledges Claude as
+an external guidance source while keeping Francis as the topic and validation as
+the next action boundary.
+
+What changed:
+
+- The body-map runtime observation helper now recognizes the current counted
+  body-map prompt line, for example visible/exposed/not-exposed counts plus the
+  grant-receipt and stale-memory boundary, in addition to older whole-body
+  wording.
+- The collaboration driver contract test now asserts the counted body-map line,
+  the compact fallback body-map line, the roadmap gate, the trust ladder, the
+  Claude guidance acknowledgement, and the Codex validation/no-action-authority
+  line.
+- The live Codex-to-Francis1 prompt readback after API restart contained
+  `Claude acknowledged as guidance; Francis focus; validate`, `Body map:`,
+  `Roadmap: ledger first`, and `no action authority`.
+
+Validation:
+
+- Focused developer-bridge tests passed:
+  `python -m pytest tests/test_developer_bridge.py::test_collaboration_driver_waits_for_ollama_before_next_turn tests/test_developer_bridge.py::test_collaboration_runtime_health_is_read_only_and_reports_recurrence tests/test_developer_bridge.py::test_francis_body_map_exposes_whole_body_without_authority -q`
+  (`3` passing tests).
+- Ruff check passed:
+  `python -m ruff check src\francis\developer_bridge\body_map.py tests\test_developer_bridge.py`.
+- Ruff format check passed:
+  `python -m ruff format --check src\francis\developer_bridge\body_map.py tests\test_developer_bridge.py`.
+- Targeted mypy passed:
+  `python -m mypy src\francis\developer_bridge\body_map.py`.
+- Compileall passed:
+  `python -m compileall src\francis\developer_bridge\body_map.py`.
+- `git diff --check` passed.
+- The local Francis API was restarted. Live `/developer-bridge/francis-body-map`
+  readback showed `runtime_observed=true`,
+  `body_map_prompt_line_observed=true`, `full_body_visible=true`,
+  `visible_surface_count=10`, and `not_exposed_surface_count=9`.
+- Live `/developer-bridge/collaboration-runtime-health` reported
+  `status=healthy`, `helper_count=3`, turn `1650`, recurrence `turn_gap`, and
+  three enabled participants.
+
+Remaining truthful gap:
+
+- This repair does not grant Francis1 execution, mutation, approval, memory
+  write, training, capability, file-read, transcript, or main-build authority.
+- Claude and Codex remain guidance/toolbelt participants, not Francis's primary
+  intelligence. Francis1 remains governed by the body-map, trust, roadmap, and
+  receipt boundaries.
+- `.\scripts\check.ps1`, GitHub CI, browser proof, and full ORB/body coverage
+  proof were not run for this bounded prompt/readback repair.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
