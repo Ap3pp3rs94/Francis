@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from francis.developer_bridge.agents import collaboration_agents_status, set_collaboration_agent_enabled
 from francis.developer_bridge.body_map import read_francis_body_map
+from francis.developer_bridge.capability_grants import read_francis_capability_grants, set_francis_capability_grant
 from francis.developer_bridge.collaboration import read_collaboration_sessions, read_collaboration_transcript
 from francis.developer_bridge.collaboration_driver import read_collaboration_learning_events
 from francis.developer_bridge.collaboration_review import read_collaboration_review
@@ -42,6 +43,15 @@ class CollaborationAgentToggleIn(BaseModel):
     enabled: bool
     actor: str = "chat_ui.system"
     reason: str = ""
+
+
+class FrancisCapabilityGrantIn(BaseModel):
+    surface_id: str
+    decision: str
+    requested_access_mode: str = "read"
+    actor: str = "chat_ui.system"
+    reason: str = ""
+    source_review_item_id: str = ""
 
 
 def _call_read_only(func, *args, **kwargs) -> dict[str, object]:  # type: ignore[no-untyped-def]
@@ -496,6 +506,8 @@ def _empty_body_map_payload() -> dict[str, object]:
             "default_access_mode": "observe",
             "full_body_visible": True,
             "full_body_authority_granted": False,
+            "active_capability_grant_count": 0,
+            "denied_or_revoked_capability_count": 0,
             "trust_ladder_enforced": False,
             "runtime_restart_observed": False,
             "coverage_reviewed": False,
@@ -571,6 +583,20 @@ def _empty_body_map_payload() -> dict[str, object]:
             "grants_memory_write_authority": False,
             "grants_training_authority": False,
         },
+        "capability_grants": {
+            "surface": "developer_bridge.francis_capability_grants",
+            "route": "/developer-bridge/francis-capability-grants",
+            "connected": False,
+            "active_grants_present": False,
+            "granted_count": 0,
+            "denied_or_revoked_count": 0,
+            "deny_after_grant_supported": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+            "grants_approval_authority": False,
+            "grants_memory_write_authority": False,
+            "grants_training_authority": False,
+        },
         "governance": {
             "read_only": True,
             "full_body_awareness": True,
@@ -640,6 +666,61 @@ def _empty_trust_ladder_payload(
             "grants_memory_write_authority": False,
             "grants_training_authority": False,
             "requires_codex_or_operator_review_before_capability_exposure": True,
+        },
+    }
+
+
+def _empty_capability_grants_payload(
+    *,
+    surface_id: str = "",
+) -> dict[str, object]:
+    return {
+        "kind": "developer_bridge.francis_capability_grants",
+        "schema_version": "developer_bridge_francis_capability_grants_v1",
+        "ok": True,
+        "mode": "readback_and_operator_receipts",
+        "surface": "developer_bridge.francis_capability_grants",
+        "state_path": "integrations/developer_bridge/capability_grants/state.json",
+        "known_surfaces": [],
+        "allowed_decisions": ["grant", "deny", "revoke"],
+        "allowed_access_modes": ["observe", "read", "request", "propose_plan"],
+        "items": [],
+        "count": 0,
+        "summary": {
+            "surface_count": 0,
+            "granted_count": 0,
+            "denied_or_revoked_count": 0,
+            "active_grants_present": False,
+            "deny_after_grant_supported": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+            "grants_approval_authority": False,
+            "grants_memory_write_authority": False,
+            "grants_training_authority": False,
+        },
+        "receipts": [],
+        "filters": {"surface_id": surface_id},
+        "definitions": {
+            "grant": "Permit a named low-risk Francis body surface to be exposed as local-model capability context.",
+            "deny": "Keep or place the surface outside local-model capability use.",
+            "revoke": "Remove a prior grant while retaining the bounded decision receipt for tuning review.",
+        },
+        "governance": {
+            "read_only": True,
+            "writes_capability_grant_state": False,
+            "writes_bounded_receipt": False,
+            "executes_prompt": False,
+            "calls_model": False,
+            "trains_model": False,
+            "client_can_be_operator_console": True,
+            "client_is_automatic_execution_authority": False,
+            "requires_operator_review": True,
+            "grants_capability_authority": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+            "grants_approval_authority": False,
+            "grants_memory_write_authority": False,
+            "grants_training_authority": False,
         },
     }
 
@@ -854,6 +935,16 @@ def francis_trust_ladder_route(
     )
 
 
+@router.get("/francis-capability-grants")
+def francis_capability_grants_route(surface_id: str = "") -> Response:
+    return _cached_read_only_json_response(
+        "developer_bridge.francis_capability_grants",
+        read_francis_capability_grants,
+        _empty_capability_grants_payload,
+        surface_id=surface_id,
+    )
+
+
 @router.get("/collaboration-sessions")
 def collaboration_sessions_route(
     agent: str = "",
@@ -889,4 +980,17 @@ def collaboration_agent_toggle(payload: CollaborationAgentToggleIn) -> dict[str,
         payload.enabled,
         actor=payload.actor,
         reason=payload.reason,
+    )
+
+
+@router.post("/francis-capability-grants")
+def francis_capability_grant(payload: FrancisCapabilityGrantIn) -> dict[str, object]:
+    return _call_read_only(
+        set_francis_capability_grant,
+        payload.surface_id,
+        payload.decision,
+        requested_access_mode=payload.requested_access_mode,
+        actor=payload.actor,
+        reason=payload.reason,
+        source_review_item_id=payload.source_review_item_id,
     )

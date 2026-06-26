@@ -95696,6 +95696,67 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, and unrelated full-system UI flows were not
   run for this bounded body-map capability-connection proof slice.
 
+### 2026-06-26 01:20Z - Capability grants require explicit operator receipts
+
+Current posture: Phase 2 / developer bridge capability exposure now has an
+explicit grant/deny/revoke receipt lane. Francis1/Ollama body-map visibility is
+still not a capability grant by itself; Codex and Francis1 must read the
+capability-grant state before treating any local-model capability context as
+granted.
+
+What changed:
+
+- Added `developer_bridge.francis_capability_grants`, a bounded local operator
+  state/receipt surface that records `grant`, `deny`, or `revoke` decisions for
+  named Francis body-map surfaces.
+- Grant decisions are limited to low-risk local-model capability context modes:
+  `observe`, `read`, `request`, and `propose_plan`.
+- The capability-grant receipt records actor, reason, previous/current grant
+  state, source review item, granted access mode, and proof that deny/revoke
+  after grant remains supported for tuning.
+- The body map now reads the explicit grant state and reports
+  `connected_to_local_model`, `capability_granted`, `granted_access_mode`,
+  `capability_use_status`, `can_deny_after_fact_for_tuning`, and
+  `grants_capability_authority` per surface.
+- The compact body-map prompt line now says capability use requires a grant
+  receipt, so collaboration prompts stop implying access from visibility alone.
+- Added `GET /developer-bridge/francis-capability-grants` and
+  `POST /developer-bridge/francis-capability-grants`; the mutating POST route is
+  classified in the authority matrix as
+  `developer_bridge.operator_console_control`.
+- Added a read-only MCP tool, `francis_capability_grants_tool`, so connected
+  MCP clients can inspect grant truth without receiving grant authority.
+- The Communication UI parser and body-map panel now preserve and display active
+  grant counts, denied/revoked counts, granted access mode, grant revocation
+  support, and capability-authority state.
+
+Validation:
+
+- Developer bridge test file passed:
+  `python -m pytest tests/test_developer_bridge.py -q`.
+- Chat UI contract suite passed:
+  `npm run test -- src/chat/index.test.ts`
+  (the package script ran the configured UI suite, `280` passing tests).
+- Chat UI production build passed:
+  `npm run build`.
+- Targeted lint passed:
+  `python -m ruff check src/francis/developer_bridge/capability_grants.py src/francis/developer_bridge/body_map.py src/francis/developer_bridge/mcp_server.py src/francis/api/routes/developer_bridge.py src/francis/api/mutation_authority_matrix.py tests/test_developer_bridge.py`.
+- Targeted format check passed:
+  `python -m ruff format --check src/francis/developer_bridge/capability_grants.py src/francis/developer_bridge/body_map.py src/francis/developer_bridge/mcp_server.py src/francis/api/routes/developer_bridge.py src/francis/api/mutation_authority_matrix.py tests/test_developer_bridge.py`.
+- `git diff --check` passed.
+
+Remaining truthful gap:
+
+- This does not grant Francis1/Ollama any default access. Existing surfaces
+  still read as `not_granted` until an operator-console POST records a bounded
+  grant receipt.
+- This does not grant shell, repo mutation, execution, approval, memory-write,
+  training, or autonomous build authority.
+- This does not wire Francis1 to arbitrary tools. It records and exposes the
+  governed grant state that future wiring must obey.
+- `.\scripts\check.ps1`, GitHub CI, and unrelated full-system UI flows were not
+  run for this bounded capability-grant receipt slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

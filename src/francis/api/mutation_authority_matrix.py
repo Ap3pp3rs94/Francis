@@ -344,6 +344,21 @@ _RULES: tuple[AuthorityRule, ...] = (
         ),
     ),
     AuthorityRule(
+        family="developer_bridge",
+        prefixes=("/developer-bridge/francis-capability-grants",),
+        required_actor="payload.actor or chat_ui.system default",
+        required_scope="developer_bridge.operator_console_control",
+        approval_requirement="operator_console_control_receipt_required_for_grant_deny_or_revoke",
+        receipt_behavior="developer_bridge.francis_capability_grant_receipt and bounded capability-grant state",
+        denial_behavior="unknown surface, invalid decision, unsafe access mode, or missing grant reason returns DeveloperBridgeError before state or receipt write",
+        governance_maturity="bounded_operator_capability_grant_receipt",
+        notes=(
+            "Grant decisions are limited to observe/read/request/propose_plan local-model capability context. "
+            "They do not execute prompts, run tools, mutate the repo, approve actions, train a model, or grant "
+            "shell/execution authority."
+        ),
+    ),
+    AuthorityRule(
         family="attachments",
         prefixes=("/attachments/upload",),
         required_actor="multipart request_actor, actor, or api.attachments default",

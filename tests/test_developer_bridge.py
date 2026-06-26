@@ -18,6 +18,7 @@ from francis.developer_bridge.body_map import (
     compact_roadmap_gate_prompt_line,
     read_francis_body_map,
 )
+from francis.developer_bridge.capability_grants import read_francis_capability_grants, set_francis_capability_grant
 from francis.developer_bridge.collaboration import (
     list_collaboration_prompts,
     read_collaboration_sessions,
@@ -135,6 +136,7 @@ def test_developer_bridge_routes_are_mounted() -> None:
     assert "/developer-bridge/collaboration-agents/toggle" in routes
     assert "/developer-bridge/francis-body-map" in routes
     assert "/developer-bridge/francis-trust-ladder" in routes
+    assert "/developer-bridge/francis-capability-grants" in routes
 
 
 def test_developer_bridge_agent_toggle_is_classified_in_authority_matrix() -> None:
@@ -153,6 +155,24 @@ def test_developer_bridge_agent_toggle_is_classified_in_authority_matrix() -> No
     assert entry["required_actor"] == "payload.actor or chat_ui.system default"
     assert entry["required_scope"] == "developer_bridge.operator_console_control"
     assert entry["governance_maturity"] == "bounded_operator_control_receipt"
+
+
+def test_developer_bridge_capability_grant_is_classified_in_authority_matrix() -> None:
+    from francis.api.app import create_app
+
+    matrix = TestClient(create_app()).get("/system/mutating-route-authority-matrix").json()
+    entries = {
+        (entry["method"], entry["path"]): entry
+        for entry in matrix["entries"]
+        if entry["path"] == "/developer-bridge/francis-capability-grants"
+    }
+
+    assert matrix["missing"] == []
+    entry = entries[("POST", "/developer-bridge/francis-capability-grants")]
+    assert entry["family"] == "developer_bridge"
+    assert entry["required_actor"] == "payload.actor or chat_ui.system default"
+    assert entry["required_scope"] == "developer_bridge.operator_console_control"
+    assert entry["governance_maturity"] == "bounded_operator_capability_grant_receipt"
 
 
 def test_francis_body_map_exposes_whole_body_without_authority(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
@@ -265,7 +285,7 @@ def test_francis_body_map_exposes_whole_body_without_authority(tmp_path, monkeyp
     prompt_line = compact_body_map_prompt_line()
     assert "Body map:" in prompt_line
     assert "whole-body visible" in prompt_line
-    assert "not capability connection/grant" in prompt_line
+    assert "capability use requires grant receipt" in prompt_line
     assert "stale memory detaches" in prompt_line
     roadmap_gate = compact_roadmap_gate_prompt_line()
     assert "Roadmap:" in roadmap_gate
@@ -273,6 +293,108 @@ def test_francis_body_map_exposes_whole_body_without_authority(tmp_path, monkeyp
     assert "main-build candidate-only" in roadmap_gate
     assert "blocked_by_open_orb_gaps" in roadmap_gate
     assert compact_trust_ladder_prompt_line() == "Trust: classify needs; no capability authority."
+
+
+def test_capability_grant_receipt_controls_body_map_exposure(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    root = tmp_path / "Francis"
+    (root / "docs" / "canonical").mkdir(parents=True)
+    (root / "docs" / "operations").mkdir(parents=True)
+    (root / "meta").mkdir(parents=True)
+    (root / "src" / "francis" / "developer_bridge").mkdir(parents=True)
+    (root / "apps" / "chat_ui" / "src").mkdir(parents=True)
+    (root / "docs" / "canonical" / "BUILD_MANIFEST.md").write_text("# Phase 2\n", encoding="utf-8")
+    (root / "docs" / "PLANES.md").write_text("# Planes\n", encoding="utf-8")
+    (root / "docs" / "operations" / "COMPLETION_LEDGER.md").write_text(
+        "# Ledger\n\n### 2026-06-25 - Existing proof\n",
+        encoding="utf-8",
+    )
+    (root / "meta" / "plane_map.yaml").write_text("planes: []\n", encoding="utf-8")
+    (root / "src" / "francis" / "developer_bridge" / "collaboration.py").write_text("", encoding="utf-8")
+    (root / "src" / "francis" / "developer_bridge" / "collaboration_runtime.py").write_text("", encoding="utf-8")
+    (root / "src" / "francis" / "developer_bridge" / "trust_ladder.py").write_text("", encoding="utf-8")
+    (root / "apps" / "chat_ui" / "src" / "App.tsx").write_text("", encoding="utf-8")
+    monkeypatch.setenv("FRANCIS_ROOT", str(root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+
+    initial = read_francis_capability_grants(surface_id="collaboration")
+    assert initial["summary"]["active_grants_present"] is False  # type: ignore[index]
+    initial_body = read_francis_body_map()
+    initial_surface = {item["id"]: item for item in initial_body["surfaces"]}["collaboration"]  # type: ignore[index]
+    assert initial_surface["capability_exposure"]["capability_granted"] is False  # type: ignore[index]
+    assert initial_surface["capability_exposure"]["connected_to_local_model"] is False  # type: ignore[index]
+
+    grant = set_francis_capability_grant(
+        "collaboration",
+        "grant",
+        requested_access_mode="read",
+        actor="chat_ui.system",
+        reason="Operator allows Francis1 to use collaboration receipts as bounded context.",
+        source_review_item_id="review-insight-collaboration",
+    )
+
+    assert grant["ok"] is True
+    assert grant["receipt"]["operator_grant_proof"]["reason_recorded"] is True  # type: ignore[index]
+    assert grant["receipt"]["operator_grant_proof"]["grants_execution_authority"] is False  # type: ignore[index]
+    assert grant["receipt"]["operator_grant_proof"]["grants_mutation_authority"] is False  # type: ignore[index]
+    granted_body = read_francis_body_map()
+    granted_surface = {item["id"]: item for item in granted_body["surfaces"]}["collaboration"]  # type: ignore[index]
+    exposure = granted_surface["capability_exposure"]  # type: ignore[index]
+    assert exposure["grant_state"] == "granted"  # type: ignore[index]
+    assert exposure["capability_granted"] is True  # type: ignore[index]
+    assert exposure["connected_to_local_model"] is True  # type: ignore[index]
+    assert exposure["capability_use_status"] == "granted_read"  # type: ignore[index]
+    assert exposure["grants_execution_authority"] is False  # type: ignore[index]
+    assert exposure["grants_mutation_authority"] is False  # type: ignore[index]
+    assert granted_body["summary"]["active_capability_grant_count"] == 1  # type: ignore[index]
+
+    revoke = set_francis_capability_grant(
+        "collaboration",
+        "revoke",
+        actor="chat_ui.system",
+        reason="Revoke after tuning review.",
+    )
+
+    assert revoke["receipt"]["operator_grant_proof"]["can_deny_after_fact_for_tuning"] is True  # type: ignore[index]
+    revoked_body = read_francis_body_map()
+    revoked_surface = {item["id"]: item for item in revoked_body["surfaces"]}["collaboration"]  # type: ignore[index]
+    revoked_exposure = revoked_surface["capability_exposure"]  # type: ignore[index]
+    assert revoked_exposure["grant_state"] == "revoked"  # type: ignore[index]
+    assert revoked_exposure["capability_granted"] is False  # type: ignore[index]
+    assert revoked_exposure["connected_to_local_model"] is False  # type: ignore[index]
+    assert revoked_body["summary"]["active_capability_grant_count"] == 0  # type: ignore[index]
+    assert revoked_body["summary"]["denied_or_revoked_capability_count"] == 1  # type: ignore[index]
+
+
+def test_capability_grant_api_records_bounded_operator_receipt(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    from francis.api.app import create_app
+
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/developer-bridge/francis-capability-grants",
+        json={
+            "surface_id": "memory",
+            "decision": "deny",
+            "requested_access_mode": "read",
+            "actor": "chat_ui.system",
+            "reason": "Keep stale memory detached while tuning.",
+            "source_review_item_id": "review-memory-detached",
+        },
+    )
+
+    body = response.json()
+    assert response.status_code == 200
+    assert body["ok"] is True
+    assert body["grant"]["grant_state"] == "denied"
+    assert body["grant"]["capability_granted"] is False
+    assert body["receipt"]["operator_grant_proof"]["can_deny_after_fact_for_tuning"] is True
+    assert body["receipt"]["operator_grant_proof"]["grants_execution_authority"] is False
+    assert body["receipt"]["operator_grant_proof"]["grants_memory_write_authority"] is False
+
+    readback = client.get("/developer-bridge/francis-capability-grants?surface_id=memory").json()
+    assert readback["items"][0]["grant_state"] == "denied"
+    assert readback["items"][0]["capability_granted"] is False
 
 
 def test_collaboration_substrate_readiness_blocks_main_build_prompt_for_open_gaps(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
@@ -429,7 +551,7 @@ def test_francis_body_map_marks_runtime_observation_from_body_trust_turn(tmp_pat
                 "source_agent": "codex",
                 "target_agent": "ollama",
                 "prompt": (
-                    "Body map: whole-body visible; not capability connection/grant; stale memory detaches. "
+                    "Body map: whole-body visible; capability use requires grant receipt; stale memory detaches. "
                     "Trust: classify needs; no capability authority."
                 ),
                 "context": "no_action_authority=true.",
@@ -941,7 +1063,7 @@ def test_collaboration_driver_waits_for_ollama_before_next_turn(tmp_path, monkey
     assert len(prompts) == 2
     assert all("Do not add a 'Next best action' line" not in prompt for prompt in prompts)
     assert all("Body map: whole-body visible" in prompt for prompt in prompts)
-    assert all("not capability connection/grant" in prompt for prompt in prompts)
+    assert all("capability use requires grant receipt" in prompt for prompt in prompts)
     assert all("stale memory detaches" in prompt for prompt in prompts)
     assert all("Roadmap: ledger first" in prompt for prompt in prompts)
     assert all("main-build candidate-only" in prompt for prompt in prompts)
@@ -3606,4 +3728,5 @@ def test_developer_bridge_mcp_registers_collaboration_relay_tools() -> None:
     assert "collaboration_agents_status_tool" in names
     assert "francis_body_map_tool" in names
     assert "francis_trust_ladder_tool" in names
+    assert "francis_capability_grants_tool" in names
     assert "collaboration_substrate_readiness_tool" in names

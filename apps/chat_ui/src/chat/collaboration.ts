@@ -405,13 +405,16 @@ export type FrancisBodySurfaceCapabilityExposure = {
   grantRequires: string[];
   denyAfterGrantSupported: boolean;
   revocationState: string;
+  canDenyAfterFactForTuning: boolean;
   safeForCapabilityUse: boolean;
   capabilityUseStatus: string;
   currentAccessMode: string;
+  grantedAccessMode: string;
   nextTrustGate: string;
   requiresGovernedRequest: boolean;
   requiresCodexOrOperatorReviewBeforeCapabilityExposure: boolean;
   reason: string;
+  grantsCapabilityAuthority: boolean;
   grantsExecutionAuthority: boolean;
   grantsMutationAuthority: boolean;
   grantsApprovalAuthority: boolean;
@@ -500,6 +503,8 @@ export type FrancisBodyMap = {
     defaultAccessMode: string;
     fullBodyVisible: boolean;
     fullBodyAuthorityGranted: boolean;
+    activeCapabilityGrantCount: number;
+    deniedOrRevokedCapabilityCount: number;
     trustLadderEnforced: boolean;
     runtimeRestartObserved: boolean;
     coverageReviewed: boolean;
@@ -572,6 +577,20 @@ export type FrancisBodyMap = {
     responseId: string;
     outputGuardRewriteObserved: boolean;
     storesFullTranscript: boolean;
+    grantsExecutionAuthority: boolean;
+    grantsMutationAuthority: boolean;
+    grantsApprovalAuthority: boolean;
+    grantsMemoryWriteAuthority: boolean;
+    grantsTrainingAuthority: boolean;
+  };
+  capabilityGrants: {
+    surface: string;
+    route: string;
+    connected: boolean;
+    activeGrantsPresent: boolean;
+    grantedCount: number;
+    deniedOrRevokedCount: number;
+    denyAfterGrantSupported: boolean;
     grantsExecutionAuthority: boolean;
     grantsMutationAuthority: boolean;
     grantsApprovalAuthority: boolean;
@@ -1377,6 +1396,7 @@ export function francisBodySurfaceExposureSummary(surface: FrancisBodySurface): 
     surface.capabilityExposure.grantsApprovalAuthority ||
     surface.capabilityExposure.grantsMemoryWriteAuthority ||
     surface.capabilityExposure.grantsTrainingAuthority ||
+    surface.capabilityExposure.grantsCapabilityAuthority ||
     surface.capabilityExposure.connectedToLocalModel ||
     surface.capabilityExposure.capabilityGranted ||
     surface.capabilityExposure.detachedMemoryBin.injectsIntoPromptContext ||
@@ -1422,6 +1442,8 @@ export function francisBodySurfaceExposureSummary(surface: FrancisBodySurface): 
       `grantable after trust ${actionBoundaryBool(surface.capabilityExposure.grantableAfterTrust)}`,
       `deny after grant ${actionBoundaryBool(surface.capabilityExposure.denyAfterGrantSupported)}`,
       `revocation ${surface.capabilityExposure.revocationState || "revocable_for_tuning"}`,
+      `granted access ${surface.capabilityExposure.grantedAccessMode || "observe"}`,
+      `grant can deny for tuning ${actionBoundaryBool(surface.capabilityExposure.canDenyAfterFactForTuning)}`,
       surface.capabilityExposure.detachedMemoryBin.applies
         ? `detached memory ${surface.capabilityExposure.detachedMemoryBin.status || "detach_if_stale"}`
         : "",
@@ -1432,6 +1454,7 @@ export function francisBodySurfaceExposureSummary(surface: FrancisBodySurface): 
       `connected ${actionBoundaryBool(surface.capabilityExposure.connectedToLocalModel)}`,
       `granted ${actionBoundaryBool(surface.capabilityExposure.capabilityGranted)}`,
       `safe use ${actionBoundaryBool(surface.capabilityExposure.safeForCapabilityUse)}`,
+      `capability authority ${actionBoundaryBool(surface.capabilityExposure.grantsCapabilityAuthority)}`,
       `execute ${actionBoundaryBool(surface.grantsExecutionAuthority)}`,
       `mutation ${actionBoundaryBool(surface.grantsMutationAuthority)}`,
       `approve ${actionBoundaryBool(surface.grantsApprovalAuthority)}`,
@@ -2265,9 +2288,11 @@ function parseFrancisBodySurfaceCapabilityExposure(raw: unknown): FrancisBodySur
     grantRequires: Array.isArray(item.grant_requires) ? item.grant_requires.map((entry) => safeString(entry)).filter(Boolean) : [],
     denyAfterGrantSupported: safeBoolean(item.deny_after_grant_supported, true),
     revocationState: safeString(item.revocation_state, "revocable_for_tuning"),
+    canDenyAfterFactForTuning: safeBoolean(item.can_deny_after_fact_for_tuning, true),
     safeForCapabilityUse: safeBoolean(item.safe_for_capability_use),
     capabilityUseStatus: safeString(item.capability_use_status, "not_exposed"),
     currentAccessMode: safeString(item.current_access_mode),
+    grantedAccessMode: safeString(item.granted_access_mode, "observe"),
     nextTrustGate: safeString(item.next_trust_gate),
     requiresGovernedRequest: safeBoolean(item.requires_governed_request, true),
     requiresCodexOrOperatorReviewBeforeCapabilityExposure: safeBoolean(
@@ -2275,6 +2300,7 @@ function parseFrancisBodySurfaceCapabilityExposure(raw: unknown): FrancisBodySur
       true,
     ),
     reason: safeString(item.reason),
+    grantsCapabilityAuthority: safeBoolean(item.grants_capability_authority),
     grantsExecutionAuthority: safeBoolean(item.grants_execution_authority),
     grantsMutationAuthority: safeBoolean(item.grants_mutation_authority),
     grantsApprovalAuthority: safeBoolean(item.grants_approval_authority),
@@ -2414,6 +2440,7 @@ export function parseFrancisBodyMap(raw: unknown): FrancisBodyMap {
   const evidence = isRecord(value.evidence) ? value.evidence : {};
   const coverageReview = isRecord(value.coverage_review) ? value.coverage_review : {};
   const runtimeObservation = isRecord(value.runtime_observation) ? value.runtime_observation : {};
+  const capabilityGrants = isRecord(value.capability_grants) ? value.capability_grants : {};
   const trustLadder = isRecord(value.trust_ladder) ? value.trust_ladder : {};
   return {
     ok: safeBoolean(value.ok),
@@ -2445,6 +2472,8 @@ export function parseFrancisBodyMap(raw: unknown): FrancisBodyMap {
       defaultAccessMode: safeString(summary.default_access_mode, "observe"),
       fullBodyVisible: safeBoolean(summary.full_body_visible),
       fullBodyAuthorityGranted: safeBoolean(summary.full_body_authority_granted),
+      activeCapabilityGrantCount: safeNumber(summary.active_capability_grant_count),
+      deniedOrRevokedCapabilityCount: safeNumber(summary.denied_or_revoked_capability_count),
       trustLadderEnforced: safeBoolean(summary.trust_ladder_enforced),
       runtimeRestartObserved: safeBoolean(summary.runtime_restart_observed),
       coverageReviewed: safeBoolean(summary.coverage_reviewed),
@@ -2536,6 +2565,20 @@ export function parseFrancisBodyMap(raw: unknown): FrancisBodyMap {
       grantsApprovalAuthority: safeBoolean(runtimeObservation.grants_approval_authority),
       grantsMemoryWriteAuthority: safeBoolean(runtimeObservation.grants_memory_write_authority),
       grantsTrainingAuthority: safeBoolean(runtimeObservation.grants_training_authority),
+    },
+    capabilityGrants: {
+      surface: safeString(capabilityGrants.surface),
+      route: safeString(capabilityGrants.route),
+      connected: safeBoolean(capabilityGrants.connected),
+      activeGrantsPresent: safeBoolean(capabilityGrants.active_grants_present),
+      grantedCount: safeNumber(capabilityGrants.granted_count),
+      deniedOrRevokedCount: safeNumber(capabilityGrants.denied_or_revoked_count),
+      denyAfterGrantSupported: safeBoolean(capabilityGrants.deny_after_grant_supported, true),
+      grantsExecutionAuthority: safeBoolean(capabilityGrants.grants_execution_authority),
+      grantsMutationAuthority: safeBoolean(capabilityGrants.grants_mutation_authority),
+      grantsApprovalAuthority: safeBoolean(capabilityGrants.grants_approval_authority),
+      grantsMemoryWriteAuthority: safeBoolean(capabilityGrants.grants_memory_write_authority),
+      grantsTrainingAuthority: safeBoolean(capabilityGrants.grants_training_authority),
     },
     trustLadder: {
       surface: safeString(trustLadder.surface),

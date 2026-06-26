@@ -361,13 +361,16 @@ test("parseFrancisBodyMap preserves whole-body awareness and quest boundaries", 
           grant_requires: ["trust_ladder_decision", "codex_or_operator_review", "governed_capability_receipt"],
           deny_after_grant_supported: true,
           revocation_state: "revocable_for_tuning",
+          can_deny_after_fact_for_tuning: true,
           safe_for_capability_use: false,
           capability_use_status: "not_exposed",
           current_access_mode: "read",
+          granted_access_mode: "observe",
           next_trust_gate: "request",
           requires_governed_request: true,
           requires_codex_or_operator_review_before_capability_exposure: true,
           reason: "conversation output is not authority",
+          grants_capability_authority: false,
           grants_execution_authority: false,
           grants_mutation_authority: false,
           grants_approval_authority: false,
@@ -415,13 +418,16 @@ test("parseFrancisBodyMap preserves whole-body awareness and quest boundaries", 
           grant_requires: ["trust_ladder_decision", "codex_or_operator_review", "governed_capability_receipt"],
           deny_after_grant_supported: true,
           revocation_state: "revocable_for_tuning",
+          can_deny_after_fact_for_tuning: true,
           safe_for_capability_use: false,
           capability_use_status: "not_exposed",
           current_access_mode: "read",
+          granted_access_mode: "observe",
           next_trust_gate: "request",
           requires_governed_request: true,
           requires_codex_or_operator_review_before_capability_exposure: true,
           reason: "Memory exists, but stale memory is detached from required context.",
+          grants_capability_authority: false,
           grants_execution_authority: false,
           grants_mutation_authority: false,
           grants_approval_authority: false,
@@ -461,6 +467,8 @@ test("parseFrancisBodyMap preserves whole-body awareness and quest boundaries", 
       default_access_mode: "observe",
       full_body_visible: true,
       full_body_authority_granted: false,
+      active_capability_grant_count: 0,
+      denied_or_revoked_capability_count: 0,
       trust_ladder_enforced: true,
       runtime_restart_observed: true,
       coverage_reviewed: true,
@@ -564,6 +572,20 @@ test("parseFrancisBodyMap preserves whole-body awareness and quest boundaries", 
       grants_memory_write_authority: false,
       grants_training_authority: false,
     },
+    capability_grants: {
+      surface: "developer_bridge.francis_capability_grants",
+      route: "/developer-bridge/francis-capability-grants",
+      connected: true,
+      active_grants_present: false,
+      granted_count: 0,
+      denied_or_revoked_count: 0,
+      deny_after_grant_supported: true,
+      grants_execution_authority: false,
+      grants_mutation_authority: false,
+      grants_approval_authority: false,
+      grants_memory_write_authority: false,
+      grants_training_authority: false,
+    },
     trust_ladder: {
       surface: "developer_bridge.francis_trust_ladder",
       route: "/developer-bridge/francis-trust-ladder",
@@ -597,6 +619,8 @@ test("parseFrancisBodyMap preserves whole-body awareness and quest boundaries", 
   assert.equal(bodyMap.identity.providerNameIsIdentity, false);
   assert.equal(bodyMap.summary.fullBodyVisible, true);
   assert.equal(bodyMap.summary.fullBodyAuthorityGranted, false);
+  assert.equal(bodyMap.summary.activeCapabilityGrantCount, 0);
+  assert.equal(bodyMap.summary.deniedOrRevokedCapabilityCount, 0);
   assert.equal(bodyMap.summary.trustLadderEnforced, true);
   assert.equal(bodyMap.summary.runtimeRestartObserved, true);
   assert.equal(bodyMap.summary.coverageReviewed, true);
@@ -619,6 +643,9 @@ test("parseFrancisBodyMap preserves whole-body awareness and quest boundaries", 
   assert.equal(bodyMap.runtimeObservation.observed, true);
   assert.equal(bodyMap.runtimeObservation.outputGuardRewriteObserved, true);
   assert.equal(bodyMap.runtimeObservation.grantsTrainingAuthority, false);
+  assert.equal(bodyMap.capabilityGrants.route, "/developer-bridge/francis-capability-grants");
+  assert.equal(bodyMap.capabilityGrants.activeGrantsPresent, false);
+  assert.equal(bodyMap.capabilityGrants.denyAfterGrantSupported, true);
   assert.equal(bodyMap.trustLadder.connected, true);
   assert.equal(bodyMap.trustLadder.decisionContract.length, 4);
   assert.equal(bodyMap.quest.singleTimeline[0]?.targetDuration, "30-45 minutes");
@@ -638,9 +665,12 @@ test("parseFrancisBodyMap preserves whole-body awareness and quest boundaries", 
   ]);
   assert.equal(bodyMap.surfaces[0]?.capabilityExposure.denyAfterGrantSupported, true);
   assert.equal(bodyMap.surfaces[0]?.capabilityExposure.revocationState, "revocable_for_tuning");
+  assert.equal(bodyMap.surfaces[0]?.capabilityExposure.canDenyAfterFactForTuning, true);
   assert.equal(bodyMap.surfaces[0]?.capabilityExposure.safeForCapabilityUse, false);
   assert.equal(bodyMap.surfaces[0]?.capabilityExposure.capabilityUseStatus, "not_exposed");
+  assert.equal(bodyMap.surfaces[0]?.capabilityExposure.grantedAccessMode, "observe");
   assert.equal(bodyMap.surfaces[0]?.capabilityExposure.nextTrustGate, "request");
+  assert.equal(bodyMap.surfaces[0]?.capabilityExposure.grantsCapabilityAuthority, false);
   assert.equal(bodyMap.surfaces[0]?.capabilityExposure.detachedMemoryBin.applies, false);
   assert.equal(bodyMap.surfaces[1]?.id, "memory");
   assert.equal(bodyMap.surfaces[1]?.capabilityExposure.detachedMemoryBin.applies, true);
@@ -673,10 +703,13 @@ test("parseFrancisBodyMap preserves whole-body awareness and quest boundaries", 
     "grantable after trust true",
     "deny after grant true",
     "revocation revocable_for_tuning",
+    "granted access observe",
+    "grant can deny for tuning true",
     "visible true",
     "connected false",
     "granted false",
     "safe use false",
+    "capability authority false",
     "execute false",
     "mutation false",
     "approve false",

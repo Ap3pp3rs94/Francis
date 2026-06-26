@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from francis.developer_bridge.capability_grants import read_francis_capability_grants
 from francis.kernel.paths import data_dir, repo_root
 
 _SCHEMA_VERSION = "developer_bridge_francis_body_map_v1"
@@ -16,7 +17,14 @@ def read_francis_body_map() -> dict[str, object]:
     """Read the current Francis body map without granting any capability authority."""
 
     root = repo_root()
-    surfaces = _body_surfaces(root)
+    capability_grants = read_francis_capability_grants()
+    grant_items = [
+        _dict(item)
+        for item in capability_grants.get("items", [])
+        if isinstance(item, dict) and _safe_str(item.get("surface_id"))
+    ]
+    grant_by_surface = {_safe_str(item.get("surface_id")): item for item in grant_items}
+    surfaces = _body_surfaces(root, grant_by_surface=grant_by_surface)
     trust_ladder_connected = _trust_ladder_connected(root)
     runtime_observation = _runtime_restart_observation()
     runtime_observed = bool(runtime_observation.get("observed"))
@@ -75,6 +83,10 @@ def read_francis_body_map() -> dict[str, object]:
             "default_access_mode": "observe",
             "full_body_visible": True,
             "full_body_authority_granted": False,
+            "active_capability_grant_count": _safe_int(_dict(capability_grants.get("summary")).get("granted_count")),
+            "denied_or_revoked_capability_count": _safe_int(
+                _dict(capability_grants.get("summary")).get("denied_or_revoked_count")
+            ),
             "trust_ladder_enforced": trust_ladder_connected,
             "runtime_restart_observed": runtime_observed,
             "coverage_reviewed": coverage_review_observed,
@@ -154,6 +166,22 @@ def read_francis_body_map() -> dict[str, object]:
         },
         "coverage_review": coverage_review,
         "runtime_observation": runtime_observation,
+        "capability_grants": {
+            "surface": "developer_bridge.francis_capability_grants",
+            "route": "/developer-bridge/francis-capability-grants",
+            "connected": True,
+            "active_grants_present": bool(_dict(capability_grants.get("summary")).get("active_grants_present")),
+            "granted_count": _safe_int(_dict(capability_grants.get("summary")).get("granted_count")),
+            "denied_or_revoked_count": _safe_int(
+                _dict(capability_grants.get("summary")).get("denied_or_revoked_count")
+            ),
+            "deny_after_grant_supported": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+            "grants_approval_authority": False,
+            "grants_memory_write_authority": False,
+            "grants_training_authority": False,
+        },
         "trust_ladder": {
             "surface": "developer_bridge.francis_trust_ladder",
             "route": "/developer-bridge/francis-trust-ladder",
@@ -173,7 +201,7 @@ def read_francis_body_map() -> dict[str, object]:
 def compact_body_map_prompt_line() -> str:
     """Return a bounded prompt line for Francis1 collaboration turns."""
 
-    return _one_line("Body map: whole-body visible; not capability connection/grant; stale memory detaches.")
+    return _one_line("Body map: whole-body visible; capability use requires grant receipt; stale memory detaches.")
 
 
 def compact_roadmap_gate_prompt_line() -> str:
@@ -200,7 +228,7 @@ def compact_roadmap_gate_prompt_line() -> str:
     return _one_line(f"Roadmap: ledger first; main-build {main_build}; {gate}.")
 
 
-def _body_surfaces(root: Path) -> list[dict[str, object]]:
+def _body_surfaces(root: Path, *, grant_by_surface: dict[str, dict[str, object]]) -> list[dict[str, object]]:
     return [
         _surface(
             "collaboration",
@@ -215,6 +243,7 @@ def _body_surfaces(root: Path) -> list[dict[str, object]]:
             ],
             root,
             "Codex/Claude/Francis1 receipts are visible and bounded; conversation output is not authority.",
+            grant_by_surface,
         ),
         _surface(
             "memory",
@@ -229,6 +258,7 @@ def _body_surfaces(root: Path) -> list[dict[str, object]]:
             ],
             root,
             "Memory exists, but Francis1 does not receive automatic memory-write or long-term promotion authority.",
+            grant_by_surface,
         ),
         _surface(
             "governance",
@@ -243,6 +273,7 @@ def _body_surfaces(root: Path) -> list[dict[str, object]]:
             ],
             root,
             "Policy before power; model confidence cannot grant action.",
+            grant_by_surface,
         ),
         _surface(
             "action_intake",
@@ -257,6 +288,7 @@ def _body_surfaces(root: Path) -> list[dict[str, object]]:
             ],
             root,
             "User direction can become an action candidate; execution still needs policy, identity, and receipts.",
+            grant_by_surface,
         ),
         _surface(
             "execution",
@@ -271,6 +303,7 @@ def _body_surfaces(root: Path) -> list[dict[str, object]]:
             ],
             root,
             "Readback exists; no raw shell or autonomous execution is exposed by this bridge.",
+            grant_by_surface,
         ),
         _surface(
             "orb_planes",
@@ -285,6 +318,7 @@ def _body_surfaces(root: Path) -> list[dict[str, object]]:
             ],
             root,
             "Francis1 should know the body is plane-governed before asking for capability.",
+            grant_by_surface,
         ),
         _surface(
             "orb_lens_hud_shell",
@@ -299,6 +333,7 @@ def _body_surfaces(root: Path) -> list[dict[str, object]]:
             ],
             root,
             "Awareness is allowed; interaction authority is not widened by this map.",
+            grant_by_surface,
         ),
         _surface(
             "mcp",
@@ -312,6 +347,7 @@ def _body_surfaces(root: Path) -> list[dict[str, object]]:
             ],
             root,
             "Developer bridge is read-only; governed gateway remains separate and policy-bound.",
+            grant_by_surface,
         ),
         _surface(
             "capability_economy",
@@ -326,6 +362,7 @@ def _body_surfaces(root: Path) -> list[dict[str, object]]:
             ],
             root,
             "Capability growth remains proposal/stage/review before promotion or execution.",
+            grant_by_surface,
         ),
         _surface(
             "model_tuning",
@@ -340,6 +377,7 @@ def _body_surfaces(root: Path) -> list[dict[str, object]]:
             ],
             root,
             "Learning receipts exist; no training authority or tuning automation is granted yet.",
+            grant_by_surface,
         ),
     ]
 
@@ -353,6 +391,7 @@ def _surface(
     evidence_paths: list[str],
     root: Path,
     current_boundary: str,
+    grant_by_surface: dict[str, dict[str, object]],
 ) -> dict[str, object]:
     evidence = [
         {
@@ -375,6 +414,7 @@ def _surface(
             access_mode=access_mode,
             connection_state=connection_state,
             current_boundary=current_boundary,
+            capability_grant=grant_by_surface.get(surface_id, {}),
         ),
         "grants_execution_authority": False,
         "grants_mutation_authority": False,
@@ -390,16 +430,23 @@ def _surface_capability_exposure(
     access_mode: str,
     connection_state: str,
     current_boundary: str,
+    capability_grant: dict[str, object],
 ) -> dict[str, object]:
     readback_connected = connection_state.startswith("connected")
     detached_memory_bin = _detached_memory_bin(surface_id)
+    grant_state = _safe_str(capability_grant.get("grant_state")) or "not_granted"
+    capability_granted = bool(capability_grant.get("capability_granted"))
+    connected_to_local_model = bool(capability_grant.get("connected_to_local_model"))
+    granted_access_mode = _safe_str(capability_grant.get("granted_access_mode")) or "observe"
+    capability_use_status = _safe_str(capability_grant.get("capability_use_status")) or "not_exposed"
+    safe_for_capability_use = bool(capability_grant.get("safe_for_capability_use"))
     return {
         "visible_to_francis1": True,
         "known_surface": True,
         "readback_connected": readback_connected,
-        "connected_to_local_model": False,
-        "capability_granted": False,
-        "grant_state": "not_granted",
+        "connected_to_local_model": connected_to_local_model,
+        "capability_granted": capability_granted,
+        "grant_state": grant_state,
         "grantable_after_trust": readback_connected,
         "grant_requires": [
             "trust_ladder_decision",
@@ -408,9 +455,11 @@ def _surface_capability_exposure(
         ],
         "deny_after_grant_supported": True,
         "revocation_state": "revocable_for_tuning",
-        "safe_for_capability_use": False,
-        "capability_use_status": "not_exposed",
+        "can_deny_after_fact_for_tuning": True,
+        "safe_for_capability_use": safe_for_capability_use,
+        "capability_use_status": capability_use_status,
         "current_access_mode": access_mode,
+        "granted_access_mode": granted_access_mode,
         "next_trust_gate": _next_trust_mode(access_mode),
         "requires_governed_request": True,
         "requires_codex_or_operator_review_before_capability_exposure": True,
@@ -421,6 +470,7 @@ def _surface_capability_exposure(
         "grants_approval_authority": False,
         "grants_memory_write_authority": False,
         "grants_training_authority": False,
+        "grants_capability_authority": capability_granted,
         "detached_memory_bin": detached_memory_bin,
     }
 

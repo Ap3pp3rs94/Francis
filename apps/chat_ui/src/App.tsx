@@ -1398,7 +1398,8 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
         surface.grantsMutationAuthority ||
         surface.grantsApprovalAuthority ||
         surface.grantsMemoryWriteAuthority ||
-        surface.grantsTrainingAuthority,
+        surface.grantsTrainingAuthority ||
+        surface.capabilityExposure.grantsCapabilityAuthority,
     ) || Boolean(bodyMap?.summary.fullBodyAuthorityGranted);
   const trustLadderItems = trustLadder?.items ?? [];
   const trustLadderUnsafeAuthority =
@@ -2377,6 +2378,8 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
                 planes {bodyMap?.summary.canonicalPlaneCoveredCount ?? 0}/{bodyMap?.summary.canonicalPlaneCount ?? 0}
               </span>
               <span>gaps {bodyMap?.summary.coverageOpenGapCount ?? 0}</span>
+              <span>active grants {bodyMap?.summary.activeCapabilityGrantCount ?? 0}</span>
+              <span>denied/revoked {bodyMap?.summary.deniedOrRevokedCapabilityCount ?? 0}</span>
               <span>authority {boolText(Boolean(bodyMap?.summary.fullBodyAuthorityGranted))}</span>
               <span>unsafe {boolText(bodyMapUnsafeAuthority)}</span>
             </div>

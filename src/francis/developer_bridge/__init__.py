@@ -6,6 +6,7 @@ from .agents import (
     set_collaboration_agent_enabled,
 )
 from .body_map import compact_body_map_prompt_line, compact_roadmap_gate_prompt_line, read_francis_body_map
+from .capability_grants import read_francis_capability_grants, set_francis_capability_grant
 from .collaboration import (
     list_collaboration_prompts,
     read_collaboration_transcript,
@@ -33,6 +34,7 @@ __all__ = [
     "list_collaboration_prompts",
     "read_collaboration_transcript",
     "read_completion_ledger",
+    "read_francis_capability_grants",
     "read_francis_body_map",
     "read_francis_trust_ladder",
     "read_repo_file",
@@ -40,5 +42,6 @@ __all__ = [
     "repo_status",
     "search_repo",
     "set_collaboration_agent_enabled",
+    "set_francis_capability_grant",
     "submit_collaboration_prompt",
 ]
