@@ -16,6 +16,21 @@ _MAX_TEXT = 420
 _RECENT_INSIGHT_SCAN_THRESHOLD = 250
 _RECENT_INSIGHT_SCAN_MIN = 32
 _RECENT_INSIGHT_SCAN_MAX = 300
+_ROADMAP_FINDING_DRIFT_MARKERS = (
+    "build manifest",
+    "completion ledger",
+    "roadmap alignment",
+    "main build candidate only",
+    "main francis build",
+    "blocked by open orb gaps",
+)
+_ROADMAP_TOPIC_MARKERS = (
+    "roadmap",
+    "substrate complete",
+    "main francis build",
+    "build manifest",
+    "completion ledger",
+)
 
 
 def read_collaboration_review(*, limit: int = 10, session_id: str = "") -> dict[str, object]:
@@ -170,8 +185,9 @@ def _review_item(insight: dict[str, object], *, context: dict[str, object]) -> d
     implementation = _safe_dict(memory.get("implementation_candidate"))
     topic = _bounded_text(insight.get("topic"), limit=220)
     finding = _bounded_text(memory.get("finding"), limit=_MAX_TEXT)
+    topic_alignment = _topic_alignment_flags(topic=topic, finding=finding)
     topic_projection = _topic_projection_override(topic)
-    finding_projection = _finding_projection_override(finding)
+    finding_projection = {} if topic_alignment["blocks_projection"] else _finding_projection_override(finding)
     projection = _selected_projection(
         topic_projection=topic_projection,
         finding_projection=finding_projection,
@@ -197,6 +213,7 @@ def _review_item(insight: dict[str, object], *, context: dict[str, object]) -> d
         concrete_surface=concrete_surface,
         review_artifact=review_artifact,
         implementation=implementation,
+        topic_alignment=topic_alignment,
     )
     surface_verification = _surface_verification(
         concrete_surface=concrete_surface,
@@ -207,6 +224,7 @@ def _review_item(insight: dict[str, object], *, context: dict[str, object]) -> d
         source=source,
         concrete_surface=concrete_surface,
         review_artifact=review_artifact,
+        quality=quality,
     )
     return {
         "kind": "developer_bridge.collaboration_review_item",
@@ -1132,21 +1150,35 @@ def _build_direction_gate(
     source: dict[str, object],
     concrete_surface: str,
     review_artifact: str,
+    quality: dict[str, object],
 ) -> dict[str, object]:
     code = _bounded_text(build_issue.get("code"), limit=120)
     is_source_disagreement = code == "source_disagreement_record"
-    state = "blocked_until_typed_review" if is_source_disagreement else "advisory_review_required"
-    reason = (
-        "Source disagreement cannot become build direction until the typed review artifact records conflicting "
-        "sources, the surface under review, and required Codex or operator review."
-        if is_source_disagreement
-        else "Collaboration output remains advisory until Codex or the operator reviews the typed receipt against repo truth."
-    )
+    is_topic_alignment_block = bool(quality.get("finding_conflicts_with_topic"))
+    if is_source_disagreement:
+        state = "blocked_until_typed_review"
+        reason = (
+            "Source disagreement cannot become build direction until the typed review artifact records conflicting "
+            "sources, the surface under review, and required Codex or operator review."
+        )
+    elif is_topic_alignment_block:
+        state = "blocked_until_topic_alignment_review"
+        reason = (
+            "The finding repeats roadmap or manifest language on a non-roadmap topic; treat it as drift evidence "
+            "until Codex or the operator reviews the concrete surface against repo truth."
+        )
+    else:
+        state = "advisory_review_required"
+        reason = (
+            "Collaboration output remains advisory until Codex or the operator reviews the typed receipt against "
+            "repo truth."
+        )
     return {
         "state": state,
-        "blocks_build_direction": is_source_disagreement,
+        "blocks_build_direction": is_source_disagreement or is_topic_alignment_block,
         "requires_typed_review_artifact": True,
         "requires_conflicting_sources": is_source_disagreement,
+        "requires_topic_alignment_review": is_topic_alignment_block,
         "requires_codex_or_operator_review": True,
         "requires_repo_truth_review": True,
         "conflicting_sources": _conflicting_source_receipts(source) if is_source_disagreement else [],
@@ -1427,6 +1459,27 @@ def _finding_projection_override(finding: str) -> dict[str, object]:
     return {}
 
 
+def _topic_alignment_flags(*, topic: str, finding: str) -> dict[str, object]:
+    lower_topic = _topic_key(topic)
+    lower_finding = _topic_key(finding)
+    finding_repeats_roadmap_gate = any(marker in lower_finding for marker in _ROADMAP_FINDING_DRIFT_MARKERS)
+    topic_supports_roadmap_gate = any(marker in lower_topic for marker in _ROADMAP_TOPIC_MARKERS)
+    finding_conflicts_with_topic = finding_repeats_roadmap_gate and not topic_supports_roadmap_gate
+    return {
+        "finding_repeats_roadmap_gate": finding_repeats_roadmap_gate,
+        "topic_supports_roadmap_gate": topic_supports_roadmap_gate,
+        "finding_conflicts_with_topic": finding_conflicts_with_topic,
+        "blocks_projection": finding_conflicts_with_topic,
+        "blocks_build_direction": finding_conflicts_with_topic,
+        "status": "needs_topic_alignment_review" if finding_conflicts_with_topic else "topic_aligned",
+        "reason": (
+            "roadmap or manifest finding repeated on a non-roadmap review topic"
+            if finding_conflicts_with_topic
+            else "finding does not conflict with the active review topic"
+        ),
+    }
+
+
 def _selected_projection(
     *,
     topic_projection: dict[str, object],
@@ -1604,6 +1657,7 @@ def _quality_flags(
     concrete_surface: str,
     review_artifact: str,
     implementation: dict[str, object],
+    topic_alignment: dict[str, object],
 ) -> dict[str, object]:
     lowered = f"{finding} {concrete_surface} {review_artifact}".lower()
     generic_surface = concrete_surface in {
@@ -1621,6 +1675,13 @@ def _quality_flags(
         "implementation_candidate_status": implementation.get("status", "candidate"),
         "needs_repo_truth_review": True,
         "safe_to_implement_without_review": False,
+        "finding_repeats_roadmap_gate": bool(topic_alignment.get("finding_repeats_roadmap_gate")),
+        "topic_supports_roadmap_gate": bool(topic_alignment.get("topic_supports_roadmap_gate")),
+        "finding_conflicts_with_topic": bool(topic_alignment.get("finding_conflicts_with_topic")),
+        "blocks_projection": bool(topic_alignment.get("blocks_projection")),
+        "blocks_build_direction": bool(topic_alignment.get("blocks_build_direction")),
+        "topic_alignment_status": _bounded_text(topic_alignment.get("status"), limit=80),
+        "topic_alignment_reason": _bounded_text(topic_alignment.get("reason"), limit=180),
     }
 
 
@@ -1632,6 +1693,8 @@ def _review_recommendation(
 ) -> dict[str, object]:
     if bool(review_status.get("implemented")):
         decision = "already_implemented_claim_needs_verification"
+    elif bool(quality.get("finding_conflicts_with_topic")):
+        decision = "topic_alignment_review_required"
     elif bool(quality.get("loop_language_present")):
         decision = "model_drift_needs_review"
     elif bool(quality.get("invented_artifact_hint")) or bool(quality.get("generic_surface")):
@@ -1654,6 +1717,8 @@ def _recommendation_next_action(*, decision: str, surface_verification: dict[str
         surface_action = "Inspect the cited insight and concrete_repo_surface against repo truth before implementation."
     if decision == "model_drift_needs_review":
         return f"Review the local-model drift signal, then {surface_action[0].lower()}{surface_action[1:]}"
+    if decision == "topic_alignment_review_required":
+        return f"Treat the topic-mismatched finding as drift evidence, then {surface_action[0].lower()}{surface_action[1:]}"
     if decision == "already_implemented_claim_needs_verification":
         return f"Verify the implemented claim against repo truth, then {surface_action[0].lower()}{surface_action[1:]}"
     if decision == "needs_codex_triage":

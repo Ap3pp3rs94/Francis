@@ -99154,6 +99154,68 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, browser UI proof, GitHub CI, and broader ORB/body
   validation remain outside this bounded slice until separately run.
 
+### 2026-06-26 15:01Z - Collaboration review blocks topic-mismatched roadmap drift
+
+Current posture: Phase 2 / P9 collaboration observability now applies the
+exploration drift boundary at the review surface too. Codex can still guide and
+inspect concrete surfaces, but a Francis1 finding that repeats roadmap,
+manifest, completion-ledger, or main-build language no longer forces a
+non-roadmap topic into roadmap build direction.
+
+What changed:
+
+- Added topic/finding alignment checks to
+  `developer_bridge.collaboration_review` items.
+- Suppressed forced roadmap projection when the active topic is not roadmap,
+  substrate-completion, main-build, manifest, or ledger review.
+- Added review `quality_flags` for roadmap-finding repetition, topic support,
+  projection blocking, and build-direction blocking.
+- Added `build_direction_gate.state=blocked_until_topic_alignment_review` for
+  topic-mismatched findings while preserving source-disagreement blocks and
+  legitimate roadmap/substrate boundaries.
+- Review recommendations now say to treat topic-mismatched findings as drift
+  evidence and inspect the actual concrete surface instead of using the finding
+  as build direction.
+
+Validation:
+
+- Focused collaboration review tests passed:
+  `pytest tests\test_developer_bridge.py::test_collaboration_review_projects_generic_historical_topics_to_concrete_surfaces tests\test_developer_bridge.py::test_collaboration_review_flags_raw_reconciliation_drift_language tests\test_developer_bridge.py::test_collaboration_review_keeps_meta_loop_drift_on_learning_surface tests\test_developer_bridge.py::test_collaboration_review_http_route_marks_bounded_readback_cache -q`.
+- Ruff lint passed:
+  `ruff check src\francis\developer_bridge\collaboration_review.py tests\test_developer_bridge.py`.
+- Ruff format check passed:
+  `ruff format --check src\francis\developer_bridge\collaboration_review.py tests\test_developer_bridge.py`.
+- Mypy passed:
+  `mypy src\francis\developer_bridge\collaboration_review.py`.
+- Compile check passed:
+  `python -m compileall -q src\francis\developer_bridge\collaboration_review.py`.
+- Whitespace diff check passed:
+  `git diff --check`.
+- Direct review readback over live receipts showed latest drifted items on
+  `developer_bridge.collaboration_driver.learning_events` and
+  `api.routes.chat.mission_ingress` with `projection_applied=false`,
+  `finding_conflicts_with_topic=true`,
+  `build_direction_gate.state=blocked_until_topic_alignment_review`, and no
+  execution, mutation, approval, or memory-write authority.
+- Live collaboration helpers were restarted through the existing bounded
+  `francis communication-runtime` supervisor; runtime health returned
+  `status=healthy`, `helper_count=3`, turn `2269`,
+  `latest_prompt_within_budget=true`, and
+  `no_action_authority_receipts_observed=true`.
+- `latest_review_candidate_line()` returned
+  `surface=developer_bridge.collaboration_driver.learning_events`,
+  `verified=existing`, and `build_or_wire=false`. The latest driver prompt
+  included the same learning-events prior-check surface instead of roadmap
+  docs.
+
+Remaining truthful gap:
+
+- This does not tune Francis1, grant new Francis capabilities, promote memory,
+  or decide the content of a drifted finding; it prevents topic-mismatched
+  finding text from overriding the concrete review surface.
+- `.\scripts\check.ps1`, browser UI proof, GitHub CI, and broader ORB/body
+  validation remain outside this bounded slice until separately run.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

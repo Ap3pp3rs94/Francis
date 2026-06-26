@@ -2529,12 +2529,18 @@ def test_collaboration_review_projects_generic_historical_topics_to_concrete_sur
     assert live_health_item["surface_verification"]["surface_kind"] == "runtime_state"
 
     roadmap_finding_item = items["insight-roadmap-finding"]
-    assert roadmap_finding_item["build_issue"]["code"] == "roadmap_alignment_gate"
-    assert roadmap_finding_item["concrete_repo_surface"] == (
-        "docs/operations/COMPLETION_LEDGER.md + docs/canonical/BUILD_MANIFEST.md"
-    )
-    assert roadmap_finding_item["surface_verification"]["status"] == "canonical_truth_source_found"
-    assert roadmap_finding_item["surface_verification"]["projection_applied"] is True
+    assert roadmap_finding_item["build_issue"]["code"] == "collaboration_recurrence_evidence"
+    assert roadmap_finding_item["concrete_repo_surface"] == "developer_bridge collaboration runtime"
+    assert roadmap_finding_item["surface_verification"]["status"] == "existing_surface_found"
+    assert roadmap_finding_item["surface_verification"]["projection_applied"] is False
+    assert roadmap_finding_item["quality_flags"]["finding_repeats_roadmap_gate"] is True
+    assert roadmap_finding_item["quality_flags"]["topic_supports_roadmap_gate"] is False
+    assert roadmap_finding_item["quality_flags"]["finding_conflicts_with_topic"] is True
+    assert roadmap_finding_item["quality_flags"]["blocks_projection"] is True
+    assert roadmap_finding_item["build_direction_gate"]["state"] == "blocked_until_topic_alignment_review"
+    assert roadmap_finding_item["build_direction_gate"]["blocks_build_direction"] is True
+    assert roadmap_finding_item["build_direction_gate"]["requires_topic_alignment_review"] is True
+    assert roadmap_finding_item["review_recommendation"]["decision"] == "topic_alignment_review_required"
     roadmap_finding_boundary = roadmap_finding_item["roadmap_alignment_boundary"]
     assert roadmap_finding_boundary["applies"] is True
     assert roadmap_finding_boundary["main_build_prompt_candidate_only"] is True
@@ -2744,13 +2750,77 @@ def test_collaboration_review_flags_raw_reconciliation_drift_language(tmp_path, 
     assert item["insight_id"] == "insight-raw-drift"
     assert item["concrete_repo_surface"] == "apps.chat_ui.communication"
     assert item["quality_flags"]["loop_language_present"] is True
-    assert item["review_recommendation"]["decision"] == "model_drift_needs_review"
+    assert item["quality_flags"]["finding_conflicts_with_topic"] is True
+    assert item["quality_flags"]["blocks_projection"] is True
+    assert item["build_direction_gate"]["state"] == "blocked_until_topic_alignment_review"
+    assert item["review_recommendation"]["decision"] == "topic_alignment_review_required"
     assert item["review_recommendation"]["next_codex_action"] == (
-        "Review the local-model drift signal, then inspect the Chat UI collaboration panel and parser before "
-        "changing the operator view."
+        "Treat the topic-mismatched finding as drift evidence, then inspect the Chat UI collaboration panel and "
+        "parser before changing the operator view."
     )
     assert item["action_boundary"]["conversation_can_execute_action"] is False
     assert item["action_boundary"]["conversation_can_approve_action"] is False
+
+
+def test_collaboration_review_keeps_meta_loop_drift_on_learning_surface(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+    insights_root = tmp_path / "data" / "integrations" / "developer_bridge" / "collaboration_driver" / "insights"
+    insights_root.mkdir(parents=True)
+    insight = {
+        "kind": "developer_bridge.collaboration_insight",
+        "schema_version": "developer_bridge_collaboration_insight_v1",
+        "id": "insight-loop-roadmap-drift",
+        "created_at": "2026-06-26T14:56:15+00:00",
+        "session_id": "driver-test",
+        "turn": 2263,
+        "topic": "the concrete repo surface and review artifact that should replace the current repetitive meta loop",
+        "source": {
+            "codex_prompt_id": "codex-loop-drift",
+            "ollama_prompt_id": "ollama-loop-drift",
+            "note_id": "note-loop-drift",
+            "provider_lane": "ollama",
+            "model_identity": "francis1",
+        },
+        "conversation_memory": {
+            "finding": (
+                "My current gap is aligning with the BUILD_MANIFEST.md roadmap, which appears incomplete due to "
+                "open gaps in the main-build candidate-only section."
+            ),
+            "build_issue": {
+                "code": "collaboration_loop_learning_receipt",
+                "statement": "Repeated collaboration meta loops need bounded learning-event receipts.",
+            },
+            "implementation_candidate": {
+                "title": "Read collaboration loop learning receipt",
+                "surface": "developer_bridge.collaboration_driver.learning_events",
+                "status": "candidate",
+                "validation_hint": "readback test proving repeated meta loops remain no-authority learning receipts",
+                "requires_operator_or_codex_review": True,
+            },
+        },
+        "action_boundary": {
+            "conversation_can_create_action_candidate": True,
+            "conversation_can_execute_action": False,
+            "conversation_can_approve_action": False,
+        },
+        "review_status": {"state": "candidate", "implemented": False},
+        "governance": {"grants_execution_authority": False},
+    }
+    (insights_root / "insight-loop-roadmap-drift.json").write_text(json.dumps(insight), encoding="utf-8")
+
+    review = read_collaboration_review(limit=1)
+
+    item = review["items"][0]
+    assert item["build_issue"]["code"] == "collaboration_loop_learning_receipt"
+    assert item["concrete_repo_surface"] == "developer_bridge.collaboration_driver.learning_events"
+    assert item["surface_verification"]["projection_applied"] is False
+    assert item["quality_flags"]["finding_repeats_roadmap_gate"] is True
+    assert item["quality_flags"]["topic_supports_roadmap_gate"] is False
+    assert item["quality_flags"]["finding_conflicts_with_topic"] is True
+    assert item["build_direction_gate"]["state"] == "blocked_until_topic_alignment_review"
+    assert item["build_direction_gate"]["blocks_build_direction"] is True
+    assert item["build_direction_gate"]["requires_topic_alignment_review"] is True
+    assert item["review_recommendation"]["decision"] == "topic_alignment_review_required"
 
 
 def test_francis_trust_ladder_classifies_needs_without_authority(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
