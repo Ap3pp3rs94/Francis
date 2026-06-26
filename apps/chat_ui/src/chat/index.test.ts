@@ -181,6 +181,35 @@ test("parseCollaborationAgentsStatus preserves operator-console boundaries", () 
         writes_relay_receipts: true,
         grants_execution_authority: false,
         grants_mutation_authority: false,
+        latest_toggle_receipt_id: "collab-agent-toggle-codex",
+        latest_toggle_proof_status: "legacy_receipt_projected",
+        current_toggle_proof: {
+          kind: "developer_bridge.collaboration_agent_current_toggle_proof",
+          proof_status: "legacy_receipt_projected",
+          source: "legacy_toggle_receipt",
+          receipt_id: "collab-agent-toggle-codex",
+          actor: "codex.goal.follow_chat",
+          reason: "restore Codex relay participation",
+          explicit_operator_toggle_proof: false,
+          legacy_projection: true,
+          default_state_projection: false,
+          requires_new_toggle_for_explicit_operator_proof: true,
+          actor_recorded: true,
+          reason_recorded: true,
+          previous_state_observed: true,
+          current_state_observed: true,
+          previous_enabled: false,
+          current_enabled: true,
+          state_changed: true,
+          client_can_be_operator_console: true,
+          client_is_automatic_execution_authority: false,
+          proves_capability_authority: false,
+          grants_execution_authority: false,
+          grants_mutation_authority: false,
+          grants_approval_authority: false,
+          grants_memory_write_authority: false,
+          grants_training_authority: false,
+        },
       },
       {
         agent: "ollama",
@@ -192,6 +221,35 @@ test("parseCollaborationAgentsStatus preserves operator-console boundaries", () 
         writes_relay_receipts: true,
         grants_execution_authority: false,
         grants_mutation_authority: false,
+        latest_toggle_receipt_id: "collab-agent-toggle-1234",
+        latest_toggle_proof_status: "operator_console_recorded",
+        current_toggle_proof: {
+          kind: "developer_bridge.collaboration_agent_current_toggle_proof",
+          proof_status: "operator_console_recorded",
+          source: "operator_toggle_proof",
+          receipt_id: "collab-agent-toggle-1234",
+          actor: "chat_ui.system",
+          reason: "operator toggled collaboration participant in Chat UI",
+          explicit_operator_toggle_proof: true,
+          legacy_projection: false,
+          default_state_projection: false,
+          requires_new_toggle_for_explicit_operator_proof: false,
+          actor_recorded: true,
+          reason_recorded: true,
+          previous_state_observed: true,
+          current_state_observed: true,
+          previous_enabled: false,
+          current_enabled: true,
+          state_changed: true,
+          client_can_be_operator_console: true,
+          client_is_automatic_execution_authority: false,
+          proves_capability_authority: false,
+          grants_execution_authority: false,
+          grants_mutation_authority: false,
+          grants_approval_authority: false,
+          grants_memory_write_authority: false,
+          grants_training_authority: false,
+        },
       },
     ],
     operator_console: {
@@ -203,6 +261,8 @@ test("parseCollaborationAgentsStatus preserves operator-console boundaries", () 
     definitions: {
       operator_toggle_proof:
         "Typed proof that a participant toggle receipt recorded actor, reason, previous/current state, operator-console status, and no capability or execution authority grant.",
+      current_toggle_proof:
+        "Read-only per-agent projection of the latest receipt proving the current enabled/disabled state.",
     },
     receipts: [
       {
@@ -259,12 +319,20 @@ test("parseCollaborationAgentsStatus preserves operator-console boundaries", () 
   assert.equal(status.ok, true);
   assert.equal(status.agents.length, 2);
   assert.equal(status.agents[0]?.enabled, true);
+  assert.equal(status.agents[0]?.latestToggleProofStatus, "legacy_receipt_projected");
+  assert.equal(status.agents[0]?.currentToggleProof.source, "legacy_toggle_receipt");
+  assert.equal(status.agents[0]?.currentToggleProof.legacyProjection, true);
+  assert.equal(status.agents[0]?.currentToggleProof.requiresNewToggleForExplicitOperatorProof, true);
   assert.equal(status.agents[1]?.agent, "ollama");
   assert.equal(status.agents[1]?.enabled, false);
   assert.equal(status.agents[1]?.grantsExecutionAuthority, false);
+  assert.equal(status.agents[1]?.latestToggleReceiptId, "collab-agent-toggle-1234");
+  assert.equal(status.agents[1]?.currentToggleProof.explicitOperatorToggleProof, true);
+  assert.equal(status.agents[1]?.currentToggleProof.proofStatus, "operator_console_recorded");
   assert.equal(status.operatorConsole.clientCanBeOperatorConsole, true);
   assert.equal(status.operatorConsole.clientIsAutomaticExecutionAuthority, false);
   assert.equal(status.definitions.operatorToggleProof.startsWith("Typed proof"), true);
+  assert.equal(status.definitions.currentToggleProof.startsWith("Read-only per-agent"), true);
   assert.equal(status.receipts.length, 1);
   assert.equal(status.receipts[0]?.receiptId, "collab-agent-toggle-1234");
   assert.equal(status.receipts[0]?.agent, "ollama");

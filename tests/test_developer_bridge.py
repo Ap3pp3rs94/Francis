@@ -864,6 +864,18 @@ def test_collaboration_agent_toggle_blocks_known_disabled_agent(tmp_path, monkey
     assert status["toggle_receipt_contract"]["grants_approval_authority"] is False
     assert status["toggle_receipt_contract"]["grants_capability_authority"] is False
     assert status["toggle_receipt_summary"]["receipt_count"] == 0
+    assert status["toggle_receipt_summary"]["agent_current_toggle_proof_count"] == 3
+    assert status["toggle_receipt_summary"]["agent_explicit_operator_toggle_proof_count"] == 0
+    assert status["toggle_receipt_summary"]["agent_default_state_projection_count"] == 3
+    assert status["toggle_receipt_summary"]["all_agents_have_current_toggle_readback"] is True
+    assert status["toggle_receipt_summary"]["all_agents_have_explicit_operator_toggle_proof"] is False
+    assert status["toggle_receipt_summary"]["agents_missing_explicit_operator_toggle_proof"] == [
+        "codex",
+        "claude",
+        "ollama",
+    ]
+    assert all(item["current_toggle_proof"]["current_state_observed"] is True for item in status["agents"])
+    assert all(item["current_toggle_proof"]["default_state_projection"] is True for item in status["agents"])
 
     toggled = set_collaboration_agent_enabled(
         "ollama",
@@ -917,6 +929,11 @@ def test_collaboration_agent_toggle_blocks_known_disabled_agent(tmp_path, monkey
     assert status["toggle_receipt_summary"]["receipt_count"] == 2
     assert status["toggle_receipt_summary"]["proof_receipt_count"] == 2
     assert status["toggle_receipt_summary"]["legacy_receipt_count"] == 0
+    assert status["toggle_receipt_summary"]["agent_current_toggle_proof_count"] == 3
+    assert status["toggle_receipt_summary"]["agent_explicit_operator_toggle_proof_count"] == 1
+    assert status["toggle_receipt_summary"]["agent_default_state_projection_count"] == 2
+    assert status["toggle_receipt_summary"]["agents_with_explicit_operator_toggle_proof"] == ["ollama"]
+    assert status["toggle_receipt_summary"]["agents_missing_explicit_operator_toggle_proof"] == ["codex", "claude"]
     assert status["toggle_receipt_summary"]["latest_agent"] == "ollama"
     assert status["toggle_receipt_summary"]["latest_previous_enabled"] is False
     assert status["toggle_receipt_summary"]["latest_enabled"] is True
@@ -928,6 +945,12 @@ def test_collaboration_agent_toggle_blocks_known_disabled_agent(tmp_path, monkey
     assert status["toggle_receipt_summary"]["latest_grants_memory_write_authority"] is False
     assert status["receipts"][-1]["operator_toggle_proof"]["current_enabled"] is True
     assert status["receipts"][-1]["operator_toggle_proof"]["proves_capability_authority"] is False
+    agents_by_id = {str(item["agent"]): item for item in status["agents"]}
+    assert agents_by_id["ollama"]["latest_toggle_receipt_id"] == status["receipts"][-1]["receipt_id"]
+    assert agents_by_id["ollama"]["latest_toggle_proof_status"] == "operator_console_recorded"
+    assert agents_by_id["ollama"]["current_toggle_proof"]["explicit_operator_toggle_proof"] is True
+    assert agents_by_id["ollama"]["current_toggle_proof"]["current_enabled"] is True
+    assert agents_by_id["ollama"]["current_toggle_proof"]["grants_execution_authority"] is False
     submitted = submit_collaboration_prompt(
         source_agent="codex",
         target_agent="ollama",
@@ -935,6 +958,73 @@ def test_collaboration_agent_toggle_blocks_known_disabled_agent(tmp_path, monkey
         prompt="This relay can be appended.",
     )
     assert submitted["ok"] is True
+
+
+def test_collaboration_agent_status_projects_legacy_current_toggle_proof(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+    state_path = tmp_path / "data" / "integrations" / "developer_bridge" / "collaboration_agents" / "state.json"
+    state_path.parent.mkdir(parents=True)
+    state_path.write_text(
+        json.dumps(
+            {
+                "kind": "developer_bridge.collaboration_agents_state",
+                "created_at": "2026-06-25T00:00:00+00:00",
+                "updated_at": "2026-06-25T00:00:00+00:00",
+                "agents": {
+                    "codex": {
+                        "enabled": True,
+                        "updated_at": "2026-06-25T00:00:01+00:00",
+                        "updated_by": "codex.goal.follow_chat",
+                        "reason": "restore Codex relay participation",
+                    }
+                },
+                "receipts": [
+                    {
+                        "kind": "developer_bridge.collaboration_agent_toggle_receipt",
+                        "receipt_id": "collab-agent-toggle-legacy",
+                        "created_at": "2026-06-25T00:00:01+00:00",
+                        "agent": "codex",
+                        "enabled": True,
+                        "previous_enabled": False,
+                        "actor": "codex.goal.follow_chat",
+                        "reason": "restore Codex relay participation",
+                        "governance": {
+                            "client_can_be_operator_console": True,
+                            "client_is_automatic_execution_authority": False,
+                            "grants_execution_authority": False,
+                            "grants_mutation_authority": False,
+                            "grants_memory_write_authority": False,
+                        },
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    status = collaboration_agents_status()
+
+    agents_by_id = {str(item["agent"]): item for item in status["agents"]}
+    proof = agents_by_id["codex"]["current_toggle_proof"]
+    assert proof["proof_status"] == "legacy_receipt_projected"
+    assert proof["source"] == "legacy_toggle_receipt"
+    assert proof["receipt_id"] == "collab-agent-toggle-legacy"
+    assert proof["explicit_operator_toggle_proof"] is False
+    assert proof["legacy_projection"] is True
+    assert proof["requires_new_toggle_for_explicit_operator_proof"] is True
+    assert proof["actor_recorded"] is True
+    assert proof["reason_recorded"] is True
+    assert proof["previous_enabled"] is False
+    assert proof["current_enabled"] is True
+    assert proof["grants_execution_authority"] is False
+    assert proof["grants_memory_write_authority"] is False
+    assert status["toggle_receipt_summary"]["agent_legacy_projection_count"] == 1
+    assert status["toggle_receipt_summary"]["agent_explicit_operator_toggle_proof_count"] == 0
+    assert status["toggle_receipt_summary"]["agents_missing_explicit_operator_toggle_proof"] == [
+        "codex",
+        "claude",
+        "ollama",
+    ]
 
 
 def test_collaboration_runtime_starts_missing_event_gated_helpers(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]

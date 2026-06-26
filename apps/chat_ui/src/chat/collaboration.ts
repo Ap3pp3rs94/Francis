@@ -10,6 +10,9 @@ export type CollaborationAgent = {
   updatedAt: string;
   updatedBy: string;
   reason: string;
+  latestToggleReceiptId: string;
+  latestToggleProofStatus: string;
+  currentToggleProof: CollaborationAgentCurrentToggleProof;
   writesRelayReceipts: boolean;
   grantsExecutionAuthority: boolean;
   grantsMutationAuthority: boolean;
@@ -49,6 +52,19 @@ export type CollaborationAgentToggleProof = {
   grantsTrainingAuthority: boolean;
 };
 
+export type CollaborationAgentCurrentToggleProof = CollaborationAgentToggleProof & {
+  kind: string;
+  source: string;
+  receiptId: string;
+  createdAt: string;
+  actor: string;
+  reason: string;
+  explicitOperatorToggleProof: boolean;
+  legacyProjection: boolean;
+  defaultStateProjection: boolean;
+  requiresNewToggleForExplicitOperatorProof: boolean;
+};
+
 export type CollaborationAgentsStatus = {
   ok: boolean;
   mode: string;
@@ -57,6 +73,7 @@ export type CollaborationAgentsStatus = {
   receipts: CollaborationAgentToggleReceipt[];
   definitions: {
     operatorToggleProof: string;
+    currentToggleProof: string;
   };
   operatorConsole: {
     surface: string;
@@ -2183,16 +2200,26 @@ export function collaborationSubstrateChecklistSummary(
 
 function parseAgent(raw: unknown): CollaborationAgent {
   const item = isRecord(raw) ? raw : {};
+  const enabled = safeBoolean(item.enabled);
+  const updatedBy = safeString(item.updated_by);
+  const reason = safeString(item.reason);
   return {
     agent: safeString(item.agent, "unknown"),
     label: safeString(item.label, safeString(item.agent, "unknown")),
-    enabled: safeBoolean(item.enabled),
+    enabled,
     participantKind: safeString(item.participant_kind),
     localRunner: safeString(item.local_runner),
     authority: safeString(item.authority),
     updatedAt: safeString(item.updated_at),
-    updatedBy: safeString(item.updated_by),
-    reason: safeString(item.reason),
+    updatedBy,
+    reason,
+    latestToggleReceiptId: safeString(item.latest_toggle_receipt_id),
+    latestToggleProofStatus: safeString(item.latest_toggle_proof_status),
+    currentToggleProof: parseAgentCurrentToggleProof(item.current_toggle_proof, {
+      actor: updatedBy,
+      enabled,
+      reason,
+    }),
     writesRelayReceipts: safeBoolean(item.writes_relay_receipts),
     grantsExecutionAuthority: safeBoolean(item.grants_execution_authority),
     grantsMutationAuthority: safeBoolean(item.grants_mutation_authority),
@@ -2259,6 +2286,37 @@ function parseAgentToggleProofVerdict(
       safeBoolean(governance.grants_memory_write_authority),
     ),
     grantsTrainingAuthority: safeBoolean(item.grants_training_authority, safeBoolean(governance.grants_training_authority)),
+  };
+}
+
+function parseAgentCurrentToggleProof(
+  raw: unknown,
+  fallback: { actor: string; enabled: boolean; reason: string },
+): CollaborationAgentCurrentToggleProof {
+  const item = isRecord(raw) ? raw : {};
+  const currentEnabled = safeBoolean(item.current_enabled, fallback.enabled);
+  const previousEnabled = safeBoolean(item.previous_enabled, currentEnabled);
+  const actor = safeString(item.actor, fallback.actor);
+  const reason = safeString(item.reason, fallback.reason);
+  const proof = parseAgentToggleProofVerdict(item, {
+    actor,
+    enabled: currentEnabled,
+    previousEnabled,
+    reason,
+    governance: item,
+  });
+  return {
+    ...proof,
+    kind: safeString(item.kind, "developer_bridge.collaboration_agent_current_toggle_proof"),
+    source: safeString(item.source, isRecord(raw) ? "unknown" : "missing_current_toggle_proof"),
+    receiptId: safeString(item.receipt_id),
+    createdAt: safeString(item.created_at),
+    actor,
+    reason,
+    explicitOperatorToggleProof: safeBoolean(item.explicit_operator_toggle_proof),
+    legacyProjection: safeBoolean(item.legacy_projection),
+    defaultStateProjection: safeBoolean(item.default_state_projection, !isRecord(raw)),
+    requiresNewToggleForExplicitOperatorProof: safeBoolean(item.requires_new_toggle_for_explicit_operator_proof),
   };
 }
 
@@ -2801,6 +2859,7 @@ export function parseCollaborationAgentsStatus(raw: unknown): CollaborationAgent
     receipts: Array.isArray(value.receipts) ? value.receipts.map(parseAgentToggleReceipt) : [],
     definitions: {
       operatorToggleProof: safeString(definitions.operator_toggle_proof),
+      currentToggleProof: safeString(definitions.current_toggle_proof),
     },
     operatorConsole: {
       surface: safeString(operatorConsole.surface),

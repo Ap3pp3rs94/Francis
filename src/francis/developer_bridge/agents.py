@@ -54,8 +54,9 @@ def collaboration_agents_status() -> dict[str, object]:
     """Read the bounded collaboration participant control state."""
 
     state = _load_state()
-    agents = _agent_records(state)
-    receipts = _list(state.get("receipts"))[-10:]
+    receipt_dicts = _receipt_dicts(_list(state.get("receipts")))
+    receipts = receipt_dicts[-10:]
+    agents = _agent_records(state, receipts=receipt_dicts)
     return {
         "kind": "developer_bridge.collaboration_agents_status",
         "ok": True,
@@ -67,12 +68,16 @@ def collaboration_agents_status() -> dict[str, object]:
         "state_path": _display_path(_state_path()),
         "receipts": receipts,
         "toggle_receipt_contract": _toggle_receipt_contract(),
-        "toggle_receipt_summary": _toggle_receipt_summary(receipts),
+        "toggle_receipt_summary": _toggle_receipt_summary(receipts, agents=agents),
         "operator_console": dict(_OPERATOR_CONSOLE),
         "definitions": {
             "operator_toggle_proof": (
                 "Typed proof that a participant toggle receipt recorded actor, reason, previous/current state, "
                 "operator-console status, and no capability or execution authority grant."
+            ),
+            "current_toggle_proof": (
+                "Read-only per-agent projection of the latest receipt proving the current enabled/disabled state; "
+                "legacy receipts stay labeled as projections and do not become stronger historical proof."
             ),
             "toggle_receipt_contract": (
                 "Bounded checklist for what a collaboration participant toggle receipt proves before Codex or "
@@ -212,12 +217,17 @@ def _save_state(state: dict[str, object]) -> None:
     os.replace(tmp, path)
 
 
-def _agent_records(state: dict[str, object]) -> list[dict[str, object]]:
+def _agent_records(state: dict[str, object], *, receipts: list[dict[str, object]]) -> list[dict[str, object]]:
     agents = _state_agents(state)
     records: list[dict[str, object]] = []
     for agent in _KNOWN_AGENTS:
         current = _agent_state(agents, agent)
         details = _AGENT_DETAILS[agent]
+        current_toggle_proof = _current_toggle_proof(
+            agent=agent,
+            current=current,
+            latest_receipt=_latest_receipt_for_agent(receipts, agent),
+        )
         records.append(
             {
                 "agent": agent,
@@ -229,6 +239,9 @@ def _agent_records(state: dict[str, object]) -> list[dict[str, object]]:
                 "updated_at": current.get("updated_at", ""),
                 "updated_by": current.get("updated_by", ""),
                 "reason": current.get("reason", ""),
+                "latest_toggle_receipt_id": current_toggle_proof["receipt_id"],
+                "latest_toggle_proof_status": current_toggle_proof["proof_status"],
+                "current_toggle_proof": current_toggle_proof,
                 "writes_relay_receipts": True,
                 "grants_execution_authority": False,
                 "grants_mutation_authority": False,
@@ -276,6 +289,10 @@ def _list(value: object) -> list[object]:
     return value if isinstance(value, list) else []
 
 
+def _receipt_dicts(receipts: list[object]) -> list[dict[str, object]]:
+    return [item for item in receipts if isinstance(item, dict)]
+
+
 def _utc_now() -> str:
     return datetime.now(UTC).isoformat()
 
@@ -314,6 +331,118 @@ def _operator_toggle_proof(
         "client_can_be_operator_console": bool(governance["client_can_be_operator_console"]),
         "client_is_automatic_execution_authority": bool(governance["client_is_automatic_execution_authority"]),
         "requires_operator_review": bool(governance["requires_operator_review"]),
+        "proves_capability_authority": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "grants_approval_authority": False,
+        "grants_memory_write_authority": False,
+        "grants_training_authority": False,
+    }
+
+
+def _latest_receipt_for_agent(receipts: list[dict[str, object]], agent: str) -> dict[str, object]:
+    for receipt in reversed(receipts):
+        if str(receipt.get("agent") or "") == agent:
+            return receipt
+    return {}
+
+
+def _current_toggle_proof(
+    *,
+    agent: str,
+    current: dict[str, object],
+    latest_receipt: dict[str, object],
+) -> dict[str, object]:
+    explicit = _dict(latest_receipt.get("operator_toggle_proof"))
+    current_enabled = bool(current.get("enabled", _DEFAULT_ENABLED[agent]))
+    if explicit:
+        return {
+            "kind": "developer_bridge.collaboration_agent_current_toggle_proof",
+            "proof_status": str(explicit.get("proof_status") or "operator_toggle_proof_recorded"),
+            "source": "operator_toggle_proof",
+            "agent": agent,
+            "receipt_id": latest_receipt.get("receipt_id", ""),
+            "created_at": latest_receipt.get("created_at", ""),
+            "actor": latest_receipt.get("actor", ""),
+            "reason": latest_receipt.get("reason", ""),
+            "explicit_operator_toggle_proof": True,
+            "legacy_projection": False,
+            "default_state_projection": False,
+            "requires_new_toggle_for_explicit_operator_proof": False,
+            "actor_recorded": bool(explicit.get("actor_recorded")),
+            "reason_recorded": bool(explicit.get("reason_recorded")),
+            "previous_state_observed": bool(explicit.get("previous_state_observed")),
+            "current_state_observed": bool(explicit.get("current_state_observed")),
+            "previous_enabled": bool(explicit.get("previous_enabled")),
+            "current_enabled": bool(explicit.get("current_enabled")),
+            "state_changed": bool(explicit.get("state_changed")),
+            "client_can_be_operator_console": bool(explicit.get("client_can_be_operator_console")),
+            "client_is_automatic_execution_authority": bool(explicit.get("client_is_automatic_execution_authority")),
+            "proves_capability_authority": bool(explicit.get("proves_capability_authority")),
+            "grants_execution_authority": bool(explicit.get("grants_execution_authority")),
+            "grants_mutation_authority": bool(explicit.get("grants_mutation_authority")),
+            "grants_approval_authority": bool(explicit.get("grants_approval_authority")),
+            "grants_memory_write_authority": bool(explicit.get("grants_memory_write_authority")),
+            "grants_training_authority": bool(explicit.get("grants_training_authority")),
+        }
+    if latest_receipt:
+        previous_enabled = bool(latest_receipt.get("previous_enabled"))
+        receipt_enabled = bool(latest_receipt.get("enabled"))
+        return {
+            "kind": "developer_bridge.collaboration_agent_current_toggle_proof",
+            "proof_status": "legacy_receipt_projected",
+            "source": "legacy_toggle_receipt",
+            "agent": agent,
+            "receipt_id": latest_receipt.get("receipt_id", ""),
+            "created_at": latest_receipt.get("created_at", ""),
+            "actor": latest_receipt.get("actor", ""),
+            "reason": latest_receipt.get("reason", ""),
+            "explicit_operator_toggle_proof": False,
+            "legacy_projection": True,
+            "default_state_projection": False,
+            "requires_new_toggle_for_explicit_operator_proof": True,
+            "actor_recorded": bool(latest_receipt.get("actor")),
+            "reason_recorded": bool(latest_receipt.get("reason")),
+            "previous_state_observed": "previous_enabled" in latest_receipt,
+            "current_state_observed": "enabled" in latest_receipt,
+            "previous_enabled": previous_enabled,
+            "current_enabled": receipt_enabled,
+            "state_changed": previous_enabled != receipt_enabled,
+            "client_can_be_operator_console": bool(
+                _dict(latest_receipt.get("governance")).get("client_can_be_operator_console")
+            ),
+            "client_is_automatic_execution_authority": bool(
+                _dict(latest_receipt.get("governance")).get("client_is_automatic_execution_authority")
+            ),
+            "proves_capability_authority": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+            "grants_approval_authority": False,
+            "grants_memory_write_authority": False,
+            "grants_training_authority": False,
+        }
+    return {
+        "kind": "developer_bridge.collaboration_agent_current_toggle_proof",
+        "proof_status": "default_state_no_toggle_receipt",
+        "source": "default_agent_state",
+        "agent": agent,
+        "receipt_id": "",
+        "created_at": "",
+        "actor": "",
+        "reason": "",
+        "explicit_operator_toggle_proof": False,
+        "legacy_projection": False,
+        "default_state_projection": True,
+        "requires_new_toggle_for_explicit_operator_proof": True,
+        "actor_recorded": False,
+        "reason_recorded": False,
+        "previous_state_observed": False,
+        "current_state_observed": True,
+        "previous_enabled": current_enabled,
+        "current_enabled": current_enabled,
+        "state_changed": False,
+        "client_can_be_operator_console": True,
+        "client_is_automatic_execution_authority": False,
         "proves_capability_authority": False,
         "grants_execution_authority": False,
         "grants_mutation_authority": False,
@@ -378,14 +507,24 @@ def _toggle_receipt_contract() -> dict[str, object]:
     }
 
 
-def _toggle_receipt_summary(receipts: list[object]) -> dict[str, object]:
-    receipt_dicts = [item for item in receipts if isinstance(item, dict)]
-    latest = receipt_dicts[-1] if receipt_dicts else {}
+def _toggle_receipt_summary(receipts: list[dict[str, object]], *, agents: list[dict[str, object]]) -> dict[str, object]:
+    latest = receipts[-1] if receipts else {}
     latest_proof = _dict(latest.get("operator_toggle_proof")) if latest else {}
-    proof_count = sum(1 for item in receipt_dicts if isinstance(item.get("operator_toggle_proof"), dict))
-    legacy_count = len(receipt_dicts) - proof_count
+    proof_count = sum(1 for item in receipts if isinstance(item.get("operator_toggle_proof"), dict))
+    legacy_count = len(receipts) - proof_count
+    current_proofs = [_dict(agent.get("current_toggle_proof")) for agent in agents]
+    explicit_agents = [
+        str(agent.get("agent") or "")
+        for agent, proof in zip(agents, current_proofs, strict=False)
+        if bool(proof.get("explicit_operator_toggle_proof"))
+    ]
+    missing_explicit_agents = [
+        str(agent.get("agent") or "")
+        for agent, proof in zip(agents, current_proofs, strict=False)
+        if not bool(proof.get("explicit_operator_toggle_proof"))
+    ]
     return {
-        "receipt_count": len(receipt_dicts),
+        "receipt_count": len(receipts),
         "proof_receipt_count": proof_count,
         "legacy_receipt_count": legacy_count,
         "latest_receipt_id": latest.get("receipt_id", ""),
@@ -401,6 +540,16 @@ def _toggle_receipt_summary(receipts: list[object]) -> dict[str, object]:
         "latest_grants_approval_authority": bool(latest_proof.get("grants_approval_authority")),
         "latest_grants_memory_write_authority": bool(latest_proof.get("grants_memory_write_authority")),
         "latest_grants_training_authority": bool(latest_proof.get("grants_training_authority")),
+        "agent_current_toggle_proof_count": len(current_proofs),
+        "agent_explicit_operator_toggle_proof_count": len(explicit_agents),
+        "agent_legacy_projection_count": sum(1 for proof in current_proofs if bool(proof.get("legacy_projection"))),
+        "agent_default_state_projection_count": sum(
+            1 for proof in current_proofs if bool(proof.get("default_state_projection"))
+        ),
+        "agents_with_explicit_operator_toggle_proof": explicit_agents,
+        "agents_missing_explicit_operator_toggle_proof": missing_explicit_agents,
+        "all_agents_have_current_toggle_readback": len(current_proofs) == len(_KNOWN_AGENTS),
+        "all_agents_have_explicit_operator_toggle_proof": len(explicit_agents) == len(_KNOWN_AGENTS),
     }
 
 

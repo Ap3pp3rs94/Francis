@@ -2706,7 +2706,8 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
         {agents.map((agent) => {
           const busy = busyAgent === agent.agent;
           const latestToggle = latestToggleReceiptForAgent(toggleReceipts, agent.agent);
-          const toggleProof = latestToggle?.operatorToggleProof;
+          const currentToggleProof = agent.currentToggleProof;
+          const toggleProof = latestToggle?.operatorToggleProof ?? currentToggleProof;
           return (
             <article
               key={agent.agent}
@@ -2751,25 +2752,29 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
                 ) : null}
                 {toggleProof ? (
                   <div>
-                    <dt style={{ color: "#94a3b8" }}>Toggle Proof</dt>
+                    <dt style={{ color: "#94a3b8" }}>Current Toggle Proof</dt>
                     <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
-                      {toggleProof.proofStatus}: actor {boolText(toggleProof.actorRecorded)} / reason{" "}
-                      {boolText(toggleProof.reasonRecorded)} / state {boolText(toggleProof.previousEnabled)} {"->"}{" "}
-                      {boolText(toggleProof.currentEnabled)}
+                      {currentToggleProof.proofStatus}: {currentToggleProof.source || "unknown"}{" "}
+                      {currentToggleProof.receiptId ? `(${collaborationShortId(currentToggleProof.receiptId)})` : ""}
+                      {" / "}actor {boolText(currentToggleProof.actorRecorded)} / reason{" "}
+                      {boolText(currentToggleProof.reasonRecorded)} / state {boolText(currentToggleProof.previousEnabled)} {"->"}{" "}
+                      {boolText(currentToggleProof.currentEnabled)}
                     </dd>
                   </div>
                 ) : null}
               </dl>
-              {latestToggle ? (
-                <div style={{ color: "#94a3b8", display: "flex", flexWrap: "wrap", fontSize: 12, gap: 8, marginTop: 10 }}>
-                  <span>execute {boolText(Boolean(latestToggle.governance.executes_prompt))}</span>
-                  <span>model {boolText(Boolean(latestToggle.governance.calls_model))}</span>
-                  <span>operator console {boolText(Boolean(toggleProof?.operatorConsoleActor))}</span>
-                  <span>capability authority {boolText(Boolean(toggleProof?.provesCapabilityAuthority))}</span>
-                  <span>approval {boolText(Boolean(toggleProof?.grantsApprovalAuthority))}</span>
-                  <span>memory write {boolText(Boolean(latestToggle.governance.grants_memory_write_authority))}</span>
-                </div>
-              ) : null}
+              <div style={{ color: "#94a3b8", display: "flex", flexWrap: "wrap", fontSize: 12, gap: 8, marginTop: 10 }}>
+                <span>execute {boolText(Boolean(latestToggle?.governance.executes_prompt) || currentToggleProof.grantsExecutionAuthority)}</span>
+                <span>model {boolText(Boolean(latestToggle?.governance.calls_model))}</span>
+                <span>operator console {boolText(Boolean(toggleProof?.operatorConsoleActor))}</span>
+                <span>legacy projection {boolText(currentToggleProof.legacyProjection)}</span>
+                <span>capability authority {boolText(Boolean(toggleProof?.provesCapabilityAuthority))}</span>
+                <span>approval {boolText(Boolean(toggleProof?.grantsApprovalAuthority))}</span>
+                <span>
+                  memory write{" "}
+                  {boolText(Boolean(latestToggle?.governance.grants_memory_write_authority) || currentToggleProof.grantsMemoryWriteAuthority)}
+                </span>
+              </div>
             </article>
           );
         })}

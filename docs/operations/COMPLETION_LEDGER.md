@@ -97251,6 +97251,69 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, browser proof, and full ORB/body coverage
   proof were not run for this stale-topic guard slice.
 
+### 2026-06-26 05:03Z - Collaboration participant current-toggle proof readback
+
+Current posture: Phase 2 / P1 interface, P3 governance, and P9 observability now
+surface per-participant current-toggle proof in the collaboration agents
+readback and Communication UI. Francis1 asked what receipt proves whether a
+participant is enabled or disabled; the system now answers per agent instead of
+only exposing the global latest receipt window.
+
+What changed:
+
+- `/developer-bridge/collaboration-agents` now adds `current_toggle_proof` to
+  each participant record, including proof status, source, latest receipt id,
+  actor/reason presence, previous/current enabled state, and no-authority flags.
+- Legacy toggle receipts are projected read-only as
+  `legacy_receipt_projected`; they are not rewritten and are not silently treated
+  as explicit operator-console proof.
+- Default participant state now has a readback projection labeled
+  `default_state_no_toggle_receipt` when no receipt exists.
+- `toggle_receipt_summary` now reports per-agent proof counts, legacy/default
+  projections, and which agents still lack explicit operator-toggle proof.
+- The Communication UI parser and participant cards now show the current
+  per-agent toggle proof, so Codex/Ollama legacy projections remain visible even
+  when their raw receipts are outside the latest receipt window.
+
+Validation:
+
+- Focused developer-bridge tests passed:
+  `python -m pytest tests/test_developer_bridge.py::test_collaboration_agent_toggle_blocks_known_disabled_agent tests/test_developer_bridge.py::test_collaboration_agent_status_projects_legacy_current_toggle_proof tests/test_developer_bridge.py::test_collaboration_runtime_health_is_read_only_and_reports_recurrence -q`
+  (`3` passing tests).
+- Ruff check passed:
+  `python -m ruff check src\francis\developer_bridge\agents.py tests\test_developer_bridge.py`.
+- Ruff format check passed:
+  `python -m ruff format --check src\francis\developer_bridge\agents.py tests\test_developer_bridge.py`.
+- Targeted mypy passed:
+  `python -m mypy src\francis\developer_bridge\agents.py`.
+- Compileall passed:
+  `python -m compileall src\francis\developer_bridge\agents.py`.
+- Chat UI contract suite passed:
+  `npm run test -- --runInBand apps/chat_ui/src/chat/index.test.ts`
+  (the package script ran the configured UI suite, `282` passing tests).
+- Chat UI production build passed:
+  `npm run build`.
+- `git diff --check` passed.
+- The local Francis API was restarted. Live
+  `/developer-bridge/collaboration-agents` readback showed
+  `agent_current_toggle_proof_count=3`, `agent_explicit_operator_toggle_proof_count=1`,
+  `agent_legacy_projection_count=2`, `all_agents_have_current_toggle_readback=true`,
+  and `agents_missing_explicit_operator_toggle_proof=codex,ollama`.
+- Live `/developer-bridge/collaboration-runtime-health` reported
+  `status=healthy`, `helper_count=3`, turn `1664`, `recurrence_state=turn_gap`,
+  `manual_nudge_required=false`, and three enabled participants.
+- The Chat UI dev server was reachable at `http://127.0.0.1:5173/`.
+
+Remaining truthful gap:
+
+- This is a readback and UI visibility repair only. It does not toggle any
+  participant, rewrite legacy receipts, grant execution/mutation/approval/memory
+  authority, train the model, or clear main-build/ORB coverage gates.
+- Codex and Ollama currently remain legacy-projected in live readback until an
+  operator or governed process records a new explicit toggle receipt for them.
+- `.\scripts\check.ps1`, GitHub CI, browser screenshot proof, and full ORB/body
+  coverage proof were not run for this bounded participant-toggle proof slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
