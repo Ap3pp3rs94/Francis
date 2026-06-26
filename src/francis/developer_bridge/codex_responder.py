@@ -20,6 +20,7 @@ _MAX_TRACKED_IDS = 500
 _MAX_RESPONSES = 500
 _DEFAULT_POLL_SECONDS = 30.0
 _DEFAULT_COOLDOWN_SECONDS = 120.0
+_SOURCE_ALIGNMENT_REPLY = "Claude acknowledged as guidance; Francis focus; validate."
 
 
 def respond_once(
@@ -210,6 +211,7 @@ def _build_reply(item: dict[str, object]) -> str:
     return (
         f"Auto-ack {source} relay {source_id}. Received; no_response_requested=true. "
         f"Objective: {objective}. Preview: {preview}. "
+        f"{_SOURCE_ALIGNMENT_REPLY} "
         "Receipt only; no execution, mutation, approval, commit, or push authority."
     )
 

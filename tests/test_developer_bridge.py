@@ -3444,6 +3444,7 @@ def test_codex_responder_ignores_existing_then_replies_once(tmp_path, monkeypatc
     assert transcript["count"] == 1
     assert transcript["items"][0]["id"] == responded["response_prompt_id"]
     assert str(existing["prompt_id"]) not in transcript["items"][0]["prompt"]
+    assert "Claude acknowledged as guidance; Francis focus; validate." in transcript["items"][0]["prompt"]
 
     idle = respond_once(ignore_existing=True, cooldown_seconds=0)
     assert idle["status"] == "idle"
@@ -3492,9 +3493,10 @@ def test_codex_responder_can_ack_ollama_without_retriggering_model(tmp_path, mon
     response = transcript["items"][0]
     assert response["id"] == responded["response_prompt_id"]
     assert "Auto-ack ollama relay" in response["prompt"]
+    assert "Claude acknowledged as guidance; Francis focus; validate." in response["prompt"]
     assert "Receipt only" in response["prompt"]
     assert "Cadence rule" not in response["prompt"]
-    assert len(str(response["prompt"])) < 520
+    assert len(str(response["prompt"])) < 600
     assert "no_response_requested=true" in response["context"]
 
     def fail_generate(_prompt: str) -> str:

@@ -97430,6 +97430,55 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, browser screenshot proof, and full ORB/body
   coverage proof were not run for this bounded slice.
 
+### 2026-06-26 05:24Z - Codex auto-ack source alignment
+
+Current posture: Phase 2 / P1 interface, P3 governance, and P9 observability now
+keep both Codex driver prompts and Codex auto-ack relay receipts aligned to the
+same source boundary: Claude is acknowledged as guidance, Francis stays the
+conversation focus, and relay output remains non-authoritative.
+
+What changed:
+
+- `francis.developer_bridge.codex_responder` now adds
+  `Claude acknowledged as guidance; Francis focus; validate.` to bounded
+  auto-ack relay messages.
+- The existing responder tests now prove both Claude-origin and Ollama-origin
+  auto-acks carry the alignment phrase while preserving
+  `no_response_requested=true` and no execution/mutation/approval authority.
+- The live `codex_ollama_responder` helper was restarted so natural auto-acks
+  use the updated source alignment.
+
+Validation:
+
+- Focused responder tests passed:
+  `python -m pytest tests/test_developer_bridge.py::test_codex_responder_ignores_existing_then_replies_once tests/test_developer_bridge.py::test_codex_responder_can_ack_ollama_without_retriggering_model -q`
+  (`2` passing tests).
+- Ruff check passed:
+  `python -m ruff check src\francis\developer_bridge\codex_responder.py tests\test_developer_bridge.py`.
+- Ruff format check passed:
+  `python -m ruff format --check src\francis\developer_bridge\codex_responder.py tests\test_developer_bridge.py`;
+  Ruff also reported an access-denied warning while writing its cache, but the
+  command exited successfully and reported both files already formatted.
+- Targeted mypy passed:
+  `python -m mypy src\francis\developer_bridge\codex_responder.py`.
+- Compileall passed:
+  `python -m compileall src\francis\developer_bridge\codex_responder.py`.
+- `git diff --check` passed.
+- Live collaboration runtime restarted the Codex responder pair as PIDs `34664`
+  and `24212`.
+- Live transcript readback showed natural auto-ack
+  `collab-f39c513b84efe4d9-4d694aef1f9b` includes the Claude-guidance /
+  Francis-focus alignment line.
+
+Remaining truthful gap:
+
+- This is a relay wording and source-boundary repair only. It does not make
+  Claude authoritative, grant Francis1 capability use, execute or approve any
+  prompt, tune the local model, promote memory, or clear the main-build gate.
+- Older auto-ack receipts remain historical and are not rewritten.
+- `.\scripts\check.ps1`, GitHub CI, browser screenshot proof, and full ORB/body
+  coverage proof were not run for this bounded responder slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
