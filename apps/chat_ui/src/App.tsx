@@ -3506,6 +3506,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
               const hasRoadmapProof = Boolean(
                 roadmapProof.latestLedgerEntry || roadmapProof.currentPhase || roadmapProof.mainBuildPromptGate,
               );
+              const participantToggle = item.participantToggleBoundary;
               return (
                 <article
                   key={item.id || item.insightId}
@@ -3618,6 +3619,34 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
                           candidate only {boolText(roadmapProof.mainBuildPromptCandidateOnly)} / override{" "}
                           {boolText(roadmapProof.conversationCanOverrideRoadmap)} / execute {boolText(roadmapProof.grantsExecutionAuthority)}
                         </dd>
+                      </div>
+                    ) : null}
+                    {participantToggle.applies ? (
+                      <div>
+                        <dt style={{ color: "#93c5fd" }}>Toggle Proof</dt>
+                        <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
+                          current readback {participantToggle.agentCurrentToggleProofCount}/{participantToggle.knownAgents.length || "?"} /
+                          explicit proof {participantToggle.agentExplicitOperatorToggleProofCount}/{participantToggle.knownAgents.length || "?"} /
+                          missing {participantToggle.agentsMissingExplicitOperatorToggleProof.join(", ") || "none"}
+                        </dd>
+                        <dd style={{ color: "#94a3b8", margin: "4px 0 0", overflowWrap: "anywhere" }}>
+                          legacy projections {participantToggle.agentLegacyProjectionCount} / blocks disabled{" "}
+                          {boolText(participantToggle.disabledParticipantBlocksNewRelaySubmissions)} / automatic authority{" "}
+                          {boolText(participantToggle.clientIsAutomaticExecutionAuthority)} / execute{" "}
+                          {boolText(participantToggle.grantsExecutionAuthority)}
+                        </dd>
+                        {participantToggle.agentProofs.length ? (
+                          <dd style={{ color: "#94a3b8", margin: "4px 0 0", overflowWrap: "anywhere" }}>
+                            {participantToggle.agentProofs
+                              .map(
+                                (proof) =>
+                                  `${proof.agent || "unknown"} ${boolText(proof.enabled)} ${proof.proofStatus || "unknown"}${
+                                    proof.requiresNewToggleForExplicitOperatorProof ? " needs explicit toggle" : ""
+                                  }`,
+                              )
+                              .join(" / ")}
+                          </dd>
+                        ) : null}
                       </div>
                     ) : null}
                     <div>

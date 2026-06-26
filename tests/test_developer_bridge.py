@@ -1937,6 +1937,45 @@ def test_collaboration_review_projects_generic_historical_topics_to_concrete_sur
     assert toggle_item["quality_flags"]["generic_surface"] is False
     assert toggle_item["surface_verification"]["status"] == "existing_surface_found"
     assert toggle_item["surface_verification"]["surface_kind"] == "operator_control_receipts"
+    participant_toggle_boundary = toggle_item["participant_toggle_boundary"]
+    assert participant_toggle_boundary["applies"] is True
+    assert participant_toggle_boundary["surface"] == "developer_bridge.collaboration_agents"
+    assert participant_toggle_boundary["visibility_is_capability_grant"] is False
+    assert participant_toggle_boundary["participant_enablement_is_execution_authority"] is False
+    assert participant_toggle_boundary["disabled_participant_blocks_new_relay_submissions"] is True
+    assert participant_toggle_boundary["requires_operator_toggle_proof"] is True
+    assert participant_toggle_boundary["grants_execution_authority"] is False
+    assert participant_toggle_boundary["grants_capability_authority"] is False
+    toggle_proof = participant_toggle_boundary["current_proof"]
+    assert toggle_proof["receipt_kind"] == "developer_bridge.collaboration_agent_toggle_receipt"
+    assert toggle_proof["known_agents"] == ["codex", "claude", "ollama"]
+    assert toggle_proof["receipt_count"] == 0
+    assert toggle_proof["agent_current_toggle_proof_count"] == 3
+    assert toggle_proof["agent_explicit_operator_toggle_proof_count"] == 0
+    assert toggle_proof["agent_default_state_projection_count"] == 3
+    assert toggle_proof["agents_missing_explicit_operator_toggle_proof"] == [
+        "codex",
+        "claude",
+        "ollama",
+    ]
+    assert toggle_proof["all_agents_have_current_toggle_readback"] is True
+    assert toggle_proof["all_agents_have_explicit_operator_toggle_proof"] is False
+    assert toggle_proof["client_is_automatic_execution_authority"] is False
+    assert toggle_proof["proof_source"] == "developer_bridge.collaboration_agents_status"
+    assert toggle_proof["stores_full_transcript"] is False
+    assert toggle_proof["grants_execution_authority"] is False
+    assert toggle_proof["grants_capability_authority"] is False
+    assert len(toggle_proof["agent_proofs"]) == 3
+    assert all(item["current_state_observed"] is True for item in toggle_proof["agent_proofs"])
+    assert all(item["requires_new_toggle_for_explicit_operator_proof"] is True for item in toggle_proof["agent_proofs"])
+    assert (
+        "collaboration_agents_status.toggle_receipt_summary.all_agents_have_current_toggle_readback=true"
+        in participant_toggle_boundary["required_proof_fields"]
+    )
+    assert (
+        "/developer-bridge/collaboration-agents agents[].current_toggle_proof"
+        in participant_toggle_boundary["required_readbacks"]
+    )
 
     gate_item = items["insight-gate"]
     assert gate_item["build_issue"]["code"] == "model_advice_governance_gate_visibility"

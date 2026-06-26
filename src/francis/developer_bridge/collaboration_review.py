@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from francis.developer_bridge.agents import collaboration_agents_status
 from francis.developer_bridge.body_map import read_francis_body_map
 from francis.governance.redaction import redact_secret_text
 from francis.kernel.paths import data_dir
@@ -76,6 +77,10 @@ def read_collaboration_review(*, limit: int = 10, session_id: str = "") -> dict[
             "capability_exposure_boundary": (
                 "Typed proof checklist for body-map collaboration items, separating visibility of Francis body "
                 "surfaces from operator-granted capability use."
+            ),
+            "participant_toggle_boundary": (
+                "Typed proof checklist for collaboration participant toggles, projecting current toggle receipt "
+                "truth without turning visibility into execution or capability authority."
             ),
         },
         "governance": _governance(),
@@ -260,6 +265,10 @@ def _review_item(insight: dict[str, object]) -> dict[str, object]:
             review_artifact=review_artifact,
         ),
         "capability_exposure_boundary": _capability_exposure_boundary(
+            build_issue=build_issue,
+            concrete_surface=concrete_surface,
+        ),
+        "participant_toggle_boundary": _participant_toggle_boundary(
             build_issue=build_issue,
             concrete_surface=concrete_surface,
         ),
@@ -515,6 +524,136 @@ def _roadmap_current_proof(*, is_roadmap_gate: bool) -> dict[str, object]:
         "grants_approval_authority": False,
         "grants_memory_write_authority": False,
         "grants_training_authority": False,
+    }
+
+
+def _participant_toggle_boundary(*, build_issue: dict[str, object], concrete_surface: str) -> dict[str, object]:
+    code = _bounded_text(build_issue.get("code"), limit=120)
+    surface_key = _surface_key(concrete_surface)
+    applies = code == "collaboration_agent_toggle_receipt" or surface_key == "developer bridge collaboration agents"
+    base: dict[str, object] = {
+        "applies": applies,
+        "surface": "developer_bridge.collaboration_agents" if applies else concrete_surface,
+        "current_proof": {},
+        "visibility_is_capability_grant": False,
+        "participant_enablement_is_execution_authority": False,
+        "disabled_participant_blocks_new_relay_submissions": applies,
+        "requires_operator_toggle_proof": applies,
+        "requires_codex_or_operator_review": True,
+        "requires_repo_truth_review": True,
+        "requires_typed_review_artifact": applies,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "grants_approval_authority": False,
+        "grants_memory_write_authority": False,
+        "grants_training_authority": False,
+        "grants_capability_authority": False,
+    }
+    if not applies:
+        return {
+            **base,
+            "required_proof_fields": [],
+            "required_readbacks": [],
+            "validation_tests": [],
+            "next_codex_action": "Use surface_verification and build_direction_gate for non-participant-control review items.",
+        }
+    return {
+        **base,
+        "current_proof": _participant_toggle_current_proof(),
+        "required_proof_fields": [
+            "collaboration_agents_status.toggle_receipt_contract.receipt_kind",
+            "collaboration_agents_status.toggle_receipt_summary.all_agents_have_current_toggle_readback=true",
+            "collaboration_agents_status.agents[].current_toggle_proof.current_state_observed=true",
+            "collaboration_agents_status.agents[].current_toggle_proof.explicit_operator_toggle_proof",
+            "collaboration_agents_status.agents[].current_toggle_proof.requires_new_toggle_for_explicit_operator_proof",
+            "collaboration_agents_status.governance.client_is_automatic_execution_authority=false",
+            "collaboration_agents_status.governance.grants_execution_authority=false",
+            "collaboration_agents_status.governance.grants_capability_authority=false",
+        ],
+        "required_readbacks": [
+            "/developer-bridge/collaboration-agents toggle_receipt_contract",
+            "/developer-bridge/collaboration-agents toggle_receipt_summary",
+            "/developer-bridge/collaboration-agents agents[].current_toggle_proof",
+        ],
+        "validation_tests": [
+            "tests/test_developer_bridge.py::test_collaboration_agent_toggle_blocks_known_disabled_agent",
+            "tests/test_developer_bridge.py::test_collaboration_review_projects_generic_historical_topics_to_concrete_surfaces",
+        ],
+        "next_codex_action": (
+            "Read the current participant toggle proof before changing participant controls; legacy projections "
+            "prove current readback only and require a new operator toggle for explicit proof."
+        ),
+    }
+
+
+def _participant_toggle_current_proof() -> dict[str, object]:
+    status = collaboration_agents_status()
+    summary = _safe_dict(status.get("toggle_receipt_summary"))
+    contract = _safe_dict(status.get("toggle_receipt_contract"))
+    governance = _safe_dict(status.get("governance"))
+    operator_console = _safe_dict(status.get("operator_console"))
+    agents: list[dict[str, object]] = []
+    raw_agents = status.get("agents")
+    if isinstance(raw_agents, list):
+        for raw_agent in raw_agents:
+            agent = _safe_dict(raw_agent)
+            proof = _safe_dict(agent.get("current_toggle_proof"))
+            agents.append(
+                {
+                    "agent": _bounded_text(agent.get("agent"), limit=40),
+                    "enabled": bool(agent.get("enabled")),
+                    "proof_status": _bounded_text(proof.get("proof_status"), limit=80),
+                    "source": _bounded_text(proof.get("source"), limit=80),
+                    "receipt_id": _bounded_text(proof.get("receipt_id"), limit=120),
+                    "explicit_operator_toggle_proof": bool(proof.get("explicit_operator_toggle_proof")),
+                    "legacy_projection": bool(proof.get("legacy_projection")),
+                    "default_state_projection": bool(proof.get("default_state_projection")),
+                    "requires_new_toggle_for_explicit_operator_proof": bool(
+                        proof.get("requires_new_toggle_for_explicit_operator_proof")
+                    ),
+                    "actor_recorded": bool(proof.get("actor_recorded")),
+                    "reason_recorded": bool(proof.get("reason_recorded")),
+                    "current_state_observed": bool(proof.get("current_state_observed")),
+                    "grants_execution_authority": bool(proof.get("grants_execution_authority")),
+                    "grants_capability_authority": bool(proof.get("proves_capability_authority")),
+                }
+            )
+    return {
+        "receipt_kind": _bounded_text(contract.get("receipt_kind"), limit=120),
+        "known_agents": _bounded_text_list(status.get("known_agents"), limit=40),
+        "receipt_count": _safe_int(summary.get("receipt_count")),
+        "proof_receipt_count": _safe_int(summary.get("proof_receipt_count")),
+        "legacy_receipt_count": _safe_int(summary.get("legacy_receipt_count")),
+        "latest_receipt_id": _bounded_text(summary.get("latest_receipt_id"), limit=120),
+        "latest_agent": _bounded_text(summary.get("latest_agent"), limit=40),
+        "agent_current_toggle_proof_count": _safe_int(summary.get("agent_current_toggle_proof_count")),
+        "agent_explicit_operator_toggle_proof_count": _safe_int(
+            summary.get("agent_explicit_operator_toggle_proof_count")
+        ),
+        "agent_legacy_projection_count": _safe_int(summary.get("agent_legacy_projection_count")),
+        "agent_default_state_projection_count": _safe_int(summary.get("agent_default_state_projection_count")),
+        "agents_with_explicit_operator_toggle_proof": _bounded_text_list(
+            summary.get("agents_with_explicit_operator_toggle_proof"), limit=40
+        ),
+        "agents_missing_explicit_operator_toggle_proof": _bounded_text_list(
+            summary.get("agents_missing_explicit_operator_toggle_proof"), limit=40
+        ),
+        "all_agents_have_current_toggle_readback": bool(summary.get("all_agents_have_current_toggle_readback")),
+        "all_agents_have_explicit_operator_toggle_proof": bool(
+            summary.get("all_agents_have_explicit_operator_toggle_proof")
+        ),
+        "operator_console_actor": _bounded_text(operator_console.get("actor"), limit=80),
+        "client_can_be_operator_console": bool(governance.get("client_can_be_operator_console")),
+        "client_is_automatic_execution_authority": bool(governance.get("client_is_automatic_execution_authority")),
+        "proof_source": "developer_bridge.collaboration_agents_status",
+        "agent_proofs": agents,
+        "stores_full_transcript": False,
+        "grants_execution_authority": bool(governance.get("grants_execution_authority")),
+        "grants_mutation_authority": bool(governance.get("grants_mutation_authority")),
+        "grants_approval_authority": bool(governance.get("grants_approval_authority")),
+        "grants_memory_write_authority": bool(governance.get("grants_memory_write_authority")),
+        "grants_training_authority": bool(governance.get("grants_training_authority")),
+        "grants_capability_authority": bool(governance.get("grants_capability_authority")),
     }
 
 
@@ -1325,6 +1464,17 @@ def _insights_root() -> Path:
 
 def _safe_dict(value: object) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+def _bounded_text_list(value: object, *, limit: int) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    bounded: list[str] = []
+    for item in value:
+        text = _bounded_text(item, limit=limit)
+        if text:
+            bounded.append(text)
+    return bounded
 
 
 def _bounded_text(value: object, *, limit: int) -> str:

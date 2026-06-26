@@ -2356,6 +2356,60 @@ test("parseCollaborationReview preserves advisory candidate boundaries", () => {
             grants_training_authority: false,
           },
         },
+        participant_toggle_boundary: {
+          applies: true,
+          surface: "developer_bridge.collaboration_agents",
+          disabled_participant_blocks_new_relay_submissions: true,
+          requires_operator_toggle_proof: true,
+          visibility_is_capability_grant: false,
+          participant_enablement_is_execution_authority: false,
+          current_proof: {
+            receipt_kind: "developer_bridge.collaboration_agent_toggle_receipt",
+            known_agents: ["codex", "claude", "ollama"],
+            receipt_count: 10,
+            proof_receipt_count: 1,
+            legacy_receipt_count: 9,
+            latest_receipt_id: "collab-agent-toggle-acc7685f0351460f",
+            latest_agent: "claude",
+            agent_current_toggle_proof_count: 3,
+            agent_explicit_operator_toggle_proof_count: 1,
+            agent_legacy_projection_count: 2,
+            agent_default_state_projection_count: 0,
+            agents_with_explicit_operator_toggle_proof: ["claude"],
+            agents_missing_explicit_operator_toggle_proof: ["codex", "ollama"],
+            all_agents_have_current_toggle_readback: true,
+            all_agents_have_explicit_operator_toggle_proof: false,
+            operator_console_actor: "chat_ui.system",
+            client_can_be_operator_console: true,
+            client_is_automatic_execution_authority: false,
+            proof_source: "developer_bridge.collaboration_agents_status",
+            agent_proofs: [
+              {
+                agent: "codex",
+                enabled: true,
+                proof_status: "legacy_receipt_projected",
+                source: "legacy_toggle_receipt",
+                receipt_id: "collab-agent-toggle-52710ad17026434b",
+                explicit_operator_toggle_proof: false,
+                legacy_projection: true,
+                default_state_projection: false,
+                requires_new_toggle_for_explicit_operator_proof: true,
+                actor_recorded: true,
+                reason_recorded: true,
+                current_state_observed: true,
+                grants_execution_authority: false,
+                grants_capability_authority: false,
+              },
+            ],
+            stores_full_transcript: false,
+            grants_execution_authority: false,
+            grants_mutation_authority: false,
+            grants_approval_authority: false,
+            grants_memory_write_authority: false,
+            grants_training_authority: false,
+            grants_capability_authority: false,
+          },
+        },
         implementation_preflight: {
           must_read_before_editing: true,
           review_item_id: "review-insight-alpha",
@@ -2425,6 +2479,21 @@ test("parseCollaborationReview preserves advisory candidate boundaries", () => {
   assert.equal(review.items[0]?.roadmapAlignmentProof.mainBuildPromptGate, "blocked_by_open_orb_gaps");
   assert.equal(review.items[0]?.roadmapAlignmentProof.conversationCanOverrideRoadmap, false);
   assert.equal(review.items[0]?.roadmapAlignmentProof.grantsExecutionAuthority, false);
+  assert.equal(review.items[0]?.participantToggleBoundary.applies, true);
+  assert.equal(review.items[0]?.participantToggleBoundary.surface, "developer_bridge.collaboration_agents");
+  assert.equal(review.items[0]?.participantToggleBoundary.receiptKind, "developer_bridge.collaboration_agent_toggle_receipt");
+  assert.equal(review.items[0]?.participantToggleBoundary.agentCurrentToggleProofCount, 3);
+  assert.equal(review.items[0]?.participantToggleBoundary.agentExplicitOperatorToggleProofCount, 1);
+  assert.deepEqual(review.items[0]?.participantToggleBoundary.agentsMissingExplicitOperatorToggleProof, [
+    "codex",
+    "ollama",
+  ]);
+  assert.equal(review.items[0]?.participantToggleBoundary.allAgentsHaveCurrentToggleReadback, true);
+  assert.equal(review.items[0]?.participantToggleBoundary.allAgentsHaveExplicitOperatorToggleProof, false);
+  assert.equal(review.items[0]?.participantToggleBoundary.clientIsAutomaticExecutionAuthority, false);
+  assert.equal(review.items[0]?.participantToggleBoundary.grantsExecutionAuthority, false);
+  assert.equal(review.items[0]?.participantToggleBoundary.grantsCapabilityAuthority, false);
+  assert.equal(review.items[0]?.participantToggleBoundary.agentProofs[0]?.requiresNewToggleForExplicitOperatorProof, true);
   assert.equal(review.items[0]?.implementationPreflight.mustReadBeforeEditing, true);
   assert.equal(review.items[0]?.implementationPreflight.reviewItemId, "review-insight-alpha");
   assert.equal(review.items[0]?.implementationPreflight.reviewRoute, "/developer-bridge/collaboration-review?limit=1");

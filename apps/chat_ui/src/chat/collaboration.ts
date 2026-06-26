@@ -1081,6 +1081,56 @@ export type CollaborationReviewItem = {
     grantsMemoryWriteAuthority: boolean;
     grantsTrainingAuthority: boolean;
   };
+  participantToggleBoundary: {
+    applies: boolean;
+    surface: string;
+    disabledParticipantBlocksNewRelaySubmissions: boolean;
+    requiresOperatorToggleProof: boolean;
+    visibilityIsCapabilityGrant: boolean;
+    participantEnablementIsExecutionAuthority: boolean;
+    receiptKind: string;
+    knownAgents: string[];
+    receiptCount: number;
+    proofReceiptCount: number;
+    legacyReceiptCount: number;
+    latestReceiptId: string;
+    latestAgent: string;
+    agentCurrentToggleProofCount: number;
+    agentExplicitOperatorToggleProofCount: number;
+    agentLegacyProjectionCount: number;
+    agentDefaultStateProjectionCount: number;
+    agentsWithExplicitOperatorToggleProof: string[];
+    agentsMissingExplicitOperatorToggleProof: string[];
+    allAgentsHaveCurrentToggleReadback: boolean;
+    allAgentsHaveExplicitOperatorToggleProof: boolean;
+    operatorConsoleActor: string;
+    clientCanBeOperatorConsole: boolean;
+    clientIsAutomaticExecutionAuthority: boolean;
+    proofSource: string;
+    agentProofs: {
+      agent: string;
+      enabled: boolean;
+      proofStatus: string;
+      source: string;
+      receiptId: string;
+      explicitOperatorToggleProof: boolean;
+      legacyProjection: boolean;
+      defaultStateProjection: boolean;
+      requiresNewToggleForExplicitOperatorProof: boolean;
+      actorRecorded: boolean;
+      reasonRecorded: boolean;
+      currentStateObserved: boolean;
+      grantsExecutionAuthority: boolean;
+      grantsCapabilityAuthority: boolean;
+    }[];
+    storesFullTranscript: boolean;
+    grantsExecutionAuthority: boolean;
+    grantsMutationAuthority: boolean;
+    grantsApprovalAuthority: boolean;
+    grantsMemoryWriteAuthority: boolean;
+    grantsTrainingAuthority: boolean;
+    grantsCapabilityAuthority: boolean;
+  };
   implementationPreflight: CollaborationImplementationPreflight;
   governance: Record<string, unknown>;
 };
@@ -1098,6 +1148,7 @@ export type CollaborationReview = {
     surfaceVerification: string;
     buildDirectionGate: string;
     implementationPreflight: string;
+    participantToggleBoundary: string;
   };
   readbackCache: CollaborationReadbackCache;
   governance: Record<string, unknown>;
@@ -2442,6 +2493,8 @@ function parseReviewItem(raw: unknown): CollaborationReviewItem {
   const buildGate = isRecord(item.build_direction_gate) ? item.build_direction_gate : {};
   const roadmapBoundary = isRecord(item.roadmap_alignment_boundary) ? item.roadmap_alignment_boundary : {};
   const roadmapProof = isRecord(roadmapBoundary.current_proof) ? roadmapBoundary.current_proof : {};
+  const toggleBoundary = isRecord(item.participant_toggle_boundary) ? item.participant_toggle_boundary : {};
+  const toggleProof = isRecord(toggleBoundary.current_proof) ? toggleBoundary.current_proof : {};
   const implementationPreflight = isRecord(item.implementation_preflight) ? item.implementation_preflight : {};
   return {
     id: safeString(item.id),
@@ -2535,6 +2588,71 @@ function parseReviewItem(raw: unknown): CollaborationReviewItem {
       grantsApprovalAuthority: safeBoolean(roadmapProof.grants_approval_authority),
       grantsMemoryWriteAuthority: safeBoolean(roadmapProof.grants_memory_write_authority),
       grantsTrainingAuthority: safeBoolean(roadmapProof.grants_training_authority),
+    },
+    participantToggleBoundary: {
+      applies: safeBoolean(toggleBoundary.applies),
+      surface: safeString(toggleBoundary.surface),
+      disabledParticipantBlocksNewRelaySubmissions: safeBoolean(
+        toggleBoundary.disabled_participant_blocks_new_relay_submissions,
+      ),
+      requiresOperatorToggleProof: safeBoolean(toggleBoundary.requires_operator_toggle_proof),
+      visibilityIsCapabilityGrant: safeBoolean(toggleBoundary.visibility_is_capability_grant),
+      participantEnablementIsExecutionAuthority: safeBoolean(
+        toggleBoundary.participant_enablement_is_execution_authority,
+      ),
+      receiptKind: safeString(toggleProof.receipt_kind),
+      knownAgents: Array.isArray(toggleProof.known_agents) ? toggleProof.known_agents.map((entry) => safeString(entry)).filter(Boolean) : [],
+      receiptCount: safeNumber(toggleProof.receipt_count),
+      proofReceiptCount: safeNumber(toggleProof.proof_receipt_count),
+      legacyReceiptCount: safeNumber(toggleProof.legacy_receipt_count),
+      latestReceiptId: safeString(toggleProof.latest_receipt_id),
+      latestAgent: safeString(toggleProof.latest_agent),
+      agentCurrentToggleProofCount: safeNumber(toggleProof.agent_current_toggle_proof_count),
+      agentExplicitOperatorToggleProofCount: safeNumber(toggleProof.agent_explicit_operator_toggle_proof_count),
+      agentLegacyProjectionCount: safeNumber(toggleProof.agent_legacy_projection_count),
+      agentDefaultStateProjectionCount: safeNumber(toggleProof.agent_default_state_projection_count),
+      agentsWithExplicitOperatorToggleProof: Array.isArray(toggleProof.agents_with_explicit_operator_toggle_proof)
+        ? toggleProof.agents_with_explicit_operator_toggle_proof.map((entry) => safeString(entry)).filter(Boolean)
+        : [],
+      agentsMissingExplicitOperatorToggleProof: Array.isArray(toggleProof.agents_missing_explicit_operator_toggle_proof)
+        ? toggleProof.agents_missing_explicit_operator_toggle_proof.map((entry) => safeString(entry)).filter(Boolean)
+        : [],
+      allAgentsHaveCurrentToggleReadback: safeBoolean(toggleProof.all_agents_have_current_toggle_readback),
+      allAgentsHaveExplicitOperatorToggleProof: safeBoolean(toggleProof.all_agents_have_explicit_operator_toggle_proof),
+      operatorConsoleActor: safeString(toggleProof.operator_console_actor),
+      clientCanBeOperatorConsole: safeBoolean(toggleProof.client_can_be_operator_console),
+      clientIsAutomaticExecutionAuthority: safeBoolean(toggleProof.client_is_automatic_execution_authority),
+      proofSource: safeString(toggleProof.proof_source),
+      agentProofs: Array.isArray(toggleProof.agent_proofs)
+        ? toggleProof.agent_proofs.map((entry) => {
+            const proof = isRecord(entry) ? entry : {};
+            return {
+              agent: safeString(proof.agent),
+              enabled: safeBoolean(proof.enabled),
+              proofStatus: safeString(proof.proof_status),
+              source: safeString(proof.source),
+              receiptId: safeString(proof.receipt_id),
+              explicitOperatorToggleProof: safeBoolean(proof.explicit_operator_toggle_proof),
+              legacyProjection: safeBoolean(proof.legacy_projection),
+              defaultStateProjection: safeBoolean(proof.default_state_projection),
+              requiresNewToggleForExplicitOperatorProof: safeBoolean(
+                proof.requires_new_toggle_for_explicit_operator_proof,
+              ),
+              actorRecorded: safeBoolean(proof.actor_recorded),
+              reasonRecorded: safeBoolean(proof.reason_recorded),
+              currentStateObserved: safeBoolean(proof.current_state_observed),
+              grantsExecutionAuthority: safeBoolean(proof.grants_execution_authority),
+              grantsCapabilityAuthority: safeBoolean(proof.grants_capability_authority),
+            };
+          })
+        : [],
+      storesFullTranscript: safeBoolean(toggleProof.stores_full_transcript),
+      grantsExecutionAuthority: safeBoolean(toggleProof.grants_execution_authority),
+      grantsMutationAuthority: safeBoolean(toggleProof.grants_mutation_authority),
+      grantsApprovalAuthority: safeBoolean(toggleProof.grants_approval_authority),
+      grantsMemoryWriteAuthority: safeBoolean(toggleProof.grants_memory_write_authority),
+      grantsTrainingAuthority: safeBoolean(toggleProof.grants_training_authority),
+      grantsCapabilityAuthority: safeBoolean(toggleProof.grants_capability_authority),
     },
     implementationPreflight: parseImplementationPreflight(implementationPreflight),
     governance: isRecord(item.governance) ? item.governance : {},
@@ -3521,6 +3639,7 @@ export function parseCollaborationReview(raw: unknown): CollaborationReview {
       surfaceVerification: safeString(definitions.surface_verification),
       buildDirectionGate: safeString(definitions.build_direction_gate),
       implementationPreflight: safeString(definitions.implementation_preflight),
+      participantToggleBoundary: safeString(definitions.participant_toggle_boundary),
     },
     readbackCache: parseReadbackCache(value.readback_cache),
     governance: isRecord(value.governance) ? value.governance : {},

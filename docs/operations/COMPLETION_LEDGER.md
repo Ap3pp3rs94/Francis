@@ -97546,6 +97546,74 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, browser screenshot proof, and full ORB/body
   coverage proof were not run for this bounded review-proof slice.
 
+### 2026-06-26 05:39Z - Collaboration review participant toggle proof projection
+
+Current posture: Phase 2 / P1 interface, P3 governance, and P9 observability now
+carry current participant-toggle proof directly inside toggle-related
+collaboration review items. Francis1 can ask what proves a participant was
+enabled or disabled, and the review card now answers from the existing
+collaboration-agents readback instead of forcing manual cross-reading.
+
+What changed:
+
+- `developer_bridge.collaboration_review` now adds
+  `participant_toggle_boundary.current_proof` for
+  `developer_bridge.collaboration_agents` review items.
+- The proof is derived from `collaboration_agents_status` and includes receipt
+  kind, known agents, current proof counts, explicit operator-proof counts,
+  legacy/default projection counts, missing explicit-proof agents, per-agent
+  proof states, and no-authority flags.
+- The Chat UI collaboration parser preserves the proof as
+  `participantToggleBoundary`.
+- The Communication review cards render a compact Toggle Proof block when the
+  boundary applies.
+
+Validation:
+
+- Focused backend review test passed:
+  `python -m pytest tests/test_developer_bridge.py::test_collaboration_review_projects_generic_historical_topics_to_concrete_surfaces -q`.
+- Chat UI contract suite passed:
+  `npm run test -- --runInBand apps/chat_ui/src/chat/index.test.ts`
+  (the package script ran the configured UI suite, `282` passing tests).
+- Ruff check passed:
+  `python -m ruff check src\francis\developer_bridge\collaboration_review.py tests\test_developer_bridge.py`.
+- Ruff format check passed after formatting the touched backend test:
+  `python -m ruff format --check src\francis\developer_bridge\collaboration_review.py tests\test_developer_bridge.py`.
+- Targeted mypy passed:
+  `python -m mypy src\francis\developer_bridge\collaboration_review.py`.
+- Compileall passed:
+  `python -m compileall src\francis\developer_bridge\collaboration_review.py`.
+- Chat UI production build passed:
+  `npm run build`.
+- `git diff --check` passed.
+- The local Francis API was restarted as wrapper PID `50156` and worker PID
+  `9128`. Live `/developer-bridge/collaboration-review?limit=50` showed toggle
+  review `review-insight-collab-792ccaa7b0ac72c1-a1828eb20267` with
+  `receipt_kind=developer_bridge.collaboration_agent_toggle_receipt`,
+  current readback `3/3`, explicit operator proof `1/3`, missing explicit proof
+  agents `codex,ollama`, legacy projection count `2`,
+  `disabled_participant_blocks_new_relay_submissions=true`,
+  `client_is_automatic_execution_authority=false`,
+  `grants_execution_authority=false`,
+  `grants_capability_authority=false`, and
+  `proof_source=developer_bridge.collaboration_agents_status`.
+- Live `/developer-bridge/collaboration-runtime-health` reported
+  `status=healthy`, `helper_count=3`, `recurrence_state=waiting_for_ollama`,
+  `manual_nudge_required=false`, latest prompt within budget, and participants
+  enabled `3/3`.
+
+Remaining truthful gap:
+
+- This is a readback and operator-visibility projection only. It does not grant
+  participant capability use, rewrite legacy receipts, tune Francis1, promote
+  memory, or execute/approve anything.
+- Codex and Ollama remain current-state legacy projections until a new explicit
+  operator toggle records fresh proof for those participants.
+- The latest local-model response can still be guard-rewritten on some turns;
+  those remain learning receipts, not action-readiness evidence.
+- `.\scripts\check.ps1`, GitHub CI, browser screenshot proof, and full ORB/body
+  coverage proof were not run for this bounded toggle-proof slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
