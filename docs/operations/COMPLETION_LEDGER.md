@@ -96405,6 +96405,51 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, and browser proof were not run for this
   bounded transcript-display slice.
 
+### 2026-06-26 03:25Z - Communication UI hides relay mechanics by default
+
+Current posture: Phase 2 / the Communication UI now consumes the transcript
+display metadata from the developer bridge so the default operator view favors
+substantive conversation rows while keeping relay mechanics explicitly
+recoverable from the same transcript surface.
+
+What changed:
+
+- Added a pure `filterCollaborationTranscriptItems` helper for Chat UI transcript
+  visibility.
+- The helper uses typed receipt categories and `display.hideByDefault` to count
+  and hide auto-ack receipts, Codex driver prompts, output-guard receipts, and
+  any future display-marked hidden receipt class.
+- Codex driver prompts now default to hidden in the Communication UI, matching
+  the backend `driver_prompt` display contract.
+- Live Conversation and Relay Transcript Archive now keep their toggle controls
+  visible even when all recent transcript rows are hidden relay mechanics.
+- Empty transcript panels now distinguish a true empty readback from a filtered
+  conversation where relay mechanics are hidden by display metadata.
+
+Validation:
+
+- Focused Chat UI parser/filter tests passed:
+  `node --test --experimental-strip-types apps\chat_ui\src\chat\index.test.ts`.
+- Chat UI package test command passed with `282` tests:
+  `cd apps\chat_ui; npm run test -- src/chat/index.test.ts`.
+- Chat UI production build passed:
+  `cd apps\chat_ui; npm run build`.
+- `git diff --check` passed.
+- Browser proof screenshot passed:
+  `npx --yes playwright screenshot --wait-for-selector "text=Live Conversation" --wait-for-timeout 2500 --full-page --viewport-size "1440,1800" http://127.0.0.1:5173/ output\playwright\communication-filter-default.png`.
+- The screenshot showed the default Live Conversation view with substantive
+  rows visible, Codex driver prompts, audit receipts, and guard receipts hidden,
+  the hidden-mechanics count visible, and the reveal controls still available.
+
+Remaining truthful gap:
+
+- This is UI filtering, not receipt deletion or transcript rewriting. Raw and
+  technical receipts remain available when the operator reveals mechanics.
+- The UI still uses existing per-class mechanics toggles rather than a broader
+  saved operator preference or persistent session-level display profile.
+- `.\scripts\check.ps1` and GitHub CI were not run for this bounded UI filtering
+  slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

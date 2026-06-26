@@ -277,6 +277,22 @@ export type CollaborationTranscript = {
   governance: Record<string, unknown>;
 };
 
+export type CollaborationTranscriptVisibilityOptions = {
+  showAuditReceipts: boolean;
+  showDriverPrompts: boolean;
+  showGuardReceipts: boolean;
+  showOtherHiddenReceipts?: boolean;
+};
+
+export type CollaborationTranscriptVisibility = {
+  items: CollaborationTranscriptItem[];
+  hiddenMechanicCount: number;
+  hiddenAuditReceiptCount: number;
+  hiddenDriverPromptCount: number;
+  hiddenGuardReceiptCount: number;
+  hiddenOtherReceiptCount: number;
+};
+
 export type CollaborationRelayDisplay = {
   summary: string;
   conversationText: string;
@@ -1199,6 +1215,47 @@ export function collaborationTranscriptAuditSummary(items: CollaborationTranscri
     relayMechanicCount,
     substantiveTurnCount: Math.max(0, items.length - relayMechanicCount),
     totalCount: items.length,
+  };
+}
+
+export function filterCollaborationTranscriptItems(
+  items: CollaborationTranscriptItem[],
+  options: CollaborationTranscriptVisibilityOptions,
+): CollaborationTranscriptVisibility {
+  const visibleItems: CollaborationTranscriptItem[] = [];
+  let hiddenAuditReceiptCount = 0;
+  let hiddenDriverPromptCount = 0;
+  let hiddenGuardReceiptCount = 0;
+  let hiddenOtherReceiptCount = 0;
+  for (const item of items) {
+    const auditReceipt = isCollaborationAuditReceipt(item);
+    const driverPrompt = isCollaborationDriverPrompt(item);
+    const guardReceipt = isCollaborationGuardReceipt(item);
+    if (auditReceipt && !options.showAuditReceipts) {
+      hiddenAuditReceiptCount += 1;
+      continue;
+    }
+    if (driverPrompt && !options.showDriverPrompts) {
+      hiddenDriverPromptCount += 1;
+      continue;
+    }
+    if (guardReceipt && !options.showGuardReceipts) {
+      hiddenGuardReceiptCount += 1;
+      continue;
+    }
+    if (item.display.hideByDefault && !auditReceipt && !driverPrompt && !guardReceipt && !options.showOtherHiddenReceipts) {
+      hiddenOtherReceiptCount += 1;
+      continue;
+    }
+    visibleItems.push(item);
+  }
+  return {
+    items: visibleItems,
+    hiddenMechanicCount: hiddenAuditReceiptCount + hiddenDriverPromptCount + hiddenGuardReceiptCount + hiddenOtherReceiptCount,
+    hiddenAuditReceiptCount,
+    hiddenDriverPromptCount,
+    hiddenGuardReceiptCount,
+    hiddenOtherReceiptCount,
   };
 }
 

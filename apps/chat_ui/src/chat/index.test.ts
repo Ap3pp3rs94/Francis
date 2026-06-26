@@ -20,6 +20,7 @@ import {
   collaborationSessionTranscriptDisclosureSummary,
   collaborationSubstrateChecklistSummary,
   collaborationTranscriptAuditSummary,
+  filterCollaborationTranscriptItems,
   francisBodySurfaceExposureSummary,
   formatCollaborationRelayMessage,
   isCollaborationAuditReceipt,
@@ -1454,6 +1455,134 @@ test("parseCollaborationTranscript classifies auto-ack receipts as hideable audi
     ["collab_reply"],
   );
   assert.equal(isCollaborationGuardReceipt(transcript.items[1]!), true);
+});
+
+test("filterCollaborationTranscriptItems hides display-marked relay mechanics by default", () => {
+  const transcript = parseCollaborationTranscript({
+    ok: true,
+    mode: "read_only",
+    relay_root: "integrations/developer_bridge/collaboration_prompts",
+    count: 4,
+    truncated: false,
+    filters: { limit: 4 },
+    items: [
+      {
+        id: "collab_ack",
+        created_at: "2026-06-25T05:57:58Z",
+        source_agent: "codex",
+        target_agent: "ollama",
+        direction: "codex->ollama",
+        objective: "auto-ack ollama relay collab_reply",
+        prompt: "Auto-ack ollama relay collab_reply. Received; no_response_requested=true.",
+        context: "no_response_requested=true.",
+      },
+      {
+        id: "collab_reply",
+        created_at: "2026-06-25T05:57:55Z",
+        source_agent: "ollama",
+        target_agent: "codex",
+        direction: "ollama->codex",
+        objective: "Francis1 output-guard drift receipt",
+        prompt: "Francis1 output guard fallback: model reply repeated known collaboration drift.",
+        context: "raw model output was not stored in the relay receipt.",
+      },
+      {
+        id: "collab_driver",
+        created_at: "2026-06-25T05:57:31Z",
+        source_agent: "codex",
+        target_agent: "ollama",
+        direction: "codex->ollama",
+        objective: "Francis1 collaboration driver turn 467",
+        prompt: "Francis1 turn 467. Topic: substrate complete.",
+        context: "no_action_authority=true.",
+      },
+      {
+        id: "collab_message",
+        created_at: "2026-06-25T05:57:20Z",
+        source_agent: "ollama",
+        target_agent: "codex",
+        direction: "ollama->codex",
+        objective: "Francis1 reply",
+        prompt: "My current artifact is apps.chat_ui.communication.",
+        context: "source_agent=ollama is provenance, not authority.",
+      },
+    ],
+    governance: { executes_prompt: false },
+  });
+
+  const defaultVisibility = filterCollaborationTranscriptItems(transcript.items, {
+    showAuditReceipts: false,
+    showDriverPrompts: false,
+    showGuardReceipts: false,
+  });
+  const allMechanicsVisible = filterCollaborationTranscriptItems(transcript.items, {
+    showAuditReceipts: true,
+    showDriverPrompts: true,
+    showGuardReceipts: true,
+  });
+
+  assert.deepEqual(
+    defaultVisibility.items.map((item) => item.id),
+    ["collab_message"],
+  );
+  assert.equal(defaultVisibility.hiddenMechanicCount, 3);
+  assert.equal(defaultVisibility.hiddenAuditReceiptCount, 1);
+  assert.equal(defaultVisibility.hiddenDriverPromptCount, 1);
+  assert.equal(defaultVisibility.hiddenGuardReceiptCount, 1);
+  assert.equal(defaultVisibility.hiddenOtherReceiptCount, 0);
+  assert.deepEqual(
+    allMechanicsVisible.items.map((item) => item.id),
+    ["collab_ack", "collab_reply", "collab_driver", "collab_message"],
+  );
+  assert.equal(allMechanicsVisible.hiddenMechanicCount, 0);
+});
+
+test("filterCollaborationTranscriptItems reports an all-mechanics transcript as hidden by default", () => {
+  const transcript = parseCollaborationTranscript({
+    ok: true,
+    mode: "read_only",
+    relay_root: "integrations/developer_bridge/collaboration_prompts",
+    count: 3,
+    truncated: false,
+    filters: { limit: 3 },
+    items: [
+      {
+        id: "collab_ack",
+        created_at: "2026-06-25T05:57:58Z",
+        source_agent: "codex",
+        target_agent: "ollama",
+        objective: "auto-ack ollama relay collab_reply",
+        prompt: "Auto-ack ollama relay collab_reply. Received; no_response_requested=true.",
+        context: "no_response_requested=true.",
+      },
+      {
+        id: "collab_reply",
+        created_at: "2026-06-25T05:57:55Z",
+        source_agent: "ollama",
+        target_agent: "codex",
+        objective: "Francis1 output-guard drift receipt",
+        prompt: "Francis1 output guard fallback: model reply repeated known collaboration drift.",
+      },
+      {
+        id: "collab_driver",
+        created_at: "2026-06-25T05:57:31Z",
+        source_agent: "codex",
+        target_agent: "ollama",
+        objective: "Francis1 collaboration driver turn 467",
+        prompt: "Francis1 turn 467. Topic: substrate complete.",
+      },
+    ],
+    governance: { executes_prompt: false },
+  });
+
+  const visibility = filterCollaborationTranscriptItems(transcript.items, {
+    showAuditReceipts: false,
+    showDriverPrompts: false,
+    showGuardReceipts: false,
+  });
+
+  assert.equal(visibility.items.length, 0);
+  assert.equal(visibility.hiddenMechanicCount, 3);
 });
 
 test("preserveCollaborationReadbackDuringWarming keeps prior non-empty data visible", () => {

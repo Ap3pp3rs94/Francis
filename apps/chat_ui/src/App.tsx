@@ -36,6 +36,7 @@ import {
   collaborationRuntimeReviewReceiptSummary,
   collaborationSubstrateChecklistSummary,
   collaborationSessionTranscriptDisclosureSummary,
+  filterCollaborationTranscriptItems,
   francisBodySurfaceExposureSummary,
   formatCollaborationRelayMessage,
   isCollaborationAuditReceipt,
@@ -1169,7 +1170,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
   const [selectedSessionId, setSelectedSessionId] = useState("");
   const [followLatest, setFollowLatest] = useState(true);
   const [showAuditReceipts, setShowAuditReceipts] = useState(false);
-  const [showRelayPrompts, setShowRelayPrompts] = useState(true);
+  const [showRelayPrompts, setShowRelayPrompts] = useState(false);
   const [showGuardReceipts, setShowGuardReceipts] = useState(false);
   const requestInFlight = useRef<{ signal?: AbortSignal } | null>(null);
   const liveTranscriptScrollRef = useRef<HTMLDivElement | null>(null);
@@ -1352,16 +1353,19 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
   const transcriptGuardText = transcriptAuditSummary.guardReceiptCount
     ? ` / ${transcriptAuditSummary.guardReceiptCount} guard ${showGuardReceipts ? "shown" : "hidden"}`
     : "";
-  const sessionSourceItems = useMemo(
+  const transcriptVisibility = useMemo(
     () =>
-      transcriptItems.filter((item) => {
-        if (!showAuditReceipts && isCollaborationAuditReceipt(item)) return false;
-        if (!showRelayPrompts && isCollaborationDriverPrompt(item)) return false;
-        if (!showGuardReceipts && isCollaborationGuardReceipt(item)) return false;
-        return true;
+      filterCollaborationTranscriptItems(transcriptItems, {
+        showAuditReceipts,
+        showDriverPrompts: showRelayPrompts,
+        showGuardReceipts,
       }),
     [showAuditReceipts, showGuardReceipts, showRelayPrompts, transcriptItems],
   );
+  const sessionSourceItems = transcriptVisibility.items;
+  const hiddenMechanicText = transcriptVisibility.hiddenMechanicCount
+    ? ` / ${transcriptVisibility.hiddenMechanicCount} mechanics hidden`
+    : "";
   const sessions = useMemo(() => buildCollaborationSessions(sessionSourceItems), [sessionSourceItems]);
   const sessionSummaries = sessionReadback?.items ?? [];
   const reviewItems = review?.items ?? [];
@@ -2066,10 +2070,11 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
             {liveTranscriptItems.length} shown / {transcriptFilterText}
             {transcriptAuditText}
             {transcriptGuardText}
+            {hiddenMechanicText}
             {collaborationCacheLabel(transcript?.readbackCache)}
           </span>
         </div>
-        {sessions.length ? (
+        {sessions.length || transcriptItems.length ? (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
             <button
               type="button"
@@ -2330,7 +2335,9 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
             })
           ) : (
             <div style={{ border: "1px solid rgba(148, 163, 184, 0.22)", borderRadius: 12, color: "#94a3b8", padding: 14 }}>
-              No relay transcript entries returned.
+              {transcriptItems.length && transcriptVisibility.hiddenMechanicCount
+                ? `No conversation entries visible. ${transcriptVisibility.hiddenMechanicCount} relay mechanics hidden by display metadata.`
+                : "No relay transcript entries returned."}
             </div>
           )}
         </div>
@@ -3633,10 +3640,11 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
             {transcript?.truncated ? " / truncated" : ""}
             {transcriptAuditText}
             {transcriptGuardText}
+            {hiddenMechanicText}
             {collaborationCacheLabel(transcript?.readbackCache)}
           </span>
         </div>
-        {sessions.length ? (
+        {sessions.length || transcriptItems.length ? (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
             <button
               type="button"
@@ -3804,7 +3812,9 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
             })
           ) : (
             <div style={{ border: "1px solid rgba(148, 163, 184, 0.22)", borderRadius: 12, color: "#94a3b8", padding: 14 }}>
-              No relay transcript entries returned.
+              {transcriptItems.length && transcriptVisibility.hiddenMechanicCount
+                ? `No conversation entries visible. ${transcriptVisibility.hiddenMechanicCount} relay mechanics hidden by display metadata.`
+                : "No relay transcript entries returned."}
             </div>
           )}
         </div>
