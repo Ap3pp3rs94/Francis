@@ -34,6 +34,18 @@ _LOW_RISK_ACCESS_MODES = ("observe", "read", "request", "propose_plan")
 _DECISIONS = ("grant", "deny", "revoke")
 
 
+def known_capability_surfaces() -> tuple[str, ...]:
+    """Return the bounded Francis body surfaces that can receive explicit grants."""
+
+    return _KNOWN_SURFACES
+
+
+def allowed_capability_access_modes() -> tuple[str, ...]:
+    """Return low-risk access modes allowed by the capability-grant receipt lane."""
+
+    return _LOW_RISK_ACCESS_MODES
+
+
 def read_francis_capability_grants(*, surface_id: str = "") -> dict[str, object]:
     """Read operator capability-grant decisions without granting execution authority."""
 
@@ -112,7 +124,7 @@ def set_francis_capability_grant(
     previous = _grant_record(clean_surface, _decision_state(decisions, clean_surface))
     now = _utc_now()
     grant_state = _grant_state_for(clean_decision)
-    current = {
+    current: dict[str, object] = {
         "surface_id": clean_surface,
         "grant_state": grant_state,
         "decision": clean_decision,

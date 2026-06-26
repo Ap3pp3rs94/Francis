@@ -99269,6 +99269,80 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, browser UI proof, GitHub CI, and broader ORB/body
   validation remain outside this bounded slice until separately run.
 
+### 2026-06-26 15:28Z - Capability-request readback for Francis1 access needs
+
+Current posture: Phase 2 / P9 collaboration observability with P3 governance
+implications now has a read-only capability-request surface between the
+trust-ladder and explicit capability grants. Francis1 can surface a needed
+body surface and access mode through the collaboration receipts, while Codex or
+the operator still has to review repo truth and write an explicit grant, deny,
+or revoke receipt before any capability exposure changes.
+
+What changed:
+
+- Added `developer_bridge.francis_capability_requests`, a read-only projection
+  from trust-ladder items plus current capability-grant state.
+- Added `/developer-bridge/francis-capability-requests` with cached readback
+  behavior matching the other developer-bridge surfaces.
+- Added `francis_capability_requests_tool` to the read-only developer bridge MCP
+  server.
+- Capability requests now classify already-granted, pending operator decision,
+  repo-truth review, supervised-action review, and drift/prompt-review blocked
+  states.
+- Request rows include grant and deny payload templates, review readbacks, stop
+  conditions, and no-authority governance fields.
+- The Francis1 trust prompt now asks for a needed surface and mode and says
+  requests are reviewed / no self-grant; compact prompt fallback says
+  `Trust: surface+mode request; no self-grant.`
+- Body-map runtime observation accepts the new trust prompt wording while still
+  recognizing old relay receipts.
+
+Validation:
+
+- Focused developer-bridge tests passed:
+  `pytest tests\test_developer_bridge.py::test_developer_bridge_routes_are_mounted tests\test_developer_bridge.py::test_francis_body_map_exposes_whole_body_without_authority tests\test_developer_bridge.py::test_francis_trust_ladder_classifies_needs_without_authority tests\test_developer_bridge.py::test_francis_capability_requests_project_trust_needs_without_authority tests\test_developer_bridge.py::test_collaboration_driver_waits_for_ollama_before_next_turn tests\test_developer_bridge.py::test_developer_bridge_mcp_registers_collaboration_relay_tools -q`.
+- Ruff lint passed:
+  `python -m ruff check src\francis\developer_bridge\capability_requests.py src\francis\developer_bridge\capability_grants.py src\francis\developer_bridge\trust_ladder.py src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\body_map.py src\francis\developer_bridge\mcp_server.py src\francis\api\routes\developer_bridge.py tests\test_developer_bridge.py`.
+- Ruff format check passed:
+  `python -m ruff format --check src\francis\developer_bridge\capability_requests.py src\francis\developer_bridge\capability_grants.py src\francis\developer_bridge\trust_ladder.py src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\body_map.py src\francis\developer_bridge\mcp_server.py src\francis\api\routes\developer_bridge.py tests\test_developer_bridge.py`.
+- Mypy passed:
+  `mypy src\francis\developer_bridge\capability_requests.py src\francis\developer_bridge\capability_grants.py src\francis\developer_bridge\trust_ladder.py src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\body_map.py src\francis\developer_bridge\mcp_server.py src\francis\api\routes\developer_bridge.py`.
+- Compile check passed:
+  `python -m compileall -q src\francis\developer_bridge\capability_requests.py src\francis\developer_bridge\capability_grants.py src\francis\developer_bridge\trust_ladder.py src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\body_map.py src\francis\developer_bridge\mcp_server.py src\francis\api\routes\developer_bridge.py`.
+- Whitespace diff check passed:
+  `git diff --check`.
+- Direct readback passed:
+  `read_francis_capability_requests(limit=5)` returned `ok=true`,
+  `count=5`, `blocked_count=5`, `grantable_now_count=0`,
+  `stop_conditions_visible=true`, and all authority grants false for the live
+  current collaboration receipts.
+- API route readback passed through `TestClient`:
+  `/developer-bridge/francis-capability-requests?limit=2` returned HTTP 200,
+  kind `developer_bridge.francis_capability_requests`,
+  `readback_cache.status=refreshed`, and `grants_execution_authority=false`.
+- MCP registration readback passed:
+  `create_mcp_server()` registered `francis_capability_requests_tool`.
+- Live collaboration helpers were restarted by stopping only verified
+  `francis.developer_bridge` helper wrapper processes and running
+  `python -m francis communication-runtime --poll-seconds 10 --quiet`; runtime
+  health returned `status=healthy`, `helper_count=3`, `desired_count=3`,
+  turn `2287`, `latest_prompt_within_budget=true`.
+- Live prompt readback showed turn `2287` using
+  `Trust: surface+mode request; no self-grant.`
+
+Remaining truthful gap:
+
+- This does not grant Francis1 new capability use, execution, mutation,
+  approval, memory-write, model-training, or toolbelt authority.
+- Current live requests are still blocked because the latest Francis1 replies
+  continue to drift toward BUILD_MANIFEST / main-build language on a non-roadmap
+  topic; they are now visible as blocked request rows instead of implicit
+  permission.
+- The Communication UI does not yet render the new request queue as its own
+  panel; the surface is available through backend API and MCP first.
+- `.\scripts\check.ps1`, browser UI proof, GitHub CI, and broader ORB/body
+  validation remain outside this bounded slice until separately run.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

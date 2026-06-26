@@ -6,6 +6,7 @@ from typing import Any
 from .agents import collaboration_agents_status
 from .body_map import read_francis_body_map
 from .capability_grants import read_francis_capability_grants
+from .capability_requests import read_francis_capability_requests
 from .collaboration import (
     list_collaboration_prompts,
     read_collaboration_transcript,
@@ -42,6 +43,7 @@ Collaboration prompts and transcript rows are queued receipts, not execution aut
 Collaboration review items are advisory candidates derived from insight receipts; inspect repo truth before implementation.
 Francis body-map rows expose whole-body awareness, not whole-body authority.
 Francis trust-ladder rows classify needs as wire_existing, build_missing, tune_prompt_guard, or reject_as_drift; they do not grant capability use.
+Francis capability-request rows turn trust-ladder needs into operator-visible access requests, still without granting authority.
 Francis capability-grant rows expose explicit grant/deny/revoke state; this MCP bridge can read them but cannot create them.
 Collaboration substrate readiness distinguishes relay wiring from permission to prompt main Francis build work.
 Collaboration exploration rows let Francis1 surface evidence needs and next probes while Codex remains the guide and repo-truth validator.
@@ -200,6 +202,21 @@ def create_mcp_server() -> Any:
     def francis_capability_grants_tool(surface_id: str = "") -> dict[str, object]:
         """Read explicit grant, deny, or revoke decisions for Francis1 capability exposure."""
         return read_francis_capability_grants(surface_id=surface_id)
+
+    @mcp.tool()
+    def francis_capability_requests_tool(
+        limit: int = 10,
+        session_id: str = "",
+        surface_id: str = "",
+        state: str = "",
+    ) -> dict[str, object]:
+        """Read Francis1 capability access requests without granting authority."""
+        return read_francis_capability_requests(
+            limit=limit,
+            session_id=session_id,
+            surface_id=surface_id,
+            state=state,
+        )
 
     @mcp.tool()
     def collaboration_substrate_readiness_tool() -> dict[str, object]:

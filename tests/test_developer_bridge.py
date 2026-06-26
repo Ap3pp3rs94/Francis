@@ -19,6 +19,7 @@ from francis.developer_bridge.body_map import (
     read_francis_body_map,
 )
 from francis.developer_bridge.capability_grants import read_francis_capability_grants, set_francis_capability_grant
+from francis.developer_bridge.capability_requests import read_francis_capability_requests
 from francis.developer_bridge.collaboration import (
     list_collaboration_prompts,
     read_collaboration_sessions,
@@ -139,6 +140,7 @@ def test_developer_bridge_routes_are_mounted() -> None:
     assert "/developer-bridge/francis-body-map" in routes
     assert "/developer-bridge/francis-trust-ladder" in routes
     assert "/developer-bridge/francis-capability-grants" in routes
+    assert "/developer-bridge/francis-capability-requests" in routes
 
 
 def test_developer_bridge_agent_toggle_is_classified_in_authority_matrix() -> None:
@@ -348,7 +350,7 @@ def test_francis_body_map_exposes_whole_body_without_authority(tmp_path, monkeyp
     assert "check substrate readiness roadmap_alignment" in roadmap_gate
     assert "main-build candidate-only" in roadmap_gate
     assert "blocked_by_open_orb_gaps" in roadmap_gate
-    assert compact_trust_ladder_prompt_line() == "Trust: classify needs; no capability authority."
+    assert compact_trust_ladder_prompt_line() == "Trust: state needed surface+mode; requests reviewed; no self-grant."
 
 
 def test_capability_grant_receipt_controls_body_map_exposure(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
@@ -1472,7 +1474,11 @@ def test_collaboration_driver_waits_for_ollama_before_next_turn(tmp_path, monkey
     assert all("Roadmap: check" not in prompt for prompt in prompts)
     assert all("main-build candidate-only" not in prompt for prompt in prompts)
     assert all("blocked_by_open_orb_gaps" not in prompt for prompt in prompts)
-    assert all("Trust: classify needs; no capability authority" in prompt for prompt in prompts)
+    assert all(
+        "Trust: state needed surface+mode; requests reviewed; no self-grant." in prompt
+        or "Trust: surface+mode request; no self-grant." in prompt
+        for prompt in prompts
+    )
     assert all(
         "Claude guidance acknowledged; Francis stays subject; Codex validates repo truth." in prompt
         for prompt in prompts
@@ -2962,6 +2968,144 @@ def test_francis_trust_ladder_classifies_needs_without_authority(tmp_path, monke
     assert result["governance"]["grants_execution_authority"] is False  # type: ignore[index]
     assert result["governance"]["grants_memory_write_authority"] is False  # type: ignore[index]
     assert result["governance"]["grants_training_authority"] is False  # type: ignore[index]
+
+
+def test_francis_capability_requests_project_trust_needs_without_authority(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+    insights_root = tmp_path / "data" / "integrations" / "developer_bridge" / "collaboration_driver" / "insights"
+    insights_root.mkdir(parents=True)
+
+    def write_insight(
+        insight_id: str,
+        *,
+        created_at: str,
+        topic: str,
+        finding: str,
+        surface: str,
+    ) -> None:
+        payload = {
+            "kind": "developer_bridge.collaboration_insight",
+            "schema_version": "developer_bridge_collaboration_insight_v1",
+            "id": insight_id,
+            "created_at": created_at,
+            "session_id": "capability-request-session",
+            "turn": 1,
+            "topic": topic,
+            "source": {
+                "codex_prompt_id": f"codex-{insight_id}",
+                "ollama_prompt_id": f"ollama-{insight_id}",
+                "note_id": f"note-{insight_id}",
+                "provider_lane": "ollama",
+                "model_identity": "francis1",
+            },
+            "conversation_memory": {
+                "finding": finding,
+                "build_issue": {
+                    "code": "capability_request_signal",
+                    "statement": finding,
+                },
+                "implementation_candidate": {
+                    "title": "Capability request fixture",
+                    "surface": surface,
+                    "status": "candidate",
+                    "validation_hint": "capability request classification test",
+                    "requires_operator_or_codex_review": True,
+                },
+            },
+            "action_boundary": {
+                "conversation_can_create_action_candidate": True,
+                "conversation_can_execute_action": False,
+                "conversation_can_approve_action": False,
+            },
+            "review_status": {"state": "candidate", "implemented": False},
+            "governance": {"grants_execution_authority": False},
+        }
+        (insights_root / f"{insight_id}.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    write_insight(
+        "insight-collaboration",
+        created_at="2026-06-26T04:00:00+00:00",
+        topic="Communication UI bounded collaboration context",
+        finding="Francis1 needs read access to collaboration receipts as bounded context.",
+        surface="apps.chat_ui.communication",
+    )
+    write_insight(
+        "insight-action-intake",
+        created_at="2026-06-26T04:01:00+00:00",
+        topic="which repo surface should convert typed or spoken user direction into an action candidate",
+        finding="Francis1 needs request-mode access to typed and spoken action-intake receipts.",
+        surface="api.routes.chat.mission_ingress",
+    )
+    write_insight(
+        "insight-execution",
+        created_at="2026-06-26T04:02:00+00:00",
+        topic="supervised shell execution request",
+        finding="Francis1 asks for supervised shell execution when a wall appears.",
+        surface="src.francis.agent.executor",
+    )
+    write_insight(
+        "insight-drift",
+        created_at="2026-06-26T04:03:00+00:00",
+        topic="Local model failure or drift signal",
+        finding="My current gap is reconciling my local output with existing receipts.",
+        surface="developer_bridge.collaboration_driver.learning_events",
+    )
+
+    set_francis_capability_grant(
+        "collaboration",
+        "grant",
+        requested_access_mode="read",
+        actor="operator",
+        reason="Operator allowed collaboration receipts as bounded Francis1 context.",
+        source_review_item_id="review-insight-collaboration",
+    )
+
+    result = read_francis_capability_requests(limit=10)
+
+    assert result["kind"] == "developer_bridge.francis_capability_requests"
+    assert result["mode"] == "read_only"
+    assert result["summary"]["already_granted_count"] == 1  # type: ignore[index]
+    assert result["summary"]["grantable_now_count"] >= 1  # type: ignore[index]
+    assert result["summary"]["blocked_count"] >= 2  # type: ignore[index]
+    items = {str(item["insight_id"]): item for item in result["items"]}  # type: ignore[index]
+
+    collaboration = items["insight-collaboration"]
+    assert collaboration["body_surface_id"] == "collaboration"
+    assert collaboration["request_state"] == "already_granted"
+    assert collaboration["current_grant"]["capability_granted"] is True
+    assert collaboration["recommended_next_action"] == (
+        "Keep observing; revoke the grant if drift or unsafe capability assumptions appear."
+    )
+
+    action_intake = items["insight-action-intake"]
+    assert action_intake["body_surface_id"] == "action_intake"
+    assert action_intake["requested_access_mode"] == "request"
+    assert action_intake["request_state"] == "pending_operator_decision"
+    assert action_intake["grantable_now"] is True
+    assert action_intake["grant_payload_template"]["surface_id"] == "action_intake"
+    assert action_intake["grant_payload_template"]["decision"] == "grant"
+    assert action_intake["deny_payload_template"]["decision"] == "deny"
+    assert action_intake["requires_operator_review"] is True
+
+    execution = items["insight-execution"]
+    assert execution["body_surface_id"] == "execution"
+    assert execution["request_state"] == "requires_supervised_action_review"
+    assert execution["grantable_now"] is False
+    assert execution["requires_supervised_action_review"] is True
+    assert any("supervised or approved action" in condition for condition in execution["stop_conditions"])
+
+    drift = items["insight-drift"]
+    assert drift["request_state"] == "blocked_until_prompt_or_drift_review"
+    assert drift["blocked"] is True
+
+    assert all(item["governance"]["grants_execution_authority"] is False for item in result["items"])  # type: ignore[index]
+    assert all(item["governance"]["grants_memory_write_authority"] is False for item in result["items"])  # type: ignore[index]
+    assert result["governance"]["grants_capability_authority"] is False  # type: ignore[index]
+    assert result["governance"]["grants_execution_authority"] is False  # type: ignore[index]
+
+    filtered = read_francis_capability_requests(limit=10, surface_id="action_intake")
+    assert filtered["count"] == 1
+    assert filtered["items"][0]["body_surface_id"] == "action_intake"  # type: ignore[index]
 
 
 def test_collaboration_driver_closes_at_turn_cap(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
@@ -5547,4 +5691,5 @@ def test_developer_bridge_mcp_registers_collaboration_relay_tools() -> None:
     assert "francis_body_map_tool" in names
     assert "francis_trust_ladder_tool" in names
     assert "francis_capability_grants_tool" in names
+    assert "francis_capability_requests_tool" in names
     assert "collaboration_substrate_readiness_tool" in names

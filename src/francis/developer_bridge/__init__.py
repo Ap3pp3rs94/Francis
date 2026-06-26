@@ -7,6 +7,7 @@ from .agents import (
 )
 from .body_map import compact_body_map_prompt_line, compact_roadmap_gate_prompt_line, read_francis_body_map
 from .capability_grants import read_francis_capability_grants, set_francis_capability_grant
+from .capability_requests import read_francis_capability_requests
 from .collaboration import (
     list_collaboration_prompts,
     read_collaboration_transcript,
@@ -35,6 +36,7 @@ __all__ = [
     "read_collaboration_transcript",
     "read_completion_ledger",
     "read_francis_capability_grants",
+    "read_francis_capability_requests",
     "read_francis_body_map",
     "read_francis_trust_ladder",
     "read_repo_file",

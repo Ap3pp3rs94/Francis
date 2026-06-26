@@ -564,7 +564,7 @@ def _fit_driver_prompt_to_budget(
     compact_loop = _extra_compact_loop_line(loop_line)
     compact_codex = _extra_compact_codex_response_line(codex_response)
     compact_roadmap = _compact_roadmap_gate_prompt_line_for_topic(topic)
-    compact_trust = "Trust: classify needs; no capability authority."
+    compact_trust = "Trust: surface+mode request; no self-grant."
     attempts = [
         (
             64,

@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from francis.developer_bridge.agents import collaboration_agents_status, set_collaboration_agent_enabled
 from francis.developer_bridge.body_map import read_francis_body_map
 from francis.developer_bridge.capability_grants import read_francis_capability_grants, set_francis_capability_grant
+from francis.developer_bridge.capability_requests import read_francis_capability_requests
 from francis.developer_bridge.collaboration import read_collaboration_sessions, read_collaboration_transcript
 from francis.developer_bridge.collaboration_driver import (
     read_collaboration_exploration,
@@ -901,6 +902,82 @@ def _empty_capability_grants_payload(
     }
 
 
+def _empty_capability_requests_payload(
+    *,
+    limit: int = 10,
+    session_id: str = "",
+    surface_id: str = "",
+    state: str = "",
+) -> dict[str, object]:
+    return {
+        "kind": "developer_bridge.francis_capability_requests",
+        "schema_version": "developer_bridge_francis_capability_requests_v1",
+        "ok": True,
+        "mode": "read_only",
+        "surface": "developer_bridge.francis_capability_requests",
+        "items": [],
+        "count": 0,
+        "summary": {
+            "request_count": 0,
+            "grantable_now_count": 0,
+            "blocked_count": 0,
+            "already_granted_count": 0,
+            "known_surface_count": 0,
+            "unknown_surface_count": 0,
+            "requires_operator_review_count": 0,
+            "stop_conditions_visible": True,
+            "can_revoke_after_grant": True,
+            "grants_capability_authority": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+            "grants_approval_authority": False,
+            "grants_memory_write_authority": False,
+            "grants_training_authority": False,
+        },
+        "filters": {
+            "limit": limit,
+            "session_id": session_id,
+            "surface_id": surface_id,
+            "state": state,
+        },
+        "definitions": {
+            "capability_request": "A trust-ladder need projected into a body-surface access request.",
+            "grantable_now": "A known low-risk surface and mode still requiring review before grant.",
+            "blocked": "A request that must not be granted before review.",
+            "stop_conditions": "Operator-visible deny, revoke, or pause triggers.",
+        },
+        "operator_controls": {
+            "grant_or_deny_route": "/developer-bridge/francis-capability-grants",
+            "participant_toggle_route": "/developer-bridge/collaboration-agents/toggle",
+            "request_readback_route": "/developer-bridge/francis-capability-requests",
+            "client_can_be_operator_console": True,
+            "client_is_automatic_execution_authority": False,
+            "deny_after_grant_supported": True,
+            "revoke_after_grant_supported": True,
+        },
+        "governance": {
+            "read_only": True,
+            "derived_from": "developer_bridge.francis_trust_ladder",
+            "reads_capability_grant_state": True,
+            "writes_capability_grant_state": False,
+            "writes_files": False,
+            "writes_receipts": False,
+            "stores_full_transcript": False,
+            "calls_model": False,
+            "trains_model": False,
+            "client_can_be_operator_console": True,
+            "client_is_automatic_execution_authority": False,
+            "requires_operator_review_before_grant": True,
+            "grants_capability_authority": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+            "grants_approval_authority": False,
+            "grants_memory_write_authority": False,
+            "grants_training_authority": False,
+        },
+    }
+
+
 @router.get("/status")
 def status() -> dict[str, object]:
     return _call_read_only(repo_status)
@@ -1154,6 +1231,24 @@ def francis_capability_grants_route(surface_id: str = "") -> Response:
     )
 
 
+@router.get("/francis-capability-requests")
+def francis_capability_requests_route(
+    limit: int = Query(10, ge=1, le=50),
+    session_id: str = "",
+    surface_id: str = "",
+    state: str = "",
+) -> Response:
+    return _cached_read_only_json_response(
+        "developer_bridge.francis_capability_requests",
+        read_francis_capability_requests,
+        _empty_capability_requests_payload,
+        limit=limit,
+        session_id=session_id,
+        surface_id=surface_id,
+        state=state,
+    )
+
+
 @router.get("/collaboration-sessions")
 def collaboration_sessions_route(
     agent: str = "",
@@ -1206,6 +1301,7 @@ def francis_capability_grant(payload: FrancisCapabilityGrantIn) -> dict[str, obj
     if result.get("ok") is True:
         _invalidate_readback_cache(
             "developer_bridge.francis_capability_grants",
+            "developer_bridge.francis_capability_requests",
             "developer_bridge.francis_body_map",
             "developer_bridge.collaboration_substrate_readiness",
         )

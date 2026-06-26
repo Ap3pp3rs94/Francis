@@ -79,7 +79,7 @@ def read_francis_trust_ladder(*, limit: int = 10, session_id: str = "") -> dict[
 def compact_trust_ladder_prompt_line() -> str:
     """Return the compact Francis1 trust-ladder contract line."""
 
-    return _one_line("Trust: classify needs; no capability authority.")
+    return _one_line("Trust: state needed surface+mode; requests reviewed; no self-grant.")
 
 
 def _trust_request(review_item: dict[str, object]) -> dict[str, object]:

@@ -1087,7 +1087,7 @@ def _runtime_restart_observation() -> dict[str, object]:
         if _safe_str(record.get("source_agent")) == "codex"
         and _safe_str(record.get("target_agent")) == "ollama"
         and _has_body_map_prompt_line(_safe_str(record.get("prompt")))
-        and "Trust: classify needs; no capability authority" in _safe_str(record.get("prompt"))
+        and _has_trust_ladder_prompt_line(_safe_str(record.get("prompt")))
     ]
     prompt = prompts[0] if prompts else None
     response: dict[str, object] | None = None
@@ -1142,6 +1142,14 @@ def _has_body_map_prompt_line(prompt: str) -> bool:
     if "capability use requires grant receipt" in prompt and "stale memory detaches" in prompt:
         return "visible" in prompt and "not exposed" in prompt
     return "Body map: visible; grants required; stale detaches." in prompt
+
+
+def _has_trust_ladder_prompt_line(prompt: str) -> bool:
+    return (
+        "Trust: state needed surface+mode; requests reviewed; no self-grant." in prompt
+        or "Trust: surface+mode request; no self-grant." in prompt
+        or "Trust: classify needs; no capability authority" in prompt
+    )
 
 
 def _relay_records(*, limit: int = 250) -> list[dict[str, object]]:
