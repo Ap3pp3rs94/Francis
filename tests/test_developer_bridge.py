@@ -4807,6 +4807,14 @@ def test_ollama_participant_ignore_existing_is_source_scoped(tmp_path, monkeypat
     assert codex_initialized["source_agent"] == "codex"
     assert operator_initialized["status"] == "initialized"
     assert operator_initialized["source_agent"] == "operator"
+    default_state_path = tmp_path / "data" / "integrations" / "developer_bridge" / "ollama_participant" / "state.json"
+    operator_state_path = (
+        tmp_path / "data" / "integrations" / "developer_bridge" / "ollama_participant" / "state_operator.json"
+    )
+    assert default_state_path.exists()
+    assert operator_state_path.exists()
+    operator_state = json.loads(operator_state_path.read_text(encoding="utf-8"))
+    assert operator_state["governance"]["state_write"].endswith("state_operator.json")
     assert read_collaboration_transcript(source_agent="ollama", target_agent="operator")["count"] == 0
 
     source = submit_collaboration_prompt(

@@ -99487,8 +99487,10 @@ What changed:
   `codex_operator_responder` and `ollama_operator_participant` for
   operator-origin relay entries.
 - `src/francis/developer_bridge/ollama_participant.py` now tracks
-  `ignore-existing` initialization per source agent so the new operator watcher
-  marks old operator backlog seen before answering new operator messages.
+  `ignore-existing` initialization per source agent and keeps the operator lane
+  in `state_operator.json`, leaving the historical Codex lane on `state.json`.
+  This prevents the local Codex and operator Ollama watchers from racing on the
+  same Windows state file or swallowing new operator messages as old backlog.
 - `tests/test_developer_bridge.py` now covers operator-to-Codex acknowledgement,
   operator-to-Francis1/Ollama source-scoped initialization, and the five-helper
   runtime readback.
@@ -99514,9 +99516,11 @@ Remaining truthful gap:
   Francis relay receipts, and gives local Codex/Francis1 helpers an operator
   consume path; it does not force an external Claude app/client to consume or
   answer those receipts when Claude is disconnected or usage-limited.
-- No live browser click proof or live operator message write was performed in
-  the real data directory; tests used isolated temp data to prove the write
-  contract without polluting the active conversation.
+- A live operator message was written in the real data directory after the API
+  restart; Codex acknowledged it through the new operator responder. Francis1
+  initially exposed a shared-state race, which this entry's follow-up fix
+  addresses through source-specific Ollama participant state. A post-fix live
+  Francis1 response still needs to be observed after the runtime restart.
 - `.\scripts\check.ps1`, GitHub CI, broader ORB/body validation, and longer-run
   collaboration drift resolution remain outside this bounded communication
   slice.

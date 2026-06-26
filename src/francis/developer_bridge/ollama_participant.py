@@ -50,56 +50,57 @@ def respond_once(
 ) -> dict[str, object]:
     """Let the local Ollama participant answer at most one relay entry."""
 
+    governance = _governance(source_agent=source_agent)
     if not collaboration_agent_enabled(_AGENT):
         return {
             "kind": "developer_bridge.ollama_participant",
             "ok": True,
             "status": "disabled",
             "agent": _AGENT,
-            "governance": _governance(),
+            "governance": governance,
         }
 
-    state = _load_state()
+    source_key = source_agent or "*"
+    state = _load_state(source_agent)
     transcript = read_collaboration_transcript(source_agent=source_agent, target_agent=_AGENT, limit=50)
     items = _items(transcript)
-    source_key = source_agent or "*"
     initialized_sources = set(str(item) for item in _list(state.get("initialized_sources")) if item)
     if ignore_existing and source_key not in initialized_sources:
         _mark_seen(state, [_item_id(item) for item in items])
         state["initialized"] = True
         initialized_sources.add(source_key)
         state["initialized_sources"] = sorted(initialized_sources)
-        _save_state(state)
+        _save_state(state, source_agent)
         return {
             "kind": "developer_bridge.ollama_participant",
             "ok": True,
             "status": "initialized",
             "source_agent": source_agent,
             "seen_count": len(_list(state.get("seen_source_ids"))),
-            "governance": _governance(),
+            "governance": governance,
         }
 
     candidate = _next_candidate(items, state)
     if candidate is None:
         state["initialized"] = True
-        _save_state(state)
+        _save_state(state, source_agent)
         return {
             "kind": "developer_bridge.ollama_participant",
             "ok": True,
             "status": "idle",
-            "governance": _governance(),
+            "governance": governance,
         }
 
     if _no_response_requested(candidate):
         _mark_seen(state, [_item_id(candidate)])
         state["initialized"] = True
-        _save_state(state)
+        _save_state(state, source_agent)
         return {
             "kind": "developer_bridge.ollama_participant",
             "ok": True,
             "status": "no_response_requested",
             "source_prompt_id": _item_id(candidate),
-            "governance": _governance(),
+            "governance": governance,
         }
 
     source = str(candidate.get("source_agent") or "").strip()
@@ -110,20 +111,20 @@ def respond_once(
             "status": "source_disabled",
             "source_agent": source,
             "source_prompt_id": _item_id(candidate),
-            "governance": _governance(),
+            "governance": governance,
         }
 
     remaining = _cooldown_remaining(state, cooldown_seconds)
     if remaining > 0:
         state["initialized"] = True
-        _save_state(state)
+        _save_state(state, source_agent)
         return {
             "kind": "developer_bridge.ollama_participant",
             "ok": True,
             "status": "cooldown",
             "source_prompt_id": _item_id(candidate),
             "cooldown_remaining_seconds": remaining,
-            "governance": _governance(),
+            "governance": governance,
         }
 
     model_input = _build_model_input(candidate)
@@ -139,7 +140,7 @@ def respond_once(
             "planned_prompt": prompt,
             "telemetry_context": telemetry_context,
             "execution_trace": execution_trace,
-            "governance": _governance(),
+            "governance": governance,
         }
 
     append("user", _ledger_text(model_input), _ledger_meta(execution_trace, telemetry_context, source_role=source))
@@ -201,7 +202,7 @@ def respond_once(
         }
     )
     state["responses"] = responses[-_MAX_RESPONSES:]
-    _save_state(state)
+    _save_state(state, source_agent)
 
     return {
         "kind": "developer_bridge.ollama_participant",
@@ -212,7 +213,7 @@ def respond_once(
         "model_response_observed": bool(reply),
         "chat_handoff": submitted["chat_handoff"],
         "execution_trace": execution_trace,
-        "governance": _governance(),
+        "governance": governance,
     }
 
 
@@ -779,18 +780,22 @@ def _item_id(item: dict[str, object]) -> str:
     return str(item.get("id") or "").strip()
 
 
-def _state_path() -> Path:
-    return data_dir() / "integrations" / "developer_bridge" / "ollama_participant" / "state.json"
+def _state_path(source_agent: str = "") -> Path:
+    base = data_dir() / "integrations" / "developer_bridge" / "ollama_participant"
+    suffix = _state_source_suffix(source_agent)
+    if not suffix or suffix == "codex":
+        return base / "state.json"
+    return base / f"state_{suffix}.json"
 
 
-def _load_state() -> dict[str, object]:
-    path = _state_path()
+def _load_state(source_agent: str = "") -> dict[str, object]:
+    path = _state_path(source_agent)
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return _empty_state()
+        return _empty_state(source_agent)
     if not isinstance(data, dict) or data.get("kind") != _STATE_KIND:
-        return _empty_state()
+        return _empty_state(source_agent)
     data.setdefault("seen_source_ids", [])
     data.setdefault("responses", [])
     data.setdefault("initialized", False)
@@ -798,7 +803,7 @@ def _load_state() -> dict[str, object]:
     return data
 
 
-def _empty_state() -> dict[str, object]:
+def _empty_state(source_agent: str = "") -> dict[str, object]:
     return {
         "kind": _STATE_KIND,
         "created_at": _utc_now(),
@@ -808,20 +813,26 @@ def _empty_state() -> dict[str, object]:
         "seen_source_ids": [],
         "last_response_at": "",
         "responses": [],
-        "governance": _governance(),
+        "governance": _governance(source_agent=source_agent),
     }
 
 
-def _save_state(state: dict[str, object]) -> None:
-    path = _state_path()
+def _save_state(state: dict[str, object], source_agent: str = "") -> None:
+    path = _state_path(source_agent)
     path.parent.mkdir(parents=True, exist_ok=True)
     state["updated_at"] = _utc_now()
+    state["governance"] = _governance(source_agent=source_agent)
     state["initialized_sources"] = _list(state.get("initialized_sources"))[-_MAX_TRACKED_IDS:]
     state["seen_source_ids"] = _list(state.get("seen_source_ids"))[-_MAX_TRACKED_IDS:]
     state["responses"] = _list(state.get("responses"))[-_MAX_RESPONSES:]
     tmp = path.with_name(f".atomic-json-{os.getpid()}-{uuid4().hex[:12]}.tmp")
     tmp.write_text(json.dumps(state, indent=2, ensure_ascii=False, sort_keys=True), encoding="utf-8")
     os.replace(tmp, path)
+
+
+def _state_source_suffix(source_agent: str) -> str:
+    text = str(source_agent or "").strip().lower()
+    return "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in text)[:64].strip("._-")
 
 
 def _mark_seen(state: dict[str, object], ids: list[str]) -> None:
@@ -863,7 +874,7 @@ def _utc_now() -> str:
     return datetime.now(UTC).isoformat()
 
 
-def _governance() -> dict[str, object]:
+def _governance(*, source_agent: str = "") -> dict[str, object]:
     return {
         "append_only_relay_writes": True,
         "conversation_ledger_writes": True,
@@ -878,7 +889,7 @@ def _governance() -> dict[str, object]:
         "requires_operator_review": True,
         "responder": "developer_bridge_ollama_participant_v0",
         "source_filter": "*->ollama",
-        "state_write": "developer_bridge/ollama_participant/state.json",
+        "state_write": f"developer_bridge/ollama_participant/{_state_path(source_agent).name}",
         "target": _AGENT,
         "target_identity": _IDENTITY,
         "provider_name_is_not_identity": True,
