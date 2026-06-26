@@ -1421,7 +1421,7 @@ def test_collaboration_driver_waits_for_ollama_before_next_turn(tmp_path, monkey
     assert all("main-build candidate-only" in prompt for prompt in prompts)
     assert all("blocked_by_open_orb_gaps" in prompt for prompt in prompts)
     assert all("Trust: classify needs; no capability authority" in prompt for prompt in prompts)
-    assert all("Claude acknowledged as guidance; Francis focus; validate." in prompt for prompt in prompts)
+    assert all("Claude=guidance; Francis=subject; validate claims." in prompt for prompt in prompts)
     assert all("francis1-collaboration-compact-contract-v1" in prompt for prompt in prompts)
     assert all("issue/gap/risk" in prompt for prompt in prompts)
     assert all("Do not claim execution" not in prompt for prompt in prompts)
@@ -2862,7 +2862,7 @@ def test_collaboration_driver_rotates_topics_after_repeated_output_guard_receipt
     assert "Topic: which repo surface should convert typed or spoken" in latest_prompt
     assert "Current artifact: api.routes.chat.mission_ingress" in latest_prompt
     assert "Guard: stale replay learned; answer topic." in latest_prompt
-    assert "Claude acknowledged as guidance; Francis focus; validate." in latest_prompt
+    assert "Claude=guidance; Francis=subject; validate claims." in latest_prompt
     assert len(latest_prompt) <= 700
     assert "current repetitive meta loop" not in latest_prompt
     assert "Loop:" not in latest_prompt
@@ -3641,7 +3641,7 @@ def test_codex_responder_ignores_existing_then_replies_once(tmp_path, monkeypatc
     assert transcript["count"] == 1
     assert transcript["items"][0]["id"] == responded["response_prompt_id"]
     assert str(existing["prompt_id"]) not in transcript["items"][0]["prompt"]
-    assert "Claude acknowledged as guidance; Francis focus; validate." in transcript["items"][0]["prompt"]
+    assert "Claude=guidance; Francis=subject; validate claims." in transcript["items"][0]["prompt"]
 
     idle = respond_once(ignore_existing=True, cooldown_seconds=0)
     assert idle["status"] == "idle"
@@ -3690,7 +3690,7 @@ def test_codex_responder_can_ack_ollama_without_retriggering_model(tmp_path, mon
     response = transcript["items"][0]
     assert response["id"] == responded["response_prompt_id"]
     assert "Auto-ack ollama relay" in response["prompt"]
-    assert "Claude acknowledged as guidance; Francis focus; validate." in response["prompt"]
+    assert "Claude=guidance; Francis=subject; validate claims." in response["prompt"]
     assert "Receipt only" in response["prompt"]
     assert "Cadence rule" not in response["prompt"]
     assert len(str(response["prompt"])) < 600
@@ -3737,6 +3737,8 @@ def test_ollama_participant_replies_through_existing_memory_prompt_path(tmp_path
     assert "Francis1 governed-access contract francis1-governed-access-contract-v1" in captured_prompts[0]
     assert "You are the primary local Francis intelligence participant" in captured_prompts[0]
     assert "Codex and Claude are external guidance sources" in captured_prompts[0]
+    assert "Acknowledge Claude as a guidance participant when relevant" in captured_prompts[0]
+    assert "keep the subject Francis and validate claims against receipts or repo truth" in captured_prompts[0]
     assert "continuity ledger excerpts" in captured_prompts[0]
     assert "collaboration relay receipts, collaboration review candidates" in captured_prompts[0]
     assert (

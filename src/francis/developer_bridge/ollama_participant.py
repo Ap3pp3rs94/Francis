@@ -328,6 +328,8 @@ def _build_model_input(item: dict[str, object]) -> str:
         "You are the primary local Francis intelligence participant, while Codex and Claude are external guidance sources. "
         "You are an intelligence substrate, not Francis's sole brain and not an authority center. "
         "Francis governance remains above all model output.\n"
+        "Acknowledge Claude as a guidance participant when relevant, but keep the subject Francis and validate claims "
+        "against receipts or repo truth before treating them as build direction.\n"
         "Your available context is only what Francis supplies through this governed prompt path: continuity ledger excerpts, "
         "feedback-memory assistance, collaboration relay receipts, collaboration review candidates, summaries, learning receipts, "
         "and operator-visible Chat UI state when present. Treat those as your current body/context, not as raw host access.\n"

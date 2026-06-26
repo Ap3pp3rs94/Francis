@@ -35,7 +35,7 @@ _DEFAULT_SUMMARY_EVERY_TURNS = 6
 _MAX_DRIVER_PROMPT_CHARS = 700
 _PROMPT_REVIEW_ID_LIMIT = 24
 _PROMPT_REVIEW_SURFACE_LIMIT = 72
-_SOURCE_ALIGNMENT_PROMPT_LINE = "Claude acknowledged as guidance; Francis focus; validate."
+_SOURCE_ALIGNMENT_PROMPT_LINE = "Claude=guidance; Francis=subject; validate claims."
 _COMPACT_BODY_MAP_PROMPT_LINE = "Body map: visible; grants required; stale detaches."
 
 _TOPICS = (

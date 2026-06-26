@@ -97979,6 +97979,64 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, browser screenshot proof, and full ORB/body
   coverage proof were not run for this bounded proof-projection slice.
 
+### 2026-06-26 06:45Z - Collaboration source-alignment prompt contract
+
+Current posture: Phase 2 / P1 interface, P3 governance, and P9 observability now
+carry a tighter source-alignment contract through the developer-bridge
+collaboration loop. Codex driver prompts and bounded Codex auto-acks explicitly
+mark Claude as guidance, keep Francis as the conversation subject, and require
+claim validation without granting new authority. The Francis1 Ollama provider
+prompt also tells the local model to acknowledge Claude when relevant while
+validating build direction against receipts or repo truth.
+
+What changed:
+
+- `collaboration_driver` now emits the compact line
+  `Claude=guidance; Francis=subject; validate claims.` inside the recurring
+  Codex-to-Francis1 driver prompt.
+- `codex_responder` uses the same compact line for bounded no-response
+  acknowledgements to Claude or Ollama relay messages.
+- `ollama_participant` adds the fuller model-input contract that Claude may be
+  acknowledged as a guidance participant, but Francis remains the subject and
+  claims must be validated against receipts or repo truth before becoming build
+  direction.
+- Tests now assert the contract across driver prompts, auto-acks, model-input
+  construction, and the long-review prompt-budget path.
+
+Validation:
+
+- Focused collaboration prompt contract tests passed:
+  `python -m pytest tests/test_developer_bridge.py::test_collaboration_driver_waits_for_ollama_before_next_turn tests/test_developer_bridge.py::test_collaboration_driver_rotates_topics_after_repeated_output_guard_receipts tests/test_developer_bridge.py::test_collaboration_driver_compacts_long_review_line_into_prompt_budget tests/test_developer_bridge.py::test_codex_responder_ignores_existing_then_replies_once tests/test_developer_bridge.py::test_codex_responder_can_ack_ollama_without_retriggering_model tests/test_developer_bridge.py::test_ollama_participant_replies_through_existing_memory_prompt_path -q`.
+- Full developer-bridge backend test file passed:
+  `python -m pytest tests/test_developer_bridge.py -q`.
+- Ruff check passed:
+  `python -m ruff check src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\codex_responder.py src\francis\developer_bridge\ollama_participant.py tests\test_developer_bridge.py`.
+- Ruff format check passed:
+  `python -m ruff format --check src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\codex_responder.py src\francis\developer_bridge\ollama_participant.py tests\test_developer_bridge.py`.
+- Targeted mypy passed:
+  `python -m mypy src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\codex_responder.py src\francis\developer_bridge\ollama_participant.py`.
+- Compileall passed:
+  `python -m compileall src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\codex_responder.py src\francis\developer_bridge\ollama_participant.py`.
+- `git diff --check` passed.
+- The bounded collaboration runtime was restarted through the documented
+  `python -m francis communication-runtime --watch --poll-seconds 10 --quiet`
+  path as supervisor PID `47936`; live
+  `/developer-bridge/collaboration-runtime-health` returned `status=healthy`,
+  `desired_count=3`, `helper_count=3`, participants enabled `3`, and effective
+  helper worker PIDs `45388`, `33724`, and `18684`.
+- Live `/developer-bridge/collaboration-transcript?limit=8&include_hidden=true`
+  showed turn `1780` driver prompt and its bounded Codex auto-ack carrying
+  `Claude=guidance; Francis=subject; validate claims.`
+
+Remaining truthful gap:
+
+- This is a prompt-contract and readback discipline change only. It does not
+  make Claude, Codex, or Francis1 an authority source, does not grant execution,
+  mutation, approval, training, memory-write, or capability authority, and does
+  not tune the local model.
+- `.\scripts\check.ps1`, GitHub CI, browser screenshot proof, and full ORB/body
+  coverage proof were not run for this bounded collaboration-contract slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
