@@ -98930,6 +98930,58 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, browser screenshot proof, GitHub CI, and broader
   ORB/body validation were not run for this bounded classifier slice.
 
+### 2026-06-26 09:29Z - Roadmap overgeneralization becomes learning signal
+
+Current posture: Phase 2 / P9 collaboration learning now records repeated
+Francis1 roadmap-alignment/main-build-candidate-only language across unrelated
+topics as bounded drift evidence. The roadmap gate remains true; the repetition
+is no longer treated as fresh build direction each time it appears.
+
+What changed:
+
+- Added collaboration-driver loop markers for
+  `roadmap_alignment_overgeneralization` and
+  `main_build_candidate_only_overgeneralization`.
+- Added a typed `roadmap_alignment_overgeneralization` learning signal with
+  no training, memory-promotion, execution, mutation, or approval authority.
+- Preserved compact prompt-budget behavior while adding a loop hint that asks
+  Francis1 to answer the current artifact instead of repeating roadmap wording.
+- Added regression coverage proving the repeated-roadmap pattern writes a
+  bounded learning event and keeps memory/model tuning gated for Codex or
+  operator review.
+
+Validation:
+
+- Focused learning-signal tests passed:
+  `python -m pytest tests\test_developer_bridge.py::test_collaboration_driver_records_roadmap_overgeneralization_as_learning_event tests\test_developer_bridge.py::test_collaboration_driver_rotates_topics_after_repeated_output_guard_receipts -q`.
+- Full developer-bridge backend test file passed:
+  `python -m pytest tests\test_developer_bridge.py -q`.
+- Ruff lint passed for touched files:
+  `python -m ruff check src\francis\developer_bridge\collaboration_driver.py tests\test_developer_bridge.py`.
+- Ruff format check passed for touched files:
+  `python -m ruff format --check src\francis\developer_bridge\collaboration_driver.py tests\test_developer_bridge.py`.
+- Mypy passed for the touched backend module:
+  `python -m mypy src\francis\developer_bridge\collaboration_driver.py`.
+- Compile check passed:
+  `python -m compileall src\francis\developer_bridge\collaboration_driver.py`.
+- `git diff --check` passed.
+- Live collaboration helpers were restarted after the code change; runtime
+  readback returned `status=healthy`, `helper_count=3`,
+  `recurrence_state=waiting_for_ollama`, `latest_prompt_within_budget=true`,
+  and `manual_nudge_required=false`.
+
+Remaining truthful gap:
+
+- This records and steers around roadmap-overgeneralization drift; it does not
+  clear the roadmap gate, close ORB blockers, tune Francis1, promote memory, or
+  execute model advice.
+- The current live post-restart learning readback showed output-guard drift
+  rather than a fresh roadmap-overgeneralization event; the new roadmap
+  learning-signal path is validated by focused regression tests.
+- `.\scripts\check.ps1`, browser screenshot proof, GitHub CI, and broader
+  ORB/body validation remain outside this bounded learning-signal slice until
+  separately run.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

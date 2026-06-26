@@ -3106,6 +3106,64 @@ def test_collaboration_driver_records_user_confirmation_fallback_as_learning_eve
     assert event["governance"]["grants_memory_write_authority"] is False
 
 
+def test_collaboration_driver_records_roadmap_overgeneralization_as_learning_event(
+    tmp_path,
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+    from francis.developer_bridge.collaboration_driver import drive_once, read_collaboration_learning_events
+
+    turn = drive_once(ignore_existing=True, max_turns=0, turn_gap_seconds=0, summary_every_turns=0)
+    prompt_id = str(turn["prompt_id"])
+    for index in range(4):
+        submit_collaboration_prompt(
+            source_agent="ollama",
+            target_agent="codex",
+            objective=f"local Ollama roadmap overgeneralization {index} to {prompt_id}",
+            prompt=(
+                "My current gap is aligning readiness.roadmap_alignment with main-build candidate-only. "
+                "Artifact: developer_bridge.collaboration_agents."
+            ),
+            context=f"Local Ollama participant response for relay {prompt_id}.",
+        )
+        turn = drive_once(max_turns=0, turn_gap_seconds=0, summary_every_turns=0)
+        prompt_id = str(turn["prompt_id"])
+
+    assert turn["status"] == "submitted"
+    transcript = read_collaboration_transcript(source_agent="codex", target_agent="ollama", limit=1)
+    latest_prompt = str(transcript["items"][0]["prompt"])
+    assert "Loop: roadmap_overgeneralization; answer artifact." in latest_prompt
+    assert "Claude guidance acknowledged; Francis stays subject; Codex validates repo truth." in latest_prompt
+    assert len(latest_prompt) <= 700
+
+    readback = read_collaboration_learning_events(limit=5, failure_type="roadmap_alignment_overgeneralization")
+    assert readback["count"] == 1
+    event = readback["items"][0]
+    assert event["failure_type"] == "roadmap_alignment_overgeneralization"
+    assert "roadmap_alignment_overgeneralization" in event["repeated_terms"]
+    assert "main_build_candidate_only_overgeneralization" in event["repeated_terms"]
+    assert event["recent_turn_count"] >= 4
+    assert event["current_signal_observed"] is True
+    assert event["learning"]["memory_value"].startswith("roadmap-alignment repetition")
+    assert "answer the current artifact" in event["learning"]["next_prompt_policy"]
+    signal_review = event["signal_review"]
+    assert signal_review["classification"] == "local_model_roadmap_overgeneralization"
+    assert signal_review["review_priority"] == "medium"
+    assert signal_review["memory_promotion_allowed"] is False
+    assert signal_review["model_tuning_allowed"] is False
+    assert signal_review["requires_codex_or_operator_review"] is True
+    assert signal_review["requires_repo_truth_review"] is True
+    assert signal_review["stores_full_transcript"] is False
+    assert signal_review["grants_training_authority"] is False
+    assert signal_review["grants_execution_authority"] is False
+    assert signal_review["grants_memory_write_authority"] is False
+    assert event["memory_promotion_gate"]["memory_promotion_allowed"] is False
+    assert event["memory_promotion_gate"]["model_tuning_allowed"] is False
+    assert event["writer_governance"]["stores_full_transcript"] is False
+    assert event["writer_governance"]["grants_training_authority"] is False
+    assert event["writer_governance"]["grants_execution_authority"] is False
+
+
 def test_collaboration_driver_rotates_topics_after_repeated_output_guard_receipts(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
     from francis.developer_bridge.collaboration_driver import drive_once, read_collaboration_learning_events
