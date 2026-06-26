@@ -185,9 +185,17 @@ def read_collaboration_runtime_health(
     enabled_agents = [
         item for item in _list(agents.get("agents")) if isinstance(item, dict) and bool(item.get("enabled"))
     ]
+    total_agent_count = _safe_int(agents.get("agent_count"), default=len(_list(agents.get("agents"))))
     all_helpers_running = all(item["running"] for item in helper_items)
     loop = _collaboration_loop_readback(driver_state)
     health_status = "healthy" if all_helpers_running and driver_state else "degraded"
+    loop["live_health_evidence"] = _live_health_evidence_readback(
+        health_status=health_status,
+        helper_items=helper_items,
+        enabled_agent_count=len(enabled_agents),
+        total_agent_count=total_agent_count,
+        loop=loop,
+    )
     return {
         "kind": "developer_bridge.collaboration_runtime_health",
         "ok": True,
@@ -207,7 +215,7 @@ def read_collaboration_runtime_health(
         "collaboration_loop": loop,
         "participants": {
             "enabled_count": len(enabled_agents),
-            "total_count": _safe_int(agents.get("agent_count"), default=len(_list(agents.get("agents")))),
+            "total_count": total_agent_count,
             "items": [
                 {
                     "agent": _safe_str(item.get("agent")),
@@ -653,6 +661,103 @@ def _recurrence_proof_status(
     return "ready_for_next_prompt"
 
 
+def _live_health_evidence_readback(
+    *,
+    health_status: str,
+    helper_items: list[dict[str, object]],
+    enabled_agent_count: int,
+    total_agent_count: int,
+    loop: dict[str, object],
+) -> dict[str, object]:
+    recurrence = _dict(loop.get("recurrence_proof"))
+    latest_review = _dict(loop.get("latest_review_receipt"))
+    latest_learning = _dict(loop.get("latest_learning_receipt"))
+    latest_local_model = _dict(loop.get("latest_local_model_response"))
+    prompt_id = _safe_str(recurrence.get("latest_prompt_id")) or _safe_str(loop.get("last_codex_prompt_id"))
+    reply_id = _safe_str(recurrence.get("latest_response_prompt_id")) or _safe_str(loop.get("last_ollama_prompt_id"))
+    running_helper_count = sum(1 for item in helper_items if bool(item.get("running")))
+    effective_worker_count = sum(_safe_int(item.get("effective_worker_count"), default=0) for item in helper_items)
+    desired_helper_count = len(helper_items)
+    recurrence_status = _safe_str(recurrence.get("status"))
+    manual_nudge_required = recurrence.get("manual_nudge_required")
+    no_authority_observed = not any(
+        bool(value)
+        for value in [
+            recurrence.get("grants_execution_authority"),
+            recurrence.get("grants_mutation_authority"),
+            recurrence.get("grants_approval_authority"),
+            recurrence.get("grants_memory_write_authority"),
+            latest_review.get("grants_execution_authority"),
+            latest_review.get("grants_mutation_authority"),
+            latest_review.get("grants_approval_authority"),
+            latest_review.get("grants_memory_write_authority"),
+            latest_learning.get("grants_training_authority"),
+            latest_learning.get("grants_execution_authority"),
+            latest_learning.get("grants_mutation_authority"),
+            latest_learning.get("grants_approval_authority"),
+            latest_learning.get("grants_memory_write_authority"),
+            latest_local_model.get("grants_training_authority"),
+            latest_local_model.get("grants_execution_authority"),
+            latest_local_model.get("grants_mutation_authority"),
+            latest_local_model.get("grants_approval_authority"),
+            latest_local_model.get("grants_memory_write_authority"),
+            latest_local_model.get("grants_capability_authority"),
+        ]
+    )
+    evidence_ok = (
+        bool(loop.get("state_observed"))
+        and health_status == "healthy"
+        and desired_helper_count > 0
+        and running_helper_count >= desired_helper_count
+        and effective_worker_count >= desired_helper_count
+        and total_agent_count > 0
+        and enabled_agent_count > 0
+        and recurrence_status in {"waiting_for_response", "response_observed", "turn_gap", "ready_for_next_prompt"}
+        and bool(recurrence.get("prompt_budget_matches_latest_prompt"))
+        and bool(recurrence.get("latest_prompt_within_budget"))
+        and manual_nudge_required is False
+        and no_authority_observed
+    )
+    return {
+        "observed": bool(loop.get("state_observed")),
+        "proof_status": "recurring_cleanly" if evidence_ok else "needs_review",
+        "health_status": health_status,
+        "latest_prompt_id": prompt_id,
+        "latest_reply_id": reply_id,
+        "waiting_state": _safe_str(loop.get("recurrence_state")),
+        "waiting_for_ollama": bool(loop.get("waiting_for_ollama")),
+        "turn_gap_remaining_seconds": loop.get("turn_gap_remaining_seconds", 0.0),
+        "latest_prompt_within_budget": bool(recurrence.get("latest_prompt_within_budget")),
+        "manual_nudge_required": manual_nudge_required,
+        "enabled_participant_count": enabled_agent_count,
+        "total_participant_count": total_agent_count,
+        "all_participants_enabled": total_agent_count > 0 and enabled_agent_count == total_agent_count,
+        "running_helper_count": running_helper_count,
+        "desired_helper_count": desired_helper_count,
+        "effective_worker_count": effective_worker_count,
+        "latest_review_artifact": _safe_str(latest_review.get("review_artifact")),
+        "latest_learning_artifact": _safe_str(latest_learning.get("learning_artifact")),
+        "no_action_authority_receipts_observed": no_authority_observed,
+        "evidence_fields": [
+            "collaboration_loop.live_health_evidence.latest_prompt_id",
+            "collaboration_loop.live_health_evidence.latest_reply_id",
+            "collaboration_loop.live_health_evidence.waiting_state",
+            "collaboration_loop.live_health_evidence.turn_gap_remaining_seconds",
+            "collaboration_loop.live_health_evidence.enabled_participant_count",
+            "collaboration_loop.live_health_evidence.running_helper_count",
+            "collaboration_loop.live_health_evidence.no_action_authority_receipts_observed",
+        ],
+        "stores_full_transcript": False,
+        "calls_model": False,
+        "grants_training_authority": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "grants_approval_authority": False,
+        "grants_memory_write_authority": False,
+        "grants_capability_authority": False,
+    }
+
+
 def _latest_turn_readback(driver_state: dict[str, object]) -> dict[str, object]:
     turns = [item for item in _list(driver_state.get("turns")) if isinstance(item, dict)]
     if not turns:
@@ -874,6 +979,10 @@ def _read_json(path: Path, *, expected_kind: str) -> dict[str, object]:
 
 def _list(value: object) -> list[object]:
     return value if isinstance(value, list) else []
+
+
+def _dict(value: object) -> dict[str, object]:
+    return value if isinstance(value, dict) else {}
 
 
 def _safe_str(value: object) -> str:

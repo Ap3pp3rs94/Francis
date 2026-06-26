@@ -1381,6 +1381,39 @@ test("parseCollaborationRuntimeHealth preserves recurrence and no-authority fiel
         grants_approval_authority: false,
         grants_memory_write_authority: false,
       },
+      live_health_evidence: {
+        observed: true,
+        proof_status: "recurring_cleanly",
+        health_status: "healthy",
+        latest_prompt_id: "collab-codex",
+        latest_reply_id: "collab-ollama",
+        waiting_state: "turn_gap",
+        waiting_for_ollama: false,
+        turn_gap_remaining_seconds: 17,
+        latest_prompt_within_budget: true,
+        manual_nudge_required: false,
+        enabled_participant_count: 2,
+        total_participant_count: 3,
+        all_participants_enabled: false,
+        running_helper_count: 3,
+        desired_helper_count: 3,
+        effective_worker_count: 3,
+        latest_review_artifact: "developer_bridge.collaboration_review.items:review_candidate:insight-ollama",
+        latest_learning_artifact: "developer_bridge.collaboration_driver.learning_events:learning-ollama",
+        no_action_authority_receipts_observed: true,
+        evidence_fields: [
+          "collaboration_loop.live_health_evidence.latest_prompt_id",
+          "collaboration_loop.live_health_evidence.enabled_participant_count",
+        ],
+        stores_full_transcript: false,
+        calls_model: false,
+        grants_training_authority: false,
+        grants_execution_authority: false,
+        grants_mutation_authority: false,
+        grants_approval_authority: false,
+        grants_memory_write_authority: false,
+        grants_capability_authority: false,
+      },
       latest_local_model_response: {
         observed: true,
         state_observed: true,
@@ -1477,6 +1510,12 @@ test("parseCollaborationRuntimeHealth preserves recurrence and no-authority fiel
     health.collaborationLoop.latestLocalModelResponse.adviceOnlyProof.requiresCodexOrOperatorReviewBeforeActionReadiness,
     true,
   );
+  assert.equal(health.collaborationLoop.liveHealthEvidence.proofStatus, "recurring_cleanly");
+  assert.equal(health.collaborationLoop.liveHealthEvidence.latestPromptId, "collab-codex");
+  assert.equal(health.collaborationLoop.liveHealthEvidence.latestReplyId, "collab-ollama");
+  assert.equal(health.collaborationLoop.liveHealthEvidence.enabledParticipantCount, 2);
+  assert.equal(health.collaborationLoop.liveHealthEvidence.totalParticipantCount, 3);
+  assert.equal(health.collaborationLoop.liveHealthEvidence.noActionAuthorityReceiptsObserved, true);
   assert.equal(health.participants.enabledCount, 2);
   assert.equal(health.readbackCache.servesFullTranscriptStore, false);
   assert.equal(health.governance.starts_arbitrary_commands, false);
@@ -1501,6 +1540,9 @@ test("parseCollaborationRuntimeHealth preserves recurrence and no-authority fiel
     "learning receipt learning-ollama",
     "waiting for ollama false",
     "turn gap 17s",
+    "live proof recurring_cleanly",
+    "participants enabled 2/3",
+    "no-action receipts true",
     "driver age 2s",
     "supervisor age 3s",
     "authority none true",

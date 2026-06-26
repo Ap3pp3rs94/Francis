@@ -98080,6 +98080,66 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, browser screenshot proof, and full ORB/body
   coverage proof were not run for this bounded UI compaction slice.
 
+### 2026-06-26 07:02Z - Collaboration live-health evidence readback
+
+Current posture: Phase 2 / P9 observability now exposes a compact
+`collaboration_loop.live_health_evidence` proof inside
+`developer_bridge.collaboration_runtime_health`. The current Francis1 review
+signal asked which live-health fields prove recurring collaboration without user
+nudges; this slice packages the existing helper, participant, prompt, reply,
+turn-gap, review, learning, and no-authority receipt fields into one read-only
+operator-facing proof object.
+
+What changed:
+
+- `read_collaboration_runtime_health()` now derives
+  `collaboration_loop.live_health_evidence` from existing runtime readbacks.
+- The proof includes latest Codex prompt id, latest Francis1/Ollama reply id,
+  waiting state, turn-gap seconds, prompt-budget status, participant counts,
+  helper/worker counts, latest review and learning artifacts, and a
+  `no_action_authority_receipts_observed` flag.
+- The Chat UI collaboration runtime parser preserves that proof and the
+  recurrence summary displays live proof status, participant counts, and
+  no-action receipt status.
+- The proof is read-only: it does not start helpers, call a model, store full
+  transcripts, tune memory, or grant execution, mutation, approval,
+  memory-write, training, or capability authority.
+
+Validation:
+
+- Focused backend runtime-health test passed:
+  `python -m pytest tests/test_developer_bridge.py::test_collaboration_runtime_health_is_read_only_and_reports_recurrence -q`.
+- Full Chat UI contract suite passed:
+  `npm run test -- --runInBand` (`283` passing tests).
+- Chat UI production build passed:
+  `npm run build`.
+- Ruff check passed:
+  `python -m ruff check src\francis\developer_bridge\collaboration_runtime.py tests\test_developer_bridge.py`.
+- Ruff format check passed:
+  `python -m ruff format --check src\francis\developer_bridge\collaboration_runtime.py tests\test_developer_bridge.py`.
+- Targeted mypy passed:
+  `python -m mypy src\francis\developer_bridge\collaboration_runtime.py`.
+- Compileall passed:
+  `python -m compileall src\francis\developer_bridge\collaboration_runtime.py`.
+- `git diff --check` passed.
+- Live direct readback returned `status=healthy`,
+  `live_health_evidence.proof_status=recurring_cleanly`, participants `3/3`,
+  helpers/workers `3/3/3`, and
+  `no_action_authority_receipts_observed=true`.
+- Restarted the local Francis API on `127.0.0.1:8000`; HTTP
+  `/developer-bridge/collaboration-runtime-health` returned
+  `proof_status=recurring_cleanly`, participants `3/3`, helpers/workers
+  `3/3/3`, and `no_action_authority_receipts_observed=true`.
+
+Remaining truthful gap:
+
+- This is a readback contract and UI parser/display update only. It does not
+  change recurrence scheduling, model prompting, output-guard behavior,
+  participant toggles, memory promotion, model tuning, or any execution,
+  mutation, approval, memory-write, training, or capability authority.
+- `.\scripts\check.ps1`, GitHub CI, browser screenshot proof, and full ORB/body
+  coverage proof were not run for this bounded live-health evidence slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

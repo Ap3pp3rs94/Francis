@@ -1331,6 +1331,35 @@ def test_collaboration_runtime_health_is_read_only_and_reports_recurrence(tmp_pa
     assert recurrence["manual_nudge_required"] is False
     assert recurrence["stores_full_transcript"] is False
     assert recurrence["grants_execution_authority"] is False
+    live_health = loop["live_health_evidence"]
+    assert live_health["observed"] is True
+    assert live_health["proof_status"] == "recurring_cleanly"
+    assert live_health["health_status"] == "healthy"
+    assert live_health["latest_prompt_id"] == latest_budgeted["prompt_id"]
+    assert live_health["latest_reply_id"] == "collab-ollama-last"
+    assert live_health["waiting_state"] == "waiting_for_ollama"
+    assert live_health["waiting_for_ollama"] is True
+    assert live_health["latest_prompt_within_budget"] is True
+    assert live_health["manual_nudge_required"] is False
+    assert live_health["enabled_participant_count"] == health["participants"]["enabled_count"]
+    assert live_health["total_participant_count"] == health["participants"]["total_count"]
+    assert live_health["all_participants_enabled"] is True
+    assert live_health["running_helper_count"] == 3
+    assert live_health["desired_helper_count"] == 3
+    assert live_health["effective_worker_count"] == 3
+    assert (
+        live_health["latest_review_artifact"]
+        == "developer_bridge.collaboration_review.items:review_candidate:insight-last"
+    )
+    assert (
+        live_health["latest_learning_artifact"] == "developer_bridge.collaboration_driver.learning_events:learning-last"
+    )
+    assert live_health["no_action_authority_receipts_observed"] is True
+    assert "collaboration_loop.live_health_evidence.enabled_participant_count" in live_health["evidence_fields"]
+    assert live_health["stores_full_transcript"] is False
+    assert live_health["calls_model"] is False
+    assert live_health["grants_execution_authority"] is False
+    assert live_health["grants_memory_write_authority"] is False
     assert loop["latest_local_model_response"] == {
         "observed": True,
         "state_observed": True,

@@ -190,6 +190,36 @@ export type CollaborationRuntimeHealth = {
       grantsApprovalAuthority: boolean;
       grantsMemoryWriteAuthority: boolean;
     };
+    liveHealthEvidence: {
+      observed: boolean;
+      proofStatus: string;
+      healthStatus: string;
+      latestPromptId: string;
+      latestReplyId: string;
+      waitingState: string;
+      waitingForOllama: boolean;
+      turnGapRemainingSeconds: number;
+      latestPromptWithinBudget: boolean;
+      manualNudgeRequired: boolean | null;
+      enabledParticipantCount: number;
+      totalParticipantCount: number;
+      allParticipantsEnabled: boolean;
+      runningHelperCount: number;
+      desiredHelperCount: number;
+      effectiveWorkerCount: number;
+      latestReviewArtifact: string;
+      latestLearningArtifact: string;
+      noActionAuthorityReceiptsObserved: boolean;
+      evidenceFields: string[];
+      storesFullTranscript: boolean;
+      callsModel: boolean;
+      grantsTrainingAuthority: boolean;
+      grantsExecutionAuthority: boolean;
+      grantsMutationAuthority: boolean;
+      grantsApprovalAuthority: boolean;
+      grantsMemoryWriteAuthority: boolean;
+      grantsCapabilityAuthority: boolean;
+    };
     latestLocalModelResponse: {
       observed: boolean;
       stateObserved: boolean;
@@ -1334,6 +1364,10 @@ function safeBoolean(v: unknown, fallback = false): boolean {
   return typeof v === "boolean" ? v : fallback;
 }
 
+function safeNullableBoolean(v: unknown): boolean | null {
+  return typeof v === "boolean" ? v : null;
+}
+
 function safeNumber(v: unknown, fallback = 0): number {
   return typeof v === "number" && Number.isFinite(v) ? v : fallback;
 }
@@ -2143,7 +2177,18 @@ export function collaborationRuntimeRecurrenceSummary(
     !safeBoolean(health.governance.grants_repo_mutation_authority) &&
     !safeBoolean(health.governance.grants_approval_authority) &&
     !safeBoolean(health.governance.grants_memory_write_authority);
-  const recurringCleanly = health.status === "healthy" && helpersReady && loopFresh && supervisorFresh && loopActive && authorityNone;
+  const liveEvidence = health.collaborationLoop.liveHealthEvidence;
+  const liveEvidenceReady = !liveEvidence.observed || liveEvidence.proofStatus === "recurring_cleanly";
+  const noActionReceipts = liveEvidence.observed ? liveEvidence.noActionAuthorityReceiptsObserved : authorityNone;
+  const recurringCleanly =
+    health.status === "healthy" &&
+    helpersReady &&
+    loopFresh &&
+    supervisorFresh &&
+    loopActive &&
+    authorityNone &&
+    liveEvidenceReady &&
+    noActionReceipts;
 
   return {
     badge: recurringCleanly ? "recurring cleanly" : "recurrence needs review",
@@ -2163,6 +2208,11 @@ export function collaborationRuntimeRecurrenceSummary(
       `learning receipt ${health.collaborationLoop.lastLearningEventId || "unknown"}`,
       `waiting for ollama ${actionBoundaryBool(health.collaborationLoop.waitingForOllama)}`,
       `turn gap ${Math.max(0, Math.round(health.collaborationLoop.turnGapRemainingSeconds || 0))}s`,
+      `live proof ${liveEvidence.proofStatus || "unknown"}`,
+      `participants enabled ${liveEvidence.enabledParticipantCount || health.participants.enabledCount}/${
+        liveEvidence.totalParticipantCount || health.participants.totalCount
+      }`,
+      `no-action receipts ${actionBoundaryBool(noActionReceipts)}`,
       `driver age ${ageText(health.collaborationLoop.ageSeconds)}`,
       `supervisor age ${ageText(health.supervisor.ageSeconds)}`,
       `authority none ${actionBoundaryBool(authorityNone)}`,
@@ -3768,6 +3818,7 @@ export function parseCollaborationRuntimeHealth(raw: unknown): CollaborationRunt
   const latestReviewReceipt = isRecord(loop.latest_review_receipt) ? loop.latest_review_receipt : {};
   const latestLearningReceipt = isRecord(loop.latest_learning_receipt) ? loop.latest_learning_receipt : {};
   const currentLearningSignal = isRecord(loop.current_learning_signal) ? loop.current_learning_signal : {};
+  const liveHealthEvidence = isRecord(loop.live_health_evidence) ? loop.live_health_evidence : {};
   const latestLocalModelResponse = isRecord(loop.latest_local_model_response) ? loop.latest_local_model_response : {};
   const participants = isRecord(value.participants) ? value.participants : {};
   return {
@@ -3863,6 +3914,38 @@ export function parseCollaborationRuntimeHealth(raw: unknown): CollaborationRunt
         grantsMutationAuthority: safeBoolean(currentLearningSignal.grants_mutation_authority),
         grantsApprovalAuthority: safeBoolean(currentLearningSignal.grants_approval_authority),
         grantsMemoryWriteAuthority: safeBoolean(currentLearningSignal.grants_memory_write_authority),
+      },
+      liveHealthEvidence: {
+        observed: safeBoolean(liveHealthEvidence.observed),
+        proofStatus: safeString(liveHealthEvidence.proof_status, "unknown"),
+        healthStatus: safeString(liveHealthEvidence.health_status, "unknown"),
+        latestPromptId: safeString(liveHealthEvidence.latest_prompt_id),
+        latestReplyId: safeString(liveHealthEvidence.latest_reply_id),
+        waitingState: safeString(liveHealthEvidence.waiting_state, "unknown"),
+        waitingForOllama: safeBoolean(liveHealthEvidence.waiting_for_ollama),
+        turnGapRemainingSeconds: safeNumber(liveHealthEvidence.turn_gap_remaining_seconds),
+        latestPromptWithinBudget: safeBoolean(liveHealthEvidence.latest_prompt_within_budget),
+        manualNudgeRequired: safeNullableBoolean(liveHealthEvidence.manual_nudge_required),
+        enabledParticipantCount: safeNumber(liveHealthEvidence.enabled_participant_count),
+        totalParticipantCount: safeNumber(liveHealthEvidence.total_participant_count),
+        allParticipantsEnabled: safeBoolean(liveHealthEvidence.all_participants_enabled),
+        runningHelperCount: safeNumber(liveHealthEvidence.running_helper_count),
+        desiredHelperCount: safeNumber(liveHealthEvidence.desired_helper_count),
+        effectiveWorkerCount: safeNumber(liveHealthEvidence.effective_worker_count),
+        latestReviewArtifact: safeString(liveHealthEvidence.latest_review_artifact),
+        latestLearningArtifact: safeString(liveHealthEvidence.latest_learning_artifact),
+        noActionAuthorityReceiptsObserved: safeBoolean(liveHealthEvidence.no_action_authority_receipts_observed),
+        evidenceFields: Array.isArray(liveHealthEvidence.evidence_fields)
+          ? liveHealthEvidence.evidence_fields.map((field) => safeString(field)).filter(Boolean)
+          : [],
+        storesFullTranscript: safeBoolean(liveHealthEvidence.stores_full_transcript),
+        callsModel: safeBoolean(liveHealthEvidence.calls_model),
+        grantsTrainingAuthority: safeBoolean(liveHealthEvidence.grants_training_authority),
+        grantsExecutionAuthority: safeBoolean(liveHealthEvidence.grants_execution_authority),
+        grantsMutationAuthority: safeBoolean(liveHealthEvidence.grants_mutation_authority),
+        grantsApprovalAuthority: safeBoolean(liveHealthEvidence.grants_approval_authority),
+        grantsMemoryWriteAuthority: safeBoolean(liveHealthEvidence.grants_memory_write_authority),
+        grantsCapabilityAuthority: safeBoolean(liveHealthEvidence.grants_capability_authority),
       },
       latestLocalModelResponse: {
         observed: safeBoolean(latestLocalModelResponse.observed),
