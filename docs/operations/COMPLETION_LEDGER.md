@@ -98304,6 +98304,66 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, browser screenshot proof, and full ORB/body
   coverage proof were not run for this bounded readback-contract slice.
 
+### 2026-06-26 07:41Z - Francis1 guard-retry prompt tightening
+
+Current posture: Phase 2 / P9 observability, P3 governance, and collaboration
+memory hygiene now tighten the Codex-to-Francis1 retry path after output-guard
+drift. Codex-side prompts still acknowledge Claude as a guidance participant and
+keep Francis as the subject, but active guard retries now explicitly steer
+Francis1 away from uncertainty/reconciliation loops and toward a concrete
+issue-plus-artifact answer.
+
+What changed:
+
+- `collaboration_driver` now changes active guard retry prompt text from generic
+  "answer topic" wording to explicit instructions to avoid old-topic replay or
+  uncertainty loops and give `issue + artifact`.
+- `ollama_participant` now tells Francis1 that when a current artifact or
+  verified surface is supplied, it must not frame the reply as reconciling
+  understanding, uncertainty, or missing guidance.
+- Focused tests now prove both the updated guard retry prompt and the Francis1
+  model-input instruction.
+- The change remains advisory and bounded: it does not tune the local model,
+  store raw model output, promote memory, execute actions, approve actions,
+  grant capabilities, or make Claude/Codex/Francis1 authoritative.
+
+Validation:
+
+- Focused backend collaboration tests passed:
+  `python -m pytest tests\test_developer_bridge.py -k "collaboration_driver_waits_for_ollama_before_next_turn or collaboration_driver_rotates_topics_after_repeated_output_guard_receipts or codex_responder_ignores_existing_then_replies_once or codex_responder_can_ack_ollama_without_retriggering_model or ollama_participant_replies_through_existing_memory_prompt_path or ollama_participant_rewrites_live_health_reconciliation_drift or ollama_participant_rewrites_learning_receipt_gap_loop"`.
+- Ruff check passed:
+  `python -m ruff check src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\ollama_participant.py tests\test_developer_bridge.py`.
+- Ruff format check passed:
+  `python -m ruff format --check src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\ollama_participant.py tests\test_developer_bridge.py`.
+- Targeted mypy passed:
+  `python -m mypy src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\ollama_participant.py`.
+- Compileall passed:
+  `python -m compileall src\francis\developer_bridge\collaboration_driver.py src\francis\developer_bridge\ollama_participant.py`.
+- Refreshed the bounded collaboration helper processes. A transient duplicate
+  helper set appeared because the persistent supervisor restarted helpers while a
+  one-shot supervisor also started them; the duplicate set was stopped, leaving
+  one wrapper/worker pair for each helper.
+- Live readback after cleanup returned `status=healthy`, one effective worker
+  each for the Codex responder, Francis1 participant, and collaboration driver,
+  and turn `1837` showed the new guard text
+  `avoid uncertainty loops; give issue + artifact`.
+- The tracked Francis1 response to turn `1837` returned
+  `output_guard_status=passed`, `is_guard_rewrite=false`, and all execution,
+  mutation, approval, memory-write, training, and capability grants false. The
+  following Codex auto-ack still included
+  `Claude guidance acknowledged; Francis subject; Codex validates repo truth.`
+
+Remaining truthful gap:
+
+- This reduces a known prompt/guard drift path but does not prove Francis1 will
+  never drift again. Future drift must still be captured as bounded learning
+  receipts and reviewed before tuning or memory promotion.
+- The brief duplicate-helper window produced two equivalent turn `1837` driver
+  prompts in the relay. The runtime was cleaned back to one helper set, but the
+  duplicate receipts remain in history as truthful operational evidence.
+- `.\scripts\check.ps1`, GitHub CI, browser screenshot proof, and full ORB/body
+  coverage proof were not run for this bounded prompt-contract slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

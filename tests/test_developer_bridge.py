@@ -2919,7 +2919,7 @@ def test_collaboration_driver_rotates_topics_after_repeated_output_guard_receipt
     latest_prompt = str(transcript["items"][0]["prompt"])
     assert "Topic: which repo surface should convert typed or spoken" in latest_prompt
     assert "Current artifact: api.routes.chat.mission_ingress" in latest_prompt
-    assert "Guard: stale replay learned; answer topic." in latest_prompt
+    assert "Guard: stale replay learned; avoid old topic; give issue + artifact." in latest_prompt
     assert "Claude guidance acknowledged; Francis subject; Codex validates repo truth." in latest_prompt
     assert len(latest_prompt) <= 700
     assert "current repetitive meta loop" not in latest_prompt
@@ -3824,6 +3824,9 @@ def test_ollama_participant_replies_through_existing_memory_prompt_path(tmp_path
     )
     assert "Use first-person Francis1 language" in captured_prompts[0]
     assert "do not ask Codex to clarify" in captured_prompts[0]
+    assert (
+        "do not frame the reply as reconciling understanding, uncertainty, or missing guidance" in captured_prompts[0]
+    )
     assert "Do not say 'Francis lacks'" in captured_prompts[0]
     assert "continuity.ledger.relevant[user]: Francis is local-first and receipts-backed." in captured_prompts[0]
     assert "intelligence substrate" in captured_prompts[0]

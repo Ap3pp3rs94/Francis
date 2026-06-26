@@ -346,6 +346,7 @@ def _build_model_input(item: dict[str, object]) -> str:
         "Do not say 'Francis lacks', 'Francis needs', or 'Francis should' as if Francis is external. "
         "Do not append a generic 'Next best action' line unless the source explicitly asks for one. "
         "When the source gives a Current artifact or verified surface, do not ask Codex to clarify; "
+        "do not frame the reply as reconciling understanding, uncertainty, or missing guidance; "
         "name your issue, evidence gap, or risk from that artifact. "
         f"{_COLLABORATION_REPLY_CONTRACT} "
         "Do not claim execution, mutation, approval, shell access, commits, pushes, hidden perception, training, or memory-write authority."

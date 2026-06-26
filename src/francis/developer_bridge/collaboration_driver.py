@@ -438,8 +438,8 @@ def _compose_driver_prompt(
 def _guard_prompt_line(guard_signal: dict[str, object]) -> str:
     terms = [str(term) for term in _list(guard_signal.get("repeated_terms"))]
     if "stale_action_readiness_topic_replay" in terms:
-        return " Guard: stale replay learned; answer topic."
-    return " Guard: drift learned; answer topic."
+        return " Guard: stale replay learned; avoid old topic; give issue + artifact."
+    return " Guard: drift learned; avoid uncertainty loops; give issue + artifact."
 
 
 def _codex_response_line(review_line: str) -> str:
