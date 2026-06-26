@@ -828,6 +828,24 @@ export type CollaborationSubstrateReadinessChecklistItem = {
   blocksMainBuildPrompt: boolean;
 };
 
+export type CollaborationSubstrateOpenOrbGap = {
+  planeId: string;
+  planeName: string;
+  bodySurfaceId: string;
+  currentPosture: string;
+  riskLevel: string;
+  riskStatement: string;
+  remainingGaps: string[];
+  nextReviewArtifact: string;
+  recommendedNextAction: string;
+  blocksMainBuildPrompt: boolean;
+  grantsExecutionAuthority: boolean;
+  grantsMutationAuthority: boolean;
+  grantsApprovalAuthority: boolean;
+  grantsMemoryWriteAuthority: boolean;
+  grantsTrainingAuthority: boolean;
+};
+
 export type CollaborationRoadmapAlignment = {
   status: string;
   requiredSources: string[];
@@ -841,6 +859,8 @@ export type CollaborationRoadmapAlignment = {
   candidateOnlyUntilReview: boolean;
   blocksMainBuildPrompt: boolean;
   blockingItems: string[];
+  openOrbGapCount: number;
+  openOrbGapPlaneIds: string[];
   nextCheck: string;
   grantsExecutionAuthority: boolean;
   grantsMutationAuthority: boolean;
@@ -861,6 +881,7 @@ export type CollaborationSubstrateReadiness = {
     mainBuildPromptAllowed: boolean;
     mainBuildPromptGate: string;
     coverageOpenGapCount: number;
+    openOrbGapPlaneIds: string[];
     trustLadderEnforced: boolean;
     runtimeHealthy: boolean;
     learningReceiptsBounded: boolean;
@@ -869,12 +890,14 @@ export type CollaborationSubstrateReadiness = {
   roadmapAlignment: CollaborationRoadmapAlignment;
   checklist: CollaborationSubstrateReadinessChecklistItem[];
   blockingItems: string[];
+  openOrbGaps: CollaborationSubstrateOpenOrbGap[];
   nextAction: string;
   definitions: {
     collaborationSubstrateWired: string;
     mainBuildPromptAllowed: string;
     blockingItems: string;
     roadmapAlignment: string;
+    openOrbGaps: string;
   };
   sourceReadbacks: Record<string, string>;
   readbackCache: CollaborationReadbackCache;
@@ -3105,6 +3128,9 @@ export function parseCollaborationSubstrateReadiness(raw: unknown): Collaboratio
       mainBuildPromptAllowed: safeBoolean(summary.main_build_prompt_allowed),
       mainBuildPromptGate: safeString(summary.main_build_prompt_gate, "requires_alignment_review"),
       coverageOpenGapCount: safeNumber(summary.coverage_open_gap_count),
+      openOrbGapPlaneIds: Array.isArray(summary.open_orb_gap_plane_ids)
+        ? summary.open_orb_gap_plane_ids.map((item) => safeString(item)).filter(Boolean)
+        : [],
       trustLadderEnforced: safeBoolean(summary.trust_ladder_enforced),
       runtimeHealthy: safeBoolean(summary.runtime_healthy),
       learningReceiptsBounded: safeBoolean(summary.learning_receipts_bounded),
@@ -3129,6 +3155,10 @@ export function parseCollaborationSubstrateReadiness(raw: unknown): Collaboratio
       blockingItems: Array.isArray(roadmapAlignment.blocking_items)
         ? roadmapAlignment.blocking_items.map((item) => safeString(item)).filter(Boolean)
         : [],
+      openOrbGapCount: safeNumber(roadmapAlignment.open_orb_gap_count),
+      openOrbGapPlaneIds: Array.isArray(roadmapAlignment.open_orb_gap_plane_ids)
+        ? roadmapAlignment.open_orb_gap_plane_ids.map((item) => safeString(item)).filter(Boolean)
+        : [],
       nextCheck: safeString(roadmapAlignment.next_check),
       grantsExecutionAuthority: safeBoolean(roadmapAlignment.grants_execution_authority),
       grantsMutationAuthority: safeBoolean(roadmapAlignment.grants_mutation_authority),
@@ -3137,16 +3167,39 @@ export function parseCollaborationSubstrateReadiness(raw: unknown): Collaboratio
     },
     checklist: Array.isArray(value.checklist) ? value.checklist.map(parseCollaborationSubstrateChecklistItem) : [],
     blockingItems: Array.isArray(value.blocking_items) ? value.blocking_items.map((item) => safeString(item)).filter(Boolean) : [],
+    openOrbGaps: Array.isArray(value.open_orb_gaps) ? value.open_orb_gaps.map(parseCollaborationSubstrateOpenOrbGap) : [],
     nextAction: safeString(value.next_action),
     definitions: {
       collaborationSubstrateWired: safeString(definitions.collaboration_substrate_wired),
       mainBuildPromptAllowed: safeString(definitions.main_build_prompt_allowed),
       blockingItems: safeString(definitions.blocking_items),
       roadmapAlignment: safeString(definitions.roadmap_alignment),
+      openOrbGaps: safeString(definitions.open_orb_gaps),
     },
     sourceReadbacks: Object.fromEntries(Object.entries(sourceReadbacks).map(([key, item]) => [key, safeString(item)])),
     readbackCache: parseReadbackCache(value.readback_cache),
     governance: isRecord(value.governance) ? value.governance : {},
+  };
+}
+
+function parseCollaborationSubstrateOpenOrbGap(raw: unknown): CollaborationSubstrateOpenOrbGap {
+  const value = isRecord(raw) ? raw : {};
+  return {
+    planeId: safeString(value.plane_id),
+    planeName: safeString(value.plane_name),
+    bodySurfaceId: safeString(value.body_surface_id),
+    currentPosture: safeString(value.current_posture),
+    riskLevel: safeString(value.risk_level),
+    riskStatement: safeString(value.risk_statement),
+    remainingGaps: Array.isArray(value.remaining_gaps) ? value.remaining_gaps.map((item) => safeString(item)).filter(Boolean) : [],
+    nextReviewArtifact: safeString(value.next_review_artifact),
+    recommendedNextAction: safeString(value.recommended_next_action),
+    blocksMainBuildPrompt: safeBoolean(value.blocks_main_build_prompt),
+    grantsExecutionAuthority: safeBoolean(value.grants_execution_authority),
+    grantsMutationAuthority: safeBoolean(value.grants_mutation_authority),
+    grantsApprovalAuthority: safeBoolean(value.grants_approval_authority),
+    grantsMemoryWriteAuthority: safeBoolean(value.grants_memory_write_authority),
+    grantsTrainingAuthority: safeBoolean(value.grants_training_authority),
   };
 }
 

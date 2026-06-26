@@ -38,6 +38,7 @@ def read_collaboration_substrate_readiness() -> dict[str, object]:
         body_summary.get("coverage_open_gap_count"),
         default=_int(coverage_review.get("open_gap_count")),
     )
+    open_orb_gaps = _open_orb_gaps(coverage_review)
     bounded_wiring_percent = _int(body_quest.get("percent_complete"))
     runtime_healthy = _str(runtime.get("status")) == "healthy"
     trust_ladder_enforced = bool(body_summary.get("trust_ladder_enforced")) and not bool(
@@ -152,6 +153,7 @@ def read_collaboration_substrate_readiness() -> dict[str, object]:
             "main_build_prompt_allowed": main_build_prompt_allowed,
             "main_build_prompt_gate": main_build_prompt_gate,
             "coverage_open_gap_count": coverage_open_gap_count,
+            "open_orb_gap_plane_ids": [_str(item.get("plane_id")) for item in open_orb_gaps],
             "trust_ladder_enforced": trust_ladder_enforced,
             "runtime_healthy": runtime_healthy,
             "learning_receipts_bounded": learning_bounded,
@@ -163,9 +165,11 @@ def read_collaboration_substrate_readiness() -> dict[str, object]:
             main_build_prompt_allowed=main_build_prompt_allowed,
             main_build_prompt_gate=main_build_prompt_gate,
             blocking_items=blocking_items,
+            open_orb_gaps=open_orb_gaps,
         ),
         "checklist": checklist,
         "blocking_items": [item["id"] for item in blocking_items],
+        "open_orb_gaps": open_orb_gaps,
         "next_action": (
             "Read the completion ledger and build manifest, review open ORB gaps, and keep any main Francis "
             "build prompt candidate-only until Codex/operator review clears the gap."
@@ -180,6 +184,10 @@ def read_collaboration_substrate_readiness() -> dict[str, object]:
             "blocking_items": "Checklist items that block main-build prompting even when the relay wiring is complete.",
             "roadmap_alignment": (
                 "Ledger-first readback proving whether a main Francis build prompt must remain candidate-only."
+            ),
+            "open_orb_gaps": (
+                "Bounded per-plane ORB coverage gaps derived from the Francis body-map coverage review; "
+                "these are review inputs, not authority grants."
             ),
         },
         "source_readbacks": {
@@ -243,6 +251,7 @@ def _roadmap_alignment(
     main_build_prompt_allowed: bool,
     main_build_prompt_gate: str,
     blocking_items: list[dict[str, object]],
+    open_orb_gaps: list[dict[str, object]],
 ) -> dict[str, object]:
     sources_observed = ledger_observed and manifest_observed
     if main_build_prompt_allowed:
@@ -264,6 +273,8 @@ def _roadmap_alignment(
         "candidate_only_until_review": not main_build_prompt_allowed,
         "blocks_main_build_prompt": bool(blocking_items),
         "blocking_items": [_str(item.get("id")) for item in blocking_items if _str(item.get("id"))],
+        "open_orb_gap_count": len(open_orb_gaps),
+        "open_orb_gap_plane_ids": [_str(item.get("plane_id")) for item in open_orb_gaps if _str(item.get("plane_id"))],
         "next_check": (
             "Read docs/operations/COMPLETION_LEDGER.md first, compare it against "
             "docs/canonical/BUILD_MANIFEST.md, confirm phase posture and ORB blockers, and keep any main "
@@ -274,6 +285,35 @@ def _roadmap_alignment(
         "grants_approval_authority": False,
         "grants_memory_write_authority": False,
     }
+
+
+def _open_orb_gaps(coverage_review: dict[str, object]) -> list[dict[str, object]]:
+    gaps: list[dict[str, object]] = []
+    for raw_item in _list(coverage_review.get("items")):
+        item = _dict(raw_item)
+        remaining_gaps = [_str(value) for value in _list(item.get("remaining_gaps")) if _str(value)]
+        if not remaining_gaps:
+            continue
+        gaps.append(
+            {
+                "plane_id": _str(item.get("plane_id")),
+                "plane_name": _str(item.get("plane_name")),
+                "body_surface_id": _str(item.get("body_surface_id")),
+                "current_posture": _str(item.get("current_posture")),
+                "risk_level": _str(item.get("risk_level")),
+                "risk_statement": _str(item.get("risk_statement")),
+                "remaining_gaps": remaining_gaps[:4],
+                "next_review_artifact": _str(item.get("next_review_artifact")),
+                "recommended_next_action": _str(item.get("recommended_next_action")),
+                "blocks_main_build_prompt": True,
+                "grants_execution_authority": False,
+                "grants_mutation_authority": False,
+                "grants_approval_authority": False,
+                "grants_memory_write_authority": False,
+                "grants_training_authority": False,
+            }
+        )
+    return gaps[:12]
 
 
 def _phase_blocks_main_build_prompt(*, current: str, posture: str) -> bool:

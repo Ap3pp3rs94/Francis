@@ -984,6 +984,7 @@ test("parseCollaborationSubstrateReadiness preserves main-build prompt gate", ()
       main_build_prompt_allowed: false,
       main_build_prompt_gate: "blocked_by_open_orb_gaps",
       coverage_open_gap_count: 11,
+      open_orb_gap_plane_ids: ["P1_INTERFACE", "P8_MEMORY"],
       trust_ladder_enforced: true,
       runtime_healthy: true,
       learning_receipts_bounded: true,
@@ -1002,6 +1003,8 @@ test("parseCollaborationSubstrateReadiness preserves main-build prompt gate", ()
       candidate_only_until_review: true,
       blocks_main_build_prompt: true,
       blocking_items: ["coverage_gaps_reviewed"],
+      open_orb_gap_count: 2,
+      open_orb_gap_plane_ids: ["P1_INTERFACE", "P8_MEMORY"],
       next_check: "Read ledger first, then compare the build manifest before prompting main Francis build work.",
       grants_execution_authority: false,
       grants_mutation_authority: false,
@@ -1027,6 +1030,42 @@ test("parseCollaborationSubstrateReadiness preserves main-build prompt gate", ()
       },
     ],
     blocking_items: ["coverage_gaps_reviewed"],
+    open_orb_gaps: [
+      {
+        plane_id: "P1_INTERFACE",
+        plane_name: "Interface",
+        body_surface_id: "collaboration",
+        current_posture: "partial",
+        risk_level: "high",
+        risk_statement: "The operator can miss plane, gate, and trace state if interface readbacks stay fragmented.",
+        remaining_gaps: ["The operator experience is not yet a complete ORB console."],
+        next_review_artifact: "apps/chat_ui.communication + developer_bridge.francis_body_map.coverage_review",
+        recommended_next_action: "Keep coverage gaps, session context, and authority boundaries visible before expanding interaction.",
+        blocks_main_build_prompt: true,
+        grants_execution_authority: false,
+        grants_mutation_authority: false,
+        grants_approval_authority: false,
+        grants_memory_write_authority: false,
+        grants_training_authority: false,
+      },
+      {
+        plane_id: "P8_MEMORY",
+        plane_name: "Memory",
+        body_surface_id: "memory",
+        current_posture: "partial",
+        risk_level: "high",
+        risk_statement: "Memory can poison future behavior if promotion, retrieval, and correction are not typed.",
+        remaining_gaps: ["Memory still needs stronger retrieval and operator-facing promotion review."],
+        next_review_artifact: "src/francis/chat/continuity + src/francis/memory",
+        recommended_next_action: "Wire memory promotion review before using collaboration failures as tuning or long-term memory.",
+        blocks_main_build_prompt: true,
+        grants_execution_authority: false,
+        grants_mutation_authority: false,
+        grants_approval_authority: false,
+        grants_memory_write_authority: false,
+        grants_training_authority: false,
+      },
+    ],
     next_action:
       "Read the completion ledger and build manifest, review open ORB gaps, and keep any main Francis build prompt candidate-only.",
     definitions: {
@@ -1034,6 +1073,7 @@ test("parseCollaborationSubstrateReadiness preserves main-build prompt gate", ()
       main_build_prompt_allowed: "Whether this readback allows unsupervised main Francis build work.",
       blocking_items: "Checklist items that block main-build prompting.",
       roadmap_alignment: "Ledger-first readback proving whether a main Francis build prompt must remain candidate-only.",
+      open_orb_gaps: "Bounded per-plane ORB coverage gaps.",
     },
     source_readbacks: {
       body_map: "developer_bridge.francis_body_map",
@@ -1060,6 +1100,7 @@ test("parseCollaborationSubstrateReadiness preserves main-build prompt gate", ()
   assert.equal(readiness.summary.mainBuildPromptAllowed, false);
   assert.equal(readiness.summary.mainBuildPromptGate, "blocked_by_open_orb_gaps");
   assert.equal(readiness.summary.coverageOpenGapCount, 11);
+  assert.deepEqual(readiness.summary.openOrbGapPlaneIds, ["P1_INTERFACE", "P8_MEMORY"]);
   assert.equal(readiness.summary.noAuthorityGranted, true);
   assert.equal(readiness.roadmapAlignment.status, "blocked_candidate_only");
   assert.deepEqual(readiness.roadmapAlignment.sourceOrder, [
@@ -1073,10 +1114,19 @@ test("parseCollaborationSubstrateReadiness preserves main-build prompt gate", ()
   assert.equal(readiness.roadmapAlignment.candidateOnlyUntilReview, true);
   assert.equal(readiness.roadmapAlignment.blocksMainBuildPrompt, true);
   assert.equal(readiness.roadmapAlignment.blockingItems[0], "coverage_gaps_reviewed");
+  assert.equal(readiness.roadmapAlignment.openOrbGapCount, 2);
+  assert.deepEqual(readiness.roadmapAlignment.openOrbGapPlaneIds, ["P1_INTERFACE", "P8_MEMORY"]);
   assert.equal(readiness.roadmapAlignment.grantsExecutionAuthority, false);
   assert.equal(readiness.roadmapAlignment.grantsMemoryWriteAuthority, false);
   assert.equal(readiness.checklist[0]?.blocksMainBuildPrompt, true);
   assert.equal(readiness.blockingItems[0], "coverage_gaps_reviewed");
+  assert.equal(readiness.openOrbGaps.length, 2);
+  assert.equal(readiness.openOrbGaps[0]?.planeId, "P1_INTERFACE");
+  assert.equal(readiness.openOrbGaps[0]?.remainingGaps[0], "The operator experience is not yet a complete ORB console.");
+  assert.equal(readiness.openOrbGaps[0]?.blocksMainBuildPrompt, true);
+  assert.equal(readiness.openOrbGaps[0]?.grantsExecutionAuthority, false);
+  assert.equal(readiness.openOrbGaps[0]?.grantsMemoryWriteAuthority, false);
+  assert.equal(readiness.definitions.openOrbGaps, "Bounded per-plane ORB coverage gaps.");
   assert.equal(readiness.requiredAlignmentSources.includes("docs/canonical/BUILD_MANIFEST.md"), true);
   assert.equal(readiness.sourceReadbacks.body_map, "developer_bridge.francis_body_map");
   assert.equal(readiness.governance.executes_prompt, false);

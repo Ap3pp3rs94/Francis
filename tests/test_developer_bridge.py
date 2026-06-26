@@ -611,6 +611,15 @@ def test_collaboration_substrate_readiness_blocks_main_build_prompt_for_open_gap
     assert result["summary"]["runtime_healthy"] is True  # type: ignore[index]
     assert result["summary"]["trust_ladder_enforced"] is True  # type: ignore[index]
     assert result["summary"]["no_authority_granted"] is True  # type: ignore[index]
+    assert result["summary"]["open_orb_gap_plane_ids"]  # type: ignore[index]
+    open_orb_gaps = result["open_orb_gaps"]  # type: ignore[index]
+    assert len(open_orb_gaps) == result["summary"]["coverage_open_gap_count"]  # type: ignore[index]
+    first_gap = open_orb_gaps[0]
+    assert first_gap["plane_id"].startswith("P")
+    assert first_gap["remaining_gaps"]
+    assert first_gap["blocks_main_build_prompt"] is True
+    assert first_gap["grants_execution_authority"] is False
+    assert first_gap["grants_memory_write_authority"] is False
     roadmap_alignment = result["roadmap_alignment"]  # type: ignore[index]
     assert roadmap_alignment["status"] == "blocked_candidate_only"  # type: ignore[index]
     assert roadmap_alignment["source_order"] == [  # type: ignore[index]
@@ -623,6 +632,8 @@ def test_collaboration_substrate_readiness_blocks_main_build_prompt_for_open_gap
     assert roadmap_alignment["main_build_prompt_allowed"] is False  # type: ignore[index]
     assert roadmap_alignment["candidate_only_until_review"] is True  # type: ignore[index]
     assert roadmap_alignment["blocks_main_build_prompt"] is True  # type: ignore[index]
+    assert roadmap_alignment["open_orb_gap_count"] == len(open_orb_gaps)  # type: ignore[index]
+    assert roadmap_alignment["open_orb_gap_plane_ids"] == result["summary"]["open_orb_gap_plane_ids"]  # type: ignore[index]
     assert roadmap_alignment["grants_execution_authority"] is False  # type: ignore[index]
     assert roadmap_alignment["grants_memory_write_authority"] is False  # type: ignore[index]
     checklist = {item["id"]: item for item in result["checklist"]}  # type: ignore[index]

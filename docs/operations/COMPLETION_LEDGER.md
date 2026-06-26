@@ -97361,6 +97361,75 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, browser screenshot proof, and full ORB/body
   coverage proof were not run for this bounded UI visibility slice.
 
+### 2026-06-26 05:19Z - Substrate readiness open ORB gap readback
+
+Current posture: Phase 2 / P1 interface, P3 governance, P8 memory, and P9
+observability now expose concrete open ORB gaps behind the
+`blocked_by_open_orb_gaps` main-build gate. The collaboration loop also keeps
+Codex prompts aligned to Claude as guidance while keeping Francis as the
+directed subject of the conversation.
+
+What changed:
+
+- `/developer-bridge/collaboration-substrate-readiness` now projects
+  `open_orb_gaps`, `summary.open_orb_gap_plane_ids`, and
+  `roadmap_alignment.open_orb_gap_count/open_orb_gap_plane_ids` from the
+  body-map coverage review.
+- Each open ORB gap is metadata-only and includes plane id/name, body surface,
+  posture, risk, bounded remaining gaps, next review artifact, recommended next
+  action, `blocks_main_build_prompt=true`, and no-authority flags.
+- The Communication UI parses and renders a scrollable Open ORB Gaps section
+  under Substrate Readiness so the operator can see what blocks the main build
+  prompt without opening raw body-map internals.
+- Codex-side collaboration driver prompts remain validated to include
+  `Claude acknowledged as guidance; Francis focus; validate.` while preserving
+  Francis1 as the local participant and Claude/Codex as guidance sources.
+
+Validation:
+
+- Focused substrate-readiness backend test passed:
+  `python -m pytest tests/test_developer_bridge.py::test_collaboration_substrate_readiness_blocks_main_build_prompt_for_open_gaps -q`.
+- Focused Codex-side prompt contract tests passed:
+  `python -m pytest tests/test_developer_bridge.py::test_collaboration_driver_waits_for_ollama_before_next_turn tests/test_developer_bridge.py::test_collaboration_driver_rotates_topics_after_repeated_output_guard_receipts -q`
+  (`2` passing tests).
+- Ruff check passed:
+  `python -m ruff check src\francis\developer_bridge\substrate_readiness.py tests\test_developer_bridge.py`.
+- Ruff format check passed:
+  `python -m ruff format --check src\francis\developer_bridge\substrate_readiness.py tests\test_developer_bridge.py`.
+- Targeted mypy passed:
+  `python -m mypy src\francis\developer_bridge\substrate_readiness.py`.
+- Compileall passed:
+  `python -m compileall src\francis\developer_bridge\substrate_readiness.py`.
+- Chat UI contract suite passed:
+  `npm run test -- --runInBand apps/chat_ui/src/chat/index.test.ts`
+  (the package script ran the configured UI suite, `282` passing tests).
+- Chat UI production build passed:
+  `npm run build`.
+- `git diff --check` passed.
+- The local Francis API was restarted. Live
+  `/developer-bridge/collaboration-substrate-readiness` reported
+  `open_orb_gap_count=11`, roadmap open ORB gap count `11`, first gap
+  `P0_FOUNDATION`, `blocks_main_build_prompt=true`, and
+  `grants_execution_authority=false`.
+- Live `/developer-bridge/collaboration-runtime-health` reported
+  `status=healthy`, `helper_count=3`, three enabled participants including
+  Claude, `recurrence_state=waiting_for_ollama`,
+  `manual_nudge_required=false`, and latest prompt within budget.
+- Live `/developer-bridge/collaboration-transcript?source_agent=codex&target_agent=ollama&limit=1`
+  showed the latest Codex prompt includes the Claude-guidance / Francis-focus
+  alignment line.
+
+Remaining truthful gap:
+
+- This is a readback and operator-visibility repair only. It does not clear any
+  ORB gap, authorize a main Francis build prompt, grant capability use to
+  Francis1, grant execution/mutation/approval/memory authority, tune the local
+  model, or promote memory.
+- The live loop is currently waiting for the local model response; this is not a
+  manual-nudge-required state.
+- `.\scripts\check.ps1`, GitHub CI, browser screenshot proof, and full ORB/body
+  coverage proof were not run for this bounded slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

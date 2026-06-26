@@ -1397,6 +1397,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
   const substrateChecklistItems = substrateReadiness?.checklist ?? [];
   const substrateChecklistProof = collaborationSubstrateChecklistSummary(substrateReadiness);
   const substrateBlockedItems = substrateReadiness?.checklist.filter((item) => item.blocksMainBuildPrompt && item.status !== "passed") ?? [];
+  const substrateOpenOrbGaps = substrateReadiness?.openOrbGaps ?? [];
   const roadmapAlignment = substrateReadiness?.roadmapAlignment;
   const roadmapAlignmentBlocked = Boolean(roadmapAlignment?.blocksMainBuildPrompt || roadmapAlignment?.candidateOnlyUntilReview);
   const bodyMapSurfaces = bodyMap?.surfaces ?? [];
@@ -1704,6 +1705,78 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
             </div>
             <div style={{ color: "#93c5fd", fontSize: 13, marginTop: 8, overflowWrap: "anywhere" }}>
               next {roadmapAlignment.nextCheck || substrateReadiness?.nextAction || "Read ledger and manifest before main build prompting."}
+            </div>
+          </div>
+        ) : null}
+        {substrateOpenOrbGaps.length ? (
+          <div
+            style={{
+              borderTop: "1px solid rgba(148, 163, 184, 0.18)",
+              marginTop: 14,
+              paddingTop: 12,
+            }}
+          >
+            <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "space-between" }}>
+              <span style={{ color: "#dbeafe", fontSize: 15, fontWeight: 700 }}>Open ORB Gaps</span>
+              <span style={{ color: "#fecaca", fontSize: 13 }}>
+                {substrateOpenOrbGaps.length} shown / gate {substrateSummary?.mainBuildPromptGate || "unknown"}
+              </span>
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gap: 0,
+                marginTop: 10,
+                maxHeight: 280,
+                overflowY: "auto",
+              }}
+            >
+              {substrateOpenOrbGaps.map((gap) => (
+                <div
+                  key={`${gap.planeId}-${gap.bodySurfaceId}`}
+                  style={{
+                    borderBottom: "1px solid rgba(148, 163, 184, 0.16)",
+                    display: "grid",
+                    gap: 6,
+                    padding: "10px 0",
+                  }}
+                >
+                  <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "space-between" }}>
+                    <span style={{ color: "#e2e8f0", fontWeight: 700, overflowWrap: "anywhere" }}>
+                      {gap.planeId} {gap.planeName || gap.bodySurfaceId}
+                    </span>
+                    <span
+                      style={{
+                        background: gap.riskLevel === "high" ? "rgba(127, 29, 29, 0.24)" : "rgba(71, 85, 105, 0.28)",
+                        border: `1px solid ${gap.riskLevel === "high" ? "rgba(252, 165, 165, 0.42)" : "rgba(148, 163, 184, 0.3)"}`,
+                        borderRadius: 999,
+                        color: gap.riskLevel === "high" ? "#fecaca" : "#cbd5e1",
+                        fontSize: 12,
+                        padding: "3px 8px",
+                      }}
+                    >
+                      {gap.riskLevel || "risk"}
+                    </span>
+                  </div>
+                  <div style={{ color: "#cbd5e1", fontSize: 13, overflowWrap: "anywhere" }}>{gap.riskStatement || "No risk statement."}</div>
+                  <ul style={{ color: "#e2e8f0", display: "grid", gap: 4, listStyle: "none", margin: 0, padding: 0 }}>
+                    {(gap.remainingGaps.length ? gap.remainingGaps : ["No remaining gap text."]).map((item) => (
+                      <li key={item} style={{ fontSize: 13, overflowWrap: "anywhere" }}>
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                  <div style={{ color: "#93c5fd", fontSize: 12, overflowWrap: "anywhere" }}>
+                    review {gap.nextReviewArtifact || "unknown"} / next {gap.recommendedNextAction || "review required"}
+                  </div>
+                  <div style={{ color: "#94a3b8", display: "flex", flexWrap: "wrap", fontSize: 12, gap: 8 }}>
+                    <span>blocks main build {boolText(gap.blocksMainBuildPrompt)}</span>
+                    <span>execute {boolText(gap.grantsExecutionAuthority)}</span>
+                    <span>approve {boolText(gap.grantsApprovalAuthority)}</span>
+                    <span>memory write {boolText(gap.grantsMemoryWriteAuthority)}</span>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         ) : null}
