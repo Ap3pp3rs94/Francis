@@ -45,7 +45,7 @@ Francis should be read from current repo truth, not from a hard-coded phase labe
 This block is intentionally overwritten as the build moves. The append-only
 history stays in [docs/operations/COMPLETION_LEDGER.md](docs/operations/COMPLETION_LEDGER.md).
 
-- Last updated: 2026-06-19.
+- Last updated: 2026-06-27.
 - Source of truth: this block summarizes the ledger and canonical build docs for
   readers. It does not replace the append-only ledger or create a milestone
   claim by itself.
@@ -53,36 +53,41 @@ history stays in [docs/operations/COMPLETION_LEDGER.md](docs/operations/COMPLETI
   spans observability/governance hardening, mission and recovery readbacks,
   Forge/capability lifecycle governance, Lens/orb/voice embodiment, MCP ingress,
   memory continuity, and bounded execution/Lab controls.
-- Recent pushed implementation work includes local tool policy relay enforcement,
-  persistent connector ingress readiness, Cloudflare login/token ingress support,
-  and public-MCP transport provenance for the ChatGPT voice bridge. The latest
-  implementation commit before this README refresh is `f456e3c9`.
+- Recent pushed implementation work includes the live collaboration console and
+  chat composer, Trust Ladder grounding for the local model lane, a receipt-backed
+  Orb operator dry-run slice, and Francis1 self-model/intelligence-seat/usage
+  readbacks with draft-only Codex/Claude tool-dispatch envelopes. The latest
+  implementation commit before this README refresh is `02433ca8`.
 - Materially real today: API and chat-UI readbacks, mission continuity/recovery
   flows, Forge proposal/review/promotion-readiness receipts, plugin and
   capability catalog projections, governed evidence-ref intake surfaces, the
   command-palette monitor, a visible Lens/orb overlay, passive transcription
-  controls, ElevenLabs voice configuration, local MCP listener surfaces, and
-  ChatGPT connector readiness readbacks.
-- Still partial: the complete ORB console, stable ChatGPT-origin MCP proof,
-  voice-to-action reliability, persistent Cloudflare hostname/token operations,
-  OS-wide desktop control, full memory retrieval/write UX, live governed Lab
-  execution, and Stage 17 backlog closure.
+  controls, ElevenLabs voice configuration, local MCP listener surfaces,
+  ChatGPT connector readiness readbacks, governed collaboration relay controls,
+  Francis1 self-understanding readbacks, and dry-run Orb intent receipts.
+- Still partial: live Orb-driven desktop control, stable ChatGPT-origin MCP
+  proof, voice-to-action reliability, persistent Cloudflare hostname/token
+  operations, full memory retrieval/write UX, live governed Lab execution,
+  operator-approved tool dispatch, and Stage 17 backlog closure.
 - Latest validation actually checked for recent implementation work: local parser
-  checks, focused pytest coverage for voice/MCP/monitor contracts, the Vite UI
-  test suite, `npm run build`, and diff checks. Use the GitHub Actions badge
-  above for live CI status; this snapshot does not claim a passing GitHub gate
-  unless a specific completed run is named in the ledger.
-- GitHub alert readback at this update: open Dependabot alerts `0`, open code
-  scanning alerts `0`, and open secret scanning alerts `0`.
+  checks, focused pytest coverage for developer-bridge intelligence surfaces,
+  Orb operator input receipts, collaboration contracts, voice/MCP/monitor
+  contracts, the Vite UI test suite, `npm run build`, and diff checks. Use the
+  GitHub Actions badge above for live CI status; this snapshot does not claim a
+  passing GitHub gate unless a specific completed run is named in the ledger.
+- GitHub alert readback at this update: the latest push reported `2`
+  vulnerability alerts on the default branch (`1 high`, `1 moderate`). Code
+  scanning and secret scanning were not re-read in this README refresh.
 - Guardrails: current work does not grant execution authority, does not grant
   mutation authority beyond governed runtime state, does not approve proposals,
   does not promote capabilities, does not close Stage 6/Lens, and does not close
   Stage 17.
-- Next truthful gaps: obtain a fresh ChatGPT-origin MCP tool-call receipt through
-  the stable connector path, keep wiring orb voice commands to bounded actions,
-  harden memory/execution readbacks into the end-to-end ORB loop, and continue
-  Stage 17 through governed evidence/review chunks or projection-timing
-  hardening.
+- Next truthful gaps: wire Orb operator feedback into the visible overlay/HUD,
+  obtain a fresh ChatGPT-origin MCP tool-call receipt through the stable
+  connector path, add an operator-approved tool-dispatch send path without
+  impersonation, harden memory/execution readbacks into the end-to-end ORB loop,
+  and continue Stage 17 through governed evidence/review chunks or
+  projection-timing hardening.
 
 Use [docs/operations/COMPLETION_LEDGER.md](docs/operations/COMPLETION_LEDGER.md) for shipped truth. Use [docs/canonical/ROADMAP.md](docs/canonical/ROADMAP.md) and [docs/canonical/BUILD_MANIFEST.md](docs/canonical/BUILD_MANIFEST.md) for target state and build order. Phase and stage names are orientation markers only; each build pass should derive the active priority from the ledger and canonical roadmap instead of locking Francis into one fixed phase.
 
