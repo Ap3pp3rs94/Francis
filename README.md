@@ -181,6 +181,19 @@ Current visual asset:
   HUD, or desktop screenshots should be added only when tied to live UI proof, so
   this README does not present mock visuals as shipped functionality.
 
+## Presentation Demo
+
+Francis has a safe presentation path that shows current build posture, MCP
+governance smoke, and Orb operator dry-run receipts without claiming live desktop
+control:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\francis-presentation-demo.ps1
+```
+
+Use [docs/presentation/FRANCIS_PRESENTATION_DEMO.md](docs/presentation/FRANCIS_PRESENTATION_DEMO.md)
+for the presenter runbook, allowed claims, and claims that must not be made.
+
 ## Repository Navigation
 
 | Need | Start here |
@@ -197,6 +210,7 @@ Current visual asset:
 | Plugins and capabilities | [docs/PLUGINS.md](docs/PLUGINS.md), [plugins/](plugins/) |
 | MCP and developer bridge | [docs/operations/MCP_CLIENT_SETUP.md](docs/operations/MCP_CLIENT_SETUP.md), [docs/architecture/FRANCIS_MCP_GATEWAY.md](docs/architecture/FRANCIS_MCP_GATEWAY.md) |
 | Input and desktop operation path | [docs/architecture/FRANCIS_INPUT_ACTUATOR.md](docs/architecture/FRANCIS_INPUT_ACTUATOR.md), [src/francis/input_actuator/](src/francis/input_actuator/) |
+| Presentation demo | [docs/presentation/FRANCIS_PRESENTATION_DEMO.md](docs/presentation/FRANCIS_PRESENTATION_DEMO.md), [scripts/francis-presentation-demo.ps1](scripts/francis-presentation-demo.ps1) |
 | Contribution rules | [AGENTS.md](AGENTS.md), [CONTRIBUTING.md](CONTRIBUTING.md) |
 
 Core code map:

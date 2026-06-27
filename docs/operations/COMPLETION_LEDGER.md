@@ -99897,6 +99897,72 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, UI screenshots, and live long-run
   Francis1 behavior were not part of this bounded validation.
 
+### 2026-06-27 17:28Z - Presentation demo evidence runner
+
+Current posture: Phase 2 / P9 observability and presentation evidence now have a
+safe first demo runner that generates a timestamped readback and dry-run evidence
+bundle for technical or investor presentations. This is a presentation path, not
+a product-readiness claim, live desktop-control claim, Stage 6 closure, Stage 17
+closure, ORB Core closure, or autonomy grant.
+
+What changed:
+
+- `scripts/francis-presentation-demo.ps1` runs a bounded presentation sequence:
+  completion-model status readback, MCP gateway smoke, and Orb operator
+  move/click/type dry-run.
+- The runner writes ignored runtime evidence under
+  `.francis/presentation/demos/`, including a Markdown report, summary JSON, and
+  raw Orb dry-run JSON.
+- `docs/presentation/FRANCIS_PRESENTATION_DEMO.md` gives the presenter runbook,
+  allowed claims, disallowed claims, optional UI setup, and recovery commands.
+- `README.md` now links the presentation demo from the public project overview
+  and repository navigation.
+
+Validation:
+
+- PowerShell AST parse passed for
+  `scripts/francis-presentation-demo.ps1`.
+- Whitespace diff check passed for `README.md`,
+  `docs/presentation/FRANCIS_PRESENTATION_DEMO.md`, and
+  `scripts/francis-presentation-demo.ps1`.
+- README and presentation runbook local Markdown link check passed with
+  `bad 0`.
+- ASCII scan passed for the touched README, runbook, and script files.
+- Presentation runner passed:
+  `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\francis-presentation-demo.ps1`.
+  Result: `ok=true`, `current_phase=Phase 2`, `stage17_status=open`,
+  `mcp_gateway_smoke.ok=true`, `tool_count=23`,
+  `unapproved_takeover_refused=true`, `unapproved_input_refused=true`,
+  `orb_operator_dry_run.ok=true`, `sequence_count=3`,
+  `live_input_performed=false`, `raw_input=false`, and
+  `input_execution_attempted=false`.
+
+Receipt evidence:
+
+- Presentation report:
+  `.francis/presentation/demos/francis-presentation-demo-20260627-172847.md`.
+- Presentation summary:
+  `.francis/presentation/demos/francis-presentation-demo-20260627-172847.json`.
+- Orb raw output:
+  `.francis/presentation/demos/francis-presentation-demo-20260627-172847-orb.json`.
+- Orb operator receipts:
+  `.francis/orb_operator/receipts/orb_operator_01424c831990.json`,
+  `.francis/orb_operator/receipts/orb_operator_1b241e552570.json`, and
+  `.francis/orb_operator/receipts/orb_operator_6c92685120b5.json`.
+
+Remaining truthful gap:
+
+- This demo runner does not start the API or UI, move the physical cursor, type
+  into a live app, capture screenshots, grant execution authority, grant memory
+  write authority, approve proposals, promote capabilities, or make Francis a
+  finished autonomous desktop operator.
+- The validation run happened before the presentation files were committed, so
+  the generated report truthfully recorded `working_tree=dirty`; future runs
+  after commit should report the current worktree state at that moment.
+- `.\scripts\check.ps1`, GitHub CI, live browser/UI proof, and live desktop
+  input proof were not part of this bounded presentation slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
