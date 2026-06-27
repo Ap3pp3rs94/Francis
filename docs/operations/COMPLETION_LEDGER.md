@@ -99900,10 +99900,10 @@ Remaining truthful gap:
 ### 2026-06-27 17:28Z - Presentation demo evidence runner
 
 Current posture: Phase 2 / P9 observability and presentation evidence now have a
-safe first demo runner that generates a timestamped readback and dry-run evidence
-bundle for technical or investor presentations. This is a presentation path, not
-a product-readiness claim, live desktop-control claim, Stage 6 closure, Stage 17
-closure, ORB Core closure, or autonomy grant.
+safe first demo runner that generates a timestamped visual, readback, and
+dry-run evidence bundle for technical or investor presentations. This is a
+presentation path, not a product-readiness claim, live desktop-control claim,
+Stage 6 closure, Stage 17 closure, ORB Core closure, or autonomy grant.
 
 What changed:
 
@@ -99911,10 +99911,11 @@ What changed:
   completion-model status readback, MCP gateway smoke, and Orb operator
   move/click/type dry-run.
 - The runner writes ignored runtime evidence under
-  `.francis/presentation/demos/`, including a Markdown report, summary JSON, and
-  raw Orb dry-run JSON.
+  `.francis/presentation/demos/`, including a visual HTML report, Markdown
+  report, summary JSON, and raw Orb dry-run JSON.
 - `docs/presentation/FRANCIS_PRESENTATION_DEMO.md` gives the presenter runbook,
-  allowed claims, disallowed claims, optional UI setup, and recovery commands.
+  visual artifact path, allowed claims, disallowed claims, optional UI setup,
+  and recovery commands.
 - `README.md` now links the presentation demo from the public project overview
   and repository navigation.
 
@@ -99937,9 +99938,16 @@ Validation:
   `orb_operator_dry_run.ok=true`, `sequence_count=3`,
   `live_input_performed=false`, `raw_input=false`, and
   `input_execution_attempted=false`.
+- Visual HTML generation passed after the first presentation commit:
+  `.francis/presentation/demos/francis-presentation-demo-20260627-205400.html`
+  was written with no unreplaced template placeholders, then opened locally for
+  visual inspection. The run still reported `live_input_performed=false`,
+  `raw_input=false`, and `input_execution_attempted=false`.
 
 Receipt evidence:
 
+- Visual presentation:
+  `.francis/presentation/demos/francis-presentation-demo-20260627-205400.html`.
 - Presentation report:
   `.francis/presentation/demos/francis-presentation-demo-20260627-172847.md`.
 - Presentation summary:

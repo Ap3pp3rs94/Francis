@@ -183,16 +183,17 @@ Current visual asset:
 
 ## Presentation Demo
 
-Francis has a safe presentation path that shows current build posture, MCP
-governance smoke, and Orb operator dry-run receipts without claiming live desktop
-control:
+Francis has a safe visual presentation path that shows current build posture,
+MCP governance smoke, and Orb operator dry-run receipts without claiming live
+desktop control:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\francis-presentation-demo.ps1
 ```
 
 Use [docs/presentation/FRANCIS_PRESENTATION_DEMO.md](docs/presentation/FRANCIS_PRESENTATION_DEMO.md)
-for the presenter runbook, allowed claims, and claims that must not be made.
+for the presenter runbook, visual artifact location, allowed claims, and claims
+that must not be made.
 
 ## Repository Navigation
 

@@ -26,7 +26,7 @@ From the repository root:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\francis-presentation-demo.ps1
 ```
 
-The script writes a timestamped evidence bundle under:
+The script writes a timestamped visual and evidence bundle under:
 
 ```text
 .francis\presentation\demos\
@@ -39,12 +39,15 @@ That directory is ignored by git because it is runtime evidence, not source.
 1. Open [README.md](../../README.md) and give the 30 second explanation:
    Francis is a local-first governed operator layer, not a chatbot wrapper.
 2. Run the presentation script.
-3. Open the generated Markdown report from `.francis\presentation\demos\`.
-4. Point to the completion-model readback:
+3. Open the generated `.html` visual report from
+   `.francis\presentation\demos\`.
+4. Use the generated Markdown report as the audit companion if someone wants
+   the proof text.
+5. Point to the completion-model readback:
    current phase, latest ledger entry, plane readiness, and open gaps.
-5. Point to the MCP smoke readback:
+6. Point to the MCP smoke readback:
    tool count, ready statuses, and unapproved action refusals.
-6. Point to the Orb dry-run receipt paths:
+7. Point to the Orb dry-run receipt paths:
    move, click, and type intents were proposed and receipted; live input stayed
    false.
 
