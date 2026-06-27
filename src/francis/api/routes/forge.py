@@ -73,10 +73,25 @@ def _real_path(value: str | Path) -> Path:
     return Path(os.path.realpath(os.fspath(value)))
 
 
+def _trusted_storage_path(path: Path) -> Path | None:
+    try:
+        resolved = _real_path(path)
+        allowed_roots = (
+            _real_path(_artifact_root()),
+            _real_path(data_dir() / "plugins"),
+        )
+    except OSError:
+        return None
+    return resolved if any(_is_under(root, resolved) for root in allowed_roots) else None
+
+
 def _filesystem_path(path: Path) -> str:
+    trusted = _trusted_storage_path(path)
+    if trusted is None:
+        raise ValueError("path_outside_trusted_forge_storage")
     if os.name != "nt":
-        return str(path)
-    resolved = str(path.resolve())
+        return str(trusted)
+    resolved = str(trusted.resolve())
     if resolved.startswith("\\\\?\\"):
         return resolved
     if resolved.startswith("\\\\"):

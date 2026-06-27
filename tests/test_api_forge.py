@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 _PLUGIN_ACTOR = "test.plugins.write"
 
 
@@ -358,6 +360,9 @@ def test_forge_atomic_write_record_json_rejects_record_traversal(monkeypatch, tm
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
 
     from francis.api.routes import forge
+
+    with pytest.raises(ValueError, match="path_outside_trusted_forge_storage"):
+        forge._filesystem_path(tmp_path / "outside" / "record.json")
 
     assert forge._atomic_write_record_json("proposals", "../outside", {"ok": True}) is None
     assert not (data_root / "artifacts" / "plugins" / "outside.json").exists()

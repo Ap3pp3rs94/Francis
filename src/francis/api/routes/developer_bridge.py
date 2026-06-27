@@ -145,11 +145,13 @@ def _readback_error_payload(kind: str, error: BaseException) -> dict[str, object
         "kind": kind,
         "ok": False,
         "mode": "read_only",
-        "error": str(error),
+        "error": "readback_failed",
+        "error_type": type(error).__name__,
         "governance": {
             "executes_prompt": False,
             "grants_execution_authority": False,
             "grants_mutation_authority": False,
+            "exposes_exception_detail": False,
         },
     }
 

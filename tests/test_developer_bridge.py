@@ -46,6 +46,23 @@ def _normalize_newlines(value: str) -> str:
     return value.replace("\r\n", "\n")
 
 
+def test_developer_bridge_readback_errors_do_not_expose_exception_detail() -> None:
+    from francis.api.routes import developer_bridge
+
+    payload = developer_bridge._readback_error_payload(
+        "developer_bridge.test_failure",
+        RuntimeError("raw stack detail token=developerbridgesecret123"),
+    )
+    encoded = json.dumps(payload, sort_keys=True)
+
+    assert payload["ok"] is False
+    assert payload["error"] == "readback_failed"
+    assert payload["error_type"] == "RuntimeError"
+    assert payload["governance"]["exposes_exception_detail"] is False
+    assert "developerbridgesecret123" not in encoded
+    assert "raw stack detail" not in encoded
+
+
 def test_read_repo_file_is_repo_bounded_and_text_only(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.setenv("FRANCIS_ROOT", str(tmp_path))
     target = tmp_path / "docs" / "note.md"

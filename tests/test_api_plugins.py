@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import pytest
 import shutil
 from pathlib import Path
 
@@ -1187,6 +1188,9 @@ def test_plugins_capability_library_execution_dry_run_probe_blocks_unbounded_or_
 def test_plugins_atomic_write_json_uses_unique_temp_siblings(monkeypatch, tmp_path: Path) -> None:
     from francis.api.routes import plugins
 
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
     replace_calls: list[Path] = []
     real_replace = plugins.os.replace
 
@@ -1203,7 +1207,7 @@ def test_plugins_atomic_write_json_uses_unique_temp_siblings(monkeypatch, tmp_pa
         real_replace(src, dst)
 
     monkeypatch.setattr(plugins.os, "replace", spy_replace)
-    path = tmp_path / "plugins" / "_registry.json"
+    path = data_root / "plugins" / "_registry.json"
 
     plugins._atomic_write_json(path, {"write": 1})
     plugins._atomic_write_json(path, {"write": 2})
@@ -1216,6 +1220,11 @@ def test_plugins_atomic_write_json_uses_unique_temp_siblings(monkeypatch, tmp_pa
     assert all(item.name.startswith(".atomic-json-") for item in replace_calls)
     assert all("_registry.json" not in item.name for item in replace_calls)
     assert not any(path.parent.glob(".atomic-json-*.tmp"))
+
+    outside_path = tmp_path / "outside" / "_registry.json"
+    with pytest.raises(ValueError, match="path_outside_trusted_plugin_storage"):
+        plugins._atomic_write_json(outside_path, {"write": "outside"})
+    assert not outside_path.exists()
 
 
 def test_plugins_build_lifecycle_and_run(monkeypatch, tmp_path: Path) -> None:

@@ -403,6 +403,18 @@ def _real_path(value: str | Path) -> Path:
     return Path(os.path.realpath(os.fspath(value)))
 
 
+def _trusted_storage_path(path: Path) -> Path | None:
+    try:
+        resolved = _real_path(path)
+        allowed_roots = (
+            _real_path(data_dir()),
+            _real_path(_gen_dir()),
+        )
+    except OSError:
+        return None
+    return resolved if any(_is_under(root, resolved) for root in allowed_roots) else None
+
+
 def _resolve_under(root: Path, raw: str | Path, *, relative_to_root: bool = True) -> Path | None:
     text = _safe_str(raw).strip()
     if not text or any(ch in text for ch in ("\x00", "\n", "\r")):
@@ -12312,9 +12324,12 @@ def _default_registry() -> dict[str, Any]:
 
 
 def _filesystem_path(path: Path) -> str:
+    trusted = _trusted_storage_path(path)
+    if trusted is None:
+        raise ValueError("path_outside_trusted_plugin_storage")
     if os.name != "nt":
-        return str(path)
-    resolved = str(path.resolve())
+        return str(trusted)
+    resolved = str(trusted.resolve())
     if resolved.startswith("\\\\?\\"):
         return resolved
     if resolved.startswith("\\\\"):
