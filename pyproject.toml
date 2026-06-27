@@ -94,7 +94,7 @@ comms = [
 iot = [
   "paho-mqtt",
   "bleak",
-  "zeroconf>=0.149.12",
+  "zeroconf>=0.149.16",
   "pyserial",
 ]
 reports = [
