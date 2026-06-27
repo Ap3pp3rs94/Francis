@@ -192,7 +192,7 @@ Local checkout rule: if a repo root contains `.francis-mirror`, standard runtime
 
 Francis is proprietary and all rights are reserved by Austin Peppers. Viewing, cloning, forking, or submitting material to this repository does not grant permission to use, copy, distribute, commercialize, or create derivative works from Francis except under a separate written agreement. See [LICENSE](LICENSE).
 
-Only clean additions that Austin Peppers fully accepts and incorporates into Francis, and that materially improve Francis by creating measurable build momentum or acceleration, are eligible for ownership consideration of up to one percent (1%) of Francis project ownership. Submission, review, discussion, partial acceptance, experimental use, temporary use, or rejection does not qualify. Contributions that create advantages beyond Austin Peppers' own current implementation capacity may open a broader ownership conversation. Any ownership grant must be documented in a separate written agreement; contribution or full acceptance alone does not create ownership rights.
+Clean additions that Austin Peppers fully accepts and incorporates into Francis may be recognized as accepted contributions when they materially improve Francis by creating measurable build momentum or acceleration. Submission, review, discussion, partial acceptance, experimental use, temporary use, or rejection does not create ownership rights. Any ownership or compensation discussion must be documented in a separate written agreement before it exists.
 
 ## GitHub Engagement
 
