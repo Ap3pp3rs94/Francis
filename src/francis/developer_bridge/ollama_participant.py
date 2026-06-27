@@ -294,6 +294,9 @@ def _ollama_telemetry_context(message: str) -> dict[str, Any]:
             "collaboration_exploration_receipts",
             "collaboration_summaries",
             "collaboration_learning_receipts",
+            "francis_trust_ladder_readback",
+            "francis_capability_request_receipts",
+            "francis_capability_grant_receipts",
             "operator_visible_chat_ui_state",
         ],
         "write_receipt_surfaces": [
@@ -339,7 +342,8 @@ def _build_model_input(item: dict[str, object]) -> str:
         "against receipts or repo truth before treating them as build direction.\n"
         "Your available context is only what Francis supplies through this governed prompt path: continuity ledger excerpts, "
         "feedback-memory assistance, collaboration relay receipts, collaboration review candidates, exploration receipts, "
-        "summaries, learning receipts, and operator-visible Chat UI state when present. "
+        "summaries, learning receipts, Trust Ladder readbacks, capability request/grant receipts, "
+        "and operator-visible Chat UI state when present. "
         "Treat those as your current body/context, not as raw host access.\n"
         "Your write path here is limited to conversation-ledger and collaboration-relay receipts. "
         "Codex and Claude may advise, but they do not define Francis identity, approve actions, or outrank Francis governance.\n"
@@ -780,6 +784,9 @@ def _execution_trace(item: dict[str, object]) -> dict[str, object]:
             "collaboration_summaries",
             "collaboration_learning_receipts",
             "francis_body_map_readback",
+            "francis_trust_ladder_readback",
+            "francis_capability_request_receipts",
+            "francis_capability_grant_receipts",
             "operator_visible_chat_ui_state",
         ],
         "write_receipt_surfaces": [

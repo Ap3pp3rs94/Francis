@@ -4762,6 +4762,8 @@ def test_ollama_participant_replies_through_existing_memory_prompt_path(tmp_path
     assert "continuity ledger excerpts" in captured_prompts[0]
     assert "collaboration relay receipts, collaboration review candidates" in captured_prompts[0]
     assert "exploration receipts" in captured_prompts[0]
+    assert "Trust Ladder readbacks" in captured_prompts[0]
+    assert "capability request/grant receipts" in captured_prompts[0]
     assert (
         "Your write path here is limited to conversation-ledger and collaboration-relay receipts" in captured_prompts[0]
     )
@@ -4788,6 +4790,9 @@ def test_ollama_participant_replies_through_existing_memory_prompt_path(tmp_path
     assert result["execution_trace"]["codex_and_claude_external_guidance_sources"] is True
     assert "collaboration_review_candidates" in result["execution_trace"]["available_context_surfaces"]
     assert "collaboration_exploration_receipts" in result["execution_trace"]["available_context_surfaces"]
+    assert "francis_trust_ladder_readback" in result["execution_trace"]["available_context_surfaces"]
+    assert "francis_capability_request_receipts" in result["execution_trace"]["available_context_surfaces"]
+    assert "francis_capability_grant_receipts" in result["execution_trace"]["available_context_surfaces"]
     assert "conversation_ledger_receipts" in result["execution_trace"]["write_receipt_surfaces"]
     assert result["execution_trace"]["raw_host_access"] is False
     assert result["execution_trace"]["grants_execution_authority"] is False

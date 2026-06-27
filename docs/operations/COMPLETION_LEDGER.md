@@ -99697,6 +99697,50 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, broader ORB/body validation, and longer-run
   collaboration drift resolution remain outside this bounded slice.
 
+### 2026-06-27 03:09Z - Ollama participant sees Trust Ladder surfaces as context
+
+Current posture: Phase 2 / P3 governance and P9 collaboration observability
+already expose the Trust Ladder through API routes, MCP tools, body-map
+readback, substrate readiness, collaboration review, capability requests/grants,
+driver prompts, and the Chat UI. The missing wiring was narrower: the Ollama
+participant's governed prompt/context contract did not explicitly name the
+Trust Ladder or capability request/grant receipts as available Francis context.
+
+What changed:
+
+- `src/francis/developer_bridge/ollama_participant.py` now declares
+  `francis_trust_ladder_readback`, `francis_capability_request_receipts`, and
+  `francis_capability_grant_receipts` in the local model context contract and
+  execution trace.
+- The Ollama prompt now tells Francis1 that Trust Ladder readbacks and
+  capability request/grant receipts are available through Francis's governed
+  prompt path, while preserving no execution, mutation, approval, training, or
+  memory-write authority.
+- `tests/test_developer_bridge.py` now proves the generated Ollama prompt and
+  execution trace include those Trust Ladder/capability surfaces.
+
+Validation:
+
+- Focused Ollama participant test passed:
+  `python -m pytest tests/test_developer_bridge.py::test_ollama_participant_replies_through_existing_memory_prompt_path -q`.
+- Python lint and compile checks passed:
+  `python -m ruff check src/francis/developer_bridge/ollama_participant.py tests/test_developer_bridge.py`
+  and `python -m compileall -q src/francis/developer_bridge/ollama_participant.py`.
+- Python format check passed:
+  `python -m ruff format --check src/francis/developer_bridge/ollama_participant.py tests/test_developer_bridge.py`.
+  Ruff reported a local cache write warning for `.ruff_cache`, but the files
+  were already formatted.
+
+Remaining truthful gap:
+
+- This tells the local model the Trust Ladder/capability receipt surfaces exist;
+  it does not grant capability authority, execution, mutation, approval,
+  training, or memory-write access.
+- The operator-to-Ollama watcher must be restarted before the running local
+  model lane picks up this prompt/context contract update.
+- `.\scripts\check.ps1`, GitHub CI, broader ORB/body validation, and live
+  long-run model behavior were not part of this bounded wiring check.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
