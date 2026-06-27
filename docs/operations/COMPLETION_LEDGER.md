@@ -99774,6 +99774,67 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, broader ORB/body validation, and live
   long-run model behavior were not part of this bounded prompt-contract check.
 
+### 2026-06-27 03:44Z - Orb operator dry-run intent receipts
+
+Current posture: Phase 2 / Lens Orb embodiment and Stage 9 input-actuator
+readiness now have a bounded Orb-operator adapter that turns visible Orb intent
+into governed desktop input proposals and operator receipts. This is not live
+desktop control, not a visual redesign, and not a Stage 6/Stage 9 closure claim.
+
+What changed:
+
+- `src/francis/input_actuator/orb_operator.py` adds `OrbIntent`,
+  `DesktopInputBackend`, and `OperatorReceipt` contracts for `move_to`,
+  `hover_target`, `click`, `type_text`, `key_press`, `focus_window`,
+  `inspect_area`, and unsupported `mouse_drag` readback.
+- Dry-run Orb actions create governed input-actuator proposals and Orb operator
+  receipts without moving the mouse, typing, capturing pixels, or bypassing
+  approval.
+- Guarded-live mode now requires a supplied approved input proposal and checks
+  that the proposal's stored public action matches the Orb intent before
+  delegating to the existing input actuator execution gate.
+- `src/francis/world_state/orb.py` now exposes latest Orb operator feedback
+  state through read-only Orb status as `operator_input`.
+- `scripts/orb-operator-dry-run.ps1` runs a manual move + click + type dry-run
+  sequence and prints the emitted receipt paths.
+
+Validation:
+
+- Focused tests passed:
+  `python -m pytest tests/unit/test_orb_operator.py tests/unit/test_input_actuator.py tests/unit/test_handoff.py tests/unit/test_takeover_session.py`
+  (`30 passed`).
+- Python lint, formatting, compile, and type checks passed:
+  `python -m ruff check src/francis/input_actuator/orb_operator.py src/francis/input_actuator/__init__.py src/francis/world_state/orb.py tests/unit/test_orb_operator.py`,
+  `python -m ruff format --check src/francis/input_actuator/orb_operator.py src/francis/input_actuator/__init__.py src/francis/world_state/orb.py tests/unit/test_orb_operator.py`,
+  `python -m py_compile src/francis/input_actuator/orb_operator.py src/francis/input_actuator/__init__.py src/francis/world_state/orb.py`,
+  and `python -m mypy src/francis/input_actuator src/francis/world_state/orb.py`.
+- Manual dry-run script passed:
+  `.\scripts\orb-operator-dry-run.ps1 -X 320 -Y 240 -Text "Francis Orb dry-run"`.
+
+Receipt evidence:
+
+- Move receipt:
+  `.francis/orb_operator/receipts/orb_operator_81d3aed39c4e.json`.
+- Click receipt:
+  `.francis/orb_operator/receipts/orb_operator_3429a8179552.json`.
+- Type receipt:
+  `.francis/orb_operator/receipts/orb_operator_08ba4962b8fd.json`.
+  The type receipt stores `text_length` and `text_sha256`, not raw typed text,
+  and records `raw_input: false`, `live_input_performed: false`, and
+  `input_execution_attempted: false`.
+
+Remaining truthful gap:
+
+- This proves Orb intent-to-proposal/receipt wiring and feedback readback only.
+  It does not move the Orb overlay, move the physical cursor, type into a live
+  app, grant screenshot/OCR/pixel access, or prove a live takeover/control
+  transfer session.
+- Live execution still depends on the existing input actuator, approval phrase,
+  takeover handoff evidence, real-input env gate, active Takeover/Pilot session,
+  and Stage 8/Stage 9 gates.
+- `.\scripts\check.ps1`, GitHub CI, and live overlay/HUD rendering proof were
+  not part of this bounded slice.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -495,7 +495,33 @@ def _orb_live_state(operator_report: dict[str, Any]) -> dict[str, Any]:
         "handback_state": handback_state,
         "semantic_state": semantic_operator_state["state"],
         "semantic_operator_state": semantic_operator_state,
+        "operator_input": _orb_operator_input_state(),
         "render_state": _render_state(incident_pressure, activity_intensity, handback_state),
+    }
+
+
+def _orb_operator_input_state() -> dict[str, Any]:
+    try:
+        from francis.input_actuator.orb_operator import latest_orb_operator_state
+
+        state = latest_orb_operator_state()
+        if isinstance(state, dict):
+            return state
+    except Exception as exc:
+        return {
+            "state": "failed",
+            "feedback_state": "failed",
+            "source": "francis.orb_operator.v0",
+            "read_only": True,
+            "grants_execution_authority": False,
+            "error": type(exc).__name__,
+        }
+    return {
+        "state": "idle",
+        "feedback_state": "idle",
+        "source": "francis.orb_operator.v0",
+        "read_only": True,
+        "grants_execution_authority": False,
     }
 
 
