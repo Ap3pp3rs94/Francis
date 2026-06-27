@@ -370,16 +370,27 @@ try {
     $Report | Set-Content -LiteralPath $ReportPath -Encoding utf8
 
     $PlaneCards = New-Object System.Collections.Generic.List[string]
+    $PlaneProvenCount = 0
+    $PlaneActiveCount = 0
+    $PlaneEarlyCount = 0
     foreach ($Plane in @($CompletionSummary.plane_readiness_snapshot)) {
         $StatusText = [string]$Plane.status
-        $StatusClass = "status-partial"
+        $StatusClass = "status-active"
+        $CategoryLabel = "Active build"
         if ($StatusText -match "materially real|strongest") {
             $StatusClass = "status-ready"
+            $CategoryLabel = "Proven strength"
+            $PlaneProvenCount += 1
         }
         elseif ($StatusText -match "early|roadmap") {
             $StatusClass = "status-early"
+            $CategoryLabel = if ($StatusText -match "roadmap") { "Roadmap" } else { "Early capability" }
+            $PlaneEarlyCount += 1
         }
-        $PlaneCards.Add("<li><span>$(ConvertTo-HtmlText $Plane.plane)</span><strong class=""$StatusClass"">$(ConvertTo-HtmlText $StatusText)</strong></li>")
+        else {
+            $PlaneActiveCount += 1
+        }
+        $PlaneCards.Add("<li><span>$(ConvertTo-HtmlText $Plane.plane)</span><strong class=""$StatusClass"">$(ConvertTo-HtmlText $CategoryLabel)</strong><small>ledger: $(ConvertTo-HtmlText $StatusText)</small></li>")
     }
     if ($PlaneCards.Count -eq 0) {
         $PlaneCards.Add("<li><span>Unavailable</span><strong class=""status-blocked"">no readback</strong></li>")
@@ -405,6 +416,7 @@ try {
     $CompletionOkText = if ($CompletionSummary.ok) { "TRUE" } else { "FALSE" }
     $GuardrailClass = if ($Summary.ok) { "good" } else { "bad" }
     $PlaneCardsHtml = [string]::Join("`n", [string[]]$PlaneCards.ToArray())
+    $PlaneStory = "Phase 2 is expected to show many active-build planes. The visual groups raw ledger statuses into presentation categories while preserving the ledger wording on each plane."
     $ReceiptCardsHtml = [string]::Join("`n", [string[]]$ReceiptCards.ToArray())
     $LatestGap = ConvertTo-HtmlText $CompletionSummary.latest_remaining_gap
 
@@ -647,10 +659,22 @@ try {
       font-size: 13px;
     }
 
+    .planes li {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+    }
+
     .status-ready { color: var(--green); }
-    .status-partial { color: var(--amber); }
+    .status-active { color: var(--amber); }
     .status-early { color: var(--blue); }
     .status-blocked { color: var(--red); }
+
+    .planes small {
+      grid-column: 1 / -1;
+      color: var(--muted);
+      font-size: 12px;
+    }
 
     .receipts li {
       display: grid;
@@ -747,6 +771,10 @@ try {
     <section>
       <div class="panel">
         <h2>ORB Plane Readiness</h2>
+        <p>__PLANE_STORY__</p>
+        <div class="metric"><span>Proven strength</span><strong class="good">__PLANE_PROVEN_COUNT__</strong></div>
+        <div class="metric"><span>Active build</span><strong class="warn">__PLANE_ACTIVE_COUNT__</strong></div>
+        <div class="metric"><span>Early or roadmap</span><strong class="blue">__PLANE_EARLY_COUNT__</strong></div>
         <ul class="planes">
           __PLANE_CARDS__
         </ul>
@@ -816,6 +844,10 @@ try {
     $VisualHtml = $VisualHtml.Replace("__LIVE_INPUT__", (ConvertTo-HtmlText $LiveInputText))
     $VisualHtml = $VisualHtml.Replace("__RAW_INPUT__", (ConvertTo-HtmlText $RawInputText))
     $VisualHtml = $VisualHtml.Replace("__EXECUTION_ATTEMPT__", (ConvertTo-HtmlText $ExecutionAttemptText))
+    $VisualHtml = $VisualHtml.Replace("__PLANE_STORY__", (ConvertTo-HtmlText $PlaneStory))
+    $VisualHtml = $VisualHtml.Replace("__PLANE_PROVEN_COUNT__", (ConvertTo-HtmlText $PlaneProvenCount))
+    $VisualHtml = $VisualHtml.Replace("__PLANE_ACTIVE_COUNT__", (ConvertTo-HtmlText $PlaneActiveCount))
+    $VisualHtml = $VisualHtml.Replace("__PLANE_EARLY_COUNT__", (ConvertTo-HtmlText $PlaneEarlyCount))
     $VisualHtml = $VisualHtml.Replace("__PLANE_CARDS__", $PlaneCardsHtml)
     $VisualHtml = $VisualHtml.Replace("__RECEIPT_CARDS__", $ReceiptCardsHtml)
     $VisualHtml = $VisualHtml.Replace("__LATEST_GAP__", $LatestGap)

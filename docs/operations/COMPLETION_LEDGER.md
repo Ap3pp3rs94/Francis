@@ -99918,6 +99918,9 @@ What changed:
   and recovery commands.
 - `README.md` now links the presentation demo from the public project overview
   and repository navigation.
+- The visual report now groups raw plane statuses into presentation categories:
+  proven strength, active build, and early/roadmap, while preserving the raw
+  ledger wording on each plane.
 
 Validation:
 
@@ -99943,6 +99946,11 @@ Validation:
   was written with no unreplaced template placeholders, then opened locally for
   visual inspection. The run still reported `live_input_performed=false`,
   `raw_input=false`, and `input_execution_attempted=false`.
+- Plane-readiness visual grouping generated successfully in
+  `.francis/presentation/demos/francis-presentation-demo-20260627-222519.html`
+  with no unreplaced template placeholders; the generated HTML showed 2 proven
+  strength planes, 6 active-build planes, and 3 early/roadmap planes while
+  preserving raw ledger wording through `ledger:` labels.
 
 Receipt evidence:
 
