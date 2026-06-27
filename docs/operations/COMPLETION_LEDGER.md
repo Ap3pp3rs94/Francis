@@ -99741,6 +99741,39 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, broader ORB/body validation, and live
   long-run model behavior were not part of this bounded wiring check.
 
+### 2026-06-27 03:11Z - Ollama treats Trust Ladder context as background
+
+Current posture: Phase 2 / P3 governance and P9 collaboration observability now
+tell the local model lane to hold Trust Ladder and capability receipt context as
+background operating context instead of reciting the surface list every turn.
+
+What changed:
+
+- `src/francis/developer_bridge/ollama_participant.py` now instructs Francis1
+  not to recite the surface list, Trust Ladder, capability receipts, or
+  governance boilerplate unless the source asks about them or an
+  authority/capability boundary needs correction.
+- `tests/test_developer_bridge.py` now proves that background-context instruction
+  is present in the generated Ollama prompt.
+
+Validation:
+
+- Focused Ollama participant test passed:
+  `python -m pytest tests/test_developer_bridge.py::test_ollama_participant_replies_through_existing_memory_prompt_path -q`.
+- Python lint, formatting, and compile checks passed:
+  `python -m ruff check src/francis/developer_bridge/ollama_participant.py tests/test_developer_bridge.py`,
+  `python -m ruff format --check src/francis/developer_bridge/ollama_participant.py tests/test_developer_bridge.py`,
+  and `python -m compileall -q src/francis/developer_bridge/ollama_participant.py`.
+
+Remaining truthful gap:
+
+- This is prompt-contract steering, not fine-tuning or proof that every future
+  local-model answer will be concise.
+- The operator-to-Ollama watcher must be restarted before the running local
+  model lane picks up this prompt/context contract update.
+- `.\scripts\check.ps1`, GitHub CI, broader ORB/body validation, and live
+  long-run model behavior were not part of this bounded prompt-contract check.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

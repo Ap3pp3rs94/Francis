@@ -4764,6 +4764,9 @@ def test_ollama_participant_replies_through_existing_memory_prompt_path(tmp_path
     assert "exploration receipts" in captured_prompts[0]
     assert "Trust Ladder readbacks" in captured_prompts[0]
     assert "capability request/grant receipts" in captured_prompts[0]
+    assert "Treat those as background body/context" in captured_prompts[0]
+    assert "do not recite the surface list" in captured_prompts[0]
+    assert "unless the source asks about them" in captured_prompts[0]
     assert (
         "Your write path here is limited to conversation-ledger and collaboration-relay receipts" in captured_prompts[0]
     )
