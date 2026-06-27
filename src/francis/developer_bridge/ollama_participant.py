@@ -6,7 +6,7 @@ import os
 import time
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 from francis.api.errors import api_error_code, log_api_exception
@@ -266,6 +266,61 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _francis_grounding_prompt_lines(turn_hint: int = 0) -> list[str]:
+    """Compact self-understanding lines for the local-model prompt.
+
+    Points the model's grounding at the consolidated Francis self-model so each
+    reply flows from one coherent understanding of who Francis is, its posture,
+    and its current need -- not three disconnected readback lines. Read-only and
+    defensive: any readback failure yields no line, never an error.
+    """
+
+    try:
+        from francis.developer_bridge.francis_self_model import read_francis_self_model
+    except Exception:
+        return []
+
+    try:
+        model = read_francis_self_model()
+    except Exception:
+        return []
+    if not isinstance(model, dict):
+        return []
+
+    raw_identity = model.get("identity")
+    raw_posture = model.get("posture")
+    raw_needs = model.get("needs")
+    identity = cast(dict[str, object], raw_identity if isinstance(raw_identity, dict) else {})
+    posture = cast(dict[str, object], raw_posture if isinstance(raw_posture, dict) else {})
+    needs = cast(dict[str, object], raw_needs if isinstance(raw_needs, dict) else {})
+
+    lines: list[str] = []
+
+    seated = str(identity.get("seated_lane") or "francis1_local")
+    lines.append(f"Self: I am Francis1 in the {seated} seat; Codex/Claude are my tools on one shared substrate.")
+
+    posture_bits: list[str] = [f"phase {posture.get('phase') or 'unknown'}"]
+    wired = posture.get("connected_to_local_model_count")
+    surfaces = posture.get("surface_count")
+    if wired is not None and surfaces is not None:
+        posture_bits.append(f"{wired}/{surfaces} surfaces wired")
+    open_gaps = posture.get("open_orb_gap_count")
+    if open_gaps is not None:
+        posture_bits.append(f"{open_gaps} open gaps")
+    lines.append("Posture: " + "; ".join(posture_bits) + ".")
+
+    gaps = needs.get("open_orb_gaps")
+    if isinstance(gaps, list) and gaps:
+        focus = gaps[max(int(turn_hint), 0) % len(gaps)]
+        if isinstance(focus, dict):
+            plane = str(focus.get("plane_id") or "ORB plane")
+            need = str(focus.get("need") or "open coverage gap")[:130]
+            artifact = str(focus.get("review_artifact") or "review artifact")[:90]
+            lines.append(f"Current need: {plane} -- {need}; artifact: {artifact}; capability needs an operator grant.")
+
+    return lines
+
+
 def _ollama_telemetry_context(message: str) -> dict[str, Any]:
     context: dict[str, Any] = telemetry_context_snapshot(surface="developer_bridge.ollama")
     try:
@@ -313,14 +368,14 @@ def _ollama_telemetry_context(message: str) -> dict[str, Any]:
         "grants_approval_authority": False,
         "grants_memory_write_authority": False,
     }
+    grounding_lines = _francis_grounding_prompt_lines()
     lines = context.get("prompt_lines")
     if isinstance(lines, list):
-        prompt_lines = [*CONTEXT_CONTRACT_PROMPT_LINES, *lines]
-        context["prompt_lines"] = prompt_lines
-        context["max_prompt_lines"] = max(int(context.get("max_prompt_lines") or 0), len(prompt_lines))
+        prompt_lines = [*CONTEXT_CONTRACT_PROMPT_LINES, *grounding_lines, *lines]
     else:
-        context["prompt_lines"] = list(CONTEXT_CONTRACT_PROMPT_LINES)
-        context["max_prompt_lines"] = len(CONTEXT_CONTRACT_PROMPT_LINES)
+        prompt_lines = [*CONTEXT_CONTRACT_PROMPT_LINES, *grounding_lines]
+    context["prompt_lines"] = prompt_lines
+    context["max_prompt_lines"] = max(int(context.get("max_prompt_lines") or 0), len(prompt_lines))
     return context
 
 

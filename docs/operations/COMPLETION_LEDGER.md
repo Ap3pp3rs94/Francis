@@ -99835,6 +99835,68 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, and live overlay/HUD rendering proof were
   not part of this bounded slice.
 
+### 2026-06-27 04:35Z - Francis1 self-model, intelligence seat, usage, and draft dispatch
+
+Current posture: Phase 2 / P3 governance and P9 collaboration observability now
+give Francis1 a coherent read-only self-understanding surface and a governed
+tool-orchestration contract. Francis1 can read that it holds the local
+operator-intelligence seat, that Codex and Claude are permanent tool lanes, that
+tool usage should be spent judiciously, and that dispatch to both tools can only
+be prepared for operator review. This is not autonomous send authority,
+operator impersonation, model fine-tuning, or a capability grant.
+
+What changed:
+
+- `src/francis/developer_bridge/intelligence_seat.py` records the shared-seat
+  model: Francis1 holds the default local seat, Codex is the implementation
+  toolbelt, Claude is the guidance tool, and all lanes share the governed
+  substrate.
+- `src/francis/developer_bridge/francis_self_model.py` composes the body map,
+  intelligence seat, and capability grants into a single read-only self-model
+  with identity, posture, needs, and roadmap.
+- `src/francis/developer_bridge/intelligence_usage.py` adds read-only usage
+  guidance so Francis1 prefers local-first work and spends Codex/Claude tool
+  calls only when a need exceeds current local capability.
+- `src/francis/developer_bridge/tool_dispatch.py` adds a draft-only dispatch
+  contract. It can prepare unsent relay envelopes for Codex and Claude, but it
+  does not call `submit_collaboration_prompt`, send messages, execute work,
+  approve work, or grant any authority.
+- `src/francis/developer_bridge/ollama_participant.py` now injects compact
+  self-model grounding lines into the local model prompt: `Self`, `Posture`,
+  and `Current need`.
+- `src/francis/developer_bridge/mcp_server.py` exposes
+  `intelligence_seat_tool`, `francis_self_model_tool`,
+  `intelligence_usage_tool`, `tool_dispatch_tool`, and
+  `prepare_tool_dispatch_tool`.
+- `docs/architecture/FRANCIS1_INTELLIGENCE_ORCHESTRATION_ROADMAP.md` records
+  the durable model: Francis1 is the local embodied operator-intelligence that
+  uses Codex/Claude as tools under one governed substrate.
+
+Validation:
+
+- Focused tests passed:
+  `python -m pytest tests/test_ollama_participant_grounding.py tests/test_intelligence_seat.py tests/test_francis_self_model.py tests/test_intelligence_usage.py tests/test_tool_dispatch.py tests/test_developer_bridge.py::test_developer_bridge_mcp_registers_collaboration_relay_tools -q --disable-warnings`
+  (`22 passed`).
+- Python lint, formatting, compile, and type checks passed:
+  `python -m ruff check src/francis/developer_bridge/ollama_participant.py src/francis/developer_bridge/mcp_server.py src/francis/developer_bridge/francis_self_model.py src/francis/developer_bridge/intelligence_seat.py src/francis/developer_bridge/intelligence_usage.py src/francis/developer_bridge/tool_dispatch.py tests/test_ollama_participant_grounding.py tests/test_intelligence_seat.py tests/test_francis_self_model.py tests/test_intelligence_usage.py tests/test_tool_dispatch.py`,
+  `python -m ruff format --check src/francis/developer_bridge/ollama_participant.py src/francis/developer_bridge/mcp_server.py src/francis/developer_bridge/francis_self_model.py src/francis/developer_bridge/intelligence_seat.py src/francis/developer_bridge/intelligence_usage.py src/francis/developer_bridge/tool_dispatch.py tests/test_ollama_participant_grounding.py tests/test_intelligence_seat.py tests/test_francis_self_model.py tests/test_intelligence_usage.py tests/test_tool_dispatch.py`,
+  `python -m py_compile src/francis/developer_bridge/ollama_participant.py src/francis/developer_bridge/mcp_server.py src/francis/developer_bridge/francis_self_model.py src/francis/developer_bridge/intelligence_seat.py src/francis/developer_bridge/intelligence_usage.py src/francis/developer_bridge/tool_dispatch.py`,
+  and `python -m mypy src/francis/developer_bridge/ollama_participant.py src/francis/developer_bridge/francis_self_model.py src/francis/developer_bridge/intelligence_seat.py src/francis/developer_bridge/intelligence_usage.py src/francis/developer_bridge/tool_dispatch.py`.
+- MCP readback confirmed the developer bridge now exposes 22 tools, including
+  `intelligence_seat_tool`, `francis_self_model_tool`,
+  `intelligence_usage_tool`, `tool_dispatch_tool`, and
+  `prepare_tool_dispatch_tool`.
+
+Remaining truthful gap:
+
+- `prepare_tool_dispatch_tool` prepares envelopes only. It does not send relay
+  prompts, impersonate the operator in Claude Code or Codex, or create
+  execution-level authority.
+- Live dev-bridge/backend processes must be restarted before running MCP
+  clients see the new tools.
+- `.\scripts\check.ps1`, GitHub CI, UI screenshots, and live long-run
+  Francis1 behavior were not part of this bounded validation.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -6,6 +6,9 @@ from typing import Any
 from .agents import collaboration_agents_status
 from .body_map import read_francis_body_map
 from .capability_grants import read_francis_capability_grants
+from .francis_self_model import read_francis_self_model
+from .intelligence_seat import read_intelligence_seat
+from .intelligence_usage import read_intelligence_usage
 from .capability_requests import read_francis_capability_requests
 from .collaboration import (
     list_collaboration_prompts,
@@ -23,6 +26,7 @@ from .repo_tools import (
     search_repo,
 )
 from .substrate_readiness import read_collaboration_substrate_readiness
+from .tool_dispatch import prepare_tool_dispatch, read_tool_dispatch
 from .trust_ladder import read_francis_trust_ladder
 
 FastMCP: Any
@@ -45,6 +49,7 @@ Francis body-map rows expose whole-body awareness, not whole-body authority.
 Francis trust-ladder rows classify needs as wire_existing, build_missing, tune_prompt_guard, or reject_as_drift; they do not grant capability use.
 Francis capability-request rows turn trust-ladder needs into operator-visible access requests, still without granting authority.
 Francis capability-grant rows expose explicit grant/deny/revoke state; this MCP bridge can read them but cannot create them.
+Francis tool-dispatch rows are draft-only envelopes for operator review; preparing dispatch does not send prompts, execute work, or impersonate the operator.
 Collaboration substrate readiness distinguishes relay wiring from permission to prompt main Francis build work.
 Collaboration exploration rows let Francis1 surface evidence needs and next probes while Codex remains the guide and repo-truth validator.
 When you submit or read collaboration relay entries, echo the returned chat_handoff.chat_text in your chat response so the operator can see what agents said to each other.
@@ -187,6 +192,36 @@ def create_mcp_server() -> Any:
     def collaboration_agents_status_tool() -> dict[str, object]:
         """Read enabled/disabled state for Codex, Claude, and local Ollama collaboration participants."""
         return collaboration_agents_status()
+
+    @mcp.tool()
+    def intelligence_seat_tool() -> dict[str, object]:
+        """Read the governed operator-intelligence seat: Francis1 holds the seat and uses Codex/Claude as tools; read-only, grants no authority."""
+        return read_intelligence_seat()
+
+    @mcp.tool()
+    def francis_self_model_tool() -> dict[str, object]:
+        """Read Francis's coherent self-model (identity, posture, needs, roadmap) so it can understand itself before building; read-only, grants no authority."""
+        return read_francis_self_model()
+
+    @mcp.tool()
+    def intelligence_usage_tool() -> dict[str, object]:
+        """Read the governed usage posture for the intelligence tool lanes (Codex/Claude): spend judiciously, prefer local-first; read-only, advisory, grants no authority."""
+        return read_intelligence_usage()
+
+    @mcp.tool()
+    def tool_dispatch_tool() -> dict[str, object]:
+        """Read the governed Francis1-to-tool dispatch contract; read-only and grants no send authority."""
+        return read_tool_dispatch()
+
+    @mcp.tool()
+    def prepare_tool_dispatch_tool(
+        task: str,
+        objective: str = "",
+        target_agents: str = "codex,claude",
+    ) -> dict[str, object]:
+        """Prepare unsent Codex/Claude relay envelopes for operator review; performs no send."""
+        targets = tuple(target.strip().lower() for target in target_agents.split(",") if target.strip())
+        return prepare_tool_dispatch(task, targets=targets, objective=objective)
 
     @mcp.tool()
     def francis_body_map_tool() -> dict[str, object]:
