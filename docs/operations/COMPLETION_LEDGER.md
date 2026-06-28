@@ -99979,6 +99979,73 @@ Remaining truthful gap:
 - `.\scripts\check.ps1`, GitHub CI, live browser/UI proof, and live desktop
   input proof were not part of this bounded presentation slice.
 
+### 2026-06-28 00:52Z - Orb guarded-live mouse move proof
+
+Current posture: Phase 2 / Orb embodied desktop operation now has a bounded
+guarded-live mouse-move proof through the existing Orb operator and Stage 9
+input-actuator path. This is a real physical cursor movement proof for
+`mouse.move` only; it is not a live click proof, live typing proof, visual
+overlay assertion, screenshot/pixel proof, Stage 6 closure, Stage 9 closure, or
+autonomy grant.
+
+What changed:
+
+- A live test started an approved pilot Takeover session using the existing
+  Stage 8 closure receipt `exec_stage8_closure_7c5bcc182cce`.
+- The test generated dry-run Orb move intents, bound each input proposal to the
+  Takeover session start receipt through `francis.handoff.v0`, enabled the
+  scoped `FRANCIS_INPUT_ACTUATOR_ENABLE_REAL=1` gate inside the test process,
+  and executed two guarded-live Orb `move_to` intents.
+- The physical cursor moved from approximately `(1175, 670)` to `(1199, 670)`
+  and then returned to approximately `(1175, 670)`.
+- The test ended the Takeover session with a handback receipt. Post-test
+  readback showed `control_transfer_active=false`, `handback_required=false`,
+  and the input actuator back at ready/read-only status with real input disabled
+  outside the scoped test process.
+
+Validation:
+
+- Preflight `python -m francis.mcp_gateway.smoke` passed with `ok=True`,
+  `tool_count=23`, screen/takeover/input ready, and unapproved takeover/input
+  refused.
+- Completion-model status readback passed with `current_phase=Phase 2` and
+  Stage 17 still open.
+- Live test result reported `ok=true`, `performed_count=2`,
+  `live_input_performed=true`, and both guarded-live Orb receipts reported
+  `status=complete`, `mode=guarded_live`, `input_execution_attempted=true`,
+  `performed=true`, `dry_run=false`, and backend `win32.user32`.
+- Post-test readback confirmed Takeover returned to ready/read-only state and
+  the repo worktree was clean before this ledger entry was written.
+
+Receipt evidence:
+
+- Takeover session start:
+  `.francis/takeover_session/receipts/takeover_session_start_d909210a264c.json`.
+- Stage 9 control transfer:
+  `takeover_transfer_e93820dc6bfc`.
+- Handoff bindings:
+  `data/handoff/receipts/handoff-allow-60d2bf905864b6d3.json` and
+  `data/handoff/receipts/handoff-allow-df573546c9b5acab.json`.
+- Guarded-live Orb receipts:
+  `.francis/orb_operator/receipts/orb_operator_6949668763f7.json` and
+  `.francis/orb_operator/receipts/orb_operator_18bfa42ee16c.json`.
+- Physical input receipts:
+  `.francis/input_actuator/receipts/input_execute-approved_100278732672.json`
+  and
+  `.francis/input_actuator/receipts/input_execute-approved_e7b3070eeb97.json`.
+- Takeover handback:
+  `.francis/takeover_session/receipts/takeover_session_end_dad69834f061.json`
+  and Stage 9 handback `takeover_handback_358322660b06`.
+
+Remaining truthful gap:
+
+- This proof did not click, type, drag, focus windows, inspect live pixels,
+  assert Orb overlay movement, validate a visible UI target, capture
+  screenshots, run the full test suite, or close any roadmap stage.
+- The next safest live task is a bounded visible local test target that can
+  receive a governed click and short typed text without touching unrelated
+  desktop state.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
