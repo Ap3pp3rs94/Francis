@@ -789,7 +789,7 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "function Start-OrbFrameSyncedMotion" in script
     assert "function Stop-OrbFrameSyncedMotion" in script
     assert "[switch]$EnableAutonomousMotion" in script
-    assert "[int]$McpBodyStateTimeoutSeconds = 8" in script
+    assert "[int]$McpBodyStateTimeoutSeconds = 1" in script
     assert "function Invoke-OverlayVoiceSpeech" in script
     assert "function Invoke-OverlayElevenLabsVoiceSpeech" in script
     assert "function Invoke-OverlayAudioFilePlayback" in script
@@ -1170,7 +1170,15 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "BackgroundImage" not in script
     assert "headless_browser_alpha_screenshot" not in script
     assert "playwright screenshot" not in script
-    assert "$RefreshTimer.Interval = [TimeSpan]::FromSeconds(5)" in script
+    assert "[int]$McpBodyStateTimeoutSeconds = 1" in script
+    assert "[int]$McpRefreshIntervalSeconds = 0" in script
+    assert "refresh_deferred_for_animation" in script
+    assert "Publish-DeferredOverlayMcpBodyState -Label $script:LensOverlayLabel" in script
+    assert "if ($McpRefreshIntervalSeconds -gt 0) {" in script
+    assert "$RefreshTimer.Interval = [TimeSpan]::FromSeconds($McpRefreshIntervalSeconds)" in script
+    assert "LensOverlayLastOrbVirtualPointerWriteTicks" in script
+    assert "$PointerItem.LastWriteTimeUtc.Ticks" in script
+    assert "'-McpRefreshIntervalSeconds'" in script
     assert "mcp_body_state = $McpBodyState" in script
     assert "orb_semantic_state" in script
     assert "semantic_state" in script

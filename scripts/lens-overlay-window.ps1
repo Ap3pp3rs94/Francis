@@ -71,8 +71,11 @@ param(
   [ValidateRange(1, 30)]
   [int]$StartupTimeoutSeconds = 15,
 
-  [ValidateRange(2, 30)]
-  [int]$McpBodyStateTimeoutSeconds = 8,
+  [ValidateRange(1, 30)]
+  [int]$McpBodyStateTimeoutSeconds = 1,
+
+  [ValidateRange(0, 3600)]
+  [int]$McpRefreshIntervalSeconds = 0,
 
   [ValidateRange(0, 3600)]
   [int]$RunSeconds = 0
@@ -1192,6 +1195,41 @@ function Update-OverlayMcpBodyStateLabel {
     $script:LensOverlayEnergyRoot.Opacity = if (Get-OrbEnergyReady -BodyState $BodyState) { 1.0 } else { 0.72 }
   }
   Write-OverlayState -Root $Root -Status 'overlay_running' -OverlayWindowVisible $true -AlwaysOnTop $true -Message 'Francis Lens overlay window is running with MCP body-state readback.' -McpBodyState $BodyState -OrbVisual $script:LensOverlayOrbVisual -OverlayVoice $script:LensOverlayRuntimeVoice
+}
+
+function New-DeferredMcpBodyStateForOverlay {
+  param([object]$Config)
+
+  $BodyState = New-McpBodyStateProjection -McpStatusRoute $Config.mcp_status_route -OrbMcpStatusRoute $Config.orb_mcp_status_route
+  Set-McpBodyStateValue -Projection $BodyState -Name 'live_status' -Value 'refresh_deferred_for_animation'
+  Set-McpBodyStateValue -Projection $BodyState -Name 'body_status' -Value 'deferred'
+  Set-McpBodyStateValue -Projection $BodyState -Name 'embodied_posture' -Value 'unknown'
+  Set-McpBodyStateValue -Projection $BodyState -Name 'semantic_state' -Value 'unknown'
+  Set-McpBodyStateValue -Projection $BodyState -Name 'semantic_source' -Value 'refresh_deferred'
+  Set-McpBodyStateValue -Projection $BodyState -Name 'tool_count' -Value 0
+  Set-McpBodyStateValue -Projection $BodyState -Name 'expected_tool_count' -Value 0
+  Set-McpBodyStateValue -Projection $BodyState -Name 'missing_tools_count' -Value 0
+  Set-McpBodyStateValue -Projection $BodyState -Name 'blockers_count' -Value 0
+  Set-McpBodyStateValue -Projection $BodyState -Name 'resident' -Value $false
+  Set-McpBodyStateValue -Projection $BodyState -Name 'input_status' -Value 'unknown'
+  Set-McpBodyStateValue -Projection $BodyState -Name 'takeover_status' -Value 'unknown'
+  Set-McpBodyStateValue -Projection $BodyState -Name 'message' -Value 'Overlay runtime is visible; live MCP body-state refresh is deferred so Orb animation stays smooth.'
+  return $BodyState
+}
+
+function Publish-DeferredOverlayMcpBodyState {
+  param(
+    [object]$Label,
+    [object]$Config,
+    [string]$Root
+  )
+
+  $BodyState = New-DeferredMcpBodyStateForOverlay -Config $Config
+  Set-OverlayLabelText -Label $Label -Text (Format-McpBodyStateLabel -BodyState $BodyState)
+  if ($null -ne $script:LensOverlayEnergyRoot) {
+    $script:LensOverlayEnergyRoot.Opacity = 0.72
+  }
+  Write-OverlayState -Root $Root -Status 'overlay_running' -OverlayWindowVisible $true -AlwaysOnTop $true -Message 'Francis Lens overlay window is running; live MCP body-state refresh is deferred for Orb animation smoothness.' -McpBodyState $BodyState -OrbVisual $script:LensOverlayOrbVisual -OverlayVoice $script:LensOverlayRuntimeVoice
 }
 
 function Update-OverlayMcpBodyStateLabelSafely {
@@ -3401,19 +3439,36 @@ function Invoke-OverlayOrbVirtualPointerState {
   }
 
   $PointerPath = Get-OverlayOrbVirtualPointerStatePath
+  if (-not (Test-Path -LiteralPath $PointerPath -PathType Leaf)) {
+    return $null
+  }
+  try {
+    $PointerItem = Get-Item -LiteralPath $PointerPath -ErrorAction Stop
+    $PointerWriteTicks = [Int64]$PointerItem.LastWriteTimeUtc.Ticks
+    $LastPointerWriteTicksVariable = Get-Variable -Name LensOverlayLastOrbVirtualPointerWriteTicks -Scope Script -ErrorAction SilentlyContinue
+    $LastPointerWriteTicks = if ($null -ne $LastPointerWriteTicksVariable) { [Int64]$LastPointerWriteTicksVariable.Value } else { [Int64]0 }
+    if ($PointerWriteTicks -eq $LastPointerWriteTicks) {
+      return $null
+    }
+  } catch {
+    return $null
+  }
   $Pointer = Read-JsonFile -Path $PointerPath
   if ($null -eq $Pointer) {
+    $script:LensOverlayLastOrbVirtualPointerWriteTicks = $PointerWriteTicks
     return $null
   }
 
   $PointerMode = Get-StringProperty -Payload $Pointer -Name 'mode' -Default ''
   $PointerUpdatedAt = Get-StringProperty -Payload $Pointer -Name 'updated_at' -Default ''
   if ($PointerMode -ne 'orb_pointer' -or [string]::IsNullOrWhiteSpace($PointerUpdatedAt)) {
+    $script:LensOverlayLastOrbVirtualPointerWriteTicks = $PointerWriteTicks
     return $null
   }
   $LastPointerVariable = Get-Variable -Name LensOverlayLastOrbVirtualPointerUpdatedAt -Scope Script -ErrorAction SilentlyContinue
   $LastPointerUpdatedAt = if ($null -ne $LastPointerVariable) { [string]$LastPointerVariable.Value } else { '' }
   if ($PointerUpdatedAt -eq $LastPointerUpdatedAt) {
+    $script:LensOverlayLastOrbVirtualPointerWriteTicks = $PointerWriteTicks
     return $null
   }
 
@@ -3451,6 +3506,7 @@ function Invoke-OverlayOrbVirtualPointerState {
   $RequestId = 'orb-virtual-pointer-{0}' -f (Get-OverlayTextDigest -Text $PointerUpdatedAt).Substring(0, 12)
   Write-OverlayOrbVirtualPointerReceipt -Root $Root -RequestId $RequestId -Pointer $Pointer -Result $Payload
   $script:LensOverlayLastOrbVirtualPointerUpdatedAt = $PointerUpdatedAt
+  $script:LensOverlayLastOrbVirtualPointerWriteTicks = $PointerWriteTicks
   return $Payload
 }
 
@@ -5063,6 +5119,7 @@ if ($Mode -eq 'Run') {
   $script:LensOverlayRenderFrameClock = $null
   $script:LensOverlayLastPositionReceiptSeconds = -1.0
   $script:LensOverlayLastOrbVirtualPointerUpdatedAt = ''
+  $script:LensOverlayLastOrbVirtualPointerWriteTicks = [Int64]0
   try {
     if (-not $RunningOnWindows) {
       Write-OverlayState -Root $DataRoot -Status 'unsupported' -OverlayWindowVisible $false -AlwaysOnTop $false -Message 'Windows overlay requires a Windows user session.'
@@ -5172,14 +5229,16 @@ if ($Mode -eq 'Run') {
           $script:LensOverlayRuntimeVoice.microphone_gate_while_speaking = 'francis_stop_only'
           $script:LensOverlayRuntimeVoice.conversation_forwarding_while_speaking = $false
         }
-        Update-OverlayMcpBodyStateLabelSafely -Label $script:LensOverlayLabel -Config $script:LensOverlayConfig -Root $script:LensOverlayDataRoot
+        Publish-DeferredOverlayMcpBodyState -Label $script:LensOverlayLabel -Config $script:LensOverlayConfig -Root $script:LensOverlayDataRoot
       })
-    $RefreshTimer = New-Object System.Windows.Threading.DispatcherTimer
-    $RefreshTimer.Interval = [TimeSpan]::FromSeconds(5)
-    $RefreshTimer.Add_Tick({
-        Update-OverlayMcpBodyStateLabelSafely -Label $script:LensOverlayLabel -Config $script:LensOverlayConfig -Root $script:LensOverlayDataRoot
-      })
-    $RefreshTimer.Start()
+    if ($McpRefreshIntervalSeconds -gt 0) {
+      $RefreshTimer = New-Object System.Windows.Threading.DispatcherTimer
+      $RefreshTimer.Interval = [TimeSpan]::FromSeconds($McpRefreshIntervalSeconds)
+      $RefreshTimer.Add_Tick({
+          Update-OverlayMcpBodyStateLabelSafely -Label $script:LensOverlayLabel -Config $script:LensOverlayConfig -Root $script:LensOverlayDataRoot
+        })
+      $RefreshTimer.Start()
+    }
     $CommandTimer = New-Object System.Windows.Threading.DispatcherTimer
     $CommandTimer.Interval = [TimeSpan]::FromMilliseconds(500)
     $CommandTimer.Add_Tick({
@@ -5330,6 +5389,10 @@ $ArgumentList = @(
   ([string]$VoiceRate),
   '-VoiceVolume',
   ([string]$VoiceVolume),
+  '-McpBodyStateTimeoutSeconds',
+  ([string]$McpBodyStateTimeoutSeconds),
+  '-McpRefreshIntervalSeconds',
+  ([string]$McpRefreshIntervalSeconds),
   '-RunSeconds',
   ([string]$RunSeconds)
 )

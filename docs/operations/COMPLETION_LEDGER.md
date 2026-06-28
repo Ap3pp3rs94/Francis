@@ -100189,6 +100189,65 @@ Remaining truthful gap:
   surface that can accept Orb-originated clicks, drags, and right-click context
   actions without moving the user's physical cursor.
 
+### 2026-06-28 02:30Z - Orb overlay animation-first runtime smoothing
+
+Current posture: Phase 2 / Orb embodied desktop operation now treats smooth Orb
+animation as the primary runtime contract. Live MCP body-state readback remains
+available as an explicit opt-in, but the overlay no longer performs the initial
+live MCP API read on the WPF startup path and no longer retries that read on a
+default timer. The visible Orb should not pause just because the local API is
+slow or unavailable.
+
+What changed:
+
+- The overlay now publishes a fast `refresh_deferred_for_animation` MCP
+  projection on startup instead of synchronously calling the live MCP status API
+  from the WPF loaded handler.
+- The default live MCP read timeout changed from 8 seconds to 1 second.
+- The live MCP refresh interval is now configurable and defaults to disabled
+  (`0`) instead of a hard-coded 5 seconds.
+- `Start` passes `McpBodyStateTimeoutSeconds` and
+  `McpRefreshIntervalSeconds` through to the spawned `Run` process.
+- Orb virtual pointer polling now checks the pointer file `LastWriteTimeUtc`
+  before parsing JSON, so the 500ms command timer does less work when no new Orb
+  action was written.
+
+Validation:
+
+- PowerShell parser validation for `scripts\lens-overlay-window.ps1` passed.
+- `python -m pytest tests\test_lens_overlay_window_script.py tests\test_orb_phase0_contracts.py -q`
+  passed.
+- `git diff --check` passed.
+- Restart proof:
+  `Measure-Command { pwsh -NoProfile -ExecutionPolicy Bypass -File scripts\lens-overlay-window.ps1 -Mode Start | Out-Null }`
+  reported about `5.64` seconds instead of waiting on the prior 8-second live
+  MCP timeout path.
+- Runtime status after restart reported `overlay_window=true`,
+  `live_status=refresh_deferred_for_animation`, and
+  `semantic_source=refresh_deferred`.
+- Gesture smoke still completed with `ok=true`, `sequence_count=7`,
+  `virtual_pointer_only=true`, `uses_user_os_cursor=false`, and
+  `user_mouse_taken=false`.
+- Follow-up status after a 7-second wait reported
+  `live_status=refresh_deferred_for_animation`, confirming the old 5-second
+  timeout loop was not firing before the stronger opt-in-only refresh change.
+
+Receipt evidence:
+
+- Runtime status path:
+  `data/runtime/lens-overlay/status.json`.
+- Latest gesture operator receipts include
+  `.francis/orb_operator/receipts/orb_operator_4567d4b0d9b0.json`,
+  `.francis/orb_operator/receipts/orb_operator_d668bc91b1ce.json`, and
+  `.francis/orb_operator/receipts/orb_operator_7c0433f842d5.json`.
+
+Remaining truthful gap:
+
+- This fix reduces known UI-thread stalls from MCP refresh and pointer polling,
+  but it does not add frame-time telemetry or a formal FPS/jank monitor.
+- Some pause can still occur during deliberate Orb gesture receipts because the
+  overlay still writes position/action receipts on the UI-owned movement path.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
