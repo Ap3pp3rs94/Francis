@@ -122,6 +122,61 @@ def test_orb_pointer_click_records_virtual_event_without_desktop_click(tmp_path:
     assert result["governance"]["user_mouse_taken"] is False
 
 
+def test_orb_pointer_right_click_records_virtual_event_without_user_mouse(tmp_path: Path, monkeypatch) -> None:
+    _envs(tmp_path, monkeypatch)
+
+    result = submit_orb_intent(
+        {"mode": "orb_pointer", "intent": {"kind": "click", "x": 10, "y": 20, "button": "right", "clicks": 1}}
+    )
+
+    assert result["ok"] is True
+    assert result["status"] == "complete"
+    assert result["backend"]["input_kind"] == "mouse.click"
+    assert result["backend"]["result"]["pointer_state"]["last_action"]["status"] == (
+        "virtual_pointer_right_click_recorded"
+    )
+    assert result["backend"]["result"]["pointer_state"]["last_action"]["public_action"]["button"] == "right"
+    assert result["backend"]["result"]["desktop_effect_performed"] is False
+    assert result["governance"]["virtual_pointer_only"] is True
+    assert result["governance"]["uses_user_os_cursor"] is False
+    assert result["governance"]["user_mouse_taken"] is False
+
+
+def test_orb_pointer_drag_records_virtual_path_without_user_mouse(tmp_path: Path, monkeypatch) -> None:
+    _envs(tmp_path, monkeypatch)
+
+    result = submit_orb_intent(
+        {
+            "mode": "orb_pointer",
+            "intent": {
+                "kind": "mouse_drag",
+                "x": 10,
+                "y": 20,
+                "target_x": 60,
+                "target_y": 80,
+                "button": "left",
+            },
+        }
+    )
+
+    assert result["ok"] is True
+    assert result["status"] == "complete"
+    assert result["resolved_target"]["target_x"] == 60
+    assert result["resolved_target"]["target_y"] == 80
+    assert result["backend"]["input_kind"] == "mouse.drag"
+    pointer_state = result["backend"]["result"]["pointer_state"]
+    assert pointer_state["x"] == 60
+    assert pointer_state["y"] == 80
+    assert pointer_state["last_action"]["status"] == "virtual_pointer_drag_recorded"
+    assert pointer_state["last_action"]["gesture"]["kind"] == "drag"
+    assert pointer_state["last_action"]["gesture"]["start"] == {"x": 10, "y": 20}
+    assert pointer_state["last_action"]["gesture"]["end"] == {"x": 60, "y": 80}
+    assert result["backend"]["result"]["desktop_effect_performed"] is False
+    assert result["governance"]["virtual_pointer_only"] is True
+    assert result["governance"]["uses_user_os_cursor"] is False
+    assert result["governance"]["user_mouse_taken"] is False
+
+
 def test_orb_keyboard_type_dry_run_receipt_redacts_text(tmp_path: Path, monkeypatch) -> None:
     _envs(tmp_path, monkeypatch)
 

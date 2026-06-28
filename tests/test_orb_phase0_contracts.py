@@ -100,6 +100,10 @@ def test_overlay_orb_virtual_pointer_uses_locked_desktop_orb_not_browser_marker(
     assert "lens.overlay.orb_virtual_pointer.receipt" in script
     assert "Set-OrbWindowCoordinatePosition -Window $Window -WorkArea $WorkArea -X $X -Y $Y" in script
     assert "[void](Invoke-OverlayOrbVirtualPointerState -Root $script:LensOverlayDataRoot)" in script
+    assert "last_public_action_kind" in script
+    assert "last_action_button" in script
+    assert "drag_start_x" in script
+    assert "drag_target_x" in script
     assert "controls_user_os_cursor = $false" in script
     assert "user_mouse_taken = $false" in script
     assert "physical_input_performed = $false" in script

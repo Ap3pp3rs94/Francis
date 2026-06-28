@@ -100126,6 +100126,69 @@ Remaining truthful gap:
 - This slice did not add multi-pointer OS injection, inspect live pixels, verify
   the overlay with OS-level screenshot evidence, or close any roadmap stage.
 
+### 2026-06-28 02:11Z - Orb visible click drag right-click gestures
+
+Current posture: Phase 2 / Orb embodied desktop operation now has a visible
+Orb-body gesture path for left-click, segmented drag, and right-click in
+`orb_pointer` mode. The gestures move the canonical WPF desktop Orb and record
+operator/overlay receipts. They do not take the user's OS cursor, perform
+physical input, or claim application-level desktop effects.
+
+What changed:
+
+- `OrbIntent.from_dict` now accepts top-level `target_x` and `target_y` for
+  `mouse_drag` payloads.
+- `DesktopInputBackend` now permits `mouse_drag` in `orb_pointer` mode and
+  records the drag path as a virtual Orb gesture. Non-`orb_pointer` drag remains
+  unsupported by the governed input actuator.
+- Virtual pointer state now distinguishes right-click from left-click and
+  records visible gesture metadata for click, drag, and right-click.
+- `python -m francis.input_actuator.orb_operator --gesture-demo` now runs a
+  delayed visible sequence: move, left-click, segmented drag, and right-click.
+- `scripts/lens-overlay-window.ps1` overlay receipts now include public action,
+  button, click count, and drag start/target fields while preserving the locked
+  Orb renderer.
+
+Validation:
+
+- `python -m ruff check src/francis/input_actuator/orb_operator.py tests/unit/test_orb_operator.py tests/test_orb_phase0_contracts.py`
+  passed.
+- `python -m pytest tests\unit\test_orb_operator.py -q` passed.
+- `python -m pytest tests\test_orb_phase0_contracts.py tests\test_lens_overlay_window_script.py -q`
+  passed.
+- PowerShell parser validation for `scripts\lens-overlay-window.ps1` passed.
+- Live overlay gesture proof:
+  `python -m francis.input_actuator.orb_operator --gesture-demo --x 420 --y 260 --drag-to-x 780 --drag-to-y 420 --step-delay 1.0`
+  completed with `ok=true`, `sequence_count=7`, `virtual_pointer_only=true`,
+  `uses_user_os_cursor=false`, `user_mouse_taken=false`,
+  `physical_input_performed=false`, and `desktop_effect_performed=false`.
+- Follow-up overlay status reported `overlay_window=true`,
+  `anchor=orb_pointer`, `left=670.4`, `top=310.4`, and
+  `right_corner_locked=false`.
+
+Receipt evidence:
+
+- Latest visible right-click overlay receipt:
+  `data/runtime/lens-overlay/orb-position-commands/orb-virtual-pointer-e221195f72d3.json`.
+- Latest visible drag overlay receipt:
+  `data/runtime/lens-overlay/orb-position-commands/orb-virtual-pointer-1cd1ebe4efe0.json`.
+- Latest gesture operator receipts include
+  `.francis/orb_operator/receipts/orb_operator_f20cec4c53f4.json`,
+  `.francis/orb_operator/receipts/orb_operator_8f011e694ae6.json`,
+  `.francis/orb_operator/receipts/orb_operator_7f607ca3a373.json`,
+  `.francis/orb_operator/receipts/orb_operator_0ede0e6c97ad.json`, and
+  `.francis/orb_operator/receipts/orb_operator_539d5cc6681a.json`.
+
+Remaining truthful gap:
+
+- The Orb can now visibly perform receipt-backed click/drag/right-click
+  gestures as its desktop body, but those gestures still do not activate app UI,
+  open context menus, drag app content, or type/click through a true independent
+  second-pointer backend.
+- The next safest task is an app/accessibility bridge or Francis-owned test
+  surface that can accept Orb-originated clicks, drags, and right-click context
+  actions without moving the user's physical cursor.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

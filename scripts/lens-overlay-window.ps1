@@ -2710,6 +2710,10 @@ function Write-OverlayOrbVirtualPointerReceipt {
   )
 
   $LastAction = if ($null -ne $Pointer -and $null -ne $Pointer.PSObject.Properties['last_action']) { $Pointer.last_action } else { $null }
+  $PublicAction = if ($null -ne $LastAction -and $null -ne $LastAction.PSObject.Properties['public_action']) { $LastAction.public_action } else { $null }
+  $Gesture = if ($null -ne $LastAction -and $null -ne $LastAction.PSObject.Properties['gesture']) { $LastAction.gesture } else { $null }
+  $DragStart = if ($null -ne $Gesture -and $null -ne $Gesture.PSObject.Properties['start']) { $Gesture.start } else { $null }
+  $DragEnd = if ($null -ne $Gesture -and $null -ne $Gesture.PSObject.Properties['end']) { $Gesture.end } else { $null }
   $Receipt = [ordered]@{
     kind = 'lens.overlay.orb_virtual_pointer.receipt'
     status = Get-StringProperty -Payload $Result -Name 'status' -Default 'orb_virtual_pointer_result_unknown'
@@ -2722,6 +2726,14 @@ function Write-OverlayOrbVirtualPointerReceipt {
     virtual_pointer_y = Get-StringProperty -Payload $Pointer -Name 'y' -Default ''
     last_input_kind = Get-StringProperty -Payload $LastAction -Name 'input_kind' -Default ''
     last_action_status = Get-StringProperty -Payload $LastAction -Name 'status' -Default ''
+    last_public_action_kind = Get-StringProperty -Payload $PublicAction -Name 'kind' -Default ''
+    last_action_button = Get-StringProperty -Payload $PublicAction -Name 'button' -Default ''
+    last_action_clicks = Get-StringProperty -Payload $PublicAction -Name 'clicks' -Default ''
+    gesture_kind = Get-StringProperty -Payload $Gesture -Name 'kind' -Default ''
+    drag_start_x = Get-StringProperty -Payload $DragStart -Name 'x' -Default ''
+    drag_start_y = Get-StringProperty -Payload $DragStart -Name 'y' -Default ''
+    drag_target_x = Get-StringProperty -Payload $DragEnd -Name 'x' -Default ''
+    drag_target_y = Get-StringProperty -Payload $DragEnd -Name 'y' -Default ''
     applied = Get-BoolProperty -Payload $Result -Name 'runtime_overlay_position_changed' -Default $false
     overlay_left = Get-StringProperty -Payload $Result -Name 'overlay_left' -Default ''
     overlay_top = Get-StringProperty -Payload $Result -Name 'overlay_top' -Default ''

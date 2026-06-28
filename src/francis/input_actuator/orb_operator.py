@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import os
+import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -132,8 +133,10 @@ def _read_virtual_pointer_state() -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
-def _virtual_pointer_position(payload: dict[str, Any]) -> tuple[int, int]:
+def _virtual_pointer_position(input_kind: str, payload: dict[str, Any]) -> tuple[int, int]:
     previous = _read_virtual_pointer_state()
+    if input_kind == "mouse.drag" and payload.get("target_x") is not None and payload.get("target_y") is not None:
+        return _bounded_coord(payload.get("target_x"), "target_x"), _bounded_coord(payload.get("target_y"), "target_y")
     if payload.get("x") is not None and payload.get("y") is not None:
         return _bounded_coord(payload.get("x"), "x"), _bounded_coord(payload.get("y"), "y")
     return (
@@ -142,14 +145,47 @@ def _virtual_pointer_position(payload: dict[str, Any]) -> tuple[int, int]:
     )
 
 
-def _virtual_pointer_action_status(input_kind: str) -> str:
+def _virtual_pointer_action_status(input_kind: str, payload: dict[str, Any] | None = None) -> str:
+    safe_payload = payload or {}
     if input_kind == "mouse.move":
         return "virtual_pointer_moved"
     if input_kind == "mouse.click":
+        if _clean_text(safe_payload.get("button"), "left").lower() == "right":
+            return "virtual_pointer_right_click_recorded"
         return "virtual_pointer_click_recorded"
+    if input_kind == "mouse.drag":
+        return "virtual_pointer_drag_recorded"
     if input_kind in {"keyboard.type", "keyboard.hotkey"}:
         return "virtual_pointer_keyboard_event_recorded"
     return "virtual_pointer_event_recorded"
+
+
+def _virtual_pointer_gesture(input_kind: str, payload: dict[str, Any]) -> dict[str, Any]:
+    if input_kind == "mouse.click":
+        button = _clean_text(payload.get("button"), "left").lower()
+        return {
+            "kind": "right_click" if button == "right" else "click",
+            "button": button,
+            "clicks": max(1, min(_safe_int(payload.get("clicks"), 1), 3)),
+            "x": payload.get("x"),
+            "y": payload.get("y"),
+            "visible_orb_body_only": True,
+        }
+    if input_kind == "mouse.drag":
+        return {
+            "kind": "drag",
+            "button": _clean_text(payload.get("button"), "left").lower(),
+            "start": {
+                "x": _bounded_coord(payload.get("x"), "x"),
+                "y": _bounded_coord(payload.get("y"), "y"),
+            },
+            "end": {
+                "x": _bounded_coord(payload.get("target_x"), "target_x"),
+                "y": _bounded_coord(payload.get("target_y"), "target_y"),
+            },
+            "visible_orb_body_only": True,
+        }
+    return {}
 
 
 def _write_virtual_pointer_state(
@@ -160,9 +196,10 @@ def _write_virtual_pointer_state(
     objective: str,
     session_id: str,
 ) -> dict[str, Any]:
-    x, y = _virtual_pointer_position(payload)
+    x, y = _virtual_pointer_position(input_kind, payload)
     now = _utc_now()
     public_action = _public_input_action(input_kind, payload)
+    gesture = _virtual_pointer_gesture(input_kind, payload)
     requires_bridge = input_kind != "mouse.move"
     state = {
         "ok": True,
@@ -177,8 +214,9 @@ def _write_virtual_pointer_state(
         "position": {"x": x, "y": y, "source": "orb_virtual_pointer"},
         "last_action": {
             "input_kind": input_kind,
-            "status": _virtual_pointer_action_status(input_kind),
+            "status": _virtual_pointer_action_status(input_kind, payload),
             "public_action": public_action,
+            "gesture": gesture,
             "actor": actor,
             "objective": objective,
             "session_id": session_id,
@@ -188,6 +226,7 @@ def _write_virtual_pointer_state(
             "user_mouse_taken": False,
             "requires_app_bridge_for_desktop_effect": requires_bridge,
         },
+        "gesture": gesture,
         "governance": {
             "virtual_pointer_only": True,
             "controls_user_os_cursor": False,
@@ -287,11 +326,17 @@ class OrbIntent:
             "move": "move_to",
             "mouse.move": "move_to",
             "mouse.click": "click",
+            "mouse.drag": "mouse_drag",
             "keyboard.type": "type_text",
             "keyboard.hotkey": "key_press",
         }
         kind = aliases.get(kind, kind)
         metadata = _coerce_dict(payload.get("metadata"))
+        if kind == "mouse_drag":
+            if payload.get("target_x") is not None:
+                metadata["target_x"] = _bounded_coord(payload.get("target_x"), "target_x")
+            if payload.get("target_y") is not None:
+                metadata["target_y"] = _bounded_coord(payload.get("target_y"), "target_y")
         return cls(
             kind=kind,
             x=payload.get("x") if payload.get("x") is None else _bounded_coord(payload.get("x"), "x"),
@@ -465,7 +510,43 @@ class DesktopInputBackend:
             "keyboard.hotkey", {"keys": [key]}, proposal_id=proposal_id, approval_phrase=approval_phrase
         )
 
-    def mouse_drag(self, *_args: Any, **_kwargs: Any) -> BackendAttempt:
+    def mouse_drag(
+        self,
+        *,
+        x: int | None = None,
+        y: int | None = None,
+        target_x: int | None = None,
+        target_y: int | None = None,
+        button: str = "left",
+        proposal_id: str = "",
+        approval_phrase: str = "",
+    ) -> BackendAttempt:
+        if self.mode == ORB_POINTER_MODE:
+            if x is None or y is None or target_x is None or target_y is None:
+                return BackendAttempt(
+                    ok=False,
+                    status="blocked",
+                    mode=self.mode,
+                    backend="francis.orb_virtual_pointer",
+                    input_kind="mouse.drag",
+                    governance={
+                        "decision": "deny",
+                        "reason": "mouse_drag_requires_start_and_target_coordinates",
+                        "virtual_pointer_only": True,
+                        "raw_input": False,
+                        "performed": False,
+                        "physical_input_performed": False,
+                        "user_mouse_taken": False,
+                    },
+                    error="mouse drag requires start and target coordinates",
+                )
+            return self._submit(
+                "mouse.drag",
+                {"x": x, "y": y, "target_x": target_x, "target_y": target_y, "button": button},
+                proposal_id=proposal_id,
+                approval_phrase=approval_phrase,
+            )
+
         return BackendAttempt(
             ok=False,
             status="unsupported",
@@ -477,6 +558,8 @@ class DesktopInputBackend:
                 "reason": "mouse_drag_backend_not_declared",
                 "raw_input": False,
                 "performed": False,
+                "physical_input_performed": False,
+                "user_mouse_taken": False,
             },
             error="mouse drag is not yet supported by the governed input actuator",
         )
@@ -519,7 +602,7 @@ class DesktopInputBackend:
             last_action = _coerce_dict(state.get("last_action"))
             return BackendAttempt(
                 ok=True,
-                status=_virtual_pointer_action_status(kind),
+                status=_virtual_pointer_action_status(kind, payload),
                 mode=self.mode,
                 backend="francis.orb_virtual_pointer",
                 input_kind=kind,
@@ -761,7 +844,27 @@ def _resolve_intent(intent: OrbIntent) -> IntentResolution:
         return IntentResolution(feedback_state="blocked", supported=False, reason="focus_window_backend_not_declared")
 
     if intent.kind == "mouse_drag":
-        return IntentResolution(feedback_state="blocked", supported=False, reason="mouse_drag_backend_not_declared")
+        if intent.x is None or intent.y is None:
+            return IntentResolution(feedback_state="blocked", supported=False, reason="mouse_drag_requires_coordinates")
+        target_x = intent.metadata.get("target_x")
+        target_y = intent.metadata.get("target_y")
+        if target_x is None or target_y is None:
+            return IntentResolution(feedback_state="blocked", supported=False, reason="mouse_drag_requires_target")
+        x, y = _bounded_coord(intent.x, "x"), _bounded_coord(intent.y, "y")
+        end_x, end_y = _bounded_coord(target_x, "target_x"), _bounded_coord(target_y, "target_y")
+        return IntentResolution(
+            feedback_state="moving",
+            input_kind="mouse.drag",
+            input_payload={"x": x, "y": y, "target_x": end_x, "target_y": end_y, "button": intent.button},
+            resolved_target={
+                "x": x,
+                "y": y,
+                "target_x": end_x,
+                "target_y": end_y,
+                "button": intent.button,
+                "source": "coordinates",
+            },
+        )
 
     return IntentResolution(feedback_state="blocked", supported=False, reason=f"unsupported_orb_intent:{intent.kind}")
 
@@ -826,7 +929,15 @@ def _run_backend(
         key = _clean_text(keys[0] if keys else "")
         return backend.key_press(key, proposal_id=proposal_id, approval_phrase=approval_phrase)
     if resolution.input_kind == "mouse.drag":
-        return backend.mouse_drag()
+        return backend.mouse_drag(
+            x=payload.get("x"),
+            y=payload.get("y"),
+            target_x=payload.get("target_x"),
+            target_y=payload.get("target_y"),
+            button=str(payload.get("button", "left")),
+            proposal_id=proposal_id,
+            approval_phrase=approval_phrase,
+        )
     raise InputActuatorError(f"unsupported resolved input kind: {resolution.input_kind}")
 
 
@@ -843,6 +954,15 @@ def _public_input_action(kind: str, payload: dict[str, Any]) -> dict[str, Any]:
             public["x"] = payload.get("x")
             public["y"] = payload.get("y")
         return public
+    if kind == "mouse.drag":
+        return {
+            "kind": kind,
+            "button": _clean_text(payload.get("button"), "left"),
+            "x": payload.get("x"),
+            "y": payload.get("y"),
+            "target_x": payload.get("target_x"),
+            "target_y": payload.get("target_y"),
+        }
     if kind == "keyboard.type":
         text = str(payload.get("text", ""))
         return {"kind": kind, "text_length": len(text), "text_sha256": _hash_text(text)}
@@ -1178,14 +1298,97 @@ def _demo_sequence(x: int, y: int, text: str, mode: str) -> dict[str, Any]:
     )
 
 
+def _visible_gesture_demo_sequence(
+    *,
+    x: int,
+    y: int,
+    drag_to_x: int,
+    drag_to_y: int,
+    step_delay: float,
+) -> dict[str, Any]:
+    shared = {
+        "mode": ORB_POINTER_MODE,
+        "actor": "manual.orb_operator_visible_gesture_demo",
+        "objective": "visible Orb left-click drag and right-click proof",
+        "session_id": f"manual-gesture-{uuid.uuid4().hex[:8]}",
+    }
+    start_x, start_y = _bounded_coord(x, "x"), _bounded_coord(y, "y")
+    end_x, end_y = _bounded_coord(drag_to_x, "drag_to_x"), _bounded_coord(drag_to_y, "drag_to_y")
+    drag_points: list[tuple[int, int]] = []
+    for index in range(1, 5):
+        ratio = index / 4
+        drag_points.append((round(start_x + ((end_x - start_x) * ratio)), round(start_y + ((end_y - start_y) * ratio))))
+
+    intents: list[dict[str, Any]] = [
+        {"kind": "move_to", "x": start_x, "y": start_y},
+        {"kind": "click", "x": start_x, "y": start_y, "button": "left", "clicks": 1},
+    ]
+    current_x, current_y = start_x, start_y
+    for target_x, target_y in drag_points:
+        intents.append(
+            {
+                "kind": "mouse_drag",
+                "x": current_x,
+                "y": current_y,
+                "target_x": target_x,
+                "target_y": target_y,
+                "button": "left",
+            }
+        )
+        current_x, current_y = target_x, target_y
+    intents.append({"kind": "click", "x": end_x, "y": end_y, "button": "right", "clicks": 1})
+
+    results: list[dict[str, Any]] = []
+    safe_delay = max(0.0, min(float(step_delay), 5.0))
+    for intent in intents:
+        results.append(submit_orb_intent({**shared, "intent": intent}))
+        if safe_delay:
+            time.sleep(safe_delay)
+
+    return {
+        "ok": all(bool(item.get("ok")) for item in results),
+        "status": "complete" if all(bool(item.get("ok")) for item in results) else "partial_or_blocked",
+        "surface": ORB_OPERATOR_SURFACE,
+        "stage": ORB_OPERATOR_STAGE,
+        "mode": ORB_POINTER_MODE,
+        "results": results,
+        "receipt_paths": [
+            str(item.get("operator_receipt_path")) for item in results if item.get("operator_receipt_path")
+        ],
+        "governance": {
+            "raw_input": False,
+            "virtual_pointer_only": True,
+            "uses_user_os_cursor": False,
+            "user_mouse_taken": False,
+            "physical_input_performed": False,
+            "desktop_effect_performed": False,
+            "receipt_written": True,
+            "sequence_count": len(results),
+        },
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run a safe Orb operator dry-run sequence.")
     parser.add_argument("--mode", choices=ORB_BACKEND_MODES, default="dry_run")
     parser.add_argument("--x", type=int, default=320)
     parser.add_argument("--y", type=int, default=240)
+    parser.add_argument("--drag-to-x", type=int, default=640)
+    parser.add_argument("--drag-to-y", type=int, default=420)
+    parser.add_argument("--step-delay", type=float, default=0.8)
+    parser.add_argument("--gesture-demo", action="store_true")
     parser.add_argument("--text", default="Francis Orb dry-run")
     args = parser.parse_args(argv)
-    result = _demo_sequence(args.x, args.y, args.text, args.mode)
+    if args.gesture_demo:
+        result = _visible_gesture_demo_sequence(
+            x=args.x,
+            y=args.y,
+            drag_to_x=args.drag_to_x,
+            drag_to_y=args.drag_to_y,
+            step_delay=args.step_delay,
+        )
+    else:
+        result = _demo_sequence(args.x, args.y, args.text, args.mode)
     print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True, default=str))
     return 0 if result.get("ok") else 1
 
