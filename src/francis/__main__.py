@@ -252,6 +252,8 @@ def cmd_overnight_explore(args: argparse.Namespace) -> int:
         str(args.max_findings),
         "--max-scan-files",
         str(args.max_scan_files),
+        "--max-cycles",
+        str(args.max_cycles),
         "--actor",
         str(args.actor),
     ]
@@ -261,6 +263,8 @@ def cmd_overnight_explore(args: argparse.Namespace) -> int:
         explorer_args.extend(["--data-dir", str(args.data_dir)])
     if bool(getattr(args, "once", False)):
         explorer_args.append("--once")
+    if bool(getattr(args, "stream", False)):
+        explorer_args.append("--stream")
     if bool(getattr(args, "status", False)):
         explorer_args.append("--status")
     if bool(getattr(args, "stop", False)):
@@ -1361,7 +1365,9 @@ def main(argv: list[str] | None = None) -> int:
     p_overnight.add_argument("--interval-minutes", type=float, default=20.0)
     p_overnight.add_argument("--max-findings", type=int, default=40)
     p_overnight.add_argument("--max-scan-files", type=int, default=900)
+    p_overnight.add_argument("--max-cycles", type=int, default=200)
     p_overnight.add_argument("--once", action="store_true", help="Run one read-only cycle and exit.")
+    p_overnight.add_argument("--stream", action="store_true", help="Print visible lifecycle and per-cycle events.")
     p_overnight.add_argument("--status", action="store_true", help="Print latest explorer status.")
     p_overnight.add_argument("--stop", action="store_true", help="Request a running explorer to stop.")
     p_overnight.add_argument("--clear-stop-flag", action="store_true", help="Remove a stale stop flag before running.")

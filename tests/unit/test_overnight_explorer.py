@@ -97,3 +97,30 @@ def test_overnight_explorer_status_reports_latest(tmp_path: Path) -> None:
     assert status["status"] == "ready"
     assert status["receipt_count"] == 1
     assert status["latest"]["session_id"] == "status-session"
+
+
+def test_overnight_explorer_streams_user_visible_cycle_events(tmp_path: Path, capsys) -> None:
+    from francis.exploration.overnight import make_config, run_loop
+
+    data_root = tmp_path / "data"
+    summary = run_loop(
+        make_config(
+            repo_root=_fake_repo(tmp_path),
+            data_root=data_root,
+            session_id="stream-session",
+            max_cycles=1,
+            max_findings=3,
+            max_scan_files=50,
+        ),
+        stream=True,
+    )
+
+    lines = [json.loads(line) for line in capsys.readouterr().out.splitlines() if line.strip()]
+    assert summary["status"] == "max_cycles_reached"
+    assert summary["cycles_completed"] == 1
+    assert [line["event"] for line in lines] == ["started", "cycle_complete", "finished"]
+    assert lines[0]["session_id"] == "stream-session"
+    assert lines[0]["governance"]["read_only"] is True
+    assert lines[1]["cycle"]["status"] == "complete"
+    assert lines[1]["cycle"]["learned"]["scanned_files"] >= 4
+    assert lines[2]["summary"]["cycles_completed"] == 1

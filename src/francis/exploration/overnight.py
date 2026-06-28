@@ -78,6 +78,7 @@ class OvernightExplorerConfig:
     interval_minutes: float = DEFAULT_INTERVAL_MINUTES
     max_findings: int = DEFAULT_MAX_FINDINGS
     max_scan_files: int = DEFAULT_MAX_SCAN_FILES
+    max_cycles: int = MAX_CYCLES
 
 
 def make_config(
@@ -90,6 +91,7 @@ def make_config(
     interval_minutes: float = DEFAULT_INTERVAL_MINUTES,
     max_findings: int = DEFAULT_MAX_FINDINGS,
     max_scan_files: int = DEFAULT_MAX_SCAN_FILES,
+    max_cycles: int = MAX_CYCLES,
 ) -> OvernightExplorerConfig:
     root = Path(repo_root).expanduser().resolve() if repo_root is not None else francis_repo_root()
     data = Path(data_root).expanduser().resolve() if data_root is not None else francis_data_dir()
@@ -102,6 +104,7 @@ def make_config(
         interval_minutes=_bounded_float(interval_minutes, DEFAULT_INTERVAL_MINUTES, minimum=0.01),
         max_findings=_bounded_int(max_findings, DEFAULT_MAX_FINDINGS, minimum=1, maximum=250),
         max_scan_files=_bounded_int(max_scan_files, DEFAULT_MAX_SCAN_FILES, minimum=10, maximum=5000),
+        max_cycles=_bounded_int(max_cycles, MAX_CYCLES, minimum=1, maximum=1000),
     )
 
 
@@ -226,7 +229,7 @@ def run_once(config: OvernightExplorerConfig | None = None) -> dict[str, Any]:
     return receipt
 
 
-def run_loop(config: OvernightExplorerConfig | None = None) -> dict[str, Any]:
+def run_loop(config: OvernightExplorerConfig | None = None, *, stream: bool = False) -> dict[str, Any]:
     cfg = config or make_config()
     session_id = cfg.session_id or _new_session_id("overnight")
     root = runtime_root(cfg.data_root)
@@ -237,8 +240,20 @@ def run_loop(config: OvernightExplorerConfig | None = None) -> dict[str, Any]:
     interval_seconds = cfg.interval_minutes * 60
     cycles: list[dict[str, Any]] = []
     status = "complete"
+    if stream:
+        _stream_event(
+            "started",
+            {
+                "session_id": session_id,
+                "started_at": started_at,
+                "duration_hours_requested": cfg.duration_hours,
+                "interval_minutes": cfg.interval_minutes,
+                "max_cycles": cfg.max_cycles,
+                "governance": _governance_base(),
+            },
+        )
 
-    while len(cycles) < MAX_CYCLES:
+    while len(cycles) < cfg.max_cycles:
         if stop_path.exists():
             status = "stopped"
             break
@@ -255,16 +270,22 @@ def run_loop(config: OvernightExplorerConfig | None = None) -> dict[str, Any]:
                 interval_minutes=cfg.interval_minutes,
                 max_findings=cfg.max_findings,
                 max_scan_files=cfg.max_scan_files,
+                max_cycles=cfg.max_cycles,
             )
         )
-        cycles.append(_cycle_projection(receipt))
+        cycle = _cycle_projection(receipt)
+        cycles.append(cycle)
+        if stream:
+            _stream_event("cycle_complete", {"session_id": session_id, "cycle": cycle})
+        if len(cycles) >= cfg.max_cycles:
+            break
 
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             break
         _sleep_with_stop_poll(stop_path, seconds=min(interval_seconds, remaining))
 
-    if len(cycles) >= MAX_CYCLES:
+    if len(cycles) >= cfg.max_cycles:
         status = "max_cycles_reached"
     if stop_path.exists() and status != "max_cycles_reached":
         status = "stopped"
@@ -291,6 +312,8 @@ def run_loop(config: OvernightExplorerConfig | None = None) -> dict[str, Any]:
     summary["summary_path"] = str(summary_path)
     _write_json(summary_path, summary)
     _write_json(latest_path(cfg.data_root), summary)
+    if stream:
+        _stream_event("finished", {"session_id": session_id, "summary": summary})
     return summary
 
 
@@ -303,7 +326,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--interval-minutes", type=float, default=DEFAULT_INTERVAL_MINUTES)
     parser.add_argument("--max-findings", type=int, default=DEFAULT_MAX_FINDINGS)
     parser.add_argument("--max-scan-files", type=int, default=DEFAULT_MAX_SCAN_FILES)
+    parser.add_argument("--max-cycles", type=int, default=MAX_CYCLES)
     parser.add_argument("--once", action="store_true", help="Run one read-only exploration cycle and exit.")
+    parser.add_argument("--stream", action="store_true", help="Print visible lifecycle and per-cycle events.")
     parser.add_argument("--status", action="store_true", help="Print latest overnight explorer status.")
     parser.add_argument("--stop", action="store_true", help="Request a running overnight explorer to stop.")
     parser.add_argument("--clear-stop-flag", action="store_true", help="Remove a stale stop flag before running.")
@@ -327,8 +352,9 @@ def main(argv: list[str] | None = None) -> int:
         interval_minutes=args.interval_minutes,
         max_findings=args.max_findings,
         max_scan_files=args.max_scan_files,
+        max_cycles=args.max_cycles,
     )
-    result = run_once(cfg) if args.once else run_loop(cfg)
+    result = run_once(cfg) if args.once else run_loop(cfg, stream=bool(args.stream))
     _print_json(result)
     return 0 if result.get("ok") is True else 1
 
@@ -637,6 +663,23 @@ def _cycle_projection(receipt: dict[str, Any]) -> dict[str, Any]:
         "receipt_path": latest.get("receipt_path", ""),
         "learned": latest.get("learned", {}),
     }
+
+
+def _stream_event(event: str, payload: dict[str, Any]) -> None:
+    print(
+        json.dumps(
+            {
+                "kind": "francis.exploration.overnight.stream",
+                "event": event,
+                "created_at": _utc_now(),
+                **payload,
+            },
+            sort_keys=True,
+            ensure_ascii=False,
+            default=str,
+        ),
+        flush=True,
+    )
 
 
 def _governance_base() -> dict[str, Any]:

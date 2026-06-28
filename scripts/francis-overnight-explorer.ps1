@@ -6,7 +6,9 @@ param(
   [double]$IntervalMinutes = 20.0,
   [int]$MaxFindings = 40,
   [int]$MaxScanFiles = 900,
+  [int]$MaxCycles = 200,
   [switch]$Once,
+  [switch]$Stream,
   [switch]$Detached,
   [switch]$Status,
   [switch]$Stop,
@@ -35,10 +37,12 @@ $pythonArgs = @(
   '--duration-hours', ([string]::Format([Globalization.CultureInfo]::InvariantCulture, '{0}', $DurationHours)),
   '--interval-minutes', ([string]::Format([Globalization.CultureInfo]::InvariantCulture, '{0}', $IntervalMinutes)),
   '--max-findings', ([string]$MaxFindings),
-  '--max-scan-files', ([string]$MaxScanFiles)
+  '--max-scan-files', ([string]$MaxScanFiles),
+  '--max-cycles', ([string]$MaxCycles)
 )
 
 if ($Once) { $pythonArgs += '--once' }
+if ($Stream) { $pythonArgs += '--stream' }
 if ($Status) { $pythonArgs += '--status' }
 if ($Stop) { $pythonArgs += '--stop' }
 if ($ClearStopFlag) { $pythonArgs += '--clear-stop-flag' }
@@ -52,28 +56,36 @@ try {
   }
 
   if ($Detached -and -not $Status -and -not $Stop) {
-    $logDir = Join-Path $repoRoot 'data\runtime\overnight_explorer\logs'
-    New-Item -ItemType Directory -Force -Path $logDir | Out-Null
-    $stamp = Get-Date -Format 'yyyyMMddTHHmmss'
-    $stdoutLog = Join-Path $logDir "overnight-explorer-$stamp.stdout.log"
-    $stderrLog = Join-Path $logDir "overnight-explorer-$stamp.stderr.log"
+    $shellCommand = Get-Command pwsh -ErrorAction SilentlyContinue
+    $shell = if ($shellCommand) { $shellCommand.Source } else { 'powershell' }
+    $scriptArgs = @(
+      '-NoExit',
+      '-NoProfile',
+      '-ExecutionPolicy', 'Bypass',
+      '-File', $PSCommandPath,
+      '-DurationHours', ([string]::Format([Globalization.CultureInfo]::InvariantCulture, '{0}', $DurationHours)),
+      '-IntervalMinutes', ([string]::Format([Globalization.CultureInfo]::InvariantCulture, '{0}', $IntervalMinutes)),
+      '-MaxFindings', ([string]$MaxFindings),
+      '-MaxScanFiles', ([string]$MaxScanFiles),
+      '-MaxCycles', ([string]$MaxCycles),
+      '-Stream'
+    )
+    if ($ClearStopFlag) { $scriptArgs += '-ClearStopFlag' }
 
     $process = Start-Process `
-      -FilePath $python `
-      -ArgumentList $pythonArgs `
+      -FilePath $shell `
+      -ArgumentList $scriptArgs `
       -WorkingDirectory $repoRoot `
-      -WindowStyle Hidden `
-      -RedirectStandardOutput $stdoutLog `
-      -RedirectStandardError $stderrLog `
+      -WindowStyle Normal `
       -PassThru
 
     [ordered]@{
       ok = $true
-      status = 'started'
+      status = 'started_visible'
       pid = $process.Id
-      command = "$python $($pythonArgs -join ' ')"
-      stdout_log = $stdoutLog
-      stderr_log = $stderrLog
+      command = "$shell $($scriptArgs -join ' ')"
+      user_facing = $true
+      stream = $true
       status_command = '.\scripts\francis-overnight-explorer.ps1 -Status'
       stop_command = '.\scripts\francis-overnight-explorer.ps1 -Stop'
     } | ConvertTo-Json -Depth 5
