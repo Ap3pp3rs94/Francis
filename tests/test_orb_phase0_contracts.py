@@ -50,6 +50,8 @@ def test_chat_ui_orb_overlay_defaults_to_right_corner_lock() -> None:
     assert "right: snapshotMode || manualDragEnabled ? undefined : ORB_OVERLAY_DOCK_MARGIN" in app
     assert 'pointerEvents: "none"' in app
     assert 'pointerEvents: "auto"' in app
+    assert 'data-orb-virtual-pointer="true"' not in app
+    assert "fetchOrbOperatorInput" not in app
 
 
 def test_overlay_orb_renderer_visual_constants_remain_locked() -> None:
@@ -85,6 +87,24 @@ def test_overlay_orb_renderer_visual_constants_remain_locked() -> None:
     assert "$Core.Height = 64" in script
     assert "$HotCenter.Width = 34" in script
     assert "$HotCenter.Height = 34" in script
+
+
+def test_overlay_orb_virtual_pointer_uses_locked_desktop_orb_not_browser_marker() -> None:
+    script = _read("scripts/lens-overlay-window.ps1")
+    app = _read("apps/chat_ui/src/App.tsx")
+
+    assert "function Invoke-OverlayOrbVirtualPointerState" in script
+    assert "function Set-OrbWindowCoordinatePosition" in script
+    assert "Get-OverlayOrbVirtualPointerStatePath" in script
+    assert "francis.orb_operator.virtual_pointer_state" in script
+    assert "lens.overlay.orb_virtual_pointer.receipt" in script
+    assert "Set-OrbWindowCoordinatePosition -Window $Window -WorkArea $WorkArea -X $X -Y $Y" in script
+    assert "[void](Invoke-OverlayOrbVirtualPointerState -Root $script:LensOverlayDataRoot)" in script
+    assert "controls_user_os_cursor = $false" in script
+    assert "user_mouse_taken = $false" in script
+    assert "physical_input_performed = $false" in script
+    assert "desktop_effect_performed = $false" in script
+    assert 'data-orb-virtual-pointer="true"' not in app
 
 
 def test_orb_continuum_state_preserves_one_path_wiring_rules() -> None:

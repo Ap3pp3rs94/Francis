@@ -2634,6 +2634,10 @@ function Get-OverlayOrbPositionCommandReceiptRoot {
   return Join-Path (Join-Path $Root 'runtime\lens-overlay') 'orb-position-commands'
 }
 
+function Get-OverlayOrbVirtualPointerStatePath {
+  return Join-Path (Join-Path $RepoRoot '.francis\orb_operator') 'virtual_pointer_state.json'
+}
+
 function Get-OverlayOrbPositionCommandReceiptPath {
   param(
     [string]$Root,
@@ -2690,6 +2694,49 @@ function Write-OverlayOrbPositionCommandReceipt {
     mutation_authority_scope = 'runtime_overlay_position_only'
     chat_route_writes_conversation_ledger = $false
     conversation_forwarding_suppressed = $true
+    grants_execution_authority = $false
+    grants_mutation_authority = $false
+    updated_at = [DateTimeOffset]::UtcNow.ToString('o')
+  }
+  Write-OverlayVoiceTurnFile -Path (Get-OverlayOrbPositionCommandReceiptPath -Root $Root -RequestId $RequestId) -Payload $Receipt
+}
+
+function Write-OverlayOrbVirtualPointerReceipt {
+  param(
+    [string]$Root,
+    [string]$RequestId,
+    [object]$Pointer,
+    [object]$Result
+  )
+
+  $LastAction = if ($null -ne $Pointer -and $null -ne $Pointer.PSObject.Properties['last_action']) { $Pointer.last_action } else { $null }
+  $Receipt = [ordered]@{
+    kind = 'lens.overlay.orb_virtual_pointer.receipt'
+    status = Get-StringProperty -Payload $Result -Name 'status' -Default 'orb_virtual_pointer_result_unknown'
+    ok = Get-BoolProperty -Payload $Result -Name 'ok' -Default $false
+    request_id = $RequestId
+    pointer_id = Get-StringProperty -Payload $Pointer -Name 'pointer_id' -Default 'francis.orb.primary_virtual_pointer'
+    pointer_mode = Get-StringProperty -Payload $Pointer -Name 'mode' -Default 'orb_pointer'
+    pointer_updated_at = Get-StringProperty -Payload $Pointer -Name 'updated_at' -Default ''
+    virtual_pointer_x = Get-StringProperty -Payload $Pointer -Name 'x' -Default ''
+    virtual_pointer_y = Get-StringProperty -Payload $Pointer -Name 'y' -Default ''
+    last_input_kind = Get-StringProperty -Payload $LastAction -Name 'input_kind' -Default ''
+    last_action_status = Get-StringProperty -Payload $LastAction -Name 'status' -Default ''
+    applied = Get-BoolProperty -Payload $Result -Name 'runtime_overlay_position_changed' -Default $false
+    overlay_left = Get-StringProperty -Payload $Result -Name 'overlay_left' -Default ''
+    overlay_top = Get-StringProperty -Payload $Result -Name 'overlay_top' -Default ''
+    source = 'francis.orb_operator.virtual_pointer_state'
+    actor = Get-StringProperty -Payload $LastAction -Name 'actor' -Default 'francis.orb_operator'
+    client_origin = 'francis_orb_virtual_pointer'
+    request_path = '.francis/orb_operator/virtual_pointer_state.json'
+    receipt_path = 'data/runtime/lens-overlay/orb-position-commands'
+    overlay_runtime_owns_execution = $true
+    bounded_overlay_position_mutation = $true
+    mutation_authority_scope = 'runtime_overlay_position_only'
+    controls_user_os_cursor = $false
+    user_mouse_taken = $false
+    physical_input_performed = $false
+    desktop_effect_performed = $false
     grants_execution_authority = $false
     grants_mutation_authority = $false
     updated_at = [DateTimeOffset]::UtcNow.ToString('o')
@@ -3278,6 +3325,121 @@ function Set-OrbWindowSidePosition {
     return $Window.Dispatcher.Invoke($ApplyPosition)
   }
   return $ApplyPosition.Invoke()
+}
+
+function Set-OrbWindowCoordinatePosition {
+  param(
+    [object]$Window,
+    [object]$WorkArea,
+    [double]$X,
+    [double]$Y,
+    [object]$MotionState = $null,
+    [string]$TargetAnchor = 'orb_pointer',
+    [string]$Root = ''
+  )
+
+  if ($null -eq $Window -or $null -eq $WorkArea) {
+    return [ordered]@{
+      applied = $false
+      error = 'overlay_window_or_work_area_unavailable'
+    }
+  }
+
+  $ApplyPosition = [System.Func[object]]{
+    $MinimumLeft = [double]$WorkArea.Left
+    $MinimumTop = [double]$WorkArea.Top
+    $MaximumLeft = [Math]::Max($MinimumLeft, [double]$WorkArea.Right - [double]$Window.Width)
+    $MaximumTop = [Math]::Max($MinimumTop, [double]$WorkArea.Bottom - [double]$Window.Height)
+    $TargetLeft = Clamp-OverlayDouble -Value ($X - ([double]$Window.Width / 2.0)) -Minimum $MinimumLeft -Maximum $MaximumLeft
+    $TargetTop = Clamp-OverlayDouble -Value ($Y - ([double]$Window.Height / 2.0)) -Minimum $MinimumTop -Maximum $MaximumTop
+
+    $Window.Left = $TargetLeft
+    $Window.Top = $TargetTop
+    if (-not [string]::IsNullOrWhiteSpace($TargetAnchor)) {
+      $script:LensOverlayOperatorPositionAnchor = $TargetAnchor
+    }
+    Reset-OrbAutonomousMotionAnchor -Window $Window -MotionState $MotionState
+    $PositionReceiptWritten = $false
+    if (-not [string]::IsNullOrWhiteSpace($Root)) {
+      Write-OverlayPositionState -Root $Root -Window $Window -MotionState $MotionState -OverlayWindowVisible $true
+      $PositionReceiptWritten = $true
+    }
+    return [ordered]@{
+      applied = $true
+      left = [double]$Window.Left
+      top = [double]$Window.Top
+      x = $X
+      y = $Y
+      target_anchor = $TargetAnchor
+      position_receipt_written = $PositionReceiptWritten
+    }
+  }
+
+  if ($null -ne $Window.Dispatcher -and -not [bool]$Window.Dispatcher.CheckAccess()) {
+    return $Window.Dispatcher.Invoke($ApplyPosition)
+  }
+  return $ApplyPosition.Invoke()
+}
+
+function Invoke-OverlayOrbVirtualPointerState {
+  param([string]$Root)
+
+  if ([string]::IsNullOrWhiteSpace($Root)) {
+    return $null
+  }
+
+  $PointerPath = Get-OverlayOrbVirtualPointerStatePath
+  $Pointer = Read-JsonFile -Path $PointerPath
+  if ($null -eq $Pointer) {
+    return $null
+  }
+
+  $PointerMode = Get-StringProperty -Payload $Pointer -Name 'mode' -Default ''
+  $PointerUpdatedAt = Get-StringProperty -Payload $Pointer -Name 'updated_at' -Default ''
+  if ($PointerMode -ne 'orb_pointer' -or [string]::IsNullOrWhiteSpace($PointerUpdatedAt)) {
+    return $null
+  }
+  $LastPointerVariable = Get-Variable -Name LensOverlayLastOrbVirtualPointerUpdatedAt -Scope Script -ErrorAction SilentlyContinue
+  $LastPointerUpdatedAt = if ($null -ne $LastPointerVariable) { [string]$LastPointerVariable.Value } else { '' }
+  if ($PointerUpdatedAt -eq $LastPointerUpdatedAt) {
+    return $null
+  }
+
+  $X = [double](Get-IntegerProperty -Payload $Pointer -Name 'x' -Default 0)
+  $Y = [double](Get-IntegerProperty -Payload $Pointer -Name 'y' -Default 0)
+  $Window = $script:LensOverlayWindow
+  $MotionState = $script:LensOverlayMotionState
+  $WorkArea = $script:LensOverlayWorkArea
+  if ($null -eq $WorkArea -and [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT) {
+    try {
+      $WorkArea = [System.Windows.SystemParameters]::WorkArea
+    } catch {
+      $WorkArea = $null
+    }
+  }
+
+  $Position = Set-OrbWindowCoordinatePosition -Window $Window -WorkArea $WorkArea -X $X -Y $Y -MotionState $MotionState -TargetAnchor 'orb_pointer' -Root $Root
+  $Payload = [ordered]@{
+    status = if ([bool]$Position['applied']) { 'orb_virtual_pointer_applied' } else { 'orb_virtual_pointer_unavailable' }
+    ok = [bool]$Position['applied']
+    runtime_overlay_position_changed = [bool]$Position['applied']
+    virtual_pointer_x = $X
+    virtual_pointer_y = $Y
+    overlay_left = if ([bool]$Position['applied']) { [double]$Position['left'] } else { 0.0 }
+    overlay_top = if ([bool]$Position['applied']) { [double]$Position['top'] } else { 0.0 }
+    position_receipt_written = Get-BoolProperty -Payload $Position -Name 'position_receipt_written' -Default $false
+    controls_user_os_cursor = $false
+    user_mouse_taken = $false
+    physical_input_performed = $false
+    desktop_effect_performed = $false
+    grants_execution_authority = $false
+    grants_mutation_authority = $false
+    error = Get-StringProperty -Payload $Position -Name 'error' -Default ''
+  }
+  $RequestId = 'orb-virtual-pointer-{0}' -f (Get-OverlayTextDigest -Text $PointerUpdatedAt).Substring(0, 12)
+  Write-OverlayOrbVirtualPointerReceipt -Root $Root -RequestId $RequestId -Pointer $Pointer -Result $Payload
+  $script:LensOverlayLastOrbVirtualPointerUpdatedAt = $PointerUpdatedAt
+  return $Payload
 }
 
 function Invoke-OverlayVoiceOrbCommand {
@@ -4888,6 +5050,7 @@ if ($Mode -eq 'Run') {
   $script:LensOverlayMotionState = $null
   $script:LensOverlayRenderFrameClock = $null
   $script:LensOverlayLastPositionReceiptSeconds = -1.0
+  $script:LensOverlayLastOrbVirtualPointerUpdatedAt = ''
   try {
     if (-not $RunningOnWindows) {
       Write-OverlayState -Root $DataRoot -Status 'unsupported' -OverlayWindowVisible $false -AlwaysOnTop $false -Message 'Windows overlay requires a Windows user session.'
@@ -5008,6 +5171,7 @@ if ($Mode -eq 'Run') {
     $CommandTimer = New-Object System.Windows.Threading.DispatcherTimer
     $CommandTimer.Interval = [TimeSpan]::FromMilliseconds(500)
     $CommandTimer.Add_Tick({
+        [void](Invoke-OverlayOrbVirtualPointerState -Root $script:LensOverlayDataRoot)
         [void](Invoke-OverlayQueuedOrbPositionCommand -Root $script:LensOverlayDataRoot)
       })
     $CommandTimer.Start()

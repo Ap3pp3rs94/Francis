@@ -120,8 +120,6 @@ type SpeechRecognitionEventLike = {
 const BRIDGE_MONITOR_POLL_MS = 15000;
 const COLLABORATION_PANEL_POLL_MS = 5000;
 const LENS_MCP_STATUS_TIMEOUT_MS = 5000;
-const ORB_POINTER_STATUS_TIMEOUT_MS = 3000;
-const ORB_POINTER_POLL_MS = 1500;
 const COLLABORATION_READBACK_TIMEOUT_MS = 9000;
 const COLLABORATION_TRANSCRIPT_LIMIT = 40;
 const COLLABORATION_SESSION_ITEM_LIMIT = 50;
@@ -206,72 +204,6 @@ function stringValue(value: unknown, fallback = ""): string {
 
 function booleanValue(value: unknown, fallback = false): boolean {
   return typeof value === "boolean" ? value : fallback;
-}
-
-type OrbVirtualPointerView = {
-  available: boolean;
-  x: number;
-  y: number;
-  updatedAt: string;
-  lastStatus: string;
-  userMouseTaken: boolean;
-  physicalInputPerformed: boolean;
-};
-
-function orbVirtualPointerView(
-  status: LensMcpStatus | null,
-  directOperatorInput: Record<string, unknown> = {},
-): OrbVirtualPointerView | null {
-  const operatorInput = Object.keys(directOperatorInput).length
-    ? directOperatorInput
-    : recordValue(status?.orb_semantic_state.operator_input);
-  const pointer = recordValue(operatorInput["virtual_pointer"]);
-  if (!booleanValue(pointer["available"], false)) return null;
-
-  return {
-    available: true,
-    x: numberValue(pointer["x"]),
-    y: numberValue(pointer["y"]),
-    updatedAt: stringValue(pointer["updated_at"]),
-    lastStatus: stringValue(recordValue(pointer["last_action"])["status"], "unknown"),
-    userMouseTaken: booleanValue(pointer["user_mouse_taken"], false),
-    physicalInputPerformed: booleanValue(pointer["physical_input_performed"], false),
-  };
-}
-
-async function fetchOrbOperatorInput(opts: {
-  baseUrl: string;
-  signal?: AbortSignal;
-  timeoutMs?: number;
-}): Promise<Record<string, unknown>> {
-  const baseUrl = opts.baseUrl.trim().replace(/\/+$/, "");
-  const controller = new AbortController();
-  const abortFromParent = () => controller.abort();
-  if (opts.signal?.aborted) {
-    controller.abort();
-  } else {
-    opts.signal?.addEventListener("abort", abortFromParent, { once: true });
-  }
-  const timeoutId =
-    opts.timeoutMs && opts.timeoutMs > 0 ? window.setTimeout(() => controller.abort(), opts.timeoutMs) : undefined;
-
-  let res: Response;
-  try {
-    res = await fetch(`${baseUrl}/system/orb-pointer`, { method: "GET", signal: controller.signal });
-  } finally {
-    if (timeoutId !== undefined) window.clearTimeout(timeoutId);
-    opts.signal?.removeEventListener("abort", abortFromParent);
-  }
-
-  const text = await res.text();
-  let json: unknown = {};
-  if (text.trim()) {
-    json = JSON.parse(text);
-  }
-  if (!res.ok) {
-    throw new Error(`Orb pointer request failed with HTTP ${res.status}.`);
-  }
-  return recordValue(recordValue(json)["operator_input"]);
 }
 
 function policyRelayView(status: LensMcpStatus | null): PolicyRelayView {
@@ -620,7 +552,6 @@ function BodyStatePanel(props: { status: LensMcpStatus | null; loading: boolean;
 
 const ORB_OVERLAY_SIZE = 128;
 const ORB_OVERLAY_DOCK_MARGIN = 24;
-const ORB_VIRTUAL_POINTER_SIZE = 30;
 
 function clampOrbOverlayPosition(left: number, top: number): { left: number; top: number } {
   if (typeof window === "undefined") return { left, top };
@@ -642,20 +573,6 @@ function dockedOrbOverlayPosition(): { left: number; top: number } {
     window.innerWidth - ORB_OVERLAY_SIZE - ORB_OVERLAY_DOCK_MARGIN,
     window.innerHeight - ORB_OVERLAY_SIZE - ORB_OVERLAY_DOCK_MARGIN,
   );
-}
-
-function clampOrbVirtualPointerPosition(x: number, y: number): { left: number; top: number } {
-  if (typeof window === "undefined") {
-    return { left: x, top: y };
-  }
-
-  const half = ORB_VIRTUAL_POINTER_SIZE / 2;
-  const maxLeft = Math.max(0, window.innerWidth - ORB_VIRTUAL_POINTER_SIZE);
-  const maxTop = Math.max(0, window.innerHeight - ORB_VIRTUAL_POINTER_SIZE);
-  return {
-    left: Math.min(Math.max(0, x - half), maxLeft),
-    top: Math.min(Math.max(0, y - half), maxTop),
-  };
 }
 
 function getQueryParam(name: string): string {
@@ -5087,16 +5004,8 @@ function BridgeMonitorPanel(props: { baseUrl: string }) {
   );
 }
 
-function OrbOverlaySurface(props: {
-  status: LensMcpStatus | null;
-  loading: boolean;
-  operatorInput: Record<string, unknown>;
-}) {
+function OrbOverlaySurface(props: { status: LensMcpStatus | null; loading: boolean }) {
   const orb = presentOrbGlyph(props.status, props.loading);
-  const virtualPointer = orbVirtualPointerView(props.status, props.operatorInput);
-  const virtualPointerPosition = virtualPointer
-    ? clampOrbVirtualPointerPosition(virtualPointer.x, virtualPointer.y)
-    : null;
   const dragState = useRef<{ pointerId: number; offsetX: number; offsetY: number } | null>(null);
   const [dragging, setDragging] = useState(false);
   const [position, setPosition] = useState(dockedOrbOverlayPosition);
@@ -5156,44 +5065,6 @@ function OrbOverlaySurface(props: {
         width: snapshotMode ? ORB_OVERLAY_SIZE : undefined,
       }}
     >
-      {virtualPointer && virtualPointerPosition ? (
-        <div
-          aria-label={`Francis Orb virtual pointer at ${virtualPointer.x}, ${virtualPointer.y}; user OS cursor not controlled.`}
-          data-orb-virtual-pointer="true"
-          data-user-os-cursor-controlled={virtualPointer.userMouseTaken ? "true" : "false"}
-          data-physical-input-performed={virtualPointer.physicalInputPerformed ? "true" : "false"}
-          title={`Francis Orb pointer: ${virtualPointer.lastStatus}; OS cursor untouched`}
-          style={{
-            alignItems: "center",
-            background: "rgba(14, 165, 233, 0.12)",
-            border: "1px solid rgba(125, 211, 252, 0.92)",
-            borderRadius: 999,
-            boxShadow: "0 0 18px rgba(56, 189, 248, 0.36)",
-            boxSizing: "border-box",
-            color: "#e0f2fe",
-            display: "flex",
-            height: ORB_VIRTUAL_POINTER_SIZE,
-            justifyContent: "center",
-            left: virtualPointerPosition.left,
-            pointerEvents: "none",
-            position: "fixed",
-            top: virtualPointerPosition.top,
-            width: ORB_VIRTUAL_POINTER_SIZE,
-          }}
-        >
-          <span
-            aria-hidden="true"
-            style={{
-              background: "#e0f2fe",
-              borderRadius: 999,
-              boxShadow: "0 0 10px rgba(224, 242, 254, 0.9)",
-              display: "block",
-              height: 8,
-              width: 8,
-            }}
-          />
-        </div>
-      ) : null}
       <button
         type="button"
         aria-label={orb.label}
@@ -5231,7 +5102,6 @@ function OrbOverlaySurface(props: {
 
 export default function App() {
   const [status, setStatus] = useState<LensMcpStatus | null>(null);
-  const [orbOperatorInput, setOrbOperatorInput] = useState<Record<string, unknown>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const baseUrl = useMemo(() => apiBaseUrl(), []);
@@ -5267,36 +5137,12 @@ export default function App() {
     [baseUrl],
   );
 
-  const loadOrbOperatorInput = useCallback(
-    (signal?: AbortSignal) => {
-      void fetchOrbOperatorInput({ baseUrl, signal, timeoutMs: ORB_POINTER_STATUS_TIMEOUT_MS })
-        .then((nextInput) => {
-          setOrbOperatorInput(nextInput);
-        })
-        .catch((_err: unknown) => {
-          if (signal?.aborted) return;
-        });
-    },
-    [baseUrl],
-  );
-
   useEffect(() => {
     if (communicationOnly) return;
     const controller = new AbortController();
     loadStatus(controller.signal);
     return () => controller.abort();
   }, [communicationOnly, loadStatus]);
-
-  useEffect(() => {
-    if (!orbOverlayIntent) return;
-    const controller = new AbortController();
-    loadOrbOperatorInput(controller.signal);
-    const intervalId = window.setInterval(() => loadOrbOperatorInput(controller.signal), ORB_POINTER_POLL_MS);
-    return () => {
-      controller.abort();
-      window.clearInterval(intervalId);
-    };
-  }, [loadOrbOperatorInput, orbOverlayIntent]);
 
   const shell: CSSProperties = {
     background: "radial-gradient(circle at 32% 18%, #070a10 0, #04060a 55%, #030407 100%)",
@@ -5307,7 +5153,7 @@ export default function App() {
   };
 
   if (orbOverlayIntent) {
-    return <OrbOverlaySurface status={status} loading={loading} operatorInput={orbOperatorInput} />;
+    return <OrbOverlaySurface status={status} loading={loading} />;
   }
 
   if (communicationOnly) {

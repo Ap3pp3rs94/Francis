@@ -100067,11 +100067,17 @@ What changed:
   occurred, and whether an app bridge is still required for a real desktop
   effect.
 - `/lens/mcp/status` now carries the Orb operator input readback through
-  `orb_semantic_state.operator_input`, and the existing chat UI Orb overlay can
-  render a small read-only Francis Orb pointer marker from that state.
+  `orb_semantic_state.operator_input`.
 - `/system/orb-pointer` now exposes the same read-only operator input state
-  through a lightweight route so the overlay can self-update without waiting on
-  the heavier full Orb/MCP status readbacks.
+  through a lightweight route without granting input authority.
+- `scripts/lens-overlay-window.ps1` now reads
+  `.francis/orb_operator/virtual_pointer_state.json` and applies the coordinate
+  to the existing WPF desktop Orb window. This uses the locked Orb renderer and
+  writes `lens.overlay.orb_virtual_pointer.receipt` evidence; it does not create
+  a browser marker, a fake cursor skin, or a second overlay application.
+- The earlier browser marker proof was rejected as non-authoritative because it
+  was not the canonical Francis Orb. The chat UI no longer renders
+  `data-orb-virtual-pointer`.
 
 Validation:
 
@@ -100083,6 +100089,9 @@ Validation:
 - `python -m py_compile src\francis\api\routes\system.py src\francis\input_actuator\orb_operator.py src\francis\lens\mcp_status_bridge.py tests\unit\test_orb_operator.py tests\unit\test_lens_orb_mcp_status_bridge.py tests\test_api_system_settings.py`
   passed.
 - `npm run build` in `apps/chat_ui` passed.
+- `python -m pytest tests\test_orb_phase0_contracts.py tests\unit\test_orb_operator.py::test_orb_pointer_move_updates_virtual_pointer_without_user_mouse tests\unit\test_orb_operator.py::test_orb_pointer_click_records_virtual_event_without_desktop_click tests\unit\test_orb_operator.py::test_latest_orb_operator_state_surfaces_virtual_pointer tests\test_api_system_settings.py::test_system_read_aliases_match_primary_routes tests\test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted -q`
+  passed after correcting the visual target to the real overlay Orb.
+- PowerShell parser validation for `scripts\lens-overlay-window.ps1` passed.
 - Manual proof
   `python -m francis.input_actuator.orb_operator --mode orb_pointer --x 420 --y 260 --text "Francis Orb virtual pointer"`
   passed with `ok=true`, `mode=orb_pointer`, `virtual_pointer_only=true`,
@@ -100091,9 +100100,11 @@ Validation:
   `GET /system/orb-pointer` returned `ok=true`, virtual pointer coordinates
   `(420, 260)`, `controls_user_os_cursor=false`, `user_mouse_taken=false`, and
   `physical_input_performed=false`.
-- `npx --yes playwright screenshot "http://127.0.0.1:5173/?francis_lens=orb_overlay" output\playwright\orb-virtual-pointer.png`
-  produced a visual proof with the Orb docked separately from the virtual
-  pointer marker at the requested screen coordinate.
+- `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts\lens-overlay-window.ps1 -Mode Start`
+  started the canonical WPF desktop Orb overlay. Follow-up status readback
+  reported `overlay_window=true`, `anchor=orb_pointer`, `left=310.4`,
+  `top=150.4`, and `right_corner_locked=false`, proving the real desktop Orb
+  consumed the virtual pointer state.
 
 Receipt evidence:
 
@@ -100103,16 +100114,17 @@ Receipt evidence:
   `.francis/orb_operator/receipts/orb_operator_370db4d2ea73.json`.
 - Virtual pointer readback:
   `.francis/orb_operator/virtual_pointer_state.json`.
-- Local visual proof:
-  `output/playwright/orb-virtual-pointer.png`.
+- Real overlay virtual-pointer receipt:
+  `data/runtime/lens-overlay/orb-position-commands/orb-virtual-pointer-c156a072fd7e.json`.
 
 Remaining truthful gap:
 
-- The virtual pointer is now stateful, receipt-backed, and renderable in the
-  existing Orb overlay, but virtual click/type events do not yet create real
-  desktop effects without a future app/accessibility bridge.
+- The virtual pointer is now stateful, receipt-backed, and consumed by the
+  existing desktop Orb overlay when that runtime is live, but virtual click/type
+  events do not yet create real desktop effects without a future
+  app/accessibility bridge.
 - This slice did not add multi-pointer OS injection, inspect live pixels, verify
-  the overlay with a browser screenshot, or close any roadmap stage.
+  the overlay with OS-level screenshot evidence, or close any roadmap stage.
 
 ## 6. Update rule
 
