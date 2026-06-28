@@ -14,6 +14,7 @@ from typing import Any
 from francis.kernel.paths import repo_root
 
 from .contracts import InputActuatorError
+from .orb_desktop_bridge import perform_orb_desktop_action
 from .tools import execute_approved_input_action, propose_input_action
 
 ORB_OPERATOR_SURFACE = "francis.orb_operator.v0"
@@ -195,12 +196,18 @@ def _write_virtual_pointer_state(
     actor: str,
     objective: str,
     session_id: str,
+    resolved_position: tuple[int, int] | None = None,
+    desktop_bridge: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    x, y = _virtual_pointer_position(input_kind, payload)
+    x, y = resolved_position or _virtual_pointer_position(input_kind, payload)
     now = _utc_now()
     public_action = _public_input_action(input_kind, payload)
     gesture = _virtual_pointer_gesture(input_kind, payload)
     requires_bridge = input_kind != "mouse.move"
+    bridge = desktop_bridge if isinstance(desktop_bridge, dict) else {}
+    desktop_action_sent = bool(bridge.get("desktop_action_sent"))
+    desktop_effect_performed = bool(bridge.get("desktop_effect_performed"))
+    desktop_effect_confirmed = bool(bridge.get("desktop_effect_confirmed"))
     state = {
         "ok": True,
         "kind": "francis.orb_operator.virtual_pointer_state",
@@ -220,11 +227,16 @@ def _write_virtual_pointer_state(
             "actor": actor,
             "objective": objective,
             "session_id": session_id,
-            "desktop_effect_performed": False,
+            "desktop_bridge_status": _clean_text(bridge.get("status")),
+            "desktop_bridge_receipt_id": _clean_text(bridge.get("receipt_id")),
+            "desktop_bridge_receipt_path": _clean_text(bridge.get("receipt_path")),
+            "desktop_action_sent": desktop_action_sent,
+            "desktop_effect_performed": desktop_effect_performed,
+            "desktop_effect_confirmed": desktop_effect_confirmed,
             "physical_input_performed": False,
             "user_os_cursor_moved": False,
             "user_mouse_taken": False,
-            "requires_app_bridge_for_desktop_effect": requires_bridge,
+            "requires_app_bridge_for_desktop_effect": requires_bridge and not desktop_effect_performed,
         },
         "gesture": gesture,
         "governance": {
@@ -232,8 +244,10 @@ def _write_virtual_pointer_state(
             "controls_user_os_cursor": False,
             "moves_user_mouse": False,
             "physical_input_performed": False,
-            "desktop_effect_performed": False,
-            "requires_app_bridge_for_desktop_effect": requires_bridge,
+            "desktop_action_sent": desktop_action_sent,
+            "desktop_effect_performed": desktop_effect_performed,
+            "desktop_effect_confirmed": desktop_effect_confirmed,
+            "requires_app_bridge_for_desktop_effect": requires_bridge and not desktop_effect_performed,
             "receipt_required_for_actions": True,
         },
     }
@@ -574,12 +588,29 @@ class DesktopInputBackend:
     ) -> BackendAttempt:
         if self.mode == ORB_POINTER_MODE:
             try:
+                resolved_position = _virtual_pointer_position(kind, payload)
+                bridge_payload = dict(payload)
+                bridge_payload.setdefault("x", resolved_position[0])
+                bridge_payload.setdefault("y", resolved_position[1])
+                desktop_bridge = (
+                    perform_orb_desktop_action(
+                        input_kind=kind,
+                        payload=bridge_payload,
+                        actor=self.actor,
+                        objective=self.objective,
+                        session_id=self.session_id,
+                    )
+                    if kind != "mouse.move"
+                    else {}
+                )
                 pointer = _write_virtual_pointer_state(
                     input_kind=kind,
                     payload=payload,
                     actor=self.actor,
                     objective=self.objective,
                     session_id=self.session_id,
+                    resolved_position=resolved_position,
+                    desktop_bridge=desktop_bridge,
                 )
             except Exception as exc:
                 return BackendAttempt(
@@ -620,7 +651,25 @@ class DesktopInputBackend:
                         "updated_at": _clean_text(state.get("updated_at")),
                         "last_action": last_action,
                     },
-                    "desktop_effect_performed": False,
+                    "desktop_bridge": desktop_bridge if isinstance(desktop_bridge, dict) else {},
+                    "desktop_bridge_status": _clean_text(desktop_bridge.get("status"))
+                    if isinstance(desktop_bridge, dict)
+                    else "",
+                    "desktop_bridge_receipt_id": _clean_text(desktop_bridge.get("receipt_id"))
+                    if isinstance(desktop_bridge, dict)
+                    else "",
+                    "desktop_bridge_receipt_path": _clean_text(desktop_bridge.get("receipt_path"))
+                    if isinstance(desktop_bridge, dict)
+                    else "",
+                    "desktop_action_sent": bool(desktop_bridge.get("desktop_action_sent"))
+                    if isinstance(desktop_bridge, dict)
+                    else False,
+                    "desktop_effect_performed": bool(desktop_bridge.get("desktop_effect_performed"))
+                    if isinstance(desktop_bridge, dict)
+                    else False,
+                    "desktop_effect_confirmed": bool(desktop_bridge.get("desktop_effect_confirmed"))
+                    if isinstance(desktop_bridge, dict)
+                    else False,
                     "physical_input_performed": False,
                     "user_os_cursor_moved": False,
                     "user_mouse_taken": False,
@@ -639,7 +688,15 @@ class DesktopInputBackend:
                     "physical_input_performed": False,
                     "user_os_cursor_controlled": False,
                     "user_mouse_taken": False,
-                    "desktop_effect_performed": False,
+                    "desktop_action_sent": bool(desktop_bridge.get("desktop_action_sent"))
+                    if isinstance(desktop_bridge, dict)
+                    else False,
+                    "desktop_effect_performed": bool(desktop_bridge.get("desktop_effect_performed"))
+                    if isinstance(desktop_bridge, dict)
+                    else False,
+                    "desktop_effect_confirmed": bool(desktop_bridge.get("desktop_effect_confirmed"))
+                    if isinstance(desktop_bridge, dict)
+                    else False,
                     "requires_app_bridge_for_desktop_effect": bool(
                         last_action.get("requires_app_bridge_for_desktop_effect")
                     ),
@@ -1001,6 +1058,9 @@ def _operator_governance(
     live_allowed = mode == "guarded_live" and backend_attempt.performed
     uses_user_os_cursor = live_allowed and backend_attempt.input_kind.startswith("mouse.")
     virtual_pointer_only = mode == ORB_POINTER_MODE
+    orb_desktop_action_sent = virtual_pointer_only and bool(backend_attempt.result.get("desktop_action_sent"))
+    orb_desktop_effect_performed = virtual_pointer_only and bool(backend_attempt.result.get("desktop_effect_performed"))
+    orb_desktop_effect_confirmed = virtual_pointer_only and bool(backend_attempt.result.get("desktop_effect_confirmed"))
     return {
         "decision": backend_attempt.governance.get("decision", "deny"),
         "mode": mode,
@@ -1013,9 +1073,12 @@ def _operator_governance(
         "uses_user_os_cursor": uses_user_os_cursor,
         "user_mouse_taken": uses_user_os_cursor,
         "physical_input_performed": live_allowed,
-        "desktop_effect_performed": live_allowed,
+        "desktop_action_sent": orb_desktop_action_sent,
+        "desktop_effect_performed": live_allowed or orb_desktop_effect_performed,
+        "desktop_effect_confirmed": orb_desktop_effect_confirmed,
         "live_input_performed": live_allowed,
-        "input_execution_attempted": bool(backend_attempt.result.get("input_execution_attempted")),
+        "input_execution_attempted": bool(backend_attempt.result.get("input_execution_attempted"))
+        or orb_desktop_action_sent,
         "input_proposal_written": bool(backend_attempt.result.get("proposal_written")),
         "manual_approval_required_for_execution": mode == "dry_run" or backend_attempt.status == "approval_required",
         "guarded_live_requires_existing_input_approval": True,
@@ -1144,6 +1207,10 @@ def _operator_result_status(resolution: IntentResolution, backend_attempt: Backe
     if not backend_attempt.ok:
         return "failed"
     if backend_attempt.status.startswith("virtual_pointer_"):
+        if backend_attempt.result.get("requires_app_bridge_for_desktop_effect") and not backend_attempt.result.get(
+            "desktop_effect_performed"
+        ):
+            return "visible_only"
         return "complete"
     if backend_attempt.status == "dry_run_proposed":
         return "dry_run"

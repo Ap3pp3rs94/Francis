@@ -100248,6 +100248,81 @@ Remaining truthful gap:
 - Some pause can still occur during deliberate Orb gesture receipts because the
   overlay still writes position/action receipts on the UI-owned movement path.
 
+### 2026-06-28 22:05Z - Orb desktop action bridge foundation
+
+Current posture: Phase 2 / Orb embodied desktop operation now has a gated
+desktop-action bridge behind the Francis-owned Orb pointer. This closes the
+prior ambiguity where visible Orb gestures could look complete while still
+recording `desktop_effect_performed=false`. The default path remains safe:
+without `FRANCIS_ORB_DESKTOP_BRIDGE_ENABLE=1`, Orb click/drag/type gestures are
+truthfully reported as `visible_only` and write a blocked bridge receipt.
+
+What changed:
+
+- Added a receipt-backed `win32_post_message` Orb desktop bridge that resolves a
+  non-Francis target window under the Orb coordinate, excludes the Francis Lens
+  Overlay by title, and posts left-click, segmented drag, right-click, and
+  typed-character messages without moving the user's OS cursor.
+- Wired `orb_pointer` mode through that bridge for click, drag, and type
+  intents while preserving virtual pointer movement as the visible Orb body
+  state.
+- Operator receipts and virtual pointer state now include bridge status,
+  bridge receipt paths, `desktop_action_sent`, `desktop_effect_performed`,
+  `desktop_effect_confirmed`, `user_mouse_taken`, and
+  `physical_input_performed`.
+- When the bridge is not enabled, non-move Orb gestures now report
+  `visible_only` rather than a full desktop-action `complete`.
+
+Validation:
+
+- `python -m ruff check src/francis/input_actuator/orb_operator.py src/francis/input_actuator/orb_desktop_bridge.py tests/unit/test_orb_operator.py`
+  passed.
+- `python -m ruff format src/francis/input_actuator/orb_operator.py src/francis/input_actuator/orb_desktop_bridge.py tests/unit/test_orb_operator.py`
+  reformatted one touched file.
+- `python -m py_compile src\francis\input_actuator\orb_operator.py src\francis\input_actuator\orb_desktop_bridge.py`
+  passed.
+- `python -m pytest tests\unit\test_orb_operator.py -q` passed.
+- `python -m pytest tests\test_orb_phase0_contracts.py tests\test_lens_overlay_window_script.py -q`
+  passed.
+- Durable safe-window runtime proof with `FRANCIS_ORB_DESKTOP_BRIDGE_ENABLE=1`
+  completed with `desktop_action_sent_count=4`, `received_event_count=12`,
+  `uses_user_os_cursor=false`, `user_mouse_taken=false`, and
+  `physical_input_performed=false`.
+- Live overlay status after the durable proof reported `status=visible`,
+  `ready=true`, `overlay_window=true`, `anchor=orb_pointer`,
+  `right_corner_locked=false`, `left=110.4`, and `top=70.4`.
+- A separate overlay-bound gesture with the bridge disabled wrote visible-only
+  receipts and blocked bridge receipts without affecting desktop apps.
+
+Receipt evidence:
+
+- Durable bridge proof operator receipts:
+  `.francis/orb_operator/receipts/orb_operator_02f57cc08207.json`,
+  `.francis/orb_operator/receipts/orb_operator_5c62d3c0704b.json`,
+  `.francis/orb_operator/receipts/orb_operator_98addb69f3b8.json`,
+  `.francis/orb_operator/receipts/orb_operator_1a9f68bd4261.json`, and
+  `.francis/orb_operator/receipts/orb_operator_7440bc6f0a41.json`.
+- Durable bridge proof desktop bridge receipts:
+  `.francis/orb_operator/desktop_bridge_receipts/orb_desktop_bridge_387f41c80765.json`,
+  `.francis/orb_operator/desktop_bridge_receipts/orb_desktop_bridge_dd89c8bfe6a1.json`,
+  `.francis/orb_operator/desktop_bridge_receipts/orb_desktop_bridge_6ec646841340.json`,
+  and `.francis/orb_operator/desktop_bridge_receipts/orb_desktop_bridge_eb276054f19b.json`.
+- Bridge-disabled visible-only receipts include
+  `.francis/orb_operator/receipts/orb_operator_3bb42c0b81d4.json` and
+  `.francis/orb_operator/desktop_bridge_receipts/orb_desktop_bridge_484d98e09abd.json`.
+- Live overlay status path:
+  `data/runtime/lens-overlay/status.json`.
+
+Remaining truthful gap:
+
+- This is not a universal independent OS pointer driver. It is a gated Win32
+  target-window message bridge and will only affect applications that accept
+  posted window messages.
+- `desktop_effect_confirmed` remains `false` until a post-action observer can
+  verify target-side UI state changes.
+- Real application use should stay limited to safe, operator-approved targets
+  until the observer/target-resolution proof is stronger.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
