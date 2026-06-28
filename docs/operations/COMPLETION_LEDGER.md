@@ -100046,6 +100046,74 @@ Remaining truthful gap:
   receive a governed click and short typed text without touching unrelated
   desktop state.
 
+### 2026-06-28 01:16Z - Orb virtual pointer foundation
+
+Current posture: Phase 2 / Orb embodied desktop operation now has a separate
+Francis-owned virtual pointer path for the Orb. This corrects the operator
+boundary from "move the user's physical cursor" toward "operate through the Orb
+as Francis's visible body." The user OS cursor remains untouched in the new
+`orb_pointer` mode; the older `guarded_live` path remains available only as an
+explicit governed bridge to physical input.
+
+What changed:
+
+- `DesktopInputBackend` now supports `orb_pointer` mode alongside `dry_run` and
+  `guarded_live`.
+- `orb_pointer` mode writes `.francis/orb_operator/virtual_pointer_state.json`
+  and per-action operator receipts without creating input proposals or calling
+  the physical input actuator.
+- Orb pointer move, click, and type intents now record whether they were
+  virtual-only, whether user OS cursor control was used, whether physical input
+  occurred, and whether an app bridge is still required for a real desktop
+  effect.
+- `/lens/mcp/status` now carries the Orb operator input readback through
+  `orb_semantic_state.operator_input`, and the existing chat UI Orb overlay can
+  render a small read-only Francis Orb pointer marker from that state.
+- `/system/orb-pointer` now exposes the same read-only operator input state
+  through a lightweight route so the overlay can self-update without waiting on
+  the heavier full Orb/MCP status readbacks.
+
+Validation:
+
+- `python -m pytest tests\unit\test_orb_operator.py::test_orb_pointer_move_updates_virtual_pointer_without_user_mouse tests\unit\test_orb_operator.py::test_orb_pointer_click_records_virtual_event_without_desktop_click tests\unit\test_orb_operator.py::test_latest_orb_operator_state_surfaces_virtual_pointer tests\unit\test_lens_orb_mcp_status_bridge.py::test_lens_orb_mcp_status_bridge_surfaces_substrate_semantic_state -q`
+  passed.
+- `python -m pytest tests\unit\test_orb_operator.py::test_orb_pointer_move_updates_virtual_pointer_without_user_mouse tests\unit\test_orb_operator.py::test_orb_pointer_click_records_virtual_event_without_desktop_click tests\unit\test_orb_operator.py::test_latest_orb_operator_state_surfaces_virtual_pointer tests\unit\test_lens_orb_mcp_status_bridge.py::test_lens_orb_mcp_status_bridge_surfaces_substrate_semantic_state tests\test_api_system_settings.py::test_system_read_aliases_match_primary_routes tests\test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted -q`
+  passed after adding the lightweight pointer route.
+- `node --test --experimental-strip-types src/lens/mcpStatus.test.ts` passed.
+- `python -m py_compile src\francis\api\routes\system.py src\francis\input_actuator\orb_operator.py src\francis\lens\mcp_status_bridge.py tests\unit\test_orb_operator.py tests\unit\test_lens_orb_mcp_status_bridge.py tests\test_api_system_settings.py`
+  passed.
+- `npm run build` in `apps/chat_ui` passed.
+- Manual proof
+  `python -m francis.input_actuator.orb_operator --mode orb_pointer --x 420 --y 260 --text "Francis Orb virtual pointer"`
+  passed with `ok=true`, `mode=orb_pointer`, `virtual_pointer_only=true`,
+  `uses_user_os_cursor=false`, and `user_mouse_taken=false`.
+- After restarting the local API on `127.0.0.1:8000`,
+  `GET /system/orb-pointer` returned `ok=true`, virtual pointer coordinates
+  `(420, 260)`, `controls_user_os_cursor=false`, `user_mouse_taken=false`, and
+  `physical_input_performed=false`.
+- `npx --yes playwright screenshot "http://127.0.0.1:5173/?francis_lens=orb_overlay" output\playwright\orb-virtual-pointer.png`
+  produced a visual proof with the Orb docked separately from the virtual
+  pointer marker at the requested screen coordinate.
+
+Receipt evidence:
+
+- Manual Orb operator receipts:
+  `.francis/orb_operator/receipts/orb_operator_4c0012c91792.json`,
+  `.francis/orb_operator/receipts/orb_operator_a151db2e9058.json`, and
+  `.francis/orb_operator/receipts/orb_operator_370db4d2ea73.json`.
+- Virtual pointer readback:
+  `.francis/orb_operator/virtual_pointer_state.json`.
+- Local visual proof:
+  `output/playwright/orb-virtual-pointer.png`.
+
+Remaining truthful gap:
+
+- The virtual pointer is now stateful, receipt-backed, and renderable in the
+  existing Orb overlay, but virtual click/type events do not yet create real
+  desktop effects without a future app/accessibility bridge.
+- This slice did not add multi-pointer OS injection, inspect live pixels, verify
+  the overlay with a browser screenshot, or close any roadmap stage.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

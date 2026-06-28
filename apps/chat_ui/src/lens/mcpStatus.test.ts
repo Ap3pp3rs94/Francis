@@ -50,6 +50,17 @@ test("parseLensMcpStatus preserves truthful Orb/Lens body state", () => {
         counts: { blocked_missions: 1 },
         focus: { mission_id: "msn_blocked", operation_id: "tsk_blocked" },
       },
+      operator_input: {
+        feedback_state: "complete",
+        virtual_pointer: {
+          available: true,
+          pointer_id: "francis.orb.primary_virtual_pointer",
+          x: "101",
+          y: 202,
+          controls_user_os_cursor: false,
+          user_mouse_taken: false,
+        },
+      },
       read_only: true,
       private_ui_state: false,
       visual_change: false,
@@ -124,6 +135,11 @@ test("parseLensMcpStatus preserves truthful Orb/Lens body state", () => {
   assert.deepEqual(status.orb_semantic_state.activity_intensity, { level: "handoff" });
   assert.equal(status.orb_semantic_state.semantic_operator_state["state"], "blocked");
   assert.deepEqual(status.orb_semantic_state.semantic_operator_state["counts"], { blocked_missions: 1 });
+  assert.equal(status.orb_semantic_state.operator_input["feedback_state"], "complete");
+  assert.deepEqual(
+    (status.orb_semantic_state.operator_input["virtual_pointer"] as Record<string, unknown>)["controls_user_os_cursor"],
+    false,
+  );
   assert.equal(status.orb_semantic_state.read_only, true);
   assert.equal(status.orb_semantic_state.private_ui_state, false);
   assert.equal(status.orb_semantic_state.visual_change, false);

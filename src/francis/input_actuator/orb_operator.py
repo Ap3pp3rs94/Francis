@@ -17,6 +17,9 @@ from .tools import execute_approved_input_action, propose_input_action
 
 ORB_OPERATOR_SURFACE = "francis.orb_operator.v0"
 ORB_OPERATOR_STAGE = "Phase 2 / Lens Orb embodied desktop operation"
+ORB_POINTER_MODE = "orb_pointer"
+ORB_BACKEND_MODES = ("dry_run", "guarded_live", ORB_POINTER_MODE)
+ORB_VIRTUAL_POINTER_ID = "francis.orb.primary_virtual_pointer"
 
 ORB_FEEDBACK_STATES = (
     "idle",
@@ -49,6 +52,10 @@ def _receipt_dir() -> Path:
     path = _state_root() / "receipts"
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def _virtual_pointer_state_path() -> Path:
+    return _state_root() / "virtual_pointer_state.json"
 
 
 def _input_actuator_state_root() -> Path:
@@ -112,6 +119,88 @@ def _rect_center(rect: dict[str, Any]) -> tuple[int, int]:
     width = max(0, _safe_int(rect.get("width"), 0))
     height = max(0, _safe_int(rect.get("height"), 0))
     return (_bounded_coord(x + width // 2, "rect.center_x"), _bounded_coord(y + height // 2, "rect.center_y"))
+
+
+def _read_virtual_pointer_state() -> dict[str, Any]:
+    path = _virtual_pointer_state_path()
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _virtual_pointer_position(payload: dict[str, Any]) -> tuple[int, int]:
+    previous = _read_virtual_pointer_state()
+    if payload.get("x") is not None and payload.get("y") is not None:
+        return _bounded_coord(payload.get("x"), "x"), _bounded_coord(payload.get("y"), "y")
+    return (
+        _bounded_coord(previous.get("x", 0), "virtual_pointer.x"),
+        _bounded_coord(previous.get("y", 0), "virtual_pointer.y"),
+    )
+
+
+def _virtual_pointer_action_status(input_kind: str) -> str:
+    if input_kind == "mouse.move":
+        return "virtual_pointer_moved"
+    if input_kind == "mouse.click":
+        return "virtual_pointer_click_recorded"
+    if input_kind in {"keyboard.type", "keyboard.hotkey"}:
+        return "virtual_pointer_keyboard_event_recorded"
+    return "virtual_pointer_event_recorded"
+
+
+def _write_virtual_pointer_state(
+    *,
+    input_kind: str,
+    payload: dict[str, Any],
+    actor: str,
+    objective: str,
+    session_id: str,
+) -> dict[str, Any]:
+    x, y = _virtual_pointer_position(payload)
+    now = _utc_now()
+    public_action = _public_input_action(input_kind, payload)
+    requires_bridge = input_kind != "mouse.move"
+    state = {
+        "ok": True,
+        "kind": "francis.orb_operator.virtual_pointer_state",
+        "surface": ORB_OPERATOR_SURFACE,
+        "stage": ORB_OPERATOR_STAGE,
+        "pointer_id": ORB_VIRTUAL_POINTER_ID,
+        "updated_at": now,
+        "mode": ORB_POINTER_MODE,
+        "x": x,
+        "y": y,
+        "position": {"x": x, "y": y, "source": "orb_virtual_pointer"},
+        "last_action": {
+            "input_kind": input_kind,
+            "status": _virtual_pointer_action_status(input_kind),
+            "public_action": public_action,
+            "actor": actor,
+            "objective": objective,
+            "session_id": session_id,
+            "desktop_effect_performed": False,
+            "physical_input_performed": False,
+            "user_os_cursor_moved": False,
+            "user_mouse_taken": False,
+            "requires_app_bridge_for_desktop_effect": requires_bridge,
+        },
+        "governance": {
+            "virtual_pointer_only": True,
+            "controls_user_os_cursor": False,
+            "moves_user_mouse": False,
+            "physical_input_performed": False,
+            "desktop_effect_performed": False,
+            "requires_app_bridge_for_desktop_effect": requires_bridge,
+            "receipt_required_for_actions": True,
+        },
+    }
+    path = _virtual_pointer_state_path()
+    _write_json(path, state)
+    return {"path": str(path), "state": state}
 
 
 @dataclass(frozen=True)
@@ -335,7 +424,9 @@ class DesktopInputBackend:
     Dry-run mode writes an Orb operator receipt and a governed input proposal; it
     never calls the physical input executor. Guarded-live mode only delegates to
     the existing input actuator execution path when an approved proposal phrase is
-    supplied, leaving takeover/handoff/env gates load-bearing.
+    supplied, leaving takeover/handoff/env gates load-bearing. Orb-pointer mode
+    updates Francis's own virtual pointer state and never touches the user's OS
+    cursor or keyboard.
     """
 
     mode: str = "dry_run"
@@ -344,8 +435,8 @@ class DesktopInputBackend:
     session_id: str = ""
 
     def __post_init__(self) -> None:
-        if self.mode not in {"dry_run", "guarded_live"}:
-            raise InputActuatorError("DesktopInputBackend mode must be dry_run or guarded_live")
+        if self.mode not in ORB_BACKEND_MODES:
+            raise InputActuatorError("DesktopInputBackend mode must be dry_run, guarded_live, or orb_pointer")
 
     def mouse_move(self, x: int, y: int, *, proposal_id: str = "", approval_phrase: str = "") -> BackendAttempt:
         return self._submit("mouse.move", {"x": x, "y": y}, proposal_id=proposal_id, approval_phrase=approval_phrase)
@@ -398,6 +489,80 @@ class DesktopInputBackend:
         proposal_id: str = "",
         approval_phrase: str = "",
     ) -> BackendAttempt:
+        if self.mode == ORB_POINTER_MODE:
+            try:
+                pointer = _write_virtual_pointer_state(
+                    input_kind=kind,
+                    payload=payload,
+                    actor=self.actor,
+                    objective=self.objective,
+                    session_id=self.session_id,
+                )
+            except Exception as exc:
+                return BackendAttempt(
+                    ok=False,
+                    status="blocked",
+                    mode=self.mode,
+                    backend="francis.orb_virtual_pointer",
+                    input_kind=kind,
+                    governance={
+                        "decision": "deny",
+                        "virtual_pointer_only": True,
+                        "raw_input": False,
+                        "performed": False,
+                        "physical_input_performed": False,
+                        "user_mouse_taken": False,
+                    },
+                    error=str(exc),
+                )
+            state = _coerce_dict(pointer.get("state"))
+            last_action = _coerce_dict(state.get("last_action"))
+            return BackendAttempt(
+                ok=True,
+                status=_virtual_pointer_action_status(kind),
+                mode=self.mode,
+                backend="francis.orb_virtual_pointer",
+                input_kind=kind,
+                performed=False,
+                dry_run=False,
+                result={
+                    "input_execution_attempted": False,
+                    "proposal_written": False,
+                    "virtual_pointer_updated": True,
+                    "pointer_state_path": _clean_text(pointer.get("path")),
+                    "pointer_state": {
+                        "pointer_id": _clean_text(state.get("pointer_id")),
+                        "x": _safe_int(state.get("x")),
+                        "y": _safe_int(state.get("y")),
+                        "updated_at": _clean_text(state.get("updated_at")),
+                        "last_action": last_action,
+                    },
+                    "desktop_effect_performed": False,
+                    "physical_input_performed": False,
+                    "user_os_cursor_moved": False,
+                    "user_mouse_taken": False,
+                    "requires_app_bridge_for_desktop_effect": bool(
+                        last_action.get("requires_app_bridge_for_desktop_effect")
+                    ),
+                },
+                governance={
+                    "decision": "allow_virtual_pointer",
+                    "virtual_pointer_only": True,
+                    "dry_run": False,
+                    "writes_pointer_state": True,
+                    "writes_proposal": False,
+                    "raw_input": False,
+                    "performed": False,
+                    "physical_input_performed": False,
+                    "user_os_cursor_controlled": False,
+                    "user_mouse_taken": False,
+                    "desktop_effect_performed": False,
+                    "requires_app_bridge_for_desktop_effect": bool(
+                        last_action.get("requires_app_bridge_for_desktop_effect")
+                    ),
+                },
+            )
+
         if self.mode == "dry_run":
             try:
                 proposal = propose_input_action(
@@ -714,6 +879,8 @@ def _operator_governance(
     backend_attempt: BackendAttempt,
 ) -> dict[str, Any]:
     live_allowed = mode == "guarded_live" and backend_attempt.performed
+    uses_user_os_cursor = live_allowed and backend_attempt.input_kind.startswith("mouse.")
+    virtual_pointer_only = mode == ORB_POINTER_MODE
     return {
         "decision": backend_attempt.governance.get("decision", "deny"),
         "mode": mode,
@@ -722,12 +889,20 @@ def _operator_governance(
         "screenshots": False,
         "pixels": False,
         "dry_run": bool(backend_attempt.dry_run),
+        "virtual_pointer_only": virtual_pointer_only,
+        "uses_user_os_cursor": uses_user_os_cursor,
+        "user_mouse_taken": uses_user_os_cursor,
+        "physical_input_performed": live_allowed,
+        "desktop_effect_performed": live_allowed,
         "live_input_performed": live_allowed,
         "input_execution_attempted": bool(backend_attempt.result.get("input_execution_attempted")),
         "input_proposal_written": bool(backend_attempt.result.get("proposal_written")),
         "manual_approval_required_for_execution": mode == "dry_run" or backend_attempt.status == "approval_required",
         "guarded_live_requires_existing_input_approval": True,
         "guarded_live_requires_existing_handoff": True,
+        "orb_pointer_requires_app_bridge_for_desktop_effect": bool(
+            backend_attempt.result.get("requires_app_bridge_for_desktop_effect")
+        ),
         "feedback_state_truthful": True,
         "unsupported_reason": "" if resolution.supported else resolution.reason,
         "receipt_written": True,
@@ -834,6 +1009,9 @@ def submit_orb_sequence(args: dict[str, Any]) -> dict[str, Any]:
         "governance": {
             "raw_input": False,
             "dry_run": shared["mode"] == "dry_run",
+            "virtual_pointer_only": shared["mode"] == ORB_POINTER_MODE,
+            "uses_user_os_cursor": any(bool(item.get("governance", {}).get("uses_user_os_cursor")) for item in results),
+            "user_mouse_taken": any(bool(item.get("governance", {}).get("user_mouse_taken")) for item in results),
             "receipt_written": True,
             "sequence_count": len(results),
         },
@@ -845,6 +1023,8 @@ def _operator_result_status(resolution: IntentResolution, backend_attempt: Backe
         return "blocked"
     if not backend_attempt.ok:
         return "failed"
+    if backend_attempt.status.startswith("virtual_pointer_"):
+        return "complete"
     if backend_attempt.status == "dry_run_proposed":
         return "dry_run"
     if backend_attempt.status == "metadata_only":
@@ -861,6 +1041,8 @@ def _operator_feedback_state(resolution: IntentResolution, backend_attempt: Back
         return "blocked"
     if not backend_attempt.ok:
         return "failed"
+    if backend_attempt.status.startswith("virtual_pointer_"):
+        return "complete"
     if backend_attempt.status in {"dry_run_proposed", "metadata_only"}:
         return resolution.feedback_state
     if backend_attempt.performed or backend_attempt.dry_run:
@@ -901,7 +1083,37 @@ def operator_receipts_readback(args: dict[str, Any] | None = None) -> dict[str, 
     }
 
 
+def _virtual_pointer_readback() -> dict[str, Any]:
+    state = _read_virtual_pointer_state()
+    if not state:
+        return {
+            "available": False,
+            "pointer_id": ORB_VIRTUAL_POINTER_ID,
+            "mode": ORB_POINTER_MODE,
+            "controls_user_os_cursor": False,
+            "user_mouse_taken": False,
+            "physical_input_performed": False,
+        }
+    last_action = _coerce_dict(state.get("last_action"))
+    return {
+        "available": True,
+        "pointer_id": _clean_text(state.get("pointer_id"), ORB_VIRTUAL_POINTER_ID),
+        "mode": _clean_text(state.get("mode"), ORB_POINTER_MODE),
+        "x": _safe_int(state.get("x")),
+        "y": _safe_int(state.get("y")),
+        "position": state.get("position") if isinstance(state.get("position"), dict) else {},
+        "updated_at": _clean_text(state.get("updated_at")),
+        "last_action": last_action,
+        "state_path": str(_virtual_pointer_state_path()),
+        "controls_user_os_cursor": False,
+        "user_mouse_taken": False,
+        "physical_input_performed": False,
+        "desktop_effect_performed": False,
+    }
+
+
 def latest_orb_operator_state() -> dict[str, Any]:
+    pointer = _virtual_pointer_readback()
     receipts = sorted(_receipt_dir().glob("*.json"), key=lambda item: item.stat().st_mtime, reverse=True)[:1]
     if not receipts:
         return {
@@ -912,6 +1124,7 @@ def latest_orb_operator_state() -> dict[str, Any]:
             "read_only": True,
             "receipt_id": "",
             "receipt_path": "",
+            "virtual_pointer": pointer,
             "grants_execution_authority": False,
         }
     path = receipts[0]
@@ -926,6 +1139,7 @@ def latest_orb_operator_state() -> dict[str, Any]:
             "read_only": True,
             "receipt_id": path.stem,
             "receipt_path": str(path),
+            "virtual_pointer": pointer,
             "grants_execution_authority": False,
             "error": "latest_operator_receipt_unreadable",
         }
@@ -940,6 +1154,10 @@ def latest_orb_operator_state() -> dict[str, Any]:
         "receipt_path": str(path),
         "latest_intent": receipt.get("requested_intent") if isinstance(receipt.get("requested_intent"), dict) else {},
         "latest_result": _clean_text(receipt.get("result")),
+        "virtual_pointer": pointer,
+        "uses_user_os_cursor": bool(_coerce_dict(receipt.get("governance")).get("uses_user_os_cursor")),
+        "user_mouse_taken": bool(_coerce_dict(receipt.get("governance")).get("user_mouse_taken")),
+        "physical_input_performed": bool(_coerce_dict(receipt.get("governance")).get("physical_input_performed")),
         "grants_execution_authority": False,
     }
 
@@ -962,7 +1180,7 @@ def _demo_sequence(x: int, y: int, text: str, mode: str) -> dict[str, Any]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run a safe Orb operator dry-run sequence.")
-    parser.add_argument("--mode", choices=("dry_run", "guarded_live"), default="dry_run")
+    parser.add_argument("--mode", choices=ORB_BACKEND_MODES, default="dry_run")
     parser.add_argument("--x", type=int, default=320)
     parser.add_argument("--y", type=int, default=240)
     parser.add_argument("--text", default="Francis Orb dry-run")

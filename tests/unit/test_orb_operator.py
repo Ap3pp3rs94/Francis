@@ -62,6 +62,32 @@ def test_orb_move_dry_run_records_operator_receipt(tmp_path: Path, monkeypatch) 
     assert Path(result["operator_receipt_path"]).exists()
 
 
+def test_orb_pointer_move_updates_virtual_pointer_without_user_mouse(tmp_path: Path, monkeypatch) -> None:
+    _envs(tmp_path, monkeypatch)
+
+    result = submit_orb_intent({"mode": "orb_pointer", "intent": {"kind": "move_to", "x": 101, "y": 202}})
+
+    assert result["ok"] is True
+    assert result["status"] == "complete"
+    assert result["backend"]["backend"] == "francis.orb_virtual_pointer"
+    assert result["backend"]["performed"] is False
+    assert result["backend"]["dry_run"] is False
+    assert result["backend"]["result"]["input_execution_attempted"] is False
+    assert result["backend"]["result"]["virtual_pointer_updated"] is True
+    assert result["backend"]["result"]["physical_input_performed"] is False
+    assert result["backend"]["result"]["user_mouse_taken"] is False
+    assert result["governance"]["virtual_pointer_only"] is True
+    assert result["governance"]["uses_user_os_cursor"] is False
+    assert result["governance"]["user_mouse_taken"] is False
+    assert result["governance"]["physical_input_performed"] is False
+    assert not (tmp_path / "input" / "proposals").exists()
+    pointer_path = tmp_path / "orb_operator" / "virtual_pointer_state.json"
+    assert pointer_path.exists()
+    pointer_text = pointer_path.read_text(encoding="utf-8")
+    assert '"x": 101' in pointer_text
+    assert '"y": 202' in pointer_text
+
+
 def test_orb_click_dry_run_records_mouse_action_without_live_input(tmp_path: Path, monkeypatch) -> None:
     _envs(tmp_path, monkeypatch)
 
@@ -75,6 +101,25 @@ def test_orb_click_dry_run_records_mouse_action_without_live_input(tmp_path: Pat
     assert result["backend"]["input_kind"] == "mouse.click"
     assert result["backend"]["performed"] is False
     assert result["governance"]["live_input_performed"] is False
+
+
+def test_orb_pointer_click_records_virtual_event_without_desktop_click(tmp_path: Path, monkeypatch) -> None:
+    _envs(tmp_path, monkeypatch)
+
+    result = submit_orb_intent(
+        {"mode": "orb_pointer", "intent": {"kind": "click", "x": 10, "y": 20, "button": "left", "clicks": 1}}
+    )
+
+    assert result["ok"] is True
+    assert result["status"] == "complete"
+    assert result["backend"]["input_kind"] == "mouse.click"
+    assert result["backend"]["performed"] is False
+    assert result["backend"]["result"]["desktop_effect_performed"] is False
+    assert result["backend"]["result"]["requires_app_bridge_for_desktop_effect"] is True
+    assert result["governance"]["virtual_pointer_only"] is True
+    assert result["governance"]["live_input_performed"] is False
+    assert result["governance"]["uses_user_os_cursor"] is False
+    assert result["governance"]["user_mouse_taken"] is False
 
 
 def test_orb_keyboard_type_dry_run_receipt_redacts_text(tmp_path: Path, monkeypatch) -> None:
@@ -186,3 +231,19 @@ def test_latest_orb_operator_state_is_read_only_feedback(tmp_path: Path, monkeyp
     assert state["grants_execution_authority"] is False
     assert bridged["feedback_state"] == "moving"
     assert bridged["grants_execution_authority"] is False
+
+
+def test_latest_orb_operator_state_surfaces_virtual_pointer(tmp_path: Path, monkeypatch) -> None:
+    _envs(tmp_path, monkeypatch)
+    submit_orb_intent({"mode": "orb_pointer", "intent": {"kind": "move_to", "x": 33, "y": 44}})
+
+    state = latest_orb_operator_state()
+    bridged = orb_world_state._orb_operator_input_state()
+
+    assert state["virtual_pointer"]["available"] is True
+    assert state["virtual_pointer"]["x"] == 33
+    assert state["virtual_pointer"]["y"] == 44
+    assert state["virtual_pointer"]["controls_user_os_cursor"] is False
+    assert state["user_mouse_taken"] is False
+    assert bridged["virtual_pointer"]["x"] == 33
+    assert bridged["virtual_pointer"]["user_mouse_taken"] is False

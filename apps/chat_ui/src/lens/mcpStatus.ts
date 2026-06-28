@@ -27,6 +27,7 @@ export type LensOrbSemanticState = {
   render_state: string;
   activity_intensity: Record<string, unknown>;
   semantic_operator_state: Record<string, unknown>;
+  operator_input: Record<string, unknown>;
   read_only: boolean;
   private_ui_state: boolean;
   visual_change: boolean;
@@ -134,6 +135,7 @@ function parseOrbSemanticState(value: unknown): LensOrbSemanticState {
     render_state: safeString(raw["render_state"]).trim(),
     activity_intensity: safeRecord(raw["activity_intensity"]),
     semantic_operator_state: safeRecord(raw["semantic_operator_state"]),
+    operator_input: safeRecord(raw["operator_input"]),
     read_only: safeBoolean(raw["read_only"], true),
     private_ui_state: safeBoolean(raw["private_ui_state"], false),
     visual_change: safeBoolean(raw["visual_change"], false),
