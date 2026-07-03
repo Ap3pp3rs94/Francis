@@ -656,13 +656,20 @@ def test_fr017_evidence_chain_status_moves_blocker_after_release_cable_ready(tmp
     assert payload["status"] == "blocked_on_engineering_review"
     assert payload["first_blocking_gate"] == "engineering_review"
     assert payload["first_blocking_status"] == "pending_engineering_review"
-    assert payload["next_required_input"] == "FR-017-ENGINEERING-REVIEW-INPUT-TEMPLATE.json"
+    assert payload["next_required_input"] == (
+        "scripts/fr017-new-engineering-review-record.ps1 + FR-017-ENGINEERING-REVIEW-INPUT-TEMPLATE.json"
+    )
+    assert payload["next_command"] == "create_professional_engineering_review_record_then_rerun_engineering_review_gate"
     assert "evidence.date" in payload["first_blocking_details"]["missing_fields"]
     assert payload["first_blocking_details"]["invalid_fields"] == []
     assert payload["first_blocking_details"]["engineering_review_capture_plan_not_completion_evidence"] is True
     assert (
         "not physical validation evidence"
         in payload["first_blocking_details"]["engineering_review_capture_plan_contract"]
+    )
+    assert (
+        "fr017-new-engineering-review-record.ps1"
+        in payload["first_blocking_details"]["engineering_review_capture_runbook_contract"]
     )
     assert (
         "engineering-review capture readiness only"
@@ -674,7 +681,16 @@ def test_fr017_evidence_chain_status_moves_blocker_after_release_cable_ready(tmp
     )
     assert (
         payload["first_blocking_details"]["next_required_engineering_review_input"]
-        == "complete_professional_engineering_review_record_at_FR-017-ENGINEERING-REVIEW-INPUT-TEMPLATE.json"
+        == "create_professional_engineering_review_record_with_fr017-new-engineering-review-record.ps1_then_rerun_engineering_review_gate"
+    )
+    assert payload["first_blocking_details"]["engineering_review_input_template_path"].endswith(
+        "FR-017_Stage17_Package\\FR-017-ENGINEERING-REVIEW-INPUT-TEMPLATE.json"
+    )
+    assert payload["first_blocking_details"]["engineering_review_record_initializer_path"].endswith(
+        "scripts\\fr017-new-engineering-review-record.ps1"
+    )
+    assert payload["first_blocking_details"]["engineering_review_working_record_name_pattern"] == (
+        "FR-017-ENGINEERING-REVIEW-YYYY-MM-DD-PILOT-RECORD.json"
     )
     assert payload["first_blocking_details"]["engineering_review_capture_total_groups"] == 4
     assert payload["first_blocking_details"]["engineering_review_capture_ready_groups"] == 0

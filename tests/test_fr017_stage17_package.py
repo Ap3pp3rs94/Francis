@@ -103,6 +103,7 @@ def test_fr017_stage17_final_audit_blocks_physical_and_fr018_claims() -> None:
     assert "fr017-new-pilot-static-fit-record.ps1" in package_index
     assert "fr017-new-pilot-movement-record.ps1" in package_index
     assert "fr017-new-release-cable-record.ps1" in package_index
+    assert "fr017-new-engineering-review-record.ps1" in package_index
     assert "fr017-completion-ledger-gate.ps1" in package_index
 
 
@@ -196,5 +197,6 @@ def test_fr017_validation_gate_chain_preserves_gate_order_and_no_fake_validation
     assert "fr017-new-pilot-static-fit-record.ps1" in runbook
     assert "fr017-new-pilot-movement-record.ps1" in runbook
     assert "fr017-new-release-cable-record.ps1" in runbook
+    assert "fr017-new-engineering-review-record.ps1" in runbook
     assert "safety-critical landmark confirmation" in runbook
     assert "derived consistency checks passed" in runbook
