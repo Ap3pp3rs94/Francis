@@ -96,6 +96,29 @@ Capture the left arm as its own side-labeled record:
 
 Stop if the left side label is not visible, if the second pass is not complete, if repeatability exceeds 5 mm, or if any safety-screen symptom appears.
 
+Optional guarded update command for real left-side values:
+
+```powershell
+.\scripts\fr017-update-measurement-record.ps1 -Mode UpdateSide `
+  -MeasurementPath .\FR-017_Stage17_Package\FR-017-MEASUREMENTS-YYYY-MM-DD-PILOT-RECORD.json `
+  -Side left `
+  -ForearmCircumference25mmBelowElbowCrease <mm> `
+  -ForearmCircumferenceMidForearm <mm> `
+  -ForearmCircumference40mmAboveWristCrease <mm> `
+  -ForearmLengthElbowCreaseToWristCrease <mm> `
+  -OuterForearmUsablePanelLength <mm> `
+  -UpperStrapAllowedBandWidth <mm> `
+  -LowerStrapAllowedBandWidth <mm> `
+  -BoneRidgeReliefLength <mm> `
+  -InnerForearmNoPressureZoneWidth <mm> `
+  -WristClearanceGap <mm> `
+  -ConfirmSecondPassCompleted `
+  -MaxDeltaMm <0-5> `
+  -ConfirmAllRequiredMeasurementsWithin5mm
+```
+
+This command writes operator-supplied numeric input only. It refuses to update the template and refuses to overwrite populated fields unless `-AllowOverwrite` is explicitly supplied. The measurement-intake gate remains the authority for readiness.
+
 ### 3. right_arm_numeric_measurement_passes
 
 Capture the right arm as its own side-labeled record:
@@ -115,6 +138,8 @@ Capture the right arm as its own side-labeled record:
 - `repeatability.right.all_required_measurements_within_5mm`
 
 Stop if the right side label is not visible, if the second pass is not complete, if repeatability exceeds 5 mm, or if any safety-screen symptom appears.
+
+Use the same guarded update command for right-side values with `-Side right`. Do not copy left values to the right side. The intake gate rejects copied left/right values and repeated evidence references.
 
 ### 4. safety_critical_landmark_and_zone_references
 
