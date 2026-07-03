@@ -177,6 +177,11 @@ def test_fr017_measurement_intake_reports_template_as_pending() -> None:
         .replace("/", "\\")
         .endswith("scripts\\fr017-update-measurement-record.ps1")
     )
+    assert (
+        str(payload["measurement_landmark_update_path"])
+        .replace("/", "\\")
+        .endswith("scripts\\fr017-update-landmark-record.ps1")
+    )
     assert payload["measurement_working_record_name_pattern"] == "FR-017-MEASUREMENTS-YYYY-MM-DD-PILOT-RECORD.json"
     assert payload["measurement_capture_plan_not_completion_evidence"] is True
     assert "not physical validation evidence" in payload["measurement_capture_plan_contract"]
@@ -184,6 +189,7 @@ def test_fr017_measurement_intake_reports_template_as_pending() -> None:
     assert "FR-017-MEASUREMENT-CAPTURE-RUNBOOK.md" in payload["measurement_capture_runbook_contract"]
     assert "fr017-new-measurement-record.ps1" in payload["measurement_capture_runbook_contract"]
     assert "fr017-update-measurement-record.ps1" in payload["measurement_capture_runbook_contract"]
+    assert "fr017-update-landmark-record.ps1" in payload["measurement_capture_runbook_contract"]
     assert (
         payload["next_required_physical_input"]
         == "create_pending_record_with_fr017-new-measurement-record.ps1_then_capture_with_FR-017-MEASUREMENT-CAPTURE-RUNBOOK.md_and_rerun_measurement_intake"

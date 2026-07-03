@@ -197,6 +197,7 @@ function New-GateEvidenceDetails {
     measurement_capture_runbook_path = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['measurement_capture_runbook_path']) { '' } else { [string]$Payload.measurement_capture_runbook_path }
     measurement_record_initializer_path = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['measurement_record_initializer_path']) { '' } else { [string]$Payload.measurement_record_initializer_path }
     measurement_record_update_path = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['measurement_record_update_path']) { '' } else { [string]$Payload.measurement_record_update_path }
+    measurement_landmark_update_path = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['measurement_landmark_update_path']) { '' } else { [string]$Payload.measurement_landmark_update_path }
     measurement_working_record_name_pattern = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['measurement_working_record_name_pattern']) { '' } else { [string]$Payload.measurement_working_record_name_pattern }
     measurement_capture_plan_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['measurement_capture_plan_contract']) { '' } else { [string]$Payload.measurement_capture_plan_contract }
     measurement_capture_runbook_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['measurement_capture_runbook_contract']) { '' } else { [string]$Payload.measurement_capture_runbook_contract }

@@ -126,11 +126,14 @@ def test_fr017_measurement_capture_runbook_preserves_first_physical_input_lock()
     assert "FR-017-MEASUREMENTS-INPUT-TEMPLATE.json" in runbook
     assert "fr017-new-measurement-record.ps1" in runbook
     assert "fr017-update-measurement-record.ps1" in runbook
+    assert "fr017-update-landmark-record.ps1" in runbook
     assert "refuses to overwrite an existing file" in runbook
     assert "refuses to update the template" in runbook
+    assert "refuses copied left/right references" in runbook
     assert "AllowOverwrite" in runbook
     assert "ConfirmNoTissueCompressionUsed" in runbook
     assert "ConfirmSecondPassCompleted" in runbook
+    assert "ConfirmSkinSafeMarkingUsed" in runbook
     assert "setup_and_safety_brief" in runbook
     assert "still not physical validation evidence" in runbook
     assert "fr017-measurement-intake.ps1 -Mode Status" in runbook

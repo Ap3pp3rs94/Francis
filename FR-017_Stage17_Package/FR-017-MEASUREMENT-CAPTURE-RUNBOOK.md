@@ -170,6 +170,37 @@ Capture side-specific marked-zone references:
 
 Stop if the inner elbow boundary, wrist-bone boundary, radius or ulna relief path, quick-release reach zone, or glove-removal path is unmarked or ambiguous.
 
+Optional guarded update command for real marked-zone references:
+
+```powershell
+.\scripts\fr017-update-landmark-record.ps1 -Mode UpdateLandmarks `
+  -MeasurementPath .\FR-017_Stage17_Package\FR-017-MEASUREMENTS-YYYY-MM-DD-PILOT-RECORD.json `
+  -LeftInnerElbowCreaseBoundary "<left labeled reference>" `
+  -LeftWristBoneBoundary "<left labeled reference>" `
+  -LeftRadiusRidgeRelief "<left labeled reference>" `
+  -LeftUlnaRidgeRelief "<left labeled reference>" `
+  -LeftOuterForearmCableRoute "<left labeled reference>" `
+  -LeftQuickReleaseReachZone "<left labeled reference>" `
+  -LeftGloveRemovalPath "<left labeled reference>" `
+  -RightInnerElbowCreaseBoundary "<right labeled reference>" `
+  -RightWristBoneBoundary "<right labeled reference>" `
+  -RightRadiusRidgeRelief "<right labeled reference>" `
+  -RightUlnaRidgeRelief "<right labeled reference>" `
+  -RightOuterForearmCableRoute "<right labeled reference>" `
+  -RightQuickReleaseReachZone "<right labeled reference>" `
+  -RightGloveRemovalPath "<right labeled reference>" `
+  -ConfirmInnerElbowCreaseBoundary `
+  -ConfirmWristBoneBoundary `
+  -ConfirmRadiusUlnaReliefPaths `
+  -ConfirmOuterForearmCableRoute `
+  -ConfirmQuickReleaseReachZone `
+  -ConfirmGloveRemovalPath `
+  -ConfirmSkinSafeMarkingUsed `
+  -LandmarkNotes "Skin-safe marks identify inner elbow, wrist, radius, ulna, cable route, quick release, glove path, and side labels."
+```
+
+This command writes operator-supplied landmark references only. It refuses to update the template, refuses copied left/right references, and refuses to overwrite populated fields unless `-AllowOverwrite` is explicitly supplied. The measurement-intake gate remains the authority for readiness.
+
 ### 5. left_right_independence_and_safety_screen
 
 Capture:
