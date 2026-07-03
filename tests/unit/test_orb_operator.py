@@ -224,6 +224,43 @@ def test_orb_pointer_click_with_desktop_bridge_records_action_without_user_mouse
     assert result["governance"]["user_mouse_taken"] is False
 
 
+def test_orb_pointer_click_with_desktop_bridge_propagates_confirmed_effect(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _envs(tmp_path, monkeypatch)
+    monkeypatch.setenv("FRANCIS_ORB_DESKTOP_BRIDGE_ENABLE", "1")
+
+    def fake_bridge(**kwargs):
+        assert kwargs["input_kind"] == "mouse.click"
+        return {
+            "ok": True,
+            "status": "desktop_action_confirmed",
+            "receipt_id": "orb_desktop_bridge_confirmed",
+            "receipt_path": str(tmp_path / "bridge-confirmed.json"),
+            "desktop_action_sent": True,
+            "desktop_effect_performed": True,
+            "desktop_effect_confirmed": True,
+            "target_observer_status": "confirmed_target_state_changed",
+            "uses_user_os_cursor": False,
+            "user_mouse_taken": False,
+            "physical_input_performed": False,
+        }
+
+    monkeypatch.setattr(orb_operator_module, "perform_orb_desktop_action", fake_bridge)
+
+    result = submit_orb_intent(
+        {"mode": "orb_pointer", "intent": {"kind": "click", "x": 10, "y": 20, "button": "left", "clicks": 1}}
+    )
+
+    assert result["ok"] is True
+    assert result["status"] == "complete"
+    assert result["backend"]["result"]["desktop_effect_confirmed"] is True
+    assert result["governance"]["desktop_action_sent"] is True
+    assert result["governance"]["desktop_effect_performed"] is True
+    assert result["governance"]["desktop_effect_confirmed"] is True
+    assert result["governance"]["physical_input_performed"] is False
+
+
 def test_orb_keyboard_type_dry_run_receipt_redacts_text(tmp_path: Path, monkeypatch) -> None:
     _envs(tmp_path, monkeypatch)
 

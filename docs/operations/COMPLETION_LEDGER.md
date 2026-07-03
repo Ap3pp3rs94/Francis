@@ -89,6 +89,9 @@ What is materially true now:
   plus chat/voice handoff metadata; it does not grant desktop execution.
 - Continuous no-wake voice chat is not free-running; it is gated to Ctrl+V
   push-to-talk readback.
+- The Orb desktop bridge now has a redacted post-action target observer. When
+  the bridge is explicitly enabled and a safe target's observable UI state
+  changes after posted messages, `desktop_effect_confirmed` can become true.
 
 ## 4. Latest validation evidence
 
@@ -241,6 +244,51 @@ Remaining truthful gap:
 - The desktop bridge still has no post-action observer; `desktop_effect_confirmed`
   remains a Milestone 3 gap.
 
+### 2026-07-03 19:12Z - Orb desktop bridge post-action observer
+
+Current posture: Phase 2 / Stage 6 Orb desktop bridge still remains gated behind
+`FRANCIS_ORB_DESKTOP_BRIDGE_ENABLE=1`, but the bridge no longer has to report
+every posted-message action as unconfirmed. It now records redacted target-side
+state before and after posting messages and sets `desktop_effect_confirmed=true`
+only when observable target-side state changes.
+
+What changed:
+
+- `src/francis/input_actuator/orb_desktop_bridge.py` records redacted before/after
+  target observations for the resolved target window/control.
+- The observer polls briefly after posting Win32 messages and reports
+  `confirmed_target_state_changed` only on an observed state delta.
+- Receipts include observer status, poll count, target-state changed flag, and
+  redacted observation metadata without storing raw typed text.
+- The bridge keeps the existing default-off gate, visible-only disabled path,
+  and no user-cursor/no physical-input claims.
+- Target resolution now rejects empty-title shell targets, the Francis Lens
+  Overlay, Claude-titled windows, and common desktop shell window classes.
+- Orb operator governance now propagates `desktop_effect_confirmed=true` when
+  the bridge returns a confirmed effect.
+
+Validation:
+
+- `.venv\Scripts\python.exe -m ruff check src\francis\input_actuator\orb_desktop_bridge.py tests\unit\test_orb_desktop_bridge.py tests\unit\test_orb_operator.py` passed.
+- `.venv\Scripts\python.exe -m pytest tests\unit\test_orb_desktop_bridge.py tests\unit\test_orb_operator.py -q` passed.
+- `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts\orb-operator-dry-run.ps1 -X 410 -Y 360 -Text "Milestone 3 dry run proof"` passed.
+- A live orb-pointer probe with `FRANCIS_ORB_DESKTOP_BRIDGE_ENABLE=0` returned
+  `status=complete`, last action `visible_only`, bridge status
+  `blocked_bridge_disabled`, `desktop_action_sent=false`,
+  `desktop_effect_performed=false`, and `desktop_effect_confirmed=false`.
+
+Remaining truthful gap:
+
+- The observer confirmation path is proven with a fake Win32 target in unit
+  tests, not by enabling the production bridge against a live operator-approved
+  app window.
+- The bridge remains default-off. A live enabled bridge proof must use an
+  explicit operator-approved safe target and must still exclude Francis Lens
+  Overlay and Claude windows.
+- This does not complete the final visible-loop acceptance test; that still
+  needs hotkey summon, operator-approved safe target action, confirmed effect,
+  receipt, trace, and Lens/chat visibility in one repeatable runner.
+
 ## 5. Known truthful gaps
 
 These still block any finished Orb embodiment claim:
@@ -251,9 +299,10 @@ These still block any finished Orb embodiment claim:
   Ctrl+V gated voice readback, virtual pointer gestures, and host restart now
   have focused and live proof. Production summon/dismiss/tray integration still
   waits on governed resident, tray, hotkey, and summon authority.
-- Desktop bridge: `desktop_effect_confirmed` remains false until a post-action
-  observer verifies target-side UI state after posted messages. The bridge must
-  remain gated behind `FRANCIS_ORB_DESKTOP_BRIDGE_ENABLE` and safe targets.
+- Desktop bridge: post-action observer support exists and can produce
+  `desktop_effect_confirmed=true` when target-side state changes. The remaining
+  gap is a live operator-approved safe-target proof with the bridge explicitly
+  enabled; the bridge remains default-off.
 - Voice: live Francis1 status replay and forced-garbage fallback proof still
   depend on the operator running `scripts/ollama-doctor.ps1` first.
 - One visible loop: no repeatable end-to-end proof yet shows hotkey summon -> Orb
