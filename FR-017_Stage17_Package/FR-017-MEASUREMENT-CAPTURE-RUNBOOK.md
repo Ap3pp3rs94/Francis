@@ -34,6 +34,25 @@ Run the gate before and after editing the working record:
 
 The initializer creates only a pending working record. It refuses to overwrite an existing file or target the template itself. The generated record still requires real left/right measurements, landmark references, repeatability checks, and symptom-screen entries before the intake gate can advance.
 
+If the setup and safety brief has actually been completed, the initializer can also record those first-gate fields:
+
+```powershell
+.\scripts\fr017-new-measurement-record.ps1 -Mode Create `
+  -OutputPath .\FR-017_Stage17_Package\FR-017-MEASUREMENTS-YYYY-MM-DD-PILOT-RECORD.json `
+  -EvidenceDate YYYY-MM-DD `
+  -Observer "<observer>" `
+  -PilotId "<pilot-reference>" `
+  -MeasurementTool "flexible metric tape" `
+  -ConfirmNoTissueCompressionUsed `
+  -ConfirmNoWristBoneCompressionUsed `
+  -ConfirmMetricToolUsed `
+  -ConfirmArmRelaxedPalmNeutralOrExceptionRecorded `
+  -ConfirmStopConditionsBriefed `
+  -ConditionNotes "No tissue compression, no wrist-bone compression, metric tool, and stop briefing confirmed."
+```
+
+These setup-brief fields are still not physical validation evidence. They can make only `setup_and_safety_brief` ready when real values are provided. Left/right measurements, marked zones, repeatability, left/right independence, and symptom screen entries remain separate required evidence.
+
 ## Capture Order
 
 The capture groups below must remain in the same order as the gate status output.
