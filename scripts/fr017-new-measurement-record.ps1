@@ -14,7 +14,23 @@ param(
 
   [string]$PilotId = '',
 
-  [string]$MeasurementTool = ''
+  [string]$MeasurementTool = '',
+
+  [string]$Method = '',
+
+  [string]$Posture = '',
+
+  [switch]$ConfirmNoTissueCompressionUsed,
+
+  [switch]$ConfirmNoWristBoneCompressionUsed,
+
+  [switch]$ConfirmMetricToolUsed,
+
+  [switch]$ConfirmArmRelaxedPalmNeutralOrExceptionRecorded,
+
+  [switch]$ConfirmStopConditionsBriefed,
+
+  [string]$ConditionNotes = ''
 )
 
 Set-StrictMode -Version 2
@@ -74,7 +90,9 @@ function Set-OptionalEvidenceText {
     [object]$Evidence,
     [string]$Name,
     [string]$Value,
-    [System.Collections.Generic.List[string]]$InvalidFields
+    [System.Collections.Generic.List[string]]$InvalidFields,
+    [System.Collections.Generic.List[string]]$UpdatedFields,
+    [string]$FieldPrefix = 'evidence'
   )
 
   if ([string]::IsNullOrWhiteSpace($Value)) {
@@ -82,17 +100,43 @@ function Set-OptionalEvidenceText {
   }
 
   if (Test-MissingOrPendingText -Value $Value) {
-    $InvalidFields.Add(('evidence.{0}' -f $Name)) | Out-Null
+    $InvalidFields.Add(('{0}.{1}' -f $FieldPrefix, $Name)) | Out-Null
     return
   }
 
   $Property = $Evidence.PSObject.Properties[$Name]
   if ($null -eq $Property) {
-    $InvalidFields.Add(('evidence.{0}' -f $Name)) | Out-Null
+    $InvalidFields.Add(('{0}.{1}' -f $FieldPrefix, $Name)) | Out-Null
     return
   }
 
   $Property.Value = $Value.Trim()
+  if ($null -ne $UpdatedFields) {
+    $UpdatedFields.Add(('{0}.{1}' -f $FieldPrefix, $Name)) | Out-Null
+  }
+}
+
+function Set-ConfirmedCondition {
+  param(
+    [object]$MeasurementConditions,
+    [string]$Name,
+    [bool]$Confirmed,
+    [System.Collections.Generic.List[string]]$InvalidFields,
+    [System.Collections.Generic.List[string]]$UpdatedFields
+  )
+
+  if (-not $Confirmed) {
+    return
+  }
+
+  $Property = $MeasurementConditions.PSObject.Properties[$Name]
+  if ($null -eq $Property) {
+    $InvalidFields.Add(('measurement_conditions.{0}' -f $Name)) | Out-Null
+    return
+  }
+
+  $Property.Value = $true
+  $UpdatedFields.Add(('measurement_conditions.{0}' -f $Name)) | Out-Null
 }
 
 $DefaultTemplatePath = Join-Path $RepoRoot 'FR-017_Stage17_Package\FR-017-MEASUREMENTS-INPUT-TEMPLATE.json'
@@ -102,6 +146,7 @@ $Status = 'created_pending_measurement_record'
 $ExitCode = 0
 $WroteFile = $false
 $InvalidFields = New-Object System.Collections.Generic.List[string]
+$UpdatedFields = New-Object System.Collections.Generic.List[string]
 
 if (-not (Test-Path -LiteralPath $ResolvedTemplatePath -PathType Leaf)) {
   $Status = 'missing_template_file'
@@ -140,11 +185,26 @@ if ($ExitCode -eq 0) {
         $InvalidFields.Add('evidence.date') | Out-Null
       } else {
         $Evidence.date = $EvidenceDate.Trim()
+        $UpdatedFields.Add('evidence.date') | Out-Null
       }
     }
-    Set-OptionalEvidenceText -Evidence $Evidence -Name 'observer' -Value $Observer -InvalidFields $InvalidFields
-    Set-OptionalEvidenceText -Evidence $Evidence -Name 'pilot_id' -Value $PilotId -InvalidFields $InvalidFields
-    Set-OptionalEvidenceText -Evidence $Evidence -Name 'measurement_tool' -Value $MeasurementTool -InvalidFields $InvalidFields
+    Set-OptionalEvidenceText -Evidence $Evidence -Name 'observer' -Value $Observer -InvalidFields $InvalidFields -UpdatedFields $UpdatedFields
+    Set-OptionalEvidenceText -Evidence $Evidence -Name 'pilot_id' -Value $PilotId -InvalidFields $InvalidFields -UpdatedFields $UpdatedFields
+    Set-OptionalEvidenceText -Evidence $Evidence -Name 'measurement_tool' -Value $MeasurementTool -InvalidFields $InvalidFields -UpdatedFields $UpdatedFields
+    Set-OptionalEvidenceText -Evidence $Evidence -Name 'method' -Value $Method -InvalidFields $InvalidFields -UpdatedFields $UpdatedFields
+    Set-OptionalEvidenceText -Evidence $Evidence -Name 'posture' -Value $Posture -InvalidFields $InvalidFields -UpdatedFields $UpdatedFields
+  }
+
+  $MeasurementConditions = $Payload.measurement_conditions
+  if ($null -eq $MeasurementConditions) {
+    $InvalidFields.Add('measurement_conditions') | Out-Null
+  } else {
+    Set-ConfirmedCondition -MeasurementConditions $MeasurementConditions -Name 'no_tissue_compression_used' -Confirmed $ConfirmNoTissueCompressionUsed.IsPresent -InvalidFields $InvalidFields -UpdatedFields $UpdatedFields
+    Set-ConfirmedCondition -MeasurementConditions $MeasurementConditions -Name 'no_wrist_bone_compression_used' -Confirmed $ConfirmNoWristBoneCompressionUsed.IsPresent -InvalidFields $InvalidFields -UpdatedFields $UpdatedFields
+    Set-ConfirmedCondition -MeasurementConditions $MeasurementConditions -Name 'metric_tool_used' -Confirmed $ConfirmMetricToolUsed.IsPresent -InvalidFields $InvalidFields -UpdatedFields $UpdatedFields
+    Set-ConfirmedCondition -MeasurementConditions $MeasurementConditions -Name 'arm_relaxed_palm_neutral_or_exception_recorded' -Confirmed $ConfirmArmRelaxedPalmNeutralOrExceptionRecorded.IsPresent -InvalidFields $InvalidFields -UpdatedFields $UpdatedFields
+    Set-ConfirmedCondition -MeasurementConditions $MeasurementConditions -Name 'stop_conditions_briefed' -Confirmed $ConfirmStopConditionsBriefed.IsPresent -InvalidFields $InvalidFields -UpdatedFields $UpdatedFields
+    Set-OptionalEvidenceText -Evidence $MeasurementConditions -Name 'condition_notes' -Value $ConditionNotes -InvalidFields $InvalidFields -UpdatedFields $UpdatedFields -FieldPrefix 'measurement_conditions'
   }
 
   if ($InvalidFields.Count -gt 0) {
@@ -160,9 +220,11 @@ if ($ExitCode -eq 0) {
     template_path = $ResolvedTemplatePath
     output_path = $ResolvedOutputPath
     record_is_measurement_evidence = $false
+    setup_brief_is_physical_validation_evidence = $false
     physical_validation_complete = $false
     stage17_completion_claim_allowed = $false
     fr018_implementation_cleared = $false
+    initializer_updated_fields = @($UpdatedFields.ToArray())
   }
 
   if ($null -eq $Payload.PSObject.Properties['record_generation']) {
@@ -193,7 +255,9 @@ $Output = [ordered]@{
   powered_or_frame_coupled_testing_cleared = $false
   fr018_implementation_cleared = $false
   record_is_measurement_evidence = $false
-  no_fake_validation_lock = 'This initializer copies the FR-017 measurement template into a pending working record only. It does not record physical measurements, mark physical validation complete, permit a Stage 17 completion claim, or clear FR-018.'
+  setup_brief_is_physical_validation_evidence = $false
+  no_fake_validation_lock = 'This initializer creates a pending FR-017 measurement working record and may record explicitly supplied setup/safety-brief fields only. It does not record physical measurements, mark physical validation complete, permit a Stage 17 completion claim, or clear FR-018.'
+  updated_fields = @($UpdatedFields.ToArray())
   invalid_fields = @($InvalidFields.ToArray())
   next_command = if ($WroteFile) { '.\scripts\fr017-measurement-intake.ps1 -Mode Status -MeasurementPath "{0}"' -f $ResolvedOutputPath } else { '' }
 }
