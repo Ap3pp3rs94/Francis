@@ -815,11 +815,30 @@ def test_fr017_evidence_chain_status_blocks_on_final_decision_record_after_final
     assert payload["status"] == "blocked_on_final_decision_record"
     assert payload["first_blocking_gate"] == "final_decision_record"
     assert payload["first_blocking_status"] == "pending_final_decision_record"
-    assert payload["next_required_input"] == "FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json"
-    assert payload["next_command"] == (
-        "complete_human_final_stage17_completion_decision_record_at_FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json"
+    assert payload["next_required_input"] == (
+        "scripts/fr017-new-final-decision-record.ps1 + FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json"
     )
+    assert payload["next_command"] == "create_human_final_decision_record_then_rerun_final_decision_record_gate"
     assert payload["first_blocking_details"]["missing_fields"] == ["final_decision_path"]
+    assert payload["first_blocking_details"]["next_required_final_decision_input"] == (
+        "create_human_final_decision_record_with_fr017-new-final-decision-record.ps1_then_rerun_final_decision_record_gate"
+    )
+    assert (
+        "fr017-new-final-decision-record.ps1"
+        in payload["first_blocking_details"]["final_decision_record_runbook_contract"]
+    )
+    assert payload["first_blocking_details"]["final_decision_input_template_path"].endswith(
+        "FR-017_Stage17_Package\\FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json"
+    )
+    assert payload["first_blocking_details"]["final_decision_record_initializer_path"].endswith(
+        "scripts\\fr017-new-final-decision-record.ps1"
+    )
+    assert payload["first_blocking_details"]["final_decision_working_record_name_pattern"] == (
+        "FR-017-FINAL-DECISION-YYYY-MM-DD-PILOT-RECORD.json"
+    )
+    assert payload["first_blocking_details"]["final_physical_gate_record_name_pattern"] == (
+        "FR-017-FINAL-PHYSICAL-GATE-YYYY-MM-DD-PILOT-RECORD.json"
+    )
     assert payload["first_blocking_details"]["failed_reasons"] == []
     assert payload["gates_ran"] == 10
     assert payload["gate_count"] == 11
@@ -831,6 +850,10 @@ def test_fr017_evidence_chain_status_blocks_on_final_decision_record_after_final
     assert (
         "not physical validation evidence"
         in payload["gate_results"][8]["details"]["final_physical_decision_plan_contract"]
+    )
+    assert (
+        "fr017-new-final-decision-record.ps1"
+        in payload["gate_results"][8]["details"]["final_physical_decision_runbook_contract"]
     )
     assert (
         "final physical decision readiness only"

@@ -26,6 +26,8 @@ $ErrorActionPreference = 'Stop'
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $Stage17PackageGateScript = Join-Path $PSScriptRoot 'fr017-stage17-validation-gate.ps1'
 $EngineeringReviewGateScript = Join-Path $PSScriptRoot 'fr017-engineering-review-gate.ps1'
+$FinalDecisionRecordInitializerPath = Join-Path $RepoRoot 'scripts\fr017-new-final-decision-record.ps1'
+$FinalDecisionInputTemplatePath = Join-Path $RepoRoot 'FR-017_Stage17_Package\FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json'
 
 function Invoke-JsonGate {
   param(
@@ -837,10 +839,15 @@ $Output = [ordered]@{
   evidence_containers_complete = $PackageGateReady
   physical_validation_evidence_chain_complete = ($PackageGateReady -and $EngineeringGateReady -and $EvidenceChronologyViolations.Count -eq 0 -and $PilotIdentityContinuityViolations.Count -eq 0)
   final_physical_decision_plan_contract = 'The final_physical_decision_plan is read-only operator guidance for checking FR-017 final physical decision readiness. It is not physical validation evidence by itself, does not accept or certify the cuffs, and cannot clear powered, frame-coupled, load-bearing, or FR-018 work.'
+  final_physical_decision_runbook_contract = 'Use scripts/fr017-new-final-decision-record.ps1 only to create a bounded operator-supplied human final decision working record after this gate reports ready_for_stage17_final_physical_completion_decision. The initializer saves this gate output as a linked record and populates FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json; it does not write the completion ledger, mark physical validation complete, permit a Stage 17 completion claim by itself, or clear FR-018.'
   final_physical_decision_plan_status_contract = 'The final_physical_decision_plan_status reports final physical decision readiness only. A ready group means the evidence-chain readback passed this script contract; it is not a completion claim, certification, or FR-018 clearance.'
   final_physical_decision_summary_contract = 'The final_physical_decision_* summary identifies the next blocking final-decision evidence group. It is not physical validation evidence and cannot mark Stage 17 complete.'
   final_physical_decision_plan_not_completion_evidence = $true
-  next_required_final_physical_input = 'complete_human_final_stage17_completion_decision_record_at_FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json'
+  next_required_final_physical_input = 'create_human_final_decision_record_with_fr017-new-final-decision-record.ps1_then_rerun_final_decision_record_gate'
+  final_decision_input_template_path = $FinalDecisionInputTemplatePath
+  final_decision_record_initializer_path = $FinalDecisionRecordInitializerPath
+  final_decision_working_record_name_pattern = 'FR-017-FINAL-DECISION-YYYY-MM-DD-PILOT-RECORD.json'
+  final_physical_gate_record_name_pattern = 'FR-017-FINAL-PHYSICAL-GATE-YYYY-MM-DD-PILOT-RECORD.json'
   final_physical_decision_plan = @($FinalPhysicalDecisionPlan)
   final_physical_decision_plan_status = @($FinalPhysicalDecisionPlanStatus)
   final_physical_decision_total_groups = [int]$FinalPhysicalDecisionPlanSummary.total_groups
@@ -868,7 +875,7 @@ $Output = [ordered]@{
   failed_reasons = @($FailedReasons.ToArray())
   next_actions = if ($Status -eq 'ready_for_stage17_final_physical_completion_decision') {
     @(
-      'complete_human_final_stage17_completion_decision_record_at_FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json',
+      'create_human_final_decision_record_with_fr017-new-final-decision-record.ps1_then_rerun_final_decision_record_gate',
       'update_manifest_and_completion_ledger_only_if_real_physical_evidence_is_accepted',
       'keep_FR-018_implementation_blocked_until_FR-017_completion_claim_is_ledger_backed'
     )
