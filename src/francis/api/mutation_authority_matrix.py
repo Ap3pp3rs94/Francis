@@ -1468,14 +1468,34 @@ def _route_endpoint(route: Any) -> Any:
     return getattr(route, "endpoint", None)
 
 
+def _join_paths(prefix: str, path: str) -> str:
+    if not prefix:
+        return path
+    if path == "/":
+        return prefix
+    return f"{prefix.rstrip('/')}/{path.lstrip('/')}"
+
+
+def _iter_route_contexts(routes: Iterable[Any], prefix: str = "") -> Iterable[tuple[str, Any]]:
+    for route in routes:
+        original_router = getattr(route, "original_router", None)
+        include_context = getattr(route, "include_context", None)
+        if original_router is not None and include_context is not None:
+            include_prefix = str(getattr(include_context, "prefix", "") or "").strip()
+            nested_prefix = _join_paths(prefix, include_prefix) if include_prefix else prefix
+            yield from _iter_route_contexts(getattr(original_router, "routes", []), nested_prefix)
+            continue
+
+        path = str(getattr(route, "path", "") or "").strip()
+        if path:
+            yield _join_paths(prefix, path), route
+
+
 def build_mutating_route_authority_matrix(routes: Iterable[Any]) -> dict[str, Any]:
     entries: list[dict[str, Any]] = []
     missing: list[dict[str, str]] = []
 
-    for route in routes:
-        path = str(getattr(route, "path", "") or "").strip()
-        if not path:
-            continue
+    for path, route in _iter_route_contexts(routes):
         methods = _route_methods(route)
         if not methods:
             continue

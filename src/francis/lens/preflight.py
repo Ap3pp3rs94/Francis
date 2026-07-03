@@ -210,6 +210,10 @@ def _hotkey_runtime_readback(
     state_kind = _safe_str(state_payload.get("kind"))
     state_status = _safe_str(state_payload.get("status"))
     state_pid = _int_value(state_payload.get("pid"))
+    state_error = _safe_str(state_payload.get("error"))
+    state_blocker = _safe_str(state_payload.get("blocker"))
+    state_win32_error = _int_value(state_payload.get("win32_error"))
+    registration_failure = _dict_value(state_payload, "registration_failure")
     state_claims_bound_hotkey = (
         state_kind == "lens.hotkey.runtime_state"
         and state_status == "hotkey_bound"
@@ -227,6 +231,8 @@ def _hotkey_runtime_readback(
         process_alive, process_alive_check = False, "not_attempted_runtime_state_missing"
     elif state_kind != "lens.hotkey.runtime_state":
         process_alive, process_alive_check = False, "not_attempted_runtime_state_kind_mismatch"
+    elif state_status == "hotkey_already_owned":
+        process_alive, process_alive_check = False, "not_attempted_hotkey_already_owned"
     elif state_status != "hotkey_bound":
         process_alive, process_alive_check = False, "not_attempted_runtime_state_not_bound"
     else:
@@ -235,6 +241,8 @@ def _hotkey_runtime_readback(
     requirement_state = (
         "bound"
         if ready
+        else "blocked"
+        if state_status == "hotkey_already_owned"
         else "process_running_no_bound_hotkey_claim"
         if process_alive
         else "stale_or_unverified"
@@ -258,7 +266,11 @@ def _hotkey_runtime_readback(
         "runtime_status": state_status,
         "runtime_status_kind": state_kind,
         "runtime_status_pid": state_pid,
+        "runtime_status_error": state_error,
+        "runtime_status_blocker": state_blocker,
         "runtime_status_pid_matches_pid_file": state_pid > 0 and pid > 0 and state_pid == pid,
+        "win32_error": state_win32_error,
+        "registration_failure": registration_failure,
         "runtime_state_updated_at": _safe_str(state_payload.get("updated_at")),
         "global_hotkey": _safe_str(state_payload.get("global_hotkey")),
         "expected_global_hotkey": global_hotkey,
@@ -268,7 +280,13 @@ def _hotkey_runtime_readback(
         "summon_runner": _safe_str(state_payload.get("summon_runner")),
         "press_count": _int_value(state_payload.get("press_count")),
         "requirement_state": requirement_state,
-        "blocker": "" if ready else "global_hotkey_binding_runtime_missing",
+        "blocker": ""
+        if ready
+        else state_blocker
+        if state_blocker
+        else "hotkey_already_owned"
+        if state_status == "hotkey_already_owned"
+        else "global_hotkey_binding_runtime_missing",
     }
 
 

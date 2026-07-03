@@ -9,6 +9,43 @@ from pathlib import Path
 from typing import Any
 
 
+def test_lens_command_palette_registers_orb_move_with_per_command_authority() -> None:
+    from francis.lens.status import _command_palette_surface, _palette_command
+
+    surface = _command_palette_surface(approvals={"pending_count": 0}, launch_manifest={})
+    commands = {item["id"]: item for item in surface["commands"]}
+
+    orb_move = commands["orb.move"]
+    assert orb_move["authority_scope"] == "runtime_overlay_position_only"
+    assert orb_move["capture_mode"] == "one_shot_click"
+    assert orb_move["handler"] == "lens.overlay.place_mode"
+    assert orb_move["receipt_kind"] == "overlay_position"
+    assert orb_move["trigger_carries_authority"] is False
+    assert orb_move["execution_authority"] is False
+    assert orb_move["approval_decision_authority"] is False
+    assert orb_move["triggers"] == [
+        {
+            "id": "hotkey.ctrl_m",
+            "kind": "global_hotkey",
+            "global_hotkey": "Ctrl+M",
+            "route": "scripts/lens-hotkey-binding.ps1",
+            "trigger_carries_authority": False,
+        }
+    ]
+    assert "overlay_position_receipt_match" in orb_move["provenance_reqs"]
+
+    stub_second_command = _palette_command(
+        "orb.resize.stub",
+        "Resize Orb Stub",
+        "Stub command used to prove command authority does not inherit from orb.move.",
+        "Orb",
+    )
+    assert stub_second_command["authority_scope"] == "none"
+    assert stub_second_command["capture_mode"] == "none"
+    assert stub_second_command["receipt_kind"] == ""
+    assert stub_second_command["triggers"] == []
+
+
 def _write_dev_environment(repo_root: Path) -> None:
     env_root = repo_root / "config" / "environments"
     env_root.mkdir(parents=True, exist_ok=True)
@@ -218,7 +255,7 @@ def _write_lens_runtime_configs(repo_root: Path) -> None:
   "version": 1,
   "enabled": false,
   "summon_name": "Francis Lens Summon",
-  "global_hotkey": "Ctrl+Alt+Space",
+  "global_hotkey": "Ctrl+Alt+F",
   "binding_scope": "global",
   "binding_enabled": false,
   "register_hotkey": false,
@@ -468,7 +505,7 @@ def _write_lens_hotkey_runtime_state(data_root: Path, *, pid: int, launch_on_hot
                 "kind": "lens.hotkey.runtime_state",
                 "status": "hotkey_bound",
                 "pid": pid,
-                "global_hotkey": "Ctrl+Alt+Space",
+                "global_hotkey": "Ctrl+Alt+F",
                 "binding_scope": "global",
                 "hotkey_bound": True,
                 "launch_on_hotkey": launch_on_hotkey,
@@ -1214,7 +1251,7 @@ def test_lens_os_binding_execute_binds_governed_hotkey_lease(
                         "kind": "lens.hotkey.runtime_state",
                         "status": "hotkey_stopped",
                         "pid": pid,
-                        "global_hotkey": "Ctrl+Alt+Space",
+                        "global_hotkey": "Ctrl+Alt+F",
                         "binding_scope": "global",
                         "hotkey_bound": False,
                         "launch_on_hotkey": False,
@@ -3175,7 +3212,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert "tray_host_missing" in host_preflight_groups["surface_dependencies"]
     assert preflight_surfaces["summon"]["kind"] == "lens.summon.api_preflight"
     assert preflight_surfaces["summon"]["status"] == "blocked"
-    assert preflight_surfaces["summon"]["global_hotkey"] == "Ctrl+Alt+Space"
+    assert preflight_surfaces["summon"]["global_hotkey"] == "Ctrl+Alt+F"
     assert preflight_surfaces["summon"]["config_exists"] is True
     assert preflight_surfaces["summon"]["acceptance_criterion"] == "summon_anywhere"
     assert preflight_surfaces["summon"]["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
@@ -3255,7 +3292,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert summon_enablement_gate["resident_host_ready"] is False
     assert summon_enablement_gate["tray_ready"] is False
     assert summon_enablement_gate["overlay_ready"] is False
-    assert summon_enablement_gate["global_hotkey"] == "Ctrl+Alt+Space"
+    assert summon_enablement_gate["global_hotkey"] == "Ctrl+Alt+F"
     assert summon_enablement_gate["binding_scope"] == "global"
     assert summon_enablement_gate["palette_route"] == "/lens/status"
     assert summon_enablement_gate["required_before_enable"] == [
@@ -4349,7 +4386,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert summon_gate_criterion["ready"] is False
     assert summon_gate_criterion["summon_anywhere"] is False
     assert summon_gate_criterion["evidence"] == ["/lens/summon", "/lens/preflight", "/lens/status"]
-    assert summon_gate_criterion["global_hotkey"] == "Ctrl+Alt+Space"
+    assert summon_gate_criterion["global_hotkey"] == "Ctrl+Alt+F"
     assert summon_gate_criterion["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
     assert summon_gate_criterion["first_blocker_family"] == "resident_host"
     assert summon_gate_criterion["blocked_families"] == expected_summon_blocked_families
@@ -4405,7 +4442,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert overlay_gate_criterion["hotkey_registration_authority"] is False
     assert overlay_gate_criterion["tray_registration_authority"] is False
     assert _criterion(body, "summon_preflight")["status"] == "blocked"
-    assert _criterion(body, "summon_preflight")["global_hotkey"] == "Ctrl+Alt+Space"
+    assert _criterion(body, "summon_preflight")["global_hotkey"] == "Ctrl+Alt+F"
     assert _criterion(body, "tray_preflight")["status"] == "blocked"
     assert _criterion(body, "overlay_preflight")["status"] == "blocked"
 
@@ -11820,7 +11857,7 @@ def test_lens_summon_execute_records_bounded_handoff_without_summon_anywhere_cla
                         "local_summon_available": True,
                         "os_level_summon": False,
                         "summon_anywhere": False,
-                        "global_hotkey": "Ctrl+Alt+Space",
+                        "global_hotkey": "Ctrl+Alt+F",
                         "binding_scope": "global",
                         "local_open_target_url": "http://127.0.0.1:5173/?lens=command-palette",
                         "opened": False,
@@ -12057,7 +12094,7 @@ def test_lens_summon_execute_records_summon_anywhere_when_hotkey_launch_runtime_
                         "local_summon_available": True,
                         "os_level_summon": False,
                         "summon_anywhere": False,
-                        "global_hotkey": "Ctrl+Alt+Space",
+                        "global_hotkey": "Ctrl+Alt+F",
                         "binding_scope": "global",
                         "local_open_target_url": "http://127.0.0.1:5173/?lens=command-palette",
                         "opened": True,

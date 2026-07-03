@@ -542,7 +542,9 @@ def _learning_notes(observations: dict[str, Any], *, status: str) -> dict[str, A
 
     return {
         "status": status,
-        "summary": "Read-only substrate exploration completed." if status == "complete" else "Exploration blocked by policy.",
+        "summary": "Read-only substrate exploration completed."
+        if status == "complete"
+        else "Exploration blocked by policy.",
         "learned": {
             "git_dirty": bool(git.get("dirty")) if isinstance(git, dict) else False,
             "tracked_changed_count": git.get("changed_count", 0) if isinstance(git, dict) else 0,
@@ -572,7 +574,9 @@ def _candidate_questions(findings: list[Any]) -> list[str]:
         if marker and path:
             questions.append(f"Review {marker} at {path}:{line} for a bounded follow-up task.")
     if not questions:
-        questions.append("Compare the latest receipt summary against the completion ledger before granting more authority.")
+        questions.append(
+            "Compare the latest receipt summary against the completion ledger before granting more authority."
+        )
     return questions
 
 
@@ -712,7 +716,9 @@ def _sleep_with_stop_poll(stop_path: Path, *, seconds: float) -> None:
 
 def _stable_id(payload: dict[str, Any], *, prefix: str) -> str:
     basis = {key: value for key, value in payload.items() if key not in {"receipt_id", "receipt_path", "summary_id"}}
-    digest = hashlib.sha256(json.dumps(basis, sort_keys=True, ensure_ascii=False, default=str).encode()).hexdigest()[:16]
+    digest = hashlib.sha256(json.dumps(basis, sort_keys=True, ensure_ascii=False, default=str).encode()).hexdigest()[
+        :16
+    ]
     return f"{prefix}-{digest}"
 
 

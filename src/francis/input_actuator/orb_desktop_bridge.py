@@ -21,6 +21,15 @@ ORB_DESKTOP_BRIDGE_DEFAULT_BACKEND = "win32_post_message"
 ORB_DESKTOP_BRIDGE_SOURCE_ID = "orb_desktop_bridge"
 _MAX_COORD = 10000
 _OVERLAY_TITLES = {"Francis Lens Overlay"}
+_BLOCKED_TITLE_FRAGMENTS = ("claude",)
+_BLOCKED_WINDOW_CLASSES = {
+    "Progman",
+    "Shell_TrayWnd",
+    "Shell_SecondaryTrayWnd",
+    "WorkerW",
+}
+_OBSERVER_POLL_SECONDS = 0.35
+_OBSERVER_POLL_INTERVAL_SECONDS = 0.025
 
 
 def _utc_now() -> str:
@@ -242,6 +251,17 @@ def _finish_attempt(payload: dict[str, Any]) -> dict[str, Any]:
         "desktop_action_sent": bool(payload.get("desktop_action_sent")),
         "desktop_effect_performed": bool(payload.get("desktop_effect_performed")),
         "desktop_effect_confirmed": bool(payload.get("desktop_effect_confirmed")),
+        "target_observer_status": _clean_text(payload.get("target_observer_status")),
+        "target_state_changed": bool(payload.get("target_state_changed")),
+        "target_observer_polls": _safe_int(payload.get("target_observer_polls"), 0),
+        "target_observation_before": (
+            payload.get("target_observation_before")
+            if isinstance(payload.get("target_observation_before"), dict)
+            else {}
+        ),
+        "target_observation_after": (
+            payload.get("target_observation_after") if isinstance(payload.get("target_observation_after"), dict) else {}
+        ),
         "uses_user_os_cursor": False,
         "user_mouse_taken": False,
         "physical_input_performed": False,
@@ -279,6 +299,11 @@ def _finish_attempt(payload: dict[str, Any]) -> dict[str, Any]:
             "desktop_action_sent": result["desktop_action_sent"],
             "desktop_effect_performed": result["desktop_effect_performed"],
             "desktop_effect_confirmed": result["desktop_effect_confirmed"],
+            "target_observer_status": result["target_observer_status"],
+            "target_state_changed": result["target_state_changed"],
+            "target_observer_polls": result["target_observer_polls"],
+            "target_observation_before": result["target_observation_before"],
+            "target_observation_after": result["target_observation_after"],
             "message_delivery": result["message_delivery"],
             "error": result["error"],
         },
@@ -304,6 +329,7 @@ def _perform_win32_post_message(kind: str, payload: dict[str, Any]) -> dict[str,
             "error": "no non-Francis desktop window resolved at Orb coordinate",
         }
 
+    observation_before = _observe_target_state(target)
     if kind == "mouse.click":
         _post_mouse_click(target, payload)
     elif kind == "mouse.drag":
@@ -313,13 +339,19 @@ def _perform_win32_post_message(kind: str, payload: dict[str, Any]) -> dict[str,
     else:
         raise InputActuatorError(f"unsupported Orb desktop bridge action: {kind}")
 
+    confirmation = _confirm_target_effect(target, observation_before)
     return {
         "ok": True,
-        "status": "desktop_action_sent",
+        "status": "desktop_action_confirmed" if confirmation["desktop_effect_confirmed"] else "desktop_action_sent",
         "desktop_action_sent": True,
         "desktop_effect_performed": True,
-        "desktop_effect_confirmed": False,
+        "desktop_effect_confirmed": confirmation["desktop_effect_confirmed"],
         "target": target.to_dict(),
+        "target_observer_status": confirmation["target_observer_status"],
+        "target_state_changed": confirmation["target_state_changed"],
+        "target_observer_polls": confirmation["target_observer_polls"],
+        "target_observation_before": confirmation["target_observation_before"],
+        "target_observation_after": confirmation["target_observation_after"],
         "message_delivery": "posted_to_target_window",
     }
 
@@ -346,7 +378,8 @@ def _resolve_target_window(x: int, y: int) -> _WindowTarget | None:
         if not win32gui.IsWindowVisible(hwnd) or not win32gui.IsWindowEnabled(hwnd):
             return
         title = _clean_text(win32gui.GetWindowText(hwnd))
-        if title in _OVERLAY_TITLES:
+        class_name = _clean_text(win32gui.GetClassName(hwnd))
+        if not _safe_window_target(title=title, class_name=class_name):
             return
         left, top, right, bottom = win32gui.GetWindowRect(hwnd)
         if left <= x < right and top <= y < bottom:
@@ -386,8 +419,104 @@ def _resolve_target_window(x: int, y: int) -> _WindowTarget | None:
     )
 
 
+def _safe_window_target(*, title: str, class_name: str) -> bool:
+    normalized_title = _clean_text(title).casefold()
+    if not normalized_title:
+        return False
+    if title in _OVERLAY_TITLES:
+        return False
+    if any(fragment in normalized_title for fragment in _BLOCKED_TITLE_FRAGMENTS):
+        return False
+    if class_name in _BLOCKED_WINDOW_CLASSES:
+        return False
+    return True
+
+
 def _target_hwnd(target: _WindowTarget) -> int:
     return target.child_hwnd or target.hwnd
+
+
+def _observe_target_state(target: _WindowTarget) -> dict[str, Any]:
+    try:
+        import win32gui  # type: ignore[import-not-found]
+    except ImportError as exc:
+        raise InputActuatorError("win32gui is required for the Orb desktop bridge") from exc
+
+    hwnd = _target_hwnd(target)
+    try:
+        text = _clean_text(win32gui.GetWindowText(hwnd))
+        top_level_title = _clean_text(win32gui.GetWindowText(target.hwnd))
+        class_name = _clean_text(win32gui.GetClassName(hwnd))
+        rect = tuple(int(item) for item in win32gui.GetWindowRect(target.hwnd))
+        visible = bool(win32gui.IsWindowVisible(target.hwnd))
+        enabled = bool(win32gui.IsWindowEnabled(target.hwnd))
+    except Exception as exc:
+        return {
+            "observable": False,
+            "observer_error": _clean_text(exc)[:240],
+            "text_redacted": True,
+            "raw_text_stored": False,
+            "observed_at": _utc_now(),
+        }
+
+    return {
+        "observable": True,
+        "target_hwnd": hwnd,
+        "top_level_hwnd": target.hwnd,
+        "class_name": class_name[:160],
+        "visible": visible,
+        "enabled": enabled,
+        "rect": {
+            "left": rect[0],
+            "top": rect[1],
+            "right": rect[2],
+            "bottom": rect[3],
+        },
+        "text_length": len(text),
+        "text_sha256": _hash_text(text),
+        "top_level_title_length": len(top_level_title),
+        "top_level_title_sha256": _hash_text(top_level_title),
+        "text_redacted": True,
+        "raw_text_stored": False,
+        "observed_at": _utc_now(),
+    }
+
+
+def _target_state_changed(before: dict[str, Any], after: dict[str, Any]) -> bool:
+    if not before.get("observable") or not after.get("observable"):
+        return False
+    comparable_fields = (
+        "visible",
+        "enabled",
+        "text_length",
+        "text_sha256",
+        "top_level_title_length",
+        "top_level_title_sha256",
+    )
+    return any(before.get(field) != after.get(field) for field in comparable_fields)
+
+
+def _confirm_target_effect(target: _WindowTarget, before: dict[str, Any]) -> dict[str, Any]:
+    after = _observe_target_state(target)
+    polls = 1
+    deadline = time.monotonic() + _OBSERVER_POLL_SECONDS
+    while not _target_state_changed(before, after) and time.monotonic() < deadline:
+        time.sleep(_OBSERVER_POLL_INTERVAL_SECONDS)
+        polls += 1
+        after = _observe_target_state(target)
+
+    changed = _target_state_changed(before, after)
+    observer_status = "confirmed_target_state_changed" if changed else "observed_no_target_state_change"
+    if not before.get("observable") or not after.get("observable"):
+        observer_status = "target_state_observer_unavailable"
+    return {
+        "desktop_effect_confirmed": changed,
+        "target_state_changed": changed,
+        "target_observer_status": observer_status,
+        "target_observer_polls": polls,
+        "target_observation_before": before,
+        "target_observation_after": after,
+    }
 
 
 def _make_lparam(x: int, y: int) -> int:
