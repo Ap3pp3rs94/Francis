@@ -225,6 +225,34 @@ Capture:
 
 Stop if left and right values were copied, if left and right evidence references are not distinct, if the complete left/right numeric profiles are identical without recheck, or if any symptom is true.
 
+Optional guarded update command for left/right independence and symptom screening:
+
+```powershell
+.\scripts\fr017-update-independence-safety-record.ps1 -Mode UpdateIndependenceSafety `
+  -MeasurementPath .\FR-017_Stage17_Package\FR-017-MEASUREMENTS-YYYY-MM-DD-PILOT-RECORD.json `
+  -ConfirmLeftArmMeasuredSeparately `
+  -ConfirmRightArmMeasuredSeparately `
+  -ConfirmSideLabelsVerified `
+  -ConfirmValuesNotCopiedBetweenSides `
+  -LeftMeasurementReference "<left independent evidence reference>" `
+  -RightMeasurementReference "<right independent evidence reference>" `
+  -IndependenceNotes "Left and right measurement passes were separate with side label verification." `
+  -ConfirmNoPain `
+  -ConfirmNoTingling `
+  -ConfirmNoNumbness `
+  -ConfirmNoColdFingers `
+  -ConfirmNoDiscoloration `
+  -ConfirmNoHandWeakness `
+  -ConfirmNoWristPain `
+  -ConfirmNoSharpPressure `
+  -ConfirmNoReducedFingerMotion `
+  -ConfirmNoLossOfGripStrength
+```
+
+If a symptom is observed, record the corresponding `-PainObserved`, `-TinglingObserved`, `-NumbnessObserved`, `-ColdFingersObserved`, `-DiscolorationObserved`, `-HandWeaknessObserved`, `-WristPainObserved`, `-SharpPressureObserved`, `-ReducedFingerMotionObserved`, or `-LossOfGripStrengthObserved` flag instead of the matching no-symptom confirmation. Any observed symptom is a failed fit condition and blocks FR-017 progression until appropriate review.
+
+This command writes operator-supplied independence and safety-screen values only. It refuses to update the template and refuses to overwrite populated fields unless `-AllowOverwrite` is explicitly supplied. `ready_for_non_powered_mockup_patterning` remains measurement-intake readiness only; it is not physical validation completion, fit approval, powered testing clearance, or FR-018 clearance.
+
 ## Gate Interpretation
 
 `ready_for_non_powered_mockup_patterning` means only that the measurement record passed the intake gate. It is not fit approval, fabrication approval, load approval, powered testing approval, frame-coupled testing approval, Stage 17 completion, or FR-018 clearance.

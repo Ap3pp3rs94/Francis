@@ -106,6 +106,11 @@ def test_fr017_evidence_chain_status_stops_at_measurement_template() -> None:
         .endswith("scripts\\fr017-update-landmark-record.ps1")
     )
     assert (
+        str(payload["first_blocking_details"]["measurement_independence_safety_update_path"])
+        .replace("/", "\\")
+        .endswith("scripts\\fr017-update-independence-safety-record.ps1")
+    )
+    assert (
         payload["first_blocking_details"]["measurement_working_record_name_pattern"]
         == "FR-017-MEASUREMENTS-YYYY-MM-DD-PILOT-RECORD.json"
     )
@@ -121,6 +126,10 @@ def test_fr017_evidence_chain_status_stops_at_measurement_template() -> None:
     )
     assert (
         "fr017-update-landmark-record.ps1" in payload["first_blocking_details"]["measurement_capture_runbook_contract"]
+    )
+    assert (
+        "fr017-update-independence-safety-record.ps1"
+        in payload["first_blocking_details"]["measurement_capture_runbook_contract"]
     )
     assert "intake readiness only" in payload["first_blocking_details"]["measurement_capture_plan_status_contract"]
     assert (

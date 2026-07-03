@@ -97,6 +97,7 @@ def test_fr017_stage17_final_audit_blocks_physical_and_fr018_claims() -> None:
     assert "FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json" in package_index
     assert "FR-017-MEASUREMENT-CAPTURE-RUNBOOK.md" in package_index
     assert "FR-017-COMPLETION-LEDGER-HANDOFF-TEMPLATE.md" in package_index
+    assert "fr017-update-independence-safety-record.ps1" in package_index
     assert "fr017-completion-ledger-gate.ps1" in package_index
 
 
@@ -127,6 +128,7 @@ def test_fr017_measurement_capture_runbook_preserves_first_physical_input_lock()
     assert "fr017-new-measurement-record.ps1" in runbook
     assert "fr017-update-measurement-record.ps1" in runbook
     assert "fr017-update-landmark-record.ps1" in runbook
+    assert "fr017-update-independence-safety-record.ps1" in runbook
     assert "refuses to overwrite an existing file" in runbook
     assert "refuses to update the template" in runbook
     assert "refuses copied left/right references" in runbook
@@ -134,6 +136,9 @@ def test_fr017_measurement_capture_runbook_preserves_first_physical_input_lock()
     assert "ConfirmNoTissueCompressionUsed" in runbook
     assert "ConfirmSecondPassCompleted" in runbook
     assert "ConfirmSkinSafeMarkingUsed" in runbook
+    assert "ConfirmLeftArmMeasuredSeparately" in runbook
+    assert "ConfirmNoPain" in runbook
+    assert "PainObserved" in runbook
     assert "setup_and_safety_brief" in runbook
     assert "still not physical validation evidence" in runbook
     assert "fr017-measurement-intake.ps1 -Mode Status" in runbook
