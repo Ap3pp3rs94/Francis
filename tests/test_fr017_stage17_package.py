@@ -100,6 +100,7 @@ def test_fr017_stage17_final_audit_blocks_physical_and_fr018_claims() -> None:
     assert "fr017-update-independence-safety-record.ps1" in package_index
     assert "fr017-new-mockup-record.ps1" in package_index
     assert "fr017-new-mannequin-interface-record.ps1" in package_index
+    assert "fr017-new-pilot-static-fit-record.ps1" in package_index
     assert "fr017-completion-ledger-gate.ps1" in package_index
 
 
@@ -190,5 +191,6 @@ def test_fr017_validation_gate_chain_preserves_gate_order_and_no_fake_validation
     assert "ready_for_non_powered_mockup_patterning" in runbook
     assert "fr017-new-mockup-record.ps1" in runbook
     assert "fr017-new-mannequin-interface-record.ps1" in runbook
+    assert "fr017-new-pilot-static-fit-record.ps1" in runbook
     assert "safety-critical landmark confirmation" in runbook
     assert "derived consistency checks passed" in runbook

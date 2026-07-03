@@ -153,6 +153,7 @@ def test_fr017_pilot_static_gate_reports_default_templates_as_pending_upstream()
     assert payload["pilot_movement_test_planning_ready"] is False
     assert payload["pilot_movement_testing_cleared"] is False
     assert payload["fr018_implementation_cleared"] is False
+    assert payload["stage17_completion_claim_allowed"] is False
     assert payload["read_only_contract"] is True
     assert payload["writes_repo"] is False
     assert payload["grants_mutation_authority"] is False
@@ -161,8 +162,21 @@ def test_fr017_pilot_static_gate_reports_default_templates_as_pending_upstream()
     assert "pilot static-fit capture readiness only" in payload["static_fit_capture_plan_status_contract"]
     assert "not physical validation evidence" in payload["static_fit_capture_summary_contract"]
     assert payload["next_required_static_fit_input"] == (
-        "complete_non_powered_pilot_static_fit_record_at_FR-017-PILOT-STATIC-FIT-INPUT-TEMPLATE.json"
+        "create_non_powered_pilot_static_fit_record_with_fr017-new-pilot-static-fit-record.ps1_then_rerun_pilot_static_fit_gate"
     )
+    assert "operator input tooling only" in payload["static_fit_capture_runbook_contract"]
+    assert "fr017-new-pilot-static-fit-record.ps1" in payload["static_fit_capture_runbook_contract"]
+    assert (
+        str(payload["static_fit_input_template_path"])
+        .replace("/", "\\")
+        .endswith("FR-017_Stage17_Package\\FR-017-PILOT-STATIC-FIT-INPUT-TEMPLATE.json")
+    )
+    assert (
+        str(payload["static_fit_record_initializer_path"])
+        .replace("/", "\\")
+        .endswith("scripts\\fr017-new-pilot-static-fit-record.ps1")
+    )
+    assert payload["static_fit_working_record_name_pattern"] == "FR-017-PILOT-STATIC-FIT-YYYY-MM-DD-PILOT-RECORD.json"
     assert payload["static_fit_capture_total_groups"] == 6
     assert payload["static_fit_capture_ready_groups"] == 0
     assert payload["static_fit_capture_pending_groups"] == 0
@@ -214,6 +228,7 @@ def test_fr017_pilot_static_gate_requires_static_record_after_upstream_ready(tmp
     assert payload["pilot_static_fit_test_complete"] is False
     assert payload["pilot_movement_testing_cleared"] is False
     assert payload["fr018_implementation_cleared"] is False
+    assert payload["stage17_completion_claim_allowed"] is False
     assert payload["static_fit_capture_plan_not_completion_evidence"] is True
     assert payload["static_fit_capture_total_groups"] == 6
     assert payload["static_fit_capture_ready_groups"] == 0
@@ -275,6 +290,7 @@ def test_fr017_pilot_static_gate_treats_lowercase_or_padded_pending_text_as_miss
     assert "sides.left.baseline.fingers_warm_before_donning" in payload["missing_fields"]
     assert payload["physical_validation_complete"] is False
     assert payload["fr018_implementation_cleared"] is False
+    assert payload["stage17_completion_claim_allowed"] is False
 
 
 def test_fr017_pilot_static_gate_accepts_complete_static_fit_record(tmp_path: Path) -> None:
