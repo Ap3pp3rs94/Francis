@@ -627,6 +627,50 @@ Remaining truthful gap:
   resident host, tray presence, refreshed `Ctrl+Alt+F` hotkey binding, summon
   binding, or the final enable authority.
 
+### 2026-07-03 20:49Z - Live tray prerequisite restored
+
+Current posture: Phase 2 / Orb embodiment Milestone 5 remains blocked, but the
+live tray prerequisite is restored and the latest one-visible-loop artifact now
+shows tray and overlay ready together.
+
+What changed:
+
+- Runtime-only recovery stopped the stale hotkey receipt and cleared the old
+  `Ctrl+Alt+Space` runtime claim without registering the summon hotkey.
+- Runtime-only recovery started the Lens tray presence process; summon remains
+  disabled and no desktop bridge default was changed.
+- The one-visible-loop fixture proof was refreshed so its summon readback now
+  shows `tray_presence` ready and the remaining missing requirements narrowed to
+  `resident_host_process`, `global_hotkey_binding`, and `summon_binding`.
+
+Validation:
+
+- `.\scripts\lens-hotkey-binding.ps1 -Mode Stop` returned `status=stopped`,
+  `global_hotkey=Ctrl+Alt+F`, `launch_on_hotkey=false`, and no summon authority.
+- `.\scripts\lens-tray-presence.ps1 -Mode Start -StartupTimeoutSeconds 10`
+  returned `status=started`, `tray_presence=true`, `tray_icon_visible=true`,
+  and live PID `4520`.
+- `.\scripts\lens-summon-preflight.ps1 -Mode Status` reported
+  `missing_required_before_enable=resident_host_process,global_hotkey_binding,summon_binding`,
+  `tray_ready=true`, `overlay_ready=true`, and
+  `hotkey_blocker=global_hotkey_binding_runtime_missing`.
+- One-visible-loop fixture proof wrote
+  `data\logs\operations\one_visible_loop\francis_one_visible_loop_proof_20260703_154928970.json`
+  with tray `ready=true`, overlay `ready=true`, action `status=passed`,
+  `desktop_effect_confirmed=true`, and an honest blocked summon state.
+- `.\scripts\lens-host-supervisor.ps1 -Mode Status` still reports
+  `resident_supervised_runtime=false`,
+  `authority_required=process_supervision_authority`, and
+  `authority_granted=false`.
+
+Remaining truthful gap:
+
+- Milestone 5 is still not accepted. Resident supervision still requires a
+  process-supervision authority path, the global hotkey binding and summon
+  binding remain disabled/missing pending authority, and final live acceptance
+  still requires Austin's enable approval plus a live safe-target bridge proof
+  and chat/Lens UI render verification.
+
 ## 5. Known truthful gaps
 
 These still block any finished Orb embodiment claim:
