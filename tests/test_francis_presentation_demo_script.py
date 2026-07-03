@@ -29,6 +29,12 @@ def test_presentation_demo_can_include_one_visible_loop_proof_without_defaulting
     assert "does not self-enable summon or default-enable the desktop bridge" in script
     assert "actual_chat_ui_render_verified" in script
     assert "actual_lens_ui_render_verified" in script
+    assert "chat_lens_visibility_status" in script
+    assert "receipt_trace_artifact_paths_present" in script
+    assert "lens_status_contract_verified" in script
+    assert "lens_status_test_contract_verified" in script
+    assert "presentation_demo_contract_verified" in script
+    assert "render_validation_required" in script
     assert "operator_decision_status" in script
     assert "operator_decision_question" in script
     assert "operator_decision_command" in script

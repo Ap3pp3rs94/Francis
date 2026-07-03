@@ -341,6 +341,72 @@ def _operator_decision_queue(summon_payload: dict[str, Any], host_payload: dict[
     }
 
 
+def _file_contains_all(path: Path, needles: list[str]) -> bool:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except Exception:
+        return False
+    return all(needle in text for needle in needles)
+
+
+def _chat_lens_visibility_contract(action: dict[str, Any]) -> dict[str, Any]:
+    repo = _repo_root()
+    lens_source = repo / "apps" / "chat_ui" / "src" / "lens" / "index.ts"
+    lens_test = repo / "apps" / "chat_ui" / "src" / "lens" / "index.test.ts"
+    presentation_demo = repo / "scripts" / "francis-presentation-demo.ps1"
+    proof_path = os.getenv("FRANCIS_ONE_VISIBLE_LOOP_PROOF_PATH", "")
+    receipt_trace_paths = [
+        proof_path,
+        str(action.get("operator_receipt_path") or ""),
+        str(action.get("desktop_bridge_receipt_path") or ""),
+    ]
+    lens_status_contract_verified = _file_contains_all(
+        lens_source,
+        [
+            "stage6_readiness",
+            "prerequisite_bringup",
+            "operator_sequence",
+            "presentStage6PrerequisiteBringup",
+        ],
+    )
+    lens_status_test_contract_verified = _file_contains_all(
+        lens_test,
+        [
+            "presentStage6PrerequisiteBringup",
+            "operator_sequence_command_availability",
+            "stage6_readiness.prerequisite_bringup.operator_sequence.operator_command",
+        ],
+    )
+    presentation_demo_contract_verified = _file_contains_all(
+        presentation_demo,
+        [
+            "receipt_trace_status_paths",
+            "target_observer_status",
+            "desktop_effect_confirmed",
+            "actual_chat_ui_render_verified",
+            "actual_lens_ui_render_verified",
+        ],
+    )
+    receipt_trace_artifact_paths_present = all(bool(path) for path in receipt_trace_paths)
+    contract_verified = (
+        lens_status_contract_verified
+        and lens_status_test_contract_verified
+        and presentation_demo_contract_verified
+        and receipt_trace_artifact_paths_present
+    )
+    return {
+        "status": "ui_contract_visible_render_unverified" if contract_verified else "ui_contract_gap",
+        "receipt_trace_status_paths": receipt_trace_paths,
+        "receipt_trace_artifact_paths_present": receipt_trace_artifact_paths_present,
+        "lens_status_contract_verified": lens_status_contract_verified,
+        "lens_status_test_contract_verified": lens_status_test_contract_verified,
+        "presentation_demo_contract_verified": presentation_demo_contract_verified,
+        "render_validation_required": "browser_or_live_chat_lens_ui_proof",
+        "actual_chat_ui_render_verified": False,
+        "actual_lens_ui_render_verified": False,
+    }
+
+
 repo = _repo_root()
 summon = _run_json_script(str(repo / "scripts" / "lens-summon-preflight.ps1"), "-Mode", "Status")
 summon_payload = summon["payload"]
@@ -349,6 +415,7 @@ host_supervisor_payload = host_supervisor["payload"]
 overlay = _overlay_status()
 action = _fixture_action_proof()
 operator_decision_queue = _operator_decision_queue(summon_payload, host_supervisor_payload)
+chat_lens_visibility = _chat_lens_visibility_contract(action)
 operator_approved_summon = os.getenv("FRANCIS_ONE_VISIBLE_LOOP_OPERATOR_APPROVED_SUMMON") == "1"
 summon_ready = not bool(summon_payload.get("missing_required_before_enable"))
 visible_loop_ready = (
@@ -391,16 +458,7 @@ proof = {
     "orb_presence": overlay,
     "operator_action": action,
     "operator_decision_queue": operator_decision_queue,
-    "chat_lens_visibility": {
-        "status": "proof_artifact_visible",
-        "receipt_trace_status_paths": [
-            os.getenv("FRANCIS_ONE_VISIBLE_LOOP_PROOF_PATH", ""),
-            str(action.get("operator_receipt_path") or ""),
-            str(action.get("desktop_bridge_receipt_path") or ""),
-        ],
-        "actual_chat_ui_render_verified": False,
-        "actual_lens_ui_render_verified": False,
-    },
+    "chat_lens_visibility": chat_lens_visibility,
     "governance": {
         "does_not_self_enable_summon": True,
         "does_not_default_enable_desktop_bridge": True,

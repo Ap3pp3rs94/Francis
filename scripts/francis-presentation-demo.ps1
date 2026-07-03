@@ -261,7 +261,13 @@ try {
         target_observer_status = ""
         operator_receipt_path = ""
         desktop_bridge_receipt_path = ""
+        chat_lens_visibility_status = ""
         receipt_trace_status_paths = @()
+        receipt_trace_artifact_paths_present = $false
+        lens_status_contract_verified = $false
+        lens_status_test_contract_verified = $false
+        presentation_demo_contract_verified = $false
+        render_validation_required = ""
         actual_chat_ui_render_verified = $false
         actual_lens_ui_render_verified = $false
         operator_decision_status = ""
@@ -303,7 +309,13 @@ try {
             $OneVisibleLoopSummary.target_observer_status = [string]$OneVisibleLoop.operator_action.target_observer_status
             $OneVisibleLoopSummary.operator_receipt_path = [string]$OneVisibleLoop.operator_action.operator_receipt_path
             $OneVisibleLoopSummary.desktop_bridge_receipt_path = [string]$OneVisibleLoop.operator_action.desktop_bridge_receipt_path
+            $OneVisibleLoopSummary.chat_lens_visibility_status = [string]$OneVisibleLoop.chat_lens_visibility.status
             $OneVisibleLoopSummary.receipt_trace_status_paths = @($OneVisibleLoop.chat_lens_visibility.receipt_trace_status_paths)
+            $OneVisibleLoopSummary.receipt_trace_artifact_paths_present = ConvertTo-DemoBool -Value $OneVisibleLoop.chat_lens_visibility.receipt_trace_artifact_paths_present
+            $OneVisibleLoopSummary.lens_status_contract_verified = ConvertTo-DemoBool -Value $OneVisibleLoop.chat_lens_visibility.lens_status_contract_verified
+            $OneVisibleLoopSummary.lens_status_test_contract_verified = ConvertTo-DemoBool -Value $OneVisibleLoop.chat_lens_visibility.lens_status_test_contract_verified
+            $OneVisibleLoopSummary.presentation_demo_contract_verified = ConvertTo-DemoBool -Value $OneVisibleLoop.chat_lens_visibility.presentation_demo_contract_verified
+            $OneVisibleLoopSummary.render_validation_required = [string]$OneVisibleLoop.chat_lens_visibility.render_validation_required
             $OneVisibleLoopSummary.actual_chat_ui_render_verified = ConvertTo-DemoBool -Value $OneVisibleLoop.chat_lens_visibility.actual_chat_ui_render_verified
             $OneVisibleLoopSummary.actual_lens_ui_render_verified = ConvertTo-DemoBool -Value $OneVisibleLoop.chat_lens_visibility.actual_lens_ui_render_verified
             $DecisionQueue = $OneVisibleLoop.operator_decision_queue
@@ -419,6 +431,14 @@ try {
         "- One-visible-loop status: $($OneVisibleLoopSummary.status)",
         "- One-visible-loop desktop effect confirmed: $($OneVisibleLoopSummary.desktop_effect_confirmed)",
         "- One-visible-loop target observer status: $($OneVisibleLoopSummary.target_observer_status)",
+        "- One-visible-loop chat/Lens visibility status: $($OneVisibleLoopSummary.chat_lens_visibility_status)",
+        "- One-visible-loop receipt trace artifact paths present: $($OneVisibleLoopSummary.receipt_trace_artifact_paths_present)",
+        "- One-visible-loop Lens status contract verified: $($OneVisibleLoopSummary.lens_status_contract_verified)",
+        "- One-visible-loop Lens status test contract verified: $($OneVisibleLoopSummary.lens_status_test_contract_verified)",
+        "- One-visible-loop presentation demo contract verified: $($OneVisibleLoopSummary.presentation_demo_contract_verified)",
+        "- One-visible-loop render validation required: $($OneVisibleLoopSummary.render_validation_required)",
+        "- One-visible-loop actual chat UI render verified: $($OneVisibleLoopSummary.actual_chat_ui_render_verified)",
+        "- One-visible-loop actual Lens UI render verified: $($OneVisibleLoopSummary.actual_lens_ui_render_verified)",
         "- One-visible-loop operator decision status: $($OneVisibleLoopSummary.operator_decision_status)",
         "- One-visible-loop operator decision question: $($OneVisibleLoopSummary.operator_decision_question)",
         "- One-visible-loop operator decision command: $($OneVisibleLoopSummary.operator_decision_command)",
