@@ -192,7 +192,10 @@ def test_fr017_evidence_chain_status_moves_blocker_after_measurement_ready(tmp_p
     assert payload["status"] == "blocked_on_mockup_readiness"
     assert payload["first_blocking_gate"] == "mockup_readiness"
     assert payload["first_blocking_status"] == "pending_mockup_build_record"
-    assert payload["next_required_input"] == "FR-017-MOCKUP-BUILD-INPUT-TEMPLATE.json"
+    assert (
+        payload["next_required_input"]
+        == "scripts/fr017-new-mockup-record.ps1 + FR-017-MOCKUP-BUILD-INPUT-TEMPLATE.json"
+    )
     assert "evidence.date" in payload["first_blocking_details"]["mockup_missing_fields"]
     assert payload["first_blocking_details"]["mockup_invalid_fields"] == []
     assert (
@@ -210,9 +213,25 @@ def test_fr017_evidence_chain_status_moves_blocker_after_measurement_ready(tmp_p
     assert "not physical validation evidence" in payload["first_blocking_details"]["mockup_capture_plan_contract"]
     assert "mockup readiness only" in payload["first_blocking_details"]["mockup_capture_plan_status_contract"]
     assert "not physical validation evidence" in payload["first_blocking_details"]["mockup_capture_summary_contract"]
+    assert "operator input tooling only" in payload["first_blocking_details"]["mockup_capture_runbook_contract"]
+    assert "fr017-new-mockup-record.ps1" in payload["first_blocking_details"]["mockup_capture_runbook_contract"]
     assert (
         payload["first_blocking_details"]["next_required_mockup_input"]
-        == "complete_non_powered_mockup_build_record_at_FR-017-MOCKUP-BUILD-INPUT-TEMPLATE.json"
+        == "create_non_powered_mockup_record_with_fr017-new-mockup-record.ps1_then_rerun_mockup_readiness_gate"
+    )
+    assert (
+        str(payload["first_blocking_details"]["mockup_input_template_path"])
+        .replace("/", "\\")
+        .endswith("FR-017_Stage17_Package\\FR-017-MOCKUP-BUILD-INPUT-TEMPLATE.json")
+    )
+    assert (
+        str(payload["first_blocking_details"]["mockup_record_initializer_path"])
+        .replace("/", "\\")
+        .endswith("scripts\\fr017-new-mockup-record.ps1")
+    )
+    assert (
+        payload["first_blocking_details"]["mockup_working_record_name_pattern"]
+        == "FR-017-MOCKUP-YYYY-MM-DD-PILOT-RECORD.json"
     )
     assert payload["first_blocking_details"]["mockup_capture_total_groups"] == 5
     assert payload["first_blocking_details"]["mockup_capture_ready_groups"] == 0
