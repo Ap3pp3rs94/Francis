@@ -658,6 +658,11 @@ Validation:
   `data\logs\operations\one_visible_loop\francis_one_visible_loop_proof_20260703_154928970.json`
   with tray `ready=true`, overlay `ready=true`, action `status=passed`,
   `desktop_effect_confirmed=true`, and an honest blocked summon state.
+- Presentation demo proof integration wrote
+  `.francis\presentation\demos\francis-presentation-demo-20260703-205157.json`
+  with `ok=false`, failure `one_visible_loop_proof_blocked`, action
+  `status=passed`, `desktop_effect_confirmed=true`, and
+  `target_observer_status=confirmed_target_state_changed`.
 - `.\scripts\lens-host-supervisor.ps1 -Mode Status` still reports
   `resident_supervised_runtime=false`,
   `authority_required=process_supervision_authority`, and
