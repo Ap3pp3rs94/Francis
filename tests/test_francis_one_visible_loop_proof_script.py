@@ -24,6 +24,13 @@ def test_one_visible_loop_proof_preserves_operator_authority_boundaries() -> Non
     assert "hotkey_runtime_readback" in script
     assert "tray_runtime_readback" in script
     assert "overlay_runtime_readback" in script
+    assert "operator_decision_queue" in script
+    assert "approve_resident_host_process_supervision_authority_request" in script
+    assert "Austin: approve the governed process-supervision authority path" in script
+    assert "script_would_grant_authority" in script
+    assert "script_would_execute" in script
+    assert "self_granted" in script
+    assert "scripts/lens-host-supervisor.ps1 -Mode Status" in script
     assert "actual_chat_ui_render_verified" in script
     assert "actual_lens_ui_render_verified" in script
     assert "fixture_safe_target_is_not_live_desktop_completion" in script

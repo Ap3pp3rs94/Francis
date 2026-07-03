@@ -264,6 +264,12 @@ try {
         receipt_trace_status_paths = @()
         actual_chat_ui_render_verified = $false
         actual_lens_ui_render_verified = $false
+        operator_decision_status = ""
+        operator_decision_count = 0
+        operator_decision_question = ""
+        operator_decision_command = ""
+        operator_decision_authority_required = ""
+        operator_decision_self_granted = $false
         error = $null
     }
     if ($IncludeOneVisibleLoopProof) {
@@ -300,6 +306,19 @@ try {
             $OneVisibleLoopSummary.receipt_trace_status_paths = @($OneVisibleLoop.chat_lens_visibility.receipt_trace_status_paths)
             $OneVisibleLoopSummary.actual_chat_ui_render_verified = ConvertTo-DemoBool -Value $OneVisibleLoop.chat_lens_visibility.actual_chat_ui_render_verified
             $OneVisibleLoopSummary.actual_lens_ui_render_verified = ConvertTo-DemoBool -Value $OneVisibleLoop.chat_lens_visibility.actual_lens_ui_render_verified
+            $DecisionQueue = $OneVisibleLoop.operator_decision_queue
+            if ($null -ne $DecisionQueue) {
+                $OneVisibleLoopSummary.operator_decision_status = [string]$DecisionQueue.status
+                $OneVisibleLoopSummary.operator_decision_count = [int]$DecisionQueue.queued_decision_count
+                $DecisionItems = @($DecisionQueue.decisions | Where-Object { $null -ne $_ })
+                if ($DecisionItems.Count -gt 0) {
+                    $FirstDecision = $DecisionItems[0]
+                    $OneVisibleLoopSummary.operator_decision_question = [string]$FirstDecision.question
+                    $OneVisibleLoopSummary.operator_decision_command = [string]$FirstDecision.next_operator_command
+                    $OneVisibleLoopSummary.operator_decision_authority_required = [string]$FirstDecision.authority_required
+                    $OneVisibleLoopSummary.operator_decision_self_granted = ConvertTo-DemoBool -Value $FirstDecision.self_granted
+                }
+            }
         }
         if ($OneVisibleLoopCommand.exit_code -ne 0 -or -not $OneVisibleLoopSummary.ok) {
             $Failures.Add("one_visible_loop_proof_blocked")
@@ -397,6 +416,14 @@ try {
         "- Orb live input performed: $($OrbSummary.live_input_performed)",
         "- Orb raw input exposed: $($OrbSummary.raw_input)",
         "- Orb input execution attempted: $($OrbSummary.input_execution_attempted)",
+        "- One-visible-loop status: $($OneVisibleLoopSummary.status)",
+        "- One-visible-loop desktop effect confirmed: $($OneVisibleLoopSummary.desktop_effect_confirmed)",
+        "- One-visible-loop target observer status: $($OneVisibleLoopSummary.target_observer_status)",
+        "- One-visible-loop operator decision status: $($OneVisibleLoopSummary.operator_decision_status)",
+        "- One-visible-loop operator decision question: $($OneVisibleLoopSummary.operator_decision_question)",
+        "- One-visible-loop operator decision command: $($OneVisibleLoopSummary.operator_decision_command)",
+        "- One-visible-loop operator decision authority required: $($OneVisibleLoopSummary.operator_decision_authority_required)",
+        "- One-visible-loop operator decision self-granted: $($OneVisibleLoopSummary.operator_decision_self_granted)",
         "",
         "## Plane Readiness Readback",
         "",
