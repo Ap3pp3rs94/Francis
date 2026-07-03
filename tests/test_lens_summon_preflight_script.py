@@ -235,6 +235,50 @@ def test_lens_summon_preflight_consumes_live_hotkey_runtime_readback(tmp_path: P
     assert payload["governance"]["summon_authority"] is False
 
 
+def test_lens_summon_preflight_surfaces_stale_hotkey_chord_mismatch(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    runtime_dir = data_dir / "runtime" / "lens-hotkey"
+    runtime_dir.mkdir(parents=True)
+    stale_pid = 999999
+    (runtime_dir / "lens-hotkey.pid").write_text(str(stale_pid), encoding="utf-8")
+    (runtime_dir / "status.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.hotkey.runtime_state",
+                "status": "hotkey_bound",
+                "pid": stale_pid,
+                "global_hotkey": "Ctrl+Alt+Space",
+                "binding_scope": "global",
+                "hotkey_bound": True,
+                "launch_on_hotkey": False,
+                "summon_runner": "scripts/lens-summon.ps1",
+                "press_count": 0,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    proc = _run_preflight("-Mode", "Status", "-DataDir", str(data_dir))
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    hotkey_runtime = payload["hotkey_runtime_readback"]
+    assert hotkey_runtime["ready"] is False
+    assert hotkey_runtime["process_alive"] is False
+    assert hotkey_runtime["global_hotkey"] == "Ctrl+Alt+Space"
+    assert hotkey_runtime["expected_global_hotkey"] == "Ctrl+Alt+F"
+    assert hotkey_runtime["global_hotkey_matches_expected"] is False
+    assert hotkey_runtime["requirement_state"] == "stale_mismatched_hotkey"
+    assert hotkey_runtime["blocker"] == "global_hotkey_binding_stale_mismatched_chord"
+    dependencies = {item["id"]: item for item in payload["enablement_dependency_readback"]}
+    hotkey_dependency = dependencies["global_hotkey_binding"]
+    assert hotkey_dependency["runtime_requirement_state"] == "stale_mismatched_hotkey"
+    assert hotkey_dependency["runtime_blocker"] == "global_hotkey_binding_stale_mismatched_chord"
+    assert "global_hotkey_binding_stale_mismatched_chord" in hotkey_dependency["blockers"]
+    assert "global_hotkey_binding_stale_mismatched_chord" in payload["blockers"]
+    assert "global_hotkey_binding_stale_mismatched_chord" in payload["blocker_groups"]["global_hotkey_binding"]
+
+
 def test_lens_summon_preflight_consumes_live_tray_runtime_readback(tmp_path: Path) -> None:
     data_dir = tmp_path / "data"
     runtime_dir = data_dir / "runtime" / "lens-tray"

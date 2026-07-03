@@ -20,6 +20,10 @@ def test_one_visible_loop_proof_preserves_operator_authority_boundaries() -> Non
     assert "does_not_self_enable_summon" in script
     assert "does_not_default_enable_desktop_bridge" in script
     assert "approve_summon_enable_and_live_safe_target_bridge_proof" in script
+    assert "first_missing_required_before_enable" in script
+    assert "hotkey_runtime_readback" in script
+    assert "tray_runtime_readback" in script
+    assert "overlay_runtime_readback" in script
     assert "actual_chat_ui_render_verified" in script
     assert "actual_lens_ui_render_verified" in script
     assert "fixture_safe_target_is_not_live_desktop_completion" in script

@@ -394,35 +394,52 @@ function Get-HotkeyRuntimeReadback {
     }
   }
 
+  $ActualHotkey = Get-StringProperty -Payload $Status -Name 'global_hotkey' -Default ''
+  $ActualBindingScope = Get-StringProperty -Payload $Status -Name 'binding_scope' -Default ''
+  $HotkeyMatchesExpected = (-not [string]::IsNullOrWhiteSpace($ActualHotkey) -and $ActualHotkey -eq $ExpectedHotkey)
+  $BindingScopeMatchesExpected = (-not [string]::IsNullOrWhiteSpace($ActualBindingScope) -and $ActualBindingScope -eq $ExpectedBindingScope)
+  $RuntimeStatusPidMatchesPidFile = ($StatusPid -gt 0 -and $StatusPid -eq $RuntimePid)
+  $RuntimeProcessAlive = $false
+  if ($RuntimePid -gt 0) {
+    $RuntimeProcessAlive = Get-ProcessAlive -ProcessId $RuntimePid
+  }
   $StatusClaimsBoundHotkey = (
     $StatusKind -eq 'lens.hotkey.runtime_state' -and
     $StatusValue -eq 'hotkey_bound' -and
-    $StatusPid -gt 0 -and
-    $StatusPid -eq $RuntimePid -and
+    $RuntimeStatusPidMatchesPidFile -and
     (Get-BoolProperty -Payload $Status -Name 'hotkey_bound' -Default $false) -and
-    (Get-StringProperty -Payload $Status -Name 'global_hotkey' -Default '') -eq $ExpectedHotkey -and
-    (Get-StringProperty -Payload $Status -Name 'binding_scope' -Default '') -eq $ExpectedBindingScope
+    $HotkeyMatchesExpected -and
+    $BindingScopeMatchesExpected
   )
-  $ProcessAlive = $false
-  if ($StatusClaimsBoundHotkey -and $RuntimePid -gt 0) {
-    try {
-      $ProcessAlive = $null -ne (Get-Process -Id $RuntimePid -ErrorAction Stop)
-    } catch {
-      $ProcessAlive = $false
-    }
-  }
+  $ProcessAlive = $RuntimeProcessAlive
 
   $Ready = $ProcessAlive -and $StatusClaimsBoundHotkey
   $RequirementState = if ($Ready) {
     'bound'
+  } elseif ($ProcessAlive -and -not $HotkeyMatchesExpected -and -not [string]::IsNullOrWhiteSpace($ActualHotkey)) {
+    'process_running_wrong_hotkey'
+  } elseif ($ProcessAlive -and -not $BindingScopeMatchesExpected -and -not [string]::IsNullOrWhiteSpace($ActualBindingScope)) {
+    'process_running_wrong_scope'
   } elseif ($ProcessAlive) {
     'process_running_no_bound_hotkey_claim'
+  } elseif ($RuntimeStateExists -and -not $HotkeyMatchesExpected -and -not [string]::IsNullOrWhiteSpace($ActualHotkey)) {
+    'stale_mismatched_hotkey'
+  } elseif ($RuntimeStateExists -and -not $BindingScopeMatchesExpected -and -not [string]::IsNullOrWhiteSpace($ActualBindingScope)) {
+    'stale_mismatched_scope'
   } elseif ($RuntimeStateExists -or $PidPresent) {
     'stale_or_unverified'
   } else {
     'missing'
   }
-  $Blocker = if ($Ready) { '' } else { 'global_hotkey_binding_runtime_missing' }
+  $Blocker = if ($Ready) {
+    ''
+  } elseif ($RequirementState -in @('process_running_wrong_hotkey', 'stale_mismatched_hotkey')) {
+    'global_hotkey_binding_stale_mismatched_chord'
+  } elseif ($RequirementState -in @('process_running_wrong_scope', 'stale_mismatched_scope')) {
+    'global_hotkey_binding_scope_mismatch'
+  } else {
+    'global_hotkey_binding_runtime_missing'
+  }
 
   return [ordered]@{
     ready = $Ready
@@ -436,11 +453,13 @@ function Get-HotkeyRuntimeReadback {
     runtime_status = $StatusValue
     runtime_status_kind = $StatusKind
     runtime_status_pid = $StatusPid
-    runtime_status_pid_matches_pid_file = ($StatusPid -gt 0 -and $StatusPid -eq $RuntimePid)
-    global_hotkey = Get-StringProperty -Payload $Status -Name 'global_hotkey' -Default ''
+    runtime_status_pid_matches_pid_file = $RuntimeStatusPidMatchesPidFile
+    global_hotkey = $ActualHotkey
     expected_global_hotkey = $ExpectedHotkey
-    binding_scope = Get-StringProperty -Payload $Status -Name 'binding_scope' -Default ''
+    global_hotkey_matches_expected = $HotkeyMatchesExpected
+    binding_scope = $ActualBindingScope
     expected_binding_scope = $ExpectedBindingScope
+    binding_scope_matches_expected = $BindingScopeMatchesExpected
     launch_on_hotkey = Get-BoolProperty -Payload $Status -Name 'launch_on_hotkey' -Default $false
     summon_runner = Get-StringProperty -Payload $Status -Name 'summon_runner' -Default ''
     press_count = Get-IntegerProperty -Payload $Status -Name 'press_count' -Default 0
@@ -642,6 +661,9 @@ if (-not $GlobalHotkey) { [void]$Blockers.Add('global_hotkey_not_declared') }
 if (-not $SummonRunnerExists) { [void]$Blockers.Add('lens_summon_runner_missing') }
 if (-not $BindingEnabled) { [void]$Blockers.Add('global_hotkey_binding_disabled') }
 if (-not $RegisterHotkey) { [void]$Blockers.Add('global_hotkey_registration_disabled') }
+if (@('global_hotkey_binding_stale_mismatched_chord', 'global_hotkey_binding_scope_mismatch') -contains [string]$HotkeyRuntimeReadback.blocker) {
+  [void]$Blockers.Add([string]$HotkeyRuntimeReadback.blocker)
+}
 if (-not $HostPreflightExists) { [void]$Blockers.Add('lens_host_lifecycle_preflight_missing') }
 if (-not $HostStatusRunnerExists) { [void]$Blockers.Add('lens_host_status_runner_missing') }
 if ($OverlayRequired -and -not [bool]$OverlayRuntimeReadback.ready) { [void]$Blockers.Add('overlay_window_missing') }
@@ -661,6 +683,8 @@ $BlockerGroups = [ordered]@{
       'global_hotkey_not_declared',
       'global_hotkey_binding_disabled',
       'global_hotkey_registration_disabled',
+      'global_hotkey_binding_stale_mismatched_chord',
+      'global_hotkey_binding_scope_mismatch',
       'hotkey_registration_authority_not_granted'
     ))
   summon_binding = [string[]]@(Select-Blockers -Blockers $BlockerArray -Candidates @(
@@ -749,6 +773,9 @@ foreach ($Requirement in @($RequiredBeforeEnable)) {
       if (-not $BindingEnabled) { [void]$RequirementBlockers.Add('global_hotkey_binding_disabled') }
       if (-not $RegisterHotkey) { [void]$RequirementBlockers.Add('global_hotkey_registration_disabled') }
       if (-not $HotkeyRegistrationAuthority) { [void]$RequirementBlockers.Add('hotkey_registration_authority_not_granted') }
+      if (@('global_hotkey_binding_stale_mismatched_chord', 'global_hotkey_binding_scope_mismatch') -contains [string]$HotkeyRuntimeReadback.blocker) {
+        [void]$RequirementBlockers.Add([string]$HotkeyRuntimeReadback.blocker)
+      }
       $HotkeyDependency = New-PrerequisiteReadback `
             -Id 'global_hotkey_binding' `
             -Family 'global_hotkey_binding' `

@@ -523,6 +523,59 @@ Remaining truthful gap:
 - The final operator decision remains unchanged: Austin must approve the summon
   enable flip and a live safe-target desktop bridge proof.
 
+### 2026-07-03 20:14Z - Summon stale hotkey chord readback
+
+Current posture: Phase 2 / Orb embodiment Milestone 5 still remains blocked, but
+the hotkey part of the summon prerequisite chain now exposes the exact stale
+runtime chord mismatch inside both summon preflight and the one-visible-loop
+proof artifact.
+
+What changed:
+
+- `scripts/lens-summon-preflight.ps1` now compares the runtime hotkey receipt's
+  `global_hotkey` and `binding_scope` against the configured expected values.
+- Stale or live mismatched hotkey state is reported as
+  `global_hotkey_binding_stale_mismatched_chord` instead of only the generic
+  `global_hotkey_binding_runtime_missing`.
+- The hotkey readback now includes `global_hotkey_matches_expected` and
+  `binding_scope_matches_expected` fields.
+- `scripts/francis-one-visible-loop-proof.ps1` now carries the summon preflight
+  hotkey, tray, and overlay runtime readbacks under its `summon` object so the
+  acceptance artifact itself explains the current blockers.
+
+Validation:
+
+- PowerShell parser validation passed for `scripts\lens-summon-preflight.ps1`.
+- PowerShell parser validation passed for
+  `scripts\francis-one-visible-loop-proof.ps1`.
+- `.venv\Scripts\python.exe -m pytest tests\test_lens_summon_preflight_script.py tests\test_francis_one_visible_loop_proof_script.py -q`
+  passed.
+- `.venv\Scripts\python.exe -m ruff check tests\test_lens_summon_preflight_script.py tests\test_francis_one_visible_loop_proof_script.py`
+  passed.
+- Live summon preflight reports `hotkey_state=stale_mismatched_hotkey`,
+  `hotkey_blocker=global_hotkey_binding_stale_mismatched_chord`,
+  `hotkey_actual=Ctrl+Alt+Space`, and `hotkey_expected=Ctrl+Alt+F`.
+- One-visible-loop fixture proof wrote
+  `data\logs\operations\one_visible_loop\francis_one_visible_loop_proof_20260703_151426754.json`
+  with summon missing
+  `resident_host_process,tray_presence,global_hotkey_binding,summon_binding`,
+  `overlay_ready=true`, action `status=passed`,
+  `desktop_effect_confirmed=true`, and the stale hotkey readback above.
+- Presentation demo proof integration wrote
+  `.francis\presentation\demos\francis-presentation-demo-20260703-201426.json`
+  with `ok=false`, failure `one_visible_loop_proof_blocked`, action
+  `status=passed`, `desktop_effect_confirmed=true`, and
+  `target_observer_status=confirmed_target_state_changed`.
+
+Remaining truthful gap:
+
+- Milestone 5 is still not accepted. The hotkey runtime must be refreshed and
+  proven under `Ctrl+Alt+F` after the proper authority path; the current runtime
+  receipt is stale and still names `Ctrl+Alt+Space`.
+- The proof still does not show a real global-hotkey summon from anywhere,
+  Austin's enable approval, a live safe-target bridge action, or chat/Lens UI
+  receipt/trace/status render verification.
+
 ## 5. Known truthful gaps
 
 These still block any finished Orb embodiment claim:
