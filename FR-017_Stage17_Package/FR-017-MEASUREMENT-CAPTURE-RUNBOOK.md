@@ -18,7 +18,7 @@ Required lock flags:
 
 ## Source Template
 
-Copy `FR-017-MEASUREMENTS-INPUT-TEMPLATE.json` to a dated working record before entering measurements. Do not overwrite the template.
+Create a dated working record from `FR-017-MEASUREMENTS-INPUT-TEMPLATE.json` before entering measurements. Do not overwrite the template.
 
 Suggested record name:
 
@@ -28,8 +28,11 @@ Run the gate before and after editing the working record:
 
 ```powershell
 .\scripts\fr017-measurement-intake.ps1 -Mode Status
+.\scripts\fr017-new-measurement-record.ps1 -Mode Create -OutputPath .\FR-017_Stage17_Package\FR-017-MEASUREMENTS-YYYY-MM-DD-PILOT-RECORD.json
 .\scripts\fr017-measurement-intake.ps1 -Mode Status -MeasurementPath .\FR-017_Stage17_Package\FR-017-MEASUREMENTS-YYYY-MM-DD-PILOT-RECORD.json
 ```
+
+The initializer creates only a pending working record. It refuses to overwrite an existing file or target the template itself. The generated record still requires real left/right measurements, landmark references, repeatability checks, and symptom-screen entries before the intake gate can advance.
 
 ## Capture Order
 

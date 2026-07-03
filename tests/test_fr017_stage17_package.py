@@ -124,6 +124,8 @@ def test_fr017_measurement_capture_runbook_preserves_first_physical_input_lock()
     assert "FR-017 Measurement Capture Runbook" in runbook
     assert "This runbook is not physical validation evidence." in runbook
     assert "FR-017-MEASUREMENTS-INPUT-TEMPLATE.json" in runbook
+    assert "fr017-new-measurement-record.ps1" in runbook
+    assert "refuses to overwrite an existing file" in runbook
     assert "fr017-measurement-intake.ps1 -Mode Status" in runbook
     assert "measurement_capture_plan" in runbook
     assert "setup_and_safety_brief" in runbook
