@@ -4,7 +4,11 @@ param(
     [string]$DemoText = "Francis presentation dry-run",
     [string]$OutDir = ".francis\presentation\demos",
     [switch]$SkipMcpSmoke,
-    [switch]$SkipOrbDryRun
+    [switch]$SkipOrbDryRun,
+    [switch]$IncludeOneVisibleLoopProof,
+    [switch]$UseFixtureOneVisibleLoopTarget,
+    [switch]$OperatorApprovedOneVisibleLoopFixtureAction,
+    [switch]$OperatorApprovedOneVisibleLoopSummonDecision
 )
 
 $ErrorActionPreference = "Stop"
@@ -242,6 +246,66 @@ try {
         }
     }
 
+    $OneVisibleLoopSummary = [ordered]@{
+        skipped = -not [bool]$IncludeOneVisibleLoopProof
+        command = "scripts/francis-one-visible-loop-proof.ps1 -Mode Status"
+        exit_code = $null
+        ok = $null
+        status = ""
+        proof_path = ""
+        next_operator_decision = ""
+        summon_status = ""
+        overlay_visible = $null
+        action_status = ""
+        desktop_effect_confirmed = $null
+        target_observer_status = ""
+        operator_receipt_path = ""
+        desktop_bridge_receipt_path = ""
+        receipt_trace_status_paths = @()
+        actual_chat_ui_render_verified = $false
+        actual_lens_ui_render_verified = $false
+        error = $null
+    }
+    if ($IncludeOneVisibleLoopProof) {
+        $OneVisibleLoopCommand = Invoke-ExternalCommand -Name "one_visible_loop_proof" -Command {
+            $OneVisibleLoopArgs = @{
+                Mode = 'Status'
+            }
+            if ($UseFixtureOneVisibleLoopTarget) {
+                $OneVisibleLoopArgs.UseFixtureSafeTarget = $true
+            }
+            if ($OperatorApprovedOneVisibleLoopFixtureAction) {
+                $OneVisibleLoopArgs.OperatorApprovedFixtureAction = $true
+            }
+            if ($OperatorApprovedOneVisibleLoopSummonDecision) {
+                $OneVisibleLoopArgs.OperatorApprovedSummonDecision = $true
+            }
+            & (Join-Path $RepoRoot "scripts\francis-one-visible-loop-proof.ps1") @OneVisibleLoopArgs
+        }
+        $OneVisibleLoopSummary.exit_code = $OneVisibleLoopCommand.exit_code
+        $OneVisibleLoopSummary.error = $OneVisibleLoopCommand.error
+        $OneVisibleLoop = ConvertFrom-JsonOrNull -Text $OneVisibleLoopCommand.text
+        if ($null -ne $OneVisibleLoop) {
+            $OneVisibleLoopSummary.ok = ([string]$OneVisibleLoop.status -eq "passed")
+            $OneVisibleLoopSummary.status = [string]$OneVisibleLoop.status
+            $OneVisibleLoopSummary.proof_path = [string]$OneVisibleLoop.proof_path
+            $OneVisibleLoopSummary.next_operator_decision = [string]$OneVisibleLoop.next_operator_decision
+            $OneVisibleLoopSummary.summon_status = [string]$OneVisibleLoop.summon.status
+            $OneVisibleLoopSummary.overlay_visible = ConvertTo-DemoBool -Value $OneVisibleLoop.orb_presence.overlay_window_visible
+            $OneVisibleLoopSummary.action_status = [string]$OneVisibleLoop.operator_action.status
+            $OneVisibleLoopSummary.desktop_effect_confirmed = ConvertTo-DemoBool -Value $OneVisibleLoop.operator_action.desktop_effect_confirmed
+            $OneVisibleLoopSummary.target_observer_status = [string]$OneVisibleLoop.operator_action.target_observer_status
+            $OneVisibleLoopSummary.operator_receipt_path = [string]$OneVisibleLoop.operator_action.operator_receipt_path
+            $OneVisibleLoopSummary.desktop_bridge_receipt_path = [string]$OneVisibleLoop.operator_action.desktop_bridge_receipt_path
+            $OneVisibleLoopSummary.receipt_trace_status_paths = @($OneVisibleLoop.chat_lens_visibility.receipt_trace_status_paths)
+            $OneVisibleLoopSummary.actual_chat_ui_render_verified = ConvertTo-DemoBool -Value $OneVisibleLoop.chat_lens_visibility.actual_chat_ui_render_verified
+            $OneVisibleLoopSummary.actual_lens_ui_render_verified = ConvertTo-DemoBool -Value $OneVisibleLoop.chat_lens_visibility.actual_lens_ui_render_verified
+        }
+        if ($OneVisibleLoopCommand.exit_code -ne 0 -or -not $OneVisibleLoopSummary.ok) {
+            $Failures.Add("one_visible_loop_proof_blocked")
+        }
+    }
+
     $SummaryPath = Join-Path $OutputRoot "francis-presentation-demo-$Stamp.json"
     $ReportPath = Join-Path $OutputRoot "francis-presentation-demo-$Stamp.md"
     $VisualPath = Join-Path $OutputRoot "francis-presentation-demo-$Stamp.html"
@@ -265,10 +329,12 @@ try {
         completion_model = $CompletionSummary
         mcp_gateway_smoke = $McpSummary
         orb_operator_dry_run = $OrbSummary
+        one_visible_loop_proof = $OneVisibleLoopSummary
         guardrails = @(
             "This demo does not claim finished autonomy.",
             "This demo does not move the physical cursor or type into a live app.",
             "This demo does not grant proposal, promotion, execution, or memory-write authority.",
+            "The one-visible-loop proof does not self-enable summon or default-enable the desktop bridge.",
             "Receipt paths are evidence of attempted governed dry-run actions."
         )
         failures = @($Failures)

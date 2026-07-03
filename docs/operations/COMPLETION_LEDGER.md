@@ -405,6 +405,65 @@ Remaining truthful gap:
   authority. It closes the voice replay proof requirement only.
 - The one-visible-loop acceptance proof remains unbuilt and unproven.
 
+### 2026-07-03 20:01Z - One visible loop proof gate
+
+Current posture: Phase 2 / Orb embodiment Milestone 5 now has a repeatable proof
+gate and presentation-demo integration. This is not final acceptance: the proof
+truthfully remains blocked until Austin approves the summon enable decision and a
+live safe-target desktop bridge action.
+
+What changed:
+
+- `scripts/francis-one-visible-loop-proof.ps1` now runs the one-visible-loop
+  status proof: summon preflight, overlay/orb presence readback, optional
+  operator-approved fixture safe-target action, receipt/trace/status paths, and
+  explicit governance fields.
+- The proof treats summon as blocked unless the required-before-enable chain is
+  clear and `-OperatorApprovedSummonDecision` is passed. It does not self-enable
+  summon.
+- The fixture safe-target path enables `FRANCIS_ORB_DESKTOP_BRIDGE_ENABLE=1`
+  only inside the proof process, uses a fake safe Win32 target, and proves the
+  post-action observer path with `desktop_effect_confirmed=true`.
+- `scripts/francis-presentation-demo.ps1` can include the proof with
+  `-IncludeOneVisibleLoopProof` and now surfaces the proof path, operator
+  receipt path, desktop bridge receipt path, desktop confirmation, observer
+  status, and chat/Lens render flags.
+
+Validation:
+
+- PowerShell parser validation passed for
+  `scripts\francis-one-visible-loop-proof.ps1`.
+- PowerShell parser validation passed for `scripts\francis-presentation-demo.ps1`.
+- `.venv\Scripts\python.exe -m pytest tests\test_francis_one_visible_loop_proof_script.py tests\test_francis_presentation_demo_script.py -q`
+  passed.
+- `.venv\Scripts\python.exe -m ruff check tests\test_francis_one_visible_loop_proof_script.py tests\test_francis_presentation_demo_script.py`
+  passed.
+- Default one-visible-loop proof wrote
+  `data\logs\operations\one_visible_loop\francis_one_visible_loop_proof_20260703_145744326.json`
+  with `status=blocked`, `overlay_window_visible=true`,
+  `reach_mode=full_screen_overlay_orb_offset`, and action `status=blocked`.
+- Fixture safe-target one-visible-loop proof wrote
+  `data\logs\operations\one_visible_loop\francis_one_visible_loop_proof_20260703_150058037.json`
+  with proof `status=blocked`, action `status=passed`,
+  `desktop_effect_confirmed=true`, and
+  `target_observer_status=confirmed_target_state_changed`.
+- Presentation demo proof integration wrote
+  `.francis\presentation\demos\francis-presentation-demo-20260703-200057.json`
+  with `ok=false`, failure `one_visible_loop_proof_blocked`,
+  action `status=passed`, `desktop_effect_confirmed=true`, and the desktop
+  bridge receipt path
+  `.francis\one-visible-loop\20260703_150058037\orb_operator\desktop_bridge_receipts\orb_desktop_bridge_cf1feb79dc4c.json`.
+
+Remaining truthful gap:
+
+- The final Milestone 5 acceptance loop is still not complete. The proof gate
+  does not show a real global-hotkey summon from anywhere, does not enable
+  summon, does not perform a live operator-approved safe-target desktop bridge
+  action, and does not verify that receipt, trace, and status are actually
+  rendered in the chat/Lens UI.
+- The next operator decision is singular: approve the summon enable flip and a
+  live safe-target desktop bridge proof, or leave the proof in blocked status.
+
 ## 5. Known truthful gaps
 
 These still block any finished Orb embodiment claim:
@@ -424,9 +483,10 @@ These still block any finished Orb embodiment claim:
   status replay now returns readable output through same-provider fallback
   `llama3.2:3b`. The primary `francis-chat` model remains unhealthy and should
   be repaired separately, but Milestone 4 replay proof is now present.
-- One visible loop: no repeatable end-to-end proof yet shows hotkey summon -> Orb
-  appears -> operator-approved safe-target action -> confirmed effect -> receipt,
-  trace, and chat/Lens UI visibility.
+- One visible loop: a repeatable proof gate now exists and proves fixture
+  safe-target desktop confirmation, but final acceptance remains blocked until
+  Austin approves summon enable and a live safe-target action, then verifies
+  receipt, trace, and status visibility in the chat/Lens UI.
 
 ## 6. Update rule
 
