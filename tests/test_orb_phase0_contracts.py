@@ -63,14 +63,22 @@ def test_overlay_orb_renderer_visual_constants_remain_locked() -> None:
     assert "transparent_background = $true" in script
     assert "route = '/?francis_lens=orb_overlay'" in script
     assert "function New-OrbEnergySurface" in script
-    assert "param([double]$Size = 220)" in script
+    assert "[double]$Size = 220" in script
+    assert "[double]$HitBoxSize = 72" in script
     assert "$OrbSize = 220" in script
+    assert "$OrbHitBoxSize = Get-OrbHitBoxSize" in script
+    assert "New-OrbEnergySurface -Size $OrbSize -HitBoxSize $OrbHitBoxSize" in script
     assert "$Form.WindowStyle = [System.Windows.WindowStyle]::None" in script
     assert "$Form.AllowsTransparency = $true" in script
     assert "$Form.Background = [System.Windows.Media.Brushes]::Transparent" in script
     assert "$Form.ShowInTaskbar = $true" in script
     assert "$Form.TopMost = $true" in script
-    assert "Set-OrbWindowDockPosition -Window $Form -WorkArea $Screen -Margin 48" in script
+    assert "$Screen = Get-OverlayVirtualScreenBounds" in script
+    assert "$Form.Left = [double]$Screen.Left" in script
+    assert "$Form.Width = [double]$Screen.Width" in script
+    assert "function Set-OverlayWindowTopMostPinned" in script
+    assert "Set-OrbWindowDockPosition -Window $Form -WorkArea $Screen -Margin 48" not in script
+    assert "$script:LensOverlayWindow.DragMove()" not in script
     assert "right_corner_locked" in script
     assert "default_anchor = if ($AutonomousMotion) { 'bounded_work_area' }" in script
     assert "$Viewport = New-Object System.Windows.Controls.Viewport3D" in script

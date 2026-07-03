@@ -947,8 +947,14 @@ def _palette_command(
     write_guard: str = "",
     target_mode: str = "",
     receipt_kind: str = "",
+    authority_scope: str = "none",
+    capture_mode: str = "none",
+    handler: str = "",
+    provenance_reqs: list[str] | None = None,
+    triggers: list[dict[str, Any]] | None = None,
     attention_count: int = 0,
 ) -> dict[str, Any]:
+    command_handler = handler or action
     return {
         "id": command_id,
         "label": label,
@@ -965,6 +971,12 @@ def _palette_command(
         "write_guard": write_guard,
         "target_mode": target_mode,
         "receipt_kind": receipt_kind,
+        "authority_scope": authority_scope,
+        "capture_mode": capture_mode,
+        "handler": command_handler,
+        "provenance_reqs": provenance_reqs or [],
+        "triggers": triggers or [],
+        "trigger_carries_authority": False,
         "attention_count": attention_count,
         "execution_authority": False,
         "approval_decision_authority": False,
@@ -1080,6 +1092,35 @@ def _command_palette_surface(
             route="/system/orb",
             surface="chat_ui.orb",
             keywords="orb system incidents runtime",
+        ),
+        _palette_command(
+            "orb.move",
+            "Move Orb",
+            "Arm one-shot overlay-owned placement for the Orb without granting desktop input actuation.",
+            "Orb",
+            action="dispatch_overlay_command",
+            keywords="orb move place position ctrl m hotkey overlay",
+            mutates=True,
+            write_guard="runtime_overlay_position_only; overlay-owned one-shot click capture",
+            receipt_kind="overlay_position",
+            authority_scope="runtime_overlay_position_only",
+            capture_mode="one_shot_click",
+            handler="lens.overlay.place_mode",
+            provenance_reqs=[
+                "operator_trigger",
+                "overlay_owned_transient_capture",
+                "single_left_click_or_cancel",
+                "overlay_position_receipt_match",
+            ],
+            triggers=[
+                {
+                    "id": "hotkey.ctrl_m",
+                    "kind": "global_hotkey",
+                    "global_hotkey": "Ctrl+M",
+                    "route": "scripts/lens-hotkey-binding.ps1",
+                    "trigger_carries_authority": False,
+                }
+            ],
         ),
         _palette_command(
             "nav.continuity-ledger",

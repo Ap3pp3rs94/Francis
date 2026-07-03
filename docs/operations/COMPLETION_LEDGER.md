@@ -65,7 +65,8 @@ main ledger stays under bounded readback limits without deleting evidence.
 
 ## 3. High-confidence current slice
 
-Latest committed checkpoint: `43120459 fix(lens): surface summon hotkey collisions`.
+Recent committed checkpoint before the active Orb-presence slice:
+`60d21916 docs(operations): compact completion ledger readback`.
 
 What is materially true now:
 
@@ -77,6 +78,17 @@ What is materially true now:
   preserve that blocker and point to `choose_unclaimed_global_hotkey`.
 - The final summon enable flip remains an operator authority decision. The repo
   is prepared up to the decision surface; Francis did not self-grant summon.
+- The live Lens overlay can run as a virtual-screen coordinate plane including
+  the taskbar, with the Orb moving inside that plane instead of being confined
+  to a small window.
+- The Orb click box remains bounded to the Orb core while the visual may extend
+  outside that click box; hit testing passes through outside the Orb core.
+- Ctrl+M one-shot Orb placement is bounded to overlay-owned position mutation
+  and travels over render frames instead of snapping to the clicked point.
+- The right-click Orb panel is small, receipted, and bounded to feature toggles
+  plus chat/voice handoff metadata; it does not grant desktop execution.
+- Continuous no-wake voice chat is not free-running; it is gated to Ctrl+V
+  push-to-talk readback.
 
 ## 4. Latest validation evidence
 
@@ -164,15 +176,81 @@ Remaining truthful gap:
 - Full `scripts\check.ps1`, CI, and a live successful `RegisterHotKey` session
   were not run in this checkpoint.
 
+### 2026-07-03 19:05Z - Orb presence overlay and virtual-pointer readback
+
+Current posture: Phase 2 / Stage 6 Lens Orb presence has a validated overlay
+checkpoint. The live Orb can occupy the full virtual-screen plane, including
+over the Windows taskbar, while retaining a small Orb-core hit target and
+receipt-backed virtual-pointer movement. This does not enable summon-anywhere
+or default-on tray/hotkey authority.
+
+What changed:
+
+- `scripts/lens-overlay-window.ps1` now hosts the overlay as the virtual-screen
+  coordinate plane and pins the WPF window topmost with Win32 `SetWindowPos`.
+- Orb movement uses in-window offsets inside the full-screen overlay plane, so
+  the Orb can reach screen edges while the click box stays limited to the Orb
+  core.
+- Ctrl+M one-shot placement now arms a transparent capture window and starts
+  smootherstep render-frame travel before writing the final position receipt.
+- Right-click Orb controls now expose a small receipted panel for wake listen,
+  push-to-talk, LLM handoff, ambient motion, and bounded Orb chat handoff.
+- Continuous voice chat readback now reports `push_to_talk_ctrl_v_required`
+  with `continuous_voice_chat_free_run=false`.
+- `src/francis/lens/status.py` surfaces `orb.move` as a command-palette action
+  with `Ctrl+M` as a trigger that carries no authority by itself.
+- Overlay and Orb contract tests were updated to lock the new full-screen plane,
+  small hit-box, smooth travel, right-click controls, and virtual-pointer
+  receipts.
+
+Validation:
+
+- PowerShell parser validation for `scripts\lens-overlay-window.ps1` passed.
+- `.venv\Scripts\python.exe -m pytest tests\test_lens_overlay_window_script.py -q` passed.
+- `.venv\Scripts\python.exe -m ruff check src\francis\lens\status.py tests\test_lens_overlay_window_script.py` passed.
+- `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-overlay-runtime-proof.ps1 -Mode Status -SupervisorRunSeconds 3 -ResidentSurfaceForegroundRunSeconds 2` passed after its built-in resident-surface retry.
+- A main-root overlay stop/start cycle returned `stop_status=stopped`,
+  `start_status=started`, and final status `visible` with runtime process alive.
+- Live status readback after restart showed `overlay_runtime.overlay_window_visible=true`,
+  `overlay_runtime.always_on_top=true`, `overlay_position.full_screen_overlay_plane=true`,
+  `overlay_position.overlay_includes_taskbar=true`,
+  `overlay_position.topmost_pin_applied=true`,
+  `overlay_position.hit_test_passthrough_outside_click_box_enabled=true`,
+  `click_hit_box_size=72`, and `reach_mode=full_screen_overlay_orb_offset`.
+- `.venv\Scripts\python.exe -m pytest tests\unit\test_orb_operator.py tests\test_orb_phase0_contracts.py -q` passed.
+- `.venv\Scripts\python.exe -m ruff check src\francis\input_actuator\orb_operator.py tests\unit\test_orb_operator.py tests\test_orb_phase0_contracts.py` passed.
+- Live Orb pointer probe ran with `FRANCIS_ORB_DESKTOP_BRIDGE_ENABLE=0`:
+  move/click/type and move/click/drag/right-click sequences returned complete,
+  final overlay Orb center was `(620, 640)`, newest overlay virtual-pointer
+  receipts were present, `physical_input_performed=false`, and
+  `user_mouse_taken=false`.
+- `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts\lens-tray-presence-api-execution-proof.ps1 -Mode Status` passed in an isolated data root, proving the governed API can start and stop real tray presence after fixture-granted resident/tray authority.
+
+Remaining truthful gap:
+
+- Production summon-anywhere is still blocked by governed enablement and
+  authority gates. The live proof did not self-enable summon, default-on tray,
+  or hotkey registration.
+- `scripts\lens-summon-preflight.ps1 -Mode Status` still reports missing
+  production prerequisites in the `required_before_enable` chain:
+  resident host process, tray presence, overlay window, global hotkey binding,
+  and summon binding.
+- The tray proof used an isolated data root and fixture authority, then stopped
+  tray and resident supervision before returning. It does not claim production
+  tray is now running by default.
+- The desktop bridge still has no post-action observer; `desktop_effect_confirmed`
+  remains a Milestone 3 gap.
+
 ## 5. Known truthful gaps
 
 These still block any finished Orb embodiment claim:
 
 - Summon: the final enable flip is not granted. Austin must explicitly approve
   the operator-authority decision before summon-anywhere can be enabled.
-- Orb presence: overlay window, tray, Ctrl+M one-shot placement, and virtual
-  pointer gestures still need one integrated stability proof across summon,
-  dismiss, and host restart.
+- Orb presence: overlay window, Ctrl+M one-shot placement, right-click controls,
+  Ctrl+V gated voice readback, virtual pointer gestures, and host restart now
+  have focused and live proof. Production summon/dismiss/tray integration still
+  waits on governed resident, tray, hotkey, and summon authority.
 - Desktop bridge: `desktop_effect_confirmed` remains false until a post-action
   observer verifies target-side UI state after posted messages. The bridge must
   remain gated behind `FRANCIS_ORB_DESKTOP_BRIDGE_ENABLE` and safe targets.
