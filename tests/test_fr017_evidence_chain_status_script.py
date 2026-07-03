@@ -465,7 +465,10 @@ def test_fr017_evidence_chain_status_moves_blocker_after_static_fit_ready(tmp_pa
     assert payload["status"] == "blocked_on_pilot_movement"
     assert payload["first_blocking_gate"] == "pilot_movement"
     assert payload["first_blocking_status"] == "pending_pilot_movement_test"
-    assert payload["next_required_input"] == "FR-017-PILOT-MOVEMENT-INPUT-TEMPLATE.json"
+    assert (
+        payload["next_required_input"]
+        == "scripts/fr017-new-pilot-movement-record.ps1 + FR-017-PILOT-MOVEMENT-INPUT-TEMPLATE.json"
+    )
     assert "evidence.date" in payload["first_blocking_details"]["missing_fields"]
     assert payload["first_blocking_details"]["invalid_fields"] == []
     assert payload["first_blocking_details"]["movement_capture_plan_not_completion_evidence"] is True
@@ -475,9 +478,27 @@ def test_fr017_evidence_chain_status_moves_blocker_after_static_fit_ready(tmp_pa
         in payload["first_blocking_details"]["movement_capture_plan_status_contract"]
     )
     assert "not physical validation evidence" in payload["first_blocking_details"]["movement_capture_summary_contract"]
+    assert "operator input tooling only" in payload["first_blocking_details"]["movement_capture_runbook_contract"]
+    assert (
+        "fr017-new-pilot-movement-record.ps1" in payload["first_blocking_details"]["movement_capture_runbook_contract"]
+    )
     assert (
         payload["first_blocking_details"]["next_required_movement_input"]
-        == "complete_non_powered_pilot_movement_record_at_FR-017-PILOT-MOVEMENT-INPUT-TEMPLATE.json"
+        == "create_non_powered_pilot_movement_record_with_fr017-new-pilot-movement-record.ps1_then_rerun_pilot_movement_gate"
+    )
+    assert (
+        str(payload["first_blocking_details"]["movement_input_template_path"])
+        .replace("/", "\\")
+        .endswith("FR-017_Stage17_Package\\FR-017-PILOT-MOVEMENT-INPUT-TEMPLATE.json")
+    )
+    assert (
+        str(payload["first_blocking_details"]["movement_record_initializer_path"])
+        .replace("/", "\\")
+        .endswith("scripts\\fr017-new-pilot-movement-record.ps1")
+    )
+    assert (
+        payload["first_blocking_details"]["movement_working_record_name_pattern"]
+        == "FR-017-PILOT-MOVEMENT-YYYY-MM-DD-PILOT-RECORD.json"
     )
     assert payload["first_blocking_details"]["movement_capture_total_groups"] == 6
     assert payload["first_blocking_details"]["movement_capture_ready_groups"] == 0
