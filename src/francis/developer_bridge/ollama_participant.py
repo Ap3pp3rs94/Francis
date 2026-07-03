@@ -15,7 +15,7 @@ from francis.chat.continuity.ledger import append
 from francis.chat.router import _ledger_text, _llm_prompt
 from francis.governance.redaction import redact_secret_text
 from francis.kernel.paths import data_dir
-from francis.llm.client import generate
+from francis.llm.client import generate, resolve_ollama_config
 from francis.telemetry.context import telemetry_context_snapshot
 
 from .agents import collaboration_agent_enabled
@@ -31,6 +31,7 @@ _DEFAULT_COOLDOWN_SECONDS = 120.0
 _ACTOR = "developer_bridge.ollama"
 _AGENT = "ollama"
 _IDENTITY = "francis1"
+_DEFAULT_READABLE_FALLBACK_MODELS = ("llama3.2:3b",)
 _COLLABORATION_REPLY_CONTRACT = (
     "If the source message says 'Reply: issue/gap/risk; artifact' or names a Current artifact, "
     "reply in exactly two lines:\n"
@@ -146,8 +147,9 @@ def respond_once(
     append("user", _ledger_text(model_input), _ledger_meta(execution_trace, telemetry_context, source_role=source))
     reply = ""
     try:
-        reply = generate(prompt)
+        reply = _generate_reply(prompt)
         reply = _identity_safe_reply(reply)
+        reply = _repair_unreadable_reply(prompt, reply, execution_trace)
         reply = _guard_model_reply(candidate, reply, execution_trace)
         execution_trace["model_call_response_observed"] = bool(reply)
     except Exception as exc:
@@ -183,6 +185,7 @@ def respond_once(
             "Generated through existing Francis chat/LLM/memory prompt path; "
             "source_agent=ollama is provenance, not identity or authority."
             f"{_output_guard_context(execution_trace)}"
+            f"{_readability_repair_context(execution_trace)}"
         ),
     )
 
@@ -199,6 +202,7 @@ def respond_once(
             "status": response_status,
             "model_response_observed": bool(reply),
             "output_guard_status": _output_guard_status(execution_trace),
+            "readability_repair_status": _readability_repair_status(execution_trace),
         }
     )
     state["responses"] = responses[-_MAX_RESPONSES:]
@@ -479,6 +483,102 @@ def _guard_model_reply(
         f"Drift terms: {terms or 'unknown'}.{topic_line} Review artifact: {surface}. "
         f"{fallback} No execution, mutation, approval, training, or memory-promotion authority was granted."
     )
+
+
+def _repair_unreadable_reply(prompt: str, reply: str, execution_trace: dict[str, object]) -> str:
+    quality = _reply_quality_metrics(reply) if reply else {}
+    if not reply or not _reply_is_unreadable(reply, quality=quality):
+        execution_trace["readability_repair"] = {
+            "status": "not_needed",
+            "primary_unreadable": False,
+            "stores_raw_primary_output": False,
+        }
+        return reply
+
+    primary_model = _resolved_primary_model()
+    fallback_models = _readable_fallback_models(primary_model)
+    repair: dict[str, object] = {
+        "status": "fallback_exhausted" if fallback_models else "no_fallback_configured",
+        "primary_unreadable": True,
+        "primary_model": primary_model,
+        "primary_output_quality": quality,
+        "fallback_models": fallback_models,
+        "attempts": [],
+        "stores_raw_primary_output": False,
+        "stores_raw_fallback_output": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "grants_memory_write_authority": False,
+    }
+    attempts: list[dict[str, object]] = []
+    for model in fallback_models:
+        fallback_reply = _identity_safe_reply(_generate_reply(prompt, model=model))
+        fallback_quality = _reply_quality_metrics(fallback_reply) if fallback_reply else {}
+        fallback_unreadable = bool(
+            fallback_reply and _reply_is_unreadable(fallback_reply, quality=fallback_quality)
+        )
+        attempt = {
+            "model": model,
+            "model_response_observed": bool(fallback_reply),
+            "unreadable": fallback_unreadable,
+            "model_output_quality": fallback_quality,
+            "stores_raw_model_output": False,
+        }
+        attempts.append(attempt)
+        if fallback_reply and not fallback_unreadable:
+            repair["status"] = "readable_fallback_used"
+            repair["fallback_model_used"] = model
+            repair["fallback_attempt_count"] = len(attempts)
+            repair["attempts"] = attempts
+            execution_trace["readability_repair"] = repair
+            return fallback_reply
+
+    repair["fallback_attempt_count"] = len(attempts)
+    repair["attempts"] = attempts
+    execution_trace["readability_repair"] = repair
+    return reply
+
+
+def _generate_reply(prompt: str, *, model: str | None = None) -> str:
+    if model:
+        try:
+            return generate(prompt, model=model)
+        except TypeError:
+            # Older test doubles accept only the prompt. Retrying without the
+            # keyword keeps the unreadable-output guard tests on the same path.
+            return generate(prompt)
+    return generate(prompt)
+
+
+def _resolved_primary_model() -> str:
+    try:
+        _, model = resolve_ollama_config()
+        return model
+    except Exception:
+        return ""
+
+
+def _readable_fallback_models(primary_model: str) -> list[str]:
+    configured = os.getenv("FRANCIS_LLM_READABLE_FALLBACK_MODELS") or os.getenv("FRANCIS_LLM_FALLBACK_MODELS")
+    raw_models = configured.split(",") if configured else list(_DEFAULT_READABLE_FALLBACK_MODELS)
+    primary_key = _model_key(primary_model)
+    models: list[str] = []
+    for raw_model in raw_models:
+        model = raw_model.strip()
+        if not model:
+            continue
+        if model.startswith("ollama:"):
+            model = model.split(":", 1)[1]
+        if _model_key(model) == primary_key:
+            continue
+        if model not in models:
+            models.append(model)
+    return models
+
+
+def _model_key(model: str) -> str:
+    text = str(model or "").strip().lower()
+    return text.removesuffix(":latest")
 
 
 def _output_guard(item: dict[str, object], reply: str) -> dict[str, object]:
@@ -899,6 +999,24 @@ def _output_guard_context(execution_trace: dict[str, object]) -> str:
     if _output_guard_status(execution_trace) == "unreadable_rewritten":
         return " Model output guard replaced unreadable local model output; raw model output was not stored in the relay receipt."
     return " Model output guard replaced a known drift reply; raw model output was not stored in the relay receipt."
+
+
+def _readability_repair_status(execution_trace: dict[str, object]) -> str:
+    repair = execution_trace.get("readability_repair")
+    if not isinstance(repair, dict):
+        return "not_recorded"
+    return str(repair.get("status") or "unknown")
+
+
+def _readability_repair_context(execution_trace: dict[str, object]) -> str:
+    if _readability_repair_status(execution_trace) != "readable_fallback_used":
+        return ""
+    repair = execution_trace.get("readability_repair")
+    model = str(repair.get("fallback_model_used") or "unknown") if isinstance(repair, dict) else "unknown"
+    return (
+        " Model readability repair retried unreadable primary Ollama output with same-provider fallback "
+        f"{model}; raw primary output was not stored in the relay receipt."
+    )
 
 
 def _no_response_requested(item: dict[str, object]) -> bool:

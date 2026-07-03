@@ -4976,6 +4976,57 @@ def test_ollama_participant_rewrites_unreadable_model_output(
     )
 
 
+def test_ollama_participant_uses_readable_same_provider_fallback_for_unreadable_primary(
+    tmp_path,
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("FRANCIS_LLM_CHAT_MODEL", "francis-chat")
+    monkeypatch.setenv("FRANCIS_LLM_READABLE_FALLBACK_MODELS", "llama3.2:3b")
+    source = submit_collaboration_prompt(
+        source_agent="operator",
+        target_agent="ollama",
+        objective="Operator status replay",
+        prompt="can you update me on your current status",
+    )
+    calls: list[str] = []
+
+    def fake_generate(_prompt: str, *, model: str | None = None) -> str:
+        calls.append(model or "primary")
+        if model == "llama3.2:3b":
+            return "I am online, reading the Orb embodiment receipts, and blocked only on live proof."
+        return (
+            "/.)>,|-,#7%D11155%6.+2+)}+{;%B%3FS<+G;H,FHH'H:#8-)C74'12,55* "
+            '<G3!4%22!B&GD9A!"$+C;H,!FBH*H:#8-#)C74\'12,55*<G3!4%22!B&GD9A!"$+5!'
+            "GCD728$-D$#>C7*4/=CFBA3C9*"
+        )
+
+    monkeypatch.setattr("francis.developer_bridge.ollama_participant.generate", fake_generate)
+
+    result = ollama_respond_once(source_agent="operator", cooldown_seconds=0)
+
+    assert result["status"] == "responded"
+    assert result["source_prompt_id"] == source["prompt_id"]
+    assert calls == ["primary", "llama3.2:3b"]
+    output_guard = result["execution_trace"]["output_guard"]
+    assert output_guard["status"] == "not_applicable"
+    repair = result["execution_trace"]["readability_repair"]
+    assert repair["status"] == "readable_fallback_used"
+    assert repair["primary_unreadable"] is True
+    assert repair["primary_model"] == "francis-chat"
+    assert repair["fallback_model_used"] == "llama3.2:3b"
+    assert repair["stores_raw_primary_output"] is False
+    assert repair["stores_raw_fallback_output"] is False
+    assert repair["attempts"][0]["stores_raw_model_output"] is False
+    transcript = read_collaboration_transcript(source_agent="ollama", target_agent="operator")
+    assert transcript["count"] == 1
+    response = transcript["items"][0]
+    assert "I am online, reading the Orb embodiment receipts" in response["prompt"]
+    assert "/.)>,|-,#7%D11155" not in response["prompt"]
+    assert "/.)>,|-,#7%D11155" not in response["context"]
+    assert "Model readability repair retried unreadable primary Ollama output" in response["context"]
+
+
 def test_ollama_participant_passes_structured_verified_surface_reply(
     tmp_path,
     monkeypatch,

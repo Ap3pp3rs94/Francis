@@ -94,9 +94,10 @@ What is materially true now:
   changes after posted messages, `desktop_effect_confirmed` can become true.
 - `scripts/ollama-doctor.ps1` now completes as a bounded health receipt instead
   of hanging or throwing on local CLI/Event Log/process readback quirks.
-- The live Francis1/Ollama status replay remains blocked: after a completed
-  doctor run, the local model lane still produced unreadable output and the
-  relay correctly rewrote it as `unreadable_rewritten`.
+- The live Francis1/Ollama status replay now produces readable output through a
+  same-provider readability repair when the primary local model returns
+  unreadable output; the forced-garbage path still rewrites to
+  `unreadable_rewritten` without leaking raw salad.
 
 ## 4. Latest validation evidence
 
@@ -346,6 +347,64 @@ Remaining truthful gap:
   until a new live operator-scoped status replay returns a readable reply. Do
   not proceed to the one-visible-loop acceptance proof on this evidence.
 
+### 2026-07-03 19:47Z - Francis1 voice replay readability repair proof
+
+Current posture: Phase 2 / Orb embodiment Milestone 4 now has a repeatable
+Francis1/Ollama replay proof. The unhealthy primary local chat model is still
+truthfully observed, but the developer bridge can recover a readable operator
+reply through a same-provider fallback while preserving the unreadable-output
+guard for forced garbage.
+
+What changed:
+
+- `src/francis/developer_bridge/ollama_participant.py` now performs a bounded
+  readability repair after the primary Ollama response and before the output
+  guard fallback.
+- When primary output is unreadable, the participant retries same-provider local
+  fallback models, defaulting to the already-installed `llama3.2:3b`.
+- The execution trace records `readability_repair.status`, primary output
+  quality metrics, fallback model attempts, and whether a readable fallback was
+  used without storing raw unreadable primary output.
+- Relay context explicitly states when same-provider readability repair was used.
+- If all fallback attempts are still unreadable, the existing
+  `unreadable_rewritten` output-guard fallback remains the operator-visible
+  result.
+- `scripts/francis1-ollama-replay-proof.ps1` now runs the repeatable Milestone 4
+  proof: live operator-scoped status replay plus isolated forced-garbage
+  injection.
+
+Validation:
+
+- Direct bounded Ollama probe showed `francis-chat`, `francis-chat:latest`, and
+  `qwen2.5:7b-instruct` returned unreadable symbol-heavy output for a simple
+  English prompt, while `llama3.2:3b` returned readable English.
+- `.venv\Scripts\python.exe -m pytest tests\test_developer_bridge.py -q -k "unreadable_model_output or readable_same_provider_fallback"` passed.
+- `.venv\Scripts\python.exe -m pytest tests\test_developer_bridge.py -q -k output_guard` passed.
+- `.venv\Scripts\python.exe -m ruff check src\francis\developer_bridge\ollama_participant.py tests\test_developer_bridge.py` passed.
+- PowerShell parser validation for `scripts\francis1-ollama-replay-proof.ps1`
+  passed.
+- `.venv\Scripts\python.exe -m pytest tests\test_francis1_ollama_replay_proof_script.py -q` passed.
+- `.venv\Scripts\python.exe -m ruff check tests\test_francis1_ollama_replay_proof_script.py` passed.
+- `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts\francis1-ollama-replay-proof.ps1 -Mode Status -TimeoutSeconds 180` passed and wrote
+  `data\logs\operations\francis1_ollama_replay_proof\francis1_ollama_replay_proof_20260703_144349.json`.
+- The live proof submitted prompt `collab-bcaaf1147e93045a-8a8bf44b1b27` and
+  received response `collab-561e281a6cc4b49e-7aa0ec9c1ce4` with
+  `readable_reply_observed=true`, `readability_repair_status=readable_fallback_used`,
+  `fallback_model_used=llama3.2:3b`, and `output_guard_status=not_applicable`.
+- The forced-garbage proof submitted prompt `collab-047eba3f1dafd02e-84b74b5bee49`
+  and received response `collab-dde08072831020a1-dcc41782960b` with
+  `fallback_rewritten_observed=true`, `output_guard_status=unreadable_rewritten`,
+  and `raw_garbage_leaked=false`.
+
+Remaining truthful gap:
+
+- The primary `francis-chat` model still appears unhealthy in this local runtime.
+  The live readable reply is recovered through same-provider fallback
+  `llama3.2:3b`, not proof that the primary model blob/GPU-offload path is fixed.
+- The proof does not grant execution, mutation, training, or memory-write
+  authority. It closes the voice replay proof requirement only.
+- The one-visible-loop acceptance proof remains unbuilt and unproven.
+
 ## 5. Known truthful gaps
 
 These still block any finished Orb embodiment claim:
@@ -360,10 +419,11 @@ These still block any finished Orb embodiment claim:
   `desktop_effect_confirmed=true` when target-side state changes. The remaining
   gap is a live operator-approved safe-target proof with the bridge explicitly
   enabled; the bridge remains default-off.
-- Voice: `scripts/ollama-doctor.ps1` now completes and the forced-garbage guard
-  path is validated, but the live Francis1 status replay after doctor still
-  produced `unreadable_rewritten`. Milestone 4 is blocked on local Ollama
-  model/runtime health until a readable live status reply is proven.
+- Voice: `scripts/ollama-doctor.ps1` now completes, forced-garbage injection
+  rewrites to `unreadable_rewritten` without raw salad, and the live Francis1
+  status replay now returns readable output through same-provider fallback
+  `llama3.2:3b`. The primary `francis-chat` model remains unhealthy and should
+  be repaired separately, but Milestone 4 replay proof is now present.
 - One visible loop: no repeatable end-to-end proof yet shows hotkey summon -> Orb
   appears -> operator-approved safe-target action -> confirmed effect -> receipt,
   trace, and chat/Lens UI visibility.
