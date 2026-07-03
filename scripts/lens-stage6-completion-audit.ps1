@@ -17,7 +17,12 @@ param(
   [ValidateRange(30, 600)]
   [int]$ChildProofTimeoutSeconds = 420,
 
-  [switch]$AllowLaunchOnHotkey
+  [switch]$AllowLaunchOnHotkey,
+
+  [ValidateRange(0, 3600)]
+  [int]$OverallTimeoutSeconds = 600,
+
+  [switch]$AuditWatchdogChild
 )
 
 $ErrorActionPreference = 'Stop'
@@ -69,6 +74,230 @@ function Stop-ProcessTree {
     } catch {
     }
   }
+}
+
+if (-not $AuditWatchdogChild -and $OverallTimeoutSeconds -gt 0) {
+  $RepoRootForWatchdog = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+  $PowerShellForWatchdog = (Get-Command pwsh -ErrorAction SilentlyContinue)
+  if ($null -eq $PowerShellForWatchdog) {
+    $PowerShellForWatchdog = Get-Command powershell -ErrorAction Stop
+  }
+
+  $CaptureRoot = Join-Path $RepoRootForWatchdog 'data/test_runs/lens-stage6-completion-audit'
+  New-Item -ItemType Directory -Path $CaptureRoot -Force | Out-Null
+  $CaptureId = [Guid]::NewGuid().ToString('N')
+  $StdoutPath = Join-Path $CaptureRoot "lens-stage6-completion-audit-watchdog-$CaptureId.stdout.json"
+  $StderrPath = Join-Path $CaptureRoot "lens-stage6-completion-audit-watchdog-$CaptureId.stderr.txt"
+
+  $InnerArgumentParts = @(
+    '-NoProfile',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-File',
+    (Quote-ProcessArgument -Value $PSCommandPath),
+    '-Mode',
+    (Quote-ProcessArgument -Value $Mode),
+    '-StartupTimeoutSeconds',
+    (Quote-ProcessArgument -Value ([string]$StartupTimeoutSeconds)),
+    '-HostLaunchRunSeconds',
+    (Quote-ProcessArgument -Value ([string]$HostLaunchRunSeconds)),
+    '-ResidentSurfaceForegroundRunSeconds',
+    (Quote-ProcessArgument -Value ([string]$ResidentSurfaceForegroundRunSeconds)),
+    '-SupervisorRunSeconds',
+    (Quote-ProcessArgument -Value ([string]$SupervisorRunSeconds)),
+    '-ChildProofTimeoutSeconds',
+    (Quote-ProcessArgument -Value ([string]$ChildProofTimeoutSeconds)),
+    '-OverallTimeoutSeconds',
+    '0',
+    '-AuditWatchdogChild'
+  )
+  if ($AllowLaunchOnHotkey) {
+    $InnerArgumentParts += '-AllowLaunchOnHotkey'
+  }
+
+  $CommandText = (
+    '& ' + (Quote-ProcessArgument -Value $PowerShellForWatchdog.Source) + ' ' +
+    ($InnerArgumentParts -join ' ') +
+    ' > ' + (Quote-ProcessArgument -Value $StdoutPath) +
+    ' 2> ' + (Quote-ProcessArgument -Value $StderrPath)
+  )
+  $StartInfo = [System.Diagnostics.ProcessStartInfo]::new()
+  $StartInfo.FileName = $PowerShellForWatchdog.Source
+  $StartInfo.Arguments = '-NoProfile -ExecutionPolicy Bypass -Command ' + (Quote-ProcessArgument -Value $CommandText)
+  $StartInfo.WorkingDirectory = $RepoRootForWatchdog
+  $StartInfo.UseShellExecute = $false
+  $StartInfo.CreateNoWindow = $true
+  $StartInfo.RedirectStandardOutput = $false
+  $StartInfo.RedirectStandardError = $false
+  $StartInfo.RedirectStandardInput = $false
+
+  $Process = [System.Diagnostics.Process]::new()
+  $Process.StartInfo = $StartInfo
+  $Timer = [System.Diagnostics.Stopwatch]::StartNew()
+  try {
+    $Started = $Process.Start()
+  } catch {
+    $Timer.Stop()
+    $Payload = [ordered]@{
+      ok = $false
+      kind = 'lens.stage6.completion_audit'
+      status = 'blocked'
+      audit_status = 'watchdog_start_failed'
+      mode = $Mode
+      repo_root = $RepoRootForWatchdog
+      overall_timeout_seconds = $OverallTimeoutSeconds
+      duration_ms = [int]$Timer.ElapsedMilliseconds
+      error = [string]$_.Exception.Message
+      next_smallest_truthful_gap = 'stage6_completion_audit_watchdog_start_failed'
+      recommended_next_slice = 'repair_stage6_completion_audit_watchdog_start'
+      recommended_proof_script = 'scripts/lens-stage6-completion-audit.ps1 -Mode Status'
+      authority_required = 'none_new_stage6_completion_audit'
+      authority_granted = $false
+      governance = [ordered]@{
+        read_only_contract = $true
+        diagnostic_only = $true
+        would_execute = $false
+        would_mutate = $false
+      }
+    }
+    $Payload | ConvertTo-Json -Depth 8
+    exit 1
+  }
+
+  if (-not $Started) {
+    $Timer.Stop()
+    $Payload = [ordered]@{
+      ok = $false
+      kind = 'lens.stage6.completion_audit'
+      status = 'blocked'
+      audit_status = 'watchdog_start_failed'
+      mode = $Mode
+      repo_root = $RepoRootForWatchdog
+      overall_timeout_seconds = $OverallTimeoutSeconds
+      duration_ms = [int]$Timer.ElapsedMilliseconds
+      error = 'process_not_started'
+      next_smallest_truthful_gap = 'stage6_completion_audit_watchdog_start_failed'
+      recommended_next_slice = 'repair_stage6_completion_audit_watchdog_start'
+      recommended_proof_script = 'scripts/lens-stage6-completion-audit.ps1 -Mode Status'
+      authority_required = 'none_new_stage6_completion_audit'
+      authority_granted = $false
+      governance = [ordered]@{
+        read_only_contract = $true
+        diagnostic_only = $true
+        would_execute = $false
+        would_mutate = $false
+      }
+    }
+    $Payload | ConvertTo-Json -Depth 8
+    exit 1
+  }
+
+  $Exited = $Process.WaitForExit($OverallTimeoutSeconds * 1000)
+  if (-not $Exited) {
+    Stop-ProcessTree -Process $Process
+    [void]$Process.WaitForExit(5000)
+    $Timer.Stop()
+    $StdoutPreview = ''
+    $StderrPreview = ''
+    if (Test-Path -LiteralPath $StdoutPath -PathType Leaf) {
+      $StdoutPreview = ([IO.File]::ReadAllText($StdoutPath)).Trim()
+      if ($StdoutPreview.Length -gt 1000) {
+        $StdoutPreview = $StdoutPreview.Substring(0, 1000)
+      }
+    }
+    if (Test-Path -LiteralPath $StderrPath -PathType Leaf) {
+      $StderrPreview = ([IO.File]::ReadAllText($StderrPath)).Trim()
+      if ($StderrPreview.Length -gt 1000) {
+        $StderrPreview = $StderrPreview.Substring(0, 1000)
+      }
+    }
+    $Payload = [ordered]@{
+      ok = $false
+      kind = 'lens.stage6.completion_audit'
+      status = 'blocked'
+      audit_status = 'timed_out'
+      mode = $Mode
+      repo_root = $RepoRootForWatchdog
+      overall_timeout_seconds = $OverallTimeoutSeconds
+      duration_ms = [int]$Timer.ElapsedMilliseconds
+      child_stdout_path = $StdoutPath
+      child_stderr_path = $StderrPath
+      child_stdout_preview = $StdoutPreview
+      child_stderr_preview = $StderrPreview
+      child_exit_code = 124
+      child_proof_timeout_seconds = $ChildProofTimeoutSeconds
+      allow_launch_on_hotkey = [bool]$AllowLaunchOnHotkey
+      next_smallest_truthful_gap = 'stage6_completion_audit_timeout'
+      recommended_next_slice = 'bound_stage6_completion_audit_child_proofs_before_replay'
+      recommended_proof_script = 'scripts/lens-stage6-completion-audit.ps1 -Mode Status -OverallTimeoutSeconds <seconds>'
+      authority_required = 'none_new_stage6_completion_audit'
+      authority_granted = $false
+      recommended_handoff = [ordered]@{
+        id = 'stage6_completion_audit_timeout'
+        status = 'blocked'
+        next_step = 'bound_stage6_completion_audit_child_proofs_before_replay'
+        proof_script = 'scripts/lens-stage6-completion-audit.ps1 -Mode Status -OverallTimeoutSeconds <seconds>'
+        authority_required = 'none_new_stage6_completion_audit'
+        authority_granted = $false
+        read_only_contract = $true
+        diagnostic_only = $true
+        would_execute = $false
+        would_mutate = $false
+      }
+      governance = [ordered]@{
+        read_only_contract = $true
+        diagnostic_only = $true
+        watchdog_killed_child_process_tree = $true
+        would_execute = $false
+        would_mutate = $false
+        approval_decision_authority = $false
+        memory_write = $false
+      }
+    }
+    $Payload | ConvertTo-Json -Depth 8
+    exit 124
+  }
+
+  $Timer.Stop()
+  $StdoutText = ''
+  if (Test-Path -LiteralPath $StdoutPath -PathType Leaf) {
+    $StdoutText = [IO.File]::ReadAllText($StdoutPath)
+  }
+  if (-not [string]::IsNullOrWhiteSpace($StdoutText)) {
+    Write-Output $StdoutText
+  } else {
+    $StderrText = ''
+    if (Test-Path -LiteralPath $StderrPath -PathType Leaf) {
+      $StderrText = [IO.File]::ReadAllText($StderrPath)
+    }
+    $Payload = [ordered]@{
+      ok = $false
+      kind = 'lens.stage6.completion_audit'
+      status = 'blocked'
+      audit_status = 'child_failed_without_json'
+      mode = $Mode
+      repo_root = $RepoRootForWatchdog
+      overall_timeout_seconds = $OverallTimeoutSeconds
+      duration_ms = [int]$Timer.ElapsedMilliseconds
+      child_stdout_path = $StdoutPath
+      child_stderr_path = $StderrPath
+      child_exit_code = [int]$Process.ExitCode
+      error = $StderrText.Trim()
+      next_smallest_truthful_gap = 'stage6_completion_audit_child_failed_without_json'
+      recommended_next_slice = 'repair_stage6_completion_audit_child_output'
+      recommended_proof_script = 'scripts/lens-stage6-completion-audit.ps1 -Mode Status'
+      authority_required = 'none_new_stage6_completion_audit'
+      authority_granted = $false
+      governance = [ordered]@{
+        read_only_contract = $true
+        diagnostic_only = $true
+        would_execute = $false
+        would_mutate = $false
+      }
+    }
+    $Payload | ConvertTo-Json -Depth 8
+  }
+  exit ([int]$Process.ExitCode)
 }
 
 function Invoke-JsonScript {

@@ -576,6 +576,57 @@ Remaining truthful gap:
   Austin's enable approval, a live safe-target bridge action, or chat/Lens UI
   receipt/trace/status render verification.
 
+### 2026-07-03 20:43Z - Stage 6 completion audit watchdog receipt
+
+Current posture: Phase 2 / Orb embodiment Milestone 5 remains blocked, but the
+Stage 6 completion-audit handoff now has a bounded visible receipt instead of an
+unbounded wait when nested proof review exceeds the caller's budget.
+
+What changed:
+
+- `scripts/lens-stage6-completion-audit.ps1` now wraps normal audit execution in
+  an outer watchdog unless explicitly running as its watchdog child.
+- The watchdog preserves normal audit JSON when the child finishes, and returns a
+  structured blocked receipt with `audit_status=timed_out`,
+  `stage6_completion_audit_timeout`, child stdout/stderr capture paths, and
+  `none_new_stage6_completion_audit` authority when the budget expires.
+- Timeout handling kills the child process tree and reports the non-mutating
+  governance posture instead of leaving the operator with a silent hang.
+- `tests/test_lens_stage6_completion_audit_script.py` now asserts the watchdog
+  receipt contract and passes the computed full-audit budget into the opt-in
+  full audit harness so that explicit full runs are not undercut by the default
+  watchdog.
+
+Validation:
+
+- PowerShell parser validation passed for
+  `scripts\lens-stage6-completion-audit.ps1`.
+- `.venv\Scripts\python.exe -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  passed with the existing full live audit skipped unless explicitly enabled.
+- `.venv\Scripts\python.exe -m ruff check tests\test_lens_stage6_completion_audit_script.py`
+  passed.
+- Live bounded audit proof
+  `.\scripts\lens-stage6-completion-audit.ps1 -Mode Status -OverallTimeoutSeconds 5 -ChildProofTimeoutSeconds 30`
+  returned a blocked timeout receipt in about five seconds with
+  `audit_status=timed_out`, `recommended_next_slice=bound_stage6_completion_audit_child_proofs_before_replay`,
+  and `watchdog_killed_child_process_tree=true`.
+- No leftover `lens-stage6-completion-audit.ps1` child process was observed after
+  the timeout proof.
+- One-visible-loop fixture proof wrote
+  `data\logs\operations\one_visible_loop\francis_one_visible_loop_proof_20260703_154255868.json`
+  with overlay `visible/topmost`, action `status=passed`,
+  `desktop_effect_confirmed=true`, and an honest blocked summon state.
+
+Remaining truthful gap:
+
+- Milestone 5 is still not accepted. The repeatable proof still lacks a real
+  global-hotkey summon from anywhere, Austin's enable approval, a live
+  safe-target bridge action, and chat/Lens UI receipt/trace/status render
+  verification.
+- The audit watchdog bounds operator feedback; it does not itself satisfy
+  resident host, tray presence, refreshed `Ctrl+Alt+F` hotkey binding, summon
+  binding, or the final enable authority.
+
 ## 5. Known truthful gaps
 
 These still block any finished Orb embodiment claim:

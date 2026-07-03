@@ -97,12 +97,13 @@ def _arm_full_audit_faulthandler_timeout() -> None:
 
 
 def _run_audit(*args: str) -> subprocess.CompletedProcess[str]:
+    timeout_seconds = _full_audit_timeout_seconds()
     return run_powershell_script(
         _powershell(),
         _repo_root() / "scripts" / "lens-stage6-completion-audit.ps1",
-        args,
+        (*args, "-OverallTimeoutSeconds", str(timeout_seconds)),
         cwd=_repo_root(),
-        timeout_seconds=_full_audit_timeout_seconds(),
+        timeout_seconds=timeout_seconds,
     )
 
 
@@ -123,6 +124,22 @@ def test_lens_stage6_completion_audit_child_capture_does_not_set_invalid_encodin
     assert "$StderrPath" in script
     assert "StandardOutputEncoding" not in script
     assert "StandardErrorEncoding" not in script
+
+
+def test_lens_stage6_completion_audit_outer_watchdog_returns_blocked_receipt() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+
+    assert "OverallTimeoutSeconds" in script
+    assert "AuditWatchdogChild" in script
+    assert "audit_status = 'timed_out'" in script
+    assert "Stop-ProcessTree -Process $Process" in script
+    assert "child_stdout_path" in script
+    assert "child_stderr_path" in script
+    assert "stage6_completion_audit_timeout" in script
+    assert "none_new_stage6_completion_audit" in script
+    assert "watchdog_killed_child_process_tree" in script
+    assert "would_mutate = $false" in script
+    assert "approval_decision_authority = $false" in script
 
 
 def test_lens_stage6_completion_audit_uses_distinct_api_proof_hotkeys() -> None:
