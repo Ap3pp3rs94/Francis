@@ -274,7 +274,10 @@ def test_fr017_evidence_chain_status_moves_blocker_after_mockup_ready(tmp_path: 
     assert payload["status"] == "blocked_on_mannequin_interface"
     assert payload["first_blocking_gate"] == "mannequin_interface"
     assert payload["first_blocking_status"] == "pending_mannequin_interface_test"
-    assert payload["next_required_input"] == "FR-017-MANNEQUIN-INTERFACE-INPUT-TEMPLATE.json"
+    assert (
+        payload["next_required_input"]
+        == "scripts/fr017-new-mannequin-interface-record.ps1 + FR-017-MANNEQUIN-INTERFACE-INPUT-TEMPLATE.json"
+    )
     assert "evidence.date" in payload["first_blocking_details"]["missing_fields"]
     assert payload["first_blocking_details"]["invalid_fields"] == []
     assert payload["first_blocking_details"]["mannequin_capture_plan_not_completion_evidence"] is True
@@ -284,9 +287,28 @@ def test_fr017_evidence_chain_status_moves_blocker_after_mockup_ready(tmp_path: 
         in payload["first_blocking_details"]["mannequin_capture_plan_status_contract"]
     )
     assert "not physical validation evidence" in payload["first_blocking_details"]["mannequin_capture_summary_contract"]
+    assert "operator input tooling only" in payload["first_blocking_details"]["mannequin_capture_runbook_contract"]
+    assert (
+        "fr017-new-mannequin-interface-record.ps1"
+        in payload["first_blocking_details"]["mannequin_capture_runbook_contract"]
+    )
     assert (
         payload["first_blocking_details"]["next_required_mannequin_input"]
-        == "complete_non_powered_mannequin_interface_record_at_FR-017-MANNEQUIN-INTERFACE-INPUT-TEMPLATE.json"
+        == "create_non_powered_mannequin_interface_record_with_fr017-new-mannequin-interface-record.ps1_then_rerun_mannequin_interface_gate"
+    )
+    assert (
+        str(payload["first_blocking_details"]["mannequin_input_template_path"])
+        .replace("/", "\\")
+        .endswith("FR-017_Stage17_Package\\FR-017-MANNEQUIN-INTERFACE-INPUT-TEMPLATE.json")
+    )
+    assert (
+        str(payload["first_blocking_details"]["mannequin_record_initializer_path"])
+        .replace("/", "\\")
+        .endswith("scripts\\fr017-new-mannequin-interface-record.ps1")
+    )
+    assert (
+        payload["first_blocking_details"]["mannequin_working_record_name_pattern"]
+        == "FR-017-MANNEQUIN-YYYY-MM-DD-PILOT-RECORD.json"
     )
     assert payload["first_blocking_details"]["mannequin_capture_total_groups"] == 5
     assert payload["first_blocking_details"]["mannequin_capture_ready_groups"] == 0
