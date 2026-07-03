@@ -17,7 +17,9 @@ def _fake_repo(tmp_path: Path) -> Path:
         "Francis is in `Phase 2`.\nThe strongest current posture is still observability.\n",
         encoding="utf-8",
     )
-    (root / "docs" / "BUILD_ORDER.md").write_text("## 5. Current priority\nobservability before autonomy\n", encoding="utf-8")
+    (root / "docs" / "BUILD_ORDER.md").write_text(
+        "## 5. Current priority\nobservability before autonomy\n", encoding="utf-8"
+    )
     (root / "docs" / "canonical" / "BUILD_MANIFEST.md").write_text(
         "# Francis 2.0 - ORB Build Manifest (Phase 2)\n## 2. Current Build Posture\n",
         encoding="utf-8",
@@ -74,7 +76,9 @@ def test_overnight_explorer_loop_respects_existing_stop_flag(tmp_path: Path) -> 
 
     data_root = tmp_path / "data"
     write_stop_flag(data_root, reason="test")
-    config = make_config(repo_root=_fake_repo(tmp_path), data_root=data_root, duration_hours=0.01, interval_minutes=0.01)
+    config = make_config(
+        repo_root=_fake_repo(tmp_path), data_root=data_root, duration_hours=0.01, interval_minutes=0.01
+    )
 
     summary = run_loop(config)
 

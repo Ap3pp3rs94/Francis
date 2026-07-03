@@ -514,9 +514,7 @@ def _repair_unreadable_reply(prompt: str, reply: str, execution_trace: dict[str,
     for model in fallback_models:
         fallback_reply = _identity_safe_reply(_generate_reply(prompt, model=model))
         fallback_quality = _reply_quality_metrics(fallback_reply) if fallback_reply else {}
-        fallback_unreadable = bool(
-            fallback_reply and _reply_is_unreadable(fallback_reply, quality=fallback_quality)
-        )
+        fallback_unreadable = bool(fallback_reply and _reply_is_unreadable(fallback_reply, quality=fallback_quality))
         attempt = {
             "model": model,
             "model_response_observed": bool(fallback_reply),

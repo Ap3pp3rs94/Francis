@@ -255,7 +255,9 @@ def _finish_attempt(payload: dict[str, Any]) -> dict[str, Any]:
         "target_state_changed": bool(payload.get("target_state_changed")),
         "target_observer_polls": _safe_int(payload.get("target_observer_polls"), 0),
         "target_observation_before": (
-            payload.get("target_observation_before") if isinstance(payload.get("target_observation_before"), dict) else {}
+            payload.get("target_observation_before")
+            if isinstance(payload.get("target_observation_before"), dict)
+            else {}
         ),
         "target_observation_after": (
             payload.get("target_observation_after") if isinstance(payload.get("target_observation_after"), dict) else {}
