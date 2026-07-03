@@ -3417,7 +3417,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert os_binding_candidate["kind"] == "lens.command_palette.os_binding_candidate"
     assert os_binding_candidate["status"] == "blocked"
     assert os_binding_candidate["candidate"] == "global_hotkey_to_lens_command_palette_bridge"
-    assert os_binding_candidate["trigger"] == "Ctrl+Alt+Space"
+    assert os_binding_candidate["trigger"] == "Ctrl+Alt+F"
     assert os_binding_candidate["binding_scope"] == "global"
     assert os_binding_candidate["route"] == "/lens/status"
     assert os_binding_candidate["local_surface"] == "chat_ui.command_palette"
@@ -3448,7 +3448,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert os_binding_candidate["would_launch_process_now"] is False
     assert os_binding_candidate["would_write_memory_now"] is False
     assert os_binding_candidate["next_smallest_truthful_gap"] == "os_level_command_palette_binding"
-    assert command_palette_os_binding["summon_preflight"]["global_hotkey"] == "Ctrl+Alt+Space"
+    assert command_palette_os_binding["summon_preflight"]["global_hotkey"] == "Ctrl+Alt+F"
     assert command_palette_os_binding["tray_preflight"]["ready"] is False
     assert command_palette_os_binding["overlay_preflight"]["ready"] is False
     assert command_palette_os_binding["governance"]["read_only_contract"] is True
@@ -3531,7 +3531,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert "local_process_launch_authority_not_granted" in summon_anywhere_groups["authority"]
     assert summon_anywhere_blockers_proof["lens_status_readback"]["ok"] is True
     assert summon_anywhere_blockers_proof["os_binding_authority_request_readback"]["ok"] is True
-    assert summon_anywhere_blockers_proof["summon_preflight"]["global_hotkey"] == "Ctrl+Alt+Space"
+    assert summon_anywhere_blockers_proof["summon_preflight"]["global_hotkey"] == "Ctrl+Alt+F"
     assert summon_anywhere_blockers_proof["governance"]["diagnostic_only"] is True
     assert summon_anywhere_blockers_proof["governance"]["wraps_summon_preflight"] is True
     assert summon_anywhere_blockers_proof["governance"]["wraps_lens_status"] is True
@@ -3609,7 +3609,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert summon_authority_boundary["ready"] is False
     assert summon_authority_boundary["summon_name"] == "Francis Lens Summon"
     assert summon_authority_boundary["config_path"] == "config/runtime/lens/summon.json"
-    assert summon_authority_boundary["global_hotkey"] == "Ctrl+Alt+Space"
+    assert summon_authority_boundary["global_hotkey"] == "Ctrl+Alt+F"
     assert summon_authority_boundary["binding_scope"] == "global"
     assert summon_authority_boundary["palette_route"] == "/lens/status"
     assert summon_authority_boundary["required_before_enable"] == [

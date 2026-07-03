@@ -2310,7 +2310,7 @@ $CommandPaletteOsBindingCandidateObserved = (
   [string]$CommandPaletteOsBindingCandidate.kind -eq 'lens.command_palette.os_binding_candidate' -and
   [string]$CommandPaletteOsBindingCandidate.status -eq 'blocked' -and
   [string]$CommandPaletteOsBindingCandidate.candidate -eq 'global_hotkey_to_lens_command_palette_bridge' -and
-  [string]$CommandPaletteOsBindingCandidate.trigger -eq 'Ctrl+Alt+Space' -and
+  [string]$CommandPaletteOsBindingCandidate.trigger -eq 'Ctrl+Alt+F' -and
   [string]$CommandPaletteOsBindingCandidate.binding_scope -eq 'global' -and
   [string]$CommandPaletteOsBindingCandidate.route -eq '/lens/status' -and
   [string]$CommandPaletteOsBindingCandidate.local_surface -eq 'chat_ui.command_palette' -and
@@ -3032,7 +3032,7 @@ $SummonAuthorityBlockerProofObserved = (
   -not [bool]$SummonAuthorityBoundary.ready -and
   [string]$SummonAuthorityBoundary.summon_name -eq 'Francis Lens Summon' -and
   [string]$SummonAuthorityBoundary.config_path -eq 'config/runtime/lens/summon.json' -and
-  [string]$SummonAuthorityBoundary.global_hotkey -eq 'Ctrl+Alt+Space' -and
+  [string]$SummonAuthorityBoundary.global_hotkey -eq 'Ctrl+Alt+F' -and
   [string]$SummonAuthorityBoundary.binding_scope -eq 'global' -and
   [string]$SummonAuthorityBoundary.palette_route -eq '/lens/status' -and
   $SummonAuthorityBoundaryRequiredBeforeEnable -contains 'resident_host_process' -and

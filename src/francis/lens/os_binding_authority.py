@@ -1265,6 +1265,8 @@ def _hotkey_execution_status(
         if runner_ok and not hotkey_ready:
             return "global_hotkey_binding_stopped"
         return "global_hotkey_binding_stop_incomplete"
+    if runner_status == "hotkey_already_owned":
+        return "hotkey_already_owned"
     if runner_ok and hotkey_ready:
         return "global_hotkey_binding_already_running" if runner_status == "already_running" else "global_hotkey_bound"
     return "global_hotkey_binding_failed"
@@ -1759,7 +1761,13 @@ def execute_lens_os_binding(
         runner_status=runner_status,
         hotkey_ready=hotkey_ready,
     )
-    next_gap = "summon_binding" if safe_mode == "bind" and hotkey_ready else "os_level_command_palette_binding"
+    next_gap = (
+        "choose_unclaimed_global_hotkey"
+        if status == "hotkey_already_owned"
+        else "summon_binding"
+        if safe_mode == "bind" and hotkey_ready
+        else "os_level_command_palette_binding"
+    )
     response: dict[str, Any] = {
         "ok": True,
         "applied": runner_ok,

@@ -63,7 +63,7 @@ def test_lens_summon_preflight_reports_disabled_hotkey_without_authority() -> No
     assert payload["kind"] == "lens.summon.preflight"
     assert payload["status"] == "blocked"
     assert payload["ready"] is False
-    assert payload["global_hotkey"] == "Ctrl+Alt+Space"
+    assert payload["global_hotkey"] == "Ctrl+Alt+F"
     assert payload["acceptance_criterion"] == "summon_anywhere"
     assert payload["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
     assert payload["required_before_enable"] == expected_required_before_enable
@@ -194,7 +194,7 @@ def test_lens_summon_preflight_consumes_live_hotkey_runtime_readback(tmp_path: P
                 "kind": "lens.hotkey.runtime_state",
                 "status": "hotkey_bound",
                 "pid": pid,
-                "global_hotkey": "Ctrl+Alt+Space",
+                "global_hotkey": "Ctrl+Alt+F",
                 "binding_scope": "global",
                 "hotkey_bound": True,
                 "launch_on_hotkey": False,

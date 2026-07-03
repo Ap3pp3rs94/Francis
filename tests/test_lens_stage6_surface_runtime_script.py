@@ -84,7 +84,7 @@ def test_lens_stage6_surface_runtime_status_reports_coordinated_live_components(
                 "kind": "lens.hotkey.runtime_state",
                 "status": "hotkey_bound",
                 "pid": pid,
-                "global_hotkey": "Ctrl+Alt+Space",
+                "global_hotkey": "Ctrl+Alt+F",
                 "binding_scope": "global",
                 "hotkey_bound": True,
                 "launch_on_hotkey": False,

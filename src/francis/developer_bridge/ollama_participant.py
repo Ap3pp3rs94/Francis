@@ -451,6 +451,17 @@ def _guard_model_reply(
 ) -> str:
     guard = _output_guard(item, reply)
     execution_trace["output_guard"] = guard
+    if guard["status"] == "unreadable_rewritten":
+        surface = str(guard.get("verified_surface") or "developer_bridge.collaboration_driver.learning_events")
+        topic = _source_topic_from_prompt(str(item.get("prompt") or ""))
+        topic_line = f" Topic: {topic}." if topic else ""
+        fallback = _guard_topic_fallback(topic=topic, surface=surface)
+        return (
+            "Francis1 output guard fallback: model reply was unreadable non-linguistic output, "
+            "which usually indicates an unhealthy local Ollama model or runtime."
+            f"{topic_line} Review artifact: {surface}. "
+            f"{fallback} No execution, mutation, approval, training, or memory-promotion authority was granted."
+        )
     if guard["status"] != "drift_rewritten":
         return reply
     terms = ", ".join(str(term) for term in _list(guard.get("detected_terms")))
@@ -481,6 +492,14 @@ def _output_guard(item: dict[str, object], reply: str) -> dict[str, object]:
     )
     if not reply:
         return _output_guard_record(status="empty_reply", source_prompt=source_prompt, detected_terms=[])
+    quality = _reply_quality_metrics(reply)
+    if _reply_is_unreadable(reply, quality=quality):
+        return _output_guard_record(
+            status="unreadable_rewritten",
+            source_prompt=source_prompt,
+            detected_terms=["unreadable_model_output"],
+            model_output_quality=quality,
+        )
     source_has_verified_surface = _source_prompt_has_verified_surface(source_prompt)
     stale_topic_terms = _stale_topic_replay_terms(source_prompt, reply)
     if not source_has_verified_surface and not stale_topic_terms:
@@ -503,10 +522,11 @@ def _output_guard_record(
     source_prompt: str,
     detected_terms: list[str],
     source_has_verified_surface: bool | None = None,
+    model_output_quality: dict[str, object] | None = None,
 ) -> dict[str, object]:
     if source_has_verified_surface is None:
         source_has_verified_surface = _source_prompt_has_verified_surface(source_prompt)
-    return {
+    record: dict[str, object] = {
         "status": status,
         "guard": "verified_surface_drift_guard_v1",
         "detected_terms": detected_terms,
@@ -517,6 +537,68 @@ def _output_guard_record(
         "grants_mutation_authority": False,
         "grants_memory_write_authority": False,
     }
+    if model_output_quality is not None:
+        record["model_output_quality"] = model_output_quality
+    return record
+
+
+def _reply_is_unreadable(reply: str, *, quality: dict[str, object] | None = None) -> bool:
+    """Detect non-linguistic model output (character salad from an unhealthy runtime).
+
+    Conservative on purpose: only flags replies that are both symbol-heavy and
+    lack word-like tokens, so prose, two-line contract replies, and JSON-ish
+    structured replies always pass.
+    """
+    metrics = quality or _reply_quality_metrics(reply)
+    if _safe_metric_int(metrics.get("char_count")) < 24:
+        return False
+    non_space_count = _safe_metric_int(metrics.get("non_space_count"))
+    if non_space_count < 24:
+        return False
+    alpha_ratio = _safe_metric_float(metrics.get("alpha_ratio"))
+    symbol_ratio = _safe_metric_float(metrics.get("symbol_ratio"))
+    wordlike_ratio = _safe_metric_float(metrics.get("wordlike_ratio"))
+    token_count = _safe_metric_int(metrics.get("token_count"))
+    compact_symbol_blob = token_count <= 3 and non_space_count >= 80
+    return (
+        (alpha_ratio < 0.45 and symbol_ratio > 0.35)
+        or (compact_symbol_blob and symbol_ratio > 0.25 and wordlike_ratio < 0.5)
+        or (alpha_ratio < 0.55 and wordlike_ratio < 0.5)
+    )
+
+
+def _reply_quality_metrics(reply: str) -> dict[str, object]:
+    text = reply.strip()
+    non_space = [ch for ch in text if not ch.isspace()]
+    non_space_count = len(non_space)
+    tokens = text.split()
+    wordlike = sum(1 for token in tokens if sum(1 for ch in token if ch.isalpha()) >= max(2, len(token) // 2))
+    alpha_count = sum(1 for ch in non_space if ch.isalpha())
+    symbol_count = sum(1 for ch in non_space if not ch.isalnum())
+    return {
+        "char_count": len(text),
+        "non_space_count": non_space_count,
+        "token_count": len(tokens),
+        "wordlike_token_count": wordlike,
+        "alpha_ratio": _round_ratio(alpha_count, non_space_count),
+        "symbol_ratio": _round_ratio(symbol_count, non_space_count),
+        "wordlike_ratio": _round_ratio(wordlike, len(tokens)),
+        "stores_raw_model_output": False,
+    }
+
+
+def _round_ratio(numerator: int, denominator: int) -> float:
+    if denominator <= 0:
+        return 0.0
+    return round(numerator / denominator, 3)
+
+
+def _safe_metric_int(value: object) -> int:
+    return value if isinstance(value, int) else 0
+
+
+def _safe_metric_float(value: object) -> float:
+    return value if isinstance(value, float) else 0.0
 
 
 def _source_prompt_has_verified_surface(source_prompt: str) -> bool:
@@ -798,7 +880,10 @@ def _surface_after_marker(source_prompt: str, marker: str) -> str:
 
 def _output_guard_rewrote(execution_trace: dict[str, object]) -> bool:
     output_guard = execution_trace.get("output_guard")
-    return isinstance(output_guard, dict) and output_guard.get("status") == "drift_rewritten"
+    return isinstance(output_guard, dict) and output_guard.get("status") in (
+        "drift_rewritten",
+        "unreadable_rewritten",
+    )
 
 
 def _output_guard_status(execution_trace: dict[str, object]) -> str:
@@ -811,6 +896,8 @@ def _output_guard_status(execution_trace: dict[str, object]) -> str:
 def _output_guard_context(execution_trace: dict[str, object]) -> str:
     if not _output_guard_rewrote(execution_trace):
         return ""
+    if _output_guard_status(execution_trace) == "unreadable_rewritten":
+        return " Model output guard replaced unreadable local model output; raw model output was not stored in the relay receipt."
     return " Model output guard replaced a known drift reply; raw model output was not stored in the relay receipt."
 
 

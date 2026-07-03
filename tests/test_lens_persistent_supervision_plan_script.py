@@ -130,7 +130,7 @@ def test_lens_persistent_supervision_plan_stays_blocked_without_authority(tmp_pa
     assert hotkey["readiness_route"] == "/lens/summon/readiness"
     assert hotkey["blocker"] == "global_hotkey_binding_missing"
     assert hotkey["requirement_state"] == "binding_disabled"
-    assert hotkey["global_hotkey"] == "Ctrl+Alt+Space"
+    assert hotkey["global_hotkey"] == "Ctrl+Alt+F"
     assert hotkey["binding_enabled"] is False
     assert hotkey["register_hotkey"] is False
     assert hotkey["hotkey_registration_authority"] is True
@@ -451,7 +451,7 @@ def test_lens_persistent_supervision_plan_accepts_live_surface_runtime_readbacks
                 "kind": "lens.hotkey.runtime_state",
                 "status": "hotkey_bound",
                 "pid": pid,
-                "global_hotkey": "Ctrl+Alt+Space",
+                "global_hotkey": "Ctrl+Alt+F",
                 "binding_scope": "global",
                 "hotkey_bound": True,
                 "launch_on_hotkey": False,

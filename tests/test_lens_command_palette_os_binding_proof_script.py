@@ -294,7 +294,7 @@ def test_lens_command_palette_os_binding_proof_composes_blocked_readbacks(
     assert os_binding_candidate["kind"] == "lens.command_palette.os_binding_candidate"
     assert os_binding_candidate["status"] == "blocked"
     assert os_binding_candidate["candidate"] == "global_hotkey_to_lens_command_palette_bridge"
-    assert os_binding_candidate["trigger"] == "Ctrl+Alt+Space"
+    assert os_binding_candidate["trigger"] == "Ctrl+Alt+F"
     assert os_binding_candidate["binding_scope"] == "global"
     assert os_binding_candidate["route"] == "/lens/status"
     assert os_binding_candidate["local_surface"] == "chat_ui.command_palette"
@@ -376,7 +376,7 @@ def test_lens_command_palette_os_binding_proof_composes_blocked_readbacks(
     summon_preflight = payload["summon_preflight"]
     assert summon_preflight["status"] == "blocked"
     assert summon_preflight["ready"] is False
-    assert summon_preflight["global_hotkey"] == "Ctrl+Alt+Space"
+    assert summon_preflight["global_hotkey"] == "Ctrl+Alt+F"
     assert summon_preflight["binding_scope"] == "global"
     assert summon_preflight["palette_route"] == "/lens/status"
 

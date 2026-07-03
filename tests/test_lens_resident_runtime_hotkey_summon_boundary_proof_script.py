@@ -78,7 +78,7 @@ def test_lens_resident_runtime_hotkey_summon_boundary_uses_cached_summon_preflig
                 "ready": False,
                 "summon_name": "Francis Lens Summon",
                 "config_path": "config/runtime/lens/summon.json",
-                "global_hotkey": "Ctrl+Alt+Space",
+                "global_hotkey": "Ctrl+Alt+F",
                 "binding_scope": "global",
                 "palette_route": "/lens/status",
                 "required_before_enable": ["operator_authority"],
@@ -106,7 +106,7 @@ def test_lens_resident_runtime_hotkey_summon_boundary_uses_cached_summon_preflig
     payload = json.loads(proc.stdout)
     assert payload["cached_summon_preflight"] is True
     assert payload["summon_preflight_observed"] is True
-    assert payload["summon_preflight"]["global_hotkey"] == "Ctrl+Alt+Space"
+    assert payload["summon_preflight"]["global_hotkey"] == "Ctrl+Alt+F"
 
 
 def test_lens_resident_runtime_hotkey_summon_boundary_uses_cached_tray_presence(tmp_path: Path) -> None:
@@ -206,7 +206,7 @@ def test_lens_resident_runtime_hotkey_summon_boundary_is_readback_only() -> None
     assert summon_preflight["ready"] is False
     assert summon_preflight["summon_name"] == "Francis Lens Summon"
     assert summon_preflight["config_path"] == "config/runtime/lens/summon.json"
-    assert summon_preflight["global_hotkey"] == "Ctrl+Alt+Space"
+    assert summon_preflight["global_hotkey"] == "Ctrl+Alt+F"
     assert summon_preflight["binding_scope"] == "global"
     assert summon_preflight["palette_route"] == "/lens/status"
     assert "global_hotkey_binding_disabled" in summon_preflight["blockers"]
