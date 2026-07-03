@@ -92,6 +92,11 @@ What is materially true now:
 - The Orb desktop bridge now has a redacted post-action target observer. When
   the bridge is explicitly enabled and a safe target's observable UI state
   changes after posted messages, `desktop_effect_confirmed` can become true.
+- `scripts/ollama-doctor.ps1` now completes as a bounded health receipt instead
+  of hanging or throwing on local CLI/Event Log/process readback quirks.
+- The live Francis1/Ollama status replay remains blocked: after a completed
+  doctor run, the local model lane still produced unreadable output and the
+  relay correctly rewrote it as `unreadable_rewritten`.
 
 ## 4. Latest validation evidence
 
@@ -289,6 +294,58 @@ Remaining truthful gap:
   needs hotkey summon, operator-approved safe target action, confirmed effect,
   receipt, trace, and Lens/chat visibility in one repeatable runner.
 
+### 2026-07-03 19:32Z - Francis1 voice replay blocker after Ollama doctor
+
+Current posture: Phase 2 / Orb embodiment Milestone 4 is blocked on local
+Ollama model/runtime health, not on raw unreadable output leaking through the
+developer bridge. The doctor now writes a bounded health report, and the
+Francis1 reply lane still rewrites unreadable model output instead of relaying
+symbol salad to the operator.
+
+What changed:
+
+- `scripts/ollama-doctor.ps1` now bounds external CLI probes with
+  `CommandTimeoutSec` and returns timeout details instead of waiting forever.
+- The doctor helper no longer uses a parameter named `Args`, avoiding collision
+  with PowerShell's automatic `$args` variable when launching `ollama list`,
+  `ollama ps`, and related probes.
+- Doctor probe collections that are later counted are normalized to arrays under
+  strict mode, and Event Log/process snapshots are best-effort so inaccessible
+  local fields do not abort report export.
+- `tests/test_ollama_doctor_script.py` locks the bounded command, strict-mode
+  array, Event Log, process snapshot, and report-construction contracts.
+
+Validation:
+
+- PowerShell parser validation for `scripts\ollama-doctor.ps1` passed.
+- `.venv\Scripts\python.exe -m pytest tests\test_ollama_doctor_script.py -q` passed.
+- `.venv\Scripts\python.exe -m ruff check tests\test_ollama_doctor_script.py` passed.
+- `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts\ollama-doctor.ps1 -Tag ollama_doctor_m4 -CommandTimeoutSec 5` completed and wrote:
+  `data\logs\operations\ollama_doctor\ollama_doctor_m4_20260703_142950.log`,
+  `.json`, and `_checks.csv`.
+- The doctor check summary was 10 PASSED, 3 WARN, 2 SKIPPED, and 0 FAILED. API
+  `/api/version` and `/api/tags` passed; `ollama list`, `ollama ps`, port 11434,
+  process detection, model paths, model size scan, and `nvidia-smi` passed.
+- `.venv\Scripts\python.exe -m pytest tests\test_developer_bridge.py -q -k unreadable_model_output` passed.
+- `.venv\Scripts\python.exe -m pytest tests\test_developer_bridge.py -q -k output_guard` passed.
+- `.venv\Scripts\python.exe -m ruff check src\francis\developer_bridge\ollama_participant.py tests\test_developer_bridge.py` passed.
+- A live operator-scoped Francis1 status replay submitted prompt
+  `collab-4d494e2aee18f190-ebb96481b08b` and received response
+  `collab-52e42facbda0a874-4d30a811637e` with
+  `output_guard_status=unreadable_rewritten`.
+
+Remaining truthful gap:
+
+- The Milestone 4 readable status reply requirement is not met. After a completed
+  Ollama doctor run, the live Francis1/qwen2.5:7b lane still produced unreadable
+  non-linguistic output.
+- The forced-garbage fallback path is validated, and the live relay did not leak
+  raw salad into the operator response. That is not equivalent to a healthy
+  natural Francis1 reply.
+- Treat the remaining blocker as local model blob/runtime/GPU-offload health
+  until a new live operator-scoped status replay returns a readable reply. Do
+  not proceed to the one-visible-loop acceptance proof on this evidence.
+
 ## 5. Known truthful gaps
 
 These still block any finished Orb embodiment claim:
@@ -303,8 +360,10 @@ These still block any finished Orb embodiment claim:
   `desktop_effect_confirmed=true` when target-side state changes. The remaining
   gap is a live operator-approved safe-target proof with the bridge explicitly
   enabled; the bridge remains default-off.
-- Voice: live Francis1 status replay and forced-garbage fallback proof still
-  depend on the operator running `scripts/ollama-doctor.ps1` first.
+- Voice: `scripts/ollama-doctor.ps1` now completes and the forced-garbage guard
+  path is validated, but the live Francis1 status replay after doctor still
+  produced `unreadable_rewritten`. Milestone 4 is blocked on local Ollama
+  model/runtime health until a readable live status reply is proven.
 - One visible loop: no repeatable end-to-end proof yet shows hotkey summon -> Orb
   appears -> operator-approved safe-target action -> confirmed effect -> receipt,
   trace, and chat/Lens UI visibility.
