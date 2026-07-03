@@ -251,6 +251,9 @@ function Get-Stage17StatusWithArchiveFallback {
   $ArchiveTextParts = New-Object System.Collections.Generic.List[string]
   $ArchiveSourceDocuments = @()
   foreach ($ArchivePath in @($ArchivePaths)) {
+    if ([string]::IsNullOrWhiteSpace($ArchivePath)) {
+      continue
+    }
     [void]$ArchiveTextParts.Add((Read-CompletionModelText -Path $ArchivePath))
     $ArchiveSourceDocuments += (Get-CompletionModelRelativePath -Path $ArchivePath)
   }
