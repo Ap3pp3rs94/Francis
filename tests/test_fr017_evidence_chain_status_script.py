@@ -554,7 +554,10 @@ def test_fr017_evidence_chain_status_moves_blocker_after_movement_ready(tmp_path
     assert payload["status"] == "blocked_on_quick_release_cable_snag"
     assert payload["first_blocking_gate"] == "quick_release_cable_snag"
     assert payload["first_blocking_status"] == "pending_quick_release_cable_snag_test"
-    assert payload["next_required_input"] == "FR-017-QUICK-RELEASE-CABLE-SNAG-INPUT-TEMPLATE.json"
+    assert (
+        payload["next_required_input"]
+        == "scripts/fr017-new-release-cable-record.ps1 + FR-017-QUICK-RELEASE-CABLE-SNAG-INPUT-TEMPLATE.json"
+    )
     assert "evidence.date" in payload["first_blocking_details"]["missing_fields"]
     assert payload["first_blocking_details"]["invalid_fields"] == []
     assert payload["first_blocking_details"]["release_cable_capture_plan_not_completion_evidence"] is True
@@ -569,9 +572,28 @@ def test_fr017_evidence_chain_status_moves_blocker_after_movement_ready(tmp_path
         "not physical validation evidence"
         in payload["first_blocking_details"]["release_cable_capture_summary_contract"]
     )
+    assert "operator input tooling only" in payload["first_blocking_details"]["release_cable_capture_runbook_contract"]
+    assert (
+        "fr017-new-release-cable-record.ps1"
+        in payload["first_blocking_details"]["release_cable_capture_runbook_contract"]
+    )
     assert (
         payload["first_blocking_details"]["next_required_release_cable_input"]
-        == "complete_non_powered_quick_release_cable_snag_record_at_FR-017-QUICK-RELEASE-CABLE-SNAG-INPUT-TEMPLATE.json"
+        == "create_non_powered_quick_release_cable_snag_record_with_fr017-new-release-cable-record.ps1_then_rerun_release_cable_gate"
+    )
+    assert (
+        str(payload["first_blocking_details"]["release_cable_input_template_path"])
+        .replace("/", "\\")
+        .endswith("FR-017_Stage17_Package\\FR-017-QUICK-RELEASE-CABLE-SNAG-INPUT-TEMPLATE.json")
+    )
+    assert (
+        str(payload["first_blocking_details"]["release_cable_record_initializer_path"])
+        .replace("/", "\\")
+        .endswith("scripts\\fr017-new-release-cable-record.ps1")
+    )
+    assert (
+        payload["first_blocking_details"]["release_cable_working_record_name_pattern"]
+        == "FR-017-RELEASE-CABLE-YYYY-MM-DD-PILOT-RECORD.json"
     )
     assert payload["first_blocking_details"]["release_cable_capture_total_groups"] == 6
     assert payload["first_blocking_details"]["release_cable_capture_ready_groups"] == 0
