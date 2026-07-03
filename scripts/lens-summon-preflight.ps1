@@ -169,6 +169,19 @@ function Read-JsonFile {
   }
 }
 
+function Get-ProcessAlive {
+  param([int]$ProcessId)
+
+  if ($ProcessId -le 0) {
+    return $false
+  }
+  try {
+    return $null -ne (Get-Process -Id $ProcessId -ErrorAction Stop)
+  } catch {
+    return $false
+  }
+}
+
 function Get-HostProcessReadback {
   param([string]$Root)
 
@@ -218,6 +231,141 @@ function Get-HostProcessReadback {
     runtime_status_pid_matches_pid_file = ($StatusPid -gt 0 -and $StatusPid -eq $HostPid)
     requirement_state = if ($ProcessAlive) { 'running' } elseif ($RuntimeStateExists -or $PidPresent) { 'stale_or_unverified' } else { 'missing' }
     blocker = if ($ProcessAlive) { '' } else { 'resident_host_process_missing' }
+  }
+}
+
+function Get-TrayRuntimeReadback {
+  param([string]$Root)
+
+  $RuntimeRoot = Join-Path $Root 'runtime\lens-tray'
+  $PidPath = Join-Path $RuntimeRoot 'lens-tray.pid'
+  $StatusPath = Join-Path $RuntimeRoot 'status.json'
+  $Status = Read-JsonFile -Path $StatusPath
+  $StatusKind = Get-StringProperty -Payload $Status -Name 'kind' -Default ''
+  $StatusValue = Get-StringProperty -Payload $Status -Name 'status' -Default ''
+  $StatusPid = Get-IntegerProperty -Payload $Status -Name 'pid' -Default 0
+  $RuntimeStateExists = Test-Path -LiteralPath $StatusPath -PathType Leaf
+  $PidPresent = Test-Path -LiteralPath $PidPath -PathType Leaf
+  $RuntimePid = 0
+  if ($PidPresent) {
+    try {
+      $RuntimePid = [int]((Get-Content -LiteralPath $PidPath -Raw -ErrorAction Stop).Trim())
+    } catch {
+      $RuntimePid = 0
+    }
+  }
+
+  $StatusClaimsRunningTray = (
+    $StatusKind -eq 'lens.tray.runtime_state' -and
+    $StatusValue -eq 'tray_running' -and
+    $StatusPid -gt 0 -and
+    $StatusPid -eq $RuntimePid
+  )
+  $ProcessAlive = if ($StatusClaimsRunningTray) { Get-ProcessAlive -ProcessId $RuntimePid } else { $false }
+  $TrayIconVisible = $ProcessAlive -and (Get-BoolProperty -Payload $Status -Name 'tray_icon_visible' -Default $false)
+  $RequirementState = if ($TrayIconVisible) {
+    'running'
+  } elseif ($ProcessAlive) {
+    'process_running_no_icon_claim'
+  } elseif ($RuntimeStateExists -or $PidPresent) {
+    'stale_or_unverified'
+  } else {
+    'missing'
+  }
+  $Blocker = if ($TrayIconVisible) {
+    ''
+  } elseif ($ProcessAlive) {
+    'tray_icon_not_observed'
+  } else {
+    'tray_presence_runtime_missing'
+  }
+
+  return [ordered]@{
+    ready = $TrayIconVisible
+    process_alive = $ProcessAlive
+    tray_icon_visible = $TrayIconVisible
+    pid = $RuntimePid
+    pid_present = $PidPresent
+    status_path = $StatusPath
+    pid_path = $PidPath
+    runtime_state_exists = $RuntimeStateExists
+    runtime_status = $StatusValue
+    runtime_status_kind = $StatusKind
+    runtime_status_pid = $StatusPid
+    runtime_status_pid_matches_pid_file = ($StatusPid -gt 0 -and $StatusPid -eq $RuntimePid)
+    requirement_state = $RequirementState
+    blocker = $Blocker
+  }
+}
+
+function Get-OverlayRuntimeReadback {
+  param([string]$Root)
+
+  $RuntimeRoot = Join-Path $Root 'runtime\lens-overlay'
+  $PidPath = Join-Path $RuntimeRoot 'lens-overlay.pid'
+  $StatusPath = Join-Path $RuntimeRoot 'status.json'
+  $Status = Read-JsonFile -Path $StatusPath
+  $StatusKind = Get-StringProperty -Payload $Status -Name 'kind' -Default ''
+  $StatusValue = Get-StringProperty -Payload $Status -Name 'status' -Default ''
+  $StatusPid = Get-IntegerProperty -Payload $Status -Name 'pid' -Default 0
+  $RuntimeStateExists = Test-Path -LiteralPath $StatusPath -PathType Leaf
+  $PidPresent = Test-Path -LiteralPath $PidPath -PathType Leaf
+  $RuntimePid = 0
+  if ($PidPresent) {
+    try {
+      $RuntimePid = [int]((Get-Content -LiteralPath $PidPath -Raw -ErrorAction Stop).Trim())
+    } catch {
+      $RuntimePid = 0
+    }
+  }
+
+  $StatusClaimsRunningOverlay = (
+    $StatusKind -eq 'lens.overlay.runtime_state' -and
+    $StatusValue -eq 'overlay_running' -and
+    $StatusPid -gt 0 -and
+    $StatusPid -eq $RuntimePid
+  )
+  $ProcessAlive = if ($StatusClaimsRunningOverlay) { Get-ProcessAlive -ProcessId $RuntimePid } else { $false }
+  $OverlayWindowVisible = $ProcessAlive -and (Get-BoolProperty -Payload $Status -Name 'overlay_window_visible' -Default $false)
+  $AlwaysOnTop = $OverlayWindowVisible -and (Get-BoolProperty -Payload $Status -Name 'always_on_top' -Default $false)
+  $Ready = $OverlayWindowVisible -and $AlwaysOnTop
+  $RequirementState = if ($Ready) {
+    'visible_topmost'
+  } elseif ($OverlayWindowVisible) {
+    'visible_not_topmost'
+  } elseif ($ProcessAlive) {
+    'process_running_no_visible_overlay_claim'
+  } elseif ($RuntimeStateExists -or $PidPresent) {
+    'stale_or_unverified'
+  } else {
+    'missing'
+  }
+  $Blocker = if ($Ready) {
+    ''
+  } elseif ($OverlayWindowVisible) {
+    'overlay_window_not_topmost'
+  } elseif ($ProcessAlive) {
+    'overlay_window_not_visible'
+  } else {
+    'overlay_window_runtime_missing'
+  }
+
+  return [ordered]@{
+    ready = $Ready
+    process_alive = $ProcessAlive
+    overlay_window_visible = $OverlayWindowVisible
+    always_on_top = $AlwaysOnTop
+    pid = $RuntimePid
+    pid_present = $PidPresent
+    status_path = $StatusPath
+    pid_path = $PidPath
+    runtime_state_exists = $RuntimeStateExists
+    runtime_status = $StatusValue
+    runtime_status_kind = $StatusKind
+    runtime_status_pid = $StatusPid
+    runtime_status_pid_matches_pid_file = ($StatusPid -gt 0 -and $StatusPid -eq $RuntimePid)
+    requirement_state = $RequirementState
+    blocker = $Blocker
   }
 }
 
@@ -458,6 +606,8 @@ $ConfigReason = if ($ConfigError) {
 }
 $DataRoot = Get-DataRoot -Override $DataDir
 $ResidentHostProcessReadback = Get-HostProcessReadback -Root $DataRoot
+$TrayRuntimeReadback = Get-TrayRuntimeReadback -Root $DataRoot
+$OverlayRuntimeReadback = Get-OverlayRuntimeReadback -Root $DataRoot
 $HotkeyRuntimeReadback = Get-HotkeyRuntimeReadback -Root $DataRoot -ExpectedHotkey $GlobalHotkey -ExpectedBindingScope $BindingScope
 
 $HostPreflightPath = Join-Path $RepoRoot $HostPreflight
@@ -479,8 +629,8 @@ Add-Check -Target $Checks -Id 'hotkey_runtime' -Status $(if ([bool]$HotkeyRuntim
 Add-Check -Target $Checks -Id 'host_preflight' -Status $(if ($HostPreflightExists) { 'present' } else { 'missing' }) -Reason $(if ($HostPreflightExists) { 'host lifecycle preflight is present' } else { 'host lifecycle preflight is missing' }) -Evidence $HostPreflight
 Add-Check -Target $Checks -Id 'host_status_runner' -Status $(if ($HostStatusRunnerExists) { 'present' } else { 'missing' }) -Reason $(if ($HostStatusRunnerExists) { 'host status runner is present' } else { 'host status runner is missing' }) -Evidence $HostStatusRunner
 Add-Check -Target $Checks -Id 'palette_route' -Status 'declared' -Reason 'summon target route is declared for later UI/host binding' -Evidence $PaletteRoute
-Add-Check -Target $Checks -Id 'overlay_window' -Status $(if ($OverlayRequired) { 'missing' } else { 'not_required' }) -Reason 'resident overlay window is not implemented' -Evidence 'overlay_required'
-Add-Check -Target $Checks -Id 'tray_presence' -Status $(if ($TrayRequired) { 'missing' } else { 'not_required' }) -Reason 'tray or equivalent presence is not implemented' -Evidence 'tray_required'
+Add-Check -Target $Checks -Id 'overlay_window' -Status $(if ([bool]$OverlayRuntimeReadback.ready) { 'running' } elseif ($OverlayRequired) { 'missing' } else { 'not_required' }) -Reason $(if ([bool]$OverlayRuntimeReadback.ready) { 'overlay window runtime reports visible topmost overlay' } else { 'resident overlay window is not live' }) -Evidence 'data/runtime/lens-overlay/status.json'
+Add-Check -Target $Checks -Id 'tray_presence' -Status $(if ([bool]$TrayRuntimeReadback.ready) { 'running' } elseif ($TrayRequired) { 'missing' } else { 'not_required' }) -Reason $(if ([bool]$TrayRuntimeReadback.ready) { 'tray runtime reports visible tray presence' } else { 'tray or equivalent presence is not live' }) -Evidence 'data/runtime/lens-tray/status.json'
 Add-Check -Target $Checks -Id 'summon_authority' -Status $(if ($SummonAuthority) { 'allowed' } else { 'blocked' }) -Reason 'summon authority is not granted by this Stage 6 preflight' -Evidence 'summon_authority'
 Add-Check -Target $Checks -Id 'hotkey_registration_authority' -Status $(if ($HotkeyRegistrationAuthority) { 'allowed' } else { 'blocked' }) -Reason 'hotkey registration authority is not granted' -Evidence 'hotkey_registration_authority'
 
@@ -494,8 +644,8 @@ if (-not $BindingEnabled) { [void]$Blockers.Add('global_hotkey_binding_disabled'
 if (-not $RegisterHotkey) { [void]$Blockers.Add('global_hotkey_registration_disabled') }
 if (-not $HostPreflightExists) { [void]$Blockers.Add('lens_host_lifecycle_preflight_missing') }
 if (-not $HostStatusRunnerExists) { [void]$Blockers.Add('lens_host_status_runner_missing') }
-if ($OverlayRequired) { [void]$Blockers.Add('overlay_window_missing') }
-if ($TrayRequired) { [void]$Blockers.Add('tray_host_missing') }
+if ($OverlayRequired -and -not [bool]$OverlayRuntimeReadback.ready) { [void]$Blockers.Add('overlay_window_missing') }
+if ($TrayRequired -and -not [bool]$TrayRuntimeReadback.ready) { [void]$Blockers.Add('tray_host_missing') }
 if (-not $SummonAuthority) { [void]$Blockers.Add('summon_authority_not_granted') }
 if (-not $HotkeyRegistrationAuthority) { [void]$Blockers.Add('hotkey_registration_authority_not_granted') }
 if (-not $OverlayControlAuthority) { [void]$Blockers.Add('overlay_control_authority_not_granted') }
@@ -552,32 +702,46 @@ foreach ($Requirement in @($RequiredBeforeEnable)) {
             -AuthorityRequired 'resident_runtime_execution_authority'))
     }
     'tray_presence' {
-      $RequirementBlockers = if ($TrayRequired) { [string[]]@('tray_host_missing') } else { [string[]]@() }
-      [void]$RequiredBeforeEnableDependencies.Add((New-PrerequisiteReadback `
+      $TrayReady = (-not $TrayRequired) -or [bool]$TrayRuntimeReadback.ready
+      $RequirementBlockers = if (-not $TrayReady) { [string[]]@('tray_host_missing') } else { [string[]]@() }
+      $TrayDependency = New-PrerequisiteReadback `
             -Id 'tray_presence' `
             -Family 'tray_presence' `
-            -Ready (-not $TrayRequired) `
+            -Ready $TrayReady `
             -Blockers $RequirementBlockers `
             -Route '/lens/tray' `
             -ReadinessRoute '/lens/tray/readiness' `
             -ProofScript 'scripts/lens-summon-tray-presence-blocker-proof.ps1 -Mode Status' `
             -NextStep 'resolve_tray_presence_before_summon_enablement' `
             -NextSmallestTruthfulGap 'summon_overlay_window_blocker_boundary' `
-            -AuthorityRequired 'tray_registration_authority'))
+            -AuthorityRequired 'tray_registration_authority'
+      $TrayDependency.tray_runtime_readback = $TrayRuntimeReadback
+      $TrayDependency.runtime_ready = [bool]$TrayRuntimeReadback.ready
+      $TrayDependency.runtime_requirement_state = [string]$TrayRuntimeReadback.requirement_state
+      $TrayDependency.runtime_blocker = [string]$TrayRuntimeReadback.blocker
+      $TrayDependency.tray_presence_source = if ([bool]$TrayRuntimeReadback.ready) { 'live_runtime_readback' } else { 'not_observed' }
+      [void]$RequiredBeforeEnableDependencies.Add($TrayDependency)
     }
     'overlay_window' {
-      $RequirementBlockers = if ($OverlayRequired) { [string[]]@('overlay_window_missing') } else { [string[]]@() }
-      [void]$RequiredBeforeEnableDependencies.Add((New-PrerequisiteReadback `
+      $OverlayReady = (-not $OverlayRequired) -or [bool]$OverlayRuntimeReadback.ready
+      $RequirementBlockers = if (-not $OverlayReady) { [string[]]@('overlay_window_missing') } else { [string[]]@() }
+      $OverlayDependency = New-PrerequisiteReadback `
             -Id 'overlay_window' `
             -Family 'overlay_window' `
-            -Ready (-not $OverlayRequired) `
+            -Ready $OverlayReady `
             -Blockers $RequirementBlockers `
             -Route '/lens/overlay' `
             -ReadinessRoute '/lens/overlay/readiness' `
             -ProofScript 'scripts/lens-summon-overlay-window-blocker-proof.ps1 -Mode Status' `
             -NextStep 'resolve_overlay_window_before_summon_enablement' `
             -NextSmallestTruthfulGap 'summon_global_hotkey_binding_blocker_boundary' `
-            -AuthorityRequired 'overlay_control_authority'))
+            -AuthorityRequired 'overlay_control_authority'
+      $OverlayDependency.overlay_runtime_readback = $OverlayRuntimeReadback
+      $OverlayDependency.runtime_ready = [bool]$OverlayRuntimeReadback.ready
+      $OverlayDependency.runtime_requirement_state = [string]$OverlayRuntimeReadback.requirement_state
+      $OverlayDependency.runtime_blocker = [string]$OverlayRuntimeReadback.blocker
+      $OverlayDependency.overlay_window_source = if ([bool]$OverlayRuntimeReadback.ready) { 'live_runtime_readback' } else { 'not_observed' }
+      [void]$RequiredBeforeEnableDependencies.Add($OverlayDependency)
     }
     'global_hotkey_binding' {
       $RequirementBlockers = [System.Collections.ArrayList]::new()
@@ -675,6 +839,8 @@ $Payload = [ordered]@{
   first_blocker_family_handoff = $RecommendedHandoff
   enablement_dependency_readback = @($RequiredBeforeEnableDependencyArray)
   resident_host_process_readback = $ResidentHostProcessReadback
+  tray_runtime_readback = $TrayRuntimeReadback
+  overlay_runtime_readback = $OverlayRuntimeReadback
   hotkey_runtime_readback = $HotkeyRuntimeReadback
   global_hotkey = $GlobalHotkey
   binding_scope = $BindingScope
@@ -708,6 +874,8 @@ $Payload = [ordered]@{
     local_process_launch_authority = $false
     hotkey_registration_authority = $false
     hotkey_runtime_readback = $true
+    tray_runtime_readback = $true
+    overlay_runtime_readback = $true
     summon_runner_readback = $true
     required_before_enable_readback = $true
     resident_host_process_readback = $true

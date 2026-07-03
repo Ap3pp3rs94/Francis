@@ -464,6 +464,65 @@ Remaining truthful gap:
 - The next operator decision is singular: approve the summon enable flip and a
   live safe-target desktop bridge proof, or leave the proof in blocked status.
 
+### 2026-07-03 20:07Z - Summon preflight live overlay readback
+
+Current posture: Phase 2 / Orb embodiment Milestone 5 still remains blocked, but
+the summon prerequisite readback is now narrower and more truthful. The live
+overlay window is no longer reported as missing when its runtime state proves a
+visible topmost overlay.
+
+What changed:
+
+- `scripts/lens-summon-preflight.ps1` now reads live tray and overlay runtime
+  state from `data\runtime\lens-tray\status.json` and
+  `data\runtime\lens-overlay\status.json`.
+- The `overlay_window` required-before-enable dependency now becomes ready only
+  when a live `lens.overlay.runtime_state` process reports
+  `overlay_running`, `overlay_window_visible=true`, and `always_on_top=true`.
+- The `tray_presence` dependency now has the same runtime-readback contract used
+  by `scripts\lens-tray-presence.ps1`: matching live PID, `tray_running`, and
+  `tray_icon_visible=true`.
+- The preflight preserves the existing missing/blocker names for absent
+  prerequisites, but adds runtime readback details and source fields so the
+  proof can distinguish ready, stale, and missing states.
+
+Validation:
+
+- PowerShell parser validation passed for `scripts\lens-summon-preflight.ps1`.
+- `.venv\Scripts\python.exe -m pytest tests\test_lens_summon_preflight_script.py -q`
+  passed.
+- `.venv\Scripts\python.exe -m ruff check tests\test_lens_summon_preflight_script.py`
+  passed.
+- Live summon preflight now reports `overlay_ready=true`,
+  `overlay_state=visible_topmost`, and missing prerequisites
+  `resident_host_process,tray_presence,global_hotkey_binding,summon_binding`.
+- Default one-visible-loop proof wrote
+  `data\logs\operations\one_visible_loop\francis_one_visible_loop_proof_20260703_150706740.json`
+  with summon missing
+  `resident_host_process,tray_presence,global_hotkey_binding,summon_binding`,
+  `overlay_window_visible=true`, and action `status=blocked`.
+- Fixture safe-target one-visible-loop proof wrote
+  `data\logs\operations\one_visible_loop\francis_one_visible_loop_proof_20260703_150715329.json`
+  with action `status=passed`, `desktop_effect_confirmed=true`, and
+  `target_observer_status=confirmed_target_state_changed`.
+- Presentation demo proof integration wrote
+  `.francis\presentation\demos\francis-presentation-demo-20260703-200814.json`
+  with `ok=false`, failure `one_visible_loop_proof_blocked`,
+  action `status=passed`, `desktop_effect_confirmed=true`, and
+  `target_observer_status=confirmed_target_state_changed`.
+
+Remaining truthful gap:
+
+- Milestone 5 is still not accepted. The remaining summon blockers are resident
+  host process supervision, tray presence, global hotkey binding, and summon
+  binding.
+- Live runtime also shows stale/mismatched hotkey state: the persisted hotkey
+  runtime status still reports `Ctrl+Alt+Space` while summon config now expects
+  `Ctrl+Alt+F`. Do not treat summon-anywhere as ready until the runtime binding
+  is refreshed and proven under the new chord.
+- The final operator decision remains unchanged: Austin must approve the summon
+  enable flip and a live safe-target desktop bridge proof.
+
 ## 5. Known truthful gaps
 
 These still block any finished Orb embodiment claim:
@@ -484,9 +543,12 @@ These still block any finished Orb embodiment claim:
   `llama3.2:3b`. The primary `francis-chat` model remains unhealthy and should
   be repaired separately, but Milestone 4 replay proof is now present.
 - One visible loop: a repeatable proof gate now exists and proves fixture
-  safe-target desktop confirmation, but final acceptance remains blocked until
-  Austin approves summon enable and a live safe-target action, then verifies
-  receipt, trace, and status visibility in the chat/Lens UI.
+  safe-target desktop confirmation. The summon preflight now consumes live
+  overlay readback and no longer reports `overlay_window` as missing while the
+  overlay is visible/topmost. Final acceptance remains blocked by resident host,
+  tray presence, refreshed `Ctrl+Alt+F` hotkey binding, summon binding, Austin's
+  approval for the enable flip/live safe-target action, and chat/Lens UI
+  receipt/trace/status visibility.
 
 ## 6. Update rule
 

@@ -138,6 +138,8 @@ def test_lens_summon_preflight_reports_disabled_hotkey_without_authority() -> No
         "local_process_launch_authority": False,
         "hotkey_registration_authority": False,
         "hotkey_runtime_readback": True,
+        "tray_runtime_readback": True,
+        "overlay_runtime_readback": True,
         "summon_runner_readback": True,
         "required_before_enable_readback": True,
         "resident_host_process_readback": True,
@@ -231,6 +233,90 @@ def test_lens_summon_preflight_consumes_live_hotkey_runtime_readback(tmp_path: P
     assert payload["governance"]["hotkey_runtime_readback"] is True
     assert payload["governance"]["hotkey_registration_authority"] is False
     assert payload["governance"]["summon_authority"] is False
+
+
+def test_lens_summon_preflight_consumes_live_tray_runtime_readback(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    runtime_dir = data_dir / "runtime" / "lens-tray"
+    runtime_dir.mkdir(parents=True)
+    pid = os.getpid()
+    (runtime_dir / "lens-tray.pid").write_text(str(pid), encoding="utf-8")
+    (runtime_dir / "status.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.tray.runtime_state",
+                "status": "tray_running",
+                "pid": pid,
+                "tray_icon_visible": True,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    proc = _run_preflight("-Mode", "Status", "-DataDir", str(data_dir))
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    tray_runtime = payload["tray_runtime_readback"]
+    assert tray_runtime["ready"] is True
+    assert tray_runtime["tray_icon_visible"] is True
+    assert tray_runtime["requirement_state"] == "running"
+    assert tray_runtime["blocker"] == ""
+    dependencies = {item["id"]: item for item in payload["enablement_dependency_readback"]}
+    tray_dependency = dependencies["tray_presence"]
+    assert tray_dependency["ready"] is True
+    assert tray_dependency["blockers"] == []
+    assert tray_dependency["runtime_ready"] is True
+    assert tray_dependency["runtime_requirement_state"] == "running"
+    assert tray_dependency["runtime_blocker"] == ""
+    assert tray_dependency["tray_presence_source"] == "live_runtime_readback"
+    assert "tray_presence" not in payload["missing_required_before_enable"]
+    assert payload["blocker_groups"]["surface_dependencies"] == ["overlay_window_missing"]
+    checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["tray_presence"]["status"] == "running"
+
+
+def test_lens_summon_preflight_consumes_live_overlay_runtime_readback(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    runtime_dir = data_dir / "runtime" / "lens-overlay"
+    runtime_dir.mkdir(parents=True)
+    pid = os.getpid()
+    (runtime_dir / "lens-overlay.pid").write_text(str(pid), encoding="utf-8")
+    (runtime_dir / "status.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.overlay.runtime_state",
+                "status": "overlay_running",
+                "pid": pid,
+                "overlay_window_visible": True,
+                "always_on_top": True,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    proc = _run_preflight("-Mode", "Status", "-DataDir", str(data_dir))
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    overlay_runtime = payload["overlay_runtime_readback"]
+    assert overlay_runtime["ready"] is True
+    assert overlay_runtime["overlay_window_visible"] is True
+    assert overlay_runtime["always_on_top"] is True
+    assert overlay_runtime["requirement_state"] == "visible_topmost"
+    assert overlay_runtime["blocker"] == ""
+    dependencies = {item["id"]: item for item in payload["enablement_dependency_readback"]}
+    overlay_dependency = dependencies["overlay_window"]
+    assert overlay_dependency["ready"] is True
+    assert overlay_dependency["blockers"] == []
+    assert overlay_dependency["runtime_ready"] is True
+    assert overlay_dependency["runtime_requirement_state"] == "visible_topmost"
+    assert overlay_dependency["runtime_blocker"] == ""
+    assert overlay_dependency["overlay_window_source"] == "live_runtime_readback"
+    assert "overlay_window" not in payload["missing_required_before_enable"]
+    assert payload["blocker_groups"]["surface_dependencies"] == ["tray_host_missing"]
+    checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["overlay_window"]["status"] == "running"
 
 
 def test_lens_summon_preflight_refuses_bind_actions() -> None:
