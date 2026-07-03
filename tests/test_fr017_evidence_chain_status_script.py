@@ -934,11 +934,10 @@ def test_fr017_evidence_chain_status_blocks_on_completion_ledger_after_final_dec
     assert payload["status"] == "blocked_on_completion_ledger"
     assert payload["first_blocking_gate"] == "completion_ledger"
     assert payload["first_blocking_status"] == "pending_completion_ledger_entry"
-    assert payload["next_required_input"] == "FR-017-COMPLETION-LEDGER-HANDOFF-TEMPLATE.md"
-    assert (
-        payload["next_command"]
-        == "copy_and_complete_FR-017-COMPLETION-LEDGER-HANDOFF-TEMPLATE.md_with_operator_reviewed_final_decision_evidence"
+    assert payload["next_required_input"] == (
+        "scripts/fr017-new-completion-ledger-handoff.ps1 + FR-017-COMPLETION-LEDGER-HANDOFF-TEMPLATE.md"
     )
+    assert payload["next_command"] == "create_candidate_completion_ledger_handoff_then_rerun_completion_ledger_gate"
     assert payload["gates_ran"] == 11
     assert payload["gate_count"] == 11
     assert payload["gate_results"][9]["id"] == "final_decision_record"
@@ -951,6 +950,22 @@ def test_fr017_evidence_chain_status_blocks_on_completion_ledger_after_final_dec
     assert payload["gate_results"][10]["details"]["ledger_entry_review_ready"] is False
     assert payload["gate_results"][10]["details"]["missing_fields"] == ["ledger_entry_path"]
     assert payload["first_blocking_details"]["missing_fields"] == ["ledger_entry_path"]
+    assert payload["first_blocking_details"]["next_required_ledger_input"] == (
+        "create_candidate_completion_ledger_handoff_with_fr017-new-completion-ledger-handoff.ps1_then_rerun_completion_ledger_gate"
+    )
+    assert (
+        "fr017-new-completion-ledger-handoff.ps1"
+        in payload["first_blocking_details"]["completion_ledger_handoff_runbook_contract"]
+    )
+    assert payload["first_blocking_details"]["completion_ledger_handoff_template_path"].endswith(
+        "FR-017_Stage17_Package\\FR-017-COMPLETION-LEDGER-HANDOFF-TEMPLATE.md"
+    )
+    assert payload["first_blocking_details"]["completion_ledger_handoff_initializer_path"].endswith(
+        "scripts\\fr017-new-completion-ledger-handoff.ps1"
+    )
+    assert payload["first_blocking_details"]["completion_ledger_handoff_working_record_name_pattern"] == (
+        "FR-017-COMPLETION-LEDGER-HANDOFF-YYYY-MM-DD-PILOT.md"
+    )
     assert payload["evidence_chain_decision_ready"] is False
     assert payload["ledger_completion_review_ready"] is False
     assert payload["completion_ledger_handoff_ready"] is False

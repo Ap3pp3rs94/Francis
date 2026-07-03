@@ -30,7 +30,9 @@ $ErrorActionPreference = 'Stop'
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $FinalDecisionGateScript = Join-Path $PSScriptRoot 'fr017-final-decision-record-gate.ps1'
 $ExpectedFinalDecisionStatus = 'ready_for_completion_ledger_review'
-$ExpectedNextLedgerInput = 'copy_and_complete_FR-017-COMPLETION-LEDGER-HANDOFF-TEMPLATE.md_with_operator_reviewed_final_decision_evidence'
+$ExpectedNextLedgerInput = 'create_candidate_completion_ledger_handoff_with_fr017-new-completion-ledger-handoff.ps1_then_rerun_completion_ledger_gate'
+$CompletionLedgerHandoffInitializerPath = Join-Path $RepoRoot 'scripts\fr017-new-completion-ledger-handoff.ps1'
+$CompletionLedgerHandoffTemplatePath = Join-Path $RepoRoot 'FR-017_Stage17_Package\FR-017-COMPLETION-LEDGER-HANDOFF-TEMPLATE.md'
 
 function Resolve-GatePath {
   param([string]$Path)
@@ -272,6 +274,10 @@ $Output = [ordered]@{
   ledger_entry_read_ok = $LedgerEntryReadOk
   ledger_entry_review_ready = ($Status -eq 'ready_for_operator_completion_ledger_update')
   ledger_entry_contract = 'This gate validates a candidate FR-017 completion-ledger handoff after final decision readiness. It is read-only and does not write the ledger, certify physical validation, clear powered/frame/load use, or clear FR-018.'
+  completion_ledger_handoff_runbook_contract = 'Use scripts/fr017-new-completion-ledger-handoff.ps1 only to create a candidate completion-ledger handoff file from FR-017-COMPLETION-LEDGER-HANDOFF-TEMPLATE.md after final decision readiness. The initializer and this gate do not write docs/operations/COMPLETION_LEDGER.md, mark Stage 17 complete, or clear FR-018.'
+  completion_ledger_handoff_template_path = $CompletionLedgerHandoffTemplatePath
+  completion_ledger_handoff_initializer_path = $CompletionLedgerHandoffInitializerPath
+  completion_ledger_handoff_working_record_name_pattern = 'FR-017-COMPLETION-LEDGER-HANDOFF-YYYY-MM-DD-PILOT.md'
   missing_fields = @($MissingFields.ToArray())
   invalid_fields = @($InvalidFields.ToArray())
   prohibited_clearance_flags = @($ProhibitedClearanceFlags.ToArray())

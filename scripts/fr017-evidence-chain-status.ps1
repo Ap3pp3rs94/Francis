@@ -371,6 +371,10 @@ function New-GateEvidenceDetails {
     ledger_entry_read_ok = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['ledger_entry_read_ok']) { $false } else { [bool]$Payload.ledger_entry_read_ok }
     ledger_entry_review_ready = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['ledger_entry_review_ready']) { $false } else { [bool]$Payload.ledger_entry_review_ready }
     ledger_entry_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['ledger_entry_contract']) { '' } else { [string]$Payload.ledger_entry_contract }
+    completion_ledger_handoff_runbook_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['completion_ledger_handoff_runbook_contract']) { '' } else { [string]$Payload.completion_ledger_handoff_runbook_contract }
+    completion_ledger_handoff_template_path = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['completion_ledger_handoff_template_path']) { '' } else { [string]$Payload.completion_ledger_handoff_template_path }
+    completion_ledger_handoff_initializer_path = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['completion_ledger_handoff_initializer_path']) { '' } else { [string]$Payload.completion_ledger_handoff_initializer_path }
+    completion_ledger_handoff_working_record_name_pattern = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['completion_ledger_handoff_working_record_name_pattern']) { '' } else { [string]$Payload.completion_ledger_handoff_working_record_name_pattern }
     next_required_ledger_input = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['next_required_ledger_input']) { '' } else { [string]$Payload.next_required_ledger_input }
     next_actions = @(Get-PayloadArrayProperty -Payload $Payload -Name 'next_actions')
   }
@@ -507,7 +511,7 @@ $Gates = @(
   (New-GateDefinition -Id 'engineering_review' -ScriptName 'fr017-engineering-review-gate.ps1' -ReadyStatus 'ready_for_final_stage17_physical_gate_audit' -NextRequiredInput 'scripts/fr017-new-engineering-review-record.ps1 + FR-017-ENGINEERING-REVIEW-INPUT-TEMPLATE.json' -NextCommand 'create_professional_engineering_review_record_then_rerun_engineering_review_gate' -Arguments $EngineeringArgs.ToArray()),
   (New-GateDefinition -Id 'final_physical_gate' -ScriptName 'fr017-final-physical-gate.ps1' -ReadyStatus 'ready_for_stage17_final_physical_completion_decision' -NextRequiredInput 'scripts/fr017-new-final-decision-record.ps1 + FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json' -NextCommand 'create_human_final_decision_record_then_rerun_final_decision_record_gate' -Arguments $FinalArgs.ToArray()),
   (New-GateDefinition -Id 'final_decision_record' -ScriptName 'fr017-final-decision-record-gate.ps1' -ReadyStatus 'ready_for_completion_ledger_review' -NextRequiredInput 'scripts/fr017-new-final-decision-record.ps1 + FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json' -NextCommand 'create_human_final_decision_record_then_rerun_final_decision_record_gate' -Arguments $FinalDecisionArgs.ToArray()),
-  (New-GateDefinition -Id 'completion_ledger' -ScriptName 'fr017-completion-ledger-gate.ps1' -ReadyStatus 'ready_for_operator_completion_ledger_update' -NextRequiredInput 'FR-017-COMPLETION-LEDGER-HANDOFF-TEMPLATE.md' -NextCommand 'copy_and_complete_FR-017-COMPLETION-LEDGER-HANDOFF-TEMPLATE.md_with_operator_reviewed_final_decision_evidence' -Arguments $CompletionLedgerArgs.ToArray())
+  (New-GateDefinition -Id 'completion_ledger' -ScriptName 'fr017-completion-ledger-gate.ps1' -ReadyStatus 'ready_for_operator_completion_ledger_update' -NextRequiredInput 'scripts/fr017-new-completion-ledger-handoff.ps1 + FR-017-COMPLETION-LEDGER-HANDOFF-TEMPLATE.md' -NextCommand 'create_candidate_completion_ledger_handoff_then_rerun_completion_ledger_gate' -Arguments $CompletionLedgerArgs.ToArray())
 )
 
 $GateResults = New-Object System.Collections.Generic.List[object]
