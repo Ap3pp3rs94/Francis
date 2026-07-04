@@ -1401,7 +1401,7 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
             evidence: ["/lens/summon", "/lens/preflight", "/lens/status"],
             ready: false,
             summon_anywhere: false,
-            global_hotkey: "Ctrl+Alt+Space",
+            global_hotkey: "Ctrl+Alt+F",
             blockers: ["summon_authority_not_granted"],
             hotkey_registration_authority: false,
             summon_authority: false,
@@ -2511,7 +2511,7 @@ test("LensClient.getStatus reads the read-only Lens contract without authority c
     assert.equal(snapshot.stage6_readiness.criteria[5]?.service_control_authority, false);
     assert.equal(snapshot.stage6_readiness.criteria[6]?.id, "summon_enablement_gate");
     assert.equal(snapshot.stage6_readiness.criteria[6]?.summon_anywhere, false);
-    assert.equal(snapshot.stage6_readiness.criteria[6]?.global_hotkey, "Ctrl+Alt+Space");
+    assert.equal(snapshot.stage6_readiness.criteria[6]?.global_hotkey, "Ctrl+Alt+F");
     assert.equal(snapshot.stage6_readiness.criteria[6]?.hotkey_registration_authority, false);
     assert.equal(snapshot.stage6_readiness.criteria[7]?.id, "tray_enablement_gate");
     assert.equal(snapshot.stage6_readiness.criteria[7]?.tray_presence, false);

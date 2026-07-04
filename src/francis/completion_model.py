@@ -9,23 +9,35 @@ from francis.kernel.paths import repo_root
 
 COMPLETION_MODEL_STATUS_KIND = "francis.completion_model.status"
 COMPLETION_LEDGER_RELATIVE_PATH = "docs/operations/COMPLETION_LEDGER.md"
+COMPLETION_LEDGER_ARCHIVE_RELATIVE_DIR = "docs/operations/archive"
 BUILD_MANIFEST_RELATIVE_PATH = "docs/canonical/BUILD_MANIFEST.md"
 
 
 def completion_model_status_snapshot(
     *,
     ledger_path: Path | None = None,
+    ledger_archive_dir_path: Path | None = None,
     build_manifest_path: Path | None = None,
 ) -> dict[str, Any]:
     root = repo_root()
     resolved_ledger_path = ledger_path or root / COMPLETION_LEDGER_RELATIVE_PATH
+    resolved_ledger_archive_dir_path = ledger_archive_dir_path or root / COMPLETION_LEDGER_ARCHIVE_RELATIVE_DIR
     resolved_build_manifest_path = build_manifest_path or root / BUILD_MANIFEST_RELATIVE_PATH
     ledger_text = _read_text(resolved_ledger_path)
     build_manifest_text = _read_text(resolved_build_manifest_path)
     ledger_exists = resolved_ledger_path.is_file()
     build_manifest_exists = resolved_build_manifest_path.is_file()
+    archive_paths = (
+        _completion_ledger_archive_paths(resolved_ledger_archive_dir_path)
+        if ledger_path is None or ledger_archive_dir_path is not None
+        else []
+    )
     latest_ledger_entry = _latest_ledger_entry(ledger_text)
-    stage17_status = _stage17_status(ledger_text)
+    stage17_status = _stage17_status_with_archive_fallback(
+        ledger_text=ledger_text,
+        archive_paths=archive_paths,
+        root=root,
+    )
     loop_guard = _loop_guard(
         ledger_exists=ledger_exists,
         build_manifest_exists=build_manifest_exists,
@@ -50,6 +62,8 @@ def completion_model_status_snapshot(
         "grants_mutation_authority": False,
         "source_documents": {
             "completion_ledger": COMPLETION_LEDGER_RELATIVE_PATH,
+            "completion_ledger_archive": COMPLETION_LEDGER_ARCHIVE_RELATIVE_DIR,
+            "completion_ledger_archive_files": [_relative_to_repo(path, root=root) for path in archive_paths],
             "build_manifest": BUILD_MANIFEST_RELATIVE_PATH,
         },
         "current_phase": _current_phase(ledger_text=ledger_text, build_manifest_text=build_manifest_text),
@@ -347,6 +361,41 @@ def _stage17_status(ledger_text: str) -> dict[str, Any]:
         if latest_stage17_entry["has_remaining_truthful_gap"]
         else "name_stage17_remaining_truthful_gap_in_ledger",
     }
+
+
+def _stage17_status_with_archive_fallback(
+    *,
+    ledger_text: str,
+    archive_paths: list[Path],
+    root: Path,
+) -> dict[str, Any]:
+    status = _stage17_status(ledger_text)
+    status["archive_fallback_used"] = False
+    status["archive_source_documents"] = []
+    if status["found"]:
+        return status
+
+    archive_text = "\n\n".join(_read_text(path) for path in archive_paths)
+    archive_status = _stage17_status(archive_text)
+    archive_status["archive_fallback_used"] = bool(archive_status["found"])
+    archive_status["archive_source_documents"] = [_relative_to_repo(path, root=root) for path in archive_paths]
+    return archive_status
+
+
+def _completion_ledger_archive_paths(archive_dir_path: Path) -> list[Path]:
+    if not archive_dir_path.is_dir():
+        return []
+    return sorted(
+        (path for path in archive_dir_path.glob("COMPLETION_LEDGER*.md") if path.is_file()),
+        key=lambda path: path.name,
+    )
+
+
+def _relative_to_repo(path: Path, *, root: Path) -> str:
+    try:
+        return path.resolve().relative_to(root.resolve()).as_posix()
+    except ValueError:
+        return path.as_posix()
 
 
 def _is_stage17_ledger_entry(*, title: str, roadmap_area: str) -> bool:

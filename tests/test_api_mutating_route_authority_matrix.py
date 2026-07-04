@@ -10,9 +10,29 @@ from francis.api.mutation_authority_matrix import (
 )
 
 
+def _join_paths(prefix: str, path: str) -> str:
+    if not prefix:
+        return path
+    if path == "/":
+        return prefix
+    return f"{prefix.rstrip('/')}/{path.lstrip('/')}"
+
+
+def _iter_routes(routes: list[object], prefix: str = ""):
+    for route in routes:
+        original_router = getattr(route, "original_router", None)
+        include_context = getattr(route, "include_context", None)
+        if original_router is not None and include_context is not None:
+            include_prefix = str(getattr(include_context, "prefix", "") or "")
+            nested_prefix = _join_paths(prefix, include_prefix) if include_prefix else prefix
+            yield from _iter_routes(getattr(original_router, "routes", []), nested_prefix)
+            continue
+        yield route
+
+
 def _mutating_route_total() -> int:
     total = 0
-    for route in create_app().routes:
+    for route in _iter_routes(create_app().routes):
         if not isinstance(route, APIRoute):
             continue
         total += len([method for method in route.methods if method in MUTATING_METHODS])

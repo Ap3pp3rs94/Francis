@@ -132,7 +132,7 @@ def test_lens_summon_binding_blocker_proof_is_readback_only(tmp_path: Path) -> N
     assert boundary["ready"] is False
     assert boundary["summon_name"] == "Francis Lens Summon"
     assert boundary["config_path"] == "config/runtime/lens/summon.json"
-    assert boundary["global_hotkey"] == "Ctrl+Alt+Space"
+    assert boundary["global_hotkey"] == "Ctrl+Alt+F"
     assert boundary["binding_scope"] == "global"
     assert boundary["palette_route"] == "/lens/status"
     assert boundary["required_before_enable"] == [

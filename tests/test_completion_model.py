@@ -414,6 +414,71 @@ def test_completion_model_snapshot_keeps_stage17_gap_when_latest_entry_is_other_
     ]
 
 
+def test_completion_model_snapshot_uses_archive_when_main_ledger_is_compacted(tmp_path: Path) -> None:
+    ledger = tmp_path / "ledger.md"
+    ledger.write_text(
+        "\n".join(
+            [
+                "# Ledger",
+                "",
+                "Francis is in `Phase 2` per `docs/canonical/BUILD_MANIFEST.md`.",
+                "",
+                "### 2026-07-03 - Stage 6 current compact ledger entry",
+                "",
+                "Roadmap area: Stage 6 / Lens MVP and P9 observability.",
+                "",
+                "Remaining truthful gap:",
+                "",
+                "- Keep live Orb proof honest.",
+                "",
+                "## 6. Update rule",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    archive_dir = tmp_path / "archive"
+    archive_dir.mkdir()
+    archive_path = archive_dir / "COMPLETION_LEDGER_2026-06.md"
+    archive_path.write_text(
+        "\n".join(
+            [
+                "# FRANCIS - COMPLETION_LEDGER archive (2026-06)",
+                "",
+                "### 2026-06-20 - Stage 17 archived governed apply gap",
+                "",
+                "Roadmap area: Stage 17 / Capability Economy, archived proposal evidence.",
+                "",
+                "Remaining truthful gap:",
+                "",
+                "- Stage 17 remains open. Continue the archived governed apply queue.",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    manifest = tmp_path / "manifest.md"
+    manifest.write_text("# Manifest (Phase 2)\n", encoding="utf-8")
+
+    payload = completion_model_status_snapshot(
+        ledger_path=ledger,
+        ledger_archive_dir_path=archive_dir,
+        build_manifest_path=manifest,
+    )
+
+    assert payload["latest_ledger_entry"]["title"] == "2026-07-03 - Stage 6 current compact ledger entry"
+    assert payload["stage17_status"]["found"] is True
+    assert payload["stage17_status"]["status"] == "open"
+    assert payload["stage17_status"]["archive_fallback_used"] is True
+    assert payload["stage17_status"]["latest_ledger_entry"]["title"] == (
+        "2026-06-20 - Stage 17 archived governed apply gap"
+    )
+    assert payload["next_continue_decision"]["selected_gap_source"] == "stage17_latest_ledger_entry"
+    assert payload["next_continue_decision"]["next_smallest_truthful_gap"] == (
+        "- Stage 17 remains open. Continue the archived governed apply queue."
+    )
+    expected_archive_source = archive_path.resolve().relative_to(Path.cwd().resolve()).as_posix()
+    assert expected_archive_source in payload["stage17_status"]["archive_source_documents"]
+
+
 def test_completion_model_status_route_is_mounted_and_read_only() -> None:
     client = TestClient(create_app())
 

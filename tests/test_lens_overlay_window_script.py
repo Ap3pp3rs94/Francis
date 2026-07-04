@@ -93,7 +93,7 @@ def test_lens_overlay_window_status_reports_missing_runtime(tmp_path: Path) -> N
     assert payload["orb_visual"]["motion_profile"] == "right_corner_locked"
     assert payload["orb_visual"]["manual_drag_supported"] is False
     assert payload["orb_visual"]["desktop_roam_supported"] is False
-    assert payload["orb_visual"]["desktop_roam_bounds"] == "work_area"
+    assert payload["orb_visual"]["desktop_roam_bounds"] == "virtual_screen"
     assert payload["orb_visual"]["render_profile"]["source"] == "wpf_render_capability"
     assert payload["orb_visual"]["render_profile"]["motion_integrator"] == "elapsed_time_delta_clamped"
     assert payload["overlay_position"]["status"] == "window_unavailable"
@@ -710,19 +710,36 @@ def test_lens_overlay_voice_orb_position_command_is_local_and_bounded() -> None:
     assert "$HasMoveVerb = $Words -contains 'move'" in script
     assert "$Words -contains 'go'" in script
     assert "$Words -contains 'slide'" in script
-    assert "$Result.command = 'move_orb_{0}_side' -f $TargetSide" in script
+    assert "$MoveTop = $Words -contains 'top' -or $Words -contains 'upper'" in script
+    assert "$MoveBottom = $Words -contains 'bottom' -or $Words -contains 'lower'" in script
+    assert "$HasHorizontalDirection = ($MoveLeft -or $MoveRight) -and ($MoveLeft -ne $MoveRight)" in script
+    assert "$HasVerticalDirection = ($MoveTop -or $MoveBottom) -and ($MoveTop -ne $MoveBottom)" in script
+    assert (
+        "$TargetCorner = if (-not [string]::IsNullOrWhiteSpace($TargetSide) -and -not [string]::IsNullOrWhiteSpace($TargetVertical))"
+        in script
+    )
+    assert "$Result.command = 'move_orb_{0}_{1}' -f $TargetToken, $TargetKind" in script
+    assert "$Result.target_vertical = $TargetVertical" in script
+    assert "$Result.target_corner = $TargetCorner" in script
     assert "$Result.reference_type = $ReferenceType" in script
     assert "function Set-OrbWindowSidePosition" in script
+    assert "function Get-OrbCommandTargetCoordinate" in script
+    assert "$HasVerticalTarget = $TargetVertical -in @('top', 'bottom')" in script
+    assert "[double]$WorkArea.Top + $Margin" in script
+    assert "[double]$WorkArea.Right - $Margin" in script
     assert "Clamp-OverlayDouble -Value ($MinimumLeft + $Margin)" in script
     assert "Clamp-OverlayDouble -Value ($MaximumLeft - $Margin)" in script
     assert "function Invoke-OverlayVoiceOrbCommand" in script
     assert "$Payload.status = 'orb_voice_command_applied'" in script
+    assert "$Payload.status = 'orb_voice_command_travel_started'" in script
     assert "$Payload.overlay_position_command_source = $CommandSource" in script
     assert (
         "$Payload.orb_command_reference_type = Get-StringProperty -Payload $Command -Name 'reference_type' -Default ''"
         in script
     )
     assert "$Payload.overlay_position_command_request_id = $EffectiveCommandRequestId" in script
+    assert "$Payload.target_vertical = $TargetVertical" in script
+    assert "$Payload.target_corner = $TargetCorner" in script
     assert "$Payload.direct_francis_address_detected = [bool]$IsDirectFrancisAddressCommand" in script
     assert "microphone_direct_francis_address" in script
     assert "$Payload.microphone_speech = (-not [bool]$IsBridgeFileCommand)" in script
@@ -736,6 +753,10 @@ def test_lens_overlay_voice_orb_position_command_is_local_and_bounded() -> None:
     assert "$Payload.mutation_authority_scope = 'runtime_overlay_position_only'" in script
     assert "$Payload.grants_execution_authority = $false" in script
     assert "$Payload.grants_mutation_authority = $false" in script
+    assert "Start-OrbWindowCoordinateTravel `" in script
+    assert "-Request $CommandReceiptRequest" in script
+    assert "target_vertical = $TargetVertical" in script
+    assert "target_corner = $TargetCorner" in script
     assert "$script:LensOverlayOperatorPositionAnchor = $TargetAnchor" in script
     assert "Reset-OrbAutonomousMotionAnchor -Window $Window -MotionState $MotionState" in script
     assert "Write-OverlayPositionState -Root $Root -Window $Window -MotionState $MotionState" in script
@@ -762,12 +783,384 @@ def test_lens_overlay_voice_orb_position_command_is_local_and_bounded() -> None:
         "microphone_recognition_claimed = Get-BoolProperty -Payload $Result -Name 'microphone_recognition_claimed'"
         in script
     )
-    assert "client_origin = 'local_overlay_speech_recognition'" in script
+    assert (
+        "$ReceiptClientOrigin = if ($IsBridgeFileCommand) { 'chatgpt_voice_bridge_file_request' } else { 'local_overlay_speech_recognition' }"
+        in script
+    )
     assert "Write-OverlayOrbPositionCommandReceipt -Root $Root -RequestId $RequestId" in script
     assert "Remove-OverlayOrbPositionCommandRequest -Root $Root -Path $RequestPath" in script
     assert "$CommandTimer = New-Object System.Windows.Threading.DispatcherTimer" in script
     assert "Invoke-OverlayQueuedOrbPositionCommand -Root $script:LensOverlayDataRoot" in script
     assert "voice_position_command_active" in script
+
+
+def test_lens_overlay_orb_move_place_mode_is_one_shot_bounded_and_receipted() -> None:
+    script = (_repo_root() / "scripts" / "lens-overlay-window.ps1").read_text(encoding="utf-8")
+
+    assert "[int]$OrbMovePlaceTimeoutSeconds = 12" in script
+    assert "function Invoke-OverlayOrbMovePlaceMode" in script
+    assert "$AuthorityScope -ne 'runtime_overlay_position_only'" in script
+    assert "$CommandId -eq 'orb.move' -and $CaptureMode -eq 'one_shot_click'" in script
+    assert "Remove-OverlayOrbPositionCommandRequest -Root $Root -Path $RequestPath" in script
+    assert "$CaptureWindow = New-Object System.Windows.Window" in script
+    assert "LensOverlayOrbMoveCaptureWindow" in script
+    assert "status = 'orb_move_place_already_armed'" in script
+    assert "$CaptureWindow.AllowsTransparency = $true" in script
+    assert "$CaptureWindow.TopMost = $true" in script
+    assert "$CaptureWindow.Owner = $Window" in script
+    assert "$CaptureWindow.Cursor = [System.Windows.Input.Cursors]::Cross" in script
+    assert "$TimeoutTimer = New-Object System.Windows.Threading.DispatcherTimer" in script
+    assert "cancel_reason = 'timeout'" in script
+    assert "$CaptureWindow.Add_KeyDown" in script
+    assert "[System.Windows.Input.Key]::Escape" in script
+    assert "cancel_reason = 'escape'" in script
+    assert "$CaptureRoot.Add_MouseRightButtonDown" in script
+    assert "cancel_reason = 'right_click'" in script
+    assert "$CaptureRoot.Add_MouseLeftButtonDown" in script
+    assert "$script:LensOverlayOrbMovePlaceModeHandled = $true" in script
+    assert "function Dismiss-OverlayOrbMoveCaptureWindow" in script
+    assert "$script:LensOverlayOrbMoveCaptureWindow.Hide()" in script
+    assert "Dismiss-OverlayOrbMoveCaptureWindow" in script
+    assert "$script:LensOverlayOrbMoveCaptureTimeoutTimer.Dispose()" not in script
+    assert "$ActiveTimer.Dispose()" not in script
+    assert "function Start-OrbWindowCoordinateTravel" in script
+    assert "[System.Windows.Media.CompositionTarget]::add_Rendering($Handler)" in script
+    assert "[System.Windows.Media.CompositionTarget]::remove_Rendering($RenderingHandler)" in script
+    assert "$Ease = ($Progress * $Progress * $Progress)" in script
+    assert "320 + ($Distance * 0.95)" in script
+    assert "travel_timing_source = 'composition_rendering'" in script
+    assert "travel_easing = 'smootherstep'" in script
+    assert "Get-Variable -Name LensOverlayOperatorPositionAnchor -Scope Script" in script
+    assert "if (-not [string]::IsNullOrWhiteSpace($OperatorAnchor))" in script
+    assert (
+        "Start-OrbWindowCoordinateTravel -Window $Context['window'] -WorkArea $Context['work_area'] -X $TargetX -Y $TargetY"
+        in script
+    )
+    assert "overlay_position_anchor = $ContextTargetAnchor" in script
+    assert "status = 'orb_move_place_travel_started'" in script
+    assert "status = 'orb_move_place_applied'" in script
+    assert "travelled_to_target = $true" in script
+    assert "travel_started = Get-BoolProperty -Payload $Travel -Name 'ok' -Default $false" in script
+    assert (
+        "Write-OverlayOrbPositionCommandReceipt -Root ([string]$Context['root']) -RequestId ([string]$Context['request_id']) -Request $Context['request'] -Result $Result"
+        in script
+    )
+    assert (
+        "receipt_kind = Get-StringProperty -Payload $Request -Name 'receipt_kind' -Default 'overlay_position'" in script
+    )
+    assert "authority_scope = $AuthorityScope" in script
+    assert "trigger_carries_authority = Get-BoolProperty -Payload $Request -Name 'trigger_carries_authority'" in script
+    assert "controls_user_os_cursor = $false" in script
+    assert "physical_input_performed = $false" in script
+    assert "desktop_effect_performed = $false" in script
+    assert "grants_execution_authority = $false" in script
+    assert "grants_mutation_authority = $false" in script
+    assert "[void]$CaptureWindow.Show()" in script
+    assert "$CaptureWindow.Add_Closed({" in script
+    assert "param($Sender, $EventArgs)" in script
+    assert "status = 'orb_move_place_armed'" in script
+    assert "[void]$CaptureWindow.ShowDialog()" not in script
+    assert "$Application.ShutdownMode = [System.Windows.ShutdownMode]::OnExplicitShutdown" in script
+    assert "$Application.MainWindow = $Form" in script
+    assert "$Form.Add_Closed({" in script
+    assert "$script:LensOverlayApplication.Shutdown()" in script
+    assert "$Form.Width = [double]$Screen.Width" in script
+    assert "$Form.Height = [double]$Screen.Height" in script
+    assert "$OverlayRoot = New-Object System.Windows.Controls.Canvas" in script
+    assert "New-OrbEnergySurface -Size $OrbSize -HitBoxSize $OrbHitBoxSize" in script
+    assert "function Register-OverlayOrbHitTestHook" in script
+    assert "$OrbClickTarget.Add_MouseRightButtonDown({" in script
+    assert "$script:LensOverlayWindow.DragMove()" not in script
+    assert "full_screen_overlay_orb_offset" in script
+    assert "click_hit_box_scope = 'orb_core_only'" in script
+    assert "hit_test_passthrough_outside_click_box_enabled = $HitTestPassthroughEnabled" in script
+
+
+@pytest.mark.skipif(os.name != "nt", reason="WPF travel probe requires Windows")
+def test_lens_overlay_orb_coordinate_travel_moves_over_render_frames() -> None:
+    powershell = shutil.which("powershell")
+    if powershell is None:
+        pytest.skip("Windows PowerShell is not available")
+
+    overlay_script = _repo_root() / "scripts" / "lens-overlay-window.ps1"
+    probe = f"""
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName PresentationFramework
+Add-Type -AssemblyName PresentationCore
+Add-Type -AssemblyName WindowsBase
+$scriptPath = @'
+{overlay_script}
+'@
+$tokens = $null
+$errors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile($scriptPath, [ref]$tokens, [ref]$errors)
+if ($errors.Count -gt 0) {{ throw ($errors[0].ToString()) }}
+$wanted = @(
+  'Clamp-OverlayDouble',
+  'Get-OrbHitBoxSize',
+  'Test-OrbFullScreenOverlayPlane',
+  'Get-OrbInWindowOffsetX',
+  'Get-OrbInWindowOffsetY',
+  'Set-OrbInWindowOffset',
+  'Get-OrbWindowPlacementForTarget',
+  'Reset-OrbAutonomousMotionAnchor',
+  'Start-OrbWindowCoordinateTravel'
+)
+$functionAsts = $ast.FindAll({{ param($Node) $Node -is [System.Management.Automation.Language.FunctionDefinitionAst] }}, $true)
+foreach ($name in $wanted) {{
+  $functionAst = @($functionAsts | Where-Object {{ $_.Name -eq $name }} | Select-Object -First 1)
+  if ($functionAst.Count -eq 0) {{ throw "Missing function $name" }}
+  Invoke-Expression $functionAst[0].Extent.Text
+}}
+$script:LensOverlayOrbMoveTravelRenderingHandler = $null
+$script:LensOverlayOrbMoveTravelContext = $null
+$script:LensOverlayOrbMovePlaceModeResult = $null
+$window = New-Object System.Windows.Window
+$window.Width = 80
+$window.Height = 80
+$window.Left = 10
+$window.Top = 20
+$window.ShowInTaskbar = $false
+$window.WindowStyle = [System.Windows.WindowStyle]::None
+$window.Opacity = 0.05
+$workArea = [pscustomobject]@{{ Left = 0.0; Top = 0.0; Right = 800.0; Bottom = 600.0; Width = 800.0; Height = 600.0 }}
+$motion = [ordered]@{{ anchor_left = 10.0; anchor_top = 20.0; phase = 0.0; last_frame_seconds = -1.0 }}
+try {{
+  $window.Show()
+  $result = Start-OrbWindowCoordinateTravel -Window $window -WorkArea $workArea -X 520 -Y 420 -MotionState $motion -TargetAnchor 'probe' -Root '' -RequestId 'probe' -DurationMilliseconds 520
+  $postStartLeft = [double]$window.Left
+  $postStartTop = [double]$window.Top
+  $frames = [System.Collections.ArrayList]::new()
+  for ($i = 0; $i -lt 100; $i++) {{
+    $frame = New-Object System.Windows.Threading.DispatcherFrame
+    $timer = New-Object System.Windows.Threading.DispatcherTimer
+    $timer.Interval = [TimeSpan]::FromMilliseconds(16)
+    $timer.Add_Tick({{ param($Sender, $EventArgs) $Sender.Stop(); $frame.Continue = $false }})
+    $timer.Start()
+    [System.Windows.Threading.Dispatcher]::PushFrame($frame)
+    [void]$frames.Add([pscustomobject]@{{ left = [double]$window.Left; top = [double]$window.Top; active = ($null -ne $script:LensOverlayOrbMoveTravelRenderingHandler) }})
+    if ($null -eq $script:LensOverlayOrbMoveTravelRenderingHandler) {{ break }}
+  }}
+  $final = $script:LensOverlayOrbMovePlaceModeResult
+  $expectedLeft = 480.0
+  $expectedTop = 380.0
+  $intermediate = @($frames | Where-Object {{ $_.left -gt 10.5 -and $_.left -lt ($expectedLeft - 0.5) -and $_.top -gt 20.5 -and $_.top -lt ($expectedTop - 0.5) }})
+  if (-not [bool]$result.ok) {{ throw 'travel did not start' }}
+  if ([Math]::Abs($postStartLeft - $expectedLeft) -le 0.75 -and [Math]::Abs($postStartTop - $expectedTop) -le 0.75) {{ throw 'travel landed immediately' }}
+  if ($intermediate.Count -lt 1) {{ throw 'no intermediate travel frame observed' }}
+  if ($null -eq $final -or -not [bool]$final.ok) {{ throw 'final travel result missing' }}
+  if ([Math]::Abs(([double]$final.overlay_left) - $expectedLeft) -gt 0.75 -or [Math]::Abs(([double]$final.overlay_top) - $expectedTop) -gt 0.75) {{ throw 'final travel position mismatch' }}
+  [pscustomobject]@{{
+    started_status = $result.status
+    post_start_at_final = ([Math]::Abs($postStartLeft - $expectedLeft) -le 0.75 -and [Math]::Abs($postStartTop - $expectedTop) -le 0.75)
+    frame_count = $frames.Count
+    intermediate_count = $intermediate.Count
+    final_status = $final.status
+    final_left = [double]$final.overlay_left
+    final_top = [double]$final.overlay_top
+    timing_source = $final.travel_timing_source
+    easing = $final.travel_easing
+  }} | ConvertTo-Json -Depth 4
+}} finally {{
+  if ($null -ne $window) {{ $window.Close() }}
+}}
+"""
+    proc = subprocess.run(
+        [powershell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Sta", "-Command", probe],
+        cwd=_repo_root(),
+        check=False,
+        text=True,
+        capture_output=True,
+        timeout=30,
+    )
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = json.loads(proc.stdout)
+    assert payload["started_status"] == "orb_move_place_travel_started"
+    assert payload["post_start_at_final"] is False
+    assert payload["frame_count"] >= 2
+    assert payload["intermediate_count"] >= 1
+    assert payload["final_status"] == "orb_move_place_applied"
+    assert payload["final_left"] == pytest.approx(480.0, abs=0.75)
+    assert payload["final_top"] == pytest.approx(380.0, abs=0.75)
+    assert payload["timing_source"] == "composition_rendering"
+    assert payload["easing"] == "smootherstep"
+
+
+@pytest.mark.skipif(os.name != "nt", reason="WPF coordinate probe requires Windows")
+def test_lens_overlay_orb_edge_reach_uses_in_window_offset() -> None:
+    powershell = shutil.which("powershell")
+    if powershell is None:
+        pytest.skip("Windows PowerShell is not available")
+
+    overlay_script = _repo_root() / "scripts" / "lens-overlay-window.ps1"
+    probe = f"""
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName PresentationFramework
+Add-Type -AssemblyName PresentationCore
+Add-Type -AssemblyName WindowsBase
+$scriptPath = @'
+{overlay_script}
+'@
+$tokens = $null
+$errors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile($scriptPath, [ref]$tokens, [ref]$errors)
+if ($errors.Count -gt 0) {{ throw ($errors[0].ToString()) }}
+$wanted = @(
+  'Clamp-OverlayDouble',
+  'Get-OrbHitBoxSize',
+  'Test-OrbFullScreenOverlayPlane',
+  'Get-OrbInWindowOffsetX',
+  'Get-OrbInWindowOffsetY',
+  'Set-OrbInWindowOffset',
+  'Get-OrbWindowPlacementForTarget',
+  'Reset-OrbAutonomousMotionAnchor',
+  'Set-OrbWindowCoordinatePosition'
+)
+$functionAsts = $ast.FindAll({{ param($Node) $Node -is [System.Management.Automation.Language.FunctionDefinitionAst] }}, $true)
+foreach ($name in $wanted) {{
+  $functionAst = @($functionAsts | Where-Object {{ $_.Name -eq $name }} | Select-Object -First 1)
+  if ($functionAst.Count -eq 0) {{ throw "Missing function $name" }}
+  Invoke-Expression $functionAst[0].Extent.Text
+}}
+$script:LensOverlayEnergyRoot = $null
+$script:LensOverlayOrbWindowOffsetTransform = $null
+$script:LensOverlayOrbInWindowOffsetX = 0.0
+$script:LensOverlayOrbInWindowOffsetY = 0.0
+$script:LensOverlayOrbHitBoxSize = 72.0
+$window = New-Object System.Windows.Window
+$window.Width = 800
+$window.Height = 600
+$window.Left = 0
+$window.Top = 0
+$workArea = [pscustomobject]@{{ Left = 0.0; Top = 0.0; Right = 800.0; Bottom = 600.0; Width = 800.0; Height = 600.0 }}
+$motion = [ordered]@{{ anchor_left = 400.0; anchor_top = 300.0; phase = 0.0; last_frame_seconds = -1.0; full_screen_overlay_plane = $true }}
+$result = Set-OrbWindowCoordinatePosition -Window $window -WorkArea $workArea -X 0 -Y 0 -MotionState $motion -TargetAnchor 'edge_probe' -Root ''
+[pscustomobject]@{{
+  applied = [bool]$result.applied
+  left = [double]$result.left
+  top = [double]$result.top
+  orb_center_x = [double]$result.orb_center_x
+  orb_center_y = [double]$result.orb_center_y
+  offset_x = [double]$result.orb_in_window_offset_x
+  offset_y = [double]$result.orb_in_window_offset_y
+  offset_applied = [bool]$result.in_window_offset_applied
+  target_reachable = [bool]$result.target_reachable_by_orb_center
+  window_clamped = [bool]$result.window_clamped
+  full_screen_overlay_plane = [bool]$result.full_screen_overlay_plane
+  overlay_window_stationary = [bool]$result.overlay_window_stationary
+  click_hit_box_size = [double]$result.click_hit_box_size
+  click_hit_box_scope = [string]$result.click_hit_box_scope
+  reach_mode = [string]$result.reach_mode
+}} | ConvertTo-Json -Depth 4
+"""
+    proc = subprocess.run(
+        [powershell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Sta", "-Command", probe],
+        cwd=_repo_root(),
+        check=False,
+        text=True,
+        capture_output=True,
+        timeout=30,
+    )
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = json.loads(proc.stdout)
+    assert payload["applied"] is True
+    assert payload["left"] == pytest.approx(0.0, abs=0.75)
+    assert payload["top"] == pytest.approx(0.0, abs=0.75)
+    assert payload["orb_center_x"] == pytest.approx(0.0, abs=0.75)
+    assert payload["orb_center_y"] == pytest.approx(0.0, abs=0.75)
+    assert payload["offset_x"] == pytest.approx(-400.0, abs=0.75)
+    assert payload["offset_y"] == pytest.approx(-300.0, abs=0.75)
+    assert payload["offset_applied"] is True
+    assert payload["target_reachable"] is True
+    assert payload["window_clamped"] is False
+    assert payload["full_screen_overlay_plane"] is True
+    assert payload["overlay_window_stationary"] is True
+    assert payload["click_hit_box_size"] == pytest.approx(72.0, abs=0.1)
+    assert payload["click_hit_box_scope"] == "orb_core_only"
+    assert payload["reach_mode"] == "full_screen_overlay_orb_offset"
+
+
+def test_lens_overlay_orb_right_click_panel_controls_and_chat_are_receipted() -> None:
+    script = (_repo_root() / "scripts" / "lens-overlay-window.ps1").read_text(encoding="utf-8")
+
+    assert "function New-OverlayOrbRightClickPanel" in script
+    assert "function Show-OverlayOrbRightClickPanel" in script
+    assert "function Set-OverlayOrbFeatureToggle" in script
+    assert "function Invoke-OverlayOrbPanelChatSubmit" in script
+    assert "$OrbClickTarget.Add_MouseRightButtonDown({" in script
+    assert "Show-OverlayOrbRightClickPanel -PlacementTarget $Sender" in script
+    assert "$Popup = New-Object System.Windows.Controls.Primitives.Popup" in script
+    assert "$Popup.Placement = [System.Windows.Controls.Primitives.PlacementMode]::MousePoint" in script
+    assert "$Popup.StaysOpen = $false" in script
+    assert "$Border.Width = 292" in script
+    assert "$Border.MaxHeight = 268" in script
+    assert "$Input.MaxLength = 600" in script
+    assert "Francis Orb" in script
+    assert "Listen" in script
+    assert "PTT" in script
+    assert "LLM" in script
+    assert "Drift" in script
+    assert "Receipted Orb chat. Hold Ctrl+V for push-to-talk." in script
+    assert "conversation_surface = 'lens.overlay.orb.right_click_chat'" in script
+    assert "chat_bridge_route = '/chat/send'" in script
+    assert "chat_bridge_actor = 'lens.overlay.voice'" in script
+    assert "voice_reply_requested = $true" in script
+    assert "orb-controls" in script
+    assert "kind = 'lens.overlay.orb_control.receipt'" in script
+    assert "-Action 'panel_open'" in script
+    assert "trigger = 'right_click'" in script
+    assert "-Action 'feature_toggle'" in script
+    assert "wake_listen" in script
+    assert "continuous_voice_chat" in script
+    assert "voice_llm" in script
+    assert "ambient_motion" in script
+    assert "Start-OverlayWakeListener -Root $script:LensOverlayDataRoot" in script
+    assert "RecognizeAsyncCancel()" in script
+    assert "Start-OrbFrameSyncedMotion -Window $script:LensOverlayWindow" in script
+    assert "Stop-OrbFrameSyncedMotion -Subscription $MotionSubscription" in script
+    assert "SyntheticVoiceTurn" in script
+    assert "New-OverlayVoiceTextFile -Root $script:LensOverlayDataRoot -Text $BoundedText" in script
+    assert "Remove-OverlayVoiceTextFile -Root $DataRoot -TextPath $VoiceTextPath" in script
+    assert "chat_input_hash = Get-OverlayTextDigest -Text $BoundedText" in script
+    assert "chat_text_redacted = $true" in script
+    assert "overlay_stores_transcript = $false" in script
+    assert "synthetic_voice_turn = $true" in script
+    assert "speech_output_owner = 'lens.overlay'" in script
+    assert "text_file_retention = 'transient_deleted_by_synthetic_voice_turn'" in script
+    assert "orb_controls = Get-OverlayOrbControlReadback" in script
+    assert "grants_execution_authority = $false" in script
+    assert "grants_mutation_authority = $false" in script
+    assert "controls_user_os_cursor = $false" in script
+    assert "physical_input_performed = $false" in script
+    assert "desktop_effect_performed = $false" in script
+    assert "ShowDialog()" not in script
+
+
+def test_lens_overlay_voice_chat_falls_back_when_llm_bridge_is_slow() -> None:
+    script = (_repo_root() / "scripts" / "lens-overlay-window.ps1").read_text(encoding="utf-8")
+
+    assert "function Invoke-OverlayVoiceChatBridgeRequest" in script
+    assert "function Get-OverlayContinuousVoiceTurnGuard" in script
+    assert "MaxPendingSeconds = 90" in script
+    assert "$Status -in @('chat_pending', 'speaking')" in script
+    assert "voice_input_suppressed_pending_turn" in script
+    assert "pending_voice_turn_guard = $true" in script
+    assert "conversation_forwarding_suppressed = $true" in script
+    assert "$PrimaryTimeoutSeconds = if ($UseLlm) { 0 } else { 20 }" in script
+    assert "$FallbackTimeoutSeconds = 45" in script
+    assert "llm_deferred_for_voice_bridge_availability" in script
+    assert "local_llm_voice_turn_not_called_without_abort_or_quality_guard" in script
+    assert "-UseLlm $false" in script
+    assert "$ChatBridgeFallbackUsed = $true" in script
+    assert "chat_bridge_primary_status = $ChatBridgePrimaryStatus" in script
+    assert "chat_bridge_primary_error = $ChatBridgePrimaryError" in script
+    assert "chat_bridge_fallback_used = $ChatBridgeFallbackUsed" in script
+    assert "chat_bridge_effective_use_llm = $ChatBridgeEffectiveUseLlm" in script
+    assert "llm_fallback_used = $ChatBridgeFallbackUsed" in script
+    assert "grants_execution_authority = $false" in script
+    assert "grants_mutation_authority = $false" in script
 
 
 def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -> None:
@@ -789,7 +1182,7 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "function Start-OrbFrameSyncedMotion" in script
     assert "function Stop-OrbFrameSyncedMotion" in script
     assert "[switch]$EnableAutonomousMotion" in script
-    assert "[int]$McpBodyStateTimeoutSeconds = 8" in script
+    assert "[int]$McpBodyStateTimeoutSeconds = 1" in script
     assert "function Invoke-OverlayVoiceSpeech" in script
     assert "function Invoke-OverlayElevenLabsVoiceSpeech" in script
     assert "function Invoke-OverlayAudioFilePlayback" in script
@@ -890,6 +1283,15 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "function Test-OverlayStopPhraseRecognized" in script
     assert "function Invoke-OverlayVoiceStopPhrase" in script
     assert "function Get-OverlayTextDigest" in script
+    assert "function Initialize-OverlayKeyboardInterop" in script
+    assert "FrancisLensOverlayKeyboardNative" in script
+    assert "GetAsyncKeyState" in script
+    assert "function Test-OverlayContinuousVoiceChatPushToTalkActive" in script
+    assert "function Get-OverlayContinuousVoiceChatMode" in script
+    assert "function Set-OverlayContinuousVoiceChatGateReadback" in script
+    assert "push_to_talk_ctrl_v_required" in script
+    assert "continuous_voice_chat_push_to_talk_chord = 'Ctrl+V'" in script
+    assert "continuous_voice_chat_free_run = $false" in script
     assert "function Get-OverlayVoiceTurnStatusPath" in script
     assert "function Get-OverlayVoiceTurnReceiptPath" in script
     assert "function Get-OverlayVoiceTurnReadback" in script
@@ -902,7 +1304,7 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "EnableVoiceLlm" in script
     assert "$UtteranceBuilder.AppendWildcard()" in script
     assert "Invoke-RestMethod -Uri $ChatUri -Method Post" in script
-    assert "message = $BoundedUtterance" in script
+    assert "message = $Message" in script
     assert "actor = $ConversationActor" in script
     assert "voice_turn_id = $VoiceTurnId" in script
     assert "supersedes_voice_turn_id = $SupersedesVoiceTurnId" in script
@@ -929,12 +1331,12 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "system_speech_continuous_dictation" in script
     assert "wake_phrase_detected = [bool]$EffectiveWakePhraseDetected" in script
     assert "continuous_voice_chat = [bool]$ContinuousVoiceChat" in script
+    assert "Set-OverlayContinuousVoiceChatGateReadback -Payload $Payload" in script
+    assert "voice_input_suppressed_push_to_talk_inactive" in script
+    assert "push_to_talk_chord_not_held" in script
+    assert "No-wake continuous voice chat is push-to-talk gated; hold Ctrl+V while speaking" in script
     assert (
-        "continuous_voice_chat_mode = if ($ContinuousVoiceChat) { 'enabled_no_wake_phrase_required' } else { 'disabled_wake_phrase_required' }"
-        in script
-    )
-    assert (
-        "continuous_voice_chat_self_trigger_guard = 'suppress_all_except_francis_stop_while_owned_speech_process_active'"
+        "$ContinuousVoiceCommandAllowed = ([bool]$script:LensOverlayContinuousVoiceChat -and [bool]$ContinuousVoicePushToTalkAllowed)"
         in script
     )
     assert "voice_input_suppressed_while_speaking" in script
@@ -1102,12 +1504,26 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "$Form.Background = [System.Windows.Media.Brushes]::Transparent" in script
     assert "$Form.ShowInTaskbar = $true" in script
     assert "$Form.TopMost = $true" in script
+    assert "function Get-OverlayVirtualScreenBounds" in script
+    assert "VirtualScreenHeight" in script
+    assert "function Set-OverlayWindowTopMostPinned" in script
+    assert "FrancisLensOverlayNativeWindow" in script
+    assert "SetWindowPos" in script
     assert "[switch]$EnableManualOrbDrag" in script
-    assert "Set-OrbWindowDockPosition -Window $Form -WorkArea $Screen -Margin 48" in script
-    assert "$EnergyRoot.Cursor = if ($ManualOrbDragEnabled)" in script
+    assert "$Form.Left = [double]$Screen.Left" in script
+    assert "$Form.Width = [double]$Screen.Width" in script
+    assert "$Screen = Get-OverlayVirtualScreenBounds" in script
+    assert "$OrbClickTarget.Cursor = if ($ManualOrbDragEnabled)" in script
+    assert "$script:LensOverlayHitTestPassthroughEnabled = $true" in script
+    assert "$script:LensOverlayTopMostPinApplied = [bool]$Pinned" in script
+    assert "topmost_pin_applied = $TopMostPinApplied" in script
+    assert "overlay_includes_taskbar = $OverlayIncludesTaskbar" in script
     assert "if ($ManualOrbDragEnabled) {" in script
-    assert "$EnergyRoot.Add_MouseLeftButtonDown" in script
-    assert "$script:LensOverlayWindow.DragMove()" in script
+    assert "$OrbClickTarget.Add_MouseLeftButtonDown" in script
+    assert "$OrbClickTarget.Add_MouseMove" in script
+    assert "$script:LensOverlayOrbDragActive = $true" in script
+    assert "Set-OrbWindowCoordinatePosition -Window $script:LensOverlayWindow" in script
+    assert "$script:LensOverlayWindow.DragMove()" not in script
     assert "Reset-OrbAutonomousMotionAnchor" in script
     assert "bounded_desktop_roam" in script
     assert "right_corner_locked" in script
@@ -1115,9 +1531,9 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "$AutonomousMotionEnabled = [bool]$EnableAutonomousMotion -and -not [bool]$DisableAutonomousMotion" in script
     assert "desktop_roam_supported = $AutonomousMotion" in script
     assert "manual_drag_supported = $ManualDrag" in script
-    assert "desktop_roam_bounds = 'work_area'" in script
+    assert "desktop_roam_bounds = 'virtual_screen'" in script
     assert "roam_left = $MinimumLeft" in script
-    assert "roam_right = $MaximumLeft" in script
+    assert "roam_right = if ($FullScreenOverlayPlane) { [double]$WorkArea.Right } else { $MaximumLeft }" in script
     assert "overlay_position = New-OverlayWindowPositionProjection" in script
     assert "overlay_position = $Readback.overlay_position" in script
     assert "function Write-OverlayPositionState" in script
@@ -1170,7 +1586,15 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "BackgroundImage" not in script
     assert "headless_browser_alpha_screenshot" not in script
     assert "playwright screenshot" not in script
-    assert "$RefreshTimer.Interval = [TimeSpan]::FromSeconds(5)" in script
+    assert "[int]$McpBodyStateTimeoutSeconds = 1" in script
+    assert "[int]$McpRefreshIntervalSeconds = 0" in script
+    assert "refresh_deferred_for_animation" in script
+    assert "Publish-DeferredOverlayMcpBodyState -Label $script:LensOverlayLabel" in script
+    assert "if ($McpRefreshIntervalSeconds -gt 0) {" in script
+    assert "$RefreshTimer.Interval = [TimeSpan]::FromSeconds($McpRefreshIntervalSeconds)" in script
+    assert "LensOverlayLastOrbVirtualPointerWriteTicks" in script
+    assert "$PointerItem.LastWriteTimeUtc.Ticks" in script
+    assert "'-McpRefreshIntervalSeconds'" in script
     assert "mcp_body_state = $McpBodyState" in script
     assert "orb_semantic_state" in script
     assert "semantic_state" in script

@@ -592,7 +592,7 @@ def test_persistent_supervision_prerequisite_readback_reports_global_hotkey_gate
         assert dependency["blocked_reason"] == "global_hotkey_binding_disabled"
         assert dependency["config_path"] == "config/runtime/lens/summon.json"
         assert dependency["config_exists"] is True
-        assert dependency["global_hotkey"] == "Ctrl+Alt+Space"
+        assert dependency["global_hotkey"] == "Ctrl+Alt+F"
         assert dependency["binding_scope"] == "global"
         assert dependency["palette_route"] == "/lens/status"
         assert dependency["binding_enabled"] is False
@@ -686,7 +686,7 @@ def test_persistent_supervision_prerequisite_readback_reports_summon_binding_gat
         assert dependency["summon_name"] == "Francis Lens Summon"
         assert dependency["acceptance_criterion"] == "summon_anywhere"
         assert dependency["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
-        assert dependency["global_hotkey"] == "Ctrl+Alt+Space"
+        assert dependency["global_hotkey"] == "Ctrl+Alt+F"
         assert dependency["binding_scope"] == "global"
         assert dependency["palette_route"] == "/lens/status"
         assert dependency["required_before_enable"] == [

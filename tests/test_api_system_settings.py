@@ -264,6 +264,22 @@ ui:
             orb_status_body.get("state")
         )
 
+    orb_pointer = client.get("/system/orb_pointer")
+    orb_pointer_alias = client.get("/system/orb-pointer")
+    orb_pointer_path_alias = client.get("/system/orb/pointer")
+    assert orb_pointer.status_code == 200
+    assert orb_pointer_alias.status_code == 200
+    assert orb_pointer_path_alias.status_code == 200
+    orb_pointer_body = orb_pointer.json()
+    for alias_body in (orb_pointer_alias.json(), orb_pointer_path_alias.json()):
+        assert alias_body["ok"] == orb_pointer_body["ok"]
+        assert alias_body["subsystem"] == "orb_pointer"
+        assert alias_body["read_only"] is True
+        assert alias_body["governance"]["user_os_cursor_controlled"] is False
+        assert alias_body["governance"]["physical_input_performed"] is False
+        assert alias_body["governance"]["grants_execution_authority"] is False
+        assert isinstance(alias_body["operator_input"], dict)
+
     operator_mode = client.get("/system/operator_mode")
     operator_mode_alias = client.get("/system/operator-mode")
     assert operator_mode.status_code == 200

@@ -194,7 +194,7 @@ function Write-ProofSurfaceRuntimeStates {
       kind = 'lens.hotkey.runtime_state'
       status = 'hotkey_bound'
       pid = $ProcessId
-      global_hotkey = 'Ctrl+Alt+Space'
+      global_hotkey = 'Ctrl+Alt+F'
       binding_scope = 'global'
       hotkey_bound = $true
       launch_on_hotkey = $false
@@ -222,7 +222,7 @@ function Write-ProofSurfaceRuntimeStates {
       kind = 'lens.summon.runtime_state'
       status = 'summon_binding_observed'
       pid = $ProcessId
-      global_hotkey = 'Ctrl+Alt+Space'
+      global_hotkey = 'Ctrl+Alt+F'
       binding_scope = 'global'
       bounded_handoff_ready = $true
       local_open_ready = $true

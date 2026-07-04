@@ -46,7 +46,7 @@ def _write_summon_binding_runtime_readback(data_root: Path) -> None:
             {
                 "kind": "lens.summon.runtime_state",
                 "status": "summon_binding_observed",
-                "global_hotkey": "Ctrl+Alt+Space",
+                "global_hotkey": "Ctrl+Alt+F",
                 "binding_scope": "global",
                 "bounded_handoff_ready": True,
                 "local_open_ready": True,
@@ -72,8 +72,8 @@ def _write_lens_status_with_overlay_missing_surface_readbacks(path: Path) -> Non
         "hotkey_runtime_readback": {
             "ready": True,
             "status": "running",
-            "global_hotkey": "Ctrl+Alt+Space",
-            "expected_global_hotkey": "Ctrl+Alt+Space",
+            "global_hotkey": "Ctrl+Alt+F",
+            "expected_global_hotkey": "Ctrl+Alt+F",
             "binding_scope": "global",
             "expected_binding_scope": "global",
             "launch_on_hotkey": True,
@@ -83,8 +83,8 @@ def _write_lens_status_with_overlay_missing_surface_readbacks(path: Path) -> Non
         "summon_runtime_readback": {
             "ready": True,
             "status": "observed",
-            "global_hotkey": "Ctrl+Alt+Space",
-            "expected_global_hotkey": "Ctrl+Alt+Space",
+            "global_hotkey": "Ctrl+Alt+F",
+            "expected_global_hotkey": "Ctrl+Alt+F",
             "binding_scope": "global",
             "expected_binding_scope": "global",
             "bounded_handoff_ready": True,

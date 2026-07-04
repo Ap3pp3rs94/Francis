@@ -63,7 +63,7 @@ def test_lens_summon_preflight_reports_disabled_hotkey_without_authority() -> No
     assert payload["kind"] == "lens.summon.preflight"
     assert payload["status"] == "blocked"
     assert payload["ready"] is False
-    assert payload["global_hotkey"] == "Ctrl+Alt+Space"
+    assert payload["global_hotkey"] == "Ctrl+Alt+F"
     assert payload["acceptance_criterion"] == "summon_anywhere"
     assert payload["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
     assert payload["required_before_enable"] == expected_required_before_enable
@@ -138,6 +138,8 @@ def test_lens_summon_preflight_reports_disabled_hotkey_without_authority() -> No
         "local_process_launch_authority": False,
         "hotkey_registration_authority": False,
         "hotkey_runtime_readback": True,
+        "tray_runtime_readback": True,
+        "overlay_runtime_readback": True,
         "summon_runner_readback": True,
         "required_before_enable_readback": True,
         "resident_host_process_readback": True,
@@ -194,7 +196,7 @@ def test_lens_summon_preflight_consumes_live_hotkey_runtime_readback(tmp_path: P
                 "kind": "lens.hotkey.runtime_state",
                 "status": "hotkey_bound",
                 "pid": pid,
-                "global_hotkey": "Ctrl+Alt+Space",
+                "global_hotkey": "Ctrl+Alt+F",
                 "binding_scope": "global",
                 "hotkey_bound": True,
                 "launch_on_hotkey": False,
@@ -231,6 +233,134 @@ def test_lens_summon_preflight_consumes_live_hotkey_runtime_readback(tmp_path: P
     assert payload["governance"]["hotkey_runtime_readback"] is True
     assert payload["governance"]["hotkey_registration_authority"] is False
     assert payload["governance"]["summon_authority"] is False
+
+
+def test_lens_summon_preflight_surfaces_stale_hotkey_chord_mismatch(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    runtime_dir = data_dir / "runtime" / "lens-hotkey"
+    runtime_dir.mkdir(parents=True)
+    stale_pid = 999999
+    (runtime_dir / "lens-hotkey.pid").write_text(str(stale_pid), encoding="utf-8")
+    (runtime_dir / "status.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.hotkey.runtime_state",
+                "status": "hotkey_bound",
+                "pid": stale_pid,
+                "global_hotkey": "Ctrl+Alt+Space",
+                "binding_scope": "global",
+                "hotkey_bound": True,
+                "launch_on_hotkey": False,
+                "summon_runner": "scripts/lens-summon.ps1",
+                "press_count": 0,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    proc = _run_preflight("-Mode", "Status", "-DataDir", str(data_dir))
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    hotkey_runtime = payload["hotkey_runtime_readback"]
+    assert hotkey_runtime["ready"] is False
+    assert hotkey_runtime["process_alive"] is False
+    assert hotkey_runtime["global_hotkey"] == "Ctrl+Alt+Space"
+    assert hotkey_runtime["expected_global_hotkey"] == "Ctrl+Alt+F"
+    assert hotkey_runtime["global_hotkey_matches_expected"] is False
+    assert hotkey_runtime["requirement_state"] == "stale_mismatched_hotkey"
+    assert hotkey_runtime["blocker"] == "global_hotkey_binding_stale_mismatched_chord"
+    dependencies = {item["id"]: item for item in payload["enablement_dependency_readback"]}
+    hotkey_dependency = dependencies["global_hotkey_binding"]
+    assert hotkey_dependency["runtime_requirement_state"] == "stale_mismatched_hotkey"
+    assert hotkey_dependency["runtime_blocker"] == "global_hotkey_binding_stale_mismatched_chord"
+    assert "global_hotkey_binding_stale_mismatched_chord" in hotkey_dependency["blockers"]
+    assert "global_hotkey_binding_stale_mismatched_chord" in payload["blockers"]
+    assert "global_hotkey_binding_stale_mismatched_chord" in payload["blocker_groups"]["global_hotkey_binding"]
+
+
+def test_lens_summon_preflight_consumes_live_tray_runtime_readback(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    runtime_dir = data_dir / "runtime" / "lens-tray"
+    runtime_dir.mkdir(parents=True)
+    pid = os.getpid()
+    (runtime_dir / "lens-tray.pid").write_text(str(pid), encoding="utf-8")
+    (runtime_dir / "status.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.tray.runtime_state",
+                "status": "tray_running",
+                "pid": pid,
+                "tray_icon_visible": True,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    proc = _run_preflight("-Mode", "Status", "-DataDir", str(data_dir))
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    tray_runtime = payload["tray_runtime_readback"]
+    assert tray_runtime["ready"] is True
+    assert tray_runtime["tray_icon_visible"] is True
+    assert tray_runtime["requirement_state"] == "running"
+    assert tray_runtime["blocker"] == ""
+    dependencies = {item["id"]: item for item in payload["enablement_dependency_readback"]}
+    tray_dependency = dependencies["tray_presence"]
+    assert tray_dependency["ready"] is True
+    assert tray_dependency["blockers"] == []
+    assert tray_dependency["runtime_ready"] is True
+    assert tray_dependency["runtime_requirement_state"] == "running"
+    assert tray_dependency["runtime_blocker"] == ""
+    assert tray_dependency["tray_presence_source"] == "live_runtime_readback"
+    assert "tray_presence" not in payload["missing_required_before_enable"]
+    assert payload["blocker_groups"]["surface_dependencies"] == ["overlay_window_missing"]
+    checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["tray_presence"]["status"] == "running"
+
+
+def test_lens_summon_preflight_consumes_live_overlay_runtime_readback(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    runtime_dir = data_dir / "runtime" / "lens-overlay"
+    runtime_dir.mkdir(parents=True)
+    pid = os.getpid()
+    (runtime_dir / "lens-overlay.pid").write_text(str(pid), encoding="utf-8")
+    (runtime_dir / "status.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.overlay.runtime_state",
+                "status": "overlay_running",
+                "pid": pid,
+                "overlay_window_visible": True,
+                "always_on_top": True,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    proc = _run_preflight("-Mode", "Status", "-DataDir", str(data_dir))
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    overlay_runtime = payload["overlay_runtime_readback"]
+    assert overlay_runtime["ready"] is True
+    assert overlay_runtime["overlay_window_visible"] is True
+    assert overlay_runtime["always_on_top"] is True
+    assert overlay_runtime["requirement_state"] == "visible_topmost"
+    assert overlay_runtime["blocker"] == ""
+    dependencies = {item["id"]: item for item in payload["enablement_dependency_readback"]}
+    overlay_dependency = dependencies["overlay_window"]
+    assert overlay_dependency["ready"] is True
+    assert overlay_dependency["blockers"] == []
+    assert overlay_dependency["runtime_ready"] is True
+    assert overlay_dependency["runtime_requirement_state"] == "visible_topmost"
+    assert overlay_dependency["runtime_blocker"] == ""
+    assert overlay_dependency["overlay_window_source"] == "live_runtime_readback"
+    assert "overlay_window" not in payload["missing_required_before_enable"]
+    assert payload["blocker_groups"]["surface_dependencies"] == ["tray_host_missing"]
+    checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["overlay_window"]["status"] == "running"
 
 
 def test_lens_summon_preflight_refuses_bind_actions() -> None:
