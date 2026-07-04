@@ -9417,6 +9417,7 @@ def test_lens_api_surfaces_bounded_resident_candidate_supervisor_readback(monkey
 
     fixed_now = datetime(2026, 5, 1, 0, 0, 5, tzinfo=UTC).timestamp()
     monkeypatch.setattr(host_manifest_module.time, "time", lambda: fixed_now)
+    monkeypatch.setattr(host_manifest_module, "_process_alive_readback", lambda pid: (False, "test_dead_pid"))
 
     client = TestClient(create_app())
     response = client.get("/lens/status?limit=1")
@@ -9436,6 +9437,8 @@ def test_lens_api_surfaces_bounded_resident_candidate_supervisor_readback(monkey
     assert supervisor_readback["resident_supervised_runtime"] is False
     assert supervisor_readback["resident_claim_allowed"] is False
     assert supervisor_readback["blocked_reason"] == "resident_runtime_candidate_not_persistent"
+    assert supervisor_readback["supervisor_process_alive"] is False
+    assert supervisor_readback["supervisor_process_alive_check"] == "test_dead_pid"
     assert supervisor_readback["governance"]["execution_authority"] is False
     assert supervisor_readback["governance"]["resident_claim_authority"] is False
 
