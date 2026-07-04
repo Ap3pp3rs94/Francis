@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import os
 
-from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 import pytest
 
@@ -139,7 +138,7 @@ def test_developer_bridge_routes_are_mounted() -> None:
     from francis.api.app import create_app
 
     app = create_app()
-    routes = {route.path for route in app.routes if isinstance(route, APIRoute)}
+    routes = {str(route.path) for route in app.routes if getattr(route, "path", None)}
 
     assert "/developer-bridge/status" in routes
     assert "/developer-bridge/read-file" in routes
