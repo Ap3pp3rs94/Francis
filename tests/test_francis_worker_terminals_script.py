@@ -170,6 +170,20 @@ def test_francis_worker_coordinator_publication_gate_uses_unwrapped_worker_statu
     assert "worker_execution_missing" in script
 
 
+def test_worker_terminal_scripts_resolve_cross_platform_powershell() -> None:
+    scripts = [
+        _repo_root() / "scripts" / "francis-worker-coordinator.ps1",
+        _repo_root() / "scripts" / "start-francis-worker-terminals.ps1",
+    ]
+
+    for script_path in scripts:
+        script = script_path.read_text(encoding="utf-8")
+        assert "function Get-FrancisPowerShellPath" in script
+        assert "Get-Command pwsh -ErrorAction SilentlyContinue" in script
+        assert "powershell.exe -NoProfile" not in script
+        assert "(Get-Command pwsh.exe -ErrorAction SilentlyContinue).Source" not in script
+
+
 def test_francis_worker_coordinator_generates_individual_pm_dispatches(tmp_path: Path) -> None:
     state_root = tmp_path / "coordinator"
     proc = _run_coordinator(
