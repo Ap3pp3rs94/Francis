@@ -140,8 +140,32 @@ function Get-PayloadObjectArrayProperty {
   return @($Property.Value)
 }
 
+function Get-PayloadValue {
+  param(
+    [object]$Payload,
+    [string]$Name,
+    [object]$Default = ''
+  )
+
+  if ($null -eq $Payload) {
+    return $Default
+  }
+  $Property = $Payload.PSObject.Properties[$Name]
+  if ($null -eq $Property -or $null -eq $Property.Value) {
+    return $Default
+  }
+  return $Property.Value
+}
+
 function New-GateEvidenceDetails {
-  param([object]$Payload)
+  param(
+    [object]$Payload,
+    [object]$MeasurementSessionPayload = $null,
+    [bool]$MeasurementSessionParseOk = $false,
+    [int]$MeasurementSessionExitCode = 0
+  )
+
+  $MeasurementSessionBriefPath = if ($null -eq $MeasurementSessionPayload) { '' } else { Join-Path $RepoRoot 'scripts\fr017-measurement-session-brief.ps1' }
 
   return [ordered]@{
     missing_fields = @(Get-PayloadArrayProperty -Payload $Payload -Name 'missing_fields')
@@ -203,6 +227,17 @@ function New-GateEvidenceDetails {
     measurement_landmark_update_path = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['measurement_landmark_update_path']) { '' } else { [string]$Payload.measurement_landmark_update_path }
     measurement_independence_safety_update_path = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['measurement_independence_safety_update_path']) { '' } else { [string]$Payload.measurement_independence_safety_update_path }
     measurement_working_record_name_pattern = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['measurement_working_record_name_pattern']) { '' } else { [string]$Payload.measurement_working_record_name_pattern }
+    measurement_session_brief_path = $MeasurementSessionBriefPath
+    measurement_session_brief_status = [string](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'status' -Default '')
+    measurement_session_brief_exit_code = $MeasurementSessionExitCode
+    measurement_session_brief_parse_ok = $MeasurementSessionParseOk
+    measurement_session_brief_contract = [string](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'measurement_session_brief_contract' -Default '')
+    measurement_session_next_operator_action = [string](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'next_operator_action' -Default '')
+    measurement_session_current_group_id = [string](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'first_blocking_group_id' -Default '')
+    measurement_session_current_group_required_action = [string](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'current_group_required_action' -Default '')
+    measurement_session_current_group_update_tool_path = [string](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'current_group_update_tool_path' -Default '')
+    measurement_session_current_group_update_command_template = [string](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'current_group_update_command_template' -Default '')
+    measurement_session_current_group_update_contract = [string](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'current_group_update_contract' -Default '')
     measurement_capture_plan_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['measurement_capture_plan_contract']) { '' } else { [string]$Payload.measurement_capture_plan_contract }
     measurement_capture_runbook_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['measurement_capture_runbook_contract']) { '' } else { [string]$Payload.measurement_capture_runbook_contract }
     measurement_capture_plan_status_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['measurement_capture_plan_status_contract']) { '' } else { [string]$Payload.measurement_capture_plan_status_contract }
@@ -561,7 +596,15 @@ foreach ($Gate in $Gates) {
   $GateStatus = if ([bool]$Result.parse_ok) { [string]$Result.payload.status } else { 'failed_gate_parse' }
   $GateReady = [bool]$Result.parse_ok -and [int]$Result.exit_code -eq 0 -and $GateStatus -eq [string]$Gate.ready_status
   $GateFailed = (-not [bool]$Result.parse_ok) -or [int]$Result.exit_code -ne 0 -or $GateStatus.StartsWith('failed_') -or $GateStatus.StartsWith('missing_') -or $GateStatus.StartsWith('invalid_')
-  $GateDetails = New-GateEvidenceDetails -Payload $Result.payload
+  $MeasurementSessionResult = $null
+  if ([string]$Gate.id -eq 'measurement_intake' -and -not $GateReady) {
+    $MeasurementSessionResult = Invoke-JsonGate -ScriptName 'fr017-measurement-session-brief.ps1' -Arguments ([string[]]$Gate.arguments)
+  }
+  $GateDetails = if ($null -eq $MeasurementSessionResult) {
+    New-GateEvidenceDetails -Payload $Result.payload
+  } else {
+    New-GateEvidenceDetails -Payload $Result.payload -MeasurementSessionPayload $MeasurementSessionResult.payload -MeasurementSessionParseOk ([bool]$MeasurementSessionResult.parse_ok) -MeasurementSessionExitCode ([int]$MeasurementSessionResult.exit_code)
+  }
 
   $GateResults.Add([ordered]@{
       id = [string]$Gate.id

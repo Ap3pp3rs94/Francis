@@ -47,7 +47,7 @@ def _run_gate(*args: str):
         SCRIPT,
         args,
         cwd=ROOT,
-        timeout_seconds=140,
+        timeout_seconds=240,
     )
 
 
@@ -114,6 +114,41 @@ def test_fr017_evidence_chain_status_stops_at_measurement_template() -> None:
         str(payload["first_blocking_details"]["measurement_independence_safety_update_path"])
         .replace("/", "\\")
         .endswith("scripts\\fr017-update-independence-safety-record.ps1")
+    )
+    assert (
+        str(payload["first_blocking_details"]["measurement_session_brief_path"])
+        .replace("/", "\\")
+        .endswith("scripts\\fr017-measurement-session-brief.ps1")
+    )
+    assert payload["first_blocking_details"]["measurement_session_brief_parse_ok"] is True
+    assert payload["first_blocking_details"]["measurement_session_brief_exit_code"] == 0
+    assert payload["first_blocking_details"]["measurement_session_brief_status"] == "measurement_session_input_required"
+    assert "Read-only operator brief" in payload["first_blocking_details"]["measurement_session_brief_contract"]
+    assert (
+        payload["first_blocking_details"]["measurement_session_next_operator_action"]
+        == "complete_first_blocking_measurement_capture_group_then_rerun_measurement_intake"
+    )
+    assert payload["first_blocking_details"]["measurement_session_current_group_id"] == "setup_and_safety_brief"
+    assert (
+        "brief stop conditions"
+        in payload["first_blocking_details"]["measurement_session_current_group_required_action"]
+    )
+    assert (
+        str(payload["first_blocking_details"]["measurement_session_current_group_update_tool_path"])
+        .replace("/", "\\")
+        .endswith("scripts\\fr017-new-measurement-record.ps1")
+    )
+    assert (
+        "fr017-new-measurement-record.ps1 -Mode Create"
+        in payload["first_blocking_details"]["measurement_session_current_group_update_command_template"]
+    )
+    assert (
+        "-OutputPath <measurement-record.json>"
+        in payload["first_blocking_details"]["measurement_session_current_group_update_command_template"]
+    )
+    assert (
+        "Creates a pending working record"
+        in payload["first_blocking_details"]["measurement_session_current_group_update_contract"]
     )
     assert (
         payload["first_blocking_details"]["measurement_working_record_name_pattern"]
@@ -1300,6 +1335,15 @@ def test_fr017_evidence_chain_status_fails_closed_on_measurement_symptom(tmp_pat
         == "scripts/fr017-new-measurement-record.ps1 + FR-017-MEASUREMENT-CAPTURE-RUNBOOK.md + FR-017-MEASUREMENTS-INPUT-TEMPLATE.json"
     )
     assert result["first_blocking_details"]["safety_blockers"] == ["tingling"]
+    assert result["first_blocking_details"]["measurement_session_brief_parse_ok"] is True
+    assert result["first_blocking_details"]["measurement_session_brief_exit_code"] == 1
+    assert result["first_blocking_details"]["measurement_session_brief_status"] == "failed_measurement_session_brief"
+    assert result["first_blocking_details"]["measurement_session_current_group_update_tool_path"] == ""
+    assert result["first_blocking_details"]["measurement_session_current_group_update_command_template"] == ""
+    assert (
+        "Stop the measurement session"
+        in result["first_blocking_details"]["measurement_session_current_group_update_contract"]
+    )
     assert result["gate_results"][1]["details"]["safety_blockers"] == ["tingling"]
     assert result["physical_validation_complete"] is False
     assert result["fr018_implementation_cleared"] is False
