@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Iterable
 
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
@@ -44,6 +45,27 @@ from francis.developer_bridge.repo_tools import (
 
 def _normalize_newlines(value: str) -> str:
     return value.replace("\r\n", "\n")
+
+
+def _join_paths(prefix: str, path: str) -> str:
+    if not prefix:
+        return path
+    if path == "/":
+        return prefix
+    return f"{prefix.rstrip('/')}/{path.lstrip('/')}"
+
+
+def _iter_api_routes(routes: Iterable[object], prefix: str = "") -> Iterable[tuple[str, APIRoute]]:
+    for route in routes:
+        original_router = getattr(route, "original_router", None)
+        include_context = getattr(route, "include_context", None)
+        if original_router is not None and include_context is not None:
+            include_prefix = str(getattr(include_context, "prefix", "") or "")
+            nested_prefix = _join_paths(prefix, include_prefix) if include_prefix else prefix
+            yield from _iter_api_routes(getattr(original_router, "routes", []), nested_prefix)
+            continue
+        if isinstance(route, APIRoute):
+            yield _join_paths(prefix, route.path), route
 
 
 def test_developer_bridge_readback_errors_do_not_expose_exception_detail() -> None:
@@ -139,7 +161,7 @@ def test_developer_bridge_routes_are_mounted() -> None:
     from francis.api.app import create_app
 
     app = create_app()
-    routes = {route.path for route in app.routes if isinstance(route, APIRoute)}
+    routes = {path for path, _route in _iter_api_routes(app.routes)}
 
     assert "/developer-bridge/status" in routes
     assert "/developer-bridge/read-file" in routes
@@ -3972,6 +3994,10 @@ def test_collaboration_transcript_uses_recent_scan_for_large_unfiltered_readback
             prompt=f"Prompt {index}",
         )
         path = tmp_path / "data" / str(item["path"])
+        record = json.loads(path.read_text(encoding="utf-8"))
+        record["created_at"] = "2026-07-04T00:00:00+00:00"
+        record["updated_at"] = "2026-07-04T00:00:00+00:00"
+        path.write_text(json.dumps(record), encoding="utf-8")
         os.utime(path, (index + 1, index + 1))
         submitted.append(item)
     collaboration_module._invalidate_prompt_cache()

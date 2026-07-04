@@ -245,11 +245,177 @@ def _fixture_action_proof() -> dict[str, Any]:
     }
 
 
+def _operator_decision_queue(summon_payload: dict[str, Any], host_payload: dict[str, Any]) -> dict[str, Any]:
+    missing = summon_payload.get("missing_required_before_enable")
+    missing_requirements = [str(item) for item in missing] if isinstance(missing, list) else []
+    first_missing = str(summon_payload.get("first_missing_required_before_enable") or "")
+    if not first_missing and missing_requirements:
+        first_missing = missing_requirements[0]
+    if not first_missing:
+        return {
+            "status": "no_operator_decision_queued",
+            "queued_decision_count": 0,
+            "decisions": [],
+        }
+
+    decision_by_requirement: dict[str, dict[str, Any]] = {
+        "resident_host_process": {
+            "decision_id": "approve_resident_host_process_supervision_authority_request",
+            "question": (
+                "Austin: approve the governed process-supervision authority path "
+                "for the Francis resident host prerequisite?"
+            ),
+            "authority_required": str(host_payload.get("authority_required") or "process_supervision_authority"),
+            "current_runtime_status": str(host_payload.get("status") or "blocked"),
+            "next_operator_command": (
+                ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 "
+                "-Mode RequestNext -Actor <actor> -ConfirmRequest"
+            ),
+            "proof_script": "scripts/lens-host-supervisor.ps1 -Mode Status",
+            "follow_up_after_approval": (
+                "Use the resulting approval id for the existing GrantNext and ExecuteNext "
+                "handoffs; do not self-grant."
+            ),
+        },
+        "global_hotkey_binding": {
+            "decision_id": "approve_global_hotkey_binding_authority_request",
+            "question": "Austin: approve the governed Ctrl+Alt+F global hotkey binding authority path?",
+            "authority_required": "hotkey_registration_authority",
+            "current_runtime_status": "global_hotkey_binding_runtime_missing",
+            "next_operator_command": (
+                ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 "
+                "-Mode RequestNext -Actor <actor> -ConfirmRequest"
+            ),
+            "proof_script": "scripts/lens-hotkey-binding.ps1 -Mode Status",
+            "follow_up_after_approval": (
+                "Use the resulting approval id for the existing GrantNext and ExecuteNext "
+                "handoffs; do not self-grant."
+            ),
+        },
+        "summon_binding": {
+            "decision_id": "approve_summon_binding_authority_request",
+            "question": "Austin: approve the governed summon-binding authority path?",
+            "authority_required": "summon_authority",
+            "current_runtime_status": "summon_binding_missing",
+            "next_operator_command": (
+                ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 "
+                "-Mode RequestNext -Actor <actor> -ConfirmRequest"
+            ),
+            "proof_script": "scripts/lens-summon-preflight.ps1 -Mode Status",
+            "follow_up_after_approval": (
+                "Use the resulting approval id for the existing GrantNext and ExecuteNext "
+                "handoffs; do not self-grant."
+            ),
+        },
+    }
+    decision = dict(
+        decision_by_requirement.get(
+            first_missing,
+            {
+                "decision_id": f"approve_{first_missing}_authority_request",
+                "question": f"Austin: approve the governed authority path for {first_missing}?",
+                "authority_required": "operator_authority",
+                "current_runtime_status": "blocked",
+                "next_operator_command": ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status",
+                "proof_script": "scripts/lens-summon-preflight.ps1 -Mode Status",
+                "follow_up_after_approval": "Return to the prerequisite bring-up plan for the next bounded handoff.",
+            },
+        )
+    )
+    decision.update(
+        {
+            "first_missing_required_before_enable": first_missing,
+            "missing_required_before_enable": missing_requirements,
+            "requires_explicit_operator_decision": True,
+            "script_would_request_authority_if_run": True,
+            "script_would_grant_authority": False,
+            "script_would_execute": False,
+            "script_would_mutate_runtime_now": False,
+            "self_granted": False,
+        }
+    )
+    return {
+        "status": "operator_decision_required",
+        "queued_decision_count": 1,
+        "decisions": [decision],
+    }
+
+
+def _file_contains_all(path: Path, needles: list[str]) -> bool:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except Exception:
+        return False
+    return all(needle in text for needle in needles)
+
+
+def _chat_lens_visibility_contract(action: dict[str, Any]) -> dict[str, Any]:
+    repo = _repo_root()
+    lens_source = repo / "apps" / "chat_ui" / "src" / "lens" / "index.ts"
+    lens_test = repo / "apps" / "chat_ui" / "src" / "lens" / "index.test.ts"
+    presentation_demo = repo / "scripts" / "francis-presentation-demo.ps1"
+    proof_path = os.getenv("FRANCIS_ONE_VISIBLE_LOOP_PROOF_PATH", "")
+    receipt_trace_paths = [
+        proof_path,
+        str(action.get("operator_receipt_path") or ""),
+        str(action.get("desktop_bridge_receipt_path") or ""),
+    ]
+    lens_status_contract_verified = _file_contains_all(
+        lens_source,
+        [
+            "stage6_readiness",
+            "prerequisite_bringup",
+            "operator_sequence",
+            "presentStage6PrerequisiteBringup",
+        ],
+    )
+    lens_status_test_contract_verified = _file_contains_all(
+        lens_test,
+        [
+            "presentStage6PrerequisiteBringup",
+            "operator_sequence_command_availability",
+            "stage6_readiness.prerequisite_bringup.operator_sequence.operator_command",
+        ],
+    )
+    presentation_demo_contract_verified = _file_contains_all(
+        presentation_demo,
+        [
+            "receipt_trace_status_paths",
+            "target_observer_status",
+            "desktop_effect_confirmed",
+            "actual_chat_ui_render_verified",
+            "actual_lens_ui_render_verified",
+        ],
+    )
+    receipt_trace_artifact_paths_present = all(bool(path) for path in receipt_trace_paths)
+    contract_verified = (
+        lens_status_contract_verified
+        and lens_status_test_contract_verified
+        and presentation_demo_contract_verified
+        and receipt_trace_artifact_paths_present
+    )
+    return {
+        "status": "ui_contract_visible_render_unverified" if contract_verified else "ui_contract_gap",
+        "receipt_trace_status_paths": receipt_trace_paths,
+        "receipt_trace_artifact_paths_present": receipt_trace_artifact_paths_present,
+        "lens_status_contract_verified": lens_status_contract_verified,
+        "lens_status_test_contract_verified": lens_status_test_contract_verified,
+        "presentation_demo_contract_verified": presentation_demo_contract_verified,
+        "render_validation_required": "browser_or_live_chat_lens_ui_proof",
+        "actual_chat_ui_render_verified": False,
+        "actual_lens_ui_render_verified": False,
+    }
+
+
 repo = _repo_root()
 summon = _run_json_script(str(repo / "scripts" / "lens-summon-preflight.ps1"), "-Mode", "Status")
 summon_payload = summon["payload"]
+host_supervisor = _run_json_script(str(repo / "scripts" / "lens-host-supervisor.ps1"), "-Mode", "Status")
+host_supervisor_payload = host_supervisor["payload"]
 overlay = _overlay_status()
 action = _fixture_action_proof()
+operator_decision_queue = _operator_decision_queue(summon_payload, host_supervisor_payload)
+chat_lens_visibility = _chat_lens_visibility_contract(action)
 operator_approved_summon = os.getenv("FRANCIS_ONE_VISIBLE_LOOP_OPERATOR_APPROVED_SUMMON") == "1"
 summon_ready = not bool(summon_payload.get("missing_required_before_enable"))
 visible_loop_ready = (
@@ -281,18 +447,18 @@ proof = {
         "overlay_runtime_readback": summon_payload.get("overlay_runtime_readback", {}),
         "next_smallest_truthful_gap": summon_payload.get("next_smallest_truthful_gap", ""),
     },
+    "resident_host": {
+        "status": host_supervisor_payload.get("status", "unknown"),
+        "resident_supervised_runtime": bool(host_supervisor_payload.get("resident_supervised_runtime")),
+        "supervisor_process_alive": bool(host_supervisor_payload.get("supervisor_process_alive")),
+        "authority_required": host_supervisor_payload.get("authority_required", ""),
+        "authority_granted": bool(host_supervisor_payload.get("authority_granted")),
+        "next_smallest_truthful_gap": host_supervisor_payload.get("next_smallest_truthful_gap", ""),
+    },
     "orb_presence": overlay,
     "operator_action": action,
-    "chat_lens_visibility": {
-        "status": "proof_artifact_visible",
-        "receipt_trace_status_paths": [
-            os.getenv("FRANCIS_ONE_VISIBLE_LOOP_PROOF_PATH", ""),
-            str(action.get("operator_receipt_path") or ""),
-            str(action.get("desktop_bridge_receipt_path") or ""),
-        ],
-        "actual_chat_ui_render_verified": False,
-        "actual_lens_ui_render_verified": False,
-    },
+    "operator_decision_queue": operator_decision_queue,
+    "chat_lens_visibility": chat_lens_visibility,
     "governance": {
         "does_not_self_enable_summon": True,
         "does_not_default_enable_desktop_bridge": True,

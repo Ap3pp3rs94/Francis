@@ -98,6 +98,9 @@ What is materially true now:
   same-provider readability repair when the primary local model returns
   unreadable output; the forced-garbage path still rewrites to
   `unreadable_rewritten` without leaking raw salad.
+- The one-visible-loop proof now separates receipt/trace artifact visibility,
+  Lens/chat contract visibility, and actual rendered UI proof, leaving render
+  verification false until a browser/live UI check proves it.
 
 ## 4. Latest validation evidence
 
@@ -676,6 +679,106 @@ Remaining truthful gap:
   still requires Austin's enable approval plus a live safe-target bridge proof
   and chat/Lens UI render verification.
 
+### 2026-07-03 20:59Z - One visible loop operator decision queue
+
+Current posture: Phase 2 / Orb embodiment Milestone 5 remains blocked, but the
+repeatable one-visible-loop proof now surfaces the exact next Austin decision
+instead of only a generic enable reminder.
+
+What changed:
+
+- `scripts/francis-one-visible-loop-proof.ps1` now reads live resident-host
+  supervisor status and adds an `operator_decision_queue` object to the proof.
+- The queue emits exactly one decision from the first live missing summon
+  prerequisite. In the current environment that is
+  `approve_resident_host_process_supervision_authority_request`.
+- The queued decision names the required authority
+  `process_supervision_authority`, the exact next request command, and explicit
+  non-granting/non-executing flags.
+- `scripts/francis-presentation-demo.ps1` now carries the one-visible-loop
+  decision status, question, command, required authority, and self-grant state
+  into the JSON summary and Markdown report.
+
+Validation:
+
+- PowerShell parser validation passed for
+  `scripts\francis-one-visible-loop-proof.ps1` and
+  `scripts\francis-presentation-demo.ps1`.
+- `.venv\Scripts\python.exe -m pytest tests\test_francis_one_visible_loop_proof_script.py tests\test_francis_presentation_demo_script.py -q`
+  passed.
+- `.venv\Scripts\python.exe -m ruff check tests\test_francis_one_visible_loop_proof_script.py tests\test_francis_presentation_demo_script.py`
+  passed.
+- One-visible-loop fixture proof wrote
+  `data\logs\operations\one_visible_loop\francis_one_visible_loop_proof_20260703_155647543.json`
+  with `operator_decision_queue.status=operator_decision_required`,
+  `queued_decision_count=1`,
+  `authority_required=process_supervision_authority`,
+  `script_would_execute=false`, `script_would_grant_authority=false`, and
+  `self_granted=false`.
+- Presentation demo proof integration wrote
+  `.francis\presentation\demos\francis-presentation-demo-20260703-205850.json`
+  with the same operator decision question and command surfaced in the summary,
+  while remaining honestly blocked by `one_visible_loop_proof_blocked`.
+
+Remaining truthful gap:
+
+- Milestone 5 is still not accepted. Austin has not approved the resident-host
+  process-supervision authority path, the global hotkey binding and summon
+  binding remain missing, and final live acceptance still requires Austin's
+  enable approval, a live safe-target bridge proof, and chat/Lens UI render
+  verification.
+
+### 2026-07-03 21:06Z - One visible loop visibility contract readback
+
+Current posture: Phase 2 / Orb embodiment Milestone 5 remains blocked, but the
+proof no longer collapses artifact paths, UI contract surfacing, and live render
+verification into one vague visibility claim.
+
+What changed:
+
+- `scripts/francis-one-visible-loop-proof.ps1` now emits
+  `chat_lens_visibility.status=ui_contract_visible_render_unverified` when the
+  proof artifact path, operator receipt path, desktop bridge receipt path,
+  Lens status contract, Lens status tests, and presentation-demo summary fields
+  are all present.
+- The proof keeps `actual_chat_ui_render_verified=false` and
+  `actual_lens_ui_render_verified=false` until a browser or live chat/Lens UI
+  render proof is run.
+- `scripts/francis-presentation-demo.ps1` now carries the visibility contract
+  status, artifact-path presence, Lens contract flags, and render-validation
+  requirement into the JSON summary and Markdown report.
+
+Validation:
+
+- PowerShell parser validation passed for
+  `scripts\francis-one-visible-loop-proof.ps1` and
+  `scripts\francis-presentation-demo.ps1`.
+- `.venv\Scripts\python.exe -m pytest tests\test_francis_one_visible_loop_proof_script.py tests\test_francis_presentation_demo_script.py -q`
+  passed.
+- `.venv\Scripts\python.exe -m ruff check tests\test_francis_one_visible_loop_proof_script.py tests\test_francis_presentation_demo_script.py`
+  passed.
+- One-visible-loop fixture proof wrote
+  `data\logs\operations\one_visible_loop\francis_one_visible_loop_proof_20260703_160616943.json`
+  with `desktop_effect_confirmed=true`,
+  `chat_lens_visibility.status=ui_contract_visible_render_unverified`,
+  `receipt_trace_artifact_paths_present=true`,
+  `lens_status_contract_verified=true`,
+  `lens_status_test_contract_verified=true`,
+  `presentation_demo_contract_verified=true`,
+  and both actual render flags false.
+- Presentation demo proof integration wrote
+  `.francis\presentation\demos\francis-presentation-demo-20260703-210623.json`
+  with the same visibility contract fields while remaining honestly blocked by
+  `one_visible_loop_proof_blocked`.
+
+Remaining truthful gap:
+
+- Milestone 5 is still not accepted. The proof now shows that receipt/trace
+  artifacts and Lens/chat contracts are surfaced, but final acceptance still
+  requires resident-host supervision authority, refreshed `Ctrl+Alt+F` hotkey
+  binding, summon binding, Austin's enable approval, a live safe-target bridge
+  proof, and browser/live chat/Lens render verification.
+
 ## 5. Known truthful gaps
 
 These still block any finished Orb embodiment claim:
@@ -699,9 +802,9 @@ These still block any finished Orb embodiment claim:
   safe-target desktop confirmation. The summon preflight now consumes live
   overlay readback and no longer reports `overlay_window` as missing while the
   overlay is visible/topmost. Final acceptance remains blocked by resident host,
-  tray presence, refreshed `Ctrl+Alt+F` hotkey binding, summon binding, Austin's
-  approval for the enable flip/live safe-target action, and chat/Lens UI
-  receipt/trace/status visibility.
+  refreshed `Ctrl+Alt+F` hotkey binding, summon binding, Austin's approval for
+  the resident-host supervision path, the enable flip/live safe-target action,
+  and chat/Lens UI receipt/trace/status visibility.
 
 ## 6. Update rule
 
