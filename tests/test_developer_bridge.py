@@ -3994,6 +3994,10 @@ def test_collaboration_transcript_uses_recent_scan_for_large_unfiltered_readback
             prompt=f"Prompt {index}",
         )
         path = tmp_path / "data" / str(item["path"])
+        record = json.loads(path.read_text(encoding="utf-8"))
+        record["created_at"] = "2026-07-04T00:00:00+00:00"
+        record["updated_at"] = "2026-07-04T00:00:00+00:00"
+        path.write_text(json.dumps(record), encoding="utf-8")
         os.utime(path, (index + 1, index + 1))
         submitted.append(item)
     collaboration_module._invalidate_prompt_cache()
