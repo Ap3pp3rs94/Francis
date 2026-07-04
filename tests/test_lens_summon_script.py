@@ -86,7 +86,7 @@ def test_lens_summon_status_reports_local_binding_without_os_authority(tmp_path:
     assert payload["local_summon_available"] is True
     assert payload["os_level_summon"] is False
     assert payload["summon_anywhere"] is False
-    assert payload["global_hotkey"] == "Ctrl+Alt+Space"
+    assert payload["global_hotkey"] == "Ctrl+Alt+F"
     assert payload["binding_scope"] == "global"
     assert payload["binding_enabled"] is False
     assert payload["register_hotkey"] is False

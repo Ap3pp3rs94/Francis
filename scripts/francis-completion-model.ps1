@@ -5,6 +5,8 @@ param(
 
   [string]$LedgerPath = '',
 
+  [string]$LedgerArchiveDirPath = '',
+
   [string]$BuildManifestPath = '',
 
   [string]$ArtifactReconstructionReceiptRootPath = ''
@@ -34,6 +36,26 @@ function Read-CompletionModelText {
     return ''
   }
   return [System.IO.File]::ReadAllText($Path)
+}
+
+function Get-CompletionLedgerArchivePaths {
+  param([string]$ArchiveDirPath)
+
+  if ([string]::IsNullOrWhiteSpace($ArchiveDirPath) -or -not (Test-Path -LiteralPath $ArchiveDirPath -PathType Container)) {
+    return @()
+  }
+  return @(Get-ChildItem -LiteralPath $ArchiveDirPath -File -Filter 'COMPLETION_LEDGER*.md' | Sort-Object Name | ForEach-Object { [string]$_.FullName })
+}
+
+function Get-CompletionModelRelativePath {
+  param([string]$Path)
+
+  $FullPath = [System.IO.Path]::GetFullPath($Path)
+  $RootPath = [System.IO.Path]::GetFullPath($RepoRoot).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+  if ($FullPath.StartsWith($RootPath + [System.IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+    return $FullPath.Substring($RootPath.Length + 1).Replace('\', '/')
+  }
+  return $FullPath.Replace('\', '/')
 }
 
 function Limit-CompletionModelText {
@@ -211,6 +233,35 @@ function Get-Stage17Status {
     latest_ledger_entry = $LatestStage17Entry
     next_smallest_truthful_gap = if ([bool]$LatestStage17Entry.has_remaining_truthful_gap) { 'select_from_latest_stage17_remaining_truthful_gap' } else { 'name_stage17_remaining_truthful_gap_in_ledger' }
   }
+}
+
+function Get-Stage17StatusWithArchiveFallback {
+  param(
+    [string]$LedgerText,
+    [string[]]$ArchivePaths
+  )
+
+  $Status = Get-Stage17Status -LedgerText $LedgerText
+  $Status['archive_fallback_used'] = $false
+  $Status['archive_source_documents'] = @()
+  if ([bool]$Status.found) {
+    return $Status
+  }
+
+  $ArchiveTextParts = New-Object System.Collections.Generic.List[string]
+  $ArchiveSourceDocuments = @()
+  foreach ($ArchivePath in @($ArchivePaths)) {
+    if ([string]::IsNullOrWhiteSpace($ArchivePath)) {
+      continue
+    }
+    [void]$ArchiveTextParts.Add((Read-CompletionModelText -Path $ArchivePath))
+    $ArchiveSourceDocuments += (Get-CompletionModelRelativePath -Path $ArchivePath)
+  }
+
+  $ArchiveStatus = Get-Stage17Status -LedgerText ([string]::Join("`n`n", [string[]]$ArchiveTextParts.ToArray()))
+  $ArchiveStatus['archive_fallback_used'] = [bool]$ArchiveStatus.found
+  $ArchiveStatus['archive_source_documents'] = @($ArchiveSourceDocuments)
+  return $ArchiveStatus
 }
 
 function Get-PlaneReadiness {
@@ -655,18 +706,22 @@ function New-NextContinueDecision {
 }
 
 $ResolvedLedgerPath = Resolve-CompletionModelPath -Override $LedgerPath -DefaultRelativePath 'docs/operations/COMPLETION_LEDGER.md'
+$ResolvedLedgerArchiveDirPath = Resolve-CompletionModelPath -Override $LedgerArchiveDirPath -DefaultRelativePath 'docs/operations/archive'
 $ResolvedBuildManifestPath = Resolve-CompletionModelPath -Override $BuildManifestPath -DefaultRelativePath 'docs/canonical/BUILD_MANIFEST.md'
 $ResolvedArtifactReconstructionReceiptRootPath = Resolve-CompletionModelPath -Override $ArtifactReconstructionReceiptRootPath -DefaultRelativePath 'data/artifacts/plugins/capability_packs/artifact_reconstructions'
 $LedgerExists = Test-Path -LiteralPath $ResolvedLedgerPath -PathType Leaf
 $BuildManifestExists = Test-Path -LiteralPath $ResolvedBuildManifestPath -PathType Leaf
 $LedgerText = Read-CompletionModelText -Path $ResolvedLedgerPath
 $BuildManifestText = Read-CompletionModelText -Path $ResolvedBuildManifestPath
+$UseLedgerArchiveFallback = ([string]::IsNullOrWhiteSpace($LedgerPath) -or -not [string]::IsNullOrWhiteSpace($LedgerArchiveDirPath))
+$LedgerArchivePaths = if ($UseLedgerArchiveFallback) { @(Get-CompletionLedgerArchivePaths -ArchiveDirPath $ResolvedLedgerArchiveDirPath) } else { @() }
+$LedgerArchiveSourceDocuments = @($LedgerArchivePaths | ForEach-Object { Get-CompletionModelRelativePath -Path $_ })
 $CurrentPhase = Get-FirstRegexGroup -Text $LedgerText -Pattern 'Francis is in `(?<phase>Phase \d+)`' -GroupName 'phase'
 if ([string]::IsNullOrWhiteSpace($CurrentPhase)) {
   $CurrentPhase = Get-FirstRegexGroup -Text $BuildManifestText -Pattern '\((?<phase>Phase \d+)\)' -GroupName 'phase'
 }
 $LatestLedgerEntry = Get-LatestLedgerEntry -LedgerText $LedgerText
-$Stage17Status = Get-Stage17Status -LedgerText $LedgerText
+$Stage17Status = Get-Stage17StatusWithArchiveFallback -LedgerText $LedgerText -ArchivePaths $LedgerArchivePaths
 $Planes = Get-PlaneReadiness -BuildManifestText $BuildManifestText
 $LoopGuard = New-CompletionLoopGuard -LedgerExists $LedgerExists -BuildManifestExists $BuildManifestExists -LatestLedgerEntry $LatestLedgerEntry -Stage17Status $Stage17Status
 $NextContinueDecision = New-NextContinueDecision -LoopGuard $LoopGuard -LatestLedgerEntry $LatestLedgerEntry -Stage17Status $Stage17Status
@@ -685,6 +740,8 @@ $Payload = [ordered]@{
   grants_mutation_authority = $false
   source_documents = [ordered]@{
     completion_ledger = 'docs/operations/COMPLETION_LEDGER.md'
+    completion_ledger_archive = 'docs/operations/archive'
+    completion_ledger_archive_files = @($LedgerArchiveSourceDocuments)
     build_manifest = 'docs/canonical/BUILD_MANIFEST.md'
   }
   current_phase = $CurrentPhase

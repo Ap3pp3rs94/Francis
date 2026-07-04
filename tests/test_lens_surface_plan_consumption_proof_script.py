@@ -235,8 +235,8 @@ def test_lens_surface_plan_consumption_proof_consumes_summon_handoff_readback() 
     assert summon_runtime["status"] == "observed"
     assert summon_runtime["state_kind"] == "lens.summon.runtime_state"
     assert summon_runtime["state_status"] == "summon_binding_observed"
-    assert summon_runtime["global_hotkey"] == "Ctrl+Alt+Space"
-    assert summon_runtime["expected_global_hotkey"] == "Ctrl+Alt+Space"
+    assert summon_runtime["global_hotkey"] == "Ctrl+Alt+F"
+    assert summon_runtime["expected_global_hotkey"] == "Ctrl+Alt+F"
     assert summon_runtime["binding_scope"] == "global"
     assert summon_runtime["expected_binding_scope"] == "global"
     assert summon_runtime["bounded_handoff_ready"] is True

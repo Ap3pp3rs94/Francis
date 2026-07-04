@@ -3,7 +3,7 @@
   "version": 1,
   "enabled": false,
   "summon_name": "Francis Lens Summon",
-  "global_hotkey": "Ctrl+Alt+Space",
+  "global_hotkey": "Ctrl+Alt+F",
   "binding_scope": "global",
   "binding_enabled": false,
   "register_hotkey": false,
@@ -15,6 +15,20 @@
   "host_status_runner": "scripts/lens-host.ps1",
   "summon_runner": "scripts/lens-summon.ps1",
   "local_palette_launcher": "scripts/lens-command-palette.ps1 -Mode LocalOpen",
+  "command_hotkeys": [
+    {
+      "id": "hotkey.ctrl_m",
+      "command_id": "orb.move",
+      "global_hotkey": "Ctrl+M",
+      "binding_scope": "global",
+      "enabled": true,
+      "authority_scope": "runtime_overlay_position_only",
+      "capture_mode": "one_shot_click",
+      "handler": "lens.overlay.place_mode",
+      "receipt_kind": "overlay_position",
+      "trigger_carries_authority": false
+    }
+  ],
   "overlay_required": true,
   "tray_required": true,
   "requires_explicit_enable": true,

@@ -97,12 +97,13 @@ def _arm_full_audit_faulthandler_timeout() -> None:
 
 
 def _run_audit(*args: str) -> subprocess.CompletedProcess[str]:
+    timeout_seconds = _full_audit_timeout_seconds()
     return run_powershell_script(
         _powershell(),
         _repo_root() / "scripts" / "lens-stage6-completion-audit.ps1",
-        args,
+        (*args, "-OverallTimeoutSeconds", str(timeout_seconds)),
         cwd=_repo_root(),
-        timeout_seconds=_full_audit_timeout_seconds(),
+        timeout_seconds=timeout_seconds,
     )
 
 
@@ -123,6 +124,22 @@ def test_lens_stage6_completion_audit_child_capture_does_not_set_invalid_encodin
     assert "$StderrPath" in script
     assert "StandardOutputEncoding" not in script
     assert "StandardErrorEncoding" not in script
+
+
+def test_lens_stage6_completion_audit_outer_watchdog_returns_blocked_receipt() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+
+    assert "OverallTimeoutSeconds" in script
+    assert "AuditWatchdogChild" in script
+    assert "audit_status = 'timed_out'" in script
+    assert "Stop-ProcessTree -Process $Process" in script
+    assert "child_stdout_path" in script
+    assert "child_stderr_path" in script
+    assert "stage6_completion_audit_timeout" in script
+    assert "none_new_stage6_completion_audit" in script
+    assert "watchdog_killed_child_process_tree" in script
+    assert "would_mutate = $false" in script
+    assert "approval_decision_authority = $false" in script
 
 
 def test_lens_stage6_completion_audit_uses_distinct_api_proof_hotkeys() -> None:
@@ -3417,7 +3434,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert os_binding_candidate["kind"] == "lens.command_palette.os_binding_candidate"
     assert os_binding_candidate["status"] == "blocked"
     assert os_binding_candidate["candidate"] == "global_hotkey_to_lens_command_palette_bridge"
-    assert os_binding_candidate["trigger"] == "Ctrl+Alt+Space"
+    assert os_binding_candidate["trigger"] == "Ctrl+Alt+F"
     assert os_binding_candidate["binding_scope"] == "global"
     assert os_binding_candidate["route"] == "/lens/status"
     assert os_binding_candidate["local_surface"] == "chat_ui.command_palette"
@@ -3448,7 +3465,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert os_binding_candidate["would_launch_process_now"] is False
     assert os_binding_candidate["would_write_memory_now"] is False
     assert os_binding_candidate["next_smallest_truthful_gap"] == "os_level_command_palette_binding"
-    assert command_palette_os_binding["summon_preflight"]["global_hotkey"] == "Ctrl+Alt+Space"
+    assert command_palette_os_binding["summon_preflight"]["global_hotkey"] == "Ctrl+Alt+F"
     assert command_palette_os_binding["tray_preflight"]["ready"] is False
     assert command_palette_os_binding["overlay_preflight"]["ready"] is False
     assert command_palette_os_binding["governance"]["read_only_contract"] is True
@@ -3531,7 +3548,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert "local_process_launch_authority_not_granted" in summon_anywhere_groups["authority"]
     assert summon_anywhere_blockers_proof["lens_status_readback"]["ok"] is True
     assert summon_anywhere_blockers_proof["os_binding_authority_request_readback"]["ok"] is True
-    assert summon_anywhere_blockers_proof["summon_preflight"]["global_hotkey"] == "Ctrl+Alt+Space"
+    assert summon_anywhere_blockers_proof["summon_preflight"]["global_hotkey"] == "Ctrl+Alt+F"
     assert summon_anywhere_blockers_proof["governance"]["diagnostic_only"] is True
     assert summon_anywhere_blockers_proof["governance"]["wraps_summon_preflight"] is True
     assert summon_anywhere_blockers_proof["governance"]["wraps_lens_status"] is True
@@ -3609,7 +3626,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert summon_authority_boundary["ready"] is False
     assert summon_authority_boundary["summon_name"] == "Francis Lens Summon"
     assert summon_authority_boundary["config_path"] == "config/runtime/lens/summon.json"
-    assert summon_authority_boundary["global_hotkey"] == "Ctrl+Alt+Space"
+    assert summon_authority_boundary["global_hotkey"] == "Ctrl+Alt+F"
     assert summon_authority_boundary["binding_scope"] == "global"
     assert summon_authority_boundary["palette_route"] == "/lens/status"
     assert summon_authority_boundary["required_before_enable"] == [

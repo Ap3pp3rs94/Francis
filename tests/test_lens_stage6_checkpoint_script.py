@@ -240,7 +240,7 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert enablement_gates["summon_enablement_gate"]["status"] == "blocked"
     assert enablement_gates["summon_enablement_gate"]["ready"] is False
     assert enablement_gates["summon_enablement_gate"]["summon_anywhere"] is False
-    assert enablement_gates["summon_enablement_gate"]["global_hotkey"] == "Ctrl+Alt+Space"
+    assert enablement_gates["summon_enablement_gate"]["global_hotkey"] == "Ctrl+Alt+F"
     assert "summon_binding_missing" in enablement_gates["summon_enablement_gate"]["blockers"]
     summon_gate_groups = enablement_gates["summon_enablement_gate"]["blocker_groups"]
     assert "lens_host_persistent_supervision_prerequisites_pending" in summon_gate_groups["resident_host"]
@@ -1618,7 +1618,7 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert os_binding_candidate["kind"] == "lens.command_palette.os_binding_candidate"
     assert os_binding_candidate["status"] == "blocked"
     assert os_binding_candidate["candidate"] == "global_hotkey_to_lens_command_palette_bridge"
-    assert os_binding_candidate["trigger"] == "Ctrl+Alt+Space"
+    assert os_binding_candidate["trigger"] == "Ctrl+Alt+F"
     assert os_binding_candidate["binding_scope"] == "global"
     assert os_binding_candidate["route"] == "/lens/status"
     assert os_binding_candidate["local_surface"] == "chat_ui.command_palette"
@@ -1651,7 +1651,7 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert os_binding_candidate["would_launch_process_now"] is False
     assert os_binding_candidate["would_write_memory_now"] is False
     assert os_binding_candidate["next_smallest_truthful_gap"] == "os_level_command_palette_binding"
-    assert command_palette_os_binding["summon_preflight"]["global_hotkey"] == "Ctrl+Alt+Space"
+    assert command_palette_os_binding["summon_preflight"]["global_hotkey"] == "Ctrl+Alt+F"
     assert command_palette_os_binding["tray_preflight"]["ready"] is False
     assert command_palette_os_binding["overlay_preflight"]["ready"] is False
     assert command_palette_os_binding["governance"]["read_only_contract"] is True

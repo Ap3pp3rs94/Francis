@@ -167,14 +167,20 @@ def test_fr017_measurement_intake_reports_template_as_pending() -> None:
         .replace("/", "\\")
         .endswith("FR-017_Stage17_Package\\FR-017-MEASUREMENT-CAPTURE-RUNBOOK.md")
     )
+    assert (
+        str(payload["measurement_record_initializer_path"])
+        .replace("/", "\\")
+        .endswith("scripts\\fr017-new-measurement-record.ps1")
+    )
     assert payload["measurement_working_record_name_pattern"] == "FR-017-MEASUREMENTS-YYYY-MM-DD-PILOT-RECORD.json"
     assert payload["measurement_capture_plan_not_completion_evidence"] is True
     assert "not physical validation evidence" in payload["measurement_capture_plan_contract"]
     assert "not measurement evidence" in payload["measurement_capture_runbook_contract"]
     assert "FR-017-MEASUREMENT-CAPTURE-RUNBOOK.md" in payload["measurement_capture_runbook_contract"]
+    assert "fr017-new-measurement-record.ps1" in payload["measurement_capture_runbook_contract"]
     assert (
         payload["next_required_physical_input"]
-        == "copy_FR-017-MEASUREMENTS-INPUT-TEMPLATE.json_to_FR-017-MEASUREMENTS-YYYY-MM-DD-PILOT-RECORD.json_and_capture_with_FR-017-MEASUREMENT-CAPTURE-RUNBOOK.md"
+        == "create_pending_record_with_fr017-new-measurement-record.ps1_then_capture_with_FR-017-MEASUREMENT-CAPTURE-RUNBOOK.md_and_rerun_measurement_intake"
     )
     capture_plan = payload["measurement_capture_plan"]
     assert isinstance(capture_plan, list)

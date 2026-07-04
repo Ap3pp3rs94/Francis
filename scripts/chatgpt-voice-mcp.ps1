@@ -160,40 +160,22 @@ function Test-LocalTcpListener {
   )
 
   $TargetAddress = if ($Address -in @('0.0.0.0', '::', '')) { '127.0.0.1' } else { $Address }
-  $Socket = [System.Net.Sockets.Socket]::new(
-    [System.Net.Sockets.AddressFamily]::InterNetwork,
-    [System.Net.Sockets.SocketType]::Stream,
-    [System.Net.Sockets.ProtocolType]::Tcp
-  )
+  $Client = [System.Net.Sockets.TcpClient]::new()
+  $AsyncResult = $null
   try {
-    $Socket.Blocking = $false
-    try {
-      $Socket.Connect($TargetAddress, $PortValue)
-    } catch [System.Net.Sockets.SocketException] {
-      $PendingErrors = @(
-        [System.Net.Sockets.SocketError]::WouldBlock,
-        [System.Net.Sockets.SocketError]::InProgress,
-        [System.Net.Sockets.SocketError]::AlreadyInProgress
-      )
-      if ($_.Exception.SocketErrorCode -notin $PendingErrors) {
-        return $false
-      }
-    }
-    if ($Socket.Connected) {
-      return $true
-    }
-    if (-not $Socket.Poll(250000, [System.Net.Sockets.SelectMode]::SelectWrite)) {
+    $AsyncResult = $Client.BeginConnect($TargetAddress, $PortValue, $null, $null)
+    if (-not $AsyncResult.AsyncWaitHandle.WaitOne(250)) {
       return $false
     }
-    $SocketError = [int]$Socket.GetSocketOption(
-      [System.Net.Sockets.SocketOptionLevel]::Socket,
-      [System.Net.Sockets.SocketOptionName]::Error
-    )
-    return ($SocketError -eq 0)
+    $Client.EndConnect($AsyncResult)
+    return [bool]$Client.Connected
   } catch {
     return $false
   } finally {
-    $Socket.Dispose()
+    if ($null -ne $AsyncResult) {
+      $AsyncResult.AsyncWaitHandle.Dispose()
+    }
+    $Client.Dispose()
   }
 }
 

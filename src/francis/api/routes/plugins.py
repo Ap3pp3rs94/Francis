@@ -2405,10 +2405,15 @@ def _plugin_lifecycle_repair_plan(
 
 
 def _plugin_lifecycle_repair_fingerprint(*, plan: dict[str, Any]) -> str:
+    stable_plan = redact_governed_display_value(plan)
+    if isinstance(stable_plan, dict):
+        current = stable_plan.get("current")
+        if isinstance(current, dict):
+            current.pop("updated_ts", None)
     body = {
         "contract": "stage17_plugin_lifecycle_repair_dry_run_v1",
         "route": _PLUGIN_LIFECYCLE_REPAIR_ROUTE,
-        "plan": redact_governed_display_value(plan),
+        "plan": stable_plan,
     }
     raw = json.dumps(body, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(raw).hexdigest()

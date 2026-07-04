@@ -217,7 +217,7 @@ def test_lens_resident_surface_proof_composes_blocked_surface_without_authority(
     assert proof["tray_icon_enabled"] is False
     assert proof["overlay_window_enabled"] is False
     assert proof["overlay_focus_supported"] is False
-    assert proof["global_hotkey"] == "Ctrl+Alt+Space"
+    assert proof["global_hotkey"] == "Ctrl+Alt+F"
     assert proof["summon_binding_enabled"] is False
     assert proof["hotkey_registration_enabled"] is False
     assert "tray_host_disabled" in proof["tray_blockers"]

@@ -464,7 +464,7 @@ function Get-HotkeyRuntimeReadback {
   $StatusKind = [string](Get-PropertyValue -Payload $Status -Name 'kind' -Default '')
   $StatusValue = [string](Get-PropertyValue -Payload $Status -Name 'status' -Default '')
   $StatusPid = [int](Get-PropertyValue -Payload $Status -Name 'pid' -Default 0)
-  $ExpectedGlobalHotkey = [string](Get-PropertyValue -Payload $SummonConfig -Name 'global_hotkey' -Default 'Ctrl+Alt+Space')
+  $ExpectedGlobalHotkey = [string](Get-PropertyValue -Payload $SummonConfig -Name 'global_hotkey' -Default 'Ctrl+Alt+F')
   $ExpectedBindingScope = [string](Get-PropertyValue -Payload $SummonConfig -Name 'binding_scope' -Default 'global')
   $RuntimeStateExists = Test-Path -LiteralPath $StatusPath -PathType Leaf
   $PidPresent = Test-Path -LiteralPath $PidPath -PathType Leaf
