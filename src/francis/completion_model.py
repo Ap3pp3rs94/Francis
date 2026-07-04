@@ -9,23 +9,32 @@ from francis.kernel.paths import repo_root
 
 COMPLETION_MODEL_STATUS_KIND = "francis.completion_model.status"
 COMPLETION_LEDGER_RELATIVE_PATH = "docs/operations/COMPLETION_LEDGER.md"
+COMPLETION_LEDGER_STATIC_HISTORY_RELATIVE_PATH = (
+    "docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md"
+)
 BUILD_MANIFEST_RELATIVE_PATH = "docs/canonical/BUILD_MANIFEST.md"
 
 
 def completion_model_status_snapshot(
     *,
     ledger_path: Path | None = None,
+    ledger_archive_path: Path | None = None,
     build_manifest_path: Path | None = None,
 ) -> dict[str, Any]:
     root = repo_root()
+    uses_default_ledger = ledger_path is None
     resolved_ledger_path = ledger_path or root / COMPLETION_LEDGER_RELATIVE_PATH
+    resolved_ledger_archive_path = ledger_archive_path or (
+        root / COMPLETION_LEDGER_STATIC_HISTORY_RELATIVE_PATH if uses_default_ledger else None
+    )
     resolved_build_manifest_path = build_manifest_path or root / BUILD_MANIFEST_RELATIVE_PATH
     ledger_text = _read_text(resolved_ledger_path)
+    ledger_archive_text = _read_text(resolved_ledger_archive_path) if resolved_ledger_archive_path else ""
     build_manifest_text = _read_text(resolved_build_manifest_path)
     ledger_exists = resolved_ledger_path.is_file()
     build_manifest_exists = resolved_build_manifest_path.is_file()
     latest_ledger_entry = _latest_ledger_entry(ledger_text)
-    stage17_status = _stage17_status(ledger_text)
+    stage17_status = _stage17_status_with_archive(ledger_text=ledger_text, ledger_archive_text=ledger_archive_text)
     loop_guard = _loop_guard(
         ledger_exists=ledger_exists,
         build_manifest_exists=build_manifest_exists,
@@ -50,6 +59,7 @@ def completion_model_status_snapshot(
         "grants_mutation_authority": False,
         "source_documents": {
             "completion_ledger": COMPLETION_LEDGER_RELATIVE_PATH,
+            "completion_ledger_static_history": COMPLETION_LEDGER_STATIC_HISTORY_RELATIVE_PATH,
             "build_manifest": BUILD_MANIFEST_RELATIVE_PATH,
         },
         "current_phase": _current_phase(ledger_text=ledger_text, build_manifest_text=build_manifest_text),
@@ -346,6 +356,22 @@ def _stage17_status(ledger_text: str) -> dict[str, Any]:
         "next_smallest_truthful_gap": "select_from_latest_stage17_remaining_truthful_gap"
         if latest_stage17_entry["has_remaining_truthful_gap"]
         else "name_stage17_remaining_truthful_gap_in_ledger",
+    }
+
+
+def _stage17_status_with_archive(*, ledger_text: str, ledger_archive_text: str) -> dict[str, Any]:
+    stage17_status = _stage17_status(ledger_text)
+    if stage17_status.get("found") is True or not ledger_archive_text.strip():
+        return stage17_status
+
+    archived_status = _stage17_status(ledger_archive_text)
+    if archived_status.get("found") is not True:
+        return stage17_status
+
+    return {
+        **archived_status,
+        "readback_scope": "latest_stage17_archived_ledger_entry",
+        "archive_source": COMPLETION_LEDGER_STATIC_HISTORY_RELATIVE_PATH,
     }
 
 
