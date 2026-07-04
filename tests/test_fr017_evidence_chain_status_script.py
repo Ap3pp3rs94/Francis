@@ -77,6 +77,14 @@ def test_fr017_evidence_chain_status_stops_at_measurement_template() -> None:
         == "create_pending_measurement_record_then_capture_with_runbook_and_rerun_measurement_intake"
     )
     assert (
+        str(payload["first_blocking_update_tool_path"])
+        .replace("/", "\\")
+        .endswith("scripts\\fr017-new-measurement-record.ps1")
+    )
+    assert "fr017-new-measurement-record.ps1 -Mode Create" in payload["first_blocking_update_command_template"]
+    assert "-OutputPath <measurement-record.json>" in payload["first_blocking_update_command_template"]
+    assert "Creates a pending working record" in payload["first_blocking_update_contract"]
+    assert (
         payload["first_blocking_details"]["next_required_physical_input"]
         == "create_pending_record_with_fr017-new-measurement-record.ps1_then_capture_with_FR-017-MEASUREMENT-CAPTURE-RUNBOOK.md_and_rerun_measurement_intake"
     )
@@ -240,6 +248,9 @@ def test_fr017_evidence_chain_status_moves_blocker_after_measurement_ready(tmp_p
         payload["next_required_input"]
         == "scripts/fr017-new-mockup-record.ps1 + FR-017-MOCKUP-BUILD-INPUT-TEMPLATE.json"
     )
+    assert payload["first_blocking_update_tool_path"] == ""
+    assert payload["first_blocking_update_command_template"] == ""
+    assert payload["first_blocking_update_contract"] == ""
     assert "evidence.date" in payload["first_blocking_details"]["mockup_missing_fields"]
     assert payload["first_blocking_details"]["mockup_invalid_fields"] == []
     assert (
@@ -1335,6 +1346,9 @@ def test_fr017_evidence_chain_status_fails_closed_on_measurement_symptom(tmp_pat
         == "scripts/fr017-new-measurement-record.ps1 + FR-017-MEASUREMENT-CAPTURE-RUNBOOK.md + FR-017-MEASUREMENTS-INPUT-TEMPLATE.json"
     )
     assert result["first_blocking_details"]["safety_blockers"] == ["tingling"]
+    assert result["first_blocking_update_tool_path"] == ""
+    assert result["first_blocking_update_command_template"] == ""
+    assert "Stop the measurement session" in result["first_blocking_update_contract"]
     assert result["first_blocking_details"]["measurement_session_brief_parse_ok"] is True
     assert result["first_blocking_details"]["measurement_session_brief_exit_code"] == 1
     assert result["first_blocking_details"]["measurement_session_brief_status"] == "failed_measurement_session_brief"

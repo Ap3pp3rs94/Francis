@@ -587,6 +587,9 @@ $FirstBlockingGate = $null
 $FirstBlockingStatus = ''
 $NextRequiredInput = ''
 $NextCommand = ''
+$FirstBlockingUpdateToolPath = ''
+$FirstBlockingUpdateCommandTemplate = ''
+$FirstBlockingUpdateContract = ''
 $FirstBlockingDetails = New-GateEvidenceDetails -Payload $null
 $Status = 'ready_for_operator_stage17_completion_ledger_update_review'
 $ExitCode = 0
@@ -626,6 +629,11 @@ foreach ($Gate in $Gates) {
     $NextRequiredInput = [string]$Gate.next_required_input
     $NextCommand = [string]$Gate.next_command
     $FirstBlockingDetails = $GateDetails
+    if ($GateDetails -is [System.Collections.IDictionary]) {
+      $FirstBlockingUpdateToolPath = [string]$GateDetails['measurement_session_current_group_update_tool_path']
+      $FirstBlockingUpdateCommandTemplate = [string]$GateDetails['measurement_session_current_group_update_command_template']
+      $FirstBlockingUpdateContract = [string]$GateDetails['measurement_session_current_group_update_contract']
+    }
     if ($GateFailed) {
       $Status = 'failed_{0}' -f [string]$Gate.id
       $ExitCode = 1
@@ -667,6 +675,9 @@ $Output = [ordered]@{
   first_blocking_status = $FirstBlockingStatus
   next_required_input = $NextRequiredInput
   next_command = $NextCommand
+  first_blocking_update_tool_path = $FirstBlockingUpdateToolPath
+  first_blocking_update_command_template = $FirstBlockingUpdateCommandTemplate
+  first_blocking_update_contract = $FirstBlockingUpdateContract
   first_blocking_details = $FirstBlockingDetails
   gates_ran = $GateResults.Count
   gate_count = $Gates.Count
