@@ -201,6 +201,64 @@ def test_completion_model_snapshot_blocks_when_sources_are_missing(tmp_path: Pat
     assert checklist["stage17_worker_execution_liveness_guard"] == "enforced"
 
 
+def test_completion_model_snapshot_uses_archived_stage17_history_after_ledger_rotation(tmp_path: Path) -> None:
+    ledger = tmp_path / "ledger.md"
+    ledger.write_text(
+        "\n".join(
+            [
+                "# Ledger",
+                "",
+                "Francis is in `Phase 2`.",
+                "",
+                "### 2026-07-03 - Current non-stage17 slice",
+                "",
+                "Roadmap area: Stage 6 / Lens MVP.",
+                "",
+                "Remaining truthful gap:",
+                "",
+                "- Keep the current non-stage17 gap open.",
+                "",
+                "## 6. Update rule",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    archive = tmp_path / "archive.md"
+    archive.write_text(
+        "\n".join(
+            [
+                "# Static Ledger History",
+                "",
+                "### 2026-06-21 21:00Z - Stage 17 governed dry-run probe and invocation-audit proof",
+                "",
+                "Roadmap area: Stage 17 / Capability Economy.",
+                "",
+                "Remaining truthful gap:",
+                "",
+                "- Stage 17 remains open. Full local check, GitHub CI, and completion remain unproven.",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    manifest = tmp_path / "manifest.md"
+    manifest.write_text("- `P2_GOVERNANCE`: ready\n", encoding="utf-8")
+
+    payload = completion_model_status_snapshot(
+        ledger_path=ledger,
+        ledger_archive_path=archive,
+        build_manifest_path=manifest,
+    )
+
+    assert payload["stage17_status"]["found"] is True
+    assert payload["stage17_status"]["status"] == "open"
+    assert payload["stage17_status"]["readback_scope"] == "latest_stage17_archived_ledger_entry"
+    assert payload["stage17_status"]["archive_source"] == (
+        "docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md"
+    )
+    assert payload["next_continue_decision"]["selected_gap_source"] == "stage17_latest_ledger_entry"
+    assert payload["next_continue_decision"]["stage17_gap_preferred"] is True
+
+
 def test_completion_model_snapshot_reads_wrapped_roadmap_area(tmp_path: Path) -> None:
     ledger = tmp_path / "ledger.md"
     ledger.write_text(
