@@ -103,6 +103,20 @@ function Get-UtcNowText {
   return [DateTimeOffset]::UtcNow.ToString('o')
 }
 
+function Get-FrancisPowerShellPath {
+  $PowerShell = Get-Command pwsh -ErrorAction SilentlyContinue
+  if (-not $PowerShell) {
+    $PowerShell = Get-Command pwsh.exe -ErrorAction SilentlyContinue
+  }
+  if (-not $PowerShell) {
+    $PowerShell = Get-Command powershell -ErrorAction SilentlyContinue
+  }
+  if (-not $PowerShell) {
+    $PowerShell = Get-Command powershell.exe -ErrorAction Stop
+  }
+  return $PowerShell.Source
+}
+
 function Get-CoordinatorBoundedText {
   param(
     [string]$Text,
@@ -122,7 +136,8 @@ function Get-CoordinatorBuildSnapshot {
   $Completion = ''
   if (Test-Path -LiteralPath $CompletionModelScript -PathType Leaf) {
     try {
-      $Completion = powershell.exe -NoProfile -ExecutionPolicy Bypass -File $CompletionModelScript -Mode Status | Out-String
+      $PowerShell = Get-FrancisPowerShellPath
+      $Completion = & $PowerShell -NoProfile -ExecutionPolicy Bypass -File $CompletionModelScript -Mode Status | Out-String
     } catch {
       $Completion = 'completion_model_read_failed: {0}' -f $_.Exception.Message
     }
@@ -417,7 +432,8 @@ $BasePrompt
 }
 
 function Get-LauncherStatus {
-  $Output = powershell.exe -NoProfile -ExecutionPolicy Bypass -File $Launcher -Mode Status
+  $PowerShell = Get-FrancisPowerShellPath
+  $Output = & $PowerShell -NoProfile -ExecutionPolicy Bypass -File $Launcher -Mode Status
   return ($Output | ConvertFrom-Json -ErrorAction Stop)
 }
 
@@ -459,7 +475,8 @@ function Start-WorkerLane {
   if (-not [string]::IsNullOrWhiteSpace($Model)) {
     $Args += @('-Model', $Model)
   }
-  $Output = powershell.exe @Args
+  $PowerShell = Get-FrancisPowerShellPath
+  $Output = & $PowerShell @Args
   $Launch = ($Output | ConvertFrom-Json -ErrorAction Stop)
   return [ordered]@{
     launch = $Launch
@@ -697,10 +714,7 @@ if ($Mode -eq 'Stop') {
 if ($Mode -eq 'Start') {
   Initialize-CoordinatorStateRoot
   Remove-Item -LiteralPath $StopFlagPath -Force -ErrorAction SilentlyContinue
-  $Pwsh = (Get-Command pwsh.exe -ErrorAction SilentlyContinue).Source
-  if ([string]::IsNullOrWhiteSpace($Pwsh)) {
-    $Pwsh = (Get-Command powershell.exe -ErrorAction Stop).Source
-  }
+  $Pwsh = Get-FrancisPowerShellPath
   $Args = @(
     '-NoProfile',
     '-ExecutionPolicy',
