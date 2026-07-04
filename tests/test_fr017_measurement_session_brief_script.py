@@ -57,6 +57,10 @@ def test_fr017_measurement_session_brief_reports_first_template_blocker() -> Non
         "complete_first_blocking_measurement_capture_group_then_rerun_measurement_intake"
     )
     assert payload["operator_sequence"][0] == "create_pending_measurement_record_with_fr017-new-measurement-record.ps1"
+    assert (
+        "update_setup_safety_brief_with_fr017-update-measurement-setup-record.ps1_when_pending_record_exists"
+        in payload["operator_sequence"]
+    )
     assert "loss_of_grip_strength" in payload["safety_stop_conditions"]
     assert "copied_left_right_values_or_references" in payload["safety_stop_conditions"]
     assert "Read-only operator brief" in payload["measurement_session_brief_contract"]

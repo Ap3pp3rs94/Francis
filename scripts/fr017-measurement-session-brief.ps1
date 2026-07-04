@@ -234,6 +234,7 @@ $Output = [ordered]@{
   next_operator_action = $NextOperatorAction
   operator_sequence = @(
     'create_pending_measurement_record_with_fr017-new-measurement-record.ps1',
+    'update_setup_safety_brief_with_fr017-update-measurement-setup-record.ps1_when_pending_record_exists',
     'capture_setup_and_safety_brief_without_symptoms_or_compression',
     'capture_left_arm_numeric_measurements_with_second_pass_repeatability',
     'capture_right_arm_numeric_measurements_separately_with_second_pass_repeatability',

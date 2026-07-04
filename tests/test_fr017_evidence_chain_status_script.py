@@ -101,6 +101,11 @@ def test_fr017_evidence_chain_status_stops_at_measurement_template() -> None:
         .endswith("scripts\\fr017-update-measurement-record.ps1")
     )
     assert (
+        str(payload["first_blocking_details"]["measurement_setup_update_path"])
+        .replace("/", "\\")
+        .endswith("scripts\\fr017-update-measurement-setup-record.ps1")
+    )
+    assert (
         str(payload["first_blocking_details"]["measurement_landmark_update_path"])
         .replace("/", "\\")
         .endswith("scripts\\fr017-update-landmark-record.ps1")
@@ -119,6 +124,10 @@ def test_fr017_evidence_chain_status_stops_at_measurement_template() -> None:
     assert "operator input tooling only" in payload["first_blocking_details"]["measurement_capture_runbook_contract"]
     assert (
         "fr017-new-measurement-record.ps1" in payload["first_blocking_details"]["measurement_capture_runbook_contract"]
+    )
+    assert (
+        "fr017-update-measurement-setup-record.ps1"
+        in payload["first_blocking_details"]["measurement_capture_runbook_contract"]
     )
     assert (
         "fr017-update-measurement-record.ps1"

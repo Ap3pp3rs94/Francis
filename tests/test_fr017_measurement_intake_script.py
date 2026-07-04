@@ -178,6 +178,11 @@ def test_fr017_measurement_intake_reports_template_as_pending() -> None:
         .endswith("scripts\\fr017-update-measurement-record.ps1")
     )
     assert (
+        str(payload["measurement_setup_update_path"])
+        .replace("/", "\\")
+        .endswith("scripts\\fr017-update-measurement-setup-record.ps1")
+    )
+    assert (
         str(payload["measurement_landmark_update_path"])
         .replace("/", "\\")
         .endswith("scripts\\fr017-update-landmark-record.ps1")
@@ -193,6 +198,7 @@ def test_fr017_measurement_intake_reports_template_as_pending() -> None:
     assert "operator input tooling only" in payload["measurement_capture_runbook_contract"]
     assert "FR-017-MEASUREMENT-CAPTURE-RUNBOOK.md" in payload["measurement_capture_runbook_contract"]
     assert "fr017-new-measurement-record.ps1" in payload["measurement_capture_runbook_contract"]
+    assert "fr017-update-measurement-setup-record.ps1" in payload["measurement_capture_runbook_contract"]
     assert "fr017-update-measurement-record.ps1" in payload["measurement_capture_runbook_contract"]
     assert "fr017-update-landmark-record.ps1" in payload["measurement_capture_runbook_contract"]
     assert "fr017-update-independence-safety-record.ps1" in payload["measurement_capture_runbook_contract"]

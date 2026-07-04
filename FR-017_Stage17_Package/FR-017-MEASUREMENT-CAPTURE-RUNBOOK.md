@@ -53,6 +53,27 @@ If the setup and safety brief has actually been completed, the initializer can a
 
 These setup-brief fields are still not physical validation evidence. They can make only `setup_and_safety_brief` ready when real values are provided. Left/right measurements, marked zones, repeatability, left/right independence, and symptom screen entries remain separate required evidence.
 
+If a pending record already exists without setup/safety-brief fields, update that first capture group with real operator-supplied values instead of editing JSON by hand:
+
+```powershell
+.\scripts\fr017-update-measurement-setup-record.ps1 -Mode UpdateSetup `
+  -MeasurementPath .\FR-017_Stage17_Package\FR-017-MEASUREMENTS-YYYY-MM-DD-PILOT-RECORD.json `
+  -EvidenceDate YYYY-MM-DD `
+  -Observer "<observer>" `
+  -PilotId "<pilot-reference>" `
+  -MeasurementTool "flexible metric tape" `
+  -Method "flexible tape, no tissue compression" `
+  -Posture "arm relaxed, palm neutral" `
+  -ConfirmNoTissueCompressionUsed `
+  -ConfirmNoWristBoneCompressionUsed `
+  -ConfirmMetricToolUsed `
+  -ConfirmArmRelaxedPalmNeutralOrExceptionRecorded `
+  -ConfirmStopConditionsBriefed `
+  -ConditionNotes "No tissue compression, no wrist-bone compression, metric tool, and stop briefing confirmed."
+```
+
+This command writes operator-supplied setup and measurement-condition input only. It refuses to update the template and refuses to overwrite populated fields unless `-AllowOverwrite` is explicitly supplied. The measurement-intake gate remains the authority for readiness.
+
 ## Capture Order
 
 The capture groups below must remain in the same order as the gate status output.

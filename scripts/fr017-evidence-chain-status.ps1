@@ -198,6 +198,7 @@ function New-GateEvidenceDetails {
     measurement_input_template_path = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['measurement_input_template_path']) { '' } else { [string]$Payload.measurement_input_template_path }
     measurement_capture_runbook_path = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['measurement_capture_runbook_path']) { '' } else { [string]$Payload.measurement_capture_runbook_path }
     measurement_record_initializer_path = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['measurement_record_initializer_path']) { '' } else { [string]$Payload.measurement_record_initializer_path }
+    measurement_setup_update_path = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['measurement_setup_update_path']) { '' } else { [string]$Payload.measurement_setup_update_path }
     measurement_record_update_path = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['measurement_record_update_path']) { '' } else { [string]$Payload.measurement_record_update_path }
     measurement_landmark_update_path = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['measurement_landmark_update_path']) { '' } else { [string]$Payload.measurement_landmark_update_path }
     measurement_independence_safety_update_path = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['measurement_independence_safety_update_path']) { '' } else { [string]$Payload.measurement_independence_safety_update_path }

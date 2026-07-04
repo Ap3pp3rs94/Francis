@@ -98,6 +98,7 @@ def test_fr017_stage17_final_audit_blocks_physical_and_fr018_claims() -> None:
     assert "FR-017-MEASUREMENT-CAPTURE-RUNBOOK.md" in package_index
     assert "FR-017-COMPLETION-LEDGER-HANDOFF-TEMPLATE.md" in package_index
     assert "fr017-measurement-session-brief.ps1" in package_index
+    assert "fr017-update-measurement-setup-record.ps1" in package_index
     assert "fr017-update-independence-safety-record.ps1" in package_index
     assert "fr017-new-mockup-record.ps1" in package_index
     assert "fr017-new-mannequin-interface-record.ps1" in package_index
@@ -136,6 +137,7 @@ def test_fr017_measurement_capture_runbook_preserves_first_physical_input_lock()
     assert "This runbook is not physical validation evidence." in runbook
     assert "FR-017-MEASUREMENTS-INPUT-TEMPLATE.json" in runbook
     assert "fr017-new-measurement-record.ps1" in runbook
+    assert "fr017-update-measurement-setup-record.ps1" in runbook
     assert "fr017-update-measurement-record.ps1" in runbook
     assert "fr017-update-landmark-record.ps1" in runbook
     assert "fr017-update-independence-safety-record.ps1" in runbook
