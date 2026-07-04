@@ -52,6 +52,7 @@ def _normalize_newlines(value: str) -> str:
 
 def _run_api_json_in_fresh_process(source: str, *, env: dict[str, str] | None = None) -> dict[str, object]:
     run_env = os.environ.copy()
+    run_env["FRANCIS_ROOT"] = str(_TEST_ROOT)
     python_path = str(_TEST_SRC)
     if existing := run_env.get("PYTHONPATH"):
         python_path = f"{python_path}{os.pathsep}{existing}"
