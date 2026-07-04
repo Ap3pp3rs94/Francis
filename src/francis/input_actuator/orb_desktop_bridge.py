@@ -112,6 +112,10 @@ def _bridge_backend() -> str:
     return _clean_text(os.environ.get(ORB_DESKTOP_BRIDGE_BACKEND_ENV), ORB_DESKTOP_BRIDGE_DEFAULT_BACKEND)
 
 
+def _win32_platform_supported() -> bool:
+    return os.name == "nt"
+
+
 @dataclass(frozen=True)
 class _WindowTarget:
     hwnd: int
@@ -208,7 +212,7 @@ def perform_orb_desktop_action(
             }
         )
 
-    if os.name != "nt":
+    if not _win32_platform_supported():
         return _finish_attempt(
             {
                 **base,

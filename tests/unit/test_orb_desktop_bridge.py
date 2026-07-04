@@ -60,6 +60,7 @@ def _state_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 def _install_fake_win32gui(monkeypatch: pytest.MonkeyPatch, windows: dict[int, dict[str, Any]]) -> FakeWin32Gui:
     fake = FakeWin32Gui(windows)
     monkeypatch.setitem(sys.modules, "win32gui", fake)
+    monkeypatch.setattr(orb_desktop_bridge, "_win32_platform_supported", lambda: True)
     return fake
 
 
