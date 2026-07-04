@@ -665,6 +665,7 @@ $DefaultMeasurementPath = Join-Path $RepoRoot 'FR-017_Stage17_Package\FR-017-MEA
 $DefaultMockupPath = Join-Path $RepoRoot 'FR-017_Stage17_Package\FR-017-MOCKUP-BUILD-INPUT-TEMPLATE.json'
 $DefaultMannequinPath = Join-Path $RepoRoot 'FR-017_Stage17_Package\FR-017-MANNEQUIN-INTERFACE-INPUT-TEMPLATE.json'
 $DefaultStaticFitPath = Join-Path $RepoRoot 'FR-017_Stage17_Package\FR-017-PILOT-STATIC-FIT-INPUT-TEMPLATE.json'
+$StaticFitRecordInitializerPath = Join-Path $RepoRoot 'scripts\fr017-new-pilot-static-fit-record.ps1'
 $ResolvedMeasurementPath = if ([string]::IsNullOrWhiteSpace($MeasurementPath)) { $DefaultMeasurementPath } else { Resolve-GatePath -Path $MeasurementPath }
 $ResolvedMockupPath = if ([string]::IsNullOrWhiteSpace($MockupPath)) { $DefaultMockupPath } else { Resolve-GatePath -Path $MockupPath }
 $ResolvedMannequinPath = if ([string]::IsNullOrWhiteSpace($MannequinPath)) { $DefaultMannequinPath } else { Resolve-GatePath -Path $MannequinPath }
@@ -867,6 +868,7 @@ $Output = [ordered]@{
   grants_execution_authority = $false
   grants_mutation_authority = $false
   physical_validation_complete = $false
+  stage17_completion_claim_allowed = $false
   pilot_static_fit_test_complete = ($Status -eq 'ready_for_pilot_movement_test_planning')
   pilot_movement_test_planning_ready = ($Status -eq 'ready_for_pilot_movement_test_planning')
   pilot_movement_testing_cleared = $false
@@ -880,8 +882,12 @@ $Output = [ordered]@{
   static_fit_capture_plan_contract = 'The static_fit_capture_plan is read-only operator guidance for capturing FR-017 non-powered pilot static-fit evidence. It is not physical validation evidence by itself, does not prove pilot safety, and cannot clear pilot movement, powered, frame-coupled, or FR-018 work.'
   static_fit_capture_plan_status_contract = 'The static_fit_capture_plan_status reports pilot static-fit capture readiness only. A ready group means the supplied record fields passed this script contract; it is not professional certification, medical clearance, or movement-test clearance.'
   static_fit_capture_summary_contract = 'The static_fit_capture_* summary identifies the next blocking pilot static-fit evidence group. It is not physical validation evidence and cannot mark Stage 17 complete.'
+  static_fit_capture_runbook_contract = 'Use FR-017-PILOT-STATIC-FIT-INPUT-TEMPLATE.json with completed measurement, mockup, and mannequin records. Use scripts/fr017-new-pilot-static-fit-record.ps1 only to create a real operator-supplied non-powered pilot static-fit working record after mannequin interface readiness is ready. The template, initializer, and gate are operator input tooling only; they are not physical validation completion, movement testing clearance, powered testing clearance, frame-coupled testing clearance, professional engineering approval, or FR-018 clearance.'
   static_fit_capture_plan_not_completion_evidence = $true
-  next_required_static_fit_input = 'complete_non_powered_pilot_static_fit_record_at_FR-017-PILOT-STATIC-FIT-INPUT-TEMPLATE.json'
+  next_required_static_fit_input = 'create_non_powered_pilot_static_fit_record_with_fr017-new-pilot-static-fit-record.ps1_then_rerun_pilot_static_fit_gate'
+  static_fit_input_template_path = $DefaultStaticFitPath
+  static_fit_record_initializer_path = $StaticFitRecordInitializerPath
+  static_fit_working_record_name_pattern = 'FR-017-PILOT-STATIC-FIT-YYYY-MM-DD-PILOT-RECORD.json'
   static_fit_capture_plan = @($StaticFitCapturePlan)
   static_fit_capture_plan_status = @($StaticFitCapturePlanStatus)
   static_fit_capture_total_groups = [int]$StaticFitCapturePlanSummary.total_groups
@@ -914,7 +920,7 @@ $Output = [ordered]@{
   } elseif ($Status -eq 'pending_pilot_static_fit_test') {
     @(
       'run_non_powered_pilot_static_fit_test_with_observer',
-      'complete_FR-017_pilot_static_fit_record',
+      'create_non_powered_pilot_static_fit_record_with_fr017-new-pilot-static-fit-record.ps1',
       'rerun_pilot_static_fit_gate'
     )
   } elseif ($Status -eq 'pending_mannequin_interface_gate') {

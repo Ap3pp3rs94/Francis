@@ -28,7 +28,9 @@ $ErrorActionPreference = 'Stop'
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $FinalPhysicalGateScript = Join-Path $PSScriptRoot 'fr017-final-physical-gate.ps1'
 $ExpectedFinalPhysicalStatus = 'ready_for_stage17_final_physical_completion_decision'
-$ExpectedNextDecisionInput = 'complete_human_final_stage17_completion_decision_record_at_FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json'
+$ExpectedNextDecisionInput = 'create_human_final_decision_record_with_fr017-new-final-decision-record.ps1_then_rerun_final_decision_record_gate'
+$FinalDecisionRecordInitializerPath = Join-Path $RepoRoot 'scripts\fr017-new-final-decision-record.ps1'
+$FinalDecisionInputTemplatePath = Join-Path $RepoRoot 'FR-017_Stage17_Package\FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json'
 
 function Resolve-GatePath {
   param([string]$Path)
@@ -430,7 +432,12 @@ $Output = [ordered]@{
   final_decision_record_parse_ok = $DecisionRecordParseOk
   final_decision_record_ready = ($Status -eq 'ready_for_completion_ledger_review')
   final_decision_record_contract = 'This gate validates a populated human final decision record after the final physical gate is decision-ready. It is a ledger-review handoff, not certification, physical validation completion, powered/frame/load clearance, or FR-018 clearance.'
+  final_decision_record_runbook_contract = 'Use scripts/fr017-new-final-decision-record.ps1 only to create a bounded operator-supplied human final decision working record and linked saved final-physical-gate output. The initializer and template are input tooling only; they do not write the completion ledger, mark physical validation complete, permit a Stage 17 completion claim by themselves, or clear FR-018.'
   final_decision_pilot_identity_contract = 'Final decision evidence.pilot_id must match the final physical gate pilot identity continuity reference by redacted SHA-256-derived fingerprint; raw pilot ID is not emitted.'
+  final_decision_input_template_path = $FinalDecisionInputTemplatePath
+  final_decision_record_initializer_path = $FinalDecisionRecordInitializerPath
+  final_decision_working_record_name_pattern = 'FR-017-FINAL-DECISION-YYYY-MM-DD-PILOT-RECORD.json'
+  final_physical_gate_record_name_pattern = 'FR-017-FINAL-PHYSICAL-GATE-YYYY-MM-DD-PILOT-RECORD.json'
   final_physical_gate_reference_pilot_fingerprint = $FinalPhysicalGateReferencePilotFingerprint
   final_decision_pilot_fingerprint = $FinalDecisionPilotFingerprint
   saved_final_physical_gate_record_path = $SavedFinalGateRecordPath

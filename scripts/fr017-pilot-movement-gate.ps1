@@ -634,6 +634,7 @@ $DefaultMockupPath = Join-Path $RepoRoot 'FR-017_Stage17_Package\FR-017-MOCKUP-B
 $DefaultMannequinPath = Join-Path $RepoRoot 'FR-017_Stage17_Package\FR-017-MANNEQUIN-INTERFACE-INPUT-TEMPLATE.json'
 $DefaultStaticFitPath = Join-Path $RepoRoot 'FR-017_Stage17_Package\FR-017-PILOT-STATIC-FIT-INPUT-TEMPLATE.json'
 $DefaultMovementPath = Join-Path $RepoRoot 'FR-017_Stage17_Package\FR-017-PILOT-MOVEMENT-INPUT-TEMPLATE.json'
+$MovementRecordInitializerPath = Join-Path $RepoRoot 'scripts\fr017-new-pilot-movement-record.ps1'
 $ResolvedMeasurementPath = if ([string]::IsNullOrWhiteSpace($MeasurementPath)) { $DefaultMeasurementPath } else { Resolve-GatePath -Path $MeasurementPath }
 $ResolvedMockupPath = if ([string]::IsNullOrWhiteSpace($MockupPath)) { $DefaultMockupPath } else { Resolve-GatePath -Path $MockupPath }
 $ResolvedMannequinPath = if ([string]::IsNullOrWhiteSpace($MannequinPath)) { $DefaultMannequinPath } else { Resolve-GatePath -Path $MannequinPath }
@@ -833,8 +834,10 @@ $Output = [ordered]@{
   grants_execution_authority = $false
   grants_mutation_authority = $false
   physical_validation_complete = $false
+  stage17_completion_claim_allowed = $false
   pilot_movement_test_complete = ($Status -eq 'ready_for_quick_release_and_cable_snag_test_planning')
   quick_release_and_cable_snag_test_planning_ready = ($Status -eq 'ready_for_quick_release_and_cable_snag_test_planning')
+  quick_release_and_cable_snag_testing_cleared = $false
   powered_or_frame_coupled_testing_cleared = $false
   fr018_implementation_cleared = $false
   required_preconditions = $RequiredPreconditions
@@ -844,8 +847,12 @@ $Output = [ordered]@{
   movement_capture_plan_contract = 'The movement_capture_plan is read-only operator guidance for capturing FR-017 non-powered pilot movement evidence. It is not physical validation evidence by itself, does not prove pilot safety, and cannot clear release/cable testing, powered, frame-coupled, or FR-018 work.'
   movement_capture_plan_status_contract = 'The movement_capture_plan_status reports pilot movement capture readiness only. A ready group means the supplied record fields passed this script contract; it is not professional certification, medical clearance, or quick-release/cable-snag clearance.'
   movement_capture_summary_contract = 'The movement_capture_* summary identifies the next blocking pilot movement evidence group. It is not physical validation evidence and cannot mark Stage 17 complete.'
+  movement_capture_runbook_contract = 'Use FR-017-PILOT-MOVEMENT-INPUT-TEMPLATE.json with completed measurement, mockup, mannequin, and static-fit records. Use scripts/fr017-new-pilot-movement-record.ps1 only to create a real operator-supplied non-powered pilot movement working record after pilot static-fit readiness is ready. The template, initializer, and gate are operator input tooling only; they are not physical validation completion, quick-release/cable-snag clearance, powered testing clearance, frame-coupled testing clearance, professional engineering approval, or FR-018 clearance.'
   movement_capture_plan_not_completion_evidence = $true
-  next_required_movement_input = 'complete_non_powered_pilot_movement_record_at_FR-017-PILOT-MOVEMENT-INPUT-TEMPLATE.json'
+  next_required_movement_input = 'create_non_powered_pilot_movement_record_with_fr017-new-pilot-movement-record.ps1_then_rerun_pilot_movement_gate'
+  movement_input_template_path = $DefaultMovementPath
+  movement_record_initializer_path = $MovementRecordInitializerPath
+  movement_working_record_name_pattern = 'FR-017-PILOT-MOVEMENT-YYYY-MM-DD-PILOT-RECORD.json'
   movement_capture_plan = @($MovementCapturePlan)
   movement_capture_plan_status = @($MovementCapturePlanStatus)
   movement_capture_total_groups = [int]$MovementCapturePlanSummary.total_groups
@@ -878,7 +885,7 @@ $Output = [ordered]@{
   } elseif ($Status -eq 'pending_pilot_movement_test') {
     @(
       'run_non_powered_pilot_movement_test_with_observer',
-      'complete_FR-017_pilot_movement_record',
+      'create_non_powered_pilot_movement_record_with_fr017-new-pilot-movement-record.ps1',
       'rerun_pilot_movement_gate'
     )
   } elseif ($Status -eq 'pending_pilot_static_fit_gate') {

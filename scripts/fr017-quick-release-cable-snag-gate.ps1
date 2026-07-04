@@ -644,6 +644,7 @@ $DefaultMannequinPath = Join-Path $RepoRoot 'FR-017_Stage17_Package\FR-017-MANNE
 $DefaultStaticFitPath = Join-Path $RepoRoot 'FR-017_Stage17_Package\FR-017-PILOT-STATIC-FIT-INPUT-TEMPLATE.json'
 $DefaultMovementPath = Join-Path $RepoRoot 'FR-017_Stage17_Package\FR-017-PILOT-MOVEMENT-INPUT-TEMPLATE.json'
 $DefaultReleaseCablePath = Join-Path $RepoRoot 'FR-017_Stage17_Package\FR-017-QUICK-RELEASE-CABLE-SNAG-INPUT-TEMPLATE.json'
+$ReleaseCableRecordInitializerPath = Join-Path $RepoRoot 'scripts\fr017-new-release-cable-record.ps1'
 $ResolvedMeasurementPath = if ([string]::IsNullOrWhiteSpace($MeasurementPath)) { $DefaultMeasurementPath } else { Resolve-GatePath -Path $MeasurementPath }
 $ResolvedMockupPath = if ([string]::IsNullOrWhiteSpace($MockupPath)) { $DefaultMockupPath } else { Resolve-GatePath -Path $MockupPath }
 $ResolvedMannequinPath = if ([string]::IsNullOrWhiteSpace($MannequinPath)) { $DefaultMannequinPath } else { Resolve-GatePath -Path $MannequinPath }
@@ -850,8 +851,10 @@ $Output = [ordered]@{
   grants_execution_authority = $false
   grants_mutation_authority = $false
   physical_validation_complete = $false
+  stage17_completion_claim_allowed = $false
   quick_release_and_cable_snag_test_complete = ($Status -eq 'ready_for_engineering_review_or_final_physical_gate_audit')
   engineering_review_or_final_physical_gate_audit_ready = ($Status -eq 'ready_for_engineering_review_or_final_physical_gate_audit')
+  professional_engineering_review_cleared = $false
   powered_or_frame_coupled_testing_cleared = $false
   fr018_implementation_cleared = $false
   required_preconditions = $RequiredPreconditions
@@ -861,8 +864,12 @@ $Output = [ordered]@{
   release_cable_capture_plan_contract = 'The release_cable_capture_plan is read-only operator guidance for capturing FR-017 non-powered quick-release and cable-snag evidence. It is not physical validation evidence by itself, does not prove pilot safety, and cannot clear engineering review, powered, frame-coupled, or FR-018 work.'
   release_cable_capture_plan_status_contract = 'The release_cable_capture_plan_status reports quick-release/cable-snag capture readiness only. A ready group means the supplied record fields passed this script contract; it is not professional certification, medical clearance, or Stage 17 completion.'
   release_cable_capture_summary_contract = 'The release_cable_capture_* summary identifies the next blocking quick-release/cable-snag evidence group. It is not physical validation evidence and cannot mark Stage 17 complete.'
+  release_cable_capture_runbook_contract = 'Use FR-017-QUICK-RELEASE-CABLE-SNAG-INPUT-TEMPLATE.json with completed measurement, mockup, mannequin, static-fit, and movement records. Use scripts/fr017-new-release-cable-record.ps1 only to create a real operator-supplied non-powered quick-release/cable-snag working record after pilot movement readiness is ready. The template, initializer, and gate are operator input tooling only; they are not physical validation completion, professional engineering approval, powered testing clearance, frame-coupled testing clearance, or FR-018 clearance.'
   release_cable_capture_plan_not_completion_evidence = $true
-  next_required_release_cable_input = 'complete_non_powered_quick_release_cable_snag_record_at_FR-017-QUICK-RELEASE-CABLE-SNAG-INPUT-TEMPLATE.json'
+  next_required_release_cable_input = 'create_non_powered_quick_release_cable_snag_record_with_fr017-new-release-cable-record.ps1_then_rerun_release_cable_gate'
+  release_cable_input_template_path = $DefaultReleaseCablePath
+  release_cable_record_initializer_path = $ReleaseCableRecordInitializerPath
+  release_cable_working_record_name_pattern = 'FR-017-RELEASE-CABLE-YYYY-MM-DD-PILOT-RECORD.json'
   release_cable_capture_plan = @($ReleaseCableCapturePlan)
   release_cable_capture_plan_status = @($ReleaseCableCapturePlanStatus)
   release_cable_capture_total_groups = [int]$ReleaseCableCapturePlanSummary.total_groups
@@ -895,7 +902,7 @@ $Output = [ordered]@{
   } elseif ($Status -eq 'pending_quick_release_cable_snag_test') {
     @(
       'run_non_powered_quick_release_and_cable_snag_test_with_observer',
-      'complete_FR-017_release_cable_record',
+      'create_non_powered_quick_release_cable_snag_record_with_fr017-new-release-cable-record.ps1',
       'rerun_quick_release_cable_snag_gate'
     )
   } elseif ($Status -eq 'pending_pilot_movement_gate') {
