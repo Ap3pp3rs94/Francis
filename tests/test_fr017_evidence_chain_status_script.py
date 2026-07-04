@@ -59,6 +59,18 @@ def _assert_unique(values: list[Any]) -> None:
     assert len(values) == len(set(values))
 
 
+def _assert_first_blocking_update_hint(
+    payload: dict[str, Any],
+    script_name: str,
+    command_parts: list[str],
+    contract_fragment: str = "operator input tooling only",
+) -> None:
+    assert str(payload["first_blocking_update_tool_path"]).replace("/", "\\").endswith(f"scripts\\{script_name}")
+    for command_part in command_parts:
+        assert command_part in payload["first_blocking_update_command_template"]
+    assert contract_fragment in payload["first_blocking_update_contract"]
+
+
 def test_fr017_evidence_chain_status_stops_at_measurement_template() -> None:
     proc = _run_gate("-Mode", "Status")
 
@@ -248,9 +260,15 @@ def test_fr017_evidence_chain_status_moves_blocker_after_measurement_ready(tmp_p
         payload["next_required_input"]
         == "scripts/fr017-new-mockup-record.ps1 + FR-017-MOCKUP-BUILD-INPUT-TEMPLATE.json"
     )
-    assert payload["first_blocking_update_tool_path"] == ""
-    assert payload["first_blocking_update_command_template"] == ""
-    assert payload["first_blocking_update_contract"] == ""
+    _assert_first_blocking_update_hint(
+        payload,
+        "fr017-new-mockup-record.ps1",
+        [
+            "fr017-new-mockup-record.ps1 -Mode Create",
+            "-OutputPath <mockup-record.json>",
+            "-MeasurementPath <measurement-record.json>",
+        ],
+    )
     assert "evidence.date" in payload["first_blocking_details"]["mockup_missing_fields"]
     assert payload["first_blocking_details"]["mockup_invalid_fields"] == []
     assert (
@@ -332,6 +350,16 @@ def test_fr017_evidence_chain_status_moves_blocker_after_mockup_ready(tmp_path: 
     assert (
         payload["next_required_input"]
         == "scripts/fr017-new-mannequin-interface-record.ps1 + FR-017-MANNEQUIN-INTERFACE-INPUT-TEMPLATE.json"
+    )
+    _assert_first_blocking_update_hint(
+        payload,
+        "fr017-new-mannequin-interface-record.ps1",
+        [
+            "fr017-new-mannequin-interface-record.ps1 -Mode Create",
+            "-OutputPath <mannequin-interface-record.json>",
+            "-MeasurementPath <measurement-record.json>",
+            "-MockupPath <mockup-record.json>",
+        ],
     )
     assert "evidence.date" in payload["first_blocking_details"]["missing_fields"]
     assert payload["first_blocking_details"]["invalid_fields"] == []
@@ -425,6 +453,17 @@ def test_fr017_evidence_chain_status_moves_blocker_after_mannequin_ready(tmp_pat
     assert (
         payload["next_required_input"]
         == "scripts/fr017-new-pilot-static-fit-record.ps1 + FR-017-PILOT-STATIC-FIT-INPUT-TEMPLATE.json"
+    )
+    _assert_first_blocking_update_hint(
+        payload,
+        "fr017-new-pilot-static-fit-record.ps1",
+        [
+            "fr017-new-pilot-static-fit-record.ps1 -Mode Create",
+            "-OutputPath <pilot-static-fit-record.json>",
+            "-MeasurementPath <measurement-record.json>",
+            "-MockupPath <mockup-record.json>",
+            "-MannequinPath <mannequin-interface-record.json>",
+        ],
     )
     assert "evidence.date" in payload["first_blocking_details"]["missing_fields"]
     assert payload["first_blocking_details"]["invalid_fields"] == []
@@ -524,6 +563,18 @@ def test_fr017_evidence_chain_status_moves_blocker_after_static_fit_ready(tmp_pa
         payload["next_required_input"]
         == "scripts/fr017-new-pilot-movement-record.ps1 + FR-017-PILOT-MOVEMENT-INPUT-TEMPLATE.json"
     )
+    _assert_first_blocking_update_hint(
+        payload,
+        "fr017-new-pilot-movement-record.ps1",
+        [
+            "fr017-new-pilot-movement-record.ps1 -Mode Create",
+            "-OutputPath <pilot-movement-record.json>",
+            "-MeasurementPath <measurement-record.json>",
+            "-MockupPath <mockup-record.json>",
+            "-MannequinPath <mannequin-interface-record.json>",
+            "-StaticFitPath <pilot-static-fit-record.json>",
+        ],
+    )
     assert "evidence.date" in payload["first_blocking_details"]["missing_fields"]
     assert payload["first_blocking_details"]["invalid_fields"] == []
     assert payload["first_blocking_details"]["movement_capture_plan_not_completion_evidence"] is True
@@ -612,6 +663,19 @@ def test_fr017_evidence_chain_status_moves_blocker_after_movement_ready(tmp_path
     assert (
         payload["next_required_input"]
         == "scripts/fr017-new-release-cable-record.ps1 + FR-017-QUICK-RELEASE-CABLE-SNAG-INPUT-TEMPLATE.json"
+    )
+    _assert_first_blocking_update_hint(
+        payload,
+        "fr017-new-release-cable-record.ps1",
+        [
+            "fr017-new-release-cable-record.ps1 -Mode Create",
+            "-OutputPath <release-cable-record.json>",
+            "-MeasurementPath <measurement-record.json>",
+            "-MockupPath <mockup-record.json>",
+            "-MannequinPath <mannequin-interface-record.json>",
+            "-StaticFitPath <pilot-static-fit-record.json>",
+            "-MovementPath <pilot-movement-record.json>",
+        ],
     )
     assert "evidence.date" in payload["first_blocking_details"]["missing_fields"]
     assert payload["first_blocking_details"]["invalid_fields"] == []
@@ -715,6 +779,21 @@ def test_fr017_evidence_chain_status_moves_blocker_after_release_cable_ready(tmp
         "scripts/fr017-new-engineering-review-record.ps1 + FR-017-ENGINEERING-REVIEW-INPUT-TEMPLATE.json"
     )
     assert payload["next_command"] == "create_professional_engineering_review_record_then_rerun_engineering_review_gate"
+    _assert_first_blocking_update_hint(
+        payload,
+        "fr017-new-engineering-review-record.ps1",
+        [
+            "fr017-new-engineering-review-record.ps1 -Mode Create",
+            "-OutputPath <engineering-review-record.json>",
+            "-MeasurementPath <measurement-record.json>",
+            "-MockupPath <mockup-record.json>",
+            "-MannequinPath <mannequin-interface-record.json>",
+            "-StaticFitPath <pilot-static-fit-record.json>",
+            "-MovementPath <pilot-movement-record.json>",
+            "-ReleaseCablePath <release-cable-record.json>",
+        ],
+        contract_fragment="bounded operator-supplied professional engineering review working record",
+    )
     assert "evidence.date" in payload["first_blocking_details"]["missing_fields"]
     assert payload["first_blocking_details"]["invalid_fields"] == []
     assert payload["first_blocking_details"]["engineering_review_capture_plan_not_completion_evidence"] is True

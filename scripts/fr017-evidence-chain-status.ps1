@@ -157,6 +157,25 @@ function Get-PayloadValue {
   return $Property.Value
 }
 
+function Get-DetailsValue {
+  param(
+    [object]$Details,
+    [string]$Name,
+    [object]$Default = ''
+  )
+
+  if ($null -eq $Details) {
+    return $Default
+  }
+  if ($Details -is [System.Collections.IDictionary]) {
+    if ($Details.Contains($Name) -and $null -ne $Details[$Name]) {
+      return $Details[$Name]
+    }
+    return $Default
+  }
+  return Get-PayloadValue -Payload $Details -Name $Name -Default $Default
+}
+
 function New-GateEvidenceDetails {
   param(
     [object]$Payload,
@@ -452,6 +471,84 @@ function New-GateDefinition {
   }
 }
 
+function New-FirstBlockingUpdateHint {
+  param(
+    [string]$GateId,
+    [bool]$GateFailed,
+    [object]$GateDetails
+  )
+
+  $ToolPath = ''
+  $CommandTemplate = ''
+  $Contract = ''
+
+  if ($GateFailed) {
+    if ($GateId -eq 'measurement_intake') {
+      $Contract = [string](Get-DetailsValue -Details $GateDetails -Name 'measurement_session_current_group_update_contract')
+    }
+    if ([string]::IsNullOrWhiteSpace($Contract)) {
+      $Contract = 'Stop the FR-017 evidence chain and resolve the failed safety, validation, or redesign condition before creating downstream evidence records.'
+    }
+    return [ordered]@{
+      tool_path = ''
+      command_template = ''
+      contract = $Contract
+    }
+  }
+
+  switch ($GateId) {
+    'measurement_intake' {
+      $ToolPath = [string](Get-DetailsValue -Details $GateDetails -Name 'measurement_session_current_group_update_tool_path')
+      $CommandTemplate = [string](Get-DetailsValue -Details $GateDetails -Name 'measurement_session_current_group_update_command_template')
+      $Contract = [string](Get-DetailsValue -Details $GateDetails -Name 'measurement_session_current_group_update_contract')
+    }
+    'mockup_readiness' {
+      $ToolPath = [string](Get-DetailsValue -Details $GateDetails -Name 'mockup_record_initializer_path')
+      $CommandTemplate = '.\scripts\fr017-new-mockup-record.ps1 -Mode Create -OutputPath <mockup-record.json> -MeasurementPath <measurement-record.json>'
+      $Contract = [string](Get-DetailsValue -Details $GateDetails -Name 'mockup_capture_runbook_contract')
+    }
+    'mannequin_interface' {
+      $ToolPath = [string](Get-DetailsValue -Details $GateDetails -Name 'mannequin_record_initializer_path')
+      $CommandTemplate = '.\scripts\fr017-new-mannequin-interface-record.ps1 -Mode Create -OutputPath <mannequin-interface-record.json> -MeasurementPath <measurement-record.json> -MockupPath <mockup-record.json>'
+      $Contract = [string](Get-DetailsValue -Details $GateDetails -Name 'mannequin_capture_runbook_contract')
+    }
+    'pilot_static_fit' {
+      $ToolPath = [string](Get-DetailsValue -Details $GateDetails -Name 'static_fit_record_initializer_path')
+      $CommandTemplate = '.\scripts\fr017-new-pilot-static-fit-record.ps1 -Mode Create -OutputPath <pilot-static-fit-record.json> -MeasurementPath <measurement-record.json> -MockupPath <mockup-record.json> -MannequinPath <mannequin-interface-record.json>'
+      $Contract = [string](Get-DetailsValue -Details $GateDetails -Name 'static_fit_capture_runbook_contract')
+    }
+    'pilot_movement' {
+      $ToolPath = [string](Get-DetailsValue -Details $GateDetails -Name 'movement_record_initializer_path')
+      $CommandTemplate = '.\scripts\fr017-new-pilot-movement-record.ps1 -Mode Create -OutputPath <pilot-movement-record.json> -MeasurementPath <measurement-record.json> -MockupPath <mockup-record.json> -MannequinPath <mannequin-interface-record.json> -StaticFitPath <pilot-static-fit-record.json>'
+      $Contract = [string](Get-DetailsValue -Details $GateDetails -Name 'movement_capture_runbook_contract')
+    }
+    'quick_release_cable_snag' {
+      $ToolPath = [string](Get-DetailsValue -Details $GateDetails -Name 'release_cable_record_initializer_path')
+      $CommandTemplate = '.\scripts\fr017-new-release-cable-record.ps1 -Mode Create -OutputPath <release-cable-record.json> -MeasurementPath <measurement-record.json> -MockupPath <mockup-record.json> -MannequinPath <mannequin-interface-record.json> -StaticFitPath <pilot-static-fit-record.json> -MovementPath <pilot-movement-record.json>'
+      $Contract = [string](Get-DetailsValue -Details $GateDetails -Name 'release_cable_capture_runbook_contract')
+    }
+    'engineering_review' {
+      $ToolPath = [string](Get-DetailsValue -Details $GateDetails -Name 'engineering_review_record_initializer_path')
+      $CommandTemplate = '.\scripts\fr017-new-engineering-review-record.ps1 -Mode Create -OutputPath <engineering-review-record.json> -MeasurementPath <measurement-record.json> -MockupPath <mockup-record.json> -MannequinPath <mannequin-interface-record.json> -StaticFitPath <pilot-static-fit-record.json> -MovementPath <pilot-movement-record.json> -ReleaseCablePath <release-cable-record.json>'
+      $Contract = [string](Get-DetailsValue -Details $GateDetails -Name 'engineering_review_capture_runbook_contract')
+    }
+  }
+
+  if ([string]::IsNullOrWhiteSpace($ToolPath)) {
+    $CommandTemplate = ''
+  }
+
+  if ([string]::IsNullOrWhiteSpace($Contract) -and -not [string]::IsNullOrWhiteSpace($CommandTemplate)) {
+    $Contract = 'Operator input tooling only; this hint creates or updates a pending evidence record and does not mark physical validation complete.'
+  }
+
+  return [ordered]@{
+    tool_path = $ToolPath
+    command_template = $CommandTemplate
+    contract = $Contract
+  }
+}
+
 $PackageArgs = New-Object System.Collections.Generic.List[string]
 $PackageArgs.Add('-Mode') | Out-Null
 $PackageArgs.Add('Status') | Out-Null
@@ -629,11 +726,10 @@ foreach ($Gate in $Gates) {
     $NextRequiredInput = [string]$Gate.next_required_input
     $NextCommand = [string]$Gate.next_command
     $FirstBlockingDetails = $GateDetails
-    if ($GateDetails -is [System.Collections.IDictionary]) {
-      $FirstBlockingUpdateToolPath = [string]$GateDetails['measurement_session_current_group_update_tool_path']
-      $FirstBlockingUpdateCommandTemplate = [string]$GateDetails['measurement_session_current_group_update_command_template']
-      $FirstBlockingUpdateContract = [string]$GateDetails['measurement_session_current_group_update_contract']
-    }
+    $FirstBlockingUpdateHint = New-FirstBlockingUpdateHint -GateId ([string]$Gate.id) -GateFailed $GateFailed -GateDetails $GateDetails
+    $FirstBlockingUpdateToolPath = [string]$FirstBlockingUpdateHint.tool_path
+    $FirstBlockingUpdateCommandTemplate = [string]$FirstBlockingUpdateHint.command_template
+    $FirstBlockingUpdateContract = [string]$FirstBlockingUpdateHint.contract
     if ($GateFailed) {
       $Status = 'failed_{0}' -f [string]$Gate.id
       $ExitCode = 1
