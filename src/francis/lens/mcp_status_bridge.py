@@ -173,6 +173,7 @@ def _orb_semantic_state() -> dict[str, Any]:
 
     state = _as_dict(payload.get("state"))
     semantic = _as_dict(state.get("semantic_operator_state"))
+    operator_input = _as_dict(state.get("operator_input"))
     semantic_state = _safe_str(semantic.get("state") or state.get("semantic_state"), "unknown") or "unknown"
     return _redacted(
         {
@@ -184,6 +185,7 @@ def _orb_semantic_state() -> dict[str, Any]:
             "render_state": _safe_str(state.get("render_state")),
             "activity_intensity": _as_dict(state.get("activity_intensity")),
             "semantic_operator_state": semantic,
+            "operator_input": operator_input,
             "read_only": True,
             "private_ui_state": False,
             "visual_change": False,

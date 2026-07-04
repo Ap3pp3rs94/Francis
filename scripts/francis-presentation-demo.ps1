@@ -4,7 +4,11 @@ param(
     [string]$DemoText = "Francis presentation dry-run",
     [string]$OutDir = ".francis\presentation\demos",
     [switch]$SkipMcpSmoke,
-    [switch]$SkipOrbDryRun
+    [switch]$SkipOrbDryRun,
+    [switch]$IncludeOneVisibleLoopProof,
+    [switch]$UseFixtureOneVisibleLoopTarget,
+    [switch]$OperatorApprovedOneVisibleLoopFixtureAction,
+    [switch]$OperatorApprovedOneVisibleLoopSummonDecision
 )
 
 $ErrorActionPreference = "Stop"
@@ -242,6 +246,97 @@ try {
         }
     }
 
+    $OneVisibleLoopSummary = [ordered]@{
+        skipped = -not [bool]$IncludeOneVisibleLoopProof
+        command = "scripts/francis-one-visible-loop-proof.ps1 -Mode Status"
+        exit_code = $null
+        ok = $null
+        status = ""
+        proof_path = ""
+        next_operator_decision = ""
+        summon_status = ""
+        overlay_visible = $null
+        action_status = ""
+        desktop_effect_confirmed = $null
+        target_observer_status = ""
+        operator_receipt_path = ""
+        desktop_bridge_receipt_path = ""
+        chat_lens_visibility_status = ""
+        receipt_trace_status_paths = @()
+        receipt_trace_artifact_paths_present = $false
+        lens_status_contract_verified = $false
+        lens_status_test_contract_verified = $false
+        presentation_demo_contract_verified = $false
+        render_validation_required = ""
+        actual_chat_ui_render_verified = $false
+        actual_lens_ui_render_verified = $false
+        operator_decision_status = ""
+        operator_decision_count = 0
+        operator_decision_question = ""
+        operator_decision_command = ""
+        operator_decision_authority_required = ""
+        operator_decision_self_granted = $false
+        error = $null
+    }
+    if ($IncludeOneVisibleLoopProof) {
+        $OneVisibleLoopCommand = Invoke-ExternalCommand -Name "one_visible_loop_proof" -Command {
+            $OneVisibleLoopArgs = @{
+                Mode = 'Status'
+            }
+            if ($UseFixtureOneVisibleLoopTarget) {
+                $OneVisibleLoopArgs.UseFixtureSafeTarget = $true
+            }
+            if ($OperatorApprovedOneVisibleLoopFixtureAction) {
+                $OneVisibleLoopArgs.OperatorApprovedFixtureAction = $true
+            }
+            if ($OperatorApprovedOneVisibleLoopSummonDecision) {
+                $OneVisibleLoopArgs.OperatorApprovedSummonDecision = $true
+            }
+            & (Join-Path $RepoRoot "scripts\francis-one-visible-loop-proof.ps1") @OneVisibleLoopArgs
+        }
+        $OneVisibleLoopSummary.exit_code = $OneVisibleLoopCommand.exit_code
+        $OneVisibleLoopSummary.error = $OneVisibleLoopCommand.error
+        $OneVisibleLoop = ConvertFrom-JsonOrNull -Text $OneVisibleLoopCommand.text
+        if ($null -ne $OneVisibleLoop) {
+            $OneVisibleLoopSummary.ok = ([string]$OneVisibleLoop.status -eq "passed")
+            $OneVisibleLoopSummary.status = [string]$OneVisibleLoop.status
+            $OneVisibleLoopSummary.proof_path = [string]$OneVisibleLoop.proof_path
+            $OneVisibleLoopSummary.next_operator_decision = [string]$OneVisibleLoop.next_operator_decision
+            $OneVisibleLoopSummary.summon_status = [string]$OneVisibleLoop.summon.status
+            $OneVisibleLoopSummary.overlay_visible = ConvertTo-DemoBool -Value $OneVisibleLoop.orb_presence.overlay_window_visible
+            $OneVisibleLoopSummary.action_status = [string]$OneVisibleLoop.operator_action.status
+            $OneVisibleLoopSummary.desktop_effect_confirmed = ConvertTo-DemoBool -Value $OneVisibleLoop.operator_action.desktop_effect_confirmed
+            $OneVisibleLoopSummary.target_observer_status = [string]$OneVisibleLoop.operator_action.target_observer_status
+            $OneVisibleLoopSummary.operator_receipt_path = [string]$OneVisibleLoop.operator_action.operator_receipt_path
+            $OneVisibleLoopSummary.desktop_bridge_receipt_path = [string]$OneVisibleLoop.operator_action.desktop_bridge_receipt_path
+            $OneVisibleLoopSummary.chat_lens_visibility_status = [string]$OneVisibleLoop.chat_lens_visibility.status
+            $OneVisibleLoopSummary.receipt_trace_status_paths = @($OneVisibleLoop.chat_lens_visibility.receipt_trace_status_paths)
+            $OneVisibleLoopSummary.receipt_trace_artifact_paths_present = ConvertTo-DemoBool -Value $OneVisibleLoop.chat_lens_visibility.receipt_trace_artifact_paths_present
+            $OneVisibleLoopSummary.lens_status_contract_verified = ConvertTo-DemoBool -Value $OneVisibleLoop.chat_lens_visibility.lens_status_contract_verified
+            $OneVisibleLoopSummary.lens_status_test_contract_verified = ConvertTo-DemoBool -Value $OneVisibleLoop.chat_lens_visibility.lens_status_test_contract_verified
+            $OneVisibleLoopSummary.presentation_demo_contract_verified = ConvertTo-DemoBool -Value $OneVisibleLoop.chat_lens_visibility.presentation_demo_contract_verified
+            $OneVisibleLoopSummary.render_validation_required = [string]$OneVisibleLoop.chat_lens_visibility.render_validation_required
+            $OneVisibleLoopSummary.actual_chat_ui_render_verified = ConvertTo-DemoBool -Value $OneVisibleLoop.chat_lens_visibility.actual_chat_ui_render_verified
+            $OneVisibleLoopSummary.actual_lens_ui_render_verified = ConvertTo-DemoBool -Value $OneVisibleLoop.chat_lens_visibility.actual_lens_ui_render_verified
+            $DecisionQueue = $OneVisibleLoop.operator_decision_queue
+            if ($null -ne $DecisionQueue) {
+                $OneVisibleLoopSummary.operator_decision_status = [string]$DecisionQueue.status
+                $OneVisibleLoopSummary.operator_decision_count = [int]$DecisionQueue.queued_decision_count
+                $DecisionItems = @($DecisionQueue.decisions | Where-Object { $null -ne $_ })
+                if ($DecisionItems.Count -gt 0) {
+                    $FirstDecision = $DecisionItems[0]
+                    $OneVisibleLoopSummary.operator_decision_question = [string]$FirstDecision.question
+                    $OneVisibleLoopSummary.operator_decision_command = [string]$FirstDecision.next_operator_command
+                    $OneVisibleLoopSummary.operator_decision_authority_required = [string]$FirstDecision.authority_required
+                    $OneVisibleLoopSummary.operator_decision_self_granted = ConvertTo-DemoBool -Value $FirstDecision.self_granted
+                }
+            }
+        }
+        if ($OneVisibleLoopCommand.exit_code -ne 0 -or -not $OneVisibleLoopSummary.ok) {
+            $Failures.Add("one_visible_loop_proof_blocked")
+        }
+    }
+
     $SummaryPath = Join-Path $OutputRoot "francis-presentation-demo-$Stamp.json"
     $ReportPath = Join-Path $OutputRoot "francis-presentation-demo-$Stamp.md"
     $VisualPath = Join-Path $OutputRoot "francis-presentation-demo-$Stamp.html"
@@ -265,10 +360,12 @@ try {
         completion_model = $CompletionSummary
         mcp_gateway_smoke = $McpSummary
         orb_operator_dry_run = $OrbSummary
+        one_visible_loop_proof = $OneVisibleLoopSummary
         guardrails = @(
             "This demo does not claim finished autonomy.",
             "This demo does not move the physical cursor or type into a live app.",
             "This demo does not grant proposal, promotion, execution, or memory-write authority.",
+            "The one-visible-loop proof does not self-enable summon or default-enable the desktop bridge.",
             "Receipt paths are evidence of attempted governed dry-run actions."
         )
         failures = @($Failures)
@@ -331,6 +428,22 @@ try {
         "- Orb live input performed: $($OrbSummary.live_input_performed)",
         "- Orb raw input exposed: $($OrbSummary.raw_input)",
         "- Orb input execution attempted: $($OrbSummary.input_execution_attempted)",
+        "- One-visible-loop status: $($OneVisibleLoopSummary.status)",
+        "- One-visible-loop desktop effect confirmed: $($OneVisibleLoopSummary.desktop_effect_confirmed)",
+        "- One-visible-loop target observer status: $($OneVisibleLoopSummary.target_observer_status)",
+        "- One-visible-loop chat/Lens visibility status: $($OneVisibleLoopSummary.chat_lens_visibility_status)",
+        "- One-visible-loop receipt trace artifact paths present: $($OneVisibleLoopSummary.receipt_trace_artifact_paths_present)",
+        "- One-visible-loop Lens status contract verified: $($OneVisibleLoopSummary.lens_status_contract_verified)",
+        "- One-visible-loop Lens status test contract verified: $($OneVisibleLoopSummary.lens_status_test_contract_verified)",
+        "- One-visible-loop presentation demo contract verified: $($OneVisibleLoopSummary.presentation_demo_contract_verified)",
+        "- One-visible-loop render validation required: $($OneVisibleLoopSummary.render_validation_required)",
+        "- One-visible-loop actual chat UI render verified: $($OneVisibleLoopSummary.actual_chat_ui_render_verified)",
+        "- One-visible-loop actual Lens UI render verified: $($OneVisibleLoopSummary.actual_lens_ui_render_verified)",
+        "- One-visible-loop operator decision status: $($OneVisibleLoopSummary.operator_decision_status)",
+        "- One-visible-loop operator decision question: $($OneVisibleLoopSummary.operator_decision_question)",
+        "- One-visible-loop operator decision command: $($OneVisibleLoopSummary.operator_decision_command)",
+        "- One-visible-loop operator decision authority required: $($OneVisibleLoopSummary.operator_decision_authority_required)",
+        "- One-visible-loop operator decision self-granted: $($OneVisibleLoopSummary.operator_decision_self_granted)",
         "",
         "## Plane Readiness Readback",
         "",
@@ -370,16 +483,27 @@ try {
     $Report | Set-Content -LiteralPath $ReportPath -Encoding utf8
 
     $PlaneCards = New-Object System.Collections.Generic.List[string]
+    $PlaneProvenCount = 0
+    $PlaneActiveCount = 0
+    $PlaneEarlyCount = 0
     foreach ($Plane in @($CompletionSummary.plane_readiness_snapshot)) {
         $StatusText = [string]$Plane.status
-        $StatusClass = "status-partial"
+        $StatusClass = "status-active"
+        $CategoryLabel = "Active build"
         if ($StatusText -match "materially real|strongest") {
             $StatusClass = "status-ready"
+            $CategoryLabel = "Proven strength"
+            $PlaneProvenCount += 1
         }
         elseif ($StatusText -match "early|roadmap") {
             $StatusClass = "status-early"
+            $CategoryLabel = if ($StatusText -match "roadmap") { "Roadmap" } else { "Early capability" }
+            $PlaneEarlyCount += 1
         }
-        $PlaneCards.Add("<li><span>$(ConvertTo-HtmlText $Plane.plane)</span><strong class=""$StatusClass"">$(ConvertTo-HtmlText $StatusText)</strong></li>")
+        else {
+            $PlaneActiveCount += 1
+        }
+        $PlaneCards.Add("<li><span>$(ConvertTo-HtmlText $Plane.plane)</span><strong class=""$StatusClass"">$(ConvertTo-HtmlText $CategoryLabel)</strong><small>ledger: $(ConvertTo-HtmlText $StatusText)</small></li>")
     }
     if ($PlaneCards.Count -eq 0) {
         $PlaneCards.Add("<li><span>Unavailable</span><strong class=""status-blocked"">no readback</strong></li>")
@@ -405,6 +529,7 @@ try {
     $CompletionOkText = if ($CompletionSummary.ok) { "TRUE" } else { "FALSE" }
     $GuardrailClass = if ($Summary.ok) { "good" } else { "bad" }
     $PlaneCardsHtml = [string]::Join("`n", [string[]]$PlaneCards.ToArray())
+    $PlaneStory = "Phase 2 is expected to show many active-build planes. The visual groups raw ledger statuses into presentation categories while preserving the ledger wording on each plane."
     $ReceiptCardsHtml = [string]::Join("`n", [string[]]$ReceiptCards.ToArray())
     $LatestGap = ConvertTo-HtmlText $CompletionSummary.latest_remaining_gap
 
@@ -647,10 +772,22 @@ try {
       font-size: 13px;
     }
 
+    .planes li {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+    }
+
     .status-ready { color: var(--green); }
-    .status-partial { color: var(--amber); }
+    .status-active { color: var(--amber); }
     .status-early { color: var(--blue); }
     .status-blocked { color: var(--red); }
+
+    .planes small {
+      grid-column: 1 / -1;
+      color: var(--muted);
+      font-size: 12px;
+    }
 
     .receipts li {
       display: grid;
@@ -747,6 +884,10 @@ try {
     <section>
       <div class="panel">
         <h2>ORB Plane Readiness</h2>
+        <p>__PLANE_STORY__</p>
+        <div class="metric"><span>Proven strength</span><strong class="good">__PLANE_PROVEN_COUNT__</strong></div>
+        <div class="metric"><span>Active build</span><strong class="warn">__PLANE_ACTIVE_COUNT__</strong></div>
+        <div class="metric"><span>Early or roadmap</span><strong class="blue">__PLANE_EARLY_COUNT__</strong></div>
         <ul class="planes">
           __PLANE_CARDS__
         </ul>
@@ -816,6 +957,10 @@ try {
     $VisualHtml = $VisualHtml.Replace("__LIVE_INPUT__", (ConvertTo-HtmlText $LiveInputText))
     $VisualHtml = $VisualHtml.Replace("__RAW_INPUT__", (ConvertTo-HtmlText $RawInputText))
     $VisualHtml = $VisualHtml.Replace("__EXECUTION_ATTEMPT__", (ConvertTo-HtmlText $ExecutionAttemptText))
+    $VisualHtml = $VisualHtml.Replace("__PLANE_STORY__", (ConvertTo-HtmlText $PlaneStory))
+    $VisualHtml = $VisualHtml.Replace("__PLANE_PROVEN_COUNT__", (ConvertTo-HtmlText $PlaneProvenCount))
+    $VisualHtml = $VisualHtml.Replace("__PLANE_ACTIVE_COUNT__", (ConvertTo-HtmlText $PlaneActiveCount))
+    $VisualHtml = $VisualHtml.Replace("__PLANE_EARLY_COUNT__", (ConvertTo-HtmlText $PlaneEarlyCount))
     $VisualHtml = $VisualHtml.Replace("__PLANE_CARDS__", $PlaneCardsHtml)
     $VisualHtml = $VisualHtml.Replace("__RECEIPT_CARDS__", $ReceiptCardsHtml)
     $VisualHtml = $VisualHtml.Replace("__LATEST_GAP__", $LatestGap)

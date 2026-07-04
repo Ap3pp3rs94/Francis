@@ -537,8 +537,10 @@ def _compose_driver_prompt(
     prior_check: str,
     codex_response: str,
     loop_line: str,
+    guided_exploration_line: str = _GUIDED_EXPLORATION_PROMPT_LINE,
 ) -> str:
     body_map = f" {body_map_line}" if body_map_line else ""
+    guided = f" {guided_exploration_line}" if guided_exploration_line else ""
     return (
         f"Francis1 {turn_label}. {CONTEXT_CONTRACT_ID}. Topic: {topic}. "
         "Reply: issue/gap/risk; artifact."
@@ -546,7 +548,7 @@ def _compose_driver_prompt(
         f" {roadmap_gate_line}"
         f" {trust_line}"
         f" {_SOURCE_ALIGNMENT_PROMPT_LINE}"
-        f" {_GUIDED_EXPLORATION_PROMPT_LINE}"
+        f"{guided}"
         f"{topic_artifact}{prior_check}{codex_response}{loop_line}"
     )
 
@@ -569,6 +571,8 @@ def _fit_driver_prompt_to_budget(
     compact_codex = _extra_compact_codex_response_line(codex_response)
     compact_roadmap = _compact_roadmap_gate_prompt_line_for_topic(topic)
     compact_trust = "Trust: surface+mode request; no self-grant."
+    fallback_prior = _fallback_prior_check(prior_check) if compact_loop else _ultra_compact_prior_check(prior_check)
+    fallback_loop = " Guard: issue+artifact." if compact_loop.strip().startswith("Guard:") else compact_loop
     attempts = [
         (
             96,
@@ -591,9 +595,9 @@ def _fit_driver_prompt_to_budget(
             compact_loop,
         ),
         (
-            64,
             56,
-            "",
+            56,
+            _COMPACT_BODY_MAP_PROMPT_LINE,
             compact_roadmap,
             compact_trust,
             _ultra_compact_prior_check(prior_check),
@@ -601,14 +605,14 @@ def _fit_driver_prompt_to_budget(
             compact_loop,
         ),
         (
+            64,
             56,
-            44,
-            "",
+            _COMPACT_BODY_MAP_PROMPT_LINE,
             compact_roadmap,
-            "Trust: no self-grant.",
-            _ultra_compact_prior_check(prior_check),
-            " Codex: no action authority.",
-            " Guard: issue+artifact." if loop_line else "",
+            compact_trust,
+            fallback_prior,
+            " Codex: validating; no action authority.",
+            fallback_loop,
         ),
     ]
     for topic_limit, surface_limit, body_map_line, roadmap_line, trust_line_value, prior, codex, loop in attempts:
@@ -622,6 +626,22 @@ def _fit_driver_prompt_to_budget(
             prior_check=prior,
             codex_response=codex,
             loop_line=loop,
+        )
+        if len(candidate) <= _MAX_DRIVER_PROMPT_CHARS:
+            return candidate
+
+    if compact_loop:
+        candidate = _compose_driver_prompt(
+            turn_label=turn_label,
+            topic=_bounded_text(topic, limit=64),
+            body_map_line=_COMPACT_BODY_MAP_PROMPT_LINE,
+            roadmap_gate_line=compact_roadmap,
+            trust_line=compact_trust,
+            topic_artifact=_topic_artifact_line(topic, surface_limit=56),
+            prior_check=fallback_prior,
+            codex_response=" Codex: validating; no action authority.",
+            loop_line=fallback_loop,
+            guided_exploration_line="",
         )
         if len(candidate) <= _MAX_DRIVER_PROMPT_CHARS:
             return candidate
@@ -741,6 +761,22 @@ def _ultra_compact_prior_check(prior_check: str) -> str:
     parts = [f"Prior check: Review candidate {_bounded_text(insight_id, limit=_PROMPT_REVIEW_ID_LIMIT)}"]
     if surface:
         parts.append(f"surface={_bounded_text(surface, limit=40)}")
+    if verified:
+        parts.append(f"verified={_bounded_text(verified, limit=20)}")
+    if build_or_wire:
+        parts.append(f"build_or_wire={_bounded_text(build_or_wire, limit=12)}")
+    return " " + "; ".join(parts) + "."
+
+
+def _fallback_prior_check(prior_check: str) -> str:
+    if not prior_check:
+        return ""
+    insight_id = _field_after(prior_check, "Review candidate ", ":")
+    verified = _field_after(prior_check, "verified=", ";")
+    build_or_wire = _field_after(prior_check, "build_or_wire=", ".")
+    if not insight_id:
+        return _bounded_text(prior_check, limit=72)
+    parts = [f"Prior check: Review candidate {_bounded_text(insight_id, limit=_PROMPT_REVIEW_ID_LIMIT)}"]
     if verified:
         parts.append(f"verified={_bounded_text(verified, limit=20)}")
     if build_or_wire:

@@ -50,6 +50,8 @@ def test_chat_ui_orb_overlay_defaults_to_right_corner_lock() -> None:
     assert "right: snapshotMode || manualDragEnabled ? undefined : ORB_OVERLAY_DOCK_MARGIN" in app
     assert 'pointerEvents: "none"' in app
     assert 'pointerEvents: "auto"' in app
+    assert 'data-orb-virtual-pointer="true"' not in app
+    assert "fetchOrbOperatorInput" not in app
 
 
 def test_overlay_orb_renderer_visual_constants_remain_locked() -> None:
@@ -61,14 +63,22 @@ def test_overlay_orb_renderer_visual_constants_remain_locked() -> None:
     assert "transparent_background = $true" in script
     assert "route = '/?francis_lens=orb_overlay'" in script
     assert "function New-OrbEnergySurface" in script
-    assert "param([double]$Size = 220)" in script
+    assert "[double]$Size = 220" in script
+    assert "[double]$HitBoxSize = 72" in script
     assert "$OrbSize = 220" in script
+    assert "$OrbHitBoxSize = Get-OrbHitBoxSize" in script
+    assert "New-OrbEnergySurface -Size $OrbSize -HitBoxSize $OrbHitBoxSize" in script
     assert "$Form.WindowStyle = [System.Windows.WindowStyle]::None" in script
     assert "$Form.AllowsTransparency = $true" in script
     assert "$Form.Background = [System.Windows.Media.Brushes]::Transparent" in script
     assert "$Form.ShowInTaskbar = $true" in script
     assert "$Form.TopMost = $true" in script
-    assert "Set-OrbWindowDockPosition -Window $Form -WorkArea $Screen -Margin 48" in script
+    assert "$Screen = Get-OverlayVirtualScreenBounds" in script
+    assert "$Form.Left = [double]$Screen.Left" in script
+    assert "$Form.Width = [double]$Screen.Width" in script
+    assert "function Set-OverlayWindowTopMostPinned" in script
+    assert "Set-OrbWindowDockPosition -Window $Form -WorkArea $Screen -Margin 48" not in script
+    assert "$script:LensOverlayWindow.DragMove()" not in script
     assert "right_corner_locked" in script
     assert "default_anchor = if ($AutonomousMotion) { 'bounded_work_area' }" in script
     assert "$Viewport = New-Object System.Windows.Controls.Viewport3D" in script
@@ -85,6 +95,28 @@ def test_overlay_orb_renderer_visual_constants_remain_locked() -> None:
     assert "$Core.Height = 64" in script
     assert "$HotCenter.Width = 34" in script
     assert "$HotCenter.Height = 34" in script
+
+
+def test_overlay_orb_virtual_pointer_uses_locked_desktop_orb_not_browser_marker() -> None:
+    script = _read("scripts/lens-overlay-window.ps1")
+    app = _read("apps/chat_ui/src/App.tsx")
+
+    assert "function Invoke-OverlayOrbVirtualPointerState" in script
+    assert "function Set-OrbWindowCoordinatePosition" in script
+    assert "Get-OverlayOrbVirtualPointerStatePath" in script
+    assert "francis.orb_operator.virtual_pointer_state" in script
+    assert "lens.overlay.orb_virtual_pointer.receipt" in script
+    assert "Set-OrbWindowCoordinatePosition -Window $Window -WorkArea $WorkArea -X $X -Y $Y" in script
+    assert "[void](Invoke-OverlayOrbVirtualPointerState -Root $script:LensOverlayDataRoot)" in script
+    assert "last_public_action_kind" in script
+    assert "last_action_button" in script
+    assert "drag_start_x" in script
+    assert "drag_target_x" in script
+    assert "controls_user_os_cursor = $false" in script
+    assert "user_mouse_taken = $false" in script
+    assert "physical_input_performed = $false" in script
+    assert "desktop_effect_performed = $false" in script
+    assert 'data-orb-virtual-pointer="true"' not in app
 
 
 def test_orb_continuum_state_preserves_one_path_wiring_rules() -> None:

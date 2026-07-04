@@ -157,6 +157,16 @@ def test_lens_orb_mcp_status_bridge_surfaces_substrate_semantic_state(monkeypatc
                     "grants_execution_authority": False,
                     "grants_mutation_authority": False,
                 },
+                "operator_input": {
+                    "feedback_state": "complete",
+                    "virtual_pointer": {
+                        "available": True,
+                        "x": 101,
+                        "y": 202,
+                        "controls_user_os_cursor": False,
+                        "user_mouse_taken": False,
+                    },
+                },
             },
         },
     )
@@ -168,6 +178,9 @@ def test_lens_orb_mcp_status_bridge_surfaces_substrate_semantic_state(monkeypatc
     assert out["orb_semantic_state"]["semantic_state"] == "blocked"
     assert out["orb_semantic_state"]["render_state"] == "handback"
     assert out["orb_semantic_state"]["activity_intensity"]["level"] == "handoff"
+    assert out["orb_semantic_state"]["operator_input"]["feedback_state"] == "complete"
+    assert out["orb_semantic_state"]["operator_input"]["virtual_pointer"]["x"] == 101
+    assert out["orb_semantic_state"]["operator_input"]["virtual_pointer"]["controls_user_os_cursor"] is False
     semantic = out["orb_semantic_state"]["semantic_operator_state"]
     assert semantic["truth_source"] == "mission_operation_readback"
     assert semantic["focus"]["mission_id"] == "msn_blocked"

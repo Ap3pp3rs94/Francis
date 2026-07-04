@@ -928,7 +928,7 @@ $CommandPaletteOsBindingCandidateObserved = (
   [string](Get-PropertyValue -Payload $CommandPaletteOsBindingCandidate -Name 'kind' -Default '') -eq 'lens.command_palette.os_binding_candidate' -and
   [string](Get-PropertyValue -Payload $CommandPaletteOsBindingCandidate -Name 'status' -Default '') -eq 'blocked' -and
   [string](Get-PropertyValue -Payload $CommandPaletteOsBindingCandidate -Name 'candidate' -Default '') -eq 'global_hotkey_to_lens_command_palette_bridge' -and
-  [string](Get-PropertyValue -Payload $CommandPaletteOsBindingCandidate -Name 'trigger' -Default '') -eq 'Ctrl+Alt+Space' -and
+  [string](Get-PropertyValue -Payload $CommandPaletteOsBindingCandidate -Name 'trigger' -Default '') -eq 'Ctrl+Alt+F' -and
   [string](Get-PropertyValue -Payload $CommandPaletteOsBindingCandidate -Name 'binding_scope' -Default '') -eq 'global' -and
   [string](Get-PropertyValue -Payload $CommandPaletteOsBindingCandidate -Name 'route' -Default '') -eq '/lens/status' -and
   [string](Get-PropertyValue -Payload $CommandPaletteOsBindingCandidate -Name 'local_surface' -Default '') -eq 'chat_ui.command_palette' -and

@@ -28,6 +28,7 @@ from francis.kernel.stack import stack_status
 from francis.settings import Settings
 from francis.telemetry.audit import record
 from francis.telemetry.tracing import start_span
+from francis.input_actuator.orb_operator import latest_orb_operator_state
 from francis.world_state.operator_mode import set_control_mode, snapshot as operator_mode_snapshot
 from francis.world_state.orb import snapshot as orb_status_snapshot
 from francis.world_state.snapshot import (
@@ -565,6 +566,31 @@ def orb_status() -> dict[str, object]:
         return orb_status_snapshot()
     except Exception as exc:
         return {"ok": False, "error": api_error_message(exc), "subsystem": "orb_status"}
+
+
+@router.get("/orb_pointer")
+@router.get("/orb-pointer")
+@router.get("/orb/pointer")
+def orb_pointer() -> dict[str, object]:
+    try:
+        operator_input = latest_orb_operator_state()
+        return {
+            "ok": bool(operator_input.get("ok", True)),
+            "subsystem": "orb_pointer",
+            "read_only": True,
+            "operator_input": operator_input,
+            "virtual_pointer": operator_input.get("virtual_pointer", {}),
+            "governance": {
+                "read_only": True,
+                "raw_input": False,
+                "physical_input_performed": False,
+                "user_os_cursor_controlled": False,
+                "grants_execution_authority": False,
+                "grants_mutation_authority": False,
+            },
+        }
+    except Exception as exc:
+        return {"ok": False, "error": api_error_message(exc), "subsystem": "orb_pointer"}
 
 
 @router.get("/operator_mode")

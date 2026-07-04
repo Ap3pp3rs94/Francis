@@ -240,6 +240,40 @@ def cmd_communication_runtime(args: argparse.Namespace) -> int:
     return int(collaboration_runtime_main(runtime_args))
 
 
+def cmd_overnight_explore(args: argparse.Namespace) -> int:
+    from francis.exploration.overnight import main as overnight_main
+
+    explorer_args: list[str] = [
+        "--duration-hours",
+        str(args.duration_hours),
+        "--interval-minutes",
+        str(args.interval_minutes),
+        "--max-findings",
+        str(args.max_findings),
+        "--max-scan-files",
+        str(args.max_scan_files),
+        "--max-cycles",
+        str(args.max_cycles),
+        "--actor",
+        str(args.actor),
+    ]
+    if str(args.repo_root or ""):
+        explorer_args.extend(["--repo-root", str(args.repo_root)])
+    if str(args.data_dir or ""):
+        explorer_args.extend(["--data-dir", str(args.data_dir)])
+    if bool(getattr(args, "once", False)):
+        explorer_args.append("--once")
+    if bool(getattr(args, "stream", False)):
+        explorer_args.append("--stream")
+    if bool(getattr(args, "status", False)):
+        explorer_args.append("--status")
+    if bool(getattr(args, "stop", False)):
+        explorer_args.append("--stop")
+    if bool(getattr(args, "clear_stop_flag", False)):
+        explorer_args.append("--clear-stop-flag")
+    return int(overnight_main(explorer_args))
+
+
 def cmd_stage3_readiness_proof(args: argparse.Namespace) -> int:
     from francis.missions.readiness_proof import run_stage3_readiness_proof
 
@@ -1319,6 +1353,25 @@ def main(argv: list[str] | None = None) -> int:
         "--quiet", action="store_true", help="Write supervisor receipts without printing each check."
     )
     p_communication_runtime.set_defaults(fn=cmd_communication_runtime)
+
+    p_overnight = sub.add_parser(
+        "overnight-explore",
+        help="Run the bounded read-only overnight substrate explorer",
+    )
+    p_overnight.add_argument("--repo-root", default="", help="Repo root to explore. Defaults to detected Francis root.")
+    p_overnight.add_argument("--data-dir", default="", help="Data root for explorer receipts.")
+    p_overnight.add_argument("--actor", default="francis.overnight_explorer", help="Actor recorded in receipts.")
+    p_overnight.add_argument("--duration-hours", type=float, default=8.0)
+    p_overnight.add_argument("--interval-minutes", type=float, default=20.0)
+    p_overnight.add_argument("--max-findings", type=int, default=40)
+    p_overnight.add_argument("--max-scan-files", type=int, default=900)
+    p_overnight.add_argument("--max-cycles", type=int, default=200)
+    p_overnight.add_argument("--once", action="store_true", help="Run one read-only cycle and exit.")
+    p_overnight.add_argument("--stream", action="store_true", help="Print visible lifecycle and per-cycle events.")
+    p_overnight.add_argument("--status", action="store_true", help="Print latest explorer status.")
+    p_overnight.add_argument("--stop", action="store_true", help="Request a running explorer to stop.")
+    p_overnight.add_argument("--clear-stop-flag", action="store_true", help="Remove a stale stop flag before running.")
+    p_overnight.set_defaults(fn=cmd_overnight_explore)
 
     p_stage3 = sub.add_parser(
         "stage3-readiness-proof",

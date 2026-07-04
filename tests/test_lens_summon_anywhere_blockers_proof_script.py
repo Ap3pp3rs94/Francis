@@ -174,8 +174,8 @@ def _write_lens_status_with_supervised_resident_host_and_live_surface_readbacks(
             "state_status": "hotkey_bound",
             "process_alive": True,
             "hotkey_bound": True,
-            "global_hotkey": "Ctrl+Alt+Space",
-            "expected_global_hotkey": "Ctrl+Alt+Space",
+            "global_hotkey": "Ctrl+Alt+F",
+            "expected_global_hotkey": "Ctrl+Alt+F",
             "binding_scope": "global",
             "expected_binding_scope": "global",
             "launch_on_hotkey": True,
@@ -204,8 +204,8 @@ def _write_lens_status_with_supervised_resident_host_and_live_surface_readbacks(
             "runtime_state_path": "data/runtime/lens-summon/status.json",
             "state_kind": "lens.summon.runtime_state",
             "state_status": "summon_binding_observed",
-            "global_hotkey": "Ctrl+Alt+Space",
-            "expected_global_hotkey": "Ctrl+Alt+Space",
+            "global_hotkey": "Ctrl+Alt+F",
+            "expected_global_hotkey": "Ctrl+Alt+F",
             "binding_scope": "global",
             "expected_binding_scope": "global",
             "bounded_handoff_ready": True,
@@ -478,7 +478,7 @@ def test_lens_summon_anywhere_blockers_proof_is_readback_only(tmp_path: Path) ->
     assert summon_preflight["ready"] is False
     assert summon_preflight["summon_name"] == "Francis Lens Summon"
     assert summon_preflight["config_path"] == "config/runtime/lens/summon.json"
-    assert summon_preflight["global_hotkey"] == "Ctrl+Alt+Space"
+    assert summon_preflight["global_hotkey"] == "Ctrl+Alt+F"
     assert summon_preflight["binding_scope"] == "global"
     assert summon_preflight["palette_route"] == "/lens/status"
     assert summon_preflight["required_before_enable"] == [

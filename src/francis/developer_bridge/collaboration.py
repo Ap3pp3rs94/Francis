@@ -402,14 +402,23 @@ def _recent_unfiltered_prompts(*, limit: int) -> _FilteredPrompts | None:
     if len(paths) <= _RECENT_PROMPT_SCAN_THRESHOLD:
         return None
     scan_limit = min(max(limit + 1, _RECENT_PROMPT_SCAN_MIN), _RECENT_PROMPT_SCAN_MAX)
-    recent_paths = sorted(paths, key=_path_sort_key, reverse=True)[:scan_limit]
-    records: list[dict[str, object]] = []
-    for path in recent_paths:
+    recent_paths = sorted(((path, _path_sort_key(path)) for path in paths), key=lambda item: item[1], reverse=True)[
+        :scan_limit
+    ]
+    records: list[tuple[dict[str, object], tuple[int, str]]] = []
+    for path, path_sort_key in recent_paths:
         record = _read_prompt(path)
         if record:
-            records.append(record)
-    sorted_records = sorted(records, key=_sort_key, reverse=True)
+            records.append((record, path_sort_key))
+    sorted_records = [
+        record for record, _path_key in sorted(records, key=lambda item: _recent_sort_key(*item), reverse=True)
+    ]
     return _FilteredPrompts(items=sorted_records[:limit], truncated=len(paths) > limit)
+
+
+def _recent_sort_key(record: dict[str, object], path_sort_key: tuple[int, str]) -> tuple[str, int, str, str]:
+    mtime_ns, path_name = path_sort_key
+    return (str(record.get("created_at") or ""), mtime_ns, str(record.get("id") or ""), path_name)
 
 
 def _path_sort_key(path: Path) -> tuple[int, str]:

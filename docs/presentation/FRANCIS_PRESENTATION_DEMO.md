@@ -45,6 +45,9 @@ That directory is ignored by git because it is runtime evidence, not source.
    the proof text.
 5. Point to the completion-model readback:
    current phase, latest ledger entry, plane readiness, and open gaps.
+   The visual groups raw ledger plane statuses into presentation categories:
+   proven strength, active build, and early or roadmap. The raw ledger wording is
+   still shown on each plane.
 6. Point to the MCP smoke readback:
    tool count, ready statuses, and unapproved action refusals.
 7. Point to the Orb dry-run receipt paths:

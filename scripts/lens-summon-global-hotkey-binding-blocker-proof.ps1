@@ -354,7 +354,7 @@ $HandoffAligned = (
   $HotkeySummonBlockers -contains 'global_hotkey_binding_disabled' -and
   $HotkeySummonBlockers -contains 'global_hotkey_registration_disabled' -and
   $HotkeySummonBlockers -contains 'hotkey_registration_authority_not_granted' -and
-  [string](Get-PropertyValue -Payload $SummonPreflight -Name 'global_hotkey' -Default '') -eq 'Ctrl+Alt+Space' -and
+  [string](Get-PropertyValue -Payload $SummonPreflight -Name 'global_hotkey' -Default '') -eq 'Ctrl+Alt+F' -and
   [string](Get-PropertyValue -Payload $SummonPreflight -Name 'binding_scope' -Default '') -eq 'global'
 )
 $SideEffectsDenied = (
