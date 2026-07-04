@@ -32,13 +32,41 @@ def _write_lens_hotkey_runtime_state(data_root: Path, *, pid: int, launch_on_hot
                 "kind": "lens.hotkey.runtime_state",
                 "status": "hotkey_bound",
                 "pid": pid,
-                "global_hotkey": "Ctrl+Alt+Space",
+                "global_hotkey": "Ctrl+Alt+F",
                 "binding_scope": "global",
                 "hotkey_bound": True,
                 "launch_on_hotkey": launch_on_hotkey,
                 "summon_runner": "scripts/lens-summon.ps1",
                 "press_count": 0,
                 "updated_at": "2026-05-13T00:30:00Z",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def _write_lens_hotkey_owned_runtime_state(data_root: Path) -> None:
+    runtime_root = data_root / "runtime" / "lens-hotkey"
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    (runtime_root / "status.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.hotkey.runtime_state",
+                "status": "hotkey_already_owned",
+                "pid": 999999,
+                "global_hotkey": "Ctrl+Alt+F",
+                "binding_scope": "global",
+                "hotkey_bound": False,
+                "error": "hotkey_already_owned",
+                "blocker": "hotkey_already_owned",
+                "win32_error": 1409,
+                "registration_failure": {
+                    "error": "hotkey_already_owned",
+                    "blocker": "hotkey_already_owned",
+                    "global_hotkey": "Ctrl+Alt+F",
+                    "win32_error": 1409,
+                },
+                "updated_at": "2026-07-03T18:50:00Z",
             }
         ),
         encoding="utf-8",
@@ -75,7 +103,7 @@ def _write_lens_summon_config(repo_root: Path) -> None:
                 "kind": "lens.summon.config",
                 "version": 1,
                 "enabled": False,
-                "global_hotkey": "Ctrl+Alt+Space",
+                "global_hotkey": "Ctrl+Alt+F",
                 "binding_scope": "global",
                 "binding_enabled": False,
                 "register_hotkey": False,
@@ -1103,3 +1131,73 @@ def test_lens_os_binding_launch_on_hotkey_records_authorized_runtime_readback(
     assert receipt["overlay_authority_grant_receipt_id"] == overlay_grant_receipt_id
     assert receipt["execution"]["allow_launch"] is True
     assert receipt["execution"]["launch_on_hotkey"] is True
+
+
+def test_lens_os_binding_execute_surfaces_owned_global_hotkey_blocker(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    from francis.lens import os_binding_authority as module
+
+    client, data_root = _client(monkeypatch, tmp_path)
+    repo_root = data_root.parent
+    _write_lens_summon_config(repo_root)
+
+    os_approval_id, _os_grant_receipt_id = _grant_lens_authority(
+        client,
+        request_route="/lens/os-binding/authority/request",
+        grant_route="/lens/os-binding/authority",
+        reason="request governed OS-binding authority",
+    )
+
+    def fake_hotkey_runner(*, mode: str, run_seconds: int, allow_launch: bool = False) -> dict[str, object]:
+        assert mode == "bind"
+        assert run_seconds == 1
+        assert allow_launch is False
+        _write_lens_hotkey_owned_runtime_state(data_root)
+        return {
+            "ok": False,
+            "status": "hotkey_already_owned",
+            "script_mode": "Start",
+            "blockers": ["hotkey_already_owned"],
+            "runner": {
+                "ok": False,
+                "status": "hotkey_already_owned",
+                "blocker": "hotkey_already_owned",
+                "win32_error": 1409,
+            },
+        }
+
+    monkeypatch.setattr(module, "_run_lens_os_binding_hotkey_action", fake_hotkey_runner)
+
+    result = module.execute_lens_os_binding(
+        approval_id=os_approval_id,
+        actor="test.system.write",
+        reason="bind hotkey with an already-owned global chord",
+        route="/lens/os-binding/execute",
+        method="POST",
+        record_receipt=False,
+        mode="bind",
+        run_seconds=1,
+        allow_launch=False,
+    )
+
+    assert result["kind"] == "lens.os_binding.command_palette_binding.execution"
+    assert result["status"] == "hotkey_already_owned"
+    assert result["applied"] is False
+    assert result["executed"] is False
+    assert result["global_hotkey"] == "Ctrl+Alt+F"
+    assert result["global_hotkey_binding"] is False
+    assert result["hotkey_runtime_ready"] is False
+    assert result["hotkey_runtime_readback"]["requirement_state"] == "blocked"
+    assert result["hotkey_runtime_readback"]["blocker"] == "hotkey_already_owned"
+    assert result["hotkey_runtime_readback"]["runtime_status"] == "hotkey_already_owned"
+    assert result["hotkey_runtime_readback"]["runtime_status_error"] == "hotkey_already_owned"
+    assert result["hotkey_runtime_readback"]["win32_error"] == 1409
+    assert result["hotkey_runtime_readback"]["registration_failure"]["global_hotkey"] == "Ctrl+Alt+F"
+    assert result["next_smallest_truthful_gap"] == "choose_unclaimed_global_hotkey"
+    assert result["blockers"] == ["hotkey_already_owned"]
+    assert result["authority_granted"] is True
+    assert result["os_level_command_palette_binding_authority"] is True
+    assert result["governance"]["execution_authority"] is False
+    assert result["governance"]["hotkey_registration_authority"] is False

@@ -2086,6 +2086,9 @@ def test_plugins_lifecycle_repair_restores_staged_candidate_without_promoting(
     assert blocked_mismatch_body["governance"]["writes_lifecycle_receipt"] is False
     assert len(list(lifecycle_dir.glob("*.json"))) == receipt_count_before_repair
 
+    drifted_now = plugins._now_s() + 10
+    monkeypatch.setattr(plugins, "_now_s", lambda: drifted_now)
+
     repaired = client.post(
         "/plugins/lifecycle/repair",
         json={

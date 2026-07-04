@@ -35,6 +35,20 @@ $LogRoot = Join-Path $RepoRoot '.francis\worker-terminal-logs'
 New-Item -ItemType Directory -Force -Path $SessionRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $LogRoot | Out-Null
 
+function Get-FrancisPowerShellPath {
+  $PowerShell = Get-Command pwsh -ErrorAction SilentlyContinue
+  if (-not $PowerShell) {
+    $PowerShell = Get-Command pwsh.exe -ErrorAction SilentlyContinue
+  }
+  if (-not $PowerShell) {
+    $PowerShell = Get-Command powershell -ErrorAction SilentlyContinue
+  }
+  if (-not $PowerShell) {
+    $PowerShell = Get-Command powershell.exe -ErrorAction Stop
+  }
+  return $PowerShell.Source
+}
+
 function Get-WorkerFileSha256 {
   param([string]$Path)
 
@@ -213,10 +227,7 @@ if ($Mode -eq 'Status') {
   exit 0
 }
 
-$Pwsh = (Get-Command pwsh.exe -ErrorAction SilentlyContinue).Source
-if ([string]::IsNullOrWhiteSpace($Pwsh)) {
-  $Pwsh = (Get-Command powershell.exe -ErrorAction Stop).Source
-}
+$Pwsh = Get-FrancisPowerShellPath
 $Runner = Join-Path $PSScriptRoot 'francis-worker-terminal.ps1'
 
 $Launches = @()

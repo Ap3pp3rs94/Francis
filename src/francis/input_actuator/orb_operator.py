@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import os
+import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -13,10 +14,14 @@ from typing import Any
 from francis.kernel.paths import repo_root
 
 from .contracts import InputActuatorError
+from .orb_desktop_bridge import perform_orb_desktop_action
 from .tools import execute_approved_input_action, propose_input_action
 
 ORB_OPERATOR_SURFACE = "francis.orb_operator.v0"
 ORB_OPERATOR_STAGE = "Phase 2 / Lens Orb embodied desktop operation"
+ORB_POINTER_MODE = "orb_pointer"
+ORB_BACKEND_MODES = ("dry_run", "guarded_live", ORB_POINTER_MODE)
+ORB_VIRTUAL_POINTER_ID = "francis.orb.primary_virtual_pointer"
 
 ORB_FEEDBACK_STATES = (
     "idle",
@@ -49,6 +54,10 @@ def _receipt_dir() -> Path:
     path = _state_root() / "receipts"
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def _virtual_pointer_state_path() -> Path:
+    return _state_root() / "virtual_pointer_state.json"
 
 
 def _input_actuator_state_root() -> Path:
@@ -112,6 +121,139 @@ def _rect_center(rect: dict[str, Any]) -> tuple[int, int]:
     width = max(0, _safe_int(rect.get("width"), 0))
     height = max(0, _safe_int(rect.get("height"), 0))
     return (_bounded_coord(x + width // 2, "rect.center_x"), _bounded_coord(y + height // 2, "rect.center_y"))
+
+
+def _read_virtual_pointer_state() -> dict[str, Any]:
+    path = _virtual_pointer_state_path()
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _virtual_pointer_position(input_kind: str, payload: dict[str, Any]) -> tuple[int, int]:
+    previous = _read_virtual_pointer_state()
+    if input_kind == "mouse.drag" and payload.get("target_x") is not None and payload.get("target_y") is not None:
+        return _bounded_coord(payload.get("target_x"), "target_x"), _bounded_coord(payload.get("target_y"), "target_y")
+    if payload.get("x") is not None and payload.get("y") is not None:
+        return _bounded_coord(payload.get("x"), "x"), _bounded_coord(payload.get("y"), "y")
+    return (
+        _bounded_coord(previous.get("x", 0), "virtual_pointer.x"),
+        _bounded_coord(previous.get("y", 0), "virtual_pointer.y"),
+    )
+
+
+def _virtual_pointer_action_status(input_kind: str, payload: dict[str, Any] | None = None) -> str:
+    safe_payload = payload or {}
+    if input_kind == "mouse.move":
+        return "virtual_pointer_moved"
+    if input_kind == "mouse.click":
+        if _clean_text(safe_payload.get("button"), "left").lower() == "right":
+            return "virtual_pointer_right_click_recorded"
+        return "virtual_pointer_click_recorded"
+    if input_kind == "mouse.drag":
+        return "virtual_pointer_drag_recorded"
+    if input_kind in {"keyboard.type", "keyboard.hotkey"}:
+        return "virtual_pointer_keyboard_event_recorded"
+    return "virtual_pointer_event_recorded"
+
+
+def _virtual_pointer_gesture(input_kind: str, payload: dict[str, Any]) -> dict[str, Any]:
+    if input_kind == "mouse.click":
+        button = _clean_text(payload.get("button"), "left").lower()
+        return {
+            "kind": "right_click" if button == "right" else "click",
+            "button": button,
+            "clicks": max(1, min(_safe_int(payload.get("clicks"), 1), 3)),
+            "x": payload.get("x"),
+            "y": payload.get("y"),
+            "visible_orb_body_only": True,
+        }
+    if input_kind == "mouse.drag":
+        return {
+            "kind": "drag",
+            "button": _clean_text(payload.get("button"), "left").lower(),
+            "start": {
+                "x": _bounded_coord(payload.get("x"), "x"),
+                "y": _bounded_coord(payload.get("y"), "y"),
+            },
+            "end": {
+                "x": _bounded_coord(payload.get("target_x"), "target_x"),
+                "y": _bounded_coord(payload.get("target_y"), "target_y"),
+            },
+            "visible_orb_body_only": True,
+        }
+    return {}
+
+
+def _write_virtual_pointer_state(
+    *,
+    input_kind: str,
+    payload: dict[str, Any],
+    actor: str,
+    objective: str,
+    session_id: str,
+    resolved_position: tuple[int, int] | None = None,
+    desktop_bridge: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    x, y = resolved_position or _virtual_pointer_position(input_kind, payload)
+    now = _utc_now()
+    public_action = _public_input_action(input_kind, payload)
+    gesture = _virtual_pointer_gesture(input_kind, payload)
+    requires_bridge = input_kind != "mouse.move"
+    bridge = desktop_bridge if isinstance(desktop_bridge, dict) else {}
+    desktop_action_sent = bool(bridge.get("desktop_action_sent"))
+    desktop_effect_performed = bool(bridge.get("desktop_effect_performed"))
+    desktop_effect_confirmed = bool(bridge.get("desktop_effect_confirmed"))
+    state = {
+        "ok": True,
+        "kind": "francis.orb_operator.virtual_pointer_state",
+        "surface": ORB_OPERATOR_SURFACE,
+        "stage": ORB_OPERATOR_STAGE,
+        "pointer_id": ORB_VIRTUAL_POINTER_ID,
+        "updated_at": now,
+        "mode": ORB_POINTER_MODE,
+        "x": x,
+        "y": y,
+        "position": {"x": x, "y": y, "source": "orb_virtual_pointer"},
+        "last_action": {
+            "input_kind": input_kind,
+            "status": _virtual_pointer_action_status(input_kind, payload),
+            "public_action": public_action,
+            "gesture": gesture,
+            "actor": actor,
+            "objective": objective,
+            "session_id": session_id,
+            "desktop_bridge_status": _clean_text(bridge.get("status")),
+            "desktop_bridge_receipt_id": _clean_text(bridge.get("receipt_id")),
+            "desktop_bridge_receipt_path": _clean_text(bridge.get("receipt_path")),
+            "desktop_action_sent": desktop_action_sent,
+            "desktop_effect_performed": desktop_effect_performed,
+            "desktop_effect_confirmed": desktop_effect_confirmed,
+            "physical_input_performed": False,
+            "user_os_cursor_moved": False,
+            "user_mouse_taken": False,
+            "requires_app_bridge_for_desktop_effect": requires_bridge and not desktop_effect_performed,
+        },
+        "gesture": gesture,
+        "governance": {
+            "virtual_pointer_only": True,
+            "controls_user_os_cursor": False,
+            "moves_user_mouse": False,
+            "physical_input_performed": False,
+            "desktop_action_sent": desktop_action_sent,
+            "desktop_effect_performed": desktop_effect_performed,
+            "desktop_effect_confirmed": desktop_effect_confirmed,
+            "requires_app_bridge_for_desktop_effect": requires_bridge and not desktop_effect_performed,
+            "receipt_required_for_actions": True,
+        },
+    }
+    path = _virtual_pointer_state_path()
+    _write_json(path, state)
+    return {"path": str(path), "state": state}
 
 
 @dataclass(frozen=True)
@@ -198,11 +340,17 @@ class OrbIntent:
             "move": "move_to",
             "mouse.move": "move_to",
             "mouse.click": "click",
+            "mouse.drag": "mouse_drag",
             "keyboard.type": "type_text",
             "keyboard.hotkey": "key_press",
         }
         kind = aliases.get(kind, kind)
         metadata = _coerce_dict(payload.get("metadata"))
+        if kind == "mouse_drag":
+            if payload.get("target_x") is not None:
+                metadata["target_x"] = _bounded_coord(payload.get("target_x"), "target_x")
+            if payload.get("target_y") is not None:
+                metadata["target_y"] = _bounded_coord(payload.get("target_y"), "target_y")
         return cls(
             kind=kind,
             x=payload.get("x") if payload.get("x") is None else _bounded_coord(payload.get("x"), "x"),
@@ -335,7 +483,9 @@ class DesktopInputBackend:
     Dry-run mode writes an Orb operator receipt and a governed input proposal; it
     never calls the physical input executor. Guarded-live mode only delegates to
     the existing input actuator execution path when an approved proposal phrase is
-    supplied, leaving takeover/handoff/env gates load-bearing.
+    supplied, leaving takeover/handoff/env gates load-bearing. Orb-pointer mode
+    updates Francis's own virtual pointer state and never touches the user's OS
+    cursor or keyboard.
     """
 
     mode: str = "dry_run"
@@ -344,8 +494,8 @@ class DesktopInputBackend:
     session_id: str = ""
 
     def __post_init__(self) -> None:
-        if self.mode not in {"dry_run", "guarded_live"}:
-            raise InputActuatorError("DesktopInputBackend mode must be dry_run or guarded_live")
+        if self.mode not in ORB_BACKEND_MODES:
+            raise InputActuatorError("DesktopInputBackend mode must be dry_run, guarded_live, or orb_pointer")
 
     def mouse_move(self, x: int, y: int, *, proposal_id: str = "", approval_phrase: str = "") -> BackendAttempt:
         return self._submit("mouse.move", {"x": x, "y": y}, proposal_id=proposal_id, approval_phrase=approval_phrase)
@@ -374,7 +524,43 @@ class DesktopInputBackend:
             "keyboard.hotkey", {"keys": [key]}, proposal_id=proposal_id, approval_phrase=approval_phrase
         )
 
-    def mouse_drag(self, *_args: Any, **_kwargs: Any) -> BackendAttempt:
+    def mouse_drag(
+        self,
+        *,
+        x: int | None = None,
+        y: int | None = None,
+        target_x: int | None = None,
+        target_y: int | None = None,
+        button: str = "left",
+        proposal_id: str = "",
+        approval_phrase: str = "",
+    ) -> BackendAttempt:
+        if self.mode == ORB_POINTER_MODE:
+            if x is None or y is None or target_x is None or target_y is None:
+                return BackendAttempt(
+                    ok=False,
+                    status="blocked",
+                    mode=self.mode,
+                    backend="francis.orb_virtual_pointer",
+                    input_kind="mouse.drag",
+                    governance={
+                        "decision": "deny",
+                        "reason": "mouse_drag_requires_start_and_target_coordinates",
+                        "virtual_pointer_only": True,
+                        "raw_input": False,
+                        "performed": False,
+                        "physical_input_performed": False,
+                        "user_mouse_taken": False,
+                    },
+                    error="mouse drag requires start and target coordinates",
+                )
+            return self._submit(
+                "mouse.drag",
+                {"x": x, "y": y, "target_x": target_x, "target_y": target_y, "button": button},
+                proposal_id=proposal_id,
+                approval_phrase=approval_phrase,
+            )
+
         return BackendAttempt(
             ok=False,
             status="unsupported",
@@ -386,6 +572,8 @@ class DesktopInputBackend:
                 "reason": "mouse_drag_backend_not_declared",
                 "raw_input": False,
                 "performed": False,
+                "physical_input_performed": False,
+                "user_mouse_taken": False,
             },
             error="mouse drag is not yet supported by the governed input actuator",
         )
@@ -398,6 +586,123 @@ class DesktopInputBackend:
         proposal_id: str = "",
         approval_phrase: str = "",
     ) -> BackendAttempt:
+        if self.mode == ORB_POINTER_MODE:
+            try:
+                resolved_position = _virtual_pointer_position(kind, payload)
+                bridge_payload = dict(payload)
+                bridge_payload.setdefault("x", resolved_position[0])
+                bridge_payload.setdefault("y", resolved_position[1])
+                desktop_bridge = (
+                    perform_orb_desktop_action(
+                        input_kind=kind,
+                        payload=bridge_payload,
+                        actor=self.actor,
+                        objective=self.objective,
+                        session_id=self.session_id,
+                    )
+                    if kind != "mouse.move"
+                    else {}
+                )
+                pointer = _write_virtual_pointer_state(
+                    input_kind=kind,
+                    payload=payload,
+                    actor=self.actor,
+                    objective=self.objective,
+                    session_id=self.session_id,
+                    resolved_position=resolved_position,
+                    desktop_bridge=desktop_bridge,
+                )
+            except Exception as exc:
+                return BackendAttempt(
+                    ok=False,
+                    status="blocked",
+                    mode=self.mode,
+                    backend="francis.orb_virtual_pointer",
+                    input_kind=kind,
+                    governance={
+                        "decision": "deny",
+                        "virtual_pointer_only": True,
+                        "raw_input": False,
+                        "performed": False,
+                        "physical_input_performed": False,
+                        "user_mouse_taken": False,
+                    },
+                    error=str(exc),
+                )
+            state = _coerce_dict(pointer.get("state"))
+            last_action = _coerce_dict(state.get("last_action"))
+            return BackendAttempt(
+                ok=True,
+                status=_virtual_pointer_action_status(kind, payload),
+                mode=self.mode,
+                backend="francis.orb_virtual_pointer",
+                input_kind=kind,
+                performed=False,
+                dry_run=False,
+                result={
+                    "input_execution_attempted": False,
+                    "proposal_written": False,
+                    "virtual_pointer_updated": True,
+                    "pointer_state_path": _clean_text(pointer.get("path")),
+                    "pointer_state": {
+                        "pointer_id": _clean_text(state.get("pointer_id")),
+                        "x": _safe_int(state.get("x")),
+                        "y": _safe_int(state.get("y")),
+                        "updated_at": _clean_text(state.get("updated_at")),
+                        "last_action": last_action,
+                    },
+                    "desktop_bridge": desktop_bridge if isinstance(desktop_bridge, dict) else {},
+                    "desktop_bridge_status": _clean_text(desktop_bridge.get("status"))
+                    if isinstance(desktop_bridge, dict)
+                    else "",
+                    "desktop_bridge_receipt_id": _clean_text(desktop_bridge.get("receipt_id"))
+                    if isinstance(desktop_bridge, dict)
+                    else "",
+                    "desktop_bridge_receipt_path": _clean_text(desktop_bridge.get("receipt_path"))
+                    if isinstance(desktop_bridge, dict)
+                    else "",
+                    "desktop_action_sent": bool(desktop_bridge.get("desktop_action_sent"))
+                    if isinstance(desktop_bridge, dict)
+                    else False,
+                    "desktop_effect_performed": bool(desktop_bridge.get("desktop_effect_performed"))
+                    if isinstance(desktop_bridge, dict)
+                    else False,
+                    "desktop_effect_confirmed": bool(desktop_bridge.get("desktop_effect_confirmed"))
+                    if isinstance(desktop_bridge, dict)
+                    else False,
+                    "physical_input_performed": False,
+                    "user_os_cursor_moved": False,
+                    "user_mouse_taken": False,
+                    "requires_app_bridge_for_desktop_effect": bool(
+                        last_action.get("requires_app_bridge_for_desktop_effect")
+                    ),
+                },
+                governance={
+                    "decision": "allow_virtual_pointer",
+                    "virtual_pointer_only": True,
+                    "dry_run": False,
+                    "writes_pointer_state": True,
+                    "writes_proposal": False,
+                    "raw_input": False,
+                    "performed": False,
+                    "physical_input_performed": False,
+                    "user_os_cursor_controlled": False,
+                    "user_mouse_taken": False,
+                    "desktop_action_sent": bool(desktop_bridge.get("desktop_action_sent"))
+                    if isinstance(desktop_bridge, dict)
+                    else False,
+                    "desktop_effect_performed": bool(desktop_bridge.get("desktop_effect_performed"))
+                    if isinstance(desktop_bridge, dict)
+                    else False,
+                    "desktop_effect_confirmed": bool(desktop_bridge.get("desktop_effect_confirmed"))
+                    if isinstance(desktop_bridge, dict)
+                    else False,
+                    "requires_app_bridge_for_desktop_effect": bool(
+                        last_action.get("requires_app_bridge_for_desktop_effect")
+                    ),
+                },
+            )
+
         if self.mode == "dry_run":
             try:
                 proposal = propose_input_action(
@@ -596,7 +901,27 @@ def _resolve_intent(intent: OrbIntent) -> IntentResolution:
         return IntentResolution(feedback_state="blocked", supported=False, reason="focus_window_backend_not_declared")
 
     if intent.kind == "mouse_drag":
-        return IntentResolution(feedback_state="blocked", supported=False, reason="mouse_drag_backend_not_declared")
+        if intent.x is None or intent.y is None:
+            return IntentResolution(feedback_state="blocked", supported=False, reason="mouse_drag_requires_coordinates")
+        target_x = intent.metadata.get("target_x")
+        target_y = intent.metadata.get("target_y")
+        if target_x is None or target_y is None:
+            return IntentResolution(feedback_state="blocked", supported=False, reason="mouse_drag_requires_target")
+        x, y = _bounded_coord(intent.x, "x"), _bounded_coord(intent.y, "y")
+        end_x, end_y = _bounded_coord(target_x, "target_x"), _bounded_coord(target_y, "target_y")
+        return IntentResolution(
+            feedback_state="moving",
+            input_kind="mouse.drag",
+            input_payload={"x": x, "y": y, "target_x": end_x, "target_y": end_y, "button": intent.button},
+            resolved_target={
+                "x": x,
+                "y": y,
+                "target_x": end_x,
+                "target_y": end_y,
+                "button": intent.button,
+                "source": "coordinates",
+            },
+        )
 
     return IntentResolution(feedback_state="blocked", supported=False, reason=f"unsupported_orb_intent:{intent.kind}")
 
@@ -661,7 +986,15 @@ def _run_backend(
         key = _clean_text(keys[0] if keys else "")
         return backend.key_press(key, proposal_id=proposal_id, approval_phrase=approval_phrase)
     if resolution.input_kind == "mouse.drag":
-        return backend.mouse_drag()
+        return backend.mouse_drag(
+            x=payload.get("x"),
+            y=payload.get("y"),
+            target_x=payload.get("target_x"),
+            target_y=payload.get("target_y"),
+            button=str(payload.get("button", "left")),
+            proposal_id=proposal_id,
+            approval_phrase=approval_phrase,
+        )
     raise InputActuatorError(f"unsupported resolved input kind: {resolution.input_kind}")
 
 
@@ -678,6 +1011,15 @@ def _public_input_action(kind: str, payload: dict[str, Any]) -> dict[str, Any]:
             public["x"] = payload.get("x")
             public["y"] = payload.get("y")
         return public
+    if kind == "mouse.drag":
+        return {
+            "kind": kind,
+            "button": _clean_text(payload.get("button"), "left"),
+            "x": payload.get("x"),
+            "y": payload.get("y"),
+            "target_x": payload.get("target_x"),
+            "target_y": payload.get("target_y"),
+        }
     if kind == "keyboard.type":
         text = str(payload.get("text", ""))
         return {"kind": kind, "text_length": len(text), "text_sha256": _hash_text(text)}
@@ -714,6 +1056,11 @@ def _operator_governance(
     backend_attempt: BackendAttempt,
 ) -> dict[str, Any]:
     live_allowed = mode == "guarded_live" and backend_attempt.performed
+    uses_user_os_cursor = live_allowed and backend_attempt.input_kind.startswith("mouse.")
+    virtual_pointer_only = mode == ORB_POINTER_MODE
+    orb_desktop_action_sent = virtual_pointer_only and bool(backend_attempt.result.get("desktop_action_sent"))
+    orb_desktop_effect_performed = virtual_pointer_only and bool(backend_attempt.result.get("desktop_effect_performed"))
+    orb_desktop_effect_confirmed = virtual_pointer_only and bool(backend_attempt.result.get("desktop_effect_confirmed"))
     return {
         "decision": backend_attempt.governance.get("decision", "deny"),
         "mode": mode,
@@ -722,12 +1069,23 @@ def _operator_governance(
         "screenshots": False,
         "pixels": False,
         "dry_run": bool(backend_attempt.dry_run),
+        "virtual_pointer_only": virtual_pointer_only,
+        "uses_user_os_cursor": uses_user_os_cursor,
+        "user_mouse_taken": uses_user_os_cursor,
+        "physical_input_performed": live_allowed,
+        "desktop_action_sent": orb_desktop_action_sent,
+        "desktop_effect_performed": live_allowed or orb_desktop_effect_performed,
+        "desktop_effect_confirmed": orb_desktop_effect_confirmed,
         "live_input_performed": live_allowed,
-        "input_execution_attempted": bool(backend_attempt.result.get("input_execution_attempted")),
+        "input_execution_attempted": bool(backend_attempt.result.get("input_execution_attempted"))
+        or orb_desktop_action_sent,
         "input_proposal_written": bool(backend_attempt.result.get("proposal_written")),
         "manual_approval_required_for_execution": mode == "dry_run" or backend_attempt.status == "approval_required",
         "guarded_live_requires_existing_input_approval": True,
         "guarded_live_requires_existing_handoff": True,
+        "orb_pointer_requires_app_bridge_for_desktop_effect": bool(
+            backend_attempt.result.get("requires_app_bridge_for_desktop_effect")
+        ),
         "feedback_state_truthful": True,
         "unsupported_reason": "" if resolution.supported else resolution.reason,
         "receipt_written": True,
@@ -834,6 +1192,9 @@ def submit_orb_sequence(args: dict[str, Any]) -> dict[str, Any]:
         "governance": {
             "raw_input": False,
             "dry_run": shared["mode"] == "dry_run",
+            "virtual_pointer_only": shared["mode"] == ORB_POINTER_MODE,
+            "uses_user_os_cursor": any(bool(item.get("governance", {}).get("uses_user_os_cursor")) for item in results),
+            "user_mouse_taken": any(bool(item.get("governance", {}).get("user_mouse_taken")) for item in results),
             "receipt_written": True,
             "sequence_count": len(results),
         },
@@ -845,6 +1206,12 @@ def _operator_result_status(resolution: IntentResolution, backend_attempt: Backe
         return "blocked"
     if not backend_attempt.ok:
         return "failed"
+    if backend_attempt.status.startswith("virtual_pointer_"):
+        if backend_attempt.result.get("requires_app_bridge_for_desktop_effect") and not backend_attempt.result.get(
+            "desktop_effect_performed"
+        ):
+            return "visible_only"
+        return "complete"
     if backend_attempt.status == "dry_run_proposed":
         return "dry_run"
     if backend_attempt.status == "metadata_only":
@@ -861,6 +1228,8 @@ def _operator_feedback_state(resolution: IntentResolution, backend_attempt: Back
         return "blocked"
     if not backend_attempt.ok:
         return "failed"
+    if backend_attempt.status.startswith("virtual_pointer_"):
+        return "complete"
     if backend_attempt.status in {"dry_run_proposed", "metadata_only"}:
         return resolution.feedback_state
     if backend_attempt.performed or backend_attempt.dry_run:
@@ -901,7 +1270,37 @@ def operator_receipts_readback(args: dict[str, Any] | None = None) -> dict[str, 
     }
 
 
+def _virtual_pointer_readback() -> dict[str, Any]:
+    state = _read_virtual_pointer_state()
+    if not state:
+        return {
+            "available": False,
+            "pointer_id": ORB_VIRTUAL_POINTER_ID,
+            "mode": ORB_POINTER_MODE,
+            "controls_user_os_cursor": False,
+            "user_mouse_taken": False,
+            "physical_input_performed": False,
+        }
+    last_action = _coerce_dict(state.get("last_action"))
+    return {
+        "available": True,
+        "pointer_id": _clean_text(state.get("pointer_id"), ORB_VIRTUAL_POINTER_ID),
+        "mode": _clean_text(state.get("mode"), ORB_POINTER_MODE),
+        "x": _safe_int(state.get("x")),
+        "y": _safe_int(state.get("y")),
+        "position": state.get("position") if isinstance(state.get("position"), dict) else {},
+        "updated_at": _clean_text(state.get("updated_at")),
+        "last_action": last_action,
+        "state_path": str(_virtual_pointer_state_path()),
+        "controls_user_os_cursor": False,
+        "user_mouse_taken": False,
+        "physical_input_performed": False,
+        "desktop_effect_performed": False,
+    }
+
+
 def latest_orb_operator_state() -> dict[str, Any]:
+    pointer = _virtual_pointer_readback()
     receipts = sorted(_receipt_dir().glob("*.json"), key=lambda item: item.stat().st_mtime, reverse=True)[:1]
     if not receipts:
         return {
@@ -912,6 +1311,7 @@ def latest_orb_operator_state() -> dict[str, Any]:
             "read_only": True,
             "receipt_id": "",
             "receipt_path": "",
+            "virtual_pointer": pointer,
             "grants_execution_authority": False,
         }
     path = receipts[0]
@@ -926,6 +1326,7 @@ def latest_orb_operator_state() -> dict[str, Any]:
             "read_only": True,
             "receipt_id": path.stem,
             "receipt_path": str(path),
+            "virtual_pointer": pointer,
             "grants_execution_authority": False,
             "error": "latest_operator_receipt_unreadable",
         }
@@ -940,6 +1341,10 @@ def latest_orb_operator_state() -> dict[str, Any]:
         "receipt_path": str(path),
         "latest_intent": receipt.get("requested_intent") if isinstance(receipt.get("requested_intent"), dict) else {},
         "latest_result": _clean_text(receipt.get("result")),
+        "virtual_pointer": pointer,
+        "uses_user_os_cursor": bool(_coerce_dict(receipt.get("governance")).get("uses_user_os_cursor")),
+        "user_mouse_taken": bool(_coerce_dict(receipt.get("governance")).get("user_mouse_taken")),
+        "physical_input_performed": bool(_coerce_dict(receipt.get("governance")).get("physical_input_performed")),
         "grants_execution_authority": False,
     }
 
@@ -960,14 +1365,97 @@ def _demo_sequence(x: int, y: int, text: str, mode: str) -> dict[str, Any]:
     )
 
 
+def _visible_gesture_demo_sequence(
+    *,
+    x: int,
+    y: int,
+    drag_to_x: int,
+    drag_to_y: int,
+    step_delay: float,
+) -> dict[str, Any]:
+    shared = {
+        "mode": ORB_POINTER_MODE,
+        "actor": "manual.orb_operator_visible_gesture_demo",
+        "objective": "visible Orb left-click drag and right-click proof",
+        "session_id": f"manual-gesture-{uuid.uuid4().hex[:8]}",
+    }
+    start_x, start_y = _bounded_coord(x, "x"), _bounded_coord(y, "y")
+    end_x, end_y = _bounded_coord(drag_to_x, "drag_to_x"), _bounded_coord(drag_to_y, "drag_to_y")
+    drag_points: list[tuple[int, int]] = []
+    for index in range(1, 5):
+        ratio = index / 4
+        drag_points.append((round(start_x + ((end_x - start_x) * ratio)), round(start_y + ((end_y - start_y) * ratio))))
+
+    intents: list[dict[str, Any]] = [
+        {"kind": "move_to", "x": start_x, "y": start_y},
+        {"kind": "click", "x": start_x, "y": start_y, "button": "left", "clicks": 1},
+    ]
+    current_x, current_y = start_x, start_y
+    for target_x, target_y in drag_points:
+        intents.append(
+            {
+                "kind": "mouse_drag",
+                "x": current_x,
+                "y": current_y,
+                "target_x": target_x,
+                "target_y": target_y,
+                "button": "left",
+            }
+        )
+        current_x, current_y = target_x, target_y
+    intents.append({"kind": "click", "x": end_x, "y": end_y, "button": "right", "clicks": 1})
+
+    results: list[dict[str, Any]] = []
+    safe_delay = max(0.0, min(float(step_delay), 5.0))
+    for intent in intents:
+        results.append(submit_orb_intent({**shared, "intent": intent}))
+        if safe_delay:
+            time.sleep(safe_delay)
+
+    return {
+        "ok": all(bool(item.get("ok")) for item in results),
+        "status": "complete" if all(bool(item.get("ok")) for item in results) else "partial_or_blocked",
+        "surface": ORB_OPERATOR_SURFACE,
+        "stage": ORB_OPERATOR_STAGE,
+        "mode": ORB_POINTER_MODE,
+        "results": results,
+        "receipt_paths": [
+            str(item.get("operator_receipt_path")) for item in results if item.get("operator_receipt_path")
+        ],
+        "governance": {
+            "raw_input": False,
+            "virtual_pointer_only": True,
+            "uses_user_os_cursor": False,
+            "user_mouse_taken": False,
+            "physical_input_performed": False,
+            "desktop_effect_performed": False,
+            "receipt_written": True,
+            "sequence_count": len(results),
+        },
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run a safe Orb operator dry-run sequence.")
-    parser.add_argument("--mode", choices=("dry_run", "guarded_live"), default="dry_run")
+    parser.add_argument("--mode", choices=ORB_BACKEND_MODES, default="dry_run")
     parser.add_argument("--x", type=int, default=320)
     parser.add_argument("--y", type=int, default=240)
+    parser.add_argument("--drag-to-x", type=int, default=640)
+    parser.add_argument("--drag-to-y", type=int, default=420)
+    parser.add_argument("--step-delay", type=float, default=0.8)
+    parser.add_argument("--gesture-demo", action="store_true")
     parser.add_argument("--text", default="Francis Orb dry-run")
     args = parser.parse_args(argv)
-    result = _demo_sequence(args.x, args.y, args.text, args.mode)
+    if args.gesture_demo:
+        result = _visible_gesture_demo_sequence(
+            x=args.x,
+            y=args.y,
+            drag_to_x=args.drag_to_x,
+            drag_to_y=args.drag_to_y,
+            step_delay=args.step_delay,
+        )
+    else:
+        result = _demo_sequence(args.x, args.y, args.text, args.mode)
     print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True, default=str))
     return 0 if result.get("ok") else 1
 

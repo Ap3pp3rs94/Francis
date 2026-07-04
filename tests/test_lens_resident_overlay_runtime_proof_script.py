@@ -113,7 +113,7 @@ def test_lens_resident_overlay_runtime_proof_observes_boundary_without_authority
     assert proof["tray_host_enabled"] is False
     assert proof["tray_icon_enabled"] is False
     assert proof["summon_status"] == "blocked"
-    assert proof["global_hotkey"] == "Ctrl+Alt+Space"
+    assert proof["global_hotkey"] == "Ctrl+Alt+F"
     assert proof["summon_binding_enabled"] is False
     assert proof["hotkey_registration_enabled"] is False
     assert "resident_overlay_runtime_missing" in payload["blockers"]

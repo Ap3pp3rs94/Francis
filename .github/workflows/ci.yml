@@ -42,7 +42,7 @@ jobs:
           enable-cache: true
 
       - name: Install
-        run: uv sync --frozen --python ${{ matrix.python-version }} --extra core --extra web --extra dev
+        run: uv sync --frozen --python ${{ matrix.python-version }} --extra core --extra web --extra dev --extra bridge
 
       - name: Verify Python matrix
         run: |

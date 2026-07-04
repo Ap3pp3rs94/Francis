@@ -51,6 +51,7 @@ param(
   # Behavior
   [Parameter()][switch]$Execute,
   [Parameter()][int]$HttpTimeoutSec = 4,
+  [Parameter()][int]$CommandTimeoutSec = 12,
   [Parameter()][int]$EventLogHours  = 24,
 
   # Potential fixes (only do anything when -Execute is set)
@@ -136,30 +137,42 @@ function Try-Do {
 function Invoke-CommandSafe {
   param(
     [string]$Exe,
-    [string[]]$Args = @(),
-    [int]$MaxLines = 120
+    [string[]]$CommandArgs = @(),
+    [int]$MaxLines = 120,
+    [int]$TimeoutSec = 12
   )
   if ([string]::IsNullOrWhiteSpace($Exe) -or -not (Test-Path -LiteralPath $Exe)) {
-    return [pscustomobject]@{ ExitCode = 127; Stdout = @(); Stderr = @("exe not found") }
+    return [pscustomobject]@{ ExitCode = 127; TimedOut = $false; TimeoutSec = $TimeoutSec; Stdout = @(); Stderr = @("exe not found") }
   }
 
   $tmpOut = New-TemporaryFile
   $tmpErr = New-TemporaryFile
 
   try {
-    $p = Start-Process -FilePath $Exe -ArgumentList $Args -NoNewWindow -PassThru `
+    $boundedTimeoutMs = [Math]::Max(1, $TimeoutSec) * 1000
+    $argLine = ($CommandArgs -join " ")
+    $p = Start-Process -FilePath $Exe -ArgumentList $argLine -NoNewWindow -PassThru `
       -RedirectStandardOutput $tmpOut.FullName -RedirectStandardError $tmpErr.FullName
-    $p.WaitForExit()
+    $completed = $p.WaitForExit($boundedTimeoutMs)
+    if (-not $completed) {
+      Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+      try { $p.WaitForExit(2000) | Out-Null } catch { }
+    }
 
     $o = @()
     $e = @()
     if (Test-Path $tmpOut.FullName) { $o = Get-Content -LiteralPath $tmpOut.FullName -ErrorAction SilentlyContinue }
     if (Test-Path $tmpErr.FullName) { $e = Get-Content -LiteralPath $tmpErr.FullName -ErrorAction SilentlyContinue }
+    if (-not $completed) {
+      $e = @($e) + @("command timed out after TimeoutSec=$TimeoutSec")
+    }
 
     return [pscustomobject]@{
-      ExitCode = $p.ExitCode
-      Stdout   = @($o | Select-Object -First $MaxLines)
-      Stderr   = @($e | Select-Object -First $MaxLines)
+      ExitCode   = $(if ($completed) { $p.ExitCode } else { 124 })
+      TimedOut   = -not $completed
+      TimeoutSec = $TimeoutSec
+      Stdout     = @($o | Select-Object -First $MaxLines)
+      Stderr     = @($e | Select-Object -First $MaxLines)
     }
   } finally {
     Remove-Item -LiteralPath $tmpOut.FullName -Force -ErrorAction SilentlyContinue
@@ -266,15 +279,15 @@ function Find-OllamaService {
 function Get-GpuInfo {
   $gpus = @()
   Try-Do {
-    $gpus = Get-CimInstance Win32_VideoController |
+    $gpus = @(Get-CimInstance Win32_VideoController |
       Select-Object Name,AdapterCompatibility,DriverVersion,VideoProcessor,
-        @{n="VRAM_GB";e={ if($_.AdapterRAM){ [math]::Round($_.AdapterRAM/1GB,2)} else { $null } }}
+        @{n="VRAM_GB";e={ if($_.AdapterRAM){ [math]::Round($_.AdapterRAM/1GB,2)} else { $null } }})
   } "WARN" | Out-Null
 
   $nvidia = $null
   $nvsmi = Get-Command nvidia-smi -ErrorAction SilentlyContinue
   if ($nvsmi) {
-    $nvidia = Invoke-CommandSafe -Exe $nvsmi.Source -Args @("-L") -MaxLines 40
+    $nvidia = Invoke-CommandSafe -Exe $nvsmi.Source -CommandArgs @("-L") -MaxLines 40 -TimeoutSec $CommandTimeoutSec
   }
 
   return [pscustomobject]@{
@@ -359,7 +372,7 @@ if ($ollamaExe) {
 # Basic CLI
 $cli = [ordered]@{}
 if ($ollamaExe) {
-  $ver = Invoke-CommandSafe -Exe $ollamaExe -Args @("version") -MaxLines 20
+  $ver = Invoke-CommandSafe -Exe $ollamaExe -CommandArgs @("version") -MaxLines 20 -TimeoutSec $CommandTimeoutSec
   $cli.Version = $ver
   if ($ver.ExitCode -eq 0) {
     Add-Check "OLLAMA" "CLI version" "PASSED" (($ver.Stdout -join " ") -replace "\s+"," ").Trim()
@@ -367,7 +380,7 @@ if ($ollamaExe) {
     Add-Check "OLLAMA" "CLI version" "WARN" (($ver.Stderr -join " ") -replace "\s+"," ").Trim()
   }
 
-  $list = Invoke-CommandSafe -Exe $ollamaExe -Args @("list") -MaxLines 200
+  $list = Invoke-CommandSafe -Exe $ollamaExe -CommandArgs @("list") -MaxLines 200 -TimeoutSec $CommandTimeoutSec
   $cli.List = $list
   if ($list.ExitCode -eq 0) {
     Add-Check "OLLAMA" "CLI list" "PASSED" ("ExitCode 0; lines={0}" -f $list.Stdout.Count)
@@ -375,7 +388,7 @@ if ($ollamaExe) {
     Add-Check "OLLAMA" "CLI list" "WARN" ("ExitCode {0}; {1}" -f $list.ExitCode, (($list.Stderr | Select-Object -First 1) -as [string]))
   }
 
-  $ps = Invoke-CommandSafe -Exe $ollamaExe -Args @("ps") -MaxLines 200
+  $ps = Invoke-CommandSafe -Exe $ollamaExe -CommandArgs @("ps") -MaxLines 200 -TimeoutSec $CommandTimeoutSec
   $cli.PS = $ps
   if ($ps.ExitCode -eq 0) {
     Add-Check "OLLAMA" "CLI ps" "PASSED" ("ExitCode 0; lines={0}" -f $ps.Stdout.Count)
@@ -389,14 +402,14 @@ if ($ollamaExe) {
 # -----------------------------
 Write-Log "Checking process/service..." "STEP"
 
-$proc = Get-Process -Name "ollama" -ErrorAction SilentlyContinue
+$proc = @(Get-Process -Name "ollama" -ErrorAction SilentlyContinue)
 if ($proc) {
   Add-Check "RUNTIME" "Process" "PASSED" ("ollama PID(s): {0}" -f (($proc.Id -join ", ")))
 } else {
   Add-Check "RUNTIME" "Process" "WARN" "ollama process not detected"
 }
 
-$services = Find-OllamaService
+$services = @(Find-OllamaService)
 if ($services.Count -gt 0) {
   $svcSummary = ($services | ForEach-Object { "{0}({1}/{2})" -f $_.Name, $_.State, $_.StartMode }) -join "; "
   Add-Check "RUNTIME" "Service" "PASSED" $svcSummary
@@ -458,7 +471,7 @@ if ($Execute -and $StartServerIfNotRunning -and -not $proc -and ($services.Count
 # -----------------------------
 Write-Log "Checking port 11434 and API..." "STEP"
 
-$listen = Get-ListeningPortInfo -Port 11434
+$listen = @(Get-ListeningPortInfo -Port 11434)
 if ($listen -and $listen.Count -gt 0) {
   Add-Check "NETWORK" "Port 11434 listen" "PASSED" ("Listening entries: {0}" -f $listen.Count)
 } else {
@@ -492,7 +505,7 @@ if ($apiTags.Ok) {
 # -----------------------------
 Write-Log "Checking model storage paths..." "STEP"
 
-$modelPaths = Get-ModelPaths
+$modelPaths = @(Get-ModelPaths)
 $modelInfo  = @()
 
 if ($modelPaths.Count -eq 0) {
@@ -523,8 +536,9 @@ if ($SkipModelSize) {
   Add-Check "STORAGE" "Model size scan" "SKIPPED" "SkipModelSize specified"
 } else {
   # Flag if any scanned sizes are null due to access errors
-  $scanned = $modelInfo | Where-Object { $_.Exists -and $_.SizeScanned }
-  if ($scanned.Count -gt 0 -and ($scanned | Where-Object { $null -eq $_.SizeBytes }).Count -gt 0) {
+  $scanned = @($modelInfo | Where-Object { $_.Exists -and $_.SizeScanned })
+  $scannedMissingSize = @($scanned | Where-Object { $null -eq $_.SizeBytes })
+  if ($scanned.Count -gt 0 -and $scannedMissingSize.Count -gt 0) {
     Add-Check "STORAGE" "Model size scan" "WARN" "One or more paths could not be sized (permissions/long paths)"
   } elseif ($scanned.Count -gt 0) {
     Add-Check "STORAGE" "Model size scan" "PASSED" ("Scanned {0} path(s)" -f $scanned.Count)
@@ -542,9 +556,10 @@ $os = Get-CimInstance Win32_OperatingSystem
 $cs = Get-CimInstance Win32_ComputerSystem
 $cpu = Get-CimInstance Win32_Processor | Select-Object -First 1
 $gpu = Get-GpuInfo
+$videoControllers = @($gpu.VideoControllers)
 
-if ($gpu.VideoControllers.Count -gt 0) {
-  Add-Check "HARDWARE" "GPU detected" "PASSED" (($gpu.VideoControllers | ForEach-Object { $_.Name }) -join "; ")
+if ($videoControllers.Count -gt 0) {
+  Add-Check "HARDWARE" "GPU detected" "PASSED" (($videoControllers | ForEach-Object { $_.Name }) -join "; ")
 } else {
   Add-Check "HARDWARE" "GPU detected" "WARN" "No Win32_VideoController entries found"
 }
@@ -577,17 +592,30 @@ $ollamaEnv = [ordered]@{
 # -----------------------------
 Write-Log ("Collecting Event Log mentions of 'Ollama' (last {0}h)..." -f $EventLogHours) "STEP"
 $events = @()
-Try-Do {
+try {
   $since = (Get-Date).AddHours(-1 * [math]::Abs($EventLogHours))
-  $events = Get-WinEvent -FilterHashtable @{ LogName="Application"; StartTime=$since } -ErrorAction SilentlyContinue |
+  $events = @(Get-WinEvent -FilterHashtable @{ LogName="Application"; StartTime=$since } -ErrorAction SilentlyContinue |
     Where-Object { $_.Message -match "Ollama" -or $_.ProviderName -match "Ollama" } |
-    Select-Object -First 80 TimeCreated,Id,LevelDisplayName,ProviderName,Message
-} "WARN" | Out-Null
+    Select-Object -First 80 TimeCreated,Id,LevelDisplayName,ProviderName,Message)
+} catch {
+  Write-Log ("Event Log collection skipped: {0}" -f $_.Exception.Message) "WARN"
+  $events = @()
+}
 
 if ($events.Count -gt 0) {
   Add-Check "LOGS" "EventLog Application" "PASSED" ("Found {0} entries" -f $events.Count)
 } else {
   Add-Check "LOGS" "EventLog Application" "SKIPPED" "No matching events found"
+}
+
+$processSnapshot = @()
+foreach ($processItem in $proc) {
+  $processSnapshot += [pscustomobject]@{
+    Name      = $(try { $processItem.Name } catch { $null })
+    Id        = $(try { $processItem.Id } catch { $null })
+    Path      = $(try { $processItem.Path } catch { $null })
+    StartTime = $(try { $processItem.StartTime } catch { $null })
+  }
 }
 
 # -----------------------------
@@ -607,6 +635,7 @@ $report = [ordered]@{
     Root                   = $RootResolved
     HostUrl                = $HostUrl
     HttpTimeoutSec         = $HttpTimeoutSec
+    CommandTimeoutSec      = $CommandTimeoutSec
     EventLogHours          = $EventLogHours
 
     StartServiceIfStopped  = [bool]$StartServiceIfStopped
@@ -640,15 +669,15 @@ $report = [ordered]@{
     ExePath    = $ollamaExe
     CLI        = $cli
     Services   = $services
-    Process    = @($proc | Select-Object Name,Id,Path,StartTime -ErrorAction SilentlyContinue)
+    Process    = $processSnapshot
     Port11434  = $listen
     API        = $api
     ModelPaths = $modelInfo
     GPU        = $gpu
-    EventLog   = @($events)
+    EventLog   = $events
   }
 
-  Checks = @($script:Checks)
+  Checks = $script:Checks.ToArray()
 }
 
 Export-Json -Path $JsonPath -Obj $report
