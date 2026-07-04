@@ -180,8 +180,35 @@ def test_developer_bridge_routes_are_mounted() -> None:
 import json
 from francis.api.app import create_app
 
+
+def _join_paths(prefix, path):
+    if not prefix:
+        return path
+    if path == "/":
+        return prefix
+    return f"{prefix.rstrip('/')}/{path.lstrip('/')}"
+
+
+def _collect_route_paths(route, prefix=""):
+    original_router = getattr(route, "original_router", None)
+    include_context = getattr(route, "include_context", None)
+    if original_router is not None and include_context is not None:
+        include_prefix = str(getattr(include_context, "prefix", "") or "")
+        nested_prefix = _join_paths(prefix, include_prefix) if include_prefix else prefix
+        for nested_route in getattr(original_router, "routes", []):
+            yield from _collect_route_paths(nested_route, nested_prefix)
+        return
+
+    path = str(getattr(route, "path", "") or "").strip()
+    if path:
+        yield _join_paths(prefix, path)
+
+
 app = create_app()
-print(json.dumps({"routes": sorted(str(route.path) for route in app.routes if getattr(route, "path", None))}))
+routes = []
+for route in app.routes:
+    routes.extend(_collect_route_paths(route))
+print(json.dumps({"routes": sorted(routes)}))
 """
     )
     routes = set(payload["routes"])
