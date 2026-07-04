@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import shutil
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +14,7 @@ from tests.test_fr017_measurement_intake_script import _ready_measurement_payloa
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "fr017-measurement-session-brief.ps1"
+INITIALIZER_SCRIPT = ROOT / "scripts" / "fr017-new-measurement-record.ps1"
 
 
 def _powershell() -> str:
@@ -32,8 +34,44 @@ def _run_brief(*args: str):
     )
 
 
+def _run_script(script: Path, *args: str):
+    return run_powershell_script(
+        _powershell(),
+        script,
+        args,
+        cwd=ROOT,
+        timeout_seconds=40,
+    )
+
+
 def _payload(stdout: str) -> dict[str, Any]:
     return json.loads(stdout)
+
+
+def _create_setup_brief_record(output_path: Path) -> None:
+    proc = _run_script(
+        INITIALIZER_SCRIPT,
+        "-Mode",
+        "Create",
+        "-OutputPath",
+        str(output_path),
+        "-EvidenceDate",
+        date.today().isoformat(),
+        "-Observer",
+        "test-observer",
+        "-PilotId",
+        "pilot-reference",
+        "-MeasurementTool",
+        "flexible metric tape",
+        "-ConfirmNoTissueCompressionUsed",
+        "-ConfirmNoWristBoneCompressionUsed",
+        "-ConfirmMetricToolUsed",
+        "-ConfirmArmRelaxedPalmNeutralOrExceptionRecorded",
+        "-ConfirmStopConditionsBriefed",
+        "-ConditionNotes",
+        "No tissue compression, no wrist-bone compression, metric tape, and stop briefing completed.",
+    )
+    assert proc.returncode == 0, proc.stderr
 
 
 def test_fr017_measurement_session_brief_reports_first_template_blocker() -> None:
@@ -50,6 +88,10 @@ def test_fr017_measurement_session_brief_reports_first_template_blocker() -> Non
     assert "brief stop conditions" in payload["first_blocking_group_action"]
     assert "evidence.date" in payload["current_group_missing_fields"]
     assert "measurement_conditions.stop_conditions_briefed" in payload["current_group_missing_fields"]
+    assert payload["current_group_update_tool_path"].endswith("scripts\\fr017-new-measurement-record.ps1")
+    assert "fr017-new-measurement-record.ps1 -Mode Create" in payload["current_group_update_command_template"]
+    assert "-OutputPath <measurement-record.json>" in payload["current_group_update_command_template"]
+    assert "Creates a pending working record" in payload["current_group_update_contract"]
     assert payload["measurement_capture_total_groups"] == 5
     assert payload["measurement_capture_ready_groups"] == 0
     assert payload["measurement_capture_pending_groups"] == 5
@@ -73,6 +115,52 @@ def test_fr017_measurement_session_brief_reports_first_template_blocker() -> Non
     assert payload["writes_data"] is False
 
 
+def test_fr017_measurement_session_brief_points_pending_record_to_setup_updater(
+    tmp_path: Path,
+) -> None:
+    measurement_path = tmp_path / "pending-measurements.json"
+    proc = _run_script(INITIALIZER_SCRIPT, "-Mode", "Create", "-OutputPath", str(measurement_path))
+    assert proc.returncode == 0, proc.stderr
+
+    brief = _run_brief("-Mode", "Status", "-MeasurementPath", str(measurement_path))
+
+    assert brief.returncode == 0, brief.stderr
+    payload = _payload(brief.stdout)
+    assert payload["status"] == "measurement_session_input_required"
+    assert payload["using_template"] is False
+    assert payload["first_blocking_group_id"] == "setup_and_safety_brief"
+    assert payload["current_group_update_tool_path"].endswith("scripts\\fr017-update-measurement-setup-record.ps1")
+    assert (
+        "fr017-update-measurement-setup-record.ps1 -Mode UpdateSetup"
+        in payload["current_group_update_command_template"]
+    )
+    assert str(measurement_path) in payload["current_group_update_command_template"]
+    assert "existing working record only" in payload["current_group_update_contract"]
+    assert payload["physical_validation_complete"] is False
+    assert payload["fr018_implementation_cleared"] is False
+
+
+def test_fr017_measurement_session_brief_points_setup_ready_record_to_left_side_updater(
+    tmp_path: Path,
+) -> None:
+    measurement_path = tmp_path / "setup-ready-measurements.json"
+    _create_setup_brief_record(measurement_path)
+
+    proc = _run_brief("-Mode", "Status", "-MeasurementPath", str(measurement_path))
+
+    assert proc.returncode == 0, proc.stderr
+    payload = _payload(proc.stdout)
+    assert payload["status"] == "measurement_session_input_required"
+    assert payload["first_blocking_group_id"] == "left_arm_numeric_measurement_passes"
+    assert payload["current_group_update_tool_path"].endswith("scripts\\fr017-update-measurement-record.ps1")
+    assert "fr017-update-measurement-record.ps1 -Mode UpdateSide" in payload["current_group_update_command_template"]
+    assert "-Side left" in payload["current_group_update_command_template"]
+    assert str(measurement_path) in payload["current_group_update_command_template"]
+    assert "real left-side numeric measurement passes only" in payload["current_group_update_contract"]
+    assert payload["physical_validation_complete"] is False
+    assert payload["fr018_implementation_cleared"] is False
+
+
 def test_fr017_measurement_session_brief_hands_off_ready_measurement_record(
     tmp_path: Path,
 ) -> None:
@@ -92,6 +180,9 @@ def test_fr017_measurement_session_brief_hands_off_ready_measurement_record(
     assert payload["current_group_missing_fields"] == []
     assert payload["current_group_invalid_fields"] == []
     assert payload["current_group_blocking_signals"] == []
+    assert payload["current_group_update_tool_path"].endswith("scripts\\fr017-mockup-readiness-gate.ps1")
+    assert "fr017-mockup-readiness-gate.ps1 -Mode Status" in payload["current_group_update_command_template"]
+    assert "does not mark physical validation complete" in payload["current_group_update_contract"]
     assert payload["measurement_capture_ready_groups"] == 5
     assert payload["measurement_capture_pending_groups"] == 0
     assert payload["next_operator_action"] == (
@@ -120,6 +211,9 @@ def test_fr017_measurement_session_brief_fails_closed_on_symptom(
     assert result["intake_failed"] is True
     assert result["first_blocking_group_id"] == "left_right_independence_and_safety_screen"
     assert result["current_group_blocking_signals"] == ["safety_screen.tingling"]
+    assert result["current_group_update_tool_path"] == ""
+    assert result["current_group_update_command_template"] == ""
+    assert "Stop the measurement session" in result["current_group_update_contract"]
     assert result["next_operator_action"] == (
         "stop_measurement_session_and_resolve_intake_failure_before_any_mockup_or_FR-018_work"
     )
