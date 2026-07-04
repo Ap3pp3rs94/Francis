@@ -11,6 +11,23 @@ from francis.api.mutation_authority_matrix import (
 
 
 def _mutating_route_total() -> int:
+    def collect(routes) -> int:
+        total = 0
+        for route in routes:
+            original_router = getattr(route, "original_router", None)
+            include_context = getattr(route, "include_context", None)
+            if original_router is not None and include_context is not None:
+                total += collect(getattr(original_router, "routes", []))
+                continue
+            if not isinstance(route, APIRoute):
+                continue
+            total += len([method for method in route.methods if method in MUTATING_METHODS])
+        return total
+
+    return collect(create_app().routes)
+
+
+def _direct_mutating_route_total() -> int:
     total = 0
     for route in create_app().routes:
         if not isinstance(route, APIRoute):
@@ -30,6 +47,7 @@ def test_mutating_route_authority_matrix_covers_all_non_get_routes() -> None:
     assert matrix["status"] == "covered"
     assert matrix["missing"] == []
     assert matrix["missing_total"] == 0
+    assert matrix["total"] > _direct_mutating_route_total()
     assert matrix["total"] == _mutating_route_total()
     assert matrix["summary"]["read_only_projection"] is True
     assert matrix["summary"]["write_behavior_changed"] is False

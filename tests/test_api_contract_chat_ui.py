@@ -1,8 +1,35 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from types import SimpleNamespace
 
+from fastapi import APIRouter
 from fastapi.routing import APIRoute
+
+
+def _join_paths(prefix: str, path: str) -> str:
+    if not prefix:
+        return path
+    if path == "/":
+        return prefix
+    return f"{prefix.rstrip('/')}/{path.lstrip('/')}"
+
+
+def _collect_route_methods(route: object, prefix: str = "") -> Iterable[tuple[str, set[str]]]:
+    if isinstance(route, APIRoute):
+        methods = {method.upper() for method in (route.methods or set())}
+        yield _join_paths(prefix, route.path), methods
+        return
+
+    original_router = getattr(route, "original_router", None)
+    include_context = getattr(route, "include_context", None)
+    if original_router is None or include_context is None:
+        return
+
+    include_prefix = getattr(include_context, "prefix", "")
+    nested_prefix = _join_paths(prefix, include_prefix) if include_prefix else prefix
+    for nested_route in getattr(original_router, "routes", []):
+        yield from _collect_route_methods(nested_route, nested_prefix)
 
 
 def _routes() -> dict[str, set[str]]:
@@ -11,10 +38,8 @@ def _routes() -> dict[str, set[str]]:
     app = create_app()
     out: dict[str, set[str]] = {}
     for route in app.routes:
-        if not isinstance(route, APIRoute):
-            continue
-        methods = {method.upper() for method in (route.methods or set())}
-        out.setdefault(route.path, set()).update(methods)
+        for path, methods in _collect_route_methods(route):
+            out.setdefault(path, set()).update(methods)
     return out
 
 
@@ -28,6 +53,21 @@ def _assert_has_endpoints(routes: dict[str, set[str]], endpoints: Iterable[tuple
         if method.upper() not in methods:
             missing.append(f"{method} {path} (method missing; have {sorted(methods)})")
     assert not missing, "Missing chat-ui contract endpoints:\n" + "\n".join(missing)
+
+
+def test_chat_ui_contract_route_collector_handles_nested_router_wrappers() -> None:
+    router = APIRouter()
+
+    @router.get("/status")
+    def status() -> dict[str, bool]:
+        return {"ok": True}
+
+    wrapper = SimpleNamespace(
+        original_router=router,
+        include_context=SimpleNamespace(prefix="/wrapped"),
+    )
+
+    assert dict(_collect_route_methods(wrapper)) == {"/wrapped/status": {"GET"}}
 
 
 def test_chat_ui_contract_endpoints_are_mounted() -> None:

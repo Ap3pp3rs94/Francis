@@ -569,6 +569,12 @@ def _fit_driver_prompt_to_budget(
     compact_codex = _extra_compact_codex_response_line(codex_response)
     compact_roadmap = _compact_roadmap_gate_prompt_line_for_topic(topic)
     compact_trust = "Trust: surface+mode request; no self-grant."
+    compact_loop_lower = compact_loop.lower()
+    final_surface = str(_implementation_candidate_for_topic(topic).get("surface") or "")
+    final_uses_learning_events = "developer_bridge.collaboration_driver.learning_events" in final_surface
+    final_topic_limit = 16 if final_uses_learning_events else 54 if "issue+artifact" in compact_loop_lower else 32
+    final_surface_limit = 64 if final_uses_learning_events else 48 if "guard:" in compact_loop_lower else 32
+    final_prior_surface_limit = 24 if final_uses_learning_events else 28
     attempts = [
         (
             96,
@@ -591,9 +597,9 @@ def _fit_driver_prompt_to_budget(
             compact_loop,
         ),
         (
-            64,
             56,
-            "",
+            48,
+            _COMPACT_BODY_MAP_PROMPT_LINE,
             compact_roadmap,
             compact_trust,
             _ultra_compact_prior_check(prior_check),
@@ -601,14 +607,14 @@ def _fit_driver_prompt_to_budget(
             compact_loop,
         ),
         (
-            56,
-            44,
-            "",
+            final_topic_limit,
+            final_surface_limit,
+            _COMPACT_BODY_MAP_PROMPT_LINE,
             compact_roadmap,
             "Trust: no self-grant.",
-            _ultra_compact_prior_check(prior_check),
-            " Codex: no action authority.",
-            " Guard: issue+artifact." if loop_line else "",
+            _ultra_compact_prior_check(prior_check, surface_limit=final_prior_surface_limit),
+            compact_codex,
+            compact_loop,
         ),
     ]
     for topic_limit, surface_limit, body_map_line, roadmap_line, trust_line_value, prior, codex, loop in attempts:
@@ -729,7 +735,7 @@ def _extra_compact_prior_check(prior_check: str) -> str:
     return f" Prior check: Review candidate {_bounded_text(insight_id, limit=_PROMPT_REVIEW_ID_LIMIT)}{suffix}."
 
 
-def _ultra_compact_prior_check(prior_check: str) -> str:
+def _ultra_compact_prior_check(prior_check: str, *, surface_limit: int = 40) -> str:
     if not prior_check:
         return ""
     insight_id = _field_after(prior_check, "Review candidate ", ":")
@@ -740,7 +746,7 @@ def _ultra_compact_prior_check(prior_check: str) -> str:
         return _bounded_text(prior_check, limit=60)
     parts = [f"Prior check: Review candidate {_bounded_text(insight_id, limit=_PROMPT_REVIEW_ID_LIMIT)}"]
     if surface:
-        parts.append(f"surface={_bounded_text(surface, limit=40)}")
+        parts.append(f"surface={_bounded_text(surface, limit=surface_limit)}")
     if verified:
         parts.append(f"verified={_bounded_text(verified, limit=20)}")
     if build_or_wire:
@@ -753,7 +759,7 @@ def _extra_compact_loop_line(loop_line: str) -> str:
         return ""
     lower = loop_line.lower()
     if "stale replay" in lower:
-        return " Guard: stale replay learned; avoid old topic; give issue + artifact."
+        return " Guard: issue+artifact."
     if "guard:" in lower:
         return " Guard: drift learned; issue + artifact."
     if "loop:" in lower:
