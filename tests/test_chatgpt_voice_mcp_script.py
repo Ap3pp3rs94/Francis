@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 import json
 import shutil
 import socket
@@ -26,6 +28,13 @@ def _unused_local_port() -> int:
         return int(sock.getsockname()[1])
 
 
+@contextmanager
+def _reserved_nonlistening_local_port() -> Iterator[int]:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        yield int(sock.getsockname()[1])
+
+
 def _run_mcp_script(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [
@@ -46,16 +55,15 @@ def _run_mcp_script(*args: str) -> subprocess.CompletedProcess[str]:
 
 
 def test_chatgpt_voice_mcp_status_json_reports_local_and_connector_readiness() -> None:
-    port = _unused_local_port()
-
-    proc = _run_mcp_script(
-        "-StatusOnly",
-        "-Json",
-        "-Port",
-        str(port),
-        "-ConnectorUrl",
-        "https://francis.example.test/mcp",
-    )
+    with _reserved_nonlistening_local_port() as port:
+        proc = _run_mcp_script(
+            "-StatusOnly",
+            "-Json",
+            "-Port",
+            str(port),
+            "-ConnectorUrl",
+            "https://francis.example.test/mcp",
+        )
 
     assert proc.returncode == 0, proc.stderr
     payload = json.loads(proc.stdout)
