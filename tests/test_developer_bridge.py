@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
+from pathlib import Path
 
-from fastapi.routing import APIRoute
-from fastapi.testclient import TestClient
 import pytest
 
 from francis.chat.continuity.ledger import append
@@ -41,9 +42,47 @@ from francis.developer_bridge.repo_tools import (
     search_repo,
 )
 
+_TEST_ROOT = Path(__file__).resolve().parents[1]
+_TEST_SRC = _TEST_ROOT / "src"
+
 
 def _normalize_newlines(value: str) -> str:
     return value.replace("\r\n", "\n")
+
+
+def _run_api_json_in_fresh_process(source: str, *, env: dict[str, str] | None = None) -> dict[str, object]:
+    run_env = os.environ.copy()
+    run_env["FRANCIS_ROOT"] = str(_TEST_ROOT)
+    python_path = str(_TEST_SRC)
+    if existing := run_env.get("PYTHONPATH"):
+        python_path = f"{python_path}{os.pathsep}{existing}"
+    run_env["PYTHONPATH"] = python_path
+    if env:
+        run_env.update(env)
+
+    proc = subprocess.run(
+        [sys.executable, "-c", source],
+        cwd=_TEST_ROOT,
+        env=run_env,
+        text=True,
+        capture_output=True,
+        timeout=80,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    return json.loads(proc.stdout)
+
+
+def _developer_bridge_authority_matrix_from_fresh_process() -> dict[str, object]:
+    return _run_api_json_in_fresh_process(
+        """
+import json
+from fastapi.testclient import TestClient
+from francis.api.app import create_app
+
+print(json.dumps(TestClient(create_app()).get("/system/mutating-route-authority-matrix").json()))
+"""
+    )
 
 
 def test_developer_bridge_readback_errors_do_not_expose_exception_detail() -> None:
@@ -136,10 +175,16 @@ def test_read_supervised_exec_receipt_is_bounded_to_artifact_root(tmp_path, monk
 
 
 def test_developer_bridge_routes_are_mounted() -> None:
-    from francis.api.app import create_app
+    payload = _run_api_json_in_fresh_process(
+        """
+import json
+from francis.api.app import create_app
 
-    app = create_app()
-    routes = {route.path for route in app.routes if isinstance(route, APIRoute)}
+app = create_app()
+print(json.dumps({"routes": sorted(str(route.path) for route in app.routes if getattr(route, "path", None))}))
+"""
+    )
+    routes = set(payload["routes"])
 
     assert "/developer-bridge/status" in routes
     assert "/developer-bridge/read-file" in routes
@@ -163,9 +208,7 @@ def test_developer_bridge_routes_are_mounted() -> None:
 
 
 def test_developer_bridge_agent_toggle_is_classified_in_authority_matrix() -> None:
-    from francis.api.app import create_app
-
-    matrix = TestClient(create_app()).get("/system/mutating-route-authority-matrix").json()
+    matrix = _developer_bridge_authority_matrix_from_fresh_process()
     entries = {
         (entry["method"], entry["path"]): entry
         for entry in matrix["entries"]
@@ -181,9 +224,7 @@ def test_developer_bridge_agent_toggle_is_classified_in_authority_matrix() -> No
 
 
 def test_developer_bridge_operator_message_is_classified_in_authority_matrix() -> None:
-    from francis.api.app import create_app
-
-    matrix = TestClient(create_app()).get("/system/mutating-route-authority-matrix").json()
+    matrix = _developer_bridge_authority_matrix_from_fresh_process()
     entries = {
         (entry["method"], entry["path"]): entry
         for entry in matrix["entries"]
@@ -199,9 +240,7 @@ def test_developer_bridge_operator_message_is_classified_in_authority_matrix() -
 
 
 def test_developer_bridge_capability_grant_is_classified_in_authority_matrix() -> None:
-    from francis.api.app import create_app
-
-    matrix = TestClient(create_app()).get("/system/mutating-route-authority-matrix").json()
+    matrix = _developer_bridge_authority_matrix_from_fresh_process()
     entries = {
         (entry["method"], entry["path"]): entry
         for entry in matrix["entries"]
@@ -468,25 +507,32 @@ def test_capability_grant_receipt_controls_body_map_exposure(tmp_path, monkeypat
 
 
 def test_capability_grant_api_records_bounded_operator_receipt(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    from francis.api.app import create_app
-
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
-    client = TestClient(create_app())
+    request_payload = {
+        "surface_id": "memory",
+        "decision": "deny",
+        "requested_access_mode": "read",
+        "actor": "chat_ui.system",
+        "reason": "Keep stale memory detached while tuning.",
+        "source_review_item_id": "review-memory-detached",
+    }
+    result = _run_api_json_in_fresh_process(
+        f"""
+import json
+from fastapi.testclient import TestClient
+from francis.api.app import create_app
 
-    response = client.post(
-        "/developer-bridge/francis-capability-grants",
-        json={
-            "surface_id": "memory",
-            "decision": "deny",
-            "requested_access_mode": "read",
-            "actor": "chat_ui.system",
-            "reason": "Keep stale memory detached while tuning.",
-            "source_review_item_id": "review-memory-detached",
-        },
+client = TestClient(create_app())
+response = client.post("/developer-bridge/francis-capability-grants", json={json.dumps(request_payload)})
+readback = client.get("/developer-bridge/francis-capability-grants?surface_id=memory")
+print(json.dumps({{"status_code": response.status_code, "body": response.json(), "readback": readback.json()}}))
+""",
+        env={"FRANCIS_DATA_DIR": str(tmp_path / "data")},
     )
 
-    body = response.json()
-    assert response.status_code == 200
+    body = result["body"]
+    readback = result["readback"]
+    assert result["status_code"] == 200
     assert body["ok"] is True
     assert body["grant"]["grant_state"] == "denied"
     assert body["grant"]["capability_granted"] is False
@@ -494,15 +540,11 @@ def test_capability_grant_api_records_bounded_operator_receipt(tmp_path, monkeyp
     assert body["receipt"]["operator_grant_proof"]["grants_execution_authority"] is False
     assert body["receipt"]["operator_grant_proof"]["grants_memory_write_authority"] is False
 
-    readback = client.get("/developer-bridge/francis-capability-grants?surface_id=memory").json()
     assert readback["items"][0]["grant_state"] == "denied"
     assert readback["items"][0]["capability_granted"] is False
 
 
 def test_capability_grant_api_invalidates_body_map_cache(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    from francis.api.app import create_app
-    import francis.api.routes.developer_bridge as route_module
-
     root = tmp_path / "Francis"
     (root / "docs" / "canonical").mkdir(parents=True)
     (root / "docs" / "operations").mkdir(parents=True)
@@ -521,31 +563,43 @@ def test_capability_grant_api_invalidates_body_map_cache(tmp_path, monkeypatch) 
     (root / "tests" / "test_api_missions.py").write_text("", encoding="utf-8")
     monkeypatch.setenv("FRANCIS_ROOT", str(root))
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
-    route_module._READBACK_CACHE.clear()
-    route_module._READBACK_IN_FLIGHT.clear()
-    client = TestClient(create_app())
+    request_payload = {
+        "surface_id": "action_intake",
+        "decision": "grant",
+        "requested_access_mode": "request",
+        "actor": "codex.system",
+        "reason": "Operator allowed a bounded request-mode action-intake test.",
+        "source_review_item_id": "review-insight-action-intake",
+    }
+    result = _run_api_json_in_fresh_process(
+        f"""
+import json
+from fastapi.testclient import TestClient
+from francis.api.app import create_app
+import francis.api.routes.developer_bridge as route_module
 
-    cached = client.get("/developer-bridge/francis-body-map").json()
+route_module._READBACK_CACHE.clear()
+route_module._READBACK_IN_FLIGHT.clear()
+client = TestClient(create_app())
+cached = client.get("/developer-bridge/francis-body-map").json()
+grant = client.post("/developer-bridge/francis-capability-grants", json={json.dumps(request_payload)}).json()
+refreshed = client.get("/developer-bridge/francis-body-map").json()
+print(json.dumps({{"cached": cached, "grant": grant, "refreshed": refreshed}}))
+""",
+        env={"FRANCIS_ROOT": str(root), "FRANCIS_DATA_DIR": str(tmp_path / "data")},
+    )
+
+    cached = result["cached"]
     cached_action_intake = {item["id"]: item for item in cached["surfaces"]}["action_intake"]
     assert cached["readback_cache"]["status"] == "refreshed"
     assert cached_action_intake["capability_exposure"]["connected_to_local_model"] is False
 
-    grant = client.post(
-        "/developer-bridge/francis-capability-grants",
-        json={
-            "surface_id": "action_intake",
-            "decision": "grant",
-            "requested_access_mode": "request",
-            "actor": "codex.system",
-            "reason": "Operator allowed a bounded request-mode action-intake test.",
-            "source_review_item_id": "review-insight-action-intake",
-        },
-    ).json()
+    grant = result["grant"]
     assert grant["ok"] is True
     assert grant["grant"]["connected_to_local_model"] is True
     assert grant["receipt"]["operator_grant_proof"]["grants_execution_authority"] is False
 
-    refreshed = client.get("/developer-bridge/francis-body-map").json()
+    refreshed = result["refreshed"]
     refreshed_action_intake = {item["id"]: item for item in refreshed["surfaces"]}["action_intake"]
     assert refreshed["readback_cache"]["status"] == "refreshed"
     assert refreshed_action_intake["capability_exposure"]["connected_to_local_model"] is True
@@ -897,23 +951,30 @@ def test_operator_collaboration_message_broadcasts_to_all_targets_without_author
 
 
 def test_operator_collaboration_message_api_writes_bounded_relay_receipts(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    from francis.api.app import create_app
-
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
-    client = TestClient(create_app())
+    request_payload = {
+        "message": "Operator note for Codex and Francis1.",
+        "target_agents": ["codex", "francis1"],
+        "actor": "chat_ui.system",
+        "objective": "Operator message smoke test",
+    }
+    result = _run_api_json_in_fresh_process(
+        f"""
+import json
+from fastapi.testclient import TestClient
+from francis.api.app import create_app
 
-    response = client.post(
-        "/developer-bridge/collaboration-message",
-        json={
-            "message": "Operator note for Codex and Francis1.",
-            "target_agents": ["codex", "francis1"],
-            "actor": "chat_ui.system",
-            "objective": "Operator message smoke test",
-        },
+client = TestClient(create_app())
+response = client.post("/developer-bridge/collaboration-message", json={json.dumps(request_payload)})
+transcript = client.get("/developer-bridge/collaboration-transcript?source_agent=operator&limit=5")
+print(json.dumps({{"status_code": response.status_code, "body": response.json(), "transcript": transcript.json()}}))
+""",
+        env={"FRANCIS_DATA_DIR": str(tmp_path / "data")},
     )
 
-    body = response.json()
-    assert response.status_code == 200
+    body = result["body"]
+    transcript = result["transcript"]
+    assert result["status_code"] == 200
     assert body["ok"] is True
     assert body["target_agents"] == ["codex", "ollama"]
     assert body["count"] == 2
@@ -922,7 +983,6 @@ def test_operator_collaboration_message_api_writes_bounded_relay_receipts(tmp_pa
     assert body["governance"]["grants_execution_authority"] is False
     assert body["governance"]["grants_memory_write_authority"] is False
 
-    transcript = client.get("/developer-bridge/collaboration-transcript?source_agent=operator&limit=5").json()
     assert transcript["count"] == 2
     assert {item["target_agent"] for item in transcript["items"]} == {"codex", "ollama"}
 
