@@ -97,6 +97,7 @@ def test_fr017_stage17_final_audit_blocks_physical_and_fr018_claims() -> None:
     assert "FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json" in package_index
     assert "FR-017-MEASUREMENT-CAPTURE-RUNBOOK.md" in package_index
     assert "FR-017-COMPLETION-LEDGER-HANDOFF-TEMPLATE.md" in package_index
+    assert "fr017-measurement-session-brief.ps1" in package_index
     assert "fr017-update-independence-safety-record.ps1" in package_index
     assert "fr017-new-mockup-record.ps1" in package_index
     assert "fr017-new-mannequin-interface-record.ps1" in package_index
