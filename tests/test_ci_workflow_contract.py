@@ -91,6 +91,6 @@ def test_ci_matrix_interpreter_binding_is_verified() -> None:
 
     assert job["env"]["UV_PYTHON"] == "${{ matrix.python-version }}"
     assert install_step["run"] == (
-        "uv sync --frozen --python ${{ matrix.python-version }} --extra core --extra web --extra dev"
+        "uv sync --frozen --python ${{ matrix.python-version }} --extra core --extra web --extra dev --extra bridge"
     )
     assert "expected='${{ matrix.python-version }}'" in verify_step["run"]
