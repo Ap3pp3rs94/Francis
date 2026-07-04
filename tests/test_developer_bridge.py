@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import json
 import os
 
@@ -40,9 +41,64 @@ from francis.developer_bridge.repo_tools import (
     search_repo,
 )
 
+_API_ROUTE_MODULES = (
+    "adversarial_hardening",
+    "apprenticeship",
+    "approvals",
+    "artifacts",
+    "attachments",
+    "away",
+    "chat",
+    "chatgpt_voice_bridge",
+    "completion_model",
+    "continuity",
+    "credentials",
+    "developer_bridge",
+    "digital_twin",
+    "domain_learner",
+    "domains",
+    "evolution",
+    "explanation",
+    "executor_substrate",
+    "federation",
+    "forge",
+    "industrial",
+    "ingest",
+    "knowledge_fabric",
+    "lens",
+    "lens_mcp_status",
+    "managed_copies",
+    "memory_timeline",
+    "missions",
+    "operations",
+    "plugins",
+    "reactor",
+    "resilience",
+    "simulation",
+    "supervised_exec",
+    "swarm",
+    "system",
+    "takeover",
+    "telemetry",
+    "trust",
+    "trust_calibration",
+    "web_learning",
+)
+
 
 def _normalize_newlines(value: str) -> str:
     return value.replace("\r\n", "\n")
+
+
+def _create_fresh_api_app_for_route_contract():
+    importlib.invalidate_caches()
+    for module_name in _API_ROUTE_MODULES:
+        module = importlib.import_module(f"francis.api.routes.{module_name}")
+        importlib.reload(module)
+
+    import francis.api.app as app_module
+
+    return importlib.reload(app_module).create_app()
 
 
 def test_developer_bridge_readback_errors_do_not_expose_exception_detail() -> None:
@@ -135,9 +191,7 @@ def test_read_supervised_exec_receipt_is_bounded_to_artifact_root(tmp_path, monk
 
 
 def test_developer_bridge_routes_are_mounted() -> None:
-    from francis.api.app import create_app
-
-    app = create_app()
+    app = _create_fresh_api_app_for_route_contract()
     routes = {str(route.path) for route in app.routes if getattr(route, "path", None)}
 
     assert "/developer-bridge/status" in routes
