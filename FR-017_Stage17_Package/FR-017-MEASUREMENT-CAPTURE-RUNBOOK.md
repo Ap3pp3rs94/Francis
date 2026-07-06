@@ -6,7 +6,7 @@ Gate: measurement_intake
 
 ## Purpose
 
-This runbook converts the read-only `measurement_capture_plan` from `scripts/fr017-measurement-intake.ps1 -Mode Status` into an operator capture sequence for the first FR-017 physical-input gate. Use `scripts/fr017-measurement-session-brief.ps1 -Mode Summary` when the operator needs the compact current-group command handoff and stop-condition list without the full status payload.
+This runbook converts the read-only `measurement_capture_plan` from `scripts/fr017-measurement-intake.ps1 -Mode Status` into an operator capture sequence for the first FR-017 physical-input gate. Use `scripts/fr017-measurement-session-brief.ps1 -Mode Summary` when the operator needs the compact current-group command handoff and stop-condition list without the full status payload. Use `scripts/fr017-new-measurement-record.ps1 -Mode Summary` when the operator needs compact initializer path-readiness and next-create-command readback before writing a pending record.
 
 This runbook is not physical validation evidence. It does not replace `FR-017-MEASUREMENTS-INPUT-TEMPLATE.json`, does not record Pilot measurements, does not approve fabrication, does not approve load-bearing use, and does not clear powered or frame-coupled testing.
 
@@ -29,12 +29,13 @@ Run the gate before and after editing the working record:
 ```powershell
 .\scripts\fr017-measurement-intake.ps1 -Mode Status
 .\scripts\fr017-new-measurement-record.ps1 -Mode Status
+.\scripts\fr017-new-measurement-record.ps1 -Mode Summary -OutputPath .\FR-017_Stage17_Package\FR-017-MEASUREMENTS-YYYY-MM-DD-PILOT-RECORD.json
 .\scripts\fr017-new-measurement-record.ps1 -Mode Status -OutputPath .\FR-017_Stage17_Package\FR-017-MEASUREMENTS-YYYY-MM-DD-PILOT-RECORD.json
 .\scripts\fr017-new-measurement-record.ps1 -Mode Create -OutputPath .\FR-017_Stage17_Package\FR-017-MEASUREMENTS-YYYY-MM-DD-PILOT-RECORD.json
 .\scripts\fr017-measurement-intake.ps1 -Mode Status -MeasurementPath .\FR-017_Stage17_Package\FR-017-MEASUREMENTS-YYYY-MM-DD-PILOT-RECORD.json
 ```
 
-The initializer `Status` mode is read-only. It checks the template, optionally checks whether a candidate output path is ready, reports `candidate_output_path_ready`, returns `create_command_template`, and never writes evidence, marks physical validation complete, or clears FR-018. The initializer `Create` mode creates only a pending working record. It refuses to overwrite an existing file or target the template itself. The generated record still requires real left/right measurements, landmark references, repeatability checks, and symptom-screen entries before the intake gate can advance.
+The initializer `Status` and `Summary` modes are read-only. `Status` returns the full initializer contract. `Summary` compresses template/path readiness, `next_action`, and `next_create_command` for operator handoff. Neither mode writes evidence, marks physical validation complete, or clears FR-018. The initializer `Create` mode creates only a pending working record. It refuses to overwrite an existing file or target the template itself. The generated record still requires real left/right measurements, landmark references, repeatability checks, and symptom-screen entries before the intake gate can advance.
 
 If the setup and safety brief has actually been completed, the initializer can also record those first-gate fields:
 

@@ -72,6 +72,37 @@ def test_fr017_measurement_record_initializer_status_is_read_only() -> None:
     )
 
 
+def test_fr017_measurement_record_initializer_summary_reports_next_action_without_writing(
+    tmp_path: Path,
+) -> None:
+    output_path = tmp_path / "candidate-measurement-record.json"
+
+    proc = _run_initializer("-Mode", "Summary", "-OutputPath", str(output_path))
+
+    assert proc.returncode == 0, proc.stderr
+    result = _payload(proc.stdout)
+    assert result["kind"] == "francis.fr017.measurement_record_initializer_summary"
+    assert result["source_kind"] == "francis.fr017.measurement_record_initializer"
+    assert result["source_mode"] == "Status"
+    assert result["status"] == "measurement_record_initializer_status"
+    assert result["output_path"] == str(output_path)
+    assert result["candidate_output_path_ready"] is True
+    assert result["next_action"] == "run_create_or_capture_setup_brief"
+    assert result["next_create_command"] == (
+        f'.\\scripts\\fr017-new-measurement-record.ps1 -Mode Create -OutputPath "{output_path}"'
+    )
+    assert "updated_fields" in result["omitted_full_status_fields"]
+    assert "evidence.date" in result["setup_brief_fields_supported"]
+    assert result["setup_brief_can_only_clear_first_group"] is True
+    assert result["read_only_contract"] is True
+    assert result["wrote_file"] is False
+    assert result["writes_data"] is False
+    assert result["physical_validation_complete"] is False
+    assert result["stage17_completion_claim_allowed"] is False
+    assert result["fr018_implementation_cleared"] is False
+    assert not output_path.exists()
+
+
 def test_fr017_measurement_record_initializer_status_preserves_missing_template_status(
     tmp_path: Path,
 ) -> None:
