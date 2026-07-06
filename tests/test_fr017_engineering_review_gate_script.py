@@ -129,11 +129,13 @@ def test_fr017_engineering_review_gate_reports_default_templates_as_pending_upst
         payload["next_required_engineering_review_input"]
         == "create_professional_engineering_review_record_with_fr017-new-engineering-review-record.ps1_then_rerun_engineering_review_gate"
     )
-    assert payload["engineering_review_input_template_path"].endswith(
-        "FR-017_Stage17_Package\\FR-017-ENGINEERING-REVIEW-INPUT-TEMPLATE.json"
+    assert Path(payload["engineering_review_input_template_path"]).parts[-2:] == (
+        "FR-017_Stage17_Package",
+        "FR-017-ENGINEERING-REVIEW-INPUT-TEMPLATE.json",
     )
-    assert payload["engineering_review_record_initializer_path"].endswith(
-        "scripts\\fr017-new-engineering-review-record.ps1"
+    assert Path(payload["engineering_review_record_initializer_path"]).parts[-2:] == (
+        "scripts",
+        "fr017-new-engineering-review-record.ps1",
     )
     assert payload["engineering_review_working_record_name_pattern"] == (
         "FR-017-ENGINEERING-REVIEW-YYYY-MM-DD-PILOT-RECORD.json"
@@ -212,8 +214,9 @@ def test_fr017_engineering_review_gate_requires_review_after_release_ready(tmp_p
     assert payload["load_bearing_use_approved"] is False
     assert payload["fr018_implementation_cleared"] is False
     assert "fr017-new-engineering-review-record.ps1" in payload["engineering_review_capture_runbook_contract"]
-    assert payload["engineering_review_record_initializer_path"].endswith(
-        "scripts\\fr017-new-engineering-review-record.ps1"
+    assert Path(payload["engineering_review_record_initializer_path"]).parts[-2:] == (
+        "scripts",
+        "fr017-new-engineering-review-record.ps1",
     )
     assert payload["engineering_review_capture_total_groups"] == 4
     assert payload["engineering_review_capture_ready_groups"] == 0

@@ -35,7 +35,7 @@ Run the gate before and after editing the working record:
 .\scripts\fr017-measurement-intake.ps1 -Mode Status -MeasurementPath .\FR-017_Stage17_Package\FR-017-MEASUREMENTS-YYYY-MM-DD-PILOT-RECORD.json
 ```
 
-The initializer `Status` and `Summary` modes are read-only. `Status` returns the full initializer contract. `Summary` compresses template/path readiness, `next_action`, and `next_create_command` for operator handoff. Neither mode writes evidence, marks physical validation complete, or clears FR-018. The initializer `Create` mode creates only a pending working record. It refuses to overwrite an existing file or target the template itself. The generated record still requires real left/right measurements, landmark references, repeatability checks, and symptom-screen entries before the intake gate can advance.
+The initializer `Status` and `Summary` modes are read-only. `Status` returns the full initializer contract. `Summary` compresses template/path readiness, `candidate_output_path_ready`, `create_command_template`, `next_action`, and `next_create_command` for operator handoff. Neither mode writes evidence, marks physical validation complete, or clears FR-018; read-only initializer preflight never writes evidence. The initializer `Create` mode creates only a pending working record. It refuses to overwrite an existing file or target the template itself. The generated record still requires real left/right measurements, landmark references, repeatability checks, and symptom-screen entries before the intake gate can advance.
 
 If the setup and safety brief has actually been completed, the initializer can also record those first-gate fields:
 
