@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
-  [ValidateSet('UpdateLandmarks')]
-  [string]$Mode = 'UpdateLandmarks',
+  [ValidateSet('Status', 'UpdateLandmarks')]
+  [string]$Mode = 'Status',
 
   [string]$MeasurementPath = '',
 
@@ -182,7 +182,75 @@ function Add-CopiedReferenceCheck {
   }
 }
 
-$Status = 'updated_measurement_landmarks'
+$LandmarkZoneFields = @(
+  'inner_elbow_crease_boundary',
+  'wrist_bone_boundary',
+  'radius_ridge_relief',
+  'ulna_ridge_relief',
+  'outer_forearm_cable_route',
+  'quick_release_reach_zone',
+  'glove_removal_path'
+)
+
+$LandmarkConfirmationTrueFields = @(
+  'inner_elbow_crease_boundary_confirmed',
+  'wrist_bone_boundary_confirmed',
+  'radius_ulna_relief_paths_confirmed',
+  'outer_forearm_cable_route_confirmed',
+  'quick_release_reach_zone_confirmed',
+  'glove_removal_path_confirmed',
+  'skin_safe_marking_used'
+)
+
+$LandmarkConfirmationFields = @($LandmarkConfirmationTrueFields + @('landmark_notes'))
+
+function Add-LandmarkTextReadback {
+  param(
+    [object]$Target,
+    [string]$Field,
+    [string]$QualifiedField,
+    [System.Collections.Generic.List[string]]$MissingFields,
+    [System.Collections.Generic.List[string]]$ExistingFields
+  )
+
+  if ($null -eq $Target) {
+    $MissingFields.Add($QualifiedField) | Out-Null
+    return
+  }
+
+  $Property = $Target.PSObject.Properties[$Field]
+  if ($null -eq $Property -or (Test-MissingOrPendingText -Value $Property.Value)) {
+    $MissingFields.Add($QualifiedField) | Out-Null
+    return
+  }
+
+  $ExistingFields.Add($QualifiedField) | Out-Null
+}
+
+function Add-LandmarkConfirmationReadback {
+  param(
+    [object]$Target,
+    [string]$Field,
+    [string]$QualifiedField,
+    [System.Collections.Generic.List[string]]$MissingFields,
+    [System.Collections.Generic.List[string]]$ExistingFields
+  )
+
+  if ($null -eq $Target) {
+    $MissingFields.Add($QualifiedField) | Out-Null
+    return
+  }
+
+  $Property = $Target.PSObject.Properties[$Field]
+  if ($null -eq $Property -or $Property.Value -isnot [bool] -or -not [bool]$Property.Value) {
+    $MissingFields.Add($QualifiedField) | Out-Null
+    return
+  }
+
+  $ExistingFields.Add($QualifiedField) | Out-Null
+}
+
+$Status = if ($Mode -eq 'Status') { 'measurement_landmark_update_status' } else { 'updated_measurement_landmarks' }
 $ExitCode = 0
 $WroteFile = $false
 $UpdatedFields = New-Object System.Collections.Generic.List[string]
@@ -190,6 +258,8 @@ $InvalidFields = New-Object System.Collections.Generic.List[string]
 $OverwriteBlockedFields = New-Object System.Collections.Generic.List[string]
 $OverwrittenFields = New-Object System.Collections.Generic.List[string]
 $ReferenceBlockers = New-Object System.Collections.Generic.List[string]
+$LandmarkMissingFields = New-Object System.Collections.Generic.List[string]
+$LandmarkExistingFields = New-Object System.Collections.Generic.List[string]
 $ResolvedMeasurementPath = ''
 $Payload = $null
 
@@ -247,42 +317,61 @@ if ($ExitCode -eq 0) {
   }
 
   if ($InvalidFields.Count -eq 0) {
-    $ZoneInputs = [ordered]@{
-      inner_elbow_crease_boundary = [ordered]@{ left = $LeftInnerElbowCreaseBoundary; right = $RightInnerElbowCreaseBoundary }
-      wrist_bone_boundary = [ordered]@{ left = $LeftWristBoneBoundary; right = $RightWristBoneBoundary }
-      radius_ridge_relief = [ordered]@{ left = $LeftRadiusRidgeRelief; right = $RightRadiusRidgeRelief }
-      ulna_ridge_relief = [ordered]@{ left = $LeftUlnaRidgeRelief; right = $RightUlnaRidgeRelief }
-      outer_forearm_cable_route = [ordered]@{ left = $LeftOuterForearmCableRoute; right = $RightOuterForearmCableRoute }
-      quick_release_reach_zone = [ordered]@{ left = $LeftQuickReleaseReachZone; right = $RightQuickReleaseReachZone }
-      glove_removal_path = [ordered]@{ left = $LeftGloveRemovalPath; right = $RightGloveRemovalPath }
+    foreach ($Field in $LandmarkZoneFields) {
+      Add-LandmarkTextReadback -Target $LeftZones -Field $Field -QualifiedField ('marked_zones.left.{0}' -f $Field) -MissingFields $LandmarkMissingFields -ExistingFields $LandmarkExistingFields
+      Add-LandmarkTextReadback -Target $RightZones -Field $Field -QualifiedField ('marked_zones.right.{0}' -f $Field) -MissingFields $LandmarkMissingFields -ExistingFields $LandmarkExistingFields
     }
-
-    foreach ($Entry in $ZoneInputs.GetEnumerator()) {
-      $Field = [string]$Entry.Key
-      $LeftValue = [string]$Entry.Value.left
-      $RightValue = [string]$Entry.Value.right
-      Add-CopiedReferenceCheck -ReferenceBlockers $ReferenceBlockers -Field $Field -LeftValue $LeftValue -RightValue $RightValue
-      Set-RequiredText -Target $LeftZones -Field $Field -Value $LeftValue -QualifiedField ('marked_zones.left.{0}' -f $Field) -InvalidFields $InvalidFields -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
-      Set-RequiredText -Target $RightZones -Field $Field -Value $RightValue -QualifiedField ('marked_zones.right.{0}' -f $Field) -InvalidFields $InvalidFields -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
+    foreach ($Field in $LandmarkConfirmationTrueFields) {
+      Add-LandmarkConfirmationReadback -Target $LandmarkConfirmation -Field $Field -QualifiedField ('landmark_confirmation.{0}' -f $Field) -MissingFields $LandmarkMissingFields -ExistingFields $LandmarkExistingFields
     }
-
-    $Confirmations = [ordered]@{
-      inner_elbow_crease_boundary_confirmed = $ConfirmInnerElbowCreaseBoundary.IsPresent
-      wrist_bone_boundary_confirmed = $ConfirmWristBoneBoundary.IsPresent
-      radius_ulna_relief_paths_confirmed = $ConfirmRadiusUlnaReliefPaths.IsPresent
-      outer_forearm_cable_route_confirmed = $ConfirmOuterForearmCableRoute.IsPresent
-      quick_release_reach_zone_confirmed = $ConfirmQuickReleaseReachZone.IsPresent
-      glove_removal_path_confirmed = $ConfirmGloveRemovalPath.IsPresent
-      skin_safe_marking_used = $ConfirmSkinSafeMarkingUsed.IsPresent
-    }
-
-    foreach ($Entry in $Confirmations.GetEnumerator()) {
-      Set-RequiredConfirmation -Target $LandmarkConfirmation -Field ([string]$Entry.Key) -Confirmed ([bool]$Entry.Value) -QualifiedField ('landmark_confirmation.{0}' -f $Entry.Key) -InvalidFields $InvalidFields -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
-    }
-
-    Set-RequiredText -Target $LandmarkConfirmation -Field 'landmark_notes' -Value $LandmarkNotes -QualifiedField 'landmark_confirmation.landmark_notes' -InvalidFields $InvalidFields -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
+    Add-LandmarkTextReadback -Target $LandmarkConfirmation -Field 'landmark_notes' -QualifiedField 'landmark_confirmation.landmark_notes' -MissingFields $LandmarkMissingFields -ExistingFields $LandmarkExistingFields
   }
 
+  if ($InvalidFields.Count -gt 0) {
+    $Status = if ($Mode -eq 'Status') { 'invalid_landmark_status_target' } else { 'invalid_landmark_update_input' }
+    $ExitCode = 1
+  }
+}
+
+if ($Mode -eq 'UpdateLandmarks' -and $ExitCode -eq 0) {
+  $MarkedZones = $Payload.marked_zones
+  $LandmarkConfirmation = $Payload.landmark_confirmation
+  $LeftZones = $MarkedZones.PSObject.Properties['left'].Value
+  $RightZones = $MarkedZones.PSObject.Properties['right'].Value
+  $ZoneInputs = [ordered]@{
+    inner_elbow_crease_boundary = [ordered]@{ left = $LeftInnerElbowCreaseBoundary; right = $RightInnerElbowCreaseBoundary }
+    wrist_bone_boundary = [ordered]@{ left = $LeftWristBoneBoundary; right = $RightWristBoneBoundary }
+    radius_ridge_relief = [ordered]@{ left = $LeftRadiusRidgeRelief; right = $RightRadiusRidgeRelief }
+    ulna_ridge_relief = [ordered]@{ left = $LeftUlnaRidgeRelief; right = $RightUlnaRidgeRelief }
+    outer_forearm_cable_route = [ordered]@{ left = $LeftOuterForearmCableRoute; right = $RightOuterForearmCableRoute }
+    quick_release_reach_zone = [ordered]@{ left = $LeftQuickReleaseReachZone; right = $RightQuickReleaseReachZone }
+    glove_removal_path = [ordered]@{ left = $LeftGloveRemovalPath; right = $RightGloveRemovalPath }
+  }
+
+  foreach ($Entry in $ZoneInputs.GetEnumerator()) {
+    $Field = [string]$Entry.Key
+    $LeftValue = [string]$Entry.Value.left
+    $RightValue = [string]$Entry.Value.right
+    Add-CopiedReferenceCheck -ReferenceBlockers $ReferenceBlockers -Field $Field -LeftValue $LeftValue -RightValue $RightValue
+    Set-RequiredText -Target $LeftZones -Field $Field -Value $LeftValue -QualifiedField ('marked_zones.left.{0}' -f $Field) -InvalidFields $InvalidFields -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
+    Set-RequiredText -Target $RightZones -Field $Field -Value $RightValue -QualifiedField ('marked_zones.right.{0}' -f $Field) -InvalidFields $InvalidFields -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
+  }
+
+  $Confirmations = [ordered]@{
+    inner_elbow_crease_boundary_confirmed = $ConfirmInnerElbowCreaseBoundary.IsPresent
+    wrist_bone_boundary_confirmed = $ConfirmWristBoneBoundary.IsPresent
+    radius_ulna_relief_paths_confirmed = $ConfirmRadiusUlnaReliefPaths.IsPresent
+    outer_forearm_cable_route_confirmed = $ConfirmOuterForearmCableRoute.IsPresent
+    quick_release_reach_zone_confirmed = $ConfirmQuickReleaseReachZone.IsPresent
+    glove_removal_path_confirmed = $ConfirmGloveRemovalPath.IsPresent
+    skin_safe_marking_used = $ConfirmSkinSafeMarkingUsed.IsPresent
+  }
+
+  foreach ($Entry in $Confirmations.GetEnumerator()) {
+    Set-RequiredConfirmation -Target $LandmarkConfirmation -Field ([string]$Entry.Key) -Confirmed ([bool]$Entry.Value) -QualifiedField ('landmark_confirmation.{0}' -f $Entry.Key) -InvalidFields $InvalidFields -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
+  }
+
+  Set-RequiredText -Target $LandmarkConfirmation -Field 'landmark_notes' -Value $LandmarkNotes -QualifiedField 'landmark_confirmation.landmark_notes' -InvalidFields $InvalidFields -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
   if ($ReferenceBlockers.Count -gt 0) {
     $Status = 'copied_left_right_landmark_reference'
     $ExitCode = 1
@@ -295,7 +384,7 @@ if ($ExitCode -eq 0) {
   }
 }
 
-if ($ExitCode -eq 0) {
+if ($Mode -eq 'UpdateLandmarks' -and $ExitCode -eq 0) {
   $UpdateEvent = [ordered]@{
     generated_by = 'scripts/fr017-update-landmark-record.ps1'
     generated_at_utc = (Get-Date).ToUniversalTime().ToString('o')
@@ -318,6 +407,15 @@ if ($ExitCode -eq 0) {
   $WroteFile = $true
 }
 
+$UpdateCommandTemplate = if ([string]::IsNullOrWhiteSpace($ResolvedMeasurementPath)) { '' } else { '.\scripts\fr017-update-landmark-record.ps1 -Mode UpdateLandmarks -MeasurementPath "{0}" -LeftInnerElbowCreaseBoundary "<left reference>" -LeftWristBoneBoundary "<left reference>" -LeftRadiusRidgeRelief "<left reference>" -LeftUlnaRidgeRelief "<left reference>" -LeftOuterForearmCableRoute "<left reference>" -LeftQuickReleaseReachZone "<left reference>" -LeftGloveRemovalPath "<left reference>" -RightInnerElbowCreaseBoundary "<right reference>" -RightWristBoneBoundary "<right reference>" -RightRadiusRidgeRelief "<right reference>" -RightUlnaRidgeRelief "<right reference>" -RightOuterForearmCableRoute "<right reference>" -RightQuickReleaseReachZone "<right reference>" -RightGloveRemovalPath "<right reference>" -ConfirmInnerElbowCreaseBoundary -ConfirmWristBoneBoundary -ConfirmRadiusUlnaReliefPaths -ConfirmOuterForearmCableRoute -ConfirmQuickReleaseReachZone -ConfirmGloveRemovalPath -ConfirmSkinSafeMarkingUsed -LandmarkNotes "<side-specific skin-safe landmark notes>"' -f $ResolvedMeasurementPath }
+$LandmarkRequiredFields = New-Object System.Collections.Generic.List[string]
+foreach ($Field in $LandmarkZoneFields) {
+  $LandmarkRequiredFields.Add(('marked_zones.left.{0}' -f $Field)) | Out-Null
+  $LandmarkRequiredFields.Add(('marked_zones.right.{0}' -f $Field)) | Out-Null
+}
+foreach ($Field in $LandmarkConfirmationFields) {
+  $LandmarkRequiredFields.Add(('landmark_confirmation.{0}' -f $Field)) | Out-Null
+}
 $Output = [ordered]@{
   kind = 'francis.fr017.landmark_record_update'
   mode = $Mode
@@ -325,7 +423,7 @@ $Output = [ordered]@{
   measurement_path = $ResolvedMeasurementPath
   output_exists = if ([string]::IsNullOrWhiteSpace($ResolvedMeasurementPath)) { $false } else { Test-Path -LiteralPath $ResolvedMeasurementPath -PathType Leaf }
   wrote_file = $WroteFile
-  read_only_contract = $false
+  read_only_contract = ($Mode -eq 'Status')
   writes_repo = ($WroteFile -and (Test-PathUnderRoot -Path $ResolvedMeasurementPath -Root $RepoRoot))
   writes_data = $WroteFile
   grants_execution_authority = $false
@@ -337,12 +435,20 @@ $Output = [ordered]@{
   powered_or_frame_coupled_testing_cleared = $false
   fr018_implementation_cleared = $false
   no_fake_validation_lock = 'This updater records operator-supplied marked-zone references and landmark confirmations in an existing FR-017 working record only. It does not mark the measurement intake gate ready by itself, does not mark physical validation complete, does not permit a Stage 17 completion claim, and does not clear FR-018.'
+  landmark_status_contract = 'Status mode is a read-only preflight for the safety-critical marked-zone updater. It checks the target working record and reports which left/right marked-zone references and landmark-confirmation fields are still missing without writing evidence, marking physical validation complete, or clearing FR-018.'
+  landmark_required_fields = @($LandmarkRequiredFields.ToArray())
+  landmark_missing_fields = @($LandmarkMissingFields.ToArray())
+  landmark_existing_fields = @($LandmarkExistingFields.ToArray())
+  landmark_missing_field_count = [int]$LandmarkMissingFields.Count
+  landmark_existing_field_count = [int]$LandmarkExistingFields.Count
+  landmark_capture_group_complete = ($ExitCode -eq 0 -and $LandmarkMissingFields.Count -eq 0)
   updated_fields = @($UpdatedFields.ToArray())
   invalid_fields = @($InvalidFields.ToArray())
   reference_blockers = @($ReferenceBlockers.ToArray())
   overwrite_blocked_fields = @($OverwriteBlockedFields.ToArray())
   overwritten_fields = @($OverwrittenFields.ToArray())
-  next_command = if ($WroteFile) { '.\scripts\fr017-measurement-intake.ps1 -Mode Status -MeasurementPath "{0}"' -f $ResolvedMeasurementPath } else { '' }
+  update_command_template = $UpdateCommandTemplate
+  next_command = if ($WroteFile) { '.\scripts\fr017-measurement-intake.ps1 -Mode Status -MeasurementPath "{0}"' -f $ResolvedMeasurementPath } elseif ($Mode -eq 'Status' -and $ExitCode -eq 0) { $UpdateCommandTemplate } else { '' }
 }
 
 $Output | ConvertTo-Json -Depth 8

@@ -408,6 +408,58 @@ def test_fr017_evidence_chain_status_preflights_existing_measurement_side_update
     assert payload["fr018_implementation_cleared"] is False
 
 
+def test_fr017_evidence_chain_status_preflights_existing_measurement_landmark_update(
+    tmp_path: Path,
+) -> None:
+    measurement_path = tmp_path / "numeric-ready-measurements.json"
+    payload = _ready_measurement_payload()
+    for side in ("left", "right"):
+        for field in payload["marked_zones"][side]:
+            payload["marked_zones"][side][field] = "PENDING"
+    for field in payload["landmark_confirmation"]:
+        payload["landmark_confirmation"][field] = "PENDING"
+    measurement_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    proc = _run_gate("-Mode", "Status", "-MeasurementPath", str(measurement_path))
+
+    assert proc.returncode == 0, proc.stderr
+    payload = _payload(proc.stdout)
+    assert payload["status"] == "blocked_on_measurement_intake"
+    assert payload["first_blocking_gate"] == "measurement_intake"
+    assert payload["first_blocking_status"] == "pending_measurements"
+    assert (
+        payload["first_blocking_details"]["measurement_session_current_group_id"]
+        == "safety_critical_landmark_and_zone_references"
+    )
+    assert (
+        str(payload["first_blocking_preflight_tool_path"])
+        .replace("/", "\\")
+        .endswith("scripts\\fr017-update-landmark-record.ps1")
+    )
+    assert "fr017-update-landmark-record.ps1 -Mode Status" in payload["first_blocking_preflight_command_template"]
+    assert str(measurement_path) in payload["first_blocking_preflight_command_template"]
+    assert "missing marked-zone references" in payload["first_blocking_preflight_contract"]
+    assert payload["first_blocking_preflight_status"] == "measurement_landmark_update_status"
+    assert payload["first_blocking_preflight_exit_code"] == 0
+    assert payload["first_blocking_preflight_parse_ok"] is True
+    assert payload["first_blocking_preflight_read_only_contract"] is True
+    assert payload["first_blocking_preflight_wrote_file"] is False
+    assert payload["first_blocking_preflight_physical_validation_complete"] is False
+    assert payload["first_blocking_preflight_fr018_implementation_cleared"] is False
+    _assert_first_blocking_update_hint(
+        payload,
+        "fr017-update-landmark-record.ps1",
+        [
+            "fr017-update-landmark-record.ps1 -Mode UpdateLandmarks",
+            str(measurement_path),
+        ],
+        contract_fragment="real side-specific marked-zone references only",
+    )
+    assert payload["physical_validation_complete"] is False
+    assert payload["stage17_completion_claim_allowed"] is False
+    assert payload["fr018_implementation_cleared"] is False
+
+
 def test_fr017_evidence_chain_status_moves_blocker_after_measurement_ready(tmp_path: Path) -> None:
     measurement_path = tmp_path / "ready-measurements.json"
     measurement_path.write_text(json.dumps(_ready_measurement_payload()), encoding="utf-8")
