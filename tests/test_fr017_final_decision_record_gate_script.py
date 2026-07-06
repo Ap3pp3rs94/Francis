@@ -50,6 +50,10 @@ def _payload(stdout: str) -> dict[str, Any]:
     return json.loads(stdout)
 
 
+def _portable_path(path: str) -> str:
+    return path.replace("\\", "/")
+
+
 def _write_ready_evidence(tmp_path: Path) -> tuple[Path, Path, Path, Path, Path, Path, Path]:
     measurement_path, mockup_path, mannequin_path, static_fit_path, movement_path, release_cable_path = (
         _write_release_ready_records(tmp_path)
@@ -180,10 +184,12 @@ def test_fr017_final_decision_record_gate_requires_decision_record_after_final_g
         "create_human_final_decision_record_with_fr017-new-final-decision-record.ps1_then_rerun_final_decision_record_gate"
     )
     assert "fr017-new-final-decision-record.ps1" in payload["final_decision_record_runbook_contract"]
-    assert payload["final_decision_input_template_path"].endswith(
-        "FR-017_Stage17_Package\\FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json"
+    assert _portable_path(payload["final_decision_input_template_path"]).endswith(
+        "FR-017_Stage17_Package/FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json"
     )
-    assert payload["final_decision_record_initializer_path"].endswith("scripts\\fr017-new-final-decision-record.ps1")
+    assert _portable_path(payload["final_decision_record_initializer_path"]).endswith(
+        "scripts/fr017-new-final-decision-record.ps1"
+    )
     assert payload["final_decision_working_record_name_pattern"] == (
         "FR-017-FINAL-DECISION-YYYY-MM-DD-PILOT-RECORD.json"
     )
