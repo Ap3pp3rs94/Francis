@@ -48,6 +48,10 @@ def _payload(stdout: str) -> dict[str, Any]:
     return json.loads(stdout)
 
 
+def _portable_path(path: str) -> str:
+    return path.replace("\\", "/")
+
+
 def _create_setup_brief_record(output_path: Path) -> None:
     proc = _run_script(
         INITIALIZER_SCRIPT,
@@ -88,7 +92,9 @@ def test_fr017_measurement_session_brief_reports_first_template_blocker() -> Non
     assert "brief stop conditions" in payload["first_blocking_group_action"]
     assert "evidence.date" in payload["current_group_missing_fields"]
     assert "measurement_conditions.stop_conditions_briefed" in payload["current_group_missing_fields"]
-    assert payload["current_group_update_tool_path"].endswith("scripts\\fr017-new-measurement-record.ps1")
+    assert _portable_path(payload["current_group_update_tool_path"]).endswith(
+        "scripts/fr017-new-measurement-record.ps1"
+    )
     assert "fr017-new-measurement-record.ps1 -Mode Create" in payload["current_group_update_command_template"]
     assert "-OutputPath <measurement-record.json>" in payload["current_group_update_command_template"]
     assert "Creates a pending working record" in payload["current_group_update_contract"]
@@ -129,7 +135,9 @@ def test_fr017_measurement_session_brief_points_pending_record_to_setup_updater(
     assert payload["status"] == "measurement_session_input_required"
     assert payload["using_template"] is False
     assert payload["first_blocking_group_id"] == "setup_and_safety_brief"
-    assert payload["current_group_update_tool_path"].endswith("scripts\\fr017-update-measurement-setup-record.ps1")
+    assert _portable_path(payload["current_group_update_tool_path"]).endswith(
+        "scripts/fr017-update-measurement-setup-record.ps1"
+    )
     assert (
         "fr017-update-measurement-setup-record.ps1 -Mode UpdateSetup"
         in payload["current_group_update_command_template"]
@@ -152,7 +160,9 @@ def test_fr017_measurement_session_brief_points_setup_ready_record_to_left_side_
     payload = _payload(proc.stdout)
     assert payload["status"] == "measurement_session_input_required"
     assert payload["first_blocking_group_id"] == "left_arm_numeric_measurement_passes"
-    assert payload["current_group_update_tool_path"].endswith("scripts\\fr017-update-measurement-record.ps1")
+    assert _portable_path(payload["current_group_update_tool_path"]).endswith(
+        "scripts/fr017-update-measurement-record.ps1"
+    )
     assert "fr017-update-measurement-record.ps1 -Mode UpdateSide" in payload["current_group_update_command_template"]
     assert "-Side left" in payload["current_group_update_command_template"]
     assert str(measurement_path) in payload["current_group_update_command_template"]
@@ -180,7 +190,9 @@ def test_fr017_measurement_session_brief_hands_off_ready_measurement_record(
     assert payload["current_group_missing_fields"] == []
     assert payload["current_group_invalid_fields"] == []
     assert payload["current_group_blocking_signals"] == []
-    assert payload["current_group_update_tool_path"].endswith("scripts\\fr017-mockup-readiness-gate.ps1")
+    assert _portable_path(payload["current_group_update_tool_path"]).endswith(
+        "scripts/fr017-mockup-readiness-gate.ps1"
+    )
     assert "fr017-mockup-readiness-gate.ps1 -Mode Status" in payload["current_group_update_command_template"]
     assert "does not mark physical validation complete" in payload["current_group_update_contract"]
     assert payload["measurement_capture_ready_groups"] == 5
