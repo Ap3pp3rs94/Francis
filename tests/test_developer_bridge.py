@@ -4049,6 +4049,8 @@ def test_collaboration_transcript_uses_recent_scan_for_large_unfiltered_readback
     monkeypatch.setattr(collaboration_module, "_RECENT_PROMPT_SCAN_THRESHOLD", 3)
     monkeypatch.setattr(collaboration_module, "_RECENT_PROMPT_SCAN_MIN", 3)
     monkeypatch.setattr(collaboration_module, "_RECENT_PROMPT_SCAN_MAX", 3)
+    created_times = iter(f"2026-06-25T21:{index:02d}:00+00:00" for index in range(6))
+    monkeypatch.setattr(collaboration_module, "_utc_now", lambda: next(created_times))
 
     submitted: list[dict[str, object]] = []
     for index in range(6):
