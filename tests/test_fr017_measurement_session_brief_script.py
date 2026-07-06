@@ -262,6 +262,48 @@ def test_fr017_measurement_session_brief_points_numeric_ready_record_to_landmark
     assert payload["fr018_implementation_cleared"] is False
 
 
+def test_fr017_measurement_session_brief_points_measurement_ready_record_to_independence_safety_updater(
+    tmp_path: Path,
+) -> None:
+    measurement_path = tmp_path / "landmark-ready-measurements.json"
+    payload = _ready_measurement_payload()
+    for field in payload["left_right_independence"]:
+        payload["left_right_independence"][field] = "PENDING"
+    for field in payload["safety_screen"]:
+        payload["safety_screen"][field] = "PENDING"
+    measurement_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    proc = _run_brief("-Mode", "Status", "-MeasurementPath", str(measurement_path))
+
+    assert proc.returncode == 0, proc.stderr
+    payload = _payload(proc.stdout)
+    assert payload["status"] == "measurement_session_input_required"
+    assert payload["first_blocking_group_id"] == "left_right_independence_and_safety_screen"
+    assert payload["current_group_preflight_tool_path"].endswith("scripts\\fr017-update-independence-safety-record.ps1")
+    assert (
+        "fr017-update-independence-safety-record.ps1 -Mode Status"
+        in payload["current_group_preflight_command_template"]
+    )
+    assert str(measurement_path) in payload["current_group_preflight_command_template"]
+    assert "missing left/right independence and symptom-screen fields" in payload["current_group_preflight_contract"]
+    assert payload["current_group_preflight_status"] == "measurement_independence_safety_update_status"
+    assert payload["current_group_preflight_exit_code"] == 0
+    assert payload["current_group_preflight_parse_ok"] is True
+    assert payload["current_group_preflight_read_only_contract"] is True
+    assert payload["current_group_preflight_wrote_file"] is False
+    assert payload["current_group_preflight_physical_validation_complete"] is False
+    assert payload["current_group_preflight_fr018_implementation_cleared"] is False
+    assert payload["current_group_update_tool_path"].endswith("scripts\\fr017-update-independence-safety-record.ps1")
+    assert (
+        "fr017-update-independence-safety-record.ps1 -Mode UpdateIndependenceSafety"
+        in payload["current_group_update_command_template"]
+    )
+    assert str(measurement_path) in payload["current_group_update_command_template"]
+    assert "real left/right independence confirmations" in payload["current_group_update_contract"]
+    assert payload["physical_validation_complete"] is False
+    assert payload["fr018_implementation_cleared"] is False
+
+
 def test_fr017_measurement_session_brief_hands_off_ready_measurement_record(
     tmp_path: Path,
 ) -> None:

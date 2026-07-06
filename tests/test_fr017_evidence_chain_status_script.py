@@ -460,6 +460,66 @@ def test_fr017_evidence_chain_status_preflights_existing_measurement_landmark_up
     assert payload["fr018_implementation_cleared"] is False
 
 
+def test_fr017_evidence_chain_status_preflights_existing_measurement_independence_safety_update(
+    tmp_path: Path,
+) -> None:
+    measurement_path = tmp_path / "landmark-ready-measurements.json"
+    payload = _ready_measurement_payload()
+    for field in payload["left_right_independence"]:
+        payload["left_right_independence"][field] = "PENDING"
+    for field in payload["safety_screen"]:
+        payload["safety_screen"][field] = "PENDING"
+    measurement_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    proc = _run_gate("-Mode", "Status", "-MeasurementPath", str(measurement_path))
+
+    assert proc.returncode == 0, proc.stderr
+    payload = _payload(proc.stdout)
+    assert payload["status"] == "blocked_on_measurement_intake"
+    assert payload["first_blocking_gate"] == "measurement_intake"
+    assert payload["first_blocking_status"] == "pending_measurements"
+    assert (
+        payload["first_blocking_details"]["measurement_session_current_group_id"]
+        == "left_right_independence_and_safety_screen"
+    )
+    assert (
+        str(payload["first_blocking_preflight_tool_path"])
+        .replace("/", "\\")
+        .endswith("scripts\\fr017-update-independence-safety-record.ps1")
+    )
+    assert (
+        "fr017-update-independence-safety-record.ps1 -Mode Status"
+        in payload["first_blocking_preflight_command_template"]
+    )
+    assert str(measurement_path) in payload["first_blocking_preflight_command_template"]
+    assert "missing left/right independence and symptom-screen fields" in payload["first_blocking_preflight_contract"]
+    assert payload["first_blocking_preflight_status"] == "measurement_independence_safety_update_status"
+    assert payload["first_blocking_preflight_exit_code"] == 0
+    assert payload["first_blocking_preflight_parse_ok"] is True
+    assert payload["first_blocking_preflight_read_only_contract"] is True
+    assert payload["first_blocking_preflight_wrote_file"] is False
+    assert payload["first_blocking_preflight_physical_validation_complete"] is False
+    assert payload["first_blocking_preflight_fr018_implementation_cleared"] is False
+    assert (
+        payload["first_blocking_details"]["measurement_session_current_group_preflight_status"]
+        == "measurement_independence_safety_update_status"
+    )
+    assert payload["first_blocking_details"]["measurement_session_current_group_preflight_read_only_contract"] is True
+    assert payload["first_blocking_details"]["measurement_session_current_group_preflight_wrote_file"] is False
+    _assert_first_blocking_update_hint(
+        payload,
+        "fr017-update-independence-safety-record.ps1",
+        [
+            "fr017-update-independence-safety-record.ps1 -Mode UpdateIndependenceSafety",
+            str(measurement_path),
+        ],
+        contract_fragment="real left/right independence confirmations",
+    )
+    assert payload["physical_validation_complete"] is False
+    assert payload["stage17_completion_claim_allowed"] is False
+    assert payload["fr018_implementation_cleared"] is False
+
+
 def test_fr017_evidence_chain_status_moves_blocker_after_measurement_ready(tmp_path: Path) -> None:
     measurement_path = tmp_path / "ready-measurements.json"
     measurement_path.write_text(json.dumps(_ready_measurement_payload()), encoding="utf-8")

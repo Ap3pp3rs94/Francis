@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
-  [ValidateSet('UpdateIndependenceSafety')]
-  [string]$Mode = 'UpdateIndependenceSafety',
+  [ValidateSet('Status', 'UpdateIndependenceSafety')]
+  [string]$Mode = 'Status',
 
   [string]$MeasurementPath = '',
 
@@ -221,7 +221,107 @@ function Set-SafetyScreenValue {
   $UpdatedFields.Add($QualifiedField) | Out-Null
 }
 
-$Status = 'updated_measurement_independence_safety'
+$IndependenceTrueFields = @(
+  'left_arm_measured_separately',
+  'right_arm_measured_separately',
+  'side_labels_verified',
+  'values_not_copied_between_sides'
+)
+
+$IndependenceTextFields = @(
+  'left_measurement_reference',
+  'right_measurement_reference',
+  'independence_notes'
+)
+
+$SafetyScreenFields = @(
+  'pain',
+  'tingling',
+  'numbness',
+  'cold_fingers',
+  'discoloration',
+  'hand_weakness',
+  'wrist_pain',
+  'sharp_pressure',
+  'reduced_finger_motion',
+  'loss_of_grip_strength'
+)
+
+function Add-TrueFieldReadback {
+  param(
+    [object]$Target,
+    [string]$Field,
+    [string]$QualifiedField,
+    [System.Collections.Generic.List[string]]$MissingFields,
+    [System.Collections.Generic.List[string]]$ExistingFields
+  )
+
+  if ($null -eq $Target) {
+    $MissingFields.Add($QualifiedField) | Out-Null
+    return
+  }
+
+  $Property = $Target.PSObject.Properties[$Field]
+  if ($null -eq $Property -or $Property.Value -isnot [bool] -or -not [bool]$Property.Value) {
+    $MissingFields.Add($QualifiedField) | Out-Null
+    return
+  }
+
+  $ExistingFields.Add($QualifiedField) | Out-Null
+}
+
+function Add-TextFieldReadback {
+  param(
+    [object]$Target,
+    [string]$Field,
+    [string]$QualifiedField,
+    [System.Collections.Generic.List[string]]$MissingFields,
+    [System.Collections.Generic.List[string]]$ExistingFields
+  )
+
+  if ($null -eq $Target) {
+    $MissingFields.Add($QualifiedField) | Out-Null
+    return
+  }
+
+  $Property = $Target.PSObject.Properties[$Field]
+  if ($null -eq $Property -or (Test-MissingOrPendingText -Value $Property.Value)) {
+    $MissingFields.Add($QualifiedField) | Out-Null
+    return
+  }
+
+  $ExistingFields.Add($QualifiedField) | Out-Null
+}
+
+function Add-SafeFalseFieldReadback {
+  param(
+    [object]$Target,
+    [string]$Field,
+    [string]$QualifiedField,
+    [System.Collections.Generic.List[string]]$MissingFields,
+    [System.Collections.Generic.List[string]]$ExistingFields,
+    [System.Collections.Generic.List[string]]$SafetyBlockers
+  )
+
+  if ($null -eq $Target) {
+    $MissingFields.Add($QualifiedField) | Out-Null
+    return
+  }
+
+  $Property = $Target.PSObject.Properties[$Field]
+  if ($null -eq $Property -or $Property.Value -isnot [bool]) {
+    $MissingFields.Add($QualifiedField) | Out-Null
+    return
+  }
+
+  if ([bool]$Property.Value) {
+    $SafetyBlockers.Add($Field) | Out-Null
+    return
+  }
+
+  $ExistingFields.Add($QualifiedField) | Out-Null
+}
+$Status = if ($Mode -eq 'Status') { 'measurement_independence_safety_update_status' } else { 'updated_measurement_independence_safety' }
 $ExitCode = 0
 $WroteFile = $false
 $UpdatedFields = New-Object System.Collections.Generic.List[string]
@@ -229,6 +329,8 @@ $InvalidFields = New-Object System.Collections.Generic.List[string]
 $SafetyBlockers = New-Object System.Collections.Generic.List[string]
 $OverwriteBlockedFields = New-Object System.Collections.Generic.List[string]
 $OverwrittenFields = New-Object System.Collections.Generic.List[string]
+$IndependenceSafetyMissingFields = New-Object System.Collections.Generic.List[string]
+$IndependenceSafetyExistingFields = New-Object System.Collections.Generic.List[string]
 $ResolvedMeasurementPath = ''
 $Payload = $null
 
@@ -280,31 +382,53 @@ if ($ExitCode -eq 0) {
   }
 
   if ($InvalidFields.Count -eq 0) {
-    Set-RequiredTrue -Target $LeftRightIndependence -Field 'left_arm_measured_separately' -Confirmed $ConfirmLeftArmMeasuredSeparately.IsPresent -QualifiedField 'left_right_independence.left_arm_measured_separately' -InvalidFields $InvalidFields -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
-    Set-RequiredTrue -Target $LeftRightIndependence -Field 'right_arm_measured_separately' -Confirmed $ConfirmRightArmMeasuredSeparately.IsPresent -QualifiedField 'left_right_independence.right_arm_measured_separately' -InvalidFields $InvalidFields -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
-    Set-RequiredTrue -Target $LeftRightIndependence -Field 'side_labels_verified' -Confirmed $ConfirmSideLabelsVerified.IsPresent -QualifiedField 'left_right_independence.side_labels_verified' -InvalidFields $InvalidFields -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
-    Set-RequiredTrue -Target $LeftRightIndependence -Field 'values_not_copied_between_sides' -Confirmed $ConfirmValuesNotCopiedBetweenSides.IsPresent -QualifiedField 'left_right_independence.values_not_copied_between_sides' -InvalidFields $InvalidFields -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
-
-    Set-RequiredText -Target $LeftRightIndependence -Field 'left_measurement_reference' -Value $LeftMeasurementReference -QualifiedField 'left_right_independence.left_measurement_reference' -InvalidFields $InvalidFields -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
-    Set-RequiredText -Target $LeftRightIndependence -Field 'right_measurement_reference' -Value $RightMeasurementReference -QualifiedField 'left_right_independence.right_measurement_reference' -InvalidFields $InvalidFields -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
-    Set-RequiredText -Target $LeftRightIndependence -Field 'independence_notes' -Value $IndependenceNotes -QualifiedField 'left_right_independence.independence_notes' -InvalidFields $InvalidFields -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
-
-    if (-not (Test-MissingOrPendingText -Value $LeftMeasurementReference) -and -not (Test-MissingOrPendingText -Value $RightMeasurementReference) -and [string]::Equals($LeftMeasurementReference.Trim(), $RightMeasurementReference.Trim(), [System.StringComparison]::OrdinalIgnoreCase)) {
-      $InvalidFields.Add('left_right_independence.measurement_reference') | Out-Null
+    foreach ($Field in $IndependenceTrueFields) {
+      Add-TrueFieldReadback -Target $LeftRightIndependence -Field $Field -QualifiedField ('left_right_independence.{0}' -f $Field) -MissingFields $IndependenceSafetyMissingFields -ExistingFields $IndependenceSafetyExistingFields
     }
-
-    Set-SafetyScreenValue -Target $SafetyScreen -Field 'pain' -ConfirmAbsent $ConfirmNoPain.IsPresent -Observed $PainObserved.IsPresent -QualifiedField 'safety_screen.pain' -InvalidFields $InvalidFields -SafetyBlockers $SafetyBlockers -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
-    Set-SafetyScreenValue -Target $SafetyScreen -Field 'tingling' -ConfirmAbsent $ConfirmNoTingling.IsPresent -Observed $TinglingObserved.IsPresent -QualifiedField 'safety_screen.tingling' -InvalidFields $InvalidFields -SafetyBlockers $SafetyBlockers -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
-    Set-SafetyScreenValue -Target $SafetyScreen -Field 'numbness' -ConfirmAbsent $ConfirmNoNumbness.IsPresent -Observed $NumbnessObserved.IsPresent -QualifiedField 'safety_screen.numbness' -InvalidFields $InvalidFields -SafetyBlockers $SafetyBlockers -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
-    Set-SafetyScreenValue -Target $SafetyScreen -Field 'cold_fingers' -ConfirmAbsent $ConfirmNoColdFingers.IsPresent -Observed $ColdFingersObserved.IsPresent -QualifiedField 'safety_screen.cold_fingers' -InvalidFields $InvalidFields -SafetyBlockers $SafetyBlockers -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
-    Set-SafetyScreenValue -Target $SafetyScreen -Field 'discoloration' -ConfirmAbsent $ConfirmNoDiscoloration.IsPresent -Observed $DiscolorationObserved.IsPresent -QualifiedField 'safety_screen.discoloration' -InvalidFields $InvalidFields -SafetyBlockers $SafetyBlockers -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
-    Set-SafetyScreenValue -Target $SafetyScreen -Field 'hand_weakness' -ConfirmAbsent $ConfirmNoHandWeakness.IsPresent -Observed $HandWeaknessObserved.IsPresent -QualifiedField 'safety_screen.hand_weakness' -InvalidFields $InvalidFields -SafetyBlockers $SafetyBlockers -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
-    Set-SafetyScreenValue -Target $SafetyScreen -Field 'wrist_pain' -ConfirmAbsent $ConfirmNoWristPain.IsPresent -Observed $WristPainObserved.IsPresent -QualifiedField 'safety_screen.wrist_pain' -InvalidFields $InvalidFields -SafetyBlockers $SafetyBlockers -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
-    Set-SafetyScreenValue -Target $SafetyScreen -Field 'sharp_pressure' -ConfirmAbsent $ConfirmNoSharpPressure.IsPresent -Observed $SharpPressureObserved.IsPresent -QualifiedField 'safety_screen.sharp_pressure' -InvalidFields $InvalidFields -SafetyBlockers $SafetyBlockers -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
-    Set-SafetyScreenValue -Target $SafetyScreen -Field 'reduced_finger_motion' -ConfirmAbsent $ConfirmNoReducedFingerMotion.IsPresent -Observed $ReducedFingerMotionObserved.IsPresent -QualifiedField 'safety_screen.reduced_finger_motion' -InvalidFields $InvalidFields -SafetyBlockers $SafetyBlockers -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
-    Set-SafetyScreenValue -Target $SafetyScreen -Field 'loss_of_grip_strength' -ConfirmAbsent $ConfirmNoLossOfGripStrength.IsPresent -Observed $LossOfGripStrengthObserved.IsPresent -QualifiedField 'safety_screen.loss_of_grip_strength' -InvalidFields $InvalidFields -SafetyBlockers $SafetyBlockers -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
+    foreach ($Field in $IndependenceTextFields) {
+      Add-TextFieldReadback -Target $LeftRightIndependence -Field $Field -QualifiedField ('left_right_independence.{0}' -f $Field) -MissingFields $IndependenceSafetyMissingFields -ExistingFields $IndependenceSafetyExistingFields
+    }
+    foreach ($Field in $SafetyScreenFields) {
+      Add-SafeFalseFieldReadback -Target $SafetyScreen -Field $Field -QualifiedField ('safety_screen.{0}' -f $Field) -MissingFields $IndependenceSafetyMissingFields -ExistingFields $IndependenceSafetyExistingFields -SafetyBlockers $SafetyBlockers
+    }
   }
 
+  if ($InvalidFields.Count -gt 0) {
+    $Status = if ($Mode -eq 'Status') { 'invalid_independence_safety_status_target' } else { 'invalid_independence_safety_update_input' }
+    $ExitCode = 1
+  }
+}
+
+if ($Mode -eq 'Status' -and $ExitCode -eq 0 -and $SafetyBlockers.Count -gt 0) {
+  $Status = 'safety_symptom_recorded_requires_review'
+  $ExitCode = 1
+}
+if ($Mode -eq 'UpdateIndependenceSafety' -and $ExitCode -eq 0) {
+  $LeftRightIndependence = $Payload.left_right_independence
+  $SafetyScreen = $Payload.safety_screen
+  Set-RequiredTrue -Target $LeftRightIndependence -Field 'left_arm_measured_separately' -Confirmed $ConfirmLeftArmMeasuredSeparately.IsPresent -QualifiedField 'left_right_independence.left_arm_measured_separately' -InvalidFields $InvalidFields -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
+  Set-RequiredTrue -Target $LeftRightIndependence -Field 'right_arm_measured_separately' -Confirmed $ConfirmRightArmMeasuredSeparately.IsPresent -QualifiedField 'left_right_independence.right_arm_measured_separately' -InvalidFields $InvalidFields -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
+  Set-RequiredTrue -Target $LeftRightIndependence -Field 'side_labels_verified' -Confirmed $ConfirmSideLabelsVerified.IsPresent -QualifiedField 'left_right_independence.side_labels_verified' -InvalidFields $InvalidFields -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
+  Set-RequiredTrue -Target $LeftRightIndependence -Field 'values_not_copied_between_sides' -Confirmed $ConfirmValuesNotCopiedBetweenSides.IsPresent -QualifiedField 'left_right_independence.values_not_copied_between_sides' -InvalidFields $InvalidFields -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
+
+  Set-RequiredText -Target $LeftRightIndependence -Field 'left_measurement_reference' -Value $LeftMeasurementReference -QualifiedField 'left_right_independence.left_measurement_reference' -InvalidFields $InvalidFields -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
+  Set-RequiredText -Target $LeftRightIndependence -Field 'right_measurement_reference' -Value $RightMeasurementReference -QualifiedField 'left_right_independence.right_measurement_reference' -InvalidFields $InvalidFields -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
+  Set-RequiredText -Target $LeftRightIndependence -Field 'independence_notes' -Value $IndependenceNotes -QualifiedField 'left_right_independence.independence_notes' -InvalidFields $InvalidFields -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
+
+  if (-not (Test-MissingOrPendingText -Value $LeftMeasurementReference) -and -not (Test-MissingOrPendingText -Value $RightMeasurementReference) -and [string]::Equals($LeftMeasurementReference.Trim(), $RightMeasurementReference.Trim(), [System.StringComparison]::OrdinalIgnoreCase)) {
+    $InvalidFields.Add('left_right_independence.measurement_reference') | Out-Null
+  }
+
+  Set-SafetyScreenValue -Target $SafetyScreen -Field 'pain' -ConfirmAbsent $ConfirmNoPain.IsPresent -Observed $PainObserved.IsPresent -QualifiedField 'safety_screen.pain' -InvalidFields $InvalidFields -SafetyBlockers $SafetyBlockers -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
+  Set-SafetyScreenValue -Target $SafetyScreen -Field 'tingling' -ConfirmAbsent $ConfirmNoTingling.IsPresent -Observed $TinglingObserved.IsPresent -QualifiedField 'safety_screen.tingling' -InvalidFields $InvalidFields -SafetyBlockers $SafetyBlockers -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
+  Set-SafetyScreenValue -Target $SafetyScreen -Field 'numbness' -ConfirmAbsent $ConfirmNoNumbness.IsPresent -Observed $NumbnessObserved.IsPresent -QualifiedField 'safety_screen.numbness' -InvalidFields $InvalidFields -SafetyBlockers $SafetyBlockers -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
+  Set-SafetyScreenValue -Target $SafetyScreen -Field 'cold_fingers' -ConfirmAbsent $ConfirmNoColdFingers.IsPresent -Observed $ColdFingersObserved.IsPresent -QualifiedField 'safety_screen.cold_fingers' -InvalidFields $InvalidFields -SafetyBlockers $SafetyBlockers -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
+  Set-SafetyScreenValue -Target $SafetyScreen -Field 'discoloration' -ConfirmAbsent $ConfirmNoDiscoloration.IsPresent -Observed $DiscolorationObserved.IsPresent -QualifiedField 'safety_screen.discoloration' -InvalidFields $InvalidFields -SafetyBlockers $SafetyBlockers -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
+  Set-SafetyScreenValue -Target $SafetyScreen -Field 'hand_weakness' -ConfirmAbsent $ConfirmNoHandWeakness.IsPresent -Observed $HandWeaknessObserved.IsPresent -QualifiedField 'safety_screen.hand_weakness' -InvalidFields $InvalidFields -SafetyBlockers $SafetyBlockers -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
+  Set-SafetyScreenValue -Target $SafetyScreen -Field 'wrist_pain' -ConfirmAbsent $ConfirmNoWristPain.IsPresent -Observed $WristPainObserved.IsPresent -QualifiedField 'safety_screen.wrist_pain' -InvalidFields $InvalidFields -SafetyBlockers $SafetyBlockers -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
+  Set-SafetyScreenValue -Target $SafetyScreen -Field 'sharp_pressure' -ConfirmAbsent $ConfirmNoSharpPressure.IsPresent -Observed $SharpPressureObserved.IsPresent -QualifiedField 'safety_screen.sharp_pressure' -InvalidFields $InvalidFields -SafetyBlockers $SafetyBlockers -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
+  Set-SafetyScreenValue -Target $SafetyScreen -Field 'reduced_finger_motion' -ConfirmAbsent $ConfirmNoReducedFingerMotion.IsPresent -Observed $ReducedFingerMotionObserved.IsPresent -QualifiedField 'safety_screen.reduced_finger_motion' -InvalidFields $InvalidFields -SafetyBlockers $SafetyBlockers -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
+  Set-SafetyScreenValue -Target $SafetyScreen -Field 'loss_of_grip_strength' -ConfirmAbsent $ConfirmNoLossOfGripStrength.IsPresent -Observed $LossOfGripStrengthObserved.IsPresent -QualifiedField 'safety_screen.loss_of_grip_strength' -InvalidFields $InvalidFields -SafetyBlockers $SafetyBlockers -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
   if ($SafetyBlockers.Count -gt 0) {
     $Status = 'safety_symptom_recorded_requires_review'
     $ExitCode = 1
@@ -317,7 +441,7 @@ if ($ExitCode -eq 0) {
   }
 }
 
-if ($ExitCode -eq 0) {
+if ($Mode -eq 'UpdateIndependenceSafety' -and $ExitCode -eq 0) {
   $UpdateEvent = [ordered]@{
     generated_by = 'scripts/fr017-update-independence-safety-record.ps1'
     generated_at_utc = (Get-Date).ToUniversalTime().ToString('o')
@@ -340,6 +464,25 @@ if ($ExitCode -eq 0) {
   $WroteFile = $true
 }
 
+if ($WroteFile) {
+  $IndependenceSafetyMissingFields.Clear()
+  $IndependenceSafetyExistingFields.Clear()
+  foreach ($Field in $IndependenceTrueFields) {
+    Add-TrueFieldReadback -Target $Payload.left_right_independence -Field $Field -QualifiedField ('left_right_independence.{0}' -f $Field) -MissingFields $IndependenceSafetyMissingFields -ExistingFields $IndependenceSafetyExistingFields
+  }
+  foreach ($Field in $IndependenceTextFields) {
+    Add-TextFieldReadback -Target $Payload.left_right_independence -Field $Field -QualifiedField ('left_right_independence.{0}' -f $Field) -MissingFields $IndependenceSafetyMissingFields -ExistingFields $IndependenceSafetyExistingFields
+  }
+  foreach ($Field in $SafetyScreenFields) {
+    Add-SafeFalseFieldReadback -Target $Payload.safety_screen -Field $Field -QualifiedField ('safety_screen.{0}' -f $Field) -MissingFields $IndependenceSafetyMissingFields -ExistingFields $IndependenceSafetyExistingFields -SafetyBlockers $SafetyBlockers
+  }
+}
+
+$UpdateCommandTemplate = if ([string]::IsNullOrWhiteSpace($ResolvedMeasurementPath)) { '' } else { '.\scripts\fr017-update-independence-safety-record.ps1 -Mode UpdateIndependenceSafety -MeasurementPath "{0}" -ConfirmLeftArmMeasuredSeparately -ConfirmRightArmMeasuredSeparately -ConfirmSideLabelsVerified -ConfirmValuesNotCopiedBetweenSides -LeftMeasurementReference "<left reference>" -RightMeasurementReference "<right reference>" -IndependenceNotes "<separate left/right side-label notes>" -ConfirmNoPain -ConfirmNoTingling -ConfirmNoNumbness -ConfirmNoColdFingers -ConfirmNoDiscoloration -ConfirmNoHandWeakness -ConfirmNoWristPain -ConfirmNoSharpPressure -ConfirmNoReducedFingerMotion -ConfirmNoLossOfGripStrength' -f $ResolvedMeasurementPath }
+$IndependenceSafetyRequiredFields = New-Object System.Collections.Generic.List[string]
+foreach ($Field in $IndependenceTrueFields) { $IndependenceSafetyRequiredFields.Add(('left_right_independence.{0}' -f $Field)) | Out-Null }
+foreach ($Field in $IndependenceTextFields) { $IndependenceSafetyRequiredFields.Add(('left_right_independence.{0}' -f $Field)) | Out-Null }
+foreach ($Field in $SafetyScreenFields) { $IndependenceSafetyRequiredFields.Add(('safety_screen.{0}' -f $Field)) | Out-Null }
 $Output = [ordered]@{
   kind = 'francis.fr017.independence_safety_record_update'
   mode = $Mode
@@ -347,7 +490,15 @@ $Output = [ordered]@{
   measurement_path = $ResolvedMeasurementPath
   output_exists = if ([string]::IsNullOrWhiteSpace($ResolvedMeasurementPath)) { $false } else { Test-Path -LiteralPath $ResolvedMeasurementPath -PathType Leaf }
   wrote_file = $WroteFile
-  read_only_contract = $false
+  read_only_contract = ($Mode -eq 'Status')
+  independence_safety_status_contract = 'Status mode is a read-only preflight for the left/right independence and safety-screen updater. It checks the target working record and reports which independence and symptom-screen fields are still missing without writing evidence, marking physical validation complete, or clearing FR-018.'
+  independence_safety_required_fields = @($IndependenceSafetyRequiredFields.ToArray())
+  independence_safety_missing_fields = @($IndependenceSafetyMissingFields.ToArray())
+  independence_safety_existing_fields = @($IndependenceSafetyExistingFields.ToArray())
+  independence_safety_missing_field_count = [int]$IndependenceSafetyMissingFields.Count
+  independence_safety_existing_field_count = [int]$IndependenceSafetyExistingFields.Count
+  independence_safety_capture_group_complete = ($ExitCode -eq 0 -and $IndependenceSafetyMissingFields.Count -eq 0 -and $SafetyBlockers.Count -eq 0)
+  update_command_template = $UpdateCommandTemplate
   writes_repo = ($WroteFile -and (Test-PathUnderRoot -Path $ResolvedMeasurementPath -Root $RepoRoot))
   writes_data = $WroteFile
   grants_execution_authority = $false
@@ -364,7 +515,7 @@ $Output = [ordered]@{
   invalid_fields = @($InvalidFields.ToArray())
   overwrite_blocked_fields = @($OverwriteBlockedFields.ToArray())
   overwritten_fields = @($OverwrittenFields.ToArray())
-  next_command = if ($WroteFile) { '.\scripts\fr017-measurement-intake.ps1 -Mode Status -MeasurementPath "{0}"' -f $ResolvedMeasurementPath } else { '' }
+  next_command = if ($WroteFile) { '.\scripts\fr017-measurement-intake.ps1 -Mode Status -MeasurementPath "{0}"' -f $ResolvedMeasurementPath } elseif ($Mode -eq 'Status' -and $ExitCode -eq 0) { $UpdateCommandTemplate } else { '' }
 }
 
 $Output | ConvertTo-Json -Depth 8

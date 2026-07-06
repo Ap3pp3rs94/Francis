@@ -17,6 +17,7 @@ $MeasurementInitializerScript = Join-Path $PSScriptRoot 'fr017-new-measurement-r
 $MeasurementSetupUpdateScript = Join-Path $PSScriptRoot 'fr017-update-measurement-setup-record.ps1'
 $MeasurementSideUpdateScript = Join-Path $PSScriptRoot 'fr017-update-measurement-record.ps1'
 $MeasurementLandmarkUpdateScript = Join-Path $PSScriptRoot 'fr017-update-landmark-record.ps1'
+$MeasurementIndependenceSafetyUpdateScript = Join-Path $PSScriptRoot 'fr017-update-independence-safety-record.ps1'
 
 function Resolve-BriefPath {
   param([string]$Path)
@@ -376,6 +377,19 @@ if (-not $IntakeFailed -and -not $IntakeReady -and $UsingTemplate -and $FirstBlo
   $CurrentGroupPreflightCommandTemplate = '.\scripts\fr017-update-landmark-record.ps1 -Mode Status -MeasurementPath "{0}"' -f $ResolvedMeasurementPath
   $CurrentGroupPreflightContract = 'Read-only landmark updater preflight for an existing measurement record with setup and left/right numeric measurements ready. It checks missing marked-zone references and landmark-confirmation fields, writes no evidence, records no measurements or marked zones, and does not clear FR-018.'
   $PreflightGate = Invoke-JsonGate -ScriptPath $MeasurementLandmarkUpdateScript -Arguments @('-Mode', 'Status', '-MeasurementPath', $ResolvedMeasurementPath)
+  $CurrentGroupPreflightExitCode = [int]$PreflightGate.exit_code
+  $CurrentGroupPreflightParseOk = [bool]$PreflightGate.parse_ok
+  $CurrentGroupPreflightStatus = if ([bool]$PreflightGate.parse_ok) { [string](Get-PayloadValue -Payload $PreflightGate.payload -Name 'status' -Default '') } else { 'failed_preflight_parse' }
+  $CurrentGroupPreflightReadOnlyContract = [bool](Get-PayloadValue -Payload $PreflightGate.payload -Name 'read_only_contract' -Default $false)
+  $CurrentGroupPreflightWroteFile = [bool](Get-PayloadValue -Payload $PreflightGate.payload -Name 'wrote_file' -Default $false)
+  $CurrentGroupPreflightPhysicalValidationComplete = [bool](Get-PayloadValue -Payload $PreflightGate.payload -Name 'physical_validation_complete' -Default $false)
+  $CurrentGroupPreflightFr018ImplementationCleared = [bool](Get-PayloadValue -Payload $PreflightGate.payload -Name 'fr018_implementation_cleared' -Default $false)
+} elseif (-not $IntakeFailed -and -not $IntakeReady -and -not $UsingTemplate -and $FirstBlockingGroupId -eq 'left_right_independence_and_safety_screen') {
+  $IndependenceSafetyUpdatePath = [string](Get-PayloadValue -Payload $IntakeGate.payload -Name 'measurement_independence_safety_update_path' -Default (Join-Path $RepoRoot 'scripts\fr017-update-independence-safety-record.ps1'))
+  $CurrentGroupPreflightToolPath = $IndependenceSafetyUpdatePath
+  $CurrentGroupPreflightCommandTemplate = '.\scripts\fr017-update-independence-safety-record.ps1 -Mode Status -MeasurementPath "{0}"' -f $ResolvedMeasurementPath
+  $CurrentGroupPreflightContract = 'Read-only independence/safety updater preflight for an existing measurement record with setup, left/right numeric measurements, and landmarks ready. It checks missing left/right independence and symptom-screen fields, writes no evidence, records no safety-screen values, and does not clear FR-018.'
+  $PreflightGate = Invoke-JsonGate -ScriptPath $MeasurementIndependenceSafetyUpdateScript -Arguments @('-Mode', 'Status', '-MeasurementPath', $ResolvedMeasurementPath)
   $CurrentGroupPreflightExitCode = [int]$PreflightGate.exit_code
   $CurrentGroupPreflightParseOk = [bool]$PreflightGate.parse_ok
   $CurrentGroupPreflightStatus = if ([bool]$PreflightGate.parse_ok) { [string](Get-PayloadValue -Payload $PreflightGate.payload -Name 'status' -Default '') } else { 'failed_preflight_parse' }

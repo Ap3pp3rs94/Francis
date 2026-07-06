@@ -166,6 +166,63 @@ def _independence_safety_args(
     return args
 
 
+def test_fr017_independence_safety_update_status_preflights_without_writing(
+    tmp_path: Path,
+) -> None:
+    measurement_path = tmp_path / "measurement-record.json"
+    _create_ready_until_independence_record(measurement_path)
+    before = measurement_path.read_bytes()
+
+    proc = _run_script(
+        INDEPENDENCE_SAFETY_UPDATE_SCRIPT,
+        "-Mode",
+        "Status",
+        "-MeasurementPath",
+        str(measurement_path),
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    result = _payload(proc.stdout)
+    assert result["kind"] == "francis.fr017.independence_safety_record_update"
+    assert result["mode"] == "Status"
+    assert result["status"] == "measurement_independence_safety_update_status"
+    assert result["wrote_file"] is False
+    assert result["read_only_contract"] is True
+    assert result["writes_repo"] is False
+    assert result["writes_data"] is False
+    assert result["grants_execution_authority"] is False
+    assert result["grants_mutation_authority"] is False
+    assert result["operator_supplied_independence_safety_input_recorded"] is False
+    assert result["independence_safety_update_is_physical_validation_evidence"] is False
+    assert result["physical_validation_complete"] is False
+    assert result["stage17_completion_claim_allowed"] is False
+    assert result["powered_or_frame_coupled_testing_cleared"] is False
+    assert result["fr018_implementation_cleared"] is False
+    assert "read-only preflight" in result["independence_safety_status_contract"]
+    assert "without writing evidence" in result["independence_safety_status_contract"]
+    assert "left_right_independence.left_arm_measured_separately" in result["independence_safety_required_fields"]
+    assert "left_right_independence.left_arm_measured_separately" in result["independence_safety_missing_fields"]
+    assert "left_right_independence.independence_notes" in result["independence_safety_missing_fields"]
+    assert "safety_screen.loss_of_grip_strength" in result["independence_safety_missing_fields"]
+    assert result["independence_safety_existing_fields"] == []
+    assert result["independence_safety_missing_field_count"] == len(result["independence_safety_missing_fields"])
+    assert result["independence_safety_missing_field_count"] == len(result["independence_safety_required_fields"])
+    assert result["independence_safety_existing_field_count"] == 0
+    assert result["independence_safety_capture_group_complete"] is False
+    assert (
+        "fr017-update-independence-safety-record.ps1 -Mode UpdateIndependenceSafety"
+        in result["update_command_template"]
+    )
+    assert str(measurement_path) in result["update_command_template"]
+    assert result["next_command"] == result["update_command_template"]
+    assert measurement_path.read_bytes() == before
+
+    record = json.loads(measurement_path.read_text(encoding="utf-8-sig"))
+    assert "independence_safety_update_events" not in record
+    assert record["left_right_independence"]["left_arm_measured_separately"] == "PENDING"
+    assert record["safety_screen"]["loss_of_grip_strength"] == "PENDING"
+
+
 def test_fr017_independence_safety_update_records_final_measurement_group_without_clearance(
     tmp_path: Path,
 ) -> None:
