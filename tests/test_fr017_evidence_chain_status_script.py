@@ -355,6 +355,59 @@ def test_fr017_evidence_chain_status_preflights_existing_measurement_setup_updat
     assert payload["fr018_implementation_cleared"] is False
 
 
+def test_fr017_evidence_chain_status_preflights_existing_measurement_side_update(
+    tmp_path: Path,
+) -> None:
+    measurement_path = tmp_path / "setup-ready-measurements.json"
+    payload = _ready_measurement_payload()
+    for field in payload["sides"]["left"]:
+        payload["sides"]["left"][field] = "PENDING"
+    for field in payload["repeatability"]["left"]:
+        payload["repeatability"]["left"][field] = "PENDING"
+    measurement_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    proc = _run_gate("-Mode", "Status", "-MeasurementPath", str(measurement_path))
+
+    assert proc.returncode == 0, proc.stderr
+    payload = _payload(proc.stdout)
+    assert payload["status"] == "blocked_on_measurement_intake"
+    assert payload["first_blocking_gate"] == "measurement_intake"
+    assert payload["first_blocking_status"] == "pending_measurements"
+    assert (
+        payload["first_blocking_details"]["measurement_session_current_group_id"]
+        == "left_arm_numeric_measurement_passes"
+    )
+    assert (
+        str(payload["first_blocking_preflight_tool_path"])
+        .replace("/", "\\")
+        .endswith("scripts\\fr017-update-measurement-record.ps1")
+    )
+    assert "fr017-update-measurement-record.ps1 -Mode Status" in payload["first_blocking_preflight_command_template"]
+    assert "-Side left" in payload["first_blocking_preflight_command_template"]
+    assert str(measurement_path) in payload["first_blocking_preflight_command_template"]
+    assert "missing numeric/repeatability fields" in payload["first_blocking_preflight_contract"]
+    assert payload["first_blocking_preflight_status"] == "measurement_side_update_status"
+    assert payload["first_blocking_preflight_exit_code"] == 0
+    assert payload["first_blocking_preflight_parse_ok"] is True
+    assert payload["first_blocking_preflight_read_only_contract"] is True
+    assert payload["first_blocking_preflight_wrote_file"] is False
+    assert payload["first_blocking_preflight_physical_validation_complete"] is False
+    assert payload["first_blocking_preflight_fr018_implementation_cleared"] is False
+    _assert_first_blocking_update_hint(
+        payload,
+        "fr017-update-measurement-record.ps1",
+        [
+            "fr017-update-measurement-record.ps1 -Mode UpdateSide",
+            "-Side left",
+            str(measurement_path),
+        ],
+        contract_fragment="real left-side numeric measurement passes only",
+    )
+    assert payload["physical_validation_complete"] is False
+    assert payload["stage17_completion_claim_allowed"] is False
+    assert payload["fr018_implementation_cleared"] is False
+
+
 def test_fr017_evidence_chain_status_moves_blocker_after_measurement_ready(tmp_path: Path) -> None:
     measurement_path = tmp_path / "ready-measurements.json"
     measurement_path.write_text(json.dumps(_ready_measurement_payload()), encoding="utf-8")
