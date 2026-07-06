@@ -50,6 +50,10 @@ def _payload(stdout: str) -> dict[str, Any]:
     return json.loads(stdout)
 
 
+def _portable_path(path: str) -> str:
+    return path.replace("\\", "/")
+
+
 def _decision_status_by_id(payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return {step["id"]: step for step in payload["final_physical_decision_plan_status"]}
 
@@ -106,10 +110,12 @@ def test_fr017_final_physical_gate_reports_default_templates_as_pending() -> Non
     assert payload["next_required_final_physical_input"] == (
         "create_human_final_decision_record_with_fr017-new-final-decision-record.ps1_then_rerun_final_decision_record_gate"
     )
-    assert payload["final_decision_input_template_path"].endswith(
-        "FR-017_Stage17_Package\\FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json"
+    assert _portable_path(payload["final_decision_input_template_path"]).endswith(
+        "FR-017_Stage17_Package/FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json"
     )
-    assert payload["final_decision_record_initializer_path"].endswith("scripts\\fr017-new-final-decision-record.ps1")
+    assert _portable_path(payload["final_decision_record_initializer_path"]).endswith(
+        "scripts/fr017-new-final-decision-record.ps1"
+    )
     assert payload["final_decision_working_record_name_pattern"] == (
         "FR-017-FINAL-DECISION-YYYY-MM-DD-PILOT-RECORD.json"
     )
@@ -301,7 +307,9 @@ def test_fr017_final_physical_gate_ready_state_does_not_claim_completion(tmp_pat
         "create_human_final_decision_record_with_fr017-new-final-decision-record.ps1_then_rerun_final_decision_record_gate"
     )
     assert "fr017-new-final-decision-record.ps1" in payload["final_physical_decision_runbook_contract"]
-    assert payload["final_decision_record_initializer_path"].endswith("scripts\\fr017-new-final-decision-record.ps1")
+    assert _portable_path(payload["final_decision_record_initializer_path"]).endswith(
+        "scripts/fr017-new-final-decision-record.ps1"
+    )
     assert all(
         step["status"] == "ready_for_final_physical_decision_review"
         for step in payload["final_physical_decision_plan_status"]
