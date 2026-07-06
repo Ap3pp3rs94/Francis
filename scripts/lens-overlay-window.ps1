@@ -4260,6 +4260,7 @@ function Start-OrbWindowCoordinateTravel {
       duration_ms = $Duration
       distance = $Distance
       clock = $Clock
+      first_frame_elapsed_ms = -1.0
     }
     $Handler = [System.EventHandler]{
       param($Sender, $EventArgs)
@@ -4276,7 +4277,11 @@ function Start-OrbWindowCoordinateTravel {
           $script:LensOverlayOrbMoveTravelContext = $null
           return
         }
-        $ElapsedMilliseconds = [double]$Context['clock'].Elapsed.TotalMilliseconds
+        $RawElapsedMilliseconds = [double]$Context['clock'].Elapsed.TotalMilliseconds
+        if ([double]$Context['first_frame_elapsed_ms'] -lt 0.0) {
+          $Context['first_frame_elapsed_ms'] = $RawElapsedMilliseconds
+        }
+        $ElapsedMilliseconds = [Math]::Max(0.0, $RawElapsedMilliseconds - [double]$Context['first_frame_elapsed_ms'])
         $DurationMs = [Math]::Max(1.0, [double]$Context['duration_ms'])
         $Progress = [Math]::Min(1.0, [Math]::Max(0.0, $ElapsedMilliseconds / $DurationMs))
         $Ease = ($Progress * $Progress * $Progress) * (($Progress * (($Progress * 6.0) - 15.0)) + 10.0)

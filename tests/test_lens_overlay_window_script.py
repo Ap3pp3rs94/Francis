@@ -947,7 +947,14 @@ try {{
   $intermediate = @($frames | Where-Object {{ $_.left -gt 10.5 -and $_.left -lt ($expectedLeft - 0.5) -and $_.top -gt 20.5 -and $_.top -lt ($expectedTop - 0.5) }})
   if (-not [bool]$result.ok) {{ throw 'travel did not start' }}
   if ([Math]::Abs($postStartLeft - $expectedLeft) -le 0.75 -and [Math]::Abs($postStartTop - $expectedTop) -le 0.75) {{ throw 'travel landed immediately' }}
-  if ($intermediate.Count -lt 1) {{ throw 'no intermediate travel frame observed' }}
+  if ($intermediate.Count -lt 1) {{
+    $lastFrame = @($frames | Select-Object -Last 1)
+    $lastLeft = if ($lastFrame.Count -gt 0) {{ [double]$lastFrame[0].left }} else {{ -1.0 }}
+    $lastTop = if ($lastFrame.Count -gt 0) {{ [double]$lastFrame[0].top }} else {{ -1.0 }}
+    $lastActive = if ($lastFrame.Count -gt 0) {{ [bool]$lastFrame[0].active }} else {{ $false }}
+    $finalStatus = if ($null -ne $final) {{ [string]$final.status }} else {{ 'missing' }}
+    throw ('no intermediate travel frame observed; frames={{0}} last_left={{1}} last_top={{2}} last_active={{3}} final={{4}}' -f $frames.Count, $lastLeft, $lastTop, $lastActive, $finalStatus)
+  }}
   if ($null -eq $final -or -not [bool]$final.ok) {{ throw 'final travel result missing' }}
   if ([Math]::Abs(([double]$final.overlay_left) - $expectedLeft) -gt 0.75 -or [Math]::Abs(([double]$final.overlay_top) - $expectedTop) -gt 0.75) {{ throw 'final travel position mismatch' }}
   [pscustomobject]@{{
