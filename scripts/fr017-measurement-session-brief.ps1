@@ -179,6 +179,7 @@ function New-CurrentGroupUpdateHint {
   param(
     [string]$GroupId,
     [string]$ResolvedMeasurementPath,
+    [string]$ResolvedCandidateMeasurementPath,
     [object]$IntakePayload,
     [bool]$UsingTemplate,
     [bool]$IntakeReady,
@@ -186,6 +187,7 @@ function New-CurrentGroupUpdateHint {
   )
 
   $MeasurementPathArg = if ([string]::IsNullOrWhiteSpace($ResolvedMeasurementPath)) { '<measurement-record.json>' } else { $ResolvedMeasurementPath }
+  $PendingRecordOutputPathArg = if ([string]::IsNullOrWhiteSpace($ResolvedCandidateMeasurementPath)) { '<measurement-record.json>' } else { '"{0}"' -f $ResolvedCandidateMeasurementPath }
   $SetupUpdatePath = [string](Get-PayloadValue -Payload $IntakePayload -Name 'measurement_setup_update_path' -Default (Join-Path $RepoRoot 'scripts\fr017-update-measurement-setup-record.ps1'))
   $InitializerPath = [string](Get-PayloadValue -Payload $IntakePayload -Name 'measurement_record_initializer_path' -Default (Join-Path $RepoRoot 'scripts\fr017-new-measurement-record.ps1'))
   $MeasurementUpdatePath = [string](Get-PayloadValue -Payload $IntakePayload -Name 'measurement_record_update_path' -Default (Join-Path $RepoRoot 'scripts\fr017-update-measurement-record.ps1'))
@@ -214,7 +216,7 @@ function New-CurrentGroupUpdateHint {
       if ($UsingTemplate) {
         return [ordered]@{
           tool_path = $InitializerPath
-          command_template = '.\scripts\fr017-new-measurement-record.ps1 -Mode Create -OutputPath <measurement-record.json> -EvidenceDate YYYY-MM-DD -Observer "<observer>" -PilotId "<pilot-reference>" -MeasurementTool "flexible metric tape" -Method "flexible tape, no tissue compression" -Posture "arm relaxed, palm neutral unless otherwise noted" -ConfirmNoTissueCompressionUsed -ConfirmNoWristBoneCompressionUsed -ConfirmMetricToolUsed -ConfirmArmRelaxedPalmNeutralOrExceptionRecorded -ConfirmStopConditionsBriefed -ConditionNotes "<no tissue/no wrist-bone compression, metric tool, and stop briefing notes>"'
+          command_template = '.\scripts\fr017-new-measurement-record.ps1 -Mode Create -OutputPath {0} -EvidenceDate YYYY-MM-DD -Observer "<observer>" -PilotId "<pilot-reference>" -MeasurementTool "flexible metric tape" -Method "flexible tape, no tissue compression" -Posture "arm relaxed, palm neutral unless otherwise noted" -ConfirmNoTissueCompressionUsed -ConfirmNoWristBoneCompressionUsed -ConfirmMetricToolUsed -ConfirmArmRelaxedPalmNeutralOrExceptionRecorded -ConfirmStopConditionsBriefed -ConditionNotes "<no tissue/no wrist-bone compression, metric tool, and stop briefing notes>"' -f $PendingRecordOutputPathArg
           contract = 'Creates a pending working record and may populate the setup/safety brief only with real operator-supplied values. It does not record left/right measurements, validate fit, or clear FR-018.'
         }
       }
@@ -369,7 +371,7 @@ if ($IntakeReady) {
   $ExitCode = 0
   $NextOperatorAction = 'complete_first_blocking_measurement_capture_group_then_rerun_measurement_intake'
 }
-$CurrentGroupUpdateHint = New-CurrentGroupUpdateHint -GroupId $FirstBlockingGroupId -ResolvedMeasurementPath $ResolvedMeasurementPath -IntakePayload $IntakeGate.payload -UsingTemplate $UsingTemplate -IntakeReady $IntakeReady -IntakeFailed $IntakeFailed
+$CurrentGroupUpdateHint = New-CurrentGroupUpdateHint -GroupId $FirstBlockingGroupId -ResolvedMeasurementPath $ResolvedMeasurementPath -ResolvedCandidateMeasurementPath $ResolvedCandidateMeasurementPath -IntakePayload $IntakeGate.payload -UsingTemplate $UsingTemplate -IntakeReady $IntakeReady -IntakeFailed $IntakeFailed
 $CurrentGroupPreflightToolPath = ''
 $CurrentGroupPreflightCommandTemplate = ''
 $CurrentGroupPreflightContract = ''

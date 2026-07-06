@@ -204,6 +204,8 @@ def test_fr017_measurement_session_brief_preflights_candidate_measurement_path(t
     assert payload["current_group_preflight_output_parent_exists"] is True
     assert payload["current_group_preflight_output_exists"] is False
     assert payload["current_group_preflight_wrote_file"] is False
+    assert "fr017-new-measurement-record.ps1 -Mode Create" in payload["current_group_update_command_template"]
+    assert str(candidate_path) in payload["current_group_update_command_template"]
     assert payload["current_group_preflight_physical_validation_complete"] is False
     assert payload["current_group_preflight_fr018_implementation_cleared"] is False
     assert not candidate_path.exists()
@@ -228,6 +230,8 @@ def test_fr017_measurement_session_summary_reports_candidate_path_readiness(
     assert payload["current_group_preflight_output_parent_exists"] is True
     assert payload["current_group_preflight_output_exists"] is False
     assert payload["current_group_preflight_wrote_file"] is False
+    assert "fr017-new-measurement-record.ps1 -Mode Create" in payload["current_group_update_command_template"]
+    assert str(candidate_path) in payload["current_group_update_command_template"]
     assert payload["physical_validation_complete"] is False
     assert payload["fr018_implementation_cleared"] is False
     assert not candidate_path.exists()

@@ -357,6 +357,8 @@ def test_fr017_evidence_chain_status_preflights_candidate_measurement_path(tmp_p
     assert payload["first_blocking_preflight_output_parent_exists"] is True
     assert payload["first_blocking_preflight_output_exists"] is False
     assert payload["first_blocking_preflight_wrote_file"] is False
+    assert "fr017-new-measurement-record.ps1 -Mode Create" in payload["first_blocking_update_command_template"]
+    assert str(candidate_path) in payload["first_blocking_update_command_template"]
     assert payload["first_blocking_preflight_physical_validation_complete"] is False
     assert payload["first_blocking_preflight_fr018_implementation_cleared"] is False
     assert not candidate_path.exists()
@@ -381,6 +383,8 @@ def test_fr017_evidence_chain_summary_reports_candidate_measurement_path_readine
     assert payload["first_blocking_preflight_output_parent_exists"] is True
     assert payload["first_blocking_preflight_output_exists"] is False
     assert payload["first_blocking_preflight_wrote_file"] is False
+    assert "fr017-new-measurement-record.ps1 -Mode Create" in payload["first_blocking_update_command_template"]
+    assert str(candidate_path) in payload["first_blocking_update_command_template"]
     assert payload["physical_validation_complete"] is False
     assert payload["fr018_implementation_cleared"] is False
     assert not candidate_path.exists()
