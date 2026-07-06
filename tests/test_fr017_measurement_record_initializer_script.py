@@ -48,6 +48,77 @@ def _payload(stdout: str) -> dict[str, Any]:
     return json.loads(stdout)
 
 
+def test_fr017_measurement_record_initializer_status_is_read_only() -> None:
+    proc = _run_initializer("-Mode", "Status")
+
+    assert proc.returncode == 0, proc.stderr
+    result = _payload(proc.stdout)
+    assert result["kind"] == "francis.fr017.measurement_record_initializer"
+    assert result["status"] == "measurement_record_initializer_status"
+    assert result["read_only_contract"] is True
+    assert result["template_exists"] is True
+    assert result["template_parse_ok"] is True
+    assert result["output_path_required_for_create"] is True
+    assert result["candidate_output_path_ready"] is False
+    assert result["wrote_file"] is False
+    assert result["writes_data"] is False
+    assert result["physical_validation_complete"] is False
+    assert result["stage17_completion_claim_allowed"] is False
+    assert result["fr018_implementation_cleared"] is False
+    assert "fr017-new-measurement-record.ps1 -Mode Create" in result["create_command_template"]
+    assert result["next_command"] == result["create_command_template"]
+    assert result["measurement_intake_status_command_template"] == (
+        ".\\scripts\\fr017-measurement-intake.ps1 -Mode Status -MeasurementPath <measurement-record.json>"
+    )
+
+
+def test_fr017_measurement_record_initializer_status_preserves_missing_template_status(
+    tmp_path: Path,
+) -> None:
+    missing_template = tmp_path / "missing-template.json"
+
+    proc = _run_initializer("-Mode", "Status", "-TemplatePath", str(missing_template))
+
+    assert proc.returncode == 1
+    result = _payload(proc.stdout)
+    assert result["status"] == "missing_template_file"
+    assert result["template_exists"] is False
+    assert result["template_parse_ok"] is False
+    assert result["read_only_contract"] is True
+    assert result["wrote_file"] is False
+    assert result["physical_validation_complete"] is False
+    assert result["fr018_implementation_cleared"] is False
+
+
+def test_fr017_measurement_record_initializer_status_checks_candidate_path(tmp_path: Path) -> None:
+    output_path = tmp_path / "candidate-measurement-record.json"
+
+    proc = _run_initializer("-Mode", "Status", "-OutputPath", str(output_path))
+
+    assert proc.returncode == 0, proc.stderr
+    result = _payload(proc.stdout)
+    assert result["status"] == "measurement_record_initializer_status"
+    assert result["output_path"] == str(output_path)
+    assert result["output_path_required_for_create"] is False
+    assert result["candidate_output_path_ready"] is True
+    assert result["output_exists"] is False
+    assert result["wrote_file"] is False
+    assert not output_path.exists()
+
+
+def test_fr017_measurement_record_initializer_create_requires_output_path() -> None:
+    proc = _run_initializer("-Mode", "Create")
+
+    assert proc.returncode == 1
+    result = _payload(proc.stdout)
+    assert result["status"] == "missing_output_path"
+    assert result["output_path_required_for_create"] is True
+    assert result["wrote_file"] is False
+    assert result["writes_data"] is False
+    assert result["physical_validation_complete"] is False
+    assert result["fr018_implementation_cleared"] is False
+
+
 def test_fr017_measurement_record_initializer_creates_pending_working_record(tmp_path: Path) -> None:
     evidence_date = date.today().isoformat()
     output_path = tmp_path / f"FR-017-MEASUREMENTS-{evidence_date}-PILOT-RECORD.json"

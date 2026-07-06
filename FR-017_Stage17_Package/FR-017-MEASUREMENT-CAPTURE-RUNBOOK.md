@@ -28,11 +28,13 @@ Run the gate before and after editing the working record:
 
 ```powershell
 .\scripts\fr017-measurement-intake.ps1 -Mode Status
+.\scripts\fr017-new-measurement-record.ps1 -Mode Status
+.\scripts\fr017-new-measurement-record.ps1 -Mode Status -OutputPath .\FR-017_Stage17_Package\FR-017-MEASUREMENTS-YYYY-MM-DD-PILOT-RECORD.json
 .\scripts\fr017-new-measurement-record.ps1 -Mode Create -OutputPath .\FR-017_Stage17_Package\FR-017-MEASUREMENTS-YYYY-MM-DD-PILOT-RECORD.json
 .\scripts\fr017-measurement-intake.ps1 -Mode Status -MeasurementPath .\FR-017_Stage17_Package\FR-017-MEASUREMENTS-YYYY-MM-DD-PILOT-RECORD.json
 ```
 
-The initializer creates only a pending working record. It refuses to overwrite an existing file or target the template itself. The generated record still requires real left/right measurements, landmark references, repeatability checks, and symptom-screen entries before the intake gate can advance.
+The initializer `Status` mode is read-only. It checks the template, optionally checks whether a candidate output path is ready, reports `candidate_output_path_ready`, returns `create_command_template`, and never writes evidence, marks physical validation complete, or clears FR-018. The initializer `Create` mode creates only a pending working record. It refuses to overwrite an existing file or target the template itself. The generated record still requires real left/right measurements, landmark references, repeatability checks, and symptom-screen entries before the intake gate can advance.
 
 If the setup and safety brief has actually been completed, the initializer can also record those first-gate fields:
 

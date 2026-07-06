@@ -1,10 +1,9 @@
 [CmdletBinding()]
 param(
-  [ValidateSet('Create')]
-  [string]$Mode = 'Create',
+  [ValidateSet('Status', 'Create')]
+  [string]$Mode = 'Status',
 
-  [Parameter(Mandatory = $true)]
-  [string]$OutputPath,
+  [string]$OutputPath = '',
 
   [string]$TemplatePath = '',
 
@@ -141,41 +140,62 @@ function Set-ConfirmedCondition {
 
 $DefaultTemplatePath = Join-Path $RepoRoot 'FR-017_Stage17_Package\FR-017-MEASUREMENTS-INPUT-TEMPLATE.json'
 $ResolvedTemplatePath = if ([string]::IsNullOrWhiteSpace($TemplatePath)) { $DefaultTemplatePath } else { Resolve-Fr017Path -Path $TemplatePath }
-$ResolvedOutputPath = Resolve-Fr017Path -Path $OutputPath
-$Status = 'created_pending_measurement_record'
+$ResolvedOutputPath = if ([string]::IsNullOrWhiteSpace($OutputPath)) { '' } else { Resolve-Fr017Path -Path $OutputPath }
+$CreateCommandTemplate = '.\scripts\fr017-new-measurement-record.ps1 -Mode Create -OutputPath <measurement-record.json> -EvidenceDate YYYY-MM-DD -Observer "<observer>" -PilotId "<pilot-reference>" -MeasurementTool "flexible metric tape" -Method "flexible tape, no tissue compression" -Posture "arm relaxed, palm neutral unless otherwise noted" -ConfirmNoTissueCompressionUsed -ConfirmNoWristBoneCompressionUsed -ConfirmMetricToolUsed -ConfirmArmRelaxedPalmNeutralOrExceptionRecorded -ConfirmStopConditionsBriefed -ConditionNotes "<no tissue/no wrist-bone compression, metric tool, and stop briefing notes>"'
+$MeasurementIntakeStatusCommandTemplate = '.\scripts\fr017-measurement-intake.ps1 -Mode Status -MeasurementPath <measurement-record.json>'
+$Status = if ($Mode -eq 'Status') { 'measurement_record_initializer_status' } else { 'created_pending_measurement_record' }
 $ExitCode = 0
 $WroteFile = $false
 $InvalidFields = New-Object System.Collections.Generic.List[string]
 $UpdatedFields = New-Object System.Collections.Generic.List[string]
+$TemplateParseOk = $false
+$OutputPathRequiredForCreate = [string]::IsNullOrWhiteSpace($ResolvedOutputPath)
+$OutputPathTargetsTemplate = $false
+$OutputFileExists = $false
+$OutputParentExists = $false
+$CandidateOutputPathReady = $false
 
 if (-not (Test-Path -LiteralPath $ResolvedTemplatePath -PathType Leaf)) {
   $Status = 'missing_template_file'
   $ExitCode = 1
-} elseif ([string]::Equals($ResolvedTemplatePath, $ResolvedOutputPath, [System.StringComparison]::OrdinalIgnoreCase)) {
-  $Status = 'output_path_targets_template'
-  $ExitCode = 1
-} elseif (Test-Path -LiteralPath $ResolvedOutputPath) {
-  $Status = 'output_file_exists'
-  $ExitCode = 1
 } else {
-  $OutputParent = Split-Path -Parent $ResolvedOutputPath
-  if ([string]::IsNullOrWhiteSpace($OutputParent) -or -not (Test-Path -LiteralPath $OutputParent -PathType Container)) {
-    $Status = 'missing_output_parent'
-    $ExitCode = 1
+  if (-not [string]::IsNullOrWhiteSpace($ResolvedOutputPath)) {
+    $OutputPathTargetsTemplate = [string]::Equals($ResolvedTemplatePath, $ResolvedOutputPath, [System.StringComparison]::OrdinalIgnoreCase)
+    $OutputFileExists = Test-Path -LiteralPath $ResolvedOutputPath
+    $OutputParent = Split-Path -Parent $ResolvedOutputPath
+    $OutputParentExists = -not [string]::IsNullOrWhiteSpace($OutputParent) -and (Test-Path -LiteralPath $OutputParent -PathType Container)
+    $CandidateOutputPathReady = -not $OutputPathTargetsTemplate -and -not $OutputFileExists -and $OutputParentExists
+  }
+
+  if ($Mode -eq 'Create') {
+    if ($OutputPathRequiredForCreate) {
+      $Status = 'missing_output_path'
+      $ExitCode = 1
+    } elseif ($OutputPathTargetsTemplate) {
+      $Status = 'output_path_targets_template'
+      $ExitCode = 1
+    } elseif ($OutputFileExists) {
+      $Status = 'output_file_exists'
+      $ExitCode = 1
+    } elseif (-not $OutputParentExists) {
+      $Status = 'missing_output_parent'
+      $ExitCode = 1
+    }
   }
 }
 
 $Payload = $null
-if ($ExitCode -eq 0) {
+if ((Test-Path -LiteralPath $ResolvedTemplatePath -PathType Leaf) -and ($ExitCode -eq 0 -or $Mode -eq 'Status')) {
   try {
     $Payload = Get-Content -LiteralPath $ResolvedTemplatePath -Raw | ConvertFrom-Json -ErrorAction Stop
+    $TemplateParseOk = $true
   } catch {
     $Status = 'invalid_template_json'
     $ExitCode = 1
   }
 }
 
-if ($ExitCode -eq 0) {
+if ($Mode -eq 'Create' -and $ExitCode -eq 0) {
   $Evidence = $Payload.evidence
   if ($null -eq $Evidence) {
     $InvalidFields.Add('evidence') | Out-Null
@@ -213,7 +233,7 @@ if ($ExitCode -eq 0) {
   }
 }
 
-if ($ExitCode -eq 0) {
+if ($Mode -eq 'Create' -and $ExitCode -eq 0) {
   $Generation = [ordered]@{
     generated_by = 'scripts/fr017-new-measurement-record.ps1'
     generated_at_utc = (Get-Date).ToUniversalTime().ToString('o')
@@ -243,9 +263,15 @@ $Output = [ordered]@{
   status = $Status
   template_path = $ResolvedTemplatePath
   output_path = $ResolvedOutputPath
-  output_exists = (Test-Path -LiteralPath $ResolvedOutputPath -PathType Leaf)
+  template_exists = (Test-Path -LiteralPath $ResolvedTemplatePath -PathType Leaf)
+  template_parse_ok = $TemplateParseOk
+  output_path_required_for_create = $OutputPathRequiredForCreate
+  output_path_targets_template = $OutputPathTargetsTemplate
+  output_parent_exists = $OutputParentExists
+  candidate_output_path_ready = $CandidateOutputPathReady
+  output_exists = if ([string]::IsNullOrWhiteSpace($ResolvedOutputPath)) { $false } else { (Test-Path -LiteralPath $ResolvedOutputPath -PathType Leaf) }
   wrote_file = $WroteFile
-  read_only_contract = $false
+  read_only_contract = ($Mode -eq 'Status')
   writes_repo = ($WroteFile -and (Test-PathUnderRoot -Path $ResolvedOutputPath -Root $RepoRoot))
   writes_data = $WroteFile
   grants_execution_authority = $false
@@ -259,7 +285,9 @@ $Output = [ordered]@{
   no_fake_validation_lock = 'This initializer creates a pending FR-017 measurement working record and may record explicitly supplied setup/safety-brief fields only. It does not record physical measurements, mark physical validation complete, permit a Stage 17 completion claim, or clear FR-018.'
   updated_fields = @($UpdatedFields.ToArray())
   invalid_fields = @($InvalidFields.ToArray())
-  next_command = if ($WroteFile) { '.\scripts\fr017-measurement-intake.ps1 -Mode Status -MeasurementPath "{0}"' -f $ResolvedOutputPath } else { '' }
+  create_command_template = $CreateCommandTemplate
+  measurement_intake_status_command_template = $MeasurementIntakeStatusCommandTemplate
+  next_command = if ($WroteFile) { '.\scripts\fr017-measurement-intake.ps1 -Mode Status -MeasurementPath "{0}"' -f $ResolvedOutputPath } elseif ($Mode -eq 'Status') { $CreateCommandTemplate } else { '' }
 }
 
 $Output | ConvertTo-Json -Depth 8

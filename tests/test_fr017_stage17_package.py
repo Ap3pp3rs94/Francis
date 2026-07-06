@@ -137,6 +137,9 @@ def test_fr017_measurement_capture_runbook_preserves_first_physical_input_lock()
     assert "This runbook is not physical validation evidence." in runbook
     assert "FR-017-MEASUREMENTS-INPUT-TEMPLATE.json" in runbook
     assert "fr017-new-measurement-record.ps1" in runbook
+    assert "fr017-new-measurement-record.ps1 -Mode Status" in runbook
+    assert "candidate_output_path_ready" in runbook
+    assert "create_command_template" in runbook
     assert "fr017-update-measurement-setup-record.ps1" in runbook
     assert "fr017-update-measurement-record.ps1" in runbook
     assert "fr017-update-landmark-record.ps1" in runbook
@@ -153,6 +156,7 @@ def test_fr017_measurement_capture_runbook_preserves_first_physical_input_lock()
     assert "PainObserved" in runbook
     assert "setup_and_safety_brief" in runbook
     assert "still not physical validation evidence" in runbook
+    assert "never writes evidence" in runbook
     assert "fr017-measurement-intake.ps1 -Mode Status" in runbook
     assert "measurement_capture_plan" in runbook
     assert "setup_and_safety_brief" in runbook
