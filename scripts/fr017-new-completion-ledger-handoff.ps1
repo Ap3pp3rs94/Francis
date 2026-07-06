@@ -1,34 +1,25 @@
 [CmdletBinding()]
 param(
-  [ValidateSet('Create')]
-  [string]$Mode = 'Create',
+  [ValidateSet('Status', 'Create')]
+  [string]$Mode = 'Status',
 
-  [Parameter(Mandatory = $true)]
-  [string]$OutputPath,
+  [string]$OutputPath = '',
 
-  [Parameter(Mandatory = $true)]
-  [string]$MeasurementPath,
+  [string]$MeasurementPath = '',
 
-  [Parameter(Mandatory = $true)]
-  [string]$MockupPath,
+  [string]$MockupPath = '',
 
-  [Parameter(Mandatory = $true)]
-  [string]$MannequinPath,
+  [string]$MannequinPath = '',
 
-  [Parameter(Mandatory = $true)]
-  [string]$StaticFitPath,
+  [string]$StaticFitPath = '',
 
-  [Parameter(Mandatory = $true)]
-  [string]$MovementPath,
+  [string]$MovementPath = '',
 
-  [Parameter(Mandatory = $true)]
-  [string]$ReleaseCablePath,
+  [string]$ReleaseCablePath = '',
 
-  [Parameter(Mandatory = $true)]
-  [string]$EngineeringReviewPath,
+  [string]$EngineeringReviewPath = '',
 
-  [Parameter(Mandatory = $true)]
-  [string]$FinalDecisionPath,
+  [string]$FinalDecisionPath = '',
 
   [string]$TemplatePath = '',
 
@@ -200,55 +191,150 @@ function Add-ProhibitedIfTrue {
 
 $DefaultTemplatePath = Join-Path $RepoRoot 'FR-017_Stage17_Package\FR-017-COMPLETION-LEDGER-HANDOFF-TEMPLATE.md'
 $ResolvedTemplatePath = if ([string]::IsNullOrWhiteSpace($TemplatePath)) { $DefaultTemplatePath } else { Resolve-Fr017Path -Path $TemplatePath }
-$ResolvedOutputPath = Resolve-Fr017Path -Path $OutputPath
-$ResolvedMeasurementPath = Resolve-Fr017Path -Path $MeasurementPath
-$ResolvedMockupPath = Resolve-Fr017Path -Path $MockupPath
-$ResolvedMannequinPath = Resolve-Fr017Path -Path $MannequinPath
-$ResolvedStaticFitPath = Resolve-Fr017Path -Path $StaticFitPath
-$ResolvedMovementPath = Resolve-Fr017Path -Path $MovementPath
-$ResolvedReleaseCablePath = Resolve-Fr017Path -Path $ReleaseCablePath
-$ResolvedEngineeringReviewPath = Resolve-Fr017Path -Path $EngineeringReviewPath
-$ResolvedFinalDecisionPath = Resolve-Fr017Path -Path $FinalDecisionPath
-$Status = 'created_completion_ledger_handoff'
+$ResolvedOutputPath = if ([string]::IsNullOrWhiteSpace($OutputPath)) { '' } else { Resolve-Fr017Path -Path $OutputPath }
+$ResolvedMeasurementPath = if ([string]::IsNullOrWhiteSpace($MeasurementPath)) { '' } else { Resolve-Fr017Path -Path $MeasurementPath }
+$ResolvedMockupPath = if ([string]::IsNullOrWhiteSpace($MockupPath)) { '' } else { Resolve-Fr017Path -Path $MockupPath }
+$ResolvedMannequinPath = if ([string]::IsNullOrWhiteSpace($MannequinPath)) { '' } else { Resolve-Fr017Path -Path $MannequinPath }
+$ResolvedStaticFitPath = if ([string]::IsNullOrWhiteSpace($StaticFitPath)) { '' } else { Resolve-Fr017Path -Path $StaticFitPath }
+$ResolvedMovementPath = if ([string]::IsNullOrWhiteSpace($MovementPath)) { '' } else { Resolve-Fr017Path -Path $MovementPath }
+$ResolvedReleaseCablePath = if ([string]::IsNullOrWhiteSpace($ReleaseCablePath)) { '' } else { Resolve-Fr017Path -Path $ReleaseCablePath }
+$ResolvedEngineeringReviewPath = if ([string]::IsNullOrWhiteSpace($EngineeringReviewPath)) { '' } else { Resolve-Fr017Path -Path $EngineeringReviewPath }
+$ResolvedFinalDecisionPath = if ([string]::IsNullOrWhiteSpace($FinalDecisionPath)) { '' } else { Resolve-Fr017Path -Path $FinalDecisionPath }
+$CreateCommandTemplate = '.\scripts\fr017-new-completion-ledger-handoff.ps1 -Mode Create -OutputPath <completion-ledger-handoff.md> -MeasurementPath <measurement-record.json> -MockupPath <mockup-record.json> -MannequinPath <mannequin-interface-record.json> -StaticFitPath <pilot-static-fit-record.json> -MovementPath <pilot-movement-record.json> -ReleaseCablePath <release-cable-record.json> -EngineeringReviewPath <engineering-review-record.json> -FinalDecisionPath <final-decision-record.json> -HandoffDate YYYY-MM-DD -ValidationCommandOrRecord "<validation command or record>" -ConfirmOperatorReviewedFinalDecision -ConfirmCandidateOnly -ConfirmDoesNotWriteCompletionLedger -ConfirmPhysicalValidationCompleteFalse -ConfirmStage17CompletionClaimAllowedFalse -ConfirmFr018ImplementationClearedFalse -ConfirmPoweredTestingNotCleared -ConfirmFrameCoupledTestingNotCleared -ConfirmLoadBearingUseNotApproved -ConfirmFr018Blocked'
+$CompletionLedgerGateStatusCommandTemplate = '.\scripts\fr017-completion-ledger-gate.ps1 -Mode Status -MeasurementPath <measurement-record.json> -MockupPath <mockup-record.json> -MannequinPath <mannequin-interface-record.json> -StaticFitPath <pilot-static-fit-record.json> -MovementPath <pilot-movement-record.json> -ReleaseCablePath <release-cable-record.json> -EngineeringReviewPath <engineering-review-record.json> -FinalDecisionPath <final-decision-record.json> -LedgerEntryPath <completion-ledger-handoff.md>'
+$Status = if ($Mode -eq 'Status') { 'completion_ledger_handoff_initializer_status' } else { 'created_completion_ledger_handoff' }
 $ExitCode = 0
 $WroteFile = $false
 $InvalidFields = New-Object System.Collections.Generic.List[string]
 $ProhibitedClearanceFlags = New-Object System.Collections.Generic.List[string]
 $UpdatedFields = New-Object System.Collections.Generic.List[string]
+$TemplateParseOk = $false
+$OutputPathRequiredForCreate = [string]::IsNullOrWhiteSpace($ResolvedOutputPath)
+$MeasurementPathRequiredForCreate = [string]::IsNullOrWhiteSpace($ResolvedMeasurementPath)
+$MockupPathRequiredForCreate = [string]::IsNullOrWhiteSpace($ResolvedMockupPath)
+$MannequinPathRequiredForCreate = [string]::IsNullOrWhiteSpace($ResolvedMannequinPath)
+$StaticFitPathRequiredForCreate = [string]::IsNullOrWhiteSpace($ResolvedStaticFitPath)
+$MovementPathRequiredForCreate = [string]::IsNullOrWhiteSpace($ResolvedMovementPath)
+$ReleaseCablePathRequiredForCreate = [string]::IsNullOrWhiteSpace($ResolvedReleaseCablePath)
+$EngineeringReviewPathRequiredForCreate = [string]::IsNullOrWhiteSpace($ResolvedEngineeringReviewPath)
+$FinalDecisionPathRequiredForCreate = [string]::IsNullOrWhiteSpace($ResolvedFinalDecisionPath)
+$OutputPathTargetsTemplate = $false
+$OutputFileExists = $false
+$OutputParentExists = $false
+$CandidateOutputPathReady = $false
+$MeasurementPathTargetsTemplate = $false
+$MockupPathTargetsTemplate = $false
+$MannequinPathTargetsTemplate = $false
+$StaticFitPathTargetsTemplate = $false
+$MovementPathTargetsTemplate = $false
+$ReleaseCablePathTargetsTemplate = $false
+$EngineeringReviewPathTargetsTemplate = $false
+$FinalDecisionPathTargetsTemplate = $false
+$MeasurementFileExists = $false
+$MockupFileExists = $false
+$MannequinFileExists = $false
+$StaticFitFileExists = $false
+$MovementFileExists = $false
+$ReleaseCableFileExists = $false
+$EngineeringReviewFileExists = $false
+$FinalDecisionFileExists = $false
 $UpstreamFinalDecisionStatus = ''
 $UpstreamFinalDecisionReady = $false
-$UpstreamFinalDecisionExitCode = 1
+$UpstreamFinalDecisionExitCode = 0
 $UpstreamFinalDecisionParseOk = $false
 
 if (-not (Test-Path -LiteralPath $ResolvedTemplatePath -PathType Leaf)) {
   $Status = 'missing_template_file'
   $ExitCode = 1
-} elseif ([string]::Equals($ResolvedTemplatePath, $ResolvedOutputPath, [System.StringComparison]::OrdinalIgnoreCase)) {
-  $Status = 'output_path_targets_template'
-  $ExitCode = 1
-} elseif (Test-Path -LiteralPath $ResolvedOutputPath) {
-  $Status = 'output_file_exists'
-  $ExitCode = 1
 } else {
-  $OutputParent = Split-Path -Parent $ResolvedOutputPath
-  if ([string]::IsNullOrWhiteSpace($OutputParent) -or -not (Test-Path -LiteralPath $OutputParent -PathType Container)) {
-    $Status = 'missing_output_parent'
-    $ExitCode = 1
+  if (-not [string]::IsNullOrWhiteSpace($ResolvedOutputPath)) {
+    $OutputPathTargetsTemplate = [string]::Equals($ResolvedTemplatePath, $ResolvedOutputPath, [System.StringComparison]::OrdinalIgnoreCase)
+    $OutputFileExists = Test-Path -LiteralPath $ResolvedOutputPath
+    $OutputParent = Split-Path -Parent $ResolvedOutputPath
+    $OutputParentExists = -not [string]::IsNullOrWhiteSpace($OutputParent) -and (Test-Path -LiteralPath $OutputParent -PathType Container)
+    $CandidateOutputPathReady = -not $OutputPathTargetsTemplate -and -not $OutputFileExists -and $OutputParentExists
+  }
+
+  if ($Mode -eq 'Create') {
+    if ($OutputPathRequiredForCreate) {
+      $Status = 'missing_output_path'
+      $ExitCode = 1
+    } elseif ($OutputPathTargetsTemplate) {
+      $Status = 'output_path_targets_template'
+      $ExitCode = 1
+    } elseif ($OutputFileExists) {
+      $Status = 'output_file_exists'
+      $ExitCode = 1
+    } elseif (-not $OutputParentExists) {
+      $Status = 'missing_output_parent'
+      $ExitCode = 1
+    }
   }
 }
 
 if ($ExitCode -eq 0) {
   foreach ($RequiredPath in @(
-      @{ field = 'measurement_file'; path = $ResolvedMeasurementPath },
-      @{ field = 'mockup_file'; path = $ResolvedMockupPath },
-      @{ field = 'mannequin_file'; path = $ResolvedMannequinPath },
-      @{ field = 'static_fit_file'; path = $ResolvedStaticFitPath },
-      @{ field = 'movement_file'; path = $ResolvedMovementPath },
-      @{ field = 'release_cable_file'; path = $ResolvedReleaseCablePath },
-      @{ field = 'engineering_review_file'; path = $ResolvedEngineeringReviewPath },
-      @{ field = 'final_decision_file'; path = $ResolvedFinalDecisionPath }
+      @{ name = 'measurement'; field = 'measurement_file'; missing_path_status = 'missing_measurement_path'; path = $ResolvedMeasurementPath },
+      @{ name = 'mockup'; field = 'mockup_file'; missing_path_status = 'missing_mockup_path'; path = $ResolvedMockupPath },
+      @{ name = 'mannequin'; field = 'mannequin_file'; missing_path_status = 'missing_mannequin_path'; path = $ResolvedMannequinPath },
+      @{ name = 'static_fit'; field = 'static_fit_file'; missing_path_status = 'missing_static_fit_path'; path = $ResolvedStaticFitPath },
+      @{ name = 'movement'; field = 'movement_file'; missing_path_status = 'missing_movement_path'; path = $ResolvedMovementPath },
+      @{ name = 'release_cable'; field = 'release_cable_file'; missing_path_status = 'missing_release_cable_path'; path = $ResolvedReleaseCablePath },
+      @{ name = 'engineering_review'; field = 'engineering_review_file'; missing_path_status = 'missing_engineering_review_path'; path = $ResolvedEngineeringReviewPath },
+      @{ name = 'final_decision'; field = 'final_decision_file'; missing_path_status = 'missing_final_decision_path'; path = $ResolvedFinalDecisionPath }
     )) {
-    if (-not (Test-Path -LiteralPath ([string]$RequiredPath.path) -PathType Leaf)) {
+    $PathValue = [string]$RequiredPath.path
+    if ([string]::IsNullOrWhiteSpace($PathValue)) {
+      if ($Mode -eq 'Create') {
+        $Status = [string]$RequiredPath.missing_path_status
+        $ExitCode = 1
+        break
+      }
+      continue
+    }
+
+    $TargetsTemplate = [string]::Equals($PathValue, $ResolvedTemplatePath, [System.StringComparison]::OrdinalIgnoreCase)
+    $Exists = Test-Path -LiteralPath $PathValue -PathType Leaf
+    switch ([string]$RequiredPath.name) {
+      'measurement' {
+        $MeasurementPathTargetsTemplate = $TargetsTemplate
+        $MeasurementFileExists = $Exists
+      }
+      'mockup' {
+        $MockupPathTargetsTemplate = $TargetsTemplate
+        $MockupFileExists = $Exists
+      }
+      'mannequin' {
+        $MannequinPathTargetsTemplate = $TargetsTemplate
+        $MannequinFileExists = $Exists
+      }
+      'static_fit' {
+        $StaticFitPathTargetsTemplate = $TargetsTemplate
+        $StaticFitFileExists = $Exists
+      }
+      'movement' {
+        $MovementPathTargetsTemplate = $TargetsTemplate
+        $MovementFileExists = $Exists
+      }
+      'release_cable' {
+        $ReleaseCablePathTargetsTemplate = $TargetsTemplate
+        $ReleaseCableFileExists = $Exists
+      }
+      'engineering_review' {
+        $EngineeringReviewPathTargetsTemplate = $TargetsTemplate
+        $EngineeringReviewFileExists = $Exists
+      }
+      'final_decision' {
+        $FinalDecisionPathTargetsTemplate = $TargetsTemplate
+        $FinalDecisionFileExists = $Exists
+      }
+    }
+
+    if ($TargetsTemplate) {
+      $Status = '{0}_path_targets_completion_ledger_handoff_template' -f [string]$RequiredPath.name
+      $ExitCode = 1
+      break
+    } elseif (-not $Exists) {
       $Status = 'missing_{0}' -f [string]$RequiredPath.field
       $ExitCode = 1
       break
@@ -256,7 +342,15 @@ if ($ExitCode -eq 0) {
   }
 }
 
-if ($ExitCode -eq 0) {
+if ($ExitCode -eq 0 -and
+  -not [string]::IsNullOrWhiteSpace($ResolvedMeasurementPath) -and
+  -not [string]::IsNullOrWhiteSpace($ResolvedMockupPath) -and
+  -not [string]::IsNullOrWhiteSpace($ResolvedMannequinPath) -and
+  -not [string]::IsNullOrWhiteSpace($ResolvedStaticFitPath) -and
+  -not [string]::IsNullOrWhiteSpace($ResolvedMovementPath) -and
+  -not [string]::IsNullOrWhiteSpace($ResolvedReleaseCablePath) -and
+  -not [string]::IsNullOrWhiteSpace($ResolvedEngineeringReviewPath) -and
+  -not [string]::IsNullOrWhiteSpace($ResolvedFinalDecisionPath)) {
   $FinalDecisionGate = Invoke-FinalDecisionGate -ResolvedMeasurementPath $ResolvedMeasurementPath -ResolvedMockupPath $ResolvedMockupPath -ResolvedMannequinPath $ResolvedMannequinPath -ResolvedStaticFitPath $ResolvedStaticFitPath -ResolvedMovementPath $ResolvedMovementPath -ResolvedReleaseCablePath $ResolvedReleaseCablePath -ResolvedEngineeringReviewPath $ResolvedEngineeringReviewPath -ResolvedFinalDecisionPath $ResolvedFinalDecisionPath
   $UpstreamFinalDecisionExitCode = [int]$FinalDecisionGate.exit_code
   $UpstreamFinalDecisionParseOk = [bool]$FinalDecisionGate.parse_ok
@@ -269,16 +363,21 @@ if ($ExitCode -eq 0) {
 }
 
 $TemplateText = ''
-if ($ExitCode -eq 0) {
+if ((Test-Path -LiteralPath $ResolvedTemplatePath -PathType Leaf) -and ($ExitCode -eq 0 -or $Mode -eq 'Status')) {
   try {
     $TemplateText = Get-Content -LiteralPath $ResolvedTemplatePath -Raw
+    $TemplateParseOk = $TemplateText.Contains('PENDING_DATE') -and $TemplateText.Contains('PENDING_FINAL_DECISION_RECORD_PATH') -and $TemplateText.Contains('PENDING_VALIDATION_COMMAND_OR_RECORD')
+    if (-not $TemplateParseOk) {
+      $Status = 'invalid_completion_ledger_handoff_template'
+      $ExitCode = 1
+    }
   } catch {
     $Status = 'template_read_failed'
     $ExitCode = 1
   }
 }
 
-if ($ExitCode -eq 0) {
+if ($Mode -eq 'Create' -and $ExitCode -eq 0) {
   if (Test-MissingOrPendingText -Value $HandoffDate) {
     $InvalidFields.Add('handoff_date') | Out-Null
   } elseif (-not (Test-IsoDateNotFuture -Value $HandoffDate.Trim())) {
@@ -315,7 +414,7 @@ if ($ExitCode -eq 0) {
   }
 }
 
-if ($ExitCode -eq 0) {
+if ($Mode -eq 'Create' -and $ExitCode -eq 0) {
   $CandidateText = $TemplateText
   $CandidateText = $CandidateText.Replace('PENDING_DATE', $HandoffDate.Trim())
   $CandidateText = $CandidateText.Replace('PENDING_FINAL_DECISION_RECORD_PATH', $ResolvedFinalDecisionPath)
@@ -364,9 +463,39 @@ $Output = [ordered]@{
   engineering_review_path = $ResolvedEngineeringReviewPath
   final_decision_path = $ResolvedFinalDecisionPath
   output_path = $ResolvedOutputPath
-  output_exists = (Test-Path -LiteralPath $ResolvedOutputPath -PathType Leaf)
+  template_exists = (Test-Path -LiteralPath $ResolvedTemplatePath -PathType Leaf)
+  template_parse_ok = $TemplateParseOk
+  output_path_required_for_create = $OutputPathRequiredForCreate
+  measurement_path_required_for_create = $MeasurementPathRequiredForCreate
+  mockup_path_required_for_create = $MockupPathRequiredForCreate
+  mannequin_path_required_for_create = $MannequinPathRequiredForCreate
+  static_fit_path_required_for_create = $StaticFitPathRequiredForCreate
+  movement_path_required_for_create = $MovementPathRequiredForCreate
+  release_cable_path_required_for_create = $ReleaseCablePathRequiredForCreate
+  engineering_review_path_required_for_create = $EngineeringReviewPathRequiredForCreate
+  final_decision_path_required_for_create = $FinalDecisionPathRequiredForCreate
+  output_path_targets_template = $OutputPathTargetsTemplate
+  output_parent_exists = $OutputParentExists
+  candidate_output_path_ready = $CandidateOutputPathReady
+  measurement_path_targets_completion_ledger_handoff_template = $MeasurementPathTargetsTemplate
+  mockup_path_targets_completion_ledger_handoff_template = $MockupPathTargetsTemplate
+  mannequin_path_targets_completion_ledger_handoff_template = $MannequinPathTargetsTemplate
+  static_fit_path_targets_completion_ledger_handoff_template = $StaticFitPathTargetsTemplate
+  movement_path_targets_completion_ledger_handoff_template = $MovementPathTargetsTemplate
+  release_cable_path_targets_completion_ledger_handoff_template = $ReleaseCablePathTargetsTemplate
+  engineering_review_path_targets_completion_ledger_handoff_template = $EngineeringReviewPathTargetsTemplate
+  final_decision_path_targets_completion_ledger_handoff_template = $FinalDecisionPathTargetsTemplate
+  measurement_file_exists = $MeasurementFileExists
+  mockup_file_exists = $MockupFileExists
+  mannequin_file_exists = $MannequinFileExists
+  static_fit_file_exists = $StaticFitFileExists
+  movement_file_exists = $MovementFileExists
+  release_cable_file_exists = $ReleaseCableFileExists
+  engineering_review_file_exists = $EngineeringReviewFileExists
+  final_decision_file_exists = $FinalDecisionFileExists
+  output_exists = if ([string]::IsNullOrWhiteSpace($ResolvedOutputPath)) { $false } else { (Test-Path -LiteralPath $ResolvedOutputPath -PathType Leaf) }
   wrote_file = $WroteFile
-  read_only_contract = $false
+  read_only_contract = ($Mode -eq 'Status')
   writes_repo = ($WroteFile -and (Test-PathUnderRoot -Path $ResolvedOutputPath -Root $RepoRoot))
   writes_data = $WroteFile
   writes_completion_ledger = $false
@@ -387,7 +516,9 @@ $Output = [ordered]@{
   updated_fields = @($UpdatedFields.ToArray())
   invalid_fields = @($InvalidFields.ToArray())
   no_fake_validation_lock = 'This initializer creates a candidate FR-017 completion-ledger handoff file only after final decision readiness. It does not write docs/operations/COMPLETION_LEDGER.md, does not mark physical_validation_complete, does not permit a Stage 17 completion claim by itself, and does not clear FR-018, powered testing, frame-coupled testing, or load-bearing use.'
-  next_command = if ($WroteFile) { '.\scripts\fr017-completion-ledger-gate.ps1 -Mode Status -MeasurementPath "{0}" -MockupPath "{1}" -MannequinPath "{2}" -StaticFitPath "{3}" -MovementPath "{4}" -ReleaseCablePath "{5}" -EngineeringReviewPath "{6}" -FinalDecisionPath "{7}" -LedgerEntryPath "{8}"' -f $ResolvedMeasurementPath, $ResolvedMockupPath, $ResolvedMannequinPath, $ResolvedStaticFitPath, $ResolvedMovementPath, $ResolvedReleaseCablePath, $ResolvedEngineeringReviewPath, $ResolvedFinalDecisionPath, $ResolvedOutputPath } else { '' }
+  create_command_template = $CreateCommandTemplate
+  completion_ledger_gate_status_command_template = $CompletionLedgerGateStatusCommandTemplate
+  next_command = if ($Mode -eq 'Status') { $CreateCommandTemplate } elseif ($WroteFile) { '.\scripts\fr017-completion-ledger-gate.ps1 -Mode Status -MeasurementPath "{0}" -MockupPath "{1}" -MannequinPath "{2}" -StaticFitPath "{3}" -MovementPath "{4}" -ReleaseCablePath "{5}" -EngineeringReviewPath "{6}" -FinalDecisionPath "{7}" -LedgerEntryPath "{8}"' -f $ResolvedMeasurementPath, $ResolvedMockupPath, $ResolvedMannequinPath, $ResolvedStaticFitPath, $ResolvedMovementPath, $ResolvedReleaseCablePath, $ResolvedEngineeringReviewPath, $ResolvedFinalDecisionPath, $ResolvedOutputPath } else { '' }
 }
 
 $Output | ConvertTo-Json -Depth 8

@@ -115,6 +115,61 @@ def _handoff_args(
     return args
 
 
+def test_fr017_completion_ledger_handoff_initializer_status_preflights_without_writing(
+    tmp_path: Path,
+) -> None:
+    paths, final_decision_path = _write_ready_final_decision(tmp_path)
+    output_path = tmp_path / "candidate-completion-ledger-handoff.md"
+
+    proc = _run_script(
+        SCRIPT,
+        "-Mode",
+        "Status",
+        *_ready_args(paths),
+        "-FinalDecisionPath",
+        str(final_decision_path),
+        "-OutputPath",
+        str(output_path),
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    result = _payload(proc.stdout)
+    assert result["kind"] == "francis.fr017.completion_ledger_handoff_initializer"
+    assert result["status"] == "completion_ledger_handoff_initializer_status"
+    assert result["template_exists"] is True
+    assert result["template_parse_ok"] is True
+    assert result["candidate_output_path_ready"] is True
+    assert result["output_parent_exists"] is True
+    assert result["output_exists"] is False
+    assert result["wrote_file"] is False
+    assert result["read_only_contract"] is True
+    assert result["writes_repo"] is False
+    assert result["writes_data"] is False
+    assert result["writes_completion_ledger"] is False
+    assert result["upstream_final_decision_status"] == "ready_for_completion_ledger_review"
+    assert result["upstream_final_decision_ready"] is True
+    assert result["upstream_final_decision_parse_ok"] is True
+    assert result["measurement_file_exists"] is True
+    assert result["mockup_file_exists"] is True
+    assert result["mannequin_file_exists"] is True
+    assert result["static_fit_file_exists"] is True
+    assert result["movement_file_exists"] is True
+    assert result["release_cable_file_exists"] is True
+    assert result["engineering_review_file_exists"] is True
+    assert result["final_decision_file_exists"] is True
+    assert result["operator_supplied_completion_ledger_handoff_recorded"] is False
+    assert result["candidate_ledger_handoff_ready_for_review"] is False
+    assert result["completion_ledger_update_written"] is False
+    assert result["physical_validation_complete"] is False
+    assert result["stage17_completion_claim_allowed"] is False
+    assert result["powered_or_frame_coupled_testing_cleared"] is False
+    assert result["fr018_implementation_cleared"] is False
+    assert result["prohibited_clearance_flags_recorded"] == []
+    assert result["invalid_fields"] == []
+    assert "fr017-new-completion-ledger-handoff.ps1 -Mode Create" in result["next_command"]
+    assert not output_path.exists()
+
+
 def test_fr017_completion_ledger_handoff_initializer_creates_candidate_without_writing_ledger(
     tmp_path: Path,
 ) -> None:

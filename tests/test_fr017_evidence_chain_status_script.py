@@ -1572,6 +1572,29 @@ def test_fr017_evidence_chain_status_blocks_on_completion_ledger_after_final_dec
     assert payload["first_blocking_details"]["completion_ledger_handoff_working_record_name_pattern"] == (
         "FR-017-COMPLETION-LEDGER-HANDOFF-YYYY-MM-DD-PILOT.md"
     )
+    assert str(payload["first_blocking_preflight_tool_path"]).endswith(
+        "scripts\\fr017-new-completion-ledger-handoff.ps1"
+    )
+    assert (
+        "fr017-new-completion-ledger-handoff.ps1 -Mode Status" in payload["first_blocking_preflight_command_template"]
+    )
+    assert str(final_decision_path) in payload["first_blocking_preflight_command_template"]
+    assert "completion-ledger handoff initializer preflight" in payload["first_blocking_preflight_contract"]
+    assert "writes no candidate handoff" in payload["first_blocking_preflight_contract"]
+    assert "writes no completion ledger" in payload["first_blocking_preflight_contract"]
+    assert payload["first_blocking_preflight_status"] == "completion_ledger_handoff_initializer_status"
+    assert payload["first_blocking_preflight_exit_code"] == 0
+    assert payload["first_blocking_preflight_parse_ok"] is True
+    assert payload["first_blocking_preflight_read_only_contract"] is True
+    assert payload["first_blocking_preflight_template_exists"] is True
+    assert payload["first_blocking_preflight_template_parse_ok"] is True
+    assert payload["first_blocking_preflight_candidate_output_path_ready"] is False
+    assert payload["first_blocking_preflight_output_path"] == ""
+    assert payload["first_blocking_preflight_output_exists"] is False
+    assert payload["first_blocking_preflight_output_parent_exists"] is False
+    assert payload["first_blocking_preflight_wrote_file"] is False
+    assert payload["first_blocking_preflight_physical_validation_complete"] is False
+    assert payload["first_blocking_preflight_fr018_implementation_cleared"] is False
     assert payload["evidence_chain_decision_ready"] is False
     assert payload["ledger_completion_review_ready"] is False
     assert payload["completion_ledger_handoff_ready"] is False

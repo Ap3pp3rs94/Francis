@@ -555,6 +555,11 @@ function New-FirstBlockingUpdateHint {
       $CommandTemplate = '.\scripts\fr017-new-final-decision-record.ps1 -Mode Create -OutputPath <final-decision-record.json> -FinalPhysicalGateRecordOutputPath <final-physical-gate-record.json> -MeasurementPath <measurement-record.json> -MockupPath <mockup-record.json> -MannequinPath <mannequin-interface-record.json> -StaticFitPath <pilot-static-fit-record.json> -MovementPath <pilot-movement-record.json> -ReleaseCablePath <release-cable-record.json> -EngineeringReviewPath <engineering-review-record.json>'
       $Contract = [string](Get-DetailsValue -Details $GateDetails -Name 'final_decision_record_runbook_contract')
     }
+    'completion_ledger' {
+      $ToolPath = [string](Get-DetailsValue -Details $GateDetails -Name 'completion_ledger_handoff_initializer_path')
+      $CommandTemplate = '.\scripts\fr017-new-completion-ledger-handoff.ps1 -Mode Create -OutputPath <completion-ledger-handoff.md> -MeasurementPath <measurement-record.json> -MockupPath <mockup-record.json> -MannequinPath <mannequin-interface-record.json> -StaticFitPath <pilot-static-fit-record.json> -MovementPath <pilot-movement-record.json> -ReleaseCablePath <release-cable-record.json> -EngineeringReviewPath <engineering-review-record.json> -FinalDecisionPath <final-decision-record.json>'
+      $Contract = [string](Get-DetailsValue -Details $GateDetails -Name 'completion_ledger_handoff_runbook_contract')
+    }
   }
 
   if ([string]::IsNullOrWhiteSpace($ToolPath)) {
@@ -982,6 +987,36 @@ foreach ($Gate in $Gates) {
       $FirstBlockingPreflightWroteFile = [bool](Get-PayloadValue -Payload $FinalDecisionInitializerPreflight.payload -Name 'wrote_file' -Default $false)
       $FirstBlockingPreflightPhysicalValidationComplete = [bool](Get-PayloadValue -Payload $FinalDecisionInitializerPreflight.payload -Name 'physical_validation_complete' -Default $false)
       $FirstBlockingPreflightFr018ImplementationCleared = [bool](Get-PayloadValue -Payload $FinalDecisionInitializerPreflight.payload -Name 'fr018_implementation_cleared' -Default $false)
+    } elseif ([string]$Gate.id -eq 'completion_ledger' -and -not $GateFailed) {
+      $CompletionLedgerInitializerArgs = New-Object System.Collections.Generic.List[string]
+      $CompletionLedgerInitializerArgs.Add('-Mode') | Out-Null
+      $CompletionLedgerInitializerArgs.Add('Status') | Out-Null
+      Add-OptionalArg -Target $CompletionLedgerInitializerArgs -Name '-MeasurementPath' -Value $MeasurementPath
+      Add-OptionalArg -Target $CompletionLedgerInitializerArgs -Name '-MockupPath' -Value $MockupPath
+      Add-OptionalArg -Target $CompletionLedgerInitializerArgs -Name '-MannequinPath' -Value $MannequinPath
+      Add-OptionalArg -Target $CompletionLedgerInitializerArgs -Name '-StaticFitPath' -Value $StaticFitPath
+      Add-OptionalArg -Target $CompletionLedgerInitializerArgs -Name '-MovementPath' -Value $MovementPath
+      Add-OptionalArg -Target $CompletionLedgerInitializerArgs -Name '-ReleaseCablePath' -Value $ReleaseCablePath
+      Add-OptionalArg -Target $CompletionLedgerInitializerArgs -Name '-EngineeringReviewPath' -Value $EngineeringReviewPath
+      Add-OptionalArg -Target $CompletionLedgerInitializerArgs -Name '-FinalDecisionPath' -Value $FinalDecisionPath
+      Add-OptionalArg -Target $CompletionLedgerInitializerArgs -Name '-OutputPath' -Value $LedgerEntryPath
+      $CompletionLedgerInitializerPreflight = Invoke-JsonGate -ScriptName 'fr017-new-completion-ledger-handoff.ps1' -Arguments $CompletionLedgerInitializerArgs.ToArray()
+      $FirstBlockingPreflightToolPath = Join-Path $RepoRoot 'scripts\fr017-new-completion-ledger-handoff.ps1'
+      $FirstBlockingPreflightCommandTemplate = if ([string]::IsNullOrWhiteSpace($LedgerEntryPath)) { '.\scripts\fr017-new-completion-ledger-handoff.ps1 -Mode Status -MeasurementPath "{0}" -MockupPath "{1}" -MannequinPath "{2}" -StaticFitPath "{3}" -MovementPath "{4}" -ReleaseCablePath "{5}" -EngineeringReviewPath "{6}" -FinalDecisionPath "{7}"' -f $MeasurementPath, $MockupPath, $MannequinPath, $StaticFitPath, $MovementPath, $ReleaseCablePath, $EngineeringReviewPath, $FinalDecisionPath } else { '.\scripts\fr017-new-completion-ledger-handoff.ps1 -Mode Status -MeasurementPath "{0}" -MockupPath "{1}" -MannequinPath "{2}" -StaticFitPath "{3}" -MovementPath "{4}" -ReleaseCablePath "{5}" -EngineeringReviewPath "{6}" -FinalDecisionPath "{7}" -OutputPath "{8}"' -f $MeasurementPath, $MockupPath, $MannequinPath, $StaticFitPath, $MovementPath, $ReleaseCablePath, $EngineeringReviewPath, $FinalDecisionPath, $LedgerEntryPath }
+      $FirstBlockingPreflightContract = 'Read-only completion-ledger handoff initializer preflight for the FR-017 candidate ledger handoff. It checks the handoff template, candidate output path when provided, and upstream final-decision readiness, writes no candidate handoff, writes no completion ledger, and does not mark physical validation complete, permit a Stage 17 completion claim, approve load-bearing use, clear powered or frame-coupled testing, or clear FR-018.'
+      $FirstBlockingPreflightStatus = if ([bool]$CompletionLedgerInitializerPreflight.parse_ok) { [string](Get-PayloadValue -Payload $CompletionLedgerInitializerPreflight.payload -Name 'status' -Default '') } else { 'failed_preflight_parse' }
+      $FirstBlockingPreflightExitCode = [int]$CompletionLedgerInitializerPreflight.exit_code
+      $FirstBlockingPreflightParseOk = [bool]$CompletionLedgerInitializerPreflight.parse_ok
+      $FirstBlockingPreflightReadOnlyContract = [bool](Get-PayloadValue -Payload $CompletionLedgerInitializerPreflight.payload -Name 'read_only_contract' -Default $false)
+      $FirstBlockingPreflightTemplateExists = [bool](Get-PayloadValue -Payload $CompletionLedgerInitializerPreflight.payload -Name 'template_exists' -Default $false)
+      $FirstBlockingPreflightTemplateParseOk = [bool](Get-PayloadValue -Payload $CompletionLedgerInitializerPreflight.payload -Name 'template_parse_ok' -Default $false)
+      $FirstBlockingPreflightCandidateOutputPathReady = [bool](Get-PayloadValue -Payload $CompletionLedgerInitializerPreflight.payload -Name 'candidate_output_path_ready' -Default $false)
+      $FirstBlockingPreflightOutputPath = [string](Get-PayloadValue -Payload $CompletionLedgerInitializerPreflight.payload -Name 'output_path' -Default '')
+      $FirstBlockingPreflightOutputExists = [bool](Get-PayloadValue -Payload $CompletionLedgerInitializerPreflight.payload -Name 'output_exists' -Default $false)
+      $FirstBlockingPreflightOutputParentExists = [bool](Get-PayloadValue -Payload $CompletionLedgerInitializerPreflight.payload -Name 'output_parent_exists' -Default $false)
+      $FirstBlockingPreflightWroteFile = [bool](Get-PayloadValue -Payload $CompletionLedgerInitializerPreflight.payload -Name 'wrote_file' -Default $false)
+      $FirstBlockingPreflightPhysicalValidationComplete = [bool](Get-PayloadValue -Payload $CompletionLedgerInitializerPreflight.payload -Name 'physical_validation_complete' -Default $false)
+      $FirstBlockingPreflightFr018ImplementationCleared = [bool](Get-PayloadValue -Payload $CompletionLedgerInitializerPreflight.payload -Name 'fr018_implementation_cleared' -Default $false)
     }
     $FirstBlockingUpdateHint = New-FirstBlockingUpdateHint -GateId ([string]$Gate.id) -GateFailed $GateFailed -GateDetails $GateDetails
     $FirstBlockingUpdateToolPath = [string]$FirstBlockingUpdateHint.tool_path
