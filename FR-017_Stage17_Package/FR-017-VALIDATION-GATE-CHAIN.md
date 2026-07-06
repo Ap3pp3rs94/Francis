@@ -10,7 +10,7 @@ It does not perform physical testing, approve load-bearing use, clear powered or
 
 ## Gate Order
 
-Run `scripts/fr017-evidence-chain-status.ps1 -Mode Status` at any point to identify the first blocking evidence gate and the next required input without writing data or claiming physical validation.
+Run `scripts/fr017-evidence-chain-status.ps1 -Mode Status` at any point to identify the first blocking evidence gate and next required input without writing data or claiming physical validation. Use `-Mode Summary` when the operator needs the same blocker and no-clearance locks without the full `gate_results` payload.
 
 | Order | Gate | Command | Required input state | Output state that permits next gate |
 | --- | --- | --- | --- | --- |

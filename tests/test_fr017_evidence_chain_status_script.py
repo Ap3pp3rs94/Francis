@@ -299,6 +299,48 @@ def test_fr017_evidence_chain_status_stops_at_measurement_template() -> None:
     assert payload["grants_mutation_authority"] is False
 
 
+def test_fr017_evidence_chain_summary_reports_next_operator_blocker() -> None:
+    proc = _run_gate("-Mode", "Summary")
+
+    assert proc.returncode == 0, proc.stderr
+    payload = _payload(proc.stdout)
+    assert payload["kind"] == "francis.fr017.evidence_chain_summary"
+    assert payload["mode"] == "Summary"
+    assert payload["source_kind"] == "francis.fr017.evidence_chain_status"
+    assert payload["source_mode"] == "Status"
+    assert payload["status"] == "blocked_on_measurement_intake"
+    assert payload["first_blocking_gate"] == "measurement_intake"
+    assert payload["first_blocking_status"] == "pending_measurements"
+    assert payload["first_blocking_capture_group_id"] == "setup_and_safety_brief"
+    assert payload["first_blocking_capture_group_status"] == "pending_required_fields"
+    assert "brief stop conditions" in payload["first_blocking_capture_group_required_action"]
+    assert (
+        payload["operator_input_hint"]
+        == "create_pending_record_with_fr017-new-measurement-record.ps1_then_capture_with_FR-017-MEASUREMENT-CAPTURE-RUNBOOK.md_and_rerun_measurement_intake"
+    )
+    assert "fr017-new-measurement-record.ps1 -Mode Status" in payload["first_blocking_preflight_command_template"]
+    assert payload["first_blocking_preflight_parse_ok"] is True
+    assert payload["first_blocking_preflight_read_only_contract"] is True
+    assert payload["first_blocking_preflight_wrote_file"] is False
+    assert "fr017-new-measurement-record.ps1 -Mode Create" in payload["first_blocking_update_command_template"]
+    assert payload["evidence_chain_decision_ready"] is False
+    assert payload["physical_validation_complete"] is False
+    assert payload["stage17_completion_claim_allowed"] is False
+    assert payload["powered_or_frame_coupled_testing_cleared"] is False
+    assert payload["fr018_implementation_cleared"] is False
+    assert payload["read_only_contract"] is True
+    assert payload["writes_repo"] is False
+    assert payload["writes_data"] is False
+    assert payload["grants_execution_authority"] is False
+    assert payload["grants_mutation_authority"] is False
+    assert payload["gates_ran"] == 2
+    assert payload["gate_count"] == 12
+    assert payload["omitted_full_status_fields"] == ["first_blocking_details", "gate_results"]
+    assert "first_blocking_details" not in payload
+    assert "gate_results" not in payload
+    assert "never writes the ledger" in payload["no_fake_validation_lock"]
+
+
 def test_fr017_evidence_chain_status_preflights_candidate_measurement_path(tmp_path: Path) -> None:
     candidate_path = tmp_path / "FR-017-MEASUREMENTS-2099-01-01-PILOT-RECORD.json"
 

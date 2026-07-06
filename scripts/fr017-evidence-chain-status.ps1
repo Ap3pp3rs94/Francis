@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-  [ValidateSet('Status')]
+  [ValidateSet('Status', 'Summary')]
   [string]$Mode = 'Status',
 
   [string]$ManifestPath = '',
@@ -582,6 +582,113 @@ function New-FirstBlockingUpdateHint {
   }
 }
 
+function Get-FirstNonEmptyDetailsValue {
+  param(
+    [object]$Details,
+    [string[]]$Names
+  )
+
+  foreach ($Name in $Names) {
+    $Value = [string](Get-DetailsValue -Details $Details -Name $Name)
+    if (-not [string]::IsNullOrWhiteSpace($Value)) {
+      return $Value
+    }
+  }
+  return ''
+}
+
+function New-EvidenceChainSummary {
+  param([System.Collections.IDictionary]$StatusPayload)
+
+  $Details = $StatusPayload['first_blocking_details']
+  $CaptureGroupId = Get-FirstNonEmptyDetailsValue -Details $Details -Names @(
+    'measurement_session_current_group_id',
+    'measurement_capture_first_blocking_group_id',
+    'mockup_capture_first_blocking_group_id',
+    'mannequin_capture_first_blocking_group_id',
+    'static_fit_capture_first_blocking_group_id',
+    'movement_capture_first_blocking_group_id',
+    'release_cable_capture_first_blocking_group_id',
+    'engineering_review_capture_first_blocking_group_id',
+    'final_physical_decision_first_blocking_group_id'
+  )
+  $CaptureGroupStatus = Get-FirstNonEmptyDetailsValue -Details $Details -Names @(
+    'measurement_capture_first_blocking_group_status',
+    'mockup_capture_first_blocking_group_status',
+    'mannequin_capture_first_blocking_group_status',
+    'static_fit_capture_first_blocking_group_status',
+    'movement_capture_first_blocking_group_status',
+    'release_cable_capture_first_blocking_group_status',
+    'engineering_review_capture_first_blocking_group_status',
+    'final_physical_decision_first_blocking_group_status'
+  )
+  $CaptureGroupAction = Get-FirstNonEmptyDetailsValue -Details $Details -Names @(
+    'measurement_session_current_group_required_action',
+    'measurement_capture_first_blocking_group_action',
+    'mockup_capture_first_blocking_group_action',
+    'mannequin_capture_first_blocking_group_action',
+    'static_fit_capture_first_blocking_group_action',
+    'movement_capture_first_blocking_group_action',
+    'release_cable_capture_first_blocking_group_action',
+    'engineering_review_capture_first_blocking_group_action',
+    'final_physical_decision_first_blocking_group_action'
+  )
+  $OperatorInputHint = Get-FirstNonEmptyDetailsValue -Details $Details -Names @(
+    'next_required_physical_input',
+    'next_required_mockup_input',
+    'next_required_mannequin_input',
+    'next_required_static_fit_input',
+    'next_required_movement_input',
+    'next_required_release_cable_input',
+    'next_required_engineering_review_input',
+    'next_required_final_physical_input',
+    'next_required_final_decision_input',
+    'next_required_ledger_input',
+    'next_required_completion_ledger_update_input'
+  )
+
+  return [ordered]@{
+    kind = 'francis.fr017.evidence_chain_summary'
+    mode = 'Summary'
+    source_kind = [string]$StatusPayload['kind']
+    source_mode = 'Status'
+    status = [string]$StatusPayload['status']
+    evidence_chain_decision_ready = [bool]$StatusPayload['evidence_chain_decision_ready']
+    ledger_completion_review_ready = [bool]$StatusPayload['ledger_completion_review_ready']
+    completion_ledger_handoff_ready = [bool]$StatusPayload['completion_ledger_handoff_ready']
+    completion_ledger_update_review_ready = [bool]$StatusPayload['completion_ledger_update_review_ready']
+    physical_validation_complete = [bool]$StatusPayload['physical_validation_complete']
+    stage17_completion_claim_allowed = [bool]$StatusPayload['stage17_completion_claim_allowed']
+    powered_or_frame_coupled_testing_cleared = [bool]$StatusPayload['powered_or_frame_coupled_testing_cleared']
+    fr018_implementation_cleared = [bool]$StatusPayload['fr018_implementation_cleared']
+    read_only_contract = [bool]$StatusPayload['read_only_contract']
+    writes_repo = [bool]$StatusPayload['writes_repo']
+    writes_data = [bool]$StatusPayload['writes_data']
+    grants_execution_authority = [bool]$StatusPayload['grants_execution_authority']
+    grants_mutation_authority = [bool]$StatusPayload['grants_mutation_authority']
+    first_blocking_gate = [string]$StatusPayload['first_blocking_gate']
+    first_blocking_status = [string]$StatusPayload['first_blocking_status']
+    first_blocking_capture_group_id = $CaptureGroupId
+    first_blocking_capture_group_status = $CaptureGroupStatus
+    first_blocking_capture_group_required_action = $CaptureGroupAction
+    next_required_input = [string]$StatusPayload['next_required_input']
+    next_command = [string]$StatusPayload['next_command']
+    operator_input_hint = $OperatorInputHint
+    first_blocking_preflight_tool_path = [string]$StatusPayload['first_blocking_preflight_tool_path']
+    first_blocking_preflight_command_template = [string]$StatusPayload['first_blocking_preflight_command_template']
+    first_blocking_preflight_status = [string]$StatusPayload['first_blocking_preflight_status']
+    first_blocking_preflight_parse_ok = [bool]$StatusPayload['first_blocking_preflight_parse_ok']
+    first_blocking_preflight_read_only_contract = [bool]$StatusPayload['first_blocking_preflight_read_only_contract']
+    first_blocking_preflight_wrote_file = [bool]$StatusPayload['first_blocking_preflight_wrote_file']
+    first_blocking_update_tool_path = [string]$StatusPayload['first_blocking_update_tool_path']
+    first_blocking_update_command_template = [string]$StatusPayload['first_blocking_update_command_template']
+    gates_ran = [int]$StatusPayload['gates_ran']
+    gate_count = [int]$StatusPayload['gate_count']
+    omitted_full_status_fields = @('first_blocking_details', 'gate_results')
+    no_fake_validation_lock = [string]$StatusPayload['no_fake_validation_lock']
+  }
+}
+
 $PackageArgs = New-Object System.Collections.Generic.List[string]
 $PackageArgs.Add('-Mode') | Out-Null
 $PackageArgs.Add('Status') | Out-Null
@@ -1111,6 +1218,10 @@ $Output = [ordered]@{
   gate_count = $Gates.Count
   gate_results = @($GateResults.ToArray())
   no_fake_validation_lock = 'This chain-status command reports evidence, completion-ledger handoff readiness, and read-only completion-ledger update review only. It never writes the ledger, marks physical_validation_complete, permits a Stage 17 completion claim, or clears FR-018.'
+}
+
+if ($Mode -eq 'Summary') {
+  $Output = New-EvidenceChainSummary -StatusPayload $Output
 }
 
 $Output | ConvertTo-Json -Depth 8
