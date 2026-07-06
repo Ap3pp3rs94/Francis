@@ -320,6 +320,41 @@ def test_fr017_evidence_chain_status_preflights_candidate_measurement_path(tmp_p
     assert not candidate_path.exists()
 
 
+def test_fr017_evidence_chain_status_preflights_existing_measurement_setup_update(
+    tmp_path: Path,
+) -> None:
+    template_path = ROOT / "FR-017_Stage17_Package" / "FR-017-MEASUREMENTS-INPUT-TEMPLATE.json"
+    measurement_path = tmp_path / "pending-measurements.json"
+    measurement_path.write_text(template_path.read_text(encoding="utf-8"), encoding="utf-8")
+
+    proc = _run_gate("-Mode", "Status", "-MeasurementPath", str(measurement_path))
+
+    assert proc.returncode == 0, proc.stderr
+    payload = _payload(proc.stdout)
+    assert payload["status"] == "blocked_on_measurement_intake"
+    assert payload["first_blocking_gate"] == "measurement_intake"
+    assert payload["first_blocking_status"] == "pending_measurements"
+    assert (
+        str(payload["first_blocking_preflight_tool_path"])
+        .replace("/", "\\")
+        .endswith("scripts\\fr017-update-measurement-setup-record.ps1")
+    )
+    assert (
+        "fr017-update-measurement-setup-record.ps1 -Mode Status" in payload["first_blocking_preflight_command_template"]
+    )
+    assert str(measurement_path) in payload["first_blocking_preflight_command_template"]
+    assert payload["first_blocking_preflight_status"] == "measurement_setup_update_status"
+    assert payload["first_blocking_preflight_exit_code"] == 0
+    assert payload["first_blocking_preflight_parse_ok"] is True
+    assert payload["first_blocking_preflight_read_only_contract"] is True
+    assert payload["first_blocking_preflight_wrote_file"] is False
+    assert payload["first_blocking_preflight_physical_validation_complete"] is False
+    assert payload["first_blocking_preflight_fr018_implementation_cleared"] is False
+    assert payload["physical_validation_complete"] is False
+    assert payload["stage17_completion_claim_allowed"] is False
+    assert payload["fr018_implementation_cleared"] is False
+
+
 def test_fr017_evidence_chain_status_moves_blocker_after_measurement_ready(tmp_path: Path) -> None:
     measurement_path = tmp_path / "ready-measurements.json"
     measurement_path.write_text(json.dumps(_ready_measurement_payload()), encoding="utf-8")

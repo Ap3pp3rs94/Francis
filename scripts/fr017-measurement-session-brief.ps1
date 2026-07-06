@@ -14,6 +14,7 @@ $ErrorActionPreference = 'Stop'
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $MeasurementIntakeScript = Join-Path $PSScriptRoot 'fr017-measurement-intake.ps1'
 $MeasurementInitializerScript = Join-Path $PSScriptRoot 'fr017-new-measurement-record.ps1'
+$MeasurementSetupUpdateScript = Join-Path $PSScriptRoot 'fr017-update-measurement-setup-record.ps1'
 
 function Resolve-BriefPath {
   param([string]$Path)
@@ -337,6 +338,19 @@ if (-not $IntakeFailed -and -not $IntakeReady -and $UsingTemplate -and $FirstBlo
   $CurrentGroupPreflightOutputPath = [string](Get-PayloadValue -Payload $PreflightGate.payload -Name 'output_path' -Default '')
   $CurrentGroupPreflightOutputExists = [bool](Get-PayloadValue -Payload $PreflightGate.payload -Name 'output_exists' -Default $false)
   $CurrentGroupPreflightOutputParentExists = [bool](Get-PayloadValue -Payload $PreflightGate.payload -Name 'output_parent_exists' -Default $false)
+  $CurrentGroupPreflightWroteFile = [bool](Get-PayloadValue -Payload $PreflightGate.payload -Name 'wrote_file' -Default $false)
+  $CurrentGroupPreflightPhysicalValidationComplete = [bool](Get-PayloadValue -Payload $PreflightGate.payload -Name 'physical_validation_complete' -Default $false)
+  $CurrentGroupPreflightFr018ImplementationCleared = [bool](Get-PayloadValue -Payload $PreflightGate.payload -Name 'fr018_implementation_cleared' -Default $false)
+} elseif (-not $IntakeFailed -and -not $IntakeReady -and -not $UsingTemplate -and $FirstBlockingGroupId -eq 'setup_and_safety_brief') {
+  $SetupUpdatePath = [string](Get-PayloadValue -Payload $IntakeGate.payload -Name 'measurement_setup_update_path' -Default (Join-Path $RepoRoot 'scripts\fr017-update-measurement-setup-record.ps1'))
+  $CurrentGroupPreflightToolPath = $SetupUpdatePath
+  $CurrentGroupPreflightCommandTemplate = '.\scripts\fr017-update-measurement-setup-record.ps1 -Mode Status -MeasurementPath "{0}"' -f $ResolvedMeasurementPath
+  $CurrentGroupPreflightContract = 'Read-only setup/safety updater preflight for an existing pending measurement record. It checks the target record and missing setup fields, writes no evidence, records no measurements, and does not clear FR-018.'
+  $PreflightGate = Invoke-JsonGate -ScriptPath $MeasurementSetupUpdateScript -Arguments @('-Mode', 'Status', '-MeasurementPath', $ResolvedMeasurementPath)
+  $CurrentGroupPreflightExitCode = [int]$PreflightGate.exit_code
+  $CurrentGroupPreflightParseOk = [bool]$PreflightGate.parse_ok
+  $CurrentGroupPreflightStatus = if ([bool]$PreflightGate.parse_ok) { [string](Get-PayloadValue -Payload $PreflightGate.payload -Name 'status' -Default '') } else { 'failed_preflight_parse' }
+  $CurrentGroupPreflightReadOnlyContract = [bool](Get-PayloadValue -Payload $PreflightGate.payload -Name 'read_only_contract' -Default $false)
   $CurrentGroupPreflightWroteFile = [bool](Get-PayloadValue -Payload $PreflightGate.payload -Name 'wrote_file' -Default $false)
   $CurrentGroupPreflightPhysicalValidationComplete = [bool](Get-PayloadValue -Payload $PreflightGate.payload -Name 'physical_validation_complete' -Default $false)
   $CurrentGroupPreflightFr018ImplementationCleared = [bool](Get-PayloadValue -Payload $PreflightGate.payload -Name 'fr018_implementation_cleared' -Default $false)

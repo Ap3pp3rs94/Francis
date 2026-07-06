@@ -168,6 +168,19 @@ def test_fr017_measurement_session_brief_points_pending_record_to_setup_updater(
     assert payload["status"] == "measurement_session_input_required"
     assert payload["using_template"] is False
     assert payload["first_blocking_group_id"] == "setup_and_safety_brief"
+    assert payload["current_group_preflight_tool_path"].endswith("scripts\\fr017-update-measurement-setup-record.ps1")
+    assert (
+        "fr017-update-measurement-setup-record.ps1 -Mode Status" in payload["current_group_preflight_command_template"]
+    )
+    assert str(measurement_path) in payload["current_group_preflight_command_template"]
+    assert "missing setup fields" in payload["current_group_preflight_contract"]
+    assert payload["current_group_preflight_status"] == "measurement_setup_update_status"
+    assert payload["current_group_preflight_exit_code"] == 0
+    assert payload["current_group_preflight_parse_ok"] is True
+    assert payload["current_group_preflight_read_only_contract"] is True
+    assert payload["current_group_preflight_wrote_file"] is False
+    assert payload["current_group_preflight_physical_validation_complete"] is False
+    assert payload["current_group_preflight_fr018_implementation_cleared"] is False
     assert payload["current_group_update_tool_path"].endswith("scripts\\fr017-update-measurement-setup-record.ps1")
     assert (
         "fr017-update-measurement-setup-record.ps1 -Mode UpdateSetup"

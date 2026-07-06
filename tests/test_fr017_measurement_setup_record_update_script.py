@@ -70,6 +70,43 @@ def _setup_args() -> list[str]:
     ]
 
 
+def test_fr017_measurement_setup_update_status_preflights_pending_record_without_writing(
+    tmp_path: Path,
+) -> None:
+    measurement_path = tmp_path / "measurement-record.json"
+    _create_pending_record(measurement_path)
+    before = measurement_path.read_bytes()
+
+    proc = _run_script(UPDATE_SCRIPT, "-Mode", "Status", "-MeasurementPath", str(measurement_path))
+
+    assert proc.returncode == 0, proc.stderr
+    result = _payload(proc.stdout)
+    assert result["kind"] == "francis.fr017.measurement_setup_record_update"
+    assert result["mode"] == "Status"
+    assert result["status"] == "measurement_setup_update_status"
+    assert result["output_exists"] is True
+    assert result["wrote_file"] is False
+    assert result["read_only_contract"] is True
+    assert result["writes_repo"] is False
+    assert result["writes_data"] is False
+    assert result["operator_supplied_setup_input_recorded"] is False
+    assert result["setup_update_is_physical_validation_evidence"] is False
+    assert result["physical_validation_complete"] is False
+    assert result["stage17_completion_claim_allowed"] is False
+    assert result["fr018_implementation_cleared"] is False
+    assert "evidence.date" in result["setup_missing_fields"]
+    assert "measurement_conditions.stop_conditions_briefed" in result["setup_missing_fields"]
+    assert "evidence.method" in result["setup_existing_fields"]
+    assert result["setup_missing_field_count"] == len(result["setup_missing_fields"])
+    assert result["setup_capture_group_complete"] is False
+    assert "fr017-update-measurement-setup-record.ps1 -Mode UpdateSetup" in result["update_command_template"]
+    assert str(measurement_path) in result["update_command_template"]
+    assert result["next_command"] == result["update_command_template"]
+    assert measurement_path.read_bytes() == before
+    record = json.loads(measurement_path.read_text(encoding="utf-8-sig"))
+    assert "measurement_setup_update_events" not in record
+
+
 def test_fr017_measurement_setup_update_records_first_capture_group_without_completion_claim(
     tmp_path: Path,
 ) -> None:
