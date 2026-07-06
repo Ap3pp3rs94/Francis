@@ -254,6 +254,9 @@ function New-GateEvidenceDetails {
     measurement_session_next_operator_action = [string](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'next_operator_action' -Default '')
     measurement_session_current_group_id = [string](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'first_blocking_group_id' -Default '')
     measurement_session_current_group_required_action = [string](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'current_group_required_action' -Default '')
+    measurement_session_current_group_preflight_tool_path = [string](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'current_group_preflight_tool_path' -Default '')
+    measurement_session_current_group_preflight_command_template = [string](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'current_group_preflight_command_template' -Default '')
+    measurement_session_current_group_preflight_contract = [string](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'current_group_preflight_contract' -Default '')
     measurement_session_current_group_update_tool_path = [string](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'current_group_update_tool_path' -Default '')
     measurement_session_current_group_update_command_template = [string](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'current_group_update_command_template' -Default '')
     measurement_session_current_group_update_contract = [string](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'current_group_update_contract' -Default '')
@@ -684,6 +687,9 @@ $FirstBlockingGate = $null
 $FirstBlockingStatus = ''
 $NextRequiredInput = ''
 $NextCommand = ''
+$FirstBlockingPreflightToolPath = ''
+$FirstBlockingPreflightCommandTemplate = ''
+$FirstBlockingPreflightContract = ''
 $FirstBlockingUpdateToolPath = ''
 $FirstBlockingUpdateCommandTemplate = ''
 $FirstBlockingUpdateContract = ''
@@ -726,6 +732,14 @@ foreach ($Gate in $Gates) {
     $NextRequiredInput = [string]$Gate.next_required_input
     $NextCommand = [string]$Gate.next_command
     $FirstBlockingDetails = $GateDetails
+    $FirstBlockingPreflightToolPath = ''
+    $FirstBlockingPreflightCommandTemplate = ''
+    $FirstBlockingPreflightContract = ''
+    if ([string]$Gate.id -eq 'measurement_intake') {
+      $FirstBlockingPreflightToolPath = [string](Get-DetailsValue -Details $GateDetails -Name 'measurement_session_current_group_preflight_tool_path')
+      $FirstBlockingPreflightCommandTemplate = [string](Get-DetailsValue -Details $GateDetails -Name 'measurement_session_current_group_preflight_command_template')
+      $FirstBlockingPreflightContract = [string](Get-DetailsValue -Details $GateDetails -Name 'measurement_session_current_group_preflight_contract')
+    }
     $FirstBlockingUpdateHint = New-FirstBlockingUpdateHint -GateId ([string]$Gate.id) -GateFailed $GateFailed -GateDetails $GateDetails
     $FirstBlockingUpdateToolPath = [string]$FirstBlockingUpdateHint.tool_path
     $FirstBlockingUpdateCommandTemplate = [string]$FirstBlockingUpdateHint.command_template
@@ -771,6 +785,9 @@ $Output = [ordered]@{
   first_blocking_status = $FirstBlockingStatus
   next_required_input = $NextRequiredInput
   next_command = $NextCommand
+  first_blocking_preflight_tool_path = $FirstBlockingPreflightToolPath
+  first_blocking_preflight_command_template = $FirstBlockingPreflightCommandTemplate
+  first_blocking_preflight_contract = $FirstBlockingPreflightContract
   first_blocking_update_tool_path = $FirstBlockingUpdateToolPath
   first_blocking_update_command_template = $FirstBlockingUpdateCommandTemplate
   first_blocking_update_contract = $FirstBlockingUpdateContract

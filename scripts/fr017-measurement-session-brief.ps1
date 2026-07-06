@@ -296,6 +296,15 @@ if ($IntakeReady) {
   $NextOperatorAction = 'complete_first_blocking_measurement_capture_group_then_rerun_measurement_intake'
 }
 $CurrentGroupUpdateHint = New-CurrentGroupUpdateHint -GroupId $FirstBlockingGroupId -ResolvedMeasurementPath $ResolvedMeasurementPath -IntakePayload $IntakeGate.payload -UsingTemplate $UsingTemplate -IntakeReady $IntakeReady -IntakeFailed $IntakeFailed
+$CurrentGroupPreflightToolPath = ''
+$CurrentGroupPreflightCommandTemplate = ''
+$CurrentGroupPreflightContract = ''
+if (-not $IntakeFailed -and -not $IntakeReady -and $UsingTemplate -and $FirstBlockingGroupId -eq 'setup_and_safety_brief') {
+  $InitializerPath = [string](Get-PayloadValue -Payload $IntakeGate.payload -Name 'measurement_record_initializer_path' -Default (Join-Path $RepoRoot 'scripts\fr017-new-measurement-record.ps1'))
+  $CurrentGroupPreflightToolPath = $InitializerPath
+  $CurrentGroupPreflightCommandTemplate = '.\scripts\fr017-new-measurement-record.ps1 -Mode Status -OutputPath <measurement-record.json>'
+  $CurrentGroupPreflightContract = 'Read-only initializer preflight for the pending measurement record. It checks the template and candidate output path, writes no evidence, records no measurements, and does not clear FR-018.'
+}
 
 $Output = [ordered]@{
   kind = 'francis.fr017.measurement_session_brief'
@@ -315,6 +324,9 @@ $Output = [ordered]@{
   current_group_missing_fields = @($CurrentMissingFields)
   current_group_invalid_fields = @($CurrentInvalidFields)
   current_group_blocking_signals = @($CurrentBlockingSignals)
+  current_group_preflight_tool_path = $CurrentGroupPreflightToolPath
+  current_group_preflight_command_template = $CurrentGroupPreflightCommandTemplate
+  current_group_preflight_contract = $CurrentGroupPreflightContract
   current_group_update_tool_path = [string]$CurrentGroupUpdateHint.tool_path
   current_group_update_command_template = [string]$CurrentGroupUpdateHint.command_template
   current_group_update_contract = [string]$CurrentGroupUpdateHint.contract
@@ -326,6 +338,7 @@ $Output = [ordered]@{
   next_required_physical_input = [string](Get-PayloadValue -Payload $IntakeGate.payload -Name 'next_required_physical_input' -Default '')
   next_operator_action = $NextOperatorAction
   operator_sequence = @(
+    'preflight_measurement_record_initializer_status_with_fr017-new-measurement-record.ps1',
     'create_pending_measurement_record_with_fr017-new-measurement-record.ps1',
     'update_setup_safety_brief_with_fr017-update-measurement-setup-record.ps1_when_pending_record_exists',
     'capture_setup_and_safety_brief_without_symptoms_or_compression',

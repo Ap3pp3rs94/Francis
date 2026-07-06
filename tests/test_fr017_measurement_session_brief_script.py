@@ -88,6 +88,10 @@ def test_fr017_measurement_session_brief_reports_first_template_blocker() -> Non
     assert "brief stop conditions" in payload["first_blocking_group_action"]
     assert "evidence.date" in payload["current_group_missing_fields"]
     assert "measurement_conditions.stop_conditions_briefed" in payload["current_group_missing_fields"]
+    assert payload["current_group_preflight_tool_path"].endswith("scripts\\fr017-new-measurement-record.ps1")
+    assert "fr017-new-measurement-record.ps1 -Mode Status" in payload["current_group_preflight_command_template"]
+    assert "-OutputPath <measurement-record.json>" in payload["current_group_preflight_command_template"]
+    assert "writes no evidence" in payload["current_group_preflight_contract"]
     assert payload["current_group_update_tool_path"].endswith("scripts\\fr017-new-measurement-record.ps1")
     assert "fr017-new-measurement-record.ps1 -Mode Create" in payload["current_group_update_command_template"]
     assert "-OutputPath <measurement-record.json>" in payload["current_group_update_command_template"]
@@ -98,7 +102,10 @@ def test_fr017_measurement_session_brief_reports_first_template_blocker() -> Non
     assert payload["next_operator_action"] == (
         "complete_first_blocking_measurement_capture_group_then_rerun_measurement_intake"
     )
-    assert payload["operator_sequence"][0] == "create_pending_measurement_record_with_fr017-new-measurement-record.ps1"
+    assert payload["operator_sequence"][0] == (
+        "preflight_measurement_record_initializer_status_with_fr017-new-measurement-record.ps1"
+    )
+    assert payload["operator_sequence"][1] == "create_pending_measurement_record_with_fr017-new-measurement-record.ps1"
     assert (
         "update_setup_safety_brief_with_fr017-update-measurement-setup-record.ps1_when_pending_record_exists"
         in payload["operator_sequence"]
