@@ -106,7 +106,17 @@ def test_fr017_completion_ledger_gate_requires_ledger_entry_after_final_decision
     assert payload["ledger_entry_review_ready"] is False
     assert payload["missing_fields"] == ["ledger_entry_path"]
     assert payload["next_required_ledger_input"] == (
-        "copy_and_complete_FR-017-COMPLETION-LEDGER-HANDOFF-TEMPLATE.md_with_operator_reviewed_final_decision_evidence"
+        "create_candidate_completion_ledger_handoff_with_fr017-new-completion-ledger-handoff.ps1_then_rerun_completion_ledger_gate"
+    )
+    assert "fr017-new-completion-ledger-handoff.ps1" in payload["completion_ledger_handoff_runbook_contract"]
+    assert payload["completion_ledger_handoff_template_path"].endswith(
+        "FR-017_Stage17_Package\\FR-017-COMPLETION-LEDGER-HANDOFF-TEMPLATE.md"
+    )
+    assert payload["completion_ledger_handoff_initializer_path"].endswith(
+        "scripts\\fr017-new-completion-ledger-handoff.ps1"
+    )
+    assert payload["completion_ledger_handoff_working_record_name_pattern"] == (
+        "FR-017-COMPLETION-LEDGER-HANDOFF-YYYY-MM-DD-PILOT.md"
     )
     assert payload["physical_validation_complete"] is False
     assert payload["stage17_completion_claim_allowed"] is False
@@ -169,6 +179,7 @@ def test_fr017_completion_ledger_gate_ready_handoff_remains_read_only(
     assert payload["ledger_entry_read_ok"] is True
     assert payload["ledger_entry_review_ready"] is True
     assert "read-only" in payload["ledger_entry_contract"]
+    assert "fr017-new-completion-ledger-handoff.ps1" in payload["completion_ledger_handoff_runbook_contract"]
     assert payload["missing_fields"] == []
     assert payload["invalid_fields"] == []
     assert payload["prohibited_clearance_flags"] == []

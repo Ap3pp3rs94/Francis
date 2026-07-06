@@ -115,16 +115,28 @@ def test_fr017_engineering_review_gate_reports_default_templates_as_pending_upst
     assert payload["upstream_quick_release_cable_snag_gate_ready"] is False
     assert payload["upstream_measurement_intake_status"] == "pending_measurements"
     assert payload["physical_validation_complete"] is False
+    assert payload["stage17_completion_claim_allowed"] is False
     assert payload["engineering_review_complete"] is False
     assert payload["final_physical_gate_audit_ready"] is False
+    assert payload["load_bearing_use_approved"] is False
     assert payload["fr018_implementation_cleared"] is False
     assert payload["engineering_review_capture_plan_not_completion_evidence"] is True
     assert "not physical validation evidence" in payload["engineering_review_capture_plan_contract"]
+    assert "fr017-new-engineering-review-record.ps1" in payload["engineering_review_capture_runbook_contract"]
     assert "engineering-review capture readiness only" in payload["engineering_review_capture_plan_status_contract"]
     assert "not physical validation evidence" in payload["engineering_review_capture_summary_contract"]
     assert (
         payload["next_required_engineering_review_input"]
-        == "complete_professional_engineering_review_record_at_FR-017-ENGINEERING-REVIEW-INPUT-TEMPLATE.json"
+        == "create_professional_engineering_review_record_with_fr017-new-engineering-review-record.ps1_then_rerun_engineering_review_gate"
+    )
+    assert payload["engineering_review_input_template_path"].endswith(
+        "FR-017_Stage17_Package\\FR-017-ENGINEERING-REVIEW-INPUT-TEMPLATE.json"
+    )
+    assert payload["engineering_review_record_initializer_path"].endswith(
+        "scripts\\fr017-new-engineering-review-record.ps1"
+    )
+    assert payload["engineering_review_working_record_name_pattern"] == (
+        "FR-017-ENGINEERING-REVIEW-YYYY-MM-DD-PILOT-RECORD.json"
     )
     assert payload["engineering_review_capture_total_groups"] == 4
     assert payload["engineering_review_capture_ready_groups"] == 0
@@ -196,7 +208,13 @@ def test_fr017_engineering_review_gate_requires_review_after_release_ready(tmp_p
     assert "evidence.date" in payload["missing_fields"]
     assert payload["engineering_review_complete"] is False
     assert payload["physical_validation_complete"] is False
+    assert payload["stage17_completion_claim_allowed"] is False
+    assert payload["load_bearing_use_approved"] is False
     assert payload["fr018_implementation_cleared"] is False
+    assert "fr017-new-engineering-review-record.ps1" in payload["engineering_review_capture_runbook_contract"]
+    assert payload["engineering_review_record_initializer_path"].endswith(
+        "scripts\\fr017-new-engineering-review-record.ps1"
+    )
     assert payload["engineering_review_capture_total_groups"] == 4
     assert payload["engineering_review_capture_ready_groups"] == 0
     assert payload["engineering_review_capture_pending_groups"] == 4
@@ -308,6 +326,8 @@ def test_fr017_engineering_review_gate_accepts_complete_non_powered_review_recor
     assert payload["engineering_review_complete"] is True
     assert payload["final_physical_gate_audit_ready"] is True
     assert payload["physical_validation_complete"] is False
+    assert payload["stage17_completion_claim_allowed"] is False
+    assert payload["load_bearing_use_approved"] is False
     assert payload["powered_or_frame_coupled_testing_cleared"] is False
     assert payload["fr018_implementation_cleared"] is False
     assert payload["engineering_review_capture_total_groups"] == 4

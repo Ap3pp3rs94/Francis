@@ -140,8 +140,10 @@ def test_fr017_release_cable_gate_reports_default_templates_as_pending_upstream(
     assert payload["upstream_pilot_movement_gate_ready"] is False
     assert payload["upstream_measurement_intake_status"] == "pending_measurements"
     assert payload["physical_validation_complete"] is False
+    assert payload["stage17_completion_claim_allowed"] is False
     assert payload["quick_release_and_cable_snag_test_complete"] is False
     assert payload["engineering_review_or_final_physical_gate_audit_ready"] is False
+    assert payload["professional_engineering_review_cleared"] is False
     assert payload["fr018_implementation_cleared"] is False
     assert payload["release_cable_capture_plan_not_completion_evidence"] is True
     assert "not physical validation evidence" in payload["release_cable_capture_plan_contract"]
@@ -149,8 +151,21 @@ def test_fr017_release_cable_gate_reports_default_templates_as_pending_upstream(
     assert "not physical validation evidence" in payload["release_cable_capture_summary_contract"]
     assert (
         payload["next_required_release_cable_input"]
-        == "complete_non_powered_quick_release_cable_snag_record_at_FR-017-QUICK-RELEASE-CABLE-SNAG-INPUT-TEMPLATE.json"
+        == "create_non_powered_quick_release_cable_snag_record_with_fr017-new-release-cable-record.ps1_then_rerun_release_cable_gate"
     )
+    assert "operator input tooling only" in payload["release_cable_capture_runbook_contract"]
+    assert "fr017-new-release-cable-record.ps1" in payload["release_cable_capture_runbook_contract"]
+    assert (
+        str(payload["release_cable_input_template_path"])
+        .replace("/", "\\")
+        .endswith("FR-017_Stage17_Package\\FR-017-QUICK-RELEASE-CABLE-SNAG-INPUT-TEMPLATE.json")
+    )
+    assert (
+        str(payload["release_cable_record_initializer_path"])
+        .replace("/", "\\")
+        .endswith("scripts\\fr017-new-release-cable-record.ps1")
+    )
+    assert payload["release_cable_working_record_name_pattern"] == "FR-017-RELEASE-CABLE-YYYY-MM-DD-PILOT-RECORD.json"
     assert payload["release_cable_capture_total_groups"] == 6
     assert payload["release_cable_capture_ready_groups"] == 0
     assert payload["release_cable_capture_pending_groups"] == 0
@@ -212,6 +227,7 @@ def test_fr017_release_cable_gate_requires_record_after_movement_ready(tmp_path:
     assert "evidence.date" in payload["missing_fields"]
     assert payload["quick_release_and_cable_snag_test_complete"] is False
     assert payload["fr018_implementation_cleared"] is False
+    assert payload["stage17_completion_claim_allowed"] is False
     assert payload["release_cable_capture_total_groups"] == 6
     assert payload["release_cable_capture_ready_groups"] == 0
     assert payload["release_cable_capture_pending_groups"] == 6
@@ -321,8 +337,10 @@ def test_fr017_release_cable_gate_accepts_complete_release_cable_record(tmp_path
     assert payload["release_cable_redesign_triggers"] == []
     assert payload["fail_observations"] == []
     assert payload["physical_validation_complete"] is False
+    assert payload["stage17_completion_claim_allowed"] is False
     assert payload["quick_release_and_cable_snag_test_complete"] is True
     assert payload["engineering_review_or_final_physical_gate_audit_ready"] is True
+    assert payload["professional_engineering_review_cleared"] is False
     assert payload["powered_or_frame_coupled_testing_cleared"] is False
     assert payload["fr018_implementation_cleared"] is False
     assert payload["release_cable_capture_total_groups"] == 6

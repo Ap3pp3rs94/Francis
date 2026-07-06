@@ -168,6 +168,93 @@ function Find-CaptureStatus {
   return $null
 }
 
+function New-CurrentGroupUpdateHint {
+  param(
+    [string]$GroupId,
+    [string]$ResolvedMeasurementPath,
+    [object]$IntakePayload,
+    [bool]$UsingTemplate,
+    [bool]$IntakeReady,
+    [bool]$IntakeFailed
+  )
+
+  $MeasurementPathArg = if ([string]::IsNullOrWhiteSpace($ResolvedMeasurementPath)) { '<measurement-record.json>' } else { $ResolvedMeasurementPath }
+  $SetupUpdatePath = [string](Get-PayloadValue -Payload $IntakePayload -Name 'measurement_setup_update_path' -Default (Join-Path $RepoRoot 'scripts\fr017-update-measurement-setup-record.ps1'))
+  $InitializerPath = [string](Get-PayloadValue -Payload $IntakePayload -Name 'measurement_record_initializer_path' -Default (Join-Path $RepoRoot 'scripts\fr017-new-measurement-record.ps1'))
+  $MeasurementUpdatePath = [string](Get-PayloadValue -Payload $IntakePayload -Name 'measurement_record_update_path' -Default (Join-Path $RepoRoot 'scripts\fr017-update-measurement-record.ps1'))
+  $LandmarkUpdatePath = [string](Get-PayloadValue -Payload $IntakePayload -Name 'measurement_landmark_update_path' -Default (Join-Path $RepoRoot 'scripts\fr017-update-landmark-record.ps1'))
+  $IndependenceSafetyUpdatePath = [string](Get-PayloadValue -Payload $IntakePayload -Name 'measurement_independence_safety_update_path' -Default (Join-Path $RepoRoot 'scripts\fr017-update-independence-safety-record.ps1'))
+  $MockupReadinessPath = Join-Path $RepoRoot 'scripts\fr017-mockup-readiness-gate.ps1'
+
+  if ($IntakeFailed) {
+    return [ordered]@{
+      tool_path = ''
+      command_template = ''
+      contract = 'Stop the measurement session and resolve the failed measurement-intake condition before any mockup, powered, load-bearing, or FR-018 work.'
+    }
+  }
+
+  if ($IntakeReady) {
+    return [ordered]@{
+      tool_path = $MockupReadinessPath
+      command_template = '.\scripts\fr017-mockup-readiness-gate.ps1 -Mode Status -MeasurementPath "{0}"' -f $MeasurementPathArg
+      contract = 'Read-only handoff to the non-powered mockup readiness gate. This does not mark physical validation complete or clear FR-018.'
+    }
+  }
+
+  switch ($GroupId) {
+    'setup_and_safety_brief' {
+      if ($UsingTemplate) {
+        return [ordered]@{
+          tool_path = $InitializerPath
+          command_template = '.\scripts\fr017-new-measurement-record.ps1 -Mode Create -OutputPath <measurement-record.json> -EvidenceDate YYYY-MM-DD -Observer "<observer>" -PilotId "<pilot-reference>" -MeasurementTool "flexible metric tape" -Method "flexible tape, no tissue compression" -Posture "arm relaxed, palm neutral unless otherwise noted" -ConfirmNoTissueCompressionUsed -ConfirmNoWristBoneCompressionUsed -ConfirmMetricToolUsed -ConfirmArmRelaxedPalmNeutralOrExceptionRecorded -ConfirmStopConditionsBriefed -ConditionNotes "<no tissue/no wrist-bone compression, metric tool, and stop briefing notes>"'
+          contract = 'Creates a pending working record and may populate the setup/safety brief only with real operator-supplied values. It does not record left/right measurements, validate fit, or clear FR-018.'
+        }
+      }
+      return [ordered]@{
+        tool_path = $SetupUpdatePath
+        command_template = '.\scripts\fr017-update-measurement-setup-record.ps1 -Mode UpdateSetup -MeasurementPath "{0}" -EvidenceDate YYYY-MM-DD -Observer "<observer>" -PilotId "<pilot-reference>" -MeasurementTool "flexible metric tape" -Method "flexible tape, no tissue compression" -Posture "arm relaxed, palm neutral unless otherwise noted" -ConfirmNoTissueCompressionUsed -ConfirmNoWristBoneCompressionUsed -ConfirmMetricToolUsed -ConfirmArmRelaxedPalmNeutralOrExceptionRecorded -ConfirmStopConditionsBriefed -ConditionNotes "<no tissue/no wrist-bone compression, metric tool, and stop briefing notes>"' -f $MeasurementPathArg
+        contract = 'Updates setup/safety fields in an existing working record only. It does not record left/right measurements, validate fit, or clear FR-018.'
+      }
+    }
+    'left_arm_numeric_measurement_passes' {
+      return [ordered]@{
+        tool_path = $MeasurementUpdatePath
+        command_template = '.\scripts\fr017-update-measurement-record.ps1 -Mode UpdateSide -MeasurementPath "{0}" -Side left -ForearmCircumference25mmBelowElbowCrease <mm> -ForearmCircumferenceMidForearm <mm> -ForearmCircumference40mmAboveWristCrease <mm> -ForearmLengthElbowCreaseToWristCrease <mm> -OuterForearmUsablePanelLength <mm> -UpperStrapAllowedBandWidth <mm> -LowerStrapAllowedBandWidth <mm> -BoneRidgeReliefLength <mm> -InnerForearmNoPressureZoneWidth <mm> -WristClearanceGap <mm> -ConfirmSecondPassCompleted -MaxDeltaMm <0-5> -ConfirmAllRequiredMeasurementsWithin5mm' -f $MeasurementPathArg
+        contract = 'Records real left-side numeric measurement passes only. It does not validate fit, approve fabrication, or clear FR-018.'
+      }
+    }
+    'right_arm_numeric_measurement_passes' {
+      return [ordered]@{
+        tool_path = $MeasurementUpdatePath
+        command_template = '.\scripts\fr017-update-measurement-record.ps1 -Mode UpdateSide -MeasurementPath "{0}" -Side right -ForearmCircumference25mmBelowElbowCrease <mm> -ForearmCircumferenceMidForearm <mm> -ForearmCircumference40mmAboveWristCrease <mm> -ForearmLengthElbowCreaseToWristCrease <mm> -OuterForearmUsablePanelLength <mm> -UpperStrapAllowedBandWidth <mm> -LowerStrapAllowedBandWidth <mm> -BoneRidgeReliefLength <mm> -InnerForearmNoPressureZoneWidth <mm> -WristClearanceGap <mm> -ConfirmSecondPassCompleted -MaxDeltaMm <0-5> -ConfirmAllRequiredMeasurementsWithin5mm' -f $MeasurementPathArg
+        contract = 'Records real right-side numeric measurement passes only. It does not validate fit, approve fabrication, or clear FR-018.'
+      }
+    }
+    'safety_critical_landmark_and_zone_references' {
+      return [ordered]@{
+        tool_path = $LandmarkUpdatePath
+        command_template = '.\scripts\fr017-update-landmark-record.ps1 -Mode UpdateLandmarks -MeasurementPath "{0}" -LeftInnerElbowCreaseBoundary "<left reference>" -LeftWristBoneBoundary "<left reference>" -LeftRadiusRidgeRelief "<left reference>" -LeftUlnaRidgeRelief "<left reference>" -LeftOuterForearmCableRoute "<left reference>" -LeftQuickReleaseReachZone "<left reference>" -LeftGloveRemovalPath "<left reference>" -RightInnerElbowCreaseBoundary "<right reference>" -RightWristBoneBoundary "<right reference>" -RightRadiusRidgeRelief "<right reference>" -RightUlnaRidgeRelief "<right reference>" -RightOuterForearmCableRoute "<right reference>" -RightQuickReleaseReachZone "<right reference>" -RightGloveRemovalPath "<right reference>" -ConfirmInnerElbowCreaseBoundary -ConfirmWristBoneBoundary -ConfirmRadiusUlnaReliefPaths -ConfirmOuterForearmCableRoute -ConfirmQuickReleaseReachZone -ConfirmGloveRemovalPath -ConfirmSkinSafeMarkingUsed -LandmarkNotes "<side-specific skin-safe landmark notes>"' -f $MeasurementPathArg
+        contract = 'Records real side-specific marked-zone references only. It does not validate fit, approve fabrication, or clear FR-018.'
+      }
+    }
+    'left_right_independence_and_safety_screen' {
+      return [ordered]@{
+        tool_path = $IndependenceSafetyUpdatePath
+        command_template = '.\scripts\fr017-update-independence-safety-record.ps1 -Mode UpdateIndependenceSafety -MeasurementPath "{0}" -ConfirmLeftArmMeasuredSeparately -ConfirmRightArmMeasuredSeparately -ConfirmSideLabelsVerified -ConfirmValuesNotCopiedBetweenSides -LeftMeasurementReference "<left reference>" -RightMeasurementReference "<right reference>" -IndependenceNotes "<separate left/right side-label notes>" -ConfirmNoPain -ConfirmNoTingling -ConfirmNoNumbness -ConfirmNoColdFingers -ConfirmNoDiscoloration -ConfirmNoHandWeakness -ConfirmNoWristPain -ConfirmNoSharpPressure -ConfirmNoReducedFingerMotion -ConfirmNoLossOfGripStrength' -f $MeasurementPathArg
+        contract = 'Records real left/right independence confirmations and symptom screen only. Any observed symptom must stop FR-017 progression; this does not clear FR-018.'
+      }
+    }
+    default {
+      return [ordered]@{
+        tool_path = ''
+        command_template = ''
+        contract = 'No current update command is available because no measurement capture group is blocking.'
+      }
+    }
+  }
+}
+
 $IntakeArgs = New-Object System.Collections.Generic.List[string]
 $IntakeArgs.Add('-Mode') | Out-Null
 $IntakeArgs.Add('Status') | Out-Null
@@ -192,6 +279,8 @@ if ($null -ne $FirstBlockingGroup) {
   $CurrentBlockingSignals = @(Get-PayloadArrayProperty -Payload $FirstBlockingGroup -Name 'blocking_signals')
   $CurrentRequiredAction = [string](Get-PayloadValue -Payload $FirstBlockingGroup -Name 'required_action' -Default $CurrentRequiredAction)
 }
+$ResolvedMeasurementPath = Resolve-BriefPath -Path $MeasurementPath
+$UsingTemplate = if ($null -eq $IntakeGate.payload -or $null -eq $IntakeGate.payload.PSObject.Properties['using_template']) { [string]::IsNullOrWhiteSpace($MeasurementPath) } else { [bool]$IntakeGate.payload.using_template }
 
 if ($IntakeReady) {
   $Status = 'ready_for_non_powered_mockup_patterning_handoff'
@@ -206,6 +295,7 @@ if ($IntakeReady) {
   $ExitCode = 0
   $NextOperatorAction = 'complete_first_blocking_measurement_capture_group_then_rerun_measurement_intake'
 }
+$CurrentGroupUpdateHint = New-CurrentGroupUpdateHint -GroupId $FirstBlockingGroupId -ResolvedMeasurementPath $ResolvedMeasurementPath -IntakePayload $IntakeGate.payload -UsingTemplate $UsingTemplate -IntakeReady $IntakeReady -IntakeFailed $IntakeFailed
 
 $Output = [ordered]@{
   kind = 'francis.fr017.measurement_session_brief'
@@ -216,8 +306,8 @@ $Output = [ordered]@{
   intake_parse_ok = [bool]$IntakeGate.parse_ok
   intake_failed = $IntakeFailed
   intake_ready_for_non_powered_mockup_patterning = $IntakeReady
-  measurement_path = Resolve-BriefPath -Path $MeasurementPath
-  using_template = if ($null -eq $IntakeGate.payload -or $null -eq $IntakeGate.payload.PSObject.Properties['using_template']) { [string]::IsNullOrWhiteSpace($MeasurementPath) } else { [bool]$IntakeGate.payload.using_template }
+  measurement_path = $ResolvedMeasurementPath
+  using_template = $UsingTemplate
   first_blocking_group_id = $FirstBlockingGroupId
   first_blocking_group_status = [string](Get-PayloadValue -Payload $IntakeGate.payload -Name 'measurement_capture_first_blocking_group_status' -Default '')
   first_blocking_group_action = [string](Get-PayloadValue -Payload $IntakeGate.payload -Name 'measurement_capture_first_blocking_group_action' -Default '')
@@ -225,6 +315,9 @@ $Output = [ordered]@{
   current_group_missing_fields = @($CurrentMissingFields)
   current_group_invalid_fields = @($CurrentInvalidFields)
   current_group_blocking_signals = @($CurrentBlockingSignals)
+  current_group_update_tool_path = [string]$CurrentGroupUpdateHint.tool_path
+  current_group_update_command_template = [string]$CurrentGroupUpdateHint.command_template
+  current_group_update_contract = [string]$CurrentGroupUpdateHint.contract
   measurement_capture_total_groups = [int](Get-PayloadValue -Payload $IntakeGate.payload -Name 'measurement_capture_total_groups' -Default 0)
   measurement_capture_ready_groups = [int](Get-PayloadValue -Payload $IntakeGate.payload -Name 'measurement_capture_ready_groups' -Default 0)
   measurement_capture_pending_groups = [int](Get-PayloadValue -Payload $IntakeGate.payload -Name 'measurement_capture_pending_groups' -Default 0)
@@ -234,6 +327,7 @@ $Output = [ordered]@{
   next_operator_action = $NextOperatorAction
   operator_sequence = @(
     'create_pending_measurement_record_with_fr017-new-measurement-record.ps1',
+    'update_setup_safety_brief_with_fr017-update-measurement-setup-record.ps1_when_pending_record_exists',
     'capture_setup_and_safety_brief_without_symptoms_or_compression',
     'capture_left_arm_numeric_measurements_with_second_pass_repeatability',
     'capture_right_arm_numeric_measurements_separately_with_second_pass_repeatability',

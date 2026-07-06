@@ -177,7 +177,18 @@ def test_fr017_final_decision_record_gate_requires_decision_record_after_final_g
     assert payload["final_physical_gate_ready"] is True
     assert payload["missing_fields"] == ["final_decision_path"]
     assert payload["next_required_final_decision_input"] == (
-        "complete_human_final_stage17_completion_decision_record_at_FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json"
+        "create_human_final_decision_record_with_fr017-new-final-decision-record.ps1_then_rerun_final_decision_record_gate"
+    )
+    assert "fr017-new-final-decision-record.ps1" in payload["final_decision_record_runbook_contract"]
+    assert payload["final_decision_input_template_path"].endswith(
+        "FR-017_Stage17_Package\\FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json"
+    )
+    assert payload["final_decision_record_initializer_path"].endswith("scripts\\fr017-new-final-decision-record.ps1")
+    assert payload["final_decision_working_record_name_pattern"] == (
+        "FR-017-FINAL-DECISION-YYYY-MM-DD-PILOT-RECORD.json"
+    )
+    assert payload["final_physical_gate_record_name_pattern"] == (
+        "FR-017-FINAL-PHYSICAL-GATE-YYYY-MM-DD-PILOT-RECORD.json"
     )
     assert payload["physical_validation_complete"] is False
     assert payload["stage17_completion_claim_allowed"] is False
@@ -230,6 +241,7 @@ def test_fr017_final_decision_record_gate_ready_state_remains_read_only(
     assert payload["final_decision_record_ready"] is True
     assert payload["ledger_completion_review_ready"] is True
     assert payload["saved_final_physical_gate_record_status"] == "ready_for_stage17_final_physical_completion_decision"
+    assert "fr017-new-final-decision-record.ps1" in payload["final_decision_record_runbook_contract"]
     assert "redacted SHA-256-derived" in payload["final_decision_pilot_identity_contract"]
     assert payload["final_physical_gate_reference_pilot_fingerprint"]
     assert payload["final_decision_pilot_fingerprint"] == payload["final_physical_gate_reference_pilot_fingerprint"]

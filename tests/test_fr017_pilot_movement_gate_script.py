@@ -140,6 +140,8 @@ def test_fr017_pilot_movement_gate_reports_default_templates_as_pending_upstream
     assert payload["physical_validation_complete"] is False
     assert payload["pilot_movement_test_complete"] is False
     assert payload["quick_release_and_cable_snag_test_planning_ready"] is False
+    assert payload["quick_release_and_cable_snag_testing_cleared"] is False
+    assert payload["stage17_completion_claim_allowed"] is False
     assert payload["fr018_implementation_cleared"] is False
     assert payload["read_only_contract"] is True
     assert payload["writes_repo"] is False
@@ -149,8 +151,21 @@ def test_fr017_pilot_movement_gate_reports_default_templates_as_pending_upstream
     assert "pilot movement capture readiness only" in payload["movement_capture_plan_status_contract"]
     assert "not physical validation evidence" in payload["movement_capture_summary_contract"]
     assert payload["next_required_movement_input"] == (
-        "complete_non_powered_pilot_movement_record_at_FR-017-PILOT-MOVEMENT-INPUT-TEMPLATE.json"
+        "create_non_powered_pilot_movement_record_with_fr017-new-pilot-movement-record.ps1_then_rerun_pilot_movement_gate"
     )
+    assert "operator input tooling only" in payload["movement_capture_runbook_contract"]
+    assert "fr017-new-pilot-movement-record.ps1" in payload["movement_capture_runbook_contract"]
+    assert (
+        str(payload["movement_input_template_path"])
+        .replace("/", "\\")
+        .endswith("FR-017_Stage17_Package\\FR-017-PILOT-MOVEMENT-INPUT-TEMPLATE.json")
+    )
+    assert (
+        str(payload["movement_record_initializer_path"])
+        .replace("/", "\\")
+        .endswith("scripts\\fr017-new-pilot-movement-record.ps1")
+    )
+    assert payload["movement_working_record_name_pattern"] == "FR-017-PILOT-MOVEMENT-YYYY-MM-DD-PILOT-RECORD.json"
     assert payload["movement_capture_total_groups"] == 6
     assert payload["movement_capture_ready_groups"] == 0
     assert payload["movement_capture_pending_groups"] == 0
@@ -205,6 +220,7 @@ def test_fr017_pilot_movement_gate_requires_movement_record_after_static_ready(
     assert "evidence.date" in payload["missing_fields"]
     assert payload["pilot_movement_test_complete"] is False
     assert payload["fr018_implementation_cleared"] is False
+    assert payload["stage17_completion_claim_allowed"] is False
     assert payload["movement_capture_plan_not_completion_evidence"] is True
     assert payload["movement_capture_total_groups"] == 6
     assert payload["movement_capture_ready_groups"] == 0
@@ -271,6 +287,7 @@ def test_fr017_pilot_movement_gate_treats_lowercase_or_padded_pending_text_as_mi
     assert "sides.left.movement_checks.hand_opening_full" in payload["missing_fields"]
     assert payload["physical_validation_complete"] is False
     assert payload["fr018_implementation_cleared"] is False
+    assert payload["stage17_completion_claim_allowed"] is False
 
 
 def test_fr017_pilot_movement_gate_accepts_complete_movement_record(tmp_path: Path) -> None:

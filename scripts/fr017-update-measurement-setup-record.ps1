@@ -98,7 +98,8 @@ function Set-RequiredText {
     [System.Collections.Generic.List[string]]$OverwriteBlockedFields,
     [System.Collections.Generic.List[string]]$OverwrittenFields,
     [System.Collections.Generic.List[string]]$UpdatedFields,
-    [bool]$AllowOverwrite
+    [bool]$AllowOverwrite,
+    [bool]$AllowMatchingExisting = $false
   )
 
   $Property = $Target.PSObject.Properties[$Field]
@@ -109,6 +110,16 @@ function Set-RequiredText {
 
   if (Test-MissingOrPendingValue -Value $Value) {
     $InvalidFields.Add($QualifiedField) | Out-Null
+    return
+  }
+
+  if (
+    $AllowMatchingExisting -and
+    -not (Test-MissingOrPendingValue -Value $Property.Value) -and
+    [string]::Equals(([string]$Property.Value).Trim(), $Value.Trim(), [System.StringComparison]::OrdinalIgnoreCase)
+  ) {
+    $Property.Value = $Value.Trim()
+    $UpdatedFields.Add($QualifiedField) | Out-Null
     return
   }
 
@@ -261,8 +272,8 @@ if ($ExitCode -eq 0) {
     Set-RequiredText -Target $Evidence -Field 'observer' -Value $Observer -QualifiedField 'evidence.observer' -InvalidFields $InvalidFields -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
     Set-RequiredText -Target $Evidence -Field 'pilot_id' -Value $PilotId -QualifiedField 'evidence.pilot_id' -InvalidFields $InvalidFields -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
     Set-RequiredText -Target $Evidence -Field 'measurement_tool' -Value $MeasurementTool -QualifiedField 'evidence.measurement_tool' -InvalidFields $InvalidFields -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
-    Set-RequiredText -Target $Evidence -Field 'method' -Value $Method -QualifiedField 'evidence.method' -InvalidFields $InvalidFields -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
-    Set-RequiredText -Target $Evidence -Field 'posture' -Value $Posture -QualifiedField 'evidence.posture' -InvalidFields $InvalidFields -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
+    Set-RequiredText -Target $Evidence -Field 'method' -Value $Method -QualifiedField 'evidence.method' -InvalidFields $InvalidFields -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent -AllowMatchingExisting $true
+    Set-RequiredText -Target $Evidence -Field 'posture' -Value $Posture -QualifiedField 'evidence.posture' -InvalidFields $InvalidFields -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent -AllowMatchingExisting $true
     Set-RequiredConfirmation -Target $MeasurementConditions -Field 'no_tissue_compression_used' -Confirmed $ConfirmNoTissueCompressionUsed.IsPresent -QualifiedField 'measurement_conditions.no_tissue_compression_used' -InvalidFields $InvalidFields -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
     Set-RequiredConfirmation -Target $MeasurementConditions -Field 'no_wrist_bone_compression_used' -Confirmed $ConfirmNoWristBoneCompressionUsed.IsPresent -QualifiedField 'measurement_conditions.no_wrist_bone_compression_used' -InvalidFields $InvalidFields -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent
     Set-RequiredConfirmation -Target $MeasurementConditions -Field 'metric_tool_used' -Confirmed $ConfirmMetricToolUsed.IsPresent -QualifiedField 'measurement_conditions.metric_tool_used' -InvalidFields $InvalidFields -OverwriteBlockedFields $OverwriteBlockedFields -OverwrittenFields $OverwrittenFields -UpdatedFields $UpdatedFields -AllowOverwrite $AllowOverwrite.IsPresent

@@ -122,6 +122,7 @@ def test_fr017_mannequin_gate_reports_default_templates_as_pending_upstream() ->
     assert payload["upstream_mockup_status"] == "pending_measurement_intake"
     assert payload["upstream_mockup_gate_ready"] is False
     assert payload["physical_validation_complete"] is False
+    assert payload["stage17_completion_claim_allowed"] is False
     assert payload["mannequin_interface_test_complete"] is False
     assert payload["pilot_static_fit_planning_ready"] is False
     assert payload["pilot_testing_cleared"] is False
@@ -133,9 +134,22 @@ def test_fr017_mannequin_gate_reports_default_templates_as_pending_upstream() ->
     assert "not physical validation evidence" in payload["mannequin_capture_plan_contract"]
     assert "mannequin interface capture readiness only" in payload["mannequin_capture_plan_status_contract"]
     assert "not physical validation evidence" in payload["mannequin_capture_summary_contract"]
+    assert "operator input tooling only" in payload["mannequin_capture_runbook_contract"]
+    assert "fr017-new-mannequin-interface-record.ps1" in payload["mannequin_capture_runbook_contract"]
     assert payload["next_required_mannequin_input"] == (
-        "complete_non_powered_mannequin_interface_record_at_FR-017-MANNEQUIN-INTERFACE-INPUT-TEMPLATE.json"
+        "create_non_powered_mannequin_interface_record_with_fr017-new-mannequin-interface-record.ps1_then_rerun_mannequin_interface_gate"
     )
+    assert (
+        str(payload["mannequin_input_template_path"])
+        .replace("/", "\\")
+        .endswith("FR-017_Stage17_Package\\FR-017-MANNEQUIN-INTERFACE-INPUT-TEMPLATE.json")
+    )
+    assert (
+        str(payload["mannequin_record_initializer_path"])
+        .replace("/", "\\")
+        .endswith("scripts\\fr017-new-mannequin-interface-record.ps1")
+    )
+    assert payload["mannequin_working_record_name_pattern"] == "FR-017-MANNEQUIN-YYYY-MM-DD-PILOT-RECORD.json"
     assert payload["mannequin_capture_total_groups"] == 5
     assert payload["mannequin_capture_ready_groups"] == 0
     assert payload["mannequin_capture_pending_groups"] == 0
@@ -179,6 +193,9 @@ def test_fr017_mannequin_gate_requires_test_record_after_mockup_ready(tmp_path: 
     assert payload["status"] == "pending_mannequin_interface_test"
     assert payload["upstream_mockup_status"] == "ready_for_mannequin_interface_test"
     assert payload["upstream_mockup_gate_ready"] is True
+    assert payload["next_required_mannequin_input"] == (
+        "create_non_powered_mannequin_interface_record_with_fr017-new-mannequin-interface-record.ps1_then_rerun_mannequin_interface_gate"
+    )
     assert "evidence.date" in payload["missing_fields"]
     assert payload["mannequin_interface_test_complete"] is False
     assert payload["pilot_testing_cleared"] is False
@@ -269,6 +286,7 @@ def test_fr017_mannequin_gate_accepts_complete_interface_record(tmp_path: Path) 
     assert payload["interface_redesign_triggers"] == []
     assert payload["fail_observations"] == []
     assert payload["physical_validation_complete"] is False
+    assert payload["stage17_completion_claim_allowed"] is False
     assert payload["mannequin_interface_test_complete"] is True
     assert payload["pilot_static_fit_planning_ready"] is True
     assert payload["pilot_testing_cleared"] is False
