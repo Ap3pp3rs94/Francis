@@ -190,9 +190,7 @@ def test_fr017_measurement_session_brief_hands_off_ready_measurement_record(
     assert payload["current_group_missing_fields"] == []
     assert payload["current_group_invalid_fields"] == []
     assert payload["current_group_blocking_signals"] == []
-    assert _portable_path(payload["current_group_update_tool_path"]).endswith(
-        "scripts/fr017-mockup-readiness-gate.ps1"
-    )
+    assert _portable_path(payload["current_group_update_tool_path"]).endswith("scripts/fr017-mockup-readiness-gate.ps1")
     assert "fr017-mockup-readiness-gate.ps1 -Mode Status" in payload["current_group_update_command_template"]
     assert "does not mark physical validation complete" in payload["current_group_update_contract"]
     assert payload["measurement_capture_ready_groups"] == 5
