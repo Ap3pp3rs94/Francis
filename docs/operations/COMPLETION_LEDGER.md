@@ -107,6 +107,31 @@ What is materially true now:
 > Older dated entries are archived under docs/operations/archive/ (see scripts/archive-completion-ledger.ps1).
 > Historical undated ledger body is archived under docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md.
 
+### 2026-07-06 23:21Z - FR-017 measurement intake exposes next capture command
+
+Current posture: Phase 2 / FR-017 Stage 17 remains documentation-ready and evidence-container-ready, with physical validation still blocked at measurement intake. This is a Stage 17 / FR-017 intake-readback slice for the first physical-input gate. It does not create a measurement record, record pilot dimensions, mark physical validation complete, close Stage 17, approve load-bearing use, clear powered or frame-coupled use, or clear FR-018.
+
+What changed:
+
+- `scripts/fr017-measurement-intake.ps1 -Mode Status` now exposes read-only capture command templates for the five measurement-capture groups.
+- The intake output now reports `measurement_capture_next_command_kind`, `measurement_capture_next_command_template`, and `measurement_capture_next_status_command_template` so the operator can move from the first blocking group to the correct updater path without guessing.
+- Template/no-record status routes the next command to `fr017-new-measurement-record.ps1 -Mode Create` instead of suggesting mutation of `FR-017-MEASUREMENTS-INPUT-TEMPLATE.json`; existing working records route to the first blocking updater group, and ready records route only to the non-powered mockup readiness gate.
+
+Validation actually run:
+
+- PowerShell parser validation passed for `scripts/fr017-measurement-intake.ps1`.
+- `python -m py_compile tests\test_fr017_measurement_intake_script.py`: passed with `PYTHONPYCACHEPREFIX` redirected to a temp cache.
+- `python -m ruff check tests/test_fr017_measurement_intake_script.py`: passed.
+- `python -m ruff format --check tests/test_fr017_measurement_intake_script.py`: passed after formatting.
+- `python -m pytest tests/test_fr017_measurement_intake_script.py -q`: passed, 34 tests.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\fr017-measurement-intake.ps1 -Mode Status`: passed and returned `measurement_capture_next_command_kind=create_pending_measurement_record`, a create command with `<measurement-record.json>`, `measurement_capture_command_templates_not_evidence=True`, `physical_validation_complete=False`, and `fr018_implementation_cleared=False`.
+
+Remaining blockers:
+
+- FR-017 still requires a real accepted measurement record with setup/safety brief values, left/right dimensions, marked zones, repeatability, independence, and symptom-screen evidence before mockup patterning can truthfully proceed.
+- Downstream non-powered mockup, mannequin/interface, pilot static-fit, pilot movement, quick-release/cable-snag, professional engineering review, final human physical decision, and operator-reviewed completion-ledger update evidence remain required before any Stage 17 completion claim.
+- FR-018 remains blocked and not cleared by this slice.
+
 ### 2026-07-06 23:06Z - FR-017 initializer summary suggests output path
 
 Current posture: Phase 2 / FR-017 Stage 17 remains documentation-ready and evidence-container-ready, with physical validation still blocked at measurement intake. This is a Stage 17 / FR-017 initializer-readback slice for the first physical-input gate. It does not create a measurement record, record pilot dimensions, mark physical validation complete, close Stage 17, approve load-bearing use, clear powered or frame-coupled use, or clear FR-018.

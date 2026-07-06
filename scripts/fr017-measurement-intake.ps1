@@ -677,6 +677,16 @@ function New-CapturePlanSummary {
   }
 }
 
+function Format-CommandArgument {
+  param([string]$Value)
+
+  if ([string]::IsNullOrWhiteSpace($Value)) {
+    return '<measurement-record.json>'
+  }
+
+  return '"{0}"' -f $Value.Replace('"', '`"')
+}
+
 $RequiredMeasurementFields = @(
   'forearm_circumference_25mm_below_elbow_crease',
   'forearm_circumference_mid_forearm',
@@ -991,7 +1001,15 @@ $MeasurementIndependenceSafetyUpdatePath = Join-Path $RepoRoot 'scripts\fr017-up
 $MeasurementWorkingRecordNamePattern = 'FR-017-MEASUREMENTS-YYYY-MM-DD-PILOT-RECORD.json'
 $ResolvedMeasurementPath = if ([string]::IsNullOrWhiteSpace($MeasurementPath)) { $DefaultTemplatePath } else { Resolve-IntakePath -Path $MeasurementPath }
 $UsingTemplate = [string]::IsNullOrWhiteSpace($MeasurementPath)
+$CommandMeasurementPathArg = Format-CommandArgument -Value $(if ($UsingTemplate) { '' } else { $ResolvedMeasurementPath })
 $Exists = Test-Path -LiteralPath $ResolvedMeasurementPath -PathType Leaf
+$MeasurementCaptureCommandTemplates = [ordered]@{
+  setup_and_safety_brief = '.\scripts\fr017-update-measurement-setup-record.ps1 -Mode UpdateSetup -MeasurementPath {0} -EvidenceDate YYYY-MM-DD -Observer "<observer>" -PilotId "<pilot-reference>" -MeasurementTool "flexible metric tape" -Method "flexible tape, no tissue compression" -Posture "arm relaxed, palm neutral unless otherwise noted" -ConfirmNoTissueCompressionUsed -ConfirmNoWristBoneCompressionUsed -ConfirmMetricToolUsed -ConfirmArmRelaxedPalmNeutralOrExceptionRecorded -ConfirmStopConditionsBriefed -ConditionNotes "<no tissue/no wrist-bone compression, metric tool, and stop briefing notes>"' -f $CommandMeasurementPathArg
+  left_arm_numeric_measurement_passes = '.\scripts\fr017-update-measurement-record.ps1 -Mode UpdateSide -MeasurementPath {0} -Side left -ForearmCircumference25mmBelowElbowCrease <mm> -ForearmCircumferenceMidForearm <mm> -ForearmCircumference40mmAboveWristCrease <mm> -ForearmLengthElbowCreaseToWristCrease <mm> -OuterForearmUsablePanelLength <mm> -UpperStrapAllowedBandWidth <mm> -LowerStrapAllowedBandWidth <mm> -BoneRidgeReliefLength <mm> -InnerForearmNoPressureZoneWidth <mm> -WristClearanceGap <mm> -ConfirmSecondPassCompleted -MaxDeltaMm <0-5> -ConfirmAllRequiredMeasurementsWithin5mm' -f $CommandMeasurementPathArg
+  right_arm_numeric_measurement_passes = '.\scripts\fr017-update-measurement-record.ps1 -Mode UpdateSide -MeasurementPath {0} -Side right -ForearmCircumference25mmBelowElbowCrease <mm> -ForearmCircumferenceMidForearm <mm> -ForearmCircumference40mmAboveWristCrease <mm> -ForearmLengthElbowCreaseToWristCrease <mm> -OuterForearmUsablePanelLength <mm> -UpperStrapAllowedBandWidth <mm> -LowerStrapAllowedBandWidth <mm> -BoneRidgeReliefLength <mm> -InnerForearmNoPressureZoneWidth <mm> -WristClearanceGap <mm> -ConfirmSecondPassCompleted -MaxDeltaMm <0-5> -ConfirmAllRequiredMeasurementsWithin5mm' -f $CommandMeasurementPathArg
+  safety_critical_landmark_and_zone_references = '.\scripts\fr017-update-landmark-record.ps1 -Mode UpdateLandmarks -MeasurementPath {0} -LeftInnerElbowCreaseBoundary "<left reference>" -LeftWristBoneBoundary "<left reference>" -LeftRadiusRidgeRelief "<left reference>" -LeftUlnaRidgeRelief "<left reference>" -LeftOuterForearmCableRoute "<left reference>" -LeftQuickReleaseReachZone "<left reference>" -LeftGloveRemovalPath "<left reference>" -RightInnerElbowCreaseBoundary "<right reference>" -RightWristBoneBoundary "<right reference>" -RightRadiusRidgeRelief "<right reference>" -RightUlnaRidgeRelief "<right reference>" -RightOuterForearmCableRoute "<right reference>" -RightQuickReleaseReachZone "<right reference>" -RightGloveRemovalPath "<right reference>" -ConfirmInnerElbowCreaseBoundary -ConfirmWristBoneBoundary -ConfirmRadiusUlnaReliefPaths -ConfirmOuterForearmCableRoute -ConfirmQuickReleaseReachZone -ConfirmGloveRemovalPath -ConfirmSkinSafeMarkingUsed -LandmarkNotes "<inner elbow, wrist, radius/ulna, cable route, quick release, glove path, skin-safe marking notes>"' -f $CommandMeasurementPathArg
+  left_right_independence_and_safety_screen = '.\scripts\fr017-update-independence-safety-record.ps1 -Mode UpdateIndependenceSafety -MeasurementPath {0} -ConfirmLeftArmMeasuredSeparately -ConfirmRightArmMeasuredSeparately -ConfirmSideLabelsVerified -ConfirmValuesNotCopiedBetweenSides -LeftMeasurementReference "<left measurement evidence>" -RightMeasurementReference "<right measurement evidence>" -IndependenceNotes "<separate left/right collection and side-label notes>" -ConfirmNoPain -ConfirmNoTingling -ConfirmNoNumbness -ConfirmNoColdFingers -ConfirmNoDiscoloration -ConfirmNoHandWeakness -ConfirmNoWristPain -ConfirmNoSharpPressure -ConfirmNoReducedFingerMotion -ConfirmNoLossOfGripStrength' -f $CommandMeasurementPathArg
+}
 
 $MissingFields = New-Object System.Collections.Generic.List[string]
 $InvalidFields = New-Object System.Collections.Generic.List[string]
@@ -1170,6 +1188,22 @@ $MeasurementCapturePlanStatus = @(
     -BlockingSignals $AllBlockingSignals
 )
 $MeasurementCapturePlanSummary = New-CapturePlanSummary -CapturePlanStatus $MeasurementCapturePlanStatus
+$MeasurementCaptureFirstBlockingGroupId = [string]$MeasurementCapturePlanSummary.first_blocking_group_id
+$MeasurementCaptureNextCommandKind = 'none'
+$MeasurementCaptureNextCommandTemplate = ''
+if ($UsingTemplate -or -not $Exists) {
+  $MeasurementCaptureNextCommandKind = 'create_pending_measurement_record'
+  $CreateOutputPathArg = Format-CommandArgument -Value $(if ($UsingTemplate) { '' } else { $ResolvedMeasurementPath })
+  $MeasurementCaptureNextCommandTemplate = '.\scripts\fr017-new-measurement-record.ps1 -Mode Create -OutputPath {0} -EvidenceDate YYYY-MM-DD -Observer "<observer>" -PilotId "<pilot-reference>" -MeasurementTool "flexible metric tape" -Method "flexible tape, no tissue compression" -Posture "arm relaxed, palm neutral unless otherwise noted" -ConfirmNoTissueCompressionUsed -ConfirmNoWristBoneCompressionUsed -ConfirmMetricToolUsed -ConfirmArmRelaxedPalmNeutralOrExceptionRecorded -ConfirmStopConditionsBriefed -ConditionNotes "<no tissue/no wrist-bone compression, metric tool, and stop briefing notes>"' -f $CreateOutputPathArg
+} elseif (-not $ParseOk) {
+  $MeasurementCaptureNextCommandKind = 'repair_or_replace_measurement_record_json'
+} elseif ($Status -eq 'ready_for_non_powered_mockup_patterning') {
+  $MeasurementCaptureNextCommandKind = 'run_mockup_readiness_gate'
+  $MeasurementCaptureNextCommandTemplate = '.\scripts\fr017-mockup-readiness-gate.ps1 -Mode Status -MeasurementPath {0}' -f $CommandMeasurementPathArg
+} elseif (-not [string]::IsNullOrWhiteSpace($MeasurementCaptureFirstBlockingGroupId)) {
+  $MeasurementCaptureNextCommandKind = 'capture_' + $MeasurementCaptureFirstBlockingGroupId
+  $MeasurementCaptureNextCommandTemplate = [string]$MeasurementCaptureCommandTemplates[$MeasurementCaptureFirstBlockingGroupId]
+}
 
 $Output = [ordered]@{
   kind = 'francis.fr017.measurement_intake'
@@ -1219,8 +1253,11 @@ $Output = [ordered]@{
   measurement_capture_runbook_contract = 'Use FR-017-MEASUREMENT-CAPTURE-RUNBOOK.md with a pending working record created by scripts/fr017-new-measurement-record.ps1 from FR-017-MEASUREMENTS-INPUT-TEMPLATE.json. Use scripts/fr017-update-measurement-setup-record.ps1 only to record real operator-supplied setup and safety-brief fields, scripts/fr017-update-measurement-record.ps1 only to record real operator-supplied left/right numeric measurement passes, scripts/fr017-update-landmark-record.ps1 only to record real operator-supplied marked-zone references and landmark confirmations, and scripts/fr017-update-independence-safety-record.ps1 only to record real operator-supplied left/right independence confirmations and safety-screen values in that working record. The runbook, initializer, and updaters are operator input tooling only; they are not physical validation completion, powered testing clearance, frame-coupled testing clearance, or FR-018 clearance.'
   measurement_capture_plan_status_contract = 'Dynamic read-only status for each measurement_capture_plan group. A group is ready_for_measurement_intake only when its required fields have no missing values, no invalid values, and no matching blocking signals. This is intake readiness only, not physical validation completion.'
   measurement_capture_summary_contract = 'Scalar read-only summary of measurement_capture_plan_status for operator triage. The first blocking group points to the next capture group requiring work, but this is not physical validation evidence and does not clear fabrication, powered testing, or FR-018.'
+  measurement_capture_command_template_contract = 'Command templates are read-only operator handoffs. They are not executed by this gate, are not physical validation evidence, and must be filled only with real operator-supplied measurement observations before any updater is run.'
+  measurement_capture_command_templates_not_evidence = $true
   measurement_capture_plan_not_completion_evidence = $true
   next_required_physical_input = 'create_pending_record_with_fr017-new-measurement-record.ps1_then_capture_with_FR-017-MEASUREMENT-CAPTURE-RUNBOOK.md_and_rerun_measurement_intake'
+  measurement_capture_command_templates = $MeasurementCaptureCommandTemplates
   measurement_capture_plan = @($MeasurementCapturePlan)
   measurement_capture_plan_status = @($MeasurementCapturePlanStatus)
   measurement_capture_total_groups = [int]$MeasurementCapturePlanSummary.total_groups
@@ -1228,9 +1265,12 @@ $Output = [ordered]@{
   measurement_capture_pending_groups = [int]$MeasurementCapturePlanSummary.pending_groups
   measurement_capture_invalid_groups = [int]$MeasurementCapturePlanSummary.invalid_groups
   measurement_capture_failed_groups = [int]$MeasurementCapturePlanSummary.failed_groups
-  measurement_capture_first_blocking_group_id = [string]$MeasurementCapturePlanSummary.first_blocking_group_id
+  measurement_capture_first_blocking_group_id = $MeasurementCaptureFirstBlockingGroupId
   measurement_capture_first_blocking_group_status = [string]$MeasurementCapturePlanSummary.first_blocking_group_status
   measurement_capture_first_blocking_group_action = [string]$MeasurementCapturePlanSummary.first_blocking_group_action
+  measurement_capture_next_command_kind = $MeasurementCaptureNextCommandKind
+  measurement_capture_next_command_template = $MeasurementCaptureNextCommandTemplate
+  measurement_capture_next_status_command_template = '.\scripts\fr017-measurement-intake.ps1 -Mode Status -MeasurementPath {0}' -f $CommandMeasurementPathArg
   required_measurement_fields = $RequiredMeasurementFields
   required_marked_zone_fields = $RequiredMarkedZoneFields
   required_repeatability_fields = $RequiredRepeatabilityFields
