@@ -151,6 +151,73 @@ def _release_cable_args(
     return args
 
 
+def test_fr017_release_cable_initializer_status_preflights_without_writing(
+    tmp_path: Path,
+) -> None:
+    measurement_path, mockup_path, mannequin_path, static_fit_path, movement_path = _write_movement_ready_records(
+        tmp_path
+    )
+    release_cable_path = tmp_path / "candidate-release-cable.json"
+
+    proc = _run_script(
+        SCRIPT,
+        "-Mode",
+        "Status",
+        "-MeasurementPath",
+        str(measurement_path),
+        "-MockupPath",
+        str(mockup_path),
+        "-MannequinPath",
+        str(mannequin_path),
+        "-StaticFitPath",
+        str(static_fit_path),
+        "-MovementPath",
+        str(movement_path),
+        "-OutputPath",
+        str(release_cable_path),
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    result = _payload(proc.stdout)
+    assert result["kind"] == "francis.fr017.release_cable_record_initializer"
+    assert result["mode"] == "Status"
+    assert result["status"] == "release_cable_record_initializer_status"
+    assert result["template_exists"] is True
+    assert result["template_parse_ok"] is True
+    assert result["output_path_required_for_create"] is False
+    assert result["measurement_path_required_for_create"] is False
+    assert result["mockup_path_required_for_create"] is False
+    assert result["mannequin_path_required_for_create"] is False
+    assert result["static_fit_path_required_for_create"] is False
+    assert result["movement_path_required_for_create"] is False
+    assert result["output_path_targets_template"] is False
+    assert result["output_parent_exists"] is True
+    assert result["candidate_output_path_ready"] is True
+    assert result["measurement_file_exists"] is True
+    assert result["mockup_file_exists"] is True
+    assert result["mannequin_file_exists"] is True
+    assert result["static_fit_file_exists"] is True
+    assert result["movement_file_exists"] is True
+    assert result["upstream_pilot_movement_status"] == "ready_for_quick_release_and_cable_snag_test_planning"
+    assert result["upstream_pilot_movement_ready"] is True
+    assert result["wrote_file"] is False
+    assert result["output_exists"] is False
+    assert result["read_only_contract"] is True
+    assert result["writes_repo"] is False
+    assert result["writes_data"] is False
+    assert result["operator_supplied_release_cable_input_recorded"] is False
+    assert result["release_cable_record_is_stage17_completion_evidence"] is False
+    assert result["physical_validation_complete"] is False
+    assert result["stage17_completion_claim_allowed"] is False
+    assert result["professional_engineering_review_cleared"] is False
+    assert result["powered_or_frame_coupled_testing_cleared"] is False
+    assert result["fr018_implementation_cleared"] is False
+    assert "fr017-new-release-cable-record.ps1 -Mode Create" in result["create_command_template"]
+    assert "fr017-quick-release-cable-snag-gate.ps1 -Mode Status" in result["release_cable_status_command_template"]
+    assert result["next_command"] == result["create_command_template"]
+    assert not release_cable_path.exists()
+
+
 def test_fr017_release_cable_initializer_creates_non_powered_record_without_clearance(
     tmp_path: Path,
 ) -> None:
