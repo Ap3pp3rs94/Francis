@@ -3,8 +3,12 @@ from __future__ import annotations
 import tomllib
 from pathlib import Path
 
-ZEROCONF_SECURITY_FLOOR = "0.149.12"
+ZEROCONF_SECURITY_FLOOR = "0.149.16"
 ZEROCONF_SECURITY_SPECIFIER = f">={ZEROCONF_SECURITY_FLOOR}"
+
+
+def _version_tuple(version: str) -> tuple[int, ...]:
+    return tuple(int(part) for part in version.split("."))
 
 
 def _repo_root() -> Path:
@@ -29,7 +33,9 @@ def test_iot_extra_pins_zeroconf_security_floor() -> None:
     assert f"zeroconf{ZEROCONF_SECURITY_SPECIFIER}" in iot_extra
 
     zeroconf_packages = [package for package in lock["package"] if package["name"] == "zeroconf"]
-    assert [package["version"] for package in zeroconf_packages] == [ZEROCONF_SECURITY_FLOOR]
+    locked_versions = [package["version"] for package in zeroconf_packages]
+    assert len(locked_versions) == 1
+    assert _version_tuple(locked_versions[0]) >= _version_tuple(ZEROCONF_SECURITY_FLOOR)
 
     francis_package = next(package for package in lock["package"] if package["name"] == "francis")
     locked_iot_dependencies = francis_package["optional-dependencies"]["iot"]
