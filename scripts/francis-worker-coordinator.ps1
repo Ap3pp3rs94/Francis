@@ -103,6 +103,17 @@ function Get-UtcNowText {
   return [DateTimeOffset]::UtcNow.ToString('o')
 }
 
+function Get-CoordinatorPowerShellHost {
+  $Candidates = @('pwsh', 'pwsh.exe', 'powershell', 'powershell.exe')
+  foreach ($Candidate in $Candidates) {
+    $Command = Get-Command $Candidate -ErrorAction SilentlyContinue
+    if ($null -ne $Command -and -not [string]::IsNullOrWhiteSpace($Command.Source)) {
+      return $Command.Source
+    }
+  }
+  throw 'No PowerShell host was found for coordinator child script execution.'
+}
+
 function Get-CoordinatorBoundedText {
   param(
     [string]$Text,
@@ -122,7 +133,8 @@ function Get-CoordinatorBuildSnapshot {
   $Completion = ''
   if (Test-Path -LiteralPath $CompletionModelScript -PathType Leaf) {
     try {
-      $Completion = powershell.exe -NoProfile -ExecutionPolicy Bypass -File $CompletionModelScript -Mode Status | Out-String
+      $PowerShellHost = Get-CoordinatorPowerShellHost
+      $Completion = & $PowerShellHost -NoProfile -ExecutionPolicy Bypass -File $CompletionModelScript -Mode Status | Out-String
     } catch {
       $Completion = 'completion_model_read_failed: {0}' -f $_.Exception.Message
     }
@@ -417,7 +429,8 @@ $BasePrompt
 }
 
 function Get-LauncherStatus {
-  $Output = powershell.exe -NoProfile -ExecutionPolicy Bypass -File $Launcher -Mode Status
+  $PowerShellHost = Get-CoordinatorPowerShellHost
+  $Output = & $PowerShellHost -NoProfile -ExecutionPolicy Bypass -File $Launcher -Mode Status
   return ($Output | ConvertFrom-Json -ErrorAction Stop)
 }
 
@@ -459,7 +472,8 @@ function Start-WorkerLane {
   if (-not [string]::IsNullOrWhiteSpace($Model)) {
     $Args += @('-Model', $Model)
   }
-  $Output = powershell.exe @Args
+  $PowerShellHost = Get-CoordinatorPowerShellHost
+  $Output = & $PowerShellHost @Args
   $Launch = ($Output | ConvertFrom-Json -ErrorAction Stop)
   return [ordered]@{
     launch = $Launch
