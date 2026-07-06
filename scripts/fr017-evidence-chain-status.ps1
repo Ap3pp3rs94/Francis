@@ -7,6 +7,8 @@ param(
 
   [string]$MeasurementPath = '',
 
+  [string]$CandidateMeasurementPath = '',
+
   [string]$MockupPath = '',
 
   [string]$MannequinPath = '',
@@ -264,6 +266,9 @@ function New-GateEvidenceDetails {
     measurement_session_current_group_preflight_template_exists = [bool](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'current_group_preflight_template_exists' -Default $false)
     measurement_session_current_group_preflight_template_parse_ok = [bool](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'current_group_preflight_template_parse_ok' -Default $false)
     measurement_session_current_group_preflight_candidate_output_path_ready = [bool](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'current_group_preflight_candidate_output_path_ready' -Default $false)
+    measurement_session_current_group_preflight_output_path = [string](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'current_group_preflight_output_path' -Default '')
+    measurement_session_current_group_preflight_output_exists = [bool](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'current_group_preflight_output_exists' -Default $false)
+    measurement_session_current_group_preflight_output_parent_exists = [bool](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'current_group_preflight_output_parent_exists' -Default $false)
     measurement_session_current_group_preflight_wrote_file = [bool](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'current_group_preflight_wrote_file' -Default $false)
     measurement_session_current_group_preflight_physical_validation_complete = [bool](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'current_group_preflight_physical_validation_complete' -Default $false)
     measurement_session_current_group_preflight_fr018_implementation_cleared = [bool](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'current_group_preflight_fr018_implementation_cleared' -Default $false)
@@ -707,6 +712,9 @@ $FirstBlockingPreflightReadOnlyContract = $false
 $FirstBlockingPreflightTemplateExists = $false
 $FirstBlockingPreflightTemplateParseOk = $false
 $FirstBlockingPreflightCandidateOutputPathReady = $false
+$FirstBlockingPreflightOutputPath = ''
+$FirstBlockingPreflightOutputExists = $false
+$FirstBlockingPreflightOutputParentExists = $false
 $FirstBlockingPreflightWroteFile = $false
 $FirstBlockingPreflightPhysicalValidationComplete = $false
 $FirstBlockingPreflightFr018ImplementationCleared = $false
@@ -724,7 +732,12 @@ foreach ($Gate in $Gates) {
   $GateFailed = (-not [bool]$Result.parse_ok) -or [int]$Result.exit_code -ne 0 -or $GateStatus.StartsWith('failed_') -or $GateStatus.StartsWith('missing_') -or $GateStatus.StartsWith('invalid_')
   $MeasurementSessionResult = $null
   if ([string]$Gate.id -eq 'measurement_intake' -and -not $GateReady) {
-    $MeasurementSessionResult = Invoke-JsonGate -ScriptName 'fr017-measurement-session-brief.ps1' -Arguments ([string[]]$Gate.arguments)
+    $MeasurementSessionArgs = New-Object System.Collections.Generic.List[string]
+    foreach ($Argument in ([string[]]$Gate.arguments)) {
+      $MeasurementSessionArgs.Add($Argument) | Out-Null
+    }
+    Add-OptionalArg -Target $MeasurementSessionArgs -Name '-CandidateMeasurementPath' -Value $CandidateMeasurementPath
+    $MeasurementSessionResult = Invoke-JsonGate -ScriptName 'fr017-measurement-session-brief.ps1' -Arguments $MeasurementSessionArgs.ToArray()
   }
   $GateDetails = if ($null -eq $MeasurementSessionResult) {
     New-GateEvidenceDetails -Payload $Result.payload
@@ -776,6 +789,9 @@ foreach ($Gate in $Gates) {
       $FirstBlockingPreflightTemplateExists = [bool](Get-DetailsValue -Details $GateDetails -Name 'measurement_session_current_group_preflight_template_exists' -Default $false)
       $FirstBlockingPreflightTemplateParseOk = [bool](Get-DetailsValue -Details $GateDetails -Name 'measurement_session_current_group_preflight_template_parse_ok' -Default $false)
       $FirstBlockingPreflightCandidateOutputPathReady = [bool](Get-DetailsValue -Details $GateDetails -Name 'measurement_session_current_group_preflight_candidate_output_path_ready' -Default $false)
+      $FirstBlockingPreflightOutputPath = [string](Get-DetailsValue -Details $GateDetails -Name 'measurement_session_current_group_preflight_output_path')
+      $FirstBlockingPreflightOutputExists = [bool](Get-DetailsValue -Details $GateDetails -Name 'measurement_session_current_group_preflight_output_exists' -Default $false)
+      $FirstBlockingPreflightOutputParentExists = [bool](Get-DetailsValue -Details $GateDetails -Name 'measurement_session_current_group_preflight_output_parent_exists' -Default $false)
       $FirstBlockingPreflightWroteFile = [bool](Get-DetailsValue -Details $GateDetails -Name 'measurement_session_current_group_preflight_wrote_file' -Default $false)
       $FirstBlockingPreflightPhysicalValidationComplete = [bool](Get-DetailsValue -Details $GateDetails -Name 'measurement_session_current_group_preflight_physical_validation_complete' -Default $false)
       $FirstBlockingPreflightFr018ImplementationCleared = [bool](Get-DetailsValue -Details $GateDetails -Name 'measurement_session_current_group_preflight_fr018_implementation_cleared' -Default $false)
@@ -835,6 +851,9 @@ $Output = [ordered]@{
   first_blocking_preflight_template_exists = $FirstBlockingPreflightTemplateExists
   first_blocking_preflight_template_parse_ok = $FirstBlockingPreflightTemplateParseOk
   first_blocking_preflight_candidate_output_path_ready = $FirstBlockingPreflightCandidateOutputPathReady
+  first_blocking_preflight_output_path = $FirstBlockingPreflightOutputPath
+  first_blocking_preflight_output_exists = $FirstBlockingPreflightOutputExists
+  first_blocking_preflight_output_parent_exists = $FirstBlockingPreflightOutputParentExists
   first_blocking_preflight_wrote_file = $FirstBlockingPreflightWroteFile
   first_blocking_preflight_physical_validation_complete = $FirstBlockingPreflightPhysicalValidationComplete
   first_blocking_preflight_fr018_implementation_cleared = $FirstBlockingPreflightFr018ImplementationCleared

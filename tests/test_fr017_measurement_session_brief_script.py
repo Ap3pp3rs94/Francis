@@ -90,7 +90,8 @@ def test_fr017_measurement_session_brief_reports_first_template_blocker() -> Non
     assert "measurement_conditions.stop_conditions_briefed" in payload["current_group_missing_fields"]
     assert payload["current_group_preflight_tool_path"].endswith("scripts\\fr017-new-measurement-record.ps1")
     assert "fr017-new-measurement-record.ps1 -Mode Status" in payload["current_group_preflight_command_template"]
-    assert "-OutputPath <measurement-record.json>" in payload["current_group_preflight_command_template"]
+    assert "-OutputPath" in payload["current_group_preflight_command_template"]
+    assert "<measurement-record.json>" in payload["current_group_preflight_command_template"]
     assert "writes no evidence" in payload["current_group_preflight_contract"]
     assert payload["current_group_preflight_status"] == "measurement_record_initializer_status"
     assert payload["current_group_preflight_exit_code"] == 0
@@ -130,6 +131,27 @@ def test_fr017_measurement_session_brief_reports_first_template_blocker() -> Non
     assert payload["read_only_contract"] is True
     assert payload["writes_repo"] is False
     assert payload["writes_data"] is False
+
+
+def test_fr017_measurement_session_brief_preflights_candidate_measurement_path(tmp_path: Path) -> None:
+    candidate_path = tmp_path / "FR-017-MEASUREMENTS-2099-01-01-PILOT-RECORD.json"
+
+    proc = _run_brief("-Mode", "Status", "-CandidateMeasurementPath", str(candidate_path))
+
+    assert proc.returncode == 0, proc.stderr
+    payload = _payload(proc.stdout)
+    assert payload["status"] == "measurement_session_input_required"
+    assert payload["candidate_measurement_path"] == str(candidate_path)
+    assert str(candidate_path) in payload["current_group_preflight_command_template"]
+    assert payload["current_group_preflight_status"] == "measurement_record_initializer_status"
+    assert payload["current_group_preflight_candidate_output_path_ready"] is True
+    assert payload["current_group_preflight_output_path"] == str(candidate_path)
+    assert payload["current_group_preflight_output_parent_exists"] is True
+    assert payload["current_group_preflight_output_exists"] is False
+    assert payload["current_group_preflight_wrote_file"] is False
+    assert payload["current_group_preflight_physical_validation_complete"] is False
+    assert payload["current_group_preflight_fr018_implementation_cleared"] is False
+    assert not candidate_path.exists()
 
 
 def test_fr017_measurement_session_brief_points_pending_record_to_setup_updater(

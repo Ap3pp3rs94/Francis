@@ -94,7 +94,8 @@ def test_fr017_evidence_chain_status_stops_at_measurement_template() -> None:
         .endswith("scripts\\fr017-new-measurement-record.ps1")
     )
     assert "fr017-new-measurement-record.ps1 -Mode Status" in payload["first_blocking_preflight_command_template"]
-    assert "-OutputPath <measurement-record.json>" in payload["first_blocking_preflight_command_template"]
+    assert "-OutputPath" in payload["first_blocking_preflight_command_template"]
+    assert "<measurement-record.json>" in payload["first_blocking_preflight_command_template"]
     assert "writes no evidence" in payload["first_blocking_preflight_contract"]
     assert payload["first_blocking_preflight_status"] == "measurement_record_initializer_status"
     assert payload["first_blocking_preflight_exit_code"] == 0
@@ -296,6 +297,27 @@ def test_fr017_evidence_chain_status_stops_at_measurement_template() -> None:
     assert payload["read_only_contract"] is True
     assert payload["writes_repo"] is False
     assert payload["grants_mutation_authority"] is False
+
+
+def test_fr017_evidence_chain_status_preflights_candidate_measurement_path(tmp_path: Path) -> None:
+    candidate_path = tmp_path / "FR-017-MEASUREMENTS-2099-01-01-PILOT-RECORD.json"
+
+    proc = _run_gate("-Mode", "Status", "-CandidateMeasurementPath", str(candidate_path))
+
+    assert proc.returncode == 0, proc.stderr
+    payload = _payload(proc.stdout)
+    assert payload["status"] == "blocked_on_measurement_intake"
+    assert payload["first_blocking_gate"] == "measurement_intake"
+    assert str(candidate_path) in payload["first_blocking_preflight_command_template"]
+    assert payload["first_blocking_preflight_status"] == "measurement_record_initializer_status"
+    assert payload["first_blocking_preflight_candidate_output_path_ready"] is True
+    assert payload["first_blocking_preflight_output_path"] == str(candidate_path)
+    assert payload["first_blocking_preflight_output_parent_exists"] is True
+    assert payload["first_blocking_preflight_output_exists"] is False
+    assert payload["first_blocking_preflight_wrote_file"] is False
+    assert payload["first_blocking_preflight_physical_validation_complete"] is False
+    assert payload["first_blocking_preflight_fr018_implementation_cleared"] is False
+    assert not candidate_path.exists()
 
 
 def test_fr017_evidence_chain_status_moves_blocker_after_measurement_ready(tmp_path: Path) -> None:
