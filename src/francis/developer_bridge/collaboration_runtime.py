@@ -355,11 +355,15 @@ def _collaboration_loop_readback(driver_state: dict[str, object]) -> dict[str, o
     waiting = bool(driver_state.get("waiting_for_ollama"))
     remaining = _turn_gap_remaining_seconds(_safe_str(driver_state.get("next_prompt_after")))
     recurrence_state = "waiting_for_ollama" if waiting else "turn_gap" if remaining > 0 else "ready_for_next_prompt"
+    latest_turn = _latest_turn_readback(driver_state)
+    latest_prompt_id = _safe_str(latest_turn.get("codex_prompt_id")) or _safe_str(
+        driver_state.get("last_codex_prompt_id")
+    )
     participant_state = _read_json(
         _ollama_participant_state_path(),
         expected_kind="developer_bridge.ollama_participant_state",
     )
-    prompt_budget = _driver_prompt_budget_readback()
+    prompt_budget = _driver_prompt_budget_readback(latest_prompt_id=latest_prompt_id)
     latest_local_model_response = _latest_local_model_response_readback(participant_state)
     return {
         "state_observed": bool(driver_state),
@@ -376,7 +380,7 @@ def _collaboration_loop_readback(driver_state: dict[str, object]) -> dict[str, o
         "turn_gap_remaining_seconds": remaining,
         "updated_at": _safe_str(driver_state.get("updated_at")),
         "age_seconds": _age_seconds(_safe_str(driver_state.get("updated_at"))),
-        "latest_turn": _latest_turn_readback(driver_state),
+        "latest_turn": latest_turn,
         "latest_review_receipt": _latest_review_receipt_readback(driver_state),
         "latest_learning_receipt": _latest_learning_receipt_readback(driver_state),
         "current_learning_signal": _current_learning_signal_readback(driver_state),
@@ -825,7 +829,7 @@ def _latest_turn_readback(driver_state: dict[str, object]) -> dict[str, object]:
     }
 
 
-def _driver_prompt_budget_readback(*, limit: int = 30) -> dict[str, object]:
+def _driver_prompt_budget_readback(*, limit: int = 30, latest_prompt_id: str = "") -> dict[str, object]:
     max_chars = driver_prompt_max_chars()
     try:
         transcript = read_collaboration_transcript(source_agent="codex", target_agent="ollama", limit=limit)
@@ -853,7 +857,10 @@ def _driver_prompt_budget_readback(*, limit: int = 30) -> dict[str, object]:
     ]
     prompt_items = [_driver_prompt_budget_item(item, max_chars=max_chars) for item in items]
     violations = [item for item in prompt_items if not bool(item.get("within_budget"))]
-    latest = prompt_items[0] if prompt_items else {}
+    latest = next(
+        (item for item in prompt_items if _safe_str(item.get("prompt_id")) == latest_prompt_id),
+        prompt_items[0] if prompt_items else {},
+    )
     latest_violation = violations[0] if violations else {}
     return {
         "observed": bool(prompt_items),
