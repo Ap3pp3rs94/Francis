@@ -46,6 +46,11 @@ function Resolve-Fr017Path {
   return [System.IO.Path]::GetFullPath((Join-Path $RepoRoot $Path))
 }
 
+function Get-DefaultMeasurementOutputPath {
+  $DateStamp = Get-Date -Format 'yyyy-MM-dd'
+  return [System.IO.Path]::GetFullPath((Join-Path $RepoRoot ('FR-017_Stage17_Package\FR-017-MEASUREMENTS-{0}-PILOT-RECORD.json' -f $DateStamp)))
+}
+
 function Test-MissingOrPendingText {
   param([object]$Value)
 
@@ -140,10 +145,19 @@ function Set-ConfirmedCondition {
 
 $DefaultTemplatePath = Join-Path $RepoRoot 'FR-017_Stage17_Package\FR-017-MEASUREMENTS-INPUT-TEMPLATE.json'
 $ResolvedTemplatePath = if ([string]::IsNullOrWhiteSpace($TemplatePath)) { $DefaultTemplatePath } else { Resolve-Fr017Path -Path $TemplatePath }
-$ResolvedOutputPath = if ([string]::IsNullOrWhiteSpace($OutputPath)) { '' } else { Resolve-Fr017Path -Path $OutputPath }
-$CreateCommandTemplate = '.\scripts\fr017-new-measurement-record.ps1 -Mode Create -OutputPath <measurement-record.json> -EvidenceDate YYYY-MM-DD -Observer "<observer>" -PilotId "<pilot-reference>" -MeasurementTool "flexible metric tape" -Method "flexible tape, no tissue compression" -Posture "arm relaxed, palm neutral unless otherwise noted" -ConfirmNoTissueCompressionUsed -ConfirmNoWristBoneCompressionUsed -ConfirmMetricToolUsed -ConfirmArmRelaxedPalmNeutralOrExceptionRecorded -ConfirmStopConditionsBriefed -ConditionNotes "<no tissue/no wrist-bone compression, metric tool, and stop briefing notes>"'
-$MeasurementIntakeStatusCommandTemplate = '.\scripts\fr017-measurement-intake.ps1 -Mode Status -MeasurementPath <measurement-record.json>'
 $ReadOnlyMode = $Mode -in @('Status', 'Summary')
+$SuggestedOutputPath = Get-DefaultMeasurementOutputPath
+if ([string]::IsNullOrWhiteSpace($OutputPath)) {
+  $ResolvedOutputPath = if ($ReadOnlyMode) { $SuggestedOutputPath } else { '' }
+  $OutputPathSource = if ($ReadOnlyMode) { 'suggested_default' } else { 'missing' }
+} else {
+  $ResolvedOutputPath = Resolve-Fr017Path -Path $OutputPath
+  $OutputPathSource = 'operator_supplied'
+}
+$CreateCommandOutputArg = if ([string]::IsNullOrWhiteSpace($ResolvedOutputPath)) { '<measurement-record.json>' } else { '"{0}"' -f $ResolvedOutputPath }
+$MeasurementPathStatusArg = if ([string]::IsNullOrWhiteSpace($ResolvedOutputPath)) { '<measurement-record.json>' } else { '"{0}"' -f $ResolvedOutputPath }
+$CreateCommandTemplate = '.\scripts\fr017-new-measurement-record.ps1 -Mode Create -OutputPath {0} -EvidenceDate YYYY-MM-DD -Observer "<observer>" -PilotId "<pilot-reference>" -MeasurementTool "flexible metric tape" -Method "flexible tape, no tissue compression" -Posture "arm relaxed, palm neutral unless otherwise noted" -ConfirmNoTissueCompressionUsed -ConfirmNoWristBoneCompressionUsed -ConfirmMetricToolUsed -ConfirmArmRelaxedPalmNeutralOrExceptionRecorded -ConfirmStopConditionsBriefed -ConditionNotes "<no tissue/no wrist-bone compression, metric tool, and stop briefing notes>"' -f $CreateCommandOutputArg
+$MeasurementIntakeStatusCommandTemplate = '.\scripts\fr017-measurement-intake.ps1 -Mode Status -MeasurementPath {0}' -f $MeasurementPathStatusArg
 $EffectiveMode = if ($ReadOnlyMode) { 'Status' } else { $Mode }
 $Status = if ($EffectiveMode -eq 'Status') { 'measurement_record_initializer_status' } else { 'created_pending_measurement_record' }
 $ExitCode = 0
@@ -265,6 +279,8 @@ $Output = [ordered]@{
   status = $Status
   template_path = $ResolvedTemplatePath
   output_path = $ResolvedOutputPath
+  suggested_output_path = $SuggestedOutputPath
+  output_path_source = $OutputPathSource
   template_exists = (Test-Path -LiteralPath $ResolvedTemplatePath -PathType Leaf)
   template_parse_ok = $TemplateParseOk
   output_path_required_for_create = $OutputPathRequiredForCreate
@@ -320,6 +336,8 @@ if ($Mode -eq 'Summary') {
     status = $Output.status
     template_path = $Output.template_path
     output_path = $Output.output_path
+    suggested_output_path = $Output.suggested_output_path
+    output_path_source = $Output.output_path_source
     template_exists = $Output.template_exists
     template_parse_ok = $Output.template_parse_ok
     output_path_required_for_create = $Output.output_path_required_for_create
