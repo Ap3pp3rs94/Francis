@@ -384,9 +384,9 @@ if (-not $IntakeFailed -and -not $IntakeReady -and $UsingTemplate -and $FirstBlo
   $InitializerPath = [string](Get-PayloadValue -Payload $IntakeGate.payload -Name 'measurement_record_initializer_path' -Default (Join-Path $RepoRoot 'scripts\fr017-new-measurement-record.ps1'))
   $CurrentGroupPreflightToolPath = $InitializerPath
   $PreflightOutputPathArg = if ([string]::IsNullOrWhiteSpace($ResolvedCandidateMeasurementPath)) { '<measurement-record.json>' } else { $ResolvedCandidateMeasurementPath }
-  $CurrentGroupPreflightCommandTemplate = '.\scripts\fr017-new-measurement-record.ps1 -Mode Status -OutputPath "{0}"' -f $PreflightOutputPathArg
-  $CurrentGroupPreflightContract = 'Read-only initializer preflight for the pending measurement record. It checks the template and candidate output path, writes no evidence, records no measurements, and does not clear FR-018.'
-  $PreflightArgs = @('-Mode', 'Status')
+  $CurrentGroupPreflightCommandTemplate = '.\scripts\fr017-new-measurement-record.ps1 -Mode Summary -OutputPath "{0}"' -f $PreflightOutputPathArg
+  $CurrentGroupPreflightContract = 'Read-only initializer summary preflight for the pending measurement record. It checks the template and candidate output path, returns the next create action, writes no evidence, records no measurements, and does not clear FR-018.'
+  $PreflightArgs = @('-Mode', 'Summary')
   if (-not [string]::IsNullOrWhiteSpace($ResolvedCandidateMeasurementPath)) {
     $PreflightArgs += @('-OutputPath', $ResolvedCandidateMeasurementPath)
   }
@@ -505,7 +505,7 @@ $Output = [ordered]@{
   next_required_physical_input = [string](Get-PayloadValue -Payload $IntakeGate.payload -Name 'next_required_physical_input' -Default '')
   next_operator_action = $NextOperatorAction
   operator_sequence = @(
-    'preflight_measurement_record_initializer_status_with_fr017-new-measurement-record.ps1',
+    'preflight_measurement_record_initializer_summary_with_fr017-new-measurement-record.ps1',
     'create_pending_measurement_record_with_fr017-new-measurement-record.ps1',
     'update_setup_safety_brief_with_fr017-update-measurement-setup-record.ps1_when_pending_record_exists',
     'capture_setup_and_safety_brief_without_symptoms_or_compression',

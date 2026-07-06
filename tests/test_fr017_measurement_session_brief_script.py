@@ -89,7 +89,7 @@ def test_fr017_measurement_session_brief_reports_first_template_blocker() -> Non
     assert "evidence.date" in payload["current_group_missing_fields"]
     assert "measurement_conditions.stop_conditions_briefed" in payload["current_group_missing_fields"]
     assert payload["current_group_preflight_tool_path"].endswith("scripts\\fr017-new-measurement-record.ps1")
-    assert "fr017-new-measurement-record.ps1 -Mode Status" in payload["current_group_preflight_command_template"]
+    assert "fr017-new-measurement-record.ps1 -Mode Summary" in payload["current_group_preflight_command_template"]
     assert "-OutputPath" in payload["current_group_preflight_command_template"]
     assert "<measurement-record.json>" in payload["current_group_preflight_command_template"]
     assert "writes no evidence" in payload["current_group_preflight_contract"]
@@ -114,7 +114,7 @@ def test_fr017_measurement_session_brief_reports_first_template_blocker() -> Non
         "complete_first_blocking_measurement_capture_group_then_rerun_measurement_intake"
     )
     assert payload["operator_sequence"][0] == (
-        "preflight_measurement_record_initializer_status_with_fr017-new-measurement-record.ps1"
+        "preflight_measurement_record_initializer_summary_with_fr017-new-measurement-record.ps1"
     )
     assert payload["operator_sequence"][1] == "create_pending_measurement_record_with_fr017-new-measurement-record.ps1"
     assert (
@@ -155,7 +155,7 @@ def test_fr017_measurement_session_summary_reports_current_capture_group() -> No
     assert payload["current_group_invalid_field_count"] == 0
     assert payload["current_group_blocking_signal_count"] == 0
     assert payload["current_group_preflight_tool_path"].endswith("scripts\\fr017-new-measurement-record.ps1")
-    assert "fr017-new-measurement-record.ps1 -Mode Status" in payload["current_group_preflight_command_template"]
+    assert "fr017-new-measurement-record.ps1 -Mode Summary" in payload["current_group_preflight_command_template"]
     assert payload["current_group_preflight_parse_ok"] is True
     assert payload["current_group_preflight_read_only_contract"] is True
     assert payload["current_group_preflight_wrote_file"] is False

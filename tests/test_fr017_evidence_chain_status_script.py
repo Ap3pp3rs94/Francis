@@ -93,7 +93,7 @@ def test_fr017_evidence_chain_status_stops_at_measurement_template() -> None:
         .replace("/", "\\")
         .endswith("scripts\\fr017-new-measurement-record.ps1")
     )
-    assert "fr017-new-measurement-record.ps1 -Mode Status" in payload["first_blocking_preflight_command_template"]
+    assert "fr017-new-measurement-record.ps1 -Mode Summary" in payload["first_blocking_preflight_command_template"]
     assert "-OutputPath" in payload["first_blocking_preflight_command_template"]
     assert "<measurement-record.json>" in payload["first_blocking_preflight_command_template"]
     assert "writes no evidence" in payload["first_blocking_preflight_contract"]
@@ -178,7 +178,7 @@ def test_fr017_evidence_chain_status_stops_at_measurement_template() -> None:
         .endswith("scripts\\fr017-new-measurement-record.ps1")
     )
     assert (
-        "fr017-new-measurement-record.ps1 -Mode Status"
+        "fr017-new-measurement-record.ps1 -Mode Summary"
         in payload["first_blocking_details"]["measurement_session_current_group_preflight_command_template"]
     )
     assert (
@@ -318,7 +318,7 @@ def test_fr017_evidence_chain_summary_reports_next_operator_blocker() -> None:
         payload["operator_input_hint"]
         == "create_pending_record_with_fr017-new-measurement-record.ps1_then_capture_with_FR-017-MEASUREMENT-CAPTURE-RUNBOOK.md_and_rerun_measurement_intake"
     )
-    assert "fr017-new-measurement-record.ps1 -Mode Status" in payload["first_blocking_preflight_command_template"]
+    assert "fr017-new-measurement-record.ps1 -Mode Summary" in payload["first_blocking_preflight_command_template"]
     assert payload["first_blocking_preflight_parse_ok"] is True
     assert payload["first_blocking_preflight_read_only_contract"] is True
     assert payload["first_blocking_preflight_wrote_file"] is False
