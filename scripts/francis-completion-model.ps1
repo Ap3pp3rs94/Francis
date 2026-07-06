@@ -5,6 +5,8 @@ param(
 
   [string]$LedgerPath = '',
 
+  [string]$LedgerArchivePath = '',
+
   [string]$BuildManifestPath = '',
 
   [string]$ArtifactReconstructionReceiptRootPath = ''
@@ -34,6 +36,21 @@ function Read-CompletionModelText {
     return ''
   }
   return [System.IO.File]::ReadAllText($Path)
+}
+
+function Resolve-CompletionLedgerArchivePath {
+  param(
+    [string]$Override,
+    [bool]$UsesDefaultLedger
+  )
+
+  if (-not [string]::IsNullOrWhiteSpace($Override)) {
+    return [System.IO.Path]::GetFullPath($Override)
+  }
+  if ($UsesDefaultLedger) {
+    return Join-Path $RepoRoot 'docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md'
+  }
+  return ''
 }
 
 function Limit-CompletionModelText {
@@ -211,6 +228,27 @@ function Get-Stage17Status {
     latest_ledger_entry = $LatestStage17Entry
     next_smallest_truthful_gap = if ([bool]$LatestStage17Entry.has_remaining_truthful_gap) { 'select_from_latest_stage17_remaining_truthful_gap' } else { 'name_stage17_remaining_truthful_gap_in_ledger' }
   }
+}
+
+function Get-Stage17StatusWithArchive {
+  param(
+    [string]$LedgerText,
+    [string]$LedgerArchiveText
+  )
+
+  $Stage17Status = Get-Stage17Status -LedgerText $LedgerText
+  if ([bool]$Stage17Status.found -or [string]::IsNullOrWhiteSpace($LedgerArchiveText)) {
+    return $Stage17Status
+  }
+
+  $ArchivedStatus = Get-Stage17Status -LedgerText $LedgerArchiveText
+  if (-not [bool]$ArchivedStatus.found) {
+    return $Stage17Status
+  }
+
+  $ArchivedStatus.readback_scope = 'latest_stage17_archived_ledger_entry'
+  $ArchivedStatus.archive_source = 'docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md'
+  return $ArchivedStatus
 }
 
 function Get-PlaneReadiness {
@@ -654,19 +692,22 @@ function New-NextContinueDecision {
   }
 }
 
+$UsesDefaultLedger = [string]::IsNullOrWhiteSpace($LedgerPath)
 $ResolvedLedgerPath = Resolve-CompletionModelPath -Override $LedgerPath -DefaultRelativePath 'docs/operations/COMPLETION_LEDGER.md'
+$ResolvedLedgerArchivePath = Resolve-CompletionLedgerArchivePath -Override $LedgerArchivePath -UsesDefaultLedger $UsesDefaultLedger
 $ResolvedBuildManifestPath = Resolve-CompletionModelPath -Override $BuildManifestPath -DefaultRelativePath 'docs/canonical/BUILD_MANIFEST.md'
 $ResolvedArtifactReconstructionReceiptRootPath = Resolve-CompletionModelPath -Override $ArtifactReconstructionReceiptRootPath -DefaultRelativePath 'data/artifacts/plugins/capability_packs/artifact_reconstructions'
 $LedgerExists = Test-Path -LiteralPath $ResolvedLedgerPath -PathType Leaf
 $BuildManifestExists = Test-Path -LiteralPath $ResolvedBuildManifestPath -PathType Leaf
 $LedgerText = Read-CompletionModelText -Path $ResolvedLedgerPath
+$LedgerArchiveText = if ([string]::IsNullOrWhiteSpace($ResolvedLedgerArchivePath)) { '' } else { Read-CompletionModelText -Path $ResolvedLedgerArchivePath }
 $BuildManifestText = Read-CompletionModelText -Path $ResolvedBuildManifestPath
 $CurrentPhase = Get-FirstRegexGroup -Text $LedgerText -Pattern 'Francis is in `(?<phase>Phase \d+)`' -GroupName 'phase'
 if ([string]::IsNullOrWhiteSpace($CurrentPhase)) {
   $CurrentPhase = Get-FirstRegexGroup -Text $BuildManifestText -Pattern '\((?<phase>Phase \d+)\)' -GroupName 'phase'
 }
 $LatestLedgerEntry = Get-LatestLedgerEntry -LedgerText $LedgerText
-$Stage17Status = Get-Stage17Status -LedgerText $LedgerText
+$Stage17Status = Get-Stage17StatusWithArchive -LedgerText $LedgerText -LedgerArchiveText $LedgerArchiveText
 $Planes = Get-PlaneReadiness -BuildManifestText $BuildManifestText
 $LoopGuard = New-CompletionLoopGuard -LedgerExists $LedgerExists -BuildManifestExists $BuildManifestExists -LatestLedgerEntry $LatestLedgerEntry -Stage17Status $Stage17Status
 $NextContinueDecision = New-NextContinueDecision -LoopGuard $LoopGuard -LatestLedgerEntry $LatestLedgerEntry -Stage17Status $Stage17Status
@@ -685,6 +726,7 @@ $Payload = [ordered]@{
   grants_mutation_authority = $false
   source_documents = [ordered]@{
     completion_ledger = 'docs/operations/COMPLETION_LEDGER.md'
+    completion_ledger_static_history = 'docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md'
     build_manifest = 'docs/canonical/BUILD_MANIFEST.md'
   }
   current_phase = $CurrentPhase
