@@ -818,6 +818,30 @@ foreach ($Gate in $Gates) {
       $FirstBlockingPreflightWroteFile = [bool](Get-PayloadValue -Payload $MockupInitializerPreflight.payload -Name 'wrote_file' -Default $false)
       $FirstBlockingPreflightPhysicalValidationComplete = [bool](Get-PayloadValue -Payload $MockupInitializerPreflight.payload -Name 'physical_validation_complete' -Default $false)
       $FirstBlockingPreflightFr018ImplementationCleared = [bool](Get-PayloadValue -Payload $MockupInitializerPreflight.payload -Name 'fr018_implementation_cleared' -Default $false)
+    } elseif ([string]$Gate.id -eq 'mannequin_interface' -and -not $GateFailed) {
+      $MannequinInitializerArgs = New-Object System.Collections.Generic.List[string]
+      $MannequinInitializerArgs.Add('-Mode') | Out-Null
+      $MannequinInitializerArgs.Add('Status') | Out-Null
+      Add-OptionalArg -Target $MannequinInitializerArgs -Name '-MeasurementPath' -Value $MeasurementPath
+      Add-OptionalArg -Target $MannequinInitializerArgs -Name '-MockupPath' -Value $MockupPath
+      Add-OptionalArg -Target $MannequinInitializerArgs -Name '-OutputPath' -Value $MannequinPath
+      $MannequinInitializerPreflight = Invoke-JsonGate -ScriptName 'fr017-new-mannequin-interface-record.ps1' -Arguments $MannequinInitializerArgs.ToArray()
+      $FirstBlockingPreflightToolPath = Join-Path $RepoRoot 'scripts\fr017-new-mannequin-interface-record.ps1'
+      $FirstBlockingPreflightCommandTemplate = if ([string]::IsNullOrWhiteSpace($MannequinPath)) { '.\scripts\fr017-new-mannequin-interface-record.ps1 -Mode Status -MeasurementPath "{0}" -MockupPath "{1}"' -f $MeasurementPath, $MockupPath } else { '.\scripts\fr017-new-mannequin-interface-record.ps1 -Mode Status -MeasurementPath "{0}" -MockupPath "{1}" -OutputPath "{2}"' -f $MeasurementPath, $MockupPath, $MannequinPath }
+      $FirstBlockingPreflightContract = 'Read-only mannequin-interface initializer preflight for the non-powered FR-017 mannequin or arm-form interface record. It checks the mannequin template, candidate output path when provided, and upstream mockup readiness, writes no evidence, records no mannequin test, and does not clear physical validation, pilot testing, powered testing, or FR-018.'
+      $FirstBlockingPreflightStatus = if ([bool]$MannequinInitializerPreflight.parse_ok) { [string](Get-PayloadValue -Payload $MannequinInitializerPreflight.payload -Name 'status' -Default '') } else { 'failed_preflight_parse' }
+      $FirstBlockingPreflightExitCode = [int]$MannequinInitializerPreflight.exit_code
+      $FirstBlockingPreflightParseOk = [bool]$MannequinInitializerPreflight.parse_ok
+      $FirstBlockingPreflightReadOnlyContract = [bool](Get-PayloadValue -Payload $MannequinInitializerPreflight.payload -Name 'read_only_contract' -Default $false)
+      $FirstBlockingPreflightTemplateExists = [bool](Get-PayloadValue -Payload $MannequinInitializerPreflight.payload -Name 'template_exists' -Default $false)
+      $FirstBlockingPreflightTemplateParseOk = [bool](Get-PayloadValue -Payload $MannequinInitializerPreflight.payload -Name 'template_parse_ok' -Default $false)
+      $FirstBlockingPreflightCandidateOutputPathReady = [bool](Get-PayloadValue -Payload $MannequinInitializerPreflight.payload -Name 'candidate_output_path_ready' -Default $false)
+      $FirstBlockingPreflightOutputPath = [string](Get-PayloadValue -Payload $MannequinInitializerPreflight.payload -Name 'output_path' -Default '')
+      $FirstBlockingPreflightOutputExists = [bool](Get-PayloadValue -Payload $MannequinInitializerPreflight.payload -Name 'output_exists' -Default $false)
+      $FirstBlockingPreflightOutputParentExists = [bool](Get-PayloadValue -Payload $MannequinInitializerPreflight.payload -Name 'output_parent_exists' -Default $false)
+      $FirstBlockingPreflightWroteFile = [bool](Get-PayloadValue -Payload $MannequinInitializerPreflight.payload -Name 'wrote_file' -Default $false)
+      $FirstBlockingPreflightPhysicalValidationComplete = [bool](Get-PayloadValue -Payload $MannequinInitializerPreflight.payload -Name 'physical_validation_complete' -Default $false)
+      $FirstBlockingPreflightFr018ImplementationCleared = [bool](Get-PayloadValue -Payload $MannequinInitializerPreflight.payload -Name 'fr018_implementation_cleared' -Default $false)
     }
     $FirstBlockingUpdateHint = New-FirstBlockingUpdateHint -GateId ([string]$Gate.id) -GateFailed $GateFailed -GateDetails $GateDetails
     $FirstBlockingUpdateToolPath = [string]$FirstBlockingUpdateHint.tool_path

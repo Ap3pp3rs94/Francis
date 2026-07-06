@@ -111,6 +111,59 @@ def _mannequin_args(
     return args
 
 
+def test_fr017_mannequin_initializer_status_preflights_without_writing(
+    tmp_path: Path,
+) -> None:
+    measurement_path, mockup_path = _write_ready_upstream(tmp_path)
+    mannequin_path = tmp_path / "candidate-mannequin.json"
+
+    proc = _run_script(
+        SCRIPT,
+        "-Mode",
+        "Status",
+        "-MeasurementPath",
+        str(measurement_path),
+        "-MockupPath",
+        str(mockup_path),
+        "-OutputPath",
+        str(mannequin_path),
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    result = _payload(proc.stdout)
+    assert result["kind"] == "francis.fr017.mannequin_interface_record_initializer"
+    assert result["mode"] == "Status"
+    assert result["status"] == "mannequin_interface_record_initializer_status"
+    assert result["template_exists"] is True
+    assert result["template_parse_ok"] is True
+    assert result["output_path_required_for_create"] is False
+    assert result["measurement_path_required_for_create"] is False
+    assert result["mockup_path_required_for_create"] is False
+    assert result["output_path_targets_template"] is False
+    assert result["output_parent_exists"] is True
+    assert result["candidate_output_path_ready"] is True
+    assert result["measurement_file_exists"] is True
+    assert result["mockup_file_exists"] is True
+    assert result["upstream_mockup_status"] == "ready_for_mannequin_interface_test"
+    assert result["upstream_mockup_ready"] is True
+    assert result["wrote_file"] is False
+    assert result["output_exists"] is False
+    assert result["read_only_contract"] is True
+    assert result["writes_repo"] is False
+    assert result["writes_data"] is False
+    assert result["operator_supplied_mannequin_interface_input_recorded"] is False
+    assert result["mannequin_interface_record_is_physical_validation_evidence"] is False
+    assert result["physical_validation_complete"] is False
+    assert result["stage17_completion_claim_allowed"] is False
+    assert result["pilot_testing_cleared"] is False
+    assert result["powered_or_frame_coupled_testing_cleared"] is False
+    assert result["fr018_implementation_cleared"] is False
+    assert "fr017-new-mannequin-interface-record.ps1 -Mode Create" in result["create_command_template"]
+    assert "fr017-mannequin-interface-gate.ps1 -Mode Status" in result["mannequin_interface_status_command_template"]
+    assert result["next_command"] == result["create_command_template"]
+    assert not mannequin_path.exists()
+
+
 def test_fr017_mannequin_initializer_creates_non_powered_interface_record_without_clearance(
     tmp_path: Path,
 ) -> None:
