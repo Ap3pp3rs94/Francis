@@ -109,11 +109,13 @@ def test_fr017_completion_ledger_gate_requires_ledger_entry_after_final_decision
         "create_candidate_completion_ledger_handoff_with_fr017-new-completion-ledger-handoff.ps1_then_rerun_completion_ledger_gate"
     )
     assert "fr017-new-completion-ledger-handoff.ps1" in payload["completion_ledger_handoff_runbook_contract"]
-    assert payload["completion_ledger_handoff_template_path"].endswith(
-        "FR-017_Stage17_Package\\FR-017-COMPLETION-LEDGER-HANDOFF-TEMPLATE.md"
+    assert Path(payload["completion_ledger_handoff_template_path"]).parts[-2:] == (
+        "FR-017_Stage17_Package",
+        "FR-017-COMPLETION-LEDGER-HANDOFF-TEMPLATE.md",
     )
-    assert payload["completion_ledger_handoff_initializer_path"].endswith(
-        "scripts\\fr017-new-completion-ledger-handoff.ps1"
+    assert Path(payload["completion_ledger_handoff_initializer_path"]).parts[-2:] == (
+        "scripts",
+        "fr017-new-completion-ledger-handoff.ps1",
     )
     assert payload["completion_ledger_handoff_working_record_name_pattern"] == (
         "FR-017-COMPLETION-LEDGER-HANDOFF-YYYY-MM-DD-PILOT.md"
