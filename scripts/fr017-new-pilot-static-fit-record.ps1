@@ -1,19 +1,15 @@
 [CmdletBinding()]
 param(
-  [ValidateSet('Create')]
-  [string]$Mode = 'Create',
+  [ValidateSet('Status', 'Create')]
+  [string]$Mode = 'Status',
 
-  [Parameter(Mandatory = $true)]
-  [string]$OutputPath,
+  [string]$OutputPath = '',
 
-  [Parameter(Mandatory = $true)]
-  [string]$MeasurementPath,
+  [string]$MeasurementPath = '',
 
-  [Parameter(Mandatory = $true)]
-  [string]$MockupPath,
+  [string]$MockupPath = '',
 
-  [Parameter(Mandatory = $true)]
-  [string]$MannequinPath,
+  [string]$MannequinPath = '',
 
   [string]$TemplatePath = '',
 
@@ -412,53 +408,120 @@ function Invoke-MannequinInterfaceGate {
 
 $DefaultTemplatePath = Join-Path $RepoRoot 'FR-017_Stage17_Package\FR-017-PILOT-STATIC-FIT-INPUT-TEMPLATE.json'
 $ResolvedTemplatePath = if ([string]::IsNullOrWhiteSpace($TemplatePath)) { $DefaultTemplatePath } else { Resolve-Fr017Path -Path $TemplatePath }
-$ResolvedOutputPath = Resolve-Fr017Path -Path $OutputPath
-$ResolvedMeasurementPath = Resolve-Fr017Path -Path $MeasurementPath
-$ResolvedMockupPath = Resolve-Fr017Path -Path $MockupPath
-$ResolvedMannequinPath = Resolve-Fr017Path -Path $MannequinPath
-$Status = 'created_pilot_static_fit_record'
+$ResolvedOutputPath = if ([string]::IsNullOrWhiteSpace($OutputPath)) { '' } else { Resolve-Fr017Path -Path $OutputPath }
+$ResolvedMeasurementPath = if ([string]::IsNullOrWhiteSpace($MeasurementPath)) { '' } else { Resolve-Fr017Path -Path $MeasurementPath }
+$ResolvedMockupPath = if ([string]::IsNullOrWhiteSpace($MockupPath)) { '' } else { Resolve-Fr017Path -Path $MockupPath }
+$ResolvedMannequinPath = if ([string]::IsNullOrWhiteSpace($MannequinPath)) { '' } else { Resolve-Fr017Path -Path $MannequinPath }
+$CreateCommandTemplate = '.\scripts\fr017-new-pilot-static-fit-record.ps1 -Mode Create -OutputPath <pilot-static-fit-record.json> -MeasurementPath <measurement-record.json> -MockupPath <mockup-record.json> -MannequinPath <mannequin-interface-record.json> -EvidenceDate YYYY-MM-DD -Observer "<observer>" -PilotId "<pilot id>" -PrototypeRevision "<prototype revision>" -TestDurationMinutes <minutes> -ConfirmNonPoweredOnly -ConfirmNoFrameOrPowerCoupling -ConfirmObserverPresent -ConfirmEmergencyReleaseBriefed -ConfirmStopOnSymptoms -ConfirmPilotCanSelfRemoveOrAbort -ConfirmLeftFingersWarmBeforeDonning -ConfirmLeftNormalColorBeforeDonning -ConfirmLeftBaselineGripPresent -ConfirmRightFingersWarmBeforeDonning -ConfirmRightNormalColorBeforeDonning -ConfirmRightBaselineGripPresent -ConfirmLeftCuffBelowElbowCrease -ConfirmLeftLowerCuffAboveWristBones -ConfirmLeftUpperStrapBroadNonCompressive -ConfirmLeftLowerStrapBroadNonCompressive -ConfirmLeftInnerForearmClear -ConfirmLeftBoneReliefPresent -ConfirmLeftQuickReleaseVisibleTactileReachable -ConfirmLeftCuffStableWithoutMigration -ConfirmLeftGloveRemovalPathOpen -ConfirmLeftWristAssemblyRemovalPathOpen -ConfirmLeftCableRouteStaticNoSnag -ConfirmRightCuffBelowElbowCrease -ConfirmRightLowerCuffAboveWristBones -ConfirmRightUpperStrapBroadNonCompressive -ConfirmRightLowerStrapBroadNonCompressive -ConfirmRightInnerForearmClear -ConfirmRightBoneReliefPresent -ConfirmRightQuickReleaseVisibleTactileReachable -ConfirmRightCuffStableWithoutMigration -ConfirmRightGloveRemovalPathOpen -ConfirmRightWristAssemblyRemovalPathOpen -ConfirmRightCableRouteStaticNoSnag -ConfirmLeftFingersWarmAfterDoffing -ConfirmLeftNormalColorAfterDoffing -ConfirmLeftGripStrengthUnchanged -ConfirmRightFingersWarmAfterDoffing -ConfirmRightNormalColorAfterDoffing -ConfirmRightGripStrengthUnchanged -ConfirmNoLeftPain -ConfirmNoLeftTingling -ConfirmNoLeftNumbness -ConfirmNoLeftColdFingers -ConfirmNoLeftDiscoloration -ConfirmNoLeftHandWeakness -ConfirmNoLeftWristPain -ConfirmNoLeftSharpPressure -ConfirmNoLeftReducedFingerMotion -ConfirmNoLeftLossOfGripStrength -ConfirmNoRightPain -ConfirmNoRightTingling -ConfirmNoRightNumbness -ConfirmNoRightColdFingers -ConfirmNoRightDiscoloration -ConfirmNoRightHandWeakness -ConfirmNoRightWristPain -ConfirmNoRightSharpPressure -ConfirmNoRightReducedFingerMotion -ConfirmNoRightLossOfGripStrength'
+$PilotStaticFitStatusCommandTemplate = '.\scripts\fr017-pilot-static-fit-gate.ps1 -Mode Status -MeasurementPath <measurement-record.json> -MockupPath <mockup-record.json> -MannequinPath <mannequin-interface-record.json> -StaticFitPath <pilot-static-fit-record.json>'
+$Status = if ($Mode -eq 'Status') { 'pilot_static_fit_record_initializer_status' } else { 'created_pilot_static_fit_record' }
 $ExitCode = 0
 $WroteFile = $false
 $InvalidFields = New-Object System.Collections.Generic.List[string]
 $UpdatedFields = New-Object System.Collections.Generic.List[string]
 $SymptomObservations = New-Object System.Collections.Generic.List[string]
 $ChronologyViolations = New-Object System.Collections.Generic.List[string]
+$TemplateParseOk = $false
+$OutputPathRequiredForCreate = [string]::IsNullOrWhiteSpace($ResolvedOutputPath)
+$MeasurementPathRequiredForCreate = [string]::IsNullOrWhiteSpace($ResolvedMeasurementPath)
+$MockupPathRequiredForCreate = [string]::IsNullOrWhiteSpace($ResolvedMockupPath)
+$MannequinPathRequiredForCreate = [string]::IsNullOrWhiteSpace($ResolvedMannequinPath)
+$OutputPathTargetsTemplate = $false
+$OutputFileExists = $false
+$OutputParentExists = $false
+$CandidateOutputPathReady = $false
+$MeasurementPathTargetsStaticFitTemplate = $false
+$MockupPathTargetsStaticFitTemplate = $false
+$MannequinPathTargetsStaticFitTemplate = $false
+$MeasurementFileExists = $false
+$MockupFileExists = $false
+$MannequinFileExists = $false
 $UpstreamMannequinStatus = ''
 $UpstreamMannequinReady = $false
-$UpstreamMannequinExitCode = 1
+$UpstreamMannequinExitCode = 0
 $UpstreamMannequinParseOk = $false
 
 if (-not (Test-Path -LiteralPath $ResolvedTemplatePath -PathType Leaf)) {
   $Status = 'missing_template_file'
   $ExitCode = 1
-} elseif ([string]::Equals($ResolvedTemplatePath, $ResolvedOutputPath, [System.StringComparison]::OrdinalIgnoreCase)) {
-  $Status = 'output_path_targets_template'
-  $ExitCode = 1
-} elseif (Test-Path -LiteralPath $ResolvedOutputPath) {
-  $Status = 'output_file_exists'
-  $ExitCode = 1
 } else {
-  $OutputParent = Split-Path -Parent $ResolvedOutputPath
-  if ([string]::IsNullOrWhiteSpace($OutputParent) -or -not (Test-Path -LiteralPath $OutputParent -PathType Container)) {
-    $Status = 'missing_output_parent'
-    $ExitCode = 1
+  if (-not [string]::IsNullOrWhiteSpace($ResolvedOutputPath)) {
+    $OutputPathTargetsTemplate = [string]::Equals($ResolvedTemplatePath, $ResolvedOutputPath, [System.StringComparison]::OrdinalIgnoreCase)
+    $OutputFileExists = Test-Path -LiteralPath $ResolvedOutputPath
+    $OutputParent = Split-Path -Parent $ResolvedOutputPath
+    $OutputParentExists = -not [string]::IsNullOrWhiteSpace($OutputParent) -and (Test-Path -LiteralPath $OutputParent -PathType Container)
+    $CandidateOutputPathReady = -not $OutputPathTargetsTemplate -and -not $OutputFileExists -and $OutputParentExists
+  }
+
+  if ($Mode -eq 'Create') {
+    if ($OutputPathRequiredForCreate) {
+      $Status = 'missing_output_path'
+      $ExitCode = 1
+    } elseif ($OutputPathTargetsTemplate) {
+      $Status = 'output_path_targets_template'
+      $ExitCode = 1
+    } elseif ($OutputFileExists) {
+      $Status = 'output_file_exists'
+      $ExitCode = 1
+    } elseif (-not $OutputParentExists) {
+      $Status = 'missing_output_parent'
+      $ExitCode = 1
+    }
   }
 }
 
 if ($ExitCode -eq 0) {
-  if (-not (Test-Path -LiteralPath $ResolvedMeasurementPath -PathType Leaf)) {
-    $Status = 'missing_measurement_file'
+  if ($MeasurementPathRequiredForCreate -and $Mode -eq 'Create') {
+    $Status = 'missing_measurement_path'
     $ExitCode = 1
-  } elseif (-not (Test-Path -LiteralPath $ResolvedMockupPath -PathType Leaf)) {
-    $Status = 'missing_mockup_file'
-    $ExitCode = 1
-  } elseif (-not (Test-Path -LiteralPath $ResolvedMannequinPath -PathType Leaf)) {
-    $Status = 'missing_mannequin_file'
-    $ExitCode = 1
+  } elseif (-not [string]::IsNullOrWhiteSpace($ResolvedMeasurementPath)) {
+    $MeasurementPathTargetsStaticFitTemplate = [string]::Equals($ResolvedMeasurementPath, $DefaultTemplatePath, [System.StringComparison]::OrdinalIgnoreCase)
+    $MeasurementFileExists = Test-Path -LiteralPath $ResolvedMeasurementPath -PathType Leaf
+    if ($MeasurementPathTargetsStaticFitTemplate) {
+      $Status = 'measurement_path_targets_static_fit_template'
+      $ExitCode = 1
+    } elseif (-not $MeasurementFileExists) {
+      $Status = 'missing_measurement_file'
+      $ExitCode = 1
+    }
   }
 }
 
 if ($ExitCode -eq 0) {
+  if ($MockupPathRequiredForCreate -and $Mode -eq 'Create') {
+    $Status = 'missing_mockup_path'
+    $ExitCode = 1
+  } elseif (-not [string]::IsNullOrWhiteSpace($ResolvedMockupPath)) {
+    $MockupPathTargetsStaticFitTemplate = [string]::Equals($ResolvedMockupPath, $DefaultTemplatePath, [System.StringComparison]::OrdinalIgnoreCase)
+    $MockupFileExists = Test-Path -LiteralPath $ResolvedMockupPath -PathType Leaf
+    if ($MockupPathTargetsStaticFitTemplate) {
+      $Status = 'mockup_path_targets_static_fit_template'
+      $ExitCode = 1
+    } elseif (-not $MockupFileExists) {
+      $Status = 'missing_mockup_file'
+      $ExitCode = 1
+    }
+  }
+}
+
+if ($ExitCode -eq 0) {
+  if ($MannequinPathRequiredForCreate -and $Mode -eq 'Create') {
+    $Status = 'missing_mannequin_path'
+    $ExitCode = 1
+  } elseif (-not [string]::IsNullOrWhiteSpace($ResolvedMannequinPath)) {
+    $MannequinPathTargetsStaticFitTemplate = [string]::Equals($ResolvedMannequinPath, $DefaultTemplatePath, [System.StringComparison]::OrdinalIgnoreCase)
+    $MannequinFileExists = Test-Path -LiteralPath $ResolvedMannequinPath -PathType Leaf
+    if ($MannequinPathTargetsStaticFitTemplate) {
+      $Status = 'mannequin_path_targets_static_fit_template'
+      $ExitCode = 1
+    } elseif (-not $MannequinFileExists) {
+      $Status = 'missing_mannequin_file'
+      $ExitCode = 1
+    }
+  }
+}
+
+if ($ExitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($ResolvedMeasurementPath) -and -not [string]::IsNullOrWhiteSpace($ResolvedMockupPath) -and -not [string]::IsNullOrWhiteSpace($ResolvedMannequinPath)) {
   $Upstream = Invoke-MannequinInterfaceGate -ResolvedMeasurementPath $ResolvedMeasurementPath -ResolvedMockupPath $ResolvedMockupPath -ResolvedMannequinPath $ResolvedMannequinPath
   $UpstreamMannequinExitCode = [int]$Upstream.exit_code
   $UpstreamMannequinParseOk = [bool]$Upstream.parse_ok
@@ -472,16 +535,17 @@ if ($ExitCode -eq 0) {
 }
 
 $Payload = $null
-if ($ExitCode -eq 0) {
+if ((Test-Path -LiteralPath $ResolvedTemplatePath -PathType Leaf) -and ($ExitCode -eq 0 -or $Mode -eq 'Status')) {
   try {
     $Payload = Get-Content -LiteralPath $ResolvedTemplatePath -Raw | ConvertFrom-Json -ErrorAction Stop
+    $TemplateParseOk = $true
   } catch {
     $Status = 'invalid_template_json'
     $ExitCode = 1
   }
 }
 
-if ($ExitCode -eq 0) {
+if ($Mode -eq 'Create' -and $ExitCode -eq 0) {
   if ([string]$Payload.kind -ne 'francis.fr017.pilot_static_fit.v1') {
     $InvalidFields.Add('kind') | Out-Null
   }
@@ -699,7 +763,7 @@ if ($ExitCode -eq 0) {
   }
 }
 
-if ($ExitCode -eq 0) {
+if ($Mode -eq 'Create' -and $ExitCode -eq 0) {
   $Generation = [ordered]@{
     generated_by = 'scripts/fr017-new-pilot-static-fit-record.ps1'
     generated_at_utc = (Get-Date).ToUniversalTime().ToString('o')
@@ -737,9 +801,24 @@ $Output = [ordered]@{
   mockup_path = $ResolvedMockupPath
   mannequin_path = $ResolvedMannequinPath
   output_path = $ResolvedOutputPath
-  output_exists = (Test-Path -LiteralPath $ResolvedOutputPath -PathType Leaf)
+  template_exists = (Test-Path -LiteralPath $ResolvedTemplatePath -PathType Leaf)
+  template_parse_ok = $TemplateParseOk
+  output_path_required_for_create = $OutputPathRequiredForCreate
+  measurement_path_required_for_create = $MeasurementPathRequiredForCreate
+  mockup_path_required_for_create = $MockupPathRequiredForCreate
+  mannequin_path_required_for_create = $MannequinPathRequiredForCreate
+  output_path_targets_template = $OutputPathTargetsTemplate
+  output_parent_exists = $OutputParentExists
+  candidate_output_path_ready = $CandidateOutputPathReady
+  measurement_path_targets_static_fit_template = $MeasurementPathTargetsStaticFitTemplate
+  mockup_path_targets_static_fit_template = $MockupPathTargetsStaticFitTemplate
+  mannequin_path_targets_static_fit_template = $MannequinPathTargetsStaticFitTemplate
+  measurement_file_exists = $MeasurementFileExists
+  mockup_file_exists = $MockupFileExists
+  mannequin_file_exists = $MannequinFileExists
+  output_exists = if ([string]::IsNullOrWhiteSpace($ResolvedOutputPath)) { $false } else { (Test-Path -LiteralPath $ResolvedOutputPath -PathType Leaf) }
   wrote_file = $WroteFile
-  read_only_contract = $false
+  read_only_contract = ($Mode -eq 'Status')
   writes_repo = ($WroteFile -and (Test-PathUnderRoot -Path $ResolvedOutputPath -Root $RepoRoot))
   writes_data = $WroteFile
   grants_execution_authority = $false
@@ -760,7 +839,9 @@ $Output = [ordered]@{
   no_fake_validation_lock = 'This initializer records operator-supplied non-powered FR-017 pilot static-fit input only after mannequin interface readiness is ready. It does not certify fit or pilot safety, does not mark physical validation complete, does not permit a Stage 17 completion claim, does not clear pilot movement testing, does not clear powered or frame-coupled testing, and does not clear FR-018.'
   updated_fields = @($UpdatedFields.ToArray())
   invalid_fields = @($InvalidFields.ToArray())
-  next_command = if ($WroteFile) { '.\scripts\fr017-pilot-static-fit-gate.ps1 -Mode Status -MeasurementPath "{0}" -MockupPath "{1}" -MannequinPath "{2}" -StaticFitPath "{3}"' -f $ResolvedMeasurementPath, $ResolvedMockupPath, $ResolvedMannequinPath, $ResolvedOutputPath } else { '' }
+  create_command_template = $CreateCommandTemplate
+  pilot_static_fit_status_command_template = $PilotStaticFitStatusCommandTemplate
+  next_command = if ($WroteFile) { '.\scripts\fr017-pilot-static-fit-gate.ps1 -Mode Status -MeasurementPath "{0}" -MockupPath "{1}" -MannequinPath "{2}" -StaticFitPath "{3}"' -f $ResolvedMeasurementPath, $ResolvedMockupPath, $ResolvedMannequinPath, $ResolvedOutputPath } elseif ($Mode -eq 'Status' -and $ExitCode -eq 0) { $CreateCommandTemplate } else { '' }
 }
 
 $Output | ConvertTo-Json -Depth 8

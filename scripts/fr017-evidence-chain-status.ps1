@@ -842,6 +842,31 @@ foreach ($Gate in $Gates) {
       $FirstBlockingPreflightWroteFile = [bool](Get-PayloadValue -Payload $MannequinInitializerPreflight.payload -Name 'wrote_file' -Default $false)
       $FirstBlockingPreflightPhysicalValidationComplete = [bool](Get-PayloadValue -Payload $MannequinInitializerPreflight.payload -Name 'physical_validation_complete' -Default $false)
       $FirstBlockingPreflightFr018ImplementationCleared = [bool](Get-PayloadValue -Payload $MannequinInitializerPreflight.payload -Name 'fr018_implementation_cleared' -Default $false)
+    } elseif ([string]$Gate.id -eq 'pilot_static_fit' -and -not $GateFailed) {
+      $StaticFitInitializerArgs = New-Object System.Collections.Generic.List[string]
+      $StaticFitInitializerArgs.Add('-Mode') | Out-Null
+      $StaticFitInitializerArgs.Add('Status') | Out-Null
+      Add-OptionalArg -Target $StaticFitInitializerArgs -Name '-MeasurementPath' -Value $MeasurementPath
+      Add-OptionalArg -Target $StaticFitInitializerArgs -Name '-MockupPath' -Value $MockupPath
+      Add-OptionalArg -Target $StaticFitInitializerArgs -Name '-MannequinPath' -Value $MannequinPath
+      Add-OptionalArg -Target $StaticFitInitializerArgs -Name '-OutputPath' -Value $StaticFitPath
+      $StaticFitInitializerPreflight = Invoke-JsonGate -ScriptName 'fr017-new-pilot-static-fit-record.ps1' -Arguments $StaticFitInitializerArgs.ToArray()
+      $FirstBlockingPreflightToolPath = Join-Path $RepoRoot 'scripts\fr017-new-pilot-static-fit-record.ps1'
+      $FirstBlockingPreflightCommandTemplate = if ([string]::IsNullOrWhiteSpace($StaticFitPath)) { '.\scripts\fr017-new-pilot-static-fit-record.ps1 -Mode Status -MeasurementPath "{0}" -MockupPath "{1}" -MannequinPath "{2}"' -f $MeasurementPath, $MockupPath, $MannequinPath } else { '.\scripts\fr017-new-pilot-static-fit-record.ps1 -Mode Status -MeasurementPath "{0}" -MockupPath "{1}" -MannequinPath "{2}" -OutputPath "{3}"' -f $MeasurementPath, $MockupPath, $MannequinPath, $StaticFitPath }
+      $FirstBlockingPreflightContract = 'Read-only pilot static-fit initializer preflight for the non-powered FR-017 pilot static-fit record. It checks the static-fit template, candidate output path when provided, upstream mannequin-interface readiness, writes no evidence, records no pilot-contact test, and does not certify fit, clear pilot movement testing, physical validation, powered testing, or FR-018.'
+      $FirstBlockingPreflightStatus = if ([bool]$StaticFitInitializerPreflight.parse_ok) { [string](Get-PayloadValue -Payload $StaticFitInitializerPreflight.payload -Name 'status' -Default '') } else { 'failed_preflight_parse' }
+      $FirstBlockingPreflightExitCode = [int]$StaticFitInitializerPreflight.exit_code
+      $FirstBlockingPreflightParseOk = [bool]$StaticFitInitializerPreflight.parse_ok
+      $FirstBlockingPreflightReadOnlyContract = [bool](Get-PayloadValue -Payload $StaticFitInitializerPreflight.payload -Name 'read_only_contract' -Default $false)
+      $FirstBlockingPreflightTemplateExists = [bool](Get-PayloadValue -Payload $StaticFitInitializerPreflight.payload -Name 'template_exists' -Default $false)
+      $FirstBlockingPreflightTemplateParseOk = [bool](Get-PayloadValue -Payload $StaticFitInitializerPreflight.payload -Name 'template_parse_ok' -Default $false)
+      $FirstBlockingPreflightCandidateOutputPathReady = [bool](Get-PayloadValue -Payload $StaticFitInitializerPreflight.payload -Name 'candidate_output_path_ready' -Default $false)
+      $FirstBlockingPreflightOutputPath = [string](Get-PayloadValue -Payload $StaticFitInitializerPreflight.payload -Name 'output_path' -Default '')
+      $FirstBlockingPreflightOutputExists = [bool](Get-PayloadValue -Payload $StaticFitInitializerPreflight.payload -Name 'output_exists' -Default $false)
+      $FirstBlockingPreflightOutputParentExists = [bool](Get-PayloadValue -Payload $StaticFitInitializerPreflight.payload -Name 'output_parent_exists' -Default $false)
+      $FirstBlockingPreflightWroteFile = [bool](Get-PayloadValue -Payload $StaticFitInitializerPreflight.payload -Name 'wrote_file' -Default $false)
+      $FirstBlockingPreflightPhysicalValidationComplete = [bool](Get-PayloadValue -Payload $StaticFitInitializerPreflight.payload -Name 'physical_validation_complete' -Default $false)
+      $FirstBlockingPreflightFr018ImplementationCleared = [bool](Get-PayloadValue -Payload $StaticFitInitializerPreflight.payload -Name 'fr018_implementation_cleared' -Default $false)
     }
     $FirstBlockingUpdateHint = New-FirstBlockingUpdateHint -GateId ([string]$Gate.id) -GateFailed $GateFailed -GateDetails $GateDetails
     $FirstBlockingUpdateToolPath = [string]$FirstBlockingUpdateHint.tool_path
