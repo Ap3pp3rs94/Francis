@@ -6,7 +6,7 @@ Gate: measurement_intake
 
 ## Purpose
 
-This runbook converts the read-only `measurement_capture_plan` from `scripts/fr017-measurement-intake.ps1 -Mode Status` into an operator capture sequence for the first FR-017 physical-input gate.
+This runbook converts the read-only `measurement_capture_plan` from `scripts/fr017-measurement-intake.ps1 -Mode Status` into an operator capture sequence for the first FR-017 physical-input gate. Use `scripts/fr017-measurement-session-brief.ps1 -Mode Summary` when the operator needs the compact current-group command handoff and stop-condition list without the full status payload.
 
 This runbook is not physical validation evidence. It does not replace `FR-017-MEASUREMENTS-INPUT-TEMPLATE.json`, does not record Pilot measurements, does not approve fabrication, does not approve load-bearing use, and does not clear powered or frame-coupled testing.
 

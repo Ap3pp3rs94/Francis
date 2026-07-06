@@ -133,6 +133,61 @@ def test_fr017_measurement_session_brief_reports_first_template_blocker() -> Non
     assert payload["writes_data"] is False
 
 
+def test_fr017_measurement_session_summary_reports_current_capture_group() -> None:
+    proc = _run_brief("-Mode", "Summary")
+
+    assert proc.returncode == 0, proc.stderr
+    payload = _payload(proc.stdout)
+    assert payload["kind"] == "francis.fr017.measurement_session_summary"
+    assert payload["mode"] == "Summary"
+    assert payload["source_kind"] == "francis.fr017.measurement_session_brief"
+    assert payload["source_mode"] == "Status"
+    assert payload["status"] == "measurement_session_input_required"
+    assert payload["intake_status"] == "pending_measurements"
+    assert payload["intake_failed"] is False
+    assert payload["intake_ready_for_non_powered_mockup_patterning"] is False
+    assert payload["using_template"] is True
+    assert payload["first_blocking_group_id"] == "setup_and_safety_brief"
+    assert payload["first_blocking_group_status"] == "pending_required_fields"
+    assert "brief stop conditions" in payload["current_group_required_action"]
+    assert payload["current_group_missing_field_count"] == 10
+    assert "measurement_conditions.stop_conditions_briefed" in payload["current_group_missing_fields"]
+    assert payload["current_group_invalid_field_count"] == 0
+    assert payload["current_group_blocking_signal_count"] == 0
+    assert payload["current_group_preflight_tool_path"].endswith("scripts\\fr017-new-measurement-record.ps1")
+    assert "fr017-new-measurement-record.ps1 -Mode Status" in payload["current_group_preflight_command_template"]
+    assert payload["current_group_preflight_parse_ok"] is True
+    assert payload["current_group_preflight_read_only_contract"] is True
+    assert payload["current_group_preflight_wrote_file"] is False
+    assert "fr017-new-measurement-record.ps1 -Mode Create" in payload["current_group_update_command_template"]
+    assert payload["measurement_capture_total_groups"] == 5
+    assert payload["measurement_capture_pending_groups"] == 5
+    assert payload["next_operator_action"] == (
+        "complete_first_blocking_measurement_capture_group_then_rerun_measurement_intake"
+    )
+    assert payload["safety_stop_condition_count"] == len(payload["safety_stop_conditions"])
+    assert "loss_of_grip_strength" in payload["safety_stop_conditions"]
+    assert "copied_left_right_values_or_references" in payload["safety_stop_conditions"]
+    assert payload["physical_validation_complete"] is False
+    assert payload["stage17_completion_claim_allowed"] is False
+    assert payload["powered_or_frame_coupled_testing_cleared"] is False
+    assert payload["fr018_implementation_cleared"] is False
+    assert payload["read_only_contract"] is True
+    assert payload["writes_repo"] is False
+    assert payload["writes_data"] is False
+    assert payload["grants_execution_authority"] is False
+    assert payload["grants_mutation_authority"] is False
+    assert payload["omitted_full_status_fields"] == [
+        "current_group_preflight_contract",
+        "current_group_update_contract",
+        "operator_sequence",
+    ]
+    assert "current_group_preflight_contract" not in payload
+    assert "current_group_update_contract" not in payload
+    assert "operator_sequence" not in payload
+    assert "only a real accepted measurement record" in payload["no_fake_validation_lock"]
+
+
 def test_fr017_measurement_session_brief_preflights_candidate_measurement_path(tmp_path: Path) -> None:
     candidate_path = tmp_path / "FR-017-MEASUREMENTS-2099-01-01-PILOT-RECORD.json"
 

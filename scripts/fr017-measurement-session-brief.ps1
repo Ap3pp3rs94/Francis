@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-  [ValidateSet('Status')]
+  [ValidateSet('Status', 'Summary')]
   [string]$Mode = 'Status',
 
   [string]$MeasurementPath = '',
@@ -262,6 +262,66 @@ function New-CurrentGroupUpdateHint {
   }
 }
 
+function New-MeasurementSessionSummary {
+  param([System.Collections.IDictionary]$StatusPayload)
+
+  $MissingFields = @(ConvertTo-StringArray -Value $StatusPayload['current_group_missing_fields'])
+  $InvalidFields = @(ConvertTo-StringArray -Value $StatusPayload['current_group_invalid_fields'])
+  $BlockingSignals = @(ConvertTo-StringArray -Value $StatusPayload['current_group_blocking_signals'])
+  $SafetyStopConditions = @(ConvertTo-StringArray -Value $StatusPayload['safety_stop_conditions'])
+
+  return [ordered]@{
+    kind = 'francis.fr017.measurement_session_summary'
+    mode = 'Summary'
+    source_kind = [string]$StatusPayload['kind']
+    source_mode = 'Status'
+    status = [string]$StatusPayload['status']
+    intake_status = [string]$StatusPayload['intake_status']
+    intake_failed = [bool]$StatusPayload['intake_failed']
+    intake_ready_for_non_powered_mockup_patterning = [bool]$StatusPayload['intake_ready_for_non_powered_mockup_patterning']
+    measurement_path = [string]$StatusPayload['measurement_path']
+    candidate_measurement_path = [string]$StatusPayload['candidate_measurement_path']
+    using_template = [bool]$StatusPayload['using_template']
+    first_blocking_group_id = [string]$StatusPayload['first_blocking_group_id']
+    first_blocking_group_status = [string]$StatusPayload['first_blocking_group_status']
+    first_blocking_group_action = [string]$StatusPayload['first_blocking_group_action']
+    current_group_required_action = [string]$StatusPayload['current_group_required_action']
+    current_group_missing_field_count = $MissingFields.Count
+    current_group_missing_fields = @($MissingFields)
+    current_group_invalid_field_count = $InvalidFields.Count
+    current_group_invalid_fields = @($InvalidFields)
+    current_group_blocking_signal_count = $BlockingSignals.Count
+    current_group_blocking_signals = @($BlockingSignals)
+    current_group_preflight_tool_path = [string]$StatusPayload['current_group_preflight_tool_path']
+    current_group_preflight_command_template = [string]$StatusPayload['current_group_preflight_command_template']
+    current_group_preflight_status = [string]$StatusPayload['current_group_preflight_status']
+    current_group_preflight_parse_ok = [bool]$StatusPayload['current_group_preflight_parse_ok']
+    current_group_preflight_read_only_contract = [bool]$StatusPayload['current_group_preflight_read_only_contract']
+    current_group_preflight_wrote_file = [bool]$StatusPayload['current_group_preflight_wrote_file']
+    current_group_update_tool_path = [string]$StatusPayload['current_group_update_tool_path']
+    current_group_update_command_template = [string]$StatusPayload['current_group_update_command_template']
+    measurement_capture_total_groups = [int]$StatusPayload['measurement_capture_total_groups']
+    measurement_capture_ready_groups = [int]$StatusPayload['measurement_capture_ready_groups']
+    measurement_capture_pending_groups = [int]$StatusPayload['measurement_capture_pending_groups']
+    measurement_capture_invalid_groups = [int]$StatusPayload['measurement_capture_invalid_groups']
+    measurement_capture_failed_groups = [int]$StatusPayload['measurement_capture_failed_groups']
+    next_required_physical_input = [string]$StatusPayload['next_required_physical_input']
+    next_operator_action = [string]$StatusPayload['next_operator_action']
+    safety_stop_condition_count = $SafetyStopConditions.Count
+    safety_stop_conditions = @($SafetyStopConditions)
+    physical_validation_complete = [bool]$StatusPayload['physical_validation_complete']
+    stage17_completion_claim_allowed = [bool]$StatusPayload['stage17_completion_claim_allowed']
+    powered_or_frame_coupled_testing_cleared = [bool]$StatusPayload['powered_or_frame_coupled_testing_cleared']
+    fr018_implementation_cleared = [bool]$StatusPayload['fr018_implementation_cleared']
+    read_only_contract = [bool]$StatusPayload['read_only_contract']
+    writes_repo = [bool]$StatusPayload['writes_repo']
+    writes_data = [bool]$StatusPayload['writes_data']
+    grants_execution_authority = [bool]$StatusPayload['grants_execution_authority']
+    grants_mutation_authority = [bool]$StatusPayload['grants_mutation_authority']
+    omitted_full_status_fields = @('current_group_preflight_contract', 'current_group_update_contract', 'operator_sequence')
+    no_fake_validation_lock = [string]$StatusPayload['no_fake_validation_lock']
+  }
+}
 $IntakeArgs = New-Object System.Collections.Generic.List[string]
 $IntakeArgs.Add('-Mode') | Out-Null
 $IntakeArgs.Add('Status') | Out-Null
@@ -481,6 +541,10 @@ $Output = [ordered]@{
   grants_execution_authority = $false
   grants_mutation_authority = $false
   no_fake_validation_lock = 'This brief can make the next physical-input action clearer, but only a real accepted measurement record can move measurement_intake. It never certifies FR-017 or clears FR-018.'
+}
+
+if ($Mode -eq 'Summary') {
+  $Output = New-MeasurementSessionSummary -StatusPayload $Output
 }
 
 $Output | ConvertTo-Json -Depth 8

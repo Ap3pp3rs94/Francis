@@ -20,7 +20,7 @@ It packages FR-017 Forearm Cuffs as a documentation-ready and test-record-ready 
 
 - `scripts/fr017-stage17-validation-gate.ps1 -Mode Status`: package and manifest structure.
 - `scripts/fr017-measurement-intake.ps1 -Mode Status`: measurement intake status plus the read-only `measurement_capture_plan` for the first physical-input gate.
-- `scripts/fr017-measurement-session-brief.ps1 -Mode Status`: read-only operator brief for the current measurement session blocker; summarizes the next capture group, stop conditions, and no-fake-validation locks without writing evidence.
+- `scripts/fr017-measurement-session-brief.ps1 -Mode Status`: full read-only operator brief for the current measurement session blocker; summarizes the next capture group, stop conditions, and no-fake-validation locks without writing evidence. Use `-Mode Summary` for the compact current-group handoff without the full contracts or operator sequence.
 - `scripts/fr017-mockup-readiness-gate.ps1 -Mode Status`: mockup readiness status plus the read-only `mockup_capture_plan` for the non-powered cuff mockup gate.
 - `scripts/fr017-mannequin-interface-gate.ps1 -Mode Status`: mannequin interface status plus the read-only `mannequin_capture_plan` for the non-powered future-interface clearance gate.
 - `scripts/fr017-pilot-static-fit-gate.ps1 -Mode Status`: pilot static-fit status plus the read-only `static_fit_capture_plan` for the non-powered pilot static-fit gate.
