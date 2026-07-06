@@ -115,6 +115,101 @@ def _final_decision_args(
     return args
 
 
+def test_fr017_final_decision_initializer_status_preflights_without_writing(
+    tmp_path: Path,
+) -> None:
+    paths = _write_ready_evidence(tmp_path)
+    (
+        measurement_path,
+        mockup_path,
+        mannequin_path,
+        static_fit_path,
+        movement_path,
+        release_cable_path,
+        engineering_review_path,
+    ) = paths
+    final_decision_path = tmp_path / "candidate-final-decision.json"
+    final_physical_gate_record_path = tmp_path / "candidate-final-physical-gate.json"
+
+    proc = _run_script(
+        SCRIPT,
+        "-Mode",
+        "Status",
+        "-OutputPath",
+        str(final_decision_path),
+        "-FinalPhysicalGateRecordOutputPath",
+        str(final_physical_gate_record_path),
+        "-MeasurementPath",
+        str(measurement_path),
+        "-MockupPath",
+        str(mockup_path),
+        "-MannequinPath",
+        str(mannequin_path),
+        "-StaticFitPath",
+        str(static_fit_path),
+        "-MovementPath",
+        str(movement_path),
+        "-ReleaseCablePath",
+        str(release_cable_path),
+        "-EngineeringReviewPath",
+        str(engineering_review_path),
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    result = _payload(proc.stdout)
+    assert result["kind"] == "francis.fr017.final_decision_record_initializer"
+    assert result["mode"] == "Status"
+    assert result["status"] == "final_decision_record_initializer_status"
+    assert result["template_exists"] is True
+    assert result["template_parse_ok"] is True
+    assert result["output_path_required_for_create"] is False
+    assert result["final_physical_gate_record_output_path_required_for_create"] is False
+    assert result["measurement_path_required_for_create"] is False
+    assert result["mockup_path_required_for_create"] is False
+    assert result["mannequin_path_required_for_create"] is False
+    assert result["static_fit_path_required_for_create"] is False
+    assert result["movement_path_required_for_create"] is False
+    assert result["release_cable_path_required_for_create"] is False
+    assert result["engineering_review_path_required_for_create"] is False
+    assert result["output_path_targets_template"] is False
+    assert result["final_physical_gate_record_output_path_targets_template"] is False
+    assert result["output_path_conflicts_with_final_physical_gate_record_output"] is False
+    assert result["output_parent_exists"] is True
+    assert result["final_physical_gate_record_output_parent_exists"] is True
+    assert result["candidate_output_path_ready"] is True
+    assert result["candidate_final_physical_gate_record_output_path_ready"] is True
+    assert result["measurement_file_exists"] is True
+    assert result["mockup_file_exists"] is True
+    assert result["mannequin_file_exists"] is True
+    assert result["static_fit_file_exists"] is True
+    assert result["movement_file_exists"] is True
+    assert result["release_cable_file_exists"] is True
+    assert result["engineering_review_file_exists"] is True
+    assert result["upstream_final_physical_gate_status"] == "ready_for_stage17_final_physical_completion_decision"
+    assert result["upstream_final_physical_gate_ready"] is True
+    assert result["final_physical_gate_reference_pilot_fingerprint"]
+    assert result["wrote_file"] is False
+    assert result["wrote_final_physical_gate_record"] is False
+    assert result["output_exists"] is False
+    assert result["final_physical_gate_record_output_exists"] is False
+    assert result["read_only_contract"] is True
+    assert result["writes_repo"] is False
+    assert result["writes_data"] is False
+    assert result["operator_supplied_final_decision_input_recorded"] is False
+    assert result["final_decision_record_is_ledger_review_input"] is False
+    assert result["final_decision_record_is_stage17_completion_by_itself"] is False
+    assert result["physical_validation_complete"] is False
+    assert result["stage17_completion_claim_allowed"] is False
+    assert result["completion_ledger_update_written"] is False
+    assert result["powered_or_frame_coupled_testing_cleared"] is False
+    assert result["fr018_implementation_cleared"] is False
+    assert "fr017-new-final-decision-record.ps1 -Mode Create" in result["create_command_template"]
+    assert "fr017-final-decision-record-gate.ps1 -Mode Status" in result["final_decision_status_command_template"]
+    assert result["next_command"] == result["create_command_template"]
+    assert not final_decision_path.exists()
+    assert not final_physical_gate_record_path.exists()
+
+
 def test_fr017_final_decision_initializer_creates_record_and_saved_gate_without_clearance(
     tmp_path: Path,
 ) -> None:

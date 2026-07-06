@@ -550,6 +550,11 @@ function New-FirstBlockingUpdateHint {
       $CommandTemplate = '.\scripts\fr017-new-engineering-review-record.ps1 -Mode Create -OutputPath <engineering-review-record.json> -MeasurementPath <measurement-record.json> -MockupPath <mockup-record.json> -MannequinPath <mannequin-interface-record.json> -StaticFitPath <pilot-static-fit-record.json> -MovementPath <pilot-movement-record.json> -ReleaseCablePath <release-cable-record.json>'
       $Contract = [string](Get-DetailsValue -Details $GateDetails -Name 'engineering_review_capture_runbook_contract')
     }
+    'final_decision_record' {
+      $ToolPath = [string](Get-DetailsValue -Details $GateDetails -Name 'final_decision_record_initializer_path')
+      $CommandTemplate = '.\scripts\fr017-new-final-decision-record.ps1 -Mode Create -OutputPath <final-decision-record.json> -FinalPhysicalGateRecordOutputPath <final-physical-gate-record.json> -MeasurementPath <measurement-record.json> -MockupPath <mockup-record.json> -MannequinPath <mannequin-interface-record.json> -StaticFitPath <pilot-static-fit-record.json> -MovementPath <pilot-movement-record.json> -ReleaseCablePath <release-cable-record.json> -EngineeringReviewPath <engineering-review-record.json>'
+      $Contract = [string](Get-DetailsValue -Details $GateDetails -Name 'final_decision_record_runbook_contract')
+    }
   }
 
   if ([string]::IsNullOrWhiteSpace($ToolPath)) {
@@ -948,6 +953,35 @@ foreach ($Gate in $Gates) {
       $FirstBlockingPreflightWroteFile = [bool](Get-PayloadValue -Payload $EngineeringReviewInitializerPreflight.payload -Name 'wrote_file' -Default $false)
       $FirstBlockingPreflightPhysicalValidationComplete = [bool](Get-PayloadValue -Payload $EngineeringReviewInitializerPreflight.payload -Name 'physical_validation_complete' -Default $false)
       $FirstBlockingPreflightFr018ImplementationCleared = [bool](Get-PayloadValue -Payload $EngineeringReviewInitializerPreflight.payload -Name 'fr018_implementation_cleared' -Default $false)
+    } elseif ([string]$Gate.id -eq 'final_decision_record' -and -not $GateFailed) {
+      $FinalDecisionInitializerArgs = New-Object System.Collections.Generic.List[string]
+      $FinalDecisionInitializerArgs.Add('-Mode') | Out-Null
+      $FinalDecisionInitializerArgs.Add('Status') | Out-Null
+      Add-OptionalArg -Target $FinalDecisionInitializerArgs -Name '-MeasurementPath' -Value $MeasurementPath
+      Add-OptionalArg -Target $FinalDecisionInitializerArgs -Name '-MockupPath' -Value $MockupPath
+      Add-OptionalArg -Target $FinalDecisionInitializerArgs -Name '-MannequinPath' -Value $MannequinPath
+      Add-OptionalArg -Target $FinalDecisionInitializerArgs -Name '-StaticFitPath' -Value $StaticFitPath
+      Add-OptionalArg -Target $FinalDecisionInitializerArgs -Name '-MovementPath' -Value $MovementPath
+      Add-OptionalArg -Target $FinalDecisionInitializerArgs -Name '-ReleaseCablePath' -Value $ReleaseCablePath
+      Add-OptionalArg -Target $FinalDecisionInitializerArgs -Name '-EngineeringReviewPath' -Value $EngineeringReviewPath
+      Add-OptionalArg -Target $FinalDecisionInitializerArgs -Name '-OutputPath' -Value $FinalDecisionPath
+      $FinalDecisionInitializerPreflight = Invoke-JsonGate -ScriptName 'fr017-new-final-decision-record.ps1' -Arguments $FinalDecisionInitializerArgs.ToArray()
+      $FirstBlockingPreflightToolPath = Join-Path $RepoRoot 'scripts\fr017-new-final-decision-record.ps1'
+      $FirstBlockingPreflightCommandTemplate = if ([string]::IsNullOrWhiteSpace($FinalDecisionPath)) { '.\scripts\fr017-new-final-decision-record.ps1 -Mode Status -MeasurementPath "{0}" -MockupPath "{1}" -MannequinPath "{2}" -StaticFitPath "{3}" -MovementPath "{4}" -ReleaseCablePath "{5}" -EngineeringReviewPath "{6}"' -f $MeasurementPath, $MockupPath, $MannequinPath, $StaticFitPath, $MovementPath, $ReleaseCablePath, $EngineeringReviewPath } else { '.\scripts\fr017-new-final-decision-record.ps1 -Mode Status -MeasurementPath "{0}" -MockupPath "{1}" -MannequinPath "{2}" -StaticFitPath "{3}" -MovementPath "{4}" -ReleaseCablePath "{5}" -EngineeringReviewPath "{6}" -OutputPath "{7}"' -f $MeasurementPath, $MockupPath, $MannequinPath, $StaticFitPath, $MovementPath, $ReleaseCablePath, $EngineeringReviewPath, $FinalDecisionPath }
+      $FirstBlockingPreflightContract = 'Read-only human final-decision initializer preflight for the FR-017 final decision record. It checks the final decision template, candidate output path when provided, upstream final physical gate decision readiness, writes no final decision record, saves no final physical gate record, writes no completion ledger, and does not mark physical validation complete, approve load-bearing use, clear powered or frame-coupled testing, or clear FR-018.'
+      $FirstBlockingPreflightStatus = if ([bool]$FinalDecisionInitializerPreflight.parse_ok) { [string](Get-PayloadValue -Payload $FinalDecisionInitializerPreflight.payload -Name 'status' -Default '') } else { 'failed_preflight_parse' }
+      $FirstBlockingPreflightExitCode = [int]$FinalDecisionInitializerPreflight.exit_code
+      $FirstBlockingPreflightParseOk = [bool]$FinalDecisionInitializerPreflight.parse_ok
+      $FirstBlockingPreflightReadOnlyContract = [bool](Get-PayloadValue -Payload $FinalDecisionInitializerPreflight.payload -Name 'read_only_contract' -Default $false)
+      $FirstBlockingPreflightTemplateExists = [bool](Get-PayloadValue -Payload $FinalDecisionInitializerPreflight.payload -Name 'template_exists' -Default $false)
+      $FirstBlockingPreflightTemplateParseOk = [bool](Get-PayloadValue -Payload $FinalDecisionInitializerPreflight.payload -Name 'template_parse_ok' -Default $false)
+      $FirstBlockingPreflightCandidateOutputPathReady = [bool](Get-PayloadValue -Payload $FinalDecisionInitializerPreflight.payload -Name 'candidate_output_path_ready' -Default $false)
+      $FirstBlockingPreflightOutputPath = [string](Get-PayloadValue -Payload $FinalDecisionInitializerPreflight.payload -Name 'output_path' -Default '')
+      $FirstBlockingPreflightOutputExists = [bool](Get-PayloadValue -Payload $FinalDecisionInitializerPreflight.payload -Name 'output_exists' -Default $false)
+      $FirstBlockingPreflightOutputParentExists = [bool](Get-PayloadValue -Payload $FinalDecisionInitializerPreflight.payload -Name 'output_parent_exists' -Default $false)
+      $FirstBlockingPreflightWroteFile = [bool](Get-PayloadValue -Payload $FinalDecisionInitializerPreflight.payload -Name 'wrote_file' -Default $false)
+      $FirstBlockingPreflightPhysicalValidationComplete = [bool](Get-PayloadValue -Payload $FinalDecisionInitializerPreflight.payload -Name 'physical_validation_complete' -Default $false)
+      $FirstBlockingPreflightFr018ImplementationCleared = [bool](Get-PayloadValue -Payload $FinalDecisionInitializerPreflight.payload -Name 'fr018_implementation_cleared' -Default $false)
     }
     $FirstBlockingUpdateHint = New-FirstBlockingUpdateHint -GateId ([string]$Gate.id) -GateFailed $GateFailed -GateDetails $GateDetails
     $FirstBlockingUpdateToolPath = [string]$FirstBlockingUpdateHint.tool_path

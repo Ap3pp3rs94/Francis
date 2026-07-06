@@ -1379,6 +1379,52 @@ def test_fr017_evidence_chain_status_blocks_on_final_decision_record_after_final
         "scripts/fr017-new-final-decision-record.ps1 + FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json"
     )
     assert payload["next_command"] == "create_human_final_decision_record_then_rerun_final_decision_record_gate"
+    _assert_first_blocking_update_hint(
+        payload,
+        "fr017-new-final-decision-record.ps1",
+        [
+            "fr017-new-final-decision-record.ps1 -Mode Create",
+            "-OutputPath <final-decision-record.json>",
+            "-FinalPhysicalGateRecordOutputPath <final-physical-gate-record.json>",
+            "-MeasurementPath <measurement-record.json>",
+            "-MockupPath <mockup-record.json>",
+            "-MannequinPath <mannequin-interface-record.json>",
+            "-StaticFitPath <pilot-static-fit-record.json>",
+            "-MovementPath <pilot-movement-record.json>",
+            "-ReleaseCablePath <release-cable-record.json>",
+            "-EngineeringReviewPath <engineering-review-record.json>",
+        ],
+        contract_fragment="bounded operator-supplied human final decision working record",
+    )
+    assert (
+        str(payload["first_blocking_preflight_tool_path"])
+        .replace("/", "\\")
+        .endswith("scripts\\fr017-new-final-decision-record.ps1")
+    )
+    assert "fr017-new-final-decision-record.ps1 -Mode Status" in payload["first_blocking_preflight_command_template"]
+    assert str(measurement_path) in payload["first_blocking_preflight_command_template"]
+    assert str(mockup_path) in payload["first_blocking_preflight_command_template"]
+    assert str(mannequin_path) in payload["first_blocking_preflight_command_template"]
+    assert str(static_fit_path) in payload["first_blocking_preflight_command_template"]
+    assert str(movement_path) in payload["first_blocking_preflight_command_template"]
+    assert str(release_cable_path) in payload["first_blocking_preflight_command_template"]
+    assert str(engineering_review_path) in payload["first_blocking_preflight_command_template"]
+    assert "final-decision initializer preflight" in payload["first_blocking_preflight_contract"]
+    assert "writes no final decision record" in payload["first_blocking_preflight_contract"]
+    assert "saves no final physical gate record" in payload["first_blocking_preflight_contract"]
+    assert payload["first_blocking_preflight_status"] == "final_decision_record_initializer_status"
+    assert payload["first_blocking_preflight_exit_code"] == 0
+    assert payload["first_blocking_preflight_parse_ok"] is True
+    assert payload["first_blocking_preflight_read_only_contract"] is True
+    assert payload["first_blocking_preflight_template_exists"] is True
+    assert payload["first_blocking_preflight_template_parse_ok"] is True
+    assert payload["first_blocking_preflight_candidate_output_path_ready"] is False
+    assert payload["first_blocking_preflight_output_path"] == ""
+    assert payload["first_blocking_preflight_output_exists"] is False
+    assert payload["first_blocking_preflight_output_parent_exists"] is False
+    assert payload["first_blocking_preflight_wrote_file"] is False
+    assert payload["first_blocking_preflight_physical_validation_complete"] is False
+    assert payload["first_blocking_preflight_fr018_implementation_cleared"] is False
     assert payload["first_blocking_details"]["missing_fields"] == ["final_decision_path"]
     assert payload["first_blocking_details"]["next_required_final_decision_input"] == (
         "create_human_final_decision_record_with_fr017-new-final-decision-record.ps1_then_rerun_final_decision_record_gate"
