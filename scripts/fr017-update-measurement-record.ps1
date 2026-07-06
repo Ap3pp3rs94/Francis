@@ -84,6 +84,24 @@ function Test-FinitePositiveNumber {
     return -not [double]::IsNaN($Value) -and -not [double]::IsInfinity($Value) -and $Value -gt 0
 }
 
+function Get-ObjectPropertyValue {
+    param(
+        [object]$Target,
+        [string]$Field
+    )
+
+    if ($null -eq $Target) {
+        return $null
+    }
+
+    $Property = $Target.PSObject.Properties[$Field]
+    if ($null -eq $Property) {
+        return $null
+    }
+
+    return $Property.Value
+}
+
 function Set-MeasurementNumber {
     param(
         [object]$Target,
@@ -242,18 +260,18 @@ if ($ExitCode -eq 0) {
 }
 
 if ($ExitCode -eq 0) {
-    if ([string]$Payload.kind -ne 'francis.fr017.measurements.v1') {
+    if ([string](Get-ObjectPropertyValue -Target $Payload -Field 'kind') -ne 'francis.fr017.measurements.v1') {
         $InvalidFields.Add('kind') | Out-Null
     }
-    if ([string]$Payload.component -ne 'FR-017 Forearm Cuffs') {
+    if ([string](Get-ObjectPropertyValue -Target $Payload -Field 'component') -ne 'FR-017 Forearm Cuffs') {
         $InvalidFields.Add('component') | Out-Null
     }
-    if ([string]$Payload.units -ne 'mm') {
+    if ([string](Get-ObjectPropertyValue -Target $Payload -Field 'units') -ne 'mm') {
         $InvalidFields.Add('units') | Out-Null
     }
 
-    $Sides = $Payload.sides
-    $Repeatability = $Payload.repeatability
+    $Sides = Get-ObjectPropertyValue -Target $Payload -Field 'sides'
+    $Repeatability = Get-ObjectPropertyValue -Target $Payload -Field 'repeatability'
     $SideMeasurementsProperty = if ($null -eq $Sides) { $null } else { $Sides.PSObject.Properties[$Side] }
     $SideRepeatabilityProperty = if ($null -eq $Repeatability) { $null } else { $Repeatability.PSObject.Properties[$Side] }
     $SideMeasurements = if ($null -eq $SideMeasurementsProperty) { $null } else { $SideMeasurementsProperty.Value }

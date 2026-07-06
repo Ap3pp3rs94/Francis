@@ -205,3 +205,31 @@ def test_fr017_measurement_record_update_rejects_excess_repeatability_delta(tmp_
     assert result["invalid_fields"] == ["repeatability.left.max_delta_mm"]
     assert result["physical_validation_complete"] is False
     assert result["fr018_implementation_cleared"] is False
+
+
+@pytest.mark.unit
+def test_fr017_measurement_record_update_reports_missing_top_level_properties(tmp_path: Path) -> None:
+    measurement_path = tmp_path / "measurement-record.json"
+    measurement_path.write_text("{}", encoding="utf-8")
+
+    proc = _run_script(
+        UPDATE_SCRIPT,
+        "-MeasurementPath",
+        str(measurement_path),
+        *_left_measurement_args(),
+    )
+
+    assert proc.returncode == 1
+    assert proc.stderr == ""
+    result = _payload(proc.stdout)
+    assert result["status"] == "invalid_measurement_update_input"
+    assert result["wrote_file"] is False
+    assert result["invalid_fields"] == [
+        "kind",
+        "component",
+        "units",
+        "sides.left",
+        "repeatability.left",
+    ]
+    assert result["physical_validation_complete"] is False
+    assert result["fr018_implementation_cleared"] is False
