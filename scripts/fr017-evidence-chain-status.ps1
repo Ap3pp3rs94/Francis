@@ -920,6 +920,34 @@ foreach ($Gate in $Gates) {
       $FirstBlockingPreflightWroteFile = [bool](Get-PayloadValue -Payload $ReleaseCableInitializerPreflight.payload -Name 'wrote_file' -Default $false)
       $FirstBlockingPreflightPhysicalValidationComplete = [bool](Get-PayloadValue -Payload $ReleaseCableInitializerPreflight.payload -Name 'physical_validation_complete' -Default $false)
       $FirstBlockingPreflightFr018ImplementationCleared = [bool](Get-PayloadValue -Payload $ReleaseCableInitializerPreflight.payload -Name 'fr018_implementation_cleared' -Default $false)
+    } elseif ([string]$Gate.id -eq 'engineering_review' -and -not $GateFailed) {
+      $EngineeringReviewInitializerArgs = New-Object System.Collections.Generic.List[string]
+      $EngineeringReviewInitializerArgs.Add('-Mode') | Out-Null
+      $EngineeringReviewInitializerArgs.Add('Status') | Out-Null
+      Add-OptionalArg -Target $EngineeringReviewInitializerArgs -Name '-MeasurementPath' -Value $MeasurementPath
+      Add-OptionalArg -Target $EngineeringReviewInitializerArgs -Name '-MockupPath' -Value $MockupPath
+      Add-OptionalArg -Target $EngineeringReviewInitializerArgs -Name '-MannequinPath' -Value $MannequinPath
+      Add-OptionalArg -Target $EngineeringReviewInitializerArgs -Name '-StaticFitPath' -Value $StaticFitPath
+      Add-OptionalArg -Target $EngineeringReviewInitializerArgs -Name '-MovementPath' -Value $MovementPath
+      Add-OptionalArg -Target $EngineeringReviewInitializerArgs -Name '-ReleaseCablePath' -Value $ReleaseCablePath
+      Add-OptionalArg -Target $EngineeringReviewInitializerArgs -Name '-OutputPath' -Value $EngineeringReviewPath
+      $EngineeringReviewInitializerPreflight = Invoke-JsonGate -ScriptName 'fr017-new-engineering-review-record.ps1' -Arguments $EngineeringReviewInitializerArgs.ToArray()
+      $FirstBlockingPreflightToolPath = Join-Path $RepoRoot 'scripts\fr017-new-engineering-review-record.ps1'
+      $FirstBlockingPreflightCommandTemplate = if ([string]::IsNullOrWhiteSpace($EngineeringReviewPath)) { '.\scripts\fr017-new-engineering-review-record.ps1 -Mode Status -MeasurementPath "{0}" -MockupPath "{1}" -MannequinPath "{2}" -StaticFitPath "{3}" -MovementPath "{4}" -ReleaseCablePath "{5}"' -f $MeasurementPath, $MockupPath, $MannequinPath, $StaticFitPath, $MovementPath, $ReleaseCablePath } else { '.\scripts\fr017-new-engineering-review-record.ps1 -Mode Status -MeasurementPath "{0}" -MockupPath "{1}" -MannequinPath "{2}" -StaticFitPath "{3}" -MovementPath "{4}" -ReleaseCablePath "{5}" -OutputPath "{6}"' -f $MeasurementPath, $MockupPath, $MannequinPath, $StaticFitPath, $MovementPath, $ReleaseCablePath, $EngineeringReviewPath }
+      $FirstBlockingPreflightContract = 'Read-only professional engineering-review initializer preflight for the non-powered FR-017 engineering review record. It checks the engineering-review template, candidate output path when provided, upstream quick-release/cable-snag readiness, writes no evidence, records no professional review, and does not certify pilot safety, complete the final physical gate, approve load-bearing use, clear powered or frame-coupled testing, or clear FR-018.'
+      $FirstBlockingPreflightStatus = if ([bool]$EngineeringReviewInitializerPreflight.parse_ok) { [string](Get-PayloadValue -Payload $EngineeringReviewInitializerPreflight.payload -Name 'status' -Default '') } else { 'failed_preflight_parse' }
+      $FirstBlockingPreflightExitCode = [int]$EngineeringReviewInitializerPreflight.exit_code
+      $FirstBlockingPreflightParseOk = [bool]$EngineeringReviewInitializerPreflight.parse_ok
+      $FirstBlockingPreflightReadOnlyContract = [bool](Get-PayloadValue -Payload $EngineeringReviewInitializerPreflight.payload -Name 'read_only_contract' -Default $false)
+      $FirstBlockingPreflightTemplateExists = [bool](Get-PayloadValue -Payload $EngineeringReviewInitializerPreflight.payload -Name 'template_exists' -Default $false)
+      $FirstBlockingPreflightTemplateParseOk = [bool](Get-PayloadValue -Payload $EngineeringReviewInitializerPreflight.payload -Name 'template_parse_ok' -Default $false)
+      $FirstBlockingPreflightCandidateOutputPathReady = [bool](Get-PayloadValue -Payload $EngineeringReviewInitializerPreflight.payload -Name 'candidate_output_path_ready' -Default $false)
+      $FirstBlockingPreflightOutputPath = [string](Get-PayloadValue -Payload $EngineeringReviewInitializerPreflight.payload -Name 'output_path' -Default '')
+      $FirstBlockingPreflightOutputExists = [bool](Get-PayloadValue -Payload $EngineeringReviewInitializerPreflight.payload -Name 'output_exists' -Default $false)
+      $FirstBlockingPreflightOutputParentExists = [bool](Get-PayloadValue -Payload $EngineeringReviewInitializerPreflight.payload -Name 'output_parent_exists' -Default $false)
+      $FirstBlockingPreflightWroteFile = [bool](Get-PayloadValue -Payload $EngineeringReviewInitializerPreflight.payload -Name 'wrote_file' -Default $false)
+      $FirstBlockingPreflightPhysicalValidationComplete = [bool](Get-PayloadValue -Payload $EngineeringReviewInitializerPreflight.payload -Name 'physical_validation_complete' -Default $false)
+      $FirstBlockingPreflightFr018ImplementationCleared = [bool](Get-PayloadValue -Payload $EngineeringReviewInitializerPreflight.payload -Name 'fr018_implementation_cleared' -Default $false)
     }
     $FirstBlockingUpdateHint = New-FirstBlockingUpdateHint -GateId ([string]$Gate.id) -GateFailed $GateFailed -GateDetails $GateDetails
     $FirstBlockingUpdateToolPath = [string]$FirstBlockingUpdateHint.tool_path

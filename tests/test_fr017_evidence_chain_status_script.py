@@ -1191,6 +1191,35 @@ def test_fr017_evidence_chain_status_moves_blocker_after_release_cable_ready(tmp
         ],
         contract_fragment="bounded operator-supplied professional engineering review working record",
     )
+    assert (
+        str(payload["first_blocking_preflight_tool_path"])
+        .replace("/", "\\")
+        .endswith("scripts\\fr017-new-engineering-review-record.ps1")
+    )
+    assert (
+        "fr017-new-engineering-review-record.ps1 -Mode Status" in payload["first_blocking_preflight_command_template"]
+    )
+    assert str(measurement_path) in payload["first_blocking_preflight_command_template"]
+    assert str(mockup_path) in payload["first_blocking_preflight_command_template"]
+    assert str(mannequin_path) in payload["first_blocking_preflight_command_template"]
+    assert str(static_fit_path) in payload["first_blocking_preflight_command_template"]
+    assert str(movement_path) in payload["first_blocking_preflight_command_template"]
+    assert str(release_cable_path) in payload["first_blocking_preflight_command_template"]
+    assert "engineering-review initializer preflight" in payload["first_blocking_preflight_contract"]
+    assert "writes no evidence" in payload["first_blocking_preflight_contract"]
+    assert payload["first_blocking_preflight_status"] == "engineering_review_record_initializer_status"
+    assert payload["first_blocking_preflight_exit_code"] == 0
+    assert payload["first_blocking_preflight_parse_ok"] is True
+    assert payload["first_blocking_preflight_read_only_contract"] is True
+    assert payload["first_blocking_preflight_template_exists"] is True
+    assert payload["first_blocking_preflight_template_parse_ok"] is True
+    assert payload["first_blocking_preflight_candidate_output_path_ready"] is False
+    assert payload["first_blocking_preflight_output_path"] == ""
+    assert payload["first_blocking_preflight_output_exists"] is False
+    assert payload["first_blocking_preflight_output_parent_exists"] is False
+    assert payload["first_blocking_preflight_wrote_file"] is False
+    assert payload["first_blocking_preflight_physical_validation_complete"] is False
+    assert payload["first_blocking_preflight_fr018_implementation_cleared"] is False
     assert "evidence.date" in payload["first_blocking_details"]["missing_fields"]
     assert payload["first_blocking_details"]["invalid_fields"] == []
     assert payload["first_blocking_details"]["engineering_review_capture_plan_not_completion_evidence"] is True

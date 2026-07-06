@@ -1,28 +1,21 @@
 [CmdletBinding()]
 param(
-  [ValidateSet('Create')]
-  [string]$Mode = 'Create',
+  [ValidateSet('Status', 'Create')]
+  [string]$Mode = 'Status',
 
-  [Parameter(Mandatory = $true)]
-  [string]$OutputPath,
+  [string]$OutputPath = '',
 
-  [Parameter(Mandatory = $true)]
-  [string]$MeasurementPath,
+  [string]$MeasurementPath = '',
 
-  [Parameter(Mandatory = $true)]
-  [string]$MockupPath,
+  [string]$MockupPath = '',
 
-  [Parameter(Mandatory = $true)]
-  [string]$MannequinPath,
+  [string]$MannequinPath = '',
 
-  [Parameter(Mandatory = $true)]
-  [string]$StaticFitPath,
+  [string]$StaticFitPath = '',
 
-  [Parameter(Mandatory = $true)]
-  [string]$MovementPath,
+  [string]$MovementPath = '',
 
-  [Parameter(Mandatory = $true)]
-  [string]$ReleaseCablePath,
+  [string]$ReleaseCablePath = '',
 
   [string]$TemplatePath = '',
 
@@ -300,65 +293,183 @@ function Invoke-ReleaseCableGate {
 
 $DefaultTemplatePath = Join-Path $RepoRoot 'FR-017_Stage17_Package\FR-017-ENGINEERING-REVIEW-INPUT-TEMPLATE.json'
 $ResolvedTemplatePath = if ([string]::IsNullOrWhiteSpace($TemplatePath)) { $DefaultTemplatePath } else { Resolve-Fr017Path -Path $TemplatePath }
-$ResolvedOutputPath = Resolve-Fr017Path -Path $OutputPath
-$ResolvedMeasurementPath = Resolve-Fr017Path -Path $MeasurementPath
-$ResolvedMockupPath = Resolve-Fr017Path -Path $MockupPath
-$ResolvedMannequinPath = Resolve-Fr017Path -Path $MannequinPath
-$ResolvedStaticFitPath = Resolve-Fr017Path -Path $StaticFitPath
-$ResolvedMovementPath = Resolve-Fr017Path -Path $MovementPath
-$ResolvedReleaseCablePath = Resolve-Fr017Path -Path $ReleaseCablePath
-$Status = 'created_engineering_review_record'
+$ResolvedOutputPath = if ([string]::IsNullOrWhiteSpace($OutputPath)) { '' } else { Resolve-Fr017Path -Path $OutputPath }
+$ResolvedMeasurementPath = if ([string]::IsNullOrWhiteSpace($MeasurementPath)) { '' } else { Resolve-Fr017Path -Path $MeasurementPath }
+$ResolvedMockupPath = if ([string]::IsNullOrWhiteSpace($MockupPath)) { '' } else { Resolve-Fr017Path -Path $MockupPath }
+$ResolvedMannequinPath = if ([string]::IsNullOrWhiteSpace($MannequinPath)) { '' } else { Resolve-Fr017Path -Path $MannequinPath }
+$ResolvedStaticFitPath = if ([string]::IsNullOrWhiteSpace($StaticFitPath)) { '' } else { Resolve-Fr017Path -Path $StaticFitPath }
+$ResolvedMovementPath = if ([string]::IsNullOrWhiteSpace($MovementPath)) { '' } else { Resolve-Fr017Path -Path $MovementPath }
+$ResolvedReleaseCablePath = if ([string]::IsNullOrWhiteSpace($ReleaseCablePath)) { '' } else { Resolve-Fr017Path -Path $ReleaseCablePath }
+$CreateCommandTemplate = '.\scripts\fr017-new-engineering-review-record.ps1 -Mode Create -OutputPath <engineering-review-record.json> -MeasurementPath <measurement-record.json> -MockupPath <mockup-record.json> -MannequinPath <mannequin-interface-record.json> -StaticFitPath <pilot-static-fit-record.json> -MovementPath <pilot-movement-record.json> -ReleaseCablePath <release-cable-record.json> -EvidenceDate YYYY-MM-DD -Reviewer "<reviewer>" -ReviewerRole "<reviewer role>" -ReviewerCredentialReference "<credential reference>" -PilotId "<pilot id>" -EngineeringReviewNotes "<notes>" -ConfirmDocumentationPackageReviewed -ConfirmMeasurementRecordReviewed -ConfirmMockupRecordReviewed -ConfirmMannequinRecordReviewed -ConfirmPilotStaticRecordReviewed -ConfirmPilotMovementRecordReviewed -ConfirmQuickReleaseCableRecordReviewed -ConfirmNoLoadBearingClaimApproved -ConfirmNoPoweredTestingCleared -ConfirmNoFrameCoupledTestingCleared -ConfirmFr018ImplementationNotCleared -ConfirmRedesignItemsClosedOrBlocked -ConfirmCirculationNerveRiskReviewed -ConfirmQuickReleaseAccessReviewed -ConfirmGloveWristRemovalReviewed -ConfirmCableRouteReviewed -ConfirmSymptomFailConditionsReviewed -ConfirmStopConditionsPreserved -ConfirmNonPoweredFr017PhysicalValidationAccepted -ConfirmNoRedesignRequired -ConfirmNoLoadBearingUseApproved -ConfirmNoPoweredTestingApproved -ConfirmNoFrameCoupledTestingApproved -ConfirmFr018ImplementationNotClearedByDecision'
+$EngineeringReviewStatusCommandTemplate = '.\scripts\fr017-engineering-review-gate.ps1 -Mode Status -MeasurementPath <measurement-record.json> -MockupPath <mockup-record.json> -MannequinPath <mannequin-interface-record.json> -StaticFitPath <pilot-static-fit-record.json> -MovementPath <pilot-movement-record.json> -ReleaseCablePath <release-cable-record.json> -EngineeringReviewPath <engineering-review-record.json>'
+$Status = if ($Mode -eq 'Status') { 'engineering_review_record_initializer_status' } else { 'created_engineering_review_record' }
 $ExitCode = 0
 $WroteFile = $false
 $InvalidFields = New-Object System.Collections.Generic.List[string]
 $UpdatedFields = New-Object System.Collections.Generic.List[string]
 $ProhibitedClearanceFlags = New-Object System.Collections.Generic.List[string]
 $ChronologyViolations = New-Object System.Collections.Generic.List[string]
+$TemplateParseOk = $false
+$OutputPathRequiredForCreate = [string]::IsNullOrWhiteSpace($ResolvedOutputPath)
+$MeasurementPathRequiredForCreate = [string]::IsNullOrWhiteSpace($ResolvedMeasurementPath)
+$MockupPathRequiredForCreate = [string]::IsNullOrWhiteSpace($ResolvedMockupPath)
+$MannequinPathRequiredForCreate = [string]::IsNullOrWhiteSpace($ResolvedMannequinPath)
+$StaticFitPathRequiredForCreate = [string]::IsNullOrWhiteSpace($ResolvedStaticFitPath)
+$MovementPathRequiredForCreate = [string]::IsNullOrWhiteSpace($ResolvedMovementPath)
+$ReleaseCablePathRequiredForCreate = [string]::IsNullOrWhiteSpace($ResolvedReleaseCablePath)
+$OutputPathTargetsTemplate = $false
+$OutputFileExists = $false
+$OutputParentExists = $false
+$CandidateOutputPathReady = $false
+$MeasurementPathTargetsEngineeringReviewTemplate = $false
+$MockupPathTargetsEngineeringReviewTemplate = $false
+$MannequinPathTargetsEngineeringReviewTemplate = $false
+$StaticFitPathTargetsEngineeringReviewTemplate = $false
+$MovementPathTargetsEngineeringReviewTemplate = $false
+$ReleaseCablePathTargetsEngineeringReviewTemplate = $false
+$MeasurementFileExists = $false
+$MockupFileExists = $false
+$MannequinFileExists = $false
+$StaticFitFileExists = $false
+$MovementFileExists = $false
+$ReleaseCableFileExists = $false
 $UpstreamReleaseCableStatus = ''
 $UpstreamReleaseCableReady = $false
-$UpstreamReleaseCableExitCode = 1
+$UpstreamReleaseCableExitCode = 0
 $UpstreamReleaseCableParseOk = $false
 
 if (-not (Test-Path -LiteralPath $ResolvedTemplatePath -PathType Leaf)) {
   $Status = 'missing_template_file'
   $ExitCode = 1
-} elseif ([string]::Equals($ResolvedTemplatePath, $ResolvedOutputPath, [System.StringComparison]::OrdinalIgnoreCase)) {
-  $Status = 'output_path_targets_template'
-  $ExitCode = 1
-} elseif (Test-Path -LiteralPath $ResolvedOutputPath) {
-  $Status = 'output_file_exists'
-  $ExitCode = 1
 } else {
-  $OutputParent = Split-Path -Parent $ResolvedOutputPath
-  if ([string]::IsNullOrWhiteSpace($OutputParent) -or -not (Test-Path -LiteralPath $OutputParent -PathType Container)) {
-    $Status = 'missing_output_parent'
-    $ExitCode = 1
+  if (-not [string]::IsNullOrWhiteSpace($ResolvedOutputPath)) {
+    $OutputPathTargetsTemplate = [string]::Equals($ResolvedTemplatePath, $ResolvedOutputPath, [System.StringComparison]::OrdinalIgnoreCase)
+    $OutputFileExists = Test-Path -LiteralPath $ResolvedOutputPath
+    $OutputParent = Split-Path -Parent $ResolvedOutputPath
+    $OutputParentExists = -not [string]::IsNullOrWhiteSpace($OutputParent) -and (Test-Path -LiteralPath $OutputParent -PathType Container)
+    $CandidateOutputPathReady = -not $OutputPathTargetsTemplate -and -not $OutputFileExists -and $OutputParentExists
+  }
+
+  if ($Mode -eq 'Create') {
+    if ($OutputPathRequiredForCreate) {
+      $Status = 'missing_output_path'
+      $ExitCode = 1
+    } elseif ($OutputPathTargetsTemplate) {
+      $Status = 'output_path_targets_template'
+      $ExitCode = 1
+    } elseif ($OutputFileExists) {
+      $Status = 'output_file_exists'
+      $ExitCode = 1
+    } elseif (-not $OutputParentExists) {
+      $Status = 'missing_output_parent'
+      $ExitCode = 1
+    }
   }
 }
 
 if ($ExitCode -eq 0) {
-  if (-not (Test-Path -LiteralPath $ResolvedMeasurementPath -PathType Leaf)) {
-    $Status = 'missing_measurement_file'
+  if ($MeasurementPathRequiredForCreate -and $Mode -eq 'Create') {
+    $Status = 'missing_measurement_path'
     $ExitCode = 1
-  } elseif (-not (Test-Path -LiteralPath $ResolvedMockupPath -PathType Leaf)) {
-    $Status = 'missing_mockup_file'
-    $ExitCode = 1
-  } elseif (-not (Test-Path -LiteralPath $ResolvedMannequinPath -PathType Leaf)) {
-    $Status = 'missing_mannequin_file'
-    $ExitCode = 1
-  } elseif (-not (Test-Path -LiteralPath $ResolvedStaticFitPath -PathType Leaf)) {
-    $Status = 'missing_static_fit_file'
-    $ExitCode = 1
-  } elseif (-not (Test-Path -LiteralPath $ResolvedMovementPath -PathType Leaf)) {
-    $Status = 'missing_movement_file'
-    $ExitCode = 1
-  } elseif (-not (Test-Path -LiteralPath $ResolvedReleaseCablePath -PathType Leaf)) {
-    $Status = 'missing_release_cable_file'
-    $ExitCode = 1
+  } elseif (-not [string]::IsNullOrWhiteSpace($ResolvedMeasurementPath)) {
+    $MeasurementPathTargetsEngineeringReviewTemplate = [string]::Equals($ResolvedMeasurementPath, $DefaultTemplatePath, [System.StringComparison]::OrdinalIgnoreCase)
+    $MeasurementFileExists = Test-Path -LiteralPath $ResolvedMeasurementPath -PathType Leaf
+    if ($MeasurementPathTargetsEngineeringReviewTemplate) {
+      $Status = 'measurement_path_targets_engineering_review_template'
+      $ExitCode = 1
+    } elseif (-not $MeasurementFileExists) {
+      $Status = 'missing_measurement_file'
+      $ExitCode = 1
+    }
   }
 }
 
 if ($ExitCode -eq 0) {
+  if ($MockupPathRequiredForCreate -and $Mode -eq 'Create') {
+    $Status = 'missing_mockup_path'
+    $ExitCode = 1
+  } elseif (-not [string]::IsNullOrWhiteSpace($ResolvedMockupPath)) {
+    $MockupPathTargetsEngineeringReviewTemplate = [string]::Equals($ResolvedMockupPath, $DefaultTemplatePath, [System.StringComparison]::OrdinalIgnoreCase)
+    $MockupFileExists = Test-Path -LiteralPath $ResolvedMockupPath -PathType Leaf
+    if ($MockupPathTargetsEngineeringReviewTemplate) {
+      $Status = 'mockup_path_targets_engineering_review_template'
+      $ExitCode = 1
+    } elseif (-not $MockupFileExists) {
+      $Status = 'missing_mockup_file'
+      $ExitCode = 1
+    }
+  }
+}
+
+if ($ExitCode -eq 0) {
+  if ($MannequinPathRequiredForCreate -and $Mode -eq 'Create') {
+    $Status = 'missing_mannequin_path'
+    $ExitCode = 1
+  } elseif (-not [string]::IsNullOrWhiteSpace($ResolvedMannequinPath)) {
+    $MannequinPathTargetsEngineeringReviewTemplate = [string]::Equals($ResolvedMannequinPath, $DefaultTemplatePath, [System.StringComparison]::OrdinalIgnoreCase)
+    $MannequinFileExists = Test-Path -LiteralPath $ResolvedMannequinPath -PathType Leaf
+    if ($MannequinPathTargetsEngineeringReviewTemplate) {
+      $Status = 'mannequin_path_targets_engineering_review_template'
+      $ExitCode = 1
+    } elseif (-not $MannequinFileExists) {
+      $Status = 'missing_mannequin_file'
+      $ExitCode = 1
+    }
+  }
+}
+
+if ($ExitCode -eq 0) {
+  if ($StaticFitPathRequiredForCreate -and $Mode -eq 'Create') {
+    $Status = 'missing_static_fit_path'
+    $ExitCode = 1
+  } elseif (-not [string]::IsNullOrWhiteSpace($ResolvedStaticFitPath)) {
+    $StaticFitPathTargetsEngineeringReviewTemplate = [string]::Equals($ResolvedStaticFitPath, $DefaultTemplatePath, [System.StringComparison]::OrdinalIgnoreCase)
+    $StaticFitFileExists = Test-Path -LiteralPath $ResolvedStaticFitPath -PathType Leaf
+    if ($StaticFitPathTargetsEngineeringReviewTemplate) {
+      $Status = 'static_fit_path_targets_engineering_review_template'
+      $ExitCode = 1
+    } elseif (-not $StaticFitFileExists) {
+      $Status = 'missing_static_fit_file'
+      $ExitCode = 1
+    }
+  }
+}
+
+if ($ExitCode -eq 0) {
+  if ($MovementPathRequiredForCreate -and $Mode -eq 'Create') {
+    $Status = 'missing_movement_path'
+    $ExitCode = 1
+  } elseif (-not [string]::IsNullOrWhiteSpace($ResolvedMovementPath)) {
+    $MovementPathTargetsEngineeringReviewTemplate = [string]::Equals($ResolvedMovementPath, $DefaultTemplatePath, [System.StringComparison]::OrdinalIgnoreCase)
+    $MovementFileExists = Test-Path -LiteralPath $ResolvedMovementPath -PathType Leaf
+    if ($MovementPathTargetsEngineeringReviewTemplate) {
+      $Status = 'movement_path_targets_engineering_review_template'
+      $ExitCode = 1
+    } elseif (-not $MovementFileExists) {
+      $Status = 'missing_movement_file'
+      $ExitCode = 1
+    }
+  }
+}
+
+if ($ExitCode -eq 0) {
+  if ($ReleaseCablePathRequiredForCreate -and $Mode -eq 'Create') {
+    $Status = 'missing_release_cable_path'
+    $ExitCode = 1
+  } elseif (-not [string]::IsNullOrWhiteSpace($ResolvedReleaseCablePath)) {
+    $ReleaseCablePathTargetsEngineeringReviewTemplate = [string]::Equals($ResolvedReleaseCablePath, $DefaultTemplatePath, [System.StringComparison]::OrdinalIgnoreCase)
+    $ReleaseCableFileExists = Test-Path -LiteralPath $ResolvedReleaseCablePath -PathType Leaf
+    if ($ReleaseCablePathTargetsEngineeringReviewTemplate) {
+      $Status = 'release_cable_path_targets_engineering_review_template'
+      $ExitCode = 1
+    } elseif (-not $ReleaseCableFileExists) {
+      $Status = 'missing_release_cable_file'
+      $ExitCode = 1
+    }
+  }
+}
+
+if ($ExitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($ResolvedMeasurementPath) -and -not [string]::IsNullOrWhiteSpace($ResolvedMockupPath) -and -not [string]::IsNullOrWhiteSpace($ResolvedMannequinPath) -and -not [string]::IsNullOrWhiteSpace($ResolvedStaticFitPath) -and -not [string]::IsNullOrWhiteSpace($ResolvedMovementPath) -and -not [string]::IsNullOrWhiteSpace($ResolvedReleaseCablePath)) {
   $Upstream = Invoke-ReleaseCableGate -ResolvedMeasurementPath $ResolvedMeasurementPath -ResolvedMockupPath $ResolvedMockupPath -ResolvedMannequinPath $ResolvedMannequinPath -ResolvedStaticFitPath $ResolvedStaticFitPath -ResolvedMovementPath $ResolvedMovementPath -ResolvedReleaseCablePath $ResolvedReleaseCablePath
   $UpstreamReleaseCableExitCode = [int]$Upstream.exit_code
   $UpstreamReleaseCableParseOk = [bool]$Upstream.parse_ok
@@ -372,16 +483,17 @@ if ($ExitCode -eq 0) {
 }
 
 $Payload = $null
-if ($ExitCode -eq 0) {
+if ((Test-Path -LiteralPath $ResolvedTemplatePath -PathType Leaf) -and ($ExitCode -eq 0 -or $Mode -eq 'Status')) {
   try {
     $Payload = Get-Content -LiteralPath $ResolvedTemplatePath -Raw | ConvertFrom-Json -ErrorAction Stop
+    $TemplateParseOk = $true
   } catch {
     $Status = 'invalid_template_json'
     $ExitCode = 1
   }
 }
 
-if ($ExitCode -eq 0) {
+if ($Mode -eq 'Create' -and $ExitCode -eq 0) {
   if ([string]$Payload.kind -ne 'francis.fr017.engineering_review.v1') {
     $InvalidFields.Add('kind') | Out-Null
   }
@@ -484,7 +596,7 @@ if ($ExitCode -eq 0) {
   }
 }
 
-if ($ExitCode -eq 0) {
+if ($Mode -eq 'Create' -and $ExitCode -eq 0) {
   $Generation = [ordered]@{
     generated_by = 'scripts/fr017-new-engineering-review-record.ps1'
     generated_at_utc = (Get-Date).ToUniversalTime().ToString('o')
@@ -529,9 +641,33 @@ $Output = [ordered]@{
   movement_path = $ResolvedMovementPath
   release_cable_path = $ResolvedReleaseCablePath
   output_path = $ResolvedOutputPath
-  output_exists = (Test-Path -LiteralPath $ResolvedOutputPath -PathType Leaf)
+  template_exists = (Test-Path -LiteralPath $ResolvedTemplatePath -PathType Leaf)
+  template_parse_ok = $TemplateParseOk
+  output_path_required_for_create = $OutputPathRequiredForCreate
+  measurement_path_required_for_create = $MeasurementPathRequiredForCreate
+  mockup_path_required_for_create = $MockupPathRequiredForCreate
+  mannequin_path_required_for_create = $MannequinPathRequiredForCreate
+  static_fit_path_required_for_create = $StaticFitPathRequiredForCreate
+  movement_path_required_for_create = $MovementPathRequiredForCreate
+  release_cable_path_required_for_create = $ReleaseCablePathRequiredForCreate
+  output_path_targets_template = $OutputPathTargetsTemplate
+  output_parent_exists = $OutputParentExists
+  candidate_output_path_ready = $CandidateOutputPathReady
+  measurement_path_targets_engineering_review_template = $MeasurementPathTargetsEngineeringReviewTemplate
+  mockup_path_targets_engineering_review_template = $MockupPathTargetsEngineeringReviewTemplate
+  mannequin_path_targets_engineering_review_template = $MannequinPathTargetsEngineeringReviewTemplate
+  static_fit_path_targets_engineering_review_template = $StaticFitPathTargetsEngineeringReviewTemplate
+  movement_path_targets_engineering_review_template = $MovementPathTargetsEngineeringReviewTemplate
+  release_cable_path_targets_engineering_review_template = $ReleaseCablePathTargetsEngineeringReviewTemplate
+  measurement_file_exists = $MeasurementFileExists
+  mockup_file_exists = $MockupFileExists
+  mannequin_file_exists = $MannequinFileExists
+  static_fit_file_exists = $StaticFitFileExists
+  movement_file_exists = $MovementFileExists
+  release_cable_file_exists = $ReleaseCableFileExists
+  output_exists = if ([string]::IsNullOrWhiteSpace($ResolvedOutputPath)) { $false } else { (Test-Path -LiteralPath $ResolvedOutputPath -PathType Leaf) }
   wrote_file = $WroteFile
-  read_only_contract = $false
+  read_only_contract = ($Mode -eq 'Status')
   writes_repo = ($WroteFile -and (Test-PathUnderRoot -Path $ResolvedOutputPath -Root $RepoRoot))
   writes_data = $WroteFile
   grants_execution_authority = $false
@@ -553,7 +689,9 @@ $Output = [ordered]@{
   no_fake_validation_lock = 'This initializer records operator-supplied professional FR-017 engineering review input only after quick-release/cable-snag readiness is ready. It does not certify pilot safety by itself, does not mark physical validation complete, does not permit a Stage 17 completion claim, does not approve load-bearing use, does not clear powered or frame-coupled testing, and does not clear FR-018.'
   updated_fields = @($UpdatedFields.ToArray())
   invalid_fields = @($InvalidFields.ToArray())
-  next_command = if ($WroteFile) { '.\scripts\fr017-engineering-review-gate.ps1 -Mode Status -MeasurementPath "{0}" -MockupPath "{1}" -MannequinPath "{2}" -StaticFitPath "{3}" -MovementPath "{4}" -ReleaseCablePath "{5}" -EngineeringReviewPath "{6}"' -f $ResolvedMeasurementPath, $ResolvedMockupPath, $ResolvedMannequinPath, $ResolvedStaticFitPath, $ResolvedMovementPath, $ResolvedReleaseCablePath, $ResolvedOutputPath } else { '' }
+  create_command_template = $CreateCommandTemplate
+  engineering_review_status_command_template = $EngineeringReviewStatusCommandTemplate
+  next_command = if ($WroteFile) { '.\scripts\fr017-engineering-review-gate.ps1 -Mode Status -MeasurementPath "{0}" -MockupPath "{1}" -MannequinPath "{2}" -StaticFitPath "{3}" -MovementPath "{4}" -ReleaseCablePath "{5}" -EngineeringReviewPath "{6}"' -f $ResolvedMeasurementPath, $ResolvedMockupPath, $ResolvedMannequinPath, $ResolvedStaticFitPath, $ResolvedMovementPath, $ResolvedReleaseCablePath, $ResolvedOutputPath } elseif ($Mode -eq 'Status' -and $ExitCode -eq 0) { $CreateCommandTemplate } else { '' }
 }
 
 $Output | ConvertTo-Json -Depth 8
