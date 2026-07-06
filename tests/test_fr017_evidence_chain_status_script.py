@@ -362,6 +362,30 @@ def test_fr017_evidence_chain_status_preflights_candidate_measurement_path(tmp_p
     assert not candidate_path.exists()
 
 
+def test_fr017_evidence_chain_summary_reports_candidate_measurement_path_readiness(
+    tmp_path: Path,
+) -> None:
+    candidate_path = tmp_path / "FR-017-MEASUREMENTS-2099-01-01-PILOT-RECORD.json"
+
+    proc = _run_gate("-Mode", "Summary", "-CandidateMeasurementPath", str(candidate_path))
+
+    assert proc.returncode == 0, proc.stderr
+    payload = _payload(proc.stdout)
+    assert payload["status"] == "blocked_on_measurement_intake"
+    assert payload["first_blocking_gate"] == "measurement_intake"
+    assert str(candidate_path) in payload["first_blocking_preflight_command_template"]
+    assert payload["first_blocking_preflight_template_exists"] is True
+    assert payload["first_blocking_preflight_template_parse_ok"] is True
+    assert payload["first_blocking_preflight_candidate_output_path_ready"] is True
+    assert payload["first_blocking_preflight_output_path"] == str(candidate_path)
+    assert payload["first_blocking_preflight_output_parent_exists"] is True
+    assert payload["first_blocking_preflight_output_exists"] is False
+    assert payload["first_blocking_preflight_wrote_file"] is False
+    assert payload["physical_validation_complete"] is False
+    assert payload["fr018_implementation_cleared"] is False
+    assert not candidate_path.exists()
+
+
 def test_fr017_evidence_chain_status_preflights_existing_measurement_setup_update(
     tmp_path: Path,
 ) -> None:

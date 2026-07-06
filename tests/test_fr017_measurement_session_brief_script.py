@@ -209,6 +209,30 @@ def test_fr017_measurement_session_brief_preflights_candidate_measurement_path(t
     assert not candidate_path.exists()
 
 
+def test_fr017_measurement_session_summary_reports_candidate_path_readiness(
+    tmp_path: Path,
+) -> None:
+    candidate_path = tmp_path / "FR-017-MEASUREMENTS-2099-01-01-PILOT-RECORD.json"
+
+    proc = _run_brief("-Mode", "Summary", "-CandidateMeasurementPath", str(candidate_path))
+
+    assert proc.returncode == 0, proc.stderr
+    payload = _payload(proc.stdout)
+    assert payload["status"] == "measurement_session_input_required"
+    assert payload["candidate_measurement_path"] == str(candidate_path)
+    assert str(candidate_path) in payload["current_group_preflight_command_template"]
+    assert payload["current_group_preflight_template_exists"] is True
+    assert payload["current_group_preflight_template_parse_ok"] is True
+    assert payload["current_group_preflight_candidate_output_path_ready"] is True
+    assert payload["current_group_preflight_output_path"] == str(candidate_path)
+    assert payload["current_group_preflight_output_parent_exists"] is True
+    assert payload["current_group_preflight_output_exists"] is False
+    assert payload["current_group_preflight_wrote_file"] is False
+    assert payload["physical_validation_complete"] is False
+    assert payload["fr018_implementation_cleared"] is False
+    assert not candidate_path.exists()
+
+
 def test_fr017_measurement_session_brief_points_pending_record_to_setup_updater(
     tmp_path: Path,
 ) -> None:
