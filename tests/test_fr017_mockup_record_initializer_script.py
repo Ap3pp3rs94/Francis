@@ -99,6 +99,57 @@ def _mockup_args(measurement_path: Path, output_path: Path, *, include_wrist_pre
     return args
 
 
+def test_fr017_mockup_record_initializer_status_preflights_without_writing(
+    tmp_path: Path,
+) -> None:
+    measurement_path = tmp_path / "ready-measurements.json"
+    mockup_path = tmp_path / "candidate-mockup.json"
+    measurement_path.write_text(json.dumps(_ready_measurement_payload()), encoding="utf-8")
+
+    proc = _run_script(
+        SCRIPT,
+        "-Mode",
+        "Status",
+        "-MeasurementPath",
+        str(measurement_path),
+        "-OutputPath",
+        str(mockup_path),
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    result = _payload(proc.stdout)
+    assert result["kind"] == "francis.fr017.mockup_record_initializer"
+    assert result["mode"] == "Status"
+    assert result["status"] == "mockup_record_initializer_status"
+    assert result["template_exists"] is True
+    assert result["template_parse_ok"] is True
+    assert result["output_path_required_for_create"] is False
+    assert result["measurement_path_required_for_create"] is False
+    assert result["output_path_targets_template"] is False
+    assert result["output_parent_exists"] is True
+    assert result["candidate_output_path_ready"] is True
+    assert result["measurement_file_exists"] is True
+    assert result["upstream_measurement_intake_status"] == "ready_for_non_powered_mockup_patterning"
+    assert result["upstream_measurement_intake_ready"] is True
+    assert result["wrote_file"] is False
+    assert result["output_exists"] is False
+    assert result["read_only_contract"] is True
+    assert result["writes_repo"] is False
+    assert result["writes_data"] is False
+    assert result["operator_supplied_mockup_input_recorded"] is False
+    assert result["mockup_record_is_physical_validation_evidence"] is False
+    assert result["physical_validation_complete"] is False
+    assert result["stage17_completion_claim_allowed"] is False
+    assert result["mannequin_interface_test_complete"] is False
+    assert result["pilot_testing_cleared"] is False
+    assert result["powered_or_frame_coupled_testing_cleared"] is False
+    assert result["fr018_implementation_cleared"] is False
+    assert "fr017-new-mockup-record.ps1 -Mode Create" in result["create_command_template"]
+    assert "fr017-mockup-readiness-gate.ps1 -Mode Status" in result["mockup_readiness_status_command_template"]
+    assert result["next_command"] == result["create_command_template"]
+    assert not mockup_path.exists()
+
+
 def test_fr017_mockup_record_initializer_creates_non_powered_record_without_clearance(
     tmp_path: Path,
 ) -> None:

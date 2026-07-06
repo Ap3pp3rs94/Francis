@@ -795,6 +795,29 @@ foreach ($Gate in $Gates) {
       $FirstBlockingPreflightWroteFile = [bool](Get-DetailsValue -Details $GateDetails -Name 'measurement_session_current_group_preflight_wrote_file' -Default $false)
       $FirstBlockingPreflightPhysicalValidationComplete = [bool](Get-DetailsValue -Details $GateDetails -Name 'measurement_session_current_group_preflight_physical_validation_complete' -Default $false)
       $FirstBlockingPreflightFr018ImplementationCleared = [bool](Get-DetailsValue -Details $GateDetails -Name 'measurement_session_current_group_preflight_fr018_implementation_cleared' -Default $false)
+    } elseif ([string]$Gate.id -eq 'mockup_readiness' -and -not $GateFailed) {
+      $MockupInitializerArgs = New-Object System.Collections.Generic.List[string]
+      $MockupInitializerArgs.Add('-Mode') | Out-Null
+      $MockupInitializerArgs.Add('Status') | Out-Null
+      Add-OptionalArg -Target $MockupInitializerArgs -Name '-MeasurementPath' -Value $MeasurementPath
+      Add-OptionalArg -Target $MockupInitializerArgs -Name '-OutputPath' -Value $MockupPath
+      $MockupInitializerPreflight = Invoke-JsonGate -ScriptName 'fr017-new-mockup-record.ps1' -Arguments $MockupInitializerArgs.ToArray()
+      $FirstBlockingPreflightToolPath = Join-Path $RepoRoot 'scripts\fr017-new-mockup-record.ps1'
+      $FirstBlockingPreflightCommandTemplate = if ([string]::IsNullOrWhiteSpace($MockupPath)) { '.\scripts\fr017-new-mockup-record.ps1 -Mode Status -MeasurementPath "{0}"' -f $MeasurementPath } else { '.\scripts\fr017-new-mockup-record.ps1 -Mode Status -MeasurementPath "{0}" -OutputPath "{1}"' -f $MeasurementPath, $MockupPath }
+      $FirstBlockingPreflightContract = 'Read-only mockup initializer preflight for the non-powered FR-017 mockup record. It checks the mockup template, candidate output path when provided, and upstream measurement-intake readiness, writes no evidence, records no mockup build, and does not clear physical validation or FR-018.'
+      $FirstBlockingPreflightStatus = if ([bool]$MockupInitializerPreflight.parse_ok) { [string](Get-PayloadValue -Payload $MockupInitializerPreflight.payload -Name 'status' -Default '') } else { 'failed_preflight_parse' }
+      $FirstBlockingPreflightExitCode = [int]$MockupInitializerPreflight.exit_code
+      $FirstBlockingPreflightParseOk = [bool]$MockupInitializerPreflight.parse_ok
+      $FirstBlockingPreflightReadOnlyContract = [bool](Get-PayloadValue -Payload $MockupInitializerPreflight.payload -Name 'read_only_contract' -Default $false)
+      $FirstBlockingPreflightTemplateExists = [bool](Get-PayloadValue -Payload $MockupInitializerPreflight.payload -Name 'template_exists' -Default $false)
+      $FirstBlockingPreflightTemplateParseOk = [bool](Get-PayloadValue -Payload $MockupInitializerPreflight.payload -Name 'template_parse_ok' -Default $false)
+      $FirstBlockingPreflightCandidateOutputPathReady = [bool](Get-PayloadValue -Payload $MockupInitializerPreflight.payload -Name 'candidate_output_path_ready' -Default $false)
+      $FirstBlockingPreflightOutputPath = [string](Get-PayloadValue -Payload $MockupInitializerPreflight.payload -Name 'output_path' -Default '')
+      $FirstBlockingPreflightOutputExists = [bool](Get-PayloadValue -Payload $MockupInitializerPreflight.payload -Name 'output_exists' -Default $false)
+      $FirstBlockingPreflightOutputParentExists = [bool](Get-PayloadValue -Payload $MockupInitializerPreflight.payload -Name 'output_parent_exists' -Default $false)
+      $FirstBlockingPreflightWroteFile = [bool](Get-PayloadValue -Payload $MockupInitializerPreflight.payload -Name 'wrote_file' -Default $false)
+      $FirstBlockingPreflightPhysicalValidationComplete = [bool](Get-PayloadValue -Payload $MockupInitializerPreflight.payload -Name 'physical_validation_complete' -Default $false)
+      $FirstBlockingPreflightFr018ImplementationCleared = [bool](Get-PayloadValue -Payload $MockupInitializerPreflight.payload -Name 'fr018_implementation_cleared' -Default $false)
     }
     $FirstBlockingUpdateHint = New-FirstBlockingUpdateHint -GateId ([string]$Gate.id) -GateFailed $GateFailed -GateDetails $GateDetails
     $FirstBlockingUpdateToolPath = [string]$FirstBlockingUpdateHint.tool_path

@@ -1,13 +1,11 @@
 [CmdletBinding()]
 param(
-  [ValidateSet('Create')]
-  [string]$Mode = 'Create',
+  [ValidateSet('Status', 'Create')]
+  [string]$Mode = 'Status',
 
-  [Parameter(Mandatory = $true)]
-  [string]$OutputPath,
+  [string]$OutputPath = '',
 
-  [Parameter(Mandatory = $true)]
-  [string]$MeasurementPath,
+  [string]$MeasurementPath = '',
 
   [string]$TemplatePath = '',
 
@@ -231,46 +229,76 @@ function Invoke-MeasurementIntakeGate {
 
 $DefaultTemplatePath = Join-Path $RepoRoot 'FR-017_Stage17_Package\FR-017-MOCKUP-BUILD-INPUT-TEMPLATE.json'
 $ResolvedTemplatePath = if ([string]::IsNullOrWhiteSpace($TemplatePath)) { $DefaultTemplatePath } else { Resolve-Fr017Path -Path $TemplatePath }
-$ResolvedOutputPath = Resolve-Fr017Path -Path $OutputPath
-$ResolvedMeasurementPath = Resolve-Fr017Path -Path $MeasurementPath
-$Status = 'created_mockup_build_record'
+$ResolvedOutputPath = if ([string]::IsNullOrWhiteSpace($OutputPath)) { '' } else { Resolve-Fr017Path -Path $OutputPath }
+$ResolvedMeasurementPath = if ([string]::IsNullOrWhiteSpace($MeasurementPath)) { '' } else { Resolve-Fr017Path -Path $MeasurementPath }
+$CreateCommandTemplate = '.\scripts\fr017-new-mockup-record.ps1 -Mode Create -OutputPath <mockup-record.json> -MeasurementPath <measurement-record.json> -EvidenceDate YYYY-MM-DD -Observer "<observer>" -BuildMethod "non-powered soft cuff mockup only" -PaddingLayer "<padding layer>" -SemiRigidOuterLayer "<semi-rigid outer layer>" -UpperForearmStrap "<upper strap>" -LowerForearmStrap "<lower strap>" -QuickRelease "<outer or lateral quick release>" -OuterForearmCableSleeve "<outer forearm cable sleeve>" -NonLoadBearingAlignmentTabs "<non-load-bearing tabs>" -SensorPlaceholderBlanks "<sensor blanks>" -ConfirmNonPoweredOnly -ConfirmNoLoadBearingClaim -ConfirmNoHardInnerForearmBuckles -ConfirmNoInnerElbowCrossing -ConfirmNoWristBonePressure -ConfirmReleasesVisibleAndReachable -ConfirmGloveRemovalPathPreserved -ConfirmOuterForearmCableRouteOnly -ConfirmStopOnSymptoms -ConfirmLeftUpperStrapWidthMatchesMeasurement -ConfirmLeftLowerStrapWidthMatchesMeasurement -ConfirmLeftBoneReliefChannelPresent -ConfirmLeftInnerForearmNoPressureZoneMarked -ConfirmLeftWristClearanceKept -ConfirmLeftQuickReleaseInstalledOuterOrLateral -ConfirmLeftAlignmentTabsNonLoadBearing -ConfirmLeftCableSleeveOuterRouteOnly -ConfirmRightUpperStrapWidthMatchesMeasurement -ConfirmRightLowerStrapWidthMatchesMeasurement -ConfirmRightBoneReliefChannelPresent -ConfirmRightInnerForearmNoPressureZoneMarked -ConfirmRightWristClearanceKept -ConfirmRightQuickReleaseInstalledOuterOrLateral -ConfirmRightAlignmentTabsNonLoadBearing -ConfirmRightCableSleeveOuterRouteOnly'
+$MockupReadinessStatusCommandTemplate = '.\scripts\fr017-mockup-readiness-gate.ps1 -Mode Status -MeasurementPath <measurement-record.json> -MockupPath <mockup-record.json>'
+$Status = if ($Mode -eq 'Status') { 'mockup_record_initializer_status' } else { 'created_mockup_build_record' }
 $ExitCode = 0
 $WroteFile = $false
 $InvalidFields = New-Object System.Collections.Generic.List[string]
 $UpdatedFields = New-Object System.Collections.Generic.List[string]
+$TemplateParseOk = $false
+$OutputPathRequiredForCreate = [string]::IsNullOrWhiteSpace($ResolvedOutputPath)
+$MeasurementPathRequiredForCreate = [string]::IsNullOrWhiteSpace($ResolvedMeasurementPath)
+$OutputPathTargetsTemplate = $false
+$OutputFileExists = $false
+$OutputParentExists = $false
+$CandidateOutputPathReady = $false
+$MeasurementPathTargetsMockupTemplate = $false
+$MeasurementFileExists = $false
 $UpstreamMeasurementIntakeStatus = ''
 $UpstreamMeasurementIntakeReady = $false
-$UpstreamMeasurementIntakeExitCode = 1
+$UpstreamMeasurementIntakeExitCode = 0
 $UpstreamMeasurementIntakeParseOk = $false
 
 if (-not (Test-Path -LiteralPath $ResolvedTemplatePath -PathType Leaf)) {
   $Status = 'missing_template_file'
   $ExitCode = 1
-} elseif ([string]::Equals($ResolvedTemplatePath, $ResolvedOutputPath, [System.StringComparison]::OrdinalIgnoreCase)) {
-  $Status = 'output_path_targets_template'
-  $ExitCode = 1
-} elseif (Test-Path -LiteralPath $ResolvedOutputPath) {
-  $Status = 'output_file_exists'
-  $ExitCode = 1
 } else {
-  $OutputParent = Split-Path -Parent $ResolvedOutputPath
-  if ([string]::IsNullOrWhiteSpace($OutputParent) -or -not (Test-Path -LiteralPath $OutputParent -PathType Container)) {
-    $Status = 'missing_output_parent'
-    $ExitCode = 1
+  if (-not [string]::IsNullOrWhiteSpace($ResolvedOutputPath)) {
+    $OutputPathTargetsTemplate = [string]::Equals($ResolvedTemplatePath, $ResolvedOutputPath, [System.StringComparison]::OrdinalIgnoreCase)
+    $OutputFileExists = Test-Path -LiteralPath $ResolvedOutputPath
+    $OutputParent = Split-Path -Parent $ResolvedOutputPath
+    $OutputParentExists = -not [string]::IsNullOrWhiteSpace($OutputParent) -and (Test-Path -LiteralPath $OutputParent -PathType Container)
+    $CandidateOutputPathReady = -not $OutputPathTargetsTemplate -and -not $OutputFileExists -and $OutputParentExists
+  }
+
+  if ($Mode -eq 'Create') {
+    if ($OutputPathRequiredForCreate) {
+      $Status = 'missing_output_path'
+      $ExitCode = 1
+    } elseif ($OutputPathTargetsTemplate) {
+      $Status = 'output_path_targets_template'
+      $ExitCode = 1
+    } elseif ($OutputFileExists) {
+      $Status = 'output_file_exists'
+      $ExitCode = 1
+    } elseif (-not $OutputParentExists) {
+      $Status = 'missing_output_parent'
+      $ExitCode = 1
+    }
   }
 }
 
 if ($ExitCode -eq 0) {
-  if ([string]::Equals($ResolvedMeasurementPath, $DefaultTemplatePath, [System.StringComparison]::OrdinalIgnoreCase)) {
-    $Status = 'measurement_path_targets_mockup_template'
+  if ($MeasurementPathRequiredForCreate -and $Mode -eq 'Create') {
+    $Status = 'missing_measurement_path'
     $ExitCode = 1
-  } elseif (-not (Test-Path -LiteralPath $ResolvedMeasurementPath -PathType Leaf)) {
-    $Status = 'missing_measurement_file'
-    $ExitCode = 1
+  } elseif (-not [string]::IsNullOrWhiteSpace($ResolvedMeasurementPath)) {
+    $MeasurementPathTargetsMockupTemplate = [string]::Equals($ResolvedMeasurementPath, $DefaultTemplatePath, [System.StringComparison]::OrdinalIgnoreCase)
+    $MeasurementFileExists = Test-Path -LiteralPath $ResolvedMeasurementPath -PathType Leaf
+    if ($MeasurementPathTargetsMockupTemplate) {
+      $Status = 'measurement_path_targets_mockup_template'
+      $ExitCode = 1
+    } elseif (-not $MeasurementFileExists) {
+      $Status = 'missing_measurement_file'
+      $ExitCode = 1
+    }
   }
 }
 
-if ($ExitCode -eq 0) {
+if ($ExitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($ResolvedMeasurementPath)) {
   $MeasurementIntake = Invoke-MeasurementIntakeGate -ResolvedMeasurementPath $ResolvedMeasurementPath
   $UpstreamMeasurementIntakeExitCode = [int]$MeasurementIntake.exit_code
   $UpstreamMeasurementIntakeParseOk = [bool]$MeasurementIntake.parse_ok
@@ -284,16 +312,17 @@ if ($ExitCode -eq 0) {
 }
 
 $Payload = $null
-if ($ExitCode -eq 0) {
+if ((Test-Path -LiteralPath $ResolvedTemplatePath -PathType Leaf) -and ($ExitCode -eq 0 -or $Mode -eq 'Status')) {
   try {
     $Payload = Get-Content -LiteralPath $ResolvedTemplatePath -Raw | ConvertFrom-Json -ErrorAction Stop
+    $TemplateParseOk = $true
   } catch {
     $Status = 'invalid_template_json'
     $ExitCode = 1
   }
 }
 
-if ($ExitCode -eq 0) {
+if ($Mode -eq 'Create' -and $ExitCode -eq 0) {
   if ([string]$Payload.kind -ne 'francis.fr017.mockup_build.v1') {
     $InvalidFields.Add('kind') | Out-Null
   }
@@ -391,7 +420,7 @@ if ($ExitCode -eq 0) {
   }
 }
 
-if ($ExitCode -eq 0) {
+if ($Mode -eq 'Create' -and $ExitCode -eq 0) {
   $Generation = [ordered]@{
     generated_by = 'scripts/fr017-new-mockup-record.ps1'
     generated_at_utc = (Get-Date).ToUniversalTime().ToString('o')
@@ -423,9 +452,18 @@ $Output = [ordered]@{
   template_path = $ResolvedTemplatePath
   measurement_path = $ResolvedMeasurementPath
   output_path = $ResolvedOutputPath
-  output_exists = (Test-Path -LiteralPath $ResolvedOutputPath -PathType Leaf)
+  template_exists = (Test-Path -LiteralPath $ResolvedTemplatePath -PathType Leaf)
+  template_parse_ok = $TemplateParseOk
+  output_path_required_for_create = $OutputPathRequiredForCreate
+  measurement_path_required_for_create = $MeasurementPathRequiredForCreate
+  output_path_targets_template = $OutputPathTargetsTemplate
+  output_parent_exists = $OutputParentExists
+  candidate_output_path_ready = $CandidateOutputPathReady
+  measurement_path_targets_mockup_template = $MeasurementPathTargetsMockupTemplate
+  measurement_file_exists = $MeasurementFileExists
+  output_exists = if ([string]::IsNullOrWhiteSpace($ResolvedOutputPath)) { $false } else { (Test-Path -LiteralPath $ResolvedOutputPath -PathType Leaf) }
   wrote_file = $WroteFile
-  read_only_contract = $false
+  read_only_contract = ($Mode -eq 'Status')
   writes_repo = ($WroteFile -and (Test-PathUnderRoot -Path $ResolvedOutputPath -Root $RepoRoot))
   writes_data = $WroteFile
   grants_execution_authority = $false
@@ -445,7 +483,9 @@ $Output = [ordered]@{
   no_fake_validation_lock = 'This initializer records operator-supplied non-powered FR-017 mockup-build input only after measurement intake is ready. It does not mark physical validation complete, does not permit a Stage 17 completion claim, does not complete mannequin or pilot testing, does not clear powered or frame-coupled testing, and does not clear FR-018.'
   updated_fields = @($UpdatedFields.ToArray())
   invalid_fields = @($InvalidFields.ToArray())
-  next_command = if ($WroteFile) { '.\scripts\fr017-mockup-readiness-gate.ps1 -Mode Status -MeasurementPath "{0}" -MockupPath "{1}"' -f $ResolvedMeasurementPath, $ResolvedOutputPath } else { '' }
+  create_command_template = $CreateCommandTemplate
+  mockup_readiness_status_command_template = $MockupReadinessStatusCommandTemplate
+  next_command = if ($WroteFile) { '.\scripts\fr017-mockup-readiness-gate.ps1 -Mode Status -MeasurementPath "{0}" -MockupPath "{1}"' -f $ResolvedMeasurementPath, $ResolvedOutputPath } elseif ($Mode -eq 'Status' -and $ExitCode -eq 0) { $CreateCommandTemplate } else { '' }
 }
 
 $Output | ConvertTo-Json -Depth 8
