@@ -927,11 +927,14 @@ $workArea = [pscustomobject]@{{ Left = 0.0; Top = 0.0; Right = 800.0; Bottom = 6
 $motion = [ordered]@{{ anchor_left = 10.0; anchor_top = 20.0; phase = 0.0; last_frame_seconds = -1.0 }}
 try {{
   $window.Show()
-  $result = Start-OrbWindowCoordinateTravel -Window $window -WorkArea $workArea -X 520 -Y 420 -MotionState $motion -TargetAnchor 'probe' -Root '' -RequestId 'probe' -DurationMilliseconds 520
+  # Slow CI composition ticks can skip a short travel window; keep the probe long
+  # enough to prove an intermediate render frame before final placement.
+  $travelDurationMilliseconds = 1600
+  $result = Start-OrbWindowCoordinateTravel -Window $window -WorkArea $workArea -X 520 -Y 420 -MotionState $motion -TargetAnchor 'probe' -Root '' -RequestId 'probe' -DurationMilliseconds $travelDurationMilliseconds
   $postStartLeft = [double]$window.Left
   $postStartTop = [double]$window.Top
   $frames = [System.Collections.ArrayList]::new()
-  for ($i = 0; $i -lt 100; $i++) {{
+  for ($i = 0; $i -lt 220; $i++) {{
     $frame = New-Object System.Windows.Threading.DispatcherFrame
     $timer = New-Object System.Windows.Threading.DispatcherTimer
     $timer.Interval = [TimeSpan]::FromMilliseconds(16)
