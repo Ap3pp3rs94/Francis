@@ -92,6 +92,16 @@ def test_fr017_measurement_session_brief_reports_first_template_blocker() -> Non
     assert "fr017-new-measurement-record.ps1 -Mode Status" in payload["current_group_preflight_command_template"]
     assert "-OutputPath <measurement-record.json>" in payload["current_group_preflight_command_template"]
     assert "writes no evidence" in payload["current_group_preflight_contract"]
+    assert payload["current_group_preflight_status"] == "measurement_record_initializer_status"
+    assert payload["current_group_preflight_exit_code"] == 0
+    assert payload["current_group_preflight_parse_ok"] is True
+    assert payload["current_group_preflight_read_only_contract"] is True
+    assert payload["current_group_preflight_template_exists"] is True
+    assert payload["current_group_preflight_template_parse_ok"] is True
+    assert payload["current_group_preflight_candidate_output_path_ready"] is False
+    assert payload["current_group_preflight_wrote_file"] is False
+    assert payload["current_group_preflight_physical_validation_complete"] is False
+    assert payload["current_group_preflight_fr018_implementation_cleared"] is False
     assert payload["current_group_update_tool_path"].endswith("scripts\\fr017-new-measurement-record.ps1")
     assert "fr017-new-measurement-record.ps1 -Mode Create" in payload["current_group_update_command_template"]
     assert "-OutputPath <measurement-record.json>" in payload["current_group_update_command_template"]

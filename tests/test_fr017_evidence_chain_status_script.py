@@ -96,6 +96,16 @@ def test_fr017_evidence_chain_status_stops_at_measurement_template() -> None:
     assert "fr017-new-measurement-record.ps1 -Mode Status" in payload["first_blocking_preflight_command_template"]
     assert "-OutputPath <measurement-record.json>" in payload["first_blocking_preflight_command_template"]
     assert "writes no evidence" in payload["first_blocking_preflight_contract"]
+    assert payload["first_blocking_preflight_status"] == "measurement_record_initializer_status"
+    assert payload["first_blocking_preflight_exit_code"] == 0
+    assert payload["first_blocking_preflight_parse_ok"] is True
+    assert payload["first_blocking_preflight_read_only_contract"] is True
+    assert payload["first_blocking_preflight_template_exists"] is True
+    assert payload["first_blocking_preflight_template_parse_ok"] is True
+    assert payload["first_blocking_preflight_candidate_output_path_ready"] is False
+    assert payload["first_blocking_preflight_wrote_file"] is False
+    assert payload["first_blocking_preflight_physical_validation_complete"] is False
+    assert payload["first_blocking_preflight_fr018_implementation_cleared"] is False
     assert (
         str(payload["first_blocking_update_tool_path"])
         .replace("/", "\\")
@@ -173,6 +183,28 @@ def test_fr017_evidence_chain_status_stops_at_measurement_template() -> None:
     assert (
         "writes no evidence"
         in payload["first_blocking_details"]["measurement_session_current_group_preflight_contract"]
+    )
+    assert (
+        payload["first_blocking_details"]["measurement_session_current_group_preflight_status"]
+        == "measurement_record_initializer_status"
+    )
+    assert payload["first_blocking_details"]["measurement_session_current_group_preflight_exit_code"] == 0
+    assert payload["first_blocking_details"]["measurement_session_current_group_preflight_parse_ok"] is True
+    assert payload["first_blocking_details"]["measurement_session_current_group_preflight_read_only_contract"] is True
+    assert payload["first_blocking_details"]["measurement_session_current_group_preflight_template_exists"] is True
+    assert payload["first_blocking_details"]["measurement_session_current_group_preflight_template_parse_ok"] is True
+    assert (
+        payload["first_blocking_details"]["measurement_session_current_group_preflight_candidate_output_path_ready"]
+        is False
+    )
+    assert payload["first_blocking_details"]["measurement_session_current_group_preflight_wrote_file"] is False
+    assert (
+        payload["first_blocking_details"]["measurement_session_current_group_preflight_physical_validation_complete"]
+        is False
+    )
+    assert (
+        payload["first_blocking_details"]["measurement_session_current_group_preflight_fr018_implementation_cleared"]
+        is False
     )
     assert (
         str(payload["first_blocking_details"]["measurement_session_current_group_update_tool_path"])

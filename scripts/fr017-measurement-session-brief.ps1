@@ -11,6 +11,7 @@ $ErrorActionPreference = 'Stop'
 
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $MeasurementIntakeScript = Join-Path $PSScriptRoot 'fr017-measurement-intake.ps1'
+$MeasurementInitializerScript = Join-Path $PSScriptRoot 'fr017-new-measurement-record.ps1'
 
 function Resolve-BriefPath {
   param([string]$Path)
@@ -299,11 +300,32 @@ $CurrentGroupUpdateHint = New-CurrentGroupUpdateHint -GroupId $FirstBlockingGrou
 $CurrentGroupPreflightToolPath = ''
 $CurrentGroupPreflightCommandTemplate = ''
 $CurrentGroupPreflightContract = ''
+$CurrentGroupPreflightStatus = ''
+$CurrentGroupPreflightExitCode = 0
+$CurrentGroupPreflightParseOk = $false
+$CurrentGroupPreflightReadOnlyContract = $false
+$CurrentGroupPreflightTemplateExists = $false
+$CurrentGroupPreflightTemplateParseOk = $false
+$CurrentGroupPreflightCandidateOutputPathReady = $false
+$CurrentGroupPreflightWroteFile = $false
+$CurrentGroupPreflightPhysicalValidationComplete = $false
+$CurrentGroupPreflightFr018ImplementationCleared = $false
 if (-not $IntakeFailed -and -not $IntakeReady -and $UsingTemplate -and $FirstBlockingGroupId -eq 'setup_and_safety_brief') {
   $InitializerPath = [string](Get-PayloadValue -Payload $IntakeGate.payload -Name 'measurement_record_initializer_path' -Default (Join-Path $RepoRoot 'scripts\fr017-new-measurement-record.ps1'))
   $CurrentGroupPreflightToolPath = $InitializerPath
   $CurrentGroupPreflightCommandTemplate = '.\scripts\fr017-new-measurement-record.ps1 -Mode Status -OutputPath <measurement-record.json>'
   $CurrentGroupPreflightContract = 'Read-only initializer preflight for the pending measurement record. It checks the template and candidate output path, writes no evidence, records no measurements, and does not clear FR-018.'
+  $PreflightGate = Invoke-JsonGate -ScriptPath $MeasurementInitializerScript -Arguments @('-Mode', 'Status')
+  $CurrentGroupPreflightExitCode = [int]$PreflightGate.exit_code
+  $CurrentGroupPreflightParseOk = [bool]$PreflightGate.parse_ok
+  $CurrentGroupPreflightStatus = if ([bool]$PreflightGate.parse_ok) { [string](Get-PayloadValue -Payload $PreflightGate.payload -Name 'status' -Default '') } else { 'failed_preflight_parse' }
+  $CurrentGroupPreflightReadOnlyContract = [bool](Get-PayloadValue -Payload $PreflightGate.payload -Name 'read_only_contract' -Default $false)
+  $CurrentGroupPreflightTemplateExists = [bool](Get-PayloadValue -Payload $PreflightGate.payload -Name 'template_exists' -Default $false)
+  $CurrentGroupPreflightTemplateParseOk = [bool](Get-PayloadValue -Payload $PreflightGate.payload -Name 'template_parse_ok' -Default $false)
+  $CurrentGroupPreflightCandidateOutputPathReady = [bool](Get-PayloadValue -Payload $PreflightGate.payload -Name 'candidate_output_path_ready' -Default $false)
+  $CurrentGroupPreflightWroteFile = [bool](Get-PayloadValue -Payload $PreflightGate.payload -Name 'wrote_file' -Default $false)
+  $CurrentGroupPreflightPhysicalValidationComplete = [bool](Get-PayloadValue -Payload $PreflightGate.payload -Name 'physical_validation_complete' -Default $false)
+  $CurrentGroupPreflightFr018ImplementationCleared = [bool](Get-PayloadValue -Payload $PreflightGate.payload -Name 'fr018_implementation_cleared' -Default $false)
 }
 
 $Output = [ordered]@{
@@ -327,6 +349,16 @@ $Output = [ordered]@{
   current_group_preflight_tool_path = $CurrentGroupPreflightToolPath
   current_group_preflight_command_template = $CurrentGroupPreflightCommandTemplate
   current_group_preflight_contract = $CurrentGroupPreflightContract
+  current_group_preflight_status = $CurrentGroupPreflightStatus
+  current_group_preflight_exit_code = $CurrentGroupPreflightExitCode
+  current_group_preflight_parse_ok = $CurrentGroupPreflightParseOk
+  current_group_preflight_read_only_contract = $CurrentGroupPreflightReadOnlyContract
+  current_group_preflight_template_exists = $CurrentGroupPreflightTemplateExists
+  current_group_preflight_template_parse_ok = $CurrentGroupPreflightTemplateParseOk
+  current_group_preflight_candidate_output_path_ready = $CurrentGroupPreflightCandidateOutputPathReady
+  current_group_preflight_wrote_file = $CurrentGroupPreflightWroteFile
+  current_group_preflight_physical_validation_complete = $CurrentGroupPreflightPhysicalValidationComplete
+  current_group_preflight_fr018_implementation_cleared = $CurrentGroupPreflightFr018ImplementationCleared
   current_group_update_tool_path = [string]$CurrentGroupUpdateHint.tool_path
   current_group_update_command_template = [string]$CurrentGroupUpdateHint.command_template
   current_group_update_contract = [string]$CurrentGroupUpdateHint.contract
