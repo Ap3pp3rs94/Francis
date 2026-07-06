@@ -63,6 +63,11 @@ def _install_fake_win32gui(monkeypatch: pytest.MonkeyPatch, windows: dict[int, d
     return fake
 
 
+def _enable_fake_win32_bridge(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FRANCIS_ORB_DESKTOP_BRIDGE_ENABLE", "1")
+    monkeypatch.setattr(orb_desktop_bridge, "_windows_desktop_bridge_supported", lambda: True)
+
+
 def test_disabled_bridge_writes_blocked_receipt_without_win32_lookup(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -91,7 +96,7 @@ def test_keyboard_type_confirms_target_side_state_change_and_redacts_text(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _state_env(tmp_path, monkeypatch)
-    monkeypatch.setenv("FRANCIS_ORB_DESKTOP_BRIDGE_ENABLE", "1")
+    _enable_fake_win32_bridge(monkeypatch)
     text = "raw bridge confirmation secret"
     fake = _install_fake_win32gui(
         monkeypatch,
@@ -138,7 +143,7 @@ def test_mouse_click_does_not_claim_confirmation_without_observed_state_change(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _state_env(tmp_path, monkeypatch)
-    monkeypatch.setenv("FRANCIS_ORB_DESKTOP_BRIDGE_ENABLE", "1")
+    _enable_fake_win32_bridge(monkeypatch)
     fake = _install_fake_win32gui(
         monkeypatch,
         {
@@ -173,7 +178,7 @@ def test_target_resolution_excludes_francis_overlay_and_claude_windows(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _state_env(tmp_path, monkeypatch)
-    monkeypatch.setenv("FRANCIS_ORB_DESKTOP_BRIDGE_ENABLE", "1")
+    _enable_fake_win32_bridge(monkeypatch)
     fake = _install_fake_win32gui(
         monkeypatch,
         {
