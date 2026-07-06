@@ -254,8 +254,10 @@ if ($ExitCode -eq 0) {
 
   $Sides = $Payload.sides
   $Repeatability = $Payload.repeatability
-  $SideMeasurements = if ($null -eq $Sides) { $null } else { $Sides.PSObject.Properties[$Side].Value }
-  $SideRepeatability = if ($null -eq $Repeatability) { $null } else { $Repeatability.PSObject.Properties[$Side].Value }
+  $SideMeasurementsProperty = if ($null -eq $Sides) { $null } else { $Sides.PSObject.Properties[$Side] }
+  $SideRepeatabilityProperty = if ($null -eq $Repeatability) { $null } else { $Repeatability.PSObject.Properties[$Side] }
+  $SideMeasurements = if ($null -eq $SideMeasurementsProperty) { $null } else { $SideMeasurementsProperty.Value }
+  $SideRepeatability = if ($null -eq $SideRepeatabilityProperty) { $null } else { $SideRepeatabilityProperty.Value }
   if ($null -eq $SideMeasurements) {
     $InvalidFields.Add(('sides.{0}' -f $Side)) | Out-Null
   }

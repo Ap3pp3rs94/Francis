@@ -247,6 +247,31 @@ function Get-PropertyValue {
   return $Property.Value
 }
 
+function Update-JsonPropertyValue {
+  param(
+    [object]$Target,
+    [string]$Field,
+    [object]$Value,
+    [string]$QualifiedField,
+    [System.Collections.Generic.List[string]]$InvalidFields,
+    [System.Collections.Generic.List[string]]$UpdatedFields
+  )
+
+  if ($null -eq $Target) {
+    $InvalidFields.Add($QualifiedField) | Out-Null
+    return
+  }
+
+  $Property = $Target.PSObject.Properties[$Field]
+  if ($null -eq $Property) {
+    $InvalidFields.Add($QualifiedField) | Out-Null
+    return
+  }
+
+  $Property.Value = $Value
+  $UpdatedFields.Add($QualifiedField) | Out-Null
+}
+
 function Get-IsoDateOrNull {
   param([string]$Value)
 
@@ -482,14 +507,14 @@ if ($ExitCode -eq 0) {
 }
 
 if ($ExitCode -eq 0) {
-  if ([string]$Payload.kind -ne 'francis.fr017.pilot_static_fit.v1') {
+  if ([string](Get-PropertyValue -Payload $Payload -Name 'kind' -Default '') -ne 'francis.fr017.pilot_static_fit.v1') {
     $InvalidFields.Add('kind') | Out-Null
   }
-  if ([string]$Payload.component -ne 'FR-017 Forearm Cuffs') {
+  if ([string](Get-PropertyValue -Payload $Payload -Name 'component' -Default '') -ne 'FR-017 Forearm Cuffs') {
     $InvalidFields.Add('component') | Out-Null
   }
 
-  $Evidence = $Payload.evidence
+  $Evidence = Get-PropertyValue -Payload $Payload -Name 'evidence'
   if ($null -eq $Evidence) {
     $InvalidFields.Add('evidence') | Out-Null
   } else {
@@ -498,23 +523,18 @@ if ($ExitCode -eq 0) {
     } elseif (-not (Test-IsoDateNotFuture -Value $EvidenceDate.Trim())) {
       $InvalidFields.Add('evidence.date') | Out-Null
     } else {
-      $Evidence.date = $EvidenceDate.Trim()
-      $UpdatedFields.Add('evidence.date') | Out-Null
+      Update-JsonPropertyValue -Target $Evidence -Field 'date' -Value $EvidenceDate.Trim() -QualifiedField 'evidence.date' -InvalidFields $InvalidFields -UpdatedFields $UpdatedFields
     }
     Set-RequiredText -Target $Evidence -Field 'observer' -Value $Observer -QualifiedField 'evidence.observer' -InvalidFields $InvalidFields -UpdatedFields $UpdatedFields
     Set-RequiredText -Target $Evidence -Field 'pilot_id' -Value $PilotId -QualifiedField 'evidence.pilot_id' -InvalidFields $InvalidFields -UpdatedFields $UpdatedFields
     Set-RequiredText -Target $Evidence -Field 'prototype_revision' -Value $PrototypeRevision -QualifiedField 'evidence.prototype_revision' -InvalidFields $InvalidFields -UpdatedFields $UpdatedFields
-    $Evidence.measurement_record_path = $ResolvedMeasurementPath
-    $Evidence.mockup_build_record_path = $ResolvedMockupPath
-    $Evidence.mannequin_interface_record_path = $ResolvedMannequinPath
-    $UpdatedFields.Add('evidence.measurement_record_path') | Out-Null
-    $UpdatedFields.Add('evidence.mockup_build_record_path') | Out-Null
-    $UpdatedFields.Add('evidence.mannequin_interface_record_path') | Out-Null
+    Update-JsonPropertyValue -Target $Evidence -Field 'measurement_record_path' -Value $ResolvedMeasurementPath -QualifiedField 'evidence.measurement_record_path' -InvalidFields $InvalidFields -UpdatedFields $UpdatedFields
+    Update-JsonPropertyValue -Target $Evidence -Field 'mockup_build_record_path' -Value $ResolvedMockupPath -QualifiedField 'evidence.mockup_build_record_path' -InvalidFields $InvalidFields -UpdatedFields $UpdatedFields
+    Update-JsonPropertyValue -Target $Evidence -Field 'mannequin_interface_record_path' -Value $ResolvedMannequinPath -QualifiedField 'evidence.mannequin_interface_record_path' -InvalidFields $InvalidFields -UpdatedFields $UpdatedFields
     if ($TestDurationMinutes -le 0) {
       $InvalidFields.Add('evidence.test_duration_minutes') | Out-Null
     } else {
-      $Evidence.test_duration_minutes = $TestDurationMinutes
-      $UpdatedFields.Add('evidence.test_duration_minutes') | Out-Null
+      Update-JsonPropertyValue -Target $Evidence -Field 'test_duration_minutes' -Value $TestDurationMinutes -QualifiedField 'evidence.test_duration_minutes' -InvalidFields $InvalidFields -UpdatedFields $UpdatedFields
     }
 
     $MeasurementPilotId = Get-EvidencePilotId -Path $ResolvedMeasurementPath
@@ -535,7 +555,7 @@ if ($ExitCode -eq 0) {
     }
   }
 
-  $Preconditions = $Payload.preconditions
+  $Preconditions = Get-PropertyValue -Payload $Payload -Name 'preconditions'
   if ($null -eq $Preconditions) {
     $InvalidFields.Add('preconditions') | Out-Null
   } else {
@@ -653,7 +673,7 @@ if ($ExitCode -eq 0) {
     }
   }
 
-  $Sides = $Payload.sides
+  $Sides = Get-PropertyValue -Payload $Payload -Name 'sides'
   if ($null -eq $Sides) {
     $InvalidFields.Add('sides') | Out-Null
   } else {

@@ -233,8 +233,10 @@ if ($ExitCode -eq 0) {
 
   $MarkedZones = $Payload.marked_zones
   $LandmarkConfirmation = $Payload.landmark_confirmation
-  $LeftZones = if ($null -eq $MarkedZones) { $null } else { $MarkedZones.PSObject.Properties['left'].Value }
-  $RightZones = if ($null -eq $MarkedZones) { $null } else { $MarkedZones.PSObject.Properties['right'].Value }
+  $LeftZonesProperty = if ($null -eq $MarkedZones) { $null } else { $MarkedZones.PSObject.Properties['left'] }
+  $RightZonesProperty = if ($null -eq $MarkedZones) { $null } else { $MarkedZones.PSObject.Properties['right'] }
+  $LeftZones = if ($null -eq $LeftZonesProperty) { $null } else { $LeftZonesProperty.Value }
+  $RightZones = if ($null -eq $RightZonesProperty) { $null } else { $RightZonesProperty.Value }
 
   if ($null -eq $LeftZones) {
     $InvalidFields.Add('marked_zones.left') | Out-Null

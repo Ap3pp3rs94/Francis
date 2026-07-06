@@ -98,6 +98,7 @@ def _left_measurement_args() -> list[str]:
     ]
 
 
+@pytest.mark.unit
 def test_fr017_measurement_record_update_records_left_side_without_completion_claim(tmp_path: Path) -> None:
     measurement_path = tmp_path / "measurement-record.json"
     _create_setup_brief_record(measurement_path)
@@ -153,6 +154,7 @@ def test_fr017_measurement_record_update_records_left_side_without_completion_cl
     assert intake_result["fr018_implementation_cleared"] is False
 
 
+@pytest.mark.unit
 def test_fr017_measurement_record_update_refuses_template_target() -> None:
     proc = _run_script(
         UPDATE_SCRIPT,
@@ -169,6 +171,7 @@ def test_fr017_measurement_record_update_refuses_template_target() -> None:
     assert result["fr018_implementation_cleared"] is False
 
 
+@pytest.mark.unit
 def test_fr017_measurement_record_update_refuses_overwrite_without_explicit_flag(tmp_path: Path) -> None:
     measurement_path = tmp_path / "measurement-record.json"
     _create_setup_brief_record(measurement_path)
@@ -186,6 +189,7 @@ def test_fr017_measurement_record_update_refuses_overwrite_without_explicit_flag
     assert result["fr018_implementation_cleared"] is False
 
 
+@pytest.mark.unit
 def test_fr017_measurement_record_update_rejects_excess_repeatability_delta(tmp_path: Path) -> None:
     measurement_path = tmp_path / "measurement-record.json"
     _create_setup_brief_record(measurement_path)
