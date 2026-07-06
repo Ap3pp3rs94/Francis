@@ -1685,6 +1685,33 @@ def test_fr017_evidence_chain_status_blocks_on_completion_ledger_update_after_ha
     assert payload["gate_results"][11]["details"]["ledger_update_review_ready"] is False
     assert payload["gate_results"][11]["details"]["missing_fields"] == ["completion_ledger_path"]
     assert payload["first_blocking_details"]["missing_fields"] == ["completion_ledger_path"]
+    assert str(payload["first_blocking_preflight_tool_path"]).endswith(
+        "scripts\\fr017-completion-ledger-update-gate.ps1"
+    )
+    assert (
+        "fr017-completion-ledger-update-gate.ps1 -Mode Status" in payload["first_blocking_preflight_command_template"]
+    )
+    assert str(ledger_entry_path) in payload["first_blocking_preflight_command_template"]
+    assert str(completion_ledger_path) in payload["first_blocking_preflight_command_template"]
+    assert "completion-ledger update review preflight" in payload["first_blocking_preflight_contract"]
+    assert "writes no completion ledger" in payload["first_blocking_preflight_contract"]
+    assert "writes no evidence" in payload["first_blocking_preflight_contract"]
+    assert payload["first_blocking_preflight_status"] == "pending_completion_ledger_update"
+    assert payload["first_blocking_preflight_exit_code"] == 0
+    assert payload["first_blocking_preflight_parse_ok"] is True
+    assert payload["first_blocking_preflight_read_only_contract"] is True
+    assert payload["first_blocking_preflight_template_exists"] is False
+    assert payload["first_blocking_preflight_template_parse_ok"] is False
+    assert payload["first_blocking_preflight_candidate_output_path_ready"] is False
+    assert payload["first_blocking_preflight_output_path"] == str(completion_ledger_path)
+    assert payload["first_blocking_preflight_output_exists"] is False
+    assert payload["first_blocking_preflight_output_parent_exists"] is True
+    assert payload["first_blocking_preflight_wrote_file"] is False
+    assert payload["first_blocking_preflight_physical_validation_complete"] is False
+    assert payload["first_blocking_preflight_fr018_implementation_cleared"] is False
+    assert payload["first_blocking_update_tool_path"].endswith("scripts\\fr017-completion-ledger-update-gate.ps1")
+    assert "fr017-completion-ledger-update-gate.ps1 -Mode Status" in payload["first_blocking_update_command_template"]
+    assert "read-only" in payload["first_blocking_update_contract"]
     assert payload["evidence_chain_decision_ready"] is False
     assert payload["ledger_completion_review_ready"] is False
     assert payload["completion_ledger_handoff_ready"] is True

@@ -560,6 +560,11 @@ function New-FirstBlockingUpdateHint {
       $CommandTemplate = '.\scripts\fr017-new-completion-ledger-handoff.ps1 -Mode Create -OutputPath <completion-ledger-handoff.md> -MeasurementPath <measurement-record.json> -MockupPath <mockup-record.json> -MannequinPath <mannequin-interface-record.json> -StaticFitPath <pilot-static-fit-record.json> -MovementPath <pilot-movement-record.json> -ReleaseCablePath <release-cable-record.json> -EngineeringReviewPath <engineering-review-record.json> -FinalDecisionPath <final-decision-record.json>'
       $Contract = [string](Get-DetailsValue -Details $GateDetails -Name 'completion_ledger_handoff_runbook_contract')
     }
+    'completion_ledger_update' {
+      $ToolPath = Join-Path $RepoRoot 'scripts\fr017-completion-ledger-update-gate.ps1'
+      $CommandTemplate = '.\scripts\fr017-completion-ledger-update-gate.ps1 -Mode Status -MeasurementPath <measurement-record.json> -MockupPath <mockup-record.json> -MannequinPath <mannequin-interface-record.json> -StaticFitPath <pilot-static-fit-record.json> -MovementPath <pilot-movement-record.json> -ReleaseCablePath <release-cable-record.json> -EngineeringReviewPath <engineering-review-record.json> -FinalDecisionPath <final-decision-record.json> -LedgerEntryPath <completion-ledger-handoff.md> -CompletionLedgerPath <COMPLETION_LEDGER.md>'
+      $Contract = [string](Get-DetailsValue -Details $GateDetails -Name 'completion_ledger_update_guard_contract')
+    }
   }
 
   if ([string]::IsNullOrWhiteSpace($ToolPath)) {
@@ -1017,6 +1022,25 @@ foreach ($Gate in $Gates) {
       $FirstBlockingPreflightWroteFile = [bool](Get-PayloadValue -Payload $CompletionLedgerInitializerPreflight.payload -Name 'wrote_file' -Default $false)
       $FirstBlockingPreflightPhysicalValidationComplete = [bool](Get-PayloadValue -Payload $CompletionLedgerInitializerPreflight.payload -Name 'physical_validation_complete' -Default $false)
       $FirstBlockingPreflightFr018ImplementationCleared = [bool](Get-PayloadValue -Payload $CompletionLedgerInitializerPreflight.payload -Name 'fr018_implementation_cleared' -Default $false)
+    } elseif ([string]$Gate.id -eq 'completion_ledger_update' -and -not $GateFailed) {
+      $CompletionLedgerPathForReadback = [string](Get-DetailsValue -Details $GateDetails -Name 'completion_ledger_path')
+      $CompletionLedgerParent = if ([string]::IsNullOrWhiteSpace($CompletionLedgerPathForReadback)) { '' } else { Split-Path -Parent $CompletionLedgerPathForReadback }
+      $FirstBlockingPreflightToolPath = Join-Path $RepoRoot 'scripts\fr017-completion-ledger-update-gate.ps1'
+      $FirstBlockingPreflightCommandTemplate = '.\scripts\fr017-completion-ledger-update-gate.ps1 -Mode Status -MeasurementPath "{0}" -MockupPath "{1}" -MannequinPath "{2}" -StaticFitPath "{3}" -MovementPath "{4}" -ReleaseCablePath "{5}" -EngineeringReviewPath "{6}" -FinalDecisionPath "{7}" -LedgerEntryPath "{8}" -CompletionLedgerPath "{9}"' -f $MeasurementPath, $MockupPath, $MannequinPath, $StaticFitPath, $MovementPath, $ReleaseCablePath, $EngineeringReviewPath, $FinalDecisionPath, $LedgerEntryPath, $CompletionLedgerPath
+      $FirstBlockingPreflightContract = 'Read-only completion-ledger update review preflight for FR-017. It reuses the current completion-ledger-update gate result, checks that the actual or proposed completion ledger contains the reviewed candidate handoff section with blocked-clearance language, writes no completion ledger, writes no evidence, and does not mark physical validation complete, permit a Stage 17 completion claim, approve load-bearing use, clear powered or frame-coupled testing, or clear FR-018.'
+      $FirstBlockingPreflightStatus = $GateStatus
+      $FirstBlockingPreflightExitCode = [int]$Result.exit_code
+      $FirstBlockingPreflightParseOk = [bool]$Result.parse_ok
+      $FirstBlockingPreflightReadOnlyContract = [bool](Get-PayloadValue -Payload $Result.payload -Name 'read_only_contract' -Default $false)
+      $FirstBlockingPreflightTemplateExists = $false
+      $FirstBlockingPreflightTemplateParseOk = $false
+      $FirstBlockingPreflightCandidateOutputPathReady = $false
+      $FirstBlockingPreflightOutputPath = $CompletionLedgerPathForReadback
+      $FirstBlockingPreflightOutputExists = [bool](Get-DetailsValue -Details $GateDetails -Name 'completion_ledger_exists' -Default $false)
+      $FirstBlockingPreflightOutputParentExists = -not [string]::IsNullOrWhiteSpace($CompletionLedgerParent) -and (Test-Path -LiteralPath $CompletionLedgerParent -PathType Container)
+      $FirstBlockingPreflightWroteFile = [bool](Get-PayloadValue -Payload $Result.payload -Name 'writes_data' -Default $false)
+      $FirstBlockingPreflightPhysicalValidationComplete = [bool](Get-PayloadValue -Payload $Result.payload -Name 'physical_validation_complete' -Default $false)
+      $FirstBlockingPreflightFr018ImplementationCleared = [bool](Get-PayloadValue -Payload $Result.payload -Name 'fr018_implementation_cleared' -Default $false)
     }
     $FirstBlockingUpdateHint = New-FirstBlockingUpdateHint -GateId ([string]$Gate.id) -GateFailed $GateFailed -GateDetails $GateDetails
     $FirstBlockingUpdateToolPath = [string]$FirstBlockingUpdateHint.tool_path
