@@ -31,6 +31,11 @@ function Resolve-BriefPath {
   return [System.IO.Path]::GetFullPath((Join-Path $RepoRoot $Path))
 }
 
+function Get-DefaultCandidateMeasurementPath {
+  $DateStamp = Get-Date -Format 'yyyy-MM-dd'
+  return [System.IO.Path]::GetFullPath((Join-Path $RepoRoot ('FR-017_Stage17_Package\FR-017-MEASUREMENTS-{0}-PILOT-RECORD.json' -f $DateStamp)))
+}
+
 function Add-OptionalArg {
   param(
     [System.Collections.Generic.List[string]]$Target,
@@ -282,7 +287,9 @@ function New-MeasurementSessionSummary {
     intake_failed = [bool]$StatusPayload['intake_failed']
     intake_ready_for_non_powered_mockup_patterning = [bool]$StatusPayload['intake_ready_for_non_powered_mockup_patterning']
     measurement_path = [string]$StatusPayload['measurement_path']
+    suggested_measurement_path = [string]$StatusPayload['suggested_measurement_path']
     candidate_measurement_path = [string]$StatusPayload['candidate_measurement_path']
+    candidate_measurement_path_source = [string]$StatusPayload['candidate_measurement_path_source']
     using_template = [bool]$StatusPayload['using_template']
     first_blocking_group_id = [string]$StatusPayload['first_blocking_group_id']
     first_blocking_group_status = [string]$StatusPayload['first_blocking_group_status']
@@ -357,6 +364,11 @@ if ($null -ne $FirstBlockingGroup) {
 $ResolvedMeasurementPath = Resolve-BriefPath -Path $MeasurementPath
 $ResolvedCandidateMeasurementPath = Resolve-BriefPath -Path $CandidateMeasurementPath
 $UsingTemplate = if ($null -eq $IntakeGate.payload -or $null -eq $IntakeGate.payload.PSObject.Properties['using_template']) { [string]::IsNullOrWhiteSpace($MeasurementPath) } else { [bool]$IntakeGate.payload.using_template }
+$SuggestedMeasurementPath = Get-DefaultCandidateMeasurementPath
+$CandidateMeasurementPathSource = if ([string]::IsNullOrWhiteSpace($ResolvedCandidateMeasurementPath)) { 'suggested_default' } else { 'operator_supplied' }
+if ([string]::IsNullOrWhiteSpace($ResolvedCandidateMeasurementPath) -and $UsingTemplate -and -not $IntakeReady -and -not $IntakeFailed) {
+  $ResolvedCandidateMeasurementPath = $SuggestedMeasurementPath
+}
 
 if ($IntakeReady) {
   $Status = 'ready_for_non_powered_mockup_patterning_handoff'
@@ -477,7 +489,9 @@ $Output = [ordered]@{
   intake_failed = $IntakeFailed
   intake_ready_for_non_powered_mockup_patterning = $IntakeReady
   measurement_path = $ResolvedMeasurementPath
+  suggested_measurement_path = $SuggestedMeasurementPath
   candidate_measurement_path = $ResolvedCandidateMeasurementPath
+  candidate_measurement_path_source = $CandidateMeasurementPathSource
   using_template = $UsingTemplate
   first_blocking_group_id = $FirstBlockingGroupId
   first_blocking_group_status = [string](Get-PayloadValue -Payload $IntakeGate.payload -Name 'measurement_capture_first_blocking_group_status' -Default '')
