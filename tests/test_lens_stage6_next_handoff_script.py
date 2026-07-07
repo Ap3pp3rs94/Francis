@@ -980,7 +980,7 @@ def test_lens_stage6_next_handoff_consumes_reviewed_summon_authority_handoff(tmp
     assert summon_granted_payload["recommended_operator_handoff"]["would_mutate"] is True
 
 
-def test_lens_stage6_next_handoff_preserves_completion_audit_concrete_handoff(tmp_path: Path) -> None:
+def test_lens_stage6_next_handoff_replaces_stale_completion_audit_concrete_handoff(tmp_path: Path) -> None:
     data_root = tmp_path / "data"
     audit_json = tmp_path / "stage6-completion-audit-system-resident.json"
     concrete_handoff = {
@@ -1063,16 +1063,20 @@ def test_lens_stage6_next_handoff_preserves_completion_audit_concrete_handoff(tm
     )
     assert payload["stage6_completion_audit_remaining_acceptance_handoff_observed"] is True
     assert payload["stage6_completion_audit_recommended_handoff_consumed"] is True
-    assert payload["recommended_concrete_handoff_source"] == "stage6_prerequisite_bringup_operator_plan_handoff"
-    assert payload["recommended_concrete_handoff"] == concrete_handoff
+    assert payload["recommended_concrete_handoff_source"] == (
+        "persistent_supervision_first_missing_requirement_handoff"
+    )
+    assert payload["recommended_concrete_handoff"] != concrete_handoff
     assert payload["recommended_concrete_next_slice"] == (
-        "run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt"
+        "resolve_resident_host_process_before_persistent_supervision_enablement"
     )
     assert payload["recommended_concrete_proof_script"] == (
-        "scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status"
+        "scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status"
     )
-    assert payload["recommended_concrete_next_smallest_truthful_gap"] == ("persistent_supervision_execution_boundary")
-    assert payload["recommended_concrete_authority_required"] == "none_readback_only"
+    assert payload["recommended_concrete_next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
+    assert payload["recommended_concrete_authority_required"] == (
+        "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites"
+    )
     assert payload["recommended_concrete_authority_granted"] is False
 
 
@@ -1338,7 +1342,7 @@ def test_lens_stage6_next_handoff_promotes_system_resident_acceptance_boundary(t
     assert payload["recommended_next_operator_command"]["requires_actor"] is True
 
 
-def test_lens_stage6_next_handoff_prefers_ready_concrete_over_stale_system_resident_handoff(
+def test_lens_stage6_next_handoff_prefers_live_missing_prerequisite_over_stale_ready_concrete(
     tmp_path: Path,
 ) -> None:
     data_root = tmp_path / "data"
@@ -1469,18 +1473,21 @@ def test_lens_stage6_next_handoff_prefers_ready_concrete_over_stale_system_resid
     payload = json.loads(proc.stdout)
     assert payload["stage6_completion_audit_remaining_acceptance_handoff_observed"] is True
     assert payload["stage6_completion_audit_system_resident_acceptance_handoff_observed"] is True
-    assert payload["recommended_concrete_handoff_source"] == "stage6_prerequisite_bringup_operator_plan_handoff"
-    assert payload["recommended_concrete_next_smallest_truthful_gap"] == "persistent_supervision_execution_boundary"
+    assert payload["recommended_concrete_handoff_source"] == (
+        "persistent_supervision_first_missing_requirement_handoff"
+    )
+    assert payload["recommended_concrete_next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
     assert payload["recommended_concrete_next_slice"] == (
-        "run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt"
+        "resolve_resident_host_process_before_persistent_supervision_enablement"
     )
     assert payload["recommended_concrete_proof_script"] == (
-        "scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status"
+        "scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status"
     )
-    assert payload["recommended_concrete_authority_required"] == "none_readback_only"
+    assert payload["recommended_concrete_authority_required"] == (
+        "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites"
+    )
     concrete_handoff = payload["recommended_concrete_handoff"]
-    assert concrete_handoff["next_operator_action_requirement"] == "persistent_supervision_enablement_receipt"
-    assert concrete_handoff["next_operator_action"]["id"] == "review_persistent_supervision_enablement_receipt"
+    assert concrete_handoff["id"] == "resident_host_process"
     assert concrete_handoff["read_only_contract"] is True
     assert concrete_handoff["would_execute"] is False
     assert concrete_handoff["would_mutate"] is False
@@ -1878,13 +1885,17 @@ def test_lens_stage6_next_handoff_prefers_first_missing_prerequisite_after_appli
     ]
     assert ready_concrete_payload["stage6_prerequisite_bringup_plan"]["missing_required_before_enable"] == []
     assert ready_concrete_payload["recommended_concrete_handoff_source"] == (
-        "persistent_supervision_resident_claim_boundary_handoff"
+        "persistent_supervision_first_missing_requirement_handoff"
     )
-    assert ready_concrete_payload["recommended_concrete_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert ready_concrete_payload["recommended_concrete_next_smallest_truthful_gap"] == (
+        "summon_tray_presence_blocker_boundary"
+    )
     assert ready_concrete_payload["recommended_concrete_next_slice"] == (
-        "run_stage6_lens_completion_audit_after_resident_claim_boundary_readback"
+        "resolve_tray_presence_before_persistent_supervision_enablement"
     )
-    assert ready_concrete_payload["recommended_concrete_authority_required"] == "none_new_stage6_completion_audit"
+    assert ready_concrete_payload["recommended_concrete_authority_required"] == (
+        "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites"
+    )
 
 
 def _write_lens_host_runtime_state(data_root: Path, *, pid: int) -> None:
