@@ -210,6 +210,16 @@ def test_fr017_mannequin_gate_requires_test_record_after_mockup_ready(tmp_path: 
     assert payload["mannequin_capture_first_blocking_group_id"] == "mannequin_evidence_and_linkage"
     assert payload["mannequin_capture_first_blocking_group_status"] == "pending_required_fields"
     assert "matching mockup readiness record path" in payload["mannequin_capture_first_blocking_group_action"]
+    assert payload["mannequin_capture_first_blocking_group_missing_fields"] == [
+        "evidence.date",
+        "evidence.observer",
+        "evidence.mockup_readiness_record_path",
+        "evidence.mannequin_or_arm_form_id",
+        "evidence.future_interface_mock_geometry_revision",
+        "evidence.cable_sleeve_mock_id",
+    ]
+    assert payload["mannequin_capture_first_blocking_group_invalid_fields"] == []
+    assert payload["mannequin_capture_first_blocking_group_blocking_signals"] == []
     capture_status = _capture_status_by_id(payload)
     assert "evidence.date" in capture_status["mannequin_evidence_and_linkage"]["missing_fields"]
     assert "test_article.left_cuff_revision" in capture_status["mannequin_test_article"]["missing_fields"]

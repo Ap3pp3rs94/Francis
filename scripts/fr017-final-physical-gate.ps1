@@ -228,6 +228,9 @@ function New-CapturePlanSummary {
   $FirstBlockingGroupId = ''
   $FirstBlockingGroupStatus = ''
   $FirstBlockingGroupAction = ''
+  $FirstBlockingGroupMissingFields = @()
+  $FirstBlockingGroupInvalidFields = @()
+  $FirstBlockingGroupBlockingSignals = @()
 
   foreach ($Step in $CapturePlanStatus) {
     $StepStatus = [string]$Step.status
@@ -247,6 +250,9 @@ function New-CapturePlanSummary {
       $FirstBlockingGroupId = [string]$Step.id
       $FirstBlockingGroupStatus = $StepStatus
       $FirstBlockingGroupAction = [string]$Step.required_action
+      $FirstBlockingGroupMissingFields = @(ConvertTo-StringArray -Value $Step.missing_fields)
+      $FirstBlockingGroupInvalidFields = @(ConvertTo-StringArray -Value $Step.invalid_fields)
+      $FirstBlockingGroupBlockingSignals = @(ConvertTo-StringArray -Value $Step.blocking_signals)
     }
   }
 
@@ -260,6 +266,9 @@ function New-CapturePlanSummary {
     first_blocking_group_id = $FirstBlockingGroupId
     first_blocking_group_status = $FirstBlockingGroupStatus
     first_blocking_group_action = $FirstBlockingGroupAction
+    first_blocking_group_missing_fields = @($FirstBlockingGroupMissingFields)
+    first_blocking_group_invalid_fields = @($FirstBlockingGroupInvalidFields)
+    first_blocking_group_blocking_signals = @($FirstBlockingGroupBlockingSignals)
   }
 }
 
@@ -859,6 +868,9 @@ $Output = [ordered]@{
   final_physical_decision_first_blocking_group_id = [string]$FinalPhysicalDecisionPlanSummary.first_blocking_group_id
   final_physical_decision_first_blocking_group_status = [string]$FinalPhysicalDecisionPlanSummary.first_blocking_group_status
   final_physical_decision_first_blocking_group_action = [string]$FinalPhysicalDecisionPlanSummary.first_blocking_group_action
+  final_physical_decision_first_blocking_group_missing_fields = @($FinalPhysicalDecisionPlanSummary.first_blocking_group_missing_fields)
+  final_physical_decision_first_blocking_group_invalid_fields = @($FinalPhysicalDecisionPlanSummary.first_blocking_group_invalid_fields)
+  final_physical_decision_first_blocking_group_blocking_signals = @($FinalPhysicalDecisionPlanSummary.first_blocking_group_blocking_signals)
   physical_validation_complete = $false
   stage17_physical_completion_decision_ready = ($Status -eq 'ready_for_stage17_final_physical_completion_decision')
   stage17_completion_claim_allowed = $false

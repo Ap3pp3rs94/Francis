@@ -372,6 +372,9 @@ function New-CapturePlanSummary {
   $FirstBlockingGroupId = ''
   $FirstBlockingGroupStatus = ''
   $FirstBlockingGroupAction = ''
+  $FirstBlockingGroupMissingFields = @()
+  $FirstBlockingGroupInvalidFields = @()
+  $FirstBlockingGroupBlockingSignals = @()
 
   foreach ($Step in $CapturePlanStatus) {
     $StepStatus = [string]$Step.status
@@ -391,6 +394,9 @@ function New-CapturePlanSummary {
       $FirstBlockingGroupId = [string]$Step.id
       $FirstBlockingGroupStatus = $StepStatus
       $FirstBlockingGroupAction = [string]$Step.required_action
+      $FirstBlockingGroupMissingFields = @(ConvertTo-StringArray -Value $Step.missing_fields)
+      $FirstBlockingGroupInvalidFields = @(ConvertTo-StringArray -Value $Step.invalid_fields)
+      $FirstBlockingGroupBlockingSignals = @(ConvertTo-StringArray -Value $Step.blocking_signals)
     }
   }
 
@@ -404,6 +410,9 @@ function New-CapturePlanSummary {
     first_blocking_group_id = $FirstBlockingGroupId
     first_blocking_group_status = $FirstBlockingGroupStatus
     first_blocking_group_action = $FirstBlockingGroupAction
+    first_blocking_group_missing_fields = @($FirstBlockingGroupMissingFields)
+    first_blocking_group_invalid_fields = @($FirstBlockingGroupInvalidFields)
+    first_blocking_group_blocking_signals = @($FirstBlockingGroupBlockingSignals)
   }
 }
 
@@ -881,6 +890,9 @@ $Output = [ordered]@{
   release_cable_capture_first_blocking_group_id = [string]$ReleaseCableCapturePlanSummary.first_blocking_group_id
   release_cable_capture_first_blocking_group_status = [string]$ReleaseCableCapturePlanSummary.first_blocking_group_status
   release_cable_capture_first_blocking_group_action = [string]$ReleaseCableCapturePlanSummary.first_blocking_group_action
+  release_cable_capture_first_blocking_group_missing_fields = @($ReleaseCableCapturePlanSummary.first_blocking_group_missing_fields)
+  release_cable_capture_first_blocking_group_invalid_fields = @($ReleaseCableCapturePlanSummary.first_blocking_group_invalid_fields)
+  release_cable_capture_first_blocking_group_blocking_signals = @($ReleaseCableCapturePlanSummary.first_blocking_group_blocking_signals)
   record_linkage_contract = 'The quick-release/cable-snag evidence.pilot_movement_record_path must resolve to the same movement record path passed into this gate. A release/cable record cannot advance from stale, copied, or unrelated movement evidence.'
   pilot_identity_linkage_contract = 'The quick-release/cable-snag evidence.pilot_id must match evidence.pilot_id in the linked movement record. A release/cable record cannot advance if it names a different pilot than the completed movement evidence.'
   evidence_date_contract = 'Use an ISO 8601 calendar date in YYYY-MM-DD format for evidence.date. Future-dated quick-release/cable-snag evidence is invalid because it cannot be completed evidence.'

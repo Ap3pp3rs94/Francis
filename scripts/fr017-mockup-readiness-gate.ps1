@@ -384,6 +384,9 @@ function New-CapturePlanSummary {
   $FirstBlockingGroupId = ''
   $FirstBlockingGroupStatus = ''
   $FirstBlockingGroupAction = ''
+  $FirstBlockingGroupMissingFields = @()
+  $FirstBlockingGroupInvalidFields = @()
+  $FirstBlockingGroupBlockingSignals = @()
 
   foreach ($Step in $CapturePlanStatus) {
     $StepStatus = [string]$Step.status
@@ -403,6 +406,9 @@ function New-CapturePlanSummary {
       $FirstBlockingGroupId = [string]$Step.id
       $FirstBlockingGroupStatus = $StepStatus
       $FirstBlockingGroupAction = [string]$Step.required_action
+      $FirstBlockingGroupMissingFields = @(ConvertTo-StringArray -Value $Step.missing_fields)
+      $FirstBlockingGroupInvalidFields = @(ConvertTo-StringArray -Value $Step.invalid_fields)
+      $FirstBlockingGroupBlockingSignals = @(ConvertTo-StringArray -Value $Step.blocking_signals)
     }
   }
 
@@ -416,6 +422,9 @@ function New-CapturePlanSummary {
     first_blocking_group_id = $FirstBlockingGroupId
     first_blocking_group_status = $FirstBlockingGroupStatus
     first_blocking_group_action = $FirstBlockingGroupAction
+    first_blocking_group_missing_fields = @($FirstBlockingGroupMissingFields)
+    first_blocking_group_invalid_fields = @($FirstBlockingGroupInvalidFields)
+    first_blocking_group_blocking_signals = @($FirstBlockingGroupBlockingSignals)
   }
 }
 
@@ -841,6 +850,9 @@ $Output = [ordered]@{
   mockup_capture_first_blocking_group_id = [string]$MockupCapturePlanSummary.first_blocking_group_id
   mockup_capture_first_blocking_group_status = [string]$MockupCapturePlanSummary.first_blocking_group_status
   mockup_capture_first_blocking_group_action = [string]$MockupCapturePlanSummary.first_blocking_group_action
+  mockup_capture_first_blocking_group_missing_fields = @($MockupCapturePlanSummary.first_blocking_group_missing_fields)
+  mockup_capture_first_blocking_group_invalid_fields = @($MockupCapturePlanSummary.first_blocking_group_invalid_fields)
+  mockup_capture_first_blocking_group_blocking_signals = @($MockupCapturePlanSummary.first_blocking_group_blocking_signals)
   mockup_parse_ok = $MockupParseOk
   read_only_contract = $true
   writes_repo = $false

@@ -231,6 +231,16 @@ def test_fr017_pilot_movement_gate_requires_movement_record_after_static_ready(
     assert payload["movement_capture_first_blocking_group_id"] == "movement_evidence_and_linkage"
     assert payload["movement_capture_first_blocking_group_status"] == "pending_required_fields"
     assert "matching pilot id" in payload["movement_capture_first_blocking_group_action"]
+    assert payload["movement_capture_first_blocking_group_missing_fields"] == [
+        "evidence.date",
+        "evidence.observer",
+        "evidence.pilot_id",
+        "evidence.prototype_revision",
+        "evidence.pilot_static_fit_record_path",
+        "evidence.test_duration_minutes",
+    ]
+    assert payload["movement_capture_first_blocking_group_invalid_fields"] == []
+    assert payload["movement_capture_first_blocking_group_blocking_signals"] == []
     capture_status = _capture_status_by_id(payload)
     assert "evidence.date" in capture_status["movement_evidence_and_linkage"]["missing_fields"]
     assert "preconditions.non_powered_only" in capture_status["movement_safety_preconditions"]["missing_fields"]

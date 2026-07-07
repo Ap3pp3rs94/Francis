@@ -270,6 +270,13 @@ def test_fr017_mockup_gate_requires_mockup_record_after_measurements(tmp_path: P
     assert payload["mockup_capture_first_blocking_group_id"] == "mockup_evidence_and_linkage"
     assert payload["mockup_capture_first_blocking_group_status"] == "pending_required_fields"
     assert "matching measurement record path" in payload["mockup_capture_first_blocking_group_action"]
+    assert payload["mockup_capture_first_blocking_group_missing_fields"] == [
+        "evidence.date",
+        "evidence.observer",
+        "evidence.measurement_record_path",
+    ]
+    assert payload["mockup_capture_first_blocking_group_invalid_fields"] == []
+    assert payload["mockup_capture_first_blocking_group_blocking_signals"] == []
     capture_status = {step["id"]: step for step in payload["mockup_capture_plan_status"]}
     assert "evidence.date" in capture_status["mockup_evidence_and_linkage"]["missing_fields"]
     assert "materials.padding_layer" in capture_status["mockup_material_stack"]["missing_fields"]

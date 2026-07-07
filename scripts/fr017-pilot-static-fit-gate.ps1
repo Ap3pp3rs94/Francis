@@ -368,6 +368,9 @@ function New-CapturePlanSummary {
   $FirstBlockingGroupId = ''
   $FirstBlockingGroupStatus = ''
   $FirstBlockingGroupAction = ''
+  $FirstBlockingGroupMissingFields = @()
+  $FirstBlockingGroupInvalidFields = @()
+  $FirstBlockingGroupBlockingSignals = @()
 
   foreach ($Step in $CapturePlanStatus) {
     $StepStatus = [string]$Step.status
@@ -387,6 +390,9 @@ function New-CapturePlanSummary {
       $FirstBlockingGroupId = [string]$Step.id
       $FirstBlockingGroupStatus = $StepStatus
       $FirstBlockingGroupAction = [string]$Step.required_action
+      $FirstBlockingGroupMissingFields = @(ConvertTo-StringArray -Value $Step.missing_fields)
+      $FirstBlockingGroupInvalidFields = @(ConvertTo-StringArray -Value $Step.invalid_fields)
+      $FirstBlockingGroupBlockingSignals = @(ConvertTo-StringArray -Value $Step.blocking_signals)
     }
   }
 
@@ -400,6 +406,9 @@ function New-CapturePlanSummary {
     first_blocking_group_id = $FirstBlockingGroupId
     first_blocking_group_status = $FirstBlockingGroupStatus
     first_blocking_group_action = $FirstBlockingGroupAction
+    first_blocking_group_missing_fields = @($FirstBlockingGroupMissingFields)
+    first_blocking_group_invalid_fields = @($FirstBlockingGroupInvalidFields)
+    first_blocking_group_blocking_signals = @($FirstBlockingGroupBlockingSignals)
   }
 }
 
@@ -899,6 +908,9 @@ $Output = [ordered]@{
   static_fit_capture_first_blocking_group_id = [string]$StaticFitCapturePlanSummary.first_blocking_group_id
   static_fit_capture_first_blocking_group_status = [string]$StaticFitCapturePlanSummary.first_blocking_group_status
   static_fit_capture_first_blocking_group_action = [string]$StaticFitCapturePlanSummary.first_blocking_group_action
+  static_fit_capture_first_blocking_group_missing_fields = @($StaticFitCapturePlanSummary.first_blocking_group_missing_fields)
+  static_fit_capture_first_blocking_group_invalid_fields = @($StaticFitCapturePlanSummary.first_blocking_group_invalid_fields)
+  static_fit_capture_first_blocking_group_blocking_signals = @($StaticFitCapturePlanSummary.first_blocking_group_blocking_signals)
   record_linkage_contract = 'The pilot static-fit evidence paths for measurement_record_path, mockup_build_record_path, and mannequin_interface_record_path must resolve to the same records passed into this gate. A static-fit record cannot advance from stale, copied, or unrelated upstream evidence.'
   pilot_identity_linkage_contract = 'The pilot static-fit evidence.pilot_id must match evidence.pilot_id in the linked measurement record. A static-fit record cannot advance if it names a different pilot than the measurements used for cuff sizing.'
   evidence_date_contract = 'Use an ISO 8601 calendar date in YYYY-MM-DD format for evidence.date. Future-dated pilot static-fit evidence is invalid because it cannot be completed evidence.'

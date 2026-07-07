@@ -226,6 +226,16 @@ def test_fr017_engineering_review_gate_requires_review_after_release_ready(tmp_p
     assert payload["engineering_review_capture_upstream_blocked_groups"] == 0
     assert payload["engineering_review_capture_first_blocking_group_id"] == "engineering_review_evidence_and_linkage"
     assert payload["engineering_review_capture_first_blocking_group_status"] == "pending_required_fields"
+    assert payload["engineering_review_capture_first_blocking_group_missing_fields"] == [
+        "evidence.date",
+        "evidence.reviewer",
+        "evidence.reviewer_role",
+        "evidence.reviewer_credential_reference",
+        "evidence.pilot_id",
+        "evidence.quick_release_cable_snag_record_path",
+    ]
+    assert payload["engineering_review_capture_first_blocking_group_invalid_fields"] == []
+    assert payload["engineering_review_capture_first_blocking_group_blocking_signals"] == []
     capture_status = _capture_status_by_id(payload)
     assert "evidence.date" in capture_status["engineering_review_evidence_and_linkage"]["missing_fields"]
     assert (

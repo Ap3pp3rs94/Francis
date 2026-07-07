@@ -141,6 +141,11 @@ def test_fr017_final_physical_gate_reports_default_templates_as_pending() -> Non
     assert payload["final_physical_decision_first_blocking_group_status"] == (
         "pending_required_engineering_review_gate"
     )
+    assert payload["final_physical_decision_first_blocking_group_missing_fields"] == []
+    assert payload["final_physical_decision_first_blocking_group_invalid_fields"] == []
+    assert payload["final_physical_decision_first_blocking_group_blocking_signals"] == [
+        "engineering_review_gate_status.pending_quick_release_cable_snag_gate"
+    ]
     decision_status = _decision_status_by_id(payload)
     assert decision_status["stage17_package_and_manifest_lock"]["ready_for_final_physical_decision_review"] is True
     assert decision_status["engineering_review_gate_lock"]["blocking_signals"] == [

@@ -236,6 +236,16 @@ def test_fr017_release_cable_gate_requires_record_after_movement_ready(tmp_path:
     assert payload["release_cable_capture_upstream_blocked_groups"] == 0
     assert payload["release_cable_capture_first_blocking_group_id"] == "release_cable_evidence_and_linkage"
     assert payload["release_cable_capture_first_blocking_group_status"] == "pending_required_fields"
+    assert payload["release_cable_capture_first_blocking_group_missing_fields"] == [
+        "evidence.date",
+        "evidence.observer",
+        "evidence.pilot_id",
+        "evidence.prototype_revision",
+        "evidence.pilot_movement_record_path",
+        "evidence.test_duration_minutes",
+    ]
+    assert payload["release_cable_capture_first_blocking_group_invalid_fields"] == []
+    assert payload["release_cable_capture_first_blocking_group_blocking_signals"] == []
     capture_status = _capture_status_by_id(payload)
     assert "evidence.date" in capture_status["release_cable_evidence_and_linkage"]["missing_fields"]
     assert "preconditions.non_powered_only" in capture_status["release_cable_safety_preconditions"]["missing_fields"]

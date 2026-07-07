@@ -370,6 +370,9 @@ function New-CapturePlanSummary {
   $FirstBlockingGroupId = ''
   $FirstBlockingGroupStatus = ''
   $FirstBlockingGroupAction = ''
+  $FirstBlockingGroupMissingFields = @()
+  $FirstBlockingGroupInvalidFields = @()
+  $FirstBlockingGroupBlockingSignals = @()
 
   foreach ($Step in $CapturePlanStatus) {
     $StepStatus = [string]$Step.status
@@ -389,6 +392,9 @@ function New-CapturePlanSummary {
       $FirstBlockingGroupId = [string]$Step.id
       $FirstBlockingGroupStatus = $StepStatus
       $FirstBlockingGroupAction = [string]$Step.required_action
+      $FirstBlockingGroupMissingFields = @(ConvertTo-StringArray -Value $Step.missing_fields)
+      $FirstBlockingGroupInvalidFields = @(ConvertTo-StringArray -Value $Step.invalid_fields)
+      $FirstBlockingGroupBlockingSignals = @(ConvertTo-StringArray -Value $Step.blocking_signals)
     }
   }
 
@@ -402,6 +408,9 @@ function New-CapturePlanSummary {
     first_blocking_group_id = $FirstBlockingGroupId
     first_blocking_group_status = $FirstBlockingGroupStatus
     first_blocking_group_action = $FirstBlockingGroupAction
+    first_blocking_group_missing_fields = @($FirstBlockingGroupMissingFields)
+    first_blocking_group_invalid_fields = @($FirstBlockingGroupInvalidFields)
+    first_blocking_group_blocking_signals = @($FirstBlockingGroupBlockingSignals)
   }
 }
 
@@ -864,6 +873,9 @@ $Output = [ordered]@{
   movement_capture_first_blocking_group_id = [string]$MovementCapturePlanSummary.first_blocking_group_id
   movement_capture_first_blocking_group_status = [string]$MovementCapturePlanSummary.first_blocking_group_status
   movement_capture_first_blocking_group_action = [string]$MovementCapturePlanSummary.first_blocking_group_action
+  movement_capture_first_blocking_group_missing_fields = @($MovementCapturePlanSummary.first_blocking_group_missing_fields)
+  movement_capture_first_blocking_group_invalid_fields = @($MovementCapturePlanSummary.first_blocking_group_invalid_fields)
+  movement_capture_first_blocking_group_blocking_signals = @($MovementCapturePlanSummary.first_blocking_group_blocking_signals)
   record_linkage_contract = 'The pilot movement evidence.pilot_static_fit_record_path must resolve to the same static-fit record path passed into this gate. A movement record cannot advance from stale, copied, or unrelated static-fit evidence.'
   pilot_identity_linkage_contract = 'The pilot movement evidence.pilot_id must match evidence.pilot_id in the linked static-fit record. A movement record cannot advance if it names a different pilot than the completed static-fit evidence.'
   evidence_date_contract = 'Use an ISO 8601 calendar date in YYYY-MM-DD format for evidence.date. Future-dated pilot movement evidence is invalid because it cannot be completed evidence.'

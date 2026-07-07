@@ -353,6 +353,9 @@ function New-CapturePlanSummary {
   $FirstBlockingGroupId = ''
   $FirstBlockingGroupStatus = ''
   $FirstBlockingGroupAction = ''
+  $FirstBlockingGroupMissingFields = @()
+  $FirstBlockingGroupInvalidFields = @()
+  $FirstBlockingGroupBlockingSignals = @()
 
   foreach ($Step in $CapturePlanStatus) {
     $StepStatus = [string]$Step.status
@@ -372,6 +375,9 @@ function New-CapturePlanSummary {
       $FirstBlockingGroupId = [string]$Step.id
       $FirstBlockingGroupStatus = $StepStatus
       $FirstBlockingGroupAction = [string]$Step.required_action
+      $FirstBlockingGroupMissingFields = @(ConvertTo-StringArray -Value $Step.missing_fields)
+      $FirstBlockingGroupInvalidFields = @(ConvertTo-StringArray -Value $Step.invalid_fields)
+      $FirstBlockingGroupBlockingSignals = @(ConvertTo-StringArray -Value $Step.blocking_signals)
     }
   }
 
@@ -385,6 +391,9 @@ function New-CapturePlanSummary {
     first_blocking_group_id = $FirstBlockingGroupId
     first_blocking_group_status = $FirstBlockingGroupStatus
     first_blocking_group_action = $FirstBlockingGroupAction
+    first_blocking_group_missing_fields = @($FirstBlockingGroupMissingFields)
+    first_blocking_group_invalid_fields = @($FirstBlockingGroupInvalidFields)
+    first_blocking_group_blocking_signals = @($FirstBlockingGroupBlockingSignals)
   }
 }
 
@@ -798,6 +807,9 @@ $Output = [ordered]@{
   mannequin_capture_first_blocking_group_id = [string]$MannequinCapturePlanSummary.first_blocking_group_id
   mannequin_capture_first_blocking_group_status = [string]$MannequinCapturePlanSummary.first_blocking_group_status
   mannequin_capture_first_blocking_group_action = [string]$MannequinCapturePlanSummary.first_blocking_group_action
+  mannequin_capture_first_blocking_group_missing_fields = @($MannequinCapturePlanSummary.first_blocking_group_missing_fields)
+  mannequin_capture_first_blocking_group_invalid_fields = @($MannequinCapturePlanSummary.first_blocking_group_invalid_fields)
+  mannequin_capture_first_blocking_group_blocking_signals = @($MannequinCapturePlanSummary.first_blocking_group_blocking_signals)
   evidence_date_contract = 'Use an ISO 8601 calendar date in YYYY-MM-DD format for evidence.date. Future-dated mannequin interface evidence is invalid because it cannot be completed evidence.'
   test_subject_contract = 'Mannequin interface evidence.mannequin_or_arm_form_id must identify a non-human mannequin or arm-form test subject. Any text that identifies a pilot, human, or wearer is invalid because this gate is not a pilot test.'
   record_linkage_contract = 'The mannequin interface evidence.mockup_readiness_record_path must resolve to the same mockup record path passed into this gate. A mannequin test cannot advance from stale, copied, or unrelated mockup evidence.'

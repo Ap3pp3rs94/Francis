@@ -239,6 +239,18 @@ def test_fr017_pilot_static_gate_requires_static_record_after_upstream_ready(tmp
     assert payload["static_fit_capture_first_blocking_group_id"] == "static_fit_evidence_and_linkage"
     assert payload["static_fit_capture_first_blocking_group_status"] == "pending_required_fields"
     assert "matching pilot id" in payload["static_fit_capture_first_blocking_group_action"]
+    assert payload["static_fit_capture_first_blocking_group_missing_fields"] == [
+        "evidence.date",
+        "evidence.observer",
+        "evidence.pilot_id",
+        "evidence.prototype_revision",
+        "evidence.measurement_record_path",
+        "evidence.mockup_build_record_path",
+        "evidence.mannequin_interface_record_path",
+        "evidence.test_duration_minutes",
+    ]
+    assert payload["static_fit_capture_first_blocking_group_invalid_fields"] == []
+    assert payload["static_fit_capture_first_blocking_group_blocking_signals"] == []
     capture_status = _capture_status_by_id(payload)
     assert "evidence.date" in capture_status["static_fit_evidence_and_linkage"]["missing_fields"]
     assert "preconditions.non_powered_only" in capture_status["static_fit_safety_preconditions"]["missing_fields"]

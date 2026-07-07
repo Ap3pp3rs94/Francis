@@ -293,6 +293,9 @@ function New-CapturePlanSummary {
   $FirstBlockingGroupId = ''
   $FirstBlockingGroupStatus = ''
   $FirstBlockingGroupAction = ''
+  $FirstBlockingGroupMissingFields = @()
+  $FirstBlockingGroupInvalidFields = @()
+  $FirstBlockingGroupBlockingSignals = @()
 
   foreach ($Step in $CapturePlanStatus) {
     $StepStatus = [string]$Step.status
@@ -312,6 +315,9 @@ function New-CapturePlanSummary {
       $FirstBlockingGroupId = [string]$Step.id
       $FirstBlockingGroupStatus = $StepStatus
       $FirstBlockingGroupAction = [string]$Step.required_action
+      $FirstBlockingGroupMissingFields = @(ConvertTo-StringArray -Value $Step.missing_fields)
+      $FirstBlockingGroupInvalidFields = @(ConvertTo-StringArray -Value $Step.invalid_fields)
+      $FirstBlockingGroupBlockingSignals = @(ConvertTo-StringArray -Value $Step.blocking_signals)
     }
   }
 
@@ -325,6 +331,9 @@ function New-CapturePlanSummary {
     first_blocking_group_id = $FirstBlockingGroupId
     first_blocking_group_status = $FirstBlockingGroupStatus
     first_blocking_group_action = $FirstBlockingGroupAction
+    first_blocking_group_missing_fields = @($FirstBlockingGroupMissingFields)
+    first_blocking_group_invalid_fields = @($FirstBlockingGroupInvalidFields)
+    first_blocking_group_blocking_signals = @($FirstBlockingGroupBlockingSignals)
   }
 }
 
@@ -829,6 +838,9 @@ $Output = [ordered]@{
   engineering_review_capture_first_blocking_group_id = [string]$EngineeringReviewCapturePlanSummary.first_blocking_group_id
   engineering_review_capture_first_blocking_group_status = [string]$EngineeringReviewCapturePlanSummary.first_blocking_group_status
   engineering_review_capture_first_blocking_group_action = [string]$EngineeringReviewCapturePlanSummary.first_blocking_group_action
+  engineering_review_capture_first_blocking_group_missing_fields = @($EngineeringReviewCapturePlanSummary.first_blocking_group_missing_fields)
+  engineering_review_capture_first_blocking_group_invalid_fields = @($EngineeringReviewCapturePlanSummary.first_blocking_group_invalid_fields)
+  engineering_review_capture_first_blocking_group_blocking_signals = @($EngineeringReviewCapturePlanSummary.first_blocking_group_blocking_signals)
   boolean_value_contract = 'Use unquoted JSON booleans only. Strings such as yes/no/1/0/"true"/"false" are invalid. Review acceptance requires true for required reviewed items and false for prohibited clearances or redesign conditions.'
   record_linkage_contract = 'The engineering review evidence.quick_release_cable_snag_record_path must resolve to the same quick-release/cable-snag record path passed into this gate. An engineering review record cannot advance from stale, copied, or unrelated release/cable evidence.'
   pilot_identity_linkage_contract = 'The engineering review evidence.pilot_id must match evidence.pilot_id in the linked quick-release/cable-snag record. An engineering review record cannot advance if it names a different pilot than the completed release/cable evidence.'
