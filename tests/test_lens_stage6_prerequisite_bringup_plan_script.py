@@ -2750,7 +2750,9 @@ def test_lens_stage6_prerequisite_bringup_applies_enablement_to_temp_service_con
     assert "resident_host_process" in stale_runtime_payload["missing_required_before_enable"]
     assert stale_runtime_payload["next_operator_action_requirement"] == "resident_host_process"
     assert stale_runtime_payload["next_operator_action"]["id"] == "execute_supervised_resident_host_start"
-    assert stale_runtime_payload["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
+    assert (
+        stale_runtime_payload["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
+    )
     assert stale_runtime_payload["authority_required"] == "lens.resident_runtime.execution_authority"
     assert stale_runtime_payload["would_execute"] is False
     assert stale_runtime_payload["would_mutate"] is False
