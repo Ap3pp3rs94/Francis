@@ -1116,6 +1116,7 @@ def _write_hotkey_binding_config_override(*, allow_launch: bool = False, global_
         "hotkey_registration_authority": True,
         "overlay_control_authority": allow_launch,
         "local_process_launch_authority": True,
+        "command_hotkeys": [],
     }
     safe_global_hotkey = _safe_str(global_hotkey).strip()
     if safe_global_hotkey:

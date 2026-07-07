@@ -223,6 +223,23 @@ def test_lens_os_binding_hotkey_runner_uses_ci_tolerant_startup_budget(monkeypat
     script_root.mkdir(parents=True)
     (script_root / "lens-hotkey-binding.ps1").write_text("# test hotkey runner\n", encoding="utf-8")
     _write_lens_summon_config(repo_root)
+    config_path = repo_root / "config" / "runtime" / "lens" / "summon.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["command_hotkeys"] = [
+        {
+            "id": "hotkey.ctrl_m",
+            "command_id": "orb.move",
+            "global_hotkey": "Ctrl+M",
+            "binding_scope": "global",
+            "enabled": True,
+            "authority_scope": "runtime_overlay_position_only",
+            "capture_mode": "one_shot_click",
+            "handler": "lens.overlay.place_mode",
+            "receipt_kind": "overlay_position",
+            "trigger_carries_authority": False,
+        }
+    ]
+    config_path.write_text(json.dumps(config), encoding="utf-8")
     monkeypatch.setattr(module, "repo_root", lambda: repo_root)
     monkeypatch.setattr(module, "data_dir", lambda: data_root)
     monkeypatch.setattr(module.shutil, "which", lambda name: "powershell.exe")
@@ -346,6 +363,7 @@ def test_lens_os_binding_hotkey_runner_writes_requested_global_hotkey_override(
     override_path = Path(command[override_index + 1])
     override = json.loads(override_path.read_text(encoding="utf-8"))
     assert override["global_hotkey"] == "Ctrl+Alt+Shift+F12"
+    assert override["command_hotkeys"] == []
 
 
 def test_lens_os_binding_authority_grant_requires_approved_request(monkeypatch, tmp_path: Path) -> None:
