@@ -50,6 +50,10 @@ def _payload(stdout: str) -> dict[str, Any]:
     return json.loads(stdout)
 
 
+def _assert_path_tail(value: str, expected_tail: str) -> None:
+    assert str(value).replace("/", "\\").endswith(expected_tail)
+
+
 def _decision_status_by_id(payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return {step["id"]: step for step in payload["final_physical_decision_plan_status"]}
 
@@ -100,10 +104,25 @@ def test_fr017_final_physical_gate_reports_default_templates_as_pending() -> Non
     assert payload["fr018_implementation_cleared"] is False
     assert payload["final_physical_decision_plan_not_completion_evidence"] is True
     assert "not physical validation evidence" in payload["final_physical_decision_plan_contract"]
+    assert "fr017-new-final-decision-record.ps1" in payload["final_physical_decision_runbook_contract"]
     assert "final physical decision readiness only" in payload["final_physical_decision_plan_status_contract"]
     assert "not physical validation evidence" in payload["final_physical_decision_summary_contract"]
     assert payload["next_required_final_physical_input"] == (
-        "complete_human_final_stage17_completion_decision_record_at_FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json"
+        "create_human_final_decision_record_with_fr017-new-final-decision-record.ps1_then_rerun_final_decision_record_gate"
+    )
+    _assert_path_tail(
+        payload["final_decision_input_template_path"],
+        "FR-017_Stage17_Package\\FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json",
+    )
+    _assert_path_tail(
+        payload["final_decision_record_initializer_path"],
+        "scripts\\fr017-new-final-decision-record.ps1",
+    )
+    assert payload["final_decision_working_record_name_pattern"] == (
+        "FR-017-FINAL-DECISION-YYYY-MM-DD-PILOT-RECORD.json"
+    )
+    assert payload["final_physical_gate_record_name_pattern"] == (
+        "FR-017-FINAL-PHYSICAL-GATE-YYYY-MM-DD-PILOT-RECORD.json"
     )
     assert [step["id"] for step in payload["final_physical_decision_plan"]] == [
         "stage17_package_and_manifest_lock",
@@ -287,7 +306,12 @@ def test_fr017_final_physical_gate_ready_state_does_not_claim_completion(tmp_pat
     assert payload["final_physical_decision_first_blocking_group_status"] == ""
     assert payload["final_physical_decision_first_blocking_group_action"] == ""
     assert payload["next_required_final_physical_input"] == (
-        "complete_human_final_stage17_completion_decision_record_at_FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json"
+        "create_human_final_decision_record_with_fr017-new-final-decision-record.ps1_then_rerun_final_decision_record_gate"
+    )
+    assert "fr017-new-final-decision-record.ps1" in payload["final_physical_decision_runbook_contract"]
+    _assert_path_tail(
+        payload["final_decision_record_initializer_path"],
+        "scripts\\fr017-new-final-decision-record.ps1",
     )
     assert all(
         step["status"] == "ready_for_final_physical_decision_review"

@@ -47,7 +47,7 @@ def _run_gate(*args: str):
         SCRIPT,
         args,
         cwd=ROOT,
-        timeout_seconds=140,
+        timeout_seconds=240,
     )
 
 
@@ -55,8 +55,33 @@ def _payload(stdout: str) -> dict[str, Any]:
     return json.loads(stdout)
 
 
+def _assert_default_candidate_path_from_preflight(payload: dict[str, Any]) -> Path:
+    output_path = Path(payload["first_blocking_preflight_output_path"])
+    assert output_path.parent == ROOT / "FR-017_Stage17_Package"
+    assert output_path.name.startswith("FR-017-MEASUREMENTS-")
+    assert output_path.name.endswith("-PILOT-RECORD.json")
+    assert not output_path.exists()
+    return output_path
+
+
 def _assert_unique(values: list[Any]) -> None:
     assert len(values) == len(set(values))
+
+
+def _assert_first_blocking_update_hint(
+    payload: dict[str, Any],
+    script_name: str,
+    command_parts: list[str],
+    contract_fragment: str = "operator input tooling only",
+) -> None:
+    assert str(payload["first_blocking_update_tool_path"]).replace("/", "\\").endswith(f"scripts\\{script_name}")
+    for command_part in command_parts:
+        assert command_part in payload["first_blocking_update_command_template"]
+    assert contract_fragment in payload["first_blocking_update_contract"]
+
+
+def _assert_path_tail(value: str, expected_tail: str) -> None:
+    assert str(value).replace("/", "\\").endswith(expected_tail)
 
 
 def test_fr017_evidence_chain_status_stops_at_measurement_template() -> None:
@@ -68,6 +93,7 @@ def test_fr017_evidence_chain_status_stops_at_measurement_template() -> None:
     assert payload["status"] == "blocked_on_measurement_intake"
     assert payload["first_blocking_gate"] == "measurement_intake"
     assert payload["first_blocking_status"] == "pending_measurements"
+    suggested_path = _assert_default_candidate_path_from_preflight(payload)
     assert (
         payload["next_required_input"]
         == "scripts/fr017-new-measurement-record.ps1 + FR-017-MEASUREMENT-CAPTURE-RUNBOOK.md + FR-017-MEASUREMENTS-INPUT-TEMPLATE.json"
@@ -77,7 +103,49 @@ def test_fr017_evidence_chain_status_stops_at_measurement_template() -> None:
         == "create_pending_measurement_record_then_capture_with_runbook_and_rerun_measurement_intake"
     )
     assert (
-        payload["first_blocking_details"]["next_required_physical_input"]
+        str(payload["first_blocking_preflight_tool_path"])
+        .replace("/", "\\")
+        .endswith("scripts\\fr017-new-measurement-record.ps1")
+    )
+    assert "fr017-new-measurement-record.ps1 -Mode Summary" in payload["first_blocking_preflight_command_template"]
+    assert "-OutputPath" in payload["first_blocking_preflight_command_template"]
+    assert str(suggested_path) in payload["first_blocking_preflight_command_template"]
+    assert "writes no evidence" in payload["first_blocking_preflight_contract"]
+    assert payload["first_blocking_preflight_status"] == "measurement_record_initializer_status"
+    assert payload["first_blocking_preflight_exit_code"] == 0
+    assert payload["first_blocking_preflight_parse_ok"] is True
+    assert payload["first_blocking_preflight_read_only_contract"] is True
+    assert payload["first_blocking_preflight_template_exists"] is True
+    assert payload["first_blocking_preflight_template_parse_ok"] is True
+    assert payload["first_blocking_preflight_candidate_output_path_ready"] is True
+    assert payload["first_blocking_preflight_output_parent_exists"] is True
+    assert payload["first_blocking_preflight_output_exists"] is False
+    assert payload["first_blocking_preflight_wrote_file"] is False
+    assert payload["first_blocking_preflight_physical_validation_complete"] is False
+    assert payload["first_blocking_preflight_fr018_implementation_cleared"] is False
+    assert (
+        str(payload["first_blocking_update_tool_path"])
+        .replace("/", "\\")
+        .endswith("scripts\\fr017-new-measurement-record.ps1")
+    )
+    assert "fr017-new-measurement-record.ps1 -Mode Create" in payload["first_blocking_update_command_template"]
+    assert str(suggested_path) in payload["first_blocking_update_command_template"]
+    assert "Creates a pending working record" in payload["first_blocking_update_contract"]
+    details = payload["first_blocking_details"]
+    assert details["measurement_capture_next_command_kind"] == "create_pending_measurement_record"
+    assert details["measurement_capture_next_command_template"].endswith(
+        'ConditionNotes "<no tissue/no wrist-bone compression, metric tool, and stop briefing notes>"'
+    )
+    assert details["measurement_session_measurement_capture_next_command_kind"] == ("create_pending_measurement_record")
+    assert (
+        details["measurement_session_measurement_capture_next_command_template"]
+        == payload["first_blocking_update_command_template"]
+    )
+    assert details["measurement_session_measurement_capture_next_status_command_template"] == (
+        f'.\\scripts\\fr017-measurement-intake.ps1 -Mode Status -MeasurementPath "{suggested_path}"'
+    )
+    assert (
+        details["next_required_physical_input"]
         == "create_pending_record_with_fr017-new-measurement-record.ps1_then_capture_with_FR-017-MEASUREMENT-CAPTURE-RUNBOOK.md_and_rerun_measurement_intake"
     )
     assert (
@@ -101,6 +169,11 @@ def test_fr017_evidence_chain_status_stops_at_measurement_template() -> None:
         .endswith("scripts\\fr017-update-measurement-record.ps1")
     )
     assert (
+        str(payload["first_blocking_details"]["measurement_setup_update_path"])
+        .replace("/", "\\")
+        .endswith("scripts\\fr017-update-measurement-setup-record.ps1")
+    )
+    assert (
         str(payload["first_blocking_details"]["measurement_landmark_update_path"])
         .replace("/", "\\")
         .endswith("scripts\\fr017-update-landmark-record.ps1")
@@ -111,6 +184,81 @@ def test_fr017_evidence_chain_status_stops_at_measurement_template() -> None:
         .endswith("scripts\\fr017-update-independence-safety-record.ps1")
     )
     assert (
+        str(payload["first_blocking_details"]["measurement_session_brief_path"])
+        .replace("/", "\\")
+        .endswith("scripts\\fr017-measurement-session-brief.ps1")
+    )
+    assert payload["first_blocking_details"]["measurement_session_brief_parse_ok"] is True
+    assert payload["first_blocking_details"]["measurement_session_brief_exit_code"] == 0
+    assert payload["first_blocking_details"]["measurement_session_brief_status"] == "measurement_session_input_required"
+    assert "Read-only operator brief" in payload["first_blocking_details"]["measurement_session_brief_contract"]
+    assert (
+        payload["first_blocking_details"]["measurement_session_next_operator_action"]
+        == "complete_first_blocking_measurement_capture_group_then_rerun_measurement_intake"
+    )
+    assert payload["first_blocking_details"]["measurement_session_current_group_id"] == "setup_and_safety_brief"
+    assert (
+        "brief stop conditions"
+        in payload["first_blocking_details"]["measurement_session_current_group_required_action"]
+    )
+    assert (
+        str(payload["first_blocking_details"]["measurement_session_current_group_preflight_tool_path"])
+        .replace("/", "\\")
+        .endswith("scripts\\fr017-new-measurement-record.ps1")
+    )
+    assert (
+        "fr017-new-measurement-record.ps1 -Mode Summary"
+        in payload["first_blocking_details"]["measurement_session_current_group_preflight_command_template"]
+    )
+    assert (
+        "writes no evidence"
+        in payload["first_blocking_details"]["measurement_session_current_group_preflight_contract"]
+    )
+    assert (
+        payload["first_blocking_details"]["measurement_session_current_group_preflight_status"]
+        == "measurement_record_initializer_status"
+    )
+    assert payload["first_blocking_details"]["measurement_session_current_group_preflight_exit_code"] == 0
+    assert payload["first_blocking_details"]["measurement_session_current_group_preflight_parse_ok"] is True
+    assert payload["first_blocking_details"]["measurement_session_current_group_preflight_read_only_contract"] is True
+    assert payload["first_blocking_details"]["measurement_session_current_group_preflight_template_exists"] is True
+    assert payload["first_blocking_details"]["measurement_session_current_group_preflight_template_parse_ok"] is True
+    assert (
+        payload["first_blocking_details"]["measurement_session_current_group_preflight_candidate_output_path_ready"]
+        is True
+    )
+    assert payload["first_blocking_details"]["measurement_session_current_group_preflight_output_path"] == str(
+        suggested_path
+    )
+    assert payload["first_blocking_details"]["measurement_session_current_group_preflight_output_parent_exists"] is True
+    assert payload["first_blocking_details"]["measurement_session_current_group_preflight_output_exists"] is False
+    assert payload["first_blocking_details"]["measurement_session_current_group_preflight_wrote_file"] is False
+    assert (
+        payload["first_blocking_details"]["measurement_session_current_group_preflight_physical_validation_complete"]
+        is False
+    )
+    assert (
+        payload["first_blocking_details"]["measurement_session_current_group_preflight_fr018_implementation_cleared"]
+        is False
+    )
+    assert (
+        str(payload["first_blocking_details"]["measurement_session_current_group_update_tool_path"])
+        .replace("/", "\\")
+        .endswith("scripts\\fr017-new-measurement-record.ps1")
+    )
+    assert (
+        "fr017-new-measurement-record.ps1 -Mode Create"
+        in payload["first_blocking_details"]["measurement_session_current_group_update_command_template"]
+    )
+    assert (
+        str(suggested_path)
+        in payload["first_blocking_details"]["measurement_session_current_group_update_command_template"]
+    )
+    assert (
+        "Creates a pending working record"
+        in payload["first_blocking_details"]["measurement_session_current_group_update_contract"]
+    )
+    assert (
         payload["first_blocking_details"]["measurement_working_record_name_pattern"]
         == "FR-017-MEASUREMENTS-YYYY-MM-DD-PILOT-RECORD.json"
     )
@@ -119,6 +267,10 @@ def test_fr017_evidence_chain_status_stops_at_measurement_template() -> None:
     assert "operator input tooling only" in payload["first_blocking_details"]["measurement_capture_runbook_contract"]
     assert (
         "fr017-new-measurement-record.ps1" in payload["first_blocking_details"]["measurement_capture_runbook_contract"]
+    )
+    assert (
+        "fr017-update-measurement-setup-record.ps1"
+        in payload["first_blocking_details"]["measurement_capture_runbook_contract"]
     )
     assert (
         "fr017-update-measurement-record.ps1"
@@ -171,7 +323,7 @@ def test_fr017_evidence_chain_status_stops_at_measurement_template() -> None:
     assert payload["first_blocking_details"]["invalid_fields"] == []
     assert payload["first_blocking_details"]["safety_blockers"] == []
     assert payload["gates_ran"] == 2
-    assert payload["gate_count"] == 11
+    assert payload["gate_count"] == 12
     assert payload["evidence_chain_decision_ready"] is False
     assert payload["physical_validation_complete"] is False
     assert payload["stage17_completion_claim_allowed"] is False
@@ -179,6 +331,308 @@ def test_fr017_evidence_chain_status_stops_at_measurement_template() -> None:
     assert payload["read_only_contract"] is True
     assert payload["writes_repo"] is False
     assert payload["grants_mutation_authority"] is False
+
+
+def test_fr017_evidence_chain_summary_reports_next_operator_blocker() -> None:
+    proc = _run_gate("-Mode", "Summary")
+
+    assert proc.returncode == 0, proc.stderr
+    payload = _payload(proc.stdout)
+    assert payload["kind"] == "francis.fr017.evidence_chain_summary"
+    assert payload["mode"] == "Summary"
+    assert payload["source_kind"] == "francis.fr017.evidence_chain_status"
+    assert payload["source_mode"] == "Status"
+    assert payload["status"] == "blocked_on_measurement_intake"
+    assert payload["first_blocking_gate"] == "measurement_intake"
+    assert payload["first_blocking_status"] == "pending_measurements"
+    assert payload["first_blocking_capture_group_id"] == "setup_and_safety_brief"
+    assert payload["first_blocking_capture_group_status"] == "pending_required_fields"
+    suggested_path = _assert_default_candidate_path_from_preflight(payload)
+    assert "brief stop conditions" in payload["first_blocking_capture_group_required_action"]
+    assert (
+        payload["operator_input_hint"]
+        == "create_pending_record_with_fr017-new-measurement-record.ps1_then_capture_with_FR-017-MEASUREMENT-CAPTURE-RUNBOOK.md_and_rerun_measurement_intake"
+    )
+    assert "fr017-new-measurement-record.ps1 -Mode Summary" in payload["first_blocking_preflight_command_template"]
+    assert str(suggested_path) in payload["first_blocking_preflight_command_template"]
+    assert payload["first_blocking_preflight_parse_ok"] is True
+    assert payload["first_blocking_preflight_read_only_contract"] is True
+    assert payload["first_blocking_preflight_candidate_output_path_ready"] is True
+    assert payload["first_blocking_preflight_output_parent_exists"] is True
+    assert payload["first_blocking_preflight_output_exists"] is False
+    assert payload["first_blocking_preflight_wrote_file"] is False
+    assert "fr017-new-measurement-record.ps1 -Mode Create" in payload["first_blocking_update_command_template"]
+    assert str(suggested_path) in payload["first_blocking_update_command_template"]
+    assert payload["first_blocking_capture_next_command_kind"] == "create_pending_measurement_record"
+    assert payload["first_blocking_capture_next_command_template"] == payload["first_blocking_update_command_template"]
+    assert payload["first_blocking_capture_next_status_command_template"] == (
+        f'.\\scripts\\fr017-measurement-intake.ps1 -Mode Status -MeasurementPath "{suggested_path}"'
+    )
+    assert payload["evidence_chain_decision_ready"] is False
+    assert payload["physical_validation_complete"] is False
+    assert payload["stage17_completion_claim_allowed"] is False
+    assert payload["powered_or_frame_coupled_testing_cleared"] is False
+    assert payload["fr018_implementation_cleared"] is False
+    assert payload["read_only_contract"] is True
+    assert payload["writes_repo"] is False
+    assert payload["writes_data"] is False
+    assert payload["grants_execution_authority"] is False
+    assert payload["grants_mutation_authority"] is False
+    assert payload["gates_ran"] == 2
+    assert payload["gate_count"] == 12
+    assert payload["omitted_full_status_fields"] == ["first_blocking_details", "gate_results"]
+    assert "first_blocking_details" not in payload
+    assert "gate_results" not in payload
+    assert "never writes the ledger" in payload["no_fake_validation_lock"]
+
+
+def test_fr017_evidence_chain_status_preflights_candidate_measurement_path(tmp_path: Path) -> None:
+    candidate_path = tmp_path / "FR-017-MEASUREMENTS-2099-01-01-PILOT-RECORD.json"
+
+    proc = _run_gate("-Mode", "Status", "-CandidateMeasurementPath", str(candidate_path))
+
+    assert proc.returncode == 0, proc.stderr
+    payload = _payload(proc.stdout)
+    assert payload["status"] == "blocked_on_measurement_intake"
+    assert payload["first_blocking_gate"] == "measurement_intake"
+    assert str(candidate_path) in payload["first_blocking_preflight_command_template"]
+    assert payload["first_blocking_preflight_status"] == "measurement_record_initializer_status"
+    assert payload["first_blocking_preflight_candidate_output_path_ready"] is True
+    assert payload["first_blocking_preflight_output_path"] == str(candidate_path)
+    assert payload["first_blocking_preflight_output_parent_exists"] is True
+    assert payload["first_blocking_preflight_output_exists"] is False
+    assert payload["first_blocking_preflight_wrote_file"] is False
+    assert "fr017-new-measurement-record.ps1 -Mode Create" in payload["first_blocking_update_command_template"]
+    assert str(candidate_path) in payload["first_blocking_update_command_template"]
+    assert payload["first_blocking_preflight_physical_validation_complete"] is False
+    assert payload["first_blocking_preflight_fr018_implementation_cleared"] is False
+    assert not candidate_path.exists()
+
+
+def test_fr017_evidence_chain_summary_reports_candidate_measurement_path_readiness(
+    tmp_path: Path,
+) -> None:
+    candidate_path = tmp_path / "FR-017-MEASUREMENTS-2099-01-01-PILOT-RECORD.json"
+
+    proc = _run_gate("-Mode", "Summary", "-CandidateMeasurementPath", str(candidate_path))
+
+    assert proc.returncode == 0, proc.stderr
+    payload = _payload(proc.stdout)
+    assert payload["status"] == "blocked_on_measurement_intake"
+    assert payload["first_blocking_gate"] == "measurement_intake"
+    assert str(candidate_path) in payload["first_blocking_preflight_command_template"]
+    assert payload["first_blocking_preflight_template_exists"] is True
+    assert payload["first_blocking_preflight_template_parse_ok"] is True
+    assert payload["first_blocking_preflight_candidate_output_path_ready"] is True
+    assert payload["first_blocking_preflight_output_path"] == str(candidate_path)
+    assert payload["first_blocking_preflight_output_parent_exists"] is True
+    assert payload["first_blocking_preflight_output_exists"] is False
+    assert payload["first_blocking_preflight_wrote_file"] is False
+    assert "fr017-new-measurement-record.ps1 -Mode Create" in payload["first_blocking_update_command_template"]
+    assert str(candidate_path) in payload["first_blocking_update_command_template"]
+    assert payload["physical_validation_complete"] is False
+    assert payload["fr018_implementation_cleared"] is False
+    assert not candidate_path.exists()
+
+
+def test_fr017_evidence_chain_status_preflights_existing_measurement_setup_update(
+    tmp_path: Path,
+) -> None:
+    template_path = ROOT / "FR-017_Stage17_Package" / "FR-017-MEASUREMENTS-INPUT-TEMPLATE.json"
+    measurement_path = tmp_path / "pending-measurements.json"
+    measurement_path.write_text(template_path.read_text(encoding="utf-8"), encoding="utf-8")
+
+    proc = _run_gate("-Mode", "Status", "-MeasurementPath", str(measurement_path))
+
+    assert proc.returncode == 0, proc.stderr
+    payload = _payload(proc.stdout)
+    assert payload["status"] == "blocked_on_measurement_intake"
+    assert payload["first_blocking_gate"] == "measurement_intake"
+    assert payload["first_blocking_status"] == "pending_measurements"
+    assert (
+        str(payload["first_blocking_preflight_tool_path"])
+        .replace("/", "\\")
+        .endswith("scripts\\fr017-update-measurement-setup-record.ps1")
+    )
+    assert (
+        "fr017-update-measurement-setup-record.ps1 -Mode Status" in payload["first_blocking_preflight_command_template"]
+    )
+    assert str(measurement_path) in payload["first_blocking_preflight_command_template"]
+    assert payload["first_blocking_preflight_status"] == "measurement_setup_update_status"
+    assert payload["first_blocking_preflight_exit_code"] == 0
+    assert payload["first_blocking_preflight_parse_ok"] is True
+    assert payload["first_blocking_preflight_read_only_contract"] is True
+    assert payload["first_blocking_preflight_wrote_file"] is False
+    assert payload["first_blocking_preflight_physical_validation_complete"] is False
+    assert payload["first_blocking_preflight_fr018_implementation_cleared"] is False
+    assert payload["physical_validation_complete"] is False
+    assert payload["stage17_completion_claim_allowed"] is False
+    assert payload["fr018_implementation_cleared"] is False
+
+
+def test_fr017_evidence_chain_status_preflights_existing_measurement_side_update(
+    tmp_path: Path,
+) -> None:
+    measurement_path = tmp_path / "setup-ready-measurements.json"
+    payload = _ready_measurement_payload()
+    for field in payload["sides"]["left"]:
+        payload["sides"]["left"][field] = "PENDING"
+    for field in payload["repeatability"]["left"]:
+        payload["repeatability"]["left"][field] = "PENDING"
+    measurement_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    proc = _run_gate("-Mode", "Status", "-MeasurementPath", str(measurement_path))
+
+    assert proc.returncode == 0, proc.stderr
+    payload = _payload(proc.stdout)
+    assert payload["status"] == "blocked_on_measurement_intake"
+    assert payload["first_blocking_gate"] == "measurement_intake"
+    assert payload["first_blocking_status"] == "pending_measurements"
+    assert (
+        payload["first_blocking_details"]["measurement_session_current_group_id"]
+        == "left_arm_numeric_measurement_passes"
+    )
+    assert (
+        str(payload["first_blocking_preflight_tool_path"])
+        .replace("/", "\\")
+        .endswith("scripts\\fr017-update-measurement-record.ps1")
+    )
+    assert "fr017-update-measurement-record.ps1 -Mode Status" in payload["first_blocking_preflight_command_template"]
+    assert "-Side left" in payload["first_blocking_preflight_command_template"]
+    assert str(measurement_path) in payload["first_blocking_preflight_command_template"]
+    assert "missing numeric/repeatability fields" in payload["first_blocking_preflight_contract"]
+    assert payload["first_blocking_preflight_status"] == "measurement_side_update_status"
+    assert payload["first_blocking_preflight_exit_code"] == 0
+    assert payload["first_blocking_preflight_parse_ok"] is True
+    assert payload["first_blocking_preflight_read_only_contract"] is True
+    assert payload["first_blocking_preflight_wrote_file"] is False
+    assert payload["first_blocking_preflight_physical_validation_complete"] is False
+    assert payload["first_blocking_preflight_fr018_implementation_cleared"] is False
+    _assert_first_blocking_update_hint(
+        payload,
+        "fr017-update-measurement-record.ps1",
+        [
+            "fr017-update-measurement-record.ps1 -Mode UpdateSide",
+            "-Side left",
+            str(measurement_path),
+        ],
+        contract_fragment="real left-side numeric measurement passes only",
+    )
+    assert payload["physical_validation_complete"] is False
+    assert payload["stage17_completion_claim_allowed"] is False
+    assert payload["fr018_implementation_cleared"] is False
+
+
+def test_fr017_evidence_chain_status_preflights_existing_measurement_landmark_update(
+    tmp_path: Path,
+) -> None:
+    measurement_path = tmp_path / "numeric-ready-measurements.json"
+    payload = _ready_measurement_payload()
+    for side in ("left", "right"):
+        for field in payload["marked_zones"][side]:
+            payload["marked_zones"][side][field] = "PENDING"
+    for field in payload["landmark_confirmation"]:
+        payload["landmark_confirmation"][field] = "PENDING"
+    measurement_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    proc = _run_gate("-Mode", "Status", "-MeasurementPath", str(measurement_path))
+
+    assert proc.returncode == 0, proc.stderr
+    payload = _payload(proc.stdout)
+    assert payload["status"] == "blocked_on_measurement_intake"
+    assert payload["first_blocking_gate"] == "measurement_intake"
+    assert payload["first_blocking_status"] == "pending_measurements"
+    assert (
+        payload["first_blocking_details"]["measurement_session_current_group_id"]
+        == "safety_critical_landmark_and_zone_references"
+    )
+    assert (
+        str(payload["first_blocking_preflight_tool_path"])
+        .replace("/", "\\")
+        .endswith("scripts\\fr017-update-landmark-record.ps1")
+    )
+    assert "fr017-update-landmark-record.ps1 -Mode Status" in payload["first_blocking_preflight_command_template"]
+    assert str(measurement_path) in payload["first_blocking_preflight_command_template"]
+    assert "missing marked-zone references" in payload["first_blocking_preflight_contract"]
+    assert payload["first_blocking_preflight_status"] == "measurement_landmark_update_status"
+    assert payload["first_blocking_preflight_exit_code"] == 0
+    assert payload["first_blocking_preflight_parse_ok"] is True
+    assert payload["first_blocking_preflight_read_only_contract"] is True
+    assert payload["first_blocking_preflight_wrote_file"] is False
+    assert payload["first_blocking_preflight_physical_validation_complete"] is False
+    assert payload["first_blocking_preflight_fr018_implementation_cleared"] is False
+    _assert_first_blocking_update_hint(
+        payload,
+        "fr017-update-landmark-record.ps1",
+        [
+            "fr017-update-landmark-record.ps1 -Mode UpdateLandmarks",
+            str(measurement_path),
+        ],
+        contract_fragment="real side-specific marked-zone references only",
+    )
+    assert payload["physical_validation_complete"] is False
+    assert payload["stage17_completion_claim_allowed"] is False
+    assert payload["fr018_implementation_cleared"] is False
+
+
+def test_fr017_evidence_chain_status_preflights_existing_measurement_independence_safety_update(
+    tmp_path: Path,
+) -> None:
+    measurement_path = tmp_path / "landmark-ready-measurements.json"
+    payload = _ready_measurement_payload()
+    for field in payload["left_right_independence"]:
+        payload["left_right_independence"][field] = "PENDING"
+    for field in payload["safety_screen"]:
+        payload["safety_screen"][field] = "PENDING"
+    measurement_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    proc = _run_gate("-Mode", "Status", "-MeasurementPath", str(measurement_path))
+
+    assert proc.returncode == 0, proc.stderr
+    payload = _payload(proc.stdout)
+    assert payload["status"] == "blocked_on_measurement_intake"
+    assert payload["first_blocking_gate"] == "measurement_intake"
+    assert payload["first_blocking_status"] == "pending_measurements"
+    assert (
+        payload["first_blocking_details"]["measurement_session_current_group_id"]
+        == "left_right_independence_and_safety_screen"
+    )
+    assert (
+        str(payload["first_blocking_preflight_tool_path"])
+        .replace("/", "\\")
+        .endswith("scripts\\fr017-update-independence-safety-record.ps1")
+    )
+    assert (
+        "fr017-update-independence-safety-record.ps1 -Mode Status"
+        in payload["first_blocking_preflight_command_template"]
+    )
+    assert str(measurement_path) in payload["first_blocking_preflight_command_template"]
+    assert "missing left/right independence and symptom-screen fields" in payload["first_blocking_preflight_contract"]
+    assert payload["first_blocking_preflight_status"] == "measurement_independence_safety_update_status"
+    assert payload["first_blocking_preflight_exit_code"] == 0
+    assert payload["first_blocking_preflight_parse_ok"] is True
+    assert payload["first_blocking_preflight_read_only_contract"] is True
+    assert payload["first_blocking_preflight_wrote_file"] is False
+    assert payload["first_blocking_preflight_physical_validation_complete"] is False
+    assert payload["first_blocking_preflight_fr018_implementation_cleared"] is False
+    assert (
+        payload["first_blocking_details"]["measurement_session_current_group_preflight_status"]
+        == "measurement_independence_safety_update_status"
+    )
+    assert payload["first_blocking_details"]["measurement_session_current_group_preflight_read_only_contract"] is True
+    assert payload["first_blocking_details"]["measurement_session_current_group_preflight_wrote_file"] is False
+    _assert_first_blocking_update_hint(
+        payload,
+        "fr017-update-independence-safety-record.ps1",
+        [
+            "fr017-update-independence-safety-record.ps1 -Mode UpdateIndependenceSafety",
+            str(measurement_path),
+        ],
+        contract_fragment="real left/right independence confirmations",
+    )
+    assert payload["physical_validation_complete"] is False
+    assert payload["stage17_completion_claim_allowed"] is False
+    assert payload["fr018_implementation_cleared"] is False
 
 
 def test_fr017_evidence_chain_status_moves_blocker_after_measurement_ready(tmp_path: Path) -> None:
@@ -196,6 +650,37 @@ def test_fr017_evidence_chain_status_moves_blocker_after_measurement_ready(tmp_p
         payload["next_required_input"]
         == "scripts/fr017-new-mockup-record.ps1 + FR-017-MOCKUP-BUILD-INPUT-TEMPLATE.json"
     )
+    _assert_first_blocking_update_hint(
+        payload,
+        "fr017-new-mockup-record.ps1",
+        [
+            "fr017-new-mockup-record.ps1 -Mode Create",
+            "-OutputPath <mockup-record.json>",
+            "-MeasurementPath <measurement-record.json>",
+        ],
+    )
+    assert (
+        str(payload["first_blocking_preflight_tool_path"])
+        .replace("/", "\\")
+        .endswith("scripts\\fr017-new-mockup-record.ps1")
+    )
+    assert "fr017-new-mockup-record.ps1 -Mode Status" in payload["first_blocking_preflight_command_template"]
+    assert str(measurement_path) in payload["first_blocking_preflight_command_template"]
+    assert "mockup initializer preflight" in payload["first_blocking_preflight_contract"]
+    assert "writes no evidence" in payload["first_blocking_preflight_contract"]
+    assert payload["first_blocking_preflight_status"] == "mockup_record_initializer_status"
+    assert payload["first_blocking_preflight_exit_code"] == 0
+    assert payload["first_blocking_preflight_parse_ok"] is True
+    assert payload["first_blocking_preflight_read_only_contract"] is True
+    assert payload["first_blocking_preflight_template_exists"] is True
+    assert payload["first_blocking_preflight_template_parse_ok"] is True
+    assert payload["first_blocking_preflight_candidate_output_path_ready"] is False
+    assert payload["first_blocking_preflight_output_path"] == ""
+    assert payload["first_blocking_preflight_output_exists"] is False
+    assert payload["first_blocking_preflight_output_parent_exists"] is False
+    assert payload["first_blocking_preflight_wrote_file"] is False
+    assert payload["first_blocking_preflight_physical_validation_complete"] is False
+    assert payload["first_blocking_preflight_fr018_implementation_cleared"] is False
     assert "evidence.date" in payload["first_blocking_details"]["mockup_missing_fields"]
     assert payload["first_blocking_details"]["mockup_invalid_fields"] == []
     assert (
@@ -278,6 +763,41 @@ def test_fr017_evidence_chain_status_moves_blocker_after_mockup_ready(tmp_path: 
         payload["next_required_input"]
         == "scripts/fr017-new-mannequin-interface-record.ps1 + FR-017-MANNEQUIN-INTERFACE-INPUT-TEMPLATE.json"
     )
+    _assert_first_blocking_update_hint(
+        payload,
+        "fr017-new-mannequin-interface-record.ps1",
+        [
+            "fr017-new-mannequin-interface-record.ps1 -Mode Create",
+            "-OutputPath <mannequin-interface-record.json>",
+            "-MeasurementPath <measurement-record.json>",
+            "-MockupPath <mockup-record.json>",
+        ],
+    )
+    assert (
+        str(payload["first_blocking_preflight_tool_path"])
+        .replace("/", "\\")
+        .endswith("scripts\\fr017-new-mannequin-interface-record.ps1")
+    )
+    assert (
+        "fr017-new-mannequin-interface-record.ps1 -Mode Status" in payload["first_blocking_preflight_command_template"]
+    )
+    assert str(measurement_path) in payload["first_blocking_preflight_command_template"]
+    assert str(mockup_path) in payload["first_blocking_preflight_command_template"]
+    assert "mannequin-interface initializer preflight" in payload["first_blocking_preflight_contract"]
+    assert "writes no evidence" in payload["first_blocking_preflight_contract"]
+    assert payload["first_blocking_preflight_status"] == "mannequin_interface_record_initializer_status"
+    assert payload["first_blocking_preflight_exit_code"] == 0
+    assert payload["first_blocking_preflight_parse_ok"] is True
+    assert payload["first_blocking_preflight_read_only_contract"] is True
+    assert payload["first_blocking_preflight_template_exists"] is True
+    assert payload["first_blocking_preflight_template_parse_ok"] is True
+    assert payload["first_blocking_preflight_candidate_output_path_ready"] is False
+    assert payload["first_blocking_preflight_output_path"] == ""
+    assert payload["first_blocking_preflight_output_exists"] is False
+    assert payload["first_blocking_preflight_output_parent_exists"] is False
+    assert payload["first_blocking_preflight_wrote_file"] is False
+    assert payload["first_blocking_preflight_physical_validation_complete"] is False
+    assert payload["first_blocking_preflight_fr018_implementation_cleared"] is False
     assert "evidence.date" in payload["first_blocking_details"]["missing_fields"]
     assert payload["first_blocking_details"]["invalid_fields"] == []
     assert payload["first_blocking_details"]["mannequin_capture_plan_not_completion_evidence"] is True
@@ -371,6 +891,41 @@ def test_fr017_evidence_chain_status_moves_blocker_after_mannequin_ready(tmp_pat
         payload["next_required_input"]
         == "scripts/fr017-new-pilot-static-fit-record.ps1 + FR-017-PILOT-STATIC-FIT-INPUT-TEMPLATE.json"
     )
+    _assert_first_blocking_update_hint(
+        payload,
+        "fr017-new-pilot-static-fit-record.ps1",
+        [
+            "fr017-new-pilot-static-fit-record.ps1 -Mode Create",
+            "-OutputPath <pilot-static-fit-record.json>",
+            "-MeasurementPath <measurement-record.json>",
+            "-MockupPath <mockup-record.json>",
+            "-MannequinPath <mannequin-interface-record.json>",
+        ],
+    )
+    assert (
+        str(payload["first_blocking_preflight_tool_path"])
+        .replace("/", "\\")
+        .endswith("scripts\\fr017-new-pilot-static-fit-record.ps1")
+    )
+    assert "fr017-new-pilot-static-fit-record.ps1 -Mode Status" in payload["first_blocking_preflight_command_template"]
+    assert str(measurement_path) in payload["first_blocking_preflight_command_template"]
+    assert str(mockup_path) in payload["first_blocking_preflight_command_template"]
+    assert str(mannequin_path) in payload["first_blocking_preflight_command_template"]
+    assert "pilot static-fit initializer preflight" in payload["first_blocking_preflight_contract"]
+    assert "writes no evidence" in payload["first_blocking_preflight_contract"]
+    assert payload["first_blocking_preflight_status"] == "pilot_static_fit_record_initializer_status"
+    assert payload["first_blocking_preflight_exit_code"] == 0
+    assert payload["first_blocking_preflight_parse_ok"] is True
+    assert payload["first_blocking_preflight_read_only_contract"] is True
+    assert payload["first_blocking_preflight_template_exists"] is True
+    assert payload["first_blocking_preflight_template_parse_ok"] is True
+    assert payload["first_blocking_preflight_candidate_output_path_ready"] is False
+    assert payload["first_blocking_preflight_output_path"] == ""
+    assert payload["first_blocking_preflight_output_exists"] is False
+    assert payload["first_blocking_preflight_output_parent_exists"] is False
+    assert payload["first_blocking_preflight_wrote_file"] is False
+    assert payload["first_blocking_preflight_physical_validation_complete"] is False
+    assert payload["first_blocking_preflight_fr018_implementation_cleared"] is False
     assert "evidence.date" in payload["first_blocking_details"]["missing_fields"]
     assert payload["first_blocking_details"]["invalid_fields"] == []
     assert payload["first_blocking_details"]["static_fit_capture_plan_not_completion_evidence"] is True
@@ -465,7 +1020,47 @@ def test_fr017_evidence_chain_status_moves_blocker_after_static_fit_ready(tmp_pa
     assert payload["status"] == "blocked_on_pilot_movement"
     assert payload["first_blocking_gate"] == "pilot_movement"
     assert payload["first_blocking_status"] == "pending_pilot_movement_test"
-    assert payload["next_required_input"] == "FR-017-PILOT-MOVEMENT-INPUT-TEMPLATE.json"
+    assert (
+        payload["next_required_input"]
+        == "scripts/fr017-new-pilot-movement-record.ps1 + FR-017-PILOT-MOVEMENT-INPUT-TEMPLATE.json"
+    )
+    _assert_first_blocking_update_hint(
+        payload,
+        "fr017-new-pilot-movement-record.ps1",
+        [
+            "fr017-new-pilot-movement-record.ps1 -Mode Create",
+            "-OutputPath <pilot-movement-record.json>",
+            "-MeasurementPath <measurement-record.json>",
+            "-MockupPath <mockup-record.json>",
+            "-MannequinPath <mannequin-interface-record.json>",
+            "-StaticFitPath <pilot-static-fit-record.json>",
+        ],
+    )
+    assert (
+        str(payload["first_blocking_preflight_tool_path"])
+        .replace("/", "\\")
+        .endswith("scripts\\fr017-new-pilot-movement-record.ps1")
+    )
+    assert "fr017-new-pilot-movement-record.ps1 -Mode Status" in payload["first_blocking_preflight_command_template"]
+    assert str(measurement_path) in payload["first_blocking_preflight_command_template"]
+    assert str(mockup_path) in payload["first_blocking_preflight_command_template"]
+    assert str(mannequin_path) in payload["first_blocking_preflight_command_template"]
+    assert str(static_fit_path) in payload["first_blocking_preflight_command_template"]
+    assert "pilot movement initializer preflight" in payload["first_blocking_preflight_contract"]
+    assert "writes no evidence" in payload["first_blocking_preflight_contract"]
+    assert payload["first_blocking_preflight_status"] == "pilot_movement_record_initializer_status"
+    assert payload["first_blocking_preflight_exit_code"] == 0
+    assert payload["first_blocking_preflight_parse_ok"] is True
+    assert payload["first_blocking_preflight_read_only_contract"] is True
+    assert payload["first_blocking_preflight_template_exists"] is True
+    assert payload["first_blocking_preflight_template_parse_ok"] is True
+    assert payload["first_blocking_preflight_candidate_output_path_ready"] is False
+    assert payload["first_blocking_preflight_output_path"] == ""
+    assert payload["first_blocking_preflight_output_exists"] is False
+    assert payload["first_blocking_preflight_output_parent_exists"] is False
+    assert payload["first_blocking_preflight_wrote_file"] is False
+    assert payload["first_blocking_preflight_physical_validation_complete"] is False
+    assert payload["first_blocking_preflight_fr018_implementation_cleared"] is False
     assert "evidence.date" in payload["first_blocking_details"]["missing_fields"]
     assert payload["first_blocking_details"]["invalid_fields"] == []
     assert payload["first_blocking_details"]["movement_capture_plan_not_completion_evidence"] is True
@@ -475,9 +1070,27 @@ def test_fr017_evidence_chain_status_moves_blocker_after_static_fit_ready(tmp_pa
         in payload["first_blocking_details"]["movement_capture_plan_status_contract"]
     )
     assert "not physical validation evidence" in payload["first_blocking_details"]["movement_capture_summary_contract"]
+    assert "operator input tooling only" in payload["first_blocking_details"]["movement_capture_runbook_contract"]
+    assert (
+        "fr017-new-pilot-movement-record.ps1" in payload["first_blocking_details"]["movement_capture_runbook_contract"]
+    )
     assert (
         payload["first_blocking_details"]["next_required_movement_input"]
-        == "complete_non_powered_pilot_movement_record_at_FR-017-PILOT-MOVEMENT-INPUT-TEMPLATE.json"
+        == "create_non_powered_pilot_movement_record_with_fr017-new-pilot-movement-record.ps1_then_rerun_pilot_movement_gate"
+    )
+    assert (
+        str(payload["first_blocking_details"]["movement_input_template_path"])
+        .replace("/", "\\")
+        .endswith("FR-017_Stage17_Package\\FR-017-PILOT-MOVEMENT-INPUT-TEMPLATE.json")
+    )
+    assert (
+        str(payload["first_blocking_details"]["movement_record_initializer_path"])
+        .replace("/", "\\")
+        .endswith("scripts\\fr017-new-pilot-movement-record.ps1")
+    )
+    assert (
+        payload["first_blocking_details"]["movement_working_record_name_pattern"]
+        == "FR-017-PILOT-MOVEMENT-YYYY-MM-DD-PILOT-RECORD.json"
     )
     assert payload["first_blocking_details"]["movement_capture_total_groups"] == 6
     assert payload["first_blocking_details"]["movement_capture_ready_groups"] == 0
@@ -533,7 +1146,49 @@ def test_fr017_evidence_chain_status_moves_blocker_after_movement_ready(tmp_path
     assert payload["status"] == "blocked_on_quick_release_cable_snag"
     assert payload["first_blocking_gate"] == "quick_release_cable_snag"
     assert payload["first_blocking_status"] == "pending_quick_release_cable_snag_test"
-    assert payload["next_required_input"] == "FR-017-QUICK-RELEASE-CABLE-SNAG-INPUT-TEMPLATE.json"
+    assert (
+        payload["next_required_input"]
+        == "scripts/fr017-new-release-cable-record.ps1 + FR-017-QUICK-RELEASE-CABLE-SNAG-INPUT-TEMPLATE.json"
+    )
+    _assert_first_blocking_update_hint(
+        payload,
+        "fr017-new-release-cable-record.ps1",
+        [
+            "fr017-new-release-cable-record.ps1 -Mode Create",
+            "-OutputPath <release-cable-record.json>",
+            "-MeasurementPath <measurement-record.json>",
+            "-MockupPath <mockup-record.json>",
+            "-MannequinPath <mannequin-interface-record.json>",
+            "-StaticFitPath <pilot-static-fit-record.json>",
+            "-MovementPath <pilot-movement-record.json>",
+        ],
+    )
+    assert (
+        str(payload["first_blocking_preflight_tool_path"])
+        .replace("/", "\\")
+        .endswith("scripts\\fr017-new-release-cable-record.ps1")
+    )
+    assert "fr017-new-release-cable-record.ps1 -Mode Status" in payload["first_blocking_preflight_command_template"]
+    assert str(measurement_path) in payload["first_blocking_preflight_command_template"]
+    assert str(mockup_path) in payload["first_blocking_preflight_command_template"]
+    assert str(mannequin_path) in payload["first_blocking_preflight_command_template"]
+    assert str(static_fit_path) in payload["first_blocking_preflight_command_template"]
+    assert str(movement_path) in payload["first_blocking_preflight_command_template"]
+    assert "quick-release/cable-snag initializer preflight" in payload["first_blocking_preflight_contract"]
+    assert "writes no evidence" in payload["first_blocking_preflight_contract"]
+    assert payload["first_blocking_preflight_status"] == "release_cable_record_initializer_status"
+    assert payload["first_blocking_preflight_exit_code"] == 0
+    assert payload["first_blocking_preflight_parse_ok"] is True
+    assert payload["first_blocking_preflight_read_only_contract"] is True
+    assert payload["first_blocking_preflight_template_exists"] is True
+    assert payload["first_blocking_preflight_template_parse_ok"] is True
+    assert payload["first_blocking_preflight_candidate_output_path_ready"] is False
+    assert payload["first_blocking_preflight_output_path"] == ""
+    assert payload["first_blocking_preflight_output_exists"] is False
+    assert payload["first_blocking_preflight_output_parent_exists"] is False
+    assert payload["first_blocking_preflight_wrote_file"] is False
+    assert payload["first_blocking_preflight_physical_validation_complete"] is False
+    assert payload["first_blocking_preflight_fr018_implementation_cleared"] is False
     assert "evidence.date" in payload["first_blocking_details"]["missing_fields"]
     assert payload["first_blocking_details"]["invalid_fields"] == []
     assert payload["first_blocking_details"]["release_cable_capture_plan_not_completion_evidence"] is True
@@ -548,9 +1203,28 @@ def test_fr017_evidence_chain_status_moves_blocker_after_movement_ready(tmp_path
         "not physical validation evidence"
         in payload["first_blocking_details"]["release_cable_capture_summary_contract"]
     )
+    assert "operator input tooling only" in payload["first_blocking_details"]["release_cable_capture_runbook_contract"]
+    assert (
+        "fr017-new-release-cable-record.ps1"
+        in payload["first_blocking_details"]["release_cable_capture_runbook_contract"]
+    )
     assert (
         payload["first_blocking_details"]["next_required_release_cable_input"]
-        == "complete_non_powered_quick_release_cable_snag_record_at_FR-017-QUICK-RELEASE-CABLE-SNAG-INPUT-TEMPLATE.json"
+        == "create_non_powered_quick_release_cable_snag_record_with_fr017-new-release-cable-record.ps1_then_rerun_release_cable_gate"
+    )
+    assert (
+        str(payload["first_blocking_details"]["release_cable_input_template_path"])
+        .replace("/", "\\")
+        .endswith("FR-017_Stage17_Package\\FR-017-QUICK-RELEASE-CABLE-SNAG-INPUT-TEMPLATE.json")
+    )
+    assert (
+        str(payload["first_blocking_details"]["release_cable_record_initializer_path"])
+        .replace("/", "\\")
+        .endswith("scripts\\fr017-new-release-cable-record.ps1")
+    )
+    assert (
+        payload["first_blocking_details"]["release_cable_working_record_name_pattern"]
+        == "FR-017-RELEASE-CABLE-YYYY-MM-DD-PILOT-RECORD.json"
     )
     assert payload["first_blocking_details"]["release_cable_capture_total_groups"] == 6
     assert payload["first_blocking_details"]["release_cable_capture_ready_groups"] == 0
@@ -613,13 +1287,64 @@ def test_fr017_evidence_chain_status_moves_blocker_after_release_cable_ready(tmp
     assert payload["status"] == "blocked_on_engineering_review"
     assert payload["first_blocking_gate"] == "engineering_review"
     assert payload["first_blocking_status"] == "pending_engineering_review"
-    assert payload["next_required_input"] == "FR-017-ENGINEERING-REVIEW-INPUT-TEMPLATE.json"
+    assert payload["next_required_input"] == (
+        "scripts/fr017-new-engineering-review-record.ps1 + FR-017-ENGINEERING-REVIEW-INPUT-TEMPLATE.json"
+    )
+    assert payload["next_command"] == "create_professional_engineering_review_record_then_rerun_engineering_review_gate"
+    _assert_first_blocking_update_hint(
+        payload,
+        "fr017-new-engineering-review-record.ps1",
+        [
+            "fr017-new-engineering-review-record.ps1 -Mode Create",
+            "-OutputPath <engineering-review-record.json>",
+            "-MeasurementPath <measurement-record.json>",
+            "-MockupPath <mockup-record.json>",
+            "-MannequinPath <mannequin-interface-record.json>",
+            "-StaticFitPath <pilot-static-fit-record.json>",
+            "-MovementPath <pilot-movement-record.json>",
+            "-ReleaseCablePath <release-cable-record.json>",
+        ],
+        contract_fragment="bounded operator-supplied professional engineering review working record",
+    )
+    assert (
+        str(payload["first_blocking_preflight_tool_path"])
+        .replace("/", "\\")
+        .endswith("scripts\\fr017-new-engineering-review-record.ps1")
+    )
+    assert (
+        "fr017-new-engineering-review-record.ps1 -Mode Status" in payload["first_blocking_preflight_command_template"]
+    )
+    assert str(measurement_path) in payload["first_blocking_preflight_command_template"]
+    assert str(mockup_path) in payload["first_blocking_preflight_command_template"]
+    assert str(mannequin_path) in payload["first_blocking_preflight_command_template"]
+    assert str(static_fit_path) in payload["first_blocking_preflight_command_template"]
+    assert str(movement_path) in payload["first_blocking_preflight_command_template"]
+    assert str(release_cable_path) in payload["first_blocking_preflight_command_template"]
+    assert "engineering-review initializer preflight" in payload["first_blocking_preflight_contract"]
+    assert "writes no evidence" in payload["first_blocking_preflight_contract"]
+    assert payload["first_blocking_preflight_status"] == "engineering_review_record_initializer_status"
+    assert payload["first_blocking_preflight_exit_code"] == 0
+    assert payload["first_blocking_preflight_parse_ok"] is True
+    assert payload["first_blocking_preflight_read_only_contract"] is True
+    assert payload["first_blocking_preflight_template_exists"] is True
+    assert payload["first_blocking_preflight_template_parse_ok"] is True
+    assert payload["first_blocking_preflight_candidate_output_path_ready"] is False
+    assert payload["first_blocking_preflight_output_path"] == ""
+    assert payload["first_blocking_preflight_output_exists"] is False
+    assert payload["first_blocking_preflight_output_parent_exists"] is False
+    assert payload["first_blocking_preflight_wrote_file"] is False
+    assert payload["first_blocking_preflight_physical_validation_complete"] is False
+    assert payload["first_blocking_preflight_fr018_implementation_cleared"] is False
     assert "evidence.date" in payload["first_blocking_details"]["missing_fields"]
     assert payload["first_blocking_details"]["invalid_fields"] == []
     assert payload["first_blocking_details"]["engineering_review_capture_plan_not_completion_evidence"] is True
     assert (
         "not physical validation evidence"
         in payload["first_blocking_details"]["engineering_review_capture_plan_contract"]
+    )
+    assert (
+        "fr017-new-engineering-review-record.ps1"
+        in payload["first_blocking_details"]["engineering_review_capture_runbook_contract"]
     )
     assert (
         "engineering-review capture readiness only"
@@ -631,7 +1356,18 @@ def test_fr017_evidence_chain_status_moves_blocker_after_release_cable_ready(tmp
     )
     assert (
         payload["first_blocking_details"]["next_required_engineering_review_input"]
-        == "complete_professional_engineering_review_record_at_FR-017-ENGINEERING-REVIEW-INPUT-TEMPLATE.json"
+        == "create_professional_engineering_review_record_with_fr017-new-engineering-review-record.ps1_then_rerun_engineering_review_gate"
+    )
+    _assert_path_tail(
+        payload["first_blocking_details"]["engineering_review_input_template_path"],
+        "FR-017_Stage17_Package\\FR-017-ENGINEERING-REVIEW-INPUT-TEMPLATE.json",
+    )
+    _assert_path_tail(
+        payload["first_blocking_details"]["engineering_review_record_initializer_path"],
+        "scripts\\fr017-new-engineering-review-record.ps1",
+    )
+    assert payload["first_blocking_details"]["engineering_review_working_record_name_pattern"] == (
+        "FR-017-ENGINEERING-REVIEW-YYYY-MM-DD-PILOT-RECORD.json"
     )
     assert payload["first_blocking_details"]["engineering_review_capture_total_groups"] == 4
     assert payload["first_blocking_details"]["engineering_review_capture_ready_groups"] == 0
@@ -756,14 +1492,81 @@ def test_fr017_evidence_chain_status_blocks_on_final_decision_record_after_final
     assert payload["status"] == "blocked_on_final_decision_record"
     assert payload["first_blocking_gate"] == "final_decision_record"
     assert payload["first_blocking_status"] == "pending_final_decision_record"
-    assert payload["next_required_input"] == "FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json"
-    assert payload["next_command"] == (
-        "complete_human_final_stage17_completion_decision_record_at_FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json"
+    assert payload["next_required_input"] == (
+        "scripts/fr017-new-final-decision-record.ps1 + FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json"
     )
+    assert payload["next_command"] == "create_human_final_decision_record_then_rerun_final_decision_record_gate"
+    _assert_first_blocking_update_hint(
+        payload,
+        "fr017-new-final-decision-record.ps1",
+        [
+            "fr017-new-final-decision-record.ps1 -Mode Create",
+            "-OutputPath <final-decision-record.json>",
+            "-FinalPhysicalGateRecordOutputPath <final-physical-gate-record.json>",
+            "-MeasurementPath <measurement-record.json>",
+            "-MockupPath <mockup-record.json>",
+            "-MannequinPath <mannequin-interface-record.json>",
+            "-StaticFitPath <pilot-static-fit-record.json>",
+            "-MovementPath <pilot-movement-record.json>",
+            "-ReleaseCablePath <release-cable-record.json>",
+            "-EngineeringReviewPath <engineering-review-record.json>",
+        ],
+        contract_fragment="bounded operator-supplied human final decision working record",
+    )
+    assert (
+        str(payload["first_blocking_preflight_tool_path"])
+        .replace("/", "\\")
+        .endswith("scripts\\fr017-new-final-decision-record.ps1")
+    )
+    assert "fr017-new-final-decision-record.ps1 -Mode Status" in payload["first_blocking_preflight_command_template"]
+    assert str(measurement_path) in payload["first_blocking_preflight_command_template"]
+    assert str(mockup_path) in payload["first_blocking_preflight_command_template"]
+    assert str(mannequin_path) in payload["first_blocking_preflight_command_template"]
+    assert str(static_fit_path) in payload["first_blocking_preflight_command_template"]
+    assert str(movement_path) in payload["first_blocking_preflight_command_template"]
+    assert str(release_cable_path) in payload["first_blocking_preflight_command_template"]
+    assert str(engineering_review_path) in payload["first_blocking_preflight_command_template"]
+    assert "final-decision initializer preflight" in payload["first_blocking_preflight_contract"]
+    assert "writes no final decision record" in payload["first_blocking_preflight_contract"]
+    assert "saves no final physical gate record" in payload["first_blocking_preflight_contract"]
+    assert payload["first_blocking_preflight_status"] == "final_decision_record_initializer_status"
+    assert payload["first_blocking_preflight_exit_code"] == 0
+    assert payload["first_blocking_preflight_parse_ok"] is True
+    assert payload["first_blocking_preflight_read_only_contract"] is True
+    assert payload["first_blocking_preflight_template_exists"] is True
+    assert payload["first_blocking_preflight_template_parse_ok"] is True
+    assert payload["first_blocking_preflight_candidate_output_path_ready"] is False
+    assert payload["first_blocking_preflight_output_path"] == ""
+    assert payload["first_blocking_preflight_output_exists"] is False
+    assert payload["first_blocking_preflight_output_parent_exists"] is False
+    assert payload["first_blocking_preflight_wrote_file"] is False
+    assert payload["first_blocking_preflight_physical_validation_complete"] is False
+    assert payload["first_blocking_preflight_fr018_implementation_cleared"] is False
     assert payload["first_blocking_details"]["missing_fields"] == ["final_decision_path"]
+    assert payload["first_blocking_details"]["next_required_final_decision_input"] == (
+        "create_human_final_decision_record_with_fr017-new-final-decision-record.ps1_then_rerun_final_decision_record_gate"
+    )
+    assert (
+        "fr017-new-final-decision-record.ps1"
+        in payload["first_blocking_details"]["final_decision_record_runbook_contract"]
+    )
+    _assert_path_tail(
+        payload["first_blocking_details"]["final_decision_input_template_path"],
+        "FR-017_Stage17_Package\\FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json",
+    )
+    _assert_path_tail(
+        payload["first_blocking_details"]["final_decision_record_initializer_path"],
+        "scripts\\fr017-new-final-decision-record.ps1",
+    )
+    assert payload["first_blocking_details"]["final_decision_working_record_name_pattern"] == (
+        "FR-017-FINAL-DECISION-YYYY-MM-DD-PILOT-RECORD.json"
+    )
+    assert payload["first_blocking_details"]["final_physical_gate_record_name_pattern"] == (
+        "FR-017-FINAL-PHYSICAL-GATE-YYYY-MM-DD-PILOT-RECORD.json"
+    )
     assert payload["first_blocking_details"]["failed_reasons"] == []
     assert payload["gates_ran"] == 10
-    assert payload["gate_count"] == 11
+    assert payload["gate_count"] == 12
     assert payload["gate_results"][8]["details"]["evidence_chronology_violations"] == []
     assert payload["gate_results"][8]["details"]["pilot_identity_continuity_violations"] == []
     assert payload["gate_results"][8]["details"]["pilot_identity_continuity_reference_record"] == "measurement"
@@ -772,6 +1575,10 @@ def test_fr017_evidence_chain_status_blocks_on_final_decision_record_after_final
     assert (
         "not physical validation evidence"
         in payload["gate_results"][8]["details"]["final_physical_decision_plan_contract"]
+    )
+    assert (
+        "fr017-new-final-decision-record.ps1"
+        in payload["gate_results"][8]["details"]["final_physical_decision_runbook_contract"]
     )
     assert (
         "final physical decision readiness only"
@@ -852,13 +1659,12 @@ def test_fr017_evidence_chain_status_blocks_on_completion_ledger_after_final_dec
     assert payload["status"] == "blocked_on_completion_ledger"
     assert payload["first_blocking_gate"] == "completion_ledger"
     assert payload["first_blocking_status"] == "pending_completion_ledger_entry"
-    assert payload["next_required_input"] == "FR-017-COMPLETION-LEDGER-HANDOFF-TEMPLATE.md"
-    assert (
-        payload["next_command"]
-        == "copy_and_complete_FR-017-COMPLETION-LEDGER-HANDOFF-TEMPLATE.md_with_operator_reviewed_final_decision_evidence"
+    assert payload["next_required_input"] == (
+        "scripts/fr017-new-completion-ledger-handoff.ps1 + FR-017-COMPLETION-LEDGER-HANDOFF-TEMPLATE.md"
     )
+    assert payload["next_command"] == "create_candidate_completion_ledger_handoff_then_rerun_completion_ledger_gate"
     assert payload["gates_ran"] == 11
-    assert payload["gate_count"] == 11
+    assert payload["gate_count"] == 12
     assert payload["gate_results"][9]["id"] == "final_decision_record"
     assert payload["gate_results"][9]["details"]["final_decision_record_ready"] is True
     assert payload["gate_results"][9]["details"]["ledger_completion_review_ready"] is True
@@ -869,6 +1675,45 @@ def test_fr017_evidence_chain_status_blocks_on_completion_ledger_after_final_dec
     assert payload["gate_results"][10]["details"]["ledger_entry_review_ready"] is False
     assert payload["gate_results"][10]["details"]["missing_fields"] == ["ledger_entry_path"]
     assert payload["first_blocking_details"]["missing_fields"] == ["ledger_entry_path"]
+    assert payload["first_blocking_details"]["next_required_ledger_input"] == (
+        "create_candidate_completion_ledger_handoff_with_fr017-new-completion-ledger-handoff.ps1_then_rerun_completion_ledger_gate"
+    )
+    assert (
+        "fr017-new-completion-ledger-handoff.ps1"
+        in payload["first_blocking_details"]["completion_ledger_handoff_runbook_contract"]
+    )
+    _assert_path_tail(
+        payload["first_blocking_details"]["completion_ledger_handoff_template_path"],
+        "FR-017_Stage17_Package\\FR-017-COMPLETION-LEDGER-HANDOFF-TEMPLATE.md",
+    )
+    _assert_path_tail(
+        payload["first_blocking_details"]["completion_ledger_handoff_initializer_path"],
+        "scripts\\fr017-new-completion-ledger-handoff.ps1",
+    )
+    assert payload["first_blocking_details"]["completion_ledger_handoff_working_record_name_pattern"] == (
+        "FR-017-COMPLETION-LEDGER-HANDOFF-YYYY-MM-DD-PILOT.md"
+    )
+    _assert_path_tail(payload["first_blocking_preflight_tool_path"], "scripts\\fr017-new-completion-ledger-handoff.ps1")
+    assert (
+        "fr017-new-completion-ledger-handoff.ps1 -Mode Status" in payload["first_blocking_preflight_command_template"]
+    )
+    assert str(final_decision_path) in payload["first_blocking_preflight_command_template"]
+    assert "completion-ledger handoff initializer preflight" in payload["first_blocking_preflight_contract"]
+    assert "writes no candidate handoff" in payload["first_blocking_preflight_contract"]
+    assert "writes no completion ledger" in payload["first_blocking_preflight_contract"]
+    assert payload["first_blocking_preflight_status"] == "completion_ledger_handoff_initializer_status"
+    assert payload["first_blocking_preflight_exit_code"] == 0
+    assert payload["first_blocking_preflight_parse_ok"] is True
+    assert payload["first_blocking_preflight_read_only_contract"] is True
+    assert payload["first_blocking_preflight_template_exists"] is True
+    assert payload["first_blocking_preflight_template_parse_ok"] is True
+    assert payload["first_blocking_preflight_candidate_output_path_ready"] is False
+    assert payload["first_blocking_preflight_output_path"] == ""
+    assert payload["first_blocking_preflight_output_exists"] is False
+    assert payload["first_blocking_preflight_output_parent_exists"] is False
+    assert payload["first_blocking_preflight_wrote_file"] is False
+    assert payload["first_blocking_preflight_physical_validation_complete"] is False
+    assert payload["first_blocking_preflight_fr018_implementation_cleared"] is False
     assert payload["evidence_chain_decision_ready"] is False
     assert payload["ledger_completion_review_ready"] is False
     assert payload["completion_ledger_handoff_ready"] is False
@@ -878,7 +1723,7 @@ def test_fr017_evidence_chain_status_blocks_on_completion_ledger_after_final_dec
     assert payload["fr018_implementation_cleared"] is False
 
 
-def test_fr017_evidence_chain_status_ready_after_completion_ledger_handoff(
+def test_fr017_evidence_chain_status_blocks_on_completion_ledger_update_after_handoff(
     tmp_path: Path,
 ) -> None:
     measurement_path, mockup_path, mannequin_path, static_fit_path, movement_path, release_cable_path = (
@@ -906,6 +1751,7 @@ def test_fr017_evidence_chain_status_ready_after_completion_ledger_handoff(
     )
     ledger_entry_path = tmp_path / "ready-ledger-handoff.md"
     ledger_entry_path.write_text(_ready_ledger_entry(final_decision_path), encoding="utf-8")
+    completion_ledger_path = tmp_path / "missing-completion-ledger.md"
 
     proc = _run_gate(
         "-Mode",
@@ -928,21 +1774,146 @@ def test_fr017_evidence_chain_status_ready_after_completion_ledger_handoff(
         str(final_decision_path),
         "-LedgerEntryPath",
         str(ledger_entry_path),
+        "-CompletionLedgerPath",
+        str(completion_ledger_path),
     )
 
     assert proc.returncode == 0, proc.stderr
     payload = _payload(proc.stdout)
-    assert payload["status"] == "ready_for_operator_completion_ledger_update"
-    assert payload["first_blocking_gate"] == ""
-    assert payload["gates_ran"] == 11
-    assert payload["gate_count"] == 11
+    assert payload["status"] == "blocked_on_completion_ledger_update"
+    assert payload["first_blocking_gate"] == "completion_ledger_update"
+    assert payload["first_blocking_status"] == "pending_completion_ledger_update"
+    assert payload["next_required_input"] == (
+        "docs/operations/COMPLETION_LEDGER.md or proposed completion ledger file containing reviewed FR-017 candidate handoff"
+    )
+    assert (
+        payload["next_command"] == "update_or_provide_completion_ledger_file_then_rerun_completion_ledger_update_gate"
+    )
+    assert payload["gates_ran"] == 12
+    assert payload["gate_count"] == 12
     assert payload["gate_results"][10]["id"] == "completion_ledger"
     assert payload["gate_results"][10]["details"]["ledger_entry_review_ready"] is True
     assert payload["gate_results"][10]["details"]["ledger_entry_exists"] is True
     assert payload["gate_results"][10]["details"]["prohibited_clearance_flags"] == []
+    assert payload["gate_results"][11]["id"] == "completion_ledger_update"
+    assert payload["gate_results"][11]["details"]["completion_ledger_gate_status"] == (
+        "ready_for_operator_completion_ledger_update"
+    )
+    assert payload["gate_results"][11]["details"]["completion_ledger_handoff_ready"] is True
+    assert payload["gate_results"][11]["details"]["completion_ledger_exists"] is False
+    assert payload["gate_results"][11]["details"]["ledger_update_review_ready"] is False
+    assert payload["gate_results"][11]["details"]["missing_fields"] == ["completion_ledger_path"]
+    assert payload["first_blocking_details"]["missing_fields"] == ["completion_ledger_path"]
+    _assert_path_tail(payload["first_blocking_preflight_tool_path"], "scripts\\fr017-completion-ledger-update-gate.ps1")
+    assert (
+        "fr017-completion-ledger-update-gate.ps1 -Mode Status" in payload["first_blocking_preflight_command_template"]
+    )
+    assert str(ledger_entry_path) in payload["first_blocking_preflight_command_template"]
+    assert str(completion_ledger_path) in payload["first_blocking_preflight_command_template"]
+    assert "completion-ledger update review preflight" in payload["first_blocking_preflight_contract"]
+    assert "writes no completion ledger" in payload["first_blocking_preflight_contract"]
+    assert "writes no evidence" in payload["first_blocking_preflight_contract"]
+    assert payload["first_blocking_preflight_status"] == "pending_completion_ledger_update"
+    assert payload["first_blocking_preflight_exit_code"] == 0
+    assert payload["first_blocking_preflight_parse_ok"] is True
+    assert payload["first_blocking_preflight_read_only_contract"] is True
+    assert payload["first_blocking_preflight_template_exists"] is False
+    assert payload["first_blocking_preflight_template_parse_ok"] is False
+    assert payload["first_blocking_preflight_candidate_output_path_ready"] is False
+    assert payload["first_blocking_preflight_output_path"] == str(completion_ledger_path)
+    assert payload["first_blocking_preflight_output_exists"] is False
+    assert payload["first_blocking_preflight_output_parent_exists"] is True
+    assert payload["first_blocking_preflight_wrote_file"] is False
+    assert payload["first_blocking_preflight_physical_validation_complete"] is False
+    assert payload["first_blocking_preflight_fr018_implementation_cleared"] is False
+    _assert_path_tail(payload["first_blocking_update_tool_path"], "scripts\\fr017-completion-ledger-update-gate.ps1")
+    assert "fr017-completion-ledger-update-gate.ps1 -Mode Status" in payload["first_blocking_update_command_template"]
+    assert "read-only" in payload["first_blocking_update_contract"]
+    assert payload["evidence_chain_decision_ready"] is False
+    assert payload["ledger_completion_review_ready"] is False
+    assert payload["completion_ledger_handoff_ready"] is True
+    assert payload["completion_ledger_update_review_ready"] is False
+    assert payload["physical_validation_complete"] is False
+    assert payload["stage17_completion_claim_allowed"] is False
+    assert payload["powered_or_frame_coupled_testing_cleared"] is False
+    assert payload["fr018_implementation_cleared"] is False
+
+
+def test_fr017_evidence_chain_status_ready_after_completion_ledger_update_review(
+    tmp_path: Path,
+) -> None:
+    measurement_path, mockup_path, mannequin_path, static_fit_path, movement_path, release_cable_path = (
+        _write_release_ready_records(tmp_path)
+    )
+    engineering_review_path = tmp_path / "ready-engineering-review.json"
+    engineering_review_path.write_text(
+        json.dumps(_ready_engineering_review_payload(release_cable_path)),
+        encoding="utf-8",
+    )
+    evidence_paths = (
+        measurement_path,
+        mockup_path,
+        mannequin_path,
+        static_fit_path,
+        movement_path,
+        release_cable_path,
+        engineering_review_path,
+    )
+    final_physical_gate_record_path = _write_final_physical_gate_record(tmp_path, evidence_paths)
+    final_decision_path = tmp_path / "ready-final-decision.json"
+    final_decision_path.write_text(
+        json.dumps(_ready_final_decision_payload(final_physical_gate_record_path)),
+        encoding="utf-8",
+    )
+    ledger_entry = _ready_ledger_entry(final_decision_path)
+    ledger_entry_path = tmp_path / "ready-ledger-handoff.md"
+    ledger_entry_path.write_text(ledger_entry, encoding="utf-8")
+    completion_ledger_path = tmp_path / "COMPLETION_LEDGER.md"
+    completion_ledger_path.write_text("# FRANCIS - COMPLETION LEDGER\n\n" + ledger_entry, encoding="utf-8")
+
+    proc = _run_gate(
+        "-Mode",
+        "Status",
+        "-MeasurementPath",
+        str(measurement_path),
+        "-MockupPath",
+        str(mockup_path),
+        "-MannequinPath",
+        str(mannequin_path),
+        "-StaticFitPath",
+        str(static_fit_path),
+        "-MovementPath",
+        str(movement_path),
+        "-ReleaseCablePath",
+        str(release_cable_path),
+        "-EngineeringReviewPath",
+        str(engineering_review_path),
+        "-FinalDecisionPath",
+        str(final_decision_path),
+        "-LedgerEntryPath",
+        str(ledger_entry_path),
+        "-CompletionLedgerPath",
+        str(completion_ledger_path),
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = _payload(proc.stdout)
+    assert payload["status"] == "ready_for_operator_stage17_completion_ledger_update_review"
+    assert payload["first_blocking_gate"] == ""
+    assert payload["gates_ran"] == 12
+    assert payload["gate_count"] == 12
+    assert payload["gate_results"][10]["id"] == "completion_ledger"
+    assert payload["gate_results"][10]["details"]["ledger_entry_review_ready"] is True
+    assert payload["gate_results"][11]["id"] == "completion_ledger_update"
+    assert payload["gate_results"][11]["details"]["ledger_update_review_ready"] is True
+    assert payload["gate_results"][11]["details"]["ledger_update_section_found"] is True
+    assert payload["gate_results"][11]["details"]["missing_fields"] == []
+    assert payload["gate_results"][11]["details"]["invalid_fields"] == []
+    assert payload["gate_results"][11]["details"]["prohibited_clearance_flags"] == []
     assert payload["evidence_chain_decision_ready"] is True
     assert payload["ledger_completion_review_ready"] is True
     assert payload["completion_ledger_handoff_ready"] is True
+    assert payload["completion_ledger_update_review_ready"] is True
     assert payload["physical_validation_complete"] is False
     assert payload["stage17_completion_claim_allowed"] is False
     assert payload["powered_or_frame_coupled_testing_cleared"] is False
@@ -1093,6 +2064,18 @@ def test_fr017_evidence_chain_status_fails_closed_on_measurement_symptom(tmp_pat
         == "scripts/fr017-new-measurement-record.ps1 + FR-017-MEASUREMENT-CAPTURE-RUNBOOK.md + FR-017-MEASUREMENTS-INPUT-TEMPLATE.json"
     )
     assert result["first_blocking_details"]["safety_blockers"] == ["tingling"]
+    assert result["first_blocking_update_tool_path"] == ""
+    assert result["first_blocking_update_command_template"] == ""
+    assert "Stop the measurement session" in result["first_blocking_update_contract"]
+    assert result["first_blocking_details"]["measurement_session_brief_parse_ok"] is True
+    assert result["first_blocking_details"]["measurement_session_brief_exit_code"] == 1
+    assert result["first_blocking_details"]["measurement_session_brief_status"] == "failed_measurement_session_brief"
+    assert result["first_blocking_details"]["measurement_session_current_group_update_tool_path"] == ""
+    assert result["first_blocking_details"]["measurement_session_current_group_update_command_template"] == ""
+    assert (
+        "Stop the measurement session"
+        in result["first_blocking_details"]["measurement_session_current_group_update_contract"]
+    )
     assert result["gate_results"][1]["details"]["safety_blockers"] == ["tingling"]
     assert result["physical_validation_complete"] is False
     assert result["fr018_implementation_cleared"] is False

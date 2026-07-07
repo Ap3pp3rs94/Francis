@@ -6,7 +6,7 @@ Gate: measurement_intake
 
 ## Purpose
 
-This runbook converts the read-only `measurement_capture_plan` from `scripts/fr017-measurement-intake.ps1 -Mode Status` into an operator capture sequence for the first FR-017 physical-input gate.
+This runbook converts the read-only `measurement_capture_plan` from `scripts/fr017-measurement-intake.ps1 -Mode Status` into an operator capture sequence for the first FR-017 physical-input gate. Use `scripts/fr017-measurement-session-brief.ps1 -Mode Summary` when the operator needs the compact current-group command handoff and stop-condition list without the full status payload. Use `scripts/fr017-new-measurement-record.ps1 -Mode Summary` when the operator needs compact initializer path-readiness and next-create-command readback before writing a pending record.
 
 This runbook is not physical validation evidence. It does not replace `FR-017-MEASUREMENTS-INPUT-TEMPLATE.json`, does not record Pilot measurements, does not approve fabrication, does not approve load-bearing use, and does not clear powered or frame-coupled testing.
 
@@ -28,11 +28,14 @@ Run the gate before and after editing the working record:
 
 ```powershell
 .\scripts\fr017-measurement-intake.ps1 -Mode Status
+.\scripts\fr017-new-measurement-record.ps1 -Mode Status
+.\scripts\fr017-new-measurement-record.ps1 -Mode Summary -OutputPath .\FR-017_Stage17_Package\FR-017-MEASUREMENTS-YYYY-MM-DD-PILOT-RECORD.json
+.\scripts\fr017-new-measurement-record.ps1 -Mode Status -OutputPath .\FR-017_Stage17_Package\FR-017-MEASUREMENTS-YYYY-MM-DD-PILOT-RECORD.json
 .\scripts\fr017-new-measurement-record.ps1 -Mode Create -OutputPath .\FR-017_Stage17_Package\FR-017-MEASUREMENTS-YYYY-MM-DD-PILOT-RECORD.json
 .\scripts\fr017-measurement-intake.ps1 -Mode Status -MeasurementPath .\FR-017_Stage17_Package\FR-017-MEASUREMENTS-YYYY-MM-DD-PILOT-RECORD.json
 ```
 
-The initializer creates only a pending working record. It refuses to overwrite an existing file or target the template itself. The generated record still requires real left/right measurements, landmark references, repeatability checks, and symptom-screen entries before the intake gate can advance.
+The initializer `Status` and `Summary` modes are read-only. `Status` returns the full initializer contract. `Summary` compresses template/path readiness, `candidate_output_path_ready`, `create_command_template`, `next_action`, and `next_create_command` for operator handoff. Neither mode writes evidence, marks physical validation complete, or clears FR-018; read-only initializer preflight never writes evidence. The initializer `Create` mode creates only a pending working record. It refuses to overwrite an existing file or target the template itself. The generated record still requires real left/right measurements, landmark references, repeatability checks, and symptom-screen entries before the intake gate can advance.
 
 If the setup and safety brief has actually been completed, the initializer can also record those first-gate fields:
 
@@ -52,6 +55,27 @@ If the setup and safety brief has actually been completed, the initializer can a
 ```
 
 These setup-brief fields are still not physical validation evidence. They can make only `setup_and_safety_brief` ready when real values are provided. Left/right measurements, marked zones, repeatability, left/right independence, and symptom screen entries remain separate required evidence.
+
+If a pending record already exists without setup/safety-brief fields, update that first capture group with real operator-supplied values instead of editing JSON by hand:
+
+```powershell
+.\scripts\fr017-update-measurement-setup-record.ps1 -Mode UpdateSetup `
+  -MeasurementPath .\FR-017_Stage17_Package\FR-017-MEASUREMENTS-YYYY-MM-DD-PILOT-RECORD.json `
+  -EvidenceDate YYYY-MM-DD `
+  -Observer "<observer>" `
+  -PilotId "<pilot-reference>" `
+  -MeasurementTool "flexible metric tape" `
+  -Method "flexible tape, no tissue compression" `
+  -Posture "arm relaxed, palm neutral" `
+  -ConfirmNoTissueCompressionUsed `
+  -ConfirmNoWristBoneCompressionUsed `
+  -ConfirmMetricToolUsed `
+  -ConfirmArmRelaxedPalmNeutralOrExceptionRecorded `
+  -ConfirmStopConditionsBriefed `
+  -ConditionNotes "No tissue compression, no wrist-bone compression, metric tool, and stop briefing confirmed."
+```
+
+This command writes operator-supplied setup and measurement-condition input only. It refuses to update the template and refuses to overwrite populated fields unless `-AllowOverwrite` is explicitly supplied. The measurement-intake gate remains the authority for readiness.
 
 ## Capture Order
 

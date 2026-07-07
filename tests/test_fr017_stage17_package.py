@@ -97,11 +97,19 @@ def test_fr017_stage17_final_audit_blocks_physical_and_fr018_claims() -> None:
     assert "FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json" in package_index
     assert "FR-017-MEASUREMENT-CAPTURE-RUNBOOK.md" in package_index
     assert "FR-017-COMPLETION-LEDGER-HANDOFF-TEMPLATE.md" in package_index
+    assert "fr017-measurement-session-brief.ps1" in package_index
+    assert "fr017-update-measurement-setup-record.ps1" in package_index
     assert "fr017-update-independence-safety-record.ps1" in package_index
     assert "fr017-new-mockup-record.ps1" in package_index
     assert "fr017-new-mannequin-interface-record.ps1" in package_index
     assert "fr017-new-pilot-static-fit-record.ps1" in package_index
+    assert "fr017-new-pilot-movement-record.ps1" in package_index
+    assert "fr017-new-release-cable-record.ps1" in package_index
+    assert "fr017-new-engineering-review-record.ps1" in package_index
+    assert "fr017-new-final-decision-record.ps1" in package_index
+    assert "fr017-new-completion-ledger-handoff.ps1" in package_index
     assert "fr017-completion-ledger-gate.ps1" in package_index
+    assert "fr017-completion-ledger-update-gate.ps1" in package_index
 
 
 def test_fr017_stage17_pending_records_keep_evidence_fields() -> None:
@@ -129,6 +137,10 @@ def test_fr017_measurement_capture_runbook_preserves_first_physical_input_lock()
     assert "This runbook is not physical validation evidence." in runbook
     assert "FR-017-MEASUREMENTS-INPUT-TEMPLATE.json" in runbook
     assert "fr017-new-measurement-record.ps1" in runbook
+    assert "fr017-new-measurement-record.ps1 -Mode Status" in runbook
+    assert "candidate_output_path_ready" in runbook
+    assert "create_command_template" in runbook
+    assert "fr017-update-measurement-setup-record.ps1" in runbook
     assert "fr017-update-measurement-record.ps1" in runbook
     assert "fr017-update-landmark-record.ps1" in runbook
     assert "fr017-update-independence-safety-record.ps1" in runbook
@@ -144,6 +156,7 @@ def test_fr017_measurement_capture_runbook_preserves_first_physical_input_lock()
     assert "PainObserved" in runbook
     assert "setup_and_safety_brief" in runbook
     assert "still not physical validation evidence" in runbook
+    assert "never writes evidence" in runbook
     assert "fr017-measurement-intake.ps1 -Mode Status" in runbook
     assert "measurement_capture_plan" in runbook
     assert "setup_and_safety_brief" in runbook
@@ -173,6 +186,7 @@ def test_fr017_validation_gate_chain_preserves_gate_order_and_no_fake_validation
         "fr017-final-physical-gate.ps1",
         "fr017-final-decision-record-gate.ps1",
         "fr017-completion-ledger-gate.ps1",
+        "fr017-completion-ledger-update-gate.ps1",
     ]
     positions = [runbook.index(item) for item in expected_order]
 
@@ -185,6 +199,7 @@ def test_fr017_validation_gate_chain_preserves_gate_order_and_no_fake_validation
     assert "FR-017-COMPLETION-LEDGER-HANDOFF-TEMPLATE.md" in runbook
     assert "ready_for_completion_ledger_review" in runbook
     assert "ready_for_operator_completion_ledger_update" in runbook
+    assert "ready_for_operator_stage17_completion_ledger_update_review" in runbook
     assert "A blank or" in runbook
     assert "ready_for_pilot_static_fit_planning" in runbook
     assert "ready_for_pilot_movement_test_planning" in runbook
@@ -192,5 +207,10 @@ def test_fr017_validation_gate_chain_preserves_gate_order_and_no_fake_validation
     assert "fr017-new-mockup-record.ps1" in runbook
     assert "fr017-new-mannequin-interface-record.ps1" in runbook
     assert "fr017-new-pilot-static-fit-record.ps1" in runbook
+    assert "fr017-new-pilot-movement-record.ps1" in runbook
+    assert "fr017-new-release-cable-record.ps1" in runbook
+    assert "fr017-new-engineering-review-record.ps1" in runbook
+    assert "fr017-new-final-decision-record.ps1" in runbook
+    assert "fr017-new-completion-ledger-handoff.ps1" in runbook
     assert "safety-critical landmark confirmation" in runbook
     assert "derived consistency checks passed" in runbook

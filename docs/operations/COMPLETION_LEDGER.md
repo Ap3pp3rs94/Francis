@@ -107,6 +107,218 @@ What is materially true now:
 > Older dated entries are archived under docs/operations/archive/ (see scripts/archive-completion-ledger.ps1).
 > Historical undated ledger body is archived under docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md.
 
+### 2026-07-07 01:08Z - FR-017 setup updater classifies next handoff
+
+Current posture: Phase 2 / FR-017 Stage 17 remains documentation-ready and evidence-container-ready, with physical validation still blocked at measurement intake. This is a Stage 17 / FR-017 setup-updater handoff correction for the first physical-input gate. It does not create durable pilot measurement evidence, mark physical validation complete, close Stage 17, approve load-bearing use, clear powered or frame-coupled use, or clear FR-018.
+
+What changed:
+
+- `scripts/fr017-update-measurement-setup-record.ps1` now emits typed next-command metadata: `next_command_kind`, `next_command_contract`, and `next_status_command_template`.
+- Valid pending-record status now reports `next_command_kind=update_setup_safety_brief` and points `next_command` at the setup/safety update command.
+- Successful setup/safety writes now report `next_command_kind=rerun_measurement_intake` and point `next_command` back at read-only measurement intake status; failure paths return `next_command_kind=none`.
+- The handoff contract explicitly states that these commands are operator handoffs only, not physical validation evidence, not a Stage 17 completion claim, and not FR-018 clearance.
+
+Validation actually run:
+
+- PowerShell parser validation passed for `scripts/fr017-update-measurement-setup-record.ps1`.
+- `python -m py_compile tests\test_fr017_measurement_setup_record_update_script.py`: passed.
+- `python -m ruff check tests/test_fr017_measurement_setup_record_update_script.py`: passed.
+- `python -m ruff format --check tests/test_fr017_measurement_setup_record_update_script.py`: passed.
+- `python -m pytest tests/test_fr017_measurement_setup_record_update_script.py -q`: passed, 5 tests.
+- Direct temporary-record readback passed: status returned `next_command_kind=update_setup_safety_brief`, setup update returned `next_command_kind=rerun_measurement_intake`, both reported `physical_validation_complete=False`, and both reported `fr018_implementation_cleared=False`.
+
+Remaining blockers:
+
+- FR-017 still requires a real accepted measurement record with setup/safety brief values, left/right dimensions, marked zones, repeatability, independence, and symptom-screen evidence before mockup patterning can truthfully proceed.
+- Downstream non-powered mockup, mannequin/interface, pilot static-fit, pilot movement, quick-release/cable-snag, professional engineering review, final human physical decision, and operator-reviewed completion-ledger update evidence remain required before any Stage 17 completion claim.
+- FR-018 remains blocked and not cleared by this slice.
+
+### 2026-07-07 00:59Z - Completion model prefers active roadmap workstream
+
+Current posture: Phase 2 / roadmap completion readback now keeps the declared active Orb embodiment / Stage 6 Lens runtime workstream as the continuation source when the ledger names an active workstream and current goal. This is a roadmap-steering correction. It does not close Stage 6, enable summon-anywhere, start resident supervision, claim a desktop effect, complete the one-visible-loop proof, close Stage 17, or clear FR-018.
+
+What changed:
+
+- `scripts/francis-completion-model.ps1` now reads the ledger's `Current active workstream` line and wrapped current-goal paragraph into a read-only `active_workstream` payload.
+- `next_continue_decision` now selects `active_workstream_current_goal` before archived Stage 17 fallback gaps when that active workstream is present, while preserving `stage17_status` as a separate open readback.
+- The selected-gap contract now exposes `selected_gap_is_active_workstream=True` for that path and continues to deny write, execution, mutation, promotion, and Stage 17 apply authority.
+
+Validation actually run:
+
+- PowerShell parser validation passed for `scripts/francis-completion-model.ps1`.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\francis-completion-model.ps1`: passed and returned `active_workstream.found=True`, `selected_gap_source=active_workstream_current_goal`, `active_workstream_preferred=True`, `stage17_gap_preferred=False`, `writes_repo=False`, and `grants_execution_authority=False`.
+- `python -m py_compile tests\test_francis_completion_model_script.py`: passed.
+- `python -m ruff check tests/test_francis_completion_model_script.py`: passed.
+- `python -m ruff format --check tests/test_francis_completion_model_script.py`: passed.
+- `python -m pytest tests/test_francis_completion_model_script.py -q`: passed, 6 tests.
+
+Remaining blockers:
+
+- Stage 6 Orb/Lens still requires the real summon prerequisites, Orb presence stability, confirmed desktop bridge effects, voice replay proof, and one-visible-loop proof before any completion claim.
+- The config/runtime and live desktop state were not changed by this slice; no hotkey, resident-host, overlay, tray, bridge, or browser-render acceptance is claimed.
+- Stage 17 remains open and physically unvalidated; FR-018 remains blocked and not cleared by this slice.
+
+### 2026-07-07 00:14Z - FR-017 initializer summary uses full setup command
+
+Current posture: Phase 2 / FR-017 Stage 17 remains documentation-ready and evidence-container-ready, with physical validation still blocked at measurement intake. This is a Stage 17 / FR-017 initializer-summary handoff correction for the first physical-input gate. It does not create a measurement record, record pilot dimensions, mark physical validation complete, close Stage 17, approve load-bearing use, clear powered or frame-coupled use, or clear FR-018.
+
+What changed:
+
+- `scripts/fr017-new-measurement-record.ps1 -Mode Summary` now uses the full setup/safety create command as `next_create_command`, including `-EvidenceDate`, observer/pilot/tool/method/posture placeholders, safety-condition confirmations, and condition notes.
+- The previous shorter output-path-only handoff is preserved separately as `next_create_path_command` so operators can still see the candidate file target without mistaking it for the complete create invocation.
+- The summary remains read-only and still reports `wrote_file=False`, `physical_validation_complete=False`, and `fr018_implementation_cleared=False`.
+
+Validation actually run:
+
+- PowerShell parser validation passed for `scripts/fr017-new-measurement-record.ps1`.
+- `python -m py_compile tests\test_fr017_measurement_record_initializer_script.py`: passed with `PYTHONPYCACHEPREFIX` redirected to a temp cache.
+- `python -m ruff check tests/test_fr017_measurement_record_initializer_script.py`: passed.
+- `python -m ruff format --check tests/test_fr017_measurement_record_initializer_script.py`: passed.
+- `python -m pytest tests/test_fr017_measurement_record_initializer_script.py -q`: passed, 12 tests.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\fr017-new-measurement-record.ps1 -Mode Summary`: passed and returned a `next_create_command` containing `-EvidenceDate YYYY-MM-DD` and `-ConfirmStopConditionsBriefed`, plus `wrote_file=False`, `physical_validation_complete=False`, and `fr018_implementation_cleared=False`.
+
+Remaining blockers:
+
+- FR-017 still requires a real accepted measurement record with setup/safety brief values, left/right dimensions, marked zones, repeatability, independence, and symptom-screen evidence before mockup patterning can truthfully proceed.
+- Downstream non-powered mockup, mannequin/interface, pilot static-fit, pilot movement, quick-release/cable-snag, professional engineering review, final human physical decision, and operator-reviewed completion-ledger update evidence remain required before any Stage 17 completion claim.
+- FR-018 remains blocked and not cleared by this slice.
+
+### 2026-07-06 23:44Z - FR-017 summaries carry next capture command
+
+Current posture: Phase 2 / FR-017 Stage 17 remains documentation-ready and evidence-container-ready, with physical validation still blocked at measurement intake. This is a Stage 17 / FR-017 readback-propagation slice for the first physical-input gate. It does not create a measurement record, record pilot dimensions, mark physical validation complete, close Stage 17, approve load-bearing use, clear powered or frame-coupled use, or clear FR-018.
+
+What changed:
+
+- `scripts/fr017-measurement-session-brief.ps1 -Mode Status` and `-Mode Summary` now expose `measurement_capture_next_command_kind`, `measurement_capture_next_command_template`, and `measurement_capture_next_status_command_template` from the active measurement-intake state.
+- `scripts/fr017-evidence-chain-status.ps1 -Mode Summary` now carries those fields upward as `first_blocking_capture_next_command_kind`, `first_blocking_capture_next_command_template`, and `first_blocking_capture_next_status_command_template`.
+- Template/no-record readbacks still route the operator to a pending measurement-record create command using the suggested output path, then to a concrete measurement-intake rerun command; the fields are read-only handoffs, not evidence or validation completion.
+
+Validation actually run:
+
+- PowerShell parser validation passed for `scripts/fr017-measurement-session-brief.ps1` and `scripts/fr017-evidence-chain-status.ps1`.
+- `python -m py_compile tests\test_fr017_measurement_session_brief_script.py tests\test_fr017_evidence_chain_status_script.py`: passed with `PYTHONPYCACHEPREFIX` redirected to a temp cache.
+- `python -m ruff check tests/test_fr017_measurement_session_brief_script.py tests/test_fr017_evidence_chain_status_script.py`: passed.
+- `python -m ruff format --check tests/test_fr017_measurement_session_brief_script.py tests/test_fr017_evidence_chain_status_script.py`: passed after formatting.
+- `python -m pytest tests/test_fr017_measurement_session_brief_script.py tests/test_fr017_evidence_chain_status_script.py -q`: passed, 41 tests.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\fr017-measurement-session-brief.ps1 -Mode Summary`: passed and returned `measurement_capture_next_command_kind=create_pending_measurement_record`, a create command with the suggested pending record path, a concrete intake rerun command, `physical_validation_complete=False`, and `fr018_implementation_cleared=False`.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\fr017-evidence-chain-status.ps1 -Mode Summary`: passed and returned the same first-blocking capture next-command kind/template/status-command fields, `physical_validation_complete=False`, and `fr018_implementation_cleared=False`.
+
+Remaining blockers:
+
+- FR-017 still requires a real accepted measurement record with setup/safety brief values, left/right dimensions, marked zones, repeatability, independence, and symptom-screen evidence before mockup patterning can truthfully proceed.
+- Downstream non-powered mockup, mannequin/interface, pilot static-fit, pilot movement, quick-release/cable-snag, professional engineering review, final human physical decision, and operator-reviewed completion-ledger update evidence remain required before any Stage 17 completion claim.
+- FR-018 remains blocked and not cleared by this slice.
+
+### 2026-07-06 23:21Z - FR-017 measurement intake exposes next capture command
+
+Current posture: Phase 2 / FR-017 Stage 17 remains documentation-ready and evidence-container-ready, with physical validation still blocked at measurement intake. This is a Stage 17 / FR-017 intake-readback slice for the first physical-input gate. It does not create a measurement record, record pilot dimensions, mark physical validation complete, close Stage 17, approve load-bearing use, clear powered or frame-coupled use, or clear FR-018.
+
+What changed:
+
+- `scripts/fr017-measurement-intake.ps1 -Mode Status` now exposes read-only capture command templates for the five measurement-capture groups.
+- The intake output now reports `measurement_capture_next_command_kind`, `measurement_capture_next_command_template`, and `measurement_capture_next_status_command_template` so the operator can move from the first blocking group to the correct updater path without guessing.
+- Template/no-record status routes the next command to `fr017-new-measurement-record.ps1 -Mode Create` instead of suggesting mutation of `FR-017-MEASUREMENTS-INPUT-TEMPLATE.json`; existing working records route to the first blocking updater group, and ready records route only to the non-powered mockup readiness gate.
+
+Validation actually run:
+
+- PowerShell parser validation passed for `scripts/fr017-measurement-intake.ps1`.
+- `python -m py_compile tests\test_fr017_measurement_intake_script.py`: passed with `PYTHONPYCACHEPREFIX` redirected to a temp cache.
+- `python -m ruff check tests/test_fr017_measurement_intake_script.py`: passed.
+- `python -m ruff format --check tests/test_fr017_measurement_intake_script.py`: passed after formatting.
+- `python -m pytest tests/test_fr017_measurement_intake_script.py -q`: passed, 34 tests.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\fr017-measurement-intake.ps1 -Mode Status`: passed and returned `measurement_capture_next_command_kind=create_pending_measurement_record`, a create command with `<measurement-record.json>`, `measurement_capture_command_templates_not_evidence=True`, `physical_validation_complete=False`, and `fr018_implementation_cleared=False`.
+
+Remaining blockers:
+
+- FR-017 still requires a real accepted measurement record with setup/safety brief values, left/right dimensions, marked zones, repeatability, independence, and symptom-screen evidence before mockup patterning can truthfully proceed.
+- Downstream non-powered mockup, mannequin/interface, pilot static-fit, pilot movement, quick-release/cable-snag, professional engineering review, final human physical decision, and operator-reviewed completion-ledger update evidence remain required before any Stage 17 completion claim.
+- FR-018 remains blocked and not cleared by this slice.
+
+### 2026-07-06 23:06Z - FR-017 initializer summary suggests output path
+
+Current posture: Phase 2 / FR-017 Stage 17 remains documentation-ready and evidence-container-ready, with physical validation still blocked at measurement intake. This is a Stage 17 / FR-017 initializer-readback slice for the first physical-input gate. It does not create a measurement record, record pilot dimensions, mark physical validation complete, close Stage 17, approve load-bearing use, clear powered or frame-coupled use, or clear FR-018.
+
+What changed:
+
+- `scripts/fr017-new-measurement-record.ps1 -Mode Status` and `-Mode Summary` now suggest the same default pending measurement-record path under `FR-017_Stage17_Package` when no `-OutputPath` is supplied.
+- The initializer summary now reports `output_path_source=suggested_default`, `candidate_output_path_ready=True`, and concrete next create/intake commands using the suggested path.
+- `-Mode Create` without `-OutputPath` still fails closed with `status=missing_output_path`, so the suggested readback does not silently create evidence.
+
+Validation actually run:
+
+- PowerShell parser validation passed for `scripts/fr017-new-measurement-record.ps1`.
+- `python -m py_compile tests\test_fr017_measurement_record_initializer_script.py`: passed with `PYTHONPYCACHEPREFIX` redirected to a temp cache.
+- `python -m ruff check tests/test_fr017_measurement_record_initializer_script.py`: passed.
+- `python -m ruff format --check tests/test_fr017_measurement_record_initializer_script.py`: passed after formatting.
+- `python -m pytest tests/test_fr017_measurement_record_initializer_script.py -q`: passed, 12 tests.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\fr017-new-measurement-record.ps1 -Mode Summary`: passed and returned `output_path_source=suggested_default`, the suggested path in `next_create_command`, `candidate_output_path_ready=True`, `output_exists=False`, `wrote_file=False`, `physical_validation_complete=False`, and `fr018_implementation_cleared=False`.
+- `Test-Path` for the suggested `FR-017-MEASUREMENTS-2026-07-06-PILOT-RECORD.json` path returned `False` after the read-only summary check.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\fr017-new-measurement-record.ps1 -Mode Create`: failed closed with `status=missing_output_path`, `output_path_source=missing`, `wrote_file=False`, `writes_data=False`, `physical_validation_complete=False`, and `fr018_implementation_cleared=False`.
+- `git diff --check -- scripts\fr017-new-measurement-record.ps1 tests\test_fr017_measurement_record_initializer_script.py`: passed.
+
+Remaining blockers:
+
+- FR-017 still requires a real accepted measurement record with setup/safety brief values, left/right dimensions, marked zones, repeatability, independence, and symptom-screen evidence before mockup patterning can truthfully proceed.
+- Downstream non-powered mockup, mannequin/interface, pilot static-fit, pilot movement, quick-release/cable-snag, professional engineering review, final human physical decision, and operator-reviewed completion-ledger update evidence remain required before any Stage 17 completion claim.
+- FR-018 remains blocked and not cleared by this slice.
+
+### 2026-07-06 21:28Z - FR-017 first measurement handoff suggests record path
+
+Current posture: Phase 2 / FR-017 Stage 17 remains documentation-ready and evidence-container-ready, with physical validation still blocked at measurement intake. This is a Stage 17 / FR-017 operator-readback slice for the first physical-input gate. It does not create a measurement record, record pilot dimensions, mark physical validation complete, close Stage 17, approve load-bearing use, clear powered or frame-coupled use, or clear FR-018.
+
+What changed:
+
+- `scripts/fr017-measurement-session-brief.ps1` now generates a default suggested pending measurement-record path under `FR-017_Stage17_Package` when no `-CandidateMeasurementPath` is supplied.
+- Measurement-session and evidence-chain summaries now preflight that suggested path in read-only mode and show the same path in the visible `fr017-new-measurement-record.ps1 -Mode Create -OutputPath "..."` handoff.
+- The source of the active path is explicit: `candidate_measurement_path_source=suggested_default` for generated handoffs and `operator_supplied` when the caller provides a candidate path.
+
+Validation actually run:
+
+- PowerShell parser validation passed for `scripts/fr017-measurement-session-brief.ps1`.
+- `python -m py_compile tests\test_fr017_measurement_session_brief_script.py tests\test_fr017_evidence_chain_status_script.py`: passed with `PYTHONPYCACHEPREFIX` redirected to a temp cache.
+- `python -m ruff check tests/test_fr017_measurement_session_brief_script.py tests/test_fr017_evidence_chain_status_script.py`: passed.
+- `python -m ruff format --check tests/test_fr017_measurement_session_brief_script.py tests/test_fr017_evidence_chain_status_script.py`: passed after formatting the evidence-chain test file.
+- Focused pytest checks passed for the default suggested-path handoff and explicit operator-supplied candidate override across measurement-session and evidence-chain readbacks.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\fr017-measurement-session-brief.ps1 -Mode Summary`: passed and returned `candidate_measurement_path_source=suggested_default`, the suggested path inside `current_group_update_command_template`, `current_group_preflight_candidate_output_path_ready=True`, `current_group_preflight_output_exists=False`, `current_group_preflight_wrote_file=False`, `physical_validation_complete=False`, and `fr018_implementation_cleared=False`.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\fr017-evidence-chain-status.ps1 -Mode Summary`: passed and returned the same suggested path inside `first_blocking_update_command_template`, `first_blocking_preflight_candidate_output_path_ready=True`, `first_blocking_preflight_output_exists=False`, `first_blocking_preflight_wrote_file=False`, `physical_validation_complete=False`, and `fr018_implementation_cleared=False`.
+- `Test-Path` for the suggested `FR-017-MEASUREMENTS-2026-07-06-PILOT-RECORD.json` path returned `False` after the read-only summary checks.
+- `git diff --check -- scripts\fr017-measurement-session-brief.ps1 tests\test_fr017_measurement_session_brief_script.py tests\test_fr017_evidence_chain_status_script.py`: passed with only the existing PowerShell line-ending normalization warning.
+
+Remaining blockers:
+
+- FR-017 still requires a real accepted measurement record with setup/safety brief values, left/right dimensions, marked zones, repeatability, independence, and symptom-screen evidence before mockup patterning can truthfully proceed.
+- Downstream non-powered mockup, mannequin/interface, pilot static-fit, pilot movement, quick-release/cable-snag, professional engineering review, final human physical decision, and operator-reviewed completion-ledger update evidence remain required before any Stage 17 completion claim.
+- FR-018 remains blocked and not cleared by this slice.
+
+### 2026-07-06 21:03Z - FR-017 validation stack integrated for main
+
+Current posture: Phase 2 / FR-017 Stage 17 is documentation-ready and evidence-container-ready, with physical validation still blocked. This is a `main` integration receipt for the FR-017 validation-support stack after replaying the Stage 17 code/test commits onto current `origin/main`. It does not create a measurement record, record pilot dimensions, mark physical validation complete, close Stage 17, approve load-bearing use, clear powered or frame-coupled use, or clear FR-018.
+
+What changed:
+
+- The current `main` integration head now includes the FR-017 measurement-session brief, evidence-chain status readback, measurement/landmark/independence updater paths, downstream non-powered evidence-record initializers, completion-ledger handoff/update review gates, and their FR-017 tests.
+- The latest candidate measurement path handoff is preserved on top of current `origin/main`: Summary readbacks preflight the candidate path in read-only mode and show the same path in the visible `fr017-new-measurement-record.ps1 -Mode Create -OutputPath "..."` command template.
+- Old branch ledger history was not replayed over `main`; this entry is the fresh integration receipt for the mainline push.
+
+Validation actually run:
+
+- PowerShell parser validation passed for all `scripts/fr017*.ps1` files in the integration worktree.
+- `python -m py_compile` passed for all `tests/test_fr017*.py` files with `PYTHONPYCACHEPREFIX` redirected to a temp cache.
+- `python -m ruff check tests/test_fr017*.py`: passed.
+- `python -m ruff format --check tests/test_fr017*.py`: passed, 28 files already formatted.
+- `git diff --check origin/main..HEAD -- FR-017_Stage17_Package scripts/fr017* tests/test_fr017*`: passed.
+- Focused candidate-path pytest checks passed: `test_fr017_measurement_session_brief_preflights_candidate_measurement_path`, `test_fr017_measurement_session_summary_reports_candidate_path_readiness`, `test_fr017_evidence_chain_status_preflights_candidate_measurement_path`, and `test_fr017_evidence_chain_summary_reports_candidate_measurement_path_readiness`.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\fr017-measurement-session-brief.ps1 -Mode Summary -CandidateMeasurementPath .\FR-017_Stage17_Package\FR-017-MEASUREMENTS-2099-01-06-PILOT-RECORD.json`: passed and returned the candidate path inside `current_group_update_command_template`, `current_group_preflight_candidate_output_path_ready=True`, `current_group_preflight_output_exists=False`, `current_group_preflight_wrote_file=False`, `physical_validation_complete=False`, and `fr018_implementation_cleared=False`.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\fr017-evidence-chain-status.ps1 -Mode Summary -CandidateMeasurementPath .\FR-017_Stage17_Package\FR-017-MEASUREMENTS-2099-01-06-PILOT-RECORD.json`: passed and returned the candidate path inside `first_blocking_update_command_template`, `first_blocking_preflight_candidate_output_path_ready=True`, `first_blocking_preflight_output_exists=False`, `first_blocking_preflight_wrote_file=False`, `physical_validation_complete=False`, and `fr018_implementation_cleared=False`.
+- `Test-Path -LiteralPath .\FR-017_Stage17_Package\FR-017-MEASUREMENTS-2099-01-06-PILOT-RECORD.json`: returned `False` after the read-only summary checks.
+- A full `tests/test_fr017*.py` pytest family run was started and manually stopped after 69 passing tests with no failure output; it is not counted as a full-family pass in this receipt.
+
+Remaining blockers:
+
+- FR-017 still requires a real accepted measurement record with setup/safety brief values, left/right dimensions, marked zones, repeatability, independence, and symptom-screen evidence before mockup patterning can truthfully proceed.
+- Downstream non-powered mockup, mannequin/interface, pilot static-fit, pilot movement, quick-release/cable-snag, professional engineering review, final human physical decision, and operator-reviewed completion-ledger update evidence remain required before any Stage 17 completion claim.
+- FR-018 remains blocked and not cleared by this integration.
+
 ### 2026-07-03 18:18Z - Developer bridge unreadable output guard and ledger archive checkpoint
 
 Current posture: Phase 2 / developer bridge operator trust blocks a known class

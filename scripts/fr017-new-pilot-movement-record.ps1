@@ -11,6 +11,8 @@ param(
 
   [string]$MannequinPath = '',
 
+  [string]$StaticFitPath = '',
+
   [string]$TemplatePath = '',
 
   [string]$EvidenceDate = '',
@@ -27,6 +29,8 @@ param(
 
   [switch]$ConfirmNoFrameOrPowerCoupling,
 
+  [switch]$ConfirmPilotStaticFitGatePassed,
+
   [switch]$ConfirmObserverPresent,
 
   [switch]$ConfirmEmergencyReleaseBriefed,
@@ -35,73 +39,69 @@ param(
 
   [switch]$ConfirmPilotCanSelfRemoveOrAbort,
 
-  [switch]$ConfirmLeftFingersWarmBeforeDonning,
+  [switch]$ConfirmLeftElbowFlexionNoCreaseCompression,
 
-  [switch]$ConfirmLeftNormalColorBeforeDonning,
+  [switch]$ConfirmLeftElbowExtensionNoCuffMigration,
 
-  [switch]$ConfirmLeftBaselineGripPresent,
+  [switch]$ConfirmLeftWristFlexionNoDistalEdgePressure,
 
-  [switch]$ConfirmRightFingersWarmBeforeDonning,
+  [switch]$ConfirmLeftWristExtensionNoDistalEdgePressure,
 
-  [switch]$ConfirmRightNormalColorBeforeDonning,
+  [switch]$ConfirmLeftWristLateralNoStrapOrCableInterference,
 
-  [switch]$ConfirmRightBaselineGripPresent,
+  [switch]$ConfirmLeftHandOpeningFull,
 
-  [switch]$ConfirmLeftCuffBelowElbowCrease,
+  [switch]$ConfirmLeftGripFormationClear,
 
-  [switch]$ConfirmLeftLowerCuffAboveWristBones,
+  [switch]$ConfirmLeftGloveRemovalNotTrapped,
 
-  [switch]$ConfirmLeftUpperStrapBroadNonCompressive,
+  [switch]$ConfirmLeftWristAssemblyRemovalNotBlocked,
 
-  [switch]$ConfirmLeftLowerStrapBroadNonCompressive,
+  [switch]$ConfirmLeftOuterCableRouteNoSnag,
 
-  [switch]$ConfirmLeftInnerForearmClear,
+  [switch]$ConfirmLeftQuickReleaseReachableDuringMotion,
 
-  [switch]$ConfirmLeftBoneReliefPresent,
+  [switch]$ConfirmLeftCuffReturnsToSafePositionAfterMotion,
 
-  [switch]$ConfirmLeftQuickReleaseVisibleTactileReachable,
+  [switch]$ConfirmRightElbowFlexionNoCreaseCompression,
 
-  [switch]$ConfirmLeftCuffStableWithoutMigration,
+  [switch]$ConfirmRightElbowExtensionNoCuffMigration,
 
-  [switch]$ConfirmLeftGloveRemovalPathOpen,
+  [switch]$ConfirmRightWristFlexionNoDistalEdgePressure,
 
-  [switch]$ConfirmLeftWristAssemblyRemovalPathOpen,
+  [switch]$ConfirmRightWristExtensionNoDistalEdgePressure,
 
-  [switch]$ConfirmLeftCableRouteStaticNoSnag,
+  [switch]$ConfirmRightWristLateralNoStrapOrCableInterference,
 
-  [switch]$ConfirmRightCuffBelowElbowCrease,
+  [switch]$ConfirmRightHandOpeningFull,
 
-  [switch]$ConfirmRightLowerCuffAboveWristBones,
+  [switch]$ConfirmRightGripFormationClear,
 
-  [switch]$ConfirmRightUpperStrapBroadNonCompressive,
+  [switch]$ConfirmRightGloveRemovalNotTrapped,
 
-  [switch]$ConfirmRightLowerStrapBroadNonCompressive,
+  [switch]$ConfirmRightWristAssemblyRemovalNotBlocked,
 
-  [switch]$ConfirmRightInnerForearmClear,
+  [switch]$ConfirmRightOuterCableRouteNoSnag,
 
-  [switch]$ConfirmRightBoneReliefPresent,
+  [switch]$ConfirmRightQuickReleaseReachableDuringMotion,
 
-  [switch]$ConfirmRightQuickReleaseVisibleTactileReachable,
+  [switch]$ConfirmRightCuffReturnsToSafePositionAfterMotion,
 
-  [switch]$ConfirmRightCuffStableWithoutMigration,
+  [switch]$ConfirmLeftFingersWarmAfterMotion,
 
-  [switch]$ConfirmRightGloveRemovalPathOpen,
-
-  [switch]$ConfirmRightWristAssemblyRemovalPathOpen,
-
-  [switch]$ConfirmRightCableRouteStaticNoSnag,
-
-  [switch]$ConfirmLeftFingersWarmAfterDoffing,
-
-  [switch]$ConfirmLeftNormalColorAfterDoffing,
+  [switch]$ConfirmLeftNormalColorAfterMotion,
 
   [switch]$ConfirmLeftGripStrengthUnchanged,
 
-  [switch]$ConfirmRightFingersWarmAfterDoffing,
+  [switch]$ConfirmLeftNoNewPressureMarks,
 
-  [switch]$ConfirmRightNormalColorAfterDoffing,
+  [switch]$ConfirmRightFingersWarmAfterMotion,
+
+  [switch]$ConfirmRightNormalColorAfterMotion,
 
   [switch]$ConfirmRightGripStrengthUnchanged,
+
+  [switch]$ConfirmRightNoNewPressureMarks,
 
   [switch]$ConfirmNoLeftPain,
 
@@ -188,7 +188,7 @@ Set-StrictMode -Version 2
 $ErrorActionPreference = 'Stop'
 
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$MannequinGateScript = Join-Path $PSScriptRoot 'fr017-mannequin-interface-gate.ps1'
+$StaticFitGateScript = Join-Path $PSScriptRoot 'fr017-pilot-static-fit-gate.ps1'
 
 function Resolve-Fr017Path {
   param([string]$Path)
@@ -380,15 +380,16 @@ function Set-RequiredFalse {
   $UpdatedFields.Add($QualifiedField) | Out-Null
 }
 
-function Invoke-MannequinInterfaceGate {
+function Invoke-StaticFitGate {
   param(
     [string]$ResolvedMeasurementPath,
     [string]$ResolvedMockupPath,
-    [string]$ResolvedMannequinPath
+    [string]$ResolvedMannequinPath,
+    [string]$ResolvedStaticFitPath
   )
 
   $PowerShellExe = (Get-Process -Id $PID).Path
-  $RawOutput = & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File $MannequinGateScript -Mode Status -MeasurementPath $ResolvedMeasurementPath -MockupPath $ResolvedMockupPath -MannequinPath $ResolvedMannequinPath
+  $RawOutput = & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File $StaticFitGateScript -Mode Status -MeasurementPath $ResolvedMeasurementPath -MockupPath $ResolvedMockupPath -MannequinPath $ResolvedMannequinPath -StaticFitPath $ResolvedStaticFitPath
   $GateExitCode = $LASTEXITCODE
   $Payload = $null
   $ParseOk = $false
@@ -406,15 +407,16 @@ function Invoke-MannequinInterfaceGate {
   }
 }
 
-$DefaultTemplatePath = Join-Path $RepoRoot 'FR-017_Stage17_Package\FR-017-PILOT-STATIC-FIT-INPUT-TEMPLATE.json'
+$DefaultTemplatePath = Join-Path $RepoRoot 'FR-017_Stage17_Package\FR-017-PILOT-MOVEMENT-INPUT-TEMPLATE.json'
 $ResolvedTemplatePath = if ([string]::IsNullOrWhiteSpace($TemplatePath)) { $DefaultTemplatePath } else { Resolve-Fr017Path -Path $TemplatePath }
 $ResolvedOutputPath = if ([string]::IsNullOrWhiteSpace($OutputPath)) { '' } else { Resolve-Fr017Path -Path $OutputPath }
 $ResolvedMeasurementPath = if ([string]::IsNullOrWhiteSpace($MeasurementPath)) { '' } else { Resolve-Fr017Path -Path $MeasurementPath }
 $ResolvedMockupPath = if ([string]::IsNullOrWhiteSpace($MockupPath)) { '' } else { Resolve-Fr017Path -Path $MockupPath }
 $ResolvedMannequinPath = if ([string]::IsNullOrWhiteSpace($MannequinPath)) { '' } else { Resolve-Fr017Path -Path $MannequinPath }
-$CreateCommandTemplate = '.\scripts\fr017-new-pilot-static-fit-record.ps1 -Mode Create -OutputPath <pilot-static-fit-record.json> -MeasurementPath <measurement-record.json> -MockupPath <mockup-record.json> -MannequinPath <mannequin-interface-record.json> -EvidenceDate YYYY-MM-DD -Observer "<observer>" -PilotId "<pilot id>" -PrototypeRevision "<prototype revision>" -TestDurationMinutes <minutes> -ConfirmNonPoweredOnly -ConfirmNoFrameOrPowerCoupling -ConfirmObserverPresent -ConfirmEmergencyReleaseBriefed -ConfirmStopOnSymptoms -ConfirmPilotCanSelfRemoveOrAbort -ConfirmLeftFingersWarmBeforeDonning -ConfirmLeftNormalColorBeforeDonning -ConfirmLeftBaselineGripPresent -ConfirmRightFingersWarmBeforeDonning -ConfirmRightNormalColorBeforeDonning -ConfirmRightBaselineGripPresent -ConfirmLeftCuffBelowElbowCrease -ConfirmLeftLowerCuffAboveWristBones -ConfirmLeftUpperStrapBroadNonCompressive -ConfirmLeftLowerStrapBroadNonCompressive -ConfirmLeftInnerForearmClear -ConfirmLeftBoneReliefPresent -ConfirmLeftQuickReleaseVisibleTactileReachable -ConfirmLeftCuffStableWithoutMigration -ConfirmLeftGloveRemovalPathOpen -ConfirmLeftWristAssemblyRemovalPathOpen -ConfirmLeftCableRouteStaticNoSnag -ConfirmRightCuffBelowElbowCrease -ConfirmRightLowerCuffAboveWristBones -ConfirmRightUpperStrapBroadNonCompressive -ConfirmRightLowerStrapBroadNonCompressive -ConfirmRightInnerForearmClear -ConfirmRightBoneReliefPresent -ConfirmRightQuickReleaseVisibleTactileReachable -ConfirmRightCuffStableWithoutMigration -ConfirmRightGloveRemovalPathOpen -ConfirmRightWristAssemblyRemovalPathOpen -ConfirmRightCableRouteStaticNoSnag -ConfirmLeftFingersWarmAfterDoffing -ConfirmLeftNormalColorAfterDoffing -ConfirmLeftGripStrengthUnchanged -ConfirmRightFingersWarmAfterDoffing -ConfirmRightNormalColorAfterDoffing -ConfirmRightGripStrengthUnchanged -ConfirmNoLeftPain -ConfirmNoLeftTingling -ConfirmNoLeftNumbness -ConfirmNoLeftColdFingers -ConfirmNoLeftDiscoloration -ConfirmNoLeftHandWeakness -ConfirmNoLeftWristPain -ConfirmNoLeftSharpPressure -ConfirmNoLeftReducedFingerMotion -ConfirmNoLeftLossOfGripStrength -ConfirmNoRightPain -ConfirmNoRightTingling -ConfirmNoRightNumbness -ConfirmNoRightColdFingers -ConfirmNoRightDiscoloration -ConfirmNoRightHandWeakness -ConfirmNoRightWristPain -ConfirmNoRightSharpPressure -ConfirmNoRightReducedFingerMotion -ConfirmNoRightLossOfGripStrength'
-$PilotStaticFitStatusCommandTemplate = '.\scripts\fr017-pilot-static-fit-gate.ps1 -Mode Status -MeasurementPath <measurement-record.json> -MockupPath <mockup-record.json> -MannequinPath <mannequin-interface-record.json> -StaticFitPath <pilot-static-fit-record.json>'
-$Status = if ($Mode -eq 'Status') { 'pilot_static_fit_record_initializer_status' } else { 'created_pilot_static_fit_record' }
+$ResolvedStaticFitPath = if ([string]::IsNullOrWhiteSpace($StaticFitPath)) { '' } else { Resolve-Fr017Path -Path $StaticFitPath }
+$CreateCommandTemplate = '.\scripts\fr017-new-pilot-movement-record.ps1 -Mode Create -OutputPath <pilot-movement-record.json> -MeasurementPath <measurement-record.json> -MockupPath <mockup-record.json> -MannequinPath <mannequin-interface-record.json> -StaticFitPath <pilot-static-fit-record.json> -EvidenceDate YYYY-MM-DD -Observer "<observer>" -PilotId "<pilot id>" -PrototypeRevision "<prototype revision>" -TestDurationMinutes <minutes> -ConfirmNonPoweredOnly -ConfirmNoFrameOrPowerCoupling -ConfirmPilotStaticFitGatePassed -ConfirmObserverPresent -ConfirmEmergencyReleaseBriefed -ConfirmStopOnSymptoms -ConfirmPilotCanSelfRemoveOrAbort -ConfirmLeftElbowFlexionNoCreaseCompression -ConfirmLeftElbowExtensionNoCuffMigration -ConfirmLeftWristFlexionNoDistalEdgePressure -ConfirmLeftWristExtensionNoDistalEdgePressure -ConfirmLeftWristLateralNoStrapOrCableInterference -ConfirmLeftHandOpeningFull -ConfirmLeftGripFormationClear -ConfirmLeftGloveRemovalNotTrapped -ConfirmLeftWristAssemblyRemovalNotBlocked -ConfirmLeftOuterCableRouteNoSnag -ConfirmLeftQuickReleaseReachableDuringMotion -ConfirmLeftCuffReturnsToSafePositionAfterMotion -ConfirmRightElbowFlexionNoCreaseCompression -ConfirmRightElbowExtensionNoCuffMigration -ConfirmRightWristFlexionNoDistalEdgePressure -ConfirmRightWristExtensionNoDistalEdgePressure -ConfirmRightWristLateralNoStrapOrCableInterference -ConfirmRightHandOpeningFull -ConfirmRightGripFormationClear -ConfirmRightGloveRemovalNotTrapped -ConfirmRightWristAssemblyRemovalNotBlocked -ConfirmRightOuterCableRouteNoSnag -ConfirmRightQuickReleaseReachableDuringMotion -ConfirmRightCuffReturnsToSafePositionAfterMotion -ConfirmLeftFingersWarmAfterMotion -ConfirmLeftNormalColorAfterMotion -ConfirmLeftGripStrengthUnchanged -ConfirmLeftNoNewPressureMarks -ConfirmRightFingersWarmAfterMotion -ConfirmRightNormalColorAfterMotion -ConfirmRightGripStrengthUnchanged -ConfirmRightNoNewPressureMarks -ConfirmNoLeftPain -ConfirmNoLeftTingling -ConfirmNoLeftNumbness -ConfirmNoLeftColdFingers -ConfirmNoLeftDiscoloration -ConfirmNoLeftHandWeakness -ConfirmNoLeftWristPain -ConfirmNoLeftSharpPressure -ConfirmNoLeftReducedFingerMotion -ConfirmNoLeftLossOfGripStrength -ConfirmNoRightPain -ConfirmNoRightTingling -ConfirmNoRightNumbness -ConfirmNoRightColdFingers -ConfirmNoRightDiscoloration -ConfirmNoRightHandWeakness -ConfirmNoRightWristPain -ConfirmNoRightSharpPressure -ConfirmNoRightReducedFingerMotion -ConfirmNoRightLossOfGripStrength'
+$PilotMovementStatusCommandTemplate = '.\scripts\fr017-pilot-movement-gate.ps1 -Mode Status -MeasurementPath <measurement-record.json> -MockupPath <mockup-record.json> -MannequinPath <mannequin-interface-record.json> -StaticFitPath <pilot-static-fit-record.json> -MovementPath <pilot-movement-record.json>'
+$Status = if ($Mode -eq 'Status') { 'pilot_movement_record_initializer_status' } else { 'created_pilot_movement_record' }
 $ExitCode = 0
 $WroteFile = $false
 $InvalidFields = New-Object System.Collections.Generic.List[string]
@@ -426,20 +428,23 @@ $OutputPathRequiredForCreate = [string]::IsNullOrWhiteSpace($ResolvedOutputPath)
 $MeasurementPathRequiredForCreate = [string]::IsNullOrWhiteSpace($ResolvedMeasurementPath)
 $MockupPathRequiredForCreate = [string]::IsNullOrWhiteSpace($ResolvedMockupPath)
 $MannequinPathRequiredForCreate = [string]::IsNullOrWhiteSpace($ResolvedMannequinPath)
+$StaticFitPathRequiredForCreate = [string]::IsNullOrWhiteSpace($ResolvedStaticFitPath)
 $OutputPathTargetsTemplate = $false
 $OutputFileExists = $false
 $OutputParentExists = $false
 $CandidateOutputPathReady = $false
-$MeasurementPathTargetsStaticFitTemplate = $false
-$MockupPathTargetsStaticFitTemplate = $false
-$MannequinPathTargetsStaticFitTemplate = $false
+$MeasurementPathTargetsMovementTemplate = $false
+$MockupPathTargetsMovementTemplate = $false
+$MannequinPathTargetsMovementTemplate = $false
+$StaticFitPathTargetsMovementTemplate = $false
 $MeasurementFileExists = $false
 $MockupFileExists = $false
 $MannequinFileExists = $false
-$UpstreamMannequinStatus = ''
-$UpstreamMannequinReady = $false
-$UpstreamMannequinExitCode = 0
-$UpstreamMannequinParseOk = $false
+$StaticFitFileExists = $false
+$UpstreamStaticFitStatus = ''
+$UpstreamStaticFitReady = $false
+$UpstreamStaticFitExitCode = 0
+$UpstreamStaticFitParseOk = $false
 
 if (-not (Test-Path -LiteralPath $ResolvedTemplatePath -PathType Leaf)) {
   $Status = 'missing_template_file'
@@ -475,10 +480,10 @@ if ($ExitCode -eq 0) {
     $Status = 'missing_measurement_path'
     $ExitCode = 1
   } elseif (-not [string]::IsNullOrWhiteSpace($ResolvedMeasurementPath)) {
-    $MeasurementPathTargetsStaticFitTemplate = [string]::Equals($ResolvedMeasurementPath, $DefaultTemplatePath, [System.StringComparison]::OrdinalIgnoreCase)
+    $MeasurementPathTargetsMovementTemplate = [string]::Equals($ResolvedMeasurementPath, $DefaultTemplatePath, [System.StringComparison]::OrdinalIgnoreCase)
     $MeasurementFileExists = Test-Path -LiteralPath $ResolvedMeasurementPath -PathType Leaf
-    if ($MeasurementPathTargetsStaticFitTemplate) {
-      $Status = 'measurement_path_targets_static_fit_template'
+    if ($MeasurementPathTargetsMovementTemplate) {
+      $Status = 'measurement_path_targets_movement_template'
       $ExitCode = 1
     } elseif (-not $MeasurementFileExists) {
       $Status = 'missing_measurement_file'
@@ -492,10 +497,10 @@ if ($ExitCode -eq 0) {
     $Status = 'missing_mockup_path'
     $ExitCode = 1
   } elseif (-not [string]::IsNullOrWhiteSpace($ResolvedMockupPath)) {
-    $MockupPathTargetsStaticFitTemplate = [string]::Equals($ResolvedMockupPath, $DefaultTemplatePath, [System.StringComparison]::OrdinalIgnoreCase)
+    $MockupPathTargetsMovementTemplate = [string]::Equals($ResolvedMockupPath, $DefaultTemplatePath, [System.StringComparison]::OrdinalIgnoreCase)
     $MockupFileExists = Test-Path -LiteralPath $ResolvedMockupPath -PathType Leaf
-    if ($MockupPathTargetsStaticFitTemplate) {
-      $Status = 'mockup_path_targets_static_fit_template'
+    if ($MockupPathTargetsMovementTemplate) {
+      $Status = 'mockup_path_targets_movement_template'
       $ExitCode = 1
     } elseif (-not $MockupFileExists) {
       $Status = 'missing_mockup_file'
@@ -509,10 +514,10 @@ if ($ExitCode -eq 0) {
     $Status = 'missing_mannequin_path'
     $ExitCode = 1
   } elseif (-not [string]::IsNullOrWhiteSpace($ResolvedMannequinPath)) {
-    $MannequinPathTargetsStaticFitTemplate = [string]::Equals($ResolvedMannequinPath, $DefaultTemplatePath, [System.StringComparison]::OrdinalIgnoreCase)
+    $MannequinPathTargetsMovementTemplate = [string]::Equals($ResolvedMannequinPath, $DefaultTemplatePath, [System.StringComparison]::OrdinalIgnoreCase)
     $MannequinFileExists = Test-Path -LiteralPath $ResolvedMannequinPath -PathType Leaf
-    if ($MannequinPathTargetsStaticFitTemplate) {
-      $Status = 'mannequin_path_targets_static_fit_template'
+    if ($MannequinPathTargetsMovementTemplate) {
+      $Status = 'mannequin_path_targets_movement_template'
       $ExitCode = 1
     } elseif (-not $MannequinFileExists) {
       $Status = 'missing_mannequin_file'
@@ -521,15 +526,32 @@ if ($ExitCode -eq 0) {
   }
 }
 
-if ($ExitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($ResolvedMeasurementPath) -and -not [string]::IsNullOrWhiteSpace($ResolvedMockupPath) -and -not [string]::IsNullOrWhiteSpace($ResolvedMannequinPath)) {
-  $Upstream = Invoke-MannequinInterfaceGate -ResolvedMeasurementPath $ResolvedMeasurementPath -ResolvedMockupPath $ResolvedMockupPath -ResolvedMannequinPath $ResolvedMannequinPath
-  $UpstreamMannequinExitCode = [int]$Upstream.exit_code
-  $UpstreamMannequinParseOk = [bool]$Upstream.parse_ok
-  $UpstreamMannequinStatus = if ([bool]$Upstream.parse_ok) { [string]$Upstream.payload.status } else { 'failed_mannequin_interface_gate_parse' }
-  $UpstreamMannequinReady = [bool]$Upstream.parse_ok -and [int]$Upstream.exit_code -eq 0 -and $UpstreamMannequinStatus -eq 'ready_for_pilot_static_fit_planning'
+if ($ExitCode -eq 0) {
+  if ($StaticFitPathRequiredForCreate -and $Mode -eq 'Create') {
+    $Status = 'missing_static_fit_path'
+    $ExitCode = 1
+  } elseif (-not [string]::IsNullOrWhiteSpace($ResolvedStaticFitPath)) {
+    $StaticFitPathTargetsMovementTemplate = [string]::Equals($ResolvedStaticFitPath, $DefaultTemplatePath, [System.StringComparison]::OrdinalIgnoreCase)
+    $StaticFitFileExists = Test-Path -LiteralPath $ResolvedStaticFitPath -PathType Leaf
+    if ($StaticFitPathTargetsMovementTemplate) {
+      $Status = 'static_fit_path_targets_movement_template'
+      $ExitCode = 1
+    } elseif (-not $StaticFitFileExists) {
+      $Status = 'missing_static_fit_file'
+      $ExitCode = 1
+    }
+  }
+}
 
-  if (-not $UpstreamMannequinReady) {
-    $Status = 'upstream_mannequin_interface_not_ready'
+if ($ExitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($ResolvedMeasurementPath) -and -not [string]::IsNullOrWhiteSpace($ResolvedMockupPath) -and -not [string]::IsNullOrWhiteSpace($ResolvedMannequinPath) -and -not [string]::IsNullOrWhiteSpace($ResolvedStaticFitPath)) {
+  $Upstream = Invoke-StaticFitGate -ResolvedMeasurementPath $ResolvedMeasurementPath -ResolvedMockupPath $ResolvedMockupPath -ResolvedMannequinPath $ResolvedMannequinPath -ResolvedStaticFitPath $ResolvedStaticFitPath
+  $UpstreamStaticFitExitCode = [int]$Upstream.exit_code
+  $UpstreamStaticFitParseOk = [bool]$Upstream.parse_ok
+  $UpstreamStaticFitStatus = if ([bool]$Upstream.parse_ok) { [string]$Upstream.payload.status } else { 'failed_static_fit_gate_parse' }
+  $UpstreamStaticFitReady = [bool]$Upstream.parse_ok -and [int]$Upstream.exit_code -eq 0 -and $UpstreamStaticFitStatus -eq 'ready_for_pilot_movement_test_planning'
+
+  if (-not $UpstreamStaticFitReady) {
+    $Status = 'upstream_pilot_static_fit_not_ready'
     $ExitCode = 1
   }
 }
@@ -546,7 +568,7 @@ if ((Test-Path -LiteralPath $ResolvedTemplatePath -PathType Leaf) -and ($ExitCod
 }
 
 if ($Mode -eq 'Create' -and $ExitCode -eq 0) {
-  if ([string]$Payload.kind -ne 'francis.fr017.pilot_static_fit.v1') {
+  if ([string]$Payload.kind -ne 'francis.fr017.pilot_movement_fit.v1') {
     $InvalidFields.Add('kind') | Out-Null
   }
   if ([string]$Payload.component -ne 'FR-017 Forearm Cuffs') {
@@ -568,12 +590,8 @@ if ($Mode -eq 'Create' -and $ExitCode -eq 0) {
     Set-RequiredText -Target $Evidence -Field 'observer' -Value $Observer -QualifiedField 'evidence.observer' -InvalidFields $InvalidFields -UpdatedFields $UpdatedFields
     Set-RequiredText -Target $Evidence -Field 'pilot_id' -Value $PilotId -QualifiedField 'evidence.pilot_id' -InvalidFields $InvalidFields -UpdatedFields $UpdatedFields
     Set-RequiredText -Target $Evidence -Field 'prototype_revision' -Value $PrototypeRevision -QualifiedField 'evidence.prototype_revision' -InvalidFields $InvalidFields -UpdatedFields $UpdatedFields
-    $Evidence.measurement_record_path = $ResolvedMeasurementPath
-    $Evidence.mockup_build_record_path = $ResolvedMockupPath
-    $Evidence.mannequin_interface_record_path = $ResolvedMannequinPath
-    $UpdatedFields.Add('evidence.measurement_record_path') | Out-Null
-    $UpdatedFields.Add('evidence.mockup_build_record_path') | Out-Null
-    $UpdatedFields.Add('evidence.mannequin_interface_record_path') | Out-Null
+    $Evidence.pilot_static_fit_record_path = $ResolvedStaticFitPath
+    $UpdatedFields.Add('evidence.pilot_static_fit_record_path') | Out-Null
     if ($TestDurationMinutes -le 0) {
       $InvalidFields.Add('evidence.test_duration_minutes') | Out-Null
     } else {
@@ -581,21 +599,15 @@ if ($Mode -eq 'Create' -and $ExitCode -eq 0) {
       $UpdatedFields.Add('evidence.test_duration_minutes') | Out-Null
     }
 
-    $MeasurementPilotId = Get-EvidencePilotId -Path $ResolvedMeasurementPath
-    if (-not (Test-MissingOrPendingText -Value $PilotId) -and -not [string]::Equals($PilotId.Trim(), $MeasurementPilotId.Trim(), [System.StringComparison]::OrdinalIgnoreCase)) {
-      $InvalidFields.Add('evidence.pilot_id_must_match_measurement_pilot_id') | Out-Null
+    $StaticFitPilotId = Get-EvidencePilotId -Path $ResolvedStaticFitPath
+    if (-not (Test-MissingOrPendingText -Value $PilotId) -and -not [string]::Equals($PilotId.Trim(), $StaticFitPilotId.Trim(), [System.StringComparison]::OrdinalIgnoreCase)) {
+      $InvalidFields.Add('evidence.pilot_id_must_match_static_fit_pilot_id') | Out-Null
     }
 
-    $StaticEvidenceDate = Get-IsoDateOrNull -Value $EvidenceDate
-    foreach ($UpstreamEvidence in @(
-        @{ Path = $ResolvedMeasurementPath; Id = 'measurement' },
-        @{ Path = $ResolvedMockupPath; Id = 'mockup' },
-        @{ Path = $ResolvedMannequinPath; Id = 'mannequin' }
-      )) {
-      $UpstreamEvidenceDate = Get-EvidenceDateOrNull -Path ([string]$UpstreamEvidence.Path)
-      if ($null -ne $StaticEvidenceDate -and $null -ne $UpstreamEvidenceDate -and $StaticEvidenceDate -lt $UpstreamEvidenceDate) {
-        $ChronologyViolations.Add(('evidence.date_before_{0}.evidence.date' -f [string]$UpstreamEvidence.Id)) | Out-Null
-      }
+    $MovementEvidenceDate = Get-IsoDateOrNull -Value $EvidenceDate
+    $StaticFitEvidenceDate = Get-EvidenceDateOrNull -Path $ResolvedStaticFitPath
+    if ($null -ne $MovementEvidenceDate -and $null -ne $StaticFitEvidenceDate -and $MovementEvidenceDate -lt $StaticFitEvidenceDate) {
+      $ChronologyViolations.Add('evidence.date_before_static_fit.evidence.date') | Out-Null
     }
   }
 
@@ -606,6 +618,7 @@ if ($Mode -eq 'Create' -and $ExitCode -eq 0) {
     $PreconditionConfirmations = [ordered]@{
       non_powered_only = $ConfirmNonPoweredOnly.IsPresent
       no_frame_or_power_coupling = $ConfirmNoFrameOrPowerCoupling.IsPresent
+      pilot_static_fit_gate_passed = $ConfirmPilotStaticFitGatePassed.IsPresent
       observer_present = $ConfirmObserverPresent.IsPresent
       emergency_release_briefed = $ConfirmEmergencyReleaseBriefed.IsPresent
       stop_on_symptoms = $ConfirmStopOnSymptoms.IsPresent
@@ -618,28 +631,25 @@ if ($Mode -eq 'Create' -and $ExitCode -eq 0) {
 
   $SideConfirmations = [ordered]@{
     left = [ordered]@{
-      baseline = [ordered]@{
-        fingers_warm_before_donning = $ConfirmLeftFingersWarmBeforeDonning.IsPresent
-        normal_color_before_donning = $ConfirmLeftNormalColorBeforeDonning.IsPresent
-        baseline_grip_present = $ConfirmLeftBaselineGripPresent.IsPresent
+      movement_checks = [ordered]@{
+        elbow_flexion_no_crease_compression = $ConfirmLeftElbowFlexionNoCreaseCompression.IsPresent
+        elbow_extension_no_cuff_migration = $ConfirmLeftElbowExtensionNoCuffMigration.IsPresent
+        wrist_flexion_no_distal_edge_pressure = $ConfirmLeftWristFlexionNoDistalEdgePressure.IsPresent
+        wrist_extension_no_distal_edge_pressure = $ConfirmLeftWristExtensionNoDistalEdgePressure.IsPresent
+        wrist_lateral_no_strap_or_cable_interference = $ConfirmLeftWristLateralNoStrapOrCableInterference.IsPresent
+        hand_opening_full = $ConfirmLeftHandOpeningFull.IsPresent
+        grip_formation_clear = $ConfirmLeftGripFormationClear.IsPresent
+        glove_removal_not_trapped = $ConfirmLeftGloveRemovalNotTrapped.IsPresent
+        wrist_assembly_removal_not_blocked = $ConfirmLeftWristAssemblyRemovalNotBlocked.IsPresent
+        outer_cable_route_no_snag = $ConfirmLeftOuterCableRouteNoSnag.IsPresent
+        quick_release_reachable_during_motion = $ConfirmLeftQuickReleaseReachableDuringMotion.IsPresent
+        cuff_returns_to_safe_position_after_motion = $ConfirmLeftCuffReturnsToSafePositionAfterMotion.IsPresent
       }
-      static_checks = [ordered]@{
-        cuff_below_elbow_crease = $ConfirmLeftCuffBelowElbowCrease.IsPresent
-        lower_cuff_above_wrist_bones = $ConfirmLeftLowerCuffAboveWristBones.IsPresent
-        upper_strap_broad_non_compressive = $ConfirmLeftUpperStrapBroadNonCompressive.IsPresent
-        lower_strap_broad_non_compressive = $ConfirmLeftLowerStrapBroadNonCompressive.IsPresent
-        inner_forearm_clear = $ConfirmLeftInnerForearmClear.IsPresent
-        bone_relief_present = $ConfirmLeftBoneReliefPresent.IsPresent
-        quick_release_visible_tactile_reachable = $ConfirmLeftQuickReleaseVisibleTactileReachable.IsPresent
-        cuff_stable_without_migration = $ConfirmLeftCuffStableWithoutMigration.IsPresent
-        glove_removal_path_open = $ConfirmLeftGloveRemovalPathOpen.IsPresent
-        wrist_assembly_removal_path_open = $ConfirmLeftWristAssemblyRemovalPathOpen.IsPresent
-        cable_route_static_no_snag = $ConfirmLeftCableRouteStaticNoSnag.IsPresent
-      }
-      post_doff = [ordered]@{
-        fingers_warm_after_doffing = $ConfirmLeftFingersWarmAfterDoffing.IsPresent
-        normal_color_after_doffing = $ConfirmLeftNormalColorAfterDoffing.IsPresent
+      post_movement = [ordered]@{
+        fingers_warm_after_motion = $ConfirmLeftFingersWarmAfterMotion.IsPresent
+        normal_color_after_motion = $ConfirmLeftNormalColorAfterMotion.IsPresent
         grip_strength_unchanged = $ConfirmLeftGripStrengthUnchanged.IsPresent
+        no_new_pressure_marks = $ConfirmLeftNoNewPressureMarks.IsPresent
       }
       symptoms_absent = [ordered]@{
         pain = $ConfirmNoLeftPain.IsPresent
@@ -667,28 +677,25 @@ if ($Mode -eq 'Create' -and $ExitCode -eq 0) {
       }
     }
     right = [ordered]@{
-      baseline = [ordered]@{
-        fingers_warm_before_donning = $ConfirmRightFingersWarmBeforeDonning.IsPresent
-        normal_color_before_donning = $ConfirmRightNormalColorBeforeDonning.IsPresent
-        baseline_grip_present = $ConfirmRightBaselineGripPresent.IsPresent
+      movement_checks = [ordered]@{
+        elbow_flexion_no_crease_compression = $ConfirmRightElbowFlexionNoCreaseCompression.IsPresent
+        elbow_extension_no_cuff_migration = $ConfirmRightElbowExtensionNoCuffMigration.IsPresent
+        wrist_flexion_no_distal_edge_pressure = $ConfirmRightWristFlexionNoDistalEdgePressure.IsPresent
+        wrist_extension_no_distal_edge_pressure = $ConfirmRightWristExtensionNoDistalEdgePressure.IsPresent
+        wrist_lateral_no_strap_or_cable_interference = $ConfirmRightWristLateralNoStrapOrCableInterference.IsPresent
+        hand_opening_full = $ConfirmRightHandOpeningFull.IsPresent
+        grip_formation_clear = $ConfirmRightGripFormationClear.IsPresent
+        glove_removal_not_trapped = $ConfirmRightGloveRemovalNotTrapped.IsPresent
+        wrist_assembly_removal_not_blocked = $ConfirmRightWristAssemblyRemovalNotBlocked.IsPresent
+        outer_cable_route_no_snag = $ConfirmRightOuterCableRouteNoSnag.IsPresent
+        quick_release_reachable_during_motion = $ConfirmRightQuickReleaseReachableDuringMotion.IsPresent
+        cuff_returns_to_safe_position_after_motion = $ConfirmRightCuffReturnsToSafePositionAfterMotion.IsPresent
       }
-      static_checks = [ordered]@{
-        cuff_below_elbow_crease = $ConfirmRightCuffBelowElbowCrease.IsPresent
-        lower_cuff_above_wrist_bones = $ConfirmRightLowerCuffAboveWristBones.IsPresent
-        upper_strap_broad_non_compressive = $ConfirmRightUpperStrapBroadNonCompressive.IsPresent
-        lower_strap_broad_non_compressive = $ConfirmRightLowerStrapBroadNonCompressive.IsPresent
-        inner_forearm_clear = $ConfirmRightInnerForearmClear.IsPresent
-        bone_relief_present = $ConfirmRightBoneReliefPresent.IsPresent
-        quick_release_visible_tactile_reachable = $ConfirmRightQuickReleaseVisibleTactileReachable.IsPresent
-        cuff_stable_without_migration = $ConfirmRightCuffStableWithoutMigration.IsPresent
-        glove_removal_path_open = $ConfirmRightGloveRemovalPathOpen.IsPresent
-        wrist_assembly_removal_path_open = $ConfirmRightWristAssemblyRemovalPathOpen.IsPresent
-        cable_route_static_no_snag = $ConfirmRightCableRouteStaticNoSnag.IsPresent
-      }
-      post_doff = [ordered]@{
-        fingers_warm_after_doffing = $ConfirmRightFingersWarmAfterDoffing.IsPresent
-        normal_color_after_doffing = $ConfirmRightNormalColorAfterDoffing.IsPresent
+      post_movement = [ordered]@{
+        fingers_warm_after_motion = $ConfirmRightFingersWarmAfterMotion.IsPresent
+        normal_color_after_motion = $ConfirmRightNormalColorAfterMotion.IsPresent
         grip_strength_unchanged = $ConfirmRightGripStrengthUnchanged.IsPresent
+        no_new_pressure_marks = $ConfirmRightNoNewPressureMarks.IsPresent
       }
       symptoms_absent = [ordered]@{
         pain = $ConfirmNoRightPain.IsPresent
@@ -730,7 +737,7 @@ if ($Mode -eq 'Create' -and $ExitCode -eq 0) {
       }
 
       $SidePayload = $SidePayloadProperty.Value
-      foreach ($GroupName in @('baseline', 'static_checks', 'post_doff')) {
+      foreach ($GroupName in @('movement_checks', 'post_movement')) {
         $GroupPayload = Get-PropertyValue -Payload $SidePayload -Name $GroupName
         if ($null -eq $GroupPayload) {
           $InvalidFields.Add(('sides.{0}.{1}' -f $SideName, $GroupName)) | Out-Null
@@ -755,28 +762,29 @@ if ($Mode -eq 'Create' -and $ExitCode -eq 0) {
   }
 
   if ($SymptomObservations.Count -gt 0) {
-    $Status = 'static_fit_symptom_recorded_requires_review'
+    $Status = 'movement_symptom_recorded_requires_review'
     $ExitCode = 1
   } elseif ($InvalidFields.Count -gt 0 -or $ChronologyViolations.Count -gt 0) {
-    $Status = 'invalid_pilot_static_fit_record_input'
+    $Status = 'invalid_pilot_movement_record_input'
     $ExitCode = 1
   }
 }
 
 if ($Mode -eq 'Create' -and $ExitCode -eq 0) {
   $Generation = [ordered]@{
-    generated_by = 'scripts/fr017-new-pilot-static-fit-record.ps1'
+    generated_by = 'scripts/fr017-new-pilot-movement-record.ps1'
     generated_at_utc = (Get-Date).ToUniversalTime().ToString('o')
     template_path = $ResolvedTemplatePath
     measurement_path = $ResolvedMeasurementPath
     mockup_path = $ResolvedMockupPath
     mannequin_path = $ResolvedMannequinPath
+    static_fit_path = $ResolvedStaticFitPath
     output_path = $ResolvedOutputPath
-    operator_supplied_pilot_static_fit_input_recorded = $true
-    pilot_static_fit_record_is_stage17_completion_evidence = $false
+    operator_supplied_pilot_movement_input_recorded = $true
+    pilot_movement_record_is_stage17_completion_evidence = $false
     physical_validation_complete = $false
     stage17_completion_claim_allowed = $false
-    pilot_movement_testing_cleared = $false
+    quick_release_and_cable_snag_testing_cleared = $false
     powered_or_frame_coupled_testing_cleared = $false
     fr018_implementation_cleared = $false
     initializer_updated_fields = @($UpdatedFields.ToArray())
@@ -793,13 +801,14 @@ if ($Mode -eq 'Create' -and $ExitCode -eq 0) {
 }
 
 $Output = [ordered]@{
-  kind = 'francis.fr017.pilot_static_fit_record_initializer'
+  kind = 'francis.fr017.pilot_movement_record_initializer'
   mode = $Mode
   status = $Status
   template_path = $ResolvedTemplatePath
   measurement_path = $ResolvedMeasurementPath
   mockup_path = $ResolvedMockupPath
   mannequin_path = $ResolvedMannequinPath
+  static_fit_path = $ResolvedStaticFitPath
   output_path = $ResolvedOutputPath
   template_exists = (Test-Path -LiteralPath $ResolvedTemplatePath -PathType Leaf)
   template_parse_ok = $TemplateParseOk
@@ -807,15 +816,18 @@ $Output = [ordered]@{
   measurement_path_required_for_create = $MeasurementPathRequiredForCreate
   mockup_path_required_for_create = $MockupPathRequiredForCreate
   mannequin_path_required_for_create = $MannequinPathRequiredForCreate
+  static_fit_path_required_for_create = $StaticFitPathRequiredForCreate
   output_path_targets_template = $OutputPathTargetsTemplate
   output_parent_exists = $OutputParentExists
   candidate_output_path_ready = $CandidateOutputPathReady
-  measurement_path_targets_static_fit_template = $MeasurementPathTargetsStaticFitTemplate
-  mockup_path_targets_static_fit_template = $MockupPathTargetsStaticFitTemplate
-  mannequin_path_targets_static_fit_template = $MannequinPathTargetsStaticFitTemplate
+  measurement_path_targets_movement_template = $MeasurementPathTargetsMovementTemplate
+  mockup_path_targets_movement_template = $MockupPathTargetsMovementTemplate
+  mannequin_path_targets_movement_template = $MannequinPathTargetsMovementTemplate
+  static_fit_path_targets_movement_template = $StaticFitPathTargetsMovementTemplate
   measurement_file_exists = $MeasurementFileExists
   mockup_file_exists = $MockupFileExists
   mannequin_file_exists = $MannequinFileExists
+  static_fit_file_exists = $StaticFitFileExists
   output_exists = if ([string]::IsNullOrWhiteSpace($ResolvedOutputPath)) { $false } else { (Test-Path -LiteralPath $ResolvedOutputPath -PathType Leaf) }
   wrote_file = $WroteFile
   read_only_contract = ($Mode -eq 'Status')
@@ -823,25 +835,25 @@ $Output = [ordered]@{
   writes_data = $WroteFile
   grants_execution_authority = $false
   grants_mutation_authority = $false
-  upstream_mannequin_status = $UpstreamMannequinStatus
-  upstream_mannequin_ready = $UpstreamMannequinReady
-  upstream_mannequin_exit_code = $UpstreamMannequinExitCode
-  upstream_mannequin_parse_ok = $UpstreamMannequinParseOk
-  operator_supplied_pilot_static_fit_input_recorded = $WroteFile
-  pilot_static_fit_record_is_stage17_completion_evidence = $false
+  upstream_static_fit_status = $UpstreamStaticFitStatus
+  upstream_static_fit_ready = $UpstreamStaticFitReady
+  upstream_static_fit_exit_code = $UpstreamStaticFitExitCode
+  upstream_static_fit_parse_ok = $UpstreamStaticFitParseOk
+  operator_supplied_pilot_movement_input_recorded = $WroteFile
+  pilot_movement_record_is_stage17_completion_evidence = $false
   physical_validation_complete = $false
   stage17_completion_claim_allowed = $false
-  pilot_movement_testing_cleared = $false
+  quick_release_and_cable_snag_testing_cleared = $false
   powered_or_frame_coupled_testing_cleared = $false
   fr018_implementation_cleared = $false
   symptom_observations_recorded = @($SymptomObservations.ToArray())
   record_chronology_violations = @($ChronologyViolations.ToArray())
-  no_fake_validation_lock = 'This initializer records operator-supplied non-powered FR-017 pilot static-fit input only after mannequin interface readiness is ready. It does not certify fit or pilot safety, does not mark physical validation complete, does not permit a Stage 17 completion claim, does not clear pilot movement testing, does not clear powered or frame-coupled testing, and does not clear FR-018.'
+  no_fake_validation_lock = 'This initializer records operator-supplied non-powered FR-017 pilot movement input only after pilot static-fit readiness is ready. It does not certify fit or pilot safety, does not mark physical validation complete, does not permit a Stage 17 completion claim, does not clear quick-release/cable-snag testing, does not clear powered or frame-coupled testing, and does not clear FR-018.'
   updated_fields = @($UpdatedFields.ToArray())
   invalid_fields = @($InvalidFields.ToArray())
   create_command_template = $CreateCommandTemplate
-  pilot_static_fit_status_command_template = $PilotStaticFitStatusCommandTemplate
-  next_command = if ($WroteFile) { '.\scripts\fr017-pilot-static-fit-gate.ps1 -Mode Status -MeasurementPath "{0}" -MockupPath "{1}" -MannequinPath "{2}" -StaticFitPath "{3}"' -f $ResolvedMeasurementPath, $ResolvedMockupPath, $ResolvedMannequinPath, $ResolvedOutputPath } elseif ($Mode -eq 'Status' -and $ExitCode -eq 0) { $CreateCommandTemplate } else { '' }
+  pilot_movement_status_command_template = $PilotMovementStatusCommandTemplate
+  next_command = if ($WroteFile) { '.\scripts\fr017-pilot-movement-gate.ps1 -Mode Status -MeasurementPath "{0}" -MockupPath "{1}" -MannequinPath "{2}" -StaticFitPath "{3}" -MovementPath "{4}"' -f $ResolvedMeasurementPath, $ResolvedMockupPath, $ResolvedMannequinPath, $ResolvedStaticFitPath, $ResolvedOutputPath } elseif ($Mode -eq 'Status' -and $ExitCode -eq 0) { $CreateCommandTemplate } else { '' }
 }
 
 $Output | ConvertTo-Json -Depth 8

@@ -178,6 +178,11 @@ def test_fr017_measurement_intake_reports_template_as_pending() -> None:
         .endswith("scripts\\fr017-update-measurement-record.ps1")
     )
     assert (
+        str(payload["measurement_setup_update_path"])
+        .replace("/", "\\")
+        .endswith("scripts\\fr017-update-measurement-setup-record.ps1")
+    )
+    assert (
         str(payload["measurement_landmark_update_path"])
         .replace("/", "\\")
         .endswith("scripts\\fr017-update-landmark-record.ps1")
@@ -193,6 +198,7 @@ def test_fr017_measurement_intake_reports_template_as_pending() -> None:
     assert "operator input tooling only" in payload["measurement_capture_runbook_contract"]
     assert "FR-017-MEASUREMENT-CAPTURE-RUNBOOK.md" in payload["measurement_capture_runbook_contract"]
     assert "fr017-new-measurement-record.ps1" in payload["measurement_capture_runbook_contract"]
+    assert "fr017-update-measurement-setup-record.ps1" in payload["measurement_capture_runbook_contract"]
     assert "fr017-update-measurement-record.ps1" in payload["measurement_capture_runbook_contract"]
     assert "fr017-update-landmark-record.ps1" in payload["measurement_capture_runbook_contract"]
     assert "fr017-update-independence-safety-record.ps1" in payload["measurement_capture_runbook_contract"]
@@ -220,6 +226,24 @@ def test_fr017_measurement_intake_reports_template_as_pending() -> None:
     assert "any_safety_screen_symptom_is_true" in safety_step["stop_if"]
     assert "intake readiness only" in payload["measurement_capture_plan_status_contract"]
     assert "not physical validation evidence" in payload["measurement_capture_summary_contract"]
+    assert "not executed by this gate" in payload["measurement_capture_command_template_contract"]
+    assert payload["measurement_capture_command_templates_not_evidence"] is True
+    command_templates = payload["measurement_capture_command_templates"]
+    assert isinstance(command_templates, dict)
+    assert list(command_templates) == [
+        "setup_and_safety_brief",
+        "left_arm_numeric_measurement_passes",
+        "right_arm_numeric_measurement_passes",
+        "safety_critical_landmark_and_zone_references",
+        "left_right_independence_and_safety_screen",
+    ]
+    assert "<measurement-record.json>" in command_templates["setup_and_safety_brief"]
+    assert "FR-017-MEASUREMENTS-INPUT-TEMPLATE.json" not in command_templates["setup_and_safety_brief"]
+    assert "fr017-update-measurement-record.ps1" in command_templates["left_arm_numeric_measurement_passes"]
+    assert "fr017-update-landmark-record.ps1" in command_templates["safety_critical_landmark_and_zone_references"]
+    assert (
+        "fr017-update-independence-safety-record.ps1" in command_templates["left_right_independence_and_safety_screen"]
+    )
     assert payload["measurement_capture_total_groups"] == 5
     assert payload["measurement_capture_ready_groups"] == 0
     assert payload["measurement_capture_pending_groups"] == 5
@@ -228,6 +252,13 @@ def test_fr017_measurement_intake_reports_template_as_pending() -> None:
     assert payload["measurement_capture_first_blocking_group_id"] == "setup_and_safety_brief"
     assert payload["measurement_capture_first_blocking_group_status"] == "pending_required_fields"
     assert "brief stop conditions" in payload["measurement_capture_first_blocking_group_action"]
+    assert payload["measurement_capture_next_command_kind"] == "create_pending_measurement_record"
+    assert "fr017-new-measurement-record.ps1 -Mode Create" in payload["measurement_capture_next_command_template"]
+    assert "<measurement-record.json>" in payload["measurement_capture_next_command_template"]
+    assert "FR-017-MEASUREMENTS-INPUT-TEMPLATE.json" not in payload["measurement_capture_next_command_template"]
+    assert payload["measurement_capture_next_status_command_template"].endswith(
+        "-MeasurementPath <measurement-record.json>"
+    )
     capture_plan_status = payload["measurement_capture_plan_status"]
     assert isinstance(capture_plan_status, list)
     assert [step["id"] for step in capture_plan_status] == [step["id"] for step in capture_plan]
@@ -270,6 +301,9 @@ def test_fr017_measurement_intake_fails_closed_when_file_missing(tmp_path: Path)
     assert payload["parse_ok"] is False
     assert payload["physical_validation_complete"] is False
     assert payload["fr018_implementation_cleared"] is False
+    assert payload["measurement_capture_next_command_kind"] == "create_pending_measurement_record"
+    assert "fr017-new-measurement-record.ps1 -Mode Create" in payload["measurement_capture_next_command_template"]
+    assert "missing.json" in payload["measurement_capture_next_command_template"]
 
 
 def test_fr017_measurement_intake_classifies_incomplete_input(tmp_path: Path) -> None:
@@ -285,6 +319,16 @@ def test_fr017_measurement_intake_classifies_incomplete_input(tmp_path: Path) ->
     assert result["status"] == "pending_measurements"
     assert result["physical_validation_complete"] is False
     assert "sides.left.wrist_clearance_gap" in result["missing_fields"]
+    assert result["measurement_capture_first_blocking_group_id"] == "left_arm_numeric_measurement_passes"
+    assert result["measurement_capture_next_command_kind"] == "capture_left_arm_numeric_measurement_passes"
+    next_command = result["measurement_capture_next_command_template"]
+    assert "fr017-update-measurement-record.ps1 -Mode UpdateSide" in next_command
+    assert f'-MeasurementPath "{measurement_path}"' in next_command
+    assert "-Side left" in next_command
+    assert "<mm>" in next_command
+    assert result["measurement_capture_next_status_command_template"] == (
+        f'.\\scripts\\fr017-measurement-intake.ps1 -Mode Status -MeasurementPath "{measurement_path}"'
+    )
 
 
 def test_fr017_measurement_intake_requires_pilot_id_and_tool(tmp_path: Path) -> None:
@@ -361,6 +405,10 @@ def test_fr017_measurement_intake_accepts_complete_symptom_free_input(tmp_path: 
     assert payload["measurement_capture_first_blocking_group_id"] == ""
     assert payload["measurement_capture_first_blocking_group_status"] == ""
     assert payload["measurement_capture_first_blocking_group_action"] == ""
+    assert payload["measurement_capture_next_command_kind"] == "run_mockup_readiness_gate"
+    assert payload["measurement_capture_next_command_template"] == (
+        f'.\\scripts\\fr017-mockup-readiness-gate.ps1 -Mode Status -MeasurementPath "{measurement_path}"'
+    )
     assert [step["status"] for step in payload["measurement_capture_plan_status"]] == [
         "ready_for_measurement_intake_review",
         "ready_for_measurement_intake_review",
