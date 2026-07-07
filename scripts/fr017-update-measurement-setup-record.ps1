@@ -248,6 +248,30 @@ function Add-SetupFieldReadback {
   $ExistingFields.Add($QualifiedField) | Out-Null
 }
 
+function Update-SetupFieldReadback {
+  param(
+    [object]$Evidence,
+    [object]$MeasurementConditions,
+    [System.Collections.Generic.List[string]]$MissingFields,
+    [System.Collections.Generic.List[string]]$ExistingFields
+  )
+
+  $MissingFields.Clear()
+  $ExistingFields.Clear()
+  Add-SetupFieldReadback -Target $Evidence -Field 'date' -QualifiedField 'evidence.date' -MissingFields $MissingFields -ExistingFields $ExistingFields
+  Add-SetupFieldReadback -Target $Evidence -Field 'observer' -QualifiedField 'evidence.observer' -MissingFields $MissingFields -ExistingFields $ExistingFields
+  Add-SetupFieldReadback -Target $Evidence -Field 'pilot_id' -QualifiedField 'evidence.pilot_id' -MissingFields $MissingFields -ExistingFields $ExistingFields
+  Add-SetupFieldReadback -Target $Evidence -Field 'measurement_tool' -QualifiedField 'evidence.measurement_tool' -MissingFields $MissingFields -ExistingFields $ExistingFields
+  Add-SetupFieldReadback -Target $Evidence -Field 'method' -QualifiedField 'evidence.method' -MissingFields $MissingFields -ExistingFields $ExistingFields
+  Add-SetupFieldReadback -Target $Evidence -Field 'posture' -QualifiedField 'evidence.posture' -MissingFields $MissingFields -ExistingFields $ExistingFields
+  Add-SetupFieldReadback -Target $MeasurementConditions -Field 'no_tissue_compression_used' -QualifiedField 'measurement_conditions.no_tissue_compression_used' -MissingFields $MissingFields -ExistingFields $ExistingFields
+  Add-SetupFieldReadback -Target $MeasurementConditions -Field 'no_wrist_bone_compression_used' -QualifiedField 'measurement_conditions.no_wrist_bone_compression_used' -MissingFields $MissingFields -ExistingFields $ExistingFields
+  Add-SetupFieldReadback -Target $MeasurementConditions -Field 'metric_tool_used' -QualifiedField 'measurement_conditions.metric_tool_used' -MissingFields $MissingFields -ExistingFields $ExistingFields
+  Add-SetupFieldReadback -Target $MeasurementConditions -Field 'arm_relaxed_palm_neutral_or_exception_recorded' -QualifiedField 'measurement_conditions.arm_relaxed_palm_neutral_or_exception_recorded' -MissingFields $MissingFields -ExistingFields $ExistingFields
+  Add-SetupFieldReadback -Target $MeasurementConditions -Field 'stop_conditions_briefed' -QualifiedField 'measurement_conditions.stop_conditions_briefed' -MissingFields $MissingFields -ExistingFields $ExistingFields
+  Add-SetupFieldReadback -Target $MeasurementConditions -Field 'condition_notes' -QualifiedField 'measurement_conditions.condition_notes' -MissingFields $MissingFields -ExistingFields $ExistingFields
+}
+
 $Status = if ($Mode -eq 'Status') { 'measurement_setup_update_status' } else { 'updated_measurement_setup_brief' }
 $ExitCode = 0
 $WroteFile = $false
@@ -308,18 +332,7 @@ if ($ExitCode -eq 0) {
   }
 
   if ($InvalidFields.Count -eq 0) {
-    Add-SetupFieldReadback -Target $Evidence -Field 'date' -QualifiedField 'evidence.date' -MissingFields $SetupMissingFields -ExistingFields $SetupExistingFields
-    Add-SetupFieldReadback -Target $Evidence -Field 'observer' -QualifiedField 'evidence.observer' -MissingFields $SetupMissingFields -ExistingFields $SetupExistingFields
-    Add-SetupFieldReadback -Target $Evidence -Field 'pilot_id' -QualifiedField 'evidence.pilot_id' -MissingFields $SetupMissingFields -ExistingFields $SetupExistingFields
-    Add-SetupFieldReadback -Target $Evidence -Field 'measurement_tool' -QualifiedField 'evidence.measurement_tool' -MissingFields $SetupMissingFields -ExistingFields $SetupExistingFields
-    Add-SetupFieldReadback -Target $Evidence -Field 'method' -QualifiedField 'evidence.method' -MissingFields $SetupMissingFields -ExistingFields $SetupExistingFields
-    Add-SetupFieldReadback -Target $Evidence -Field 'posture' -QualifiedField 'evidence.posture' -MissingFields $SetupMissingFields -ExistingFields $SetupExistingFields
-    Add-SetupFieldReadback -Target $MeasurementConditions -Field 'no_tissue_compression_used' -QualifiedField 'measurement_conditions.no_tissue_compression_used' -MissingFields $SetupMissingFields -ExistingFields $SetupExistingFields
-    Add-SetupFieldReadback -Target $MeasurementConditions -Field 'no_wrist_bone_compression_used' -QualifiedField 'measurement_conditions.no_wrist_bone_compression_used' -MissingFields $SetupMissingFields -ExistingFields $SetupExistingFields
-    Add-SetupFieldReadback -Target $MeasurementConditions -Field 'metric_tool_used' -QualifiedField 'measurement_conditions.metric_tool_used' -MissingFields $SetupMissingFields -ExistingFields $SetupExistingFields
-    Add-SetupFieldReadback -Target $MeasurementConditions -Field 'arm_relaxed_palm_neutral_or_exception_recorded' -QualifiedField 'measurement_conditions.arm_relaxed_palm_neutral_or_exception_recorded' -MissingFields $SetupMissingFields -ExistingFields $SetupExistingFields
-    Add-SetupFieldReadback -Target $MeasurementConditions -Field 'stop_conditions_briefed' -QualifiedField 'measurement_conditions.stop_conditions_briefed' -MissingFields $SetupMissingFields -ExistingFields $SetupExistingFields
-    Add-SetupFieldReadback -Target $MeasurementConditions -Field 'condition_notes' -QualifiedField 'measurement_conditions.condition_notes' -MissingFields $SetupMissingFields -ExistingFields $SetupExistingFields
+    Update-SetupFieldReadback -Evidence $Evidence -MeasurementConditions $MeasurementConditions -MissingFields $SetupMissingFields -ExistingFields $SetupExistingFields
   }
 
   if ($InvalidFields.Count -gt 0) {
@@ -354,6 +367,8 @@ if ($Mode -eq 'UpdateSetup' -and $ExitCode -eq 0) {
 }
 
 if ($Mode -eq 'UpdateSetup' -and $ExitCode -eq 0) {
+  Update-SetupFieldReadback -Evidence $Payload.evidence -MeasurementConditions $Payload.measurement_conditions -MissingFields $SetupMissingFields -ExistingFields $SetupExistingFields
+
   $UpdateEvent = [ordered]@{
     generated_by = 'scripts/fr017-update-measurement-setup-record.ps1'
     generated_at_utc = (Get-Date).ToUniversalTime().ToString('o')
@@ -408,7 +423,10 @@ $Output = [ordered]@{
   fr018_implementation_cleared = $false
   no_fake_validation_lock = 'This updater records operator-supplied setup and measurement-condition inputs in an existing FR-017 working record only. It does not record left/right measurements, mark physical validation complete, permit a Stage 17 completion claim, or clear FR-018.'
   setup_status_contract = 'Status mode is a read-only preflight for the setup/safety updater. It checks the target working record and reports which setup fields are still missing without writing evidence, recording measurements, marking physical validation complete, or clearing FR-018.'
+  setup_update_input_contract = 'UpdateSetup requires every field listed in setup_update_required_input_fields. Prefilled method/posture values are still operator-confirmed setup inputs; this command records setup context only and does not record left/right dimensions or complete physical validation.'
   setup_required_fields = @($SetupRequiredFields)
+  setup_update_required_input_fields = @($SetupRequiredFields)
+  setup_update_required_input_count = [int]$SetupRequiredFields.Count
   setup_missing_fields = @($SetupMissingFields.ToArray())
   setup_existing_fields = @($SetupExistingFields.ToArray())
   setup_missing_field_count = [int]$SetupMissingFields.Count

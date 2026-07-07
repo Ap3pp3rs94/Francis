@@ -15,7 +15,22 @@ ROOT = Path(__file__).resolve().parents[1]
 INITIALIZER_SCRIPT = ROOT / "scripts" / "fr017-new-measurement-record.ps1"
 UPDATE_SCRIPT = ROOT / "scripts" / "fr017-update-measurement-setup-record.ps1"
 INTAKE_SCRIPT = ROOT / "scripts" / "fr017-measurement-intake.ps1"
+SESSION_BRIEF_SCRIPT = ROOT / "scripts" / "fr017-measurement-session-brief.ps1"
 TEMPLATE_PATH = ROOT / "FR-017_Stage17_Package" / "FR-017-MEASUREMENTS-INPUT-TEMPLATE.json"
+SETUP_REQUIRED_FIELDS = [
+    "evidence.date",
+    "evidence.observer",
+    "evidence.pilot_id",
+    "evidence.measurement_tool",
+    "evidence.method",
+    "evidence.posture",
+    "measurement_conditions.no_tissue_compression_used",
+    "measurement_conditions.no_wrist_bone_compression_used",
+    "measurement_conditions.metric_tool_used",
+    "measurement_conditions.arm_relaxed_palm_neutral_or_exception_recorded",
+    "measurement_conditions.stop_conditions_briefed",
+    "measurement_conditions.condition_notes",
+]
 
 
 def _powershell() -> str:
@@ -99,6 +114,9 @@ def test_fr017_measurement_setup_update_status_preflights_pending_record_without
     assert "evidence.method" in result["setup_existing_fields"]
     assert result["setup_missing_field_count"] == len(result["setup_missing_fields"])
     assert result["setup_capture_group_complete"] is False
+    assert result["setup_update_required_input_fields"] == SETUP_REQUIRED_FIELDS
+    assert result["setup_update_required_input_count"] == len(SETUP_REQUIRED_FIELDS)
+    assert "Prefilled method/posture values" in result["setup_update_input_contract"]
     assert "fr017-update-measurement-setup-record.ps1 -Mode UpdateSetup" in result["update_command_template"]
     assert str(measurement_path) in result["update_command_template"]
     assert result["next_command_kind"] == "update_setup_safety_brief"
@@ -126,6 +144,11 @@ def test_fr017_measurement_setup_update_records_first_capture_group_without_comp
     assert result["status"] == "updated_measurement_setup_brief"
     assert result["wrote_file"] is True
     assert result["operator_supplied_setup_input_recorded"] is True
+    assert result["setup_missing_fields"] == []
+    assert result["setup_missing_field_count"] == 0
+    assert result["setup_existing_fields"] == SETUP_REQUIRED_FIELDS
+    assert result["setup_existing_field_count"] == len(SETUP_REQUIRED_FIELDS)
+    assert result["setup_capture_group_complete"] is True
     assert result["setup_update_is_physical_validation_evidence"] is False
     assert result["physical_validation_complete"] is False
     assert result["stage17_completion_claim_allowed"] is False
@@ -134,20 +157,7 @@ def test_fr017_measurement_setup_update_records_first_capture_group_without_comp
     assert "fr017-measurement-intake.ps1 -Mode Status" in result["next_status_command_template"]
     assert str(measurement_path) in result["next_status_command_template"]
     assert result["next_command"] == result["next_status_command_template"]
-    assert result["updated_fields"] == [
-        "evidence.date",
-        "evidence.observer",
-        "evidence.pilot_id",
-        "evidence.measurement_tool",
-        "evidence.method",
-        "evidence.posture",
-        "measurement_conditions.no_tissue_compression_used",
-        "measurement_conditions.no_wrist_bone_compression_used",
-        "measurement_conditions.metric_tool_used",
-        "measurement_conditions.arm_relaxed_palm_neutral_or_exception_recorded",
-        "measurement_conditions.stop_conditions_briefed",
-        "measurement_conditions.condition_notes",
-    ]
+    assert result["updated_fields"] == SETUP_REQUIRED_FIELDS
 
     record = json.loads(measurement_path.read_text(encoding="utf-8-sig"))
     assert record["evidence"]["method"] == "flexible tape, no tissue compression"
@@ -164,6 +174,15 @@ def test_fr017_measurement_setup_update_records_first_capture_group_without_comp
     assert intake_result["measurement_capture_first_blocking_group_id"] == "left_arm_numeric_measurement_passes"
     assert intake_result["physical_validation_complete"] is False
     assert intake_result["fr018_implementation_cleared"] is False
+
+    brief = _run_script(SESSION_BRIEF_SCRIPT, "-Mode", "Summary", "-MeasurementPath", str(measurement_path))
+    assert brief.returncode == 0, brief.stderr
+    brief_result = _payload(brief.stdout)
+    assert brief_result["first_blocking_group_id"] == "left_arm_numeric_measurement_passes"
+    assert brief_result["current_group_missing_field_count"] > 0
+    assert brief_result["physical_validation_complete"] is False
+    assert brief_result["stage17_completion_claim_allowed"] is False
+    assert brief_result["fr018_implementation_cleared"] is False
 
 
 def test_fr017_measurement_setup_update_refuses_template_target() -> None:
