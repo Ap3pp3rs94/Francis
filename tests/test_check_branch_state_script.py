@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -42,6 +43,11 @@ def _commit(repo: Path, relative_path: str, body: str, message: str) -> str:
     return _git(repo, "rev-parse", "HEAD")
 
 
+def _normalized_console_text(value: str) -> str:
+    without_ansi = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", value)
+    return re.sub(r"\s+", " ", without_ansi)
+
+
 def _diverged_repo(tmp_path: Path) -> Path:
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -66,6 +72,15 @@ def _diverged_repo(tmp_path: Path) -> Path:
     return repo
 
 
+def test_check_branch_state_console_normalizer_tolerates_power_shell_wrapping() -> None:
+    wrapped = "\x1b[31;1mmerge origin/main before continuing.   branch: codex/test   upstream:\x1b[0m\norigin/codex/test"
+
+    normalized = _normalized_console_text(wrapped)
+
+    assert "branch: codex/test" in normalized
+    assert "upstream: origin/codex/test" in normalized
+
+
 def test_check_branch_state_reports_divergence_counts(tmp_path: Path) -> None:
     if not shutil.which("git"):
         pytest.skip("git is not available")
@@ -80,15 +95,16 @@ def test_check_branch_state_reports_divergence_counts(tmp_path: Path) -> None:
     )
 
     combined = f"{result.stdout}\n{result.stderr}"
+    normalized = _normalized_console_text(combined)
     assert result.returncode != 0
-    assert "Branch 'codex/test' is behind or diverged from 'origin/main'." in combined
-    assert "branch: codex/test" in combined
-    assert "upstream: origin/codex/test" in combined
-    assert "HEAD:" in combined
-    assert "origin/main:" in combined
-    assert "merge-base:" in combined
-    assert "HEAD...origin/main: ahead 1, behind 1" in combined
-    assert "HEAD...upstream: ahead 1, behind 0" in combined
+    assert "Branch 'codex/test' is behind or diverged from 'origin/main'." in normalized
+    assert "branch: codex/test" in normalized
+    assert "upstream: origin/codex/test" in normalized
+    assert "HEAD:" in normalized
+    assert "origin/main:" in normalized
+    assert "merge-base:" in normalized
+    assert "HEAD...origin/main: ahead 1, behind 1" in normalized
+    assert "HEAD...upstream: ahead 1, behind 0" in normalized
 
 
 def test_check_branch_state_json_reports_divergence_counts(tmp_path: Path) -> None:
