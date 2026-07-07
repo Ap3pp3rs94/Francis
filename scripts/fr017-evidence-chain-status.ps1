@@ -178,6 +178,16 @@ function Get-DetailsValue {
   return Get-PayloadValue -Payload $Details -Name $Name -Default $Default
 }
 
+function Get-DetailsArrayValue {
+  param(
+    [object]$Details,
+    [string]$Name
+  )
+
+  $Value = Get-DetailsValue -Details $Details -Name $Name -Default @()
+  return @(ConvertTo-StringArray -Value $Value)
+}
+
 function New-GateEvidenceDetails {
   param(
     [object]$Payload,
@@ -272,6 +282,10 @@ function New-GateEvidenceDetails {
     measurement_session_current_group_preflight_wrote_file = [bool](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'current_group_preflight_wrote_file' -Default $false)
     measurement_session_current_group_preflight_physical_validation_complete = [bool](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'current_group_preflight_physical_validation_complete' -Default $false)
     measurement_session_current_group_preflight_fr018_implementation_cleared = [bool](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'current_group_preflight_fr018_implementation_cleared' -Default $false)
+    measurement_session_current_group_missing_fields = @(Get-PayloadArrayProperty -Payload $MeasurementSessionPayload -Name 'current_group_missing_fields')
+    measurement_session_current_group_invalid_fields = @(Get-PayloadArrayProperty -Payload $MeasurementSessionPayload -Name 'current_group_invalid_fields')
+    measurement_session_current_group_blocking_signals = @(Get-PayloadArrayProperty -Payload $MeasurementSessionPayload -Name 'current_group_blocking_signals')
+    measurement_session_current_group_update_required_input_fields = @(Get-PayloadArrayProperty -Payload $MeasurementSessionPayload -Name 'current_group_update_required_input_fields')
     measurement_session_current_group_update_tool_path = [string](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'current_group_update_tool_path' -Default '')
     measurement_session_current_group_update_command_template = [string](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'current_group_update_command_template' -Default '')
     measurement_session_current_group_update_contract = [string](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'current_group_update_contract' -Default '')
@@ -316,6 +330,9 @@ function New-GateEvidenceDetails {
     mockup_capture_first_blocking_group_id = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['mockup_capture_first_blocking_group_id']) { '' } else { [string]$Payload.mockup_capture_first_blocking_group_id }
     mockup_capture_first_blocking_group_status = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['mockup_capture_first_blocking_group_status']) { '' } else { [string]$Payload.mockup_capture_first_blocking_group_status }
     mockup_capture_first_blocking_group_action = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['mockup_capture_first_blocking_group_action']) { '' } else { [string]$Payload.mockup_capture_first_blocking_group_action }
+    mockup_capture_first_blocking_group_missing_fields = @(Get-PayloadArrayProperty -Payload $Payload -Name 'mockup_capture_first_blocking_group_missing_fields')
+    mockup_capture_first_blocking_group_invalid_fields = @(Get-PayloadArrayProperty -Payload $Payload -Name 'mockup_capture_first_blocking_group_invalid_fields')
+    mockup_capture_first_blocking_group_blocking_signals = @(Get-PayloadArrayProperty -Payload $Payload -Name 'mockup_capture_first_blocking_group_blocking_signals')
     mannequin_capture_plan_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['mannequin_capture_plan_contract']) { '' } else { [string]$Payload.mannequin_capture_plan_contract }
     mannequin_capture_plan_status_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['mannequin_capture_plan_status_contract']) { '' } else { [string]$Payload.mannequin_capture_plan_status_contract }
     mannequin_capture_summary_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['mannequin_capture_summary_contract']) { '' } else { [string]$Payload.mannequin_capture_summary_contract }
@@ -336,6 +353,9 @@ function New-GateEvidenceDetails {
     mannequin_capture_first_blocking_group_id = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['mannequin_capture_first_blocking_group_id']) { '' } else { [string]$Payload.mannequin_capture_first_blocking_group_id }
     mannequin_capture_first_blocking_group_status = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['mannequin_capture_first_blocking_group_status']) { '' } else { [string]$Payload.mannequin_capture_first_blocking_group_status }
     mannequin_capture_first_blocking_group_action = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['mannequin_capture_first_blocking_group_action']) { '' } else { [string]$Payload.mannequin_capture_first_blocking_group_action }
+    mannequin_capture_first_blocking_group_missing_fields = @(Get-PayloadArrayProperty -Payload $Payload -Name 'mannequin_capture_first_blocking_group_missing_fields')
+    mannequin_capture_first_blocking_group_invalid_fields = @(Get-PayloadArrayProperty -Payload $Payload -Name 'mannequin_capture_first_blocking_group_invalid_fields')
+    mannequin_capture_first_blocking_group_blocking_signals = @(Get-PayloadArrayProperty -Payload $Payload -Name 'mannequin_capture_first_blocking_group_blocking_signals')
     static_fit_capture_plan_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['static_fit_capture_plan_contract']) { '' } else { [string]$Payload.static_fit_capture_plan_contract }
     static_fit_capture_plan_status_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['static_fit_capture_plan_status_contract']) { '' } else { [string]$Payload.static_fit_capture_plan_status_contract }
     static_fit_capture_summary_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['static_fit_capture_summary_contract']) { '' } else { [string]$Payload.static_fit_capture_summary_contract }
@@ -356,6 +376,9 @@ function New-GateEvidenceDetails {
     static_fit_capture_first_blocking_group_id = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['static_fit_capture_first_blocking_group_id']) { '' } else { [string]$Payload.static_fit_capture_first_blocking_group_id }
     static_fit_capture_first_blocking_group_status = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['static_fit_capture_first_blocking_group_status']) { '' } else { [string]$Payload.static_fit_capture_first_blocking_group_status }
     static_fit_capture_first_blocking_group_action = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['static_fit_capture_first_blocking_group_action']) { '' } else { [string]$Payload.static_fit_capture_first_blocking_group_action }
+    static_fit_capture_first_blocking_group_missing_fields = @(Get-PayloadArrayProperty -Payload $Payload -Name 'static_fit_capture_first_blocking_group_missing_fields')
+    static_fit_capture_first_blocking_group_invalid_fields = @(Get-PayloadArrayProperty -Payload $Payload -Name 'static_fit_capture_first_blocking_group_invalid_fields')
+    static_fit_capture_first_blocking_group_blocking_signals = @(Get-PayloadArrayProperty -Payload $Payload -Name 'static_fit_capture_first_blocking_group_blocking_signals')
     movement_capture_plan_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['movement_capture_plan_contract']) { '' } else { [string]$Payload.movement_capture_plan_contract }
     movement_capture_plan_status_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['movement_capture_plan_status_contract']) { '' } else { [string]$Payload.movement_capture_plan_status_contract }
     movement_capture_summary_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['movement_capture_summary_contract']) { '' } else { [string]$Payload.movement_capture_summary_contract }
@@ -376,6 +399,9 @@ function New-GateEvidenceDetails {
     movement_capture_first_blocking_group_id = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['movement_capture_first_blocking_group_id']) { '' } else { [string]$Payload.movement_capture_first_blocking_group_id }
     movement_capture_first_blocking_group_status = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['movement_capture_first_blocking_group_status']) { '' } else { [string]$Payload.movement_capture_first_blocking_group_status }
     movement_capture_first_blocking_group_action = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['movement_capture_first_blocking_group_action']) { '' } else { [string]$Payload.movement_capture_first_blocking_group_action }
+    movement_capture_first_blocking_group_missing_fields = @(Get-PayloadArrayProperty -Payload $Payload -Name 'movement_capture_first_blocking_group_missing_fields')
+    movement_capture_first_blocking_group_invalid_fields = @(Get-PayloadArrayProperty -Payload $Payload -Name 'movement_capture_first_blocking_group_invalid_fields')
+    movement_capture_first_blocking_group_blocking_signals = @(Get-PayloadArrayProperty -Payload $Payload -Name 'movement_capture_first_blocking_group_blocking_signals')
     release_cable_capture_plan_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['release_cable_capture_plan_contract']) { '' } else { [string]$Payload.release_cable_capture_plan_contract }
     release_cable_capture_plan_status_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['release_cable_capture_plan_status_contract']) { '' } else { [string]$Payload.release_cable_capture_plan_status_contract }
     release_cable_capture_summary_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['release_cable_capture_summary_contract']) { '' } else { [string]$Payload.release_cable_capture_summary_contract }
@@ -396,6 +422,9 @@ function New-GateEvidenceDetails {
     release_cable_capture_first_blocking_group_id = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['release_cable_capture_first_blocking_group_id']) { '' } else { [string]$Payload.release_cable_capture_first_blocking_group_id }
     release_cable_capture_first_blocking_group_status = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['release_cable_capture_first_blocking_group_status']) { '' } else { [string]$Payload.release_cable_capture_first_blocking_group_status }
     release_cable_capture_first_blocking_group_action = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['release_cable_capture_first_blocking_group_action']) { '' } else { [string]$Payload.release_cable_capture_first_blocking_group_action }
+    release_cable_capture_first_blocking_group_missing_fields = @(Get-PayloadArrayProperty -Payload $Payload -Name 'release_cable_capture_first_blocking_group_missing_fields')
+    release_cable_capture_first_blocking_group_invalid_fields = @(Get-PayloadArrayProperty -Payload $Payload -Name 'release_cable_capture_first_blocking_group_invalid_fields')
+    release_cable_capture_first_blocking_group_blocking_signals = @(Get-PayloadArrayProperty -Payload $Payload -Name 'release_cable_capture_first_blocking_group_blocking_signals')
     engineering_review_capture_plan_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['engineering_review_capture_plan_contract']) { '' } else { [string]$Payload.engineering_review_capture_plan_contract }
     engineering_review_capture_runbook_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['engineering_review_capture_runbook_contract']) { '' } else { [string]$Payload.engineering_review_capture_runbook_contract }
     engineering_review_capture_plan_status_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['engineering_review_capture_plan_status_contract']) { '' } else { [string]$Payload.engineering_review_capture_plan_status_contract }
@@ -416,6 +445,9 @@ function New-GateEvidenceDetails {
     engineering_review_capture_first_blocking_group_id = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['engineering_review_capture_first_blocking_group_id']) { '' } else { [string]$Payload.engineering_review_capture_first_blocking_group_id }
     engineering_review_capture_first_blocking_group_status = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['engineering_review_capture_first_blocking_group_status']) { '' } else { [string]$Payload.engineering_review_capture_first_blocking_group_status }
     engineering_review_capture_first_blocking_group_action = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['engineering_review_capture_first_blocking_group_action']) { '' } else { [string]$Payload.engineering_review_capture_first_blocking_group_action }
+    engineering_review_capture_first_blocking_group_missing_fields = @(Get-PayloadArrayProperty -Payload $Payload -Name 'engineering_review_capture_first_blocking_group_missing_fields')
+    engineering_review_capture_first_blocking_group_invalid_fields = @(Get-PayloadArrayProperty -Payload $Payload -Name 'engineering_review_capture_first_blocking_group_invalid_fields')
+    engineering_review_capture_first_blocking_group_blocking_signals = @(Get-PayloadArrayProperty -Payload $Payload -Name 'engineering_review_capture_first_blocking_group_blocking_signals')
     final_physical_decision_plan_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['final_physical_decision_plan_contract']) { '' } else { [string]$Payload.final_physical_decision_plan_contract }
     final_physical_decision_runbook_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['final_physical_decision_runbook_contract']) { '' } else { [string]$Payload.final_physical_decision_runbook_contract }
     final_physical_decision_plan_status_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['final_physical_decision_plan_status_contract']) { '' } else { [string]$Payload.final_physical_decision_plan_status_contract }
@@ -437,6 +469,9 @@ function New-GateEvidenceDetails {
     final_physical_decision_first_blocking_group_id = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['final_physical_decision_first_blocking_group_id']) { '' } else { [string]$Payload.final_physical_decision_first_blocking_group_id }
     final_physical_decision_first_blocking_group_status = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['final_physical_decision_first_blocking_group_status']) { '' } else { [string]$Payload.final_physical_decision_first_blocking_group_status }
     final_physical_decision_first_blocking_group_action = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['final_physical_decision_first_blocking_group_action']) { '' } else { [string]$Payload.final_physical_decision_first_blocking_group_action }
+    final_physical_decision_first_blocking_group_missing_fields = @(Get-PayloadArrayProperty -Payload $Payload -Name 'final_physical_decision_first_blocking_group_missing_fields')
+    final_physical_decision_first_blocking_group_invalid_fields = @(Get-PayloadArrayProperty -Payload $Payload -Name 'final_physical_decision_first_blocking_group_invalid_fields')
+    final_physical_decision_first_blocking_group_blocking_signals = @(Get-PayloadArrayProperty -Payload $Payload -Name 'final_physical_decision_first_blocking_group_blocking_signals')
     final_decision_record_ready = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['final_decision_record_ready']) { $false } else { [bool]$Payload.final_decision_record_ready }
     final_decision_record_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['final_decision_record_contract']) { '' } else { [string]$Payload.final_decision_record_contract }
     final_decision_record_runbook_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['final_decision_record_runbook_contract']) { '' } else { [string]$Payload.final_decision_record_runbook_contract }
@@ -603,6 +638,21 @@ function Get-FirstNonEmptyDetailsValue {
   return ''
 }
 
+function Get-FirstNonEmptyDetailsArray {
+  param(
+    [object]$Details,
+    [string[]]$Names
+  )
+
+  foreach ($Name in $Names) {
+    $Values = @(Get-DetailsArrayValue -Details $Details -Name $Name)
+    if ($Values.Count -gt 0) {
+      return @($Values)
+    }
+  }
+  return @()
+}
+
 function New-EvidenceChainSummary {
   param([System.Collections.IDictionary]$StatusPayload)
 
@@ -639,6 +689,49 @@ function New-EvidenceChainSummary {
     'engineering_review_capture_first_blocking_group_action',
     'final_physical_decision_first_blocking_group_action'
   )
+  $CaptureGroupMissingFields = @(Get-FirstNonEmptyDetailsArray -Details $Details -Names @(
+    'measurement_session_current_group_missing_fields',
+    'mockup_capture_first_blocking_group_missing_fields',
+    'mannequin_capture_first_blocking_group_missing_fields',
+    'static_fit_capture_first_blocking_group_missing_fields',
+    'movement_capture_first_blocking_group_missing_fields',
+    'release_cable_capture_first_blocking_group_missing_fields',
+    'engineering_review_capture_first_blocking_group_missing_fields',
+    'final_physical_decision_first_blocking_group_missing_fields',
+    'missing_fields',
+    'measurement_missing_fields',
+    'mockup_missing_fields'
+  ))
+  $CaptureGroupInvalidFields = @(Get-FirstNonEmptyDetailsArray -Details $Details -Names @(
+    'measurement_session_current_group_invalid_fields',
+    'mockup_capture_first_blocking_group_invalid_fields',
+    'mannequin_capture_first_blocking_group_invalid_fields',
+    'static_fit_capture_first_blocking_group_invalid_fields',
+    'movement_capture_first_blocking_group_invalid_fields',
+    'release_cable_capture_first_blocking_group_invalid_fields',
+    'engineering_review_capture_first_blocking_group_invalid_fields',
+    'final_physical_decision_first_blocking_group_invalid_fields',
+    'invalid_fields',
+    'measurement_invalid_fields',
+    'mockup_invalid_fields'
+  ))
+  $CaptureGroupBlockingSignals = @(Get-FirstNonEmptyDetailsArray -Details $Details -Names @(
+    'measurement_session_current_group_blocking_signals',
+    'mockup_capture_first_blocking_group_blocking_signals',
+    'mannequin_capture_first_blocking_group_blocking_signals',
+    'static_fit_capture_first_blocking_group_blocking_signals',
+    'movement_capture_first_blocking_group_blocking_signals',
+    'release_cable_capture_first_blocking_group_blocking_signals',
+    'engineering_review_capture_first_blocking_group_blocking_signals',
+    'final_physical_decision_first_blocking_group_blocking_signals',
+    'safety_blockers',
+    'symptom_blockers',
+    'prohibited_clearance_flags',
+    'failed_reasons'
+  ))
+  $CaptureGroupUpdateRequiredInputFields = @(Get-FirstNonEmptyDetailsArray -Details $Details -Names @(
+    'measurement_session_current_group_update_required_input_fields'
+  ))
   $OperatorInputHint = Get-FirstNonEmptyDetailsValue -Details $Details -Names @(
     'next_required_physical_input',
     'next_required_mockup_input',
@@ -689,6 +782,14 @@ function New-EvidenceChainSummary {
     first_blocking_capture_group_id = $CaptureGroupId
     first_blocking_capture_group_status = $CaptureGroupStatus
     first_blocking_capture_group_required_action = $CaptureGroupAction
+    first_blocking_capture_group_missing_field_count = $CaptureGroupMissingFields.Count
+    first_blocking_capture_group_missing_fields = @($CaptureGroupMissingFields)
+    first_blocking_capture_group_invalid_field_count = $CaptureGroupInvalidFields.Count
+    first_blocking_capture_group_invalid_fields = @($CaptureGroupInvalidFields)
+    first_blocking_capture_group_blocking_signal_count = $CaptureGroupBlockingSignals.Count
+    first_blocking_capture_group_blocking_signals = @($CaptureGroupBlockingSignals)
+    first_blocking_capture_group_update_required_input_count = $CaptureGroupUpdateRequiredInputFields.Count
+    first_blocking_capture_group_update_required_input_fields = @($CaptureGroupUpdateRequiredInputFields)
     first_blocking_capture_next_command_kind = $CaptureNextCommandKind
     first_blocking_capture_next_command_template = $CaptureNextCommandTemplate
     first_blocking_capture_next_status_command_template = $CaptureNextStatusCommandTemplate

@@ -32,6 +32,18 @@ from tests.test_fr017_stage17_validation_gate_script import _copy_stage17_packag
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "fr017-evidence-chain-status.ps1"
+SETUP_AND_SAFETY_BRIEF_MISSING_FIELDS = [
+    "evidence.date",
+    "evidence.observer",
+    "evidence.pilot_id",
+    "evidence.measurement_tool",
+    "measurement_conditions.no_tissue_compression_used",
+    "measurement_conditions.no_wrist_bone_compression_used",
+    "measurement_conditions.metric_tool_used",
+    "measurement_conditions.arm_relaxed_palm_neutral_or_exception_recorded",
+    "measurement_conditions.stop_conditions_briefed",
+    "measurement_conditions.condition_notes",
+]
 
 
 def _powershell() -> str:
@@ -349,6 +361,14 @@ def test_fr017_evidence_chain_summary_reports_next_operator_blocker() -> None:
     assert payload["first_blocking_capture_group_status"] == "pending_required_fields"
     suggested_path = _assert_default_candidate_path_from_preflight(payload)
     assert "brief stop conditions" in payload["first_blocking_capture_group_required_action"]
+    assert payload["first_blocking_capture_group_missing_field_count"] == 10
+    assert payload["first_blocking_capture_group_missing_fields"] == SETUP_AND_SAFETY_BRIEF_MISSING_FIELDS
+    assert payload["first_blocking_capture_group_invalid_field_count"] == 0
+    assert payload["first_blocking_capture_group_invalid_fields"] == []
+    assert payload["first_blocking_capture_group_blocking_signal_count"] == 0
+    assert payload["first_blocking_capture_group_blocking_signals"] == []
+    assert payload["first_blocking_capture_group_update_required_input_count"] == 0
+    assert payload["first_blocking_capture_group_update_required_input_fields"] == []
     assert (
         payload["operator_input_hint"]
         == "create_pending_record_with_fr017-new-measurement-record.ps1_then_capture_with_FR-017-MEASUREMENT-CAPTURE-RUNBOOK.md_and_rerun_measurement_intake"
