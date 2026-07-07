@@ -281,6 +281,7 @@ function New-GateEvidenceDetails {
     measurement_session_current_group_preflight_output_parent_exists = [bool](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'current_group_preflight_output_parent_exists' -Default $false)
     measurement_session_current_group_preflight_wrote_file = [bool](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'current_group_preflight_wrote_file' -Default $false)
     measurement_session_current_group_preflight_physical_validation_complete = [bool](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'current_group_preflight_physical_validation_complete' -Default $false)
+    measurement_session_current_group_preflight_stage17_completion_claim_allowed = [bool](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'current_group_preflight_stage17_completion_claim_allowed' -Default $false)
     measurement_session_current_group_preflight_fr018_implementation_cleared = [bool](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'current_group_preflight_fr018_implementation_cleared' -Default $false)
     measurement_session_current_group_missing_fields = @(Get-PayloadArrayProperty -Payload $MeasurementSessionPayload -Name 'current_group_missing_fields')
     measurement_session_current_group_invalid_fields = @(Get-PayloadArrayProperty -Payload $MeasurementSessionPayload -Name 'current_group_invalid_fields')
@@ -808,6 +809,9 @@ function New-EvidenceChainSummary {
     first_blocking_preflight_output_exists = [bool]$StatusPayload['first_blocking_preflight_output_exists']
     first_blocking_preflight_output_parent_exists = [bool]$StatusPayload['first_blocking_preflight_output_parent_exists']
     first_blocking_preflight_wrote_file = [bool]$StatusPayload['first_blocking_preflight_wrote_file']
+    first_blocking_preflight_physical_validation_complete = [bool]$StatusPayload['first_blocking_preflight_physical_validation_complete']
+    first_blocking_preflight_stage17_completion_claim_allowed = [bool]$StatusPayload['first_blocking_preflight_stage17_completion_claim_allowed']
+    first_blocking_preflight_fr018_implementation_cleared = [bool]$StatusPayload['first_blocking_preflight_fr018_implementation_cleared']
     first_blocking_update_tool_path = [string]$StatusPayload['first_blocking_update_tool_path']
     first_blocking_update_command_template = [string]$StatusPayload['first_blocking_update_command_template']
     gates_ran = [int]$StatusPayload['gates_ran']
@@ -967,6 +971,7 @@ $FirstBlockingPreflightOutputExists = $false
 $FirstBlockingPreflightOutputParentExists = $false
 $FirstBlockingPreflightWroteFile = $false
 $FirstBlockingPreflightPhysicalValidationComplete = $false
+$FirstBlockingPreflightStage17CompletionClaimAllowed = $false
 $FirstBlockingPreflightFr018ImplementationCleared = $false
 $FirstBlockingUpdateToolPath = ''
 $FirstBlockingUpdateCommandTemplate = ''
@@ -1027,6 +1032,7 @@ foreach ($Gate in $Gates) {
     $FirstBlockingPreflightCandidateOutputPathReady = $false
     $FirstBlockingPreflightWroteFile = $false
     $FirstBlockingPreflightPhysicalValidationComplete = $false
+    $FirstBlockingPreflightStage17CompletionClaimAllowed = $false
     $FirstBlockingPreflightFr018ImplementationCleared = $false
     if ([string]$Gate.id -eq 'measurement_intake') {
       $FirstBlockingPreflightToolPath = [string](Get-DetailsValue -Details $GateDetails -Name 'measurement_session_current_group_preflight_tool_path')
@@ -1044,6 +1050,7 @@ foreach ($Gate in $Gates) {
       $FirstBlockingPreflightOutputParentExists = [bool](Get-DetailsValue -Details $GateDetails -Name 'measurement_session_current_group_preflight_output_parent_exists' -Default $false)
       $FirstBlockingPreflightWroteFile = [bool](Get-DetailsValue -Details $GateDetails -Name 'measurement_session_current_group_preflight_wrote_file' -Default $false)
       $FirstBlockingPreflightPhysicalValidationComplete = [bool](Get-DetailsValue -Details $GateDetails -Name 'measurement_session_current_group_preflight_physical_validation_complete' -Default $false)
+      $FirstBlockingPreflightStage17CompletionClaimAllowed = [bool](Get-DetailsValue -Details $GateDetails -Name 'measurement_session_current_group_preflight_stage17_completion_claim_allowed' -Default $false)
       $FirstBlockingPreflightFr018ImplementationCleared = [bool](Get-DetailsValue -Details $GateDetails -Name 'measurement_session_current_group_preflight_fr018_implementation_cleared' -Default $false)
     } elseif ([string]$Gate.id -eq 'mockup_readiness' -and -not $GateFailed) {
       $MockupInitializerArgs = New-Object System.Collections.Generic.List[string]
@@ -1337,6 +1344,7 @@ $Output = [ordered]@{
   first_blocking_preflight_output_parent_exists = $FirstBlockingPreflightOutputParentExists
   first_blocking_preflight_wrote_file = $FirstBlockingPreflightWroteFile
   first_blocking_preflight_physical_validation_complete = $FirstBlockingPreflightPhysicalValidationComplete
+  first_blocking_preflight_stage17_completion_claim_allowed = $FirstBlockingPreflightStage17CompletionClaimAllowed
   first_blocking_preflight_fr018_implementation_cleared = $FirstBlockingPreflightFr018ImplementationCleared
   first_blocking_update_tool_path = $FirstBlockingUpdateToolPath
   first_blocking_update_command_template = $FirstBlockingUpdateCommandTemplate

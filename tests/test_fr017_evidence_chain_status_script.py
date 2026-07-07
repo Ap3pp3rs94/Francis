@@ -134,6 +134,7 @@ def test_fr017_evidence_chain_status_stops_at_measurement_template() -> None:
     assert payload["first_blocking_preflight_output_exists"] is False
     assert payload["first_blocking_preflight_wrote_file"] is False
     assert payload["first_blocking_preflight_physical_validation_complete"] is False
+    assert payload["first_blocking_preflight_stage17_completion_claim_allowed"] is False
     assert payload["first_blocking_preflight_fr018_implementation_cleared"] is False
     assert (
         str(payload["first_blocking_update_tool_path"])
@@ -381,6 +382,9 @@ def test_fr017_evidence_chain_summary_reports_next_operator_blocker() -> None:
     assert payload["first_blocking_preflight_output_parent_exists"] is True
     assert payload["first_blocking_preflight_output_exists"] is False
     assert payload["first_blocking_preflight_wrote_file"] is False
+    assert payload["first_blocking_preflight_physical_validation_complete"] is False
+    assert payload["first_blocking_preflight_stage17_completion_claim_allowed"] is False
+    assert payload["first_blocking_preflight_fr018_implementation_cleared"] is False
     assert "fr017-new-measurement-record.ps1 -Mode Create" in payload["first_blocking_update_command_template"]
     assert str(suggested_path) in payload["first_blocking_update_command_template"]
     assert payload["first_blocking_capture_next_command_kind"] == "create_pending_measurement_record"
