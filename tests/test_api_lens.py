@@ -519,6 +519,49 @@ def _write_lens_hotkey_runtime_state(data_root: Path, *, pid: int, launch_on_hot
     )
 
 
+def _write_lens_summon_local_launcher_state(data_root: Path, *, global_hotkey: str = "Ctrl+Alt+F") -> None:
+    runtime_root = data_root / "runtime" / "lens-summon"
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    (runtime_root / "status.json").write_text(
+        json.dumps(
+            {
+                "ok": True,
+                "kind": "lens.summon.local_launcher",
+                "status": "native_surface_opened",
+                "mode": "localopen",
+                "repo_root": str(data_root.parent),
+                "data_root": str(data_root),
+                "config_path": "config/runtime/lens/summon.json",
+                "summon_runner": "scripts/lens-summon.ps1",
+                "launch_target": "lens.overlay.orb_panel",
+                "native_launch_target": "lens.overlay.orb_panel",
+                "native_surface": "lens.overlay.orb.right_click_panel",
+                "native_surface_ready": True,
+                "native_handoff_ready": True,
+                "resident_host_ready": True,
+                "tray_presence_ready": True,
+                "overlay_window_ready": True,
+                "local_binding_ready": True,
+                "summon_binding_target_ready": True,
+                "local_summon_available": True,
+                "os_level_summon": True,
+                "summon_anywhere": True,
+                "global_hotkey": global_hotkey,
+                "binding_scope": "global",
+                "binding_enabled": True,
+                "register_hotkey": True,
+                "startup_register": True,
+                "opened": True,
+                "native_request_consumed": True,
+                "no_launch": False,
+                "blockers": [],
+                "updated_at": "2026-07-07T13:23:06Z",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 def _write_lens_overlay_runtime_state(data_root: Path, *, pid: int) -> None:
     runtime_root = data_root / "runtime" / "lens-overlay"
     runtime_root.mkdir(parents=True, exist_ok=True)
@@ -10168,6 +10211,147 @@ def test_lens_status_promotes_coordinated_surface_runtime_before_summon_binding(
     command_palette_criterion = _criterion(body, "command_palette_commands")
     assert command_palette_criterion["availability"] == "os_runtime"
     assert command_palette_criterion["summon_anywhere"] is False
+
+
+def test_lens_status_accepts_live_summon_launcher_and_prefers_active_summon_override(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_dev_environment(repo_root)
+    _write_lens_host_status_runner(repo_root)
+    _write_service_manager(repo_root)
+    _write_lens_preflight_scripts(repo_root)
+    _write_lens_runtime_configs(repo_root)
+    _write_lens_host_service_config(repo_root)
+    service_config_path = repo_root / "config" / "runtime" / "services" / "lens-host.json"
+    service_config = json.loads(service_config_path.read_text(encoding="utf-8"))
+    service_config["process_supervision_enabled"] = True
+    service_config["persistent_supervision_enabled"] = True
+    service_config["supervision_blocked_reason"] = "resident_supervision_prerequisites_pending"
+    service_config["blocked_reason"] = "lens_host_persistent_supervision_prerequisites_pending"
+    service_config_path.write_text(json.dumps(service_config, indent=2), encoding="utf-8")
+    _write_lens_host_runtime_state(
+        data_root,
+        pid=6789,
+        status="resident_running",
+        mode="resident",
+    )
+    _write_lens_host_supervisor_state(
+        data_root,
+        observed_pid=6789,
+        status="resident_supervising",
+        mode="supervise_resident",
+        host_mode="resident",
+        observed_state="resident_running",
+        updated_at="2026-05-01T00:00:00Z",
+        resident_supervised_runtime=True,
+        process_supervision_authority=True,
+    )
+    surface_pid = os.getpid()
+    _write_lens_tray_runtime_state(data_root, pid=surface_pid)
+    _write_lens_hotkey_runtime_state(data_root, pid=surface_pid)
+    _write_lens_overlay_runtime_state(data_root, pid=surface_pid)
+    _write_lens_summon_local_launcher_state(data_root)
+
+    hotkey_runtime_root = data_root / "runtime" / "lens-hotkey"
+    hotkey_runtime_root.mkdir(parents=True, exist_ok=True)
+    (hotkey_runtime_root / "os-binding-summon-override.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.summon.config",
+                "version": 1,
+                "enabled": True,
+                "global_hotkey": "Ctrl+Alt+Space",
+                "binding_scope": "global",
+                "binding_enabled": True,
+                "register_hotkey": True,
+            }
+        ),
+        encoding="utf-8",
+    )
+    summon_runtime_root = data_root / "runtime" / "lens-summon"
+    (summon_runtime_root / "summon-action-override.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.summon.config",
+                "version": 1,
+                "enabled": True,
+                "global_hotkey": "Ctrl+Alt+F",
+                "binding_scope": "global",
+                "binding_enabled": True,
+                "register_hotkey": True,
+                "startup_register": True,
+                "launch_target": "lens.overlay.orb_panel",
+                "launch_mode": "NativeOverlay",
+                "summon_authority": True,
+                "hotkey_registration_authority": True,
+                "overlay_control_authority": True,
+                "local_process_launch_authority": True,
+                "blocked_reason": "",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.lens import host_manifest as host_manifest_module
+
+    fixed_now = datetime(2026, 5, 1, 0, 0, 5, tzinfo=UTC).timestamp()
+    monkeypatch.setattr(host_manifest_module.time, "time", lambda: fixed_now)
+    monkeypatch.setattr(
+        host_manifest_module,
+        "_process_alive_readback",
+        lambda pid: (pid in {surface_pid, 6789}, "test"),
+    )
+
+    client = TestClient(create_app())
+    response = client.get("/lens/status?limit=1")
+
+    assert response.status_code == 200
+    body = response.json()
+    resident_host = body["resident_host"]
+    assert resident_host["hotkey_runtime_readback"]["ready"] is True
+    assert resident_host["hotkey_runtime_readback"]["expected_global_hotkey"] == "Ctrl+Alt+F"
+    assert resident_host["hotkey_runtime_readback"]["config_override_path"] == (
+        "data/runtime/lens-summon/summon-action-override.json"
+    )
+    assert resident_host["hotkey_runtime_readback"]["global_hotkey"] == "Ctrl+Alt+F"
+    summon_runtime_readback = resident_host["launch_manifest"]["summon_runtime_readback"]
+    assert summon_runtime_readback["ready"] is True
+    assert summon_runtime_readback["requirement_state"] == "native_handoff_observed"
+    assert summon_runtime_readback["native_handoff_ready"] is True
+    assert summon_runtime_readback["summon_anywhere"] is True
+
+    persistent_plan = resident_host["persistent_supervision_plan"]
+    assert persistent_plan["missing_required_before_enable"] == []
+    plan_dependencies = {item["id"]: item for item in persistent_plan["enablement_dependency_readback"]}
+    for dependency_id in [
+        "resident_host_process",
+        "tray_presence",
+        "global_hotkey_binding",
+        "overlay_window",
+        "summon_binding",
+    ]:
+        assert plan_dependencies[dependency_id]["ready"] is True
+        assert plan_dependencies[dependency_id]["blocker"] == ""
+
+    hotkey_dependency = plan_dependencies["global_hotkey_binding"]
+    assert hotkey_dependency["hotkey_runtime_ready"] is True
+    assert hotkey_dependency["hotkey_runtime_bound"] is True
+    assert hotkey_dependency["hotkey_presence_source"] == "live_runtime_readback"
+    summon_dependency = plan_dependencies["summon_binding"]
+    assert summon_dependency["summon_runtime_ready"] is True
+    assert summon_dependency["summon_presence_source"] == "live_runtime_readback"
+    assert summon_dependency["summon_runtime_requirement_state"] == "native_handoff_observed"
 
 
 def test_lens_status_surfaces_pending_approval_without_decision_authority(monkeypatch, tmp_path: Path) -> None:

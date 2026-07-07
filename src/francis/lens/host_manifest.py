@@ -398,7 +398,9 @@ def _lens_tray_runtime_readback() -> dict[str, Any]:
 
 
 def _lens_hotkey_runtime_readback() -> dict[str, Any]:
-    override_file = data_dir() / "runtime" / "lens-hotkey" / "os-binding-summon-override.json"
+    summon_override_file = data_dir() / "runtime" / "lens-summon" / "summon-action-override.json"
+    hotkey_override_file = data_dir() / "runtime" / "lens-hotkey" / "os-binding-summon-override.json"
+    override_file = summon_override_file if _path_exists(summon_override_file) else hotkey_override_file
     override_config = _json_dict_from_path(override_file) if _path_exists(override_file) else {}
     config = override_config or _runtime_json_dict("config/runtime/lens/summon.json")
     config_source = "runtime_override" if override_config else "canonical_config"
@@ -452,7 +454,13 @@ def _lens_hotkey_runtime_readback() -> dict[str, Any]:
         "status": "running" if hotkey_bound else "missing",
         "runtime_state_path": "data/runtime/lens-hotkey/status.json",
         "config_source": config_source,
-        "config_override_path": "data/runtime/lens-hotkey/os-binding-summon-override.json" if override_config else "",
+        "config_override_path": (
+            "data/runtime/lens-summon/summon-action-override.json"
+            if override_config and override_file.name == "summon-action-override.json"
+            else "data/runtime/lens-hotkey/os-binding-summon-override.json"
+            if override_config
+            else ""
+        ),
         "state_exists": state_exists,
         "state_kind": state_kind,
         "state_status": state_status,
@@ -579,16 +587,30 @@ def _lens_summon_runtime_readback() -> dict[str, Any]:
         and state_global_hotkey == expected_global_hotkey
         and state_binding_scope == expected_binding_scope
     )
+    state_claims_native_handoff = (
+        state_kind == "lens.summon.local_launcher"
+        and state_status in {"native_surface_opened", "local_open_ready", "opened"}
+        and bool(state_payload.get("native_handoff_ready"))
+        and bool(state_payload.get("summon_binding_target_ready"))
+        and bool(state_payload.get("local_binding_ready"))
+        and bool(state_payload.get("summon_anywhere"))
+        and bool(state_payload.get("os_level_summon"))
+        and state_global_hotkey == expected_global_hotkey
+        and state_binding_scope == expected_binding_scope
+    )
+    handoff_ready = state_claims_bounded_handoff or state_claims_native_handoff
     requirement_state = (
         "bounded_handoff_observed"
         if state_claims_bounded_handoff
+        else "native_handoff_observed"
+        if state_claims_native_handoff
         else "stale_or_unverified"
         if state_exists
         else "missing"
     )
     return {
-        "ready": state_claims_bounded_handoff,
-        "status": "observed" if state_claims_bounded_handoff else "missing",
+        "ready": handoff_ready,
+        "status": "observed" if handoff_ready else "missing",
         "runtime_state_path": "data/runtime/lens-summon/status.json",
         "config_source": config_source,
         "config_override_path": (
@@ -606,14 +628,21 @@ def _lens_summon_runtime_readback() -> dict[str, Any]:
         "expected_global_hotkey": expected_global_hotkey,
         "binding_scope": state_binding_scope,
         "expected_binding_scope": expected_binding_scope,
-        "bounded_handoff_ready": bool(state_payload.get("bounded_handoff_ready")),
-        "local_open_ready": bool(state_payload.get("local_open_ready")),
+        "bounded_handoff_ready": bool(state_payload.get("bounded_handoff_ready"))
+        or bool(state_payload.get("native_handoff_ready")),
+        "native_handoff_ready": bool(state_payload.get("native_handoff_ready")),
+        "native_surface_ready": bool(state_payload.get("native_surface_ready")),
+        "summon_binding_target_ready": bool(state_payload.get("summon_binding_target_ready")),
+        "local_binding_ready": bool(state_payload.get("local_binding_ready")),
+        "local_open_ready": bool(state_payload.get("local_open_ready"))
+        or bool(state_payload.get("local_binding_ready")),
         "opened": bool(state_payload.get("opened")),
+        "native_request_consumed": bool(state_payload.get("native_request_consumed")),
         "no_launch": bool(state_payload.get("no_launch")),
         "summon_anywhere": bool(state_payload.get("summon_anywhere")),
         "os_level_summon": bool(state_payload.get("os_level_summon")),
         "requirement_state": requirement_state,
-        "blocker": "" if state_claims_bounded_handoff else "summon_binding_runtime_missing",
+        "blocker": "" if handoff_ready else "summon_binding_runtime_missing",
     }
 
 
