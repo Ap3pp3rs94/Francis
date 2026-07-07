@@ -80,6 +80,10 @@ def _assert_first_blocking_update_hint(
     assert contract_fragment in payload["first_blocking_update_contract"]
 
 
+def _assert_path_tail(value: str, expected_tail: str) -> None:
+    assert str(value).replace("/", "\\").endswith(expected_tail)
+
+
 def test_fr017_evidence_chain_status_stops_at_measurement_template() -> None:
     proc = _run_gate("-Mode", "Status")
 
@@ -1354,10 +1358,12 @@ def test_fr017_evidence_chain_status_moves_blocker_after_release_cable_ready(tmp
         payload["first_blocking_details"]["next_required_engineering_review_input"]
         == "create_professional_engineering_review_record_with_fr017-new-engineering-review-record.ps1_then_rerun_engineering_review_gate"
     )
-    assert payload["first_blocking_details"]["engineering_review_input_template_path"].endswith(
+    _assert_path_tail(
+        payload["first_blocking_details"]["engineering_review_input_template_path"],
         "FR-017_Stage17_Package\\FR-017-ENGINEERING-REVIEW-INPUT-TEMPLATE.json"
     )
-    assert payload["first_blocking_details"]["engineering_review_record_initializer_path"].endswith(
+    _assert_path_tail(
+        payload["first_blocking_details"]["engineering_review_record_initializer_path"],
         "scripts\\fr017-new-engineering-review-record.ps1"
     )
     assert payload["first_blocking_details"]["engineering_review_working_record_name_pattern"] == (
@@ -1544,10 +1550,12 @@ def test_fr017_evidence_chain_status_blocks_on_final_decision_record_after_final
         "fr017-new-final-decision-record.ps1"
         in payload["first_blocking_details"]["final_decision_record_runbook_contract"]
     )
-    assert payload["first_blocking_details"]["final_decision_input_template_path"].endswith(
+    _assert_path_tail(
+        payload["first_blocking_details"]["final_decision_input_template_path"],
         "FR-017_Stage17_Package\\FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json"
     )
-    assert payload["first_blocking_details"]["final_decision_record_initializer_path"].endswith(
+    _assert_path_tail(
+        payload["first_blocking_details"]["final_decision_record_initializer_path"],
         "scripts\\fr017-new-final-decision-record.ps1"
     )
     assert payload["first_blocking_details"]["final_decision_working_record_name_pattern"] == (
@@ -1674,18 +1682,18 @@ def test_fr017_evidence_chain_status_blocks_on_completion_ledger_after_final_dec
         "fr017-new-completion-ledger-handoff.ps1"
         in payload["first_blocking_details"]["completion_ledger_handoff_runbook_contract"]
     )
-    assert payload["first_blocking_details"]["completion_ledger_handoff_template_path"].endswith(
+    _assert_path_tail(
+        payload["first_blocking_details"]["completion_ledger_handoff_template_path"],
         "FR-017_Stage17_Package\\FR-017-COMPLETION-LEDGER-HANDOFF-TEMPLATE.md"
     )
-    assert payload["first_blocking_details"]["completion_ledger_handoff_initializer_path"].endswith(
+    _assert_path_tail(
+        payload["first_blocking_details"]["completion_ledger_handoff_initializer_path"],
         "scripts\\fr017-new-completion-ledger-handoff.ps1"
     )
     assert payload["first_blocking_details"]["completion_ledger_handoff_working_record_name_pattern"] == (
         "FR-017-COMPLETION-LEDGER-HANDOFF-YYYY-MM-DD-PILOT.md"
     )
-    assert str(payload["first_blocking_preflight_tool_path"]).endswith(
-        "scripts\\fr017-new-completion-ledger-handoff.ps1"
-    )
+    _assert_path_tail(payload["first_blocking_preflight_tool_path"], "scripts\\fr017-new-completion-ledger-handoff.ps1")
     assert (
         "fr017-new-completion-ledger-handoff.ps1 -Mode Status" in payload["first_blocking_preflight_command_template"]
     )
@@ -1796,9 +1804,7 @@ def test_fr017_evidence_chain_status_blocks_on_completion_ledger_update_after_ha
     assert payload["gate_results"][11]["details"]["ledger_update_review_ready"] is False
     assert payload["gate_results"][11]["details"]["missing_fields"] == ["completion_ledger_path"]
     assert payload["first_blocking_details"]["missing_fields"] == ["completion_ledger_path"]
-    assert str(payload["first_blocking_preflight_tool_path"]).endswith(
-        "scripts\\fr017-completion-ledger-update-gate.ps1"
-    )
+    _assert_path_tail(payload["first_blocking_preflight_tool_path"], "scripts\\fr017-completion-ledger-update-gate.ps1")
     assert (
         "fr017-completion-ledger-update-gate.ps1 -Mode Status" in payload["first_blocking_preflight_command_template"]
     )
@@ -1820,7 +1826,7 @@ def test_fr017_evidence_chain_status_blocks_on_completion_ledger_update_after_ha
     assert payload["first_blocking_preflight_wrote_file"] is False
     assert payload["first_blocking_preflight_physical_validation_complete"] is False
     assert payload["first_blocking_preflight_fr018_implementation_cleared"] is False
-    assert payload["first_blocking_update_tool_path"].endswith("scripts\\fr017-completion-ledger-update-gate.ps1")
+    _assert_path_tail(payload["first_blocking_update_tool_path"], "scripts\\fr017-completion-ledger-update-gate.ps1")
     assert "fr017-completion-ledger-update-gate.ps1 -Mode Status" in payload["first_blocking_update_command_template"]
     assert "read-only" in payload["first_blocking_update_contract"]
     assert payload["evidence_chain_decision_ready"] is False
