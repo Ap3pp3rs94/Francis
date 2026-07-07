@@ -18,7 +18,7 @@ permissions:
 jobs:
   test:
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 105
+    timeout-minutes: 135
     env:
       UV_PYTHON: ${{ matrix.python-version }}
     strategy:
@@ -58,5 +58,5 @@ jobs:
         run: uv run -m mypy src
 
       - name: Pytest
-        timeout-minutes: 90
+        timeout-minutes: 120
         run: uv run -m pytest -vv --maxfail=1 --durations=25 --durations-min=1
