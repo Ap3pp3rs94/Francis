@@ -99,9 +99,13 @@ def test_fr017_measurement_record_initializer_summary_suggests_default_output_wi
     assert result["candidate_output_path_ready"] is True
     assert result["output_exists"] is False
     assert result["next_action"] == "run_create_or_capture_setup_brief"
-    assert result["next_create_command"] == (
+    assert result["next_create_command"] == result["create_command_template"]
+    assert result["next_create_path_command"] == (
         f'.\\scripts\\fr017-new-measurement-record.ps1 -Mode Create -OutputPath "{suggested_path}"'
     )
+    assert "-EvidenceDate YYYY-MM-DD" in result["next_create_command"]
+    assert "-ConfirmStopConditionsBriefed" in result["next_create_command"]
+    assert "-ConditionNotes" in result["next_create_command"]
     assert str(suggested_path) in result["create_command_template"]
     assert str(suggested_path) in result["measurement_intake_status_command_template"]
     assert result["read_only_contract"] is True
@@ -129,9 +133,13 @@ def test_fr017_measurement_record_initializer_summary_reports_next_action_withou
     assert result["output_path_source"] == "operator_supplied"
     assert result["candidate_output_path_ready"] is True
     assert result["next_action"] == "run_create_or_capture_setup_brief"
-    assert result["next_create_command"] == (
+    assert result["next_create_command"] == result["create_command_template"]
+    assert result["next_create_path_command"] == (
         f'.\\scripts\\fr017-new-measurement-record.ps1 -Mode Create -OutputPath "{output_path}"'
     )
+    assert "-EvidenceDate YYYY-MM-DD" in result["next_create_command"]
+    assert "-ConfirmStopConditionsBriefed" in result["next_create_command"]
+    assert "-ConditionNotes" in result["next_create_command"]
     assert "updated_fields" in result["omitted_full_status_fields"]
     assert "evidence.date" in result["setup_brief_fields_supported"]
     assert result["setup_brief_can_only_clear_first_group"] is True

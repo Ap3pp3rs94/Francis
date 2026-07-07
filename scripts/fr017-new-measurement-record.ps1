@@ -309,7 +309,8 @@ $Output = [ordered]@{
 }
 
 if ($Mode -eq 'Summary') {
-  $NextCreateCommand = if ($CandidateOutputPathReady) { '.\scripts\fr017-new-measurement-record.ps1 -Mode Create -OutputPath "{0}"' -f $ResolvedOutputPath } else { $CreateCommandTemplate }
+  $NextCreatePathCommand = if ($CandidateOutputPathReady) { '.\scripts\fr017-new-measurement-record.ps1 -Mode Create -OutputPath "{0}"' -f $ResolvedOutputPath } else { '' }
+  $NextCreateCommand = $CreateCommandTemplate
   $NextAction = if (-not $Output.template_exists) {
     'repair_or_provide_template_path'
   } elseif (-not $TemplateParseOk) {
@@ -347,6 +348,7 @@ if ($Mode -eq 'Summary') {
     output_exists = $Output.output_exists
     next_action = $NextAction
     next_create_command = $NextCreateCommand
+    next_create_path_command = $NextCreatePathCommand
     create_command_template = $CreateCommandTemplate
     measurement_intake_status_command_template = $MeasurementIntakeStatusCommandTemplate
     setup_brief_fields_supported = @(

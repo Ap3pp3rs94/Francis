@@ -107,6 +107,31 @@ What is materially true now:
 > Older dated entries are archived under docs/operations/archive/ (see scripts/archive-completion-ledger.ps1).
 > Historical undated ledger body is archived under docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md.
 
+### 2026-07-07 00:14Z - FR-017 initializer summary uses full setup command
+
+Current posture: Phase 2 / FR-017 Stage 17 remains documentation-ready and evidence-container-ready, with physical validation still blocked at measurement intake. This is a Stage 17 / FR-017 initializer-summary handoff correction for the first physical-input gate. It does not create a measurement record, record pilot dimensions, mark physical validation complete, close Stage 17, approve load-bearing use, clear powered or frame-coupled use, or clear FR-018.
+
+What changed:
+
+- `scripts/fr017-new-measurement-record.ps1 -Mode Summary` now uses the full setup/safety create command as `next_create_command`, including `-EvidenceDate`, observer/pilot/tool/method/posture placeholders, safety-condition confirmations, and condition notes.
+- The previous shorter output-path-only handoff is preserved separately as `next_create_path_command` so operators can still see the candidate file target without mistaking it for the complete create invocation.
+- The summary remains read-only and still reports `wrote_file=False`, `physical_validation_complete=False`, and `fr018_implementation_cleared=False`.
+
+Validation actually run:
+
+- PowerShell parser validation passed for `scripts/fr017-new-measurement-record.ps1`.
+- `python -m py_compile tests\test_fr017_measurement_record_initializer_script.py`: passed with `PYTHONPYCACHEPREFIX` redirected to a temp cache.
+- `python -m ruff check tests/test_fr017_measurement_record_initializer_script.py`: passed.
+- `python -m ruff format --check tests/test_fr017_measurement_record_initializer_script.py`: passed.
+- `python -m pytest tests/test_fr017_measurement_record_initializer_script.py -q`: passed, 12 tests.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\fr017-new-measurement-record.ps1 -Mode Summary`: passed and returned a `next_create_command` containing `-EvidenceDate YYYY-MM-DD` and `-ConfirmStopConditionsBriefed`, plus `wrote_file=False`, `physical_validation_complete=False`, and `fr018_implementation_cleared=False`.
+
+Remaining blockers:
+
+- FR-017 still requires a real accepted measurement record with setup/safety brief values, left/right dimensions, marked zones, repeatability, independence, and symptom-screen evidence before mockup patterning can truthfully proceed.
+- Downstream non-powered mockup, mannequin/interface, pilot static-fit, pilot movement, quick-release/cable-snag, professional engineering review, final human physical decision, and operator-reviewed completion-ledger update evidence remain required before any Stage 17 completion claim.
+- FR-018 remains blocked and not cleared by this slice.
+
 ### 2026-07-06 23:44Z - FR-017 summaries carry next capture command
 
 Current posture: Phase 2 / FR-017 Stage 17 remains documentation-ready and evidence-container-ready, with physical validation still blocked at measurement intake. This is a Stage 17 / FR-017 readback-propagation slice for the first physical-input gate. It does not create a measurement record, record pilot dimensions, mark physical validation complete, close Stage 17, approve load-bearing use, clear powered or frame-coupled use, or clear FR-018.
