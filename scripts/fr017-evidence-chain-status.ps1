@@ -275,6 +275,9 @@ function New-GateEvidenceDetails {
     measurement_session_current_group_update_tool_path = [string](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'current_group_update_tool_path' -Default '')
     measurement_session_current_group_update_command_template = [string](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'current_group_update_command_template' -Default '')
     measurement_session_current_group_update_contract = [string](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'current_group_update_contract' -Default '')
+    measurement_session_measurement_capture_next_command_kind = [string](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'measurement_capture_next_command_kind' -Default '')
+    measurement_session_measurement_capture_next_command_template = [string](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'measurement_capture_next_command_template' -Default '')
+    measurement_session_measurement_capture_next_status_command_template = [string](Get-PayloadValue -Payload $MeasurementSessionPayload -Name 'measurement_capture_next_status_command_template' -Default '')
     measurement_capture_plan_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['measurement_capture_plan_contract']) { '' } else { [string]$Payload.measurement_capture_plan_contract }
     measurement_capture_runbook_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['measurement_capture_runbook_contract']) { '' } else { [string]$Payload.measurement_capture_runbook_contract }
     measurement_capture_plan_status_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['measurement_capture_plan_status_contract']) { '' } else { [string]$Payload.measurement_capture_plan_status_contract }
@@ -290,6 +293,9 @@ function New-GateEvidenceDetails {
     measurement_capture_first_blocking_group_id = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['measurement_capture_first_blocking_group_id']) { '' } else { [string]$Payload.measurement_capture_first_blocking_group_id }
     measurement_capture_first_blocking_group_status = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['measurement_capture_first_blocking_group_status']) { '' } else { [string]$Payload.measurement_capture_first_blocking_group_status }
     measurement_capture_first_blocking_group_action = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['measurement_capture_first_blocking_group_action']) { '' } else { [string]$Payload.measurement_capture_first_blocking_group_action }
+    measurement_capture_next_command_kind = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['measurement_capture_next_command_kind']) { '' } else { [string]$Payload.measurement_capture_next_command_kind }
+    measurement_capture_next_command_template = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['measurement_capture_next_command_template']) { '' } else { [string]$Payload.measurement_capture_next_command_template }
+    measurement_capture_next_status_command_template = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['measurement_capture_next_status_command_template']) { '' } else { [string]$Payload.measurement_capture_next_status_command_template }
     mockup_capture_plan_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['mockup_capture_plan_contract']) { '' } else { [string]$Payload.mockup_capture_plan_contract }
     mockup_capture_plan_status_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['mockup_capture_plan_status_contract']) { '' } else { [string]$Payload.mockup_capture_plan_status_contract }
     mockup_capture_summary_contract = if ($null -eq $Payload -or $null -eq $Payload.PSObject.Properties['mockup_capture_summary_contract']) { '' } else { [string]$Payload.mockup_capture_summary_contract }
@@ -646,6 +652,18 @@ function New-EvidenceChainSummary {
     'next_required_ledger_input',
     'next_required_completion_ledger_update_input'
   )
+  $CaptureNextCommandKind = Get-FirstNonEmptyDetailsValue -Details $Details -Names @(
+    'measurement_session_measurement_capture_next_command_kind',
+    'measurement_capture_next_command_kind'
+  )
+  $CaptureNextCommandTemplate = Get-FirstNonEmptyDetailsValue -Details $Details -Names @(
+    'measurement_session_measurement_capture_next_command_template',
+    'measurement_capture_next_command_template'
+  )
+  $CaptureNextStatusCommandTemplate = Get-FirstNonEmptyDetailsValue -Details $Details -Names @(
+    'measurement_session_measurement_capture_next_status_command_template',
+    'measurement_capture_next_status_command_template'
+  )
 
   return [ordered]@{
     kind = 'francis.fr017.evidence_chain_summary'
@@ -671,6 +689,9 @@ function New-EvidenceChainSummary {
     first_blocking_capture_group_id = $CaptureGroupId
     first_blocking_capture_group_status = $CaptureGroupStatus
     first_blocking_capture_group_required_action = $CaptureGroupAction
+    first_blocking_capture_next_command_kind = $CaptureNextCommandKind
+    first_blocking_capture_next_command_template = $CaptureNextCommandTemplate
+    first_blocking_capture_next_status_command_template = $CaptureNextStatusCommandTemplate
     next_required_input = [string]$StatusPayload['next_required_input']
     next_command = [string]$StatusPayload['next_command']
     operator_input_hint = $OperatorInputHint

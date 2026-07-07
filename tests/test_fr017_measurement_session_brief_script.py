@@ -122,6 +122,11 @@ def test_fr017_measurement_session_brief_reports_first_template_blocker() -> Non
     assert "fr017-new-measurement-record.ps1 -Mode Create" in payload["current_group_update_command_template"]
     assert str(suggested_path) in payload["current_group_update_command_template"]
     assert "Creates a pending working record" in payload["current_group_update_contract"]
+    assert payload["measurement_capture_next_command_kind"] == "create_pending_measurement_record"
+    assert payload["measurement_capture_next_command_template"] == payload["current_group_update_command_template"]
+    assert payload["measurement_capture_next_status_command_template"] == (
+        f'.\\scripts\\fr017-measurement-intake.ps1 -Mode Status -MeasurementPath "{suggested_path}"'
+    )
     assert payload["measurement_capture_total_groups"] == 5
     assert payload["measurement_capture_ready_groups"] == 0
     assert payload["measurement_capture_pending_groups"] == 5
@@ -182,6 +187,11 @@ def test_fr017_measurement_session_summary_reports_current_capture_group() -> No
     assert payload["current_group_preflight_wrote_file"] is False
     assert "fr017-new-measurement-record.ps1 -Mode Create" in payload["current_group_update_command_template"]
     assert str(suggested_path) in payload["current_group_update_command_template"]
+    assert payload["measurement_capture_next_command_kind"] == "create_pending_measurement_record"
+    assert payload["measurement_capture_next_command_template"] == payload["current_group_update_command_template"]
+    assert payload["measurement_capture_next_status_command_template"] == (
+        f'.\\scripts\\fr017-measurement-intake.ps1 -Mode Status -MeasurementPath "{suggested_path}"'
+    )
     assert payload["measurement_capture_total_groups"] == 5
     assert payload["measurement_capture_pending_groups"] == 5
     assert payload["next_operator_action"] == (

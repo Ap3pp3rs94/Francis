@@ -315,6 +315,9 @@ function New-MeasurementSessionSummary {
     current_group_preflight_wrote_file = [bool]$StatusPayload['current_group_preflight_wrote_file']
     current_group_update_tool_path = [string]$StatusPayload['current_group_update_tool_path']
     current_group_update_command_template = [string]$StatusPayload['current_group_update_command_template']
+    measurement_capture_next_command_kind = [string]$StatusPayload['measurement_capture_next_command_kind']
+    measurement_capture_next_command_template = [string]$StatusPayload['measurement_capture_next_command_template']
+    measurement_capture_next_status_command_template = [string]$StatusPayload['measurement_capture_next_status_command_template']
     measurement_capture_total_groups = [int]$StatusPayload['measurement_capture_total_groups']
     measurement_capture_ready_groups = [int]$StatusPayload['measurement_capture_ready_groups']
     measurement_capture_pending_groups = [int]$StatusPayload['measurement_capture_pending_groups']
@@ -384,6 +387,10 @@ if ($IntakeReady) {
   $NextOperatorAction = 'complete_first_blocking_measurement_capture_group_then_rerun_measurement_intake'
 }
 $CurrentGroupUpdateHint = New-CurrentGroupUpdateHint -GroupId $FirstBlockingGroupId -ResolvedMeasurementPath $ResolvedMeasurementPath -ResolvedCandidateMeasurementPath $ResolvedCandidateMeasurementPath -IntakePayload $IntakeGate.payload -UsingTemplate $UsingTemplate -IntakeReady $IntakeReady -IntakeFailed $IntakeFailed
+$MeasurementCaptureNextCommandKind = [string](Get-PayloadValue -Payload $IntakeGate.payload -Name 'measurement_capture_next_command_kind' -Default '')
+$MeasurementCaptureNextCommandTemplate = [string]$CurrentGroupUpdateHint.command_template
+$MeasurementCaptureNextStatusPath = if (-not [string]::IsNullOrWhiteSpace($ResolvedCandidateMeasurementPath)) { $ResolvedCandidateMeasurementPath } else { $ResolvedMeasurementPath }
+$MeasurementCaptureNextStatusCommandTemplate = if ([string]::IsNullOrWhiteSpace($MeasurementCaptureNextStatusPath)) { '.\scripts\fr017-measurement-intake.ps1 -Mode Status -MeasurementPath <measurement-record.json>' } else { '.\scripts\fr017-measurement-intake.ps1 -Mode Status -MeasurementPath "{0}"' -f $MeasurementCaptureNextStatusPath }
 $CurrentGroupPreflightToolPath = ''
 $CurrentGroupPreflightCommandTemplate = ''
 $CurrentGroupPreflightContract = ''
@@ -519,6 +526,9 @@ $Output = [ordered]@{
   current_group_update_tool_path = [string]$CurrentGroupUpdateHint.tool_path
   current_group_update_command_template = [string]$CurrentGroupUpdateHint.command_template
   current_group_update_contract = [string]$CurrentGroupUpdateHint.contract
+  measurement_capture_next_command_kind = $MeasurementCaptureNextCommandKind
+  measurement_capture_next_command_template = $MeasurementCaptureNextCommandTemplate
+  measurement_capture_next_status_command_template = $MeasurementCaptureNextStatusCommandTemplate
   measurement_capture_total_groups = [int](Get-PayloadValue -Payload $IntakeGate.payload -Name 'measurement_capture_total_groups' -Default 0)
   measurement_capture_ready_groups = [int](Get-PayloadValue -Payload $IntakeGate.payload -Name 'measurement_capture_ready_groups' -Default 0)
   measurement_capture_pending_groups = [int](Get-PayloadValue -Payload $IntakeGate.payload -Name 'measurement_capture_pending_groups' -Default 0)

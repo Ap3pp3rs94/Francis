@@ -107,6 +107,32 @@ What is materially true now:
 > Older dated entries are archived under docs/operations/archive/ (see scripts/archive-completion-ledger.ps1).
 > Historical undated ledger body is archived under docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md.
 
+### 2026-07-06 23:44Z - FR-017 summaries carry next capture command
+
+Current posture: Phase 2 / FR-017 Stage 17 remains documentation-ready and evidence-container-ready, with physical validation still blocked at measurement intake. This is a Stage 17 / FR-017 readback-propagation slice for the first physical-input gate. It does not create a measurement record, record pilot dimensions, mark physical validation complete, close Stage 17, approve load-bearing use, clear powered or frame-coupled use, or clear FR-018.
+
+What changed:
+
+- `scripts/fr017-measurement-session-brief.ps1 -Mode Status` and `-Mode Summary` now expose `measurement_capture_next_command_kind`, `measurement_capture_next_command_template`, and `measurement_capture_next_status_command_template` from the active measurement-intake state.
+- `scripts/fr017-evidence-chain-status.ps1 -Mode Summary` now carries those fields upward as `first_blocking_capture_next_command_kind`, `first_blocking_capture_next_command_template`, and `first_blocking_capture_next_status_command_template`.
+- Template/no-record readbacks still route the operator to a pending measurement-record create command using the suggested output path, then to a concrete measurement-intake rerun command; the fields are read-only handoffs, not evidence or validation completion.
+
+Validation actually run:
+
+- PowerShell parser validation passed for `scripts/fr017-measurement-session-brief.ps1` and `scripts/fr017-evidence-chain-status.ps1`.
+- `python -m py_compile tests\test_fr017_measurement_session_brief_script.py tests\test_fr017_evidence_chain_status_script.py`: passed with `PYTHONPYCACHEPREFIX` redirected to a temp cache.
+- `python -m ruff check tests/test_fr017_measurement_session_brief_script.py tests/test_fr017_evidence_chain_status_script.py`: passed.
+- `python -m ruff format --check tests/test_fr017_measurement_session_brief_script.py tests/test_fr017_evidence_chain_status_script.py`: passed after formatting.
+- `python -m pytest tests/test_fr017_measurement_session_brief_script.py tests/test_fr017_evidence_chain_status_script.py -q`: passed, 41 tests.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\fr017-measurement-session-brief.ps1 -Mode Summary`: passed and returned `measurement_capture_next_command_kind=create_pending_measurement_record`, a create command with the suggested pending record path, a concrete intake rerun command, `physical_validation_complete=False`, and `fr018_implementation_cleared=False`.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\fr017-evidence-chain-status.ps1 -Mode Summary`: passed and returned the same first-blocking capture next-command kind/template/status-command fields, `physical_validation_complete=False`, and `fr018_implementation_cleared=False`.
+
+Remaining blockers:
+
+- FR-017 still requires a real accepted measurement record with setup/safety brief values, left/right dimensions, marked zones, repeatability, independence, and symptom-screen evidence before mockup patterning can truthfully proceed.
+- Downstream non-powered mockup, mannequin/interface, pilot static-fit, pilot movement, quick-release/cable-snag, professional engineering review, final human physical decision, and operator-reviewed completion-ledger update evidence remain required before any Stage 17 completion claim.
+- FR-018 remains blocked and not cleared by this slice.
+
 ### 2026-07-06 23:21Z - FR-017 measurement intake exposes next capture command
 
 Current posture: Phase 2 / FR-017 Stage 17 remains documentation-ready and evidence-container-ready, with physical validation still blocked at measurement intake. This is a Stage 17 / FR-017 intake-readback slice for the first physical-input gate. It does not create a measurement record, record pilot dimensions, mark physical validation complete, close Stage 17, approve load-bearing use, clear powered or frame-coupled use, or clear FR-018.

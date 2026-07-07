@@ -127,8 +127,21 @@ def test_fr017_evidence_chain_status_stops_at_measurement_template() -> None:
     assert "fr017-new-measurement-record.ps1 -Mode Create" in payload["first_blocking_update_command_template"]
     assert str(suggested_path) in payload["first_blocking_update_command_template"]
     assert "Creates a pending working record" in payload["first_blocking_update_contract"]
+    details = payload["first_blocking_details"]
+    assert details["measurement_capture_next_command_kind"] == "create_pending_measurement_record"
+    assert details["measurement_capture_next_command_template"].endswith(
+        'ConditionNotes "<no tissue/no wrist-bone compression, metric tool, and stop briefing notes>"'
+    )
+    assert details["measurement_session_measurement_capture_next_command_kind"] == ("create_pending_measurement_record")
     assert (
-        payload["first_blocking_details"]["next_required_physical_input"]
+        details["measurement_session_measurement_capture_next_command_template"]
+        == payload["first_blocking_update_command_template"]
+    )
+    assert details["measurement_session_measurement_capture_next_status_command_template"] == (
+        f'.\\scripts\\fr017-measurement-intake.ps1 -Mode Status -MeasurementPath "{suggested_path}"'
+    )
+    assert (
+        details["next_required_physical_input"]
         == "create_pending_record_with_fr017-new-measurement-record.ps1_then_capture_with_FR-017-MEASUREMENT-CAPTURE-RUNBOOK.md_and_rerun_measurement_intake"
     )
     assert (
@@ -346,6 +359,11 @@ def test_fr017_evidence_chain_summary_reports_next_operator_blocker() -> None:
     assert payload["first_blocking_preflight_wrote_file"] is False
     assert "fr017-new-measurement-record.ps1 -Mode Create" in payload["first_blocking_update_command_template"]
     assert str(suggested_path) in payload["first_blocking_update_command_template"]
+    assert payload["first_blocking_capture_next_command_kind"] == "create_pending_measurement_record"
+    assert payload["first_blocking_capture_next_command_template"] == payload["first_blocking_update_command_template"]
+    assert payload["first_blocking_capture_next_status_command_template"] == (
+        f'.\\scripts\\fr017-measurement-intake.ps1 -Mode Status -MeasurementPath "{suggested_path}"'
+    )
     assert payload["evidence_chain_decision_ready"] is False
     assert payload["physical_validation_complete"] is False
     assert payload["stage17_completion_claim_allowed"] is False
