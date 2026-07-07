@@ -107,6 +107,32 @@ What is materially true now:
 > Older dated entries are archived under docs/operations/archive/ (see scripts/archive-completion-ledger.ps1).
 > Historical undated ledger body is archived under docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md.
 
+### 2026-07-07 01:08Z - FR-017 setup updater classifies next handoff
+
+Current posture: Phase 2 / FR-017 Stage 17 remains documentation-ready and evidence-container-ready, with physical validation still blocked at measurement intake. This is a Stage 17 / FR-017 setup-updater handoff correction for the first physical-input gate. It does not create durable pilot measurement evidence, mark physical validation complete, close Stage 17, approve load-bearing use, clear powered or frame-coupled use, or clear FR-018.
+
+What changed:
+
+- `scripts/fr017-update-measurement-setup-record.ps1` now emits typed next-command metadata: `next_command_kind`, `next_command_contract`, and `next_status_command_template`.
+- Valid pending-record status now reports `next_command_kind=update_setup_safety_brief` and points `next_command` at the setup/safety update command.
+- Successful setup/safety writes now report `next_command_kind=rerun_measurement_intake` and point `next_command` back at read-only measurement intake status; failure paths return `next_command_kind=none`.
+- The handoff contract explicitly states that these commands are operator handoffs only, not physical validation evidence, not a Stage 17 completion claim, and not FR-018 clearance.
+
+Validation actually run:
+
+- PowerShell parser validation passed for `scripts/fr017-update-measurement-setup-record.ps1`.
+- `python -m py_compile tests\test_fr017_measurement_setup_record_update_script.py`: passed.
+- `python -m ruff check tests/test_fr017_measurement_setup_record_update_script.py`: passed.
+- `python -m ruff format --check tests/test_fr017_measurement_setup_record_update_script.py`: passed.
+- `python -m pytest tests/test_fr017_measurement_setup_record_update_script.py -q`: passed, 5 tests.
+- Direct temporary-record readback passed: status returned `next_command_kind=update_setup_safety_brief`, setup update returned `next_command_kind=rerun_measurement_intake`, both reported `physical_validation_complete=False`, and both reported `fr018_implementation_cleared=False`.
+
+Remaining blockers:
+
+- FR-017 still requires a real accepted measurement record with setup/safety brief values, left/right dimensions, marked zones, repeatability, independence, and symptom-screen evidence before mockup patterning can truthfully proceed.
+- Downstream non-powered mockup, mannequin/interface, pilot static-fit, pilot movement, quick-release/cable-snag, professional engineering review, final human physical decision, and operator-reviewed completion-ledger update evidence remain required before any Stage 17 completion claim.
+- FR-018 remains blocked and not cleared by this slice.
+
 ### 2026-07-07 00:59Z - Completion model prefers active roadmap workstream
 
 Current posture: Phase 2 / roadmap completion readback now keeps the declared active Orb embodiment / Stage 6 Lens runtime workstream as the continuation source when the ledger names an active workstream and current goal. This is a roadmap-steering correction. It does not close Stage 6, enable summon-anywhere, start resident supervision, claim a desktop effect, complete the one-visible-loop proof, close Stage 17, or clear FR-018.

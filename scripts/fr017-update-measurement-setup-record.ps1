@@ -377,6 +377,16 @@ if ($Mode -eq 'UpdateSetup' -and $ExitCode -eq 0) {
 }
 
 $UpdateCommandTemplate = '.\scripts\fr017-update-measurement-setup-record.ps1 -Mode UpdateSetup -MeasurementPath "{0}" -EvidenceDate YYYY-MM-DD -Observer "<observer>" -PilotId "<pilot-reference>" -MeasurementTool "flexible metric tape" -Method "flexible tape, no tissue compression" -Posture "arm relaxed, palm neutral unless otherwise noted" -ConfirmNoTissueCompressionUsed -ConfirmNoWristBoneCompressionUsed -ConfirmMetricToolUsed -ConfirmArmRelaxedPalmNeutralOrExceptionRecorded -ConfirmStopConditionsBriefed -ConditionNotes "<no tissue/no wrist-bone compression, metric tool, and stop briefing notes>"' -f $ResolvedMeasurementPath
+$MeasurementIntakeStatusCommandTemplate = '.\scripts\fr017-measurement-intake.ps1 -Mode Status -MeasurementPath "{0}"' -f $ResolvedMeasurementPath
+$NextCommandKind = 'none'
+$NextCommand = ''
+if ($WroteFile) {
+  $NextCommandKind = 'rerun_measurement_intake'
+  $NextCommand = $MeasurementIntakeStatusCommandTemplate
+} elseif ($Mode -eq 'Status' -and $ExitCode -eq 0) {
+  $NextCommandKind = 'update_setup_safety_brief'
+  $NextCommand = $UpdateCommandTemplate
+}
 
 $Output = [ordered]@{
   kind = 'francis.fr017.measurement_setup_record_update'
@@ -409,7 +419,10 @@ $Output = [ordered]@{
   overwrite_blocked_fields = @($OverwriteBlockedFields.ToArray())
   overwritten_fields = @($OverwrittenFields.ToArray())
   update_command_template = $UpdateCommandTemplate
-  next_command = if ($WroteFile) { '.\scripts\fr017-measurement-intake.ps1 -Mode Status -MeasurementPath "{0}"' -f $ResolvedMeasurementPath } elseif ($Mode -eq 'Status' -and $ExitCode -eq 0) { $UpdateCommandTemplate } else { '' }
+  next_command_kind = $NextCommandKind
+  next_command_contract = 'next_command is an operator handoff only. It either points to the setup/safety update command for a valid pending record or back to read-only measurement intake after a setup write. It is not physical validation evidence, does not mark Stage 17 complete, and does not clear FR-018.'
+  next_status_command_template = $MeasurementIntakeStatusCommandTemplate
+  next_command = $NextCommand
 }
 
 $Output | ConvertTo-Json -Depth 8

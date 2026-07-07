@@ -101,6 +101,11 @@ def test_fr017_measurement_setup_update_status_preflights_pending_record_without
     assert result["setup_capture_group_complete"] is False
     assert "fr017-update-measurement-setup-record.ps1 -Mode UpdateSetup" in result["update_command_template"]
     assert str(measurement_path) in result["update_command_template"]
+    assert result["next_command_kind"] == "update_setup_safety_brief"
+    assert "operator handoff only" in result["next_command_contract"]
+    assert "does not clear FR-018" in result["next_command_contract"]
+    assert "fr017-measurement-intake.ps1 -Mode Status" in result["next_status_command_template"]
+    assert str(measurement_path) in result["next_status_command_template"]
     assert result["next_command"] == result["update_command_template"]
     assert measurement_path.read_bytes() == before
     record = json.loads(measurement_path.read_text(encoding="utf-8-sig"))
@@ -125,6 +130,10 @@ def test_fr017_measurement_setup_update_records_first_capture_group_without_comp
     assert result["physical_validation_complete"] is False
     assert result["stage17_completion_claim_allowed"] is False
     assert result["fr018_implementation_cleared"] is False
+    assert result["next_command_kind"] == "rerun_measurement_intake"
+    assert "fr017-measurement-intake.ps1 -Mode Status" in result["next_status_command_template"]
+    assert str(measurement_path) in result["next_status_command_template"]
+    assert result["next_command"] == result["next_status_command_template"]
     assert result["updated_fields"] == [
         "evidence.date",
         "evidence.observer",
@@ -164,6 +173,8 @@ def test_fr017_measurement_setup_update_refuses_template_target() -> None:
     result = _payload(proc.stdout)
     assert result["status"] == "measurement_path_targets_template"
     assert result["wrote_file"] is False
+    assert result["next_command_kind"] == "none"
+    assert result["next_command"] == ""
     assert result["physical_validation_complete"] is False
     assert result["fr018_implementation_cleared"] is False
 
@@ -184,6 +195,8 @@ def test_fr017_measurement_setup_update_refuses_overwrite_without_explicit_flag(
     assert result["wrote_file"] is False
     assert "evidence.date" in result["overwrite_blocked_fields"]
     assert "measurement_conditions.stop_conditions_briefed" in result["overwrite_blocked_fields"]
+    assert result["next_command_kind"] == "none"
+    assert result["next_command"] == ""
     assert result["physical_validation_complete"] is False
     assert result["fr018_implementation_cleared"] is False
 
@@ -201,5 +214,7 @@ def test_fr017_measurement_setup_update_rejects_future_date(tmp_path: Path) -> N
     assert result["status"] == "invalid_measurement_setup_update_input"
     assert result["wrote_file"] is False
     assert result["invalid_fields"] == ["evidence.date"]
+    assert result["next_command_kind"] == "none"
+    assert result["next_command"] == ""
     assert result["physical_validation_complete"] is False
     assert result["fr018_implementation_cleared"] is False
