@@ -636,22 +636,36 @@ function Get-SummonRuntimeReadback {
     $RuntimeGlobalHotkey -eq $ExpectedGlobalHotkey -and
     $RuntimeBindingScope -eq $ExpectedBindingScope
   )
+  $NativeHandoffReady = (
+    $StatusKind -eq 'lens.summon.local_launcher' -and
+    @('native_surface_opened', 'local_open_ready', 'opened') -contains $StatusValue -and
+    (Test-TruthyProperty -Payload $Status -Name 'native_handoff_ready') -and
+    (Test-TruthyProperty -Payload $Status -Name 'summon_binding_target_ready') -and
+    (Test-TruthyProperty -Payload $Status -Name 'local_binding_ready') -and
+    (Test-TruthyProperty -Payload $Status -Name 'summon_anywhere') -and
+    (Test-TruthyProperty -Payload $Status -Name 'os_level_summon') -and
+    $RuntimeGlobalHotkey -eq $ExpectedGlobalHotkey -and
+    $RuntimeBindingScope -eq $ExpectedBindingScope
+  )
+  $HandoffReady = $BoundedHandoffReady -or $NativeHandoffReady
   $RequirementState = if ($BoundedHandoffReady) {
     'bounded_handoff_observed'
+  } elseif ($NativeHandoffReady) {
+    'native_handoff_observed'
   } elseif ($RuntimeStateExists) {
     'stale_or_unverified'
   } else {
     'missing'
   }
-  $Blocker = if ($BoundedHandoffReady) {
+  $Blocker = if ($HandoffReady) {
     ''
   } else {
     'summon_binding_runtime_missing'
   }
 
   return [ordered]@{
-    ready = $BoundedHandoffReady
-    status = if ($BoundedHandoffReady) { 'observed' } else { 'missing' }
+    ready = $HandoffReady
+    status = if ($HandoffReady) { 'observed' } else { 'missing' }
     runtime_state_path = 'data/runtime/lens-summon/status.json'
     state_exists = $RuntimeStateExists
     state_kind = $StatusKind
@@ -661,8 +675,18 @@ function Get-SummonRuntimeReadback {
     expected_global_hotkey = $ExpectedGlobalHotkey
     binding_scope = $RuntimeBindingScope
     expected_binding_scope = $ExpectedBindingScope
-    bounded_handoff_ready = (Test-TruthyProperty -Payload $Status -Name 'bounded_handoff_ready')
-    local_open_ready = (Test-TruthyProperty -Payload $Status -Name 'local_open_ready')
+    bounded_handoff_ready = (
+      (Test-TruthyProperty -Payload $Status -Name 'bounded_handoff_ready') -or
+      (Test-TruthyProperty -Payload $Status -Name 'native_handoff_ready')
+    )
+    native_handoff_ready = (Test-TruthyProperty -Payload $Status -Name 'native_handoff_ready')
+    native_surface_ready = (Test-TruthyProperty -Payload $Status -Name 'native_surface_ready')
+    summon_binding_target_ready = (Test-TruthyProperty -Payload $Status -Name 'summon_binding_target_ready')
+    local_binding_ready = (Test-TruthyProperty -Payload $Status -Name 'local_binding_ready')
+    local_open_ready = (
+      (Test-TruthyProperty -Payload $Status -Name 'local_open_ready') -or
+      (Test-TruthyProperty -Payload $Status -Name 'local_binding_ready')
+    )
     opened = (Test-TruthyProperty -Payload $Status -Name 'opened')
     no_launch = (Test-TruthyProperty -Payload $Status -Name 'no_launch')
     summon_anywhere = (Test-TruthyProperty -Payload $Status -Name 'summon_anywhere')
@@ -962,7 +986,7 @@ $EnablementDependencyReadback = @(
         approval_action = 'lens.os_binding.command_palette_binding_authority'
         authority_scope = 'system.write'
       })),
-  (New-EnablementDependency -Id 'overlay_window' -Family 'overlay_window' -Route '/lens/overlay' -ReadinessRoute '/lens/overlay/readiness' -Ready $OverlayReady -Blocker $OverlayBlocker -RequirementState $OverlayRequirementState -BlockedReason ([string](Get-PropertyValue -Payload $OverlayConfig -Name 'blocked_reason' -Default 'lens_overlay_window_not_implemented')) -PreflightScript 'scripts/lens-overlay-preflight.ps1 -Mode Status' -Extra ([pscustomobject]@{
+  (New-EnablementDependency -Id 'overlay_window' -Family 'overlay_window' -Route '/lens/overlay' -ReadinessRoute '/lens/overlay/readiness' -Ready $OverlayReady -Blocker $OverlayBlocker -RequirementState $OverlayRequirementState -BlockedReason ([string](Get-PropertyValue -Payload $OverlayConfig -Name 'blocked_reason' -Default 'lens_overlay_window_not_implemented')) -ProofScript 'scripts/lens-summon-overlay-window-blocker-proof.ps1 -Mode Status' -PreflightScript 'scripts/lens-overlay-preflight.ps1 -Mode Status' -Extra ([pscustomobject]@{
         config_path = $OverlayConfigRelativePath
         config_exists = $null -ne $OverlayConfig
         window_enabled = (Test-TruthyProperty -Payload $OverlayConfig -Name 'window_enabled')

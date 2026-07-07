@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -72,6 +73,24 @@ def _run_bringup(*args: str, env: dict[str, str] | None = None) -> subprocess.Co
         timeout=60,
         env=run_env,
     )
+
+
+def _start_test_resident_process() -> subprocess.Popen[str]:
+    return subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(300)"],
+        text=True,
+    )
+
+
+def _stop_test_resident_process(process: subprocess.Popen[str]) -> None:
+    if process.poll() is not None:
+        return
+    process.terminate()
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=5)
 
 
 def test_lens_stage6_next_handoff_uses_explicit_completion_audit_readback() -> None:
@@ -173,6 +192,11 @@ def test_lens_stage6_next_handoff_uses_explicit_completion_audit_readback() -> N
     assert "$Stage6CompletionAuditPrerequisiteBringupOperatorPlanAuthorityObserved = (" in script
     assert "run_stage6_prerequisite_bringup_$Stage6CompletionAuditPrerequisiteBringupOperatorPlanActionId" in script
     assert "stage6_completion_audit_prerequisite_bringup_operator_plan_handoff_observed" in script
+    assert "$Stage6PrerequisiteBringupServiceConfigPath = [string]$env:FRANCIS_LENS_HOST_SERVICE_CONFIG_PATH" in script
+    assert (
+        "$Stage6PrerequisiteBringupPlanParameters.ServiceConfigPath = $Stage6PrerequisiteBringupServiceConfigPath"
+        in script
+    )
     assert "$Stage6CompletionAuditPrerequisiteBringupEnablementReceiptHandoffObserved = (" in script
     assert "'stage6_prerequisite_bringup_enablement_receipt_review'" in script
     assert "$PersistentSupervisionEnablementExecutionReceiptResidentClaimAllowed" in script
@@ -1720,6 +1744,7 @@ def test_lens_stage6_next_handoff_preserves_system_resident_host_request_proof_h
 
 def test_lens_stage6_next_handoff_prefers_first_missing_prerequisite_after_applied_enablement(
     tmp_path: Path,
+    request: pytest.FixtureRequest,
 ) -> None:
     data_root = tmp_path / "data"
     service_config_path = tmp_path / "service-config" / "lens-host.json"
@@ -1735,7 +1760,9 @@ def test_lens_stage6_next_handoff_prefers_first_missing_prerequisite_after_appli
     )
     service_config_path.parent.mkdir(parents=True, exist_ok=True)
     service_config_path.write_text(json.dumps(service_config, indent=2), encoding="utf-8")
-    pid = os.getpid()
+    resident_process = _start_test_resident_process()
+    request.addfinalizer(lambda: _stop_test_resident_process(resident_process))
+    pid = resident_process.pid
     _write_lens_host_runtime_state(data_root, pid=pid)
     _write_lens_host_supervisor_state(data_root, pid=pid)
     _write_lens_host_supervised_runtime_receipt(data_root)
@@ -1818,7 +1845,11 @@ def test_lens_stage6_next_handoff_prefers_first_missing_prerequisite_after_appli
     assert payload["stage6_completion_audit_recommended_handoff_consumed"] is True
     assert payload["stage6_completion_audit_remaining_acceptance_handoff_observed"] is True
     assert payload["stage6_prerequisite_bringup_plan_observed"] is True
-    assert payload["stage6_prerequisite_bringup_plan"]["status"] == "persistent_supervision_enablement_applied"
+    assert payload["stage6_prerequisite_bringup_plan"]["status"] == "blocked"
+    assert (
+        payload["stage6_prerequisite_bringup_plan"]["current_truthful_gap"]
+        == "persistent_supervision_required_prerequisites_missing"
+    )
     assert payload["persistent_supervision_first_missing_required_before_enable"] == "tray_presence"
     assert payload["persistent_supervision_missing_required_before_enable"] == [
         "tray_presence",
@@ -1883,7 +1914,12 @@ def test_lens_stage6_next_handoff_prefers_first_missing_prerequisite_after_appli
         "overlay_window",
         "summon_binding",
     ]
-    assert ready_concrete_payload["stage6_prerequisite_bringup_plan"]["missing_required_before_enable"] == []
+    assert ready_concrete_payload["stage6_prerequisite_bringup_plan"]["missing_required_before_enable"] == [
+        "tray_presence",
+        "global_hotkey_binding",
+        "overlay_window",
+        "summon_binding",
+    ]
     assert ready_concrete_payload["recommended_concrete_handoff_source"] == (
         "persistent_supervision_first_missing_requirement_handoff"
     )
@@ -1910,7 +1946,7 @@ def _write_lens_host_runtime_state(data_root: Path, *, pid: int) -> None:
                 "mode": "resident",
                 "pid": pid,
                 "process_alive": True,
-                "resident": False,
+                "resident": True,
                 "service_managed": False,
                 "tray_presence": False,
                 "global_hotkey": False,
@@ -2892,9 +2928,12 @@ def test_lens_stage6_next_handoff_consumes_persisted_supervision_receipt(tmp_pat
 
 def test_lens_stage6_next_handoff_does_not_promote_stale_supervised_runtime_receipt_to_tray(
     tmp_path: Path,
+    request: pytest.FixtureRequest,
 ) -> None:
     data_root = tmp_path / "data"
-    pid = os.getpid()
+    resident_process = _start_test_resident_process()
+    request.addfinalizer(lambda: _stop_test_resident_process(resident_process))
+    pid = resident_process.pid
     _write_lens_host_runtime_state(data_root, pid=pid)
     _write_lens_host_supervisor_state(data_root, pid=pid, updated_at="2026-01-01T00:00:00Z")
     _write_lens_host_supervised_runtime_receipt(data_root)
@@ -2925,9 +2964,14 @@ def test_lens_stage6_next_handoff_does_not_promote_stale_supervised_runtime_rece
     assert first_missing_handoff["supervision_execution_supervised_runtime_receipt_observed"] is True
 
 
-def test_lens_stage6_next_handoff_promotes_supervised_runtime_receipt_to_tray(tmp_path: Path) -> None:
+def test_lens_stage6_next_handoff_promotes_supervised_runtime_receipt_to_tray(
+    tmp_path: Path,
+    request: pytest.FixtureRequest,
+) -> None:
     data_root = tmp_path / "data"
-    pid = os.getpid()
+    resident_process = _start_test_resident_process()
+    request.addfinalizer(lambda: _stop_test_resident_process(resident_process))
+    pid = resident_process.pid
     _write_lens_host_runtime_state(data_root, pid=pid)
     _write_lens_host_supervisor_state(data_root, pid=pid)
     _write_lens_host_supervised_runtime_receipt(data_root)

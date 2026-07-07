@@ -27,6 +27,38 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload), encoding="utf-8")
 
 
+def test_persistent_supervision_current_gap_reads_applied_enablement_from_stage6_prerequisite_plan() -> None:
+    script = (_repo_root() / "scripts" / "lens-persistent-supervision-current-gap-proof.ps1").read_text(
+        encoding="utf-8"
+    )
+
+    assert "lens-stage6-prerequisite-bringup-plan.ps1" in script
+    assert "$Stage6PrerequisiteBringupPlanAppliedObserved = (" in script
+    assert (
+        "[string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'status' -Default '') -eq 'persistent_supervision_enablement_applied'"
+        in script
+    )
+    assert (
+        "[string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'current_truthful_gap' -Default '') -eq 'persistent_supervision_execution_boundary'"
+        in script
+    )
+    assert (
+        "[string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlanAction -Name 'id' -Default '') -eq 'review_persistent_supervision_enablement_receipt'"
+        in script
+    )
+    assert "source = 'stage6_prerequisite_bringup_plan_status'" in script
+    assert "$EffectiveAppliedReceiptHandoff = if ($Stage6NextHandoffAppliedReceiptHandoffObserved)" in script
+    assert (
+        "$Stage6PrerequisiteBringupPlanReceiptHandoffObserved = -not $PlanKeepsPrerequisiteGap -and $Stage6PrerequisiteBringupPlanAppliedObserved"
+        in script
+    )
+    assert "function Test-Subset" in script
+    assert "overlay_window = 'scripts/lens-summon-overlay-window-blocker-proof.ps1 -Mode Status'" in script
+    assert "@($PlanMissingBeforeEnable).Count -gt 0" in script
+    assert "Test-Subset -Actual $PlanMissingBeforeEnable -Allowed $ExpectedMissingBeforeEnable" in script
+    assert "$FirstMissingProofScript -eq $ExpectedFirstMissingProofScript" in script
+
+
 def test_persistent_supervision_current_gap_proof_consumes_authority_chain_without_audit(
     tmp_path: Path,
 ) -> None:
@@ -177,7 +209,7 @@ def test_persistent_supervision_current_gap_proof_consumes_authority_chain_witho
     assert checks["resident_claim_boundary_proof"]["status"] == "proof_passed"
     assert checks["authority_chain_consumed"]["status"] == "consumed"
     assert checks["current_gap"]["status"] == "persistent_supervision_required_prerequisites_missing"
-    assert checks["first_missing_requirement_handoff"]["status"] == "resident_host_process_handoff_ready"
+    assert checks["first_missing_requirement_handoff"]["status"] == "first_missing_requirement_handoff_ready"
     assert checks["product_side_effects_denied"]["status"] == "product_read_only"
     assert all(item["passed"] for item in payload["checks"])
 
@@ -371,6 +403,6 @@ def test_persistent_supervision_current_gap_treats_applied_receipt_as_stale_when
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["resident_claim_boundary_handoff"]["status"] == "not_applicable"
     assert checks["current_gap"]["status"] == "persistent_supervision_required_prerequisites_missing"
-    assert checks["first_missing_requirement_handoff"]["status"] == "resident_host_process_handoff_ready"
+    assert checks["first_missing_requirement_handoff"]["status"] == "first_missing_requirement_handoff_ready"
     assert checks["product_side_effects_denied"]["status"] == "product_read_only"
     assert all(item["passed"] for item in payload["checks"])

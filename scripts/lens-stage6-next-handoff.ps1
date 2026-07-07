@@ -1689,9 +1689,14 @@ $Stage6PrerequisiteBringupDataDir = [string]$env:FRANCIS_DATA_DIR
 if ([string]::IsNullOrWhiteSpace($Stage6PrerequisiteBringupDataDir)) {
   $Stage6PrerequisiteBringupDataDir = Join-Path $RepoRoot 'data'
 }
+$Stage6PrerequisiteBringupServiceConfigPath = [string]$env:FRANCIS_LENS_HOST_SERVICE_CONFIG_PATH
+$Stage6PrerequisiteBringupPlanParameters = @{ Mode = 'Status'; DataDir = $Stage6PrerequisiteBringupDataDir }
+if (-not [string]::IsNullOrWhiteSpace($Stage6PrerequisiteBringupServiceConfigPath)) {
+  $Stage6PrerequisiteBringupPlanParameters.ServiceConfigPath = $Stage6PrerequisiteBringupServiceConfigPath
+}
 $Stage6PrerequisiteBringupPlanResult = Invoke-JsonScriptReadback `
   -ScriptPath $Stage6PrerequisiteBringupPlanScript `
-  -Parameters @{ Mode = 'Status'; DataDir = $Stage6PrerequisiteBringupDataDir }
+  -Parameters $Stage6PrerequisiteBringupPlanParameters
 $Stage6PrerequisiteBringupPlan = $Stage6PrerequisiteBringupPlanResult.payload
 $Stage6PrerequisiteBringupPlanGovernance = Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'governance' -Default ([ordered]@{})
 $Stage6PrerequisiteBringupPlanRequiredBeforeEnable = ConvertTo-StringArray -Value (
