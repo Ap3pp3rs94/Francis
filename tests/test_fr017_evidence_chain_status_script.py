@@ -1360,11 +1360,11 @@ def test_fr017_evidence_chain_status_moves_blocker_after_release_cable_ready(tmp
     )
     _assert_path_tail(
         payload["first_blocking_details"]["engineering_review_input_template_path"],
-        "FR-017_Stage17_Package\\FR-017-ENGINEERING-REVIEW-INPUT-TEMPLATE.json"
+        "FR-017_Stage17_Package\\FR-017-ENGINEERING-REVIEW-INPUT-TEMPLATE.json",
     )
     _assert_path_tail(
         payload["first_blocking_details"]["engineering_review_record_initializer_path"],
-        "scripts\\fr017-new-engineering-review-record.ps1"
+        "scripts\\fr017-new-engineering-review-record.ps1",
     )
     assert payload["first_blocking_details"]["engineering_review_working_record_name_pattern"] == (
         "FR-017-ENGINEERING-REVIEW-YYYY-MM-DD-PILOT-RECORD.json"
@@ -1552,11 +1552,11 @@ def test_fr017_evidence_chain_status_blocks_on_final_decision_record_after_final
     )
     _assert_path_tail(
         payload["first_blocking_details"]["final_decision_input_template_path"],
-        "FR-017_Stage17_Package\\FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json"
+        "FR-017_Stage17_Package\\FR-017-FINAL-PHYSICAL-DECISION-INPUT-TEMPLATE.json",
     )
     _assert_path_tail(
         payload["first_blocking_details"]["final_decision_record_initializer_path"],
-        "scripts\\fr017-new-final-decision-record.ps1"
+        "scripts\\fr017-new-final-decision-record.ps1",
     )
     assert payload["first_blocking_details"]["final_decision_working_record_name_pattern"] == (
         "FR-017-FINAL-DECISION-YYYY-MM-DD-PILOT-RECORD.json"
@@ -1684,11 +1684,11 @@ def test_fr017_evidence_chain_status_blocks_on_completion_ledger_after_final_dec
     )
     _assert_path_tail(
         payload["first_blocking_details"]["completion_ledger_handoff_template_path"],
-        "FR-017_Stage17_Package\\FR-017-COMPLETION-LEDGER-HANDOFF-TEMPLATE.md"
+        "FR-017_Stage17_Package\\FR-017-COMPLETION-LEDGER-HANDOFF-TEMPLATE.md",
     )
     _assert_path_tail(
         payload["first_blocking_details"]["completion_ledger_handoff_initializer_path"],
-        "scripts\\fr017-new-completion-ledger-handoff.ps1"
+        "scripts\\fr017-new-completion-ledger-handoff.ps1",
     )
     assert payload["first_blocking_details"]["completion_ledger_handoff_working_record_name_pattern"] == (
         "FR-017-COMPLETION-LEDGER-HANDOFF-YYYY-MM-DD-PILOT.md"
