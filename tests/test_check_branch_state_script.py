@@ -45,7 +45,8 @@ def _commit(repo: Path, relative_path: str, body: str, message: str) -> str:
 
 def _normalized_console_text(value: str) -> str:
     without_ansi = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", value)
-    return re.sub(r"\s+", " ", without_ansi)
+    without_error_view_margins = re.sub(r"(?m)^\s*\|\s?", "", without_ansi)
+    return re.sub(r"\s+", " ", without_error_view_margins)
 
 
 def _diverged_repo(tmp_path: Path) -> Path:
@@ -74,11 +75,16 @@ def _diverged_repo(tmp_path: Path) -> Path:
 
 def test_check_branch_state_console_normalizer_tolerates_power_shell_wrapping() -> None:
     wrapped = (
-        "\x1b[31;1mmerge origin/main before continuing.   branch: codex/test   upstream:\x1b[0m\norigin/codex/test"
+        "\x1b[31;1mRebase or\x1b[0m\n"
+        "   | merge origin/main before continuing.\n"
+        "   | branch: codex/test\n"
+        "   | upstream:\n"
+        "   | origin/codex/test"
     )
 
     normalized = _normalized_console_text(wrapped)
 
+    assert "Rebase or merge origin/main" in normalized
     assert "branch: codex/test" in normalized
     assert "upstream: origin/codex/test" in normalized
 
