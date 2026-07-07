@@ -160,12 +160,34 @@ function Invoke-JsonScriptWithProofRetry {
 }
 
 function Get-LensStatus {
-  $Python = Get-Command python -ErrorAction SilentlyContinue
-  if ($null -eq $Python) {
+  $PythonPath = ''
+  $WindowsVenvPython = Join-Path $RepoRoot '.venv\Scripts\python.exe'
+  if (Test-Path -LiteralPath $WindowsVenvPython) {
+    $PythonPath = $WindowsVenvPython
+  }
+  $UnixVenvPython = Join-Path $RepoRoot '.venv/bin/python'
+  if ([string]::IsNullOrWhiteSpace($PythonPath) -and (Test-Path -LiteralPath $UnixVenvPython)) {
+    $PythonPath = $UnixVenvPython
+  }
+  if ([string]::IsNullOrWhiteSpace($PythonPath)) {
+    $Python = Get-Command python -ErrorAction SilentlyContinue
+    if ($null -ne $Python) {
+      $PythonPath = [string]$Python.Source
+    }
+  }
+  if ([string]::IsNullOrWhiteSpace($PythonPath)) {
     return [ordered]@{
       ok = $false
       error = 'python_unavailable'
     }
+  }
+
+  $PreviousPythonPath = [string]$env:PYTHONPATH
+  $SrcPath = Join-Path $RepoRoot 'src'
+  if ([string]::IsNullOrWhiteSpace($PreviousPythonPath)) {
+    $env:PYTHONPATH = $SrcPath
+  } elseif ($PreviousPythonPath -notlike "*$SrcPath*") {
+    $env:PYTHONPATH = $SrcPath + [System.IO.Path]::PathSeparator + $PreviousPythonPath
   }
 
   $Source = @'
@@ -173,13 +195,22 @@ import json
 from francis.lens.status import lens_status
 print(json.dumps(lens_status(limit=3)))
 '@
-  $Output = & $Python.Source -c $Source
-  if ($LASTEXITCODE -ne 0) {
-    return [ordered]@{
-      ok = $false
-      error = 'lens_status_failed'
-      exit_code = $LASTEXITCODE
-      output = ($Output -join "`n")
+  try {
+    $Output = & $PythonPath -c $Source
+    $ExitCode = $LASTEXITCODE
+    if ($ExitCode -ne 0) {
+      return [ordered]@{
+        ok = $false
+        error = 'lens_status_failed'
+        exit_code = $ExitCode
+        output = ($Output -join "`n")
+      }
+    }
+  } finally {
+    if ([string]::IsNullOrWhiteSpace($PreviousPythonPath)) {
+      Remove-Item Env:\PYTHONPATH -ErrorAction SilentlyContinue
+    } else {
+      $env:PYTHONPATH = $PreviousPythonPath
     }
   }
 

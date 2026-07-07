@@ -78,6 +78,9 @@ def test_lens_stage6_checkpoint_honors_explicit_observation_windows_without_chan
     assert "'-CachedSummonPreflightProofPath', $SummonPreflightProofCachePath" in script
     assert "$ResidentRuntimeHotkeySummonBoundaryProofCachePath = Write-ProofPayloadCache" in script
     assert "'-CachedHotkeySummonBoundaryProofPath', $ResidentRuntimeHotkeySummonBoundaryProofCachePath" in script
+    assert "$WindowsVenvPython = Join-Path $RepoRoot '.venv\\Scripts\\python.exe'" in script
+    assert "$UnixVenvPython = Join-Path $RepoRoot '.venv/bin/python'" in script
+    assert "$env:PYTHONPATH = $SrcPath + [System.IO.Path]::PathSeparator + $PreviousPythonPath" in script
     assert "$ResidentRuntimeOverlayWindowBoundaryProofCachePath = Write-ProofPayloadCache" in script
     assert "'-CachedOverlayWindowBoundaryProofPath', $ResidentRuntimeOverlayWindowBoundaryProofCachePath" in script
 
