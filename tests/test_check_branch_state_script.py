@@ -73,7 +73,9 @@ def _diverged_repo(tmp_path: Path) -> Path:
 
 
 def test_check_branch_state_console_normalizer_tolerates_power_shell_wrapping() -> None:
-    wrapped = "\x1b[31;1mmerge origin/main before continuing.   branch: codex/test   upstream:\x1b[0m\norigin/codex/test"
+    wrapped = (
+        "\x1b[31;1mmerge origin/main before continuing.   branch: codex/test   upstream:\x1b[0m\norigin/codex/test"
+    )
 
     normalized = _normalized_console_text(wrapped)
 
