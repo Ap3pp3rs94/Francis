@@ -545,7 +545,8 @@ def test_lens_stage6_prerequisite_bringup_plan_has_confirmed_request_and_grant_b
     assert "refused_confirmation_required" in script
     assert "runtime_missing_steps = [" in script
     assert "enablement_execution_applied = _enablement_execution_applied(enablement_execution_receipts)" in script
-    assert "and not runtime_missing_steps" not in script
+    assert "missing_steps = runtime_missing_steps" in script
+    assert "if enablement_execution_applied and not runtime_missing_steps else raw_handoff" in script
     assert "request_lens_resident_runtime_execution_authority" in script
     assert "grant_lens_resident_runtime_execution_authority" in script
     assert "execute_lens_resident_runtime_activation" in script
@@ -2742,13 +2743,15 @@ def test_lens_stage6_prerequisite_bringup_applies_enablement_to_temp_service_con
     )
     assert stale_runtime_followup.returncode == 0, stale_runtime_followup.stderr or stale_runtime_followup.stdout
     stale_runtime_payload = json.loads(stale_runtime_followup.stdout)
-    assert stale_runtime_payload["status"] == "persistent_supervision_enablement_applied"
-    assert stale_runtime_payload["missing_required_before_enable"] == []
-    assert stale_runtime_payload["first_missing_requirement_handoff"] == {}
-    assert stale_runtime_payload["next_operator_action_requirement"] == "persistent_supervision_enablement_receipt"
-    assert stale_runtime_payload["next_operator_action"]["id"] == "review_persistent_supervision_enablement_receipt"
-    assert stale_runtime_payload["next_smallest_truthful_gap"] == "persistent_supervision_execution_boundary"
-    assert stale_runtime_payload["authority_required"] == "none_readback_only"
+    assert stale_runtime_payload["status"] == "blocked"
+    assert stale_runtime_payload["current_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
+    assert stale_runtime_payload["current_first_missing_requirement"] == "resident_host_process"
+    assert stale_runtime_payload["first_missing_required_before_enable"] == "resident_host_process"
+    assert "resident_host_process" in stale_runtime_payload["missing_required_before_enable"]
+    assert stale_runtime_payload["next_operator_action_requirement"] == "resident_host_process"
+    assert stale_runtime_payload["next_operator_action"]["id"] == "execute_supervised_resident_host_start"
+    assert stale_runtime_payload["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
+    assert stale_runtime_payload["authority_required"] == "lens.resident_runtime.execution_authority"
     assert stale_runtime_payload["would_execute"] is False
     assert stale_runtime_payload["would_mutate"] is False
 
@@ -2760,12 +2763,14 @@ def test_lens_stage6_prerequisite_bringup_applies_enablement_to_temp_service_con
         service_config_path=service_config_path,
     )
     assert late_resident_grant["status"] == "authority_granted", json.dumps(late_resident_grant, indent=2)
-    assert late_resident_grant["next_operator_action"]["id"] == "review_persistent_supervision_enablement_receipt"
+    assert late_resident_grant["next_operator_action"]["id"] == (
+        "select_exact_approved_resident_runtime_execution_authority_request"
+    )
     assert late_resident_grant["grant_target_action"]["id"] == "grant_resident_runtime_execution_authority"
     assert late_resident_grant["grant_target_action"]["approved_approval_id"] == chain["resident_approval_id"]
-    assert late_resident_grant["grant_target_action"]["grant_target_source"] == "approved_approval_id_handoff"
+    assert late_resident_grant["grant_target_action"]["grant_target_source"] == "selected_approved_request_handoff"
     assert late_resident_grant["grant_target_action"]["selected_instead_of_next_operator_action_id"] == (
-        "review_persistent_supervision_enablement_receipt"
+        "select_exact_approved_resident_runtime_execution_authority_request"
     )
     late_grant_result = late_resident_grant["grant_result"]
     assert late_grant_result["ok"] is True
@@ -2794,13 +2799,10 @@ def test_lens_stage6_prerequisite_bringup_applies_enablement_to_temp_service_con
     assert late_execute_dry_run.returncode == 1, late_execute_dry_run.stderr or late_execute_dry_run.stdout
     late_execute_payload = json.loads(late_execute_dry_run.stdout)
     assert late_execute_payload["status"] == "refused_confirmation_required"
-    assert late_execute_payload["next_operator_action"]["id"] == "review_persistent_supervision_enablement_receipt"
+    assert late_execute_payload["next_operator_action"]["id"] == "execute_supervised_resident_host_start"
     assert late_execute_payload["execute_target_action"]["id"] == "execute_supervised_resident_host_start"
     assert late_execute_payload["execute_target_action"]["active_approval_id"] == chain["resident_approval_id"]
-    assert late_execute_payload["execute_target_action"]["execute_target_source"] == "active_approval_id_handoff"
-    assert late_execute_payload["execute_target_action"]["selected_instead_of_next_operator_action_id"] == (
-        "review_persistent_supervision_enablement_receipt"
-    )
+    assert late_execute_payload["execute_target_action"]["execute_target_source"] == "current_next_operator_action"
     assert late_execute_payload["execute_result"]["status"] == "refused_confirmation_required"
     assert late_execute_payload["execute_result"]["executed"] is False
     assert late_execute_payload["execute_result"]["receipt_written"] is False
@@ -2819,15 +2821,15 @@ def test_lens_stage6_prerequisite_bringup_applies_enablement_to_temp_service_con
     )
     assert stale_grants_followup.returncode == 0, stale_grants_followup.stderr or stale_grants_followup.stdout
     stale_grants_payload = json.loads(stale_grants_followup.stdout)
-    assert stale_grants_payload["status"] == "persistent_supervision_enablement_applied"
-    assert stale_grants_payload["first_missing_requirement_handoff"] == {}
-    assert stale_grants_payload["next_operator_action_requirement"] == "persistent_supervision_enablement_receipt"
-    assert stale_grants_payload["next_operator_action"]["id"] == "review_persistent_supervision_enablement_receipt"
-    assert stale_grants_payload["next_operator_action"]["method"] == "GET"
-    assert stale_grants_payload["next_smallest_truthful_gap"] == "persistent_supervision_execution_boundary"
+    assert stale_grants_payload["status"] == "blocked"
+    assert stale_grants_payload["current_first_missing_requirement"] == "resident_host_process"
+    assert stale_grants_payload["next_operator_action_requirement"] == "resident_host_process"
+    assert stale_grants_payload["next_operator_action"]["id"] == "execute_supervised_resident_host_start"
+    assert stale_grants_payload["next_operator_action"]["route"] == "/lens/resident-runtime/execute"
+    assert stale_grants_payload["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
     assert stale_grants_payload["recommended_next_slice"] == (
-        "run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt"
+        "run_stage6_prerequisite_bringup_execute_supervised_resident_host_start"
     )
-    assert stale_grants_payload["authority_required"] == "none_readback_only"
+    assert stale_grants_payload["authority_required"] == "lens.resident_runtime.execution_authority"
     assert stale_grants_payload["would_execute"] is False
     assert stale_grants_payload["would_mutate"] is False

@@ -1476,15 +1476,9 @@ def _run() -> tuple[int, dict[str, Any]]:
         step for step in ordered_steps if step["id"] in missing or not bool(step["ready"])
     ]
     enablement_execution_applied = _enablement_execution_applied(enablement_execution_receipts)
-    handoff = {} if enablement_execution_applied else raw_handoff
-    effective_missing = (
-        []
-        if enablement_execution_applied
-        else missing
-        if missing
-        else [_safe_str(step.get("id")) for step in runtime_missing_steps]
-    )
-    missing_steps = [] if enablement_execution_applied else runtime_missing_steps
+    handoff = {} if enablement_execution_applied and not runtime_missing_steps else raw_handoff
+    effective_missing = missing if missing else [_safe_str(step.get("id")) for step in runtime_missing_steps]
+    missing_steps = runtime_missing_steps
     next_operator_action = (
         missing_steps[0]["next_operator_action"]
         if missing_steps
@@ -1492,7 +1486,9 @@ def _run() -> tuple[int, dict[str, Any]]:
     )
     next_operator_actor_scope_readiness = _next_operator_actor_scope_readiness(actor, next_operator_action)
     current_gap = (
-        _applied_receipt_truthful_gap(plan, enablement_execution_receipts)
+        _current_truthful_gap(plan, missing_steps)
+        if missing_steps
+        else _applied_receipt_truthful_gap(plan, enablement_execution_receipts)
         if enablement_execution_applied
         else _current_truthful_gap(plan, missing_steps)
     )
@@ -1527,9 +1523,9 @@ def _run() -> tuple[int, dict[str, Any]]:
         recommended_authority_required = (
             _safe_str(next_operator_action.get("approval_action")) or "operator_supplied_authority"
         )
-    prerequisites_ready = enablement_execution_applied or len(missing_steps) == 0
+    prerequisites_ready = len(missing_steps) == 0
     chain_complete = all(step["actions"] for step in ordered_steps) and len(enablement_sequence) == 5
-    no_first_handoff_required = prerequisites_ready and not handoff
+    no_first_handoff_required = not handoff
     first_handoff_bounded = (
         no_first_handoff_required
         or (
@@ -1706,7 +1702,7 @@ def _run() -> tuple[int, dict[str, Any]]:
         "required_before_enable_ready": prerequisites_ready,
         "first_missing_required_before_enable": (
             ""
-            if enablement_execution_applied
+            if enablement_execution_applied and not missing_steps
             else _safe_str(plan.get("first_missing_required_before_enable"))
             or (_safe_str(missing_steps[0].get("id")) if missing_steps else "")
         ),
