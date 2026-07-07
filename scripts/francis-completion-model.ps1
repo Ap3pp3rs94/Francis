@@ -116,6 +116,37 @@ function Get-LabeledParagraph {
   return ''
 }
 
+function Get-PrefixedParagraph {
+  param(
+    [string]$Text,
+    [string]$Prefix,
+    [int]$MaxLength = 700
+  )
+
+  $Lines = [regex]::Split([string]$Text, '\r?\n')
+  for ($Index = 0; $Index -lt $Lines.Count; $Index += 1) {
+    $Line = ([string]$Lines[$Index]).Trim()
+    if (-not $Line.StartsWith($Prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+      continue
+    }
+
+    $Parts = New-Object System.Collections.ArrayList
+    $First = $Line.Substring($Prefix.Length).Trim()
+    if (-not [string]::IsNullOrWhiteSpace($First)) {
+      [void]$Parts.Add($First)
+    }
+    for ($Next = $Index + 1; $Next -lt $Lines.Count; $Next += 1) {
+      $Continuation = ([string]$Lines[$Next]).Trim()
+      if ([string]::IsNullOrWhiteSpace($Continuation)) {
+        break
+      }
+      [void]$Parts.Add($Continuation)
+    }
+    return Limit-CompletionModelText -Text ([string]::Join(' ', [string[]]$Parts.ToArray([string]))) -MaxLength $MaxLength
+  }
+  return ''
+}
+
 function Get-LatestLedgerEntry {
   param([string]$LedgerText)
 
@@ -534,8 +565,14 @@ function New-SelectedGapContract {
     [bool]$Stage17GapPreferred
   )
 
-  $Selected = ($SelectedSource -eq 'stage17_latest_ledger_entry' -or $SelectedSource -eq 'latest_ledger_entry')
-  if ($Stage17GapPreferred) {
+  $Selected = (
+    $SelectedSource -eq 'active_workstream_current_goal' -or
+    $SelectedSource -eq 'stage17_latest_ledger_entry' -or
+    $SelectedSource -eq 'latest_ledger_entry'
+  )
+  if ($SelectedSource -eq 'active_workstream_current_goal') {
+    $SelectionBasis = 'active_workstream_current_goal'
+  } elseif ($Stage17GapPreferred) {
     $SelectionBasis = 'latest_open_stage17_remaining_gap'
   } elseif ($SelectedSource -eq 'latest_ledger_entry') {
     $SelectionBasis = 'latest_ledger_remaining_gap'
@@ -551,6 +588,7 @@ function New-SelectedGapContract {
     selected_gap_source = $SelectedSource
     selection_basis = $SelectionBasis
     selected_gap_is_stage17 = $Stage17GapPreferred
+    selected_gap_is_active_workstream = ($SelectedSource -eq 'active_workstream_current_goal')
     read_only_selection = $true
     writes_repo = $false
     writes_data = $false
@@ -660,7 +698,9 @@ function New-NextContinueDecision {
   param(
     [object]$LoopGuard,
     [object]$LatestLedgerEntry,
-    [object]$Stage17Status
+    [object]$Stage17Status,
+    [string]$ActiveWorkstream = '',
+    [string]$ActiveWorkstreamGoal = ''
   )
 
   $SelectedSource = 'none'
@@ -674,7 +714,13 @@ function New-NextContinueDecision {
     $NextGap = 'restore_completion_model_sources'
   } else {
     $Stage17Entry = $Stage17Status.latest_ledger_entry
-    if (
+    if (-not [string]::IsNullOrWhiteSpace($ActiveWorkstream) -and -not [string]::IsNullOrWhiteSpace($ActiveWorkstreamGoal)) {
+      $SelectedSource = 'active_workstream_current_goal'
+      $SelectedTitle = $ActiveWorkstream
+      $SelectedRoadmapArea = $ActiveWorkstream
+      $Stage17GapPreferred = $false
+      $NextGap = $ActiveWorkstreamGoal
+    } elseif (
       [bool]$Stage17Status.found -and
       ([string]$Stage17Status.status) -eq 'open' -and
       $null -ne $Stage17Entry -and
@@ -699,6 +745,9 @@ function New-NextContinueDecision {
     selected_gap_source = $SelectedSource
     selected_ledger_title = $SelectedTitle
     selected_roadmap_area = $SelectedRoadmapArea
+    active_workstream = $ActiveWorkstream
+    active_workstream_goal = $ActiveWorkstreamGoal
+    active_workstream_preferred = ($SelectedSource -eq 'active_workstream_current_goal')
     stage17_gap_preferred = $Stage17GapPreferred
     next_smallest_truthful_gap = $NextGap
     selected_gap_contract = New-SelectedGapContract -SelectedSource $SelectedSource -Stage17GapPreferred $Stage17GapPreferred
@@ -721,10 +770,12 @@ if ([string]::IsNullOrWhiteSpace($CurrentPhase)) {
   $CurrentPhase = Get-FirstRegexGroup -Text $BuildManifestText -Pattern '\((?<phase>Phase \d+)\)' -GroupName 'phase'
 }
 $LatestLedgerEntry = Get-LatestLedgerEntry -LedgerText $LedgerText
+$ActiveWorkstream = Get-FirstRegexGroup -Text $LedgerText -Pattern '(?m)^Current active workstream:\s*(?<workstream>.+?)\s*$' -GroupName 'workstream'
+$ActiveWorkstreamGoal = Get-PrefixedParagraph -Text $LedgerText -Prefix 'The current goal is ordered as'
 $Stage17Status = Get-Stage17StatusWithArchiveFallback -LedgerText $LedgerText -ArchivePaths $LedgerArchivePaths
 $Planes = Get-PlaneReadiness -BuildManifestText $BuildManifestText
 $LoopGuard = New-CompletionLoopGuard -LedgerExists $LedgerExists -BuildManifestExists $BuildManifestExists -LatestLedgerEntry $LatestLedgerEntry -Stage17Status $Stage17Status
-$NextContinueDecision = New-NextContinueDecision -LoopGuard $LoopGuard -LatestLedgerEntry $LatestLedgerEntry -Stage17Status $Stage17Status
+$NextContinueDecision = New-NextContinueDecision -LoopGuard $LoopGuard -LatestLedgerEntry $LatestLedgerEntry -Stage17Status $Stage17Status -ActiveWorkstream $ActiveWorkstream -ActiveWorkstreamGoal $ActiveWorkstreamGoal
 $Stage17ArtifactReconstructionEvidence = Get-Stage17ArtifactReconstructionEvidence -ReceiptRootPath $ResolvedArtifactReconstructionReceiptRootPath
 
 $Payload = [ordered]@{
@@ -747,6 +798,16 @@ $Payload = [ordered]@{
   current_phase = $CurrentPhase
   plane_readiness_snapshot = $Planes
   latest_ledger_entry = $LatestLedgerEntry
+  active_workstream = [ordered]@{
+    found = -not [string]::IsNullOrWhiteSpace($ActiveWorkstream)
+    workstream = $ActiveWorkstream
+    current_goal = $ActiveWorkstreamGoal
+    read_only_contract = $true
+    writes_repo = $false
+    writes_data = $false
+    grants_execution_authority = $false
+    grants_mutation_authority = $false
+  }
   stage17_status = $Stage17Status
   stage17_artifact_reconstruction_evidence = $Stage17ArtifactReconstructionEvidence
   completion_percentage_model = [ordered]@{

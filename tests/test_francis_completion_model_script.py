@@ -55,16 +55,31 @@ def test_francis_completion_model_status_projects_ledger_backed_loop_guard() -> 
     assert payload["stage17_status"]["writes_data"] is False
     assert payload["stage17_status"]["grants_execution_authority"] is False
     assert payload["stage17_status"]["grants_mutation_authority"] is False
+    assert payload["active_workstream"] == {
+        "found": True,
+        "workstream": "Orb embodiment / Stage 6 Lens runtime completion.",
+        "current_goal": (
+            "summon prerequisites, Orb presence stability, confirmed desktop bridge effects, "
+            "voice replay proof, and one visible loop proof."
+        ),
+        "read_only_contract": True,
+        "writes_repo": False,
+        "writes_data": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+    }
     assert payload["continue_loop_guard"]["status"] == "ready"
     assert payload["next_continue_decision"]["status"] == "bounded_slice_required"
-    assert payload["next_continue_decision"]["selected_gap_source"] == "stage17_latest_ledger_entry"
-    assert payload["next_continue_decision"]["stage17_gap_preferred"] is True
+    assert payload["next_continue_decision"]["selected_gap_source"] == "active_workstream_current_goal"
+    assert payload["next_continue_decision"]["active_workstream_preferred"] is True
+    assert payload["next_continue_decision"]["stage17_gap_preferred"] is False
     selected_gap_contract = payload["next_continue_decision"]["selected_gap_contract"]
     assert selected_gap_contract["kind"] == "francis.completion_model.selected_gap_contract"
     assert selected_gap_contract["status"] == "selected"
-    assert selected_gap_contract["selected_gap_source"] == "stage17_latest_ledger_entry"
-    assert selected_gap_contract["selection_basis"] == "latest_open_stage17_remaining_gap"
-    assert selected_gap_contract["selected_gap_is_stage17"] is True
+    assert selected_gap_contract["selected_gap_source"] == "active_workstream_current_goal"
+    assert selected_gap_contract["selection_basis"] == "active_workstream_current_goal"
+    assert selected_gap_contract["selected_gap_is_stage17"] is False
+    assert selected_gap_contract["selected_gap_is_active_workstream"] is True
     assert selected_gap_contract["read_only_selection"] is True
     assert selected_gap_contract["writes_repo"] is False
     assert selected_gap_contract["writes_data"] is False

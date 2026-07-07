@@ -107,6 +107,31 @@ What is materially true now:
 > Older dated entries are archived under docs/operations/archive/ (see scripts/archive-completion-ledger.ps1).
 > Historical undated ledger body is archived under docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md.
 
+### 2026-07-07 00:59Z - Completion model prefers active roadmap workstream
+
+Current posture: Phase 2 / roadmap completion readback now keeps the declared active Orb embodiment / Stage 6 Lens runtime workstream as the continuation source when the ledger names an active workstream and current goal. This is a roadmap-steering correction. It does not close Stage 6, enable summon-anywhere, start resident supervision, claim a desktop effect, complete the one-visible-loop proof, close Stage 17, or clear FR-018.
+
+What changed:
+
+- `scripts/francis-completion-model.ps1` now reads the ledger's `Current active workstream` line and wrapped current-goal paragraph into a read-only `active_workstream` payload.
+- `next_continue_decision` now selects `active_workstream_current_goal` before archived Stage 17 fallback gaps when that active workstream is present, while preserving `stage17_status` as a separate open readback.
+- The selected-gap contract now exposes `selected_gap_is_active_workstream=True` for that path and continues to deny write, execution, mutation, promotion, and Stage 17 apply authority.
+
+Validation actually run:
+
+- PowerShell parser validation passed for `scripts/francis-completion-model.ps1`.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\francis-completion-model.ps1`: passed and returned `active_workstream.found=True`, `selected_gap_source=active_workstream_current_goal`, `active_workstream_preferred=True`, `stage17_gap_preferred=False`, `writes_repo=False`, and `grants_execution_authority=False`.
+- `python -m py_compile tests\test_francis_completion_model_script.py`: passed.
+- `python -m ruff check tests/test_francis_completion_model_script.py`: passed.
+- `python -m ruff format --check tests/test_francis_completion_model_script.py`: passed.
+- `python -m pytest tests/test_francis_completion_model_script.py -q`: passed, 6 tests.
+
+Remaining blockers:
+
+- Stage 6 Orb/Lens still requires the real summon prerequisites, Orb presence stability, confirmed desktop bridge effects, voice replay proof, and one-visible-loop proof before any completion claim.
+- The config/runtime and live desktop state were not changed by this slice; no hotkey, resident-host, overlay, tray, bridge, or browser-render acceptance is claimed.
+- Stage 17 remains open and physically unvalidated; FR-018 remains blocked and not cleared by this slice.
+
 ### 2026-07-07 00:14Z - FR-017 initializer summary uses full setup command
 
 Current posture: Phase 2 / FR-017 Stage 17 remains documentation-ready and evidence-container-ready, with physical validation still blocked at measurement intake. This is a Stage 17 / FR-017 initializer-summary handoff correction for the first physical-input gate. It does not create a measurement record, record pilot dimensions, mark physical validation complete, close Stage 17, approve load-bearing use, clear powered or frame-coupled use, or clear FR-018.
