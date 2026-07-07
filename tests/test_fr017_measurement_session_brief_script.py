@@ -48,6 +48,10 @@ def _payload(stdout: str) -> dict[str, Any]:
     return json.loads(stdout)
 
 
+def _assert_path_tail(value: str, expected_tail: str) -> None:
+    assert str(value).replace("/", "\\").endswith(expected_tail)
+
+
 def _assert_default_candidate_path(payload: dict[str, Any]) -> Path:
     suggested_path = Path(payload["suggested_measurement_path"])
     assert payload["candidate_measurement_path"] == str(suggested_path)
@@ -100,7 +104,7 @@ def test_fr017_measurement_session_brief_reports_first_template_blocker() -> Non
     assert "brief stop conditions" in payload["first_blocking_group_action"]
     assert "evidence.date" in payload["current_group_missing_fields"]
     assert "measurement_conditions.stop_conditions_briefed" in payload["current_group_missing_fields"]
-    assert payload["current_group_preflight_tool_path"].endswith("scripts\\fr017-new-measurement-record.ps1")
+    _assert_path_tail(payload["current_group_preflight_tool_path"], "scripts\\fr017-new-measurement-record.ps1")
     assert "fr017-new-measurement-record.ps1 -Mode Summary" in payload["current_group_preflight_command_template"]
     assert "-OutputPath" in payload["current_group_preflight_command_template"]
     assert str(suggested_path) in payload["current_group_preflight_command_template"]
@@ -118,7 +122,7 @@ def test_fr017_measurement_session_brief_reports_first_template_blocker() -> Non
     assert payload["current_group_preflight_wrote_file"] is False
     assert payload["current_group_preflight_physical_validation_complete"] is False
     assert payload["current_group_preflight_fr018_implementation_cleared"] is False
-    assert payload["current_group_update_tool_path"].endswith("scripts\\fr017-new-measurement-record.ps1")
+    _assert_path_tail(payload["current_group_update_tool_path"], "scripts\\fr017-new-measurement-record.ps1")
     assert "fr017-new-measurement-record.ps1 -Mode Create" in payload["current_group_update_command_template"]
     assert str(suggested_path) in payload["current_group_update_command_template"]
     assert "Creates a pending working record" in payload["current_group_update_contract"]
@@ -175,7 +179,7 @@ def test_fr017_measurement_session_summary_reports_current_capture_group() -> No
     assert "measurement_conditions.stop_conditions_briefed" in payload["current_group_missing_fields"]
     assert payload["current_group_invalid_field_count"] == 0
     assert payload["current_group_blocking_signal_count"] == 0
-    assert payload["current_group_preflight_tool_path"].endswith("scripts\\fr017-new-measurement-record.ps1")
+    _assert_path_tail(payload["current_group_preflight_tool_path"], "scripts\\fr017-new-measurement-record.ps1")
     assert "fr017-new-measurement-record.ps1 -Mode Summary" in payload["current_group_preflight_command_template"]
     assert str(suggested_path) in payload["current_group_preflight_command_template"]
     assert payload["current_group_preflight_parse_ok"] is True
@@ -285,7 +289,10 @@ def test_fr017_measurement_session_brief_points_pending_record_to_setup_updater(
     assert payload["status"] == "measurement_session_input_required"
     assert payload["using_template"] is False
     assert payload["first_blocking_group_id"] == "setup_and_safety_brief"
-    assert payload["current_group_preflight_tool_path"].endswith("scripts\\fr017-update-measurement-setup-record.ps1")
+    _assert_path_tail(
+        payload["current_group_preflight_tool_path"],
+        "scripts\\fr017-update-measurement-setup-record.ps1",
+    )
     assert (
         "fr017-update-measurement-setup-record.ps1 -Mode Status" in payload["current_group_preflight_command_template"]
     )
@@ -298,7 +305,10 @@ def test_fr017_measurement_session_brief_points_pending_record_to_setup_updater(
     assert payload["current_group_preflight_wrote_file"] is False
     assert payload["current_group_preflight_physical_validation_complete"] is False
     assert payload["current_group_preflight_fr018_implementation_cleared"] is False
-    assert payload["current_group_update_tool_path"].endswith("scripts\\fr017-update-measurement-setup-record.ps1")
+    _assert_path_tail(
+        payload["current_group_update_tool_path"],
+        "scripts\\fr017-update-measurement-setup-record.ps1",
+    )
     assert (
         "fr017-update-measurement-setup-record.ps1 -Mode UpdateSetup"
         in payload["current_group_update_command_template"]
@@ -321,7 +331,7 @@ def test_fr017_measurement_session_brief_points_setup_ready_record_to_left_side_
     payload = _payload(proc.stdout)
     assert payload["status"] == "measurement_session_input_required"
     assert payload["first_blocking_group_id"] == "left_arm_numeric_measurement_passes"
-    assert payload["current_group_preflight_tool_path"].endswith("scripts\\fr017-update-measurement-record.ps1")
+    _assert_path_tail(payload["current_group_preflight_tool_path"], "scripts\\fr017-update-measurement-record.ps1")
     assert "fr017-update-measurement-record.ps1 -Mode Status" in payload["current_group_preflight_command_template"]
     assert "-Side left" in payload["current_group_preflight_command_template"]
     assert str(measurement_path) in payload["current_group_preflight_command_template"]
@@ -333,7 +343,7 @@ def test_fr017_measurement_session_brief_points_setup_ready_record_to_left_side_
     assert payload["current_group_preflight_wrote_file"] is False
     assert payload["current_group_preflight_physical_validation_complete"] is False
     assert payload["current_group_preflight_fr018_implementation_cleared"] is False
-    assert payload["current_group_update_tool_path"].endswith("scripts\\fr017-update-measurement-record.ps1")
+    _assert_path_tail(payload["current_group_update_tool_path"], "scripts\\fr017-update-measurement-record.ps1")
     assert "fr017-update-measurement-record.ps1 -Mode UpdateSide" in payload["current_group_update_command_template"]
     assert "-Side left" in payload["current_group_update_command_template"]
     assert str(measurement_path) in payload["current_group_update_command_template"]
@@ -360,7 +370,7 @@ def test_fr017_measurement_session_brief_points_numeric_ready_record_to_landmark
     payload = _payload(proc.stdout)
     assert payload["status"] == "measurement_session_input_required"
     assert payload["first_blocking_group_id"] == "safety_critical_landmark_and_zone_references"
-    assert payload["current_group_preflight_tool_path"].endswith("scripts\\fr017-update-landmark-record.ps1")
+    _assert_path_tail(payload["current_group_preflight_tool_path"], "scripts\\fr017-update-landmark-record.ps1")
     assert "fr017-update-landmark-record.ps1 -Mode Status" in payload["current_group_preflight_command_template"]
     assert str(measurement_path) in payload["current_group_preflight_command_template"]
     assert "missing marked-zone references" in payload["current_group_preflight_contract"]
@@ -371,7 +381,7 @@ def test_fr017_measurement_session_brief_points_numeric_ready_record_to_landmark
     assert payload["current_group_preflight_wrote_file"] is False
     assert payload["current_group_preflight_physical_validation_complete"] is False
     assert payload["current_group_preflight_fr018_implementation_cleared"] is False
-    assert payload["current_group_update_tool_path"].endswith("scripts\\fr017-update-landmark-record.ps1")
+    _assert_path_tail(payload["current_group_update_tool_path"], "scripts\\fr017-update-landmark-record.ps1")
     assert "fr017-update-landmark-record.ps1 -Mode UpdateLandmarks" in payload["current_group_update_command_template"]
     assert str(measurement_path) in payload["current_group_update_command_template"]
     assert "real side-specific marked-zone references only" in payload["current_group_update_contract"]
@@ -396,7 +406,10 @@ def test_fr017_measurement_session_brief_points_measurement_ready_record_to_inde
     payload = _payload(proc.stdout)
     assert payload["status"] == "measurement_session_input_required"
     assert payload["first_blocking_group_id"] == "left_right_independence_and_safety_screen"
-    assert payload["current_group_preflight_tool_path"].endswith("scripts\\fr017-update-independence-safety-record.ps1")
+    _assert_path_tail(
+        payload["current_group_preflight_tool_path"],
+        "scripts\\fr017-update-independence-safety-record.ps1",
+    )
     assert (
         "fr017-update-independence-safety-record.ps1 -Mode Status"
         in payload["current_group_preflight_command_template"]
@@ -410,7 +423,10 @@ def test_fr017_measurement_session_brief_points_measurement_ready_record_to_inde
     assert payload["current_group_preflight_wrote_file"] is False
     assert payload["current_group_preflight_physical_validation_complete"] is False
     assert payload["current_group_preflight_fr018_implementation_cleared"] is False
-    assert payload["current_group_update_tool_path"].endswith("scripts\\fr017-update-independence-safety-record.ps1")
+    _assert_path_tail(
+        payload["current_group_update_tool_path"],
+        "scripts\\fr017-update-independence-safety-record.ps1",
+    )
     assert (
         "fr017-update-independence-safety-record.ps1 -Mode UpdateIndependenceSafety"
         in payload["current_group_update_command_template"]
@@ -440,7 +456,7 @@ def test_fr017_measurement_session_brief_hands_off_ready_measurement_record(
     assert payload["current_group_missing_fields"] == []
     assert payload["current_group_invalid_fields"] == []
     assert payload["current_group_blocking_signals"] == []
-    assert payload["current_group_update_tool_path"].endswith("scripts\\fr017-mockup-readiness-gate.ps1")
+    _assert_path_tail(payload["current_group_update_tool_path"], "scripts\\fr017-mockup-readiness-gate.ps1")
     assert "fr017-mockup-readiness-gate.ps1 -Mode Status" in payload["current_group_update_command_template"]
     assert "does not mark physical validation complete" in payload["current_group_update_contract"]
     assert payload["measurement_capture_ready_groups"] == 5
