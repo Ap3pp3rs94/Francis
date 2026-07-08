@@ -1,5 +1,15 @@
 from __future__ import annotations
 
+from francis.compute_substrate_adapters import (
+    ComputeAdapterDescriptor,
+    ComputeAdapterGateway,
+    ComputeAdapterKind,
+    ComputeAdapterPolicy,
+    ComputeAdapterRegistry,
+    ComputeAdapterRequest,
+    ComputeAdapterSubmissionResult,
+    InMemoryComputeAdapterRegistry,
+)
 from francis.compute_substrate_approvals import ApprovalStore, InMemoryApprovalStore
 from francis.compute_substrate_backends import (
     ExecutionBackend,
@@ -61,6 +71,13 @@ __all__ = [
     "CancellationToken",
     "CapabilityReceipt",
     "CapabilityReceiptAdapter",
+    "ComputeAdapterDescriptor",
+    "ComputeAdapterGateway",
+    "ComputeAdapterKind",
+    "ComputeAdapterPolicy",
+    "ComputeAdapterRegistry",
+    "ComputeAdapterRequest",
+    "ComputeAdapterSubmissionResult",
     "ComputeReceiptStore",
     "ComputeStatusStore",
     "ComputeSubmission",
@@ -76,6 +93,7 @@ __all__ = [
     "ExecutionInterrupted",
     "ExecutionResult",
     "InMemoryApprovalStore",
+    "InMemoryComputeAdapterRegistry",
     "InMemoryComputeStatusStore",
     "LiveLearningEvent",
     "LocalJsonComputeReceiptStore",

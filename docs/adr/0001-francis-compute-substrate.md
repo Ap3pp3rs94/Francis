@@ -79,6 +79,16 @@ Status records are bounded to safe summary fields such as task id, correlation i
 
 Adapters may request work through this service, but the substrate still governs, the governor still decides, approvals still authorize, and receipts still prove what happened. The service does not add Unreal, VSC-1, desktop Lens, avatar, voice, VM/container, remote worker, simulation, model-training, network, GPU, shell, subprocess, broad filesystem, OS-level CPU/memory enforcement, durable approval persistence, or long-term learning capability.
 
+## Internal Adapter Contract Layer
+
+An internal adapter contract slice adds `ComputeAdapterKind`, `ComputeAdapterDescriptor`, `ComputeAdapterPolicy`, `ComputeAdapterRequest`, `ComputeAdapterSubmissionResult`, `ComputeAdapterRegistry`, `InMemoryComputeAdapterRegistry`, and `ComputeAdapterGateway`.
+
+This layer defines obligations for future Francis bodies and runtimes before they can request compute substrate work. Adapter kinds such as Unreal, VSC-1, desktop Lens, avatar, voice, VM/container, remote worker, simulation, and internal are labels only in this slice. No real adapter implementation, runtime bridge, visual engine binding, virtual PC binding, remote worker, simulator, voice adapter, avatar adapter, or Lens adapter is added.
+
+The adapter gateway is synchronous and in-process. It validates adapter identity, enabled state, declared capabilities, adapter policy, resource ceilings, risk ceiling, default-deny network/GPU/filesystem posture, approval requirements, and optional cancellation/deadline context before converting a request into a `TaskEnvelope` and submitting only through `ComputeSubstrateService.submit`. It does not call backends directly and does not bypass the governor, approval store, budget validation, cancellation/deadline handling, receipt generation, or status readback path.
+
+Adapter request payloads may exist only in memory long enough to create a governed `TaskEnvelope`. Adapter descriptors, policies, request summaries, and submission results do not persist raw payloads, raw execution outputs, secrets, raw approval notes, raw model prompts, long-term memory, live-learning events, broad filesystem paths, or adapter-specific state. This slice does not add a public API route, async execution, background workers, durable adapter status persistence, durable approval persistence, long-term memory persistence, live-learning persistence, model training, OS-level CPU/memory enforcement, network, GPU, shell, subprocess, daemon, or new execution authority.
+
 ## Approval Consumption
 
 An internal approval-consumption slice lets approval-required compute tasks execute only when a valid `ApprovalGrant` is supplied through the internal approval store boundary.
@@ -101,4 +111,4 @@ The substrate also returns an explicit `LiveLearningEvent` contract object. It d
 
 The substrate can grow toward stronger workers without changing Francis's authority model. Visual runtimes, virtual machines, containers, remote workers, and simulations become bounded execution adapters with policy, budget, receipt, and verification obligations.
 
-The current limitation is deliberate: this foundation proves the internal contract, safe dispatch path, bounded compute receipt persistence, internal approval consumption, cooperative cancellation/deadline semantics, and internal synchronous submission/status readback. It does not prove production-grade sandboxing, OS resource isolation, durable approval persistence, cross-process atomic approval reservation, OS-level CPU/memory preemption, API submission, adapter execution, or long-term learning persistence.
+The current limitation is deliberate: this foundation proves the internal contract, safe dispatch path, bounded compute receipt persistence, internal approval consumption, cooperative cancellation/deadline semantics, internal synchronous submission/status readback, and internal adapter request obligations. It does not prove production-grade sandboxing, OS resource isolation, durable approval persistence, cross-process atomic approval reservation, OS-level CPU/memory preemption, API submission, adapter execution, or long-term learning persistence.

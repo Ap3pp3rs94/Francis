@@ -341,6 +341,12 @@ class ComputeSubstrateService:
             correlation_id=correlation_id
         )
 
+    def known_capabilities(self) -> tuple[str, ...]:
+        capabilities: set[str] = set()
+        for descriptor in self.registry.descriptors():
+            capabilities.update(descriptor.capabilities)
+        return tuple(sorted(capabilities))
+
     def describe(self) -> dict[str, Any]:
         return {
             "kind": "francis.compute_substrate.service",
