@@ -237,10 +237,17 @@ def test_lens_stage6_completion_audit_bounds_summon_anywhere_child_proof() -> No
     script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
 
     assert "$CheckpointResult = Invoke-JsonScript" in script
+    assert "'-LensStatusTimeoutSeconds', [string]$CheckpointLensStatusTimeoutSeconds" in script
+    assert "'-ChildProofTimeoutSeconds', [string]$CheckpointChildProofTimeoutSeconds" in script
     assert "New-ChildProofRunSummary -Name 'stage6_checkpoint' -Result $CheckpointResult" in script
-    assert "audit_status = if ($CheckpointTimedOut) { 'checkpoint_timed_out' } else { 'checkpoint_failed' }" in script
+    assert "$CheckpointPayloadBlocked = (" in script
+    assert "$CheckpointPayloadGap" in script
+    assert "$CheckpointAuditStatus = if ($CheckpointPayloadBlocked)" in script
+    assert "audit_status = $CheckpointAuditStatus" in script
     assert "stage6_completion_audit_checkpoint_timeout" in script
+    assert "next_smallest_truthful_gap = $CheckpointNextGap" in script
     assert "fix_stage6_checkpoint_readback_timeout" in script
+    assert "payload = $CheckpointPayload" in script
     assert "$SummonAnywhereBlockersProofResult = Invoke-JsonScript" in script
     assert "'-ChildProofTimeoutSeconds', [string]$ChildProofTimeoutSeconds" in script
     assert ") -TimeoutSeconds $ChildProofTimeoutSeconds" in script

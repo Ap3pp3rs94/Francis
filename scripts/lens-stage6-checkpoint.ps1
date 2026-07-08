@@ -13,7 +13,13 @@ param(
   [int]$ResidentSurfaceForegroundRunSeconds = 15,
 
   [ValidateRange(3, 30)]
-  [int]$SupervisorRunSeconds = 20
+  [int]$SupervisorRunSeconds = 20,
+
+  [ValidateRange(1, 120)]
+  [int]$LensStatusTimeoutSeconds = 30,
+
+  [ValidateRange(1, 600)]
+  [int]$ChildProofTimeoutSeconds = 120
 )
 
 Set-StrictMode -Version 2
@@ -89,11 +95,247 @@ function Get-PowerShellPath {
   return ''
 }
 
+function Quote-ProcessArgument {
+  param([string]$Value)
+
+  if ($null -eq $Value) {
+    return '""'
+  }
+  return '"' + ($Value -replace '"', '\"') + '"'
+}
+
+function Stop-ProcessTree {
+  param([System.Diagnostics.Process]$Process)
+
+  if ($null -eq $Process -or $Process.HasExited) {
+    return
+  }
+  $IsWindowsVariable = Get-Variable -Name IsWindows -ErrorAction SilentlyContinue
+  $RunningOnWindows = ($null -ne $IsWindowsVariable -and [bool]$IsWindowsVariable.Value) -or $env:OS -eq 'Windows_NT'
+  if ($RunningOnWindows) {
+    try {
+      & taskkill.exe /F /T /PID $Process.Id | Out-Null
+      return
+    } catch {
+    }
+  }
+  try {
+    $Process.Kill($true)
+  } catch {
+    try {
+      $Process.Kill()
+    } catch {
+    }
+  }
+}
+
+function Invoke-JsonProcess {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$ExecutablePath,
+
+    [string[]]$Arguments = @(),
+
+    [int]$TimeoutSeconds = $LensStatusTimeoutSeconds,
+
+    [string]$CaptureName = 'lens-stage6-checkpoint-child'
+  )
+
+  if ([string]::IsNullOrWhiteSpace($ExecutablePath)) {
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = ''
+      error = 'executable_unavailable'
+      timed_out = $false
+      timeout_seconds = $TimeoutSeconds
+      duration_ms = 0
+    }
+  }
+
+  $CaptureRoot = Join-Path ([System.IO.Path]::GetTempPath()) 'francis-lens-stage6-checkpoint-readbacks'
+  New-Item -ItemType Directory -Path $CaptureRoot -Force | Out-Null
+  $CaptureId = [Guid]::NewGuid().ToString('N')
+  $StdoutPath = Join-Path $CaptureRoot "$CaptureName-$CaptureId.stdout.json"
+  $StderrPath = Join-Path $CaptureRoot "$CaptureName-$CaptureId.stderr.txt"
+
+  $Shell = Get-Command pwsh -ErrorAction SilentlyContinue
+  if ($null -eq $Shell) {
+    $Shell = Get-Command powershell -ErrorAction SilentlyContinue
+  }
+  if ($null -eq $Shell) {
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = ''
+      error = 'powershell_unavailable'
+      timed_out = $false
+      timeout_seconds = $TimeoutSeconds
+      duration_ms = 0
+    }
+  }
+
+  $CommandText = (
+    '& ' + (Quote-ProcessArgument -Value $ExecutablePath) + ' ' +
+    (($Arguments | ForEach-Object { Quote-ProcessArgument -Value $_ }) -join ' ') +
+    ' > ' + (Quote-ProcessArgument -Value $StdoutPath) +
+    ' 2> ' + (Quote-ProcessArgument -Value $StderrPath)
+  )
+
+  $StartInfo = [System.Diagnostics.ProcessStartInfo]::new()
+  $StartInfo.FileName = $Shell.Source
+  $StartInfo.Arguments = '-NoProfile -ExecutionPolicy Bypass -Command ' + (Quote-ProcessArgument -Value $CommandText)
+  $StartInfo.WorkingDirectory = $RepoRoot
+  $StartInfo.UseShellExecute = $false
+  $StartInfo.CreateNoWindow = $true
+  $StartInfo.RedirectStandardOutput = $false
+  $StartInfo.RedirectStandardError = $false
+  $StartInfo.RedirectStandardInput = $false
+
+  $Process = [System.Diagnostics.Process]::new()
+  $Process.StartInfo = $StartInfo
+  $Timer = [System.Diagnostics.Stopwatch]::StartNew()
+  try {
+    $Started = $Process.Start()
+  } catch {
+    $Timer.Stop()
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = ''
+      error = [string]$_.Exception.Message
+      timed_out = $false
+      timeout_seconds = $TimeoutSeconds
+      duration_ms = [int]$Timer.ElapsedMilliseconds
+    }
+  }
+  if (-not $Started) {
+    $Timer.Stop()
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = ''
+      error = 'process_not_started'
+      timed_out = $false
+      timeout_seconds = $TimeoutSeconds
+      duration_ms = [int]$Timer.ElapsedMilliseconds
+    }
+  }
+
+  $Exited = $Process.WaitForExit($TimeoutSeconds * 1000)
+  if (-not $Exited) {
+    Stop-ProcessTree -Process $Process
+    [void]$Process.WaitForExit(5000)
+    $Timer.Stop()
+    return [ordered]@{
+      exit_code = 124
+      payload = $null
+      output = ''
+      error = 'timeout'
+      timed_out = $true
+      timeout_seconds = $TimeoutSeconds
+      duration_ms = [int]$Timer.ElapsedMilliseconds
+      stdout_path = $StdoutPath
+      stderr_path = $StderrPath
+    }
+  }
+
+  $Text = ''
+  if (Test-Path -LiteralPath $StdoutPath -PathType Leaf) {
+    $Text = [IO.File]::ReadAllText($StdoutPath)
+  }
+  $ErrorText = ''
+  if (Test-Path -LiteralPath $StderrPath -PathType Leaf) {
+    $ErrorText = [IO.File]::ReadAllText($StderrPath)
+  }
+  $Timer.Stop()
+
+  return [ordered]@{
+    exit_code = [int]$Process.ExitCode
+    payload = $null
+    output = $Text
+    error = $ErrorText
+    timed_out = $false
+    timeout_seconds = $TimeoutSeconds
+    duration_ms = [int]$Timer.ElapsedMilliseconds
+    stdout_path = $StdoutPath
+    stderr_path = $StderrPath
+  }
+}
+
+function Write-CheckpointPayloadAndExit {
+  param(
+    [Parameter(Mandatory = $true)]
+    [object]$Payload,
+    [int]$ExitCode = 1
+  )
+
+  $Json = $Payload | ConvertTo-Json -Depth 12
+  [Console]::Out.WriteLine($Json)
+  [Console]::Out.Flush()
+  exit $ExitCode
+}
+
+function Exit-CheckpointChildTimeout {
+  param(
+    [string]$ScriptPath,
+    [int]$TimeoutSeconds,
+    [int]$DurationMs,
+    [string]$StdoutPath = '',
+    [string]$StderrPath = ''
+  )
+
+  $ScriptName = if ([string]::IsNullOrWhiteSpace($ScriptPath)) {
+    'unknown_child_proof'
+  } else {
+    [IO.Path]::GetFileNameWithoutExtension($ScriptPath)
+  }
+  $Payload = [ordered]@{
+    ok = $false
+    kind = 'lens.stage6.checkpoint'
+    status = 'blocked'
+    checkpoint_status = 'child_proof_timed_out'
+    mode = $Mode
+    stage = 'Stage 6 / Lens MVP'
+    stage_state = 'active'
+    stage_claim = 'backend_readback_contract_only'
+    ready_to_close = $false
+    can_close_stage6 = $false
+    transition_allowed = $false
+    next_smallest_truthful_gap = 'stage6_checkpoint_child_proof_timeout'
+    recommended_next_slice = 'fix_stage6_checkpoint_child_proof_timeout'
+    recommended_proof_script = "scripts/$ScriptName.ps1 -Mode Status"
+    authority_required = 'none_new_stage6_checkpoint'
+    authority_granted = $false
+    blockers = [string[]]@('checkpoint_child_proof_timeout')
+    child_proof_timeout = [ordered]@{
+      script = $ScriptName
+      script_path = $ScriptPath
+      timeout_seconds = $TimeoutSeconds
+      duration_ms = $DurationMs
+      stdout_path = $StdoutPath
+      stderr_path = $StderrPath
+    }
+    governance = [ordered]@{
+      read_only_contract = $true
+      diagnostic_only = $true
+      execution_authority = $false
+      approval_decision_authority = $false
+      memory_write = $false
+      approval_request_write = $false
+      product_execution_authority = $false
+      mutation_authority_granted = $false
+    }
+  }
+  Write-CheckpointPayloadAndExit -Payload $Payload -ExitCode 1
+}
+
 function Invoke-JsonScript {
   param(
     [string]$PowerShellPath,
     [string]$ScriptPath,
-    [string[]]$ScriptArgs = @()
+    [string[]]$ScriptArgs = @(),
+    [int]$TimeoutSeconds = $ChildProofTimeoutSeconds
   )
 
   if ([string]::IsNullOrWhiteSpace($PowerShellPath) -or -not (Test-Path -LiteralPath $ScriptPath -PathType Leaf)) {
@@ -101,12 +343,28 @@ function Invoke-JsonScript {
       exit_code = 1
       payload = $null
       output = ''
+      error = 'script_unavailable'
+      timed_out = $false
+      timeout_seconds = $TimeoutSeconds
+      duration_ms = 0
     }
   }
 
-  $Output = & $PowerShellPath -NoProfile -ExecutionPolicy Bypass -File $ScriptPath @ScriptArgs 2>&1
-  $ExitCode = $LASTEXITCODE
-  $Text = ($Output | ForEach-Object { [string]$_ }) -join "`n"
+  $Result = Invoke-JsonProcess `
+    -ExecutablePath $PowerShellPath `
+    -Arguments (@('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $ScriptPath) + $ScriptArgs) `
+    -TimeoutSeconds $TimeoutSeconds `
+    -CaptureName ([IO.Path]::GetFileNameWithoutExtension($ScriptPath))
+  if ([bool]$Result.timed_out) {
+    Exit-CheckpointChildTimeout `
+      -ScriptPath $ScriptPath `
+      -TimeoutSeconds ([int]$Result.timeout_seconds) `
+      -DurationMs ([int]$Result.duration_ms) `
+      -StdoutPath ([string]$Result.stdout_path) `
+      -StderrPath ([string]$Result.stderr_path)
+  }
+
+  $Text = [string]$Result.output
   $Payload = $null
   try {
     $Payload = $Text | ConvertFrom-Json -ErrorAction Stop
@@ -115,9 +373,15 @@ function Invoke-JsonScript {
   }
 
   return [ordered]@{
-    exit_code = $ExitCode
+    exit_code = [int]$Result.exit_code
     payload = $Payload
     output = $Text
+    error = [string]$Result.error
+    timed_out = [bool]$Result.timed_out
+    timeout_seconds = [int]$Result.timeout_seconds
+    duration_ms = [int]$Result.duration_ms
+    stdout_path = [string]$Result.stdout_path
+    stderr_path = [string]$Result.stderr_path
   }
 }
 
@@ -196,14 +460,28 @@ from francis.lens.status import lens_status
 print(json.dumps(lens_status(limit=3)))
 '@
   try {
-    $Output = & $PythonPath -c $Source
-    $ExitCode = $LASTEXITCODE
-    if ($ExitCode -ne 0) {
+    $LensStatusResult = Invoke-JsonProcess `
+      -ExecutablePath $PythonPath `
+      -Arguments @('-c', $Source) `
+      -TimeoutSeconds $LensStatusTimeoutSeconds `
+      -CaptureName 'lens-status-python-readback'
+    if ([bool]$LensStatusResult.timed_out) {
+      return [ordered]@{
+        ok = $false
+        error = 'lens_status_timeout'
+        timed_out = $true
+        timeout_seconds = [int]$LensStatusResult.timeout_seconds
+        stdout_path = [string]$LensStatusResult.stdout_path
+        stderr_path = [string]$LensStatusResult.stderr_path
+      }
+    }
+    if ([int]$LensStatusResult.exit_code -ne 0) {
       return [ordered]@{
         ok = $false
         error = 'lens_status_failed'
-        exit_code = $ExitCode
-        output = ($Output -join "`n")
+        exit_code = [int]$LensStatusResult.exit_code
+        output = [string]$LensStatusResult.output
+        stderr = [string]$LensStatusResult.error
       }
     }
   } finally {
@@ -215,7 +493,7 @@ print(json.dumps(lens_status(limit=3)))
   }
 
   try {
-    return ($Output -join "`n") | ConvertFrom-Json -ErrorAction Stop
+    return ([string]$LensStatusResult.output) | ConvertFrom-Json -ErrorAction Stop
   } catch {
     return [ordered]@{
       ok = $false
@@ -297,6 +575,43 @@ function New-Criterion {
 }
 
 $LensStatus = Get-LensStatus
+$LensStatusTimedOut = (
+  [bool](Get-PropertyValue -Payload $LensStatus -Name 'timed_out' -Default $false) -or
+  [string](Get-PropertyValue -Payload $LensStatus -Name 'error' -Default '') -eq 'lens_status_timeout'
+)
+if ($LensStatusTimedOut) {
+  $Payload = [ordered]@{
+    ok = $false
+    kind = 'lens.stage6.checkpoint'
+    status = 'blocked'
+    checkpoint_status = 'lens_status_timed_out'
+    mode = $Mode
+    stage = 'Stage 6 / Lens MVP'
+    stage_state = 'active'
+    stage_claim = 'backend_readback_contract_only'
+    ready_to_close = $false
+    can_close_stage6 = $false
+    transition_allowed = $false
+    next_smallest_truthful_gap = 'stage6_checkpoint_lens_status_timeout'
+    recommended_next_slice = 'fix_lens_status_readback_timeout'
+    recommended_proof_script = 'scripts/lens-stage6-checkpoint.ps1 -Mode Status -LensStatusTimeoutSeconds <seconds>'
+    authority_required = 'none_new_stage6_checkpoint'
+    authority_granted = $false
+    blockers = [string[]]@('lens_status_timeout')
+    lens_status_readback = $LensStatus
+    governance = [ordered]@{
+      read_only_contract = $true
+      diagnostic_only = $true
+      execution_authority = $false
+      approval_decision_authority = $false
+      memory_write = $false
+      approval_request_write = $false
+      product_execution_authority = $false
+      mutation_authority_granted = $false
+    }
+  }
+  Write-CheckpointPayloadAndExit -Payload $Payload -ExitCode 1
+}
 $LensStatusOk = [bool](Get-PropertyValue -Payload $LensStatus -Name 'ok' -Default $false)
 $Stage6Readiness = Get-PropertyValue -Payload $LensStatus -Name 'stage6_readiness'
 $StageClaim = [string](Get-PropertyValue -Payload $Stage6Readiness -Name 'claim' -Default 'unavailable')

@@ -81,6 +81,15 @@ def test_lens_stage6_checkpoint_honors_explicit_observation_windows_without_chan
     assert "$WindowsVenvPython = Join-Path $RepoRoot '.venv\\Scripts\\python.exe'" in script
     assert "$UnixVenvPython = Join-Path $RepoRoot '.venv/bin/python'" in script
     assert "$env:PYTHONPATH = $SrcPath + [System.IO.Path]::PathSeparator + $PreviousPythonPath" in script
+    assert "[int]$LensStatusTimeoutSeconds = 30" in script
+    assert "[int]$ChildProofTimeoutSeconds = 120" in script
+    assert "function Invoke-JsonProcess" in script
+    assert "error = 'lens_status_timeout'" in script
+    assert "function Exit-CheckpointChildTimeout" in script
+    assert "checkpoint_status = 'child_proof_timed_out'" in script
+    assert "next_smallest_truthful_gap = 'stage6_checkpoint_child_proof_timeout'" in script
+    assert "checkpoint_status = 'lens_status_timed_out'" in script
+    assert "next_smallest_truthful_gap = 'stage6_checkpoint_lens_status_timeout'" in script
     assert "$ResidentRuntimeOverlayWindowBoundaryProofCachePath = Write-ProofPayloadCache" in script
     assert "'-CachedOverlayWindowBoundaryProofPath', $ResidentRuntimeOverlayWindowBoundaryProofCachePath" in script
 

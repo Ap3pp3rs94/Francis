@@ -59,7 +59,9 @@ function Stop-ProcessTree {
   if ($null -eq $Process -or $Process.HasExited) {
     return
   }
-  if ($IsWindows -or $env:OS -eq 'Windows_NT') {
+  $IsWindowsVariable = Get-Variable -Name IsWindows -ErrorAction SilentlyContinue
+  $RunningOnWindows = ($null -ne $IsWindowsVariable -and [bool]$IsWindowsVariable.Value) -or $env:OS -eq 'Windows_NT'
+  if ($RunningOnWindows) {
     try {
       & taskkill.exe /F /T /PID $Process.Id | Out-Null
       return
@@ -445,6 +447,26 @@ function Invoke-JsonScript {
   }
 }
 
+function Get-PropertyValue {
+  param(
+    [object]$Payload,
+    [string]$Name,
+    [object]$Default = $null
+  )
+
+  if ($null -eq $Payload) {
+    return $Default
+  }
+  $Property = $Payload.PSObject.Properties[$Name]
+  if ($null -eq $Property) {
+    return $Default
+  }
+  if ($null -eq $Property.Value) {
+    return $Default
+  }
+  return $Property.Value
+}
+
 function New-ChildProofRunSummary {
   param(
     [Parameter(Mandatory = $true)]
@@ -527,23 +549,69 @@ $Stage6ApiExecutionProofHotkeys = @{
 }
 $ChildStartupTimeoutSeconds = [Math]::Max($StartupTimeoutSeconds, 30)
 $ChildHostLaunchRunSeconds = [Math]::Max($HostLaunchRunSeconds, 5)
+$CheckpointLensStatusTimeoutSeconds = [Math]::Min([Math]::Max(1, $ChildProofTimeoutSeconds - 15), 120)
+$CheckpointChildProofTimeoutSeconds = [Math]::Min([Math]::Max(1, $ChildProofTimeoutSeconds - 15), 120)
+$CheckpointWrapperTimeoutSeconds = [Math]::Min([Math]::Max($ChildProofTimeoutSeconds, $CheckpointChildProofTimeoutSeconds + 40), 600)
 
 $CheckpointResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $CheckpointScript -ScriptArgs @(
   '-Mode', 'Status',
   '-StartupTimeoutSeconds', [string]$StartupTimeoutSeconds,
   '-HostLaunchRunSeconds', [string]$HostLaunchRunSeconds,
   '-ResidentSurfaceForegroundRunSeconds', [string]$ResidentSurfaceForegroundRunSeconds,
-  '-SupervisorRunSeconds', [string]$SupervisorRunSeconds
-) -TimeoutSeconds $ChildProofTimeoutSeconds
+  '-SupervisorRunSeconds', [string]$SupervisorRunSeconds,
+  '-LensStatusTimeoutSeconds', [string]$CheckpointLensStatusTimeoutSeconds,
+  '-ChildProofTimeoutSeconds', [string]$CheckpointChildProofTimeoutSeconds
+) -TimeoutSeconds $CheckpointWrapperTimeoutSeconds
 if ([bool]$CheckpointResult.timed_out -or [int]$CheckpointResult.exit_code -ne 0 -or $null -eq $CheckpointResult.payload) {
   $CheckpointChildRun = New-ChildProofRunSummary -Name 'stage6_checkpoint' -Result $CheckpointResult
   $CheckpointTimedOut = [bool]$CheckpointResult.timed_out
+  $CheckpointPayload = $CheckpointResult.payload
+  $CheckpointPayloadKind = [string](Get-PropertyValue -Payload $CheckpointPayload -Name 'kind' -Default '')
+  $CheckpointPayloadGap = [string](Get-PropertyValue -Payload $CheckpointPayload -Name 'next_smallest_truthful_gap' -Default '')
+  $CheckpointPayloadRecommendedNextSlice = [string](Get-PropertyValue -Payload $CheckpointPayload -Name 'recommended_next_slice' -Default '')
+  $CheckpointPayloadRecommendedProofScript = [string](Get-PropertyValue -Payload $CheckpointPayload -Name 'recommended_proof_script' -Default '')
+  $CheckpointPayloadAuthorityRequired = [string](Get-PropertyValue -Payload $CheckpointPayload -Name 'authority_required' -Default '')
+  $CheckpointPayloadBlocked = (
+    $CheckpointPayloadKind -eq 'lens.stage6.checkpoint' -and
+    -not [string]::IsNullOrWhiteSpace($CheckpointPayloadGap)
+  )
   $CheckpointChildProofTimeouts = if ($CheckpointTimedOut) { [string[]]@('stage6_checkpoint') } else { [string[]]@() }
+  $CheckpointNextGap = if ($CheckpointPayloadBlocked) {
+    $CheckpointPayloadGap
+  } elseif ($CheckpointTimedOut) {
+    'stage6_completion_audit_checkpoint_timeout'
+  } else {
+    'stage6_completion_audit_checkpoint_failed'
+  }
+  $CheckpointNextSlice = if ($CheckpointPayloadBlocked -and -not [string]::IsNullOrWhiteSpace($CheckpointPayloadRecommendedNextSlice)) {
+    $CheckpointPayloadRecommendedNextSlice
+  } elseif ($CheckpointTimedOut) {
+    'fix_stage6_checkpoint_readback_timeout'
+  } else {
+    'fix_stage6_checkpoint_readback_failure'
+  }
+  $CheckpointProofScript = if ($CheckpointPayloadBlocked -and -not [string]::IsNullOrWhiteSpace($CheckpointPayloadRecommendedProofScript)) {
+    $CheckpointPayloadRecommendedProofScript
+  } else {
+    'scripts/lens-stage6-checkpoint.ps1 -Mode Status'
+  }
+  $CheckpointAuthorityRequired = if ($CheckpointPayloadBlocked -and -not [string]::IsNullOrWhiteSpace($CheckpointPayloadAuthorityRequired)) {
+    $CheckpointPayloadAuthorityRequired
+  } else {
+    'none_new_stage6_completion_audit'
+  }
+  $CheckpointAuditStatus = if ($CheckpointPayloadBlocked) {
+    'checkpoint_blocked'
+  } elseif ($CheckpointTimedOut) {
+    'checkpoint_timed_out'
+  } else {
+    'checkpoint_failed'
+  }
   $Payload = [ordered]@{
     ok = $false
     kind = 'lens.stage6.completion_audit'
     status = 'blocked'
-    audit_status = if ($CheckpointTimedOut) { 'checkpoint_timed_out' } else { 'checkpoint_failed' }
+    audit_status = $CheckpointAuditStatus
     mode = $Mode
     stage = 'Stage 6 / Lens MVP'
     stage_state = 'active'
@@ -556,18 +624,18 @@ if ([bool]$CheckpointResult.timed_out -or [int]$CheckpointResult.exit_code -ne 0
     child_proof_timeouts = @($CheckpointChildProofTimeouts)
     child_readback_timeouts = [string[]]@()
     child_proof_runs = @($CheckpointChildRun)
-    next_smallest_truthful_gap = if ($CheckpointTimedOut) { 'stage6_completion_audit_checkpoint_timeout' } else { 'stage6_completion_audit_checkpoint_failed' }
+    next_smallest_truthful_gap = $CheckpointNextGap
     recommended_handoff_source = 'stage6_checkpoint_readback'
-    recommended_next_slice = if ($CheckpointTimedOut) { 'fix_stage6_checkpoint_readback_timeout' } else { 'fix_stage6_checkpoint_readback_failure' }
-    recommended_proof_script = 'scripts/lens-stage6-checkpoint.ps1 -Mode Status'
-    authority_required = 'none_new_stage6_completion_audit'
+    recommended_next_slice = $CheckpointNextSlice
+    recommended_proof_script = $CheckpointProofScript
+    authority_required = $CheckpointAuthorityRequired
     authority_granted = $false
     recommended_handoff = [ordered]@{
-      id = if ($CheckpointTimedOut) { 'stage6_completion_audit_checkpoint_timeout' } else { 'stage6_completion_audit_checkpoint_failed' }
+      id = $CheckpointNextGap
       status = 'blocked'
-      next_step = if ($CheckpointTimedOut) { 'fix_stage6_checkpoint_readback_timeout' } else { 'fix_stage6_checkpoint_readback_failure' }
-      proof_script = 'scripts/lens-stage6-checkpoint.ps1 -Mode Status'
-      authority_required = 'none_new_stage6_completion_audit'
+      next_step = $CheckpointNextSlice
+      proof_script = $CheckpointProofScript
+      authority_required = $CheckpointAuthorityRequired
       authority_granted = $false
       read_only_contract = $true
       diagnostic_only = $true
@@ -582,6 +650,7 @@ if ([bool]$CheckpointResult.timed_out -or [int]$CheckpointResult.exit_code -ne 0
       stdout_path = [string]$CheckpointResult.stdout_path
       stderr_path = [string]$CheckpointResult.stderr_path
       stderr = [string]$CheckpointResult.error
+      payload = $CheckpointPayload
     }
     governance = [ordered]@{
       read_only_contract = $true

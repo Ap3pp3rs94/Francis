@@ -73,7 +73,9 @@ function Stop-ProcessTree {
   if ($null -eq $Process -or $Process.HasExited) {
     return
   }
-  if ($IsWindows -or $env:OS -eq 'Windows_NT') {
+  $IsWindowsVariable = Get-Variable -Name IsWindows -ErrorAction SilentlyContinue
+  $RunningOnWindows = ($null -ne $IsWindowsVariable -and [bool]$IsWindowsVariable.Value) -or $env:OS -eq 'Windows_NT'
+  if ($RunningOnWindows) {
     try {
       & taskkill.exe /F /T /PID $Process.Id | Out-Null
       return
