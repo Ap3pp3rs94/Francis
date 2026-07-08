@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import json
 import time
 from dataclasses import replace
@@ -7,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+import francis.compute_substrate_approvals as approval_module
 from francis.compute_substrate import (
     COMPUTE_RECEIPT_KIND,
     LIVE_LEARNING_EVENT_KIND,
@@ -25,6 +27,7 @@ from francis.compute_substrate import (
     ExecutionResult,
     InMemoryApprovalStore,
     InMemoryComputeStatusStore,
+    LocalJsonComputeApprovalStore,
     LocalJsonComputeReceiptStore,
     ResourceBudget,
     SafeLocalBackend,
@@ -245,6 +248,164 @@ def _approval_grant(
         revoked=revoked,
         single_use=single_use,
     )
+
+
+def test_local_json_compute_approval_store_writes_and_reads_approval(tmp_path: Path) -> None:
+    store = LocalJsonComputeApprovalStore(tmp_path / "compute-approvals")
+    grant = _approval_grant(
+        approval_id="approval_SAFE-123",
+        approval_note="bounded approval note",
+        single_use=False,
+    )
+
+    stored = store.add(grant)
+    readback = store.get("approval_SAFE-123")
+
+    assert stored == grant
+    assert readback == grant
+    assert store.describe()["durable"] is True
+    assert store.describe()["cross_process_atomic_reservation"] is False
+    assert (tmp_path / "compute-approvals" / "approval_SAFE-123.json").exists()
+
+
+@pytest.mark.parametrize(
+    "approval_id",
+    [
+        "../escape",
+        "..\\escape",
+        "nested/escape",
+        "nested\\escape",
+        "/absolute/path",
+        "\\absolute\\path",
+        "C:/absolute/path",
+        "C:\\absolute\\path",
+        "approval.with.dot",
+        "approval:with:colon",
+        "approval\u2215with\u2215unicode-separator",
+        "",
+        "   ",
+    ],
+)
+def test_local_json_compute_approval_store_rejects_unsafe_approval_ids(
+    tmp_path: Path,
+    approval_id: str,
+) -> None:
+    store = LocalJsonComputeApprovalStore(tmp_path / "compute-approvals")
+
+    with pytest.raises(ValueError, match="unsafe_approval_id"):
+        store.get(approval_id)
+
+    with pytest.raises(ValueError, match="unsafe_approval_id"):
+        store.add(_approval_grant(approval_id=approval_id))
+
+    assert not (tmp_path / "compute-approvals").exists()
+
+
+def test_unsafe_approval_ids_are_not_silently_normalized_into_persisted_aliases(tmp_path: Path) -> None:
+    store = LocalJsonComputeApprovalStore(tmp_path / "compute-approvals")
+
+    for approval_id in ("../escape", "..\\escape", "C:/absolute/path", "approval:with:colon"):
+        with pytest.raises(ValueError, match="unsafe_approval_id"):
+            store.add(_approval_grant(approval_id=approval_id))
+
+    assert not (tmp_path / "compute-approvals").exists()
+    assert store.get("approval_escape") is None
+    assert store.get("approval-with-colon") is None
+
+
+def test_unsafe_envelope_approval_id_denies_without_persisted_receipt_alias(tmp_path: Path) -> None:
+    registry = WorkerRegistry()
+    registry.register(SafeLocalBackend())
+    approval_store = LocalJsonComputeApprovalStore(tmp_path / "compute-approvals")
+    receipt_store = LocalJsonComputeReceiptStore(tmp_path / "compute-receipts")
+
+    result = SubstrateGovernor(approval_store=approval_store, receipt_store=receipt_store).execute(
+        create_task_envelope(
+            "echo",
+            task_id="task-unsafe-approval-id",
+            approval_id="../escape",
+            budget=ResourceBudget(approval_required=True),
+        ),
+        registry,
+    )
+
+    receipt_text = Path(result.receipt.receipt_path).read_text(encoding="utf-8")
+    assert result.ok is False
+    assert result.status == "denied"
+    assert result.error == "unsafe_approval_id"
+    assert result.receipt.approval_id == ""
+    assert result.receipt.governance["approval_id"] == ""
+    assert result.receipt.governance["approval_decision"] == "unsafe_approval_id"
+    assert result.receipt.governance["approval_persistence"] == "approval_id_rejected_before_read"
+    assert result.receipt.governance["approval_consumed"] is False
+    assert "../escape" not in receipt_text
+    assert "..\\escape" not in receipt_text
+    assert "approval_escape" not in receipt_text
+
+
+def test_local_json_compute_approval_store_consumes_single_use_once_and_persists_readback(
+    tmp_path: Path,
+) -> None:
+    registry = WorkerRegistry()
+    registry.register(SafeLocalBackend())
+    store = LocalJsonComputeApprovalStore(tmp_path / "compute-approvals")
+    store.add(_approval_grant(approval_id="approval-durable-once"))
+    envelope = create_task_envelope(
+        "echo",
+        task_id="task-approved",
+        approval_id="approval-durable-once",
+        budget=ResourceBudget(approval_required=True),
+    )
+    backend = registry.backend_for("echo")
+    assert backend is not None
+
+    first = store.consume(envelope, backend.descriptor)
+    second = store.consume(envelope, backend.descriptor)
+    consumed = store.get("approval-durable-once")
+
+    assert first.allowed is True
+    assert first.consumed is True
+    assert first.evidence["durable_approval_persistence"] is True
+    assert second.allowed is False
+    assert second.reason == "already_consumed_approval"
+    assert consumed is not None
+    assert consumed.consumed_at_ms > 0
+    assert consumed.consumed_by_task_id == "task-approved"
+
+
+def test_local_json_compute_approval_store_redacts_raw_notes_and_does_not_store_task_content(
+    tmp_path: Path,
+) -> None:
+    store = LocalJsonComputeApprovalStore(tmp_path / "compute-approvals")
+    store.add(
+        _approval_grant(
+            approval_id="approval-redacted",
+            approval_note="token=approval-secret-token-123456",
+        )
+    )
+
+    approval_text = (tmp_path / "compute-approvals" / "approval-redacted.json").read_text(encoding="utf-8")
+
+    assert "approval-secret-token-123456" not in approval_text
+    assert "[REDACTED:secret]" in approval_text
+    assert "raw task payload" not in approval_text
+    assert "raw execution output" not in approval_text
+    assert "raw model prompt" not in approval_text
+    assert "C:/secret/private" not in approval_text
+    assert '"does_not_persist_raw_approval_note": true' in approval_text
+
+
+def test_failed_local_json_compute_approval_persistence_does_not_fake_stored_success(
+    tmp_path: Path,
+) -> None:
+    blocked_root = tmp_path / "approval-root-is-file"
+    blocked_root.write_text("not a directory", encoding="utf-8")
+    store = LocalJsonComputeApprovalStore(blocked_root)
+
+    with pytest.raises(OSError):
+        store.add(_approval_grant(approval_id="approval-store-fails"))
+
+    assert store.get("approval-store-fails") is None
 
 
 def test_approval_required_false_preserves_existing_execution_behavior() -> None:
@@ -521,6 +682,219 @@ def test_execution_failure_after_valid_approval_keeps_approval_consumed() -> Non
     assert result.receipt.governance["approval_satisfied"] is True
     assert result.receipt.governance["approval_consumed"] is True
     assert result.receipt.governance["approval_consumption"] == "consumed"
+
+
+def test_valid_durable_approval_executes_through_governor_and_service(tmp_path: Path) -> None:
+    store = LocalJsonComputeApprovalStore(tmp_path / "compute-approvals")
+    store.add(_approval_grant(approval_id="approval-governor", task_id="task-durable-governor"))
+    service_store = LocalJsonComputeApprovalStore(tmp_path / "service-approvals")
+    service_store.add(_approval_grant(approval_id="approval-service", task_id="task-durable-service"))
+    registry = WorkerRegistry()
+    registry.register(SafeLocalBackend())
+
+    governor_result = SubstrateGovernor(approval_store=store).execute(
+        create_task_envelope(
+            "echo",
+            task_id="task-durable-governor",
+            approval_id="approval-governor",
+            budget=ResourceBudget(approval_required=True),
+        ),
+        registry,
+    )
+    service_result = ComputeSubstrateService(approval_store=service_store).submit(
+        create_task_envelope(
+            "echo",
+            task_id="task-durable-service",
+            approval_id="approval-service",
+            budget=ResourceBudget(approval_required=True),
+        )
+    )
+
+    governor_grant = store.get("approval-governor")
+    service_grant = service_store.get("approval-service")
+    assert governor_result.ok is True
+    assert governor_result.receipt.governance["approval_persistence"] == "persisted_local_json"
+    assert governor_result.receipt.governance["durable_approval_persistence"] is True
+    assert governor_grant is not None
+    assert governor_grant.consumed_by_task_id == "task-durable-governor"
+    assert service_result.ok is True
+    assert service_result.status == ComputeTaskStatus.SUCCEEDED
+    assert service_result.record.approval_consumed is True
+    assert service_grant is not None
+    assert service_grant.consumed_by_task_id == "task-durable-service"
+
+
+def test_durable_approval_denials_match_existing_scope_rules(tmp_path: Path) -> None:
+    registry = WorkerRegistry()
+    registry.register(SafeLocalBackend())
+    expired_store = LocalJsonComputeApprovalStore(tmp_path / "expired-approvals")
+    expired_store.add(_approval_grant(approval_id="approval-expired", expires_at_ms=1))
+    revoked_store = LocalJsonComputeApprovalStore(tmp_path / "revoked-approvals")
+    revoked_store.add(_approval_grant(approval_id="approval-revoked", revoked=True))
+    wrong_scope_store = LocalJsonComputeApprovalStore(tmp_path / "scope-approvals")
+    wrong_scope_store.add(_approval_grant(approval_id="approval-scope", capability="compute_test"))
+
+    expired = SubstrateGovernor(approval_store=expired_store).execute(
+        create_task_envelope(
+            "echo",
+            task_id="task-approved",
+            approval_id="approval-expired",
+            budget=ResourceBudget(approval_required=True),
+        ),
+        registry,
+    )
+    revoked = SubstrateGovernor(approval_store=revoked_store).execute(
+        create_task_envelope(
+            "echo",
+            task_id="task-approved",
+            approval_id="approval-revoked",
+            budget=ResourceBudget(approval_required=True),
+        ),
+        registry,
+    )
+    wrong_scope = SubstrateGovernor(approval_store=wrong_scope_store).execute(
+        create_task_envelope(
+            "echo",
+            task_id="task-approved",
+            approval_id="approval-scope",
+            budget=ResourceBudget(approval_required=True),
+        ),
+        registry,
+    )
+
+    assert expired.error == "expired_approval"
+    assert revoked.error == "revoked_approval"
+    assert wrong_scope.error == "capability_mismatch"
+    assert expired.receipt.governance["durable_approval_persistence"] is True
+    assert revoked.receipt.governance["approval_consumed"] is False
+    assert wrong_scope.receipt.governance["approval_consumed"] is False
+
+
+class _FailingConsumeApprovalStore(LocalJsonComputeApprovalStore):
+    def __init__(self, approval_root: Path) -> None:
+        super().__init__(approval_root)
+        self.fail_writes = False
+
+    def _write_grant(self, grant: ApprovalGrant) -> None:
+        if self.fail_writes:
+            raise OSError("approval write unavailable")
+        super()._write_grant(grant)
+
+
+def test_failed_durable_approval_consumption_does_not_call_backend(tmp_path: Path) -> None:
+    registry = WorkerRegistry()
+    registry.register(_ExplodingBackend())
+    store = _FailingConsumeApprovalStore(tmp_path / "compute-approvals")
+    store.add(_approval_grant(approval_id="approval-consume-fails", task_id="task-consume-fails"))
+    store.fail_writes = True
+
+    result = SubstrateGovernor(approval_store=store).execute(
+        create_task_envelope(
+            "echo",
+            task_id="task-consume-fails",
+            approval_id="approval-consume-fails",
+            budget=ResourceBudget(approval_required=True),
+        ),
+        registry,
+    )
+
+    grant = store.get("approval-consume-fails")
+    assert result.ok is False
+    assert result.status == "denied"
+    assert result.error == "approval_persistence_failed"
+    assert result.receipt.governance["approval_consumed"] is False
+    assert grant is not None
+    assert grant.consumed_at_ms == 0
+
+
+def test_durable_approval_not_consumed_on_pre_execution_cancel_or_deadline(tmp_path: Path) -> None:
+    cancel_store = LocalJsonComputeApprovalStore(tmp_path / "cancel-approvals")
+    cancel_store.add(_approval_grant(approval_id="approval-cancel", task_id="task-cancel-durable"))
+    deadline_store = LocalJsonComputeApprovalStore(tmp_path / "deadline-approvals")
+    deadline_store.add(_approval_grant(approval_id="approval-deadline", task_id="task-deadline-durable"))
+
+    cancelled = ComputeSubstrateService(approval_store=cancel_store).submit(
+        create_task_envelope(
+            "echo",
+            task_id="task-cancel-durable",
+            approval_id="approval-cancel",
+            budget=ResourceBudget(approval_required=True),
+        ),
+        context=ExecutionContext(
+            cancellation_token=CancellationToken(cancel_requested=True, reason="operator_cancelled"),
+        ),
+    )
+    timed_out = ComputeSubstrateService(approval_store=deadline_store).submit(
+        create_task_envelope(
+            "echo",
+            task_id="task-deadline-durable",
+            approval_id="approval-deadline",
+            budget=ResourceBudget(approval_required=True),
+        ),
+        context=ExecutionContext(deadline=ExecutionDeadline(deadline_at_ms=1, source="test_expired")),
+    )
+
+    cancel_grant = cancel_store.get("approval-cancel")
+    deadline_grant = deadline_store.get("approval-deadline")
+    assert cancelled.status == ComputeTaskStatus.CANCELLED
+    assert timed_out.status == ComputeTaskStatus.TIMED_OUT
+    assert cancel_grant is not None
+    assert deadline_grant is not None
+    assert cancel_grant.consumed_at_ms == 0
+    assert deadline_grant.consumed_at_ms == 0
+
+
+def test_durable_approval_remains_consumed_when_execution_starts_then_fails(tmp_path: Path) -> None:
+    registry = WorkerRegistry()
+    registry.register(_FailingAfterApprovalBackend())
+    store = LocalJsonComputeApprovalStore(tmp_path / "compute-approvals")
+    store.add(_approval_grant(approval_id="approval-started-fails", task_id="task-started-fails"))
+
+    result = SubstrateGovernor(approval_store=store).execute(
+        create_task_envelope(
+            "echo",
+            task_id="task-started-fails",
+            approval_id="approval-started-fails",
+            budget=ResourceBudget(approval_required=True),
+        ),
+        registry,
+    )
+
+    grant = store.get("approval-started-fails")
+    assert result.status == "error"
+    assert result.receipt.governance["execution_started"] is True
+    assert result.receipt.governance["approval_consumed"] is True
+    assert grant is not None
+    assert grant.consumed_at_ms > 0
+    assert grant.consumed_by_task_id == "task-started-fails"
+
+
+def test_durable_compute_receipt_records_durable_approval_summary(tmp_path: Path) -> None:
+    registry = WorkerRegistry()
+    registry.register(SafeLocalBackend())
+    approval_store = LocalJsonComputeApprovalStore(tmp_path / "compute-approvals")
+    approval_store.add(_approval_grant(approval_id="approval-receipt", task_id="task-approval-receipt"))
+    receipt_store = LocalJsonComputeReceiptStore(tmp_path / "compute-receipts")
+
+    result = SubstrateGovernor(approval_store=approval_store, receipt_store=receipt_store).execute(
+        create_task_envelope(
+            "echo",
+            task_id="task-approval-receipt",
+            approval_id="approval-receipt",
+            payload={"message": "raw payload must not persist"},
+            budget=ResourceBudget(approval_required=True),
+        ),
+        registry,
+    )
+
+    receipt_text = Path(result.receipt.receipt_path).read_text(encoding="utf-8")
+    assert result.ok is True
+    assert result.receipt.persisted is True
+    assert result.receipt.governance["approval_persistence"] == "persisted_local_json"
+    assert result.receipt.governance["approval_store_type"] == "local_json_compute_approval_store"
+    assert result.receipt.governance["approval_cross_process_atomic_reservation"] is False
+    assert "raw payload must not persist" not in receipt_text
+    assert receipt_store.read_receipt(result.receipt.receipt_id) == result.receipt
 
 
 def test_durable_receipt_records_approval_summary_without_raw_approval_note(tmp_path: Path) -> None:
@@ -1489,6 +1863,7 @@ def test_compute_substrate_service_describes_internal_non_api_boundary() -> None
     assert description["stores_payload"] is False
     assert description["stores_output"] is False
     assert description["writes_memory"] is False
+    assert description["approval_store"]["kind"] == "none"
     assert description["durable_approval_persistence"] is False
     assert description["live_learning_persistence"] is False
     assert description["os_level_cpu_memory_enforcement"] is False
@@ -1496,10 +1871,42 @@ def test_compute_substrate_service_describes_internal_non_api_boundary() -> None
     assert store_description["background_execution"] is False
 
 
+def test_compute_substrate_service_describes_configured_durable_approval_store(tmp_path: Path) -> None:
+    service = ComputeSubstrateService(approval_store=LocalJsonComputeApprovalStore(tmp_path / "compute-approvals"))
+
+    description = service.describe()
+
+    assert description["approval_store"]["kind"] == "francis.compute_substrate.local_json_approval_store"
+    assert description["approval_store"]["durable"] is True
+    assert description["approval_store"]["cross_process_atomic_reservation"] is False
+    assert description["durable_approval_persistence"] is True
+    assert description["no_api_route"] is True
+    assert description["no_background_worker"] is True
+
+
 def test_public_facade_exports_compute_submission_status_contracts() -> None:
     submission = ComputeSubmission(create_task_envelope("echo", task_id="service-facade"))
     service = ComputeSubstrateService()
+    approval_store = LocalJsonComputeApprovalStore
 
     assert submission.to_dict()["stores_payload"] is False
     assert service.status_for_task("service-facade").status == ComputeTaskStatus.UNKNOWN
     assert ComputeTaskStatus.RECEIPT_PERSISTENCE_FAILED == "receipt_persistence_failed"
+    assert approval_store.__name__ == "LocalJsonComputeApprovalStore"
+
+
+def test_compute_substrate_approval_module_does_not_add_execution_authority() -> None:
+    source = inspect.getsource(approval_module)
+
+    for forbidden in (
+        "subprocess",
+        "os.system",
+        "shell=True",
+        "socket",
+        "requests",
+        "urllib",
+        "multiprocessing",
+        "asyncio.create_task",
+        "daemon=True",
+    ):
+        assert forbidden not in source

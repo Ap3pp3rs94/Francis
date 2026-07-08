@@ -22,6 +22,7 @@ from francis.compute_substrate import (
     ExecutionDeadline,
     InMemoryApprovalStore,
     InMemoryComputeAdapterRegistry,
+    LocalJsonComputeApprovalStore,
     LocalJsonComputeReceiptStore,
     ResourceBudget,
     TaskEnvelope,
@@ -424,6 +425,53 @@ def test_approval_required_with_valid_scoped_approval_executes_through_governed_
     assert result.approval_consumed is True
     assert consumed is not None
     assert consumed.consumed_by_task_id == "adapter-approved"
+
+
+def test_approval_required_with_valid_durable_approval_executes_through_adapter_gateway(tmp_path: Path) -> None:
+    approval_store = LocalJsonComputeApprovalStore(tmp_path / "adapter-approvals")
+    approval_store.add(_approval_grant(task_id="adapter-durable-approved", approval_id="approval-durable-adapter"))
+    gateway, service = _gateway(service=_RecordingService(approval_store=approval_store))
+
+    result = gateway.submit(
+        _request(
+            request_id="adapter-durable-approved",
+            approval_required=True,
+            approval_id="approval-durable-adapter",
+        )
+    )
+
+    consumed = approval_store.get("approval-durable-adapter")
+    assert service.submit_calls == 1
+    assert result.ok is True
+    assert result.status == ComputeTaskStatus.SUCCEEDED
+    assert result.approval_required is True
+    assert result.approval_satisfied is True
+    assert result.approval_consumed is True
+    assert result.submission_result is not None
+    assert result.submission_result.receipt.governance["approval_persistence"] == "persisted_local_json"
+    assert consumed is not None
+    assert consumed.consumed_by_task_id == "adapter-durable-approved"
+
+
+def test_adapter_validation_denial_does_not_consume_durable_approval(tmp_path: Path) -> None:
+    approval_store = LocalJsonComputeApprovalStore(tmp_path / "adapter-approvals")
+    approval_store.add(_approval_grant(task_id="adapter-durable-risk-denied", approval_id="approval-durable-adapter"))
+    gateway, service = _gateway(service=_RecordingService(approval_store=approval_store))
+
+    result = gateway.submit(
+        _request(
+            request_id="adapter-durable-risk-denied",
+            approval_required=True,
+            approval_id="approval-durable-adapter",
+            risk_level="high",
+        )
+    )
+
+    grant = approval_store.get("approval-durable-adapter")
+    assert result.denial_reason == "risk_exceeds_adapter_policy"
+    assert service.submit_calls == 0
+    assert grant is not None
+    assert grant.consumed_at_ms == 0
 
 
 def test_single_use_approval_cannot_be_reused_through_adapter_gateway() -> None:

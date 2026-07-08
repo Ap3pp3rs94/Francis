@@ -348,6 +348,7 @@ class ComputeSubstrateService:
         return tuple(sorted(capabilities))
 
     def describe(self) -> dict[str, Any]:
+        approval_store_description = _describe_approval_store(self.governor.approval_store)
         return {
             "kind": "francis.compute_substrate.service",
             "submission_mode": "synchronous_in_process",
@@ -358,7 +359,8 @@ class ComputeSubstrateService:
             "stores_payload": False,
             "stores_output": False,
             "writes_memory": False,
-            "durable_approval_persistence": False,
+            "approval_store": approval_store_description,
+            "durable_approval_persistence": bool(approval_store_description.get("durable", False)),
             "live_learning_persistence": False,
             "os_level_cpu_memory_enforcement": False,
         }
@@ -374,6 +376,16 @@ def _normalize_submission(
             return submission
         return replace(submission, context=context)
     return ComputeSubmission(envelope=submission, context=context)
+
+
+def _describe_approval_store(store: ApprovalStore | None) -> dict[str, Any]:
+    if store is None:
+        return {"kind": "none", "durable": False}
+    describe = getattr(store, "describe", None)
+    if callable(describe):
+        description = describe()
+        return dict(description) if isinstance(description, dict) else {"kind": "unknown", "durable": False}
+    return {"kind": type(store).__name__, "durable": False}
 
 
 def _status_from_execution(status: str) -> str:

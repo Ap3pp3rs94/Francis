@@ -12,6 +12,7 @@ LIVE_LEARNING_EVENT_KIND = "francis.compute_substrate.live_learning_event"
 _ALLOWED_PRIORITIES = {"low", "normal", "high"}
 _NO_FILESYSTEM_SCOPE = ("none",)
 _RISK_LEVELS = {"low": 1, "medium": 2, "high": 3}
+_SAFE_APPROVAL_ID_CHARS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-")
 
 
 def _now_ms() -> int:
@@ -32,6 +33,20 @@ def _safe_id(value: Any, *, fallback_prefix: str) -> str:
     if text and all(ch.isalnum() or ch in ("-", "_", ".") for ch in text):
         return text[:160]
     return f"{fallback_prefix}_{uuid.uuid4().hex[:12]}"
+
+
+def _strict_approval_id(value: Any) -> str:
+    text = _safe_text(value)
+    if not text or len(text) > 160 or any(ch not in _SAFE_APPROVAL_ID_CHARS for ch in text):
+        raise ValueError("unsafe_approval_id")
+    return text
+
+
+def _approval_reference_id(value: Any) -> str:
+    try:
+        return _strict_approval_id(value)
+    except ValueError:
+        return ""
 
 
 def _scope_tuple(value: Any) -> tuple[str, ...]:
@@ -399,7 +414,7 @@ class ApprovalGrant:
     created_at_ms: int = field(default_factory=_now_ms)
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "approval_id", _safe_id(self.approval_id, fallback_prefix="approval"))
+        object.__setattr__(self, "approval_id", _strict_approval_id(self.approval_id))
         object.__setattr__(self, "subject", _safe_text(self.subject) or "compute_substrate_task")
         object.__setattr__(self, "approved_by", _safe_text(self.approved_by) or "local.operator")
         object.__setattr__(self, "source", _safe_text(self.source) or "in_memory_compute_approval")

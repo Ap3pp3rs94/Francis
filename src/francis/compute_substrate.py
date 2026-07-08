@@ -10,7 +10,7 @@ from francis.compute_substrate_adapters import (
     ComputeAdapterSubmissionResult,
     InMemoryComputeAdapterRegistry,
 )
-from francis.compute_substrate_approvals import ApprovalStore, InMemoryApprovalStore
+from francis.compute_substrate_approvals import ApprovalStore, InMemoryApprovalStore, LocalJsonComputeApprovalStore
 from francis.compute_substrate_backends import (
     ExecutionBackend,
     RegisteredFunction,
@@ -97,6 +97,7 @@ __all__ = [
     "InMemoryComputeStatusStore",
     "LiveLearningEvent",
     "LocalJsonComputeReceiptStore",
+    "LocalJsonComputeApprovalStore",
     "RegisteredFunction",
     "ResourceBudget",
     "SafeLocalBackend",

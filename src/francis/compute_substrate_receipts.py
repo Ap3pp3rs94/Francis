@@ -11,6 +11,7 @@ from typing import Any, Protocol
 from francis.compute_substrate_types import (
     COMPUTE_RECEIPT_KIND,
     _NO_FILESYSTEM_SCOPE,
+    _approval_reference_id,
     _dict_or_empty,
     _int_or_default,
     _now_ms,
@@ -196,7 +197,7 @@ class CapabilityReceiptAdapter:
             backend_name=descriptor.backend_name,
             function_name=envelope.function_name,
             trace_id=_safe_id(envelope.trace_id, fallback_prefix="trace") if envelope.trace_id else "",
-            approval_id=_safe_id(envelope.approval_id, fallback_prefix="approval") if envelope.approval_id else "",
+            approval_id=_approval_reference_id(envelope.approval_id),
             status=status,
             reason=reason,
             budget=envelope.budget.to_dict(),
@@ -233,6 +234,8 @@ def _approval_governance(
     envelope: TaskEnvelope,
     approval_result: ApprovalConsumptionResult | None,
 ) -> dict[str, Any]:
+    persistence_summary = _approval_persistence_summary(approval_result)
+    envelope_approval_id = _approval_reference_id(envelope.approval_id)
     if not envelope.budget.approval_required:
         return {
             "approval_required": False,
@@ -243,20 +246,20 @@ def _approval_governance(
             "approval_consumed": False,
             "approval_consumption": "not_required",
             "approval_scope_summary": {},
-            "approval_persistence": "not_implemented_internal_in_memory_only",
+            **persistence_summary,
         }
 
     if approval_result is None:
         return {
             "approval_required": True,
             "approval_satisfied": False,
-            "approval_id": _safe_text(envelope.approval_id),
+            "approval_id": envelope_approval_id,
             "approval_decision": "missing_approval",
             "approval_denial_reason": "missing_approval",
             "approval_consumed": False,
             "approval_consumption": "denied_not_consumed",
             "approval_scope_summary": {},
-            "approval_persistence": "not_implemented_internal_in_memory_only",
+            **persistence_summary,
         }
 
     if approval_result.allowed:
@@ -269,25 +272,41 @@ def _approval_governance(
         return {
             "approval_required": True,
             "approval_satisfied": True,
-            "approval_id": approval_result.approval_id,
+            "approval_id": _approval_reference_id(approval_result.approval_id),
             "approval_decision": approval_result.reason,
             "approval_denial_reason": "",
             "approval_consumed": approval_result.consumed,
             "approval_consumption": consumption,
             "approval_scope_summary": dict(approval_result.scope_summary),
-            "approval_persistence": "not_implemented_internal_in_memory_only",
+            **persistence_summary,
         }
 
     return {
         "approval_required": True,
         "approval_satisfied": False,
-        "approval_id": approval_result.approval_id or _safe_text(envelope.approval_id),
+        "approval_id": _approval_reference_id(approval_result.approval_id) or envelope_approval_id,
         "approval_decision": approval_result.reason,
         "approval_denial_reason": approval_result.reason,
         "approval_consumed": False,
         "approval_consumption": "denied_not_consumed",
         "approval_scope_summary": dict(approval_result.scope_summary),
-        "approval_persistence": "not_implemented_internal_in_memory_only",
+        **persistence_summary,
+    }
+
+
+def _approval_persistence_summary(approval_result: ApprovalConsumptionResult | None) -> dict[str, Any]:
+    evidence = dict(approval_result.evidence) if approval_result is not None else {}
+    durable = bool(evidence.get("durable_approval_persistence", False))
+    store_type = _safe_text(evidence.get("approval_store") or evidence.get("approval_store_kind"))
+    persistence = _safe_text(evidence.get("approval_persistence"))
+    if not persistence:
+        persistence = "persisted_local_json" if durable else "not_implemented_internal_in_memory_only"
+    return {
+        "approval_persistence": persistence,
+        "approval_store_type": store_type or ("local_json_compute_approval_store" if durable else ""),
+        "durable_approval_persistence": durable,
+        "approval_note_persisted": bool(evidence.get("approval_note_persisted", False)),
+        "approval_cross_process_atomic_reservation": bool(evidence.get("cross_process_atomic_reservation", False)),
     }
 
 
