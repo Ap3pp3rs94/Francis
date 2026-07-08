@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import replace
 from pathlib import Path
 
@@ -12,8 +13,11 @@ from francis.compute_substrate import (
     ApprovalConsumptionResult,
     ApprovalGrant,
     ApprovalScope,
+    CancellationToken,
     CapabilityReceipt,
     CapabilityReceiptAdapter,
+    ExecutionContext,
+    ExecutionDeadline,
     InMemoryApprovalStore,
     LocalJsonComputeReceiptStore,
     ResourceBudget,
@@ -70,6 +74,7 @@ def test_worker_registry_registers_safe_local_backend() -> None:
     assert descriptors[0].filesystem_access == "none"
     assert set(descriptors[0].capabilities) == {
         "compute_test",
+        "cooperative_delay_test",
         "echo",
         "health_check",
         "summarize_status",
@@ -546,6 +551,15 @@ def test_durable_receipt_records_approval_summary_without_raw_approval_note(tmp_
 
 
 class _FailingApprovalStore:
+    def authorize(self, envelope: TaskEnvelope, descriptor: WorkerDescriptor) -> ApprovalConsumptionResult:
+        return ApprovalConsumptionResult(
+            allowed=True,
+            reason="approval_scope_valid",
+            approval_id=envelope.approval_id,
+            consumed=False,
+            scope_summary={"allowed_capabilities": [envelope.function_name]},
+        )
+
     def consume(self, envelope: TaskEnvelope, descriptor: WorkerDescriptor) -> ApprovalConsumptionResult:
         raise OSError("approval store unavailable")
 
@@ -571,6 +585,320 @@ def test_failed_approval_consumption_does_not_fake_success() -> None:
     assert result.error == "approval_cannot_be_consumed"
     assert result.receipt.governance["approval_satisfied"] is False
     assert result.receipt.governance["approval_consumed"] is False
+
+
+class _CountingBackend:
+    def __init__(self) -> None:
+        self.called = False
+
+    @property
+    def descriptor(self) -> WorkerDescriptor:
+        return WorkerDescriptor(
+            worker_id="counting-worker",
+            backend_name="counting_test",
+            capabilities=("echo",),
+        )
+
+    def execute(self, envelope: TaskEnvelope) -> dict[str, object]:
+        self.called = True
+        return {"ok": True, "task_id": envelope.task_id}
+
+
+def test_already_cancelled_context_denies_before_backend_execution() -> None:
+    backend = _CountingBackend()
+    registry = WorkerRegistry()
+    registry.register(backend)
+    context = ExecutionContext(
+        cancellation_token=CancellationToken(cancel_requested=True, reason="operator_cancelled"),
+    )
+
+    result = SubstrateGovernor().execute(create_task_envelope("echo"), registry, context=context)
+
+    assert result.ok is False
+    assert result.status == "cancelled"
+    assert result.error == "operator_cancelled"
+    assert backend.called is False
+    assert result.receipt.governance["cancellation_requested"] is True
+    assert result.receipt.governance["cancellation_reason"] == "operator_cancelled"
+    assert result.receipt.governance["execution_started"] is False
+    assert result.receipt.governance["execution_finished"] is False
+
+
+def test_expired_deadline_denies_before_backend_execution() -> None:
+    backend = _CountingBackend()
+    registry = WorkerRegistry()
+    registry.register(backend)
+    context = ExecutionContext(deadline=ExecutionDeadline(deadline_at_ms=1, source="test_expired"))
+
+    result = SubstrateGovernor().execute(create_task_envelope("echo"), registry, context=context)
+
+    assert result.ok is False
+    assert result.status == "timeout"
+    assert result.error == "deadline_exceeded_pre_execution"
+    assert backend.called is False
+    assert result.receipt.governance["timed_out"] is True
+    assert result.receipt.governance["timeout_stage"] == "pre_execution"
+    assert result.receipt.governance["deadline_source"] == "test_expired"
+    assert result.receipt.governance["execution_started"] is False
+
+
+def test_approval_denial_precedes_cancelled_context() -> None:
+    registry = WorkerRegistry()
+    registry.register(_ExplodingBackend())
+    context = ExecutionContext(
+        cancellation_token=CancellationToken(cancel_requested=True, reason="operator_cancelled"),
+    )
+
+    result = SubstrateGovernor().execute(
+        create_task_envelope("echo", budget=ResourceBudget(approval_required=True)),
+        registry,
+        context=context,
+    )
+
+    assert result.status == "denied"
+    assert result.error == "missing_approval"
+    assert result.receipt.governance["approval_satisfied"] is False
+    assert result.receipt.governance["approval_consumed"] is False
+    assert result.receipt.governance["timeout_stage"] == "not_applicable"
+    assert result.receipt.governance["execution_started"] is False
+
+
+def test_approval_is_not_consumed_when_cancellation_blocks_before_execution() -> None:
+    registry = WorkerRegistry()
+    registry.register(SafeLocalBackend())
+    approval_store = InMemoryApprovalStore([_approval_grant(task_id="task-cancel-approved")])
+    context = ExecutionContext(
+        cancellation_token=CancellationToken(cancel_requested=True, reason="operator_cancelled"),
+    )
+
+    result = SubstrateGovernor(approval_store=approval_store).execute(
+        create_task_envelope(
+            "echo",
+            task_id="task-cancel-approved",
+            approval_id="approval-echo",
+            budget=ResourceBudget(approval_required=True),
+        ),
+        registry,
+        context=context,
+    )
+
+    grant = approval_store.get("approval-echo")
+    assert result.status == "cancelled"
+    assert grant is not None
+    assert grant.consumed_at_ms == 0
+    assert result.receipt.governance["approval_satisfied"] is True
+    assert result.receipt.governance["approval_consumed"] is False
+    assert result.receipt.governance["approval_consumption"] == "validated_not_consumed"
+    assert result.receipt.governance["execution_started"] is False
+
+
+def test_approval_is_not_consumed_when_expired_deadline_blocks_before_execution() -> None:
+    registry = WorkerRegistry()
+    registry.register(SafeLocalBackend())
+    approval_store = InMemoryApprovalStore([_approval_grant(task_id="task-deadline-approved")])
+    context = ExecutionContext(deadline=ExecutionDeadline(deadline_at_ms=1, source="test_expired"))
+
+    result = SubstrateGovernor(approval_store=approval_store).execute(
+        create_task_envelope(
+            "echo",
+            task_id="task-deadline-approved",
+            approval_id="approval-echo",
+            budget=ResourceBudget(approval_required=True),
+        ),
+        registry,
+        context=context,
+    )
+
+    grant = approval_store.get("approval-echo")
+    assert result.status == "timeout"
+    assert result.error == "deadline_exceeded_pre_execution"
+    assert grant is not None
+    assert grant.consumed_at_ms == 0
+    assert result.receipt.governance["approval_satisfied"] is True
+    assert result.receipt.governance["approval_consumed"] is False
+    assert result.receipt.governance["approval_consumption"] == "validated_not_consumed"
+    assert result.receipt.governance["timeout_stage"] == "pre_execution"
+    assert result.receipt.governance["execution_started"] is False
+
+
+def test_cooperative_safe_local_backend_observes_deadline_during_execution() -> None:
+    context = ExecutionContext(
+        deadline=ExecutionDeadline(
+            deadline_at_ms=int(time.time() * 1000) + 75,
+            source="test_during_execution",
+        )
+    )
+
+    result = execute_registered_function(
+        create_task_envelope(
+            "cooperative_delay_test",
+            payload={"steps": 6, "delay_ms": 25},
+            budget=ResourceBudget(max_runtime_ms=1000, max_compute_units=6),
+        ),
+        context=context,
+    )
+
+    assert result.ok is False
+    assert result.status == "timeout"
+    assert result.error == "deadline_exceeded_during_execution"
+    assert result.output["interruption"]["os_level_preemption"] is False
+    assert result.receipt.governance["timed_out"] is True
+    assert result.receipt.governance["timeout_stage"] == "during_execution"
+    assert result.receipt.governance["execution_started"] is True
+    assert result.receipt.governance["execution_finished"] is True
+    assert result.receipt.governance["os_level_preemption"] is False
+
+
+class _SlowNonCooperativeBackend:
+    @property
+    def descriptor(self) -> WorkerDescriptor:
+        return WorkerDescriptor(
+            worker_id="slow-worker",
+            backend_name="slow_non_cooperative_test",
+            capabilities=("echo",),
+        )
+
+    def execute(self, envelope: TaskEnvelope) -> dict[str, object]:
+        time.sleep(0.08)
+        return {"ok": True, "function": envelope.function_name, "completed_late": True}
+
+
+def test_post_execution_timeout_reports_overrun_without_claiming_preemption() -> None:
+    registry = WorkerRegistry()
+    registry.register(_SlowNonCooperativeBackend())
+
+    result = SubstrateGovernor().execute(
+        create_task_envelope("echo", budget=ResourceBudget(max_runtime_ms=50)),
+        registry,
+    )
+
+    assert result.ok is False
+    assert result.status == "timeout"
+    assert result.output == {"ok": True, "function": "echo", "completed_late": True}
+    assert result.error == "runtime_budget_elapsed_after_registered_function"
+    assert result.receipt.governance["timed_out"] is True
+    assert result.receipt.governance["timeout_stage"] == "post_execution"
+    assert result.receipt.governance["execution_started"] is True
+    assert result.receipt.governance["execution_finished"] is True
+    assert result.receipt.governance["over_budget_runtime"] is True
+    assert result.receipt.governance["os_level_preemption"] is False
+
+
+def test_post_execution_expired_deadline_reports_timeout_without_budget_overrun() -> None:
+    registry = WorkerRegistry()
+    registry.register(_SlowNonCooperativeBackend())
+    context = ExecutionContext(
+        deadline=ExecutionDeadline(
+            deadline_at_ms=int(time.time() * 1000) + 20,
+            source="shorter_than_budget",
+        )
+    )
+
+    result = SubstrateGovernor().execute(
+        create_task_envelope("echo", budget=ResourceBudget(max_runtime_ms=1000)),
+        registry,
+        context=context,
+    )
+
+    assert result.ok is False
+    assert result.status == "timeout"
+    assert result.output == {"ok": True, "function": "echo", "completed_late": True}
+    assert result.error == "deadline_elapsed_after_registered_function"
+    assert result.receipt.governance["timed_out"] is True
+    assert result.receipt.governance["timeout_stage"] == "post_execution"
+    assert result.receipt.governance["deadline_expired"] is True
+    assert result.receipt.governance["over_budget_runtime"] is False
+    assert result.receipt.governance["os_level_preemption"] is False
+
+
+def test_approval_remains_consumed_when_execution_starts_then_times_out() -> None:
+    registry = WorkerRegistry()
+    registry.register(_SlowNonCooperativeBackend())
+    approval_store = InMemoryApprovalStore([_approval_grant(task_id="task-timeout-approved", worker_id="slow-worker")])
+
+    result = SubstrateGovernor(approval_store=approval_store).execute(
+        create_task_envelope(
+            "echo",
+            task_id="task-timeout-approved",
+            approval_id="approval-echo",
+            budget=ResourceBudget(approval_required=True, max_runtime_ms=50),
+        ),
+        registry,
+    )
+
+    grant = approval_store.get("approval-echo")
+    assert result.status == "timeout"
+    assert grant is not None
+    assert grant.consumed_at_ms > 0
+    assert result.receipt.governance["approval_consumed"] is True
+    assert result.receipt.governance["timed_out"] is True
+    assert result.receipt.governance["timeout_stage"] == "post_execution"
+
+
+def test_durable_receipt_records_cancellation_timeout_summary(tmp_path: Path) -> None:
+    registry = WorkerRegistry()
+    registry.register(SafeLocalBackend())
+    store = LocalJsonComputeReceiptStore(tmp_path / "compute-receipts")
+    context = ExecutionContext(
+        cancellation_token=CancellationToken(cancel_requested=True, reason="operator_cancelled"),
+    )
+
+    result = SubstrateGovernor(receipt_store=store).execute(
+        create_task_envelope("echo", task_id="task-cancel-receipt"),
+        registry,
+        context=context,
+    )
+
+    assert result.status == "cancelled"
+    assert result.receipt.persisted is True
+    payload = json.loads(Path(result.receipt.receipt_path).read_text(encoding="utf-8"))
+    governance = payload["receipt"]["governance"]
+    assert governance["cancellation_requested"] is True
+    assert governance["cancellation_reason"] == "operator_cancelled"
+    assert governance["timed_out"] is False
+    assert governance["timeout_stage"] == "not_applicable"
+    assert governance["execution_started"] is False
+    assert governance["os_level_preemption"] is False
+    assert store.read_receipt(result.receipt.receipt_id) == result.receipt
+    assert result.live_learning_event.persisted is False
+
+
+def test_durable_receipt_records_expired_deadline_timeout_summary(tmp_path: Path) -> None:
+    registry = WorkerRegistry()
+    registry.register(SafeLocalBackend())
+    store = LocalJsonComputeReceiptStore(tmp_path / "compute-receipts")
+    context = ExecutionContext(deadline=ExecutionDeadline(deadline_at_ms=1, source="test_expired"))
+
+    result = SubstrateGovernor(receipt_store=store).execute(
+        create_task_envelope("echo", task_id="task-deadline-receipt"),
+        registry,
+        context=context,
+    )
+
+    assert result.status == "timeout"
+    assert result.receipt.persisted is True
+    payload = json.loads(Path(result.receipt.receipt_path).read_text(encoding="utf-8"))
+    governance = payload["receipt"]["governance"]
+    assert governance["cancellation_requested"] is False
+    assert governance["deadline_source"] == "test_expired"
+    assert governance["deadline_expired"] is True
+    assert governance["timed_out"] is True
+    assert governance["timeout_stage"] == "pre_execution"
+    assert governance["execution_started"] is False
+    assert governance["os_level_preemption"] is False
+    assert store.read_receipt(result.receipt.receipt_id) == result.receipt
+    assert result.live_learning_event.persisted is False
+
+
+def test_public_facade_exports_cancellation_deadline_contracts() -> None:
+    token = CancellationToken()
+    deadline = ExecutionDeadline()
+    context = ExecutionContext(cancellation_token=token, deadline=deadline)
+
+    assert context.cancellation_token is token
+    assert context.deadline is deadline
+    assert context.to_summary()["cooperative_cancellation"] is True
+    assert context.to_summary()["os_level_preemption"] is False
 
 
 def test_safe_local_backend_executes_registered_function_only() -> None:

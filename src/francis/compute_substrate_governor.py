@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import uuid
 from collections.abc import Mapping
 from dataclasses import replace
@@ -17,6 +18,8 @@ from francis.compute_substrate_types import (
     _safe_text,
     ApprovalConsumptionResult,
     CapabilityReceipt,
+    ExecutionContext,
+    ExecutionInterrupted,
     ExecutionResult,
     LiveLearningEvent,
     ResourceBudget,
@@ -52,7 +55,6 @@ class SubstrateGovernor:
             "filesystem_scope_allowed": all(
                 scope in self.policy.allowed_filesystem_scopes for scope in budget.filesystem_scope
             ),
-            "not_cancelled": not budget.cancel_requested,
             "compute_units_within_limit": 0 < budget.max_compute_units <= self.policy.max_compute_units,
         }
         if all(checks.values()):
@@ -106,7 +108,18 @@ class SubstrateGovernor:
             },
         )
 
-    def execute(self, envelope: TaskEnvelope, registry: WorkerRegistry) -> ExecutionResult:
+    def execute(
+        self,
+        envelope: TaskEnvelope,
+        registry: WorkerRegistry,
+        context: ExecutionContext | None = None,
+    ) -> ExecutionResult:
+        started_at_ms = _now_ms()
+        execution_context = ExecutionContext.for_envelope(
+            envelope,
+            started_at_ms=started_at_ms,
+            context=context,
+        )
         backend = registry.backend_for(envelope.function_name)
         if backend is None:
             descriptor = WorkerDescriptor(
@@ -122,14 +135,22 @@ class SubstrateGovernor:
                 output={},
                 error="unregistered_function",
                 reason="unregistered_function",
-                started_at_ms=_now_ms(),
+                started_at_ms=started_at_ms,
                 ended_at_ms=_now_ms(),
+                execution_summary=self._execution_summary(
+                    envelope=envelope,
+                    context=execution_context,
+                    started_at_ms=started_at_ms,
+                    ended_at_ms=_now_ms(),
+                    execution_started=False,
+                    execution_finished=False,
+                ),
             )
 
         descriptor = backend.descriptor
         decision = self.authorize(envelope, descriptor)
-        started_at_ms = _now_ms()
         if not decision.allowed:
+            ended_at_ms = _now_ms()
             return self._result(
                 envelope=envelope,
                 descriptor=descriptor,
@@ -139,13 +160,22 @@ class SubstrateGovernor:
                 error=decision.reason,
                 reason=decision.reason,
                 started_at_ms=started_at_ms,
-                ended_at_ms=_now_ms(),
+                ended_at_ms=ended_at_ms,
+                execution_summary=self._execution_summary(
+                    envelope=envelope,
+                    context=execution_context,
+                    started_at_ms=started_at_ms,
+                    ended_at_ms=ended_at_ms,
+                    execution_started=False,
+                    execution_finished=False,
+                ),
             )
 
         approval_result: ApprovalConsumptionResult | None = None
         if envelope.budget.approval_required:
-            approval_result = self._consume_approval(envelope, descriptor)
+            approval_result = self._authorize_approval(envelope, descriptor)
             if not approval_result.allowed:
+                ended_at_ms = _now_ms()
                 return self._result(
                     envelope=envelope,
                     descriptor=descriptor,
@@ -155,26 +185,102 @@ class SubstrateGovernor:
                     error=approval_result.reason,
                     reason=approval_result.reason,
                     started_at_ms=started_at_ms,
-                    ended_at_ms=_now_ms(),
+                    ended_at_ms=ended_at_ms,
                     approval_result=approval_result,
+                    execution_summary=self._execution_summary(
+                        envelope=envelope,
+                        context=execution_context,
+                        started_at_ms=started_at_ms,
+                        ended_at_ms=ended_at_ms,
+                        execution_started=False,
+                        execution_finished=False,
+                    ),
                 )
 
         try:
-            output = backend.execute(envelope)
+            execution_context.raise_if_interrupted(stage="pre_execution")
+        except ExecutionInterrupted as interruption:
+            ended_at_ms = _now_ms()
+            return self._result(
+                envelope=envelope,
+                descriptor=descriptor,
+                ok=False,
+                status=interruption.status,
+                output={"interruption": self._interruption_output(interruption)},
+                error=interruption.reason,
+                reason=interruption.reason,
+                started_at_ms=started_at_ms,
+                ended_at_ms=ended_at_ms,
+                approval_result=approval_result,
+                execution_summary=self._execution_summary(
+                    envelope=envelope,
+                    context=execution_context,
+                    started_at_ms=started_at_ms,
+                    ended_at_ms=ended_at_ms,
+                    execution_started=False,
+                    execution_finished=False,
+                    interruption=interruption,
+                ),
+            )
+
+        if envelope.budget.approval_required:
+            approval_result = self._consume_approval(envelope, descriptor)
+            if not approval_result.allowed:
+                ended_at_ms = _now_ms()
+                return self._result(
+                    envelope=envelope,
+                    descriptor=descriptor,
+                    ok=False,
+                    status="denied",
+                    output={"approval": approval_result.to_dict()},
+                    error=approval_result.reason,
+                    reason=approval_result.reason,
+                    started_at_ms=started_at_ms,
+                    ended_at_ms=ended_at_ms,
+                    approval_result=approval_result,
+                    execution_summary=self._execution_summary(
+                        envelope=envelope,
+                        context=execution_context,
+                        started_at_ms=started_at_ms,
+                        ended_at_ms=ended_at_ms,
+                        execution_started=False,
+                        execution_finished=False,
+                    ),
+                )
+
+        try:
+            output = self._execute_backend(backend, envelope, execution_context)
             ended_at_ms = _now_ms()
             elapsed_ms = ended_at_ms - started_at_ms
-            if elapsed_ms > envelope.budget.max_runtime_ms:
+            runtime_over_budget = elapsed_ms > envelope.budget.max_runtime_ms
+            deadline_elapsed = execution_context.deadline.is_expired(ended_at_ms)
+            if runtime_over_budget or deadline_elapsed:
+                timeout_reason = (
+                    "runtime_budget_elapsed_after_registered_function"
+                    if runtime_over_budget
+                    else "deadline_elapsed_after_registered_function"
+                )
                 return self._result(
                     envelope=envelope,
                     descriptor=descriptor,
                     ok=False,
                     status="timeout",
                     output=output,
-                    error="runtime_budget_elapsed_after_registered_function",
-                    reason="runtime_budget_elapsed_after_registered_function",
+                    error=timeout_reason,
+                    reason=timeout_reason,
                     started_at_ms=started_at_ms,
                     ended_at_ms=ended_at_ms,
                     approval_result=approval_result,
+                    execution_summary=self._execution_summary(
+                        envelope=envelope,
+                        context=execution_context,
+                        started_at_ms=started_at_ms,
+                        ended_at_ms=ended_at_ms,
+                        execution_started=True,
+                        execution_finished=True,
+                        timeout_stage="post_execution",
+                        over_budget_runtime=runtime_over_budget,
+                    ),
                 )
             return self._result(
                 envelope=envelope,
@@ -187,8 +293,40 @@ class SubstrateGovernor:
                 started_at_ms=started_at_ms,
                 ended_at_ms=ended_at_ms,
                 approval_result=approval_result,
+                execution_summary=self._execution_summary(
+                    envelope=envelope,
+                    context=execution_context,
+                    started_at_ms=started_at_ms,
+                    ended_at_ms=ended_at_ms,
+                    execution_started=True,
+                    execution_finished=True,
+                ),
+            )
+        except ExecutionInterrupted as interruption:
+            ended_at_ms = _now_ms()
+            return self._result(
+                envelope=envelope,
+                descriptor=descriptor,
+                ok=False,
+                status=interruption.status,
+                output={"interruption": self._interruption_output(interruption)},
+                error=interruption.reason,
+                reason=interruption.reason,
+                started_at_ms=started_at_ms,
+                ended_at_ms=ended_at_ms,
+                approval_result=approval_result,
+                execution_summary=self._execution_summary(
+                    envelope=envelope,
+                    context=execution_context,
+                    started_at_ms=started_at_ms,
+                    ended_at_ms=ended_at_ms,
+                    execution_started=True,
+                    execution_finished=True,
+                    interruption=interruption,
+                ),
             )
         except Exception as exc:
+            ended_at_ms = _now_ms()
             return self._result(
                 envelope=envelope,
                 descriptor=descriptor,
@@ -198,8 +336,16 @@ class SubstrateGovernor:
                 error=f"{type(exc).__name__}: {exc}",
                 reason="registered_function_error",
                 started_at_ms=started_at_ms,
-                ended_at_ms=_now_ms(),
+                ended_at_ms=ended_at_ms,
                 approval_result=approval_result,
+                execution_summary=self._execution_summary(
+                    envelope=envelope,
+                    context=execution_context,
+                    started_at_ms=started_at_ms,
+                    ended_at_ms=ended_at_ms,
+                    execution_started=True,
+                    execution_finished=True,
+                ),
             )
 
     def _result(
@@ -215,6 +361,7 @@ class SubstrateGovernor:
         started_at_ms: int,
         ended_at_ms: int,
         approval_result: ApprovalConsumptionResult | None = None,
+        execution_summary: Mapping[str, Any] | None = None,
     ) -> ExecutionResult:
         receipt = self.receipt_adapter.create(
             envelope=envelope,
@@ -222,6 +369,7 @@ class SubstrateGovernor:
             status=status,
             reason=reason,
             approval_result=approval_result,
+            execution_summary=execution_summary,
         )
         receipt = self._persist_receipt(receipt)
         result_ok = ok
@@ -247,6 +395,8 @@ class SubstrateGovernor:
             observations=(
                 f"task_status:{result_status}",
                 f"registered_function:{envelope.function_name}",
+                f"timeout_stage:{_safe_text((execution_summary or {}).get('timeout_stage')) or 'not_applicable'}",
+                f"cancellation_requested:{bool((execution_summary or {}).get('cancellation_requested', False))}",
                 "persistence:not_requested",
             ),
             persistence_requested=False,
@@ -293,6 +443,30 @@ class SubstrateGovernor:
                 },
             )
 
+    def _authorize_approval(self, envelope: TaskEnvelope, descriptor: WorkerDescriptor) -> ApprovalConsumptionResult:
+        if self.approval_store is None:
+            return ApprovalConsumptionResult(
+                allowed=False,
+                reason="missing_approval",
+                approval_id=_safe_text(envelope.approval_id),
+                consumed=False,
+                evidence={"approval_store_configured": False},
+            )
+        try:
+            return self.approval_store.authorize(envelope, descriptor)
+        except Exception as exc:
+            return ApprovalConsumptionResult(
+                allowed=False,
+                reason="approval_cannot_be_authorized",
+                approval_id=_safe_text(envelope.approval_id),
+                consumed=False,
+                evidence={
+                    "approval_store_configured": True,
+                    "error_type": type(exc).__name__,
+                    "error": _safe_text(exc)[:160],
+                },
+            )
+
     def _consume_approval(self, envelope: TaskEnvelope, descriptor: WorkerDescriptor) -> ApprovalConsumptionResult:
         if self.approval_store is None:
             return ApprovalConsumptionResult(
@@ -318,11 +492,86 @@ class SubstrateGovernor:
             )
 
     @staticmethod
+    def _execute_backend(
+        backend: object,
+        envelope: TaskEnvelope,
+        context: ExecutionContext,
+    ) -> dict[str, Any]:
+        execute = getattr(backend, "execute")
+        try:
+            parameters = inspect.signature(execute).parameters
+        except (TypeError, ValueError):
+            return execute(envelope, context)
+        accepts_context = len(parameters) >= 2 or any(
+            parameter.kind == inspect.Parameter.VAR_KEYWORD for parameter in parameters.values()
+        )
+        if accepts_context:
+            return execute(envelope, context)
+        return execute(envelope)
+
+    @staticmethod
+    def _interruption_output(interruption: ExecutionInterrupted) -> dict[str, Any]:
+        return {
+            "status": interruption.status,
+            "reason": interruption.reason,
+            "stage": interruption.stage,
+            "timed_out": interruption.timed_out,
+            "cancellation_requested": interruption.cancellation_requested,
+            "os_level_preemption": False,
+        }
+
+    @staticmethod
+    def _execution_summary(
+        *,
+        envelope: TaskEnvelope,
+        context: ExecutionContext,
+        started_at_ms: int,
+        ended_at_ms: int,
+        execution_started: bool,
+        execution_finished: bool,
+        interruption: ExecutionInterrupted | None = None,
+        timeout_stage: str = "not_applicable",
+        over_budget_runtime: bool = False,
+    ) -> dict[str, Any]:
+        duration_ms = max(0, ended_at_ms - started_at_ms)
+        deadline_elapsed = context.deadline.is_expired(ended_at_ms)
+        timed_out = bool(
+            (interruption and interruption.timed_out)
+            or over_budget_runtime
+            or (deadline_elapsed and timeout_stage != "not_applicable")
+        )
+        resolved_timeout_stage = timeout_stage
+        if interruption and interruption.timed_out:
+            resolved_timeout_stage = interruption.stage
+        elif not timed_out:
+            resolved_timeout_stage = "not_applicable"
+        return {
+            **context.to_summary(),
+            "cancellation_requested": bool(
+                context.cancellation_token.cancel_requested or (interruption and interruption.cancellation_requested)
+            ),
+            "cancellation_reason": (
+                interruption.reason
+                if interruption and interruption.cancellation_requested
+                else context.cancellation_token.reason
+            ),
+            "deadline_expired": deadline_elapsed,
+            "timed_out": timed_out,
+            "timeout_stage": resolved_timeout_stage,
+            "execution_started": execution_started,
+            "execution_finished": execution_finished,
+            "duration_ms": duration_ms,
+            "over_budget_runtime": over_budget_runtime or duration_ms > envelope.budget.max_runtime_ms,
+            "cooperative_cancellation": True,
+            "os_level_preemption": False,
+        }
+
+    @staticmethod
     def _payload_compute_units_within_budget(envelope: TaskEnvelope) -> bool:
-        if envelope.function_name != "compute_test":
+        if envelope.function_name not in {"compute_test", "cooperative_delay_test"}:
             return True
         requested = _int_or_default(
-            envelope.payload.get("iterations", envelope.payload.get("units", 100)),
+            envelope.payload.get("iterations", envelope.payload.get("steps", envelope.payload.get("units", 100))),
             default=100,
         )
         return 0 < requested <= envelope.budget.max_compute_units
@@ -354,5 +603,6 @@ def execute_registered_function(
     *,
     registry: WorkerRegistry | None = None,
     governor: SubstrateGovernor | None = None,
+    context: ExecutionContext | None = None,
 ) -> ExecutionResult:
-    return (governor or SubstrateGovernor()).execute(envelope, registry or default_registry())
+    return (governor or SubstrateGovernor()).execute(envelope, registry or default_registry(), context=context)

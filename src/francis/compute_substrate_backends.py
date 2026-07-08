@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from typing import Any, Protocol
 
 from francis.compute_substrate_types import (
     SAFE_LOCAL_BACKEND_NAME,
     _int_or_default,
+    _now_ms,
     _safe_text,
+    ExecutionContext,
     TaskEnvelope,
     WorkerDescriptor,
 )
@@ -18,10 +21,10 @@ class ExecutionBackend(Protocol):
     @property
     def descriptor(self) -> WorkerDescriptor: ...
 
-    def execute(self, envelope: TaskEnvelope) -> dict[str, Any]: ...
+    def execute(self, envelope: TaskEnvelope, context: ExecutionContext | None = None) -> dict[str, Any]: ...
 
 
-RegisteredFunction = Callable[[TaskEnvelope], dict[str, Any]]
+RegisteredFunction = Callable[[TaskEnvelope, ExecutionContext], dict[str, Any]]
 
 
 class SafeLocalBackend:
@@ -48,11 +51,12 @@ class SafeLocalBackend:
     def descriptor(self) -> WorkerDescriptor:
         return self._descriptor
 
-    def execute(self, envelope: TaskEnvelope) -> dict[str, Any]:
+    def execute(self, envelope: TaskEnvelope, context: ExecutionContext | None = None) -> dict[str, Any]:
         fn = self._functions.get(envelope.function_name)
         if fn is None:
             raise KeyError("registered_function_not_found")
-        return fn(envelope)
+        execution_context = context or ExecutionContext.for_envelope(envelope, started_at_ms=_now_ms())
+        return fn(envelope, execution_context)
 
 
 def default_registered_functions() -> dict[str, RegisteredFunction]:
@@ -60,11 +64,13 @@ def default_registered_functions() -> dict[str, RegisteredFunction]:
         "echo": _echo,
         "health_check": _health_check,
         "compute_test": _compute_test,
+        "cooperative_delay_test": _cooperative_delay_test,
         "summarize_status": _summarize_status,
     }
 
 
-def _echo(envelope: TaskEnvelope) -> dict[str, Any]:
+def _echo(envelope: TaskEnvelope, context: ExecutionContext) -> dict[str, Any]:
+    context.raise_if_interrupted(stage="during_execution")
     return {
         "ok": True,
         "function": "echo",
@@ -72,7 +78,8 @@ def _echo(envelope: TaskEnvelope) -> dict[str, Any]:
     }
 
 
-def _health_check(_: TaskEnvelope) -> dict[str, Any]:
+def _health_check(_: TaskEnvelope, context: ExecutionContext) -> dict[str, Any]:
+    context.raise_if_interrupted(stage="during_execution")
     return {
         "ok": True,
         "function": "health_check",
@@ -81,13 +88,14 @@ def _health_check(_: TaskEnvelope) -> dict[str, Any]:
     }
 
 
-def _compute_test(envelope: TaskEnvelope) -> dict[str, Any]:
+def _compute_test(envelope: TaskEnvelope, context: ExecutionContext) -> dict[str, Any]:
     iterations = _int_or_default(
         envelope.payload.get("iterations", envelope.payload.get("units", 100)),
         default=100,
     )
     total = 0
     for index in range(iterations):
+        context.raise_if_interrupted(stage="during_execution")
         total = (total + (index * index)) % 1_000_003
     return {
         "ok": True,
@@ -97,7 +105,34 @@ def _compute_test(envelope: TaskEnvelope) -> dict[str, Any]:
     }
 
 
-def _summarize_status(_: TaskEnvelope) -> dict[str, Any]:
+def _cooperative_delay_test(envelope: TaskEnvelope, context: ExecutionContext) -> dict[str, Any]:
+    steps = max(
+        1,
+        min(
+            _int_or_default(envelope.payload.get("steps", envelope.payload.get("units", 1)), default=1),
+            envelope.budget.max_compute_units,
+            50,
+        ),
+    )
+    delay_ms = max(0, min(_int_or_default(envelope.payload.get("delay_ms", 1), default=1), 25))
+    completed_steps = 0
+    for _ in range(steps):
+        context.raise_if_interrupted(stage="during_execution")
+        if delay_ms:
+            time.sleep(delay_ms / 1000)
+        completed_steps += 1
+    context.raise_if_interrupted(stage="during_execution")
+    return {
+        "ok": True,
+        "function": "cooperative_delay_test",
+        "steps": steps,
+        "delay_ms": delay_ms,
+        "completed_steps": completed_steps,
+    }
+
+
+def _summarize_status(_: TaskEnvelope, context: ExecutionContext) -> dict[str, Any]:
+    context.raise_if_interrupted(stage="during_execution")
     status = telemetry_status_snapshot()
     return {
         "ok": True,

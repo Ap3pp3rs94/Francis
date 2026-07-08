@@ -77,6 +77,156 @@ def _risk_level(value: Any) -> str:
 
 
 @dataclass(frozen=True, slots=True)
+class ExecutionDeadline:
+    deadline_at_ms: int = 0
+    source: str = "not_set"
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "deadline_at_ms", _int_or_default(self.deadline_at_ms, default=0))
+        object.__setattr__(self, "source", _safe_text(self.source) or "not_set")
+
+    @classmethod
+    def from_runtime_budget(cls, *, started_at_ms: int, max_runtime_ms: int) -> ExecutionDeadline:
+        started = _int_or_default(started_at_ms, default=_now_ms())
+        runtime = max(0, _int_or_default(max_runtime_ms, default=0))
+        return cls(deadline_at_ms=started + runtime, source="resource_budget_max_runtime_ms")
+
+    def is_configured(self) -> bool:
+        return self.deadline_at_ms > 0
+
+    def is_expired(self, now_ms: int | None = None) -> bool:
+        return self.is_configured() and (now_ms if now_ms is not None else _now_ms()) >= self.deadline_at_ms
+
+    def remaining_ms(self, now_ms: int | None = None) -> int | None:
+        if not self.is_configured():
+            return None
+        return max(0, self.deadline_at_ms - (now_ms if now_ms is not None else _now_ms()))
+
+    def to_summary(self) -> dict[str, Any]:
+        return {
+            "deadline_configured": self.is_configured(),
+            "deadline_at_ms": self.deadline_at_ms,
+            "deadline_source": self.source,
+            "deadline_expired": self.is_expired(),
+            "remaining_ms": self.remaining_ms(),
+        }
+
+
+@dataclass(slots=True)
+class CancellationToken:
+    cancel_requested: bool = False
+    reason: str = ""
+    requested_at_ms: int = 0
+
+    def __post_init__(self) -> None:
+        self.reason = _safe_text(self.reason)
+        self.requested_at_ms = _int_or_default(self.requested_at_ms, default=0)
+        if self.cancel_requested and self.requested_at_ms <= 0:
+            self.requested_at_ms = _now_ms()
+
+    def cancel(self, *, reason: str = "cancelled_by_operator") -> None:
+        self.cancel_requested = True
+        self.reason = _safe_text(reason) or "cancelled_by_operator"
+        self.requested_at_ms = _now_ms()
+
+    def to_summary(self) -> dict[str, Any]:
+        return {
+            "cancellation_requested": self.cancel_requested,
+            "cancellation_reason": self.reason,
+            "cancellation_requested_at_ms": self.requested_at_ms,
+        }
+
+
+class ExecutionInterrupted(RuntimeError):
+    def __init__(
+        self,
+        *,
+        status: str,
+        reason: str,
+        stage: str,
+        timed_out: bool,
+        cancellation_requested: bool,
+    ) -> None:
+        super().__init__(reason)
+        self.status = _safe_text(status) or "interrupted"
+        self.reason = _safe_text(reason) or "execution_interrupted"
+        self.stage = _safe_text(stage) or "during_execution"
+        self.timed_out = timed_out
+        self.cancellation_requested = cancellation_requested
+
+
+class DeadlineExceeded(ExecutionInterrupted):
+    def __init__(self, *, stage: str) -> None:
+        super().__init__(
+            status="timeout",
+            reason=f"deadline_exceeded_{_safe_text(stage) or 'during_execution'}",
+            stage=stage,
+            timed_out=True,
+            cancellation_requested=False,
+        )
+
+
+class ExecutionCancelled(ExecutionInterrupted):
+    def __init__(self, *, reason: str, stage: str) -> None:
+        super().__init__(
+            status="cancelled",
+            reason=_safe_text(reason) or "cancelled",
+            stage=stage,
+            timed_out=False,
+            cancellation_requested=True,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionContext:
+    deadline: ExecutionDeadline = field(default_factory=ExecutionDeadline)
+    cancellation_token: CancellationToken = field(default_factory=CancellationToken)
+    started_at_ms: int = 0
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "started_at_ms", _int_or_default(self.started_at_ms, default=0))
+
+    @classmethod
+    def for_envelope(
+        cls,
+        envelope: TaskEnvelope,
+        *,
+        started_at_ms: int,
+        context: ExecutionContext | None = None,
+    ) -> ExecutionContext:
+        base = context or cls()
+        deadline = base.deadline
+        if not deadline.is_configured():
+            deadline = ExecutionDeadline.from_runtime_budget(
+                started_at_ms=started_at_ms,
+                max_runtime_ms=envelope.budget.max_runtime_ms,
+            )
+        token = base.cancellation_token
+        if envelope.budget.cancel_requested and not token.cancel_requested:
+            token = CancellationToken(
+                cancel_requested=True,
+                reason="budget_cancel_requested",
+                requested_at_ms=started_at_ms,
+            )
+        return cls(deadline=deadline, cancellation_token=token, started_at_ms=started_at_ms)
+
+    def raise_if_interrupted(self, *, stage: str) -> None:
+        if self.cancellation_token.cancel_requested:
+            raise ExecutionCancelled(reason=self.cancellation_token.reason, stage=stage)
+        if self.deadline.is_expired():
+            raise DeadlineExceeded(stage=stage)
+
+    def to_summary(self) -> dict[str, Any]:
+        return {
+            **self.cancellation_token.to_summary(),
+            **self.deadline.to_summary(),
+            "started_at_ms": self.started_at_ms,
+            "cooperative_cancellation": True,
+            "os_level_preemption": False,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class ResourceBudget:
     max_runtime_ms: int = 1000
     max_memory_mb: int = 128

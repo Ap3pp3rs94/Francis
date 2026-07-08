@@ -57,6 +57,18 @@ This slice enforces truthful configuration and validation boundaries, rejects un
 
 The worker registry rejects duplicate worker IDs and duplicate capability bindings. Disabled workers remain registered for readback but are denied by the governor before backend execution.
 
+## Cancellation And Deadline Semantics
+
+An internal cancellation/deadline slice adds cooperative execution controls through `ExecutionDeadline`, `CancellationToken`, and `ExecutionContext`.
+
+The governor now checks approval validity before cancellation/deadline denial, then denies already-cancelled or already-expired work before backend execution. Valid approval grants are not consumed when a pre-execution cancellation or expired deadline blocks execution before the backend starts. Approval grants are consumed only once execution is allowed to start, so a timeout or failure after backend start still reports approval consumption truthfully.
+
+Safe local registered functions receive the execution context and can cooperatively observe cancellation/deadline state. The bounded `cooperative_delay_test` function exists only as an internal deterministic test capability for this contract. It does not add subprocess, shell, network, GPU, daemon, broad filesystem, model-training, long-term memory, adapter, or API authority.
+
+Post-execution runtime or deadline overruns are reported as timeouts without pretending that Francis preempted the work. This slice does not implement OS-level preemption, CPU scheduling, memory enforcement, thread killing, process killing, subprocess killing, container isolation, or cgroup/job-object enforcement. Those remain future sandbox/runner adapter requirements.
+
+`CapabilityReceipt` objects now summarize cancellation and timeout evidence, including cancellation request state, cancellation reason, deadline summary, timeout stage, execution started/finished state, duration, and over-budget runtime. Durable compute receipts persist only that bounded summary.
+
 ## Approval Consumption
 
 An internal approval-consumption slice lets approval-required compute tasks execute only when a valid `ApprovalGrant` is supplied through the internal approval store boundary.
@@ -79,4 +91,4 @@ The substrate also returns an explicit `LiveLearningEvent` contract object. It d
 
 The substrate can grow toward stronger workers without changing Francis's authority model. Visual runtimes, virtual machines, containers, remote workers, and simulations become bounded execution adapters with policy, budget, receipt, and verification obligations.
 
-The current limitation is deliberate: this foundation proves the internal contract, safe dispatch path, bounded compute receipt persistence, and internal approval consumption. It does not prove production-grade sandboxing, OS resource isolation, durable approval persistence, cross-process atomic approval reservation, API submission, adapter execution, or long-term learning persistence.
+The current limitation is deliberate: this foundation proves the internal contract, safe dispatch path, bounded compute receipt persistence, internal approval consumption, and cooperative cancellation/deadline semantics. It does not prove production-grade sandboxing, OS resource isolation, durable approval persistence, cross-process atomic approval reservation, OS-level CPU/memory preemption, API submission, adapter execution, or long-term learning persistence.

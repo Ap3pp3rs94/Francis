@@ -184,8 +184,10 @@ class CapabilityReceiptAdapter:
         status: str,
         reason: str,
         approval_result: ApprovalConsumptionResult | None = None,
+        execution_summary: Mapping[str, Any] | None = None,
     ) -> CapabilityReceipt:
         approval_governance = _approval_governance(envelope, approval_result)
+        execution_governance = _execution_governance(execution_summary)
         return CapabilityReceipt(
             kind=COMPUTE_RECEIPT_KIND,
             receipt_id=f"compute_capability_{uuid.uuid4().hex[:16]}",
@@ -220,8 +222,9 @@ class CapabilityReceiptAdapter:
                 "receipt_persistence": "in_memory_only",
                 "receipt_store_configured": False,
                 **approval_governance,
+                **execution_governance,
                 "os_level_cpu_memory_enforcement": False,
-                "timeout_enforcement": "budget_validation_elapsed_check_and_registered_function_caps",
+                "timeout_enforcement": "cooperative_deadline_checks_and_post_execution_elapsed_check",
             },
         )
 
@@ -257,7 +260,12 @@ def _approval_governance(
         }
 
     if approval_result.allowed:
-        consumption = "consumed" if approval_result.consumed else "satisfied_reusable"
+        if approval_result.consumed:
+            consumption = "consumed"
+        elif approval_result.reason == "approval_satisfied_reusable":
+            consumption = "satisfied_reusable"
+        else:
+            consumption = "validated_not_consumed"
         return {
             "approval_required": True,
             "approval_satisfied": True,
@@ -280,4 +288,26 @@ def _approval_governance(
         "approval_consumption": "denied_not_consumed",
         "approval_scope_summary": dict(approval_result.scope_summary),
         "approval_persistence": "not_implemented_internal_in_memory_only",
+    }
+
+
+def _execution_governance(execution_summary: Mapping[str, Any] | None) -> dict[str, Any]:
+    summary = dict(execution_summary or {})
+    timeout_stage = _safe_text(summary.get("timeout_stage")) or "not_applicable"
+    cancellation_reason = _safe_text(summary.get("cancellation_reason"))
+    return {
+        "cancellation_requested": bool(summary.get("cancellation_requested", False)),
+        "cancellation_reason": cancellation_reason,
+        "deadline_configured": bool(summary.get("deadline_configured", False)),
+        "deadline_at_ms": _int_or_default(summary.get("deadline_at_ms"), default=0),
+        "deadline_source": _safe_text(summary.get("deadline_source")) or "not_set",
+        "deadline_expired": bool(summary.get("deadline_expired", False)),
+        "timed_out": bool(summary.get("timed_out", False)),
+        "timeout_stage": timeout_stage,
+        "execution_started": bool(summary.get("execution_started", False)),
+        "execution_finished": bool(summary.get("execution_finished", False)),
+        "duration_ms": max(0, _int_or_default(summary.get("duration_ms"), default=0)),
+        "over_budget_runtime": bool(summary.get("over_budget_runtime", False)),
+        "cooperative_cancellation": bool(summary.get("cooperative_cancellation", True)),
+        "os_level_preemption": False,
     }

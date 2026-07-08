@@ -17,6 +17,8 @@ from francis.compute_substrate_types import (
 
 
 class ApprovalStore(Protocol):
+    def authorize(self, envelope: TaskEnvelope, descriptor: WorkerDescriptor) -> ApprovalConsumptionResult: ...
+
     def consume(self, envelope: TaskEnvelope, descriptor: WorkerDescriptor) -> ApprovalConsumptionResult: ...
 
     def get(self, approval_id: str) -> ApprovalGrant | None: ...
@@ -37,10 +39,22 @@ class InMemoryApprovalStore:
     def get(self, approval_id: str) -> ApprovalGrant | None:
         return self._grants.get(_safe_text(approval_id))
 
-    def consume(self, envelope: TaskEnvelope, descriptor: WorkerDescriptor) -> ApprovalConsumptionResult:
+    def authorize(self, envelope: TaskEnvelope, descriptor: WorkerDescriptor) -> ApprovalConsumptionResult:
         approval_id = _safe_text(envelope.approval_id)
         if not approval_id:
             return _denied("missing_approval")
+
+        grant = self.get(approval_id)
+        if grant is None:
+            return _denied("missing_approval", approval_id=approval_id)
+
+        return _evaluate_grant(envelope, descriptor, grant)
+
+    def consume(self, envelope: TaskEnvelope, descriptor: WorkerDescriptor) -> ApprovalConsumptionResult:
+        approval_id = _safe_text(envelope.approval_id)
+        decision = self.authorize(envelope, descriptor)
+        if not decision.allowed:
+            return decision
 
         grant = self.get(approval_id)
         if grant is None:
