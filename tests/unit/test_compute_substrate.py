@@ -9,8 +9,12 @@ import pytest
 from francis.compute_substrate import (
     COMPUTE_RECEIPT_KIND,
     LIVE_LEARNING_EVENT_KIND,
+    ApprovalConsumptionResult,
+    ApprovalGrant,
+    ApprovalScope,
     CapabilityReceipt,
     CapabilityReceiptAdapter,
+    InMemoryApprovalStore,
     LocalJsonComputeReceiptStore,
     ResourceBudget,
     SafeLocalBackend,
@@ -191,8 +195,382 @@ def test_governor_rejects_unknown_capability_and_approval_required_tasks() -> No
     )
     assert approval_required.ok is False
     assert approval_required.status == "denied"
-    assert approval_required.error == "approval_not_required_first_slice"
-    assert approval_required.output["decision"]["checks"]["approval_not_required_first_slice"] is False
+    assert approval_required.error == "missing_approval"
+    assert approval_required.output["approval"]["reason"] == "missing_approval"
+    assert approval_required.receipt.governance["approval_required"] is True
+    assert approval_required.receipt.governance["approval_satisfied"] is False
+    assert approval_required.receipt.governance["approval_consumed"] is False
+
+
+def _approval_grant(
+    *,
+    approval_id: str = "approval-echo",
+    task_id: str = "task-approved",
+    capability: str = "echo",
+    worker_id: str = "safe-local-1",
+    max_risk_level: str = "low",
+    max_runtime_ms: int | None = 1000,
+    expires_at_ms: int | None = None,
+    revoked: bool = False,
+    approval_note: str = "",
+    single_use: bool = True,
+) -> ApprovalGrant:
+    return ApprovalGrant(
+        approval_id=approval_id,
+        scope=ApprovalScope(
+            task_id=task_id,
+            allowed_capabilities=(capability,),
+            allowed_worker_ids=(worker_id,),
+            max_risk_level=max_risk_level,
+            max_runtime_ms=max_runtime_ms,
+            max_memory_mb=128,
+            max_cpu_weight=25,
+            max_compute_units=1000,
+        ),
+        approved_by="operator",
+        reason="bounded compute approval",
+        approval_note=approval_note,
+        expires_at_ms=expires_at_ms,
+        revoked=revoked,
+        single_use=single_use,
+    )
+
+
+def test_approval_required_false_preserves_existing_execution_behavior() -> None:
+    result = execute_registered_function(create_task_envelope("echo", payload={"message": "no approval needed"}))
+
+    assert result.ok is True
+    assert result.status == "success"
+    assert result.output == {"ok": True, "function": "echo", "message": "no approval needed"}
+    assert result.receipt.governance["approval_required"] is False
+    assert result.receipt.governance["approval_decision"] == "not_required"
+    assert result.receipt.governance["approval_consumption"] == "not_required"
+
+
+def test_approval_required_with_valid_approval_executes_and_links_receipt() -> None:
+    registry = WorkerRegistry()
+    registry.register(SafeLocalBackend())
+    approval_store = InMemoryApprovalStore([_approval_grant()])
+    governor = SubstrateGovernor(approval_store=approval_store)
+
+    result = governor.execute(
+        create_task_envelope(
+            "echo",
+            task_id="task-approved",
+            approval_id="approval-echo",
+            payload={"message": "approved"},
+            budget=ResourceBudget(approval_required=True),
+        ),
+        registry,
+    )
+
+    assert result.ok is True
+    assert result.status == "success"
+    assert result.output == {"ok": True, "function": "echo", "message": "approved"}
+    assert result.receipt.approval_id == "approval-echo"
+    assert result.receipt.governance["approval_required"] is True
+    assert result.receipt.governance["approval_satisfied"] is True
+    assert result.receipt.governance["approval_consumed"] is True
+    assert result.receipt.governance["approval_consumption"] == "consumed"
+    assert result.receipt.governance["approval_scope_summary"]["task_id_bound"] is True
+    consumed = approval_store.get("approval-echo")
+    assert consumed is not None
+    assert consumed.consumed_by_task_id == "task-approved"
+    assert consumed.consumed_at_ms > 0
+
+
+def test_single_use_approval_cannot_be_reused() -> None:
+    registry = WorkerRegistry()
+    registry.register(SafeLocalBackend())
+    approval_store = InMemoryApprovalStore([_approval_grant()])
+    governor = SubstrateGovernor(approval_store=approval_store)
+    envelope = create_task_envelope(
+        "echo",
+        task_id="task-approved",
+        approval_id="approval-echo",
+        budget=ResourceBudget(approval_required=True),
+    )
+
+    first = governor.execute(envelope, registry)
+    second = governor.execute(envelope, registry)
+
+    assert first.ok is True
+    assert second.ok is False
+    assert second.status == "denied"
+    assert second.error == "already_consumed_approval"
+    assert second.receipt.governance["approval_consumed"] is False
+
+
+def test_reusable_approval_is_scoped_and_not_marked_consumed() -> None:
+    registry = WorkerRegistry()
+    registry.register(SafeLocalBackend())
+    approval_store = InMemoryApprovalStore([_approval_grant(single_use=False)])
+    governor = SubstrateGovernor(approval_store=approval_store)
+    envelope = create_task_envelope(
+        "echo",
+        task_id="task-approved",
+        approval_id="approval-echo",
+        budget=ResourceBudget(approval_required=True),
+    )
+
+    first = governor.execute(envelope, registry)
+    second = governor.execute(envelope, registry)
+
+    assert first.ok is True
+    assert second.ok is True
+    assert first.receipt.governance["approval_consumption"] == "satisfied_reusable"
+    assert first.receipt.governance["approval_consumed"] is False
+    reusable = approval_store.get("approval-echo")
+    assert reusable is not None
+    assert reusable.consumed_at_ms == 0
+
+
+def test_expired_and_revoked_approvals_fail_closed() -> None:
+    registry = WorkerRegistry()
+    registry.register(SafeLocalBackend())
+
+    expired = SubstrateGovernor(
+        approval_store=InMemoryApprovalStore([_approval_grant(approval_id="approval-expired", expires_at_ms=1)])
+    ).execute(
+        create_task_envelope(
+            "echo",
+            task_id="task-approved",
+            approval_id="approval-expired",
+            budget=ResourceBudget(approval_required=True),
+        ),
+        registry,
+    )
+    assert expired.ok is False
+    assert expired.error == "expired_approval"
+
+    revoked = SubstrateGovernor(
+        approval_store=InMemoryApprovalStore([_approval_grant(approval_id="approval-revoked", revoked=True)])
+    ).execute(
+        create_task_envelope(
+            "echo",
+            task_id="task-approved",
+            approval_id="approval-revoked",
+            budget=ResourceBudget(approval_required=True),
+        ),
+        registry,
+    )
+    assert revoked.ok is False
+    assert revoked.error == "revoked_approval"
+
+
+@pytest.mark.parametrize(
+    ("grant", "envelope", "expected_error"),
+    [
+        (
+            ApprovalGrant(
+                approval_id="approval-echo",
+                scope=ApprovalScope(task_id="task-approved", allowed_worker_ids=("safe-local-1",)),
+            ),
+            create_task_envelope(
+                "echo",
+                task_id="task-approved",
+                approval_id="approval-echo",
+                budget=ResourceBudget(approval_required=True),
+            ),
+            "approval_scope_missing_capability",
+        ),
+        (
+            _approval_grant(task_id="other-task"),
+            create_task_envelope(
+                "echo",
+                task_id="task-approved",
+                approval_id="approval-echo",
+                budget=ResourceBudget(approval_required=True),
+            ),
+            "task_id_mismatch",
+        ),
+        (
+            _approval_grant(capability="compute_test"),
+            create_task_envelope(
+                "echo",
+                task_id="task-approved",
+                approval_id="approval-echo",
+                budget=ResourceBudget(approval_required=True),
+            ),
+            "capability_mismatch",
+        ),
+        (
+            _approval_grant(worker_id="other-worker"),
+            create_task_envelope(
+                "echo",
+                task_id="task-approved",
+                approval_id="approval-echo",
+                budget=ResourceBudget(approval_required=True),
+            ),
+            "worker_mismatch",
+        ),
+        (
+            _approval_grant(max_risk_level="low"),
+            create_task_envelope(
+                "echo",
+                task_id="task-approved",
+                approval_id="approval-echo",
+                payload={"risk_level": "high"},
+                budget=ResourceBudget(approval_required=True),
+            ),
+            "risk_exceeds_approval",
+        ),
+        (
+            _approval_grant(max_runtime_ms=500),
+            create_task_envelope(
+                "echo",
+                task_id="task-approved",
+                approval_id="approval-echo",
+                budget=ResourceBudget(approval_required=True, max_runtime_ms=1000),
+            ),
+            "resource_budget_exceeds_approval",
+        ),
+    ],
+)
+def test_approval_scope_mismatches_are_denied(
+    grant: ApprovalGrant,
+    envelope: TaskEnvelope,
+    expected_error: str,
+) -> None:
+    registry = WorkerRegistry()
+    registry.register(SafeLocalBackend())
+    result = SubstrateGovernor(approval_store=InMemoryApprovalStore([grant])).execute(envelope, registry)
+
+    assert result.ok is False
+    assert result.status == "denied"
+    assert result.error == expected_error
+    assert result.receipt.governance["approval_satisfied"] is False
+    assert result.receipt.governance["approval_denial_reason"] == expected_error
+
+
+class _ExplodingBackend:
+    @property
+    def descriptor(self) -> WorkerDescriptor:
+        return WorkerDescriptor(
+            worker_id="safe-local-1",
+            backend_name="approval_denial_test",
+            capabilities=("echo",),
+        )
+
+    def execute(self, envelope: TaskEnvelope) -> dict[str, object]:
+        raise AssertionError("backend should not execute when approval is denied")
+
+
+def test_backend_is_not_called_when_approval_is_denied() -> None:
+    registry = WorkerRegistry()
+    registry.register(_ExplodingBackend())
+    result = SubstrateGovernor().execute(
+        create_task_envelope(
+            "echo",
+            task_id="task-denied-before-backend",
+            budget=ResourceBudget(approval_required=True),
+        ),
+        registry,
+    )
+
+    assert result.ok is False
+    assert result.error == "missing_approval"
+
+
+class _FailingAfterApprovalBackend:
+    @property
+    def descriptor(self) -> WorkerDescriptor:
+        return WorkerDescriptor(
+            worker_id="safe-local-1",
+            backend_name="approval_failure_test",
+            capabilities=("echo",),
+        )
+
+    def execute(self, envelope: TaskEnvelope) -> dict[str, object]:
+        raise RuntimeError("backend failed after approval")
+
+
+def test_execution_failure_after_valid_approval_keeps_approval_consumed() -> None:
+    registry = WorkerRegistry()
+    registry.register(_FailingAfterApprovalBackend())
+    approval_store = InMemoryApprovalStore([_approval_grant(task_id="task-backend-fails")])
+
+    result = SubstrateGovernor(approval_store=approval_store).execute(
+        create_task_envelope(
+            "echo",
+            task_id="task-backend-fails",
+            approval_id="approval-echo",
+            budget=ResourceBudget(approval_required=True),
+        ),
+        registry,
+    )
+
+    consumed = approval_store.get("approval-echo")
+    assert result.ok is False
+    assert result.status == "error"
+    assert result.error == "RuntimeError: backend failed after approval"
+    assert consumed is not None
+    assert consumed.consumed_by_task_id == "task-backend-fails"
+    assert consumed.consumed_at_ms > 0
+    assert result.receipt.governance["approval_satisfied"] is True
+    assert result.receipt.governance["approval_consumed"] is True
+    assert result.receipt.governance["approval_consumption"] == "consumed"
+
+
+def test_durable_receipt_records_approval_summary_without_raw_approval_note(tmp_path: Path) -> None:
+    registry = WorkerRegistry()
+    registry.register(SafeLocalBackend())
+    receipt_store = LocalJsonComputeReceiptStore(tmp_path / "compute-receipts")
+    approval_store = InMemoryApprovalStore(
+        [_approval_grant(approval_note="approval-secret-note", approval_id="approval-durable")]
+    )
+    governor = SubstrateGovernor(receipt_store=receipt_store, approval_store=approval_store)
+
+    result = governor.execute(
+        create_task_envelope(
+            "echo",
+            task_id="task-approved",
+            approval_id="approval-durable",
+            payload={"message": "approved durable"},
+            budget=ResourceBudget(approval_required=True),
+        ),
+        registry,
+    )
+
+    assert result.ok is True
+    assert result.receipt.persisted is True
+    assert result.receipt.governance["approval_required"] is True
+    assert result.receipt.governance["approval_satisfied"] is True
+    assert result.receipt.governance["approval_consumed"] is True
+    assert result.live_learning_event.persisted is False
+    receipt_text = Path(result.receipt.receipt_path).read_text(encoding="utf-8")
+    assert "approval-durable" in receipt_text
+    assert "approval-secret-note" not in receipt_text
+    assert "approved durable" not in receipt_text
+    assert receipt_store.read_receipt(result.receipt.receipt_id) == result.receipt
+
+
+class _FailingApprovalStore:
+    def consume(self, envelope: TaskEnvelope, descriptor: WorkerDescriptor) -> ApprovalConsumptionResult:
+        raise OSError("approval store unavailable")
+
+    def get(self, approval_id: str) -> ApprovalGrant | None:
+        return None
+
+
+def test_failed_approval_consumption_does_not_fake_success() -> None:
+    registry = WorkerRegistry()
+    registry.register(_ExplodingBackend())
+    result = SubstrateGovernor(approval_store=_FailingApprovalStore()).execute(
+        create_task_envelope(
+            "echo",
+            task_id="task-approval-fails",
+            approval_id="approval-fails",
+            budget=ResourceBudget(approval_required=True),
+        ),
+        registry,
+    )
+
+    assert result.ok is False
+    assert result.status == "denied"
+    assert result.error == "approval_cannot_be_consumed"
+    assert result.receipt.governance["approval_satisfied"] is False
+    assert result.receipt.governance["approval_consumed"] is False
 
 
 def test_safe_local_backend_executes_registered_function_only() -> None:
@@ -300,7 +678,7 @@ def test_local_json_compute_receipt_store_writes_and_reads_receipt(tmp_path: Pat
     assert receipt_path.parent == receipt_root
     assert persisted.governance["receipt_persistence"] == "persisted_local_json"
     assert persisted.governance["durable_compute_receipt"] is True
-    assert persisted.governance["approval_consumption"] == "not_implemented_first_slice"
+    assert persisted.governance["approval_consumption"] == "not_required"
     assert persisted.governance["long_term_memory_persistence"] is False
 
     payload = json.loads(receipt_path.read_text(encoding="utf-8"))
@@ -476,7 +854,7 @@ def test_governor_with_receipt_store_persists_compute_receipt_and_not_learning(
     assert result.receipt.governance["uses_gpu"] is False
     assert result.receipt.governance["writes_memory"] is False
     assert result.receipt.governance["long_term_memory_persistence"] is False
-    assert result.receipt.governance["approval_consumption"] == "not_implemented_first_slice"
+    assert result.receipt.governance["approval_consumption"] == "not_required"
     assert result.receipt.governance["os_level_cpu_memory_enforcement"] is False
     assert result.live_learning_event.persistence_requested is False
     assert result.live_learning_event.persisted is False

@@ -11,6 +11,7 @@ LIVE_LEARNING_EVENT_KIND = "francis.compute_substrate.live_learning_event"
 
 _ALLOWED_PRIORITIES = {"low", "normal", "high"}
 _NO_FILESYSTEM_SCOPE = ("none",)
+_RISK_LEVELS = {"low": 1, "medium": 2, "high": 3}
 
 
 def _now_ms() -> int:
@@ -57,6 +58,22 @@ def _int_or_default(value: Any, *, default: int) -> int:
 
 def _dict_or_empty(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, dict) else {}
+
+
+def _optional_positive_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    parsed = _int_or_default(value, default=0)
+    return parsed if parsed > 0 else None
+
+
+def _risk_rank(value: Any) -> int:
+    return _RISK_LEVELS.get(_safe_text(value).lower(), _RISK_LEVELS["high"])
+
+
+def _risk_level(value: Any) -> str:
+    text = _safe_text(value).lower()
+    return text if text in _RISK_LEVELS else "low"
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,6 +181,123 @@ class SubstrateDecision:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+@dataclass(frozen=True, slots=True)
+class ApprovalScope:
+    task_id: str = ""
+    correlation_id: str = ""
+    allowed_capabilities: tuple[str, ...] = ()
+    allowed_worker_ids: tuple[str, ...] = ()
+    max_risk_level: str = "low"
+    max_runtime_ms: int | None = None
+    max_memory_mb: int | None = None
+    max_cpu_weight: int | None = None
+    max_compute_units: int | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "task_id", _safe_text(self.task_id))
+        object.__setattr__(self, "correlation_id", _safe_text(self.correlation_id))
+        object.__setattr__(
+            self,
+            "allowed_capabilities",
+            tuple(sorted({_safe_text(item) for item in self.allowed_capabilities if _safe_text(item)})),
+        )
+        object.__setattr__(
+            self,
+            "allowed_worker_ids",
+            tuple(sorted({_safe_text(item) for item in self.allowed_worker_ids if _safe_text(item)})),
+        )
+        object.__setattr__(self, "max_risk_level", _risk_level(self.max_risk_level))
+        object.__setattr__(self, "max_runtime_ms", _optional_positive_int(self.max_runtime_ms))
+        object.__setattr__(self, "max_memory_mb", _optional_positive_int(self.max_memory_mb))
+        object.__setattr__(self, "max_cpu_weight", _optional_positive_int(self.max_cpu_weight))
+        object.__setattr__(self, "max_compute_units", _optional_positive_int(self.max_compute_units))
+
+    def to_summary(self) -> dict[str, Any]:
+        return {
+            "task_id_bound": bool(self.task_id),
+            "correlation_id_bound": bool(self.correlation_id),
+            "allowed_capabilities": list(self.allowed_capabilities),
+            "allowed_worker_ids": list(self.allowed_worker_ids),
+            "max_risk_level": self.max_risk_level,
+            "resource_budget_ceiling": {
+                "max_runtime_ms": self.max_runtime_ms,
+                "max_memory_mb": self.max_memory_mb,
+                "max_cpu_weight": self.max_cpu_weight,
+                "max_compute_units": self.max_compute_units,
+            },
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ApprovalGrant:
+    approval_id: str
+    scope: ApprovalScope = field(default_factory=ApprovalScope)
+    subject: str = "compute_substrate_task"
+    approved_by: str = "local.operator"
+    source: str = "in_memory_compute_approval"
+    reason: str = ""
+    approval_note: str = ""
+    correlation_id: str = ""
+    trace_id: str = ""
+    expires_at_ms: int | None = None
+    single_use: bool = True
+    consumed_at_ms: int = 0
+    consumed_by_task_id: str = ""
+    revoked: bool = False
+    created_at_ms: int = field(default_factory=_now_ms)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "approval_id", _safe_id(self.approval_id, fallback_prefix="approval"))
+        object.__setattr__(self, "subject", _safe_text(self.subject) or "compute_substrate_task")
+        object.__setattr__(self, "approved_by", _safe_text(self.approved_by) or "local.operator")
+        object.__setattr__(self, "source", _safe_text(self.source) or "in_memory_compute_approval")
+        object.__setattr__(self, "reason", _safe_text(self.reason))
+        object.__setattr__(self, "approval_note", _safe_text(self.approval_note))
+        object.__setattr__(self, "correlation_id", _safe_text(self.correlation_id))
+        object.__setattr__(self, "trace_id", _safe_text(self.trace_id))
+        object.__setattr__(self, "expires_at_ms", _optional_positive_int(self.expires_at_ms))
+        object.__setattr__(self, "consumed_at_ms", _int_or_default(self.consumed_at_ms, default=0))
+        object.__setattr__(self, "consumed_by_task_id", _safe_text(self.consumed_by_task_id))
+
+    def to_summary(self) -> dict[str, Any]:
+        return {
+            "approval_id": self.approval_id,
+            "subject": self.subject,
+            "source": self.source,
+            "approved_by": self.approved_by,
+            "single_use": self.single_use,
+            "expires_at_ms": self.expires_at_ms,
+            "revoked": self.revoked,
+            "consumed": self.consumed_at_ms > 0,
+            "consumed_at_ms": self.consumed_at_ms,
+            "consumed_by_task_id": self.consumed_by_task_id,
+            "approval_note_present": bool(self.approval_note),
+            "scope": self.scope.to_summary(),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ApprovalConsumptionResult:
+    allowed: bool
+    reason: str
+    approval_id: str = ""
+    consumed: bool = False
+    approval_required: bool = True
+    scope_summary: dict[str, Any] = field(default_factory=dict)
+    evidence: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "allowed": self.allowed,
+            "reason": self.reason,
+            "approval_id": self.approval_id,
+            "consumed": self.consumed,
+            "approval_required": self.approval_required,
+            "scope_summary": dict(self.scope_summary),
+            "evidence": dict(self.evidence),
+        }
 
 
 @dataclass(frozen=True, slots=True)

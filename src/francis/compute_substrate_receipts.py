@@ -17,6 +17,7 @@ from francis.compute_substrate_types import (
     _safe_id,
     _safe_text,
     _scope_tuple,
+    ApprovalConsumptionResult,
     CapabilityReceipt,
     TaskEnvelope,
     WorkerDescriptor,
@@ -90,10 +91,11 @@ class LocalJsonComputeReceiptStore:
                 "receipt_store_configured": True,
                 "writes_memory": False,
                 "long_term_memory_persistence": False,
-                "approval_consumption": "not_implemented_first_slice",
+                "approval_consumption": receipt.governance.get("approval_consumption", "not_required"),
                 "os_level_cpu_memory_enforcement": False,
             },
         )
+        approval_consumed = bool(persisted_receipt.governance.get("approval_consumed"))
         payload = {
             "schema_version": _RECEIPT_SCHEMA_VERSION,
             "kind": "francis.compute_substrate.local_json_capability_receipt",
@@ -104,7 +106,8 @@ class LocalJsonComputeReceiptStore:
                 "does_not_persist_task_payload": True,
                 "does_not_persist_task_output": True,
                 "does_not_write_memory": True,
-                "does_not_consume_approval": True,
+                "does_not_consume_approval": not approval_consumed,
+                "approval_consumed": approval_consumed,
                 "does_not_grant_execution_authority": True,
                 "does_not_use_network": True,
                 "does_not_use_gpu": True,
@@ -180,7 +183,9 @@ class CapabilityReceiptAdapter:
         descriptor: WorkerDescriptor,
         status: str,
         reason: str,
+        approval_result: ApprovalConsumptionResult | None = None,
     ) -> CapabilityReceipt:
+        approval_governance = _approval_governance(envelope, approval_result)
         return CapabilityReceipt(
             kind=COMPUTE_RECEIPT_KIND,
             receipt_id=f"compute_capability_{uuid.uuid4().hex[:16]}",
@@ -214,8 +219,65 @@ class CapabilityReceiptAdapter:
                 "long_term_memory_persistence": False,
                 "receipt_persistence": "in_memory_only",
                 "receipt_store_configured": False,
-                "approval_consumption": "not_implemented_first_slice",
+                **approval_governance,
                 "os_level_cpu_memory_enforcement": False,
                 "timeout_enforcement": "budget_validation_elapsed_check_and_registered_function_caps",
             },
         )
+
+
+def _approval_governance(
+    envelope: TaskEnvelope,
+    approval_result: ApprovalConsumptionResult | None,
+) -> dict[str, Any]:
+    if not envelope.budget.approval_required:
+        return {
+            "approval_required": False,
+            "approval_satisfied": False,
+            "approval_id": "",
+            "approval_decision": "not_required",
+            "approval_denial_reason": "",
+            "approval_consumed": False,
+            "approval_consumption": "not_required",
+            "approval_scope_summary": {},
+            "approval_persistence": "not_implemented_internal_in_memory_only",
+        }
+
+    if approval_result is None:
+        return {
+            "approval_required": True,
+            "approval_satisfied": False,
+            "approval_id": _safe_text(envelope.approval_id),
+            "approval_decision": "missing_approval",
+            "approval_denial_reason": "missing_approval",
+            "approval_consumed": False,
+            "approval_consumption": "denied_not_consumed",
+            "approval_scope_summary": {},
+            "approval_persistence": "not_implemented_internal_in_memory_only",
+        }
+
+    if approval_result.allowed:
+        consumption = "consumed" if approval_result.consumed else "satisfied_reusable"
+        return {
+            "approval_required": True,
+            "approval_satisfied": True,
+            "approval_id": approval_result.approval_id,
+            "approval_decision": approval_result.reason,
+            "approval_denial_reason": "",
+            "approval_consumed": approval_result.consumed,
+            "approval_consumption": consumption,
+            "approval_scope_summary": dict(approval_result.scope_summary),
+            "approval_persistence": "not_implemented_internal_in_memory_only",
+        }
+
+    return {
+        "approval_required": True,
+        "approval_satisfied": False,
+        "approval_id": approval_result.approval_id or _safe_text(envelope.approval_id),
+        "approval_decision": approval_result.reason,
+        "approval_denial_reason": approval_result.reason,
+        "approval_consumed": False,
+        "approval_consumption": "denied_not_consumed",
+        "approval_scope_summary": dict(approval_result.scope_summary),
+        "approval_persistence": "not_implemented_internal_in_memory_only",
+    }

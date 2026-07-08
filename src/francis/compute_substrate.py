@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from francis.compute_substrate_approvals import ApprovalStore, InMemoryApprovalStore
 from francis.compute_substrate_backends import (
     ExecutionBackend,
     RegisteredFunction,
@@ -21,6 +22,9 @@ from francis.compute_substrate_types import (
     COMPUTE_RECEIPT_KIND,
     LIVE_LEARNING_EVENT_KIND,
     SAFE_LOCAL_BACKEND_NAME,
+    ApprovalConsumptionResult,
+    ApprovalGrant,
+    ApprovalScope,
     CapabilityReceipt,
     ExecutionResult,
     LiveLearningEvent,
@@ -35,11 +39,16 @@ __all__ = [
     "COMPUTE_RECEIPT_KIND",
     "LIVE_LEARNING_EVENT_KIND",
     "SAFE_LOCAL_BACKEND_NAME",
+    "ApprovalConsumptionResult",
+    "ApprovalGrant",
+    "ApprovalScope",
+    "ApprovalStore",
     "CapabilityReceipt",
     "CapabilityReceiptAdapter",
     "ComputeReceiptStore",
     "ExecutionBackend",
     "ExecutionResult",
+    "InMemoryApprovalStore",
     "LiveLearningEvent",
     "LocalJsonComputeReceiptStore",
     "RegisteredFunction",

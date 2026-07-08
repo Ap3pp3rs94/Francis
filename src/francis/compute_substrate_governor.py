@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from dataclasses import replace
 from typing import Any
 
+from francis.compute_substrate_approvals import ApprovalStore
 from francis.compute_substrate_receipts import CapabilityReceiptAdapter, ComputeReceiptStore
 from francis.compute_substrate_registry import WorkerRegistry, default_registry
 from francis.compute_substrate_types import (
@@ -14,6 +15,7 @@ from francis.compute_substrate_types import (
     _int_or_default,
     _now_ms,
     _safe_text,
+    ApprovalConsumptionResult,
     CapabilityReceipt,
     ExecutionResult,
     LiveLearningEvent,
@@ -32,10 +34,12 @@ class SubstrateGovernor:
         policy: SubstratePolicy | None = None,
         receipt_adapter: CapabilityReceiptAdapter | None = None,
         receipt_store: ComputeReceiptStore | None = None,
+        approval_store: ApprovalStore | None = None,
     ) -> None:
         self.policy = policy or SubstratePolicy()
         self.receipt_adapter = receipt_adapter or CapabilityReceiptAdapter()
         self.receipt_store = receipt_store
+        self.approval_store = approval_store
 
     def validate_budget(self, budget: ResourceBudget) -> SubstrateDecision:
         checks = {
@@ -49,7 +53,6 @@ class SubstrateGovernor:
                 scope in self.policy.allowed_filesystem_scopes for scope in budget.filesystem_scope
             ),
             "not_cancelled": not budget.cancel_requested,
-            "approval_not_required_first_slice": not budget.approval_required,
             "compute_units_within_limit": 0 < budget.max_compute_units <= self.policy.max_compute_units,
         }
         if all(checks.values()):
@@ -65,7 +68,7 @@ class SubstrateGovernor:
                 "network_default_deny": not self.policy.allow_network,
                 "gpu_default_deny": not self.policy.allow_gpu,
                 "filesystem_default_scope": list(_NO_FILESYSTEM_SCOPE),
-                "approval_consumption": "not_implemented_first_slice",
+                "approval_consumption": "internal_compute_approval_store_when_required",
                 "resource_enforcement": "validated_boundaries_not_os_cgroups",
             },
         )
@@ -139,6 +142,23 @@ class SubstrateGovernor:
                 ended_at_ms=_now_ms(),
             )
 
+        approval_result: ApprovalConsumptionResult | None = None
+        if envelope.budget.approval_required:
+            approval_result = self._consume_approval(envelope, descriptor)
+            if not approval_result.allowed:
+                return self._result(
+                    envelope=envelope,
+                    descriptor=descriptor,
+                    ok=False,
+                    status="denied",
+                    output={"approval": approval_result.to_dict()},
+                    error=approval_result.reason,
+                    reason=approval_result.reason,
+                    started_at_ms=started_at_ms,
+                    ended_at_ms=_now_ms(),
+                    approval_result=approval_result,
+                )
+
         try:
             output = backend.execute(envelope)
             ended_at_ms = _now_ms()
@@ -154,6 +174,7 @@ class SubstrateGovernor:
                     reason="runtime_budget_elapsed_after_registered_function",
                     started_at_ms=started_at_ms,
                     ended_at_ms=ended_at_ms,
+                    approval_result=approval_result,
                 )
             return self._result(
                 envelope=envelope,
@@ -165,6 +186,7 @@ class SubstrateGovernor:
                 reason="executed_registered_function",
                 started_at_ms=started_at_ms,
                 ended_at_ms=ended_at_ms,
+                approval_result=approval_result,
             )
         except Exception as exc:
             return self._result(
@@ -177,6 +199,7 @@ class SubstrateGovernor:
                 reason="registered_function_error",
                 started_at_ms=started_at_ms,
                 ended_at_ms=_now_ms(),
+                approval_result=approval_result,
             )
 
     def _result(
@@ -191,12 +214,14 @@ class SubstrateGovernor:
         reason: str,
         started_at_ms: int,
         ended_at_ms: int,
+        approval_result: ApprovalConsumptionResult | None = None,
     ) -> ExecutionResult:
         receipt = self.receipt_adapter.create(
             envelope=envelope,
             descriptor=descriptor,
             status=status,
             reason=reason,
+            approval_result=approval_result,
         )
         receipt = self._persist_receipt(receipt)
         result_ok = ok
@@ -263,8 +288,32 @@ class SubstrateGovernor:
                     "receipt_store_error_recorded": True,
                     "writes_memory": False,
                     "long_term_memory_persistence": False,
-                    "approval_consumption": "not_implemented_first_slice",
+                    "approval_consumption": receipt.governance.get("approval_consumption", "not_required"),
                     "os_level_cpu_memory_enforcement": False,
+                },
+            )
+
+    def _consume_approval(self, envelope: TaskEnvelope, descriptor: WorkerDescriptor) -> ApprovalConsumptionResult:
+        if self.approval_store is None:
+            return ApprovalConsumptionResult(
+                allowed=False,
+                reason="missing_approval",
+                approval_id=_safe_text(envelope.approval_id),
+                consumed=False,
+                evidence={"approval_store_configured": False},
+            )
+        try:
+            return self.approval_store.consume(envelope, descriptor)
+        except Exception as exc:
+            return ApprovalConsumptionResult(
+                allowed=False,
+                reason="approval_cannot_be_consumed",
+                approval_id=_safe_text(envelope.approval_id),
+                consumed=False,
+                evidence={
+                    "approval_store_configured": True,
+                    "error_type": type(exc).__name__,
+                    "error": _safe_text(exc)[:160],
                 },
             )
 
