@@ -15,8 +15,8 @@ param(
   [ValidateRange(3, 30)]
   [int]$SupervisorRunSeconds = 20,
 
-  [ValidateRange(1, 120)]
-  [int]$LensStatusTimeoutSeconds = 30,
+  [ValidateRange(1, 300)]
+  [int]$LensStatusTimeoutSeconds = 120,
 
   [ValidateRange(1, 600)]
   [int]$ChildProofTimeoutSeconds = 240
@@ -484,6 +484,15 @@ print(json.dumps(lens_status(limit=3)))
         stderr = [string]$LensStatusResult.error
       }
     }
+    if ([string]::IsNullOrWhiteSpace([string]$LensStatusResult.output)) {
+      return [ordered]@{
+        ok = $false
+        error = 'lens_status_empty'
+        exit_code = [int]$LensStatusResult.exit_code
+        output = [string]$LensStatusResult.output
+        stderr = [string]$LensStatusResult.error
+      }
+    }
   } finally {
     if ([string]::IsNullOrWhiteSpace($PreviousPythonPath)) {
       Remove-Item Env:\PYTHONPATH -ErrorAction SilentlyContinue
@@ -575,9 +584,10 @@ function New-Criterion {
 }
 
 $LensStatus = Get-LensStatus
+$LensStatusError = [string](Get-PropertyValue -Payload $LensStatus -Name 'error' -Default '')
 $LensStatusTimedOut = (
   [bool](Get-PropertyValue -Payload $LensStatus -Name 'timed_out' -Default $false) -or
-  [string](Get-PropertyValue -Payload $LensStatus -Name 'error' -Default '') -eq 'lens_status_timeout'
+  $LensStatusError -eq 'lens_status_timeout'
 )
 if ($LensStatusTimedOut) {
   $Payload = [ordered]@{
@@ -599,6 +609,46 @@ if ($LensStatusTimedOut) {
     authority_granted = $false
     blockers = [string[]]@('lens_status_timeout')
     lens_status_readback = $LensStatus
+    governance = [ordered]@{
+      read_only_contract = $true
+      diagnostic_only = $true
+      execution_authority = $false
+      approval_decision_authority = $false
+      memory_write = $false
+      approval_request_write = $false
+      product_execution_authority = $false
+      mutation_authority_granted = $false
+    }
+  }
+  Write-CheckpointPayloadAndExit -Payload $Payload -ExitCode 1
+}
+$LensStatusFailed = -not [string]::IsNullOrWhiteSpace($LensStatusError)
+if ($LensStatusFailed) {
+  $Payload = [ordered]@{
+    ok = $false
+    kind = 'lens.stage6.checkpoint'
+    status = 'blocked'
+    checkpoint_status = 'lens_status_failed'
+    mode = $Mode
+    stage = 'Stage 6 / Lens MVP'
+    stage_state = 'active'
+    stage_claim = 'backend_readback_contract_only'
+    ready_to_close = $false
+    can_close_stage6 = $false
+    transition_allowed = $false
+    next_smallest_truthful_gap = 'stage6_checkpoint_lens_status_readback_failed'
+    recommended_next_slice = 'fix_lens_status_readback_failed'
+    recommended_proof_script = 'scripts/lens-stage6-checkpoint.ps1 -Mode Status -LensStatusTimeoutSeconds <seconds>'
+    authority_required = 'none_new_stage6_checkpoint'
+    authority_granted = $false
+    blockers = [string[]]@($LensStatusError)
+    lens_status_failure = [ordered]@{
+      error = $LensStatusError
+      exit_code = [int](Get-PropertyValue -Payload $LensStatus -Name 'exit_code' -Default 0)
+      output = [string](Get-PropertyValue -Payload $LensStatus -Name 'output' -Default '')
+      stderr = [string](Get-PropertyValue -Payload $LensStatus -Name 'stderr' -Default '')
+      message = [string](Get-PropertyValue -Payload $LensStatus -Name 'message' -Default '')
+    }
     governance = [ordered]@{
       read_only_contract = $true
       diagnostic_only = $true
@@ -1163,6 +1213,7 @@ $ResidentOverlayActivationResidentSurfaceForegroundSeconds = [Math]::Max(
   $ResidentSurfaceForegroundObservationSeconds,
   $ResidentOverlayActivationResidentSurfaceForegroundMinimumSeconds
 )
+$ResidentSurfaceReadbackTimeoutSeconds = [Math]::Min($LensStatusTimeoutSeconds, 30)
 
 function Write-ProofPayloadCache {
   param(
@@ -1381,7 +1432,12 @@ if (-not $LiveOperatorProofPassed) {
   $LiveOperatorBlockers += 'operator_experience_proof_missing'
 }
 
-$ResidentSurfaceProofResult = @(Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $ResidentSurfaceProofPath -ScriptArgs @('-Mode', 'Status', '-ForegroundRunSeconds', [string]$ResidentSurfaceForegroundObservationSeconds))
+$ResidentSurfaceProofResult = @(Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $ResidentSurfaceProofPath -ScriptArgs @(
+    '-Mode', 'Status',
+    '-ForegroundRunSeconds', [string]$ResidentSurfaceForegroundObservationSeconds,
+    '-LiveOperatorStartupTimeoutSeconds', [string]$StartupTimeoutSeconds,
+    '-ResidentSurfaceReadbackTimeoutSeconds', [string]$ResidentSurfaceReadbackTimeoutSeconds
+  ))
 $ResidentSurfaceProof = if ($ResidentSurfaceProofResult.Count -gt 0) { $ResidentSurfaceProofResult[-1] } else { $null }
 $ResidentSurfaceProofExitCode = -1
 $ResidentSurfaceProofPayload = $null
@@ -3467,7 +3523,7 @@ $Payload = [ordered]@{
     route = [string](Get-PropertyValue -Payload $CommandPaletteShellBridgePayload -Name 'route' -Default '')
     command_total = [int](Get-PropertyValue -Payload $CommandPaletteShellBridgePayload -Name 'command_total' -Default 0)
     next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $CommandPaletteShellBridgePayload -Name 'next_smallest_truthful_gap' -Default '')
-    blockers = $CommandPaletteShellBridgeBlockers
+    blockers = [string[]]@($CommandPaletteShellBridgeBlockers)
     governance = [ordered]@{
       read_only_contract = [bool](Get-PropertyValue -Payload $CommandPaletteShellBridgeGovernance -Name 'read_only_contract' -Default $false)
       opens_palette = [bool](Get-PropertyValue -Payload $CommandPaletteShellBridgeGovernance -Name 'opens_palette' -Default $true)

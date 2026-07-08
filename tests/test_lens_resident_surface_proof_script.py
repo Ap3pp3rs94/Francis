@@ -44,6 +44,8 @@ def test_lens_resident_surface_proof_accepts_isolated_data_dir_contract() -> Non
     assert "[string]$DataDir = ''" in script
     assert "$ReadbackDataRoot = [System.IO.Path]::GetFullPath($DataDir)" in script
     assert "Invoke-ResidentSurfaceReadback -DataDir $ReadbackDataRoot" in script
+    assert "[int]$ResidentSurfaceReadbackTimeoutSeconds = 30" in script
+    assert "Invoke-ResidentSurfaceReadback -DataDir $ReadbackDataRoot -TimeoutSeconds" in script
 
 
 def test_lens_resident_surface_readback_keeps_python_stderr_out_of_json_stdout() -> None:
@@ -53,6 +55,12 @@ def test_lens_resident_surface_readback_keeps_python_stderr_out_of_json_stdout()
     assert "$PythonStderrPath" in script
     assert "PYTHONWARNINGS" in script
     assert "$Output = & $Python.Source $TempScriptPath 2>&1" not in script
+    assert "$Completed = $PythonProcess.WaitForExit($TimeoutSeconds * 1000)" in script
+    assert "error = 'resident_surface_readback_timeout'" in script
+    assert "resident_surface_readback_timeout_seconds = $ResidentSurfaceReadbackTimeoutSeconds" in script
+    assert "$BaseBlockers += @($ResidentSurfaceRuntimeBlockers)" in script
+    assert "if ($ResidentSurfaceReadbackTimedOut) { 'resident_surface_readback_timeout' }" in script
+    assert "if ($ResidentSurfaceReadbackTimedOut) { 'fix_resident_surface_readback_timeout' }" in script
 
 
 def test_lens_resident_surface_proof_composes_blocked_surface_without_authority() -> None:
@@ -201,6 +209,7 @@ def test_lens_resident_surface_proof_composes_blocked_surface_without_authority(
     assert proof["supervision_proof_available"] is True
     assert proof["live_operator_exit_code"] == 0
     assert proof["live_operator_startup_timeout_seconds"] == 60
+    assert proof["resident_surface_readback_timeout_seconds"] == 30
     assert proof["live_operator_status"] == "proof_passed"
     assert proof["live_operator_helpful_not_noisy_readback"] is True
     assert proof["live_operator_status_route"] == "/lens/status?limit=5"

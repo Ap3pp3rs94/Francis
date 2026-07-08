@@ -9,6 +9,9 @@ param(
   [ValidateRange(5, 120)]
   [int]$LiveOperatorStartupTimeoutSeconds = 60,
 
+  [ValidateRange(5, 120)]
+  [int]$ResidentSurfaceReadbackTimeoutSeconds = 30,
+
   [string]$DataDir = ''
 )
 
@@ -214,7 +217,10 @@ function Invoke-JsonScript {
 }
 
 function Invoke-ResidentSurfaceReadback {
-  param([string]$DataDir = '')
+  param(
+    [string]$DataDir = '',
+    [int]$TimeoutSeconds = $ResidentSurfaceReadbackTimeoutSeconds
+  )
 
   $Python = Get-Command python -ErrorAction SilentlyContinue
   if ($null -eq $Python) {
@@ -254,6 +260,7 @@ print(json.dumps({"ok": response.status_code == 200, "status_code": response.sta
   $Text = ''
   $StderrText = ''
   $ExitCode = 1
+  $PythonProcess = $null
   $PreviousErrorActionPreference = $ErrorActionPreference
   try {
     if ([string]::IsNullOrWhiteSpace($PreviousPythonPath)) {
@@ -270,16 +277,66 @@ print(json.dumps({"ok": response.status_code == 200, "status_code": response.sta
       $env:PYTHONWARNINGS = "ignore::DeprecationWarning,$PreviousPythonWarnings"
     }
     Set-Content -LiteralPath $TempScriptPath -Value $Source -Encoding UTF8
-    $ErrorActionPreference = 'Continue'
-    & $Python.Source $TempScriptPath > $PythonStdoutPath 2> $PythonStderrPath
-    $ExitCode = $LASTEXITCODE
-    if (Test-Path -LiteralPath $PythonStdoutPath -PathType Leaf) {
-      $Text = Get-Content -LiteralPath $PythonStdoutPath -Raw -ErrorAction SilentlyContinue
+
+    $StartInfo = [System.Diagnostics.ProcessStartInfo]::new()
+    $StartInfo.FileName = [string]$Python.Source
+    $StartInfo.Arguments = Quote-ProcessArgument -Value $TempScriptPath
+    $StartInfo.WorkingDirectory = $RepoRoot
+    $StartInfo.UseShellExecute = $false
+    $StartInfo.CreateNoWindow = $true
+    $StartInfo.RedirectStandardOutput = $true
+    $StartInfo.RedirectStandardError = $true
+
+    $PythonProcess = [System.Diagnostics.Process]::new()
+    $PythonProcess.StartInfo = $StartInfo
+    $Started = $PythonProcess.Start()
+    if (-not $Started) {
+      return [ordered]@{
+        ok = $false
+        status_code = 0
+        payload = $null
+        error = 'resident_surface_readback_not_started'
+        timeout_seconds = $TimeoutSeconds
+      }
     }
-    if (Test-Path -LiteralPath $PythonStderrPath -PathType Leaf) {
-      $StderrText = Get-Content -LiteralPath $PythonStderrPath -Raw -ErrorAction SilentlyContinue
+
+    $Completed = $PythonProcess.WaitForExit($TimeoutSeconds * 1000)
+    if (-not $Completed) {
+      try {
+        $PythonProcess.Kill()
+      } catch {
+      }
+      $PythonProcess.WaitForExit(5000) | Out-Null
+      try {
+        $Text = $PythonProcess.StandardOutput.ReadToEnd()
+        $StderrText = $PythonProcess.StandardError.ReadToEnd()
+      } catch {
+      }
+      Set-Content -LiteralPath $PythonStdoutPath -Value $Text -Encoding UTF8 -ErrorAction SilentlyContinue
+      Set-Content -LiteralPath $PythonStderrPath -Value $StderrText -Encoding UTF8 -ErrorAction SilentlyContinue
+      return [ordered]@{
+        ok = $false
+        status_code = 0
+        payload = $null
+        error = 'resident_surface_readback_timeout'
+        timeout_seconds = $TimeoutSeconds
+        output = $Text
+        stderr = $StderrText
+      }
     }
+    $Text = $PythonProcess.StandardOutput.ReadToEnd()
+    $StderrText = $PythonProcess.StandardError.ReadToEnd()
+    Set-Content -LiteralPath $PythonStdoutPath -Value $Text -Encoding UTF8 -ErrorAction SilentlyContinue
+    Set-Content -LiteralPath $PythonStderrPath -Value $StderrText -Encoding UTF8 -ErrorAction SilentlyContinue
+    $ExitCode = $PythonProcess.ExitCode
   } finally {
+    if ($null -ne $PythonProcess -and -not $PythonProcess.HasExited) {
+      try {
+        $PythonProcess.Kill()
+      } catch {
+      }
+      $PythonProcess.WaitForExit(5000) | Out-Null
+    }
     $ErrorActionPreference = $PreviousErrorActionPreference
     if ([string]::IsNullOrWhiteSpace($PreviousPythonPath)) {
       Remove-Item Env:\PYTHONPATH -ErrorAction SilentlyContinue
@@ -374,7 +431,8 @@ function Test-ResidentSurfaceReadbackObserved {
 function Invoke-ForegroundResidentSurfaceReadback {
   param(
     [string]$PowerShellPath,
-    [int]$RunSeconds
+    [int]$RunSeconds,
+    [int]$ReadbackTimeoutSeconds = $ResidentSurfaceReadbackTimeoutSeconds
   )
 
   $HostScriptPath = Join-Path $PSScriptRoot 'lens-host.ps1'
@@ -443,7 +501,7 @@ function Invoke-ForegroundResidentSurfaceReadback {
     $RunningPid = Wait-ForForegroundPid -PidPath $PidPath -TimeoutSeconds 20
     $ReadbackDeadline = (Get-Date).AddSeconds(20)
     while ((Get-Date) -lt $ReadbackDeadline) {
-      $SurfaceReadback = Invoke-ResidentSurfaceReadback -DataDir $ProofDataRoot
+      $SurfaceReadback = Invoke-ResidentSurfaceReadback -DataDir $ProofDataRoot -TimeoutSeconds $ReadbackTimeoutSeconds
       if (Test-ForegroundSurfaceReadbackObserved -SurfaceReadback $SurfaceReadback) {
         break
       }
@@ -503,6 +561,7 @@ function Invoke-ForegroundResidentSurfaceReadback {
 
   return [ordered]@{
     ok = ($ForegroundObserved -and $ReadbackObserved -and $ForegroundCompleted)
+    error = [string](Get-PropertyValue -Payload $SurfaceReadback -Name 'error' -Default '')
     data_root = $ProofDataRoot
     runtime_state_path = 'runtime/lens-host/status.json'
     foreground_process_observed = $ForegroundObserved
@@ -558,12 +617,12 @@ if ([string]::IsNullOrWhiteSpace($DataDir)) {
 New-Item -ItemType Directory -Force -Path $ReadbackDataRoot | Out-Null
 
 $LiveResidentSurfaceReadback = if ([string]::IsNullOrWhiteSpace($DataDir)) {
-  Invoke-ResidentSurfaceReadback
+  Invoke-ResidentSurfaceReadback -TimeoutSeconds $ResidentSurfaceReadbackTimeoutSeconds
 } else {
-  Invoke-ResidentSurfaceReadback -DataDir $ReadbackDataRoot
+  Invoke-ResidentSurfaceReadback -DataDir $ReadbackDataRoot -TimeoutSeconds $ResidentSurfaceReadbackTimeoutSeconds
 }
-$ResidentSurfaceReadback = Invoke-ResidentSurfaceReadback -DataDir $ReadbackDataRoot
-$ForegroundSurfaceReadback = Invoke-ForegroundResidentSurfaceReadback -PowerShellPath $PowerShellPath -RunSeconds $ForegroundRunSeconds
+$ResidentSurfaceReadback = Invoke-ResidentSurfaceReadback -DataDir $ReadbackDataRoot -TimeoutSeconds $ResidentSurfaceReadbackTimeoutSeconds
+$ForegroundSurfaceReadback = Invoke-ForegroundResidentSurfaceReadback -PowerShellPath $PowerShellPath -RunSeconds $ForegroundRunSeconds -ReadbackTimeoutSeconds $ResidentSurfaceReadbackTimeoutSeconds
 $HostPreflight = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $HostPreflightPath -ScriptArgs @('-Mode', 'Status')
 $LiveOperatorProof = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $LiveOperatorProofPath -ScriptArgs @(
   '-Mode', 'Status',
@@ -592,6 +651,14 @@ $Binding = Get-PropertyValue -Payload $SummonPayload -Name 'binding'
 $ResidentSurfaceGovernance = Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'governance'
 $ResidentSurfaceReadbackBlockers = ConvertTo-StringArray -Value (
   Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'blockers' -Default @()
+)
+$ResidentSurfaceReadbackError = [string](Get-PropertyValue -Payload $ResidentSurfaceReadback -Name 'error' -Default '')
+$LiveResidentSurfaceReadbackError = [string](Get-PropertyValue -Payload $LiveResidentSurfaceReadback -Name 'error' -Default '')
+$ForegroundSurfaceReadbackError = [string](Get-PropertyValue -Payload $ForegroundSurfaceReadback -Name 'error' -Default '')
+$ResidentSurfaceReadbackTimedOut = (
+  $ResidentSurfaceReadbackError -eq 'resident_surface_readback_timeout' -or
+  $LiveResidentSurfaceReadbackError -eq 'resident_surface_readback_timeout' -or
+  $ForegroundSurfaceReadbackError -eq 'resident_surface_readback_timeout'
 )
 $ForegroundSurfaceRuntimeBlockers = ConvertTo-StringArray -Value (
   Get-PropertyValue -Payload $ForegroundSurfaceReadback -Name 'runtime_blockers' -Default @()
@@ -740,17 +807,16 @@ if ($ResidentSurfaceResidentRuntimeReadback) {
     @('resident_surface_runtime_missing')
   ) | Sort-Object -Unique
 }
-$BaseBlockers = @(
-  $ResidentSurfaceRuntimeBlockers +
-  (ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostPayload -Name 'blockers' -Default @())) +
-  (ConvertTo-StringArray -Value (Get-PropertyValue -Payload $TrayPayload -Name 'blockers' -Default @())) +
-  (ConvertTo-StringArray -Value (Get-PropertyValue -Payload $OverlayPayload -Name 'blockers' -Default @())) +
-  (ConvertTo-StringArray -Value (Get-PropertyValue -Payload $SummonPayload -Name 'blockers' -Default @())) +
-  @(
-    'tray_presence_missing',
-    'overlay_window_missing',
-    'summon_anywhere_missing'
-  )
+$BaseBlockers = @()
+$BaseBlockers += @($ResidentSurfaceRuntimeBlockers)
+$BaseBlockers += @(ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostPayload -Name 'blockers' -Default @()))
+$BaseBlockers += @(ConvertTo-StringArray -Value (Get-PropertyValue -Payload $TrayPayload -Name 'blockers' -Default @()))
+$BaseBlockers += @(ConvertTo-StringArray -Value (Get-PropertyValue -Payload $OverlayPayload -Name 'blockers' -Default @()))
+$BaseBlockers += @(ConvertTo-StringArray -Value (Get-PropertyValue -Payload $SummonPayload -Name 'blockers' -Default @()))
+$BaseBlockers += @(
+  'tray_presence_missing',
+  'overlay_window_missing',
+  'summon_anywhere_missing'
 )
 if ($ResidentSurfaceResidentRuntimeReadback) {
   $BaseBlockers = @(
@@ -769,12 +835,15 @@ if (-not $LiveOperatorProofPassed) {
 if (-not $ResidentSurfaceContentReadback) {
   $BaseBlockers += 'resident_surface_readback_missing'
 }
+if ($ResidentSurfaceReadbackTimedOut) {
+  $BaseBlockers += 'resident_surface_readback_timeout'
+}
 $AllBlockers = @($BaseBlockers | Sort-Object -Unique)
-$ResidentSurfaceNextSmallestTruthfulGap = if ($ResidentSurfaceResidentRuntimeReadback) { 'resident_surface_operator_experience_proof' } elseif ($ResidentSurfaceForegroundRuntimeReadback) { 'resident_surface_runtime_not_supervised' } else { 'resident_surface_runtime_missing' }
+$ResidentSurfaceNextSmallestTruthfulGap = if ($ResidentSurfaceReadbackTimedOut) { 'resident_surface_readback_timeout' } elseif ($ResidentSurfaceResidentRuntimeReadback) { 'resident_surface_operator_experience_proof' } elseif ($ResidentSurfaceForegroundRuntimeReadback) { 'resident_surface_runtime_not_supervised' } else { 'resident_surface_runtime_missing' }
 $RecommendedHandoffSource = 'resident_surface_runtime_supervision_handoff'
-$RecommendedNextSlice = if ($ResidentSurfaceResidentRuntimeReadback) { 'prove_resident_surface_operator_experience_before_helpful_not_noisy_claim' } elseif ($ResidentSurfaceForegroundRuntimeReadback) { 'resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim' } else { 'prove_resident_surface_foreground_runtime_before_helpful_not_noisy_claim' }
+$RecommendedNextSlice = if ($ResidentSurfaceReadbackTimedOut) { 'fix_resident_surface_readback_timeout' } elseif ($ResidentSurfaceResidentRuntimeReadback) { 'prove_resident_surface_operator_experience_before_helpful_not_noisy_claim' } elseif ($ResidentSurfaceForegroundRuntimeReadback) { 'resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim' } else { 'prove_resident_surface_foreground_runtime_before_helpful_not_noisy_claim' }
 $RecommendedProofScript = 'scripts/lens-resident-surface-proof.ps1 -Mode Status'
-$RecommendedAuthorityRequired = if ($ResidentSurfaceResidentRuntimeReadback) { 'operator_experience_proof' } elseif ($ResidentSurfaceForegroundRuntimeReadback) { 'process_supervision_authority' } else { 'none_readback_first' }
+$RecommendedAuthorityRequired = if ($ResidentSurfaceReadbackTimedOut) { 'none_readback_first' } elseif ($ResidentSurfaceResidentRuntimeReadback) { 'operator_experience_proof' } elseif ($ResidentSurfaceForegroundRuntimeReadback) { 'process_supervision_authority' } else { 'none_readback_first' }
 $RuntimeSurfacePayload = if ($ResidentSurfaceResidentRuntimeReadback) { $LiveResidentSurfacePayload } else { $ForegroundSurfacePayload }
 $ForegroundRecommendedHandoff = Get-PropertyValue -Payload $RuntimeSurfacePayload -Name 'recommended_handoff'
 if ($null -eq $ForegroundRecommendedHandoff) {
@@ -923,6 +992,7 @@ $Payload = [ordered]@{
     supervision_proof_available = $SupervisionProofAvailable
     live_operator_exit_code = [int](Get-PropertyValue -Payload $LiveOperatorProof -Name 'exit_code' -Default -1)
     live_operator_startup_timeout_seconds = $LiveOperatorStartupTimeoutSeconds
+    resident_surface_readback_timeout_seconds = $ResidentSurfaceReadbackTimeoutSeconds
     live_operator_status = [string](Get-PropertyValue -Payload $LiveOperatorPayload -Name 'status' -Default '')
     live_operator_helpful_not_noisy_readback = [bool](Get-PropertyValue -Payload $LiveOperatorPayload -Name 'helpful_not_noisy_readback' -Default $false)
     live_operator_status_route = [string](Get-PropertyValue -Payload $LiveOperatorPayload -Name 'status_route' -Default '')
