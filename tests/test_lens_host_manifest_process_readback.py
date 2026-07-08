@@ -97,3 +97,51 @@ def test_lens_host_manifest_observes_matching_running_runtime_state(
     assert process["process_alive"] is True
     assert process["blocked_reason"] == "resident_host_not_supervised"
     assert body["blocker_groups"]["process_readback"] == ["resident_host_not_supervised"]
+
+
+def test_lens_host_manifest_normalizes_locked_orb_ring_color_contract(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "data"
+    runtime_root = data_root / "runtime" / "lens-overlay"
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    live_pid = os.getpid()
+    (runtime_root / "lens-overlay.pid").write_text(str(live_pid), encoding="ascii")
+    (runtime_root / "status.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.overlay.runtime_state",
+                "status": "overlay_running",
+                "pid": live_pid,
+                "overlay_name": "Francis Lens Overlay",
+                "overlay_scope": "user_session",
+                "overlay_window_visible": True,
+                "always_on_top": True,
+                "orb_visual": {
+                    "visual_contract": "chat_ui.orbGlyph.energy_reference",
+                    "renderer": "wpf_3d_animated_energy_orb",
+                    "animated": True,
+                    "transparent_background": True,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    body = lens_host_launch_manifest()
+    overlay = body["overlay_runtime_readback"]
+    visual = overlay["orb_visual"]
+    contract = visual["ring_color_contract"]
+
+    assert overlay["ready"] is True
+    assert visual["visual_contract"] == "chat_ui.orbGlyph.energy_reference"
+    assert contract["kind"] == "lens.overlay.orb_ring_color_contract"
+    assert contract["source"] == "docs/operations/ORB_VISUAL_LOCK.md"
+    assert contract["renderer"] == "wpf_3d_animated_energy_orb"
+    assert contract["state_driven_render_object"] is True
+    assert contract["ring_family"]["three_d_ring_color"] == "#E2EEFC"
+    assert contract["ring_family"]["two_d_orbit_color"] == "#E0ECFA"
+    assert contract["grants_execution_authority"] is False
+    assert contract["grants_mutation_authority"] is False

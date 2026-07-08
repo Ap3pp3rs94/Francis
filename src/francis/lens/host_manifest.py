@@ -81,6 +81,54 @@ def _safe_pid(value: Any) -> int:
     return pid if pid > 0 else 0
 
 
+def _orb_ring_color_contract() -> dict[str, Any]:
+    return {
+        "kind": "lens.overlay.orb_ring_color_contract",
+        "status": "ready",
+        "source": "docs/operations/ORB_VISUAL_LOCK.md",
+        "render_source": "scripts/lens-overlay-window.ps1",
+        "visual_contract": "chat_ui.orbGlyph.energy_reference",
+        "renderer": "wpf_3d_animated_energy_orb",
+        "visual_lock_status": "locked",
+        "state_driven_render_object": True,
+        "ring_motion_contract": "parametric_orbital_motion",
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "ring_family": {
+            "material": "silver_white_energy_ring",
+            "three_d_ring_color": "#E2EEFC",
+            "two_d_orbit_color": "#E0ECFA",
+            "three_d_ring_count": 38,
+            "fine_orbit_count": 56,
+            "bright_orbit_count": 12,
+        },
+        "glow_family": {
+            "outer_glow_primary": "#EBF5FF",
+            "outer_glow_secondary": "#B6CDEB",
+            "core_primary": "#FFFFFF",
+            "core_secondary": "#E6F0FC",
+            "core_shadow": "#8092A8",
+            "hot_center": "#FFFFFF",
+        },
+    }
+
+
+def _orb_visual_runtime_readback(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    orb_visual = dict(value)
+    if any(
+        isinstance(orb_visual.get(field), dict) and orb_visual[field]
+        for field in ("ring_color_contract", "ring_contract", "color_contract", "energy_palette")
+    ):
+        return orb_visual
+    visual_contract = str(orb_visual.get("visual_contract") or "").strip()
+    renderer = str(orb_visual.get("renderer") or "").strip()
+    if visual_contract == "chat_ui.orbGlyph.energy_reference" and renderer == "wpf_3d_animated_energy_orb":
+        orb_visual["ring_color_contract"] = _orb_ring_color_contract()
+    return orb_visual
+
+
 def _pid_from_file(path: Path) -> int:
     try:
         return _safe_pid(path.read_text(encoding="utf-8-sig").strip())
@@ -557,7 +605,7 @@ def _lens_overlay_runtime_readback() -> dict[str, Any]:
         "expected_overlay_name": expected_overlay_name,
         "overlay_scope": state_overlay_scope,
         "expected_overlay_scope": expected_overlay_scope,
-        "orb_visual": _as_dict(state_payload.get("orb_visual")),
+        "orb_visual": _orb_visual_runtime_readback(state_payload.get("orb_visual")),
         "voice": _as_dict(state_payload.get("voice")),
         "overlay_voice": _as_dict(state_payload.get("overlay_voice")),
         "voice_provider_readiness": _as_dict(state_payload.get("voice_provider_readiness")),

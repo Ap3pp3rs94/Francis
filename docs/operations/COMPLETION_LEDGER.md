@@ -101,11 +101,61 @@ What is materially true now:
 - The one-visible-loop proof now separates receipt/trace artifact visibility,
   Lens/chat contract visibility, and actual rendered UI proof, leaving render
   verification false until a browser/live UI check proves it.
+- The canonical Orb runtime identity readback now exposes the locked ring/color
+  contract from `docs/operations/ORB_VISUAL_LOCK.md` and the active WPF overlay
+  renderer constants; live readback clears `orb_ring_color_contract_missing`
+  while still preserving the separate voice-provider drift blocker.
 
 ## 4. Latest validation evidence
 
 > Older dated entries are archived under docs/operations/archive/ (see scripts/archive-completion-ledger.ps1).
 > Historical undated ledger body is archived under docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md.
+
+### 2026-07-07 21:17Z - Stage 6 Orb ring/color identity readback
+
+Current posture: Phase 2 / Stage 6 Orb embodiment still remains incomplete, but
+the canonical Orb runtime identity readback now carries an explicit ring/color
+contract for the locked visible Orb. This closes the
+`orb_ring_color_contract_missing` blocker in the runtime identity readback. It
+does not close Stage 6, prove one-visible-loop completion, resolve voice-provider
+drift, grant new authority, modify the live Orb process, or claim FR-018
+clearance.
+
+What changed:
+
+- `scripts/lens-overlay-window.ps1` now projects a read-only
+  `lens.overlay.orb_ring_color_contract` sourced from
+  `docs/operations/ORB_VISUAL_LOCK.md` and the existing WPF energy-orb renderer
+  constants.
+- `src/francis/lens/host_manifest.py` normalizes older live overlay status
+  payloads at readback time when they already identify the canonical
+  `chat_ui.orbGlyph.energy_reference` / `wpf_3d_animated_energy_orb` surface.
+- The API-level canonical runtime identity now keeps missing ring/color as a
+  blocker for arbitrary incomplete readback, but clears that blocker when the
+  locked visual contract is present.
+
+Evidence:
+
+- `python -m py_compile src\francis\lens\host_manifest.py tests\test_api_lens.py tests\test_lens_host_manifest_process_readback.py tests\test_lens_overlay_window_script.py`
+  passed.
+- `python -m ruff check src/francis/lens/host_manifest.py tests/test_api_lens.py tests/test_lens_host_manifest_process_readback.py tests/test_lens_overlay_window_script.py`
+  passed.
+- `python -m pytest tests/test_api_lens.py::test_lens_orb_runtime_identity_reports_voice_and_visual_drift tests/test_api_lens.py::test_lens_orb_runtime_identity_accepts_locked_ring_color_contract tests/test_lens_host_manifest_process_readback.py::test_lens_host_manifest_normalizes_locked_orb_ring_color_contract tests/test_lens_overlay_window_script.py::test_lens_overlay_window_status_reports_missing_runtime tests/test_lens_overlay_window_script.py::test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop -q`
+  passed, 5 tests.
+- Live readback through `francis.lens.status.lens_orb_runtime_identity(limit=5,
+  include_process_scan=True)` returned `status=identity_drift_detected`,
+  `blockers=["orb_voice_provider_identity_drift"]`,
+  `visual_identity.ring_color_contract_ready=true`, and
+  `process_scan.status=single_canonical_runtime`.
+
+Remaining blockers:
+
+- `orb_voice_provider_identity_drift` still remains: overlay output is
+  configured as ElevenLabs while input/runtime readback still reports
+  WindowsSapi.
+- Broader Stage 6 gates remain open: summon-anywhere acceptance, stable
+  resident/supervision proof, desktop bridge effect proof, voice replay proof,
+  and one-visible-loop proof.
 
 ### 2026-07-07 01:08Z - FR-017 setup updater classifies next handoff
 

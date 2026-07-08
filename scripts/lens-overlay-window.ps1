@@ -788,6 +788,59 @@ function Set-OverlayWindowTopMostPinned {
   }
 }
 
+function New-OrbRingColorContract {
+  return [ordered]@{
+    kind = 'lens.overlay.orb_ring_color_contract'
+    status = 'ready'
+    source = 'docs/operations/ORB_VISUAL_LOCK.md'
+    render_source = 'scripts/lens-overlay-window.ps1'
+    visual_contract = 'chat_ui.orbGlyph.energy_reference'
+    renderer = 'wpf_3d_animated_energy_orb'
+    visual_lock_status = 'locked'
+    state_driven_render_object = $true
+    ring_motion_contract = 'parametric_orbital_motion'
+    grants_execution_authority = $false
+    grants_mutation_authority = $false
+    ring_family = [ordered]@{
+      material = 'silver_white_energy_ring'
+      three_d_ring_color = '#E2EEFC'
+      two_d_orbit_color = '#E0ECFA'
+      three_d_ring_count = 38
+      fine_orbit_count = 56
+      bright_orbit_count = 12
+    }
+    glow_family = [ordered]@{
+      outer_glow_primary = '#EBF5FF'
+      outer_glow_secondary = '#B6CDEB'
+      core_primary = '#FFFFFF'
+      core_secondary = '#E6F0FC'
+      core_shadow = '#8092A8'
+      hot_center = '#FFFFFF'
+    }
+  }
+}
+
+function Add-OrbVisualRingColorContract {
+  param([object]$OrbVisual)
+
+  if ($null -eq $OrbVisual) {
+    return New-OrbVisualProjection -AutonomousMotion $false
+  }
+
+  if ($OrbVisual -is [System.Collections.IDictionary]) {
+    if (-not $OrbVisual.Contains('ring_color_contract') -or $null -eq $OrbVisual['ring_color_contract']) {
+      $OrbVisual['ring_color_contract'] = New-OrbRingColorContract
+    }
+    return $OrbVisual
+  }
+
+  $RingContractProperty = $OrbVisual.PSObject.Properties['ring_color_contract']
+  if ($null -eq $RingContractProperty -or $null -eq $RingContractProperty.Value) {
+    $OrbVisual | Add-Member -NotePropertyName 'ring_color_contract' -NotePropertyValue (New-OrbRingColorContract) -Force
+  }
+  return $OrbVisual
+}
+
 function New-OrbVisualProjection {
   param(
     [bool]$AutonomousMotion = $false,
@@ -800,6 +853,7 @@ function New-OrbVisualProjection {
     renderer = 'wpf_3d_animated_energy_orb'
     animated = $true
     transparent_background = $true
+    ring_color_contract = New-OrbRingColorContract
     autonomous_motion = $AutonomousMotion
     right_corner_locked = (-not $AutonomousMotion -and -not $ManualDrag)
     default_anchor = if ($AutonomousMotion) { 'bounded_work_area' } elseif ($ManualDrag) { 'operator_manual' } else { 'bottom_right' }
@@ -6637,6 +6691,7 @@ function Get-OverlayRuntimeReadback {
   } else {
     New-OrbVisualProjection -AutonomousMotion $false
   }
+  $OrbVisual = Add-OrbVisualRingColorContract -OrbVisual $OrbVisual
   $StatusVoice = if ($null -ne $Status -and $null -ne $Status.PSObject.Properties['voice']) { $Status.PSObject.Properties['voice'].Value } else { $null }
   $VoiceReadback = Get-OverlayVoiceReadback -Root $Root
   $Voice = if (Test-Path -LiteralPath (Get-OverlayVoiceStatusPath -Root $Root) -PathType Leaf) {

@@ -766,6 +766,73 @@ def test_lens_orb_runtime_identity_reports_voice_and_visual_drift(
     assert payload["governance"]["mutation_authority_granted"] is False
 
 
+def test_lens_orb_runtime_identity_accepts_locked_ring_color_contract(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    from francis.lens.status import _canonical_orb_runtime_identity
+
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+    launch_manifest = {
+        "process_readback": {
+            "state_status": "resident_running",
+            "pid": 101,
+            "process_alive": True,
+        },
+        "supervisor_readback": {
+            "status": "resident_supervising",
+            "supervisor_pid": 102,
+            "resident_supervised_runtime": True,
+            "fresh_readback": True,
+        },
+        "tray_runtime_readback": {"ready": True, "pid": 103, "process_alive": True},
+        "hotkey_runtime_readback": {"ready": True, "pid": 104, "process_alive": True},
+        "overlay_runtime_readback": {
+            "ready": True,
+            "pid": 105,
+            "process_alive": True,
+            "overlay_window_visible": True,
+            "always_on_top": True,
+            "orb_visual": {
+                "visual_contract": "chat_ui.orbGlyph.energy_reference",
+                "renderer": "wpf_3d_animated_energy_orb",
+                "animated": True,
+                "transparent_background": True,
+                "ring_color_contract": {
+                    "kind": "lens.overlay.orb_ring_color_contract",
+                    "source": "docs/operations/ORB_VISUAL_LOCK.md",
+                    "renderer": "wpf_3d_animated_energy_orb",
+                },
+            },
+            "overlay_voice": {
+                "voice_provider": "ElevenLabs",
+                "selected_voice": "Emma",
+            },
+            "voice": {
+                "voice_provider": "WindowsSapi",
+                "selected_voice": "Microsoft Zira Desktop",
+            },
+            "voice_provider_readiness": {"selected_provider": "ElevenLabs"},
+        },
+        "summon_runtime_readback": {"ready": True, "status": "observed"},
+    }
+
+    payload = _canonical_orb_runtime_identity(
+        launch_manifest=launch_manifest,
+        summon_enablement_gate={"route": "/lens/summon", "ready": True, "status": "ready"},
+        tray_enablement_gate={"route": "/lens/tray", "ready": True, "status": "ready"},
+        overlay_enablement_gate={"route": "/lens/overlay", "ready": True, "status": "ready"},
+        include_process_scan=False,
+    )
+
+    assert payload["status"] == "identity_drift_detected"
+    assert payload["ready"] is False
+    assert payload["visual_identity"]["status"] == "ready"
+    assert payload["visual_identity"]["ring_color_contract_ready"] is True
+    assert "orb_ring_color_contract_missing" not in payload["blockers"]
+    assert "orb_voice_provider_identity_drift" in payload["blockers"]
+
+
 def test_lens_orb_runtime_identity_route_uses_canonical_readback(monkeypatch) -> None:
     from fastapi.testclient import TestClient
 

@@ -96,6 +96,16 @@ def test_lens_overlay_window_status_reports_missing_runtime(tmp_path: Path) -> N
     assert payload["orb_visual"]["desktop_roam_bounds"] == "virtual_screen"
     assert payload["orb_visual"]["render_profile"]["source"] == "wpf_render_capability"
     assert payload["orb_visual"]["render_profile"]["motion_integrator"] == "elapsed_time_delta_clamped"
+    ring_color_contract = payload["orb_visual"]["ring_color_contract"]
+    assert ring_color_contract["kind"] == "lens.overlay.orb_ring_color_contract"
+    assert ring_color_contract["source"] == "docs/operations/ORB_VISUAL_LOCK.md"
+    assert ring_color_contract["render_source"] == "scripts/lens-overlay-window.ps1"
+    assert ring_color_contract["visual_contract"] == "chat_ui.orbGlyph.energy_reference"
+    assert ring_color_contract["renderer"] == "wpf_3d_animated_energy_orb"
+    assert ring_color_contract["state_driven_render_object"] is True
+    assert ring_color_contract["ring_family"]["three_d_ring_color"] == "#E2EEFC"
+    assert ring_color_contract["ring_family"]["two_d_orbit_color"] == "#E0ECFA"
+    assert ring_color_contract["glow_family"]["outer_glow_primary"] == "#EBF5FF"
     assert payload["overlay_position"]["status"] == "window_unavailable"
     assert payload["overlay_position"]["right_corner_locked"] is True
     assert payload["overlay_position"]["default_anchor"] == "bottom_right"
@@ -1606,6 +1616,9 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "orb_semantic_state" in script
     assert "semantic_state" in script
     assert "semantic_source" in script
+    assert "function New-OrbRingColorContract" in script
+    assert "ring_color_contract = New-OrbRingColorContract" in script
+    assert "Add-OrbVisualRingColorContract -OrbVisual $OrbVisual" in script
     assert "orb_visual = $OrbVisual" in script
     assert "status.{0}.tmp" in script
     assert "Move-OverlayRuntimeStateFile -TempPath $TempPath -DestinationPath $StatusPath" in script
