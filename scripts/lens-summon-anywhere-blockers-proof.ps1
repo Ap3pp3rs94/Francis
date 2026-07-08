@@ -1,7 +1,11 @@
 param(
   [ValidateSet('Status')]
   [string]$Mode = 'Status',
-  [string]$StatusPath = ''
+  [string]$StatusPath = '',
+  [ValidateRange(1, 600)]
+  [int]$ChildProofTimeoutSeconds = 120,
+  [ValidateRange(1, 120)]
+  [int]$LensStatusTimeoutSeconds = 30
 )
 
 $ErrorActionPreference = 'Stop'
@@ -54,28 +58,158 @@ function Get-PropertyValue {
   return $Property.Value
 }
 
-function Invoke-JsonScript {
+function Quote-ProcessArgument {
+  param([string]$Value)
+
+  if ($null -eq $Value) {
+    return '""'
+  }
+  return '"' + ($Value -replace '"', '\"') + '"'
+}
+
+function Stop-ProcessTree {
+  param([System.Diagnostics.Process]$Process)
+
+  if ($null -eq $Process -or $Process.HasExited) {
+    return
+  }
+  if ($IsWindows -or $env:OS -eq 'Windows_NT') {
+    try {
+      & taskkill.exe /F /T /PID $Process.Id | Out-Null
+      return
+    } catch {
+    }
+  }
+  try {
+    $Process.Kill($true)
+  } catch {
+    try {
+      $Process.Kill()
+    } catch {
+    }
+  }
+}
+
+function Invoke-JsonProcess {
   param(
     [Parameter(Mandatory = $true)]
-    [string]$PowerShellPath,
+    [string]$ExecutablePath,
 
-    [Parameter(Mandatory = $true)]
-    [string]$ScriptPath,
+    [string[]]$Arguments = @(),
 
-    [string[]]$ScriptArgs = @()
+    [int]$TimeoutSeconds = $ChildProofTimeoutSeconds,
+
+    [string]$CaptureName = 'lens-summon-anywhere-proof-child'
   )
 
-  if (-not (Test-Path -LiteralPath $ScriptPath -PathType Leaf)) {
+  if ([string]::IsNullOrWhiteSpace($ExecutablePath)) {
     return [ordered]@{
       exit_code = 1
       payload = $null
       output = ''
+      error = 'executable_unavailable'
+      timed_out = $false
+      timeout_seconds = $TimeoutSeconds
+      duration_ms = 0
     }
   }
 
-  $Output = & $PowerShellPath -NoProfile -ExecutionPolicy Bypass -File $ScriptPath @ScriptArgs 2>&1
-  $ExitCode = $LASTEXITCODE
-  $Text = ($Output | ForEach-Object { [string]$_ }) -join "`n"
+  $CaptureRoot = Join-Path $RepoRoot 'data/test_runs/lens-summon-anywhere-blockers-proof'
+  New-Item -ItemType Directory -Path $CaptureRoot -Force | Out-Null
+  $CaptureId = [Guid]::NewGuid().ToString('N')
+  $StdoutPath = Join-Path $CaptureRoot "$CaptureName-$CaptureId.stdout.json"
+  $StderrPath = Join-Path $CaptureRoot "$CaptureName-$CaptureId.stderr.txt"
+
+  $Shell = Get-Command pwsh -ErrorAction SilentlyContinue
+  if ($null -eq $Shell) {
+    $Shell = Get-Command powershell -ErrorAction SilentlyContinue
+  }
+  if ($null -eq $Shell) {
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = ''
+      error = 'powershell_unavailable'
+      timed_out = $false
+      timeout_seconds = $TimeoutSeconds
+      duration_ms = 0
+    }
+  }
+
+  $CommandText = (
+    '& ' + (Quote-ProcessArgument -Value $ExecutablePath) + ' ' +
+    (($Arguments | ForEach-Object { Quote-ProcessArgument -Value $_ }) -join ' ') +
+    ' > ' + (Quote-ProcessArgument -Value $StdoutPath) +
+    ' 2> ' + (Quote-ProcessArgument -Value $StderrPath)
+  )
+
+  $StartInfo = [System.Diagnostics.ProcessStartInfo]::new()
+  $StartInfo.FileName = $Shell.Source
+  $StartInfo.Arguments = '-NoProfile -ExecutionPolicy Bypass -Command ' + (Quote-ProcessArgument -Value $CommandText)
+  $StartInfo.WorkingDirectory = $RepoRoot
+  $StartInfo.UseShellExecute = $false
+  $StartInfo.CreateNoWindow = $true
+  $StartInfo.RedirectStandardOutput = $false
+  $StartInfo.RedirectStandardError = $false
+  $StartInfo.RedirectStandardInput = $false
+
+  $Process = [System.Diagnostics.Process]::new()
+  $Process.StartInfo = $StartInfo
+  $Timer = [System.Diagnostics.Stopwatch]::StartNew()
+  try {
+    $Started = $Process.Start()
+  } catch {
+    $Timer.Stop()
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = ''
+      error = [string]$_.Exception.Message
+      timed_out = $false
+      timeout_seconds = $TimeoutSeconds
+      duration_ms = [int]$Timer.ElapsedMilliseconds
+    }
+  }
+  if (-not $Started) {
+    $Timer.Stop()
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = ''
+      error = 'process_not_started'
+      timed_out = $false
+      timeout_seconds = $TimeoutSeconds
+      duration_ms = [int]$Timer.ElapsedMilliseconds
+    }
+  }
+
+  $Exited = $Process.WaitForExit($TimeoutSeconds * 1000)
+  if (-not $Exited) {
+    Stop-ProcessTree -Process $Process
+    [void]$Process.WaitForExit(5000)
+    $Timer.Stop()
+    return [ordered]@{
+      exit_code = 124
+      payload = $null
+      output = ''
+      error = 'timeout'
+      timed_out = $true
+      timeout_seconds = $TimeoutSeconds
+      duration_ms = [int]$Timer.ElapsedMilliseconds
+      stdout_path = $StdoutPath
+      stderr_path = $StderrPath
+    }
+  }
+
+  $Text = ''
+  if (Test-Path -LiteralPath $StdoutPath -PathType Leaf) {
+    $Text = [IO.File]::ReadAllText($StdoutPath)
+  }
+  $ErrorText = ''
+  if (Test-Path -LiteralPath $StderrPath -PathType Leaf) {
+    $ErrorText = [IO.File]::ReadAllText($StderrPath)
+  }
+  $Timer.Stop()
   $Payload = $null
   try {
     $Payload = $Text | ConvertFrom-Json -ErrorAction Stop
@@ -84,10 +218,48 @@ function Invoke-JsonScript {
   }
 
   return [ordered]@{
-    exit_code = $ExitCode
+    exit_code = [int]$Process.ExitCode
     payload = $Payload
     output = $Text
+    error = $ErrorText
+    timed_out = $false
+    timeout_seconds = $TimeoutSeconds
+    duration_ms = [int]$Timer.ElapsedMilliseconds
+    stdout_path = $StdoutPath
+    stderr_path = $StderrPath
   }
+}
+
+function Invoke-JsonScript {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$PowerShellPath,
+
+    [Parameter(Mandatory = $true)]
+    [string]$ScriptPath,
+
+    [string[]]$ScriptArgs = @(),
+
+    [int]$TimeoutSeconds = $ChildProofTimeoutSeconds
+  )
+
+  if (-not (Test-Path -LiteralPath $ScriptPath -PathType Leaf)) {
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = ''
+      error = 'script_unavailable'
+      timed_out = $false
+      timeout_seconds = $TimeoutSeconds
+      duration_ms = 0
+    }
+  }
+
+  return Invoke-JsonProcess `
+    -ExecutablePath $PowerShellPath `
+    -Arguments (@('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $ScriptPath) + $ScriptArgs) `
+    -TimeoutSeconds $TimeoutSeconds `
+    -CaptureName ([IO.Path]::GetFileNameWithoutExtension($ScriptPath))
 }
 
 function Select-Blockers {
@@ -267,16 +439,34 @@ import json
 from francis.lens.status import lens_status
 print(json.dumps(lens_status(limit=5)))
 '@
-  $Output = & $Python.Source -c $Source
-  if ($LASTEXITCODE -ne 0) {
+  $LensStatusResult = Invoke-JsonProcess `
+    -ExecutablePath $Python.Source `
+    -Arguments @('-c', $Source) `
+    -TimeoutSeconds $LensStatusTimeoutSeconds `
+    -CaptureName 'lens-status-python-readback'
+  if ([bool]$LensStatusResult.timed_out) {
+    return [ordered]@{
+      ok = $false
+      source = 'python'
+      evidence = 'francis.lens.status.lens_status'
+      payload = $null
+      error = 'lens_status_timeout'
+      timed_out = $true
+      timeout_seconds = [int]$LensStatusResult.timeout_seconds
+      stdout_path = [string]$LensStatusResult.stdout_path
+      stderr_path = [string]$LensStatusResult.stderr_path
+    }
+  }
+  if ([int]$LensStatusResult.exit_code -ne 0) {
     return [ordered]@{
       ok = $false
       source = 'python'
       evidence = 'francis.lens.status.lens_status'
       payload = $null
       error = 'lens_status_failed'
-      exit_code = $LASTEXITCODE
-      output = ($Output -join "`n")
+      exit_code = [int]$LensStatusResult.exit_code
+      output = [string]$LensStatusResult.output
+      stderr = [string]$LensStatusResult.error
     }
   }
 
@@ -285,7 +475,7 @@ print(json.dumps(lens_status(limit=5)))
       ok = $true
       source = 'python'
       evidence = 'francis.lens.status.lens_status'
-      payload = (($Output -join "`n") | ConvertFrom-Json -ErrorAction Stop)
+      payload = ([string]$LensStatusResult.output | ConvertFrom-Json -ErrorAction Stop)
       error = ''
     }
   } catch {
@@ -1110,6 +1300,10 @@ $Payload = [ordered]@{
     source = [string](Get-PropertyValue -Payload $LensStatusRead -Name 'source' -Default '')
     evidence = [string](Get-PropertyValue -Payload $LensStatusRead -Name 'evidence' -Default '')
     error = [string](Get-PropertyValue -Payload $LensStatusRead -Name 'error' -Default '')
+    timed_out = [bool](Get-PropertyValue -Payload $LensStatusRead -Name 'timed_out' -Default $false)
+    timeout_seconds = [int](Get-PropertyValue -Payload $LensStatusRead -Name 'timeout_seconds' -Default 0)
+    stdout_path = [string](Get-PropertyValue -Payload $LensStatusRead -Name 'stdout_path' -Default '')
+    stderr_path = [string](Get-PropertyValue -Payload $LensStatusRead -Name 'stderr_path' -Default '')
   }
   os_binding_authority_request_readback = [ordered]@{
     status = if ($OsBindingAuthorityRequestReadbackObserved) { [string](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'status' -Default '') } else { 'missing_or_failed' }

@@ -411,6 +411,8 @@ function Invoke-JsonScript {
       timed_out = $true
       timeout_seconds = $TimeoutSeconds
       duration_ms = [int]$Timer.ElapsedMilliseconds
+      stdout_path = $StdoutPath
+      stderr_path = $StderrPath
     }
   }
 
@@ -438,6 +440,8 @@ function Invoke-JsonScript {
     timed_out = $false
     timeout_seconds = $TimeoutSeconds
     duration_ms = [int]$Timer.ElapsedMilliseconds
+    stdout_path = $StdoutPath
+    stderr_path = $StderrPath
   }
 }
 
@@ -524,16 +528,78 @@ $Stage6ApiExecutionProofHotkeys = @{
 $ChildStartupTimeoutSeconds = [Math]::Max($StartupTimeoutSeconds, 30)
 $ChildHostLaunchRunSeconds = [Math]::Max($HostLaunchRunSeconds, 5)
 
-$CheckpointJson = & $PowerShell.Source -NoProfile -ExecutionPolicy Bypass -File $CheckpointScript -Mode Status `
-  -StartupTimeoutSeconds $StartupTimeoutSeconds `
-  -HostLaunchRunSeconds $HostLaunchRunSeconds `
-  -ResidentSurfaceForegroundRunSeconds $ResidentSurfaceForegroundRunSeconds `
-  -SupervisorRunSeconds $SupervisorRunSeconds
-if ($LASTEXITCODE -ne 0) {
-  throw "Stage 6 checkpoint failed with exit code $LASTEXITCODE"
+$CheckpointResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $CheckpointScript -ScriptArgs @(
+  '-Mode', 'Status',
+  '-StartupTimeoutSeconds', [string]$StartupTimeoutSeconds,
+  '-HostLaunchRunSeconds', [string]$HostLaunchRunSeconds,
+  '-ResidentSurfaceForegroundRunSeconds', [string]$ResidentSurfaceForegroundRunSeconds,
+  '-SupervisorRunSeconds', [string]$SupervisorRunSeconds
+) -TimeoutSeconds $ChildProofTimeoutSeconds
+if ([bool]$CheckpointResult.timed_out -or [int]$CheckpointResult.exit_code -ne 0 -or $null -eq $CheckpointResult.payload) {
+  $CheckpointChildRun = New-ChildProofRunSummary -Name 'stage6_checkpoint' -Result $CheckpointResult
+  $CheckpointTimedOut = [bool]$CheckpointResult.timed_out
+  $CheckpointChildProofTimeouts = if ($CheckpointTimedOut) { [string[]]@('stage6_checkpoint') } else { [string[]]@() }
+  $Payload = [ordered]@{
+    ok = $false
+    kind = 'lens.stage6.completion_audit'
+    status = 'blocked'
+    audit_status = if ($CheckpointTimedOut) { 'checkpoint_timed_out' } else { 'checkpoint_failed' }
+    mode = $Mode
+    stage = 'Stage 6 / Lens MVP'
+    stage_state = 'active'
+    repo_root = $RepoRoot
+    ready_to_close = $false
+    can_close_stage6 = $false
+    transition_allowed = $false
+    child_proof_timeout_seconds = $ChildProofTimeoutSeconds
+    allow_launch_on_hotkey = [bool]$AllowLaunchOnHotkey
+    child_proof_timeouts = @($CheckpointChildProofTimeouts)
+    child_readback_timeouts = [string[]]@()
+    child_proof_runs = @($CheckpointChildRun)
+    next_smallest_truthful_gap = if ($CheckpointTimedOut) { 'stage6_completion_audit_checkpoint_timeout' } else { 'stage6_completion_audit_checkpoint_failed' }
+    recommended_handoff_source = 'stage6_checkpoint_readback'
+    recommended_next_slice = if ($CheckpointTimedOut) { 'fix_stage6_checkpoint_readback_timeout' } else { 'fix_stage6_checkpoint_readback_failure' }
+    recommended_proof_script = 'scripts/lens-stage6-checkpoint.ps1 -Mode Status'
+    authority_required = 'none_new_stage6_completion_audit'
+    authority_granted = $false
+    recommended_handoff = [ordered]@{
+      id = if ($CheckpointTimedOut) { 'stage6_completion_audit_checkpoint_timeout' } else { 'stage6_completion_audit_checkpoint_failed' }
+      status = 'blocked'
+      next_step = if ($CheckpointTimedOut) { 'fix_stage6_checkpoint_readback_timeout' } else { 'fix_stage6_checkpoint_readback_failure' }
+      proof_script = 'scripts/lens-stage6-checkpoint.ps1 -Mode Status'
+      authority_required = 'none_new_stage6_completion_audit'
+      authority_granted = $false
+      read_only_contract = $true
+      diagnostic_only = $true
+      would_execute = $false
+      would_mutate = $false
+    }
+    checkpoint_readback = [ordered]@{
+      exit_code = [int]$CheckpointResult.exit_code
+      timed_out = [bool]$CheckpointResult.timed_out
+      timeout_seconds = [int]$CheckpointResult.timeout_seconds
+      duration_ms = [int]$CheckpointResult.duration_ms
+      stdout_path = [string]$CheckpointResult.stdout_path
+      stderr_path = [string]$CheckpointResult.stderr_path
+      stderr = [string]$CheckpointResult.error
+    }
+    governance = [ordered]@{
+      read_only_contract = $true
+      diagnostic_only = $true
+      child_timeout_preserved = $true
+      would_execute = $false
+      would_mutate = $false
+      approval_decision_authority = $false
+      memory_write = $false
+      approval_request_write = $false
+      product_execution_authority = $false
+    }
+  }
+  $Payload | ConvertTo-Json -Depth 12
+  exit 1
 }
 
-$Checkpoint = ($CheckpointJson | Out-String | ConvertFrom-Json)
+$Checkpoint = $CheckpointResult.payload
 $EarlyHostSupervisorReadback = $Checkpoint.host_supervisor_readback
 $EarlyFreshResidentSupervisedRuntimeReadbackObserved = (
   [bool]$EarlyHostSupervisorReadback.fresh_readback -and
@@ -547,9 +613,79 @@ $EarlyFreshResidentSupervisedRuntimeReadbackObserved = (
   [string]$EarlyHostSupervisorReadback.observed_state -eq 'resident_running'
 )
 $SummonAnywhereBlockersProofResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonAnywhereBlockersProofScript -ScriptArgs @(
-  '-Mode', 'Status'
-)
+  '-Mode', 'Status',
+  '-ChildProofTimeoutSeconds', [string]$ChildProofTimeoutSeconds
+) -TimeoutSeconds $ChildProofTimeoutSeconds
 $SummonAnywhereBlockersProof = $SummonAnywhereBlockersProofResult.payload
+$SummonAnywhereLensStatusReadback = $SummonAnywhereBlockersProof.lens_status_readback
+$SummonAnywhereLensStatusReadbackTimedOut = (
+  [bool]$SummonAnywhereBlockersProofResult.timed_out -or
+  [bool]$SummonAnywhereLensStatusReadback.timed_out -or
+  [string]$SummonAnywhereLensStatusReadback.error -eq 'lens_status_timeout'
+)
+if ($SummonAnywhereLensStatusReadbackTimedOut) {
+  $SummonAnywhereChildRun = New-ChildProofRunSummary -Name 'summon_anywhere_blockers' -Result $SummonAnywhereBlockersProofResult
+  $SummonAnywhereChildReadbackTimeouts = [string[]]@('summon_anywhere_blockers.lens_status_readback')
+  $Payload = [ordered]@{
+    ok = $false
+    kind = 'lens.stage6.completion_audit'
+    status = 'blocked'
+    audit_status = 'child_readback_timed_out'
+    mode = $Mode
+    stage = [string]$Checkpoint.stage
+    stage_state = 'active'
+    repo_root = $RepoRoot
+    ready_to_close = $false
+    can_close_stage6 = $false
+    transition_allowed = $false
+    child_proof_timeout_seconds = $ChildProofTimeoutSeconds
+    allow_launch_on_hotkey = [bool]$AllowLaunchOnHotkey
+    child_proof_timeouts = [string[]]@()
+    child_readback_timeouts = @($SummonAnywhereChildReadbackTimeouts)
+    child_proof_runs = @($SummonAnywhereChildRun)
+    next_smallest_truthful_gap = 'stage6_completion_audit_child_readback_timeout'
+    recommended_handoff_source = 'summon_anywhere_blockers_lens_status_readback'
+    recommended_next_slice = 'fix_lens_status_readback_timeout'
+    recommended_proof_script = 'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status -ChildProofTimeoutSeconds <seconds> -LensStatusTimeoutSeconds <seconds>'
+    authority_required = 'none_new_stage6_completion_audit'
+    authority_granted = $false
+    recommended_handoff = [ordered]@{
+      id = 'stage6_completion_audit_child_readback_timeout'
+      status = 'blocked'
+      next_step = 'fix_lens_status_readback_timeout'
+      proof_script = 'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status -ChildProofTimeoutSeconds <seconds> -LensStatusTimeoutSeconds <seconds>'
+      authority_required = 'none_new_stage6_completion_audit'
+      authority_granted = $false
+      read_only_contract = $true
+      diagnostic_only = $true
+      would_execute = $false
+      would_mutate = $false
+    }
+    summon_anywhere_blockers_proof = [ordered]@{
+      status = if ($null -ne $SummonAnywhereBlockersProof) { [string]$SummonAnywhereBlockersProof.status } else { 'missing_or_failed' }
+      ok = $false
+      exit_code = [int]$SummonAnywhereBlockersProofResult.exit_code
+      timed_out = [bool]$SummonAnywhereBlockersProofResult.timed_out
+      next_smallest_truthful_gap = [string]$SummonAnywhereBlockersProof.next_smallest_truthful_gap
+      lens_status_readback = $SummonAnywhereLensStatusReadback
+      first_blocker_family = [string]$SummonAnywhereBlockersProof.first_blocker_family
+      blocked_families = [string[]]@(ConvertTo-StringArray -Value $SummonAnywhereBlockersProof.blocked_families)
+    }
+    governance = [ordered]@{
+      read_only_contract = $true
+      diagnostic_only = $true
+      child_timeout_preserved = $true
+      would_execute = $false
+      would_mutate = $false
+      approval_decision_authority = $false
+      memory_write = $false
+      approval_request_write = $false
+      product_execution_authority = $false
+    }
+  }
+  $Payload | ConvertTo-Json -Depth 12
+  exit 1
+}
 $SummonTrayPresenceBlockerProofResult = [ordered]@{
   exit_code = 0
   payload = $null
@@ -1702,6 +1838,7 @@ $PersistentSupervisionEnablementTransitionPlanProofObserved = (
   -not [bool]$PersistentSupervisionEnablementTransitionPlanProofGovernance.mutation_authority_granted
 )
 $ChildProofRuns = @(
+  New-ChildProofRunSummary -Name 'stage6_checkpoint' -Result $CheckpointResult
   New-ChildProofRunSummary -Name 'summon_anywhere_blockers' -Result $SummonAnywhereBlockersProofResult
   New-ChildProofRunSummary -Name 'summon_tray_presence_blocker' -Result $SummonTrayPresenceBlockerProofResult
   New-ChildProofRunSummary -Name 'summon_overlay_window_blocker' -Result $SummonOverlayWindowBlockerProofResult

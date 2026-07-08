@@ -233,6 +233,30 @@ def test_lens_stage6_completion_audit_accepts_fresh_supervised_runtime_after_bri
     assert "resident_supervised_runtime = [bool]$HostSupervisorReadback.resident_supervised_runtime" in script
 
 
+def test_lens_stage6_completion_audit_bounds_summon_anywhere_child_proof() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+
+    assert "$CheckpointResult = Invoke-JsonScript" in script
+    assert "New-ChildProofRunSummary -Name 'stage6_checkpoint' -Result $CheckpointResult" in script
+    assert "audit_status = if ($CheckpointTimedOut) { 'checkpoint_timed_out' } else { 'checkpoint_failed' }" in script
+    assert "stage6_completion_audit_checkpoint_timeout" in script
+    assert "fix_stage6_checkpoint_readback_timeout" in script
+    assert "$SummonAnywhereBlockersProofResult = Invoke-JsonScript" in script
+    assert "'-ChildProofTimeoutSeconds', [string]$ChildProofTimeoutSeconds" in script
+    assert ") -TimeoutSeconds $ChildProofTimeoutSeconds" in script
+    assert "$SummonAnywhereLensStatusReadbackTimedOut = (" in script
+    assert "audit_status = 'child_readback_timed_out'" in script
+    assert "next_smallest_truthful_gap = 'stage6_completion_audit_child_readback_timeout'" in script
+    assert (
+        "$SummonAnywhereChildReadbackTimeouts = [string[]]@('summon_anywhere_blockers.lens_status_readback')" in script
+    )
+    assert "child_readback_timeouts = @($SummonAnywhereChildReadbackTimeouts)" in script
+    assert "fix_lens_status_readback_timeout" in script
+    assert script.index("audit_status = 'child_readback_timed_out'") < script.index(
+        "$SummonTrayPresenceBlockerProofResult = [ordered]@{"
+    )
+
+
 def test_lens_stage6_completion_audit_accepts_consumed_authority_handoff_evidence() -> None:
     script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
 
