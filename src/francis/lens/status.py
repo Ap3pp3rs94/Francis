@@ -5335,42 +5335,109 @@ def _orb_visual_identity(overlay_readback: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _voice_readback_role(voice: dict[str, Any]) -> str:
+    if not voice:
+        return "missing"
+    status = _safe_str(voice.get("status")).strip()
+    if (
+        status.startswith("voice_input_")
+        or _safe_str(voice.get("voice_recognition")).strip()
+        or _safe_str(voice.get("transcript_source")).strip()
+        or bool(voice.get("microphone_capture"))
+    ):
+        return "speech_input_recognition"
+    if status in {"spoken", "speaking", "wake_acknowledged"} or bool(voice.get("last_speech_receipt")):
+        return "speech_output_receipt"
+    return "runtime_voice_readback"
+
+
 def _orb_voice_identity(overlay_readback: dict[str, Any]) -> dict[str, Any]:
     voice = _as_dict(overlay_readback.get("voice"))
     overlay_voice = _as_dict(overlay_readback.get("overlay_voice"))
     readiness = _as_dict(overlay_readback.get("voice_provider_readiness"))
     selected_provider = _safe_str(readiness.get("selected_provider")).strip()
     output_provider = _safe_str(overlay_voice.get("voice_provider")).strip()
-    input_provider = _safe_str(voice.get("voice_provider")).strip()
-    runtime_provider = output_provider or input_provider
-    selected_provider_matches_runtime = (
-        not selected_provider or not runtime_provider or selected_provider == runtime_provider
+    voice_readback_provider = _safe_str(voice.get("voice_provider")).strip()
+    voice_readback_role = _voice_readback_role(voice)
+    runtime_provider = output_provider or selected_provider or voice_readback_provider
+    selected_provider_matches_output = (
+        not selected_provider or not output_provider or selected_provider == output_provider
     )
-    output_provider_matches_input_readback = (
-        not output_provider or not input_provider or output_provider == input_provider
+    output_provider_matches_voice_readback = (
+        not output_provider or not voice_readback_provider or output_provider == voice_readback_provider
     )
-    drift = not selected_provider_matches_runtime or not output_provider_matches_input_readback
-    blockers = ["orb_voice_provider_identity_drift"] if drift else []
+    input_output_provider_split = (
+        bool(output_provider)
+        and bool(voice_readback_provider)
+        and output_provider != voice_readback_provider
+        and voice_readback_role == "speech_input_recognition"
+    )
+    output_receipt_provider_mismatch = (
+        bool(output_provider)
+        and bool(voice_readback_provider)
+        and output_provider != voice_readback_provider
+        and voice_readback_role == "speech_output_receipt"
+    )
+    blockers: list[str] = []
+    if not selected_provider_matches_output:
+        blockers.append("orb_voice_output_provider_readiness_mismatch")
+    if input_output_provider_split:
+        blockers.append("orb_voice_input_output_provider_contract_split")
+    elif output_receipt_provider_mismatch or (
+        not output_provider_matches_voice_readback and voice_readback_role == "runtime_voice_readback"
+    ):
+        blockers.append("orb_voice_output_readback_provider_mismatch")
+    if (
+        selected_provider
+        and "active_provider_configured" in readiness
+        and not bool(readiness.get("active_provider_configured"))
+    ):
+        blockers.append("orb_voice_selected_provider_unconfigured")
     if not runtime_provider and bool(overlay_readback.get("ready")):
         blockers.append("orb_voice_provider_runtime_missing")
+    status = (
+        "ready"
+        if runtime_provider and not blockers
+        else "output_readiness_mismatch"
+        if "orb_voice_output_provider_readiness_mismatch" in blockers
+        else "input_output_contract_split"
+        if "orb_voice_input_output_provider_contract_split" in blockers
+        else "output_readback_mismatch"
+        if "orb_voice_output_readback_provider_mismatch" in blockers
+        else "unconfigured"
+        if "orb_voice_selected_provider_unconfigured" in blockers
+        else "missing"
+    )
     return {
-        "status": "provider_drift" if drift else "ready" if runtime_provider else "missing",
+        "status": status,
         "selected_provider": selected_provider,
         "runtime_provider": runtime_provider,
         "output_provider": output_provider,
-        "input_readback_provider": input_provider,
+        "input_readback_provider": voice_readback_provider,
+        "voice_readback_provider": voice_readback_provider,
+        "voice_readback_role": voice_readback_role,
         "selected_voice": _safe_str(overlay_voice.get("selected_voice")).strip()
         or _safe_str(voice.get("selected_voice")).strip(),
         "remote_provider": _safe_str(overlay_voice.get("remote_provider")).strip()
         or _safe_str(voice.get("remote_provider")).strip(),
         "remote_processing": bool(overlay_voice.get("remote_processing")) or bool(voice.get("remote_processing")),
-        "selected_provider_matches_runtime": selected_provider_matches_runtime,
-        "output_provider_matches_input_readback": output_provider_matches_input_readback,
+        "selected_provider_matches_runtime": selected_provider_matches_output,
+        "selected_provider_matches_output": selected_provider_matches_output,
+        "output_provider_matches_input_readback": output_provider_matches_voice_readback,
+        "output_provider_matches_voice_readback": output_provider_matches_voice_readback,
+        "input_output_provider_split": input_output_provider_split,
+        "output_receipt_provider_mismatch": output_receipt_provider_mismatch,
         "voice_provider_readiness": readiness,
         "blockers": blockers,
         "message": (
-            "Overlay output voice and input/runtime readback name different providers; this is identity drift until the contract distinguishes them explicitly."
-            if drift
+            "Overlay output/readiness is aligned, but the live voice readback is a separate Windows speech-input recognition state; input and output voice sub-contracts must be explicit before voice identity is ready."
+            if "orb_voice_input_output_provider_contract_split" in blockers
+            else "Overlay output voice provider and readiness selected provider differ."
+            if "orb_voice_output_provider_readiness_mismatch" in blockers
+            else "Overlay output voice provider and runtime voice readback name different output providers."
+            if "orb_voice_output_readback_provider_mismatch" in blockers
+            else "Selected overlay voice provider is not fully configured."
+            if "orb_voice_selected_provider_unconfigured" in blockers
             else "Overlay voice provider readback is internally consistent."
             if runtime_provider
             else "Overlay runtime does not expose a voice provider."

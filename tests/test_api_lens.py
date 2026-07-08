@@ -642,7 +642,7 @@ def _criterion(body: dict[str, Any], criterion_id: str) -> dict[str, Any]:
     raise AssertionError(f"missing Stage 6 criterion: {criterion_id}")
 
 
-def test_lens_orb_runtime_identity_reports_voice_and_visual_drift(
+def test_lens_orb_runtime_identity_reports_voice_input_output_contract_split(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
@@ -725,8 +725,10 @@ def test_lens_orb_runtime_identity_reports_voice_and_visual_drift(
                 "remote_processing": True,
             },
             "voice": {
+                "status": "voice_input_suppressed_push_to_talk_inactive",
                 "voice_provider": "WindowsSapi",
                 "selected_voice": "Microsoft Zira Desktop",
+                "voice_recognition": "system_speech_suppressed_push_to_talk_inactive",
             },
             "voice_provider_readiness": {"selected_provider": "ElevenLabs"},
         },
@@ -754,13 +756,16 @@ def test_lens_orb_runtime_identity_reports_voice_and_visual_drift(
     assert payload["ready"] is False
     assert payload["resident_owner"]["status"] == "resident_supervisor"
     assert payload["components"]["overlay"]["pid"] == 105
-    assert payload["voice_identity"]["status"] == "provider_drift"
+    assert payload["voice_identity"]["status"] == "input_output_contract_split"
     assert payload["voice_identity"]["output_provider"] == "ElevenLabs"
     assert payload["voice_identity"]["input_readback_provider"] == "WindowsSapi"
+    assert payload["voice_identity"]["voice_readback_role"] == "speech_input_recognition"
     assert payload["voice_identity"]["output_provider_matches_input_readback"] is False
-    assert payload["visual_identity"]["ring_color_contract_ready"] is False
-    assert "orb_voice_provider_identity_drift" in payload["blockers"]
+    assert payload["voice_identity"]["input_output_provider_split"] is True
+    assert "orb_voice_provider_identity_drift" not in payload["blockers"]
+    assert "orb_voice_input_output_provider_contract_split" in payload["blockers"]
     assert "orb_ring_color_contract_missing" in payload["blockers"]
+    assert payload["visual_identity"]["ring_color_contract_ready"] is False
     assert payload["process_scan"]["checked_process_table"] is False
     assert payload["governance"]["execution_authority"] is False
     assert payload["governance"]["mutation_authority_granted"] is False
@@ -809,8 +814,10 @@ def test_lens_orb_runtime_identity_accepts_locked_ring_color_contract(
                 "selected_voice": "Emma",
             },
             "voice": {
+                "status": "voice_input_suppressed_push_to_talk_inactive",
                 "voice_provider": "WindowsSapi",
                 "selected_voice": "Microsoft Zira Desktop",
+                "voice_recognition": "system_speech_suppressed_push_to_talk_inactive",
             },
             "voice_provider_readiness": {"selected_provider": "ElevenLabs"},
         },
@@ -830,7 +837,8 @@ def test_lens_orb_runtime_identity_accepts_locked_ring_color_contract(
     assert payload["visual_identity"]["status"] == "ready"
     assert payload["visual_identity"]["ring_color_contract_ready"] is True
     assert "orb_ring_color_contract_missing" not in payload["blockers"]
-    assert "orb_voice_provider_identity_drift" in payload["blockers"]
+    assert "orb_voice_provider_identity_drift" not in payload["blockers"]
+    assert "orb_voice_input_output_provider_contract_split" in payload["blockers"]
 
 
 def test_lens_orb_runtime_identity_route_uses_canonical_readback(monkeypatch) -> None:
