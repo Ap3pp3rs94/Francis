@@ -447,6 +447,25 @@ function Invoke-JsonScript {
   }
 }
 
+function Write-ProofPayloadCache {
+  param(
+    [AllowNull()]
+    [object]$Payload,
+    [string]$FileName
+  )
+
+  if ($null -eq $Payload) {
+    return ''
+  }
+
+  $CacheRoot = Join-Path ([System.IO.Path]::GetTempPath()) 'francis-lens-proof-cache'
+  New-Item -ItemType Directory -Path $CacheRoot -Force | Out-Null
+  $CachePath = Join-Path $CacheRoot ([guid]::NewGuid().ToString('N') + '-' + $FileName)
+  $Json = $Payload | ConvertTo-Json -Depth 12
+  Set-Content -LiteralPath $CachePath -Value $Json -Encoding UTF8
+  return $CachePath
+}
+
 function Get-PropertyValue {
   param(
     [object]$Payload,
@@ -976,6 +995,7 @@ $ProcessSupervisionBoundaryResult = Invoke-JsonScript -PowerShellPath $PowerShel
   '-ChildProofTimeoutSeconds', [string]$ProcessSupervisionBoundaryChildTimeoutSeconds
 ) -TimeoutSeconds $ProcessSupervisionBoundaryChildTimeoutSeconds
 $ProcessSupervisionBoundary = $ProcessSupervisionBoundaryResult.payload
+$ProcessSupervisionBoundaryCachePath = Write-ProofPayloadCache -Payload $ProcessSupervisionBoundary -FileName 'process-supervision-boundary-proof.json'
 $ProcessSupervisionBoundaryBlockers = ConvertTo-StringArray -Value $ProcessSupervisionBoundary.blockers
 $ProcessSupervisionBoundaryObserved = (
   [int]$ProcessSupervisionBoundaryResult.exit_code -eq 0 -and
@@ -1050,14 +1070,18 @@ $ResidentHostProcessSupervisionBlockerProofResult = [ordered]@{
   duration_ms = 0
 }
 if (-not $ResidentHostProcessSupervisionBlockerProofSkippedForFreshRuntime) {
-  $ResidentHostProcessSupervisionBlockerProofResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $ResidentHostProcessSupervisionBlockerProofScript -ScriptArgs @(
+  $ResidentHostProcessSupervisionBlockerProofArgs = @(
     '-Mode', 'Status',
     '-StartupTimeoutSeconds', [string]$ChildStartupTimeoutSeconds,
     '-ForegroundRunSeconds', '2',
     '-HostLaunchRunSeconds', [string]$ChildHostLaunchRunSeconds,
     '-SupervisorRunSeconds', [string]$SupervisorRunSeconds,
     '-ChildProofTimeoutSeconds', [string]$ResidentHostProcessSupervisionBlockerProofChildTimeoutSeconds
-  ) -TimeoutSeconds $ResidentHostProcessSupervisionBlockerProofChildTimeoutSeconds
+  )
+  if (-not [string]::IsNullOrWhiteSpace($ProcessSupervisionBoundaryCachePath)) {
+    $ResidentHostProcessSupervisionBlockerProofArgs += @('-CachedProcessBoundaryProofPath', $ProcessSupervisionBoundaryCachePath)
+  }
+  $ResidentHostProcessSupervisionBlockerProofResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $ResidentHostProcessSupervisionBlockerProofScript -ScriptArgs $ResidentHostProcessSupervisionBlockerProofArgs -TimeoutSeconds $ResidentHostProcessSupervisionBlockerProofChildTimeoutSeconds
 }
 $ResidentHostProcessSupervisionBlockerProof = $ResidentHostProcessSupervisionBlockerProofResult.payload
 $ResidentHostProcessSupervisionBlockerProofBlockers = ConvertTo-StringArray -Value $ResidentHostProcessSupervisionBlockerProof.blockers

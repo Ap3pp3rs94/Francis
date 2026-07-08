@@ -84,10 +84,68 @@ def _write_active_os_binding_grant(data_dir: Path) -> None:
     )
 
 
+def _write_cached_process_boundary_proof(path: Path) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "kind": "lens.process_supervision_authority_boundary.proof",
+                "status": "proof_passed",
+                "ok": True,
+                "authority_required": "process_supervision_and_service_control",
+                "authority_granted": False,
+                "process_supervision_authority_required": "process_supervision_authority",
+                "process_supervision_authority_granted": False,
+                "process_restart_authority_required": "process_restart_authority",
+                "process_restart_authority_granted": False,
+                "service_install_authority_required": "service_install_authority",
+                "service_install_authority_granted": False,
+                "service_control_authority_required": "service_control_authority",
+                "service_control_authority_granted": False,
+                "process_supervision_boundary_observed": True,
+                "service_activation_plan_observed": True,
+                "bounded_local_process_launch_observed": True,
+                "process_supervision_ready": False,
+                "service_activation_ready": False,
+                "cached_host_supervision_proof": True,
+                "next_smallest_truthful_gap": "stage6_lens_completion_audit",
+                "blockers": [
+                    "resident_host_process_not_supervised",
+                    "process_supervision_authority_not_granted",
+                    "process_restart_authority_not_granted",
+                    "service_install_authority_not_granted",
+                    "service_control_authority_not_granted",
+                ],
+                "governance": {
+                    "diagnostic_only": True,
+                    "bounded_host_launch": True,
+                    "bounded_process_launch": True,
+                    "execution_authority": False,
+                    "approval_decision_authority": False,
+                    "memory_write": False,
+                    "process_supervision_authority": False,
+                    "process_restart_authority": False,
+                    "service_install_authority": False,
+                    "service_control_authority": False,
+                    "overlay_control_authority": False,
+                    "summon_authority": False,
+                    "capture_authority": False,
+                    "new_sensing_authority": False,
+                    "mutation_authority_granted": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 def test_lens_summon_resident_host_blocker_proof_aligns_handoff(tmp_path: Path) -> None:
     script = (_repo_root() / "scripts" / "lens-summon-resident-host-blocker-proof.ps1").read_text(encoding="utf-8")
     assert "resident_host_lifecycle_handoff_consumed" in script
     assert "consume a verified resident-host lifecycle handoff before advancing" in script
+    assert "CachedProcessBoundaryProofPath" in script
+
+    cached_process_boundary = tmp_path / "process-boundary-proof.json"
+    _write_cached_process_boundary_proof(cached_process_boundary)
 
     proc = _run_proof(
         "-Mode",
@@ -105,6 +163,8 @@ def test_lens_summon_resident_host_blocker_proof_aligns_handoff(tmp_path: Path) 
         "3",
         "-ChildProofTimeoutSeconds",
         "180",
+        "-CachedProcessBoundaryProofPath",
+        str(cached_process_boundary),
     )
 
     assert proc.returncode == 0, proc.stderr or proc.stdout

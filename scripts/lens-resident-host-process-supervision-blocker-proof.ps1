@@ -16,7 +16,9 @@ param(
   [int]$SupervisorRunSeconds = 20,
 
   [ValidateRange(30, 600)]
-  [int]$ChildProofTimeoutSeconds = 360
+  [int]$ChildProofTimeoutSeconds = 360,
+
+  [string]$CachedProcessBoundaryProofPath = ''
 )
 
 Set-StrictMode -Version 2
@@ -293,7 +295,56 @@ function New-ChildProofRunSummary {
     timed_out = [bool](Get-PropertyValue -Payload $Result -Name 'timed_out' -Default $false)
     timeout_seconds = [int](Get-PropertyValue -Payload $Result -Name 'timeout_seconds' -Default $ChildProofTimeoutSeconds)
     duration_ms = [int](Get-PropertyValue -Payload $Result -Name 'duration_ms' -Default 0)
+    cached = [bool](Get-PropertyValue -Payload $Result -Name 'cached' -Default $false)
     error = [string](Get-PropertyValue -Payload $Result -Name 'error' -Default '')
+  }
+}
+
+function Read-CachedJsonScriptResult {
+  param([string]$Path)
+
+  if ([string]::IsNullOrWhiteSpace($Path)) {
+    return $null
+  }
+  if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = ''
+      error = 'cached_payload_missing'
+      timed_out = $false
+      timeout_seconds = $ChildProofTimeoutSeconds
+      duration_ms = 0
+      cached = $true
+    }
+  }
+
+  $Text = Get-Content -LiteralPath $Path -Raw
+  $Payload = $null
+  try {
+    $Payload = $Text | ConvertFrom-Json -ErrorAction Stop
+  } catch {
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = $Text
+      error = 'cached_payload_json_invalid'
+      timed_out = $false
+      timeout_seconds = $ChildProofTimeoutSeconds
+      duration_ms = 0
+      cached = $true
+    }
+  }
+
+  return [ordered]@{
+    exit_code = 0
+    payload = $Payload
+    output = $Text
+    error = ''
+    timed_out = $false
+    timeout_seconds = $ChildProofTimeoutSeconds
+    duration_ms = 0
+    cached = $true
   }
 }
 
@@ -380,7 +431,12 @@ $ProcessArgs = @(
 if ($HostSupervisionCacheObserved) {
   $ProcessArgs += @('-CachedHostSupervisionProofPath', $HostSupervisionCachePath)
 }
-$ProcessResult = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $ProcessBoundaryScript -ScriptArgs $ProcessArgs -ExpectedKind 'lens.process_supervision_authority_boundary.proof'
+$CachedProcessResult = Read-CachedJsonScriptResult -Path $CachedProcessBoundaryProofPath
+if ($null -ne $CachedProcessResult) {
+  $ProcessResult = $CachedProcessResult
+} else {
+  $ProcessResult = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $ProcessBoundaryScript -ScriptArgs $ProcessArgs -ExpectedKind 'lens.process_supervision_authority_boundary.proof'
+}
 $ChildProofRuns = @(
   (New-ChildProofRunSummary -Name 'host_supervision_cache' -Result $HostSupervisionResult),
   (New-ChildProofRunSummary -Name 'resident_host_runtime_boundary' -Result $RuntimeResult),
@@ -566,6 +622,7 @@ $Payload = [ordered]@{
   host_supervision_cache_observed = $HostSupervisionCacheObserved
   runtime_boundary_cached_host_supervision_proof = [bool](Get-PropertyValue -Payload $RuntimePayload -Name 'cached_host_supervision_proof' -Default $false)
   process_boundary_cached_host_supervision_proof = [bool](Get-PropertyValue -Payload $ProcessPayload -Name 'cached_host_supervision_proof' -Default $false)
+  cached_process_boundary_proof = [bool](Get-PropertyValue -Payload $ProcessResult -Name 'cached' -Default $false)
   startup_timeout_seconds = $StartupTimeoutSeconds
   foreground_run_seconds = $ForegroundRunSeconds
   host_launch_run_seconds = $HostLaunchRunSeconds
@@ -626,6 +683,7 @@ $Payload = [ordered]@{
     wraps_process_supervision_authority_boundary_proof = $true
     cached_host_supervision_proof = $HostSupervisionCacheObserved
     child_proof_timeout_seconds = $ChildProofTimeoutSeconds
+    cached_process_boundary_proof = [bool](Get-PropertyValue -Payload $ProcessResult -Name 'cached' -Default $false)
     bounded_local_process_launch = $true
     temporary_runtime_state_write = $true
     local_process_launch_authority = $true

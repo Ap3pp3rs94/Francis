@@ -185,6 +185,15 @@ def test_lens_stage6_completion_audit_does_not_reopen_persistent_supervision_can
     assert process_boundary_branch in script
 
 
+def test_lens_stage6_completion_audit_reuses_process_boundary_cache_for_handoff() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+
+    assert "function Write-ProofPayloadCache" in script
+    assert "$ProcessSupervisionBoundaryCachePath = Write-ProofPayloadCache" in script
+    assert "'process-supervision-boundary-proof.json'" in script
+    assert "'-CachedProcessBoundaryProofPath', $ProcessSupervisionBoundaryCachePath" in script
+
+
 def test_lens_stage6_completion_audit_accepts_fresh_supervised_runtime_after_bringup() -> None:
     script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
 
@@ -214,7 +223,8 @@ def test_lens_stage6_completion_audit_accepts_fresh_supervised_runtime_after_bri
     assert (
         "'-ChildProofTimeoutSeconds', [string]$ResidentHostProcessSupervisionBlockerProofChildTimeoutSeconds" in script
     )
-    assert ") -TimeoutSeconds $ResidentHostProcessSupervisionBlockerProofChildTimeoutSeconds" in script
+    assert "-ScriptArgs $ResidentHostProcessSupervisionBlockerProofArgs" in script
+    assert "-TimeoutSeconds $ResidentHostProcessSupervisionBlockerProofChildTimeoutSeconds" in script
     assert "$ResidentHostProcessSupervisionBlockerProofReadbackObserved = (" in script
     assert (
         "$ResidentHostProcessSupervisionBlockerProofObserved -or "

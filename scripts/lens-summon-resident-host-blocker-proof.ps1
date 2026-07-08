@@ -19,6 +19,8 @@ param(
 
   [string]$DataDir = '',
 
+  [string]$CachedProcessBoundaryProofPath = '',
+
   [switch]$ConsumeProcessSupervisionHandoff
 )
 
@@ -349,14 +351,18 @@ $HostProcessHandoffGovernance = $null
 $HostProcessHandoffRecommendedHandoff = $null
 $HostProcessHandoffBlockers = @()
 if ($ConsumeProcessSupervisionHandoff) {
-  $HostProcessHandoffResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $HostProcessSupervisionHandoffProofScript -ScriptArgs @(
+  $HostProcessHandoffArgs = @(
     '-Mode', 'Status',
     '-StartupTimeoutSeconds', [string]$StartupTimeoutSeconds,
     '-ForegroundRunSeconds', [string]$ForegroundRunSeconds,
     '-HostLaunchRunSeconds', [string]$HostLaunchRunSeconds,
     '-SupervisorRunSeconds', [string]$SupervisorRunSeconds,
     '-ChildProofTimeoutSeconds', [string]$ChildProofTimeoutSeconds
-  ) -DataRoot $DataDir
+  )
+  if (-not [string]::IsNullOrWhiteSpace($CachedProcessBoundaryProofPath)) {
+    $HostProcessHandoffArgs += @('-CachedProcessBoundaryProofPath', $CachedProcessBoundaryProofPath)
+  }
+  $HostProcessHandoffResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $HostProcessSupervisionHandoffProofScript -ScriptArgs $HostProcessHandoffArgs -DataRoot $DataDir
   $HostProcessHandoffPayload = $HostProcessHandoffResult.payload
   $HostProcessHandoffGovernance = Get-PropertyValue -Payload $HostProcessHandoffPayload -Name 'governance'
   $HostProcessHandoffRecommendedHandoff = Get-PropertyValue -Payload $HostProcessHandoffPayload -Name 'recommended_handoff'

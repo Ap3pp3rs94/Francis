@@ -20,6 +20,60 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
+def _write_cached_process_boundary_proof(path: Path) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "kind": "lens.process_supervision_authority_boundary.proof",
+                "status": "proof_passed",
+                "ok": True,
+                "authority_required": "process_supervision_and_service_control",
+                "authority_granted": False,
+                "process_supervision_authority_required": "process_supervision_authority",
+                "process_supervision_authority_granted": False,
+                "process_restart_authority_required": "process_restart_authority",
+                "process_restart_authority_granted": False,
+                "service_install_authority_required": "service_install_authority",
+                "service_install_authority_granted": False,
+                "service_control_authority_required": "service_control_authority",
+                "service_control_authority_granted": False,
+                "process_supervision_boundary_observed": True,
+                "service_activation_plan_observed": True,
+                "bounded_local_process_launch_observed": True,
+                "process_supervision_ready": False,
+                "service_activation_ready": False,
+                "cached_host_supervision_proof": True,
+                "next_smallest_truthful_gap": "stage6_lens_completion_audit",
+                "blockers": [
+                    "resident_host_process_not_supervised",
+                    "process_supervision_authority_not_granted",
+                    "process_restart_authority_not_granted",
+                    "service_install_authority_not_granted",
+                    "service_control_authority_not_granted",
+                ],
+                "governance": {
+                    "diagnostic_only": True,
+                    "bounded_host_launch": True,
+                    "bounded_process_launch": True,
+                    "execution_authority": False,
+                    "approval_decision_authority": False,
+                    "memory_write": False,
+                    "process_supervision_authority": False,
+                    "process_restart_authority": False,
+                    "service_install_authority": False,
+                    "service_control_authority": False,
+                    "overlay_control_authority": False,
+                    "summon_authority": False,
+                    "capture_authority": False,
+                    "new_sensing_authority": False,
+                    "mutation_authority_granted": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 def _run_proof(*args: str, data_dir: Path | None = None) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     if data_dir is not None:
@@ -44,6 +98,9 @@ def _run_proof(*args: str, data_dir: Path | None = None) -> subprocess.Completed
 
 
 def test_lens_resident_host_process_supervision_blocker_consumes_handoff(tmp_path: Path) -> None:
+    cached_process_boundary = tmp_path / "process-boundary-proof.json"
+    _write_cached_process_boundary_proof(cached_process_boundary)
+
     proc = _run_proof(
         "-Mode",
         "Status",
@@ -57,6 +114,8 @@ def test_lens_resident_host_process_supervision_blocker_consumes_handoff(tmp_pat
         "3",
         "-ChildProofTimeoutSeconds",
         "180",
+        "-CachedProcessBoundaryProofPath",
+        str(cached_process_boundary),
         data_dir=tmp_path / "data",
     )
 
@@ -120,6 +179,7 @@ def test_lens_resident_host_process_supervision_blocker_consumes_handoff(tmp_pat
     assert payload["host_supervision_cache_observed"] is True
     assert payload["runtime_boundary_cached_host_supervision_proof"] is True
     assert payload["process_boundary_cached_host_supervision_proof"] is True
+    assert payload["cached_process_boundary_proof"] is True
     assert payload["startup_timeout_seconds"] == 20
     assert payload["foreground_run_seconds"] == 2
     assert payload["host_launch_run_seconds"] == 3
@@ -134,9 +194,14 @@ def test_lens_resident_host_process_supervision_blocker_consumes_handoff(tmp_pat
     }
     for run in child_proof_runs.values():
         assert run["timed_out"] is False
-        assert run["timeout_seconds"] == 180
         assert isinstance(run["duration_ms"], int)
         assert run["duration_ms"] >= 0
+        assert isinstance(run["cached"], bool)
+    assert child_proof_runs["host_supervision_cache"]["timeout_seconds"] == 180
+    assert child_proof_runs["resident_host_runtime_boundary"]["timeout_seconds"] == 180
+    assert child_proof_runs["process_supervision_boundary"]["timeout_seconds"] == 180
+    assert child_proof_runs["process_supervision_boundary"]["duration_ms"] == 0
+    assert child_proof_runs["process_supervision_boundary"]["cached"] is True
     assert payload["resident_host_process_state"] == "foreground_observed_not_supervised"
     assert payload["resident_host_process_blocker"] == "resident_host_process_not_supervised"
     assert payload["supervision_ready"] is False
@@ -197,6 +262,7 @@ def test_lens_resident_host_process_supervision_blocker_consumes_handoff(tmp_pat
         "wraps_process_supervision_authority_boundary_proof": True,
         "cached_host_supervision_proof": True,
         "child_proof_timeout_seconds": 180,
+        "cached_process_boundary_proof": True,
         "bounded_local_process_launch": True,
         "temporary_runtime_state_write": True,
         "local_process_launch_authority": True,
@@ -227,6 +293,8 @@ def test_lens_resident_host_process_supervision_blocker_accepts_delegated_author
     )
 
     assert "$ProcessBoundaryDelegatedAuthorityObserved" in script
+    assert "CachedProcessBoundaryProofPath" in script
+    assert "Read-CachedJsonScriptResult -Path $CachedProcessBoundaryProofPath" in script
     assert "'resident_runtime_execution_and_host_supervision_authority'" in script
     assert "process_supervision_delegated_authority_observed = $ProcessBoundaryDelegatedAuthorityObserved" in script
     assert "whether process supervision is still denied or delegated authority is already present" in script
