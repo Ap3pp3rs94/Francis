@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import json
+from dataclasses import replace
+from pathlib import Path
+
 import pytest
 
 from francis.compute_substrate import (
     COMPUTE_RECEIPT_KIND,
     LIVE_LEARNING_EVENT_KIND,
+    CapabilityReceipt,
     CapabilityReceiptAdapter,
+    LocalJsonComputeReceiptStore,
     ResourceBudget,
     SafeLocalBackend,
     SubstrateGovernor,
@@ -228,7 +234,8 @@ def test_execution_result_contains_receipt_and_live_learning_event() -> None:
     assert result.receipt.function_name == "echo"
     assert result.receipt.persisted is False
     assert result.receipt.receipt_path == ""
-    assert result.receipt.governance["receipt_persistence"] == "not_persisted_first_slice"
+    assert result.receipt.receipt_error == ""
+    assert result.receipt.governance["receipt_persistence"] == "in_memory_only"
     assert result.receipt.governance["os_level_cpu_memory_enforcement"] is False
     assert result.receipt.governance["long_term_memory_persistence"] is False
 
@@ -258,7 +265,224 @@ def test_receipt_adapter_creates_non_persisted_capability_receipt() -> None:
     assert receipt.task_id == "task-receipt"
     assert receipt.worker_id == "safe-local-receipt"
     assert receipt.persisted is False
+    assert receipt.receipt_path == ""
+    assert receipt.receipt_error == ""
     assert receipt.governance["registered_function_only"] is True
     assert receipt.governance["arbitrary_subprocess"] is False
     assert receipt.governance["shell"] is False
     assert receipt.governance["background_daemon"] is False
+
+
+def test_local_json_compute_receipt_store_writes_and_reads_receipt(tmp_path: Path) -> None:
+    receipt_root = tmp_path / "compute-receipts"
+    store = LocalJsonComputeReceiptStore(receipt_root)
+    receipt = CapabilityReceiptAdapter().create(
+        envelope=create_task_envelope(
+            "echo",
+            task_id="task-durable-receipt",
+            payload={"message": "raw payload should not be persisted"},
+            trace_id="trace-durable-receipt",
+        ),
+        descriptor=SafeLocalBackend(worker_id="safe-local-durable").descriptor,
+        status="success",
+        reason="executed_registered_function",
+    )
+
+    assert receipt.persisted is False
+    assert receipt.receipt_path == ""
+
+    persisted = store.write_receipt(receipt)
+
+    assert persisted.persisted is True
+    assert persisted.receipt_path
+    receipt_path = Path(persisted.receipt_path)
+    assert receipt_path.exists()
+    assert receipt_path.parent == receipt_root
+    assert persisted.governance["receipt_persistence"] == "persisted_local_json"
+    assert persisted.governance["durable_compute_receipt"] is True
+    assert persisted.governance["approval_consumption"] == "not_implemented_first_slice"
+    assert persisted.governance["long_term_memory_persistence"] is False
+
+    payload = json.loads(receipt_path.read_text(encoding="utf-8"))
+    assert payload["schema_version"] == 1
+    assert payload["receipt"]["receipt_id"] == persisted.receipt_id
+    assert payload["receipt"]["trace_id"] == "trace-durable-receipt"
+    assert payload["governance"]["does_not_persist_task_payload"] is True
+    assert payload["governance"]["does_not_persist_task_output"] is True
+    receipt_text = json.dumps(payload, sort_keys=True)
+    assert "raw payload should not be persisted" not in receipt_text
+    assert "payload" not in payload["receipt"]
+
+    readback = store.read_receipt(persisted.receipt_id)
+
+    assert readback == persisted
+
+    filesystem_scope_receipt = CapabilityReceiptAdapter().create(
+        envelope=create_task_envelope(
+            "echo",
+            task_id="task-filesystem-scope-summary",
+            budget=ResourceBudget(filesystem_scope=("C:/secret/private",)),
+        ),
+        descriptor=SafeLocalBackend(worker_id="safe-local-filesystem-summary").descriptor,
+        status="denied",
+        reason="filesystem_scope_allowed",
+    )
+    filesystem_scope_persisted = store.write_receipt(filesystem_scope_receipt)
+    assert filesystem_scope_persisted.budget["filesystem_scope"] == ["non_default_scope_requested"]
+    assert "C:/secret/private" not in Path(filesystem_scope_persisted.receipt_path).read_text(encoding="utf-8")
+
+
+def test_local_json_compute_receipt_store_rejects_unsafe_receipt_ids(tmp_path: Path) -> None:
+    store = LocalJsonComputeReceiptStore(tmp_path / "compute-receipts")
+    receipt = CapabilityReceiptAdapter().create(
+        envelope=create_task_envelope("echo", task_id="task-unsafe-receipt"),
+        descriptor=SafeLocalBackend(worker_id="safe-local-unsafe").descriptor,
+        status="success",
+        reason="executed_registered_function",
+    )
+
+    with pytest.raises(ValueError, match="unsafe_receipt_id"):
+        store.write_receipt(replace(receipt, receipt_id="../escape"))
+
+    with pytest.raises(ValueError, match="unsafe_receipt_id"):
+        store.read_receipt("..\\escape")
+
+
+@pytest.mark.parametrize(
+    "receipt_id",
+    [
+        "../escape",
+        "..\\escape",
+        "nested/escape",
+        "nested\\escape",
+        "/absolute/path",
+        "\\absolute\\path",
+        "C:/absolute/path",
+        "C:\\absolute\\path",
+        "receipt.with.dot",
+        "receipt:with:colon",
+        "receipt\u2215with\u2215unicode-separator",
+        "",
+    ],
+)
+def test_local_json_compute_receipt_store_rejects_path_like_receipt_ids(
+    tmp_path: Path,
+    receipt_id: str,
+) -> None:
+    store = LocalJsonComputeReceiptStore(tmp_path / "compute-receipts")
+    receipt = CapabilityReceiptAdapter().create(
+        envelope=create_task_envelope("echo", task_id="task-path-like-receipt"),
+        descriptor=SafeLocalBackend(worker_id="safe-local-path-like").descriptor,
+        status="success",
+        reason="executed_registered_function",
+    )
+
+    with pytest.raises(ValueError, match="unsafe_receipt_id"):
+        store.write_receipt(replace(receipt, receipt_id=receipt_id))
+
+    with pytest.raises(ValueError, match="unsafe_receipt_id"):
+        store.read_receipt(receipt_id)
+
+
+def test_local_json_compute_receipt_store_accepts_safe_receipt_id(tmp_path: Path) -> None:
+    store = LocalJsonComputeReceiptStore(tmp_path / "compute-receipts")
+    receipt = CapabilityReceiptAdapter().create(
+        envelope=create_task_envelope("echo", task_id="task-safe-receipt-id"),
+        descriptor=SafeLocalBackend(worker_id="safe-local-safe-id").descriptor,
+        status="success",
+        reason="executed_registered_function",
+    )
+    safe_receipt = replace(receipt, receipt_id="compute_capability-safe_ID_123")
+
+    persisted = store.write_receipt(safe_receipt)
+
+    assert persisted.receipt_id == "compute_capability-safe_ID_123"
+    assert Path(persisted.receipt_path).parent == store.receipt_root
+    assert store.read_receipt("compute_capability-safe_ID_123") == persisted
+
+
+class _FailingReceiptStore:
+    def write_receipt(self, receipt: CapabilityReceipt) -> CapabilityReceipt:
+        raise OSError("receipt store unavailable")
+
+    def read_receipt(self, receipt_id: str) -> CapabilityReceipt | None:
+        return None
+
+    def describe(self) -> dict[str, object]:
+        return {"kind": "test.failing_compute_receipt_store"}
+
+
+def test_failed_receipt_persistence_does_not_fake_success() -> None:
+    registry = WorkerRegistry()
+    registry.register(SafeLocalBackend())
+    governor = SubstrateGovernor(receipt_store=_FailingReceiptStore())
+
+    result = governor.execute(create_task_envelope("echo", payload={"message": "persist me"}), registry)
+
+    assert result.ok is False
+    assert result.status == "receipt_persistence_failed"
+    assert result.error.startswith("OSError: receipt store unavailable")
+    assert result.output == {"ok": True, "function": "echo", "message": "persist me"}
+    assert result.receipt.persisted is False
+    assert result.receipt.receipt_path == ""
+    assert result.receipt.receipt_error.startswith("OSError: receipt store unavailable")
+    assert result.receipt.governance["receipt_persistence"] == "persistence_failed"
+    assert result.receipt.governance["receipt_store_configured"] is True
+    assert result.live_learning_event.persisted is False
+    assert result.live_learning_event.result_status == "receipt_persistence_failed"
+
+
+def test_governor_without_receipt_store_preserves_in_memory_behavior() -> None:
+    result = execute_registered_function(create_task_envelope("echo", payload={"message": "memory only"}))
+
+    assert result.ok is True
+    assert result.status == "success"
+    assert result.receipt.persisted is False
+    assert result.receipt.receipt_path == ""
+    assert result.receipt.receipt_error == ""
+    assert result.receipt.governance["receipt_persistence"] == "in_memory_only"
+    assert result.receipt.governance["receipt_store_configured"] is False
+
+
+def test_governor_with_receipt_store_persists_compute_receipt_and_not_learning(
+    tmp_path: Path,
+) -> None:
+    registry = WorkerRegistry()
+    registry.register(SafeLocalBackend())
+    store = LocalJsonComputeReceiptStore(tmp_path / "compute-receipts")
+    governor = SubstrateGovernor(receipt_store=store)
+
+    result = governor.execute(
+        create_task_envelope(
+            "compute_test",
+            payload={"iterations": 4, "secret": "secret-token-should-not-persist"},
+            budget=ResourceBudget(max_compute_units=4),
+        ),
+        registry,
+    )
+
+    assert result.ok is True
+    assert result.status == "success"
+    assert result.receipt.persisted is True
+    assert result.receipt.receipt_path
+    assert result.receipt.receipt_error == ""
+    assert result.receipt.governance["receipt_persistence"] == "persisted_local_json"
+    assert result.receipt.governance["arbitrary_subprocess"] is False
+    assert result.receipt.governance["shell"] is False
+    assert result.receipt.governance["background_daemon"] is False
+    assert result.receipt.governance["unrestricted_filesystem_write"] is False
+    assert result.receipt.governance["unrestricted_network"] is False
+    assert result.receipt.governance["uses_network"] is False
+    assert result.receipt.governance["uses_gpu"] is False
+    assert result.receipt.governance["writes_memory"] is False
+    assert result.receipt.governance["long_term_memory_persistence"] is False
+    assert result.receipt.governance["approval_consumption"] == "not_implemented_first_slice"
+    assert result.receipt.governance["os_level_cpu_memory_enforcement"] is False
+    assert result.live_learning_event.persistence_requested is False
+    assert result.live_learning_event.persisted is False
+
+    receipt_text = Path(result.receipt.receipt_path).read_text(encoding="utf-8")
+    assert "secret-token-should-not-persist" not in receipt_text
+    assert "iterations" not in receipt_text
+    assert "checksum" not in receipt_text
+    assert store.read_receipt(result.receipt.receipt_id) == result.receipt

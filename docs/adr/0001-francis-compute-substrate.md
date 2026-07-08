@@ -59,12 +59,16 @@ The worker registry rejects duplicate worker IDs and duplicate capability bindin
 
 ## Receipts And Learning
 
-The first slice returns a typed `CapabilityReceipt` object through a narrow adapter boundary. It marks receipt persistence as not implemented instead of pretending a durable compute receipt was written.
+The baseline slice returned a typed `CapabilityReceipt` object through a narrow adapter boundary without pretending durable compute receipt persistence existed.
 
-The first slice also returns an explicit `LiveLearningEvent` contract object. It does not persist that event into long-term memory. Memory persistence requires a separate governance review because it crosses a durable memory boundary.
+A follow-on internal slice adds durable persistence for `CapabilityReceipt` only through an optional local JSON receipt store. When no store is configured, the governor still returns an in-memory receipt object. When a store is configured, `persisted=true` and `receipt_path` are set only after an actual local receipt write succeeds. Failed receipt writes are reported on the returned result and receipt instead of being treated as successful persistence.
+
+Durable compute receipts are bounded to compute receipt fields. They do not persist raw task payloads, task outputs, long-term memory, approval consumption, model-training events, network execution, GPU execution, shell execution, daemon state, or arbitrary filesystem authority.
+
+The substrate also returns an explicit `LiveLearningEvent` contract object. It does not persist that event into long-term memory. Memory persistence requires a separate governance review because it crosses a durable memory boundary.
 
 ## Consequences
 
 The substrate can grow toward stronger workers without changing Francis's authority model. Visual runtimes, virtual machines, containers, remote workers, and simulations become bounded execution adapters with policy, budget, receipt, and verification obligations.
 
-The current limitation is deliberate: this foundation proves the internal contract and safe dispatch path, not production-grade sandboxing, OS resource isolation, or persistent compute receipts.
+The current limitation is deliberate: this foundation proves the internal contract, safe dispatch path, and bounded compute receipt persistence, not production-grade sandboxing, OS resource isolation, approval consumption, API submission, adapter execution, or long-term learning persistence.
