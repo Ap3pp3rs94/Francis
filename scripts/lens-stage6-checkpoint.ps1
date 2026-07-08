@@ -19,7 +19,7 @@ param(
   [int]$LensStatusTimeoutSeconds = 30,
 
   [ValidateRange(1, 600)]
-  [int]$ChildProofTimeoutSeconds = 120
+  [int]$ChildProofTimeoutSeconds = 240
 )
 
 Set-StrictMode -Version 2

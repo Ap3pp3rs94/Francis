@@ -82,7 +82,7 @@ def test_lens_stage6_checkpoint_honors_explicit_observation_windows_without_chan
     assert "$UnixVenvPython = Join-Path $RepoRoot '.venv/bin/python'" in script
     assert "$env:PYTHONPATH = $SrcPath + [System.IO.Path]::PathSeparator + $PreviousPythonPath" in script
     assert "[int]$LensStatusTimeoutSeconds = 30" in script
-    assert "[int]$ChildProofTimeoutSeconds = 120" in script
+    assert "[int]$ChildProofTimeoutSeconds = 240" in script
     assert "function Invoke-JsonProcess" in script
     assert "error = 'lens_status_timeout'" in script
     assert "function Exit-CheckpointChildTimeout" in script

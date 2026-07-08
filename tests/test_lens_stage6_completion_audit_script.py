@@ -238,6 +238,10 @@ def test_lens_stage6_completion_audit_bounds_summon_anywhere_child_proof() -> No
 
     assert "$CheckpointResult = Invoke-JsonScript" in script
     assert "'-LensStatusTimeoutSeconds', [string]$CheckpointLensStatusTimeoutSeconds" in script
+    assert (
+        "$CheckpointChildProofTimeoutSeconds = [Math]::Min([Math]::Max(1, $ChildProofTimeoutSeconds - 15), 600)"
+        in script
+    )
     assert "'-ChildProofTimeoutSeconds', [string]$CheckpointChildProofTimeoutSeconds" in script
     assert "New-ChildProofRunSummary -Name 'stage6_checkpoint' -Result $CheckpointResult" in script
     assert "$CheckpointPayloadBlocked = (" in script

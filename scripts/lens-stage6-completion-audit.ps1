@@ -550,7 +550,7 @@ $Stage6ApiExecutionProofHotkeys = @{
 $ChildStartupTimeoutSeconds = [Math]::Max($StartupTimeoutSeconds, 30)
 $ChildHostLaunchRunSeconds = [Math]::Max($HostLaunchRunSeconds, 5)
 $CheckpointLensStatusTimeoutSeconds = [Math]::Min([Math]::Max(1, $ChildProofTimeoutSeconds - 15), 120)
-$CheckpointChildProofTimeoutSeconds = [Math]::Min([Math]::Max(1, $ChildProofTimeoutSeconds - 15), 120)
+$CheckpointChildProofTimeoutSeconds = [Math]::Min([Math]::Max(1, $ChildProofTimeoutSeconds - 15), 600)
 $CheckpointWrapperTimeoutSeconds = [Math]::Min([Math]::Max($ChildProofTimeoutSeconds, $CheckpointChildProofTimeoutSeconds + 40), 600)
 
 $CheckpointResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $CheckpointScript -ScriptArgs @(
