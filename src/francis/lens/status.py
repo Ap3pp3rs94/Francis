@@ -5277,7 +5277,9 @@ def _runtime_component_blockers(component_id: str, readback: dict[str, Any], *, 
     return _ordered_status_values(blockers)
 
 
-def _orb_component_identity(component_id: str, readback: dict[str, Any], *, ready: bool | None = None) -> dict[str, Any]:
+def _orb_component_identity(
+    component_id: str, readback: dict[str, Any], *, ready: bool | None = None
+) -> dict[str, Any]:
     component_ready = bool(readback.get("ready")) if ready is None else ready
     return {
         "id": component_id,
@@ -5344,7 +5346,9 @@ def _orb_voice_identity(overlay_readback: dict[str, Any]) -> dict[str, Any]:
     selected_provider_matches_runtime = (
         not selected_provider or not runtime_provider or selected_provider == runtime_provider
     )
-    output_provider_matches_input_readback = not output_provider or not input_provider or output_provider == input_provider
+    output_provider_matches_input_readback = (
+        not output_provider or not input_provider or output_provider == input_provider
+    )
     drift = not selected_provider_matches_runtime or not output_provider_matches_input_readback
     blockers = ["orb_voice_provider_identity_drift"] if drift else []
     if not runtime_provider and bool(overlay_readback.get("ready")):
@@ -5614,10 +5618,10 @@ def _canonical_orb_runtime_identity(
         }
     )
     blockers = _ordered_status_values([*blockers, *_as_list(process_scan.get("blockers"))])
-    ready = all(
-        bool(components[key].get("ready"))
-        for key in ("resident_host", "tray", "hotkey", "overlay", "summon")
-    ) and resident_ready
+    ready = (
+        all(bool(components[key].get("ready")) for key in ("resident_host", "tray", "hotkey", "overlay", "summon"))
+        and resident_ready
+    )
     status = "ready" if ready and not blockers else "identity_drift_detected" if blockers else "partial"
     return {
         "kind": "lens.orb.runtime_identity",

@@ -1094,11 +1094,7 @@ def _execute_next(
         reason,
         "-RunSeconds",
         run_seconds,
-        *(
-            ("-OverlayVoiceProvider", overlay_voice_provider)
-            if overlay_voice_provider
-            else ()
-        ),
+        *(("-OverlayVoiceProvider", overlay_voice_provider) if overlay_voice_provider else ()),
         "-ConfirmExecute",
     )
     if retry_overlay_start_failure and proc.returncode != 0 and _script_overlay_start_failure_retryable(proc):
@@ -1119,11 +1115,7 @@ def _execute_next(
             f"{reason} after bounded overlay start retry",
             "-RunSeconds",
             run_seconds,
-            *(
-                ("-OverlayVoiceProvider", overlay_voice_provider)
-                if overlay_voice_provider
-                else ()
-            ),
+            *(("-OverlayVoiceProvider", overlay_voice_provider) if overlay_voice_provider else ()),
             "-ConfirmExecute",
         )
     if proc.returncode != 0:
