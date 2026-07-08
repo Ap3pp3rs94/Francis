@@ -15,6 +15,9 @@ param(
 
   [int]$RunSeconds = 2,
 
+  [ValidateSet('', 'WindowsSapi', 'ElevenLabs')]
+  [string]$OverlayVoiceProvider = '',
+
   [switch]$ConfirmRequest,
 
   [switch]$ConfirmGrant,
@@ -810,17 +813,26 @@ def _operator_command(action: dict[str, Any]) -> dict[str, Any]:
             "requires_operator_approval_decision": True,
         }
     if action_id.startswith("execute_") or action_id.startswith("apply_"):
+        voice_provider_arg = ""
+        if action_id == "execute_overlay_window":
+            voice_provider = _safe_str(action.get("overlay_voice_provider")) or "<WindowsSapi|ElevenLabs>"
+            voice_provider_arg = f" -OverlayVoiceProvider {voice_provider}"
         command = (
             ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 "
-            f"-Mode ExecuteNext -Actor <actor> -ApprovalId {approval_arg} -RunSeconds 2 -ConfirmExecute"
+            f"-Mode ExecuteNext -Actor <actor> -ApprovalId {approval_arg} -RunSeconds 2"
+            f"{voice_provider_arg} -ConfirmExecute"
         )
-        return {
+        result = {
             "command": command,
             "mode": "ExecuteNext",
             "requires_confirmation": True,
             "requires_approval_id": True,
             "requires_operator_approval_decision": False,
         }
+        if action_id == "execute_overlay_window":
+            result["overlay_voice_provider_required"] = True
+            result["overlay_voice_provider_options"] = ["WindowsSapi", "ElevenLabs"]
+        return result
     if action_id.startswith("await_"):
         return {
             "command": ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status",
@@ -1282,6 +1294,7 @@ def _execute_next_action(
     approval_id: str,
     reason: str,
     run_seconds: int,
+    overlay_voice_provider: str = "",
 ) -> dict[str, Any]:
     action_id = _safe_str(action.get("id"))
     route = _safe_str(action.get("route"))
@@ -1371,6 +1384,7 @@ def _execute_next_action(
             record_receipt=True,
             mode=_safe_str(action.get("mode")) or "start",
             run_seconds=safe_seconds,
+            voice_provider=overlay_voice_provider,
         )
     elif action_id == "execute_summon_binding":
         result = execute_lens_summon_action(
@@ -1446,6 +1460,7 @@ def _run() -> tuple[int, dict[str, Any]]:
     approval_id = os.environ.get("FRANCIS_BRINGUP_APPROVAL_ID", "").strip()
     reason = os.environ.get("FRANCIS_BRINGUP_REASON", "").strip()
     run_seconds = _safe_run_seconds(os.environ.get("FRANCIS_BRINGUP_RUN_SECONDS", "2"))
+    overlay_voice_provider = os.environ.get("FRANCIS_BRINGUP_OVERLAY_VOICE_PROVIDER", "").strip()
     confirm_request = os.environ.get("FRANCIS_BRINGUP_CONFIRM_REQUEST", "").strip() == "1"
     confirm_grant = os.environ.get("FRANCIS_BRINGUP_CONFIRM_GRANT", "").strip() == "1"
     confirm_execute = os.environ.get("FRANCIS_BRINGUP_CONFIRM_EXECUTE", "").strip() == "1"
@@ -1650,7 +1665,14 @@ def _run() -> tuple[int, dict[str, Any]]:
                 "reason": "confirm_execute_required",
             }
         else:
-            execute_result = _execute_next_action(execute_target_action, actor, approval_id, reason, run_seconds)
+            execute_result = _execute_next_action(
+                execute_target_action,
+                actor,
+                approval_id,
+                reason,
+                run_seconds,
+                overlay_voice_provider=overlay_voice_provider,
+            )
     ok = all(item["passed"] for item in checks)
     mode_result = (
         request_result
@@ -1816,6 +1838,7 @@ $PreviousBringupActor = [string]$env:FRANCIS_BRINGUP_ACTOR
 $PreviousBringupApprovalId = [string]$env:FRANCIS_BRINGUP_APPROVAL_ID
 $PreviousBringupReason = [string]$env:FRANCIS_BRINGUP_REASON
 $PreviousBringupRunSeconds = [string]$env:FRANCIS_BRINGUP_RUN_SECONDS
+$PreviousBringupOverlayVoiceProvider = [string]$env:FRANCIS_BRINGUP_OVERLAY_VOICE_PROVIDER
 $PreviousBringupConfirmRequest = [string]$env:FRANCIS_BRINGUP_CONFIRM_REQUEST
 $PreviousBringupConfirmGrant = [string]$env:FRANCIS_BRINGUP_CONFIRM_GRANT
 $PreviousBringupConfirmExecute = [string]$env:FRANCIS_BRINGUP_CONFIRM_EXECUTE
@@ -1838,6 +1861,7 @@ try {
   $env:FRANCIS_BRINGUP_APPROVAL_ID = $ApprovalId
   $env:FRANCIS_BRINGUP_REASON = $Reason
   $env:FRANCIS_BRINGUP_RUN_SECONDS = [string]$RunSeconds
+  $env:FRANCIS_BRINGUP_OVERLAY_VOICE_PROVIDER = $OverlayVoiceProvider
   $env:FRANCIS_BRINGUP_CONFIRM_REQUEST = if ($ConfirmRequest) { '1' } else { '0' }
   $env:FRANCIS_BRINGUP_CONFIRM_GRANT = if ($ConfirmGrant) { '1' } else { '0' }
   $env:FRANCIS_BRINGUP_CONFIRM_EXECUTE = if ($ConfirmExecute) { '1' } else { '0' }
@@ -1909,6 +1933,11 @@ try {
     Remove-Item Env:\FRANCIS_BRINGUP_RUN_SECONDS -ErrorAction SilentlyContinue
   } else {
     $env:FRANCIS_BRINGUP_RUN_SECONDS = $PreviousBringupRunSeconds
+  }
+  if ([string]::IsNullOrWhiteSpace($PreviousBringupOverlayVoiceProvider)) {
+    Remove-Item Env:\FRANCIS_BRINGUP_OVERLAY_VOICE_PROVIDER -ErrorAction SilentlyContinue
+  } else {
+    $env:FRANCIS_BRINGUP_OVERLAY_VOICE_PROVIDER = $PreviousBringupOverlayVoiceProvider
   }
   if ([string]::IsNullOrWhiteSpace($PreviousBringupConfirmRequest)) {
     Remove-Item Env:\FRANCIS_BRINGUP_CONFIRM_REQUEST -ErrorAction SilentlyContinue

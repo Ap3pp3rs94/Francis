@@ -12,6 +12,7 @@ from typing import Any, Iterator
 import pytest
 
 _LIVE_STAGE6_PREREQUISITE_RUN_SECONDS = "180"
+_LIVE_STAGE6_DESKTOP_TESTS_ENV = "FRANCIS_STAGE6_LIVE_DESKTOP_TESTS"
 _PROOF_GLOBAL_HOTKEY = "Ctrl+Alt+Shift+F18"
 _STAGE6_RUNTIME_PROCESSES = (
     "lens-hotkey-binding.ps1",
@@ -37,6 +38,15 @@ def _powershell() -> str:
 def _skip_live_stage6_execution_if_not_windows() -> None:
     if platform.system() != "Windows":
         pytest.skip("Live Stage 6 prerequisite execution proof is Windows-hosted.")
+    canonical_data_dir = Path(__file__).resolve().parents[1] / "data"
+    if (
+        os.environ.get(_LIVE_STAGE6_DESKTOP_TESTS_ENV, "").strip() != "1"
+        and _count_stage6_runtime_processes(canonical_data_dir) > 0
+    ):
+        pytest.skip(
+            "Canonical Stage 6 runtime is already active; live desktop tests would open or stop real Orb surfaces. "
+            f"Set {_LIVE_STAGE6_DESKTOP_TESTS_ENV}=1 to opt in."
+        )
 
 
 def _repo_root() -> Path:
@@ -269,6 +279,12 @@ def _count_stage6_runtime_processes(
 def _stop_stage6_runtime_processes_by_name(data_dir: Path, process_names: tuple[str, ...]) -> None:
     if platform.system() != "Windows":
         return
+    canonical_data_dir = Path(__file__).resolve().parents[1] / "data"
+    if (
+        os.environ.get(_LIVE_STAGE6_DESKTOP_TESTS_ENV, "").strip() != "1"
+        and data_dir.resolve() == canonical_data_dir.resolve()
+    ):
+        return
     env = dict(os.environ)
     env["FRANCIS_STAGE6_TEST_CLEANUP_DATA_DIR"] = str(data_dir)
     process_filter = " -or ".join(f"$_.CommandLine -like '*{process_name}*'" for process_name in process_names)
@@ -303,6 +319,12 @@ def _wait_for_stage6_runtime_processes_to_stop(
 ) -> None:
     if platform.system() != "Windows":
         return
+    canonical_data_dir = Path(__file__).resolve().parents[1] / "data"
+    if (
+        os.environ.get(_LIVE_STAGE6_DESKTOP_TESTS_ENV, "").strip() != "1"
+        and data_dir.resolve() == canonical_data_dir.resolve()
+    ):
+        return
     remaining = 0
     for _ in range(20):
         remaining = _count_stage6_runtime_processes(data_dir, process_names)
@@ -315,6 +337,12 @@ def _wait_for_stage6_runtime_processes_to_stop(
 
 
 def _stop_stage6_live_runtime_leases(data_dir: Path) -> None:
+    canonical_data_dir = Path(__file__).resolve().parents[1] / "data"
+    if (
+        os.environ.get(_LIVE_STAGE6_DESKTOP_TESTS_ENV, "").strip() != "1"
+        and data_dir.resolve() == canonical_data_dir.resolve()
+    ):
+        return
     for script_name, mode in _STAGE6_RUNTIME_STOP_MODES:
         _run_lens_runtime_script(script_name, "-Mode", mode, "-DataDir", str(data_dir))
     _stop_stage6_runtime_processes_by_name(data_dir, _STAGE6_RUNTIME_PROCESSES)
@@ -538,6 +566,10 @@ def test_lens_stage6_prerequisite_bringup_plan_has_confirmed_request_and_grant_b
     assert "[switch]$ConfirmExecute" in script
     assert "[string]$ApprovalId" in script
     assert "[int]$RunSeconds" in script
+    assert "[ValidateSet('', 'WindowsSapi', 'ElevenLabs')]" in script
+    assert "[string]$OverlayVoiceProvider" in script
+    assert "FRANCIS_BRINGUP_OVERLAY_VOICE_PROVIDER" in script
+    assert "voice_provider=overlay_voice_provider" in script
     assert "_MAX_STAGE6_PREREQUISITE_RUN_SECONDS = 15 * 60" in script
     assert "max(0, min(parsed, _MAX_STAGE6_PREREQUISITE_RUN_SECONDS))" in script
     assert "max(1, min(parsed, _MAX_STAGE6_PREREQUISITE_RUN_SECONDS))" not in script
@@ -1045,6 +1077,7 @@ def _execute_next(
     *,
     service_config_path: Path | None = None,
     run_seconds: str = _LIVE_STAGE6_PREREQUISITE_RUN_SECONDS,
+    overlay_voice_provider: str = "",
     retry_overlay_start_failure: bool = False,
 ) -> dict[str, Any]:
     proc = _run_plan(
@@ -1061,6 +1094,11 @@ def _execute_next(
         reason,
         "-RunSeconds",
         run_seconds,
+        *(
+            ("-OverlayVoiceProvider", overlay_voice_provider)
+            if overlay_voice_provider
+            else ()
+        ),
         "-ConfirmExecute",
     )
     if retry_overlay_start_failure and proc.returncode != 0 and _script_overlay_start_failure_retryable(proc):
@@ -1081,6 +1119,11 @@ def _execute_next(
             f"{reason} after bounded overlay start retry",
             "-RunSeconds",
             run_seconds,
+            *(
+                ("-OverlayVoiceProvider", overlay_voice_provider)
+                if overlay_voice_provider
+                else ()
+            ),
             "-ConfirmExecute",
         )
     if proc.returncode != 0:
@@ -2328,12 +2371,15 @@ def test_lens_stage6_prerequisite_bringup_overlay_execution_advances_to_summon(
     assert overlay_ready_payload["next_operator_command"] == {
         "command": (
             ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 "
-            f"-Mode ExecuteNext -Actor <actor> -ApprovalId {overlay_approval_id} -RunSeconds 2 -ConfirmExecute"
+            f"-Mode ExecuteNext -Actor <actor> -ApprovalId {overlay_approval_id} -RunSeconds 2 "
+            "-OverlayVoiceProvider <WindowsSapi|ElevenLabs> -ConfirmExecute"
         ),
         "mode": "ExecuteNext",
         "requires_confirmation": True,
         "requires_approval_id": True,
         "requires_operator_approval_decision": False,
+        "overlay_voice_provider_required": True,
+        "overlay_voice_provider_options": ["WindowsSapi", "ElevenLabs"],
     }
 
     overlay_execution = _execute_next(
@@ -2341,6 +2387,7 @@ def test_lens_stage6_prerequisite_bringup_overlay_execution_advances_to_summon(
         overlay_approval_id,
         "test execute overlay window before summon handoff",
         run_seconds=_LIVE_STAGE6_PREREQUISITE_RUN_SECONDS,
+        overlay_voice_provider="ElevenLabs",
         retry_overlay_start_failure=True,
     )
     assert overlay_execution["status"] == "overlay_window_started", json.dumps(overlay_execution, indent=2)
@@ -2349,6 +2396,8 @@ def test_lens_stage6_prerequisite_bringup_overlay_execution_advances_to_summon(
     assert overlay_execution["execute_result"]["receipt_written"] is True
     assert overlay_execution["execute_result"]["result"]["overlay_window"] is True
     assert overlay_execution["execute_result"]["result"]["overlay_runtime_ready"] is True
+    assert overlay_execution["execute_result"]["result"]["voice_provider"] == "ElevenLabs"
+    assert overlay_execution["execute_result"]["result"]["receipt"]["execution"]["voice_provider"] == "ElevenLabs"
     assert overlay_execution["execute_result"]["result"]["resident_claim_allowed"] is False
     assert overlay_execution["execute_result"]["result"]["governance"]["overlay_control_authority"] is True
     assert overlay_execution["execute_result"]["result"]["governance"]["summon_authority"] is False

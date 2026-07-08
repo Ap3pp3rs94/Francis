@@ -99,6 +99,19 @@ def _safe_run_seconds(value: Any) -> int:
     return max(0, min(_MAX_RUN_SECONDS, parsed))
 
 
+def _safe_overlay_voice_provider(value: Any) -> str:
+    text = _safe_str(value).strip().lower()
+    if text == "windowssapi":
+        return "WindowsSapi"
+    if text == "elevenlabs":
+        return "ElevenLabs"
+    return ""
+
+
+def _default_overlay_voice_provider() -> str:
+    return _safe_overlay_voice_provider(os.getenv("FRANCIS_LENS_OVERLAY_VOICE_PROVIDER"))
+
+
 def _record_ts(value: Any) -> float:
     if isinstance(value, bool):
         return 0.0
@@ -844,8 +857,11 @@ def _parse_json_process_stdout(stdout: str) -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
-def _run_lens_overlay_window_action(*, mode: str, run_seconds: int) -> dict[str, Any]:
+def _run_lens_overlay_window_action(*, mode: str, run_seconds: int, voice_provider: str = "") -> dict[str, Any]:
     script_mode = "Stop" if mode == "stop" else "Start"
+    safe_voice_provider = _safe_overlay_voice_provider(voice_provider) if script_mode == "Start" else ""
+    if script_mode == "Start" and not safe_voice_provider:
+        safe_voice_provider = _default_overlay_voice_provider()
     root = repo_root()
     script = root / "scripts" / "lens-overlay-window.ps1"
     if not script.is_file():
@@ -882,6 +898,8 @@ def _run_lens_overlay_window_action(*, mode: str, run_seconds: int) -> dict[str,
     )
     if script_mode == "Start":
         command.extend(["-StartupTimeoutSeconds", "30"])
+        if safe_voice_provider:
+            command.extend(["-VoiceProvider", safe_voice_provider])
     env = dict(os.environ)
     env.setdefault("FRANCIS_ROOT", str(root))
     env.setdefault("FRANCIS_DATA_DIR", str(data_dir()))
@@ -900,6 +918,7 @@ def _run_lens_overlay_window_action(*, mode: str, run_seconds: int) -> dict[str,
             "ok": False,
             "status": "overlay_window_timeout",
             "script_mode": script_mode,
+            "voice_provider": safe_voice_provider,
             "blockers": ["lens_overlay_window_execution_timeout"],
             "script": "scripts/lens-overlay-window.ps1",
         }
@@ -908,6 +927,7 @@ def _run_lens_overlay_window_action(*, mode: str, run_seconds: int) -> dict[str,
             "ok": False,
             "status": "overlay_window_launch_failed",
             "script_mode": script_mode,
+            "voice_provider": safe_voice_provider,
             "blockers": ["lens_overlay_window_execution_failed"],
             "error": lens_error_code(exc, surface="lens_overlay_window_execution"),
             "script": "scripts/lens-overlay-window.ps1",
@@ -921,6 +941,7 @@ def _run_lens_overlay_window_action(*, mode: str, run_seconds: int) -> dict[str,
         "status": _safe_str(payload.get("status")).strip() or "overlay_window_failed",
         "returncode": completed.returncode,
         "script_mode": script_mode,
+        "voice_provider": safe_voice_provider,
         "script": "scripts/lens-overlay-window.ps1",
         "runner": _display(payload),
         "blockers": _str_list(payload.get("blockers")),
@@ -986,6 +1007,7 @@ def _overlay_execution_receipt(execution: dict[str, Any]) -> dict[str, Any]:
                 "overlay_window_visible": bool(overlay_runtime.get("overlay_window_visible")),
                 "always_on_top": bool(overlay_runtime.get("always_on_top")),
                 "overlay_runtime_pid": int(overlay_runtime.get("pid") or 0),
+                "voice_provider": _safe_str(execution.get("voice_provider")).strip(),
                 "stop_command": _safe_str(execution.get("stop_command")).strip(),
                 "next_smallest_truthful_gap": _safe_str(execution.get("next_smallest_truthful_gap")).strip(),
             },
@@ -1099,11 +1121,15 @@ def execute_lens_overlay_window(
     record_receipt: bool = False,
     mode: Any = "start",
     run_seconds: Any = _DEFAULT_RUN_SECONDS,
+    voice_provider: Any = "",
 ) -> dict[str, Any]:
     safe_route = _safe_str(route).strip() or LENS_OVERLAY_EXECUTE_ROUTE
     safe_approval_id = _safe_str(approval_id).strip()
     safe_mode = _overlay_execution_mode(mode)
     safe_run_seconds = _safe_run_seconds(run_seconds)
+    safe_voice_provider = _safe_overlay_voice_provider(voice_provider) if safe_mode == "start" else ""
+    if safe_mode == "start" and not safe_voice_provider:
+        safe_voice_provider = _default_overlay_voice_provider()
     permission = _permission_readiness(actor, route=safe_route, method=method)
     grants = lens_overlay_authority_grant_receipts(
         limit=1,
@@ -1146,6 +1172,7 @@ def execute_lens_overlay_window(
             "actor": _redact_free_text(actor),
             "reason": _redact_free_text(reason),
             "run_seconds": safe_run_seconds,
+            "voice_provider": safe_voice_provider,
             "authority_route": LENS_OVERLAY_AUTHORITY_ROUTE,
             "authority_grants_route": LENS_OVERLAY_AUTHORITY_GRANTS_ROUTE,
             "receipts_route": LENS_OVERLAY_EXECUTIONS_ROUTE,
@@ -1185,13 +1212,21 @@ def execute_lens_overlay_window(
             },
         }
 
-    runner = _run_lens_overlay_window_action(mode=safe_mode, run_seconds=safe_run_seconds)
+    runner = _run_lens_overlay_window_action(
+        mode=safe_mode,
+        run_seconds=safe_run_seconds,
+        voice_provider=safe_voice_provider,
+    )
     runner_attempts = [runner]
     retry_count = 0
     if _should_retry_overlay_start(runner, mode=safe_mode):
         stop_after_timeout = _run_lens_overlay_window_action(mode="stop", run_seconds=0)
         runner_attempts.append(stop_after_timeout)
-        runner = _run_lens_overlay_window_action(mode=safe_mode, run_seconds=safe_run_seconds)
+        runner = _run_lens_overlay_window_action(
+            mode=safe_mode,
+            run_seconds=safe_run_seconds,
+            voice_provider=safe_voice_provider,
+        )
         runner_attempts.append(runner)
         retry_count = 1
     runner_ok = bool(runner.get("ok"))
@@ -1222,6 +1257,7 @@ def execute_lens_overlay_window(
         "actor": _redact_free_text(actor),
         "reason": _redact_free_text(reason),
         "run_seconds": safe_run_seconds,
+        "voice_provider": safe_voice_provider,
         "authority_route": LENS_OVERLAY_AUTHORITY_ROUTE,
         "authority_grants_route": LENS_OVERLAY_AUTHORITY_GRANTS_ROUTE,
         "receipts_route": LENS_OVERLAY_EXECUTIONS_ROUTE,

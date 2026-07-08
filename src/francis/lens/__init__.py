@@ -128,7 +128,7 @@ from francis.lens.mcp_perception import (
     lens_perceive_via_mcp,
 )
 from francis.lens.mcp_status_bridge import lens_orb_mcp_status_bridge
-from francis.lens.status import lens_host_status, lens_resident_surface_readback, lens_status
+from francis.lens.status import lens_host_status, lens_orb_runtime_identity, lens_resident_surface_readback, lens_status
 
 __all__ = [
     "deny_lens_host_activation_execution",
@@ -191,6 +191,7 @@ __all__ = [
     "lens_mcp_perception_receipts",
     "lens_observe_overlay_region",
     "lens_orb_mcp_status_bridge",
+    "lens_orb_runtime_identity",
     "lens_perceive_via_mcp",
     "deny_lens_os_binding_execution",
     "execute_lens_os_binding",

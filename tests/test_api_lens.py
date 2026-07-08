@@ -642,6 +642,217 @@ def _criterion(body: dict[str, Any], criterion_id: str) -> dict[str, Any]:
     raise AssertionError(f"missing Stage 6 criterion: {criterion_id}")
 
 
+def test_lens_orb_runtime_identity_reports_voice_and_visual_drift(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    from francis.lens.status import _canonical_orb_runtime_identity
+
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+    launch_manifest = {
+        "process_readback": {
+            "status": "process_observed",
+            "state_status": "resident_running",
+            "runtime_state_path": "data/runtime/lens-host/status.json",
+            "state_exists": True,
+            "state_pid": 101,
+            "state_pid_matches_pid_file": True,
+            "pid_path": "data/runtime/lens-host/lens-host.pid",
+            "pid_present": True,
+            "pid": 101,
+            "process_alive": True,
+        },
+        "supervisor_readback": {
+            "status": "resident_supervising",
+            "runtime_state_path": "data/runtime/lens-host-supervisor/status.json",
+            "supervisor_pid": 102,
+            "supervisor_process_alive": True,
+            "observed_pid": 101,
+            "observed_process_alive": True,
+            "fresh_readback": True,
+            "freshness_status": "fresh",
+            "state_stale": False,
+            "resident_supervised_runtime": True,
+        },
+        "tray_runtime_readback": {
+            "ready": True,
+            "status": "running",
+            "runtime_state_path": "data/runtime/lens-tray/status.json",
+            "state_exists": True,
+            "state_status": "tray_running",
+            "state_pid": 103,
+            "state_pid_matches_pid_file": True,
+            "pid_present": True,
+            "pid": 103,
+            "process_alive": True,
+        },
+        "hotkey_runtime_readback": {
+            "ready": True,
+            "status": "running",
+            "runtime_state_path": "data/runtime/lens-hotkey/status.json",
+            "state_exists": True,
+            "state_status": "hotkey_bound",
+            "state_pid": 104,
+            "state_pid_matches_pid_file": True,
+            "pid_present": True,
+            "pid": 104,
+            "process_alive": True,
+        },
+        "overlay_runtime_readback": {
+            "ready": True,
+            "status": "running",
+            "runtime_state_path": "data/runtime/lens-overlay/status.json",
+            "state_exists": True,
+            "state_status": "overlay_running",
+            "state_pid": 105,
+            "state_pid_matches_pid_file": True,
+            "pid_present": True,
+            "pid": 105,
+            "process_alive": True,
+            "overlay_window_visible": True,
+            "always_on_top": True,
+            "overlay_name": "Francis Lens Overlay",
+            "overlay_scope": "user_session",
+            "orb_visual": {
+                "visual_contract": "chat_ui.orbGlyph.energy_reference",
+                "renderer": "wpf_3d_animated_energy_orb",
+                "animated": True,
+            },
+            "overlay_voice": {
+                "voice_provider": "ElevenLabs",
+                "selected_voice": "Emma",
+                "remote_provider": "elevenlabs",
+                "remote_processing": True,
+            },
+            "voice": {
+                "voice_provider": "WindowsSapi",
+                "selected_voice": "Microsoft Zira Desktop",
+            },
+            "voice_provider_readiness": {"selected_provider": "ElevenLabs"},
+        },
+        "summon_runtime_readback": {
+            "ready": True,
+            "status": "observed",
+            "runtime_state_path": "data/runtime/lens-summon/status.json",
+            "state_exists": True,
+            "state_status": "native_surface_opened",
+            "summon_anywhere": True,
+            "os_level_summon": True,
+        },
+    }
+
+    payload = _canonical_orb_runtime_identity(
+        launch_manifest=launch_manifest,
+        summon_enablement_gate={"route": "/lens/summon", "ready": True, "status": "ready"},
+        tray_enablement_gate={"route": "/lens/tray", "ready": True, "status": "ready"},
+        overlay_enablement_gate={"route": "/lens/overlay", "ready": True, "status": "ready"},
+        include_process_scan=False,
+    )
+
+    assert payload["kind"] == "lens.orb.runtime_identity"
+    assert payload["status"] == "identity_drift_detected"
+    assert payload["ready"] is False
+    assert payload["resident_owner"]["status"] == "resident_supervisor"
+    assert payload["components"]["overlay"]["pid"] == 105
+    assert payload["voice_identity"]["status"] == "provider_drift"
+    assert payload["voice_identity"]["output_provider"] == "ElevenLabs"
+    assert payload["voice_identity"]["input_readback_provider"] == "WindowsSapi"
+    assert payload["voice_identity"]["output_provider_matches_input_readback"] is False
+    assert payload["visual_identity"]["ring_color_contract_ready"] is False
+    assert "orb_voice_provider_identity_drift" in payload["blockers"]
+    assert "orb_ring_color_contract_missing" in payload["blockers"]
+    assert payload["process_scan"]["checked_process_table"] is False
+    assert payload["governance"]["execution_authority"] is False
+    assert payload["governance"]["mutation_authority_granted"] is False
+
+
+def test_lens_orb_runtime_identity_route_uses_canonical_readback(monkeypatch) -> None:
+    from fastapi.testclient import TestClient
+
+    import francis.api.routes.lens as lens_routes
+    from francis.api.app import create_app
+
+    def fake_identity(*, limit: int = 5, include_process_scan: bool = True) -> dict[str, Any]:
+        return {
+            "kind": "lens.orb.runtime_identity",
+            "status": "identity_drift_detected",
+            "limit": limit,
+            "include_process_scan": include_process_scan,
+            "governance": {
+                "read_only_contract": True,
+                "execution_authority": False,
+                "mutation_authority_granted": False,
+            },
+        }
+
+    monkeypatch.setattr(lens_routes, "lens_orb_runtime_identity", fake_identity)
+    client = TestClient(create_app())
+
+    response = client.get("/lens/orb/runtime-identity?limit=7&include_process_scan=false")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["kind"] == "lens.orb.runtime_identity"
+    assert body["limit"] == 7
+    assert body["include_process_scan"] is False
+    assert body["governance"]["read_only_contract"] is True
+    assert body["governance"]["execution_authority"] is False
+
+
+def test_lens_runtime_process_scan_flags_competing_overlay(monkeypatch) -> None:
+    import francis.lens.status as status_module
+
+    canonical_root = r"D:\Francis\data"
+    process_payload = [
+        {
+            "process_id": 105,
+            "parent_process_id": 100,
+            "name": "powershell.exe",
+            "command_line": (
+                r'"powershell.exe" -File D:\Francis\scripts\lens-overlay-window.ps1 '
+                r'-DataDir "D:\Francis\data"'
+            ),
+        },
+        {
+            "process_id": 999,
+            "parent_process_id": 998,
+            "name": "powershell.exe",
+            "command_line": (
+                r'"powershell.exe" -File C:\Temp\lens-overlay-window.ps1 '
+                r'-DataDir "C:\Temp\francis-data"'
+            ),
+        },
+    ]
+
+    def fake_run(command: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            args=command,
+            returncode=0,
+            stdout=json.dumps(process_payload),
+            stderr="",
+        )
+
+    monkeypatch.setattr(status_module.os, "name", "nt")
+    monkeypatch.setattr(status_module.shutil, "which", lambda _: "powershell.exe")
+    monkeypatch.setattr(status_module, "data_dir", lambda: Path(canonical_root))
+    monkeypatch.setattr(status_module.subprocess, "run", fake_run)
+
+    payload = status_module._lens_runtime_process_scan({"overlay": 105})
+
+    assert payload["status"] == "competing_detected"
+    assert payload["limit"] == 5
+    assert payload["candidate_count"] == 2
+    assert payload["competing_candidate_count"] == 1
+    assert payload["candidates_truncated"] is False
+    assert payload["competing_candidates_truncated"] is False
+    assert payload["blockers"] == ["competing_orb_runtime_process_detected"]
+    competing = payload["competing_candidates"][0]
+    assert competing["component"] == "overlay"
+    assert competing["pid"] == 999
+    assert competing["data_root_matches_canonical"] is False
+    assert "<canonical_data_root>" in payload["candidates"][0]["command_line_redacted"]
+
+
 def test_lens_os_binding_readiness_groups_blockers_without_authority(
     monkeypatch,
     tmp_path: Path,
@@ -11670,13 +11881,20 @@ def test_lens_overlay_runner_preserves_script_startup_timeout_budget(
 
     monkeypatch.setattr(overlay_authority_module.subprocess, "run", fake_run)
 
-    result = overlay_authority_module._run_lens_overlay_window_action(mode="start", run_seconds=2)
+    result = overlay_authority_module._run_lens_overlay_window_action(
+        mode="start",
+        run_seconds=2,
+        voice_provider="ElevenLabs",
+    )
 
     assert result["ok"] is True
+    assert result["voice_provider"] == "ElevenLabs"
     command = captured["command"]
     assert isinstance(command, list)
     timeout_index = command.index("-StartupTimeoutSeconds")
     assert command[timeout_index + 1] == "30"
+    provider_index = command.index("-VoiceProvider")
+    assert command[provider_index + 1] == "ElevenLabs"
 
 
 def test_lens_overlay_execute_starts_and_stops_governed_overlay_lease(
@@ -11725,9 +11943,13 @@ def test_lens_overlay_execute_starts_and_stops_governed_overlay_lease(
 
     overlay_action_calls: list[str] = []
 
-    def fake_overlay_action(*, mode: str, run_seconds: int) -> dict[str, Any]:
+    def fake_overlay_action(*, mode: str, run_seconds: int, voice_provider: str = "") -> dict[str, Any]:
         overlay_action_calls.append(mode)
         assert run_seconds == (0 if mode == "stop" and overlay_action_calls == ["start", "stop"] else 1)
+        if mode == "start":
+            assert voice_provider == "ElevenLabs"
+        else:
+            assert voice_provider == ""
         runtime_root = data_root / "runtime" / "lens-overlay"
         runtime_root.mkdir(parents=True, exist_ok=True)
         if mode == "stop":
@@ -11752,6 +11974,7 @@ def test_lens_overlay_execute_starts_and_stops_governed_overlay_lease(
                 "status": "stopped",
                 "returncode": 0,
                 "script_mode": "Stop",
+                "voice_provider": voice_provider,
                 "script": "scripts/lens-overlay-window.ps1",
                 "runner": {
                     "ok": True,
@@ -11767,6 +11990,7 @@ def test_lens_overlay_execute_starts_and_stops_governed_overlay_lease(
                 "status": "start_timeout",
                 "returncode": 1,
                 "script_mode": "Start",
+                "voice_provider": voice_provider,
                 "script": "scripts/lens-overlay-window.ps1",
                 "runner": {
                     "ok": False,
@@ -11782,6 +12006,7 @@ def test_lens_overlay_execute_starts_and_stops_governed_overlay_lease(
             "status": "started",
             "returncode": 0,
             "script_mode": "Start",
+            "voice_provider": voice_provider,
             "script": "scripts/lens-overlay-window.ps1",
             "runner": {
                 "ok": True,
@@ -11849,6 +12074,7 @@ def test_lens_overlay_execute_starts_and_stops_governed_overlay_lease(
             "reason": "start governed Lens overlay window",
             "mode": "start",
             "run_seconds": 1,
+            "voice_provider": "ElevenLabs",
         },
     )
     assert started.status_code == 200
@@ -11857,6 +12083,7 @@ def test_lens_overlay_execute_starts_and_stops_governed_overlay_lease(
     assert started_body["status"] == "overlay_window_started"
     assert started_body["executed"] is True
     assert started_body["mode"] == "start"
+    assert started_body["voice_provider"] == "ElevenLabs"
     assert started_body["runner_retry_count"] == 1
     assert [attempt["status"] for attempt in started_body["runner_attempts"]] == [
         "start_timeout",
@@ -11891,6 +12118,7 @@ def test_lens_overlay_execute_starts_and_stops_governed_overlay_lease(
     assert receipt["execution"]["overlay_runtime_ready"] is True
     assert receipt["execution"]["overlay_window_visible"] is True
     assert receipt["execution"]["always_on_top"] is True
+    assert receipt["execution"]["voice_provider"] == "ElevenLabs"
     assert receipt["resident_claim"]["resident_host_process_claimed"] is False
 
     executions = client.get("/lens/overlay/executions?limit=10")

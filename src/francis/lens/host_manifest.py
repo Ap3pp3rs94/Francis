@@ -557,6 +557,11 @@ def _lens_overlay_runtime_readback() -> dict[str, Any]:
         "expected_overlay_name": expected_overlay_name,
         "overlay_scope": state_overlay_scope,
         "expected_overlay_scope": expected_overlay_scope,
+        "orb_visual": _as_dict(state_payload.get("orb_visual")),
+        "voice": _as_dict(state_payload.get("voice")),
+        "overlay_voice": _as_dict(state_payload.get("overlay_voice")),
+        "voice_provider_readiness": _as_dict(state_payload.get("voice_provider_readiness")),
+        "voice_input_readiness": _as_dict(state_payload.get("voice_input_readiness")),
         "requirement_state": requirement_state,
         "blocker": blocker,
     }

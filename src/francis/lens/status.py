@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import json
+import os
+import re
+import shutil
+import subprocess
 import time
 from typing import Any
 
 from francis.governance.approval_projection import approval_projection_fields
 from francis.governance.approvals import list_requests
 from francis.governance.redaction import redact_governed_display_value
+from francis.kernel.paths import data_dir
 from francis.lens.activation import (
     deny_lens_host_activation_execution,
     deny_lens_host_persistent_supervision_enablement,
@@ -2316,16 +2322,25 @@ def _stage6_prerequisite_operator_command(action: dict[str, Any]) -> dict[str, A
             "requires_operator_approval_decision": True,
         }
     if action_id.startswith("execute_") or action_id.startswith("apply_"):
-        return {
+        voice_provider_arg = ""
+        if action_id == "execute_overlay_window":
+            voice_provider = _safe_str(action.get("overlay_voice_provider")).strip() or "<WindowsSapi|ElevenLabs>"
+            voice_provider_arg = f" -OverlayVoiceProvider {voice_provider}"
+        result = {
             "command": (
                 ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 "
-                f"-Mode ExecuteNext -Actor <actor> -ApprovalId {approval_arg} -RunSeconds 2 -ConfirmExecute"
+                f"-Mode ExecuteNext -Actor <actor> -ApprovalId {approval_arg} -RunSeconds 2"
+                f"{voice_provider_arg} -ConfirmExecute"
             ),
             "mode": "ExecuteNext",
             "requires_confirmation": True,
             "requires_approval_id": True,
             "requires_operator_approval_decision": False,
         }
+        if action_id == "execute_overlay_window":
+            result["overlay_voice_provider_required"] = True
+            result["overlay_voice_provider_options"] = ["WindowsSapi", "ElevenLabs"]
+        return result
     if action_id.startswith("await_"):
         return {
             "command": ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status",
@@ -5229,6 +5244,471 @@ def _resident_surface_runtime_from_host(resident_host: dict[str, Any]) -> dict[s
     }
 
 
+def _runtime_pid(value: Any) -> int:
+    return _safe_int(value, default=0, minimum=0, maximum=1_000_000)
+
+
+def _ordered_status_values(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        item = _safe_str(value).strip()
+        if item and item not in seen:
+            seen.add(item)
+            result.append(item)
+    return result
+
+
+def _runtime_component_blockers(component_id: str, readback: dict[str, Any], *, ready: bool) -> list[str]:
+    blockers: list[str] = []
+    blocker = _safe_str(readback.get("blocker")).strip() or _safe_str(readback.get("blocked_reason")).strip()
+    if blocker and not ready:
+        blockers.append(blocker)
+    state_exists = bool(readback.get("state_exists"))
+    pid_present = bool(readback.get("pid_present"))
+    process_alive = bool(readback.get("process_alive"))
+    if (state_exists or pid_present) and not process_alive and not ready:
+        blockers.append(f"{component_id}_runtime_stale_or_unverified")
+    state_pid = _runtime_pid(readback.get("state_pid"))
+    pid = _runtime_pid(readback.get("pid"))
+    if state_pid and pid and not bool(readback.get("state_pid_matches_pid_file")):
+        blockers.append(f"{component_id}_runtime_pid_mismatch")
+    return _ordered_status_values(blockers)
+
+
+def _orb_component_identity(component_id: str, readback: dict[str, Any], *, ready: bool | None = None) -> dict[str, Any]:
+    component_ready = bool(readback.get("ready")) if ready is None else ready
+    return {
+        "id": component_id,
+        "ready": component_ready,
+        "status": _safe_str(readback.get("status")).strip() or ("ready" if component_ready else "missing"),
+        "runtime_state_path": _safe_str(readback.get("runtime_state_path")).strip(),
+        "state_exists": bool(readback.get("state_exists")),
+        "state_status": _safe_str(readback.get("state_status")).strip(),
+        "state_updated_at": _safe_str(readback.get("state_updated_at")).strip(),
+        "pid_path": _safe_str(readback.get("pid_path")).strip(),
+        "pid_present": bool(readback.get("pid_present")),
+        "pid": _runtime_pid(readback.get("pid")),
+        "state_pid": _runtime_pid(readback.get("state_pid")),
+        "state_pid_matches_pid_file": bool(readback.get("state_pid_matches_pid_file")),
+        "process_alive": bool(readback.get("process_alive")),
+        "process_alive_check": _safe_str(readback.get("process_alive_check")).strip(),
+        "requirement_state": _safe_str(readback.get("requirement_state")).strip(),
+        "blocker": _safe_str(readback.get("blocker")).strip() or _safe_str(readback.get("blocked_reason")).strip(),
+        "blockers": _runtime_component_blockers(component_id, readback, ready=component_ready),
+    }
+
+
+def _orb_visual_identity(overlay_readback: dict[str, Any]) -> dict[str, Any]:
+    orb_visual = _as_dict(overlay_readback.get("orb_visual"))
+    visual_contract = _safe_str(orb_visual.get("visual_contract")).strip()
+    ring_color_contract = (
+        _as_dict(orb_visual.get("ring_color_contract"))
+        or _as_dict(orb_visual.get("ring_contract"))
+        or _as_dict(orb_visual.get("color_contract"))
+        or _as_dict(orb_visual.get("energy_palette"))
+    )
+    ring_color_ready = bool(ring_color_contract)
+    blockers = [] if ring_color_ready else ["orb_ring_color_contract_missing"]
+    return {
+        "status": "ready" if ring_color_ready else "visual_contract_present_ring_color_missing",
+        "visual_contract": visual_contract,
+        "renderer": _safe_str(orb_visual.get("renderer")).strip(),
+        "animated": bool(orb_visual.get("animated")),
+        "transparent_background": bool(orb_visual.get("transparent_background")),
+        "motion_profile": _safe_str(orb_visual.get("motion_profile")).strip(),
+        "default_anchor": _safe_str(orb_visual.get("default_anchor")).strip(),
+        "right_corner_locked": bool(orb_visual.get("right_corner_locked")),
+        "click_hit_box_size": _safe_int(orb_visual.get("click_hit_box_size"), default=0, maximum=10_000),
+        "click_hit_box_scope": _safe_str(orb_visual.get("click_hit_box_scope")).strip(),
+        "ring_color_contract_ready": ring_color_ready,
+        "ring_color_contract": ring_color_contract,
+        "blockers": blockers,
+        "message": (
+            "Orb visual identity includes an explicit ring/color contract."
+            if ring_color_ready
+            else "Orb visual readback is present, but ring/color identity is not yet contracted in runtime state."
+        ),
+    }
+
+
+def _orb_voice_identity(overlay_readback: dict[str, Any]) -> dict[str, Any]:
+    voice = _as_dict(overlay_readback.get("voice"))
+    overlay_voice = _as_dict(overlay_readback.get("overlay_voice"))
+    readiness = _as_dict(overlay_readback.get("voice_provider_readiness"))
+    selected_provider = _safe_str(readiness.get("selected_provider")).strip()
+    output_provider = _safe_str(overlay_voice.get("voice_provider")).strip()
+    input_provider = _safe_str(voice.get("voice_provider")).strip()
+    runtime_provider = output_provider or input_provider
+    selected_provider_matches_runtime = (
+        not selected_provider or not runtime_provider or selected_provider == runtime_provider
+    )
+    output_provider_matches_input_readback = not output_provider or not input_provider or output_provider == input_provider
+    drift = not selected_provider_matches_runtime or not output_provider_matches_input_readback
+    blockers = ["orb_voice_provider_identity_drift"] if drift else []
+    if not runtime_provider and bool(overlay_readback.get("ready")):
+        blockers.append("orb_voice_provider_runtime_missing")
+    return {
+        "status": "provider_drift" if drift else "ready" if runtime_provider else "missing",
+        "selected_provider": selected_provider,
+        "runtime_provider": runtime_provider,
+        "output_provider": output_provider,
+        "input_readback_provider": input_provider,
+        "selected_voice": _safe_str(overlay_voice.get("selected_voice")).strip()
+        or _safe_str(voice.get("selected_voice")).strip(),
+        "remote_provider": _safe_str(overlay_voice.get("remote_provider")).strip()
+        or _safe_str(voice.get("remote_provider")).strip(),
+        "remote_processing": bool(overlay_voice.get("remote_processing")) or bool(voice.get("remote_processing")),
+        "selected_provider_matches_runtime": selected_provider_matches_runtime,
+        "output_provider_matches_input_readback": output_provider_matches_input_readback,
+        "voice_provider_readiness": readiness,
+        "blockers": blockers,
+        "message": (
+            "Overlay output voice and input/runtime readback name different providers; this is identity drift until the contract distinguishes them explicitly."
+            if drift
+            else "Overlay voice provider readback is internally consistent."
+            if runtime_provider
+            else "Overlay runtime does not expose a voice provider."
+        ),
+    }
+
+
+def _lens_runtime_process_component(command_line: str) -> str:
+    command = command_line.lower()
+    if "lens-host-supervisor.ps1" in command:
+        return "supervisor"
+    if "lens-overlay-window.ps1" in command:
+        return "overlay"
+    if "lens-tray-presence.ps1" in command:
+        return "tray"
+    if "lens-hotkey-binding.ps1" in command:
+        return "hotkey"
+    if "lens-host.ps1" in command:
+        return "resident_host"
+    return "unknown"
+
+
+def _extract_lens_runtime_data_root(command_line: str) -> str:
+    normalized = command_line.replace('\\"', '"')
+    env_match = re.search(r"FRANCIS_DATA_DIR\s*=\s*['\"]([^'\"]+)['\"]", normalized, flags=re.IGNORECASE)
+    if env_match:
+        return env_match.group(1)
+    data_dir_match = re.search(
+        r"-DataDir\s+(?:\"([^\"]+)\"|'([^']+)'|([^ \t\r\n]+))",
+        normalized,
+        flags=re.IGNORECASE,
+    )
+    if data_dir_match:
+        return next((group for group in data_dir_match.groups() if group), "")
+    return ""
+
+
+def _lens_runtime_process_scan(expected_pids: dict[str, int], *, limit: int = 5) -> dict[str, Any]:
+    safe_limit = _safe_int(limit, default=5, minimum=1, maximum=50)
+    if os.name != "nt":
+        return {
+            "status": "unsupported_platform",
+            "checked_process_table": False,
+            "limit": safe_limit,
+            "candidates": [],
+            "competing_candidates": [],
+            "blockers": [],
+        }
+    powershell = shutil.which("powershell") or shutil.which("pwsh")
+    if not powershell:
+        return {
+            "status": "powershell_unavailable",
+            "checked_process_table": False,
+            "limit": safe_limit,
+            "candidates": [],
+            "competing_candidates": [],
+            "blockers": ["orb_process_scan_unavailable"],
+        }
+    script = r"""
+$Patterns = @(
+  'lens-overlay-window.ps1',
+  'lens-tray-presence.ps1',
+  'lens-hotkey-binding.ps1',
+  'lens-host-supervisor.ps1',
+  'lens-host.ps1'
+)
+$CurrentPid = $PID
+$Matches = Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe' OR Name = 'pwsh.exe'" |
+  Where-Object {
+    $ProcessCommandLine = [string]$_.CommandLine
+    $_.ProcessId -ne $CurrentPid -and
+    ($Patterns | Where-Object { $ProcessCommandLine -like "*$_*" }).Count -gt 0
+  } |
+  ForEach-Object {
+    [ordered]@{
+      process_id = [int]$_.ProcessId
+      parent_process_id = [int]$_.ParentProcessId
+      name = [string]$_.Name
+      command_line = [string]$_.CommandLine
+    }
+  }
+@($Matches) | ConvertTo-Json -Depth 4
+"""
+    try:
+        proc = subprocess.run(
+            [powershell, "-NoProfile", "-Command", script],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return {
+            "status": "scan_failed",
+            "checked_process_table": False,
+            "limit": safe_limit,
+            "candidates": [],
+            "competing_candidates": [],
+            "blockers": ["orb_process_scan_unavailable"],
+        }
+    if proc.returncode != 0:
+        return {
+            "status": "scan_failed",
+            "checked_process_table": False,
+            "limit": safe_limit,
+            "candidates": [],
+            "competing_candidates": [],
+            "blockers": ["orb_process_scan_failed"],
+        }
+    try:
+        raw_payload = json.loads((proc.stdout or "").strip() or "[]")
+    except json.JSONDecodeError:
+        raw_payload = []
+    raw_items = raw_payload if isinstance(raw_payload, list) else [raw_payload] if isinstance(raw_payload, dict) else []
+    canonical_data_root = str(data_dir())
+    canonical_data_root_key = canonical_data_root.casefold()
+    candidates: list[dict[str, Any]] = []
+    competing: list[dict[str, Any]] = []
+    for raw_item in raw_items:
+        item = _as_dict(raw_item)
+        command_line = _safe_str(item.get("command_line"))
+        component = _lens_runtime_process_component(command_line)
+        pid = _runtime_pid(item.get("process_id"))
+        process_data_root = _extract_lens_runtime_data_root(command_line)
+        expected_pid = expected_pids.get(component, 0)
+        data_root_matches = bool(process_data_root) and process_data_root.casefold() == canonical_data_root_key
+        expected_canonical_process = bool(expected_pid) and pid == expected_pid and data_root_matches
+        candidate = {
+            "component": component,
+            "pid": pid,
+            "parent_pid": _runtime_pid(item.get("parent_process_id")),
+            "name": _safe_str(item.get("name")),
+            "data_root": process_data_root,
+            "data_root_matches_canonical": data_root_matches,
+            "matches_expected_runtime_pid": bool(expected_pid) and pid == expected_pid,
+            "expected_runtime_pid": expected_pid,
+            "expected_canonical_process": expected_canonical_process,
+            "command_line_redacted": command_line.replace(canonical_data_root, "<canonical_data_root>"),
+        }
+        candidates.append(candidate)
+        if component != "unknown" and not expected_canonical_process:
+            competing.append(candidate)
+    blockers = ["competing_orb_runtime_process_detected"] if competing else []
+    return {
+        "status": "competing_detected" if competing else "single_canonical_runtime" if candidates else "none_observed",
+        "checked_process_table": True,
+        "canonical_data_root": canonical_data_root,
+        "limit": safe_limit,
+        "candidate_count": len(candidates),
+        "competing_candidate_count": len(competing),
+        "candidates": candidates[:safe_limit],
+        "competing_candidates": competing[:safe_limit],
+        "candidates_truncated": len(candidates) > safe_limit,
+        "competing_candidates_truncated": len(competing) > safe_limit,
+        "blockers": blockers,
+    }
+
+
+def _canonical_orb_runtime_identity(
+    *,
+    launch_manifest: dict[str, Any],
+    summon_enablement_gate: dict[str, Any],
+    tray_enablement_gate: dict[str, Any],
+    overlay_enablement_gate: dict[str, Any],
+    include_process_scan: bool = False,
+    process_scan_limit: int = 5,
+) -> dict[str, Any]:
+    process = _as_dict(launch_manifest.get("process_readback"))
+    supervisor = _as_dict(launch_manifest.get("supervisor_readback"))
+    tray = _as_dict(launch_manifest.get("tray_runtime_readback"))
+    hotkey = _as_dict(launch_manifest.get("hotkey_runtime_readback"))
+    overlay = _as_dict(launch_manifest.get("overlay_runtime_readback"))
+    summon = _as_dict(launch_manifest.get("summon_runtime_readback"))
+    resident_ready = (
+        bool(process.get("process_alive"))
+        and _safe_str(process.get("state_status")).strip() == "resident_running"
+        and bool(supervisor.get("resident_supervised_runtime"))
+        and bool(supervisor.get("fresh_readback"))
+    )
+    owner_status = (
+        "resident_supervisor"
+        if resident_ready
+        else "foreground_host_process"
+        if bool(process.get("process_alive"))
+        else "missing"
+    )
+    components = {
+        "resident_host": _orb_component_identity("resident_host", process, ready=bool(process.get("process_alive"))),
+        "supervisor": {
+            "id": "supervisor",
+            "ready": bool(supervisor.get("resident_supervised_runtime")) and bool(supervisor.get("fresh_readback")),
+            "status": _safe_str(supervisor.get("status")).strip() or "missing",
+            "runtime_state_path": _safe_str(supervisor.get("runtime_state_path")).strip(),
+            "supervisor_pid": _runtime_pid(supervisor.get("supervisor_pid")),
+            "supervisor_process_alive": bool(supervisor.get("supervisor_process_alive")),
+            "observed_pid": _runtime_pid(supervisor.get("observed_pid")),
+            "observed_process_alive": bool(supervisor.get("observed_process_alive")),
+            "freshness_status": _safe_str(supervisor.get("freshness_status")).strip(),
+            "state_stale": bool(supervisor.get("state_stale")),
+            "resident_supervised_runtime": bool(supervisor.get("resident_supervised_runtime")),
+            "blocker": _safe_str(supervisor.get("blocked_reason")).strip(),
+        },
+        "tray": _orb_component_identity("tray", tray),
+        "hotkey": _orb_component_identity("hotkey", hotkey),
+        "overlay": {
+            **_orb_component_identity("overlay", overlay),
+            "overlay_window_visible": bool(overlay.get("overlay_window_visible")),
+            "always_on_top": bool(overlay.get("always_on_top")),
+            "overlay_name": _safe_str(overlay.get("overlay_name")).strip(),
+            "overlay_scope": _safe_str(overlay.get("overlay_scope")).strip(),
+        },
+        "summon": _orb_component_identity("summon", summon),
+    }
+    visual = _orb_visual_identity(overlay)
+    voice = _orb_voice_identity(overlay)
+    blockers = _ordered_status_values(
+        [
+            *(["canonical_orb_resident_owner_missing"] if not resident_ready else []),
+            *components["resident_host"]["blockers"],
+            *components["tray"]["blockers"],
+            *components["hotkey"]["blockers"],
+            *components["overlay"]["blockers"],
+            *components["summon"]["blockers"],
+            *visual["blockers"],
+            *voice["blockers"],
+        ]
+    )
+    expected_pids = {
+        "resident_host": _runtime_pid(process.get("pid")),
+        "supervisor": _runtime_pid(supervisor.get("supervisor_pid")),
+        "tray": _runtime_pid(tray.get("pid")),
+        "hotkey": _runtime_pid(hotkey.get("pid")),
+        "overlay": _runtime_pid(overlay.get("pid")),
+    }
+    process_scan = (
+        _lens_runtime_process_scan(expected_pids, limit=process_scan_limit)
+        if include_process_scan
+        else {
+            "status": "not_requested",
+            "checked_process_table": False,
+            "limit": process_scan_limit,
+            "candidates": [],
+            "competing_candidates": [],
+            "blockers": [],
+        }
+    )
+    blockers = _ordered_status_values([*blockers, *_as_list(process_scan.get("blockers"))])
+    ready = all(
+        bool(components[key].get("ready"))
+        for key in ("resident_host", "tray", "hotkey", "overlay", "summon")
+    ) and resident_ready
+    status = "ready" if ready and not blockers else "identity_drift_detected" if blockers else "partial"
+    return {
+        "kind": "lens.orb.runtime_identity",
+        "status": status,
+        "ready": ready and not blockers,
+        "canonical_identity_id": "francis.operator_orb",
+        "canonical_visible_surface": "lens.overlay_window",
+        "canonical_data_root": str(data_dir()),
+        "route": "/lens/orb/runtime-identity",
+        "status_route": "/lens/status",
+        "canonical_launch_path": {
+            "owner": "lens.resident_host.supervision",
+            "route": "/lens/host/persistent-supervision",
+            "enablement_route": "/lens/host/persistent-supervision/enablement",
+            "execution_route": "/lens/host/persistent-supervision/enablement/execution",
+            "proof_scripts_are_launch_owners": False,
+            "current_owner_status": owner_status,
+        },
+        "resident_owner": {
+            "status": owner_status,
+            "ready": resident_ready,
+            "resident_host_pid": _runtime_pid(process.get("pid")),
+            "supervisor_pid": _runtime_pid(supervisor.get("supervisor_pid")),
+            "supervisor_freshness_status": _safe_str(supervisor.get("freshness_status")).strip(),
+            "supervisor_state_stale": bool(supervisor.get("state_stale")),
+            "resident_claim_allowed": False,
+        },
+        "components": components,
+        "visual_identity": visual,
+        "voice_identity": voice,
+        "process_scan": process_scan,
+        "gates": {
+            "summon": {
+                "route": _safe_str(summon_enablement_gate.get("route")).strip() or "/lens/summon",
+                "ready": bool(summon_enablement_gate.get("ready")),
+                "status": _safe_str(summon_enablement_gate.get("status")).strip(),
+            },
+            "tray": {
+                "route": _safe_str(tray_enablement_gate.get("route")).strip() or "/lens/tray",
+                "ready": bool(tray_enablement_gate.get("ready")),
+                "status": _safe_str(tray_enablement_gate.get("status")).strip(),
+            },
+            "overlay": {
+                "route": _safe_str(overlay_enablement_gate.get("route")).strip() or "/lens/overlay",
+                "ready": bool(overlay_enablement_gate.get("ready")),
+                "status": _safe_str(overlay_enablement_gate.get("status")).strip(),
+            },
+        },
+        "blockers": blockers,
+        "message": (
+            "One canonical Orb runtime identity is ready across owner, surface, summon, voice, and visual contracts."
+            if ready and not blockers
+            else "Canonical Orb runtime identity is readable, but drift or missing ownership is explicit."
+        ),
+        "governance": {
+            "read_only_contract": True,
+            "diagnostic_only": True,
+            "execution_authority": False,
+            "approval_decision_authority": False,
+            "local_process_launch_authority": False,
+            "process_supervision_authority": False,
+            "service_control_authority": False,
+            "overlay_control_authority": False,
+            "summon_authority": False,
+            "hotkey_registration_authority": False,
+            "tray_registration_authority": False,
+            "memory_write": False,
+            "mutation_authority_granted": False,
+        },
+    }
+
+
+def lens_orb_runtime_identity(*, limit: int = 5, include_process_scan: bool = True) -> dict[str, Any]:
+    safe_limit = _safe_int(limit, default=5, minimum=1, maximum=50)
+    launch_manifest = lens_host_launch_manifest()
+    preflight = lens_preflight()
+    tray_runtime_readback = _as_dict(launch_manifest.get("tray_runtime_readback"))
+    payload = _canonical_orb_runtime_identity(
+        launch_manifest=launch_manifest,
+        summon_enablement_gate=lens_summon_enablement_gate(preflight=preflight),
+        tray_enablement_gate=lens_tray_enablement_gate(
+            preflight=preflight,
+            tray_runtime_readback=tray_runtime_readback,
+        ),
+        overlay_enablement_gate=lens_overlay_enablement_gate(preflight=preflight),
+        include_process_scan=include_process_scan,
+        process_scan_limit=safe_limit,
+    )
+    payload["limit"] = safe_limit
+    return payload
+
+
 def lens_status(*, limit: int = 5) -> dict[str, Any]:
     safe_limit = _safe_int(limit, default=5, minimum=1, maximum=50)
     operator = _operator_surface()
@@ -5284,6 +5764,13 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
     overlay_enablement_gate = lens_overlay_enablement_gate(preflight=preflight)
     overlay_authority_requests = lens_overlay_authority_request_readback(limit=safe_limit)
     overlay_execution_receipts = lens_overlay_window_execution_receipts(limit=safe_limit)
+    orb_runtime_identity = _canonical_orb_runtime_identity(
+        launch_manifest=launch_manifest,
+        summon_enablement_gate=summon_enablement_gate,
+        tray_enablement_gate=tray_enablement_gate,
+        overlay_enablement_gate=overlay_enablement_gate,
+        include_process_scan=False,
+    )
     resident_surface_activation = lens_resident_surface_activation_boundary(limit=safe_limit)
     pilot_indicator = _pilot_indicator(mode)
     resident_runtime_preflight = _as_dict(resident_host.get("resident_runtime_preflight"))
@@ -5317,6 +5804,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
         "scope": scope,
         "hud": hud,
         "resident_host": resident_host,
+        "orb_runtime_identity": orb_runtime_identity,
         "preflight": preflight,
         "os_binding_readiness": os_binding_readiness,
         "os_binding_execution_readiness": os_binding_execution_readiness,
@@ -5435,6 +5923,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
             "lens_overlay_authority_grants_route": "/lens/overlay/authority/grants",
             "lens_overlay_executions_route": "/lens/overlay/executions",
             "lens_overlay_execute_route": "/lens/overlay/execute",
+            "lens_orb_runtime_identity_route": "/lens/orb/runtime-identity",
             "lens_summon_authority_request_route": "/lens/summon/authority/request",
             "lens_summon_authority_requests_route": "/lens/summon/authority/requests",
             "lens_summon_authority_route": "/lens/summon/authority",

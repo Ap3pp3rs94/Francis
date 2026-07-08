@@ -77,6 +77,7 @@ from francis.lens import (
     lens_overlay_authority_request_readback,
     lens_overlay_enablement_gate,
     lens_overlay_window_execution_receipts,
+    lens_orb_runtime_identity,
     lens_resident_runtime_activation_denial_receipts,
     lens_resident_runtime_activation_execution_receipts,
     lens_preflight,
@@ -408,12 +409,21 @@ class LensOverlayExecuteIn(BaseModel):
     reason: str = "attempt Lens overlay window execution"
     mode: str = Field(default="start")
     run_seconds: int = Field(default=300, ge=0, le=3600)
+    voice_provider: str = Field(default="")
 
 
 @router.get("/status")
 @router.get("/hud")
 def status(limit: int = Query(5, ge=1, le=50)) -> dict[str, Any]:
     return lens_status(limit=limit)
+
+
+@router.get("/orb/runtime-identity")
+def orb_runtime_identity(
+    limit: int = Query(5, ge=1, le=50),
+    include_process_scan: bool = True,
+) -> dict[str, Any]:
+    return lens_orb_runtime_identity(limit=limit, include_process_scan=include_process_scan)
 
 
 @router.get("/preflight")
@@ -786,6 +796,7 @@ def overlay_execute(
         record_receipt=True,
         mode=payload.mode,
         run_seconds=payload.run_seconds,
+        voice_provider=payload.voice_provider,
     )
 
 
