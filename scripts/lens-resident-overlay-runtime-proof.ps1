@@ -9,6 +9,9 @@ param(
   [ValidateRange(2, 45)]
   [int]$ResidentSurfaceForegroundRunSeconds = 40,
 
+  [ValidateRange(5, 120)]
+  [int]$ResidentSurfaceReadbackTimeoutSeconds = 60,
+
   [string]$DataDir = '',
 
   [string]$CachedResidentSurfaceProofPath = '',
@@ -275,14 +278,18 @@ function New-Check {
 $PowerShellPath = Get-PowerShellPath
 $ResidentSurfaceProofPath = Join-Path $PSScriptRoot 'lens-resident-surface-proof.ps1'
 $SupervisorObservationProofPath = Join-Path $PSScriptRoot 'lens-host-supervisor-observation-proof.ps1'
-$ResidentSurfaceTimeoutSeconds = [Math]::Max(150, ($ResidentSurfaceForegroundRunSeconds * 2) + 120)
+$ResidentSurfaceTimeoutSeconds = [Math]::Max(180, ($ResidentSurfaceForegroundRunSeconds * 2) + 120 + $ResidentSurfaceReadbackTimeoutSeconds)
 $ResidentSurfaceEffectiveRunSeconds = $ResidentSurfaceForegroundRunSeconds
 $ResidentSurfaceEffectiveTimeoutSeconds = $ResidentSurfaceTimeoutSeconds
 $ResidentSurfaceRetryAttempted = $false
 $ResidentSurfaceRetryRunSeconds = 0
 $ResidentSurfaceInitialStatus = ''
 $ResidentSurfaceRetryReason = ''
-$ResidentSurfaceArgs = @('-Mode', 'Status', '-ForegroundRunSeconds', [string]$ResidentSurfaceForegroundRunSeconds)
+$ResidentSurfaceArgs = @(
+  '-Mode', 'Status',
+  '-ForegroundRunSeconds', [string]$ResidentSurfaceForegroundRunSeconds,
+  '-ResidentSurfaceReadbackTimeoutSeconds', [string]$ResidentSurfaceReadbackTimeoutSeconds
+)
 if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
   $ResidentSurfaceArgs += @('-DataDir', $DataDir)
 }
@@ -302,8 +309,12 @@ if ($null -ne $CachedResidentSurfaceResult) {
     $ResidentSurfaceRetryRunSeconds = 18
     $ResidentSurfaceRetryReason = 'resident_surface_child_proof_initially_failed'
     $ResidentSurfaceEffectiveRunSeconds = $ResidentSurfaceRetryRunSeconds
-    $ResidentSurfaceEffectiveTimeoutSeconds = [Math]::Max(190, ($ResidentSurfaceRetryRunSeconds * 2) + 150)
-    $ResidentSurfaceRetryArgs = @('-Mode', 'Status', '-ForegroundRunSeconds', [string]$ResidentSurfaceRetryRunSeconds)
+    $ResidentSurfaceEffectiveTimeoutSeconds = [Math]::Max(240, ($ResidentSurfaceRetryRunSeconds * 2) + 150 + $ResidentSurfaceReadbackTimeoutSeconds)
+    $ResidentSurfaceRetryArgs = @(
+      '-Mode', 'Status',
+      '-ForegroundRunSeconds', [string]$ResidentSurfaceRetryRunSeconds,
+      '-ResidentSurfaceReadbackTimeoutSeconds', [string]$ResidentSurfaceReadbackTimeoutSeconds
+    )
     if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
       $ResidentSurfaceRetryArgs += @('-DataDir', $DataDir)
     }
@@ -428,6 +439,7 @@ $Payload = [ordered]@{
   resident_surface_retry_foreground_run_seconds = $ResidentSurfaceRetryRunSeconds
   resident_surface_initial_status = $ResidentSurfaceInitialStatus
   resident_surface_retry_reason = $ResidentSurfaceRetryReason
+  resident_surface_readback_timeout_seconds = $ResidentSurfaceReadbackTimeoutSeconds
   resident_surface_timeout_seconds = $ResidentSurfaceTimeoutSeconds
   resident_surface_effective_timeout_seconds = $ResidentSurfaceEffectiveTimeoutSeconds
   resident_overlay_runtime_ready = $false

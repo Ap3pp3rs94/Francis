@@ -41,6 +41,41 @@ function Get-PowerShellPath {
   return ''
 }
 
+function Get-PythonPath {
+  $WindowsVenv = Join-Path $RepoRoot '.venv\Scripts\python.exe'
+  if (Test-Path -LiteralPath $WindowsVenv -PathType Leaf) {
+    & $WindowsVenv --version *> $null
+    if ($LASTEXITCODE -eq 0) {
+      return $WindowsVenv
+    }
+  }
+
+  $UnixVenv = Join-Path $RepoRoot '.venv/bin/python'
+  if (Test-Path -LiteralPath $UnixVenv -PathType Leaf) {
+    & $UnixVenv --version *> $null
+    if ($LASTEXITCODE -eq 0) {
+      return $UnixVenv
+    }
+  }
+
+  $Python = Get-Command python -ErrorAction SilentlyContinue
+  if ($null -ne $Python) {
+    return [string]$Python.Source
+  }
+  return ''
+}
+
+function Get-FreeTcpPort {
+  $Address = [System.Net.IPAddress]::Parse('127.0.0.1')
+  $Listener = [System.Net.Sockets.TcpListener]::new($Address, 0)
+  try {
+    $Listener.Start()
+    return [int]$Listener.LocalEndpoint.Port
+  } finally {
+    $Listener.Stop()
+  }
+}
+
 function Get-PropertyValue {
   param(
     [object]$Payload,
@@ -216,14 +251,83 @@ function Invoke-JsonScript {
   }
 }
 
+function Invoke-HttpJson {
+  param(
+    [string]$Uri,
+    [int]$TimeoutSeconds = 10
+  )
+
+  try {
+    $Response = Invoke-WebRequest -UseBasicParsing -Uri $Uri -Method Get -TimeoutSec $TimeoutSeconds
+    $Payload = $Response.Content | ConvertFrom-Json -ErrorAction Stop
+    return [ordered]@{
+      ok = $true
+      status_code = [int]$Response.StatusCode
+      payload = $Payload
+      error = ''
+    }
+  } catch {
+    return [ordered]@{
+      ok = $false
+      status_code = 0
+      payload = $null
+      error = [string]$_.Exception.Message
+    }
+  }
+}
+
+function Wait-ForResidentSurfaceReadback {
+  param(
+    [System.Diagnostics.Process]$Process,
+    [string]$Uri,
+    [int]$TimeoutSeconds
+  )
+
+  $HttpRequestTimeoutSeconds = [Math]::Min(15, [Math]::Max(5, $TimeoutSeconds))
+  $Deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+  $LastResult = [ordered]@{
+    ok = $false
+    status_code = 0
+    payload = $null
+    error = 'resident_surface_readback_timeout'
+  }
+  while ((Get-Date) -lt $Deadline) {
+    if ($null -ne $Process -and $Process.HasExited) {
+      return [ordered]@{
+        ok = $false
+        status_code = 0
+        payload = $null
+        error = 'api_process_exited_before_resident_surface_readback'
+      }
+    }
+    $LastResult = Invoke-HttpJson -Uri $Uri -TimeoutSeconds $HttpRequestTimeoutSeconds
+    $Payload = Get-PropertyValue -Payload $LastResult -Name 'payload'
+    if (
+      [bool](Get-PropertyValue -Payload $LastResult -Name 'ok' -Default $false) -and
+      [string](Get-PropertyValue -Payload $Payload -Name 'kind' -Default '') -eq 'lens.resident_surface.readback'
+    ) {
+      return $LastResult
+    }
+    Start-Sleep -Milliseconds 250
+  }
+
+  return [ordered]@{
+    ok = $false
+    status_code = 0
+    payload = $null
+    error = 'resident_surface_readback_timeout'
+    last_error = [string](Get-PropertyValue -Payload $LastResult -Name 'error' -Default '')
+  }
+}
+
 function Invoke-ResidentSurfaceReadback {
   param(
     [string]$DataDir = '',
     [int]$TimeoutSeconds = $ResidentSurfaceReadbackTimeoutSeconds
   )
 
-  $Python = Get-Command python -ErrorAction SilentlyContinue
-  if ($null -eq $Python) {
+  $PythonPath = Get-PythonPath
+  if ([string]::IsNullOrWhiteSpace($PythonPath)) {
     return [ordered]@{
       ok = $false
       status_code = 0
@@ -232,64 +336,59 @@ function Invoke-ResidentSurfaceReadback {
     }
   }
 
-  $Source = @'
-import json
-import warnings
+  $ReadbackRuntimeRoot = if ([string]::IsNullOrWhiteSpace($DataDir)) {
+    Join-Path ([System.IO.Path]::GetTempPath()) ("francis-lens-resident-surface-readback\" + [guid]::NewGuid().ToString('N'))
+  } else {
+    Join-Path $DataDir 'runtime\lens-resident-surface-readback'
+  }
+  New-Item -ItemType Directory -Force -Path $ReadbackRuntimeRoot | Out-Null
 
-warnings.filterwarnings("ignore", category=DeprecationWarning)
-
-from fastapi.testclient import TestClient
-
-from francis.api.app import create_app
-
-client = TestClient(create_app())
-response = client.get("/lens/resident-surface?limit=5")
-payload = response.json()
-print(json.dumps({"ok": response.status_code == 200, "status_code": response.status_code, "payload": payload}))
-'@
-
-  $SrcPath = Join-Path $RepoRoot 'src'
-  $PreviousPythonPath = [string]$env:PYTHONPATH
-  $HadPreviousDataDir = Test-Path Env:\FRANCIS_DATA_DIR
-  $PreviousDataDir = [string]$env:FRANCIS_DATA_DIR
-  $HadPreviousPythonWarnings = Test-Path Env:\PYTHONWARNINGS
-  $PreviousPythonWarnings = [string]$env:PYTHONWARNINGS
-  $TempScriptPath = Join-Path ([System.IO.Path]::GetTempPath()) ("francis-lens-resident-surface-readback-{0}.py" -f $PID)
-  $PythonStdoutPath = Join-Path ([System.IO.Path]::GetTempPath()) ("francis-lens-resident-surface-readback-stdout-{0}.json" -f $PID)
-  $PythonStderrPath = Join-Path ([System.IO.Path]::GetTempPath()) ("francis-lens-resident-surface-readback-stderr-{0}.log" -f $PID)
-  $Text = ''
-  $StderrText = ''
-  $ExitCode = 1
-  $PythonProcess = $null
-  $PreviousErrorActionPreference = $ErrorActionPreference
+  $Port = Get-FreeTcpPort
+  $BaseUrl = "http://127.0.0.1:$Port"
+  $ReadbackUri = "$BaseUrl/lens/resident-surface?limit=5"
+  $ApiStdoutPath = Join-Path $ReadbackRuntimeRoot 'api-stdout.log'
+  $ApiStderrPath = Join-Path $ReadbackRuntimeRoot 'api-stderr.log'
+  $ApiProcess = $null
+  $StdoutTask = $null
+  $StderrTask = $null
+  $ApiStdout = ''
+  $ApiStderr = ''
+  $ApiExitCode = $null
+  $Result = [ordered]@{
+    ok = $false
+    status_code = 0
+    payload = $null
+    error = 'resident_surface_readback_timeout'
+  }
   try {
-    if ([string]::IsNullOrWhiteSpace($PreviousPythonPath)) {
-      $env:PYTHONPATH = $SrcPath
-    } else {
-      $env:PYTHONPATH = "$SrcPath$([System.IO.Path]::PathSeparator)$PreviousPythonPath"
-    }
-    if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
-      $env:FRANCIS_DATA_DIR = $DataDir
-    }
-    if ([string]::IsNullOrWhiteSpace($PreviousPythonWarnings)) {
-      $env:PYTHONWARNINGS = 'ignore::DeprecationWarning'
-    } else {
-      $env:PYTHONWARNINGS = "ignore::DeprecationWarning,$PreviousPythonWarnings"
-    }
-    Set-Content -LiteralPath $TempScriptPath -Value $Source -Encoding UTF8
-
     $StartInfo = [System.Diagnostics.ProcessStartInfo]::new()
-    $StartInfo.FileName = [string]$Python.Source
-    $StartInfo.Arguments = Quote-ProcessArgument -Value $TempScriptPath
+    $StartInfo.FileName = $PythonPath
+    $StartInfo.Arguments = "-m francis api --host 127.0.0.1 --port $Port"
     $StartInfo.WorkingDirectory = $RepoRoot
     $StartInfo.UseShellExecute = $false
     $StartInfo.CreateNoWindow = $true
     $StartInfo.RedirectStandardOutput = $true
     $StartInfo.RedirectStandardError = $true
+    $SrcPath = Join-Path $RepoRoot 'src'
+    $PreviousPythonPath = [string]$env:PYTHONPATH
+    if ([string]::IsNullOrWhiteSpace($PreviousPythonPath)) {
+      $StartInfo.EnvironmentVariables['PYTHONPATH'] = $SrcPath
+    } else {
+      $StartInfo.EnvironmentVariables['PYTHONPATH'] = "$SrcPath$([System.IO.Path]::PathSeparator)$PreviousPythonPath"
+    }
+    if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
+      $StartInfo.EnvironmentVariables['FRANCIS_DATA_DIR'] = $DataDir
+    }
+    $PreviousPythonWarnings = [string]$env:PYTHONWARNINGS
+    if ([string]::IsNullOrWhiteSpace($PreviousPythonWarnings)) {
+      $StartInfo.EnvironmentVariables['PYTHONWARNINGS'] = 'ignore::DeprecationWarning'
+    } else {
+      $StartInfo.EnvironmentVariables['PYTHONWARNINGS'] = "ignore::DeprecationWarning,$PreviousPythonWarnings"
+    }
 
-    $PythonProcess = [System.Diagnostics.Process]::new()
-    $PythonProcess.StartInfo = $StartInfo
-    $Started = $PythonProcess.Start()
+    $ApiProcess = [System.Diagnostics.Process]::new()
+    $ApiProcess.StartInfo = $StartInfo
+    $Started = $ApiProcess.Start()
     if (-not $Started) {
       return [ordered]@{
         ok = $false
@@ -299,90 +398,53 @@ print(json.dumps({"ok": response.status_code == 200, "status_code": response.sta
         timeout_seconds = $TimeoutSeconds
       }
     }
-
-    $Completed = $PythonProcess.WaitForExit($TimeoutSeconds * 1000)
-    if (-not $Completed) {
-      try {
-        $PythonProcess.Kill()
-      } catch {
-      }
-      $PythonProcess.WaitForExit(5000) | Out-Null
-      try {
-        $Text = $PythonProcess.StandardOutput.ReadToEnd()
-        $StderrText = $PythonProcess.StandardError.ReadToEnd()
-      } catch {
-      }
-      Set-Content -LiteralPath $PythonStdoutPath -Value $Text -Encoding UTF8 -ErrorAction SilentlyContinue
-      Set-Content -LiteralPath $PythonStderrPath -Value $StderrText -Encoding UTF8 -ErrorAction SilentlyContinue
-      return [ordered]@{
-        ok = $false
-        status_code = 0
-        payload = $null
-        error = 'resident_surface_readback_timeout'
-        timeout_seconds = $TimeoutSeconds
-        output = $Text
-        stderr = $StderrText
-      }
-    }
-    $Text = $PythonProcess.StandardOutput.ReadToEnd()
-    $StderrText = $PythonProcess.StandardError.ReadToEnd()
-    Set-Content -LiteralPath $PythonStdoutPath -Value $Text -Encoding UTF8 -ErrorAction SilentlyContinue
-    Set-Content -LiteralPath $PythonStderrPath -Value $StderrText -Encoding UTF8 -ErrorAction SilentlyContinue
-    $ExitCode = $PythonProcess.ExitCode
+    $StdoutTask = $ApiProcess.StandardOutput.ReadToEndAsync()
+    $StderrTask = $ApiProcess.StandardError.ReadToEndAsync()
+    $Result = Wait-ForResidentSurfaceReadback -Process $ApiProcess -Uri $ReadbackUri -TimeoutSeconds $TimeoutSeconds
   } finally {
-    if ($null -ne $PythonProcess -and -not $PythonProcess.HasExited) {
-      try {
-        $PythonProcess.Kill()
-      } catch {
+    if ($null -ne $ApiProcess) {
+      if (-not $ApiProcess.HasExited) {
+        try {
+          $ApiProcess.Kill()
+        } catch {
+        }
+        $ApiProcess.WaitForExit(5000) | Out-Null
       }
-      $PythonProcess.WaitForExit(5000) | Out-Null
-    }
-    $ErrorActionPreference = $PreviousErrorActionPreference
-    if ([string]::IsNullOrWhiteSpace($PreviousPythonPath)) {
-      Remove-Item Env:\PYTHONPATH -ErrorAction SilentlyContinue
-    } else {
-      $env:PYTHONPATH = $PreviousPythonPath
-    }
-    if ($HadPreviousDataDir) {
-      $env:FRANCIS_DATA_DIR = $PreviousDataDir
-    } else {
-      Remove-Item Env:\FRANCIS_DATA_DIR -ErrorAction SilentlyContinue
-    }
-    if ($HadPreviousPythonWarnings) {
-      $env:PYTHONWARNINGS = $PreviousPythonWarnings
-    } else {
-      Remove-Item Env:\PYTHONWARNINGS -ErrorAction SilentlyContinue
-    }
-    Remove-Item -LiteralPath $TempScriptPath -Force -ErrorAction SilentlyContinue
-    Remove-Item -LiteralPath $PythonStdoutPath -Force -ErrorAction SilentlyContinue
-    Remove-Item -LiteralPath $PythonStderrPath -Force -ErrorAction SilentlyContinue
-  }
-
-  if ($ExitCode -ne 0) {
-    return [ordered]@{
-      ok = $false
-      status_code = 0
-      payload = $null
-      error = 'resident_surface_readback_failed'
-      exit_code = $ExitCode
-      output = $Text
-      stderr = $StderrText
+      try {
+        $ApiExitCode = $ApiProcess.ExitCode
+      } catch {
+        $ApiExitCode = $null
+      }
+      try {
+        if ($null -ne $StdoutTask -and $StdoutTask.Wait(5000)) {
+          $ApiStdout = $StdoutTask.Result
+        }
+      } catch {
+        $ApiStdout = ''
+      }
+      try {
+        if ($null -ne $StderrTask -and $StderrTask.Wait(5000)) {
+          $ApiStderr = $StderrTask.Result
+        }
+      } catch {
+        $ApiStderr = ''
+      }
+      Set-Content -LiteralPath $ApiStdoutPath -Value $ApiStdout -Encoding UTF8 -ErrorAction SilentlyContinue
+      Set-Content -LiteralPath $ApiStderrPath -Value $ApiStderr -Encoding UTF8 -ErrorAction SilentlyContinue
     }
   }
 
-  try {
-    return $Text | ConvertFrom-Json -ErrorAction Stop
-  } catch {
-    return [ordered]@{
-      ok = $false
-      status_code = 0
-      payload = $null
-      error = 'resident_surface_readback_json_invalid'
-      message = [string]$_.Exception.Message
-      output = $Text
-      stderr = $StderrText
-    }
+  $Result['base_url'] = $BaseUrl
+  $Result['route'] = '/lens/resident-surface?limit=5'
+  $Result['timeout_seconds'] = $TimeoutSeconds
+  $Result['api_pid'] = if ($null -ne $ApiProcess) { [int]$ApiProcess.Id } else { 0 }
+  $Result['api_exit_code'] = $ApiExitCode
+  $Result['api_stdout_path'] = $ApiStdoutPath
+  $Result['api_stderr_path'] = $ApiStderrPath
+  if (-not [bool](Get-PropertyValue -Payload $Result -Name 'ok' -Default $false) -and [string]::IsNullOrWhiteSpace([string](Get-PropertyValue -Payload $Result -Name 'error' -Default ''))) {
+    $Result['error'] = 'resident_surface_readback_timeout'
   }
+  return $Result
 }
 
 function Test-ForegroundSurfaceReadbackObserved {
@@ -657,7 +719,6 @@ $LiveResidentSurfaceReadbackError = [string](Get-PropertyValue -Payload $LiveRes
 $ForegroundSurfaceReadbackError = [string](Get-PropertyValue -Payload $ForegroundSurfaceReadback -Name 'error' -Default '')
 $ResidentSurfaceReadbackTimedOut = (
   $ResidentSurfaceReadbackError -eq 'resident_surface_readback_timeout' -or
-  $LiveResidentSurfaceReadbackError -eq 'resident_surface_readback_timeout' -or
   $ForegroundSurfaceReadbackError -eq 'resident_surface_readback_timeout'
 )
 $ForegroundSurfaceRuntimeBlockers = ConvertTo-StringArray -Value (

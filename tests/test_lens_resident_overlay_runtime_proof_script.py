@@ -27,7 +27,7 @@ def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
         _repo_root() / "scripts" / "lens-resident-overlay-runtime-proof.ps1",
         args,
         cwd=_repo_root(),
-        timeout_seconds=260,
+        timeout_seconds=340,
     )
 
 
@@ -56,7 +56,8 @@ def test_lens_resident_overlay_runtime_proof_observes_boundary_without_authority
     assert payload["requested_resident_surface_foreground_run_seconds"] == int(run_seconds)
     assert payload["resident_surface_foreground_run_seconds"] == int(run_seconds)
     assert payload["resident_surface_effective_foreground_run_seconds"] >= int(run_seconds)
-    assert payload["resident_surface_timeout_seconds"] == 150
+    assert payload["resident_surface_readback_timeout_seconds"] == 60
+    assert payload["resident_surface_timeout_seconds"] >= 150
     assert payload["resident_surface_effective_timeout_seconds"] >= payload["resident_surface_timeout_seconds"]
     if payload["resident_surface_retry_attempted"]:
         assert payload["resident_surface_initial_status"] != "proof_passed"
@@ -157,5 +158,7 @@ def test_lens_resident_overlay_runtime_proof_observes_boundary_without_authority
 def test_lens_resident_overlay_runtime_proof_passes_data_dir_to_surface_child() -> None:
     script = (_repo_root() / "scripts" / "lens-resident-overlay-runtime-proof.ps1").read_text(encoding="utf-8")
 
+    assert "[int]$ResidentSurfaceReadbackTimeoutSeconds = 60" in script
+    assert "'-ResidentSurfaceReadbackTimeoutSeconds', [string]$ResidentSurfaceReadbackTimeoutSeconds" in script
     assert "$ResidentSurfaceArgs += @('-DataDir', $DataDir)" in script
     assert "$ResidentSurfaceRetryArgs += @('-DataDir', $DataDir)" in script

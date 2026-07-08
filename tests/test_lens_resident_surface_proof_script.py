@@ -46,17 +46,22 @@ def test_lens_resident_surface_proof_accepts_isolated_data_dir_contract() -> Non
     assert "Invoke-ResidentSurfaceReadback -DataDir $ReadbackDataRoot" in script
     assert "[int]$ResidentSurfaceReadbackTimeoutSeconds = 30" in script
     assert "Invoke-ResidentSurfaceReadback -DataDir $ReadbackDataRoot -TimeoutSeconds" in script
+    assert "function Get-FreeTcpPort" in script
+    assert "function Wait-ForResidentSurfaceReadback" in script
+    assert '$StartInfo.Arguments = "-m francis api --host 127.0.0.1 --port $Port"' in script
+    assert '$ReadbackUri = "$BaseUrl/lens/resident-surface?limit=5"' in script
 
 
-def test_lens_resident_surface_readback_keeps_python_stderr_out_of_json_stdout() -> None:
+def test_lens_resident_surface_readback_uses_live_http_route_contract() -> None:
     script = (_repo_root() / "scripts" / "lens-resident-surface-proof.ps1").read_text(encoding="utf-8")
 
-    assert "$PythonStdoutPath" in script
-    assert "$PythonStderrPath" in script
+    assert "$ApiStdoutPath" in script
+    assert "$ApiStderrPath" in script
     assert "PYTHONWARNINGS" in script
-    assert "$Output = & $Python.Source $TempScriptPath 2>&1" not in script
-    assert "$Completed = $PythonProcess.WaitForExit($TimeoutSeconds * 1000)" in script
+    assert "TestClient(create_app())" not in script
+    assert "Invoke-WebRequest -UseBasicParsing -Uri $Uri -Method Get" in script
     assert "error = 'resident_surface_readback_timeout'" in script
+    assert "error = 'api_process_exited_before_resident_surface_readback'" in script
     assert "resident_surface_readback_timeout_seconds = $ResidentSurfaceReadbackTimeoutSeconds" in script
     assert "$BaseBlockers += @($ResidentSurfaceRuntimeBlockers)" in script
     assert "if ($ResidentSurfaceReadbackTimedOut) { 'resident_surface_readback_timeout' }" in script
