@@ -292,6 +292,28 @@ If older docs or discussions still use layer language, translate them like this:
 The translation is for orientation only. Roadmap decisions should be made in plane
 terms.
 
+### 3.4 Phase 2 compute substrate amendment
+
+Francis Compute Substrate is a core expanding architecture layer under the existing
+Phase 2 `P7_EXECUTION` direction. It does not replace the Sandboxed Executor
+doctrine; it gives future compute workers a narrow place to attach while preserving
+ORB law.
+
+Future VSC-1, Unreal, desktop Lens, avatar, VM/container, remote worker, and
+simulation systems must attach as adapters to this substrate, not become the
+substrate themselves.
+
+The grounded thesis is that Francis should improve useful work per watt through
+local-first processing, resource-aware scheduling, sandboxing, simulation, reusable
+capabilities, persistent memory, model/tool routing, and receipts-backed execution.
+This is not a claim that virtual compute creates free compute or that Francis has
+solved data-center scaling.
+
+First-slice substrate work must stay internal until its policy, budget, receipt,
+timeout, filesystem, network, memory, and worker boundaries are reviewable. An API,
+visual engine, virtual PC, avatar, desktop Lens bridge, remote worker, or simulator
+may only bind after it can satisfy those substrate adapter obligations.
+
 ---
 
 ## 4. ORB Milestones
