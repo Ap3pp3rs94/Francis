@@ -11,6 +11,7 @@ from typing import Any
 from francis.governance.approval_projection import approval_projection_fields
 from francis.governance.approvals import list_requests
 from francis.governance.redaction import redact_governed_display_value
+from francis.input_actuator.orb_operator import latest_orb_operator_state
 from francis.kernel.paths import data_dir
 from francis.lens.activation import (
     deny_lens_host_activation_execution,
@@ -5709,6 +5710,208 @@ def lens_orb_runtime_identity(*, limit: int = 5, include_process_scan: bool = Tr
     return payload
 
 
+def _orb_body_current_actuator_mode(operator_state: dict[str, Any]) -> str:
+    pointer = _as_dict(operator_state.get("virtual_pointer"))
+    last_action = _as_dict(pointer.get("last_action"))
+    if (
+        bool(operator_state.get("physical_input_performed"))
+        or bool(operator_state.get("uses_user_os_cursor"))
+        or bool(operator_state.get("user_mouse_taken"))
+        or bool(pointer.get("physical_input_performed"))
+        or bool(pointer.get("controls_user_os_cursor"))
+        or bool(pointer.get("user_mouse_taken"))
+    ):
+        return "physical_input_blocked_or_requires_approval"
+    if bool(last_action.get("desktop_action_sent")) or bool(last_action.get("desktop_effect_performed")):
+        return "window_message"
+    return "visual_only"
+
+
+def _orb_body_perspective_contract(
+    *,
+    orb_runtime_identity: dict[str, Any],
+    operator_state: dict[str, Any],
+) -> dict[str, Any]:
+    components = _as_dict(orb_runtime_identity.get("components"))
+    overlay = _as_dict(components.get("overlay"))
+    body_ready = bool(overlay.get("ready")) and bool(overlay.get("overlay_window_visible"))
+    lens_plane_ready = body_ready
+    pointer = _as_dict(operator_state.get("virtual_pointer"))
+    last_action = _as_dict(pointer.get("last_action"))
+    current_actuator_mode = _orb_body_current_actuator_mode(operator_state)
+    safe_app_targeted_actuator_path_available = True
+    pointer_claims_user_input = (
+        bool(operator_state.get("uses_user_os_cursor"))
+        or bool(operator_state.get("user_mouse_taken"))
+        or bool(operator_state.get("physical_input_performed"))
+        or bool(pointer.get("controls_user_os_cursor"))
+        or bool(pointer.get("user_mouse_taken"))
+        or bool(pointer.get("physical_input_performed"))
+    )
+    blockers = _ordered_status_values(
+        [
+            *(["lens_desktop_perception_plane_missing"] if not lens_plane_ready else []),
+            *(["orb_body_state_missing"] if not body_ready else []),
+            *(["safe_app_targeted_actuator_path_missing"] if not safe_app_targeted_actuator_path_available else []),
+            *(["user_input_capture_claimed_by_orb_pointer"] if pointer_claims_user_input else []),
+        ]
+    )
+    return {
+        "kind": "lens.orb.body_perspective_contract",
+        "status": "ready" if not blockers else "blocked",
+        "ready": not blockers,
+        "route": "/lens/orb/body-perspective",
+        "status_route": "/lens/status",
+        "runtime_identity_route": "/lens/orb/runtime-identity",
+        "francis_context": {
+            "identity": "Francis",
+            "body": "Orb",
+            "view": "Lens desktop readback",
+            "allowed_actions": "governed actuator paths only",
+        },
+        "body": {
+            "francis_body": "Orb",
+            "visible_body_surface": "lens.overlay_window",
+            "body_avatar": "operator_facing_orb",
+            "body_is_chat_widget": False,
+            "ready": body_ready,
+            "overlay_pid": _runtime_pid(overlay.get("pid")),
+            "overlay_window_visible": bool(overlay.get("overlay_window_visible")),
+            "always_on_top": bool(overlay.get("always_on_top")),
+            "visual_identity": _as_dict(orb_runtime_identity.get("visual_identity")),
+            "voice_identity": _as_dict(orb_runtime_identity.get("voice_identity")),
+        },
+        "perspective": {
+            "source": "Lens desktop plane",
+            "mode": "third_person_desktop",
+            "plane": "full_desktop_readback",
+            "lens_is_perception_plane": True,
+            "orb_is_body_inside_plane": True,
+            "llm_prompt_contract": (
+                "You are Francis. Your visible body is the Orb. Your current view is the Lens desktop readback. "
+                "Your allowed actions are governed and may only occur through approved actuator paths."
+            ),
+            "ready": lens_plane_ready,
+        },
+        "pointer": {
+            "kind": "orb_virtual_pointer",
+            "pointer_id": _safe_str(pointer.get("pointer_id")).strip() or "francis.orb.primary_virtual_pointer",
+            "available": bool(pointer.get("available")),
+            "mode": _safe_str(pointer.get("mode")).strip() or "orb_pointer",
+            "position": _as_dict(pointer.get("position")),
+            "x": _safe_int(pointer.get("x"), default=0, minimum=0, maximum=10_000),
+            "y": _safe_int(pointer.get("y"), default=0, minimum=0, maximum=10_000),
+            "state_path": _safe_str(pointer.get("state_path")).strip(),
+            "last_action": last_action,
+            "separate_from_user_mouse": True,
+            "represents_francis_intent": True,
+            "controls_user_os_cursor": False,
+            "user_mouse_taken": False,
+            "physical_input_performed": False,
+        },
+        "user_input_separation": {
+            "user_mouse_captured": False,
+            "user_keyboard_captured": False,
+            "francis_pointer_separate_from_user_mouse": True,
+            "francis_keyboard_intent_separate_from_user_keyboard": True,
+            "normal_windows_session_independent_physical_devices_assumed": False,
+            "sendinput_default": False,
+            "physical_input_last_resort": True,
+            "physical_input_requires_explicit_approval_and_receipt": True,
+        },
+        "actuators": {
+            "current_mode": current_actuator_mode,
+            "supported_modes": [
+                "visual_only",
+                "UIA",
+                "window_message",
+                "browser",
+                "isolated_session",
+                "physical_input_blocked_or_requires_approval",
+            ],
+            "safe_app_targeted_actuator_path_available": safe_app_targeted_actuator_path_available,
+            "paths": [
+                {
+                    "mode": "visual_only",
+                    "ready": body_ready,
+                    "default": True,
+                    "effect_scope": "visible_orb_body_and_virtual_pointer_state",
+                    "requires_operator_approval": False,
+                    "uses_user_os_cursor": False,
+                    "captures_user_keyboard": False,
+                },
+                {
+                    "mode": "window_message",
+                    "ready": True,
+                    "default": False,
+                    "effect_scope": "operator_approved_safe_target_windows",
+                    "backend": "orb_desktop_bridge.win32_post_message",
+                    "requires_env_gate": "FRANCIS_ORB_DESKTOP_BRIDGE_ENABLE=1",
+                    "requires_safe_target": True,
+                    "uses_user_os_cursor": False,
+                    "captures_user_keyboard": False,
+                },
+                {
+                    "mode": "UIA",
+                    "ready": False,
+                    "default": False,
+                    "effect_scope": "planned_governed_app_target_adapter",
+                    "blocker": "uia_actuator_path_not_connected",
+                },
+                {
+                    "mode": "browser",
+                    "ready": False,
+                    "default": False,
+                    "effect_scope": "planned_governed_browser_adapter",
+                    "blocker": "browser_actuator_path_not_connected",
+                },
+                {
+                    "mode": "isolated_session",
+                    "ready": False,
+                    "default": False,
+                    "effect_scope": "planned_isolated_session_or_vm_adapter",
+                    "blocker": "isolated_session_actuator_path_not_connected",
+                },
+                {
+                    "mode": "physical_input_blocked_or_requires_approval",
+                    "ready": False,
+                    "default": False,
+                    "effect_scope": "last_resort_explicitly_approved_physical_input",
+                    "sendinput_default": False,
+                    "requires_operator_approval": True,
+                    "requires_receipt": True,
+                },
+            ],
+        },
+        "blockers": blockers,
+        "message": (
+            "Francis body and perspective are explicit: Lens is the desktop plane and the Orb is the body."
+            if not blockers
+            else "Francis body/perspective contract is readable, but missing body, perception, or input-safety proof is explicit."
+        ),
+        "governance": {
+            "read_only_contract": True,
+            "diagnostic_only": True,
+            "execution_authority": False,
+            "approval_decision_authority": False,
+            "desktop_action_authority": False,
+            "physical_input_authority": False,
+            "sendinput_authority": False,
+            "captures_user_mouse": False,
+            "captures_user_keyboard": False,
+            "mutation_authority_granted": False,
+            "memory_write": False,
+        },
+    }
+
+
+def lens_orb_body_perspective_contract() -> dict[str, Any]:
+    return _orb_body_perspective_contract(
+        orb_runtime_identity=lens_orb_runtime_identity(include_process_scan=False),
+        operator_state=latest_orb_operator_state(create_dirs=False),
+    )
+
+
 def lens_status(*, limit: int = 5) -> dict[str, Any]:
     safe_limit = _safe_int(limit, default=5, minimum=1, maximum=50)
     operator = _operator_surface()
@@ -5771,6 +5974,10 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
         overlay_enablement_gate=overlay_enablement_gate,
         include_process_scan=False,
     )
+    orb_body_perspective_contract = _orb_body_perspective_contract(
+        orb_runtime_identity=orb_runtime_identity,
+        operator_state=latest_orb_operator_state(create_dirs=False),
+    )
     resident_surface_activation = lens_resident_surface_activation_boundary(limit=safe_limit)
     pilot_indicator = _pilot_indicator(mode)
     resident_runtime_preflight = _as_dict(resident_host.get("resident_runtime_preflight"))
@@ -5805,6 +6012,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
         "hud": hud,
         "resident_host": resident_host,
         "orb_runtime_identity": orb_runtime_identity,
+        "orb_body_perspective_contract": orb_body_perspective_contract,
         "preflight": preflight,
         "os_binding_readiness": os_binding_readiness,
         "os_binding_execution_readiness": os_binding_execution_readiness,
@@ -5924,6 +6132,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
             "lens_overlay_executions_route": "/lens/overlay/executions",
             "lens_overlay_execute_route": "/lens/overlay/execute",
             "lens_orb_runtime_identity_route": "/lens/orb/runtime-identity",
+            "lens_orb_body_perspective_route": "/lens/orb/body-perspective",
             "lens_summon_authority_request_route": "/lens/summon/authority/request",
             "lens_summon_authority_requests_route": "/lens/summon/authority/requests",
             "lens_summon_authority_route": "/lens/summon/authority",

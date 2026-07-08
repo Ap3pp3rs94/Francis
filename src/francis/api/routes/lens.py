@@ -77,6 +77,7 @@ from francis.lens import (
     lens_overlay_authority_request_readback,
     lens_overlay_enablement_gate,
     lens_overlay_window_execution_receipts,
+    lens_orb_body_perspective_contract,
     lens_orb_runtime_identity,
     lens_resident_runtime_activation_denial_receipts,
     lens_resident_runtime_activation_execution_receipts,
@@ -424,6 +425,11 @@ def orb_runtime_identity(
     include_process_scan: bool = True,
 ) -> dict[str, Any]:
     return lens_orb_runtime_identity(limit=limit, include_process_scan=include_process_scan)
+
+
+@router.get("/orb/body-perspective")
+def orb_body_perspective() -> dict[str, Any]:
+    return lens_orb_body_perspective_contract()
 
 
 @router.get("/preflight")

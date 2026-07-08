@@ -43,21 +43,23 @@ def _utc_now() -> str:
     return datetime.now(UTC).isoformat()
 
 
-def _state_root() -> Path:
+def _state_root(*, create: bool = True) -> Path:
     override = os.environ.get("FRANCIS_ORB_OPERATOR_STATE_DIR")
     root = Path(override) if override else repo_root() / ".francis" / "orb_operator"
-    root.mkdir(parents=True, exist_ok=True)
+    if create:
+        root.mkdir(parents=True, exist_ok=True)
     return root
 
 
-def _receipt_dir() -> Path:
-    path = _state_root() / "receipts"
-    path.mkdir(parents=True, exist_ok=True)
+def _receipt_dir(*, create: bool = True) -> Path:
+    path = _state_root(create=create) / "receipts"
+    if create:
+        path.mkdir(parents=True, exist_ok=True)
     return path
 
 
-def _virtual_pointer_state_path() -> Path:
-    return _state_root() / "virtual_pointer_state.json"
+def _virtual_pointer_state_path(*, create: bool = True) -> Path:
+    return _state_root(create=create) / "virtual_pointer_state.json"
 
 
 def _input_actuator_state_root() -> Path:
@@ -123,8 +125,8 @@ def _rect_center(rect: dict[str, Any]) -> tuple[int, int]:
     return (_bounded_coord(x + width // 2, "rect.center_x"), _bounded_coord(y + height // 2, "rect.center_y"))
 
 
-def _read_virtual_pointer_state() -> dict[str, Any]:
-    path = _virtual_pointer_state_path()
+def _read_virtual_pointer_state(*, create: bool = True) -> dict[str, Any]:
+    path = _virtual_pointer_state_path(create=create)
     if not path.exists():
         return {}
     try:
@@ -1270,8 +1272,8 @@ def operator_receipts_readback(args: dict[str, Any] | None = None) -> dict[str, 
     }
 
 
-def _virtual_pointer_readback() -> dict[str, Any]:
-    state = _read_virtual_pointer_state()
+def _virtual_pointer_readback(*, create_dirs: bool = True) -> dict[str, Any]:
+    state = _read_virtual_pointer_state(create=create_dirs)
     if not state:
         return {
             "available": False,
@@ -1291,7 +1293,7 @@ def _virtual_pointer_readback() -> dict[str, Any]:
         "position": state.get("position") if isinstance(state.get("position"), dict) else {},
         "updated_at": _clean_text(state.get("updated_at")),
         "last_action": last_action,
-        "state_path": str(_virtual_pointer_state_path()),
+        "state_path": str(_virtual_pointer_state_path(create=create_dirs)),
         "controls_user_os_cursor": False,
         "user_mouse_taken": False,
         "physical_input_performed": False,
@@ -1299,9 +1301,14 @@ def _virtual_pointer_readback() -> dict[str, Any]:
     }
 
 
-def latest_orb_operator_state() -> dict[str, Any]:
-    pointer = _virtual_pointer_readback()
-    receipts = sorted(_receipt_dir().glob("*.json"), key=lambda item: item.stat().st_mtime, reverse=True)[:1]
+def latest_orb_operator_state(*, create_dirs: bool = True) -> dict[str, Any]:
+    pointer = _virtual_pointer_readback(create_dirs=create_dirs)
+    receipt_root = _receipt_dir(create=create_dirs)
+    receipts = (
+        sorted(receipt_root.glob("*.json"), key=lambda item: item.stat().st_mtime, reverse=True)[:1]
+        if receipt_root.exists()
+        else []
+    )
     if not receipts:
         return {
             "state": "idle",

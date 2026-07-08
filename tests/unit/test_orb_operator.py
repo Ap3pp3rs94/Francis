@@ -387,6 +387,19 @@ def test_latest_orb_operator_state_is_read_only_feedback(tmp_path: Path, monkeyp
     assert bridged["grants_execution_authority"] is False
 
 
+def test_latest_orb_operator_state_can_read_without_creating_state_dirs(tmp_path: Path, monkeypatch) -> None:
+    state_root = tmp_path / "orb_operator"
+    monkeypatch.setenv("FRANCIS_ORB_OPERATOR_STATE_DIR", str(state_root))
+
+    state = latest_orb_operator_state(create_dirs=False)
+
+    assert state["read_only"] is True
+    assert state["feedback_state"] == "idle"
+    assert state["virtual_pointer"]["available"] is False
+    assert state["grants_execution_authority"] is False
+    assert not state_root.exists()
+
+
 def test_latest_orb_operator_state_surfaces_virtual_pointer(tmp_path: Path, monkeypatch) -> None:
     _envs(tmp_path, monkeypatch)
     submit_orb_intent({"mode": "orb_pointer", "intent": {"kind": "move_to", "x": 33, "y": 44}})

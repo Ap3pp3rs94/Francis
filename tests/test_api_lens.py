@@ -853,6 +853,104 @@ def test_lens_runtime_process_scan_flags_competing_overlay(monkeypatch) -> None:
     assert "<canonical_data_root>" in payload["candidates"][0]["command_line_redacted"]
 
 
+def test_lens_orb_body_perspective_contract_models_orb_as_body_without_physical_input() -> None:
+    from francis.lens.status import _orb_body_perspective_contract
+
+    payload = _orb_body_perspective_contract(
+        orb_runtime_identity={
+            "components": {
+                "overlay": {
+                    "ready": True,
+                    "pid": 105,
+                    "overlay_window_visible": True,
+                    "always_on_top": True,
+                }
+            },
+            "visual_identity": {"status": "ready", "ring_color_contract_ready": True},
+            "voice_identity": {"status": "ready", "runtime_provider": "ElevenLabs"},
+        },
+        operator_state={
+            "state": "complete",
+            "feedback_state": "complete",
+            "uses_user_os_cursor": False,
+            "user_mouse_taken": False,
+            "physical_input_performed": False,
+            "virtual_pointer": {
+                "available": True,
+                "pointer_id": "francis.orb.primary_virtual_pointer",
+                "mode": "orb_pointer",
+                "x": 33,
+                "y": 44,
+                "position": {"x": 33, "y": 44, "source": "orb_virtual_pointer"},
+                "state_path": "D:/Francis/.francis/orb_operator/virtual_pointer_state.json",
+                "last_action": {
+                    "status": "virtual_pointer_click_recorded",
+                    "desktop_bridge_status": "blocked_bridge_disabled",
+                    "desktop_action_sent": False,
+                    "desktop_effect_performed": False,
+                    "requires_app_bridge_for_desktop_effect": True,
+                },
+                "controls_user_os_cursor": False,
+                "user_mouse_taken": False,
+                "physical_input_performed": False,
+            },
+        },
+    )
+
+    assert payload["kind"] == "lens.orb.body_perspective_contract"
+    assert payload["ready"] is True
+    assert payload["body"]["francis_body"] == "Orb"
+    assert payload["body"]["body_is_chat_widget"] is False
+    assert payload["perspective"]["mode"] == "third_person_desktop"
+    assert payload["perspective"]["lens_is_perception_plane"] is True
+    assert payload["perspective"]["orb_is_body_inside_plane"] is True
+    assert payload["pointer"]["kind"] == "orb_virtual_pointer"
+    assert payload["pointer"]["separate_from_user_mouse"] is True
+    assert payload["pointer"]["controls_user_os_cursor"] is False
+    assert payload["user_input_separation"]["normal_windows_session_independent_physical_devices_assumed"] is False
+    assert payload["user_input_separation"]["sendinput_default"] is False
+    assert payload["actuators"]["current_mode"] == "visual_only"
+    physical_path = {item["mode"]: item for item in payload["actuators"]["paths"]}[
+        "physical_input_blocked_or_requires_approval"
+    ]
+    assert physical_path["ready"] is False
+    assert physical_path["requires_operator_approval"] is True
+    assert payload["governance"]["execution_authority"] is False
+    assert payload["governance"]["sendinput_authority"] is False
+    assert payload["blockers"] == []
+
+
+def test_lens_orb_body_perspective_route_uses_contract(monkeypatch) -> None:
+    from fastapi.testclient import TestClient
+
+    import francis.api.routes.lens as lens_routes
+    from francis.api.app import create_app
+
+    def fake_contract() -> dict[str, Any]:
+        return {
+            "kind": "lens.orb.body_perspective_contract",
+            "status": "ready",
+            "ready": True,
+            "perspective": {"mode": "third_person_desktop"},
+            "governance": {
+                "read_only_contract": True,
+                "execution_authority": False,
+                "physical_input_authority": False,
+            },
+        }
+
+    monkeypatch.setattr(lens_routes, "lens_orb_body_perspective_contract", fake_contract)
+    client = TestClient(create_app())
+
+    response = client.get("/lens/orb/body-perspective")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["kind"] == "lens.orb.body_perspective_contract"
+    assert body["perspective"]["mode"] == "third_person_desktop"
+    assert body["governance"]["execution_authority"] is False
+
+
 def test_lens_os_binding_readiness_groups_blockers_without_authority(
     monkeypatch,
     tmp_path: Path,
