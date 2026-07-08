@@ -24,6 +24,7 @@ from francis.compute_substrate import (
     InMemoryComputeAdapterRegistry,
     LocalJsonComputeApprovalStore,
     LocalJsonComputeReceiptStore,
+    LocalJsonComputeStatusStore,
     ResourceBudget,
     TaskEnvelope,
     WorkerDescriptor,
@@ -374,6 +375,29 @@ def test_valid_adapter_request_submits_through_compute_substrate_service() -> No
     assert result.receipt_id
     assert result.submission_result is not None
     assert service.status_for_task("adapter-valid").status == ComputeTaskStatus.SUCCEEDED
+
+
+def test_adapter_gateway_records_durable_status_when_service_is_configured(tmp_path: Path) -> None:
+    status_store = LocalJsonComputeStatusStore(tmp_path / "adapter-status")
+    gateway, service = _gateway(service=_RecordingService(status_store=status_store))
+
+    result = gateway.submit(
+        _request(
+            request_id="adapter-durable-status",
+            payload={"message": "secret-adapter-payload"},
+        )
+    )
+
+    assert service.submit_calls == 1
+    assert result.ok is True
+    assert result.submission_result is not None
+    assert result.submission_result.record.durable_status_persistence is True
+    assert status_store.get_by_task_id("adapter-durable-status") == result.submission_result.record
+    assert service.status_for_task("adapter-durable-status") == result.submission_result.record
+    status_text = (tmp_path / "adapter-status" / "tasks" / "adapter-durable-status.json").read_text(encoding="utf-8")
+    assert "secret-adapter-payload" not in status_text
+    assert '"stores_payload": false' in status_text
+    assert '"stores_output": false' in status_text
 
 
 def test_adapter_gateway_does_not_import_governor_or_backend_directly() -> None:

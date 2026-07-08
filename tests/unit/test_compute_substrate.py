@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 import francis.compute_substrate_approvals as approval_module
+import francis.compute_substrate_service as service_module
 from francis.compute_substrate import (
     COMPUTE_RECEIPT_KIND,
     LIVE_LEARNING_EVENT_KIND,
@@ -21,6 +22,7 @@ from francis.compute_substrate import (
     ComputeSubmission,
     ComputeSubmissionResult,
     ComputeSubstrateService,
+    ComputeTaskRecord,
     ComputeTaskStatus,
     ExecutionContext,
     ExecutionDeadline,
@@ -29,6 +31,7 @@ from francis.compute_substrate import (
     InMemoryComputeStatusStore,
     LocalJsonComputeApprovalStore,
     LocalJsonComputeReceiptStore,
+    LocalJsonComputeStatusStore,
     ResourceBudget,
     SafeLocalBackend,
     SubstrateGovernor,
@@ -1574,6 +1577,122 @@ def test_governor_with_receipt_store_persists_compute_receipt_and_not_learning(
     assert store.read_receipt(result.receipt.receipt_id) == result.receipt
 
 
+def _status_record(
+    *,
+    task_id: str = "status-task",
+    correlation_id: str = "status-trace",
+    status: str = ComputeTaskStatus.SUCCEEDED,
+) -> ComputeTaskRecord:
+    return ComputeTaskRecord(
+        task_id=task_id,
+        correlation_id=correlation_id,
+        capability="echo",
+        worker_id="safe-local-1",
+        status=status,
+        receipt_id="compute_capability_status_123",
+        receipt_persistence_status="in_memory_only",
+        started_at_ms=100,
+        finished_at_ms=150,
+        duration_ms=50,
+    )
+
+
+def test_local_json_compute_status_store_writes_and_reads_status_record(tmp_path: Path) -> None:
+    store = LocalJsonComputeStatusStore(tmp_path / "compute-status")
+    record = _status_record(task_id="status_task_SAFE-123", correlation_id="trace_status_SAFE-123")
+
+    persisted = store.upsert(record)
+
+    assert persisted.durable_status_persistence is True
+    assert persisted.status_version == 1
+    assert store.describe()["durable"] is True
+    assert store.describe()["background_execution"] is False
+    assert store.get_by_task_id("status_task_SAFE-123") == persisted
+    assert store.get_by_correlation_id("trace_status_SAFE-123") == persisted
+
+    status_path = tmp_path / "compute-status" / "tasks" / "status_task_SAFE-123.json"
+    correlation_path = tmp_path / "compute-status" / "correlations" / "trace_status_SAFE-123.json"
+    payload = json.loads(status_path.read_text(encoding="utf-8"))
+    status_text = json.dumps(payload, sort_keys=True)
+
+    assert correlation_path.exists()
+    assert payload["schema_version"] == 1
+    assert payload["record"]["task_id"] == "status_task_SAFE-123"
+    assert payload["record"]["stores_payload"] is False
+    assert payload["record"]["stores_output"] is False
+    assert payload["record"]["durable_status_persistence"] is True
+    assert payload["governance"]["does_not_persist_task_payload"] is True
+    assert payload["governance"]["does_not_persist_task_output"] is True
+    assert "raw task payload" not in status_text
+    assert "raw execution output" not in status_text
+
+
+@pytest.mark.parametrize(
+    "record_id",
+    [
+        "../escape",
+        "..\\escape",
+        "nested/escape",
+        "nested\\escape",
+        "/absolute/path",
+        "\\absolute\\path",
+        "C:/absolute/path",
+        "C:\\absolute\\path",
+        "status.with.dot",
+        "status:with:colon",
+        "status\u2215with\u2215unicode-separator",
+        "",
+        "   ",
+    ],
+)
+def test_local_json_compute_status_store_rejects_unsafe_task_and_correlation_ids(
+    tmp_path: Path,
+    record_id: str,
+) -> None:
+    store = LocalJsonComputeStatusStore(tmp_path / "compute-status")
+
+    with pytest.raises(ValueError, match="unsafe_task_id"):
+        store.get_by_task_id(record_id)
+
+    with pytest.raises(ValueError, match="unsafe_task_id"):
+        store.upsert(_status_record(task_id=record_id, correlation_id="safe-correlation"))
+
+    with pytest.raises(ValueError, match="unsafe_correlation_id"):
+        store.get_by_correlation_id(record_id)
+
+    with pytest.raises(ValueError, match="unsafe_correlation_id"):
+        store.upsert(_status_record(task_id="safe-task", correlation_id=record_id))
+
+    assert not (tmp_path / "compute-status").exists()
+
+
+def test_unsafe_status_ids_are_not_silently_normalized_into_persisted_aliases(tmp_path: Path) -> None:
+    store = LocalJsonComputeStatusStore(tmp_path / "compute-status")
+
+    unsafe_task_ids = ("../escape", "..\\escape", "C:/absolute/path", "status:with:colon")
+    for task_id in unsafe_task_ids:
+        with pytest.raises(ValueError, match="unsafe_task_id"):
+            store.upsert(_status_record(task_id=task_id, correlation_id="safe-correlation"))
+
+    assert not (tmp_path / "compute-status").exists()
+    assert len(set(unsafe_task_ids)) == len(unsafe_task_ids)
+    assert store.get_by_task_id("escape") is None
+    assert store.get_by_task_id("status-with-colon") is None
+    assert store.get_by_task_id("status_with_colon") is None
+
+
+def test_failed_local_json_compute_status_write_does_not_return_fake_durable_record(tmp_path: Path) -> None:
+    blocked_root = tmp_path / "status-root-is-file"
+    blocked_root.write_text("not a directory", encoding="utf-8")
+    store = LocalJsonComputeStatusStore(blocked_root)
+
+    with pytest.raises(OSError):
+        store.upsert(_status_record(task_id="status-write-fails", correlation_id="trace-status-write-fails"))
+
+    assert store.get_by_task_id("status-write-fails") is None
+    assert store.get_by_correlation_id("trace-status-write-fails") is None
+
+
 class _RecordingGovernor(SubstrateGovernor):
     def __init__(self, **kwargs: object) -> None:
         super().__init__(**kwargs)
@@ -1654,6 +1773,7 @@ def test_compute_substrate_service_executes_with_valid_scoped_approval() -> None
     assert result.ok is True
     assert result.status == ComputeTaskStatus.SUCCEEDED
     assert result.record.approval_required is True
+    assert result.record.approval_id == "approval-echo"
     assert result.record.approval_satisfied is True
     assert result.record.approval_consumed is True
     consumed = approval_store.get("approval-echo")
@@ -1800,6 +1920,193 @@ def test_compute_substrate_service_reports_failed_receipt_persistence_truthfully
     assert service.status_for_task("service-receipt-fails") == result.record
 
 
+def test_compute_substrate_service_with_local_json_status_store_persists_success(tmp_path: Path) -> None:
+    status_store = LocalJsonComputeStatusStore(tmp_path / "compute-status")
+    service = ComputeSubstrateService(status_store=status_store)
+
+    result = service.submit(
+        create_task_envelope(
+            "echo",
+            task_id="service-status-success",
+            trace_id="trace-service-status-success",
+            payload={
+                "message": "secret-service-payload",
+                "prompt": "raw model prompt should not persist",
+                "path": "C:/secret/private",
+            },
+        )
+    )
+
+    readback = status_store.get_by_task_id("service-status-success")
+    correlation_readback = status_store.get_by_correlation_id("trace-service-status-success")
+    status_text = (tmp_path / "compute-status" / "tasks" / "service-status-success.json").read_text(encoding="utf-8")
+
+    assert result.ok is True
+    assert result.status == ComputeTaskStatus.SUCCEEDED
+    assert result.record.durable_status_persistence is True
+    assert service.status_for_task("service-status-success") == result.record
+    assert service.status_for_correlation("trace-service-status-success") == result.record
+    assert readback == result.record
+    assert correlation_readback == result.record
+    assert "secret-service-payload" not in status_text
+    assert "raw model prompt should not persist" not in status_text
+    assert "C:/secret/private" not in status_text
+    assert '"stores_payload": false' in status_text
+    assert '"stores_output": false' in status_text
+
+
+def test_compute_substrate_service_with_local_json_status_store_persists_denied_approval(
+    tmp_path: Path,
+) -> None:
+    status_store = LocalJsonComputeStatusStore(tmp_path / "compute-status")
+    service = ComputeSubstrateService(status_store=status_store)
+
+    result = service.submit(
+        create_task_envelope(
+            "echo",
+            task_id="service-status-denied-approval",
+            trace_id="trace-service-status-denied-approval",
+            budget=ResourceBudget(approval_required=True),
+        )
+    )
+
+    readback = status_store.get_by_task_id("service-status-denied-approval")
+
+    assert result.ok is False
+    assert result.status == ComputeTaskStatus.DENIED
+    assert result.record.denial_reason == "missing_approval"
+    assert result.record.approval_required is True
+    assert result.record.approval_satisfied is False
+    assert readback == result.record
+
+
+def test_compute_substrate_service_with_local_json_status_store_persists_cancellation_and_deadline(
+    tmp_path: Path,
+) -> None:
+    status_store = LocalJsonComputeStatusStore(tmp_path / "compute-status")
+    service = ComputeSubstrateService(status_store=status_store)
+
+    cancelled = service.submit(
+        create_task_envelope(
+            "echo",
+            task_id="service-status-cancelled",
+            trace_id="trace-service-status-cancelled",
+        ),
+        context=ExecutionContext(
+            cancellation_token=CancellationToken(cancel_requested=True, reason="operator_cancelled"),
+        ),
+    )
+    timed_out = service.submit(
+        create_task_envelope(
+            "echo",
+            task_id="service-status-timeout",
+            trace_id="trace-service-status-timeout",
+        ),
+        context=ExecutionContext(
+            deadline=ExecutionDeadline(deadline_at_ms=1, source="test_expired"),
+        ),
+    )
+
+    assert cancelled.status == ComputeTaskStatus.CANCELLED
+    assert cancelled.record.cancellation_requested is True
+    assert cancelled.record.cancellation_reason == "operator_cancelled"
+    assert status_store.get_by_task_id("service-status-cancelled") == cancelled.record
+    assert timed_out.status == ComputeTaskStatus.TIMED_OUT
+    assert timed_out.record.timed_out is True
+    assert timed_out.record.timeout_stage == "pre_execution"
+    assert status_store.get_by_task_id("service-status-timeout") == timed_out.record
+
+
+def test_compute_substrate_service_with_local_json_status_store_persists_receipt_failure_truth(
+    tmp_path: Path,
+) -> None:
+    status_store = LocalJsonComputeStatusStore(tmp_path / "compute-status")
+    service = ComputeSubstrateService(
+        receipt_store=_FailingReceiptStore(),
+        status_store=status_store,
+    )
+
+    result = service.submit(
+        create_task_envelope(
+            "echo",
+            task_id="service-status-receipt-fails",
+            trace_id="trace-service-status-receipt-fails",
+            payload={"message": "secret-output-should-not-persist"},
+        )
+    )
+
+    status_text = (tmp_path / "compute-status" / "tasks" / "service-status-receipt-fails.json").read_text(
+        encoding="utf-8"
+    )
+
+    assert result.ok is False
+    assert result.status == ComputeTaskStatus.RECEIPT_PERSISTENCE_FAILED
+    assert result.record.receipt_persistence_status == "persistence_failed"
+    assert result.record.receipt_error.startswith("OSError: receipt store unavailable")
+    assert status_store.get_by_task_id("service-status-receipt-fails") == result.record
+    assert "secret-output-should-not-persist" not in status_text
+
+
+def test_compute_substrate_service_without_durable_status_store_remains_in_memory_only() -> None:
+    service = ComputeSubstrateService()
+
+    result = service.submit(create_task_envelope("echo", task_id="service-memory-status-only"))
+
+    assert result.ok is True
+    assert result.record.durable_status_persistence is False
+    assert result.record.to_dict()["durable_status_persistence"] is False
+    assert service.status_store.describe()["durable"] is False
+    assert service.status_for_task("service-memory-status-only") == result.record
+
+
+def test_durable_status_receipt_and_approval_persistence_remain_separate(tmp_path: Path) -> None:
+    approval_store = LocalJsonComputeApprovalStore(tmp_path / "compute-approvals")
+    receipt_store = LocalJsonComputeReceiptStore(tmp_path / "compute-receipts")
+    status_store = LocalJsonComputeStatusStore(tmp_path / "compute-status")
+    approval_store.add(
+        _approval_grant(
+            approval_id="approval-status-durable",
+            task_id="service-status-approved",
+            approval_note="approval-note-secret-should-not-persist-in-status",
+        )
+    )
+    service = ComputeSubstrateService(
+        approval_store=approval_store,
+        receipt_store=receipt_store,
+        status_store=status_store,
+    )
+
+    result = service.submit(
+        create_task_envelope(
+            "echo",
+            task_id="service-status-approved",
+            trace_id="trace-service-status-approved",
+            approval_id="approval-status-durable",
+            budget=ResourceBudget(approval_required=True),
+            payload={"message": "secret-approved-payload"},
+        )
+    )
+
+    consumed = approval_store.get("approval-status-durable")
+    status_text = (tmp_path / "compute-status" / "tasks" / "service-status-approved.json").read_text(encoding="utf-8")
+
+    assert result.ok is True
+    assert result.record.approval_required is True
+    assert result.record.approval_id == "approval-status-durable"
+    assert result.record.approval_satisfied is True
+    assert result.record.approval_consumed is True
+    assert result.record.receipt_persisted is True
+    assert result.record.receipt_persistence_status == "persisted_local_json"
+    assert status_store.get_by_task_id("service-status-approved") == result.record
+    assert receipt_store.read_receipt(result.receipt.receipt_id) == result.receipt
+    assert consumed is not None
+    assert consumed.consumed_by_task_id == "service-status-approved"
+    assert (tmp_path / "compute-approvals" / "approval-status-durable.json").exists()
+    assert (tmp_path / "compute-receipts" / f"{result.receipt.receipt_id}.json").exists()
+    assert "approval-note-secret-should-not-persist-in-status" not in status_text
+    assert "secret-approved-payload" not in status_text
+
+
 def test_compute_substrate_service_preserves_worker_registry_denials() -> None:
     disabled_registry = WorkerRegistry()
     disabled_registry.register(_DisabledBackend())
@@ -1864,6 +2171,7 @@ def test_compute_substrate_service_describes_internal_non_api_boundary() -> None
     assert description["stores_output"] is False
     assert description["writes_memory"] is False
     assert description["approval_store"]["kind"] == "none"
+    assert description["durable_status_persistence"] is False
     assert description["durable_approval_persistence"] is False
     assert description["live_learning_persistence"] is False
     assert description["os_level_cpu_memory_enforcement"] is False
@@ -1884,19 +2192,35 @@ def test_compute_substrate_service_describes_configured_durable_approval_store(t
     assert description["no_background_worker"] is True
 
 
+def test_compute_substrate_service_describes_configured_durable_status_store(tmp_path: Path) -> None:
+    service = ComputeSubstrateService(status_store=LocalJsonComputeStatusStore(tmp_path / "compute-status"))
+
+    description = service.describe()
+
+    assert description["status_store"]["kind"] == "francis.compute_substrate.local_json_status_store"
+    assert description["status_store"]["durable"] is True
+    assert description["durable_status_persistence"] is True
+    assert description["no_api_route"] is True
+    assert description["no_background_worker"] is True
+    assert description["status_store"]["stores_payload"] is False
+    assert description["status_store"]["stores_output"] is False
+
+
 def test_public_facade_exports_compute_submission_status_contracts() -> None:
     submission = ComputeSubmission(create_task_envelope("echo", task_id="service-facade"))
     service = ComputeSubstrateService()
     approval_store = LocalJsonComputeApprovalStore
+    status_store = LocalJsonComputeStatusStore
 
     assert submission.to_dict()["stores_payload"] is False
     assert service.status_for_task("service-facade").status == ComputeTaskStatus.UNKNOWN
     assert ComputeTaskStatus.RECEIPT_PERSISTENCE_FAILED == "receipt_persistence_failed"
     assert approval_store.__name__ == "LocalJsonComputeApprovalStore"
+    assert status_store.__name__ == "LocalJsonComputeStatusStore"
 
 
 def test_compute_substrate_approval_module_does_not_add_execution_authority() -> None:
-    source = inspect.getsource(approval_module)
+    source = inspect.getsource(approval_module) + inspect.getsource(service_module)
 
     for forbidden in (
         "subprocess",

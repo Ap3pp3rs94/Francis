@@ -36,6 +36,7 @@ from francis.compute_substrate_service import (
     ComputeTaskRecord,
     ComputeTaskStatus,
     InMemoryComputeStatusStore,
+    LocalJsonComputeStatusStore,
 )
 from francis.compute_substrate_types import (
     COMPUTE_RECEIPT_KIND,
@@ -99,6 +100,7 @@ __all__ = [
     "LocalJsonComputeReceiptStore",
     "LocalJsonComputeApprovalStore",
     "RegisteredFunction",
+    "LocalJsonComputeStatusStore",
     "ResourceBudget",
     "SafeLocalBackend",
     "SubstrateDecision",

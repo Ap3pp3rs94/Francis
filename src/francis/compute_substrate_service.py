@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import json
+import os
+import uuid
+from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
+from pathlib import Path
 from typing import Any, Protocol
 
 from francis.compute_substrate_approvals import ApprovalStore
@@ -16,6 +21,10 @@ from francis.compute_substrate_types import (
     ExecutionResult,
     TaskEnvelope,
 )
+from francis.kernel.paths import data_dir
+
+_STATUS_SCHEMA_VERSION = 1
+_SAFE_STATUS_ID_CHARS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-")
 
 
 class ComputeTaskStatus:
@@ -61,6 +70,7 @@ class ComputeTaskRecord:
     error: str = ""
     denial_reason: str = ""
     approval_required: bool = False
+    approval_id: str = ""
     approval_satisfied: bool = False
     approval_consumed: bool = False
     cancellation_requested: bool = False
@@ -78,15 +88,19 @@ class ComputeTaskRecord:
     duration_ms: int = 0
     created_at_ms: int = field(default_factory=_now_ms)
     updated_at_ms: int = field(default_factory=_now_ms)
+    status_version: int = _STATUS_SCHEMA_VERSION
+    durable_status_persistence: bool = False
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "status_version", _int_or_default(self.status_version, default=_STATUS_SCHEMA_VERSION))
         object.__setattr__(self, "task_id", _safe_record_text(self.task_id))
-        object.__setattr__(self, "correlation_id", _safe_record_text(self.correlation_id))
+        object.__setattr__(self, "correlation_id", _bounded_text(self.correlation_id, limit=160))
         object.__setattr__(self, "capability", _bounded_text(self.capability, limit=120))
         object.__setattr__(self, "worker_id", _safe_record_text(self.worker_id))
         object.__setattr__(self, "status", _safe_status(self.status))
         object.__setattr__(self, "error", _bounded_text(self.error))
         object.__setattr__(self, "denial_reason", _bounded_text(self.denial_reason))
+        object.__setattr__(self, "approval_id", _safe_record_text(self.approval_id))
         object.__setattr__(self, "cancellation_reason", _bounded_text(self.cancellation_reason))
         object.__setattr__(self, "timeout_stage", _bounded_text(self.timeout_stage, limit=80) or "not_applicable")
         object.__setattr__(self, "receipt_id", _safe_record_text(self.receipt_id))
@@ -135,6 +149,7 @@ class ComputeTaskRecord:
             error=error,
             denial_reason=denial_reason,
             approval_required=bool(governance.get("approval_required", False)),
+            approval_id=result.receipt.approval_id,
             approval_satisfied=bool(governance.get("approval_satisfied", False)),
             approval_consumed=bool(governance.get("approval_consumed", False)),
             cancellation_requested=bool(governance.get("cancellation_requested", False)),
@@ -152,6 +167,39 @@ class ComputeTaskRecord:
             duration_ms=result.elapsed_ms,
             created_at_ms=created_at_ms,
             updated_at_ms=result.ended_at_ms,
+        )
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, Any]) -> ComputeTaskRecord:
+        return cls(
+            status_version=_int_or_default(payload.get("status_version"), default=_STATUS_SCHEMA_VERSION),
+            task_id=payload.get("task_id", ""),
+            correlation_id=payload.get("correlation_id", ""),
+            capability=payload.get("capability", ""),
+            worker_id=payload.get("worker_id", ""),
+            status=payload.get("status", ComputeTaskStatus.UNKNOWN),
+            error=payload.get("error", ""),
+            denial_reason=payload.get("denial_reason", ""),
+            approval_required=bool(payload.get("approval_required", False)),
+            approval_id=payload.get("approval_id", ""),
+            approval_satisfied=bool(payload.get("approval_satisfied", False)),
+            approval_consumed=bool(payload.get("approval_consumed", False)),
+            cancellation_requested=bool(payload.get("cancellation_requested", False)),
+            cancellation_reason=payload.get("cancellation_reason", ""),
+            timed_out=bool(payload.get("timed_out", False)),
+            timeout_stage=payload.get("timeout_stage", "not_applicable"),
+            execution_started=bool(payload.get("execution_started", False)),
+            execution_finished=bool(payload.get("execution_finished", False)),
+            receipt_id=payload.get("receipt_id", ""),
+            receipt_persisted=bool(payload.get("receipt_persisted", False)),
+            receipt_persistence_status=payload.get("receipt_persistence_status", "not_available"),
+            receipt_error=payload.get("receipt_error", ""),
+            started_at_ms=_int_or_default(payload.get("started_at_ms"), default=0),
+            finished_at_ms=_int_or_default(payload.get("finished_at_ms"), default=0),
+            duration_ms=_int_or_default(payload.get("duration_ms"), default=0),
+            created_at_ms=_int_or_default(payload.get("created_at_ms"), default=_now_ms()),
+            updated_at_ms=_int_or_default(payload.get("updated_at_ms"), default=_now_ms()),
+            durable_status_persistence=bool(payload.get("durable_status_persistence", False)),
         )
 
     @classmethod
@@ -175,6 +223,7 @@ class ComputeTaskRecord:
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "status_version": self.status_version,
             "task_id": self.task_id,
             "correlation_id": self.correlation_id,
             "capability": self.capability,
@@ -183,6 +232,7 @@ class ComputeTaskRecord:
             "error": self.error,
             "denial_reason": self.denial_reason,
             "approval_required": self.approval_required,
+            "approval_id": self.approval_id,
             "approval_satisfied": self.approval_satisfied,
             "approval_consumed": self.approval_consumed,
             "cancellation_requested": self.cancellation_requested,
@@ -202,7 +252,7 @@ class ComputeTaskRecord:
             "updated_at_ms": self.updated_at_ms,
             "stores_payload": False,
             "stores_output": False,
-            "durable_status_persistence": False,
+            "durable_status_persistence": self.durable_status_persistence,
             "background_execution": False,
         }
 
@@ -297,6 +347,99 @@ class InMemoryComputeStatusStore:
         }
 
 
+class LocalJsonComputeStatusStore:
+    """Local JSON persistence for bounded compute task status records."""
+
+    def __init__(self, status_root: Path | str | None = None) -> None:
+        root = (
+            Path(status_root)
+            if status_root is not None
+            else data_dir() / "artifacts" / "compute_substrate" / "status_records"
+        )
+        self.status_root = root.expanduser().resolve()
+
+    def upsert(self, record: ComputeTaskRecord) -> ComputeTaskRecord:
+        task_id = _safe_status_id(record.task_id, field_name="task_id")
+        correlation_id = _safe_status_id(record.correlation_id, field_name="correlation_id")
+        persisted_record = replace(
+            record,
+            task_id=task_id,
+            correlation_id=correlation_id,
+            status_version=_STATUS_SCHEMA_VERSION,
+            durable_status_persistence=True,
+        )
+        task_path = self._task_path(task_id)
+        task_path.parent.mkdir(parents=True, exist_ok=True)
+        _write_json_replace(task_path, _status_payload(persisted_record))
+        if correlation_id:
+            correlation_path = self._correlation_path(correlation_id)
+            correlation_path.parent.mkdir(parents=True, exist_ok=True)
+            _write_json_replace(
+                correlation_path,
+                {
+                    "schema_version": _STATUS_SCHEMA_VERSION,
+                    "kind": "francis.compute_substrate.local_json_status_correlation_index",
+                    "correlation_id": correlation_id,
+                    "task_id": task_id,
+                    "governance": _status_store_governance(),
+                },
+            )
+        return persisted_record
+
+    def get_by_task_id(self, task_id: str) -> ComputeTaskRecord | None:
+        path = self._task_path(task_id)
+        if not path.exists():
+            return None
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        return _record_from_status_payload(payload)
+
+    def get_by_correlation_id(self, correlation_id: str) -> ComputeTaskRecord | None:
+        path = self._correlation_path(correlation_id)
+        if not path.exists():
+            return None
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        if not isinstance(payload, dict):
+            return None
+        task_id = _safe_status_id(payload.get("task_id"), field_name="task_id")
+        return self.get_by_task_id(task_id)
+
+    def describe(self) -> dict[str, Any]:
+        return {
+            "kind": "francis.compute_substrate.local_json_status_store",
+            "status_root": str(self.status_root),
+            "schema_version": _STATUS_SCHEMA_VERSION,
+            "durable": True,
+            "bounded_local_json": True,
+            "submission_mode": "synchronous_in_process",
+            "stores_payload": False,
+            "stores_output": False,
+            "stores_raw_approval_notes": False,
+            "stores_raw_model_prompts": False,
+            "writes_memory": False,
+            "background_execution": False,
+            "async_execution": False,
+            "network": False,
+            "gpu": False,
+            "shell": False,
+            "daemon": False,
+            "arbitrary_filesystem_access": False,
+        }
+
+    def _task_path(self, task_id: str) -> Path:
+        clean_id = _safe_status_id(task_id, field_name="task_id")
+        return _bounded_status_path(self.status_root / "tasks", clean_id)
+
+    def _correlation_path(self, correlation_id: str) -> Path:
+        clean_id = _safe_status_id(correlation_id, field_name="correlation_id")
+        return _bounded_status_path(self.status_root / "correlations", clean_id)
+
+
 class ComputeSubstrateService:
     """Internal submission/status control surface for governed compute tasks."""
 
@@ -349,11 +492,13 @@ class ComputeSubstrateService:
 
     def describe(self) -> dict[str, Any]:
         approval_store_description = _describe_approval_store(self.governor.approval_store)
+        status_store_description = self.status_store.describe()
         return {
             "kind": "francis.compute_substrate.service",
             "submission_mode": "synchronous_in_process",
             "uses_governor": True,
-            "status_store": self.status_store.describe(),
+            "status_store": status_store_description,
+            "durable_status_persistence": bool(status_store_description.get("durable", False)),
             "no_api_route": True,
             "no_background_worker": True,
             "stores_payload": False,
@@ -429,5 +574,77 @@ def _safe_record_text(value: Any) -> str:
     return ""
 
 
+def _safe_status_id(value: Any, *, field_name: str) -> str:
+    text = _safe_text(value)
+    if not text or len(text) > 160 or any(ch not in _SAFE_STATUS_ID_CHARS for ch in text):
+        raise ValueError(f"unsafe_{field_name}")
+    return text
+
+
 def _bounded_text(value: Any, *, limit: int = 240) -> str:
     return _safe_text(value)[:limit]
+
+
+def _bounded_status_path(root: Path, record_id: str) -> Path:
+    resolved_root = root.expanduser().resolve()
+    path = (resolved_root / f"{record_id}.json").resolve()
+    try:
+        path.relative_to(resolved_root)
+    except ValueError as exc:
+        raise ValueError("status_path_outside_root") from exc
+    return path
+
+
+def _write_json_replace(path: Path, payload: Mapping[str, Any]) -> None:
+    tmp = path.with_name(f".{path.stem}.{os.getpid()}.{uuid.uuid4().hex[:12]}.tmp")
+    try:
+        tmp.write_text(
+            json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False, default=str),
+            encoding="utf-8",
+        )
+        os.replace(tmp, path)
+    finally:
+        try:
+            if tmp.exists():
+                tmp.unlink()
+        except OSError:
+            pass
+
+
+def _status_payload(record: ComputeTaskRecord) -> dict[str, Any]:
+    return {
+        "schema_version": _STATUS_SCHEMA_VERSION,
+        "kind": "francis.compute_substrate.local_json_compute_task_status",
+        "record": record.to_dict(),
+        "governance": _status_store_governance(),
+    }
+
+
+def _record_from_status_payload(payload: Any) -> ComputeTaskRecord | None:
+    if not isinstance(payload, dict):
+        return None
+    if _int_or_default(payload.get("schema_version"), default=0) != _STATUS_SCHEMA_VERSION:
+        return None
+    record_payload = payload.get("record")
+    if not isinstance(record_payload, dict):
+        return None
+    return ComputeTaskRecord.from_dict(record_payload)
+
+
+def _status_store_governance() -> dict[str, bool]:
+    return {
+        "bounded_local_json": True,
+        "compute_status_only": True,
+        "does_not_persist_task_payload": True,
+        "does_not_persist_task_output": True,
+        "does_not_persist_raw_approval_note": True,
+        "does_not_persist_raw_model_prompt": True,
+        "does_not_write_memory": True,
+        "does_not_grant_execution_authority": True,
+        "does_not_use_network": True,
+        "does_not_use_gpu": True,
+        "does_not_run_shell": True,
+        "does_not_start_daemon": True,
+        "background_execution": False,
+        "async_execution": False,
+    }
