@@ -69,6 +69,16 @@ Post-execution runtime or deadline overruns are reported as timeouts without pre
 
 `CapabilityReceipt` objects now summarize cancellation and timeout evidence, including cancellation request state, cancellation reason, deadline summary, timeout stage, execution started/finished state, duration, and over-budget runtime. Durable compute receipts persist only that bounded summary.
 
+## Internal Submission And Status Surface
+
+An internal submission/status slice adds `ComputeSubstrateService`, `ComputeSubmission`, `ComputeSubmissionResult`, `ComputeTaskStatus`, `ComputeTaskRecord`, and a process-local in-memory status store.
+
+The service is a synchronous, in-process Python control surface. It owns or receives a configured `SubstrateGovernor` and `WorkerRegistry`, submits `TaskEnvelope` objects through the existing governed execution path, and records bounded status summaries for readback by task id or correlation id. A task may move directly from `submitted` to a final status during a single call; this slice does not create background workers, daemons, async execution, or a new HTTP/API route.
+
+Status records are bounded to safe summary fields such as task id, correlation id, capability, worker id, final status, denial reason, approval summary, cancellation/timeout summary, receipt id, receipt persistence truth, and timing fields. They do not store raw task payloads, raw execution output, secrets, raw approval notes, model prompts, long-term memory, live-learning persistence, broad filesystem paths, or adapter-specific state.
+
+Adapters may request work through this service, but the substrate still governs, the governor still decides, approvals still authorize, and receipts still prove what happened. The service does not add Unreal, VSC-1, desktop Lens, avatar, voice, VM/container, remote worker, simulation, model-training, network, GPU, shell, subprocess, broad filesystem, OS-level CPU/memory enforcement, durable approval persistence, or long-term learning capability.
+
 ## Approval Consumption
 
 An internal approval-consumption slice lets approval-required compute tasks execute only when a valid `ApprovalGrant` is supplied through the internal approval store boundary.
@@ -91,4 +101,4 @@ The substrate also returns an explicit `LiveLearningEvent` contract object. It d
 
 The substrate can grow toward stronger workers without changing Francis's authority model. Visual runtimes, virtual machines, containers, remote workers, and simulations become bounded execution adapters with policy, budget, receipt, and verification obligations.
 
-The current limitation is deliberate: this foundation proves the internal contract, safe dispatch path, bounded compute receipt persistence, internal approval consumption, and cooperative cancellation/deadline semantics. It does not prove production-grade sandboxing, OS resource isolation, durable approval persistence, cross-process atomic approval reservation, OS-level CPU/memory preemption, API submission, adapter execution, or long-term learning persistence.
+The current limitation is deliberate: this foundation proves the internal contract, safe dispatch path, bounded compute receipt persistence, internal approval consumption, cooperative cancellation/deadline semantics, and internal synchronous submission/status readback. It does not prove production-grade sandboxing, OS resource isolation, durable approval persistence, cross-process atomic approval reservation, OS-level CPU/memory preemption, API submission, adapter execution, or long-term learning persistence.

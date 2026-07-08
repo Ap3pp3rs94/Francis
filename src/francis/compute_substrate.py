@@ -18,6 +18,15 @@ from francis.compute_substrate_receipts import (
     LocalJsonComputeReceiptStore,
 )
 from francis.compute_substrate_registry import WorkerRegistry, default_registry
+from francis.compute_substrate_service import (
+    ComputeStatusStore,
+    ComputeSubmission,
+    ComputeSubmissionResult,
+    ComputeSubstrateService,
+    ComputeTaskRecord,
+    ComputeTaskStatus,
+    InMemoryComputeStatusStore,
+)
 from francis.compute_substrate_types import (
     COMPUTE_RECEIPT_KIND,
     LIVE_LEARNING_EVENT_KIND,
@@ -53,6 +62,12 @@ __all__ = [
     "CapabilityReceipt",
     "CapabilityReceiptAdapter",
     "ComputeReceiptStore",
+    "ComputeStatusStore",
+    "ComputeSubmission",
+    "ComputeSubmissionResult",
+    "ComputeSubstrateService",
+    "ComputeTaskRecord",
+    "ComputeTaskStatus",
     "DeadlineExceeded",
     "ExecutionBackend",
     "ExecutionCancelled",
@@ -61,6 +76,7 @@ __all__ = [
     "ExecutionInterrupted",
     "ExecutionResult",
     "InMemoryApprovalStore",
+    "InMemoryComputeStatusStore",
     "LiveLearningEvent",
     "LocalJsonComputeReceiptStore",
     "RegisteredFunction",

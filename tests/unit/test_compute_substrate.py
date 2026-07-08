@@ -16,9 +16,15 @@ from francis.compute_substrate import (
     CancellationToken,
     CapabilityReceipt,
     CapabilityReceiptAdapter,
+    ComputeSubmission,
+    ComputeSubmissionResult,
+    ComputeSubstrateService,
+    ComputeTaskStatus,
     ExecutionContext,
     ExecutionDeadline,
+    ExecutionResult,
     InMemoryApprovalStore,
+    InMemoryComputeStatusStore,
     LocalJsonComputeReceiptStore,
     ResourceBudget,
     SafeLocalBackend,
@@ -1192,3 +1198,308 @@ def test_governor_with_receipt_store_persists_compute_receipt_and_not_learning(
     assert "iterations" not in receipt_text
     assert "checksum" not in receipt_text
     assert store.read_receipt(result.receipt.receipt_id) == result.receipt
+
+
+class _RecordingGovernor(SubstrateGovernor):
+    def __init__(self, **kwargs: object) -> None:
+        super().__init__(**kwargs)
+        self.execute_calls = 0
+
+    def execute(
+        self,
+        envelope: TaskEnvelope,
+        registry: WorkerRegistry,
+        context: ExecutionContext | None = None,
+    ) -> ExecutionResult:
+        self.execute_calls += 1
+        return super().execute(envelope, registry, context=context)
+
+
+def test_compute_substrate_service_submits_task_through_governor() -> None:
+    governor = _RecordingGovernor()
+    service = ComputeSubstrateService(governor=governor)
+
+    result = service.submit(
+        ComputeSubmission(
+            create_task_envelope(
+                "echo",
+                task_id="service-echo",
+                trace_id="trace-service-echo",
+                payload={"message": "service hello"},
+            )
+        )
+    )
+
+    assert isinstance(result, ComputeSubmissionResult)
+    assert governor.execute_calls == 1
+    assert result.ok is True
+    assert result.status == ComputeTaskStatus.SUCCEEDED
+    assert result.task_id == "service-echo"
+    assert result.correlation_id == "trace-service-echo"
+    assert result.record.receipt_id == result.receipt.receipt_id
+    assert result.record.receipt_persisted is False
+    assert result.record.receipt_persistence_status == "in_memory_only"
+    assert service.status_for_task("service-echo") == result.record
+    assert service.status_for_correlation("trace-service-echo") == result.record
+
+
+def test_compute_substrate_service_denies_approval_required_without_approval() -> None:
+    service = ComputeSubstrateService()
+
+    result = service.submit(
+        create_task_envelope(
+            "echo",
+            task_id="service-approval-missing",
+            budget=ResourceBudget(approval_required=True),
+        )
+    )
+
+    assert result.ok is False
+    assert result.status == ComputeTaskStatus.DENIED
+    assert result.record.denial_reason == "missing_approval"
+    assert result.record.approval_required is True
+    assert result.record.approval_satisfied is False
+    assert result.record.approval_consumed is False
+    assert result.receipt.governance["approval_required"] is True
+    assert result.receipt.governance["approval_consumed"] is False
+
+
+def test_compute_substrate_service_executes_with_valid_scoped_approval() -> None:
+    approval_store = InMemoryApprovalStore([_approval_grant(task_id="service-approved")])
+    service = ComputeSubstrateService(approval_store=approval_store)
+
+    result = service.submit(
+        create_task_envelope(
+            "echo",
+            task_id="service-approved",
+            approval_id="approval-echo",
+            budget=ResourceBudget(approval_required=True),
+        )
+    )
+
+    assert result.ok is True
+    assert result.status == ComputeTaskStatus.SUCCEEDED
+    assert result.record.approval_required is True
+    assert result.record.approval_satisfied is True
+    assert result.record.approval_consumed is True
+    consumed = approval_store.get("approval-echo")
+    assert consumed is not None
+    assert consumed.consumed_by_task_id == "service-approved"
+
+
+def test_compute_substrate_service_preserves_single_use_approval_behavior() -> None:
+    approval_store = InMemoryApprovalStore([_approval_grant(task_id="service-single-use")])
+    service = ComputeSubstrateService(approval_store=approval_store)
+    envelope = create_task_envelope(
+        "echo",
+        task_id="service-single-use",
+        approval_id="approval-echo",
+        budget=ResourceBudget(approval_required=True),
+    )
+
+    first = service.submit(envelope)
+    second = service.submit(envelope)
+
+    assert first.status == ComputeTaskStatus.SUCCEEDED
+    assert second.ok is False
+    assert second.status == ComputeTaskStatus.DENIED
+    assert second.record.denial_reason == "already_consumed_approval"
+    assert second.record.approval_consumed is False
+
+
+def test_compute_substrate_service_respects_pre_execution_cancellation() -> None:
+    service = ComputeSubstrateService()
+    context = ExecutionContext(
+        cancellation_token=CancellationToken(cancel_requested=True, reason="operator_cancelled"),
+    )
+
+    result = service.submit(
+        create_task_envelope("echo", task_id="service-cancelled"),
+        context=context,
+    )
+
+    assert result.ok is False
+    assert result.status == ComputeTaskStatus.CANCELLED
+    assert result.record.cancellation_requested is True
+    assert result.record.cancellation_reason == "operator_cancelled"
+    assert result.record.execution_started is False
+
+
+def test_compute_substrate_service_respects_expired_deadline() -> None:
+    service = ComputeSubstrateService()
+    context = ExecutionContext(deadline=ExecutionDeadline(deadline_at_ms=1, source="test_expired"))
+
+    result = service.submit(
+        create_task_envelope("echo", task_id="service-timeout"),
+        context=context,
+    )
+
+    assert result.ok is False
+    assert result.status == ComputeTaskStatus.TIMED_OUT
+    assert result.record.timed_out is True
+    assert result.record.timeout_stage == "pre_execution"
+    assert result.record.execution_started is False
+
+
+def test_compute_substrate_service_preserves_approval_not_consumed_on_pre_execution_cancel() -> None:
+    approval_store = InMemoryApprovalStore([_approval_grant(task_id="service-cancel-approved")])
+    service = ComputeSubstrateService(approval_store=approval_store)
+    context = ExecutionContext(
+        cancellation_token=CancellationToken(cancel_requested=True, reason="operator_cancelled"),
+    )
+
+    result = service.submit(
+        create_task_envelope(
+            "echo",
+            task_id="service-cancel-approved",
+            approval_id="approval-echo",
+            budget=ResourceBudget(approval_required=True),
+        ),
+        context=context,
+    )
+
+    grant = approval_store.get("approval-echo")
+    assert result.status == ComputeTaskStatus.CANCELLED
+    assert grant is not None
+    assert grant.consumed_at_ms == 0
+    assert result.record.approval_required is True
+    assert result.record.approval_satisfied is True
+    assert result.record.approval_consumed is False
+    assert result.record.execution_started is False
+
+
+def test_compute_substrate_service_preserves_approval_consumed_after_execution_timeout() -> None:
+    registry = WorkerRegistry()
+    registry.register(_SlowNonCooperativeBackend())
+    approval_store = InMemoryApprovalStore(
+        [_approval_grant(task_id="service-timeout-approved", worker_id="slow-worker")]
+    )
+    service = ComputeSubstrateService(registry=registry, approval_store=approval_store)
+
+    result = service.submit(
+        create_task_envelope(
+            "echo",
+            task_id="service-timeout-approved",
+            approval_id="approval-echo",
+            budget=ResourceBudget(approval_required=True, max_runtime_ms=50),
+        )
+    )
+
+    grant = approval_store.get("approval-echo")
+    assert result.status == ComputeTaskStatus.TIMED_OUT
+    assert grant is not None
+    assert grant.consumed_at_ms > 0
+    assert result.record.approval_consumed is True
+    assert result.record.timed_out is True
+    assert result.record.timeout_stage == "post_execution"
+    assert result.record.execution_started is True
+
+
+def test_compute_substrate_service_reports_durable_receipt_truth(tmp_path: Path) -> None:
+    store = LocalJsonComputeReceiptStore(tmp_path / "compute-receipts")
+    service = ComputeSubstrateService(receipt_store=store)
+
+    result = service.submit(create_task_envelope("echo", task_id="service-receipt-persisted"))
+
+    assert result.ok is True
+    assert result.status == ComputeTaskStatus.SUCCEEDED
+    assert result.record.receipt_persisted is True
+    assert result.record.receipt_persistence_status == "persisted_local_json"
+    assert result.receipt.persisted is True
+    assert Path(result.receipt.receipt_path).exists()
+    assert store.read_receipt(result.receipt.receipt_id) == result.receipt
+
+
+def test_compute_substrate_service_reports_failed_receipt_persistence_truthfully() -> None:
+    service = ComputeSubstrateService(receipt_store=_FailingReceiptStore())
+
+    result = service.submit(create_task_envelope("echo", task_id="service-receipt-fails"))
+
+    assert result.ok is False
+    assert result.status == ComputeTaskStatus.RECEIPT_PERSISTENCE_FAILED
+    assert result.result_status == "receipt_persistence_failed"
+    assert result.record.receipt_persisted is False
+    assert result.record.receipt_persistence_status == "persistence_failed"
+    assert result.record.receipt_error.startswith("OSError: receipt store unavailable")
+    assert result.receipt.persisted is False
+    assert result.receipt.receipt_error.startswith("OSError: receipt store unavailable")
+    assert service.status_for_task("service-receipt-fails") == result.record
+
+
+def test_compute_substrate_service_preserves_worker_registry_denials() -> None:
+    disabled_registry = WorkerRegistry()
+    disabled_registry.register(_DisabledBackend())
+    disabled = ComputeSubstrateService(registry=disabled_registry).submit(create_task_envelope("echo"))
+
+    unknown = ComputeSubstrateService().submit(create_task_envelope("shell", task_id="service-unknown"))
+
+    assert disabled.status == ComputeTaskStatus.DENIED
+    assert disabled.record.worker_id == "disabled-worker"
+    assert disabled.record.denial_reason == "worker_enabled"
+    assert unknown.status == ComputeTaskStatus.DENIED
+    assert unknown.record.worker_id == "unregistered"
+    assert unknown.record.denial_reason == "unregistered_function"
+
+
+def test_compute_substrate_service_unknown_status_readback_is_truthful() -> None:
+    service = ComputeSubstrateService()
+
+    task_status = service.status_for_task("missing-task")
+    correlation_status = service.status_for_correlation("missing-trace")
+
+    assert task_status.status == ComputeTaskStatus.UNKNOWN
+    assert task_status.task_id == "missing-task"
+    assert task_status.error == "status_not_found"
+    assert correlation_status.status == ComputeTaskStatus.UNKNOWN
+    assert correlation_status.correlation_id == "missing-trace"
+
+
+def test_compute_substrate_service_records_do_not_store_raw_payload_or_output() -> None:
+    service = ComputeSubstrateService()
+
+    result = service.submit(
+        create_task_envelope(
+            "echo",
+            task_id="service-no-raw-storage",
+            payload={"message": "secret-service-payload"},
+        )
+    )
+
+    record_text = json.dumps(result.record.to_dict(), sort_keys=True)
+    result_text = json.dumps(result.to_dict(), sort_keys=True)
+    assert "secret-service-payload" not in record_text
+    assert "secret-service-payload" not in result_text
+    assert result.record.to_dict()["stores_payload"] is False
+    assert result.record.to_dict()["stores_output"] is False
+    assert result.to_dict()["stores_payload"] is False
+    assert result.to_dict()["stores_output"] is False
+
+
+def test_compute_substrate_service_describes_internal_non_api_boundary() -> None:
+    service = ComputeSubstrateService()
+    status_store = InMemoryComputeStatusStore()
+
+    description = service.describe()
+    store_description = status_store.describe()
+
+    assert description["submission_mode"] == "synchronous_in_process"
+    assert description["uses_governor"] is True
+    assert description["no_api_route"] is True
+    assert description["no_background_worker"] is True
+    assert description["stores_payload"] is False
+    assert description["stores_output"] is False
+    assert description["writes_memory"] is False
+    assert description["durable_approval_persistence"] is False
+    assert description["live_learning_persistence"] is False
+    assert description["os_level_cpu_memory_enforcement"] is False
+    assert store_description["durable"] is False
+    assert store_description["background_execution"] is False
+
+
+def test_public_facade_exports_compute_submission_status_contracts() -> None:
+    submission = ComputeSubmission(create_task_envelope("echo", task_id="service-facade"))
+    service = ComputeSubstrateService()
+
+    assert submission.to_dict()["stores_payload"] is False
+    assert service.status_for_task("service-facade").status == ComputeTaskStatus.UNKNOWN
+    assert ComputeTaskStatus.RECEIPT_PERSISTENCE_FAILED == "receipt_persistence_failed"
