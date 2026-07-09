@@ -149,6 +149,52 @@ def test_lens_stage6_checkpoint_accepts_summon_runtime_readback_handoff() -> Non
     ) in script
 
 
+def test_lens_stage6_checkpoint_accepts_ready_summon_no_blocker_family_handoff() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-checkpoint.ps1").read_text(encoding="utf-8")
+
+    assert "$SummonEnablementGateBlockedHandoffObserved = (" in script
+    assert "$SummonEnablementGateNoBlockerFamilyObserved = (" in script
+    assert "$SummonEnablementGateReady -and" in script
+    assert "$SummonEnablementGateSummonAnywhere -and" in script
+    assert "$SummonEnablementGateBlockedFamilyHandoffs = ConvertTo-ObjectArray -Value (" in script
+    assert "@($SummonEnablementGateBlockedFamilies).Count -eq 0" in script
+    assert "@($SummonEnablementGateBlockedFamilyHandoffs).Count -eq 0" in script
+    assert "@($SummonEnablementGateBlockers).Count -eq 0" in script
+    assert "blocked_families = [string[]]@($SummonEnablementGateBlockedFamilies)" in script
+    assert "blocked_family_handoffs = @($SummonEnablementGateBlockedFamilyHandoffs)" in script
+    assert "blockers = [string[]]@($SummonEnablementGateBlockers)" in script
+    assert "status = 'no_blocker_family_remaining'" in script
+    assert "previous_next_smallest_truthful_gap = 'summon_anywhere_blockers'" in script
+    assert "next_smallest_truthful_gap = 'stage6_lens_completion_audit'" in script
+    assert "authority_required = 'none_readback_only'" in script
+    assert "no_blocker_family_handoff_observed = $SummonEnablementGateNoBlockerFamilyObserved" in script
+    assert "no_blocker_family_handoff = $SummonEnablementGateNoBlockerFamilyHandoff" in script
+    assert (
+        "next_smallest_truthful_gap = $(if ($SummonEnablementGateNoBlockerFamilyObserved) "
+        "{ 'stage6_lens_completion_audit' } else { $SummonEnablementGateNextSmallestTruthfulGap })"
+    ) in script
+
+
+def test_lens_stage6_checkpoint_string_array_converter_treats_empty_objects_as_empty() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-checkpoint.ps1").read_text(encoding="utf-8")
+
+    assert "if ($Value -is [System.Collections.IDictionary] -and $Value.Count -eq 0)" in script
+    assert "if ($Value -is [pscustomobject])" in script
+    assert "$Properties = @($Value.PSObject.Properties)" in script
+    assert "if (@($Properties).Count -eq 0)" in script
+
+
+def test_lens_stage6_checkpoint_object_array_converter_treats_empty_objects_as_empty() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-checkpoint.ps1").read_text(encoding="utf-8")
+
+    assert "function ConvertTo-ObjectArray" in script
+    assert "if ($null -eq $Value)" in script
+    assert "if ($Value -is [System.Array])" in script
+    assert "if ($Value -is [System.Collections.IDictionary] -and $Value.Count -eq 0)" in script
+    assert "if ($Value -is [pscustomobject])" in script
+    assert "blocked_family_handoffs = ConvertTo-ObjectArray -Value (" in script
+
+
 def test_lens_stage6_checkpoint_prefers_runtime_authority_family_chain_before_legacy_spine() -> None:
     script = (_repo_root() / "scripts" / "lens-stage6-checkpoint.ps1").read_text(encoding="utf-8")
 

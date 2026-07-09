@@ -59,7 +59,8 @@ def _summon_resident_host_blocker_timeout_seconds(child_timeout_seconds: int) ->
 
 
 def _transition_plan_wrapper_timeout_seconds(child_timeout_seconds: int) -> int:
-    return (child_timeout_seconds * 3) + _AUDIT_TRANSITION_PLAN_WRAPPER_OVERHEAD_SECONDS
+    child_timeout = min(child_timeout_seconds, 60)
+    return min((child_timeout * 3) + _AUDIT_TRANSITION_PLAN_WRAPPER_OVERHEAD_SECONDS, 240)
 
 
 def _expected_audit_child_proof_timeouts(child_timeout_seconds: int) -> dict[str, int]:
@@ -252,6 +253,7 @@ def test_lens_stage6_completion_audit_bounds_summon_anywhere_child_proof() -> No
         "$CheckpointChildProofTimeoutSeconds = [Math]::Min([Math]::Max(1, $ChildProofTimeoutSeconds - 15), 600)"
         in script
     )
+    assert "$CheckpointChildProofTimeoutSeconds + 120" in script
     assert "'-ChildProofTimeoutSeconds', [string]$CheckpointChildProofTimeoutSeconds" in script
     assert "New-ChildProofRunSummary -Name 'stage6_checkpoint' -Result $CheckpointResult" in script
     assert "$CheckpointPayloadBlocked = (" in script
@@ -477,10 +479,14 @@ def test_lens_stage6_completion_audit_budgets_transition_plan_wrapper() -> None:
     assert "PersistentSupervisionPrerequisitesProofFamilyChainTimeoutSeconds" not in script
     assert "$PersistentSupervisionEnablementTransitionPlanProofSiblingChildProofCount = 3" in script
     assert "$PersistentSupervisionEnablementTransitionPlanProofChildTimeoutSeconds = [Math]::Min(" in script
+    assert "  60\n)" in script
+    assert "$PersistentSupervisionEnablementTransitionPlanProofSerialTimeoutSeconds = (" in script
     assert (
         "$PersistentSupervisionEnablementTransitionPlanProofChildTimeoutSeconds *\n"
-        "    $PersistentSupervisionEnablementTransitionPlanProofSiblingChildProofCount" in script
+        "  $PersistentSupervisionEnablementTransitionPlanProofSiblingChildProofCount" in script
     )
+    assert "$PersistentSupervisionEnablementTransitionPlanProofTimeoutSeconds = [Math]::Min(" in script
+    assert "  240\n)" in script
     assert "[string]$PersistentSupervisionEnablementTransitionPlanProofChildTimeoutSeconds" in script
     assert "PersistentSupervisionEnablementTransitionPlanProofPrerequisitesTimeoutSeconds" not in script
     assert "-TimeoutSeconds $PersistentSupervisionEnablementTransitionPlanProofTimeoutSeconds" in script
@@ -1405,6 +1411,57 @@ def test_lens_stage6_completion_audit_accepts_current_checkpoint_summon_family_h
     assert "@($CheckpointSummonEnablementGateAuthorityBlockers).Count -gt 0 -or" in script
     assert "checkpoint_summon_enablement_gate_delegated_resident_first_family_handoff_observed" in script
     assert "checkpoint_summon_enablement_gate_current_first_family_handoff_observed" in script
+
+
+def test_lens_stage6_completion_audit_accepts_checkpoint_summon_no_blocker_family_handoff() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+
+    assert "$CheckpointSummonEnablementGateNoBlockerFamilyHandoff =" in script
+    assert "$CheckpointSummonEnablementGateFamilyHandoffs = ConvertTo-ObjectArray -Value (" in script
+    assert "$CheckpointSummonEnablementGateBlockedHandoffObserved = (" in script
+    assert "$CheckpointSummonEnablementGateNoBlockerFamilyHandoffObserved = (" in script
+    assert "[string]$CheckpointSummonEnablementGateHandoff.status -eq 'ready_for_operator_review'" in script
+    assert "[bool]$CheckpointSummonEnablementGateHandoff.ready -and" in script
+    assert "[bool]$CheckpointSummonEnablementGateHandoff.summon_anywhere -and" in script
+    assert "[bool]$CheckpointSummonEnablementGateHandoff.no_blocker_family_handoff_observed -and" in script
+    assert "@($CheckpointSummonEnablementGateHandoffFamilies).Count -eq 0" in script
+    assert "@($CheckpointSummonEnablementGateFamilyHandoffs).Count -eq 0" in script
+    assert (
+        "[string]$CheckpointSummonEnablementGateNoBlockerFamilyHandoff.status -eq 'no_blocker_family_remaining'"
+        in script
+    )
+    assert (
+        "[string]$CheckpointSummonEnablementGateNoBlockerFamilyHandoff.authority_required -eq 'none_readback_only'"
+    ) in script
+    assert "$CheckpointSummonEnablementGateBlockedHandoffObserved -or" in script
+    assert "$CheckpointSummonEnablementGateNoBlockerFamilyHandoffObserved" in script
+    assert "checkpoint_summon_enablement_gate_no_blocker_family_handoff_observed" in script
+    assert (
+        "no_blocker_family_handoff_observed = "
+        "[bool]$CheckpointSummonEnablementGateHandoff.no_blocker_family_handoff_observed"
+    ) in script
+
+
+def test_lens_stage6_completion_audit_string_array_converter_treats_empty_objects_as_empty() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+
+    assert "if ($Value -is [System.Collections.IDictionary] -and $Value.Count -eq 0)" in script
+    assert "if ($Value -is [pscustomobject])" in script
+    assert "$Properties = @($Value.PSObject.Properties)" in script
+    assert "if (@($Properties).Count -eq 0)" in script
+    assert "Where-Object { -not [string]::IsNullOrWhiteSpace($_) }" in script
+
+
+def test_lens_stage6_completion_audit_object_array_converter_treats_empty_objects_as_empty() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+
+    assert "function ConvertTo-ObjectArray" in script
+    assert "if ($null -eq $Value)" in script
+    assert "if ($Value -is [System.Array])" in script
+    assert "if ($Value -is [System.Collections.IDictionary] -and $Value.Count -eq 0)" in script
+    assert "if ($Value -is [pscustomobject])" in script
+    assert "$SummonAnywhereBlockersProofFamilyHandoffs = ConvertTo-ObjectArray -Value (" in script
+    assert "ConvertTo-ObjectArray -Value $SummonAnywhereFamilyChainProof.blocked_family_handoffs" in script
 
 
 def test_lens_stage6_completion_audit_distills_system_resident_concrete_handoff_to_acceptance_handoff() -> None:

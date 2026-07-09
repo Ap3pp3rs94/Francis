@@ -38,10 +38,53 @@ function ConvertTo-StringArray {
   }
 
   if ($Value -is [System.Array]) {
-    return @($Value | ForEach-Object { [string]$_ })
+    return @($Value | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
   }
 
-  return @([string]$Value)
+  if ($Value -is [System.Collections.IDictionary] -and $Value.Count -eq 0) {
+    return @()
+  }
+
+  if ($Value -is [pscustomobject]) {
+    $Properties = @($Value.PSObject.Properties)
+    if (@($Properties).Count -eq 0) {
+      return @()
+    }
+  }
+
+  $Text = [string]$Value
+  if ([string]::IsNullOrWhiteSpace($Text)) {
+    return @()
+  }
+  return @($Text)
+}
+
+function ConvertTo-ObjectArray {
+  param(
+    [AllowNull()]
+    [object]$Value
+  )
+
+  if ($null -eq $Value) {
+    return @()
+  }
+
+  if ($Value -is [System.Array]) {
+    return @($Value | Where-Object { $null -ne $_ })
+  }
+
+  if ($Value -is [System.Collections.IDictionary] -and $Value.Count -eq 0) {
+    return @()
+  }
+
+  if ($Value -is [pscustomobject]) {
+    $Properties = @($Value.PSObject.Properties)
+    if (@($Properties).Count -eq 0) {
+      return @()
+    }
+  }
+
+  return @($Value)
 }
 
 function Quote-ProcessArgument {
@@ -570,7 +613,7 @@ $ChildStartupTimeoutSeconds = [Math]::Max($StartupTimeoutSeconds, 30)
 $ChildHostLaunchRunSeconds = [Math]::Max($HostLaunchRunSeconds, 5)
 $CheckpointLensStatusTimeoutSeconds = [Math]::Min([Math]::Max(1, $ChildProofTimeoutSeconds - 15), 120)
 $CheckpointChildProofTimeoutSeconds = [Math]::Min([Math]::Max(1, $ChildProofTimeoutSeconds - 15), 600)
-$CheckpointWrapperTimeoutSeconds = [Math]::Min([Math]::Max($ChildProofTimeoutSeconds, $CheckpointChildProofTimeoutSeconds + 40), 600)
+$CheckpointWrapperTimeoutSeconds = [Math]::Min([Math]::Max($ChildProofTimeoutSeconds, $CheckpointChildProofTimeoutSeconds + 120), 600)
 
 $CheckpointResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $CheckpointScript -ScriptArgs @(
   '-Mode', 'Status',
@@ -1888,14 +1931,16 @@ $Stage6PrerequisiteBringupAppliedEnablementReceiptReviewPending = (
 $PersistentSupervisionEnablementTransitionPlanProofSiblingChildProofCount = 3
 $PersistentSupervisionEnablementTransitionPlanProofChildTimeoutSeconds = [Math]::Min(
   $ChildProofTimeoutSeconds,
-  180
+  60
 )
-$PersistentSupervisionEnablementTransitionPlanProofTimeoutSeconds = (
-  (
-    $PersistentSupervisionEnablementTransitionPlanProofChildTimeoutSeconds *
-    $PersistentSupervisionEnablementTransitionPlanProofSiblingChildProofCount
-  )
+$PersistentSupervisionEnablementTransitionPlanProofSerialTimeoutSeconds = (
+  $PersistentSupervisionEnablementTransitionPlanProofChildTimeoutSeconds *
+  $PersistentSupervisionEnablementTransitionPlanProofSiblingChildProofCount
 ) + 60
+$PersistentSupervisionEnablementTransitionPlanProofTimeoutSeconds = [Math]::Min(
+  $PersistentSupervisionEnablementTransitionPlanProofSerialTimeoutSeconds,
+  240
+)
 $PersistentSupervisionEnablementTransitionPlanProofResult = Invoke-JsonScript `
   -PowerShellPath $PowerShell.Source `
   -ScriptPath $PersistentSupervisionEnablementTransitionPlanProofScript `
@@ -2216,7 +2261,10 @@ $CheckpointSummonEnablementGateFirstFamilyHandoff = $CheckpointSummonEnablementG
 $CheckpointSummonEnablementGateFirstFamilyHandoffBlockers = ConvertTo-StringArray -Value (
   $CheckpointSummonEnablementGateFirstFamilyHandoff.blockers
 )
-$CheckpointSummonEnablementGateFamilyHandoffs = @($CheckpointSummonEnablementGateHandoff.blocked_family_handoffs)
+$CheckpointSummonEnablementGateNoBlockerFamilyHandoff = $CheckpointSummonEnablementGateHandoff.no_blocker_family_handoff
+$CheckpointSummonEnablementGateFamilyHandoffs = ConvertTo-ObjectArray -Value (
+  $CheckpointSummonEnablementGateHandoff.blocked_family_handoffs
+)
 $CheckpointSummonEnablementGateFamilyHandoffIds = [string[]]@(
   $CheckpointSummonEnablementGateFamilyHandoffs | ForEach-Object { [string]$_.id }
 )
@@ -2331,7 +2379,7 @@ $CheckpointSummonEnablementGateFirstFamilyHandoffObserved = (
   $CheckpointSummonEnablementGateDelegatedResidentFirstFamilyHandoffObserved -or
   $CheckpointSummonEnablementGateCurrentFirstFamilyHandoffObserved
 )
-$CheckpointSummonEnablementGateHandoffObserved = (
+$CheckpointSummonEnablementGateBlockedHandoffObserved = (
   [bool]$CheckpointSummonEnablementGateHandoff.ok -and
   [string]$CheckpointSummonEnablementGateHandoff.status -eq 'blocked' -and
   -not [bool]$CheckpointSummonEnablementGateHandoff.ready -and
@@ -2359,6 +2407,48 @@ $CheckpointSummonEnablementGateHandoffObserved = (
   -not [bool]$CheckpointSummonEnablementGateHandoff.memory_write -and
   -not [bool]$CheckpointSummonEnablementGateHandoff.receipt_write_authority -and
   -not [bool]$CheckpointSummonEnablementGateHandoff.resident_claim_authority
+)
+$CheckpointSummonEnablementGateNoBlockerFamilyHandoffObserved = (
+  [bool]$CheckpointSummonEnablementGateHandoff.ok -and
+  [string]$CheckpointSummonEnablementGateHandoff.status -eq 'ready_for_operator_review' -and
+  [bool]$CheckpointSummonEnablementGateHandoff.ready -and
+  [bool]$CheckpointSummonEnablementGateHandoff.summon_anywhere -and
+  [bool]$CheckpointSummonEnablementGateHandoff.operator_surface_readback_ready -and
+  -not [bool]$CheckpointSummonEnablementGateHandoff.handoff_observed -and
+  [bool]$CheckpointSummonEnablementGateHandoff.no_blocker_family_handoff_observed -and
+  [string]::IsNullOrWhiteSpace([string]$CheckpointSummonEnablementGateHandoff.first_blocker_family) -and
+  @($CheckpointSummonEnablementGateHandoffFamilies).Count -eq 0 -and
+  @($CheckpointSummonEnablementGateFamilyHandoffs).Count -eq 0 -and
+  [string]$CheckpointSummonEnablementGateHandoff.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit' -and
+  $CheckpointSummonEnablementGateHandoffEvidence -contains '/lens/status' -and
+  [string]$CheckpointSummonEnablementGateNoBlockerFamilyHandoff.status -eq 'no_blocker_family_remaining' -and
+  [string]$CheckpointSummonEnablementGateNoBlockerFamilyHandoff.previous_next_smallest_truthful_gap -eq 'summon_anywhere_blockers' -and
+  [string]$CheckpointSummonEnablementGateNoBlockerFamilyHandoff.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit' -and
+  [string]$CheckpointSummonEnablementGateNoBlockerFamilyHandoff.next_step -eq 'run_stage6_lens_completion_audit_after_no_summon_blocker_families' -and
+  [string]$CheckpointSummonEnablementGateNoBlockerFamilyHandoff.proof_script -eq 'scripts/lens-stage6-completion-audit.ps1 -Mode Status' -and
+  [string]$CheckpointSummonEnablementGateNoBlockerFamilyHandoff.route -eq '/lens/summon' -and
+  [string]$CheckpointSummonEnablementGateNoBlockerFamilyHandoff.readiness_route -eq '/lens/summon/readiness' -and
+  [string]$CheckpointSummonEnablementGateNoBlockerFamilyHandoff.acceptance_criterion -eq 'summon_anywhere' -and
+  [string]$CheckpointSummonEnablementGateNoBlockerFamilyHandoff.authority_required -eq 'none_readback_only' -and
+  -not [bool]$CheckpointSummonEnablementGateNoBlockerFamilyHandoff.authority_granted -and
+  [bool]$CheckpointSummonEnablementGateNoBlockerFamilyHandoff.read_only_contract -and
+  [bool]$CheckpointSummonEnablementGateNoBlockerFamilyHandoff.diagnostic_only -and
+  -not [bool]$CheckpointSummonEnablementGateNoBlockerFamilyHandoff.would_execute -and
+  -not [bool]$CheckpointSummonEnablementGateNoBlockerFamilyHandoff.would_mutate -and
+  -not [bool]$CheckpointSummonEnablementGateHandoff.execution_authority -and
+  -not [bool]$CheckpointSummonEnablementGateHandoff.approval_decision_authority -and
+  -not [bool]$CheckpointSummonEnablementGateHandoff.local_process_launch_authority -and
+  -not [bool]$CheckpointSummonEnablementGateHandoff.hotkey_registration_authority -and
+  -not [bool]$CheckpointSummonEnablementGateHandoff.tray_registration_authority -and
+  -not [bool]$CheckpointSummonEnablementGateHandoff.overlay_control_authority -and
+  -not [bool]$CheckpointSummonEnablementGateHandoff.summon_authority -and
+  -not [bool]$CheckpointSummonEnablementGateHandoff.memory_write -and
+  -not [bool]$CheckpointSummonEnablementGateHandoff.receipt_write_authority -and
+  -not [bool]$CheckpointSummonEnablementGateHandoff.resident_claim_authority
+)
+$CheckpointSummonEnablementGateHandoffObserved = (
+  $CheckpointSummonEnablementGateBlockedHandoffObserved -or
+  $CheckpointSummonEnablementGateNoBlockerFamilyHandoffObserved
 )
 $HostSupervisorReadback = $Checkpoint.host_supervisor_readback
 $HostSupervisorReadbackBlockers = ConvertTo-StringArray -Value $HostSupervisorReadback.blockers
@@ -2967,7 +3057,9 @@ $SummonAnywhereBlockersProofFirstFamilyHandoff = $SummonAnywhereBlockersProof.fi
 $SummonAnywhereBlockersProofFirstFamilyHandoffBlockers = ConvertTo-StringArray -Value (
   $SummonAnywhereBlockersProofFirstFamilyHandoff.blockers
 )
-$SummonAnywhereBlockersProofFamilyHandoffs = @($SummonAnywhereBlockersProof.blocked_family_handoffs)
+$SummonAnywhereBlockersProofFamilyHandoffs = ConvertTo-ObjectArray -Value (
+  $SummonAnywhereBlockersProof.blocked_family_handoffs
+)
 $SummonAnywhereBlockersProofFamilyHandoffIds = [string[]]@(
   $SummonAnywhereBlockersProofFamilyHandoffs | ForEach-Object { [string]$_.id }
 )
@@ -7151,6 +7243,7 @@ $Payload = [ordered]@{
   checkpoint_summon_enablement_gate_legacy_resident_first_family_handoff_observed = $CheckpointSummonEnablementGateLegacyResidentFirstFamilyHandoffObserved
   checkpoint_summon_enablement_gate_delegated_resident_first_family_handoff_observed = $CheckpointSummonEnablementGateDelegatedResidentFirstFamilyHandoffObserved
   checkpoint_summon_enablement_gate_current_first_family_handoff_observed = $CheckpointSummonEnablementGateCurrentFirstFamilyHandoffObserved
+  checkpoint_summon_enablement_gate_no_blocker_family_handoff_observed = $CheckpointSummonEnablementGateNoBlockerFamilyHandoffObserved
   checkpoint_summon_enablement_gate_core_handoff_observed = $CheckpointSummonEnablementGateCoreHandoffObserved
   resident_supervision_persistence_boundary_proof_observed = $ResidentSupervisionPersistenceBoundaryProofObserved
   summon_anywhere_blocker_family_handoffs = @($SummonAnywhereBlockersProofFamilyHandoffs)
@@ -7162,8 +7255,10 @@ $Payload = [ordered]@{
     summon_anywhere = [bool]$CheckpointSummonEnablementGateHandoff.summon_anywhere
     operator_surface_readback_ready = [bool]$CheckpointSummonEnablementGateHandoff.operator_surface_readback_ready
     handoff_observed = [bool]$CheckpointSummonEnablementGateHandoff.handoff_observed
+    no_blocker_family_handoff_observed = [bool]$CheckpointSummonEnablementGateHandoff.no_blocker_family_handoff_observed
     first_blocker_family = [string]$CheckpointSummonEnablementGateHandoff.first_blocker_family
     first_blocker_family_handoff = $CheckpointSummonEnablementGateFirstFamilyHandoff
+    no_blocker_family_handoff = $CheckpointSummonEnablementGateNoBlockerFamilyHandoff
     blocked_families = [string[]]@($CheckpointSummonEnablementGateHandoffFamilies)
     blocked_family_handoffs = @($CheckpointSummonEnablementGateFamilyHandoffs)
     next_smallest_truthful_gap = [string]$CheckpointSummonEnablementGateHandoff.next_smallest_truthful_gap
@@ -8889,7 +8984,9 @@ $Payload = [ordered]@{
     child_proof_timeouts = [string[]]@(ConvertTo-StringArray -Value $SummonAnywhereFamilyChainProof.child_proof_timeouts)
     child_proof_runs = @($SummonAnywhereFamilyChainProof.child_proof_runs)
     blocked_families = [string[]]@($SummonAnywhereFamilyChainProofBlockedFamilies)
-    blocked_family_handoffs = @($SummonAnywhereFamilyChainProof.blocked_family_handoffs)
+    blocked_family_handoffs = @(
+      ConvertTo-ObjectArray -Value $SummonAnywhereFamilyChainProof.blocked_family_handoffs
+    )
     first_blocker_family = [string]$SummonAnywhereFamilyChainProof.first_blocker_family
     first_blocker_family_handoff = $SummonAnywhereFamilyChainProof.first_blocker_family_handoff
     resident_host = [ordered]@{

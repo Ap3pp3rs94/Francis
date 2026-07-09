@@ -1082,6 +1082,60 @@ Remaining truthful gap:
   binding, summon binding, Austin's enable approval, a live safe-target bridge
   proof, and browser/live chat/Lens render verification.
 
+### 2026-07-09 14:51Z - Stage 6 summon checkpoint no-blocker audit handoff
+
+Current posture: Phase 2 / Orb embodiment Milestone 5 remains blocked, but the
+Stage 6 completion audit no longer treats a live ready summon-enable gate as a
+missing blocked-handoff proof.
+
+What changed:
+
+- `scripts/lens-stage6-checkpoint.ps1` now emits a read-only
+  `no_blocker_family_remaining` handoff when live `/lens/status` reports the
+  summon enablement gate ready, `summon_anywhere=true`, operator-surface
+  readback ready, and no blocker families, family handoffs, or blockers.
+- `scripts/lens-stage6-completion-audit.ps1` now accepts that ready/no-blocker
+  checkpoint shape and advances the audit to the next readback boundary instead
+  of reopening `checkpoint_summon_enablement_gate_handoff`.
+- Empty JSON list fields are normalized for both string arrays and handoff
+  object arrays, so empty `blocked_families`, `blocked_family_handoffs`, and
+  `blockers` are not misread as one empty object or `$null`.
+- The slow persistent-supervision transition proof and checkpoint wrapper now
+  have bounded child-proof budgets that let the audit return a complete receipt.
+
+Validation:
+
+- PowerShell parser validation passed for
+  `scripts\lens-stage6-checkpoint.ps1` and
+  `scripts\lens-stage6-completion-audit.ps1`.
+- `.venv\Scripts\python.exe -m pytest` passed for the focused Stage 6
+  checkpoint/audit tests covering the ready no-blocker handoff, empty-object
+  normalization, checkpoint timeout budgeting, and transition-plan budgeting.
+- `.venv\Scripts\python.exe -m ruff check` and
+  `.venv\Scripts\python.exe -m ruff format --check` passed for the two touched
+  Stage 6 test files.
+- `git diff --check` passed for the touched Stage 6 scripts and tests, with
+  only existing PowerShell line-ending warnings.
+- Direct checkpoint readback returned `ok=true`, `handoff_status=ready_for_operator_review`,
+  `no_blocker_family_handoff_observed=true`,
+  `no_blocker_handoff_status=no_blocker_family_remaining`,
+  zero blocker-family counts after JSON readback, and
+  `handoff_next_gap=stage6_lens_completion_audit`.
+- Full completion audit returned `ok=true`, `status=blocked`,
+  `audit_status=complete`, `checkpoint_handoff=true`,
+  `checkpoint_no_blocker_handoff=true`, `child_proof_timeouts=[]`,
+  `resident_supervised_runtime=true`, supervisor PID `35400`, resident PID
+  `37520`, and
+  `next_smallest_truthful_gap=persistent_supervision_prerequisites_proof_readback`.
+
+Remaining truthful gap:
+
+- Milestone 5 is still not accepted. The completion audit is still blocked by
+  missing `stage6_closure_readback`, `persistent_supervision_prerequisites_proof`,
+  `summon_authority_blocker_proof`, and `summon_anywhere_family_chain_proof`.
+  The current first reported gap is
+  `persistent_supervision_prerequisites_proof_readback`.
+
 ## 5. Known truthful gaps
 
 These still block any finished Orb embodiment claim:
