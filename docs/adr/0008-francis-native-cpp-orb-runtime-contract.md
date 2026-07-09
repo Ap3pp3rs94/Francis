@@ -1,0 +1,279 @@
+# ADR 0008: Francis Native C++ Orb Runtime Contract
+
+Date: 2026-07-09
+
+Status: Proposed as native runtime contract before implementation
+
+## Context
+
+Francis is in Phase 2. The active product workstream remains Orb embodiment /
+Stage 6 Lens runtime completion. The roadmap defines the Orb as Francis's
+embodied interface object: a persistent presence surface that communicates
+state, voice, action, handback, and revocation.
+
+The current implementation has:
+
+- a locked Orb visual surface recorded in `docs/operations/ORB_VISUAL_LOCK.md`
+- a WPF overlay renderer in `scripts/lens-overlay-window.ps1`
+- a chat UI Orb glyph in `apps/chat_ui/src/lens/orbGlyph.ts`
+- a separate Orb virtual pointer in `src/francis/input_actuator/orb_operator.py`
+- a default-gated desktop bridge in `src/francis/input_actuator/orb_desktop_bridge.py`
+- a developer-bridge body-map readback that exposes the Orb pointer as evidence
+  without granting authority
+- ADR 0007 blocking desktop reorganization until Lens semantics, plan approval,
+  reversibility evidence, and receipt chaining exist
+
+The roadmap previously described Three.js as the likely first real-time 3D
+renderer path. That was a likely implementation path, not a governance law. A
+native C++ Orb runtime is a better long-term direction if Francis needs a
+durable, low-latency, machine-resident body that should not be replaced later.
+
+This ADR records the boundary before any C++ runtime is built.
+
+## Decision
+
+Francis may move the long-lived Orb body toward a native C++ runtime, but the
+C++ runtime must be a body/renderer/input surface only. It must not become
+Francis Core, the compute substrate, the policy system, the memory system, the
+approval system, the receipt system, or the desktop authority layer.
+
+The native Orb runtime may own:
+
+- visual rendering
+- animation timing
+- local frame loop
+- visual state interpolation
+- Orb hit testing for the Orb surface itself
+- virtual pointer presentation
+- local handback and panic-stop presentation
+- bounded local IPC with Francis Core
+
+The native Orb runtime must request, display, or reflect authority decisions. It
+must not make those decisions.
+
+Francis Core remains authoritative for:
+
+- trust ladder state
+- policy and governance
+- approvals
+- receipts
+- status readback
+- memory boundaries
+- model and tool routing
+- Lens semantic target mapping
+- desktop bridge enablement
+- input action authority
+- compute substrate execution
+
+## Runtime Boundary
+
+The C++ Orb runtime is allowed to render state that Francis Core provides. State
+can include:
+
+- mode
+- listening state
+- speaking state
+- interjection state
+- activity intensity
+- incident pressure
+- approval-required posture
+- execution focus
+- handback state
+- panic-stop readiness
+- virtual pointer position
+- desktop bridge enabled/disabled posture
+
+Those state values must remain readback-derived. The C++ runtime must not invent
+successful action, active execution, approval, learning, memory mutation, or
+desktop effect state.
+
+Events emitted from the native runtime are intent events, not authority. Examples
+include:
+
+- Orb clicked
+- Orb held
+- Orb dragged
+- panic gesture requested
+- conversation surface requested
+- pointer preview requested
+- stop requested
+
+Those events must enter Francis through a governed local boundary. Any event that
+could mutate desktop state, invoke tools, move files, click, drag, type, persist
+memory, or cross a trust boundary must be denied or routed through the existing
+policy, approval, receipt, and status path.
+
+## Visual Lock
+
+The native C++ runtime must preserve the current Orb face unless a later explicit
+visual-baseline ADR replaces it.
+
+The current lock includes:
+
+- dark core family
+- silver/white ring family
+- 3D transparent energy-orb posture
+- ring density and orbital continuity
+- calm ambient motion
+- voice pulse without waveform collapse
+- topmost transparent overlay posture
+- no debug frame
+- no opaque backdrop
+- no decorative alternate Orb personality
+
+Porting the renderer to C++ is not permission to redesign the Orb. The first
+native implementation must be a parity target unless a later visual approval
+record deliberately changes the face.
+
+## IPC Contract
+
+The first C++ runtime contract should be local-first and narrow.
+
+Allowed first IPC shape:
+
+- one local state read channel from Francis Core to the Orb runtime
+- one bounded intent event channel from the Orb runtime to Francis Core
+- a heartbeat/status readback from the Orb runtime
+- schema-versioned JSON or another typed local format
+- no raw screenshots
+- no raw OCR
+- no broad filesystem paths
+- no secrets
+- no model prompts
+- no raw desktop metadata
+
+The first implementation should prefer read-only state replay before live
+interaction. If a bidirectional channel is added, the event channel must be
+default-deny for mutation and must produce governed status/receipt evidence
+before any future authority is exposed.
+
+No remote network transport is required for the first native runtime. If a local
+loopback transport is used later, it must remain bound to local development or a
+governed production permission boundary. Named pipes, local sockets, or another
+Windows-local IPC mechanism require the same actor, scope, schema, and
+redaction discipline as API routes.
+
+## Input Authority
+
+The C++ Orb runtime must not directly call operating-system input APIs for
+desktop mutation.
+
+It must not directly:
+
+- move the user OS cursor
+- click
+- drag
+- type
+- focus windows
+- move windows
+- move files or icons
+- send shell commands
+- invoke PowerShell, cmd, bash, or subprocesses
+- enable the desktop bridge
+- bypass Lens semantic target mapping
+- bypass plan-level approval
+- bypass reversibility proof
+- bypass receipts
+
+The separate Orb virtual pointer may remain visible and native-rendered. That
+pointer is a Francis-owned presentation object, not the user's OS cursor and not
+desktop mutation authority.
+
+## Relationship To Unreal
+
+Unreal remains a possible future visual/runtime adapter, not the current native
+Orb contract.
+
+If Unreal is explored later, it must attach as an adapter or renderer behind the
+same rules:
+
+- it must not become Francis Core
+- it must not bypass the substrate
+- it must not add desktop action authority
+- it must not weaken the C++/native IPC boundary
+- it must preserve visual lock or carry an explicit visual-baseline replacement
+- it must route mutation through governance, approvals, receipts, and status
+
+Choosing C++ now does not prevent a future Unreal experiment, but it prevents the
+Orb from depending on Unreal as the identity-bearing authority layer.
+
+## Migration Rule
+
+The current WPF overlay and chat UI glyph remain canonical until a native C++
+runtime proves parity.
+
+The native runtime cannot replace the existing Orb surface until it proves:
+
+- same or explicitly approved visual baseline
+- same separate virtual pointer truth
+- no user OS cursor takeover
+- no desktop bridge authority by default
+- no new click/drag/type authority
+- no shell/subprocess authority
+- no memory persistence
+- no model training
+- readback parity for mode, state, handback, stop, and pointer posture
+- focused tests and operator-visible evidence
+
+During migration, both renderers must not run as competing authority surfaces.
+If both exist for comparison, one must be explicitly marked as inactive,
+preview-only, or test-only.
+
+## Non-Goals
+
+This ADR does not implement:
+
+- a C++ project
+- a CMake build
+- a native window
+- a renderer
+- a new overlay
+- a new API route
+- real desktop action
+- click, drag, or type authority
+- UI Automation mapping
+- desktop reorganization
+- Unreal integration
+- GPU execution authority
+- network transport
+- subprocess or shell execution
+- daemon/background worker authority
+- memory persistence
+- live-learning persistence
+- model training
+- a new compute backend
+- a new adapter implementation
+
+## Future Implementation Gates
+
+Before a native C++ Orb runtime can replace the current Orb surface, Francis must
+add and validate:
+
+1. a schema-versioned Orb state snapshot contract
+2. a schema-versioned Orb intent event contract
+3. a local IPC boundary with actor/scope posture
+4. a read-only native renderer harness using fixture state
+5. visual-lock parity evidence
+6. no-user-cursor-takeover tests
+7. no-desktop-mutation tests
+8. no-shell/subprocess/network authority tests
+9. heartbeat/status readback
+10. operator-visible failure/handback state
+11. panic-stop event routing into Francis Core
+12. receipt/status evidence for any future mutation request
+
+The first safe implementation slice should be a read-only native renderer
+contract harness. It should render fixture or read-only Francis state and emit no
+desktop mutation events.
+
+## Consequences
+
+This keeps the long-term Orb body aligned with the user's preferred native C++
+direction without pretending that a native Orb exists today.
+
+It also keeps the hard boundary intact:
+
+- C++ can make the Orb feel native.
+- Francis Core decides what is allowed.
+- Receipts prove what happened.
+- The Orb body never becomes a shortcut around governance.
