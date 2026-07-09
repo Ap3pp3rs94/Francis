@@ -49,6 +49,40 @@ contract-only execution plans. A plan is not a launch. A launch plan is not a
 running worker. A worker kind label is not proof that a container, VM, microVM,
 remote worker, or simulator exists.
 
+## Managed Worker Registry Integration
+
+Francis now has a process-local, in-memory managed worker registry for
+contract-only metadata.
+
+The managed worker registry can register, validate, query, summarize, and bind
+`ManagedWorkerDescriptor` objects as future-worker metadata. It does not execute
+workers, start workers, register executable backends, submit tasks, mutate
+approvals, mutate receipts, mutate status, persist managed-worker records, or
+write memory.
+
+This registry is separate from the executable `WorkerRegistry` used by
+`SubstrateGovernor`. A managed worker descriptor is not an `ExecutionBackend`.
+Registering a managed worker descriptor does not create a SafeLocalBackend
+capability, does not create a substrate executable capability, and does not make
+VM, container, microVM, remote, or simulation execution available.
+
+Managed worker capability summaries must remain explicitly labeled:
+
+- `contract_only=true`
+- `non_executable=true`
+- `future_worker=true`
+- `executable_substrate_capability=false`
+- `registered_execution_backend=false`
+
+The current `/compute-substrate/capabilities` route reports executable substrate
+capability truth only. It must not mix managed-worker metadata into executable
+capability readback unless a later governance-reviewed contract adds a separate
+bounded managed-worker metadata readback.
+
+Durable managed-worker persistence remains future work. The current registry is
+not production durable and is not a worker scheduler, queue, runtime, launcher,
+or recovery mechanism.
+
 Future managed worker implementations must attach through the existing Compute
 Substrate authority path:
 

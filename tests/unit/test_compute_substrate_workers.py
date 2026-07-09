@@ -10,14 +10,18 @@ from francis.compute_substrate import (
     ExecutionContext,
     ExecutionDeadline,
     ExecutionResult,
+    InMemoryManagedWorkerRegistry,
     ManagedWorkerBackendContract,
     ManagedWorkerBinding,
+    ManagedWorkerCapabilitySummary,
     ManagedWorkerCapabilities,
     ManagedWorkerDescriptor,
     ManagedWorkerExecutionPlan,
     ManagedWorkerKind,
     ManagedWorkerPolicy,
     ManagedWorkerReadiness,
+    ManagedWorkerRegistry,
+    ManagedWorkerRegistryResult,
     ManagedWorkerResourceEnvelope,
     ManagedWorkerSandboxProfile,
     ResourceBudget,
@@ -229,6 +233,191 @@ def test_empty_whitespace_and_dot_path_ids_are_rejected() -> None:
     reasons = [validate_managed_worker_descriptor(descriptor).reason for descriptor in invalid_descriptors]
 
     assert reasons == ["safe_worker_id"] * len(invalid_descriptors)
+
+
+def test_managed_worker_registry_registers_valid_descriptor() -> None:
+    registry = InMemoryManagedWorkerRegistry()
+    descriptor = _descriptor(worker_id="managed-worker-registry")
+
+    result = registry.register_descriptor(descriptor)
+    summaries = registry.list_descriptors()
+    capability_summaries = registry.list_capability_summaries()
+
+    assert result.ok is True
+    assert result.status == "registered"
+    assert result.worker_id == "managed-worker-registry"
+    assert result.descriptor == descriptor
+    assert registry.get_descriptor("managed-worker-registry") == descriptor
+    assert summaries == [
+        {
+            **summaries[0],
+            "worker_id": "managed-worker-registry",
+            "status": "registered_contract_only",
+            "contract_only": True,
+            "metadata_only": True,
+            "non_executable": True,
+            "executable_substrate_capability": False,
+            "registered_execution_backend": False,
+        }
+    ]
+    assert len(capability_summaries) == 1
+    assert capability_summaries[0].worker_id == "managed-worker-registry"
+    assert capability_summaries[0].capability_id == "echo"
+    assert capability_summaries[0].to_dict()["non_executable"] is True
+    assert registry.describe()["process_local"] is True
+    assert registry.describe()["durable"] is False
+
+
+def test_managed_worker_registry_rejects_duplicate_worker_id() -> None:
+    registry = InMemoryManagedWorkerRegistry()
+    descriptor = _descriptor(worker_id="managed-worker-duplicate")
+
+    first = registry.register_descriptor(descriptor)
+    duplicate = registry.register_descriptor(descriptor)
+
+    assert first.ok is True
+    assert duplicate.ok is False
+    assert duplicate.reason == "worker_already_registered"
+    assert len(registry.list_descriptors()) == 1
+
+
+def test_managed_worker_registry_rejects_unsafe_worker_id() -> None:
+    registry = InMemoryManagedWorkerRegistry()
+
+    result = registry.register_descriptor(_descriptor(worker_id="../managed-worker"))
+
+    assert result.ok is False
+    assert result.reason == "safe_worker_id"
+    assert registry.list_descriptors() == []
+
+
+def test_managed_worker_registry_unknown_lookup_is_truthful_none() -> None:
+    registry = InMemoryManagedWorkerRegistry()
+
+    assert registry.get_descriptor("unknown-worker") is None
+    assert registry.get_descriptor("../bad-worker") is None
+    assert registry.binding_for("unknown-worker") is None
+
+
+def test_managed_worker_registry_stores_disabled_worker_as_non_executable_metadata() -> None:
+    registry = InMemoryManagedWorkerRegistry()
+
+    result = registry.register_descriptor(_descriptor(worker_id="managed-worker-disabled", enabled=False))
+    summary = registry.list_descriptors()[0]
+    capability_summary = registry.list_capability_summaries()[0].to_dict()
+    binding = registry.binding_for("managed-worker-disabled")
+
+    assert result.ok is True
+    assert summary["enabled"] is False
+    assert summary["status"] == "disabled"
+    assert summary["non_executable"] is True
+    assert capability_summary["worker_enabled"] is False
+    assert capability_summary["executable_substrate_capability"] is False
+    assert binding is not None
+    assert binding.descriptor.enabled is False
+
+
+def test_managed_worker_registry_summaries_redact_paths_secrets_env_and_user_metadata() -> None:
+    registry = InMemoryManagedWorkerRegistry()
+    descriptor = _descriptor(
+        worker_id="managed-worker-redacted",
+        metadata_summary={
+            "host_path": "D:\\Francis\\private",
+            "secret": "SECRET_SHOULD_NOT_APPEAR",
+            "raw_env": "API_KEY=SHOULD_NOT_APPEAR",
+            "container_image_credentials": "credential=SHOULD_NOT_APPEAR",
+            "host_username": "Austin",
+            "owner": "compute-substrate-tests",
+        },
+    )
+
+    result = registry.register_descriptor(descriptor)
+    serialized = json.dumps(
+        {
+            "result": result.to_dict(),
+            "descriptors": registry.list_descriptors(),
+            "capabilities": [item.to_dict() for item in registry.list_capability_summaries()],
+        },
+        sort_keys=True,
+    )
+
+    assert result.ok is True
+    assert "D:\\Francis\\private" not in serialized
+    assert "SHOULD_NOT_APPEAR" not in serialized
+    assert "Austin" not in serialized
+    assert "non_default_summary_declared" in serialized
+    assert "redacted_summary" in serialized
+
+
+def test_managed_worker_registry_exposes_no_execution_run_spawn_or_backend_lookup() -> None:
+    registry = InMemoryManagedWorkerRegistry()
+    protocol_methods = set(ManagedWorkerRegistry.__dict__)
+    concrete_methods = set(dir(registry))
+
+    assert "register_descriptor" in protocol_methods
+    assert "list_capability_summaries" in protocol_methods
+    for forbidden in ("execute", "run", "spawn", "backend_for", "launch", "start"):
+        assert forbidden not in protocol_methods
+        assert forbidden not in concrete_methods
+
+
+def test_managed_worker_registry_does_not_call_backend_governor_service_or_mutate_worker_registry() -> None:
+    backend = _CountingSafeLocalBackend()
+    worker_registry = WorkerRegistry()
+    worker_registry.register(backend)
+    governor = _CountingGovernor()
+    service = ComputeSubstrateService(governor=governor, registry=worker_registry)
+    executable_capabilities = service.known_capabilities()
+    managed_registry = InMemoryManagedWorkerRegistry()
+
+    result = managed_registry.register_descriptor(
+        _descriptor(worker_id="future-managed-worker", kind=ManagedWorkerKind.CONTAINER, capabilities=("echo",))
+    )
+    binding = managed_registry.binding_for(
+        "future-managed-worker",
+        policy=_policy(worker_kinds=(ManagedWorkerKind.CONTAINER,)),
+    )
+
+    assert result.ok is True
+    assert binding is not None
+    assert binding.create_execution_plan(_resource(), plan_id="managed-registry-plan").ok is True
+    assert backend.execute_calls == 0
+    assert governor.execute_calls == 0
+    assert service.known_capabilities() == executable_capabilities
+    assert [worker.worker_id for worker in worker_registry.descriptors()] == ["safe-local-1"]
+    assert service.status_store.describe()["stored_record_count"] == 0
+    assert managed_registry.describe()["mutates_worker_registry"] is False
+
+
+def test_managed_worker_registry_does_not_create_executable_substrate_capabilities() -> None:
+    worker_registry = WorkerRegistry()
+    worker_registry.register(SafeLocalBackend())
+    service = ComputeSubstrateService(registry=worker_registry)
+    managed_registry = InMemoryManagedWorkerRegistry()
+
+    managed_registry.register_descriptor(
+        _descriptor(
+            worker_id="future-vm-worker",
+            kind=ManagedWorkerKind.VM,
+            capabilities=("future_vm_echo",),
+        )
+    )
+    summaries = [item.to_dict() for item in managed_registry.list_capability_summaries()]
+
+    assert summaries == [
+        {
+            **summaries[0],
+            "capability_id": "future_vm_echo",
+            "contract_only": True,
+            "non_executable": True,
+            "future_worker": True,
+            "executable_substrate_capability": False,
+            "registered_execution_backend": False,
+        }
+    ]
+    assert "future_vm_echo" not in service.known_capabilities()
+    assert worker_registry.backend_for("future_vm_echo") is None
+    assert managed_registry.get_descriptor("future-vm-worker") is not None
 
 
 def test_disabled_worker_is_denied() -> None:
@@ -641,12 +830,19 @@ def test_execution_plan_does_not_execute_backend_or_live_runtime_calls() -> None
 
 
 def test_public_facade_exports_managed_worker_contracts() -> None:
+    registry = InMemoryManagedWorkerRegistry()
     descriptor = _descriptor()
     policy = _policy()
     readiness = validate_managed_worker_policy(policy)
+    registry_result = registry.register_descriptor(descriptor)
+    capability_summary = registry.list_capability_summaries()[0]
 
     assert ManagedWorkerKind.CONTAINER == "container"
     assert ManagedWorkerBackendContract is not None
+    assert ManagedWorkerRegistry is not None
+    assert isinstance(registry, InMemoryManagedWorkerRegistry)
+    assert isinstance(registry_result, ManagedWorkerRegistryResult)
+    assert isinstance(capability_summary, ManagedWorkerCapabilitySummary)
     assert isinstance(descriptor.capabilities, ManagedWorkerCapabilities)
     assert isinstance(readiness, ManagedWorkerReadiness)
     assert create_managed_worker_execution_plan(descriptor, policy, _resource()).ok is True

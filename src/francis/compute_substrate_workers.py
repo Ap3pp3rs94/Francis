@@ -46,6 +46,88 @@ class ManagedWorkerContractViolation(ValueError):
 
 
 @dataclass(frozen=True, slots=True)
+class ManagedWorkerCapabilitySummary:
+    worker_id: str
+    capability_id: str
+    worker_kind: str
+    worker_enabled: bool
+    worker_name: str = ""
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "worker_id", _contract_id(self.worker_id))
+        object.__setattr__(self, "capability_id", _contract_id(self.capability_id))
+        object.__setattr__(self, "worker_kind", _worker_kind(self.worker_kind))
+        object.__setattr__(self, "worker_name", _bounded_text(self.worker_name, limit=120))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "worker_id": self.worker_id,
+            "worker_name": self.worker_name,
+            "worker_kind": self.worker_kind,
+            "capability_id": self.capability_id,
+            "worker_enabled": self.worker_enabled,
+            "contract_only": True,
+            "non_executable": True,
+            "future_worker": True,
+            "executable_substrate_capability": False,
+            "registered_execution_backend": False,
+            "real_worker_implementation": False,
+            "starts_processes": False,
+            "uses_network": False,
+            "uses_gpu": False,
+            "runs_shell": False,
+            "starts_daemon": False,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ManagedWorkerRegistryResult:
+    ok: bool
+    status: str
+    worker_id: str = ""
+    reason: str = ""
+    descriptor: ManagedWorkerDescriptor | None = None
+
+    @classmethod
+    def registered(cls, descriptor: ManagedWorkerDescriptor) -> ManagedWorkerRegistryResult:
+        return cls(
+            ok=True,
+            status="registered",
+            worker_id=descriptor.worker_id,
+            descriptor=descriptor,
+        )
+
+    @classmethod
+    def denied(cls, reason: str, *, worker_id: str = "") -> ManagedWorkerRegistryResult:
+        return cls(
+            ok=False,
+            status="denied",
+            worker_id=_contract_id(worker_id),
+            reason=_bounded_text(reason, limit=160) or "managed_worker_registry_denied",
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "ok": self.ok,
+            "status": self.status,
+            "worker_id": self.worker_id,
+            "reason": self.reason,
+            "descriptor": _descriptor_summary(self.descriptor) if self.descriptor is not None else {},
+            "contract_only": True,
+            "non_executable": True,
+            "durable": False,
+            "starts_processes": False,
+            "uses_network": False,
+            "uses_gpu": False,
+            "runs_shell": False,
+            "starts_daemon": False,
+            "mutates_worker_registry": False,
+            "registers_execution_backend": False,
+            "real_worker_implementation": False,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class ManagedWorkerCapabilities:
     declared_capabilities: tuple[str, ...] = ()
     supports_cancellation: bool = True
@@ -554,6 +636,118 @@ class ManagedWorkerBackendContract(Protocol):
     ) -> ManagedWorkerExecutionPlan: ...
 
 
+class ManagedWorkerRegistry(Protocol):
+    def register_descriptor(self, descriptor: ManagedWorkerDescriptor) -> ManagedWorkerRegistryResult: ...
+
+    def get_descriptor(self, worker_id: str) -> ManagedWorkerDescriptor | None: ...
+
+    def list_descriptors(self) -> list[dict[str, Any]]: ...
+
+    def list_capability_summaries(self) -> list[ManagedWorkerCapabilitySummary]: ...
+
+    def validate_descriptor(self, descriptor: ManagedWorkerDescriptor) -> ManagedWorkerReadiness: ...
+
+    def binding_for(
+        self,
+        worker_id: str,
+        *,
+        policy: ManagedWorkerPolicy | None = None,
+        sandbox_profile: ManagedWorkerSandboxProfile | None = None,
+    ) -> ManagedWorkerBinding | None: ...
+
+    def describe(self) -> dict[str, Any]: ...
+
+
+class InMemoryManagedWorkerRegistry:
+    """Process-local registry for contract-only managed worker metadata."""
+
+    def __init__(self) -> None:
+        self._descriptors: dict[str, ManagedWorkerDescriptor] = {}
+
+    def register_descriptor(self, descriptor: ManagedWorkerDescriptor) -> ManagedWorkerRegistryResult:
+        readiness = self.validate_descriptor(descriptor)
+        if not readiness.ready:
+            return ManagedWorkerRegistryResult.denied(readiness.reason, worker_id=descriptor.worker_id)
+        if descriptor.worker_id in self._descriptors:
+            return ManagedWorkerRegistryResult.denied("worker_already_registered", worker_id=descriptor.worker_id)
+        self._descriptors[descriptor.worker_id] = descriptor
+        return ManagedWorkerRegistryResult.registered(descriptor)
+
+    def get_descriptor(self, worker_id: str) -> ManagedWorkerDescriptor | None:
+        clean_id = _contract_id(worker_id)
+        if not clean_id:
+            return None
+        return self._descriptors.get(clean_id)
+
+    def list_descriptors(self) -> list[dict[str, Any]]:
+        return [_descriptor_summary(descriptor) for descriptor in _sorted_descriptors(self._descriptors)]
+
+    def list_capability_summaries(self) -> list[ManagedWorkerCapabilitySummary]:
+        summaries: list[ManagedWorkerCapabilitySummary] = []
+        for descriptor in _sorted_descriptors(self._descriptors):
+            for capability in descriptor.declared_capabilities:
+                summaries.append(
+                    ManagedWorkerCapabilitySummary(
+                        worker_id=descriptor.worker_id,
+                        worker_name=descriptor.name,
+                        worker_kind=descriptor.kind,
+                        capability_id=capability,
+                        worker_enabled=descriptor.enabled,
+                    )
+                )
+        return sorted(summaries, key=lambda item: (item.worker_id, item.capability_id))
+
+    def validate_descriptor(self, descriptor: ManagedWorkerDescriptor) -> ManagedWorkerReadiness:
+        return validate_managed_worker_descriptor(descriptor)
+
+    def binding_for(
+        self,
+        worker_id: str,
+        *,
+        policy: ManagedWorkerPolicy | None = None,
+        sandbox_profile: ManagedWorkerSandboxProfile | None = None,
+    ) -> ManagedWorkerBinding | None:
+        descriptor = self.get_descriptor(worker_id)
+        if descriptor is None:
+            return None
+        return ManagedWorkerBinding(
+            descriptor=descriptor,
+            policy=policy or _policy_from_descriptor(descriptor),
+            sandbox_profile=sandbox_profile or ManagedWorkerSandboxProfile(),
+        )
+
+    def describe(self) -> dict[str, Any]:
+        return {
+            "kind": "francis.compute_substrate.in_memory_managed_worker_registry",
+            "registered_worker_count": len(self._descriptors),
+            "registered_capability_count": sum(len(item.declared_capabilities) for item in self._descriptors.values()),
+            "process_local": True,
+            "durable": False,
+            "contract_only": True,
+            "non_executable": True,
+            "metadata_only": True,
+            "registers_execution_backends": False,
+            "mutates_worker_registry": False,
+            "submits_tasks": False,
+            "mutates_approvals": False,
+            "mutates_receipts": False,
+            "mutates_status": False,
+            "writes_memory": False,
+            "live_learning_persistence": False,
+            "real_worker_implementation": False,
+            "real_container_execution": False,
+            "real_vm_execution": False,
+            "real_remote_execution": False,
+            "real_simulation_execution": False,
+            "starts_processes": False,
+            "uses_network": False,
+            "uses_gpu": False,
+            "runs_shell": False,
+            "starts_daemon": False,
+            "os_level_cpu_memory_enforcement": False,
+        }
+
+
 def validate_managed_worker_descriptor(descriptor: ManagedWorkerDescriptor) -> ManagedWorkerReadiness:
     checks = {
         "safe_worker_id": bool(descriptor.worker_id),
@@ -768,6 +962,65 @@ def _resource_envelope(value: ManagedWorkerResourceEnvelope | TaskEnvelope) -> M
     return ManagedWorkerResourceEnvelope.from_task_envelope(value)
 
 
+def _policy_from_descriptor(descriptor: ManagedWorkerDescriptor) -> ManagedWorkerPolicy:
+    return ManagedWorkerPolicy(
+        allowed_capabilities=descriptor.declared_capabilities,
+        max_resource_budget=descriptor.max_resource_budget,
+        allowed_worker_kinds=(descriptor.kind,),
+        require_approval=descriptor.requires_approval_by_default,
+        allow_network=descriptor.supports_network,
+        allow_gpu=descriptor.supports_gpu,
+        filesystem_scope=descriptor.filesystem_scope,
+        allow_persistent_storage=descriptor.supports_persistent_storage,
+        allow_remote=descriptor.supports_remote,
+        allow_shell=False,
+    )
+
+
+def _sorted_descriptors(descriptors: dict[str, ManagedWorkerDescriptor]) -> list[ManagedWorkerDescriptor]:
+    return sorted(descriptors.values(), key=lambda item: item.worker_id)
+
+
+def _descriptor_summary(descriptor: ManagedWorkerDescriptor | None) -> dict[str, Any]:
+    if descriptor is None:
+        return {}
+    return {
+        "worker_id": descriptor.worker_id,
+        "name": descriptor.name,
+        "kind": descriptor.kind,
+        "enabled": descriptor.enabled,
+        "status": "disabled" if not descriptor.enabled else "registered_contract_only",
+        "declared_capabilities": list(descriptor.declared_capabilities),
+        "declared_capability_count": len(descriptor.declared_capabilities),
+        "trust_tier": descriptor.trust_tier,
+        "default_resource_budget": _budget_summary(descriptor.default_resource_budget),
+        "max_resource_budget": _budget_summary(descriptor.max_resource_budget),
+        "requires_approval_by_default": descriptor.requires_approval_by_default,
+        "filesystem_scope": _scope_summary(descriptor.filesystem_scope),
+        "registered_at_ms": descriptor.registered_at_ms,
+        "metadata_summary": dict(descriptor.metadata_summary),
+        "contract_only": True,
+        "metadata_only": True,
+        "non_executable": True,
+        "future_worker": True,
+        "executable_substrate_worker": False,
+        "executable_substrate_capability": False,
+        "registered_execution_backend": False,
+        "real_worker_implementation": False,
+        "durable_worker_persistence": False,
+        "starts_processes": False,
+        "uses_network": False,
+        "uses_gpu": False,
+        "runs_shell": False,
+        "starts_daemon": False,
+        "stores_payload": False,
+        "stores_output": False,
+        "stores_secrets": False,
+        "stores_runtime_config": False,
+        "writes_memory": False,
+    }
+
+
 def _budget_denial(budget: ResourceBudget, maximum: ResourceBudget) -> str:
     if budget.max_runtime_ms > maximum.max_runtime_ms:
         return "max_runtime_ms"
@@ -882,6 +1135,9 @@ def _summary_key_sensitive(key: str) -> bool:
             "apikey",
             "environment",
             "env",
+            "username",
+            "user_name",
+            "user",
         )
     )
 
