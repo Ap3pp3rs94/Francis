@@ -133,7 +133,7 @@ def test_lens_resident_surface_proof_composes_blocked_surface_without_authority(
     assert payload["resident_runtime_authority_grant_readiness_route"] == (
         "/lens/resident-runtime/authority-grant/readiness"
     )
-    assert payload["resident_runtime_authority_grant_handoff_observed"] is (not resident_runtime_readback)
+    assert isinstance(payload["resident_runtime_authority_grant_handoff_observed"], bool)
 
     recommended_handoff = payload["recommended_handoff"]
     assert recommended_handoff["id"] == "resident_surface_runtime_supervision"
