@@ -43,6 +43,27 @@ _RULES: tuple[AuthorityRule, ...] = (
         notes="Closure receipt does not mutate runtime stage state or grant execution authority.",
     ),
     AuthorityRule(
+        family="compute_substrate",
+        prefixes=("/compute-substrate/submit",),
+        required_actor="payload.actor_id",
+        required_scope="compute:submit",
+        approval_requirement=(
+            "API permission allows only substrate submission; approval_required tasks still require a valid "
+            "compute approval grant consumed by the substrate"
+        ),
+        receipt_behavior="compute capability receipt plus bounded compute status record when stores are configured",
+        denial_behavior=(
+            "api_permission_denied via permission_gate before service submission; substrate denials remain "
+            "reported by ComputeSubstrateService"
+        ),
+        governance_maturity="permission_and_substrate_gated",
+        notes=(
+            "Route submits only through ComputeSubstrateService. It does not call SafeLocalBackend or "
+            "SubstrateGovernor directly, return raw output, run shell/subprocess/network/GPU work, start "
+            "background workers, or grant new execution authority."
+        ),
+    ),
+    AuthorityRule(
         family="takeover",
         prefixes=("/takeover/control-transfer",),
         required_actor="payload.actor",
