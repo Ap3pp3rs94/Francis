@@ -93,7 +93,7 @@ Implemented endpoints:
 
 Deferred endpoints:
 
-- `GET /compute-substrate/capabilities` is deferred unless the route only returns bounded capability names and worker descriptors already exposed by `ComputeSubstrateService.known_capabilities` and registry readback.
+- `GET /compute-substrate/capabilities` is designed below but not implemented in this slice.
 
 If a deployment layer later places Francis under `/api`, the same contract applies to the prefixed paths.
 
@@ -222,6 +222,55 @@ Receipt readback may show only the bounded approval summary already recorded in 
 Receipt readback reports bounded execution receipt truth. Status readback reports task status. Status-read scope does not imply receipt-read, and receipt-read scope does not imply status-read unless a future policy explicitly combines them. Receipt readback must not mutate status records and must not claim task recovery, task resume, async execution, or background execution.
 
 Receipt readback may include bounded adapter or request summary only if it is already present in receipt-safe fields. It must not expose raw adapter payloads or raw adapter metadata, must not imply any real adapter exists, and must not give adapters read authority by identity alone. Actor permission remains required.
+
+## Capabilities Readback Route Contract
+
+`GET /compute-substrate/capabilities` is a designed but not yet implemented internal/local-dev route. A future implementation must remain read-only, permission-gated, and bounded unless a later governance-reviewed promotion explicitly changes that posture.
+
+The suggested route scope is `compute:capabilities:read`. This scope must remain separate from `compute:submit`, `compute:status:read`, and `compute:receipt:read`. It does not imply execution authority, does not imply backend power, does not imply approval authority, and does not imply administrative authority.
+
+The route may report bounded capabilities only. A safe response may include:
+
+- bounded capability names already visible through `ComputeSubstrateService.known_capabilities()`
+- a capability count
+- local/internal posture flags
+- whether the capabilities surface is available
+- stable denial or unavailable reasons
+- explicit false authority flags such as no execution, no mutation, no backend direct call, and no adapter implementation
+
+The route must not expose:
+
+- raw backend objects
+- raw worker internals
+- unrestricted worker descriptors
+- secrets
+- raw filesystem paths
+- adapter internals or raw adapter metadata
+- raw task payloads or outputs
+- approval notes
+- receipt store paths
+- production/public readiness claims
+
+The preferred future read path is:
+
+1. API request.
+2. `ApiPermissionGate` or repo-equivalent actor/scope validation.
+3. `ComputeSubstrateService.known_capabilities()` or a bounded service helper.
+4. Bounded capabilities response.
+
+The route must not call `SafeLocalBackend` directly, must not call backend internals directly, must not call `SubstrateGovernor.execute`, must not submit tasks, must not mutate approval/receipt/status records, and must not imply that Unreal, VSC-1, desktop Lens, avatar, voice, VM/container, remote worker, or simulation adapters exist.
+
+If the service is unavailable, the route must return a bounded unavailable response. If the service is available but has no capabilities, the route must return an empty bounded capability list. These states must not be collapsed into fake success or fake capability.
+
+Future route tests must prove:
+
+- unauthorized actor is denied
+- missing `compute:capabilities:read` scope is denied
+- submit, status-read, and receipt-read scopes do not imply capabilities read
+- successful read returns bounded capabilities
+- response does not include secrets, paths, raw worker internals, raw backend objects, raw adapter metadata, task payloads, or outputs
+- route does not submit, execute, consume approval, or mutate approval/status/receipt records
+- route does not imply adapter implementation, backend power, production exposure, async/background execution, recovery, resume, OS-level enforcement, memory persistence, live-learning persistence, or model training
 
 ## Permission And Actor Contract
 
