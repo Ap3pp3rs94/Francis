@@ -3973,6 +3973,43 @@ def test_collaboration_transcript_projects_chat_handoff_for_legacy_records(tmp_p
     assert "This older relay file has no chat handoff." in handoff["chat_text"]
 
 
+def test_collaboration_transcript_uses_file_mtime_to_order_same_timestamp_prompts(
+    tmp_path,
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    data_root = tmp_path / "data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from francis.developer_bridge import collaboration as collaboration_module
+
+    monkeypatch.setattr(collaboration_module, "_utc_now", lambda: "2026-07-04T00:00:00+00:00")
+
+    first = submit_collaboration_prompt(
+        source_agent="codex",
+        target_agent="ollama",
+        objective="same timestamp first",
+        prompt="Francis1 first prompt.",
+    )
+    second = submit_collaboration_prompt(
+        source_agent="codex",
+        target_agent="ollama",
+        objective="same timestamp second",
+        prompt="Francis1 second prompt.",
+    )
+    first_path = data_root / str(first["path"])
+    second_path = data_root / str(second["path"])
+    os.utime(first_path, ns=(1_000_000_000, 1_000_000_000))
+    os.utime(second_path, ns=(2_000_000_000, 2_000_000_000))
+    collaboration_module._invalidate_prompt_cache()
+
+    transcript = read_collaboration_transcript(source_agent="codex", target_agent="ollama", limit=2)
+
+    assert [item["id"] for item in transcript["items"]] == [
+        second["prompt_id"],
+        first["prompt_id"],
+    ]
+
+
 def test_collaboration_transcript_uses_recent_scan_for_large_unfiltered_readback(
     tmp_path,
     monkeypatch,

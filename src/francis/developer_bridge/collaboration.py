@@ -439,12 +439,12 @@ def _sorted_prompts() -> list[dict[str, object]]:
         if _prompt_cache_root == root and _prompt_cache_records is not None and now < _prompt_cache_deadline:
             return [dict(record) for record in _prompt_cache_records]
 
-    records: list[dict[str, object]] = []
+    records: list[tuple[dict[str, object], tuple[int, str]]] = []
     for path in root.glob("*.json"):
         record = _read_prompt(path)
         if record:
-            records.append(record)
-    sorted_records = sorted(records, key=_sort_key, reverse=True)
+            records.append((record, _path_sort_key(path)))
+    sorted_records = [record for record, _path_key in sorted(records, key=lambda item: _sort_key(*item), reverse=True)]
     with _PROMPT_CACHE_LOCK:
         _prompt_cache_root = root
         _prompt_cache_records = sorted_records
@@ -452,8 +452,8 @@ def _sorted_prompts() -> list[dict[str, object]]:
     return [dict(record) for record in sorted_records]
 
 
-def _sort_key(record: dict[str, object]) -> tuple[str, str]:
-    return (str(record.get("created_at") or ""), str(record.get("id") or ""))
+def _sort_key(record: dict[str, object], path_sort_key: tuple[int, str]) -> tuple[str, int, str, str]:
+    return _recent_sort_key(record, path_sort_key)
 
 
 def _session_summaries(
