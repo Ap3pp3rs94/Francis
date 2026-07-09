@@ -213,6 +213,11 @@ class ComputeAdapterSubmissionResult:
     approval_required: bool = False
     approval_satisfied: bool = False
     approval_consumed: bool = False
+    status_write_attempted: bool = False
+    status_write_succeeded: bool = False
+    status_persisted: bool = False
+    status_persistence_failed: bool = False
+    status_persistence_error: str = ""
     cancellation_requested: bool = False
     timed_out: bool = False
     created_at_ms: int = field(default_factory=_now_ms)
@@ -264,6 +269,11 @@ class ComputeAdapterSubmissionResult:
             approval_required=record.approval_required,
             approval_satisfied=record.approval_satisfied,
             approval_consumed=record.approval_consumed,
+            status_write_attempted=record.status_write_attempted,
+            status_write_succeeded=record.status_write_succeeded,
+            status_persisted=record.status_persisted,
+            status_persistence_failed=record.status_persistence_failed,
+            status_persistence_error=record.status_persistence_error,
             cancellation_requested=record.cancellation_requested,
             timed_out=record.timed_out,
             created_at_ms=request.created_at_ms,
@@ -289,6 +299,11 @@ class ComputeAdapterSubmissionResult:
             "approval_required": self.approval_required,
             "approval_satisfied": self.approval_satisfied,
             "approval_consumed": self.approval_consumed,
+            "status_write_attempted": self.status_write_attempted,
+            "status_write_succeeded": self.status_write_succeeded,
+            "status_persisted": self.status_persisted,
+            "status_persistence_failed": self.status_persistence_failed,
+            "status_persistence_error": self.status_persistence_error,
             "cancellation_requested": self.cancellation_requested,
             "timed_out": self.timed_out,
             "created_at_ms": self.created_at_ms,

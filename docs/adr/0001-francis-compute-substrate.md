@@ -91,6 +91,8 @@ Persisted status JSON contains bounded `ComputeTaskRecord` fields such as task i
 
 If a task passes through `ComputeAdapterGateway`, durable compute status is still written only through the configured `ComputeSubstrateService` status store. Adapter contracts remain contract-only, and durable adapter persistence is not implemented.
 
+Status-store write failures are represented structurally by the internal service. A status persistence failure does not by itself turn a successful execution into an execution failure, does not hide denial truth, and does not fake durable status success. Returned records include bounded status-write evidence while preserving receipt truth, approval truth, and the underlying execution/denial status as far as the current contract allows. Durable status persistence remains separate from durable compute receipts and durable approvals. This does not add public API exposure, async/background execution, task recovery, resumability, durable adapter persistence, long-term memory persistence, live-learning persistence, model training, or new execution authority.
+
 ## Internal Adapter Contract Layer
 
 An internal adapter contract slice adds `ComputeAdapterKind`, `ComputeAdapterDescriptor`, `ComputeAdapterPolicy`, `ComputeAdapterRequest`, `ComputeAdapterSubmissionResult`, `ComputeAdapterRegistry`, `InMemoryComputeAdapterRegistry`, and `ComputeAdapterGateway`.

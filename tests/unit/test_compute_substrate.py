@@ -1501,6 +1501,25 @@ class _FailingReceiptStore:
         return {"kind": "test.failing_compute_receipt_store"}
 
 
+class _FailingStatusStore:
+    def __init__(self, *, error: str = "status store unavailable") -> None:
+        self.error = error
+        self.upsert_calls = 0
+
+    def upsert(self, record: ComputeTaskRecord) -> ComputeTaskRecord:
+        self.upsert_calls += 1
+        raise OSError(self.error)
+
+    def get_by_task_id(self, task_id: str) -> ComputeTaskRecord | None:
+        return None
+
+    def get_by_correlation_id(self, correlation_id: str) -> ComputeTaskRecord | None:
+        return None
+
+    def describe(self) -> dict[str, object]:
+        return {"kind": "test.failing_compute_status_store", "durable": True}
+
+
 def test_failed_receipt_persistence_does_not_fake_success() -> None:
     registry = WorkerRegistry()
     registry.register(SafeLocalBackend())
@@ -1604,6 +1623,11 @@ def test_local_json_compute_status_store_writes_and_reads_status_record(tmp_path
     persisted = store.upsert(record)
 
     assert persisted.durable_status_persistence is True
+    assert persisted.status_write_attempted is True
+    assert persisted.status_write_succeeded is True
+    assert persisted.status_persisted is True
+    assert persisted.status_persistence_failed is False
+    assert persisted.status_store_type == "francis.compute_substrate.local_json_status_store"
     assert persisted.status_version == 1
     assert store.describe()["durable"] is True
     assert store.describe()["background_execution"] is False
@@ -1621,6 +1645,8 @@ def test_local_json_compute_status_store_writes_and_reads_status_record(tmp_path
     assert payload["record"]["stores_payload"] is False
     assert payload["record"]["stores_output"] is False
     assert payload["record"]["durable_status_persistence"] is True
+    assert payload["record"]["status_write_succeeded"] is True
+    assert payload["record"]["status_persistence_failed"] is False
     assert payload["governance"]["does_not_persist_task_payload"] is True
     assert payload["governance"]["does_not_persist_task_output"] is True
     assert "raw task payload" not in status_text
@@ -1920,6 +1946,157 @@ def test_compute_substrate_service_reports_failed_receipt_persistence_truthfully
     assert service.status_for_task("service-receipt-fails") == result.record
 
 
+def test_compute_substrate_service_reports_status_persistence_failure_without_execution_failure() -> None:
+    raw_payload_marker = "RAW_PAYLOAD_SHOULD_NOT_PERSIST"
+    raw_output_marker = "RAW_OUTPUT_SHOULD_NOT_PERSIST"
+    approval_secret_marker = "APPROVAL_SECRET_SHOULD_NOT_PERSIST"
+    model_prompt_marker = "MODEL_PROMPT_SHOULD_NOT_PERSIST"
+    broad_filesystem_marker = "C:\\Sensitive\\Should\\Not\\Persist"
+    status_store = _FailingStatusStore(
+        error=(
+            f"{raw_payload_marker} {raw_output_marker} {approval_secret_marker} "
+            f"{model_prompt_marker} {broad_filesystem_marker}"
+        )
+    )
+    service = ComputeSubstrateService(status_store=status_store)
+
+    result = service.submit(
+        create_task_envelope(
+            "echo",
+            task_id="service-status-write-fails",
+            trace_id="trace-service-status-write-fails",
+            payload={
+                "message": raw_output_marker,
+                "payload_marker": raw_payload_marker,
+                "prompt": model_prompt_marker,
+                "path": broad_filesystem_marker,
+            },
+        )
+    )
+
+    serialized = json.dumps(result.to_dict(), sort_keys=True)
+    assert status_store.upsert_calls == 2
+    assert result.ok is True
+    assert result.status == ComputeTaskStatus.SUCCEEDED
+    assert result.result_status == "success"
+    assert result.result_error == ""
+    assert result.record.status_persistence_failed is True
+    assert result.record.status_write_attempted is True
+    assert result.record.status_write_succeeded is False
+    assert result.record.status_persisted is False
+    assert result.record.durable_status_persistence is False
+    assert result.record.status_store_type == "test.failing_compute_status_store"
+    assert result.record.status_persistence_error == "OSError: status_store_write_failed"
+    assert result.record.receipt_id == result.receipt.receipt_id
+    assert result.record.receipt_persisted is False
+    assert result.record.receipt_persistence_status == "in_memory_only"
+    assert result.receipt.status == "success"
+    assert service.status_for_task("service-status-write-fails").status == ComputeTaskStatus.UNKNOWN
+    assert service.status_for_correlation("trace-service-status-write-fails").status == ComputeTaskStatus.UNKNOWN
+    for sentinel in (
+        raw_payload_marker,
+        raw_output_marker,
+        approval_secret_marker,
+        model_prompt_marker,
+        broad_filesystem_marker,
+        broad_filesystem_marker.replace("\\", "\\\\"),
+    ):
+        assert sentinel not in result.record.status_persistence_error
+        assert sentinel not in serialized
+
+
+def test_compute_substrate_service_preserves_approval_truth_when_status_persistence_fails(
+    tmp_path: Path,
+) -> None:
+    approval_store = LocalJsonComputeApprovalStore(tmp_path / "compute-approvals")
+    approval_store.add(_approval_grant(approval_id="approval-status-fails", task_id="service-status-approval-fails"))
+    status_store = _FailingStatusStore()
+    service = ComputeSubstrateService(
+        approval_store=approval_store,
+        status_store=status_store,
+    )
+
+    result = service.submit(
+        create_task_envelope(
+            "echo",
+            task_id="service-status-approval-fails",
+            trace_id="trace-service-status-approval-fails",
+            approval_id="approval-status-fails",
+            budget=ResourceBudget(approval_required=True),
+        )
+    )
+
+    consumed = approval_store.get("approval-status-fails")
+    assert status_store.upsert_calls == 2
+    assert result.ok is True
+    assert result.status == ComputeTaskStatus.SUCCEEDED
+    assert result.record.status_persistence_failed is True
+    assert result.record.approval_required is True
+    assert result.record.approval_id == "approval-status-fails"
+    assert result.record.approval_satisfied is True
+    assert result.record.approval_consumed is True
+    assert result.receipt.governance["approval_persistence"] == "persisted_local_json"
+    assert consumed is not None
+    assert consumed.consumed_by_task_id == "service-status-approval-fails"
+    assert service.status_for_task("service-status-approval-fails").status == ComputeTaskStatus.UNKNOWN
+
+
+def test_compute_substrate_service_preserves_denial_truth_when_status_persistence_fails() -> None:
+    status_store = _FailingStatusStore()
+    service = ComputeSubstrateService(status_store=status_store)
+
+    result = service.submit(
+        create_task_envelope(
+            "echo",
+            task_id="service-status-denied-write-fails",
+            trace_id="trace-service-status-denied-write-fails",
+            budget=ResourceBudget(approval_required=True),
+        )
+    )
+
+    assert status_store.upsert_calls == 2
+    assert result.ok is False
+    assert result.status == ComputeTaskStatus.DENIED
+    assert result.result_status == "denied"
+    assert result.record.denial_reason == "missing_approval"
+    assert result.record.approval_required is True
+    assert result.record.approval_satisfied is False
+    assert result.record.approval_consumed is False
+    assert result.record.status_persistence_failed is True
+    assert result.record.status_persistence_error == "OSError: status_store_write_failed"
+    assert service.status_for_task("service-status-denied-write-fails").status == ComputeTaskStatus.UNKNOWN
+
+
+def test_compute_substrate_service_reports_receipt_and_status_persistence_failures_together() -> None:
+    status_store = _FailingStatusStore()
+    service = ComputeSubstrateService(
+        receipt_store=_FailingReceiptStore(),
+        status_store=status_store,
+    )
+
+    result = service.submit(
+        create_task_envelope(
+            "echo",
+            task_id="service-receipt-and-status-fail",
+            trace_id="trace-service-receipt-and-status-fail",
+        )
+    )
+
+    assert status_store.upsert_calls == 2
+    assert result.ok is False
+    assert result.status == ComputeTaskStatus.RECEIPT_PERSISTENCE_FAILED
+    assert result.result_status == "receipt_persistence_failed"
+    assert result.record.receipt_persisted is False
+    assert result.record.receipt_persistence_status == "persistence_failed"
+    assert result.record.receipt_error.startswith("OSError: receipt store unavailable")
+    assert result.record.status_persistence_failed is True
+    assert result.record.status_write_succeeded is False
+    assert result.record.status_persistence_error == "OSError: status_store_write_failed"
+    assert result.receipt.persisted is False
+    assert result.receipt.receipt_error.startswith("OSError: receipt store unavailable")
+    assert service.status_for_task("service-receipt-and-status-fail").status == ComputeTaskStatus.UNKNOWN
+
+
 def test_compute_substrate_service_with_local_json_status_store_persists_success(tmp_path: Path) -> None:
     status_store = LocalJsonComputeStatusStore(tmp_path / "compute-status")
     service = ComputeSubstrateService(status_store=status_store)
@@ -1944,6 +2121,11 @@ def test_compute_substrate_service_with_local_json_status_store_persists_success
     assert result.ok is True
     assert result.status == ComputeTaskStatus.SUCCEEDED
     assert result.record.durable_status_persistence is True
+    assert result.record.status_write_attempted is True
+    assert result.record.status_write_succeeded is True
+    assert result.record.status_persisted is True
+    assert result.record.status_persistence_failed is False
+    assert result.record.status_store_type == "francis.compute_substrate.local_json_status_store"
     assert service.status_for_task("service-status-success") == result.record
     assert service.status_for_correlation("trace-service-status-success") == result.record
     assert readback == result.record
@@ -2055,6 +2237,11 @@ def test_compute_substrate_service_without_durable_status_store_remains_in_memor
     assert result.ok is True
     assert result.record.durable_status_persistence is False
     assert result.record.to_dict()["durable_status_persistence"] is False
+    assert result.record.status_write_attempted is True
+    assert result.record.status_write_succeeded is True
+    assert result.record.status_persisted is False
+    assert result.record.status_persistence_failed is False
+    assert result.record.status_store_type == "francis.compute_substrate.in_memory_status_store"
     assert service.status_store.describe()["durable"] is False
     assert service.status_for_task("service-memory-status-only") == result.record
 

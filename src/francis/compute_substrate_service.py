@@ -90,6 +90,12 @@ class ComputeTaskRecord:
     updated_at_ms: int = field(default_factory=_now_ms)
     status_version: int = _STATUS_SCHEMA_VERSION
     durable_status_persistence: bool = False
+    status_store_type: str = ""
+    status_write_attempted: bool = False
+    status_write_succeeded: bool = False
+    status_persisted: bool = False
+    status_persistence_failed: bool = False
+    status_persistence_error: str = ""
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "status_version", _int_or_default(self.status_version, default=_STATUS_SCHEMA_VERSION))
@@ -115,6 +121,8 @@ class ComputeTaskRecord:
         object.__setattr__(self, "duration_ms", max(0, _int_or_default(self.duration_ms, default=0)))
         object.__setattr__(self, "created_at_ms", _int_or_default(self.created_at_ms, default=_now_ms()))
         object.__setattr__(self, "updated_at_ms", _int_or_default(self.updated_at_ms, default=_now_ms()))
+        object.__setattr__(self, "status_store_type", _bounded_text(self.status_store_type, limit=160))
+        object.__setattr__(self, "status_persistence_error", _bounded_text(self.status_persistence_error))
 
     @classmethod
     def from_submission(cls, submission: ComputeSubmission) -> ComputeTaskRecord:
@@ -200,6 +208,12 @@ class ComputeTaskRecord:
             created_at_ms=_int_or_default(payload.get("created_at_ms"), default=_now_ms()),
             updated_at_ms=_int_or_default(payload.get("updated_at_ms"), default=_now_ms()),
             durable_status_persistence=bool(payload.get("durable_status_persistence", False)),
+            status_store_type=payload.get("status_store_type", ""),
+            status_write_attempted=bool(payload.get("status_write_attempted", False)),
+            status_write_succeeded=bool(payload.get("status_write_succeeded", False)),
+            status_persisted=bool(payload.get("status_persisted", False)),
+            status_persistence_failed=bool(payload.get("status_persistence_failed", False)),
+            status_persistence_error=payload.get("status_persistence_error", ""),
         )
 
     @classmethod
@@ -253,6 +267,12 @@ class ComputeTaskRecord:
             "stores_payload": False,
             "stores_output": False,
             "durable_status_persistence": self.durable_status_persistence,
+            "status_store_type": self.status_store_type,
+            "status_write_attempted": self.status_write_attempted,
+            "status_write_succeeded": self.status_write_succeeded,
+            "status_persisted": self.status_persisted,
+            "status_persistence_failed": self.status_persistence_failed,
+            "status_persistence_error": self.status_persistence_error,
             "background_execution": False,
         }
 
@@ -298,6 +318,11 @@ class ComputeSubmissionResult:
             "result_error": self.result_error,
             "stores_payload": False,
             "stores_output": False,
+            "status_write_attempted": self.record.status_write_attempted,
+            "status_write_succeeded": self.record.status_write_succeeded,
+            "status_persisted": self.record.status_persisted,
+            "status_persistence_failed": self.record.status_persistence_failed,
+            "status_persistence_error": self.record.status_persistence_error,
             "async_execution": False,
         }
 
@@ -320,10 +345,15 @@ class InMemoryComputeStatusStore:
         self._task_id_by_correlation_id: dict[str, str] = {}
 
     def upsert(self, record: ComputeTaskRecord) -> ComputeTaskRecord:
-        self._records_by_task_id[record.task_id] = record
-        if record.correlation_id:
-            self._task_id_by_correlation_id[record.correlation_id] = record.task_id
-        return record
+        stored_record = _status_write_success_record(
+            record,
+            status_store_type="francis.compute_substrate.in_memory_status_store",
+            durable=False,
+        )
+        self._records_by_task_id[stored_record.task_id] = stored_record
+        if stored_record.correlation_id:
+            self._task_id_by_correlation_id[stored_record.correlation_id] = stored_record.task_id
+        return stored_record
 
     def get_by_task_id(self, task_id: str) -> ComputeTaskRecord | None:
         return self._records_by_task_id.get(_safe_record_text(task_id))
@@ -362,11 +392,14 @@ class LocalJsonComputeStatusStore:
         task_id = _safe_status_id(record.task_id, field_name="task_id")
         correlation_id = _safe_status_id(record.correlation_id, field_name="correlation_id")
         persisted_record = replace(
-            record,
+            _status_write_success_record(
+                record,
+                status_store_type="francis.compute_substrate.local_json_status_store",
+                durable=True,
+            ),
             task_id=task_id,
             correlation_id=correlation_id,
             status_version=_STATUS_SCHEMA_VERSION,
-            durable_status_persistence=True,
         )
         task_path = self._task_path(task_id)
         task_path.parent.mkdir(parents=True, exist_ok=True)
@@ -466,15 +499,25 @@ class ComputeSubstrateService:
         context: ExecutionContext | None = None,
     ) -> ComputeSubmissionResult:
         normalized = _normalize_submission(submission, context=context)
-        submitted_record = self.status_store.upsert(ComputeTaskRecord.from_submission(normalized))
+        submitted_record = self._record_status(ComputeTaskRecord.from_submission(normalized))
         result = self.governor.execute(normalized.envelope, self.registry, context=normalized.context)
-        final_record = self.status_store.upsert(
+        final_record = self._record_status(
             ComputeTaskRecord.from_execution_result(
                 result,
                 created_at_ms=submitted_record.created_at_ms,
             )
         )
         return ComputeSubmissionResult.from_execution_result(record=final_record, result=result)
+
+    def _record_status(self, record: ComputeTaskRecord) -> ComputeTaskRecord:
+        try:
+            return self.status_store.upsert(record)
+        except Exception as exc:
+            return _status_write_failure_record(
+                record,
+                status_store_type=_status_store_type(self.status_store),
+                exc=exc,
+            )
 
     def status_for_task(self, task_id: str) -> ComputeTaskRecord:
         return self.status_store.get_by_task_id(task_id) or ComputeTaskRecord.unknown(task_id=task_id)
@@ -531,6 +574,56 @@ def _describe_approval_store(store: ApprovalStore | None) -> dict[str, Any]:
         description = describe()
         return dict(description) if isinstance(description, dict) else {"kind": "unknown", "durable": False}
     return {"kind": type(store).__name__, "durable": False}
+
+
+def _status_store_type(store: ComputeStatusStore) -> str:
+    describe = getattr(store, "describe", None)
+    if callable(describe):
+        try:
+            description = describe()
+        except Exception:
+            description = {}
+        if isinstance(description, dict):
+            store_kind = _bounded_text(description.get("kind"), limit=160)
+            if store_kind:
+                return store_kind
+    return _bounded_text(type(store).__name__, limit=160) or "unknown_status_store"
+
+
+def _status_write_success_record(
+    record: ComputeTaskRecord,
+    *,
+    status_store_type: str,
+    durable: bool,
+) -> ComputeTaskRecord:
+    return replace(
+        record,
+        durable_status_persistence=durable,
+        status_store_type=_bounded_text(status_store_type, limit=160),
+        status_write_attempted=True,
+        status_write_succeeded=True,
+        status_persisted=durable,
+        status_persistence_failed=False,
+        status_persistence_error="",
+    )
+
+
+def _status_write_failure_record(
+    record: ComputeTaskRecord,
+    *,
+    status_store_type: str,
+    exc: Exception,
+) -> ComputeTaskRecord:
+    return replace(
+        record,
+        durable_status_persistence=False,
+        status_store_type=_bounded_text(status_store_type, limit=160),
+        status_write_attempted=True,
+        status_write_succeeded=False,
+        status_persisted=False,
+        status_persistence_failed=True,
+        status_persistence_error=f"{type(exc).__name__}: status_store_write_failed",
+    )
 
 
 def _status_from_execution(status: str) -> str:

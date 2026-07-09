@@ -17,6 +17,7 @@ from francis.compute_substrate import (
     ComputeAdapterRequest,
     ComputeAdapterSubmissionResult,
     ComputeSubstrateService,
+    ComputeTaskRecord,
     ComputeTaskStatus,
     ExecutionContext,
     ExecutionDeadline,
@@ -190,6 +191,24 @@ class _FailingReceiptStore:
 
     def describe(self) -> dict[str, object]:
         return {"kind": "test.failing_adapter_receipt_store"}
+
+
+class _FailingStatusStore:
+    def __init__(self) -> None:
+        self.upsert_calls = 0
+
+    def upsert(self, record: ComputeTaskRecord) -> ComputeTaskRecord:
+        self.upsert_calls += 1
+        raise OSError("adapter status store unavailable")
+
+    def get_by_task_id(self, task_id: str) -> ComputeTaskRecord | None:
+        return None
+
+    def get_by_correlation_id(self, correlation_id: str) -> ComputeTaskRecord | None:
+        return None
+
+    def describe(self) -> dict[str, object]:
+        return {"kind": "test.failing_adapter_status_store", "durable": True}
 
 
 class _FailingAfterApprovalBackend:
@@ -412,6 +431,31 @@ def test_adapter_gateway_records_durable_status_when_service_is_configured(tmp_p
     assert "secret-adapter-payload" not in status_text
     assert '"stores_payload": false' in status_text
     assert '"stores_output": false' in status_text
+
+
+def test_adapter_gateway_reports_status_persistence_failure_from_service() -> None:
+    status_store = _FailingStatusStore()
+    gateway, service = _gateway(service=_RecordingService(status_store=status_store))
+
+    result = gateway.submit(_request(request_id="adapter-status-write-fails"))
+
+    assert status_store.upsert_calls == 2
+    assert service.submit_calls == 1
+    assert result.ok is True
+    assert result.accepted is True
+    assert result.status == ComputeTaskStatus.SUCCEEDED
+    assert result.status_write_attempted is True
+    assert result.status_write_succeeded is False
+    assert result.status_persisted is False
+    assert result.status_persistence_failed is True
+    assert result.status_persistence_error == "OSError: status_store_write_failed"
+    assert result.submission_result is not None
+    assert result.submission_result.record.status_store_type == "test.failing_adapter_status_store"
+    assert result.submission_result.record.status_persistence_failed is True
+    assert service.status_for_task("adapter-status-write-fails").status == ComputeTaskStatus.UNKNOWN
+    assert result.to_dict()["status_persistence_failed"] is True
+    assert result.to_dict()["stores_payload"] is False
+    assert result.to_dict()["stores_output"] is False
 
 
 def test_adapter_service_governor_durable_approval_receipt_status_checkpoint(tmp_path: Path) -> None:
