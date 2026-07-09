@@ -2,21 +2,21 @@
 
 Date: 2026-07-09
 
-Status: Accepted as design contract before route implementation
+Status: Accepted; first internal/local-dev route implemented under this contract
 
 ## Context
 
-Francis now has an internally governed Compute Substrate under the existing Phase 2 / `P7_EXECUTION` direction. The current internal path includes typed task envelopes, resource budgets, worker descriptors, a worker registry, a substrate governor, safe built-in local backend functions, approval consumption, durable approval persistence, durable compute receipt persistence, durable status persistence, adapter request validation, cooperative cancellation/deadline semantics, and structured persistence-failure reporting.
+Francis now has an internally governed Compute Substrate under the existing Phase 2 / `P7_EXECUTION` direction. The current internal path includes typed task envelopes, resource budgets, worker descriptors, a worker registry, a substrate governor, safe built-in local backend functions, approval consumption, durable approval persistence, durable compute receipt persistence, durable status persistence, adapter request validation, cooperative cancellation/deadline semantics, structured persistence-failure reporting, and internal/local-dev API submission/status routes.
 
 ## Problem
 
 Exposing that substrate through an API without a written authority contract would create risk around accidental execution bypass, fake async/recovery claims, raw payload leakage, weak approval semantics, weak status/readback semantics, and adapter behavior that appears more real than it is.
 
-This ADR defines the contract that future internal API submission/status routes must satisfy before any route is implemented.
+This ADR records the contract that the first internal/local-dev API submission/status route now satisfies and that future Compute Substrate API route expansion must preserve.
 
 ## Decision
 
-Future Compute Substrate API routes must remain narrow wrappers over the existing governed substrate path:
+Implemented and future Compute Substrate API routes must remain narrow wrappers over the existing governed substrate path:
 
 1. API request.
 2. `ApiPermissionGate` or a repo-equivalent actor/scope gate.
@@ -40,12 +40,27 @@ The API must not call these surfaces to bypass the service path:
 
 The substrate remains the authority layer. API routes may submit requests and report bounded truth; they do not become the substrate.
 
+## Implemented First Route Surface
+
+As of commit `3953ed26`, Francis has an internal/local-dev, synchronous, in-process route module mounted under `/compute-substrate`:
+
+- `POST /compute-substrate/submit`
+- `GET /compute-substrate/status/{task_id}`
+- `GET /compute-substrate/status/by-correlation/{correlation_id}`
+
+The route uses `ApiPermissionGate` before service access, with separate `compute:submit` and `compute:status:read` scopes. API permission authorizes only route access. Substrate approval still authorizes execution.
+
+Submit requests are converted into bounded `TaskEnvelope` / `ComputeSubmission` objects and sent through `ComputeSubstrateService.submit`. Status readback uses the service status surface. The route does not call `SafeLocalBackend`, `SubstrateGovernor`, or backend internals directly for execution, and it does not weaken `approval_required`.
+
+Focused API and substrate tests cover permission boundaries, malformed request denial, approval denial and consumption, durable receipt/status persistence, cancellation/deadline truth, receipt/status persistence failure truth, status readback by task id and correlation id, redaction, service-boundary enforcement, and adapter validation denial before service submission.
+
 ## Non-Goals
 
-This design contract does not implement:
+This contract and the first internal/local-dev route do not add:
 
-- an API route
+- production-grade public exposure
 - public internet exposure
+- receipt readback, capability readback, or admin routes
 - fake API capability
 - real adapters
 - Unreal, VSC-1, desktop Lens, avatar, voice, VM/container, remote worker, or simulation implementation
@@ -64,9 +79,9 @@ It also does not claim that in-memory stores are production durable, that cooper
 
 ## Proposed Route Shape
 
-Francis route modules are mounted directly under route prefixes rather than under a universal `/api` prefix. A future route module should therefore use a repo-consistent internal prefix such as `/compute-substrate`.
+Francis route modules are mounted directly under route prefixes rather than under a universal `/api` prefix. The current route module uses the repo-consistent internal prefix `/compute-substrate`.
 
-Initial proposed endpoints:
+Implemented endpoints:
 
 - `POST /compute-substrate/submit`
 - `GET /compute-substrate/status/{task_id}`
@@ -109,7 +124,7 @@ Initial scope names:
 
 ## Request Contract
 
-A future submit request should be schema-driven and bounded. The request may include:
+Submit requests are schema-driven and bounded. The request may include:
 
 - `request_id`
 - `actor_id` or an actor summary
@@ -220,7 +235,7 @@ Durable adapter persistence is not required for the first API route because adap
 
 Current local JSON stores provide local persistence only. They do not implement distributed locking, cross-process approval reservation, cross-process status coordination, or multi-process receipt coordination.
 
-The first API route, when implemented, must be marked local/internal/dev until these concerns are addressed:
+The current first API route is local/internal/dev and must remain so until these concerns are addressed:
 
 - cross-process approval reservation
 - durable store root configuration policy
@@ -249,7 +264,7 @@ Required redaction and boundedness rules:
 
 ## Future Route Test Contract
 
-Before a Compute Substrate API route is implemented, route tests must prove:
+Current route and substrate tests prove the following for the first internal/local-dev route. Future route expansion must preserve this coverage or add equivalent focused tests:
 
 - unauthorized actor is denied
 - missing scope is denied
@@ -277,14 +292,14 @@ Before a Compute Substrate API route is implemented, route tests must prove:
 
 ## Consequences
 
-Future Compute Substrate API implementation is gated by this contract.
+The first internal/local-dev Compute Substrate API route is implemented under this contract. Future Compute Substrate API expansion remains gated by it.
 
-The first API route should be a narrow wrapper over `ComputeSubstrateService`. Substrate internals remain authoritative. Future adapters must not bypass the adapter gateway, service, governor, approval, receipt, and status path. This contract enables safer API implementation but does not expose API capability yet.
+The first API route is a narrow wrapper over `ComputeSubstrateService`. Substrate internals remain authoritative. Future adapters must not bypass the adapter gateway, service, governor, approval, receipt, and status path. This contract exposes only internal/local-dev submission/status capability and does not create production-grade public exposure, additional API surfaces, async/background execution, recovery/resume, real adapters, durable adapter persistence, OS-level resource enforcement, memory persistence, live-learning persistence, model training, or new execution authority.
 
 ## Open Questions And Follow-Ups
 
-- Final API scope names and whether they should align with existing `operations.run` or remain compute-specific.
-- Whether the first route is local-only, dev-only, or operator-internal by configuration.
+- Whether future API scope names should align with existing `operations.run` or remain compute-specific.
+- Production exposure and configuration posture beyond the current internal/local-dev route.
 - Cross-process approval reservation.
 - Durable store root configuration policy.
 - Status retention and cleanup policy.

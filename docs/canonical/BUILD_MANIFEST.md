@@ -314,6 +314,16 @@ timeout, filesystem, network, memory, and worker boundaries are reviewable. An A
 visual engine, virtual PC, avatar, desktop Lens bridge, remote worker, or simulator
 may only bind after it can satisfy those substrate adapter obligations.
 
+As of commit `3953ed26`, Francis has internal/local-dev Compute Substrate API
+submission/status routes for `POST /compute-substrate/submit`,
+`GET /compute-substrate/status/{task_id}`, and
+`GET /compute-substrate/status/by-correlation/{correlation_id}`. They are
+governed through `ApiPermissionGate` and `ComputeSubstrateService`, preserve the
+substrate/governor authority boundary, and remain local-dev route surfaces only.
+This does not add production-grade public exposure, real adapters,
+async/background execution, task recovery/resume, durable adapter persistence, or
+OS-level CPU/memory enforcement.
+
 ---
 
 ## 4. ORB Milestones

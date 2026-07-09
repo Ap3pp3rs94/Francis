@@ -18,9 +18,9 @@ The grounded thesis is not free compute and not a solved data-center crisis. Fra
 
 ## First Slice Boundary
 
-The first implementation slice is internal only:
+The first implementation slice was internal only:
 
-- no API route
+- no API route in that slice
 - no arbitrary subprocess execution
 - no shell execution
 - no unrestricted filesystem writes
@@ -93,6 +93,18 @@ If a task passes through `ComputeAdapterGateway`, durable compute status is stil
 
 Status-store write failures are represented structurally by the internal service. A status persistence failure does not by itself turn a successful execution into an execution failure, does not hide denial truth, and does not fake durable status success. Returned records include bounded status-write evidence while preserving receipt truth, approval truth, and the underlying execution/denial status as far as the current contract allows. Durable status persistence remains separate from durable compute receipts and durable approvals. This does not add public API exposure, async/background execution, task recovery, resumability, durable adapter persistence, long-term memory persistence, live-learning persistence, model training, or new execution authority.
 
+## Internal Local-Dev API Submission And Status Routes
+
+A later internal API slice adds local-dev submission/status routes under `/compute-substrate`:
+
+- `POST /compute-substrate/submit`
+- `GET /compute-substrate/status/{task_id}`
+- `GET /compute-substrate/status/by-correlation/{correlation_id}`
+
+The route surface is governed by `ApiPermissionGate` before substrate access, uses separate submit and status-read scopes, and submits only through `ComputeSubstrateService`. The service and `SubstrateGovernor` remain the execution authority; approval grants still authorize execution, receipts still prove what happened, and status readback still reports bounded task truth.
+
+This route surface is not production-grade public exposure and does not add receipt readback routes, capability routes, admin routes, real adapters, async/background execution, task recovery/resume, OS-level CPU/memory enforcement, cross-process approval reservation, distributed locking, durable adapter persistence, long-term memory persistence, `LiveLearningEvent` persistence, model training, or new execution authority.
+
 ## Internal Adapter Contract Layer
 
 An internal adapter contract slice adds `ComputeAdapterKind`, `ComputeAdapterDescriptor`, `ComputeAdapterPolicy`, `ComputeAdapterRequest`, `ComputeAdapterSubmissionResult`, `ComputeAdapterRegistry`, `InMemoryComputeAdapterRegistry`, and `ComputeAdapterGateway`.
@@ -121,7 +133,7 @@ Durable approval persistence is separate from durable compute receipt persistenc
 
 Persisted approval JSON contains bounded approval-grant fields and redacted note/reason summaries only. It does not persist raw task payloads, raw execution outputs, raw approval notes, raw model prompts, secrets, broad filesystem paths, long-term memory, live-learning events, adapter state, status records, network authority, GPU authority, shell authority, daemon state, or new execution authority.
 
-The durable approval store provides local JSON durability and sequential single-use consumption within the tested store semantics. It does not implement cross-process atomic reservation, distributed locks, durable compute status persistence by itself, durable adapter persistence, durable compute receipt persistence by itself, OS-level CPU/memory enforcement, process/thread preemption, API submission, Unreal, VSC-1, desktop Lens, avatar, voice, VM/container, remote worker, simulation, long-term memory persistence, live-learning persistence, or model training.
+The durable approval store provides local JSON durability and sequential single-use consumption within the tested store semantics. It does not implement cross-process atomic reservation, distributed locks, durable compute status persistence by itself, durable adapter persistence, durable compute receipt persistence by itself, OS-level CPU/memory enforcement, process/thread preemption, production-grade public API exposure, Unreal, VSC-1, desktop Lens, avatar, voice, VM/container, remote worker, simulation, long-term memory persistence, live-learning persistence, or model training.
 
 ## Receipts And Learning
 
@@ -137,4 +149,4 @@ The substrate also returns an explicit `LiveLearningEvent` contract object. It d
 
 The substrate can grow toward stronger workers without changing Francis's authority model. Visual runtimes, virtual machines, containers, remote workers, and simulations become bounded execution adapters with policy, budget, receipt, and verification obligations.
 
-The current limitation is deliberate: this foundation proves the internal contract, safe dispatch path, bounded compute receipt persistence, internal approval consumption, durable local approval persistence, cooperative cancellation/deadline semantics, internal synchronous submission/status readback, durable local compute status persistence, and internal adapter request obligations. It does not prove production-grade sandboxing, OS resource isolation, cross-process atomic approval reservation, OS-level CPU/memory preemption, API submission, adapter execution, task recovery/resume, durable adapter persistence, or long-term learning persistence.
+The current limitation is deliberate: this foundation proves the internal contract, safe dispatch path, bounded compute receipt persistence, internal approval consumption, durable local approval persistence, cooperative cancellation/deadline semantics, internal synchronous submission/status readback, durable local compute status persistence, internal adapter request obligations, and internal/local-dev API submission/status routes. It does not prove production-grade sandboxing, OS resource isolation, cross-process atomic approval reservation, OS-level CPU/memory preemption, production-grade public API exposure, additional API surfaces, adapter execution, task recovery/resume, durable adapter persistence, or long-term learning persistence.

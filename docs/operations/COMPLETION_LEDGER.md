@@ -111,6 +111,47 @@ What is materially true now:
 > Older dated entries are archived under docs/operations/archive/ (see scripts/archive-completion-ledger.ps1).
 > Historical undated ledger body is archived under docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md.
 
+### 2026-07-09 02:34Z - Internal Compute Substrate API route
+
+Current posture: Phase 2 / `P7_EXECUTION` remains partial, but the first
+internal/local-dev Compute Substrate API route surface is now implemented and
+validated at commit `3953ed26`. This does not close Phase 2, close
+`P7_EXECUTION`, change the active Orb embodiment / Stage 6 workstream, expose a
+production-grade public API, implement real adapters, add async/background
+execution, add task recovery/resume, or add OS-level resource enforcement.
+
+What changed:
+
+- `POST /compute-substrate/submit` submits bounded direct compute requests
+  through `ApiPermissionGate` and `ComputeSubstrateService`.
+- `GET /compute-substrate/status/{task_id}` and
+  `GET /compute-substrate/status/by-correlation/{correlation_id}` return bounded
+  status readback through the service status surface.
+- Route permissions use separate `compute:submit` and `compute:status:read`
+  scopes; approval grants do not replace API actor authorization.
+- The route reports bounded receipt/status/approval/cancellation/timeout truth
+  without returning raw task payloads, raw execution outputs, secrets, raw
+  approval notes, raw model prompts, broad filesystem paths, or tracebacks.
+
+Evidence:
+
+- Commit `3953ed2671ae3fe6bb8ff163abfae78940fbd4be`
+  (`feat(api): expose internal compute substrate routes`) anchors this route
+  slice.
+- Commit-time validation passed for ruff check, ruff format check, mypy over the
+  compute substrate and API route modules, API and substrate pytest suites, API
+  mutation authority matrix tests, executor substrate API tests, and diff
+  whitespace checks.
+
+Remaining blockers:
+
+- Production exposure, receipt readback routes, capability routes, admin routes,
+  real adapters, durable adapter persistence, async/background execution,
+  recovery/resume, cross-process approval reservation, distributed locking,
+  local JSON multi-process coordination, retention/cleanup policy, OS-level
+  CPU/memory enforcement, `LiveLearningEvent` persistence, long-term memory
+  persistence, and model training remain future governed work.
+
 ### 2026-07-07 21:17Z - Stage 6 Orb ring/color identity readback
 
 Current posture: Phase 2 / Stage 6 Orb embodiment still remains incomplete, but
