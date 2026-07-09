@@ -458,7 +458,7 @@ The `GET /compute-substrate/receipts/{receipt_id}` route requires focused tests 
 - absolute path and Windows drive-prefix receipt IDs are rejected
 - receipt store unavailable returns bounded `receipt_store_unavailable`
 - receipt store read failure returns bounded `receipt_store_read_failed`
-- unsupported receipt schema/version returns a bounded unsupported/read-failed response only when the configured store exposes that distinction; the current local JSON store collapses some corrupt/decode failures to not-found, which remains a follow-up
+- corrupt/decode receipt files and unsupported receipt schema/version return bounded read-failed or unsupported responses separately from not-found when the configured store exposes that distinction
 - receipt redaction failure returns bounded `receipt_redaction_failed`
 - response includes `receipt_id`, `task_id`, approval summary, execution status, and `receipt_persisted` truth
 - response excludes raw task payload

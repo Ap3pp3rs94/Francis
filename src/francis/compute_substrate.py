@@ -24,6 +24,7 @@ from francis.compute_substrate_governor import (
 )
 from francis.compute_substrate_receipts import (
     CapabilityReceiptAdapter,
+    ComputeReceiptReadResult,
     ComputeReceiptStore,
     LocalJsonComputeReceiptStore,
 )
@@ -79,6 +80,7 @@ __all__ = [
     "ComputeAdapterRegistry",
     "ComputeAdapterRequest",
     "ComputeAdapterSubmissionResult",
+    "ComputeReceiptReadResult",
     "ComputeReceiptStore",
     "ComputeStatusStore",
     "ComputeSubmission",

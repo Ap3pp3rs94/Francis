@@ -754,6 +754,55 @@ def test_compute_substrate_receipt_readback_reports_store_unavailable_and_failur
     assert "traceback" not in serialized.lower()
 
 
+def test_compute_substrate_receipt_readback_reports_corrupt_receipts_separately(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    client = _client(monkeypatch, tmp_path, actor_scopes={"receipt.reader": ["compute:receipt:read"]})
+    receipt_root = tmp_path / "francis_data" / "artifacts" / "compute_substrate" / "capability_receipts"
+    receipt_root.mkdir(parents=True)
+    (receipt_root / "corrupt-receipt.json").write_text("{not-json", encoding="utf-8")
+    (receipt_root / "bad-schema.json").write_text(
+        json.dumps({"schema_version": 1, "receipt": "not-a-receipt"}),
+        encoding="utf-8",
+    )
+
+    corrupt = client.get(
+        "/compute-substrate/receipts/corrupt-receipt",
+        params={"actor": "receipt.reader"},
+    ).json()
+    bad_schema = client.get(
+        "/compute-substrate/receipts/bad-schema",
+        params={"actor": "receipt.reader"},
+    ).json()
+    missing = client.get(
+        "/compute-substrate/receipts/missing-receipt",
+        params={"actor": "receipt.reader"},
+    ).json()
+    serialized = json.dumps(
+        {"corrupt": corrupt, "bad_schema": bad_schema, "missing": missing},
+        sort_keys=True,
+    )
+
+    assert corrupt["ok"] is False
+    assert corrupt["status"] == "unavailable"
+    assert corrupt["error"] == "receipt_decode_failed"
+    assert corrupt["found"] is False
+    assert corrupt["governance"]["receipt_store_error_redacted"] is True
+    assert bad_schema["ok"] is False
+    assert bad_schema["status"] == "unavailable"
+    assert bad_schema["error"] == "receipt_schema_unsupported"
+    assert bad_schema["found"] is False
+    assert bad_schema["governance"]["receipt_store_error_redacted"] is True
+    assert missing["ok"] is False
+    assert missing["status"] == "unknown"
+    assert missing["error"] == "receipt_not_found"
+    assert str(receipt_root) not in serialized
+    assert "not-json" not in serialized
+    assert "not-a-receipt" not in serialized
+    assert "traceback" not in serialized.lower()
+
+
 def test_compute_substrate_api_consumed_approval_cannot_be_reused(monkeypatch, tmp_path: Path) -> None:
     client = _client(monkeypatch, tmp_path, actor_scopes={"compute.submitter": ["compute:submit"]})
     approval_store = LocalJsonComputeApprovalStore()

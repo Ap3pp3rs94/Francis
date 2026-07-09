@@ -4,7 +4,7 @@ import json
 import os
 import uuid
 from collections.abc import Mapping
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -49,6 +49,17 @@ class ComputeReceiptStore(Protocol):
     def read_receipt(self, receipt_id: str) -> CapabilityReceipt | None: ...
 
     def describe(self) -> dict[str, Any]: ...
+
+
+@dataclass(frozen=True, slots=True)
+class ComputeReceiptReadResult:
+    status: str
+    receipt: CapabilityReceipt | None = None
+    error: str = ""
+
+    @property
+    def found(self) -> bool:
+        return self.status == "found" and self.receipt is not None
 
 
 class LocalJsonComputeReceiptStore:
@@ -132,36 +143,51 @@ class LocalJsonComputeReceiptStore:
         return persisted_receipt
 
     def read_receipt(self, receipt_id: str) -> CapabilityReceipt | None:
+        result = self.read_receipt_result(receipt_id)
+        return result.receipt if result.found else None
+
+    def read_receipt_result(self, receipt_id: str) -> ComputeReceiptReadResult:
         path = self._receipt_path(receipt_id)
         if not path.exists():
-            return None
+            return ComputeReceiptReadResult(status="receipt_not_found")
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return None
+        except OSError:
+            return ComputeReceiptReadResult(status="receipt_store_read_failed", error="receipt_store_read_failed")
+        except json.JSONDecodeError:
+            return ComputeReceiptReadResult(status="receipt_decode_failed", error="receipt_decode_failed")
         if not isinstance(payload, dict):
-            return None
+            return ComputeReceiptReadResult(status="receipt_schema_unsupported", error="receipt_schema_unsupported")
+        schema_version = _int_or_default(payload.get("schema_version"), default=0)
+        if schema_version != _RECEIPT_SCHEMA_VERSION:
+            return ComputeReceiptReadResult(status="receipt_schema_unsupported", error="receipt_schema_unsupported")
         receipt_payload = payload.get("receipt")
         if not isinstance(receipt_payload, dict):
-            return None
-        return CapabilityReceipt(
-            kind=_safe_text(receipt_payload.get("kind")) or COMPUTE_RECEIPT_KIND,
-            receipt_id=_safe_receipt_id(receipt_payload.get("receipt_id")),
-            task_id=_safe_id(receipt_payload.get("task_id"), fallback_prefix="task"),
-            worker_id=_safe_id(receipt_payload.get("worker_id"), fallback_prefix="worker"),
-            backend_name=_safe_text(receipt_payload.get("backend_name")),
-            function_name=_safe_text(receipt_payload.get("function_name")),
-            trace_id=_safe_text(receipt_payload.get("trace_id")),
-            approval_id=_safe_text(receipt_payload.get("approval_id")),
-            status=_safe_text(receipt_payload.get("status")),
-            reason=_safe_text(receipt_payload.get("reason")),
-            budget=_dict_or_empty(receipt_payload.get("budget")),
-            persisted=bool(receipt_payload.get("persisted")),
-            receipt_path=_safe_text(receipt_payload.get("receipt_path")),
-            receipt_error=_safe_text(receipt_payload.get("receipt_error")),
-            governance=_dict_or_empty(receipt_payload.get("governance")),
-            created_at_ms=_int_or_default(receipt_payload.get("created_at_ms"), default=_now_ms()),
-        )
+            return ComputeReceiptReadResult(status="receipt_schema_unsupported", error="receipt_schema_unsupported")
+        try:
+            receipt = CapabilityReceipt(
+                kind=_safe_text(receipt_payload.get("kind")) or COMPUTE_RECEIPT_KIND,
+                receipt_id=_safe_receipt_id(receipt_payload.get("receipt_id")),
+                task_id=_safe_id(receipt_payload.get("task_id"), fallback_prefix="task"),
+                worker_id=_safe_id(receipt_payload.get("worker_id"), fallback_prefix="worker"),
+                backend_name=_safe_text(receipt_payload.get("backend_name")),
+                function_name=_safe_text(receipt_payload.get("function_name")),
+                trace_id=_safe_text(receipt_payload.get("trace_id")),
+                approval_id=_safe_text(receipt_payload.get("approval_id")),
+                status=_safe_text(receipt_payload.get("status")),
+                reason=_safe_text(receipt_payload.get("reason")),
+                budget=_dict_or_empty(receipt_payload.get("budget")),
+                persisted=bool(receipt_payload.get("persisted")),
+                receipt_path=_safe_text(receipt_payload.get("receipt_path")),
+                receipt_error=_safe_text(receipt_payload.get("receipt_error")),
+                governance=_dict_or_empty(receipt_payload.get("governance")),
+                created_at_ms=_int_or_default(receipt_payload.get("created_at_ms"), default=_now_ms()),
+            )
+        except (TypeError, ValueError):
+            return ComputeReceiptReadResult(status="receipt_schema_unsupported", error="receipt_schema_unsupported")
+        if receipt.receipt_id != _safe_receipt_id(receipt_id):
+            return ComputeReceiptReadResult(status="receipt_schema_unsupported", error="receipt_schema_unsupported")
+        return ComputeReceiptReadResult(status="found", receipt=receipt)
 
     def _receipt_path(self, receipt_id: str) -> Path:
         clean_id = _safe_receipt_id(receipt_id)

@@ -1405,6 +1405,10 @@ def test_local_json_compute_receipt_store_writes_and_reads_receipt(tmp_path: Pat
     readback = store.read_receipt(persisted.receipt_id)
 
     assert readback == persisted
+    read_result = store.read_receipt_result(persisted.receipt_id)
+    assert read_result.found is True
+    assert read_result.status == "found"
+    assert read_result.receipt == persisted
 
     filesystem_scope_receipt = CapabilityReceiptAdapter().create(
         envelope=create_task_envelope(
@@ -1488,6 +1492,36 @@ def test_local_json_compute_receipt_store_accepts_safe_receipt_id(tmp_path: Path
     assert persisted.receipt_id == "compute_capability-safe_ID_123"
     assert Path(persisted.receipt_path).parent == store.receipt_root
     assert store.read_receipt("compute_capability-safe_ID_123") == persisted
+
+
+def test_local_json_compute_receipt_store_distinguishes_readback_failures(tmp_path: Path) -> None:
+    store = LocalJsonComputeReceiptStore(tmp_path / "compute-receipts")
+    store.receipt_root.mkdir(parents=True)
+
+    missing = store.read_receipt_result("missing-receipt")
+    assert missing.found is False
+    assert missing.status == "receipt_not_found"
+    assert missing.receipt is None
+    assert missing.error == ""
+
+    (store.receipt_root / "corrupt-receipt.json").write_text("{not-json", encoding="utf-8")
+    corrupt = store.read_receipt_result("corrupt-receipt")
+    assert corrupt.found is False
+    assert corrupt.status == "receipt_decode_failed"
+    assert corrupt.receipt is None
+    assert corrupt.error == "receipt_decode_failed"
+    assert store.read_receipt("corrupt-receipt") is None
+
+    (store.receipt_root / "bad-schema.json").write_text(
+        json.dumps({"schema_version": 1, "receipt": "not-a-receipt"}),
+        encoding="utf-8",
+    )
+    schema = store.read_receipt_result("bad-schema")
+    assert schema.found is False
+    assert schema.status == "receipt_schema_unsupported"
+    assert schema.receipt is None
+    assert schema.error == "receipt_schema_unsupported"
+    assert store.read_receipt("bad-schema") is None
 
 
 class _FailingReceiptStore:

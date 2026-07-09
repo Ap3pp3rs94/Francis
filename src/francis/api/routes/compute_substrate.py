@@ -11,7 +11,6 @@ from francis.api.errors import api_error_code, log_api_exception
 from francis.compute_substrate import (
     CancellationToken,
     CapabilityReceipt,
-    ComputeReceiptStore,
     ComputeSubstrateService,
     ComputeSubmission,
     ComputeSubmissionResult,
@@ -102,7 +101,7 @@ def _compute_substrate_service() -> ComputeSubstrateService:
     )
 
 
-def _compute_receipt_store() -> ComputeReceiptStore | None:
+def _compute_receipt_store() -> LocalJsonComputeReceiptStore | None:
     return LocalJsonComputeReceiptStore()
 
 
@@ -504,7 +503,13 @@ def _receipt_unavailable_response(*, error: str, reason: str, receipt_id: str) -
                 "does_not_trigger_execution": True,
                 "does_not_consume_approval": True,
                 "receipt_store_read_only": True,
-                "receipt_store_error_redacted": error == "receipt_store_read_failed",
+                "receipt_store_error_redacted": error
+                in {
+                    "receipt_store_read_failed",
+                    "receipt_decode_failed",
+                    "receipt_schema_unsupported",
+                    "receipt_redaction_failed",
+                },
             },
         ),
     }
@@ -660,21 +665,28 @@ def get_compute_receipt(request: Request, receipt_id: str, actor: str = "") -> d
             receipt_id=clean_id,
         )
     try:
-        receipt = store.read_receipt(clean_id)
+        read_result = store.read_receipt_result(clean_id)
     except Exception:
         return _receipt_unavailable_response(
             error="receipt_store_read_failed",
             reason="receipt_store_read_failed",
             receipt_id=clean_id,
         )
-    if receipt is None:
+    if read_result.status == "receipt_not_found":
         return _receipt_unavailable_response(
             error="receipt_not_found",
             reason="receipt_not_found",
             receipt_id=clean_id,
         )
+    if not read_result.found or read_result.receipt is None:
+        error = _safe_text(read_result.error or read_result.status, limit=80) or "receipt_store_read_failed"
+        return _receipt_unavailable_response(
+            error=error,
+            reason=error,
+            receipt_id=clean_id,
+        )
     try:
-        return _receipt_response(receipt)
+        return _receipt_response(read_result.receipt)
     except Exception:
         return _receipt_unavailable_response(
             error="receipt_redaction_failed",
