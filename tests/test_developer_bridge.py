@@ -244,6 +244,7 @@ def test_francis_body_map_exposes_whole_body_without_authority(tmp_path, monkeyp
     (root / "docs" / "operations").mkdir(parents=True)
     (root / "meta").mkdir(parents=True)
     (root / "src" / "francis" / "developer_bridge").mkdir(parents=True)
+    (root / "src" / "francis" / "input_actuator").mkdir(parents=True)
     (root / "apps" / "chat_ui" / "src").mkdir(parents=True)
     (root / "docs" / "canonical" / "BUILD_MANIFEST.md").write_text("# Phase 2\n", encoding="utf-8")
     (root / "docs" / "PLANES.md").write_text("# Planes\n", encoding="utf-8")
@@ -255,6 +256,8 @@ def test_francis_body_map_exposes_whole_body_without_authority(tmp_path, monkeyp
     (root / "src" / "francis" / "developer_bridge" / "collaboration.py").write_text("", encoding="utf-8")
     (root / "src" / "francis" / "developer_bridge" / "collaboration_runtime.py").write_text("", encoding="utf-8")
     (root / "src" / "francis" / "developer_bridge" / "trust_ladder.py").write_text("", encoding="utf-8")
+    (root / "src" / "francis" / "input_actuator" / "orb_operator.py").write_text("", encoding="utf-8")
+    (root / "src" / "francis" / "input_actuator" / "orb_desktop_bridge.py").write_text("", encoding="utf-8")
     (root / "apps" / "chat_ui" / "src" / "App.tsx").write_text("", encoding="utf-8")
     monkeypatch.setenv("FRANCIS_ROOT", str(root))
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
@@ -377,6 +380,21 @@ def test_francis_body_map_exposes_whole_body_without_authority(tmp_path, monkeyp
     assert surfaces["memory"]["information_safety"]["sensitive_surface"] is True
     assert surfaces["memory"]["information_safety"]["stores_raw_transcript"] is False
     assert surfaces["memory"]["information_safety"]["requires_codex_or_operator_review_before_expanding_detail"] is True
+    orb_surface = surfaces["orb_lens_hud_shell"]
+    assert orb_surface["access_mode"] == "observe"
+    assert orb_surface["trust_required_for_next_mode"] == "read"
+    assert "separate Orb virtual pointer" in orb_surface["description"]
+    assert "separate Orb virtual pointer" in orb_surface["current_boundary"]
+    assert "does not widen interaction authority" in orb_surface["current_boundary"]
+    assert "grant user OS cursor control" in orb_surface["current_boundary"]
+    orb_evidence = {item["path"]: item["observed"] for item in orb_surface["evidence"]}
+    assert orb_evidence["src/francis/input_actuator/orb_operator.py"] is True
+    assert orb_evidence["src/francis/input_actuator/orb_desktop_bridge.py"] is True
+    assert orb_surface["capability_exposure"]["capability_granted"] is False
+    assert orb_surface["capability_exposure"]["capability_use_status"] == "not_exposed"
+    assert orb_surface["capability_exposure"]["next_trust_gate"] == "read"
+    assert orb_surface["capability_exposure"]["grants_execution_authority"] is False
+    assert orb_surface["capability_exposure"]["grants_capability_authority"] is False
     assert surfaces["memory"]["capability_exposure"]["detached_memory_bin"] == {
         "applies": True,
         "kind": "developer_bridge.detached_memory_bin_policy",

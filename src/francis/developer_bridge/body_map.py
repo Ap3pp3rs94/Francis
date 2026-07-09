@@ -377,16 +377,19 @@ def _body_surfaces(root: Path, *, grant_by_surface: dict[str, dict[str, object]]
         _surface(
             "orb_lens_hud_shell",
             "Orb, Lens, HUD, shell, and desktop presence",
-            "operator-facing body surfaces with fidelity and focus constraints",
+            "operator-facing body surfaces, separate Orb virtual pointer, and focus constraints",
             "connected_partial",
             "observe",
             [
                 "src/francis/lens",
+                "src/francis/input_actuator/orb_operator.py",
+                "src/francis/input_actuator/orb_desktop_bridge.py",
                 "scripts/lens-host.ps1",
                 "apps/chat_ui/src",
             ],
             root,
-            "Awareness is allowed; interaction authority is not widened by this map.",
+            "Awareness includes the separate Orb virtual pointer and desktop-bridge posture; "
+            "this map does not widen interaction authority, grant desktop action, or grant user OS cursor control.",
             grant_by_surface,
         ),
         _surface(
