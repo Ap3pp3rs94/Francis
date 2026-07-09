@@ -702,7 +702,8 @@ $EarlyFreshResidentSupervisedRuntimeReadbackObserved = (
 )
 $SummonAnywhereBlockersProofResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonAnywhereBlockersProofScript -ScriptArgs @(
   '-Mode', 'Status',
-  '-ChildProofTimeoutSeconds', [string]$ChildProofTimeoutSeconds
+  '-ChildProofTimeoutSeconds', [string]$ChildProofTimeoutSeconds,
+  '-LensStatusTimeoutSeconds', [string]$CheckpointLensStatusTimeoutSeconds
 ) -TimeoutSeconds $ChildProofTimeoutSeconds
 $SummonAnywhereBlockersProof = $SummonAnywhereBlockersProofResult.payload
 $SummonAnywhereLensStatusReadback = $SummonAnywhereBlockersProof.lens_status_readback

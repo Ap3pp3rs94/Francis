@@ -264,6 +264,7 @@ def test_lens_stage6_completion_audit_bounds_summon_anywhere_child_proof() -> No
     assert "payload = $CheckpointPayload" in script
     assert "$SummonAnywhereBlockersProofResult = Invoke-JsonScript" in script
     assert "'-ChildProofTimeoutSeconds', [string]$ChildProofTimeoutSeconds" in script
+    assert "'-LensStatusTimeoutSeconds', [string]$CheckpointLensStatusTimeoutSeconds" in script
     assert ") -TimeoutSeconds $ChildProofTimeoutSeconds" in script
     assert "$SummonAnywhereLensStatusReadbackTimedOut = (" in script
     assert "audit_status = 'child_readback_timed_out'" in script

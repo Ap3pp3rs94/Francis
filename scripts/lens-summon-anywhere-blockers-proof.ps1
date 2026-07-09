@@ -5,7 +5,7 @@ param(
   [ValidateRange(1, 600)]
   [int]$ChildProofTimeoutSeconds = 120,
   [ValidateRange(1, 120)]
-  [int]$LensStatusTimeoutSeconds = 30
+  [int]$LensStatusTimeoutSeconds = 120
 )
 
 $ErrorActionPreference = 'Stop'

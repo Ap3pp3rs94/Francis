@@ -103,7 +103,7 @@ def test_lens_summon_anywhere_blockers_proof_bounds_live_readback_children() -> 
     script = (_repo_root() / "scripts" / "lens-summon-anywhere-blockers-proof.ps1").read_text(encoding="utf-8")
 
     assert "[int]$ChildProofTimeoutSeconds = 120" in script
-    assert "[int]$LensStatusTimeoutSeconds = 30" in script
+    assert "[int]$LensStatusTimeoutSeconds = 120" in script
     assert "function Invoke-JsonProcess" in script
     assert "Stop-ProcessTree -Process $Process" in script
     assert "error = 'lens_status_timeout'" in script
