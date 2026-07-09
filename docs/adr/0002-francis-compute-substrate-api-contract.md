@@ -89,10 +89,136 @@ Implemented endpoints:
 
 Deferred endpoints:
 
-- `GET /compute-substrate/receipts/{receipt_id}` is deferred until existing receipt-read patterns define a narrow, redacted compute receipt readback surface.
+- `GET /compute-substrate/receipts/{receipt_id}` is deferred, but the contract for this future route is defined below.
 - `GET /compute-substrate/capabilities` is deferred unless the route only returns bounded capability names and worker descriptors already exposed by `ComputeSubstrateService.known_capabilities` and registry readback.
 
 If a deployment layer later places Francis under `/api`, the same contract applies to the prefixed paths.
+
+## Deferred Receipt Readback Route Contract
+
+`GET /compute-substrate/receipts/{receipt_id}` is not implemented in this slice. A future implementation must remain internal/local-dev unless a later governance-reviewed promotion explicitly changes that posture.
+
+The route is read-only. It may expose bounded compute receipt truth, but it must not become a raw artifact dump, general audit-log API, execution endpoint, approval mutation endpoint, status mutation endpoint, memory or learning endpoint, production-grade public audit surface, or new authority surface.
+
+Required route posture:
+
+- permission-gated before any receipt store access
+- bounded response only
+- no execution
+- no approval consumption
+- no approval creation, revocation, update, or grant mutation
+- no status mutation
+- no receipt mutation
+- no long-term memory mutation
+- no `LiveLearningEvent` persistence
+- no model training
+- no adapter invocation
+- no production or public audit authority
+
+The preferred future read path is:
+
+1. API request.
+2. `ApiPermissionGate` or repo-equivalent actor/scope validation.
+3. Safe `receipt_id` validation.
+4. Configured durable compute receipt readback service or store path.
+5. Bounded receipt response.
+
+The route must not:
+
+- call `SafeLocalBackend`
+- call backend internals
+- trigger `SubstrateGovernor.execute`
+- create `TaskEnvelope` execution
+- consume approval
+- mutate status records
+- mutate receipt records
+- mutate approval records
+- persist `LiveLearningEvent`
+- write memory
+- train models
+- invoke adapters
+
+If a future service wrapper is added for receipt readback, it must preserve the same bounded read-only semantics and must not become a bypass around the substrate authority model.
+
+### Receipt Id Validation
+
+Receipt IDs must use the approved safe character set already established by compute receipt storage: ASCII letters, digits, underscores, and hyphens only, with the implementation-defined length bound. Future route validation must reject:
+
+- empty strings
+- whitespace-only strings
+- `../` and `..\`
+- slashes and backslashes
+- absolute paths
+- Windows drive prefixes
+- dots
+- colons
+- unusual path separators
+- IDs outside the approved safe character set
+
+Receipt readback must fail closed:
+
+- unsafe receipt IDs must return a bounded malformed or invalid ID denial such as `unsafe_receipt_id`
+- unsafe IDs must not be normalized into safe aliases
+- unsafe IDs must not reach filesystem paths
+- unknown safe IDs must return a bounded `receipt_not_found` or unknown response, not a traceback
+
+### Receipt Store Requirements
+
+Receipt readback requires a configured durable compute receipt store. Missing, in-memory-only, or unsupported receipt stores must return a bounded `receipt_store_unavailable` or `unsupported_operation` response.
+
+The route must not invent global or user-specific paths, hardcode USB paths, or hardcode `D:\Francis` runtime data paths. Focused tests must use temporary data roots. The local JSON receipt store remains local durability only; it does not implement distributed receipt coordination, cross-process locking, retention policy, cleanup policy, backup policy, or production audit durability.
+
+### Bounded Receipt Response
+
+Safe response fields may include:
+
+- `receipt_id`
+- `task_id`
+- `correlation_id` or `trace_id`
+- `worker_id` if already receipt-safe
+- `capability` or task-type summary
+- `execution_status`
+- `approval_required`
+- `approval_satisfied`
+- safe `approval_id` reference
+- `approval_decision`
+- `approval_denial_reason`
+- `approval_consumed`
+- `approval_scope_summary`
+- `receipt_persisted`
+- resource budget summary with filesystem scope summarized, not raw paths
+- `cancellation_requested`
+- `cancellation_reason`
+- `timed_out`
+- `timeout_stage`
+- `started_at_ms`
+- `finished_at_ms`
+- `duration_ms`
+- `created_at_ms` or timestamp
+- status reference if safe
+- schema version or receipt version if present
+- bounded warnings or limitations
+
+The response must not include:
+
+- raw task payload
+- raw execution output
+- secrets
+- raw approval notes
+- raw model prompts
+- broad filesystem paths
+- traceback strings
+- full exception details
+- arbitrary user content beyond bounded receipt-safe summaries
+- raw adapter metadata
+- raw logs
+- a full audit trail beyond the single compute receipt
+
+Receipt readback may show only the bounded approval summary already recorded in the compute receipt. It must not read or expose full approval grant records, reveal raw approval notes, consume approvals, revoke approvals, create approvals, or mutate approvals. The approval store remains separate from the receipt store.
+
+Receipt readback reports bounded execution receipt truth. Status readback reports task status. Status-read scope does not imply receipt-read, and receipt-read scope does not imply status-read unless a future policy explicitly combines them. Receipt readback must not mutate status records and must not claim task recovery, task resume, async execution, or background execution.
+
+Receipt readback may include bounded adapter or request summary only if it is already present in receipt-safe fields. It must not expose raw adapter payloads or raw adapter metadata, must not imply any real adapter exists, and must not give adapters read authority by identity alone. Actor permission remains required.
 
 ## Permission And Actor Contract
 
@@ -104,7 +230,13 @@ Required rules:
 - Actor scopes must be explicit.
 - Submit permission must be separate from status-read permission.
 - Status-read permission must not imply submit permission.
+- Receipt-read permission must be separate from submit permission.
+- Receipt-read permission must be separate from status-read permission.
+- Submit permission must not imply receipt-read permission.
+- Status-read permission must not imply receipt-read permission.
 - Receipt-read permission must not imply submit permission.
+- Receipt-read permission must not imply approval authority.
+- Receipt-read permission must not imply admin authority.
 - Capability-read permission must not imply submit permission.
 - Adapter identity must not replace actor authorization.
 - Approval grants must not replace API actor authorization.
@@ -195,6 +327,7 @@ The API must preserve distinct truth states. It must not collapse unrelated outc
 At minimum, response bodies must distinguish:
 
 - API permission denied
+- missing receipt-read scope
 - malformed request
 - unsupported API operation
 - adapter validation denied
@@ -211,11 +344,21 @@ At minimum, response bodies must distinguish:
 - backend execution failure
 - receipt persistence failure
 - status persistence failure
+- malformed receipt id
+- unsafe receipt id
+- receipt store unavailable
+- receipt not found
+- receipt store read failed
+- receipt schema or version unsupported
+- receipt redaction failure
+- route not enabled or local-dev only
 - unknown task or missing status record
 
 The route should follow existing Francis denial-body style: `status`, `error`, a bounded `governance` object, and explicit false authority flags where relevant, such as no shell, no process start, no memory write, and no execution authority granted by the denial.
 
 Receipt persistence failure, status persistence failure, and backend execution failure must remain separate. A status persistence failure must not make a successful execution look failed, and a backend execution failure must not be hidden behind successful status persistence.
+
+Future receipt readback errors should use bounded stable codes such as `receipt_not_found`, `unsafe_receipt_id`, `receipt_store_unavailable`, `receipt_store_read_failed`, `receipt_redaction_failed`, and `unsupported_operation`. If an error includes a message, it must be bounded and sanitized.
 
 ## Store Configuration Contract
 
@@ -228,6 +371,8 @@ Durable stores remain separate:
 Production-grade API submission requires a configured durable compute receipt store. Production-grade status readback requires a configured durable status store. Approval-required API submissions require a configured durable approval store before they can be treated as production-grade.
 
 In-memory stores may be acceptable for local development and focused tests only. Responses must report them as non-durable. In-memory status readback must not be described as durable persistence.
+
+Future receipt readback requires a configured durable compute receipt store before it is considered usable. Missing or in-memory-only receipt stores must return bounded unavailable or unsupported responses, not fake durable readback. Receipt readback must not hardcode store roots, user profile paths, USB paths, or repository-local runtime data paths; store roots must be configured through the repo's runtime configuration patterns before implementation.
 
 Durable adapter persistence is not required for the first API route because adapter contracts remain internal and contract-only.
 
@@ -242,6 +387,7 @@ The current first API route is local/internal/dev and must remain so until these
 - multi-process status and receipt coordination
 - runtime data-root backup policy
 - retention/cleanup policy for status records
+- retention/cleanup policy for compute receipts
 
 The API contract does not solve repository storage durability or backup. The repository may run from local removable storage during development, so code changes still require disciplined commit/push anchoring. Runtime stores need their own configured local data roots and backup policy.
 
@@ -259,6 +405,9 @@ Required redaction and boundedness rules:
 - no broad filesystem-path leakage
 - no raw task payloads in status, receipts, logs, approvals, adapter records, or learning events by default
 - no raw execution outputs in response by default
+- no approval-note secrets in receipt readback
+- no user directory or USB path leakage
+- no arbitrary log content in receipt readback
 - response fields must be schema-driven and length-bounded
 - errors must use stable bounded codes or summaries
 
@@ -270,6 +419,9 @@ Current route and substrate tests prove the following for the first internal/loc
 - missing scope is denied
 - submit scope allows submit but not unrelated operations
 - status-read scope allows readback but not submit
+- missing `compute:receipt:read` scope is denied for receipt readback
+- submit scope does not allow receipt read
+- status-read scope does not allow receipt read
 - receipt-read scope does not allow submit
 - malformed request is denied safely
 - request cannot downgrade `approval_required`
@@ -290,11 +442,40 @@ Current route and substrate tests prove the following for the first internal/loc
 - route makes no async, recovery, or resume claims
 - `tests/test_api_executor_substrate.py` remains passing
 
+Before implementing `GET /compute-substrate/receipts/{receipt_id}`, add focused tests proving:
+
+- unauthorized actor is denied
+- missing `compute:receipt:read` scope is denied
+- submit scope does not allow receipt read
+- status-read scope does not allow receipt read
+- safe receipt ID read succeeds
+- unknown receipt ID returns `receipt_not_found` or unknown
+- unsafe receipt IDs are rejected
+- path traversal receipt IDs are rejected
+- absolute path and Windows drive-prefix receipt IDs are rejected
+- receipt store unavailable returns bounded `receipt_store_unavailable`
+- receipt store read failure returns bounded `receipt_store_read_failed`
+- unsupported receipt schema/version returns bounded unsupported response
+- receipt redaction failure returns bounded `receipt_redaction_failed`
+- response includes `receipt_id`, `task_id`, approval summary, execution status, and `receipt_persisted` truth
+- response excludes raw task payload
+- response excludes raw execution output
+- response excludes approval-note secret
+- response excludes model prompt
+- response excludes broad filesystem path
+- response excludes traceback and full exception details
+- receipt read does not trigger execution
+- receipt read does not consume approval
+- receipt read does not mutate status
+- receipt read does not mutate receipt
+- receipt read does not persist learning or memory
+- existing submit/status API checkpoint remains passing
+
 ## Consequences
 
 The first internal/local-dev Compute Substrate API route is implemented under this contract. Future Compute Substrate API expansion remains gated by it.
 
-The first API route is a narrow wrapper over `ComputeSubstrateService`. Substrate internals remain authoritative. Future adapters must not bypass the adapter gateway, service, governor, approval, receipt, and status path. This contract exposes only internal/local-dev submission/status capability and does not create production-grade public exposure, additional API surfaces, async/background execution, recovery/resume, real adapters, durable adapter persistence, OS-level resource enforcement, memory persistence, live-learning persistence, model training, or new execution authority.
+The first API route is a narrow wrapper over `ComputeSubstrateService`. Substrate internals remain authoritative. Future adapters must not bypass the adapter gateway, service, governor, approval, receipt, and status path. This contract exposes only internal/local-dev submission/status capability and documents a future receipt readback contract. It does not implement receipt readback, create production-grade public exposure, create general audit authority, add async/background execution, add recovery/resume, add real adapters, add durable adapter persistence, add OS-level resource enforcement, add memory persistence, add live-learning persistence, add model training, or add new execution authority.
 
 ## Open Questions And Follow-Ups
 
@@ -303,8 +484,13 @@ The first API route is a narrow wrapper over `ComputeSubstrateService`. Substrat
 - Cross-process approval reservation.
 - Durable store root configuration policy.
 - Status retention and cleanup policy.
+- Receipt retention and cleanup policy.
 - Whether output-returning routes are allowed or must be separate from submission/status routes.
-- Receipt readback route shape and redaction limits.
+- Whether receipt readback should support correlation or task lookup, or only `receipt_id`.
+- Whether receipt readback can ever expose bounded execution output; this likely requires a separate future policy and route.
+- Audit export format if a broader export surface is needed later.
+- API rate limiting and local-only binding requirements before any production exposure.
+- Capability readback route design.
 - OS-level resource enforcement design.
 - VM/container backend contract.
 - `LiveLearningEvent` persistence governance.
