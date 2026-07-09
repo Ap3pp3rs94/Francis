@@ -5245,6 +5245,220 @@ def _resident_surface_runtime_from_host(resident_host: dict[str, Any]) -> dict[s
     }
 
 
+def _resident_host_surface_fast_readback(launch_manifest: dict[str, Any]) -> dict[str, Any]:
+    service_install = _as_dict(launch_manifest.get("service_install"))
+    process_readback = _as_dict(launch_manifest.get("process_readback"))
+    tray_runtime_readback = _as_dict(launch_manifest.get("tray_runtime_readback"))
+    hotkey_runtime_readback = _as_dict(launch_manifest.get("hotkey_runtime_readback"))
+    overlay_runtime_readback = _as_dict(launch_manifest.get("overlay_runtime_readback"))
+    summon_runtime_readback = _as_dict(launch_manifest.get("summon_runtime_readback"))
+    supervisor_readback = _as_dict(launch_manifest.get("supervisor_readback"))
+    process_alive = bool(process_readback.get("process_alive"))
+    process_status = _safe_str(process_readback.get("state_status")).strip()
+    resident_supervised_runtime = (
+        process_alive
+        and process_status == "resident_running"
+        and bool(supervisor_readback.get("resident_supervised_runtime"))
+    )
+    tray_runtime_ready = bool(tray_runtime_readback.get("ready"))
+    hotkey_runtime_ready = bool(hotkey_runtime_readback.get("ready"))
+    overlay_runtime_ready = bool(overlay_runtime_readback.get("ready"))
+    summon_runtime_ready = bool(summon_runtime_readback.get("ready"))
+    summon_anywhere_ready = bool(summon_runtime_readback.get("summon_anywhere")) and bool(
+        summon_runtime_readback.get("os_level_summon")
+    )
+    blockers: list[str] = []
+    if not resident_supervised_runtime:
+        if process_alive:
+            blockers.append("resident_host_process_not_supervised")
+        else:
+            blockers.append("resident_host_process_missing")
+    if not tray_runtime_ready:
+        blockers.append("tray_host_missing")
+    if not hotkey_runtime_ready:
+        blockers.append("global_hotkey_binding_missing")
+    if not overlay_runtime_ready:
+        blockers.extend(["always_on_top_window_missing", "overlay_window_missing"])
+    if not summon_runtime_ready:
+        blockers.append("summon_binding_missing")
+    elif not summon_anywhere_ready:
+        blockers.append("summon_anywhere_runtime_readback")
+    return {
+        "ok": True,
+        "kind": "lens.resident_host",
+        "status": (
+            "resident_runtime_observed"
+            if resident_supervised_runtime
+            else "runtime_process_observed"
+            if process_alive
+            else "not_implemented"
+        ),
+        "contract_status": "readback_ready",
+        "availability": "resident_runtime" if resident_supervised_runtime else "backend_readback_only",
+        "route": "/lens/host",
+        "launch_manifest_route": _safe_str(launch_manifest.get("route")).strip() or "/lens/host/manifest",
+        "launch_manifest": launch_manifest,
+        "service_config_present": bool(service_install.get("config_exists")),
+        "service_config_path": _safe_str(service_install.get("config_path")).strip(),
+        "process_readback": process_readback,
+        "process_readback_ready": bool(process_readback.get("readback_ready")),
+        "tray_runtime_readback": tray_runtime_readback,
+        "tray_runtime_readback_ready": tray_runtime_ready,
+        "hotkey_runtime_readback": hotkey_runtime_readback,
+        "hotkey_runtime_readback_ready": hotkey_runtime_ready,
+        "overlay_runtime_readback": overlay_runtime_readback,
+        "overlay_runtime_readback_ready": overlay_runtime_ready,
+        "supervisor_readback": supervisor_readback,
+        "supervisor_readback_ready": bool(supervisor_readback.get("readback_ready")),
+        "supervisor_freshness_status": _safe_str(supervisor_readback.get("freshness_status")).strip() or "missing",
+        "supervisor_state_age_seconds": supervisor_readback.get("state_age_seconds"),
+        "supervisor_state_stale": bool(supervisor_readback.get("state_stale")),
+        "fresh_supervisor_readback": bool(supervisor_readback.get("fresh_readback")),
+        "bounded_supervisor_observed": bool(supervisor_readback.get("bounded_supervisor_observed")),
+        "supervised_session_completed": bool(supervisor_readback.get("supervised_session_completed")),
+        "resident_runtime_candidate_supervised": bool(supervisor_readback.get("resident_runtime_candidate_supervised")),
+        "fresh_bounded_supervisor_observed": bool(supervisor_readback.get("fresh_bounded_supervisor_observed")),
+        "fresh_supervised_session_completed": bool(supervisor_readback.get("fresh_supervised_session_completed")),
+        "fresh_resident_runtime_candidate_supervised": bool(
+            supervisor_readback.get("fresh_resident_runtime_candidate_supervised")
+        ),
+        "foreground_session": _as_dict(launch_manifest.get("foreground_session")),
+        "resident_supervised_runtime": resident_supervised_runtime,
+        "resident": resident_supervised_runtime,
+        "process_supervision": resident_supervised_runtime,
+        "startup_integration": False,
+        "tray_presence": tray_runtime_ready,
+        "global_hotkey": hotkey_runtime_ready,
+        "always_on_top_overlay": overlay_runtime_ready,
+        "overlay_window": overlay_runtime_ready,
+        "command_palette_binding": hotkey_runtime_ready,
+        "summon_anywhere": summon_anywhere_ready,
+        "blockers": blockers,
+        "message": (
+            "Resident Lens host is supervised and visible through local runtime readback."
+            if resident_supervised_runtime
+            else "Resident Lens host runtime is visible but not yet supervised as a resident surface."
+            if process_alive
+            else "Resident Lens host is not implemented; this route preserves the launch and readiness contract only."
+        ),
+        "governance": {
+            "read_only_contract": True,
+            "fast_readback": True,
+            "execution_authority": False,
+            "approval_decision_authority": False,
+            "memory_write": False,
+            "overlay_control_authority": False,
+            "summon_authority": False,
+            "capture_authority": False,
+            "new_sensing_authority": False,
+            "local_process_launch_authority": False,
+            "service_control_authority": False,
+            "mutation_authority_granted": False,
+        },
+    }
+
+
+def _resident_surface_activation_fast_readback(
+    *,
+    resident_surface_ready: bool,
+    resident_claim_authority_readiness: dict[str, Any],
+) -> dict[str, Any]:
+    resident_claim_authority_allowed = bool(resident_claim_authority_readiness.get("resident_claim_allowed")) and bool(
+        resident_claim_authority_readiness.get("authority_granted")
+    )
+    resident_claim_allowed = resident_surface_ready and resident_claim_authority_allowed
+    resident_claim_authority_blockers = (
+        []
+        if resident_claim_allowed or not resident_surface_ready
+        else _as_list(resident_claim_authority_readiness.get("blockers"))
+    )
+    return {
+        "ok": True,
+        "kind": "lens.resident_surface.activation_boundary",
+        "status": "blocked",
+        "route": "/lens/resident-surface/activation",
+        "boundary_ready": True,
+        "activation_ready": False,
+        "resident_surface_ready": resident_surface_ready,
+        "ready_for_lens_resident_claim": resident_claim_allowed,
+        "resident_claim_allowed": resident_claim_allowed,
+        "resident_claim_authority_ready": resident_claim_authority_allowed,
+        "execution_ready": False,
+        "executed": False,
+        "applied": False,
+        "operator_experience_proof": False,
+        "execution": {
+            "runtime_authority_grant_readiness_route": "/lens/resident-runtime/authority-grant/readiness",
+            "resident_claim_authority_readiness_route": (
+                "/lens/host/persistent-supervision/resident-claim/authority/readiness"
+            ),
+            "runtime_authority_grant_readiness_status": "not_loaded_fast_readback",
+            "resident_claim_authority_readiness_status": _safe_str(
+                resident_claim_authority_readiness.get("status")
+            ).strip(),
+            "resident_claim_authority": resident_claim_authority_allowed,
+            "resident_claim_allowed": resident_claim_allowed,
+            "would_launch_process": False,
+            "would_install_service": False,
+            "would_start_service": False,
+            "would_supervise_process": False,
+            "would_restart_process": False,
+            "would_register_tray": False,
+            "would_register_hotkey": False,
+            "would_open_overlay": False,
+            "would_capture_screen": False,
+            "would_write_memory": False,
+            "would_write_receipt": False,
+            "would_decide_approval": False,
+            "would_claim_resident": False,
+        },
+        "resident_runtime_authority_grant_readiness": {
+            "status": "not_loaded_fast_readback",
+            "route": "/lens/resident-runtime/authority-grant/readiness",
+            "first_blocked_requirement_handoff": {},
+            "blockers": [],
+            "governance": {
+                "read_only_contract": True,
+                "fast_readback_omitted_deep_authority_audit": True,
+                "execution_authority": False,
+                "approval_decision_authority": False,
+                "mutation_authority_granted": False,
+            },
+        },
+        "resident_runtime_authority_grant_handoff_observed": False,
+        "resident_runtime_authority_grant_handoff": {},
+        "resident_claim_authority_readiness": resident_claim_authority_readiness,
+        "resident_claim_authority_blockers": resident_claim_authority_blockers,
+        "blockers": resident_claim_authority_blockers,
+        "next_smallest_truthful_gap": (
+            "resident_surface_operator_experience_proof"
+            if resident_surface_ready
+            else "resident_surface_runtime_missing"
+        ),
+        "governance": {
+            "gate": "lens_resident_surface_activation_boundary_fast_readback",
+            "boundary_only": True,
+            "read_only_contract": True,
+            "fast_readback": True,
+            "execution_authority": False,
+            "approval_decision_authority": False,
+            "local_process_launch_authority": False,
+            "service_install_authority": False,
+            "service_control_authority": False,
+            "tray_registration_authority": False,
+            "tray_icon_authority": False,
+            "hotkey_registration_authority": False,
+            "overlay_control_authority": False,
+            "summon_authority": False,
+            "memory_write": False,
+            "resident_claim_authority_readiness_readback": True,
+            "resident_claim_authority": resident_claim_authority_allowed,
+            "resident_claim_allowed": resident_claim_allowed,
+            "mutation_authority_granted": False,
+        },
+    }
+
+
 def _runtime_pid(value: Any) -> int:
     return _safe_int(value, default=0, minimum=0, maximum=1_000_000)
 
@@ -6251,9 +6465,75 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
     return payload
 
 
+def _resident_surface_status_snapshot(*, limit: int) -> dict[str, Any]:
+    safe_limit = _safe_int(limit, default=5, minimum=1, maximum=50)
+    operator = _operator_surface()
+    mode = _as_dict(operator.get("control_mode"))
+    scope = {
+        "environment": _as_dict(operator.get("environment")),
+        "posture": _as_dict(operator.get("posture")),
+        "focus": _as_dict(operator.get("focus")),
+        "backlog": _as_dict(operator.get("backlog")),
+    }
+    approvals = {
+        "status": "not_loaded_fast_readback",
+        "pending_count": 0,
+        "route": "/approvals/list?status=pending",
+    }
+    incidents = {
+        "status": "not_loaded_fast_readback",
+        "route": "/system/observer",
+        "reactor_route": "/reactor/operator_visibility/summary",
+    }
+    missions = _mission_surface(operator)
+    reactor: dict[str, Any] = {}
+    launch_manifest = lens_host_launch_manifest()
+    resident_host = _resident_host_surface_fast_readback(launch_manifest)
+    hud = _hud_surface(
+        mode=mode,
+        scope=scope,
+        approvals=approvals,
+        incidents=incidents,
+        missions=missions,
+        reactor=reactor,
+        launch_manifest=launch_manifest,
+    )
+    command_palette = _command_palette_surface(approvals=approvals, launch_manifest=launch_manifest)
+    preflight = lens_preflight()
+    summon_enablement_gate = lens_summon_enablement_gate(preflight=preflight)
+    tray_enablement_gate = lens_tray_enablement_gate(
+        preflight=preflight,
+        tray_runtime_readback=_as_dict(resident_host.get("tray_runtime_readback")),
+    )
+    overlay_enablement_gate = lens_overlay_enablement_gate(preflight=preflight)
+    resident_surface_runtime = _resident_surface_runtime_from_host(resident_host)
+    resident_claim_authority_readiness = lens_host_persistent_supervision_resident_claim_authority_readiness_audit(
+        limit=safe_limit
+    )
+    resident_surface_activation = _resident_surface_activation_fast_readback(
+        resident_surface_ready=bool(resident_surface_runtime.get("resident_surface_ready")),
+        resident_claim_authority_readiness=resident_claim_authority_readiness,
+    )
+    return {
+        "mode": mode,
+        "scope": scope,
+        "hud": hud,
+        "resident_host": resident_host,
+        "approvals_view": approvals,
+        "incident_view": incidents,
+        "mission_feed": missions,
+        "command_palette": command_palette,
+        "reactor": reactor,
+        "preflight": preflight,
+        "summon_enablement_gate": summon_enablement_gate,
+        "tray_enablement_gate": tray_enablement_gate,
+        "overlay_enablement_gate": overlay_enablement_gate,
+        "resident_surface_activation": resident_surface_activation,
+    }
+
+
 def lens_resident_surface_readback(*, limit: int = 5) -> dict[str, Any]:
-    status = lens_status(limit=limit)
-    return dict(_as_dict(status.get("resident_surface")))
+    return _resident_surface_readback_from_status(_resident_surface_status_snapshot(limit=limit))
 
 
 def lens_host_status(*, limit: int = 5) -> dict[str, Any]:

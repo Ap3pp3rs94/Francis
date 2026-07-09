@@ -111,6 +111,64 @@ What is materially true now:
 > Older dated entries are archived under docs/operations/archive/ (see scripts/archive-completion-ledger.ps1).
 > Historical undated ledger body is archived under docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md.
 
+### 2026-07-09 21:44Z - Stage 6 resident-surface proof/readback boundary
+
+Current posture: Phase 2 / Stage 6 Orb embodiment remains incomplete, but the
+resident-surface proof/readback path no longer requires launching a competing
+foreground runtime when the canonical supervised resident runtime is already
+visible. The live checkpoint now advances past the resident-surface
+runtime/readback blocker and reports `command_palette_shell_bridge_readback` as
+the next smallest truthful gap. This does not close Stage 6, claim one-visible
+loop completion, prove command-palette shell bridge behavior, or clear the full
+completion audit.
+
+What changed:
+
+- `/lens/resident-surface` now uses a bounded fast readback snapshot for resident
+  host, tray, hotkey, overlay, summon, resident-surface activation, and
+  resident-claim authority-readiness state instead of depending on the full
+  `/lens/status` aggregate.
+- `scripts/lens-resident-surface-proof.ps1` consumes the canonical live
+  resident runtime readback when present, skips the pre-resident foreground host
+  and live-operator proof paths in that state, and keeps the next gate at
+  `resident_surface_operator_experience_proof` without granting authority.
+- The Stage 6 checkpoint test contract now accepts either bounded foreground
+  proof before residency or direct supervised resident-runtime readback after
+  residency.
+
+Evidence:
+
+- `python -m pytest tests/test_lens_resident_surface_proof_script.py tests/test_api_lens.py::test_lens_resident_surface_readback_mirrors_claim_authority_without_execution tests/test_api_lens.py::test_lens_api_observes_live_foreground_process_readback tests/test_lens_stage6_checkpoint_script.py tests/test_lens_stage6_completion_audit_script.py -q`
+  passed with one skipped test.
+- `python -m ruff check src\francis\lens\status.py tests\test_lens_resident_surface_proof_script.py tests\test_lens_stage6_checkpoint_script.py`
+  passed.
+- `python -m ruff format --check src\francis\lens\status.py tests\test_lens_resident_surface_proof_script.py tests\test_lens_stage6_checkpoint_script.py`
+  passed.
+- `git diff --check -- scripts/lens-resident-surface-proof.ps1 src/francis/lens/status.py tests/test_lens_resident_surface_proof_script.py tests/test_lens_stage6_checkpoint_script.py`
+  passed, with only the existing PowerShell line-ending normalization warning.
+- `scripts\lens-resident-surface-proof.ps1 -Mode Status -DataDir D:\Francis\data`
+  returned `status=proof_passed`,
+  `resident_surface_resident_runtime_readback=true`,
+  `resident_surface_foreground_runtime_readback=false`,
+  `operator_experience_proof=false`, and
+  `next_smallest_truthful_gap=resident_surface_operator_experience_proof`.
+- `scripts\lens-stage6-checkpoint.ps1 -Mode Status` returned `ok=true`,
+  `status=blocked`, `helpful_not_noisy=readback_ready`,
+  `resident_surface_runtime_proof_observed=true`,
+  `resident_surface_resident_runtime_proof_observed=true`, and
+  `next_smallest_truthful_gap=command_palette_shell_bridge_readback`.
+
+Remaining blockers:
+
+- `scripts\lens-stage6-completion-audit.ps1 -Mode Status -OverallTimeoutSeconds 300 -ChildProofTimeoutSeconds 120`
+  still returned `ok=false`, `audit_status=timed_out`,
+  `child_exit_code=124`, and
+  `next_smallest_truthful_gap=stage6_completion_audit_timeout`.
+- The checkpoint's next functional gate is
+  `command_palette_shell_bridge_readback`; Stage 6 still also requires actual
+  operator-experience proof, summon acceptance, desktop effect evidence, voice
+  replay proof, and one-visible-loop proof before any closure claim.
+
 ### 2026-07-09 02:34Z - Internal Compute Substrate API route
 
 Current posture: Phase 2 / `P7_EXECUTION` remains partial, but the first

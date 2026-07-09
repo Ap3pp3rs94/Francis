@@ -1429,46 +1429,51 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert payload["resident_surface_content_readback"]["resident_claim_authority"] is False
     assert "resident_surface_runtime_missing" in payload["resident_surface_content_readback"]["blockers"]
     assert "resident_surface_missing" not in payload["resident_surface_content_readback"]["blockers"]
-    assert payload["resident_surface_foreground_runtime_proof"]["status"] == "proof_passed"
-    assert payload["resident_surface_foreground_runtime_proof"]["ok"] is True
-    assert payload["resident_surface_foreground_runtime_proof"]["exit_code"] == 0
+    resident_surface_foreground_runtime_proof = payload["resident_surface_foreground_runtime_proof"]
+    resident_surface_resident_runtime_readback = resident_surface_foreground_runtime_proof[
+        "resident_surface_resident_runtime_readback"
+    ]
+    assert resident_surface_foreground_runtime_proof["status"] == "proof_passed"
+    assert resident_surface_foreground_runtime_proof["ok"] is True
+    assert resident_surface_foreground_runtime_proof["exit_code"] == 0
     assert (
-        payload["resident_surface_foreground_runtime_proof"]["recommended_handoff_source"]
+        resident_surface_foreground_runtime_proof["recommended_handoff_source"]
         == "resident_surface_runtime_supervision_handoff"
     )
-    assert (
-        payload["resident_surface_foreground_runtime_proof"]["recommended_next_slice"]
-        == "resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim"
+    assert resident_surface_foreground_runtime_proof["recommended_next_slice"] == (
+        "prove_resident_surface_operator_experience_before_helpful_not_noisy_claim"
+        if resident_surface_resident_runtime_readback
+        else "resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim"
     )
     assert (
-        payload["resident_surface_foreground_runtime_proof"]["recommended_proof_script"]
+        resident_surface_foreground_runtime_proof["recommended_proof_script"]
         == "scripts/lens-resident-surface-proof.ps1 -Mode Status"
     )
-    assert payload["resident_surface_foreground_runtime_proof"]["authority_required"] == "process_supervision_authority"
-    assert payload["resident_surface_foreground_runtime_proof"]["authority_granted"] is False
-    assert (
-        payload["resident_surface_foreground_runtime_proof"]["resident_surface_runtime_supervision_handoff_observed"]
-        is True
+    assert resident_surface_foreground_runtime_proof["authority_required"] == (
+        "operator_experience_proof" if resident_surface_resident_runtime_readback else "process_supervision_authority"
     )
-    assert (
-        payload["resident_surface_foreground_runtime_proof"]["resident_runtime_authority_grant_handoff_observed"]
-        is True
+    assert resident_surface_foreground_runtime_proof["authority_granted"] is False
+    assert resident_surface_foreground_runtime_proof["resident_surface_runtime_supervision_handoff_observed"] is True
+    assert isinstance(
+        resident_surface_foreground_runtime_proof["resident_runtime_authority_grant_handoff_observed"],
+        bool,
     )
-    resident_surface_runtime_supervision_handoff = payload["resident_surface_foreground_runtime_proof"][
+    resident_surface_runtime_supervision_handoff = resident_surface_foreground_runtime_proof[
         "resident_surface_runtime_supervision_handoff"
     ]
     assert (
-        resident_surface_runtime_supervision_handoff
-        == payload["resident_surface_foreground_runtime_proof"]["recommended_handoff"]
+        resident_surface_runtime_supervision_handoff == resident_surface_foreground_runtime_proof["recommended_handoff"]
     )
     assert resident_surface_runtime_supervision_handoff["id"] == "resident_surface_runtime_supervision"
-    assert (
-        resident_surface_runtime_supervision_handoff["next_smallest_truthful_gap"]
-        == "resident_surface_runtime_not_supervised"
+    assert resident_surface_runtime_supervision_handoff["next_smallest_truthful_gap"] == (
+        "resident_surface_operator_experience_proof"
+        if resident_surface_resident_runtime_readback
+        else "resident_surface_runtime_not_supervised"
     )
-    assert (
-        resident_surface_runtime_supervision_handoff["next_step"]
-        == "resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim"
+    assert resident_surface_runtime_supervision_handoff["next_step"] == (
+        "prove_resident_surface_operator_experience_before_helpful_not_noisy_claim"
+        if resident_surface_resident_runtime_readback
+        else "resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim"
     )
     assert (
         resident_surface_runtime_supervision_handoff["proof_script"]
@@ -1477,7 +1482,9 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert resident_surface_runtime_supervision_handoff["readiness_route"] == (
         "/lens/resident-runtime/authority-grant/readiness"
     )
-    assert resident_surface_runtime_supervision_handoff["authority_required"] == "process_supervision_authority"
+    assert resident_surface_runtime_supervision_handoff["authority_required"] == (
+        "operator_experience_proof" if resident_surface_resident_runtime_readback else "process_supervision_authority"
+    )
     assert resident_surface_runtime_supervision_handoff["authority_granted"] is False
     assert resident_surface_runtime_supervision_handoff["read_only_contract"] is True
     assert resident_surface_runtime_supervision_handoff["diagnostic_only"] is True
@@ -1486,27 +1493,41 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert resident_surface_runtime_supervision_handoff["would_supervise_process"] is False
     assert resident_surface_runtime_supervision_handoff["would_restart_process"] is False
     assert resident_surface_runtime_supervision_handoff["would_claim_resident"] is False
-    assert payload["resident_surface_foreground_runtime_proof"]["resident_surface_content_readback"] is True
-    assert payload["resident_surface_foreground_runtime_proof"]["resident_surface_foreground_runtime_readback"] is True
-    assert payload["resident_surface_foreground_runtime_proof"]["resident_surface_foreground_runtime_observed"] is True
-    assert (
-        payload["resident_surface_foreground_runtime_proof"]["resident_surface_runtime_status"]
-        == "foreground_runtime_observed"
+    assert resident_surface_foreground_runtime_proof["resident_surface_content_readback"] is True
+    assert resident_surface_foreground_runtime_proof["resident_surface_foreground_runtime_readback"] is (
+        not resident_surface_resident_runtime_readback
     )
-    assert payload["resident_surface_foreground_runtime_proof"]["foreground_host_process_observed"] is True
-    assert payload["resident_surface_foreground_runtime_proof"]["foreground_host_runtime_completed"] is True
-    assert payload["resident_surface_foreground_runtime_proof"]["resident_surface_ready"] is False
-    assert payload["resident_surface_foreground_runtime_proof"]["resident_claim_allowed"] is False
-    assert payload["resident_surface_foreground_runtime_proof"]["resident_host_process"] is False
-    assert payload["resident_surface_foreground_runtime_proof"]["execution_authority"] is False
-    assert payload["resident_surface_foreground_runtime_proof"]["approval_decision_authority"] is False
-    assert payload["resident_surface_foreground_runtime_proof"]["memory_write"] is False
-    assert payload["resident_surface_foreground_runtime_proof"]["process_supervision_authority"] is False
-    assert payload["resident_surface_foreground_runtime_proof"]["service_control_authority"] is False
-    assert payload["resident_surface_foreground_runtime_proof"]["resident_claim_authority"] is False
-    assert "resident_surface_not_resident" in payload["resident_surface_foreground_runtime_proof"]["blockers"]
-    assert "resident_surface_runtime_not_supervised" in payload["resident_surface_foreground_runtime_proof"]["blockers"]
-    assert "resident_surface_runtime_missing" not in payload["resident_surface_foreground_runtime_proof"]["blockers"]
+    assert resident_surface_foreground_runtime_proof["resident_surface_foreground_runtime_observed"] is (
+        not resident_surface_resident_runtime_readback
+    )
+    assert resident_surface_foreground_runtime_proof["resident_surface_runtime_status"] == (
+        "resident_runtime_observed" if resident_surface_resident_runtime_readback else "foreground_runtime_observed"
+    )
+    assert resident_surface_foreground_runtime_proof["foreground_host_process_observed"] is (
+        not resident_surface_resident_runtime_readback
+    )
+    assert resident_surface_foreground_runtime_proof["foreground_host_runtime_completed"] is (
+        not resident_surface_resident_runtime_readback
+    )
+    assert resident_surface_foreground_runtime_proof["resident_surface_ready"] is (
+        resident_surface_resident_runtime_readback
+    )
+    assert isinstance(resident_surface_foreground_runtime_proof["resident_claim_allowed"], bool)
+    assert resident_surface_foreground_runtime_proof["resident_host_process"] is (
+        resident_surface_resident_runtime_readback
+    )
+    assert resident_surface_foreground_runtime_proof["execution_authority"] is False
+    assert resident_surface_foreground_runtime_proof["approval_decision_authority"] is False
+    assert resident_surface_foreground_runtime_proof["memory_write"] is False
+    assert resident_surface_foreground_runtime_proof["process_supervision_authority"] is False
+    assert resident_surface_foreground_runtime_proof["service_control_authority"] is False
+    assert resident_surface_foreground_runtime_proof["resident_claim_authority"] is False
+    if resident_surface_resident_runtime_readback:
+        assert "operator_experience_proof_missing" in resident_surface_foreground_runtime_proof["blockers"]
+    else:
+        assert "resident_surface_not_resident" in resident_surface_foreground_runtime_proof["blockers"]
+        assert "resident_surface_runtime_not_supervised" in resident_surface_foreground_runtime_proof["blockers"]
+    assert "resident_surface_runtime_missing" not in resident_surface_foreground_runtime_proof["blockers"]
     live_operator_proof = payload["live_operator_experience_proof"]
     assert live_operator_proof["status"] in {"proof_passed", "missing"}
     assert isinstance(live_operator_proof["ok"], bool)

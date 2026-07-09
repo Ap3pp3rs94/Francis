@@ -66,6 +66,9 @@ def test_lens_resident_surface_readback_uses_live_http_route_contract() -> None:
     assert "$BaseBlockers += @($ResidentSurfaceRuntimeBlockers)" in script
     assert "if ($ResidentSurfaceReadbackTimedOut) { 'resident_surface_readback_timeout' }" in script
     assert "if ($ResidentSurfaceReadbackTimedOut) { 'fix_resident_surface_readback_timeout' }" in script
+    assert "$ResidentSurfaceResidentRuntimeReadback = Test-ResidentSurfaceReadbackObserved" in script
+    assert "skipped_due_to_live_resident_runtime = $true" in script
+    assert "foreground_session_skipped_due_to_live_resident_runtime" in script
 
 
 def test_lens_resident_surface_proof_composes_blocked_surface_without_authority() -> None:
@@ -80,8 +83,8 @@ def test_lens_resident_surface_proof_composes_blocked_surface_without_authority(
     assert payload["resident_surface_ready"] is resident_runtime_readback
     assert payload["resident_surface_content_readback"] is True
     assert isinstance(payload["resident_surface_resident_runtime_observed"], bool)
-    assert payload["resident_surface_foreground_runtime_readback"] is True
-    assert payload["resident_surface_foreground_runtime_observed"] is True
+    assert payload["resident_surface_foreground_runtime_readback"] is (not resident_runtime_readback)
+    assert payload["resident_surface_foreground_runtime_observed"] is (not resident_runtime_readback)
     assert payload["resident_surface_content_contract_ready"] is True
     assert payload["resident_surface_contract_status"] == "readback_ready"
     assert payload["resident_surface_runtime_status"] == (
@@ -100,16 +103,16 @@ def test_lens_resident_surface_proof_composes_blocked_surface_without_authority(
         assert resident_runtime_readback is True
         assert payload["resident_claim_authority_ready"] is True
     assert payload["resident_host_process"] is resident_runtime_readback
-    assert payload["foreground_host_process_observed"] is True
-    assert payload["foreground_host_runtime_completed"] is True
+    assert payload["foreground_host_process_observed"] is (not resident_runtime_readback)
+    assert payload["foreground_host_runtime_completed"] is (not resident_runtime_readback)
     assert payload["tray_presence"] is False
     assert payload["tray_icon"] is False
     assert payload["overlay_window"] is False
     assert payload["global_hotkey_bound"] is False
     assert payload["summon_anywhere"] is False
     assert payload["live_http_status_readback"] is True
-    assert payload["operator_experience_proof"] is True
-    assert payload["live_operator_experience_proof"] is True
+    assert payload["operator_experience_proof"] is (not resident_runtime_readback)
+    assert payload["live_operator_experience_proof"] is (not resident_runtime_readback)
     assert payload["live_operator_experience_ready"] is False
     assert payload["next_smallest_truthful_gap"] == (
         "resident_surface_operator_experience_proof"
@@ -130,7 +133,7 @@ def test_lens_resident_surface_proof_composes_blocked_surface_without_authority(
     assert payload["resident_runtime_authority_grant_readiness_route"] == (
         "/lens/resident-runtime/authority-grant/readiness"
     )
-    assert payload["resident_runtime_authority_grant_handoff_observed"] is True
+    assert payload["resident_runtime_authority_grant_handoff_observed"] is (not resident_runtime_readback)
 
     recommended_handoff = payload["recommended_handoff"]
     assert recommended_handoff["id"] == "resident_surface_runtime_supervision"
@@ -174,7 +177,9 @@ def test_lens_resident_surface_proof_composes_blocked_surface_without_authority(
     )
     assert checks["host_lifecycle_boundary"]["status"] == "blocked_readback_ready"
     assert checks["supervision_proof_available"]["status"] == "available"
-    assert checks["live_operator_experience_proof"]["status"] == "proof_passed"
+    assert checks["live_operator_experience_proof"]["status"] == (
+        "not_run_live_resident_runtime_observed" if resident_runtime_readback else "proof_passed"
+    )
     assert checks["tray_presence_preflight"]["status"] == "blocked_disabled"
     assert checks["overlay_window_preflight"]["status"] == "blocked_disabled"
     assert checks["summon_binding_preflight"]["status"] == "blocked_disabled"
@@ -197,32 +202,49 @@ def test_lens_resident_surface_proof_composes_blocked_surface_without_authority(
     else:
         assert "resident_surface_runtime_missing" in proof["resident_surface_readback_blockers"]
     assert "resident_surface_missing" not in proof["resident_surface_readback_blockers"]
-    assert proof["resident_surface_foreground_runtime_status"] == "foreground_runtime_observed"
-    assert proof["resident_surface_foreground_runtime_observed"] is True
-    assert "resident_surface_runtime_not_supervised" in proof["resident_surface_foreground_runtime_blockers"]
-    assert "resident_surface_not_resident" in proof["resident_surface_foreground_runtime_blockers"]
-    assert "resident_surface_runtime_missing" not in proof["resident_surface_foreground_runtime_blockers"]
+    assert proof["resident_surface_foreground_runtime_status"] == (
+        "" if resident_runtime_readback else "foreground_runtime_observed"
+    )
+    assert proof["resident_surface_foreground_runtime_observed"] is (not resident_runtime_readback)
+    if resident_runtime_readback:
+        assert proof["resident_surface_foreground_runtime_blockers"] in ({}, [])
+    else:
+        assert "resident_surface_runtime_not_supervised" in proof["resident_surface_foreground_runtime_blockers"]
+        assert "resident_surface_not_resident" in proof["resident_surface_foreground_runtime_blockers"]
+        assert "resident_surface_runtime_missing" not in proof["resident_surface_foreground_runtime_blockers"]
     assert proof["resident_claim_allowed"] is payload["resident_claim_allowed"]
     assert proof["resident_claim_authority_ready"] is payload["resident_claim_authority_ready"]
     assert proof["resident_claim_authority_readiness_route"] == (
         "/lens/host/persistent-supervision/resident-claim/authority/readiness"
     )
     assert proof["resident_claim_authority_blockers"] == payload["resident_claim_authority_blockers"]
-    assert proof["foreground_runtime_running_state"] == "foreground_running"
-    assert proof["foreground_runtime_final_state"] == "foreground_stopped"
+    assert proof["foreground_runtime_running_state"] == (
+        "not_run_live_resident_runtime_observed" if resident_runtime_readback else "foreground_running"
+    )
+    assert proof["foreground_runtime_final_state"] == (
+        "not_run_live_resident_runtime_observed" if resident_runtime_readback else "foreground_stopped"
+    )
     assert proof["host_lifecycle_status"] == "blocked"
     assert proof["supervision_proof_available"] is True
     assert proof["live_operator_exit_code"] == 0
     assert proof["live_operator_startup_timeout_seconds"] == 60
     assert proof["resident_surface_readback_timeout_seconds"] == 30
-    assert proof["live_operator_status"] == "proof_passed"
-    assert proof["live_operator_helpful_not_noisy_readback"] is True
-    assert proof["live_operator_status_route"] == "/lens/status?limit=5"
+    assert proof["live_operator_status"] == (
+        "not_run_live_resident_runtime_observed" if resident_runtime_readback else "proof_passed"
+    )
+    assert proof["live_operator_helpful_not_noisy_readback"] is (not resident_runtime_readback)
+    assert proof["live_operator_status_route"] == ("" if resident_runtime_readback else "/lens/status?limit=5")
     assert proof["live_operator_status_error"] == ""
-    assert proof["live_operator_api_pid"] > 0
-    assert proof["live_operator_api_stdout_path"].endswith("api-stdout.log")
-    assert proof["live_operator_api_stderr_path"].endswith("api-stderr.log")
-    assert "resident_surface_runtime_missing" in proof["live_operator_blockers"]
+    if resident_runtime_readback:
+        assert proof["live_operator_api_pid"] == 0
+        assert proof["live_operator_api_stdout_path"] == ""
+        assert proof["live_operator_api_stderr_path"] == ""
+        assert proof["live_operator_blockers"] in (None, [], {})
+    else:
+        assert proof["live_operator_api_pid"] > 0
+        assert proof["live_operator_api_stdout_path"].endswith("api-stdout.log")
+        assert proof["live_operator_api_stderr_path"].endswith("api-stderr.log")
+        assert "resident_surface_runtime_missing" in proof["live_operator_blockers"]
     assert "resident_surface_missing" not in proof["live_operator_blockers"]
     assert proof["tray_status"] == "blocked"
     assert proof["overlay_status"] == "blocked"
@@ -257,7 +279,9 @@ def test_lens_resident_surface_proof_composes_blocked_surface_without_authority(
         "api_route_readback": True,
         "live_http_readback": True,
         "temporary_api_process": True,
-        "bounded_foreground_session": True,
+        "bounded_foreground_session": not resident_runtime_readback,
+        "foreground_session_skipped_due_to_live_resident_runtime": resident_runtime_readback,
+        "pre_resident_live_operator_proof_skipped_due_to_live_resident_runtime": resident_runtime_readback,
         "temporary_runtime_state_write": True,
         "product_execution_authority": False,
         "execution_authority": False,
