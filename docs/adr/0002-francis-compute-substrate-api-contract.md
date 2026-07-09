@@ -90,10 +90,9 @@ Implemented endpoints:
 - `GET /compute-substrate/status/{task_id}`
 - `GET /compute-substrate/status/by-correlation/{correlation_id}`
 - `GET /compute-substrate/receipts/{receipt_id}`
+- `GET /compute-substrate/capabilities`
 
-Deferred endpoints:
-
-- `GET /compute-substrate/capabilities` is designed below but not implemented in this slice.
+Deferred endpoints: none in this ADR. Future receipt mutation, receipt listing/export, capability mutation, admin, adapter, async, recovery/resume, and production/public routes require separate governance-reviewed contracts.
 
 If a deployment layer later places Francis under `/api`, the same contract applies to the prefixed paths.
 
@@ -225,9 +224,9 @@ Receipt readback may include bounded adapter or request summary only if it is al
 
 ## Capabilities Readback Route Contract
 
-`GET /compute-substrate/capabilities` is a designed but not yet implemented internal/local-dev route. A future implementation must remain read-only, permission-gated, and bounded unless a later governance-reviewed promotion explicitly changes that posture.
+`GET /compute-substrate/capabilities` is implemented as an internal/local-dev route. It must remain read-only, permission-gated, and bounded unless a later governance-reviewed promotion explicitly changes that posture.
 
-The suggested route scope is `compute:capabilities:read`. This scope must remain separate from `compute:submit`, `compute:status:read`, and `compute:receipt:read`. It does not imply execution authority, does not imply backend power, does not imply approval authority, and does not imply administrative authority.
+The route scope is `compute:capabilities:read`. This scope must remain separate from `compute:submit`, `compute:status:read`, and `compute:receipt:read`. It does not imply execution authority, does not imply backend power, does not imply approval authority, and does not imply administrative authority.
 
 The route may report bounded capabilities only. A safe response may include:
 

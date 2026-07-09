@@ -139,6 +139,11 @@ class _FailingStatusStore:
         return {"kind": "test.failing_api_compute_status_store", "durable": True}
 
 
+class _FailingCapabilitiesService:
+    def known_capabilities(self) -> tuple[str, ...]:
+        raise RuntimeError("capabilities unavailable SECRET_PATH_SHOULD_NOT_RETURN")
+
+
 def test_compute_substrate_submit_denies_missing_actor(monkeypatch, tmp_path: Path) -> None:
     client = _client(monkeypatch, tmp_path, actor_scopes={"compute.submitter": ["compute:submit"]})
 
@@ -219,6 +224,111 @@ def test_compute_substrate_submit_allows_bounded_direct_request(monkeypatch, tmp
     assert "MODEL_PROMPT_SHOULD_NOT_RETURN" not in serialized
     assert "C:\\Sensitive\\Should\\Not\\Return" not in serialized
     assert "receipt_path" not in serialized
+
+
+def test_compute_substrate_capabilities_readback_requires_capabilities_scope(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    client = _client(
+        monkeypatch,
+        tmp_path,
+        actor_scopes={
+            "compute.submitter": ["compute:submit"],
+            "status.reader": ["compute:status:read"],
+            "receipt.reader": ["compute:receipt:read"],
+            "capabilities.reader": ["compute:capabilities:read"],
+        },
+    )
+
+    submit = client.post(
+        "/compute-substrate/submit",
+        json=_submit_payload(actor="capabilities.reader", request_id="api-capabilities-reader-no-submit"),
+    ).json()
+    assert submit["ok"] is False
+    assert submit["status"] == "denied"
+    assert submit["error"] == "api_permission_denied"
+    assert submit["governance"]["required_scope"] == "compute:submit"
+    assert submit["governance"]["uses_compute_substrate_service"] is False
+
+    for actor in ("", "compute.submitter", "status.reader", "receipt.reader"):
+        body = client.get(
+            "/compute-substrate/capabilities",
+            params={"actor": actor},
+        ).json()
+        assert body["ok"] is False
+        assert body["status"] == "denied"
+        assert body["error"] == "api_permission_denied"
+        assert body["governance"]["required_scope"] == "compute:capabilities:read"
+        assert body["governance"]["uses_compute_substrate_service"] is False
+
+
+def test_compute_substrate_capabilities_readback_returns_bounded_names(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    client = _client(monkeypatch, tmp_path, actor_scopes={"capabilities.reader": ["compute:capabilities:read"]})
+
+    body = client.get(
+        "/compute-substrate/capabilities",
+        params={"actor": "capabilities.reader"},
+    ).json()
+    serialized = json.dumps(body, sort_keys=True)
+
+    assert body["ok"] is True
+    assert body["status"] == "available"
+    assert body["error"] == ""
+    assert set(body["capabilities"]) == {
+        "cooperative_delay_test",
+        "compute_test",
+        "echo",
+        "health_check",
+        "summarize_status",
+    }
+    assert body["capability_count"] == 5
+    assert body["record"]["bounded_capabilities"] is True
+    assert body["record"]["returns_raw_backend_objects"] is False
+    assert body["record"]["returns_raw_worker_internals"] is False
+    assert body["record"]["returns_adapter_metadata"] is False
+    assert body["governance"]["capabilities_readback_only"] is True
+    assert body["governance"]["uses_compute_substrate_service"] is True
+    assert body["governance"]["does_not_trigger_execution"] is True
+    assert body["governance"]["does_not_submit_tasks"] is True
+    assert body["governance"]["does_not_consume_approval"] is True
+    assert body["governance"]["does_not_expose_backend_power"] is True
+    assert body["governance"]["does_not_imply_adapter_implementation"] is True
+    assert "SafeLocalBackend" not in serialized
+    assert "worker_id" not in serialized
+    assert "receipt_path" not in serialized
+    assert "C:\\" not in serialized
+    assert "D:\\" not in serialized
+    assert not (tmp_path / "francis_data").exists()
+
+
+def test_compute_substrate_capabilities_readback_reports_unavailable_bounded(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(compute_route, "_compute_substrate_service", _FailingCapabilitiesService)
+    client = _client(monkeypatch, tmp_path, actor_scopes={"capabilities.reader": ["compute:capabilities:read"]})
+
+    body = client.get(
+        "/compute-substrate/capabilities",
+        params={"actor": "capabilities.reader"},
+    ).json()
+    serialized = json.dumps(body, sort_keys=True)
+
+    assert body["ok"] is False
+    assert body["status"] == "unavailable"
+    assert body["error"] == "capabilities_readback_unavailable"
+    assert body["capabilities"] == []
+    assert body["record"]["returns_raw_backend_objects"] is False
+    assert body["record"]["returns_raw_worker_internals"] is False
+    assert body["governance"]["exception_redacted"] is True
+    assert body["governance"]["does_not_trigger_execution"] is True
+    assert "SECRET_PATH_SHOULD_NOT_RETURN" not in serialized
+    assert "RuntimeError" not in serialized
+    assert "traceback" not in serialized.lower()
 
 
 def test_compute_substrate_submit_malformed_request_denied_safely(monkeypatch, tmp_path: Path) -> None:
@@ -1117,6 +1227,7 @@ def test_compute_substrate_api_route_uses_service_boundary() -> None:
 
     assert "ComputeSubstrateService" in source
     assert ".submit(submission)" in source
+    assert ".known_capabilities()" in source
     assert "SafeLocalBackend" not in source
     assert "SubstrateGovernor" not in source
     assert "import subprocess" not in source

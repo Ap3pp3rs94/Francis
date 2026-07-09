@@ -31,6 +31,7 @@ router = APIRouter()
 _COMPUTE_SUBMIT_SCOPE = "compute:submit"
 _COMPUTE_STATUS_READ_SCOPE = "compute:status:read"
 _COMPUTE_RECEIPT_READ_SCOPE = "compute:receipt:read"
+_COMPUTE_CAPABILITIES_READ_SCOPE = "compute:capabilities:read"
 _SAFE_API_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,120}$")
 _SAFE_CAPABILITY_RE = re.compile(r"^[A-Za-z0-9_.-]{1,120}$")
 _SUPPORTED_CAPABILITIES = {
@@ -515,6 +516,77 @@ def _receipt_unavailable_response(*, error: str, reason: str, receipt_id: str) -
     }
 
 
+def _capabilities_response(capabilities: tuple[str, ...]) -> dict[str, Any]:
+    bounded_capabilities = [
+        capability for capability in (_safe_capability(item) for item in capabilities) if capability
+    ]
+    bounded_capabilities = sorted(set(bounded_capabilities))[:100]
+    return {
+        "ok": True,
+        "status": "available",
+        "error": "",
+        "capabilities": bounded_capabilities,
+        "capability_count": len(bounded_capabilities),
+        "record": {
+            "capabilities": bounded_capabilities,
+            "capability_count": len(bounded_capabilities),
+            "bounded_capabilities": True,
+            "stores_payload": False,
+            "stores_output": False,
+            "returns_raw_backend_objects": False,
+            "returns_raw_worker_internals": False,
+            "returns_adapter_metadata": False,
+        },
+        "governance": _route_governance(
+            service_touched=True,
+            extra={
+                "capabilities_readback_only": True,
+                "grants_execution_authority": False,
+                "does_not_trigger_execution": True,
+                "does_not_submit_tasks": True,
+                "does_not_consume_approval": True,
+                "does_not_expose_backend_power": True,
+                "does_not_expose_raw_worker_internals": True,
+                "does_not_imply_adapter_implementation": True,
+            },
+        ),
+    }
+
+
+def _capabilities_unavailable_response(*, error: str, reason: str) -> dict[str, Any]:
+    return {
+        "ok": False,
+        "status": "unavailable",
+        "error": error,
+        "denial_reason": reason,
+        "capabilities": [],
+        "capability_count": 0,
+        "record": {
+            "capabilities": [],
+            "capability_count": 0,
+            "bounded_capabilities": True,
+            "stores_payload": False,
+            "stores_output": False,
+            "returns_raw_backend_objects": False,
+            "returns_raw_worker_internals": False,
+            "returns_adapter_metadata": False,
+        },
+        "governance": _route_governance(
+            service_touched=True,
+            extra={
+                "capabilities_readback_only": True,
+                "grants_execution_authority": False,
+                "does_not_trigger_execution": True,
+                "does_not_submit_tasks": True,
+                "does_not_consume_approval": True,
+                "does_not_expose_backend_power": True,
+                "does_not_expose_raw_worker_internals": True,
+                "exception_redacted": True,
+            },
+        ),
+    }
+
+
 def _submission_response(
     result: ComputeSubmissionResult,
     *,
@@ -637,6 +709,30 @@ def submit_compute_task(request: Request, payload: ComputeSubmitIn) -> dict[str,
             ),
         }
     return _submission_response(result, request_id=submission.envelope.task_id)
+
+
+@router.get("/capabilities")
+def get_compute_capabilities(request: Request, actor: str = "") -> dict[str, Any]:
+    permission = _route_permission(
+        actor=actor,
+        required_scope=_COMPUTE_CAPABILITIES_READ_SCOPE,
+        route=request.url.path,
+        method=request.method,
+    )
+    if not permission.allowed:
+        return _permission_denied(
+            permission,
+            required_scope=_COMPUTE_CAPABILITIES_READ_SCOPE,
+            next_step="configure_actor_scope_before_compute_capabilities_readback",
+        )
+    try:
+        capabilities = _compute_substrate_service().known_capabilities()
+    except Exception:
+        return _capabilities_unavailable_response(
+            error="capabilities_readback_unavailable",
+            reason="capabilities_readback_unavailable",
+        )
+    return _capabilities_response(capabilities)
 
 
 @router.get("/receipts/{receipt_id}")
