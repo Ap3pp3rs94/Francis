@@ -10,6 +10,8 @@ from pydantic import BaseModel, Field
 from francis.api.errors import api_error_code, log_api_exception
 from francis.compute_substrate import (
     CancellationToken,
+    CapabilityReceipt,
+    ComputeReceiptStore,
     ComputeSubstrateService,
     ComputeSubmission,
     ComputeSubmissionResult,
@@ -29,6 +31,7 @@ router = APIRouter()
 
 _COMPUTE_SUBMIT_SCOPE = "compute:submit"
 _COMPUTE_STATUS_READ_SCOPE = "compute:status:read"
+_COMPUTE_RECEIPT_READ_SCOPE = "compute:receipt:read"
 _SAFE_API_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,120}$")
 _SAFE_CAPABILITY_RE = re.compile(r"^[A-Za-z0-9_.-]{1,120}$")
 _SUPPORTED_CAPABILITIES = {
@@ -97,6 +100,10 @@ def _compute_substrate_service() -> ComputeSubstrateService:
         receipt_store=LocalJsonComputeReceiptStore(),
         status_store=LocalJsonComputeStatusStore(),
     )
+
+
+def _compute_receipt_store() -> ComputeReceiptStore | None:
+    return LocalJsonComputeReceiptStore()
 
 
 def _safe_text(value: Any, *, limit: int = 240) -> str:
@@ -360,6 +367,149 @@ def _bounded_record_payload(record: ComputeTaskRecord, *, found: bool = True) ->
     }
 
 
+def _receipt_budget_summary(budget: dict[str, Any]) -> dict[str, Any]:
+    filesystem_scope = budget.get("filesystem_scope")
+    filesystem_summary = ["none"] if filesystem_scope == ["none"] else ["non_default_scope_requested"]
+    return {
+        "max_runtime_ms": budget.get("max_runtime_ms") if isinstance(budget.get("max_runtime_ms"), int) else 0,
+        "max_memory_mb": budget.get("max_memory_mb") if isinstance(budget.get("max_memory_mb"), int) else 0,
+        "cpu_weight": budget.get("cpu_weight") if isinstance(budget.get("cpu_weight"), int) else 0,
+        "priority": _safe_text(budget.get("priority"), limit=40) or "normal",
+        "allow_network": bool(budget.get("allow_network", False)),
+        "filesystem_scope": filesystem_summary,
+        "allow_gpu": bool(budget.get("allow_gpu", False)),
+        "approval_required": bool(budget.get("approval_required", False)),
+        "max_compute_units": budget.get("max_compute_units") if isinstance(budget.get("max_compute_units"), int) else 0,
+    }
+
+
+def _receipt_approval_scope_summary(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    ceiling = value.get("resource_budget_ceiling")
+    ceiling_summary: dict[str, int | None] = {}
+    if isinstance(ceiling, dict):
+        for key in ("max_runtime_ms", "max_memory_mb", "max_cpu_weight", "max_compute_units"):
+            raw = ceiling.get(key)
+            ceiling_summary[key] = raw if isinstance(raw, int) else None
+    return {
+        "task_id_bound": bool(value.get("task_id_bound", False)),
+        "correlation_id_bound": bool(value.get("correlation_id_bound", False)),
+        "allowed_capabilities": [
+            capability
+            for capability in (_safe_capability(item) for item in value.get("allowed_capabilities", ()))
+            if capability
+        ][:20],
+        "allowed_worker_ids": [
+            worker_id for worker_id in (_safe_id(item) for item in value.get("allowed_worker_ids", ())) if worker_id
+        ][:20],
+        "max_risk_level": _safe_text(value.get("max_risk_level"), limit=40) or "low",
+        "resource_budget_ceiling": ceiling_summary,
+    }
+
+
+def _receipt_record_payload(receipt: CapabilityReceipt, *, found: bool = True) -> dict[str, Any]:
+    governance = receipt.governance
+    return {
+        "found": found,
+        "receipt_id": receipt.receipt_id,
+        "task_id": receipt.task_id,
+        "correlation_id": receipt.trace_id,
+        "capability": receipt.function_name,
+        "worker_id": receipt.worker_id,
+        "backend_name": receipt.backend_name,
+        "execution_status": receipt.status,
+        "reason": _safe_text(receipt.reason, limit=120),
+        "approval_required": bool(governance.get("approval_required", False)),
+        "approval_id": receipt.approval_id,
+        "approval_satisfied": bool(governance.get("approval_satisfied", False)),
+        "approval_decision": _safe_text(governance.get("approval_decision"), limit=120),
+        "approval_denial_reason": _safe_text(governance.get("approval_denial_reason"), limit=120),
+        "approval_consumed": bool(governance.get("approval_consumed", False)),
+        "approval_persistence": _safe_text(governance.get("approval_persistence"), limit=120),
+        "durable_approval_persistence": bool(governance.get("durable_approval_persistence", False)),
+        "approval_scope_summary": _receipt_approval_scope_summary(governance.get("approval_scope_summary")),
+        "receipt_persisted": bool(receipt.persisted),
+        "receipt_persistence_status": _safe_text(governance.get("receipt_persistence"), limit=120),
+        "durable_compute_receipt_persistence": bool(governance.get("durable_compute_receipt", False)),
+        "resource_budget": _receipt_budget_summary(dict(receipt.budget)),
+        "cancellation_requested": bool(governance.get("cancellation_requested", False)),
+        "cancellation_reason": _safe_text(governance.get("cancellation_reason"), limit=120),
+        "deadline_configured": bool(governance.get("deadline_configured", False)),
+        "deadline_expired": bool(governance.get("deadline_expired", False)),
+        "timed_out": bool(governance.get("timed_out", False)),
+        "timeout_stage": _safe_text(governance.get("timeout_stage"), limit=80),
+        "execution_started": bool(governance.get("execution_started", False)),
+        "execution_finished": bool(governance.get("execution_finished", False)),
+        "duration_ms": governance.get("duration_ms") if isinstance(governance.get("duration_ms"), int) else 0,
+        "created_at_ms": receipt.created_at_ms,
+        "stores_payload": False,
+        "stores_output": False,
+        "returns_raw_execution_output": False,
+        "stores_receipt_path": False,
+        "background_execution": False,
+        "async_execution": False,
+    }
+
+
+def _receipt_response(receipt: CapabilityReceipt) -> dict[str, Any]:
+    record = _receipt_record_payload(receipt)
+    return {
+        "ok": True,
+        "status": "found",
+        "error": "",
+        "found": True,
+        "receipt_id": receipt.receipt_id,
+        "task_id": receipt.task_id,
+        "correlation_id": receipt.trace_id,
+        "record": record,
+        "governance": _route_governance(
+            service_touched=False,
+            extra={
+                "receipt_readback_only": True,
+                "grants_execution_authority": False,
+                "does_not_trigger_execution": True,
+                "does_not_consume_approval": True,
+                "receipt_store_read_only": True,
+                "durable_compute_receipt_readback": True,
+                "mutates_receipts_directly": False,
+                "mutates_approvals_directly": False,
+                "mutates_status_directly": False,
+            },
+        ),
+    }
+
+
+def _receipt_unavailable_response(*, error: str, reason: str, receipt_id: str) -> dict[str, Any]:
+    return {
+        "ok": False,
+        "status": "unavailable" if error != "receipt_not_found" else "unknown",
+        "error": error,
+        "denial_reason": reason,
+        "found": False,
+        "receipt_id": receipt_id,
+        "record": {
+            "found": False,
+            "receipt_id": receipt_id,
+            "stores_payload": False,
+            "stores_output": False,
+            "returns_raw_execution_output": False,
+            "stores_receipt_path": False,
+        },
+        "governance": _route_governance(
+            service_touched=False,
+            extra={
+                "receipt_readback_only": True,
+                "grants_execution_authority": False,
+                "does_not_trigger_execution": True,
+                "does_not_consume_approval": True,
+                "receipt_store_read_only": True,
+                "receipt_store_error_redacted": error == "receipt_store_read_failed",
+            },
+        ),
+    }
+
+
 def _submission_response(
     result: ComputeSubmissionResult,
     *,
@@ -482,6 +632,55 @@ def submit_compute_task(request: Request, payload: ComputeSubmitIn) -> dict[str,
             ),
         }
     return _submission_response(result, request_id=submission.envelope.task_id)
+
+
+@router.get("/receipts/{receipt_id}")
+def get_compute_receipt(request: Request, receipt_id: str, actor: str = "") -> dict[str, Any]:
+    permission = _route_permission(
+        actor=actor,
+        required_scope=_COMPUTE_RECEIPT_READ_SCOPE,
+        route=request.url.path,
+        method=request.method,
+    )
+    if not permission.allowed:
+        return _permission_denied(
+            permission,
+            required_scope=_COMPUTE_RECEIPT_READ_SCOPE,
+            next_step="configure_actor_scope_before_compute_receipt_readback",
+        )
+    clean_id = _safe_id(receipt_id)
+    if not clean_id:
+        return _malformed_request("invalid_receipt_id")
+
+    store = _compute_receipt_store()
+    if store is None:
+        return _receipt_unavailable_response(
+            error="receipt_store_unavailable",
+            reason="receipt_store_unavailable",
+            receipt_id=clean_id,
+        )
+    try:
+        receipt = store.read_receipt(clean_id)
+    except Exception:
+        return _receipt_unavailable_response(
+            error="receipt_store_read_failed",
+            reason="receipt_store_read_failed",
+            receipt_id=clean_id,
+        )
+    if receipt is None:
+        return _receipt_unavailable_response(
+            error="receipt_not_found",
+            reason="receipt_not_found",
+            receipt_id=clean_id,
+        )
+    try:
+        return _receipt_response(receipt)
+    except Exception:
+        return _receipt_unavailable_response(
+            error="receipt_redaction_failed",
+            reason="receipt_redaction_failed",
+            receipt_id=clean_id,
+        )
 
 
 @router.get("/status/by-correlation/{correlation_id}")

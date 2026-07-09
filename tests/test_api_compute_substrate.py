@@ -110,6 +110,17 @@ class _FailingReceiptStore:
         return {"kind": "test.failing_api_compute_receipt_store"}
 
 
+class _FailingReceiptReadStore:
+    def write_receipt(self, receipt: CapabilityReceipt) -> CapabilityReceipt:
+        return receipt
+
+    def read_receipt(self, receipt_id: str) -> CapabilityReceipt | None:
+        raise OSError("receipt read failed RAW_RECEIPT_READ_ERROR_SHOULD_NOT_RETURN")
+
+    def describe(self) -> dict[str, object]:
+        return {"kind": "test.failing_api_compute_receipt_read_store", "durable": True}
+
+
 class _FailingStatusStore:
     def __init__(self) -> None:
         self.upsert_calls = 0
@@ -434,6 +445,7 @@ def test_compute_substrate_api_full_governed_checkpoint(
         actor_scopes={
             "compute.submitter": ["compute:submit"],
             "status.reader": ["compute:status:read"],
+            "receipt.reader": ["compute:receipt:read"],
         },
     )
     data_root = tmp_path / "francis_data"
@@ -486,12 +498,23 @@ def test_compute_substrate_api_full_governed_checkpoint(
     receipt = receipt_store.read_receipt(str(body["receipt_id"]))
     persisted_task_status = status_store.get_by_task_id(task_id)
     persisted_correlation_status = status_store.get_by_correlation_id(correlation_id)
+    approval_store_text_before = _durable_text(data_root / "artifacts" / "compute_substrate" / "approvals")
+    receipt_store_text_before = _durable_text(data_root / "artifacts" / "compute_substrate" / "capability_receipts")
+    status_store_text_before = _durable_text(data_root / "artifacts" / "compute_substrate" / "status")
+    receipt_readback = client.get(
+        f"/compute-substrate/receipts/{body['receipt_id']}",
+        params={"actor": "receipt.reader"},
+    ).json()
+    approval_store_text_after = _durable_text(data_root / "artifacts" / "compute_substrate" / "approvals")
+    receipt_store_text_after = _durable_text(data_root / "artifacts" / "compute_substrate" / "capability_receipts")
+    status_store_text_after = _durable_text(data_root / "artifacts" / "compute_substrate" / "status")
     durable_text = _durable_text(data_root / "artifacts" / "compute_substrate")
     serialized = json.dumps(
         {
             "submit": body,
             "task_status": task_status,
             "correlation_status": correlation_status,
+            "receipt_readback": receipt_readback,
         },
         sort_keys=True,
     )
@@ -561,6 +584,40 @@ def test_compute_substrate_api_full_governed_checkpoint(
     assert correlation_status["record"]["receipt_id"] == body["receipt_id"]
     assert correlation_status["record"]["approval_consumed"] is True
 
+    assert receipt_readback["ok"] is True
+    assert receipt_readback["status"] == "found"
+    assert receipt_readback["found"] is True
+    assert receipt_readback["receipt_id"] == body["receipt_id"]
+    assert receipt_readback["task_id"] == task_id
+    assert receipt_readback["correlation_id"] == correlation_id
+    assert receipt_readback["record"]["execution_status"] == "success"
+    assert receipt_readback["record"]["capability"] == "echo"
+    assert receipt_readback["record"]["worker_id"] == "safe-local-1"
+    assert receipt_readback["record"]["approval_required"] is True
+    assert receipt_readback["record"]["approval_id"] == approval_id
+    assert receipt_readback["record"]["approval_satisfied"] is True
+    assert receipt_readback["record"]["approval_consumed"] is True
+    assert receipt_readback["record"]["approval_scope_summary"]["allowed_capabilities"] == ["echo"]
+    assert receipt_readback["record"]["approval_scope_summary"]["allowed_worker_ids"] == ["safe-local-1"]
+    assert receipt_readback["record"]["receipt_persisted"] is True
+    assert receipt_readback["record"]["resource_budget"]["filesystem_scope"] == ["none"]
+    assert receipt_readback["record"]["stores_payload"] is False
+    assert receipt_readback["record"]["stores_output"] is False
+    assert receipt_readback["record"]["returns_raw_execution_output"] is False
+    assert receipt_readback["governance"]["receipt_readback_only"] is True
+    assert receipt_readback["governance"]["uses_compute_substrate_service"] is False
+    assert receipt_readback["governance"]["does_not_trigger_execution"] is True
+    assert receipt_readback["governance"]["does_not_consume_approval"] is True
+    assert receipt_readback["governance"]["mutates_receipts_directly"] is False
+    assert receipt_readback["governance"]["mutates_approvals_directly"] is False
+    assert receipt_readback["governance"]["mutates_status_directly"] is False
+    assert "receipt_path" not in receipt_readback["record"]
+    assert "receipt_error" not in receipt_readback["record"]
+    assert str(data_root) not in serialized
+    assert approval_store_text_after == approval_store_text_before
+    assert receipt_store_text_after == receipt_store_text_before
+    assert status_store_text_after == status_store_text_before
+
     assert persisted_task_status is not None
     assert persisted_task_status.task_id == task_id
     assert persisted_task_status.correlation_id == correlation_id
@@ -585,6 +642,116 @@ def test_compute_substrate_api_full_governed_checkpoint(
         assert sentinel not in durable_text
     assert "LiveLearningEvent" not in durable_text
     assert "live_learning_event" not in durable_text
+
+
+def test_compute_substrate_receipt_readback_requires_receipt_scope(monkeypatch, tmp_path: Path) -> None:
+    client = _client(
+        monkeypatch,
+        tmp_path,
+        actor_scopes={
+            "compute.submitter": ["compute:submit"],
+            "status.reader": ["compute:status:read"],
+            "receipt.reader": ["compute:receipt:read"],
+        },
+    )
+
+    submit = client.post(
+        "/compute-substrate/submit",
+        json=_submit_payload(actor="receipt.reader", request_id="api-receipt-reader-no-submit"),
+    ).json()
+    assert submit["ok"] is False
+    assert submit["status"] == "denied"
+    assert submit["error"] == "api_permission_denied"
+    assert submit["governance"]["required_scope"] == "compute:submit"
+    assert submit["governance"]["uses_compute_substrate_service"] is False
+
+    for actor in ("", "compute.submitter", "status.reader"):
+        body = client.get(
+            "/compute-substrate/receipts/missing-receipt",
+            params={"actor": actor},
+        ).json()
+        assert body["ok"] is False
+        assert body["status"] == "denied"
+        assert body["error"] == "api_permission_denied"
+        assert body["governance"]["required_scope"] == "compute:receipt:read"
+        assert body["governance"]["uses_compute_substrate_service"] is False
+
+    allowed = client.get(
+        "/compute-substrate/receipts/missing-receipt",
+        params={"actor": "receipt.reader"},
+    ).json()
+    assert allowed["ok"] is False
+    assert allowed["found"] is False
+    assert allowed["error"] == "receipt_not_found"
+
+
+def test_compute_substrate_receipt_readback_unknown_and_unsafe_inputs_fail_closed(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    client = _client(monkeypatch, tmp_path, actor_scopes={"receipt.reader": ["compute:receipt:read"]})
+
+    body = client.get(
+        "/compute-substrate/receipts/missing-receipt",
+        params={"actor": "receipt.reader"},
+    ).json()
+
+    assert body["ok"] is False
+    assert body["found"] is False
+    assert body["status"] == "unknown"
+    assert body["error"] == "receipt_not_found"
+    assert body["record"]["stores_payload"] is False
+    assert body["record"]["stores_output"] is False
+    assert body["governance"]["receipt_readback_only"] is True
+    assert body["governance"]["does_not_trigger_execution"] is True
+
+    for path in (
+        "/compute-substrate/receipts/%20%20%20",
+        "/compute-substrate/receipts/bad..id",
+        "/compute-substrate/receipts/..%5Cescape",
+        "/compute-substrate/receipts/bad:id",
+        "/compute-substrate/receipts/bad%5Cid",
+        "/compute-substrate/receipts/%5Cabsolute",
+        "/compute-substrate/receipts/C:Temp",
+    ):
+        rejected = client.get(path, params={"actor": "receipt.reader"}).json()
+        assert rejected["ok"] is False
+        assert rejected["error"] == "malformed_request"
+        assert rejected["denial_reason"] == "invalid_receipt_id"
+
+    assert client.get("/compute-substrate/receipts/bad/id", params={"actor": "receipt.reader"}).status_code == 404
+
+
+def test_compute_substrate_receipt_readback_reports_store_unavailable_and_failure(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    client = _client(monkeypatch, tmp_path, actor_scopes={"receipt.reader": ["compute:receipt:read"]})
+
+    monkeypatch.setattr(compute_route, "_compute_receipt_store", lambda: None)
+    unavailable = client.get(
+        "/compute-substrate/receipts/missing-receipt",
+        params={"actor": "receipt.reader"},
+    ).json()
+
+    monkeypatch.setattr(compute_route, "_compute_receipt_store", _FailingReceiptReadStore)
+    failed = client.get(
+        "/compute-substrate/receipts/missing-receipt",
+        params={"actor": "receipt.reader"},
+    ).json()
+    serialized = json.dumps({"unavailable": unavailable, "failed": failed}, sort_keys=True)
+
+    assert unavailable["ok"] is False
+    assert unavailable["status"] == "unavailable"
+    assert unavailable["error"] == "receipt_store_unavailable"
+    assert unavailable["governance"]["does_not_trigger_execution"] is True
+    assert failed["ok"] is False
+    assert failed["status"] == "unavailable"
+    assert failed["error"] == "receipt_store_read_failed"
+    assert failed["governance"]["receipt_store_error_redacted"] is True
+    assert "RAW_RECEIPT_READ_ERROR_SHOULD_NOT_RETURN" not in serialized
+    assert "OSError" not in serialized
+    assert "traceback" not in serialized.lower()
 
 
 def test_compute_substrate_api_consumed_approval_cannot_be_reused(monkeypatch, tmp_path: Path) -> None:

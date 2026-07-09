@@ -47,12 +47,15 @@ As of commit `3953ed26`, Francis has an internal/local-dev, synchronous, in-proc
 - `POST /compute-substrate/submit`
 - `GET /compute-substrate/status/{task_id}`
 - `GET /compute-substrate/status/by-correlation/{correlation_id}`
+- `GET /compute-substrate/receipts/{receipt_id}`
 
-The route uses `ApiPermissionGate` before service access, with separate `compute:submit` and `compute:status:read` scopes. API permission authorizes only route access. Substrate approval still authorizes execution.
+The route uses `ApiPermissionGate` before service or receipt-store access, with separate `compute:submit`, `compute:status:read`, and `compute:receipt:read` scopes. API permission authorizes only route access. Substrate approval still authorizes execution.
 
 Submit requests are converted into bounded `TaskEnvelope` / `ComputeSubmission` objects and sent through `ComputeSubstrateService.submit`. Status readback uses the service status surface. The route does not call `SafeLocalBackend`, `SubstrateGovernor`, or backend internals directly for execution, and it does not weaken `approval_required`.
 
-Focused API and substrate tests cover permission boundaries, malformed request denial, approval denial and consumption, durable receipt/status persistence, cancellation/deadline truth, receipt/status persistence failure truth, status readback by task id and correlation id, redaction, service-boundary enforcement, and adapter validation denial before service submission.
+Receipt readback reads bounded compute receipt truth from the configured durable receipt store only. It does not submit work, consume approval, mutate approval/status/receipt stores, expose raw receipt artifacts, or become a general audit-log surface.
+
+Focused API and substrate tests cover permission boundaries, malformed request denial, approval denial and consumption, durable receipt/status persistence, cancellation/deadline truth, receipt/status persistence failure truth, status readback by task id and correlation id, receipt readback by receipt id, redaction, service-boundary enforcement, and adapter validation denial before service submission.
 
 ## Non-Goals
 
@@ -60,7 +63,7 @@ This contract and the first internal/local-dev route do not add:
 
 - production-grade public exposure
 - public internet exposure
-- receipt readback, capability readback, or admin routes
+- receipt mutation, receipt listing/export, capability readback, or admin routes
 - fake API capability
 - real adapters
 - Unreal, VSC-1, desktop Lens, avatar, voice, VM/container, remote worker, or simulation implementation
@@ -86,17 +89,17 @@ Implemented endpoints:
 - `POST /compute-substrate/submit`
 - `GET /compute-substrate/status/{task_id}`
 - `GET /compute-substrate/status/by-correlation/{correlation_id}`
+- `GET /compute-substrate/receipts/{receipt_id}`
 
 Deferred endpoints:
 
-- `GET /compute-substrate/receipts/{receipt_id}` is deferred, but the contract for this future route is defined below.
 - `GET /compute-substrate/capabilities` is deferred unless the route only returns bounded capability names and worker descriptors already exposed by `ComputeSubstrateService.known_capabilities` and registry readback.
 
 If a deployment layer later places Francis under `/api`, the same contract applies to the prefixed paths.
 
-## Deferred Receipt Readback Route Contract
+## Receipt Readback Route Contract
 
-`GET /compute-substrate/receipts/{receipt_id}` is not implemented in this slice. A future implementation must remain internal/local-dev unless a later governance-reviewed promotion explicitly changes that posture.
+`GET /compute-substrate/receipts/{receipt_id}` is implemented as an internal/local-dev readback route. It must remain internal/local-dev unless a later governance-reviewed promotion explicitly changes that posture.
 
 The route is read-only. It may expose bounded compute receipt truth, but it must not become a raw artifact dump, general audit-log API, execution endpoint, approval mutation endpoint, status mutation endpoint, memory or learning endpoint, production-grade public audit surface, or new authority surface.
 
@@ -372,7 +375,7 @@ Production-grade API submission requires a configured durable compute receipt st
 
 In-memory stores may be acceptable for local development and focused tests only. Responses must report them as non-durable. In-memory status readback must not be described as durable persistence.
 
-Future receipt readback requires a configured durable compute receipt store before it is considered usable. Missing or in-memory-only receipt stores must return bounded unavailable or unsupported responses, not fake durable readback. Receipt readback must not hardcode store roots, user profile paths, USB paths, or repository-local runtime data paths; store roots must be configured through the repo's runtime configuration patterns before implementation.
+Receipt readback requires a configured durable compute receipt store before it is considered usable. Missing or in-memory-only receipt stores must return bounded unavailable or unsupported responses, not fake durable readback. Receipt readback must not hardcode store roots, user profile paths, USB paths, or repository-local runtime data paths; store roots must be configured through the repo's runtime configuration patterns.
 
 Durable adapter persistence is not required for the first API route because adapter contracts remain internal and contract-only.
 
@@ -442,7 +445,7 @@ Current route and substrate tests prove the following for the first internal/loc
 - route makes no async, recovery, or resume claims
 - `tests/test_api_executor_substrate.py` remains passing
 
-Before implementing `GET /compute-substrate/receipts/{receipt_id}`, add focused tests proving:
+The `GET /compute-substrate/receipts/{receipt_id}` route requires focused tests proving:
 
 - unauthorized actor is denied
 - missing `compute:receipt:read` scope is denied
@@ -455,7 +458,7 @@ Before implementing `GET /compute-substrate/receipts/{receipt_id}`, add focused 
 - absolute path and Windows drive-prefix receipt IDs are rejected
 - receipt store unavailable returns bounded `receipt_store_unavailable`
 - receipt store read failure returns bounded `receipt_store_read_failed`
-- unsupported receipt schema/version returns bounded unsupported response
+- unsupported receipt schema/version returns a bounded unsupported/read-failed response only when the configured store exposes that distinction; the current local JSON store collapses some corrupt/decode failures to not-found, which remains a follow-up
 - receipt redaction failure returns bounded `receipt_redaction_failed`
 - response includes `receipt_id`, `task_id`, approval summary, execution status, and `receipt_persisted` truth
 - response excludes raw task payload
