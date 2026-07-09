@@ -435,7 +435,7 @@ def test_compute_substrate_api_approval_grant_does_not_replace_api_scope(
     assert approval.consumed_at_ms == 0
 
 
-def test_compute_substrate_api_full_governed_checkpoint(
+def test_compute_substrate_api_receipt_readback_checkpoint(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
