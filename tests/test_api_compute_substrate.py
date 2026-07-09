@@ -15,6 +15,8 @@ from francis.compute_substrate import (
     CapabilityReceipt,
     ComputeTaskRecord,
     LocalJsonComputeApprovalStore,
+    LocalJsonComputeReceiptStore,
+    LocalJsonComputeStatusStore,
 )
 
 
@@ -422,7 +424,7 @@ def test_compute_substrate_api_approval_grant_does_not_replace_api_scope(
     assert approval.consumed_at_ms == 0
 
 
-def test_compute_substrate_api_durable_approval_receipt_status_and_readback(
+def test_compute_substrate_api_full_governed_checkpoint(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
@@ -435,32 +437,55 @@ def test_compute_substrate_api_durable_approval_receipt_status_and_readback(
         },
     )
     data_root = tmp_path / "francis_data"
+    task_id = "api-full-governed-checkpoint"
+    approval_id = "api-approval-full-governed-checkpoint"
+    correlation_id = f"trace-{task_id}"
+    raw_payload_marker = "RAW_PAYLOAD_SHOULD_NOT_PERSIST"
+    raw_output_marker = "RAW_OUTPUT_SHOULD_NOT_PERSIST"
+    approval_secret_marker = "APPROVAL_SECRET_SHOULD_NOT_PERSIST"
+    model_prompt_marker = "MODEL_PROMPT_SHOULD_NOT_PERSIST"
+    filesystem_marker = "C:\\Sensitive\\Should\\Not\\Persist"
     approval_store = LocalJsonComputeApprovalStore()
+    receipt_store = LocalJsonComputeReceiptStore()
+    status_store = LocalJsonComputeStatusStore()
     approval_store.add(
         _approval_grant(
-            task_id="api-approved-task",
-            approval_id="api-approval-approved-task",
+            task_id=task_id,
+            approval_id=approval_id,
+            approval_secret=approval_secret_marker,
         )
     )
+    stored_before = approval_store.get(approval_id)
+    assert stored_before is not None
+    assert stored_before.consumed_at_ms == 0
+    assert stored_before.consumed_by_task_id == ""
 
     body = client.post(
         "/compute-substrate/submit",
         json=_submit_payload(
-            request_id="api-approved-task",
-            message="RAW_OUTPUT_SHOULD_NOT_PERSIST",
+            request_id=task_id,
+            payload={
+                "message": raw_output_marker,
+                "payload_marker": raw_payload_marker,
+                "model_prompt": model_prompt_marker,
+                "filesystem_hint": filesystem_marker,
+            },
             approval_required=True,
-            approval_id="api-approval-approved-task",
+            approval_id=approval_id,
         ),
     ).json()
     task_status = client.get(
-        "/compute-substrate/status/api-approved-task",
+        f"/compute-substrate/status/{task_id}",
         params={"actor": "status.reader"},
     ).json()
     correlation_status = client.get(
-        "/compute-substrate/status/by-correlation/trace-api-approved-task",
+        f"/compute-substrate/status/by-correlation/{correlation_id}",
         params={"actor": "status.reader"},
     ).json()
-    consumed = approval_store.get("api-approval-approved-task")
+    consumed = approval_store.get(approval_id)
+    receipt = receipt_store.read_receipt(str(body["receipt_id"]))
+    persisted_task_status = status_store.get_by_task_id(task_id)
+    persisted_correlation_status = status_store.get_by_correlation_id(correlation_id)
     durable_text = _durable_text(data_root / "artifacts" / "compute_substrate")
     serialized = json.dumps(
         {
@@ -472,27 +497,89 @@ def test_compute_substrate_api_durable_approval_receipt_status_and_readback(
     )
 
     assert body["ok"] is True
+    assert body["accepted"] is True
     assert body["status"] == "succeeded"
+    assert body["error"] == ""
+    assert body["task_id"] == task_id
+    assert body["correlation_id"] == correlation_id
     assert body["approval_required"] is True
     assert body["approval_satisfied"] is True
+    assert body["approval_id"] == approval_id
     assert body["approval_consumed"] is True
+    assert body["receipt_id"]
     assert body["receipt_persisted"] is True
+    assert body["receipt_persistence_status"] == "persisted_local_json"
+    assert body["receipt_persistence_failed"] is False
     assert body["durable_status_persistence"] is True
+    assert body["status_write_attempted"] is True
+    assert body["status_write_succeeded"] is True
+    assert body["status_persisted"] is True
+    assert body["status_persistence_failed"] is False
+    assert body["status_persistence_error"] == ""
+    assert body["governance"]["api_permission_gate"] is True
+    assert body["governance"]["uses_compute_substrate_service"] is True
+    assert body["governance"]["calls_backend_directly"] is False
+    assert body["governance"]["calls_governor_directly"] is False
+    assert body["governance"]["durable_approval_persistence"] is True
+    assert body["governance"]["durable_compute_receipt_persistence"] is True
+    assert body["governance"]["durable_status_persistence"] is True
     assert consumed is not None
     assert consumed.consumed_at_ms > 0
-    assert consumed.consumed_by_task_id == "api-approved-task"
+    assert consumed.consumed_by_task_id == task_id
+
+    assert receipt is not None
+    assert receipt.receipt_id == body["receipt_id"]
+    assert receipt.task_id == task_id
+    assert receipt.trace_id == correlation_id
+    assert receipt.approval_id == approval_id
+    assert receipt.persisted is True
+    assert receipt.status == "success"
+    assert receipt.governance["approval_required"] is True
+    assert receipt.governance["approval_satisfied"] is True
+    assert receipt.governance["approval_consumed"] is True
+    assert receipt.governance["approval_persistence"] == "persisted_local_json"
+    assert receipt.governance["receipt_persistence"] == "persisted_local_json"
+    assert receipt.governance["long_term_memory_persistence"] is False
+    assert receipt.governance["writes_memory"] is False
+
     assert task_status["ok"] is True
-    assert task_status["record"]["task_id"] == "api-approved-task"
+    assert task_status["record"]["task_id"] == task_id
+    assert task_status["record"]["status"] == "succeeded"
+    assert task_status["record"]["receipt_id"] == body["receipt_id"]
+    assert task_status["record"]["receipt_persisted"] is True
+    assert task_status["record"]["approval_required"] is True
+    assert task_status["record"]["approval_id"] == approval_id
+    assert task_status["record"]["approval_satisfied"] is True
     assert task_status["record"]["approval_consumed"] is True
+    assert task_status["record"]["status_write_succeeded"] is True
+    assert task_status["governance"]["status_readback_only"] is True
+    assert task_status["governance"]["grants_execution_authority"] is False
+
     assert correlation_status["ok"] is True
-    assert correlation_status["record"]["correlation_id"] == "trace-api-approved-task"
+    assert correlation_status["record"]["task_id"] == task_id
+    assert correlation_status["record"]["correlation_id"] == correlation_id
+    assert correlation_status["record"]["receipt_id"] == body["receipt_id"]
+    assert correlation_status["record"]["approval_consumed"] is True
+
+    assert persisted_task_status is not None
+    assert persisted_task_status.task_id == task_id
+    assert persisted_task_status.correlation_id == correlation_id
+    assert persisted_task_status.receipt_id == body["receipt_id"]
+    assert persisted_task_status.receipt_persisted is True
+    assert persisted_task_status.approval_required is True
+    assert persisted_task_status.approval_id == approval_id
+    assert persisted_task_status.approval_satisfied is True
+    assert persisted_task_status.approval_consumed is True
+    assert persisted_task_status.status_write_succeeded is True
+    assert persisted_correlation_status == persisted_task_status
 
     for sentinel in (
+        raw_payload_marker,
         "RAW_OUTPUT_SHOULD_NOT_PERSIST",
-        "MODEL_PROMPT_SHOULD_NOT_RETURN",
-        "APPROVAL_SECRET_SHOULD_NOT_PERSIST",
-        "C:\\Sensitive\\Should\\Not\\Return",
-        "C:\\\\Sensitive\\\\Should\\\\Not\\\\Return",
+        approval_secret_marker,
+        model_prompt_marker,
+        filesystem_marker,
+        "C:\\\\Sensitive\\\\Should\\\\Not\\\\Persist",
     ):
         assert sentinel not in serialized
         assert sentinel not in durable_text
