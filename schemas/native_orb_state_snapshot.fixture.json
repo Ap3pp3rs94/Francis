@@ -1,0 +1,99 @@
+{
+  "kind": "francis.native_orb.state_snapshot",
+  "schema_version": "francis.native_orb.state_snapshot.v1",
+  "schema_path": "schemas/native_orb_state_snapshot.schema.json",
+  "generated_at": "2026-07-09T00:00:00+00:00",
+  "source": {
+    "kind": "francis.core.readback",
+    "operator_surface": "francis.orb_operator.v0",
+    "operator_state_read_only": true,
+    "receipt_observed": false
+  },
+  "runtime_contract": {
+    "native_runtime": "cpp",
+    "status": "contract_ready",
+    "implemented": false,
+    "active_renderer": false,
+    "body_renderer_only": true,
+    "authority_layer": "francis_core",
+    "francis_core_remains_authority": true
+  },
+  "visual_lock": {
+    "source": "docs/operations/ORB_VISUAL_LOCK.md",
+    "parity_required": true,
+    "redesign_allowed": false,
+    "current_renderer": "wpf_3d_animated_energy_orb",
+    "native_renderer_active": false,
+    "visual_baseline_replacement_required_for_changes": true
+  },
+  "render_state": {
+    "posture": "ambient_rest",
+    "feedback_state": "idle",
+    "speaking": false,
+    "listening": false,
+    "interjecting": false,
+    "approval_required": false,
+    "handback": false,
+    "panic_stop_ready": true
+  },
+  "virtual_pointer": {
+    "available": false,
+    "pointer_id": "francis.orb.primary_virtual_pointer",
+    "mode": "orb_pointer",
+    "x": null,
+    "y": null,
+    "controls_user_os_cursor": false,
+    "user_mouse_taken": false,
+    "physical_input_performed": false,
+    "desktop_effect_performed": false,
+    "presentation_only": true
+  },
+  "authority": {
+    "read_only": true,
+    "render_only": true,
+    "francis_core_authority": true,
+    "native_runtime_authority": false,
+    "grants_execution_authority": false,
+    "grants_capability_authority": false,
+    "grants_input_authority": false,
+    "grants_desktop_bridge_authority": false,
+    "can_move_user_os_cursor": false,
+    "can_click": false,
+    "can_drag": false,
+    "can_type": false,
+    "can_enable_desktop_bridge": false,
+    "can_persist_memory": false,
+    "can_train_model": false,
+    "unsafe_source_flags_observed": {
+      "uses_user_os_cursor": false,
+      "user_mouse_taken": false,
+      "physical_input_performed": false,
+      "grants_execution_authority": false,
+      "desktop_effect_performed": false
+    },
+    "unsafe_source_flags_denied": false
+  },
+  "ipc": {
+    "state_channel": "read_only_snapshot",
+    "event_channel": "not_implemented",
+    "local_only": true,
+    "network_transport_required": false,
+    "accepts_mutation_events": false,
+    "schema_versioned": true
+  },
+  "event_contract": {
+    "emits_intent_events": false,
+    "mutation_events_default_denied": true,
+    "panic_stop_event_requires_francis_core_routing": true,
+    "desktop_action_events_require_governed_path": true
+  },
+  "limitations": [
+    "no_native_window_implemented",
+    "no_cpp_renderer_implemented",
+    "no_desktop_mutation_authority",
+    "no_user_os_cursor_control",
+    "no_lens_semantic_targeting",
+    "no_plan_approval",
+    "no_reversibility_proof"
+  ]
+}

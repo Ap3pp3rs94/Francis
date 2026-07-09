@@ -1,0 +1,355 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://francis.local/schemas/native_orb_state_snapshot.schema.json",
+  "title": "Francis Native Orb State Snapshot",
+  "type": "object",
+  "required": [
+    "kind",
+    "schema_version",
+    "schema_path",
+    "generated_at",
+    "source",
+    "runtime_contract",
+    "visual_lock",
+    "render_state",
+    "virtual_pointer",
+    "authority",
+    "ipc",
+    "event_contract",
+    "limitations"
+  ],
+  "properties": {
+    "kind": {
+      "const": "francis.native_orb.state_snapshot"
+    },
+    "schema_version": {
+      "const": "francis.native_orb.state_snapshot.v1"
+    },
+    "schema_path": {
+      "const": "schemas/native_orb_state_snapshot.schema.json"
+    },
+    "generated_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source": {
+      "type": "object",
+      "required": ["kind", "operator_surface", "operator_state_read_only", "receipt_observed"],
+      "properties": {
+        "kind": {
+          "const": "francis.core.readback"
+        },
+        "operator_surface": {
+          "const": "francis.orb_operator.v0"
+        },
+        "operator_state_read_only": {
+          "type": "boolean"
+        },
+        "receipt_observed": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "runtime_contract": {
+      "type": "object",
+      "required": [
+        "native_runtime",
+        "status",
+        "implemented",
+        "active_renderer",
+        "body_renderer_only",
+        "authority_layer",
+        "francis_core_remains_authority"
+      ],
+      "properties": {
+        "native_runtime": {
+          "const": "cpp"
+        },
+        "status": {
+          "const": "contract_ready"
+        },
+        "implemented": {
+          "const": false
+        },
+        "active_renderer": {
+          "const": false
+        },
+        "body_renderer_only": {
+          "const": true
+        },
+        "authority_layer": {
+          "const": "francis_core"
+        },
+        "francis_core_remains_authority": {
+          "const": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "visual_lock": {
+      "type": "object",
+      "required": [
+        "source",
+        "parity_required",
+        "redesign_allowed",
+        "current_renderer",
+        "native_renderer_active",
+        "visual_baseline_replacement_required_for_changes"
+      ],
+      "properties": {
+        "source": {
+          "const": "docs/operations/ORB_VISUAL_LOCK.md"
+        },
+        "parity_required": {
+          "const": true
+        },
+        "redesign_allowed": {
+          "const": false
+        },
+        "current_renderer": {
+          "const": "wpf_3d_animated_energy_orb"
+        },
+        "native_renderer_active": {
+          "const": false
+        },
+        "visual_baseline_replacement_required_for_changes": {
+          "const": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "render_state": {
+      "type": "object",
+      "required": [
+        "posture",
+        "feedback_state",
+        "speaking",
+        "listening",
+        "interjecting",
+        "approval_required",
+        "handback",
+        "panic_stop_ready"
+      ],
+      "properties": {
+        "posture": {
+          "enum": ["ambient_rest", "active_feedback", "blocked"]
+        },
+        "feedback_state": {
+          "enum": ["idle", "observing", "aiming", "moving", "clicking", "typing", "blocked", "failed", "complete"]
+        },
+        "speaking": {
+          "type": "boolean"
+        },
+        "listening": {
+          "type": "boolean"
+        },
+        "interjecting": {
+          "type": "boolean"
+        },
+        "approval_required": {
+          "type": "boolean"
+        },
+        "handback": {
+          "type": "boolean"
+        },
+        "panic_stop_ready": {
+          "const": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "virtual_pointer": {
+      "type": "object",
+      "required": [
+        "available",
+        "pointer_id",
+        "mode",
+        "x",
+        "y",
+        "controls_user_os_cursor",
+        "user_mouse_taken",
+        "physical_input_performed",
+        "desktop_effect_performed",
+        "presentation_only"
+      ],
+      "properties": {
+        "available": {
+          "type": "boolean"
+        },
+        "pointer_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mode": {
+          "const": "orb_pointer"
+        },
+        "x": {
+          "type": ["integer", "null"]
+        },
+        "y": {
+          "type": ["integer", "null"]
+        },
+        "controls_user_os_cursor": {
+          "const": false
+        },
+        "user_mouse_taken": {
+          "const": false
+        },
+        "physical_input_performed": {
+          "const": false
+        },
+        "desktop_effect_performed": {
+          "const": false
+        },
+        "presentation_only": {
+          "const": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "authority": {
+      "type": "object",
+      "required": [
+        "read_only",
+        "render_only",
+        "francis_core_authority",
+        "native_runtime_authority",
+        "grants_execution_authority",
+        "grants_capability_authority",
+        "grants_input_authority",
+        "grants_desktop_bridge_authority",
+        "can_move_user_os_cursor",
+        "can_click",
+        "can_drag",
+        "can_type",
+        "can_enable_desktop_bridge",
+        "can_persist_memory",
+        "can_train_model",
+        "unsafe_source_flags_observed",
+        "unsafe_source_flags_denied"
+      ],
+      "properties": {
+        "read_only": {
+          "const": true
+        },
+        "render_only": {
+          "const": true
+        },
+        "francis_core_authority": {
+          "const": true
+        },
+        "native_runtime_authority": {
+          "const": false
+        },
+        "grants_execution_authority": {
+          "const": false
+        },
+        "grants_capability_authority": {
+          "const": false
+        },
+        "grants_input_authority": {
+          "const": false
+        },
+        "grants_desktop_bridge_authority": {
+          "const": false
+        },
+        "can_move_user_os_cursor": {
+          "const": false
+        },
+        "can_click": {
+          "const": false
+        },
+        "can_drag": {
+          "const": false
+        },
+        "can_type": {
+          "const": false
+        },
+        "can_enable_desktop_bridge": {
+          "const": false
+        },
+        "can_persist_memory": {
+          "const": false
+        },
+        "can_train_model": {
+          "const": false
+        },
+        "unsafe_source_flags_observed": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "boolean"
+          }
+        },
+        "unsafe_source_flags_denied": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ipc": {
+      "type": "object",
+      "required": [
+        "state_channel",
+        "event_channel",
+        "local_only",
+        "network_transport_required",
+        "accepts_mutation_events",
+        "schema_versioned"
+      ],
+      "properties": {
+        "state_channel": {
+          "const": "read_only_snapshot"
+        },
+        "event_channel": {
+          "const": "not_implemented"
+        },
+        "local_only": {
+          "const": true
+        },
+        "network_transport_required": {
+          "const": false
+        },
+        "accepts_mutation_events": {
+          "const": false
+        },
+        "schema_versioned": {
+          "const": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "event_contract": {
+      "type": "object",
+      "required": [
+        "emits_intent_events",
+        "mutation_events_default_denied",
+        "panic_stop_event_requires_francis_core_routing",
+        "desktop_action_events_require_governed_path"
+      ],
+      "properties": {
+        "emits_intent_events": {
+          "const": false
+        },
+        "mutation_events_default_denied": {
+          "const": true
+        },
+        "panic_stop_event_requires_francis_core_routing": {
+          "const": true
+        },
+        "desktop_action_events_require_governed_path": {
+          "const": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    }
+  },
+  "additionalProperties": false
+}
