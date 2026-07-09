@@ -851,8 +851,16 @@ def _driver_prompt_budget_readback(*, limit: int = 30) -> dict[str, object]:
         for item in _list(transcript.get("items"))
         if isinstance(item, dict) and _safe_str(item.get("prompt")).startswith("Francis1 ")
     ]
-    prompt_items = [_driver_prompt_budget_item(item, max_chars=max_chars) for item in items]
-    violations = [item for item in prompt_items if not bool(item.get("within_budget"))]
+    prompt_items = sorted(
+        (_driver_prompt_budget_item(item, max_chars=max_chars) for item in items),
+        key=_driver_prompt_budget_sort_key,
+        reverse=True,
+    )
+    violations = sorted(
+        (item for item in prompt_items if not bool(item.get("within_budget"))),
+        key=_driver_prompt_budget_sort_key,
+        reverse=True,
+    )
     latest = prompt_items[0] if prompt_items else {}
     latest_violation = violations[0] if violations else {}
     return {
@@ -884,6 +892,10 @@ def _driver_prompt_budget_item(item: dict[str, object], *, max_chars: int) -> di
         "prompt_length": prompt_length,
         "within_budget": prompt_length <= max_chars,
     }
+
+
+def _driver_prompt_budget_sort_key(item: dict[str, object]) -> tuple[str, str]:
+    return (_safe_str(item.get("created_at")), _safe_str(item.get("prompt_id")))
 
 
 def _iter_python_processes() -> list[ProcessInfo]:
