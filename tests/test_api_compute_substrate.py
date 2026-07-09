@@ -297,6 +297,11 @@ def test_compute_substrate_capabilities_readback_returns_bounded_names(
     assert body["governance"]["does_not_consume_approval"] is True
     assert body["governance"]["does_not_expose_backend_power"] is True
     assert body["governance"]["does_not_imply_adapter_implementation"] is True
+    for managed_worker_label in ("container", "vm", "microvm", "remote", "simulation"):
+        assert managed_worker_label not in body["capabilities"]
+        assert managed_worker_label not in serialized
+    assert "ManagedWorker" not in serialized
+    assert "sandbox_profile" not in serialized
     assert "SafeLocalBackend" not in serialized
     assert "worker_id" not in serialized
     assert "receipt_path" not in serialized

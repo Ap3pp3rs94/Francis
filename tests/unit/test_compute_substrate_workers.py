@@ -5,8 +5,11 @@ import json
 
 import francis.compute_substrate_workers as worker_module
 from francis.compute_substrate import (
+    ComputeSubstrateService,
+    ComputeTaskStatus,
     ExecutionContext,
     ExecutionDeadline,
+    ExecutionResult,
     ManagedWorkerBackendContract,
     ManagedWorkerBinding,
     ManagedWorkerCapabilities,
@@ -18,7 +21,11 @@ from francis.compute_substrate import (
     ManagedWorkerResourceEnvelope,
     ManagedWorkerSandboxProfile,
     ResourceBudget,
+    SafeLocalBackend,
+    SubstrateGovernor,
     TaskEnvelope,
+    WorkerRegistry,
+    create_task_envelope,
     create_managed_worker_execution_plan,
     validate_managed_worker_descriptor,
     validate_managed_worker_policy,
@@ -158,6 +165,31 @@ def _plan(
         context=context,
         plan_id=plan_id,
     )
+
+
+class _CountingSafeLocalBackend(SafeLocalBackend):
+    def __init__(self) -> None:
+        super().__init__()
+        self.execute_calls = 0
+
+    def execute(self, envelope: TaskEnvelope, context: ExecutionContext | None = None) -> dict[str, object]:
+        self.execute_calls += 1
+        return super().execute(envelope, context=context)
+
+
+class _CountingGovernor(SubstrateGovernor):
+    def __init__(self) -> None:
+        super().__init__()
+        self.execute_calls = 0
+
+    def execute(
+        self,
+        envelope: TaskEnvelope,
+        registry: WorkerRegistry,
+        context: ExecutionContext | None = None,
+    ) -> ExecutionResult:
+        self.execute_calls += 1
+        return super().execute(envelope, registry, context=context)
 
 
 def test_valid_managed_worker_descriptor_can_be_created() -> None:
@@ -412,6 +444,117 @@ def test_valid_request_produces_contract_only_execution_plan() -> None:
     assert plan.to_dict()["starts_processes"] is False
     assert plan.to_dict()["real_container_execution"] is False
     assert plan.to_dict()["real_vm_execution"] is False
+
+
+def test_managed_worker_contracts_compose_with_substrate_without_execution() -> None:
+    backend = _CountingSafeLocalBackend()
+    registry = WorkerRegistry()
+    registry.register(backend)
+    governor = _CountingGovernor()
+    service = ComputeSubstrateService(governor=governor, registry=registry)
+    safe_capabilities = service.known_capabilities()
+    descriptor = _descriptor(
+        worker_id="future-managed-container",
+        kind=ManagedWorkerKind.CONTAINER,
+        capabilities=("echo",),
+        metadata_summary={
+            "owner": "compute-substrate-tests",
+            "host_path": "D:\\Francis\\private",
+            "api_token": "token=SHOULD_NOT_APPEAR",
+        },
+    )
+    policy = _policy(
+        capabilities=("echo",),
+        worker_kinds=(ManagedWorkerKind.CONTAINER,),
+        require_deadline=True,
+        require_cancellation_context=True,
+    )
+    context = ExecutionContext(
+        deadline=ExecutionDeadline(deadline_at_ms=9999999999999, source="managed-worker-checkpoint")
+    )
+    plan_envelope = create_task_envelope(
+        "echo",
+        task_id="managed-worker-composition-plan",
+        payload={
+            "message": "RAW_MANAGED_WORKER_PAYLOAD_SHOULD_NOT_APPEAR",
+            "model_prompt": "MODEL_PROMPT_SHOULD_NOT_APPEAR",
+        },
+        budget=ResourceBudget(max_runtime_ms=1000, max_memory_mb=128, cpu_weight=25),
+    )
+
+    plan = create_managed_worker_execution_plan(
+        descriptor,
+        policy,
+        plan_envelope,
+        context=context,
+        plan_id="managed-worker-composition-checkpoint",
+    )
+    plan_payload = plan.to_dict()
+    serialized_contract = json.dumps(
+        {
+            "descriptor": descriptor.to_dict(),
+            "plan": plan_payload,
+            "service": service.describe(),
+        },
+        sort_keys=True,
+    )
+
+    assert plan.ok is True
+    assert plan.status == "planned_contract_only"
+    assert plan.contract_only is True
+    assert plan.dry_run is True
+    assert plan.launch_plan is not None
+    assert plan.launch_plan.contract_only is True
+    assert plan.launch_plan.dry_run is True
+    assert plan.worker_kind == ManagedWorkerKind.CONTAINER
+    assert plan_payload["starts_processes"] is False
+    assert plan_payload["uses_network"] is False
+    assert plan_payload["uses_gpu"] is False
+    assert plan_payload["runs_shell"] is False
+    assert plan_payload["starts_daemon"] is False
+    assert plan_payload["real_container_execution"] is False
+    assert plan_payload["real_vm_execution"] is False
+    assert plan_payload["real_worker_implementation"] is False
+    assert plan_payload["durable_worker_persistence"] is False
+    assert plan.readiness.evidence["requires_substrate_governor_for_execution"] is True
+    assert plan.readiness.evidence["requires_worker_registry_for_execution"] is True
+    assert backend.execute_calls == 0
+    assert governor.execute_calls == 0
+    assert [worker.worker_id for worker in registry.descriptors()] == ["safe-local-1"]
+    assert service.known_capabilities() == safe_capabilities
+    assert ManagedWorkerKind.CONTAINER not in service.known_capabilities()
+    assert ManagedWorkerKind.VM not in service.known_capabilities()
+    assert service.status_for_task("managed-worker-composition-plan").status == ComputeTaskStatus.UNKNOWN
+    assert service.status_store.describe()["stored_record_count"] == 0
+    assert "future-managed-container" not in [worker.worker_id for worker in registry.descriptors()]
+    assert "RAW_MANAGED_WORKER_PAYLOAD_SHOULD_NOT_APPEAR" not in serialized_contract
+    assert "MODEL_PROMPT_SHOULD_NOT_APPEAR" not in serialized_contract
+    assert "D:\\Francis\\private" not in serialized_contract
+    assert "SHOULD_NOT_APPEAR" not in serialized_contract
+    assert descriptor.to_dict()["metadata_summary"]["host_path"] == "non_default_summary_declared"
+    assert descriptor.to_dict()["metadata_summary"]["api_token"] == "redacted_summary"
+
+    execution = service.submit(
+        create_task_envelope(
+            "echo",
+            task_id="managed-worker-composition-exec",
+            trace_id="managed-worker-composition-trace",
+            payload={"message": "service execution remains governed"},
+        )
+    )
+
+    assert execution.status == ComputeTaskStatus.SUCCEEDED
+    assert execution.record.worker_id == "safe-local-1"
+    assert execution.receipt.worker_id == "safe-local-1"
+    assert execution.receipt.function_name == "echo"
+    assert execution.record.receipt_id == execution.receipt.receipt_id
+    assert execution.record.status_write_attempted is True
+    assert execution.record.status_write_succeeded is True
+    assert service.status_for_task("managed-worker-composition-exec") == execution.record
+    assert backend.execute_calls == 1
+    assert governor.execute_calls == 1
+    assert service.known_capabilities() == safe_capabilities
+    assert [worker.worker_id for worker in registry.descriptors()] == ["safe-local-1"]
 
 
 def test_binding_creates_contract_only_plan_without_changing_execution_path() -> None:
