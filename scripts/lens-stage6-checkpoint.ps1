@@ -1232,6 +1232,7 @@ function Write-ProofPayloadCache {
   return $CachePath
 }
 
+$LensStatusCachePath = Write-ProofPayloadCache -Payload $LensStatus -FileName 'lens-status-readback.json'
 $CommandPaletteStatusPath = [System.IO.Path]::GetTempFileName()
 try {
   $LensStatus | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $CommandPaletteStatusPath -Encoding UTF8
@@ -2397,6 +2398,7 @@ $Payload = [ordered]@{
     enablement_gate_blocked_total = $BlockedEnablementGates.Count
     blocker_total = $AllBlockers.Count
   }
+  lens_status_cache_path = $LensStatusCachePath
   criteria = @($Criteria)
   enablement_gates = @($EnablementGates)
   blockers = @($AllBlockers)

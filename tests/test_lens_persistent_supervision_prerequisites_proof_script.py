@@ -67,10 +67,16 @@ def test_lens_persistent_supervision_prerequisites_uses_summon_family_contract_r
     assert "function Test-StringArraySubset" in script
     assert "function Test-StringArrayContainsAll" in script
     assert "$ExpectedFirstMissingRequiredBeforeEnable = [string](@($EnablementMissing)[0])" in script
+    assert "$RequiredBeforeEnableSatisfied = (" in script
+    assert "$NoFirstMissingRequirementObserved = (" in script
+    assert "skipped_required_before_enable_ready" in script
+    assert "persistent_supervision_prerequisites_satisfied" in script
+    assert "$RouteReadbackTimeoutSeconds = [Math]::Min([Math]::Max(90, $ChildProofTimeoutSeconds - 15), 180)" in script
+    assert "-TimeoutSeconds $RouteReadbackTimeoutSeconds" in script
     assert "$PlanCoversEnablementMissingRequirements" in script
     assert "$EnablementFirstMissingRequirementObserved" in script
     assert "$PlanFirstMissingRequirementObserved" in script
-    assert "including partially advanced seeded-runtime postures" in script
+    assert "bounded missing-prerequisite set or an empty missing set" in script
     denied_keys_block = script[
         script.index("$DeniedKeys = @(") : script.index("$PlanGovernance =", script.index("$DeniedKeys = @("))
     ]

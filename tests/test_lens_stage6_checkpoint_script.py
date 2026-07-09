@@ -80,6 +80,8 @@ def test_lens_stage6_checkpoint_honors_explicit_observation_windows_without_chan
     assert "'-CachedTrayPresenceBoundaryProofPath', $ResidentRuntimeTrayPresenceBoundaryProofCachePath" in script
     assert "$SummonPreflightProofCachePath = Write-ProofPayloadCache" in script
     assert "'-CachedSummonPreflightProofPath', $SummonPreflightProofCachePath" in script
+    assert "$LensStatusCachePath = Write-ProofPayloadCache -Payload $LensStatus" in script
+    assert "lens_status_cache_path = $LensStatusCachePath" in script
     assert "$ResidentRuntimeHotkeySummonBoundaryProofCachePath = Write-ProofPayloadCache" in script
     assert "'-CachedHotkeySummonBoundaryProofPath', $ResidentRuntimeHotkeySummonBoundaryProofCachePath" in script
     assert "$WindowsVenvPython = Join-Path $RepoRoot '.venv\\Scripts\\python.exe'" in script

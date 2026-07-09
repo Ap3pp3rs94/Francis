@@ -262,10 +262,22 @@ def test_lens_stage6_completion_audit_bounds_summon_anywhere_child_proof() -> No
     assert "next_smallest_truthful_gap = $CheckpointNextGap" in script
     assert "fix_stage6_checkpoint_readback_timeout" in script
     assert "payload = $CheckpointPayload" in script
+    assert "$CheckpointLensStatusCachePath = ''" in script
+    assert "lens_status_cache_path" in script
+    assert (
+        "$CheckpointLensStatusCacheAvailable = -not [string]::IsNullOrWhiteSpace($CheckpointLensStatusCachePath)"
+        in script
+    )
     assert "$SummonAnywhereBlockersProofResult = Invoke-JsonScript" in script
+    assert "$SummonAnywhereBlockersProofArgs += @('-StatusPath', $CheckpointLensStatusCachePath)" in script
     assert "'-ChildProofTimeoutSeconds', [string]$ChildProofTimeoutSeconds" in script
     assert "'-LensStatusTimeoutSeconds', [string]$CheckpointLensStatusTimeoutSeconds" in script
-    assert ") -TimeoutSeconds $ChildProofTimeoutSeconds" in script
+    assert "-ScriptArgs $SummonAnywhereBlockersProofArgs -TimeoutSeconds $ChildProofTimeoutSeconds" in script
+    assert "$SummonAuthorityBlockerProofArgs += @('-StatusPath', $CheckpointLensStatusCachePath)" in script
+    assert "$SummonAnywhereFamilyChainProofArgs += @('-StatusPath', $CheckpointLensStatusCachePath)" in script
+    assert "$PersistentSupervisionPrerequisitesMissingPathObserved = (" in script
+    assert "$PersistentSupervisionPrerequisitesSatisfiedPathObserved = (" in script
+    assert "persistent_supervision_prerequisites_satisfied" in script
     assert "$SummonAnywhereLensStatusReadbackTimedOut = (" in script
     assert "audit_status = 'child_readback_timed_out'" in script
     assert "next_smallest_truthful_gap = 'stage6_completion_audit_child_readback_timeout'" in script

@@ -688,6 +688,18 @@ if ([bool]$CheckpointResult.timed_out -or [int]$CheckpointResult.exit_code -ne 0
 }
 
 $Checkpoint = $CheckpointResult.payload
+$CheckpointLensStatusCachePath = ''
+if ($null -ne $Checkpoint) {
+  $CandidateCheckpointLensStatusCachePath = [string](Get-PropertyValue -Payload $Checkpoint -Name 'lens_status_cache_path' -Default '')
+  if (-not [string]::IsNullOrWhiteSpace($CandidateCheckpointLensStatusCachePath)) {
+    try {
+      $CheckpointLensStatusCachePath = (Resolve-Path -LiteralPath $CandidateCheckpointLensStatusCachePath -ErrorAction Stop).Path
+    } catch {
+      $CheckpointLensStatusCachePath = ''
+    }
+  }
+}
+$CheckpointLensStatusCacheAvailable = -not [string]::IsNullOrWhiteSpace($CheckpointLensStatusCachePath)
 $EarlyHostSupervisorReadback = $Checkpoint.host_supervisor_readback
 $EarlyFreshResidentSupervisedRuntimeReadbackObserved = (
   [bool]$EarlyHostSupervisorReadback.fresh_readback -and
@@ -700,11 +712,15 @@ $EarlyFreshResidentSupervisedRuntimeReadbackObserved = (
   [string]$EarlyHostSupervisorReadback.state_status -eq 'resident_supervising' -and
   [string]$EarlyHostSupervisorReadback.observed_state -eq 'resident_running'
 )
-$SummonAnywhereBlockersProofResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonAnywhereBlockersProofScript -ScriptArgs @(
+$SummonAnywhereBlockersProofArgs = @(
   '-Mode', 'Status',
   '-ChildProofTimeoutSeconds', [string]$ChildProofTimeoutSeconds,
   '-LensStatusTimeoutSeconds', [string]$CheckpointLensStatusTimeoutSeconds
-) -TimeoutSeconds $ChildProofTimeoutSeconds
+)
+if ($CheckpointLensStatusCacheAvailable) {
+  $SummonAnywhereBlockersProofArgs += @('-StatusPath', $CheckpointLensStatusCachePath)
+}
+$SummonAnywhereBlockersProofResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonAnywhereBlockersProofScript -ScriptArgs $SummonAnywhereBlockersProofArgs -TimeoutSeconds $ChildProofTimeoutSeconds
 $SummonAnywhereBlockersProof = $SummonAnywhereBlockersProofResult.payload
 $SummonAnywhereLensStatusReadback = $SummonAnywhereBlockersProof.lens_status_readback
 $SummonAnywhereLensStatusReadbackTimedOut = (
@@ -826,19 +842,27 @@ if ([string]$SummonOverlayWindowBlockerProof.next_smallest_truthful_gap -eq 'sum
     -TimeoutSeconds ([Math]::Max($ChildProofTimeoutSeconds, 120))
 }
 $SummonGlobalHotkeyBindingBlockerProof = $SummonGlobalHotkeyBindingBlockerProofResult.payload
-$SummonAuthorityBlockerProofResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonAuthorityBlockerProofScript -ScriptArgs @(
+$SummonAuthorityBlockerProofArgs = @(
   '-Mode', 'Status'
-) -TimeoutSeconds ([Math]::Max($ChildProofTimeoutSeconds, 240))
+)
+if ($CheckpointLensStatusCacheAvailable) {
+  $SummonAuthorityBlockerProofArgs += @('-StatusPath', $CheckpointLensStatusCachePath)
+}
+$SummonAuthorityBlockerProofResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonAuthorityBlockerProofScript -ScriptArgs $SummonAuthorityBlockerProofArgs -TimeoutSeconds ([Math]::Max($ChildProofTimeoutSeconds, 240))
 $SummonAuthorityBlockerProof = $SummonAuthorityBlockerProofResult.payload
 $SummonAnywhereFamilyChainProofChildTimeoutSeconds = [Math]::Max($ChildProofTimeoutSeconds, 240)
 $SummonAnywhereFamilyChainProofChildProofCount = 2
 $SummonAnywhereFamilyChainProofTimeoutSeconds = (
   $SummonAnywhereFamilyChainProofChildTimeoutSeconds * $SummonAnywhereFamilyChainProofChildProofCount
 ) + 60
-$SummonAnywhereFamilyChainProofResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonAnywhereFamilyChainProofScript -ScriptArgs @(
+$SummonAnywhereFamilyChainProofArgs = @(
   '-Mode', 'Status',
   '-ChildProofTimeoutSeconds', [string]$SummonAnywhereFamilyChainProofChildTimeoutSeconds
-) -TimeoutSeconds $SummonAnywhereFamilyChainProofTimeoutSeconds
+)
+if ($CheckpointLensStatusCacheAvailable) {
+  $SummonAnywhereFamilyChainProofArgs += @('-StatusPath', $CheckpointLensStatusCachePath)
+}
+$SummonAnywhereFamilyChainProofResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonAnywhereFamilyChainProofScript -ScriptArgs $SummonAnywhereFamilyChainProofArgs -TimeoutSeconds $SummonAnywhereFamilyChainProofTimeoutSeconds
 $SummonAnywhereFamilyChainProof = $SummonAnywhereFamilyChainProofResult.payload
 $SummonApiLaunchOnHotkeyProofResult = [ordered]@{
   exit_code = 0
@@ -1346,6 +1370,35 @@ $PersistentSupervisionPrerequisitesRequiredBeforeEnable = ConvertTo-StringArray 
 $PersistentSupervisionPrerequisitesMissingRequiredBeforeEnable = ConvertTo-StringArray -Value $PersistentSupervisionPrerequisitesProof.missing_required_before_enable
 $PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable = [string]$PersistentSupervisionPrerequisitesProof.first_missing_required_before_enable
 $PersistentSupervisionPrerequisitesFirstMissingRequirementHandoff = $PersistentSupervisionPrerequisitesProof.first_missing_requirement_handoff
+$PersistentSupervisionPrerequisitesSatisfied = [bool]$PersistentSupervisionPrerequisitesProof.required_before_enable_satisfied
+$PersistentSupervisionPrerequisitesMissingPathObserved = (
+  -not $PersistentSupervisionPrerequisitesSatisfied -and
+  [string]$PersistentSupervisionPrerequisitesProof.summon_family_contract_next_smallest_truthful_gap -eq 'persistent_supervision_required_prerequisites_missing' -and
+  [string]$PersistentSupervisionPrerequisitesProof.next_smallest_truthful_gap -eq 'persistent_supervision_required_prerequisites_missing' -and
+  [string]$PersistentSupervisionPrerequisitesProof.authority_required -eq 'resident_host_process_tray_hotkey_overlay_and_summon_prerequisites' -and
+  @($PersistentSupervisionPrerequisitesMissingRequiredBeforeEnable).Count -ge 1 -and
+  [bool]$PersistentSupervisionPrerequisitesProofGovernance.wraps_first_missing_requirement_proof -and
+  [bool]$PersistentSupervisionPrerequisitesProofGovernance.bounded_local_process_launch -and
+  [bool]$PersistentSupervisionPrerequisitesProofGovernance.bounded_process_launch -and
+  [bool]$PersistentSupervisionPrerequisitesProofGovernance.temporary_runtime_state_write -and
+  [bool]$PersistentSupervisionPrerequisitesProofGovernance.local_process_launch_authority -and
+  -not [bool]$PersistentSupervisionPrerequisitesProofGovernance.read_only_contract
+)
+$PersistentSupervisionPrerequisitesSatisfiedPathObserved = (
+  $PersistentSupervisionPrerequisitesSatisfied -and
+  [string]$PersistentSupervisionPrerequisitesProof.summon_family_contract_next_smallest_truthful_gap -eq [string]$PersistentSupervisionPrerequisitesProof.route_next_smallest_truthful_gap -and
+  [string]$PersistentSupervisionPrerequisitesProof.next_smallest_truthful_gap -eq [string]$PersistentSupervisionPrerequisitesProof.route_next_smallest_truthful_gap -and
+  [string]$PersistentSupervisionPrerequisitesProof.recommended_handoff_source -eq 'persistent_supervision_prerequisites_satisfied' -and
+  @($PersistentSupervisionPrerequisitesMissingRequiredBeforeEnable).Count -eq 0 -and
+  [string]::IsNullOrWhiteSpace($PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable) -and
+  -not [bool]$PersistentSupervisionPrerequisitesProof.first_missing_requirement_proof_required -and
+  -not [bool]$PersistentSupervisionPrerequisitesProofGovernance.wraps_first_missing_requirement_proof -and
+  -not [bool]$PersistentSupervisionPrerequisitesProofGovernance.bounded_local_process_launch -and
+  -not [bool]$PersistentSupervisionPrerequisitesProofGovernance.bounded_process_launch -and
+  -not [bool]$PersistentSupervisionPrerequisitesProofGovernance.temporary_runtime_state_write -and
+  -not [bool]$PersistentSupervisionPrerequisitesProofGovernance.local_process_launch_authority -and
+  [bool]$PersistentSupervisionPrerequisitesProofGovernance.read_only_contract
+)
 $PersistentSupervisionPrerequisitesProofObserved = (
   [int]$PersistentSupervisionPrerequisitesProofResult.exit_code -eq 0 -and
   [string]$PersistentSupervisionPrerequisitesProof.kind -eq 'lens.persistent_supervision.prerequisites.proof' -and
@@ -1356,9 +1409,10 @@ $PersistentSupervisionPrerequisitesProofObserved = (
   [string]$PersistentSupervisionPrerequisitesProof.enablement_route -eq '/lens/host/persistent-supervision/enablement' -and
   [string]$PersistentSupervisionPrerequisitesProof.route_next_smallest_truthful_gap -eq 'persistent_supervision_authority_not_granted' -and
   [string]$PersistentSupervisionPrerequisitesProof.guard_next_smallest_truthful_gap -eq 'persistent_supervision_required_prerequisites_missing' -and
-  [string]$PersistentSupervisionPrerequisitesProof.summon_family_contract_next_smallest_truthful_gap -eq 'persistent_supervision_required_prerequisites_missing' -and
-  [string]$PersistentSupervisionPrerequisitesProof.next_smallest_truthful_gap -eq 'persistent_supervision_required_prerequisites_missing' -and
-  [string]$PersistentSupervisionPrerequisitesProof.authority_required -eq 'resident_host_process_tray_hotkey_overlay_and_summon_prerequisites' -and
+  (
+    $PersistentSupervisionPrerequisitesMissingPathObserved -or
+    $PersistentSupervisionPrerequisitesSatisfiedPathObserved
+  ) -and
   -not [bool]$PersistentSupervisionPrerequisitesProof.authority_granted -and
   [bool]$PersistentSupervisionPrerequisitesProof.persistent_supervision_plan_readback_observed -and
   [bool]$PersistentSupervisionPrerequisitesProof.persistent_supervision_enablement_readback_observed -and
@@ -1378,23 +1432,16 @@ $PersistentSupervisionPrerequisitesProofObserved = (
   $PersistentSupervisionPrerequisitesRequiredBeforeEnable -contains 'global_hotkey_binding' -and
   $PersistentSupervisionPrerequisitesRequiredBeforeEnable -contains 'overlay_window' -and
   $PersistentSupervisionPrerequisitesRequiredBeforeEnable -contains 'summon_binding' -and
-  @($PersistentSupervisionPrerequisitesMissingRequiredBeforeEnable).Count -ge 1 -and
   [bool]$PersistentSupervisionPrerequisitesProofGovernance.diagnostic_only -and
-  -not [bool]$PersistentSupervisionPrerequisitesProofGovernance.read_only_contract -and
   [bool]$PersistentSupervisionPrerequisitesProofGovernance.route_readback_contract -and
   [bool]$PersistentSupervisionPrerequisitesProofGovernance.wraps_persistent_supervision_plan_route -and
   [bool]$PersistentSupervisionPrerequisitesProofGovernance.wraps_persistent_supervision_enablement_route -and
   [bool]$PersistentSupervisionPrerequisitesProofGovernance.wraps_lens_status -and
   [bool]$PersistentSupervisionPrerequisitesProofGovernance.uses_summon_family_contract_readback -and
   -not [bool]$PersistentSupervisionPrerequisitesProofGovernance.wraps_summon_anywhere_family_chain_proof -and
-  [bool]$PersistentSupervisionPrerequisitesProofGovernance.wraps_first_missing_requirement_proof -and
-  [bool]$PersistentSupervisionPrerequisitesProofGovernance.bounded_local_process_launch -and
-  [bool]$PersistentSupervisionPrerequisitesProofGovernance.bounded_process_launch -and
-  [bool]$PersistentSupervisionPrerequisitesProofGovernance.temporary_runtime_state_write -and
   -not [bool]$PersistentSupervisionPrerequisitesProofGovernance.product_execution_authority -and
   -not [bool]$PersistentSupervisionPrerequisitesProofGovernance.execution_authority -and
   -not [bool]$PersistentSupervisionPrerequisitesProofGovernance.approval_decision_authority -and
-  [bool]$PersistentSupervisionPrerequisitesProofGovernance.local_process_launch_authority -and
   -not [bool]$PersistentSupervisionPrerequisitesProofGovernance.api_local_process_launch_authority -and
   -not [bool]$PersistentSupervisionPrerequisitesProofGovernance.process_supervision_authority -and
   -not [bool]$PersistentSupervisionPrerequisitesProofGovernance.persistent_supervision_enablement_authority -and
