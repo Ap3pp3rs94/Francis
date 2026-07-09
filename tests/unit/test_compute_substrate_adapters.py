@@ -26,6 +26,8 @@ from francis.compute_substrate import (
     LocalJsonComputeReceiptStore,
     LocalJsonComputeStatusStore,
     ResourceBudget,
+    SafeLocalBackend,
+    SubstrateGovernor,
     TaskEnvelope,
     WorkerDescriptor,
     WorkerRegistry,
@@ -148,6 +150,8 @@ def _approval_grant(
     capability: str = "echo",
     approval_id: str = "approval-adapter",
     max_runtime_ms: int | None = 1000,
+    reason: str = "bounded adapter compute approval",
+    approval_note: str = "raw note must not be persisted",
 ) -> ApprovalGrant:
     return ApprovalGrant(
         approval_id=approval_id,
@@ -162,9 +166,19 @@ def _approval_grant(
             max_compute_units=1000,
         ),
         approved_by="operator",
-        reason="bounded adapter compute approval",
-        approval_note="raw note must not be persisted",
+        reason=reason,
+        approval_note=approval_note,
     )
+
+
+def _durable_text(root: Path) -> str:
+    return "\n".join(path.read_text(encoding="utf-8") for path in sorted(root.rglob("*.json")))
+
+
+def _assert_sentinels_absent(text: str, sentinels: tuple[str, ...]) -> None:
+    for sentinel in sentinels:
+        assert sentinel not in text
+        assert sentinel.replace("\\", "\\\\") not in text
 
 
 class _FailingReceiptStore:
@@ -398,6 +412,176 @@ def test_adapter_gateway_records_durable_status_when_service_is_configured(tmp_p
     assert "secret-adapter-payload" not in status_text
     assert '"stores_payload": false' in status_text
     assert '"stores_output": false' in status_text
+
+
+def test_adapter_service_governor_durable_approval_receipt_status_checkpoint(tmp_path: Path) -> None:
+    raw_payload_marker = "RAW_PAYLOAD_SHOULD_NOT_PERSIST"
+    raw_output_marker = "RAW_OUTPUT_SHOULD_NOT_PERSIST"
+    approval_secret_marker = "APPROVAL_SECRET_SHOULD_NOT_PERSIST"
+    model_prompt_marker = "MODEL_PROMPT_SHOULD_NOT_PERSIST"
+    broad_filesystem_marker = "C:\\Sensitive\\Should\\Not\\Persist"
+    sentinels = (
+        raw_payload_marker,
+        raw_output_marker,
+        approval_secret_marker,
+        model_prompt_marker,
+        broad_filesystem_marker,
+    )
+
+    approval_store = LocalJsonComputeApprovalStore(tmp_path / "checkpoint-approvals")
+    receipt_store = LocalJsonComputeReceiptStore(tmp_path / "checkpoint-receipts")
+    status_store = LocalJsonComputeStatusStore(tmp_path / "checkpoint-status")
+    worker_registry = WorkerRegistry()
+    worker_registry.register(SafeLocalBackend())
+    governor = SubstrateGovernor(receipt_store=receipt_store, approval_store=approval_store)
+    service = _RecordingService(
+        governor=governor,
+        registry=worker_registry,
+        status_store=status_store,
+    )
+    adapter_registry = InMemoryComputeAdapterRegistry()
+    descriptor = _descriptor(adapter_id="checkpoint-adapter", requires_approval=True)
+    policy = _policy(require_approval=True)
+    adapter_registry.register(descriptor, policy)
+    gateway = ComputeAdapterGateway(service=service, adapter_registry=adapter_registry)
+    approval = _approval_grant(
+        task_id="adapter-full-checkpoint",
+        approval_id="approval-full-checkpoint",
+        reason="token=APPROVAL_SECRET_SHOULD_NOT_PERSIST",
+        approval_note="token=APPROVAL_SECRET_SHOULD_NOT_PERSIST",
+    )
+
+    approval_store.add(approval)
+    stored_before = approval_store.get("approval-full-checkpoint")
+    assert stored_before is not None
+    assert stored_before.consumed_at_ms == 0
+    assert adapter_registry.get("checkpoint-adapter") == descriptor
+
+    result = gateway.submit(
+        _request(
+            request_id="adapter-full-checkpoint",
+            adapter_id="checkpoint-adapter",
+            payload={
+                "message": raw_output_marker,
+                "payload_marker": raw_payload_marker,
+                "model_prompt": model_prompt_marker,
+                "filesystem_hint": broad_filesystem_marker,
+            },
+            approval_required=True,
+            approval_id="approval-full-checkpoint",
+        )
+    )
+
+    consumed = approval_store.get("approval-full-checkpoint")
+    assert service.submit_calls == 1
+    assert result.ok is True
+    assert result.accepted is True
+    assert result.status == ComputeTaskStatus.SUCCEEDED
+    assert result.task_id == "adapter-full-checkpoint"
+    assert result.correlation_id == "trace-adapter-full-checkpoint"
+    assert result.approval_required is True
+    assert result.approval_satisfied is True
+    assert result.approval_consumed is True
+    assert result.receipt_persisted is True
+    assert result.to_dict()["stores_payload"] is False
+    assert result.to_dict()["stores_output"] is False
+    assert result.to_dict()["durable_adapter_persistence"] is False
+    assert "receipt" not in result.to_dict()
+
+    assert consumed is not None
+    assert consumed.consumed_at_ms > 0
+    assert consumed.consumed_by_task_id == "adapter-full-checkpoint"
+
+    assert result.submission_result is not None
+    submission = result.submission_result
+    record = submission.record
+    receipt = submission.receipt
+    assert submission.status == ComputeTaskStatus.SUCCEEDED
+    assert submission.ok is True
+    assert record.durable_status_persistence is True
+    assert record.approval_required is True
+    assert record.approval_satisfied is True
+    assert record.approval_consumed is True
+    assert record.receipt_id == result.receipt_id
+    assert record.receipt_persisted is True
+    assert record.receipt_persistence_status == "persisted_local_json"
+    assert record.execution_started is True
+    assert record.execution_finished is True
+    assert record.timed_out is False
+
+    assert receipt.persisted is True
+    assert receipt.approval_id == "approval-full-checkpoint"
+    assert receipt.governance["approval_required"] is True
+    assert receipt.governance["approval_satisfied"] is True
+    assert receipt.governance["approval_consumed"] is True
+    assert receipt.governance["approval_persistence"] == "persisted_local_json"
+    assert receipt.governance["receipt_persistence"] == "persisted_local_json"
+    assert receipt.governance["long_term_memory_persistence"] is False
+    assert receipt.governance["writes_memory"] is False
+
+    assert receipt_store.read_receipt(result.receipt_id) == receipt
+    assert status_store.get_by_task_id("adapter-full-checkpoint") == record
+    assert status_store.get_by_correlation_id("trace-adapter-full-checkpoint") == record
+    assert service.status_for_task("adapter-full-checkpoint") == record
+    assert service.status_for_correlation("trace-adapter-full-checkpoint") == record
+
+    durable_text = "\n".join(
+        (
+            _durable_text(approval_store.approval_root),
+            _durable_text(receipt_store.receipt_root),
+            _durable_text(status_store.status_root),
+        )
+    )
+    _assert_sentinels_absent(durable_text, sentinels)
+    assert "live_learning_event" not in durable_text
+    assert "LiveLearningEvent" not in durable_text
+    assert "raw task payload" not in durable_text
+    assert "raw execution output" not in durable_text
+
+
+def test_adapter_checkpoint_denial_before_service_does_not_consume_durable_approval(tmp_path: Path) -> None:
+    approval_store = LocalJsonComputeApprovalStore(tmp_path / "checkpoint-denied-approvals")
+    receipt_store = LocalJsonComputeReceiptStore(tmp_path / "checkpoint-denied-receipts")
+    status_store = LocalJsonComputeStatusStore(tmp_path / "checkpoint-denied-status")
+    worker_registry = WorkerRegistry()
+    worker_registry.register(SafeLocalBackend())
+    governor = SubstrateGovernor(receipt_store=receipt_store, approval_store=approval_store)
+    service = _RecordingService(
+        governor=governor,
+        registry=worker_registry,
+        status_store=status_store,
+    )
+    adapter_registry = InMemoryComputeAdapterRegistry()
+    adapter_registry.register(_descriptor(adapter_id="checkpoint-denied-adapter"), _policy())
+    gateway = ComputeAdapterGateway(service=service, adapter_registry=adapter_registry)
+    approval_store.add(
+        _approval_grant(
+            task_id="adapter-denied-checkpoint",
+            approval_id="approval-denied-checkpoint",
+        )
+    )
+
+    result = gateway.submit(
+        _request(
+            request_id="adapter-denied-checkpoint",
+            adapter_id="checkpoint-denied-adapter",
+            approval_required=True,
+            approval_id="approval-denied-checkpoint",
+            risk_level="high",
+        )
+    )
+
+    grant = approval_store.get("approval-denied-checkpoint")
+    assert result.ok is False
+    assert result.accepted is False
+    assert result.denial_reason == "risk_exceeds_adapter_policy"
+    assert result.submission_result is None
+    assert service.submit_calls == 0
+    assert grant is not None
+    assert grant.consumed_at_ms == 0
+    assert grant.consumed_by_task_id == ""
+    assert status_store.get_by_task_id("adapter-denied-checkpoint") is None
+    assert receipt_store.receipt_root.exists() is False
 
 
 def test_adapter_gateway_does_not_import_governor_or_backend_directly() -> None:
