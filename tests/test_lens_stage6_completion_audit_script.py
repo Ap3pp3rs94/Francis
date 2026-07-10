@@ -247,7 +247,8 @@ def test_lens_stage6_completion_audit_accepts_fresh_supervised_runtime_after_bri
 def test_lens_stage6_completion_audit_bounds_summon_anywhere_child_proof() -> None:
     script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
 
-    assert "$CheckpointResult = Invoke-JsonScript" in script
+    assert "$CheckpointResult = if ($CheckpointReadbackValid)" in script
+    assert "Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $CheckpointScript" in script
     assert "'-LensStatusTimeoutSeconds', [string]$CheckpointLensStatusTimeoutSeconds" in script
     assert (
         "$CheckpointChildProofTimeoutSeconds = [Math]::Min([Math]::Max(1, $ChildProofTimeoutSeconds - 15), 600)"
@@ -291,6 +292,59 @@ def test_lens_stage6_completion_audit_bounds_summon_anywhere_child_proof() -> No
     assert script.index("audit_status = 'child_readback_timed_out'") < script.index(
         "$SummonTrayPresenceBlockerProofResult = [ordered]@{"
     )
+
+
+def test_lens_stage6_completion_audit_reuses_only_fresh_hashed_checkpoint_readback() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+
+    assert "[string]$CheckpointReadbackPath = ''" in script
+    assert "[string]$CheckpointReadbackSha256 = ''" in script
+    assert "[int]$CheckpointReadbackMaxAgeSeconds = 1800" in script
+    assert "checkpoint_readback_outside_audit_capture_root" in script
+    assert "checkpoint_readback_hash_mismatch" in script
+    assert "checkpoint_readback_repo_head_mismatch" in script
+    assert "checkpoint_readback_stale" in script
+    assert "checkpoint_readback_lens_status_cache_missing" in script
+    assert "function Get-FileSha256Hex" in script
+    assert "[Security.Cryptography.SHA256]::Create()" in script
+    assert "$CheckpointReadbackRepoHead -ne $CurrentRepoHead" in script
+    assert "$CheckpointReadbackPayload.kind -ne 'lens.stage6.checkpoint'" in script
+    assert "$CheckpointReadbackValid = (" in script
+    assert "$CheckpointResult = if ($CheckpointReadbackValid)" in script
+    assert "checkpoint_readback_reused = $CheckpointReadbackValid" in script
+    assert "stage6_checkpoint_readback_invalid" in script
+
+
+def test_lens_stage6_completion_audit_rejects_checkpoint_readback_outside_capture_root(tmp_path: Path) -> None:
+    checkpoint = tmp_path / "checkpoint.json"
+    checkpoint.write_text("{}", encoding="utf-8")
+
+    proc = run_powershell_script(
+        _powershell(),
+        _repo_root() / "scripts" / "lens-stage6-completion-audit.ps1",
+        (
+            "-Mode",
+            "Status",
+            "-OverallTimeoutSeconds",
+            "0",
+            "-AuditWatchdogChild",
+            "-CheckpointReadbackPath",
+            str(checkpoint),
+            "-CheckpointReadbackSha256",
+            "0" * 64,
+        ),
+        cwd=_repo_root(),
+        timeout_seconds=30,
+    )
+
+    assert proc.returncode == 1, proc.stderr
+    assert proc.stdout, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["audit_status"] == "checkpoint_readback_invalid"
+    assert payload["ready_to_close"] is False
+    assert payload["can_close_stage6"] is False
+    assert payload["checkpoint_readback"]["valid"] is False
+    assert "checkpoint_readback_outside_audit_capture_root" in payload["blockers"]
 
 
 def test_lens_stage6_completion_audit_accepts_consumed_authority_handoff_evidence() -> None:

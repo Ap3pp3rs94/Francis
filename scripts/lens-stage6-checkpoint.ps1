@@ -27,6 +27,13 @@ $ErrorActionPreference = 'Stop'
 
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 & (Join-Path $PSScriptRoot 'assert-runtime-root.ps1') -Root $RepoRoot
+$RepoHead = ''
+try {
+  $RepoHead = [string](& git -C $RepoRoot rev-parse HEAD 2>$null)
+  $RepoHead = $RepoHead.Trim()
+} catch {
+  $RepoHead = ''
+}
 
 function Get-PropertyValue {
   param(
@@ -2436,6 +2443,7 @@ $RuntimeGrantReadinessSpineObserved = $RuntimeGrantDenialReceiptSpineObserved -a
 $Payload = [ordered]@{
   ok = $true
   kind = 'lens.stage6.checkpoint'
+  repo_head = $RepoHead
   status = if ($ReadyToClose) { 'ready_to_close' } else { 'blocked' }
   mode = $Mode.ToLowerInvariant()
   stage = 'Stage 6 / Lens MVP'

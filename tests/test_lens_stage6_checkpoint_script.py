@@ -103,6 +103,13 @@ def test_lens_stage6_checkpoint_honors_explicit_observation_windows_without_chan
     assert "'-CachedOverlayWindowBoundaryProofPath', $ResidentRuntimeOverlayWindowBoundaryProofCachePath" in script
 
 
+def test_lens_stage6_checkpoint_records_repo_head_for_hashed_audit_reuse() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-checkpoint.ps1").read_text(encoding="utf-8")
+
+    assert "& git -C $RepoRoot rev-parse HEAD" in script
+    assert "repo_head = $RepoHead" in script
+
+
 def test_lens_stage6_checkpoint_keeps_helpful_not_noisy_blockers_scoped() -> None:
     script = (_repo_root() / "scripts" / "lens-stage6-checkpoint.ps1").read_text(encoding="utf-8")
 

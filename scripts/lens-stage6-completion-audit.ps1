@@ -21,6 +21,13 @@ param(
 
   [switch]$UseCanonicalSummonRuntimeReadback,
 
+  [string]$CheckpointReadbackPath = '',
+
+  [string]$CheckpointReadbackSha256 = '',
+
+  [ValidateRange(1, 3600)]
+  [int]$CheckpointReadbackMaxAgeSeconds = 1800,
+
   [ValidateRange(0, 3600)]
   [int]$OverallTimeoutSeconds = 600,
 
@@ -103,6 +110,20 @@ function Quote-ProcessArgument {
   return '"' + ($Value -replace '"', '\"') + '"'
 }
 
+function Get-FileSha256Hex {
+  param([string]$Path)
+
+  $Stream = [IO.File]::OpenRead($Path)
+  $Algorithm = [Security.Cryptography.SHA256]::Create()
+  try {
+    $HashBytes = $Algorithm.ComputeHash($Stream)
+    return (($HashBytes | ForEach-Object { $_.ToString('x2') }) -join '')
+  } finally {
+    $Algorithm.Dispose()
+    $Stream.Dispose()
+  }
+}
+
 function Stop-ProcessTree {
   param([System.Diagnostics.Process]$Process)
 
@@ -168,6 +189,16 @@ if (-not $AuditWatchdogChild -and $OverallTimeoutSeconds -gt 0) {
   }
   if ($UseCanonicalSummonRuntimeReadback) {
     $InnerArgumentParts += '-UseCanonicalSummonRuntimeReadback'
+  }
+  if (-not [string]::IsNullOrWhiteSpace($CheckpointReadbackPath)) {
+    $InnerArgumentParts += @(
+      '-CheckpointReadbackPath',
+      (Quote-ProcessArgument -Value $CheckpointReadbackPath),
+      '-CheckpointReadbackSha256',
+      (Quote-ProcessArgument -Value $CheckpointReadbackSha256),
+      '-CheckpointReadbackMaxAgeSeconds',
+      (Quote-ProcessArgument -Value ([string]$CheckpointReadbackMaxAgeSeconds))
+    )
   }
 
   $CommandText = (
@@ -609,6 +640,169 @@ if (-not (Test-Path -LiteralPath $CheckpointScript)) {
   throw "Stage 6 checkpoint script is missing: $CheckpointScript"
 }
 
+$CheckpointReadbackRequested = -not [string]::IsNullOrWhiteSpace($CheckpointReadbackPath)
+$CheckpointReadbackPayload = $null
+$CheckpointReadbackResolvedPath = ''
+$CheckpointReadbackActualSha256 = ''
+$CheckpointReadbackAgeSeconds = -1.0
+$CheckpointReadbackRepoHead = ''
+$CurrentRepoHead = ''
+$CheckpointReadbackBlockers = [System.Collections.ArrayList]::new()
+if ($CheckpointReadbackRequested) {
+  try {
+    $CurrentRepoHead = [string](& git -C $RepoRoot rev-parse HEAD 2>$null)
+    $CurrentRepoHead = $CurrentRepoHead.Trim()
+  } catch {
+    $CurrentRepoHead = ''
+  }
+  if ([string]::IsNullOrWhiteSpace($CurrentRepoHead)) {
+    [void]$CheckpointReadbackBlockers.Add('checkpoint_readback_current_repo_head_unavailable')
+  }
+  if ($CheckpointReadbackSha256 -notmatch '^[0-9A-Fa-f]{64}$') {
+    [void]$CheckpointReadbackBlockers.Add('checkpoint_readback_sha256_required')
+  }
+  try {
+    $CheckpointReadbackResolvedPath = (Resolve-Path -LiteralPath $CheckpointReadbackPath -ErrorAction Stop).Path
+  } catch {
+    [void]$CheckpointReadbackBlockers.Add('checkpoint_readback_missing')
+  }
+  if (-not [string]::IsNullOrWhiteSpace($CheckpointReadbackResolvedPath)) {
+    $AllowedCheckpointRoot = [IO.Path]::GetFullPath(
+      (Join-Path $RepoRoot 'data/test_runs/lens-stage6-completion-audit')
+    ).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+    $CheckpointPathInsideAllowedRoot = (
+      $CheckpointReadbackResolvedPath.StartsWith(
+        $AllowedCheckpointRoot + [IO.Path]::DirectorySeparatorChar,
+        [StringComparison]::OrdinalIgnoreCase
+      )
+    )
+    if (-not $CheckpointPathInsideAllowedRoot) {
+      [void]$CheckpointReadbackBlockers.Add('checkpoint_readback_outside_audit_capture_root')
+    }
+    if (-not (Test-Path -LiteralPath $CheckpointReadbackResolvedPath -PathType Leaf)) {
+      [void]$CheckpointReadbackBlockers.Add('checkpoint_readback_not_file')
+    } else {
+      $CheckpointReadbackItem = Get-Item -LiteralPath $CheckpointReadbackResolvedPath
+      $CheckpointReadbackAgeSeconds = (
+        (Get-Date).ToUniversalTime() - $CheckpointReadbackItem.LastWriteTimeUtc
+      ).TotalSeconds
+      if ($CheckpointReadbackAgeSeconds -lt -60) {
+        [void]$CheckpointReadbackBlockers.Add('checkpoint_readback_from_future')
+      }
+      if ($CheckpointReadbackAgeSeconds -gt $CheckpointReadbackMaxAgeSeconds) {
+        [void]$CheckpointReadbackBlockers.Add('checkpoint_readback_stale')
+      }
+      $CheckpointReadbackActualSha256 = Get-FileSha256Hex -Path $CheckpointReadbackResolvedPath
+      if (
+        $CheckpointReadbackSha256 -match '^[0-9A-Fa-f]{64}$' -and
+        $CheckpointReadbackActualSha256 -ne $CheckpointReadbackSha256.ToLowerInvariant()
+      ) {
+        [void]$CheckpointReadbackBlockers.Add('checkpoint_readback_hash_mismatch')
+      }
+      try {
+        $CheckpointReadbackPayload = Get-Content -LiteralPath $CheckpointReadbackResolvedPath -Raw |
+          ConvertFrom-Json -ErrorAction Stop
+      } catch {
+        [void]$CheckpointReadbackBlockers.Add('checkpoint_readback_invalid_json')
+      }
+    }
+  }
+  if ($null -ne $CheckpointReadbackPayload) {
+    $CheckpointReadbackRepoHead = [string]$CheckpointReadbackPayload.repo_head
+    if ([string]$CheckpointReadbackPayload.kind -ne 'lens.stage6.checkpoint') {
+      [void]$CheckpointReadbackBlockers.Add('checkpoint_readback_kind_mismatch')
+    }
+    if (
+      [string]::IsNullOrWhiteSpace($CheckpointReadbackRepoHead) -or
+      $CheckpointReadbackRepoHead -ne $CurrentRepoHead
+    ) {
+      [void]$CheckpointReadbackBlockers.Add('checkpoint_readback_repo_head_mismatch')
+    }
+    if (-not [bool]$CheckpointReadbackPayload.ok) {
+      [void]$CheckpointReadbackBlockers.Add('checkpoint_readback_not_ok')
+    }
+    if (@('blocked', 'ready_to_close') -notcontains [string]$CheckpointReadbackPayload.status) {
+      [void]$CheckpointReadbackBlockers.Add('checkpoint_readback_status_invalid')
+    }
+    $CheckpointPayloadRepoRoot = [string]$CheckpointReadbackPayload.repo_root
+    $CheckpointPayloadRepoRootMatches = $false
+    if (-not [string]::IsNullOrWhiteSpace($CheckpointPayloadRepoRoot)) {
+      try {
+        $CheckpointPayloadRepoRootMatches = [IO.Path]::GetFullPath($CheckpointPayloadRepoRoot).Equals(
+          $RepoRoot,
+          [StringComparison]::OrdinalIgnoreCase
+        )
+      } catch {
+        $CheckpointPayloadRepoRootMatches = $false
+      }
+    }
+    if (-not $CheckpointPayloadRepoRootMatches) {
+      [void]$CheckpointReadbackBlockers.Add('checkpoint_readback_repo_root_mismatch')
+    }
+    $CandidateCheckpointCachePath = [string]$CheckpointReadbackPayload.lens_status_cache_path
+    if (
+      [string]::IsNullOrWhiteSpace($CandidateCheckpointCachePath) -or
+      -not (Test-Path -LiteralPath $CandidateCheckpointCachePath -PathType Leaf)
+    ) {
+      [void]$CheckpointReadbackBlockers.Add('checkpoint_readback_lens_status_cache_missing')
+    }
+  }
+}
+$CheckpointReadbackValid = (
+  $CheckpointReadbackRequested -and
+  $null -ne $CheckpointReadbackPayload -and
+  $CheckpointReadbackBlockers.Count -eq 0
+)
+$CheckpointReadbackValidation = [ordered]@{
+  requested = $CheckpointReadbackRequested
+  valid = $CheckpointReadbackValid
+  path = $CheckpointReadbackResolvedPath
+  expected_sha256 = $CheckpointReadbackSha256.ToLowerInvariant()
+  actual_sha256 = $CheckpointReadbackActualSha256
+  repo_head = $CheckpointReadbackRepoHead
+  current_repo_head = $CurrentRepoHead
+  age_seconds = if ($CheckpointReadbackAgeSeconds -ge 0) {
+    [Math]::Round($CheckpointReadbackAgeSeconds, 3)
+  } else {
+    $null
+  }
+  max_age_seconds = $CheckpointReadbackMaxAgeSeconds
+  blockers = [string[]]@($CheckpointReadbackBlockers.ToArray())
+}
+if ($CheckpointReadbackRequested -and -not $CheckpointReadbackValid) {
+  $Payload = [ordered]@{
+    ok = $false
+    kind = 'lens.stage6.completion_audit'
+    status = 'blocked'
+    audit_status = 'checkpoint_readback_invalid'
+    mode = $Mode
+    stage = 'Stage 6 / Lens MVP'
+    stage_state = 'active'
+    repo_root = $RepoRoot
+    ready_to_close = $false
+    can_close_stage6 = $false
+    transition_allowed = $false
+    checkpoint_readback = $CheckpointReadbackValidation
+    blockers = [string[]]@($CheckpointReadbackBlockers.ToArray())
+    next_smallest_truthful_gap = 'stage6_checkpoint_readback_invalid'
+    recommended_next_slice = 'rerun_stage6_checkpoint_and_supply_fresh_hashed_readback'
+    recommended_proof_script = 'scripts/lens-stage6-checkpoint.ps1 -Mode Status'
+    authority_required = 'none_new_stage6_completion_audit'
+    authority_granted = $false
+    governance = [ordered]@{
+      read_only_contract = $true
+      diagnostic_only = $true
+      checkpoint_readback_reuse = $false
+      would_execute = $false
+      would_mutate = $false
+      approval_decision_authority = $false
+      memory_write = $false
+    }
+  }
+  $Payload | ConvertTo-Json -Depth 10
+  exit 1
+}
+
 $PowerShell = (Get-Command pwsh -ErrorAction SilentlyContinue)
 if ($null -eq $PowerShell) {
   $PowerShell = Get-Command powershell -ErrorAction Stop
@@ -626,15 +820,30 @@ $CheckpointLensStatusTimeoutSeconds = [Math]::Min([Math]::Max(1, $ChildProofTime
 $CheckpointChildProofTimeoutSeconds = [Math]::Min([Math]::Max(1, $ChildProofTimeoutSeconds - 15), 600)
 $CheckpointWrapperTimeoutSeconds = [Math]::Min([Math]::Max($ChildProofTimeoutSeconds, $CheckpointChildProofTimeoutSeconds + 120), 600)
 
-$CheckpointResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $CheckpointScript -ScriptArgs @(
-  '-Mode', 'Status',
-  '-StartupTimeoutSeconds', [string]$StartupTimeoutSeconds,
-  '-HostLaunchRunSeconds', [string]$HostLaunchRunSeconds,
-  '-ResidentSurfaceForegroundRunSeconds', [string]$ResidentSurfaceForegroundRunSeconds,
-  '-SupervisorRunSeconds', [string]$SupervisorRunSeconds,
-  '-LensStatusTimeoutSeconds', [string]$CheckpointLensStatusTimeoutSeconds,
-  '-ChildProofTimeoutSeconds', [string]$CheckpointChildProofTimeoutSeconds
-) -TimeoutSeconds $CheckpointWrapperTimeoutSeconds
+$CheckpointResult = if ($CheckpointReadbackValid) {
+  [ordered]@{
+    exit_code = 0
+    payload = $CheckpointReadbackPayload
+    output = ''
+    error = ''
+    timed_out = $false
+    timeout_seconds = 0
+    duration_ms = 0
+    stdout_path = $CheckpointReadbackResolvedPath
+    stderr_path = ''
+    reused = $true
+  }
+} else {
+  Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $CheckpointScript -ScriptArgs @(
+    '-Mode', 'Status',
+    '-StartupTimeoutSeconds', [string]$StartupTimeoutSeconds,
+    '-HostLaunchRunSeconds', [string]$HostLaunchRunSeconds,
+    '-ResidentSurfaceForegroundRunSeconds', [string]$ResidentSurfaceForegroundRunSeconds,
+    '-SupervisorRunSeconds', [string]$SupervisorRunSeconds,
+    '-LensStatusTimeoutSeconds', [string]$CheckpointLensStatusTimeoutSeconds,
+    '-ChildProofTimeoutSeconds', [string]$CheckpointChildProofTimeoutSeconds
+  ) -TimeoutSeconds $CheckpointWrapperTimeoutSeconds
+}
 if ([bool]$CheckpointResult.timed_out -or [int]$CheckpointResult.exit_code -ne 0 -or $null -eq $CheckpointResult.payload) {
   $CheckpointChildRun = New-ChildProofRunSummary -Name 'stage6_checkpoint' -Result $CheckpointResult
   $CheckpointTimedOut = [bool]$CheckpointResult.timed_out
@@ -7229,6 +7438,8 @@ $Payload = [ordered]@{
   requested_summon_runtime_readback_observed = $RequestedSummonRuntimeReadbackObserved
   canonical_summon_runtime_readback = [bool]$UseCanonicalSummonRuntimeReadback
   canonical_summon_runtime_readback_observed = $CanonicalSummonRuntimeReadbackObserved
+  checkpoint_readback_reused = $CheckpointReadbackValid
+  checkpoint_readback = $CheckpointReadbackValidation
   child_proof_timeouts = [string[]]@($ChildProofTimeouts)
   child_proof_runs = @($ChildProofRuns)
   next_smallest_truthful_gap = $NextSmallestTruthfulGap
@@ -9907,6 +10118,8 @@ $Payload = [ordered]@{
     canonical_summon_runtime_readback = [bool]$UseCanonicalSummonRuntimeReadback
     canonical_summon_runtime_readback_observed = $CanonicalSummonRuntimeReadbackObserved
     checkpoint_readback = $true
+    checkpoint_readback_reused = $CheckpointReadbackValid
+    checkpoint_readback_integrity_checked = $CheckpointReadbackRequested
     child_proof_timeout_readback = $true
     stage6_completion_evidence_review_readback = $Stage6CompletionEvidenceReviewed
     stage6_completion_review_requirements_readback = $Stage6CompletionReviewed
