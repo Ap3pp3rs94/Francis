@@ -1681,9 +1681,13 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
 
 def test_lens_overlay_window_native_renderer_candidate_guard_matches_expected_executable() -> None:
     script_path = _repo_root() / "scripts" / "lens-overlay-window.ps1"
+    expected_executable = str(_repo_root() / "native" / "orb" / "build" / "native_orb_renderer.exe")
+    expected_executable_literal = "'" + expected_executable.replace("'", "''") + "'"
     probe = (
         "$scriptPath = "
         + json.dumps(str(script_path))
+        + "\n$expectedExecutable = "
+        + expected_executable_literal
         + r"""
 $tokens = $null
 $parseErrors = $null
@@ -1707,7 +1711,7 @@ function Get-CimInstance {
       ProcessId = 4321
       ParentProcessId = 1234
       ExecutablePath = ''
-      CommandLine = '"C:\Francis\native\orb\build\native_orb_renderer.exe" --run-seconds 0'
+      CommandLine = ('"{0}" --run-seconds 0' -f $expectedExecutable)
     }
     [pscustomobject]@{
       ProcessId = 8765
@@ -1721,7 +1725,7 @@ function Test-NativeOrbRendererProcess {
   param([int]$ProcessId)
   return $ProcessId -in @(4321, 8765)
 }
-@(Get-NativeOrbRendererProcessCandidates -ExecutablePath 'C:\Francis\native\orb\build\native_orb_renderer.exe') |
+@(Get-NativeOrbRendererProcessCandidates -ExecutablePath $expectedExecutable) |
   ConvertTo-Json -Compress
 """
     )
