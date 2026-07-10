@@ -3424,6 +3424,7 @@ def test_plugins_capability_catalog_readback(monkeypatch, tmp_path: Path) -> Non
     from francis.api.app import create_app
     from francis.api.routes import plugins as plugins_module
 
+    _isolate_generated_plugin_root(monkeypatch, plugins_module, tmp_path)
     client = TestClient(create_app())
 
     built = client.post(
@@ -3824,6 +3825,63 @@ def test_plugins_capability_pack_readbacks_cache_static_plans_and_sync_quality_p
     assert quality_body["projection_limits"]["artifact_scan_limit"] == 0
     assert quality_body["projection_limits"]["artifact_scan_limited"] is False
     assert quality_body["requirements"]["artifact_body_scan_is_limited_by_default"] is False
+
+
+def test_plugins_capability_catalog_readback_uses_cached_snapshot_without_writes(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
+    client = TestClient(create_app())
+    built = client.post(
+        "/plugins/build",
+        json={
+            "name": "Cached Capability Catalog Plugin",
+            "description": "Stage 17 cached catalog readback coverage",
+            "actor": _PLUGIN_ACTOR,
+            "meta": _forge_promotion_meta("cached_capability_catalog"),
+        },
+    )
+    assert built.status_code == 200
+    assert built.json()["ok"] is True
+
+    registry_path = plugins._registry_path()
+    catalog_path = plugins._runtime_catalog_path()
+    assert registry_path.exists()
+    assert catalog_path.exists()
+    catalog_path.touch()
+    registry_before = registry_path.read_bytes()
+    catalog_before = catalog_path.read_bytes()
+
+    def fail_generated_sync(*_args, **_kwargs):
+        raise AssertionError("catalog readback must not sync generated plugins")
+
+    def fail_catalog_write(*_args, **_kwargs):
+        raise AssertionError("catalog readback must not compile or write the runtime catalog")
+
+    monkeypatch.setattr(plugins, "_sync_generated_plugins", fail_generated_sync)
+    monkeypatch.setattr(plugins, "_compile_runtime_catalog", fail_catalog_write)
+
+    response = client.get("/plugins/capabilities/catalog?limit=1")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True, body
+    assert body["catalog"]["source"] == "cached_runtime_catalog"
+    assert body["catalog"]["cached_runtime_catalog_used"] is True
+    assert body["catalog"]["generated_plugin_sync_performed"] is False
+    assert body["catalog"]["catalog_written"] is False
+    assert body["stage17_closure_matrix"]["governance"]["read_only"] is True
+    assert registry_path.read_bytes() == registry_before
+    assert catalog_path.read_bytes() == catalog_before
 
 
 def test_plugins_capability_pack_migration_limit_requires_explicit_large_pack_budget() -> None:

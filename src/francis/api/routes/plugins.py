@@ -13819,9 +13819,11 @@ def list_plugin_capabilities(
         source_filter = _safe_str(source).strip().lower()
 
         registry = _load_registry()
-        synced = _sync_generated_plugins(registry)
-        catalog = _save_registry_and_catalog(registry) if synced else _compile_runtime_catalog(registry)
-        runtime_catalog = _read_runtime_catalog_payload(catalog)
+        # This GET route is closure readback, not a generated-plugin synchronizer.
+        # Reuse the current catalog snapshot or compile it in memory without writes.
+        catalog_snapshot = _capability_pack_readback_catalog_snapshot(registry)
+        runtime_catalog = catalog_snapshot["runtime_catalog"]
+        catalog = catalog_snapshot["catalog"]
         marketplace = marketplace_from_plugin_catalog(runtime_catalog)
         all_items = marketplace.catalog()
         filtered_items = marketplace.catalog(
@@ -13872,6 +13874,7 @@ def list_plugin_capabilities(
                 invocation_audit=invocation_audit,
             ),
             "catalog": {
+                **catalog,
                 "path": _safe_str(catalog.get("path")).strip(),
                 "version": int(runtime_catalog.get("version") or 0),
                 "total_plugins": int(runtime_catalog.get("total_plugins") or catalog.get("total_plugins") or 0),
@@ -13881,7 +13884,9 @@ def list_plugin_capabilities(
                 "tool_risk_class_counts": tool_risk_counts if isinstance(tool_risk_counts, dict) else {},
                 "approval_required_tool_count": int(runtime_catalog.get("approval_required_tool_count") or 0),
                 "forge_lineage_index": forge_lineage,
-                "rejected": catalog.get("rejected") if isinstance(catalog.get("rejected"), list) else [],
+                "rejected": runtime_catalog.get("rejected")
+                if isinstance(runtime_catalog.get("rejected"), list)
+                else [],
             },
         }
     except Exception as exc:
