@@ -10318,6 +10318,7 @@ def _stage17_closure_matrix(
     coherence: dict[str, Any],
     pack_readiness: dict[str, Any],
     catalog: dict[str, Any],
+    invocation_audit: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     pack_total = _count_value(pack_readiness.get("pack_total"))
     ready_pack_count = _count_value(pack_readiness.get("ready_pack_count"))
@@ -10329,6 +10330,12 @@ def _stage17_closure_matrix(
     validation_lineage_gap_count = _stage17_list_count(coherence, "validation_lineage_gaps")
     quality_gap_count = _stage17_list_count(coherence, "quality_gaps")
     pack_blockers = _stage17_pack_blocker_counts(pack_readiness)
+    audit = invocation_audit if isinstance(invocation_audit, dict) else {}
+    audit_readiness = audit.get("proof_readiness") if isinstance(audit.get("proof_readiness"), dict) else {}
+    reuse_proof = audit.get("reuse_proof") if isinstance(audit.get("reuse_proof"), dict) else {}
+    invocation_reuse_ready = _safe_str(audit.get("status")).strip() == "ready" and _to_bool(
+        audit_readiness.get("ready")
+    )
 
     criteria = [
         _stage17_closure_criterion(
@@ -10522,9 +10529,14 @@ def _stage17_closure_matrix(
         _stage17_closure_criterion(
             criterion_id="criterion_6_reuse_leverage",
             title="Reuse creates visible leverage across multiple real contexts.",
-            status="partial" if all_items else "blocked",
+            status=_stage17_status(
+                bool(all_items),
+                [] if invocation_reuse_ready else ["multi_context_reuse_receipts_not_proven_by_invocation_audit"],
+            ),
             blockers=(
-                ["multi_context_reuse_receipts_not_proven_by_catalog_readback"]
+                []
+                if all_items and invocation_reuse_ready
+                else ["multi_context_reuse_receipts_not_proven_by_invocation_audit"]
                 if all_items
                 else ["no_capability_catalog_entries"]
             ),
@@ -10544,10 +10556,35 @@ def _stage17_closure_matrix(
                         if _safe_str(item.get("status")).strip()
                     }
                 ),
-                "claim_boundary": "catalog evidence does not prove reuse across real operator contexts",
+                "invocation_audit_status": _safe_str(audit.get("status")).strip() or "not_observed",
+                "invocation_audit_total": _count_value(audit.get("total_invocation_count")),
+                "invocation_audit_contexts": _unique_texts(audit.get("contexts"), limit=20),
+                "proof_readiness_contract": _safe_str(audit_readiness.get("contract")).strip(),
+                "proof_readiness_status": _safe_str(audit_readiness.get("status")).strip() or "not_observed",
+                "proof_readiness_ready": invocation_reuse_ready,
+                "pack_reuse_keys": _unique_texts(audit_readiness.get("pack_reuse_keys"), limit=50),
+                "cross_context_reuse_proven": _to_bool(reuse_proof.get("cross_context_reuse_proven")),
+                "multi_mission_reuse_proven": _to_bool(reuse_proof.get("multi_mission_reuse_proven")),
+                "mission_shape_reuse_proven": _to_bool(reuse_proof.get("mission_shape_reuse_proven")),
+                "receipt_linked_mission_shape_reuse_proven": _to_bool(
+                    reuse_proof.get("receipt_linked_mission_shape_reuse_proven")
+                ),
+                "operation_readback_mission_shape_reuse_proven": _to_bool(
+                    reuse_proof.get("operation_readback_mission_shape_reuse_proven")
+                ),
+                "receipt_linked_selection_consistent_mission_shape_reuse_proven": _to_bool(
+                    reuse_proof.get("receipt_linked_selection_consistent_mission_shape_reuse_proven")
+                ),
+                "claim_boundary": (
+                    "invocation audit proves receipt-linked reuse across mission plugin and tool operation contexts"
+                    if invocation_reuse_ready
+                    else "catalog evidence does not prove reuse across real operator contexts"
+                ),
             },
-            routes=["/plugins/capabilities/catalog"],
-            next_step="stage17_reuse_leverage_receipts",
+            routes=["/plugins/capabilities/catalog", "/plugins/capabilities/library/invocations/audit"],
+            next_step=(
+                "stage17_completion_reconciliation" if invocation_reuse_ready else "stage17_reuse_leverage_receipts"
+            ),
         ),
     ]
 
@@ -10578,6 +10615,7 @@ def _stage17_closure_matrix(
             "catalog_route": "/plugins/capabilities/catalog",
             "coherence_field": "coherence",
             "pack_readiness_field": "pack_readiness",
+            "invocation_audit_route": "/plugins/capabilities/library/invocations/audit",
         },
     }
 
@@ -13784,6 +13822,14 @@ def list_plugin_capabilities(
         tool_risk_counts = runtime_catalog.get("tool_risk_class_counts")
         coherence = analyze_capability_catalog_coherence(all_items)
         pack_readiness = analyze_capability_pack_readiness(all_items)
+        invocation_audit = _capability_pack_invocation_audit_projection(
+            pack_id="",
+            pack_version="",
+            plugin_id="",
+            capability_id="",
+            limit=200,
+            scan_limit=5000,
+        )
 
         return {
             "ok": True,
@@ -13805,6 +13851,7 @@ def list_plugin_capabilities(
                 coherence=coherence,
                 pack_readiness=pack_readiness,
                 catalog=catalog,
+                invocation_audit=invocation_audit,
             ),
             "catalog": {
                 "path": _safe_str(catalog.get("path")).strip(),

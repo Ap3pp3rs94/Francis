@@ -3422,6 +3422,7 @@ def test_plugins_capability_catalog_readback(monkeypatch, tmp_path: Path) -> Non
     from fastapi.testclient import TestClient
 
     from francis.api.app import create_app
+    from francis.api.routes import plugins as plugins_module
 
     client = TestClient(create_app())
 
@@ -3493,6 +3494,45 @@ def test_plugins_capability_catalog_readback(monkeypatch, tmp_path: Path) -> Non
     assert reuse_leverage["evidence"]["claim_boundary"] == (
         "catalog evidence does not prove reuse across real operator contexts"
     )
+    assert reuse_leverage["status"] == "partial"
+    assert reuse_leverage["routes"] == [
+        "/plugins/capabilities/catalog",
+        "/plugins/capabilities/library/invocations/audit",
+    ]
+    assert closure["source_readbacks"]["invocation_audit_route"] == ("/plugins/capabilities/library/invocations/audit")
+
+    monkeypatch.setattr(
+        plugins_module,
+        "_capability_pack_invocation_audit_projection",
+        lambda **_: {
+            "status": "ready",
+            "total_invocation_count": 2,
+            "contexts": ["mission_linked_operation", "mission_linked_tool_operation"],
+            "proof_readiness": {
+                "contract": "stage17_capability_pack_governed_invocation_proof_readiness_v1",
+                "status": "reuse_proof_ready",
+                "ready": True,
+                "pack_reuse_keys": ["ops.stage17@1.0.0:capability_catalog.run"],
+            },
+            "reuse_proof": {
+                "cross_context_reuse_proven": True,
+                "multi_mission_reuse_proven": True,
+                "mission_shape_reuse_proven": True,
+                "receipt_linked_mission_shape_reuse_proven": True,
+                "operation_readback_mission_shape_reuse_proven": True,
+                "receipt_linked_selection_consistent_mission_shape_reuse_proven": True,
+            },
+        },
+    )
+    ready_catalog = client.get("/plugins/capabilities/catalog?limit=1")
+    assert ready_catalog.status_code == 200
+    ready_criteria = {str(item["id"]): item for item in ready_catalog.json()["stage17_closure_matrix"]["criteria"]}
+    ready_reuse = ready_criteria["criterion_6_reuse_leverage"]
+    assert ready_reuse["status"] == "ready"
+    assert ready_reuse["blockers"] == []
+    assert ready_reuse["evidence"]["proof_readiness_ready"] is True
+    assert ready_reuse["evidence"]["receipt_linked_selection_consistent_mission_shape_reuse_proven"] is True
+    assert ready_reuse["next_step"] == "stage17_completion_reconciliation"
     assert not any(gap["capability"] == plugin_id for gap in body["coherence"]["lineage_gaps"])
     assert not any(gap["capability"] == plugin_id for gap in body["coherence"]["validation_lineage_gaps"])
 
