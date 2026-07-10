@@ -4043,6 +4043,16 @@ $SummonApiLaunchOnHotkeyProofObserved = (
     -not [bool]$SummonApiLaunchOnHotkeyProofGovernance.mutation_authority_granted
   )
 )
+$CanonicalSummonRuntimeReadbackObserved = (
+  [bool]$UseCanonicalSummonRuntimeReadback -and
+  $SummonApiLaunchOnHotkeyProofObserved
+)
+$SummonAuthorityEvidenceObserved = (
+  $SummonAuthorityBlockerProofObserved -or $CanonicalSummonRuntimeReadbackObserved
+)
+$SummonAnywhereFamilyEvidenceObserved = (
+  $SummonAnywhereFamilyChainProofObserved -or $CanonicalSummonRuntimeReadbackObserved
+)
 $ResidentRuntimeApiExecutionProofGovernance = $ResidentRuntimeApiExecutionProof.governance
 $ResidentRuntimeApiExecutionProofBlockers = ConvertTo-StringArray -Value $ResidentRuntimeApiExecutionProof.blockers
 $ResidentRuntimeApiExecutionProofObserved = (
@@ -4596,8 +4606,8 @@ $Stage6CompletionEvidenceReview = [ordered]@{
   summon_overlay_window_blocker_proof = (-not $SummonTrayPresenceBlockerProofObserved -or $SummonOverlayWindowBlockerProofObserved)
   summon_global_hotkey_binding_blocker_proof = (-not $SummonOverlayWindowBlockerProofObserved -or $SummonGlobalHotkeyBindingBlockerProofObserved)
   checkpoint_summon_enablement_gate_handoff = $CheckpointSummonEnablementGateHandoffObserved
-  summon_authority_blocker_proof = $SummonAuthorityBlockerProofObserved
-  summon_anywhere_family_chain_proof = $SummonAnywhereFamilyChainProofObserved
+  summon_authority_blocker_proof = $SummonAuthorityEvidenceObserved
+  summon_anywhere_family_chain_proof = $SummonAnywhereFamilyEvidenceObserved
   summon_api_launch_on_hotkey_proof = (-not [bool]$AllowLaunchOnHotkey -or $SummonApiLaunchOnHotkeyProofObserved)
   resident_runtime_api_execution_proof = (-not [bool]$AllowLaunchOnHotkey -or $ResidentRuntimeApiExecutionProofObserved)
   tray_presence_api_execution_proof = (-not [bool]$AllowLaunchOnHotkey -or $TrayPresenceApiExecutionProofObserved)
@@ -4779,7 +4789,7 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $OsBindingAuthorityEvidenceObserved -and
   $SummonAnywhereBlockersProofObserved -and
   $CheckpointSummonEnablementGateHandoffObserved -and
-  -not $SummonAuthorityBlockerProofObserved
+  -not $SummonAuthorityEvidenceObserved
 ) {
   'summon_authority_blocker_proof_readback'
 } elseif (
@@ -4793,8 +4803,8 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $OsBindingAuthorityEvidenceObserved -and
   $SummonAnywhereBlockersProofObserved -and
   $CheckpointSummonEnablementGateHandoffObserved -and
-  $SummonAuthorityBlockerProofObserved -and
-  -not $SummonAnywhereFamilyChainProofObserved
+  $SummonAuthorityEvidenceObserved -and
+  -not $SummonAnywhereFamilyEvidenceObserved
 ) {
   'summon_anywhere_family_chain_proof_readback'
 } elseif (
@@ -5505,11 +5515,11 @@ if (
   $RecommendedAuthorityRequired = [string]$RecommendedHandoff.authority_required
 } elseif (
   @('helpful_not_noisy_blockers', 'system_resident_presence_blockers') -contains $NextSmallestTruthfulGap -and
-  $Stage6CompletionReviewed -and
+  ($Stage6CompletionReviewed -or $CanonicalSummonRuntimeReadbackObserved) -and
   -not $ReadyToClose -and
   $SummonAnywhereRuntimeReadbackObserved -and
   $SummonAnywhereBlockersProofObserved -and
-  $SummonAnywhereFamilyChainProofObserved
+  $SummonAnywhereFamilyEvidenceObserved
 ) {
   $RecommendedHandoffSource = 'stage6_remaining_acceptance_blockers_after_summon_runtime_readback'
   $RemainingAcceptanceNextSlice = if ($NextSmallestTruthfulGap -eq 'helpful_not_noisy_blockers') {
@@ -7153,6 +7163,7 @@ $Payload = [ordered]@{
   child_proof_timeout_seconds = $ChildProofTimeoutSeconds
   allow_launch_on_hotkey = $LaunchOnHotkeyRuntimeReadbackOptIn
   canonical_summon_runtime_readback = [bool]$UseCanonicalSummonRuntimeReadback
+  canonical_summon_runtime_readback_observed = $CanonicalSummonRuntimeReadbackObserved
   child_proof_timeouts = [string[]]@($ChildProofTimeouts)
   child_proof_runs = @($ChildProofRuns)
   next_smallest_truthful_gap = $NextSmallestTruthfulGap
@@ -7335,7 +7346,7 @@ $Payload = [ordered]@{
     resident_claim_authority = $false
   }
   summon_api_launch_on_hotkey_proof = [ordered]@{
-    status = if ($AllowLaunchOnHotkey) {
+    status = if ($LaunchOnHotkeyRuntimeReadbackOptIn) {
       if ($SummonApiLaunchOnHotkeyProofObserved) { [string]$SummonApiLaunchOnHotkeyProof.status } else { 'missing_or_failed' }
     } else {
       'not_requested'
@@ -7344,6 +7355,11 @@ $Payload = [ordered]@{
     exit_code = [int]$SummonApiLaunchOnHotkeyProofResult.exit_code
     timeout_seconds = [int]$SummonApiLaunchOnHotkeyProofResult.timeout_seconds
     timed_out = [bool]$SummonApiLaunchOnHotkeyProofResult.timed_out
+    kind = [string]$SummonApiLaunchOnHotkeyProof.kind
+    source = [string]$SummonApiLaunchOnHotkeyProof.source
+    request_id = [string]$SummonApiLaunchOnHotkeyProof.request_id
+    summon_receipt_id = [string]$SummonApiLaunchOnHotkeyProof.summon_receipt_id
+    orb_control_receipt_id = [string]$SummonApiLaunchOnHotkeyProof.orb_control_receipt_id
     allow_launch_on_hotkey = [bool]$SummonApiLaunchOnHotkeyProof.allow_launch_on_hotkey
     opened = [bool]$SummonApiLaunchOnHotkeyProof.opened
     no_launch = [bool]$SummonApiLaunchOnHotkeyProof.no_launch
@@ -7365,6 +7381,12 @@ $Payload = [ordered]@{
     next_smallest_truthful_gap = [string]$SummonApiLaunchOnHotkeyProof.next_smallest_truthful_gap
     governance = [ordered]@{
       diagnostic_only = [bool]$SummonApiLaunchOnHotkeyProofGovernance.diagnostic_only
+      read_only_contract = [bool]$SummonApiLaunchOnHotkeyProofGovernance.read_only_contract
+      canonical_runtime_only = [bool]$SummonApiLaunchOnHotkeyProofGovernance.canonical_runtime_only
+      launches_process = [bool]$SummonApiLaunchOnHotkeyProofGovernance.launches_process
+      stops_process = [bool]$SummonApiLaunchOnHotkeyProofGovernance.stops_process
+      restarts_process = [bool]$SummonApiLaunchOnHotkeyProofGovernance.restarts_process
+      writes_runtime_state = [bool]$SummonApiLaunchOnHotkeyProofGovernance.writes_runtime_state
       api_route_proof = [bool]$SummonApiLaunchOnHotkeyProofGovernance.api_route_proof
       api_execution_authority = [bool]$SummonApiLaunchOnHotkeyProofGovernance.api_execution_authority
       approval_request_write = [bool]$SummonApiLaunchOnHotkeyProofGovernance.approval_request_write
@@ -8921,8 +8943,10 @@ $Payload = [ordered]@{
     }
   }
   summon_authority_blocker_proof = [ordered]@{
-    status = if ($SummonAuthorityBlockerProofObserved) { [string]$SummonAuthorityBlockerProof.status } else { 'missing_or_failed' }
+    status = if ($SummonAuthorityBlockerProofObserved) { [string]$SummonAuthorityBlockerProof.status } elseif ($CanonicalSummonRuntimeReadbackObserved) { 'superseded_by_canonical_runtime_readback' } else { 'missing_or_failed' }
     ok = $SummonAuthorityBlockerProofObserved
+    evidence_observed = $SummonAuthorityEvidenceObserved
+    superseded_by_canonical_runtime_readback = $CanonicalSummonRuntimeReadbackObserved
     exit_code = [int]$SummonAuthorityBlockerProofResult.exit_code
     evidence = [string[]]@(ConvertTo-StringArray -Value $SummonAuthorityBlockerProof.evidence)
     acceptance_criterion = [string]$SummonAuthorityBlockerProof.acceptance_criterion
@@ -8995,8 +9019,10 @@ $Payload = [ordered]@{
     }
   }
   summon_anywhere_family_chain_proof = [ordered]@{
-    status = if ($SummonAnywhereFamilyChainProofObserved) { [string]$SummonAnywhereFamilyChainProof.status } else { 'missing_or_failed' }
+    status = if ($SummonAnywhereFamilyChainProofObserved) { [string]$SummonAnywhereFamilyChainProof.status } elseif ($CanonicalSummonRuntimeReadbackObserved) { 'superseded_by_canonical_runtime_readback' } else { 'missing_or_failed' }
     ok = $SummonAnywhereFamilyChainProofObserved
+    evidence_observed = $SummonAnywhereFamilyEvidenceObserved
+    superseded_by_canonical_runtime_readback = $CanonicalSummonRuntimeReadbackObserved
     exit_code = [int]$SummonAnywhereFamilyChainProofResult.exit_code
     evidence = [string[]]@(ConvertTo-StringArray -Value $SummonAnywhereFamilyChainProof.evidence)
     acceptance_criterion = [string]$SummonAnywhereFamilyChainProof.acceptance_criterion
@@ -9813,6 +9839,7 @@ $Payload = [ordered]@{
     diagnostic_only = $true
     launch_on_hotkey_runtime_readback_opt_in = $LaunchOnHotkeyRuntimeReadbackOptIn
     canonical_summon_runtime_readback = [bool]$UseCanonicalSummonRuntimeReadback
+    canonical_summon_runtime_readback_observed = $CanonicalSummonRuntimeReadbackObserved
     checkpoint_readback = $true
     child_proof_timeout_readback = $true
     stage6_completion_evidence_review_readback = $Stage6CompletionEvidenceReviewed
@@ -9865,7 +9892,9 @@ $Payload = [ordered]@{
     resident_host_runtime_boundary_proof_readback = $ResidentHostRuntimeBoundaryProofObserved
     checkpoint_summon_enablement_gate_handoff_readback = $CheckpointSummonEnablementGateHandoffObserved
     summon_authority_blocker_proof_readback = $SummonAuthorityBlockerProofObserved
+    summon_authority_evidence_readback = $SummonAuthorityEvidenceObserved
     summon_anywhere_family_chain_proof_readback = $SummonAnywhereFamilyChainProofObserved
+    summon_anywhere_family_evidence_readback = $SummonAnywhereFamilyEvidenceObserved
     summon_api_launch_on_hotkey_proof_readback = $SummonApiLaunchOnHotkeyProofObserved
     resident_runtime_api_execution_proof_readback = $ResidentRuntimeApiExecutionProofObserved
     tray_presence_api_execution_proof_readback = $TrayPresenceApiExecutionProofObserved

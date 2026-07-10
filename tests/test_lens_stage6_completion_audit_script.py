@@ -1714,6 +1714,13 @@ def test_lens_stage6_completion_audit_can_consume_canonical_summon_without_launc
     assert "-not [bool]$SummonApiLaunchOnHotkeyProofGovernance.stops_process" in script
     assert "-not [bool]$SummonApiLaunchOnHotkeyProofGovernance.restarts_process" in script
     assert "canonical_summon_runtime_readback = [bool]$UseCanonicalSummonRuntimeReadback" in script
+    assert "$CanonicalSummonRuntimeReadbackObserved = (" in script
+    assert "$SummonAuthorityEvidenceObserved = (" in script
+    assert "$SummonAnywhereFamilyEvidenceObserved = (" in script
+    assert "summon_authority_blocker_proof = $SummonAuthorityEvidenceObserved" in script
+    assert "summon_anywhere_family_chain_proof = $SummonAnywhereFamilyEvidenceObserved" in script
+    assert "superseded_by_canonical_runtime_readback = $CanonicalSummonRuntimeReadbackObserved" in script
+    assert "($Stage6CompletionReviewed -or $CanonicalSummonRuntimeReadbackObserved) -and" in script
     assert (
         "$ChildProofRuns += New-ChildProofRunSummary -Name 'canonical_summon_runtime_readback' "
         "-Result $SummonApiLaunchOnHotkeyProofResult" in script
