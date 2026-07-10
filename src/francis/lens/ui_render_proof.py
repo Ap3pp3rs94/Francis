@@ -256,8 +256,16 @@ def validate_lens_ui_render_proof(
     runtime = _as_dict(payload.get("canonical_runtime"))
     if runtime.get("status") != "ready":
         blockers.append("canonical_runtime_not_ready")
-    if runtime.get("process_scan_status") != "single_canonical_runtime":
+    process_scan_status = str(runtime.get("process_scan_status") or "")
+    process_scan_candidate_count = _safe_int(runtime.get("process_scan_candidate_count"))
+    if runtime.get("process_scan_checked") is not True:
+        blockers.append("canonical_runtime_process_scan_not_checked")
+    if process_scan_status not in {"none_observed", "single_canonical_runtime"}:
         blockers.append("canonical_runtime_not_single")
+    elif process_scan_status == "none_observed" and process_scan_candidate_count != 0:
+        blockers.append("canonical_runtime_process_scan_count_mismatch")
+    elif process_scan_status == "single_canonical_runtime" and process_scan_candidate_count <= 0:
+        blockers.append("canonical_runtime_process_scan_count_mismatch")
     if _safe_int(runtime.get("competing_count")) != 0:
         blockers.append("canonical_runtime_competitors_present")
     if _safe_int(runtime.get("renderer_process_count")) != 1:

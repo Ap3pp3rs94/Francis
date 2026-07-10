@@ -106,7 +106,9 @@ def _valid_proof(root: Path, *, created_at: datetime) -> tuple[Path, dict[str, o
         },
         "canonical_runtime": {
             "status": "ready",
-            "process_scan_status": "single_canonical_runtime",
+            "process_scan_status": "none_observed",
+            "process_scan_checked": True,
+            "process_scan_candidate_count": 0,
             "competing_count": 0,
             "renderer_process_count": 1,
             "overlay_pid": 101,
@@ -177,3 +179,22 @@ def test_lens_ui_render_proof_rejects_stale_authority_and_hash_drift(tmp_path: P
     assert "ui_render_proof_head_mismatch" in result["blockers"]
     assert "lens_ui_authority_drift" in result["blockers"]
     assert "lens_screenshot_hash_mismatch" in result["blockers"]
+
+
+def test_lens_ui_render_proof_rejects_unchecked_process_scan(tmp_path: Path) -> None:
+    now = datetime.now(UTC)
+    proof_path, proof = _valid_proof(tmp_path, created_at=now - timedelta(seconds=5))
+    runtime = proof["canonical_runtime"]
+    assert isinstance(runtime, dict)
+    runtime["process_scan_checked"] = False
+    proof_path.write_text(json.dumps(proof), encoding="utf-8")
+
+    result = validate_lens_ui_render_proof(
+        proof_path,
+        repo_root=tmp_path,
+        expected_repo_head="abc123",
+        now=now,
+    )
+
+    assert result["ok"] is False
+    assert "canonical_runtime_process_scan_not_checked" in result["blockers"]
