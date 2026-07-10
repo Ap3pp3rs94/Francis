@@ -55,10 +55,13 @@ operator product surface:
 - `P7_EXECUTION`: partial
 - `P8_MEMORY`: partial
 
-Current active workstream: Telemetry MVP / Stage 7 contextual sensing.
-Stage 6 Lens MVP is ledger-closed against its five canonical acceptance criteria.
-The current goal is ordered as terminal, git, and IDE context connectors, followed
-by redaction, visible sensing indicators, and a Stage 7 acceptance audit.
+Current active workstream: Capability Economy / Stage 17 closure reconciliation.
+The current goal is ordered as final-head CI and wiring trust, current Stage 17
+route/readback reconciliation, then the FR-017 operator/physical evidence
+boundary and final closure decision.
+
+Stage 6 Lens MVP is ledger-closed against its five canonical acceptance criteria,
+and Stages 7 through 16 retain their existing receipt-backed closures.
 
 Older phase-history prose was moved to
 `docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md` so the
@@ -119,9 +122,10 @@ Current posture: Phase 2 continues, but Stage 6 Lens MVP is now ledger-closed
 against the five done criteria in `docs/canonical/ROADMAP.md`. The exact-head
 completion audit, canonical live runtime, rendered Lens/Chat surfaces, fresh
 hotkey summon, and one-visible-loop effect proof agree at code commit
-`c40cf6b965b4a262b45484a53d351b2f45e609e0`. Stage 7 Telemetry MVP is the next
-ordered roadmap workstream. This does not complete Phase 2 or Francis, close
-Stage 17, claim physical validation, or clear FR-018.
+`c40cf6b965b4a262b45484a53d351b2f45e609e0`. Archived closure receipts remain
+authoritative for Stages 7 through 16, making Stage 17 Capability Economy the
+next open dependency. This does not complete Phase 2 or Francis, close Stage 17,
+claim physical validation, or clear FR-018.
 
 What changed:
 
@@ -174,12 +178,15 @@ Evidence:
   passed for the five bounded code slices from `4d8141b9` through `c40cf6b9`.
   CodeQL for `c40cf6b9` passed; the full GitHub CI matrix was still running its
   pytest jobs when this evidence was recorded.
+- Existing stage-local closures remain receipt-backed from Stage 7 receipt
+  `tel_stage7_closure_e4c216a895a6` through Stage 16 receipt
+  `fedstage16close_f6c91d005446`; this Stage 6 closure does not reopen them.
 
 Remaining blockers:
 
-- Stage 7 still requires truthful terminal, git, and IDE telemetry connectors,
-  redaction, visible sensing indicators, and acceptance evidence. Existing
-  observability strength is not itself a Stage 7 completion claim.
+- Stage 17 remains open pending final-head CI/wiring trust, current capability
+  route/readback reconciliation, the FR-017 operator/physical evidence chain,
+  and a final governed closure decision. Stage 18 does not start before that.
 - The full local `scripts/check.ps1` gate was not run for this live acceptance
   slice; final remote CI remains the broad gate.
 - Later roadmap stages, Stage 17 physical validation, and FR-018 remain open.

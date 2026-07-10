@@ -57,10 +57,10 @@ def test_francis_completion_model_status_projects_ledger_backed_loop_guard() -> 
     assert payload["stage17_status"]["grants_mutation_authority"] is False
     assert payload["active_workstream"] == {
         "found": True,
-        "workstream": "Telemetry MVP / Stage 7 contextual sensing.",
+        "workstream": "Capability Economy / Stage 17 closure reconciliation.",
         "current_goal": (
-            "terminal, git, and IDE context connectors, followed by redaction, visible sensing "
-            "indicators, and a Stage 7 acceptance audit."
+            "final-head CI and wiring trust, current Stage 17 route/readback reconciliation, "
+            "then the FR-017 operator/physical evidence boundary and final closure decision."
         ),
         "read_only_contract": True,
         "writes_repo": False,
