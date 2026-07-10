@@ -59,6 +59,22 @@ def test_one_visible_loop_proof_exercises_confirmed_effect_with_fixture_safe_tar
     script = _script_text()
 
     assert "UseFixtureSafeTarget" in script
+    assert "UseLiveSafeTarget" in script
+    assert "LiveSafeTargetApprovalId" in script
+    assert "ConfirmLiveSafeTargetAction" in script
+    assert 'LIVE_SAFE_TARGET_ACTION = "lens.orb_desktop_bridge.live_safe_target"' in script
+    assert "live_safe_target_approval_invalid_or_expired" in script
+    assert '"delegated_operator_approval": approval.get("decision_kind") == "delegated_operator_approval"' in script
+    assert "_start_live_safe_target" in script
+    assert "_find_live_safe_target" in script
+    assert 'os.environ["FRANCIS_ORB_DESKTOP_BRIDGE_ENABLE"] = "1"' in script
+    assert 'os.environ["FRANCIS_ORB_OPERATOR_STATE_DIR"] = str(_repo_root() / ".francis" / "orb_operator")' in script
+    assert '"kind": "mouse.move"' in script
+    assert '"kind": "keyboard.type"' in script
+    assert '"proof_mode": "live_operator_approved_safe_target"' in script
+    assert '"safe_target_process_stopped"' in script
+    assert '"physical_input_performed": False' in script
+    assert '"uses_user_os_cursor": False' in script
     assert "Francis One Visible Loop Safe Target" in script
     assert 'os.environ["FRANCIS_ORB_DESKTOP_BRIDGE_ENABLE"] = "1"' in script
     assert '"mode": "orb_pointer"' in script

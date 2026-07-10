@@ -8,7 +8,13 @@ param(
 
   [switch]$OperatorApprovedFixtureAction,
 
-  [switch]$OperatorApprovedSummonDecision
+  [switch]$OperatorApprovedSummonDecision,
+
+  [switch]$UseLiveSafeTarget,
+
+  [string]$LiveSafeTargetApprovalId = '',
+
+  [switch]$ConfirmLiveSafeTargetAction
 )
 
 Set-StrictMode -Version Latest
@@ -37,20 +43,31 @@ $env:FRANCIS_ONE_VISIBLE_LOOP_PROOF_PATH = $ProofPath
 $env:FRANCIS_ONE_VISIBLE_LOOP_USE_FIXTURE_SAFE_TARGET = if ($UseFixtureSafeTarget) { '1' } else { '0' }
 $env:FRANCIS_ONE_VISIBLE_LOOP_OPERATOR_APPROVED_FIXTURE_ACTION = if ($OperatorApprovedFixtureAction) { '1' } else { '0' }
 $env:FRANCIS_ONE_VISIBLE_LOOP_OPERATOR_APPROVED_SUMMON = if ($OperatorApprovedSummonDecision) { '1' } else { '0' }
+$env:FRANCIS_ONE_VISIBLE_LOOP_USE_LIVE_SAFE_TARGET = if ($UseLiveSafeTarget) { '1' } else { '0' }
+$env:FRANCIS_ONE_VISIBLE_LOOP_LIVE_SAFE_TARGET_APPROVAL_ID = $LiveSafeTargetApprovalId
+$env:FRANCIS_ONE_VISIBLE_LOOP_CONFIRM_LIVE_SAFE_TARGET_ACTION = if ($ConfirmLiveSafeTargetAction) { '1' } else { '0' }
 $env:FRANCIS_ONE_VISIBLE_LOOP_STATE_ROOT = Join-Path $RepoRoot (".francis\one-visible-loop\{0}" -f $Stamp)
 
 $PythonSource = @'
 from __future__ import annotations
 
+import base64
 import json
 import os
+import shutil
 import subprocess
 import sys
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from francis.input_actuator.orb_operator import submit_orb_intent
+
+
+LIVE_SAFE_TARGET_ACTION = "lens.orb_desktop_bridge.live_safe_target"
+LIVE_SAFE_TARGET_ID = "francis.one_visible_loop.live_safe_target"
+LIVE_SAFE_TARGET_TITLE = "Francis One Visible Loop Live Safe Target"
 
 
 def _repo_root() -> Path:
@@ -194,6 +211,257 @@ class _FakeWin32Gui:
         return True
 
 
+def _live_safe_target_approval() -> dict[str, Any]:
+    approval_id = os.getenv("FRANCIS_ONE_VISIBLE_LOOP_LIVE_SAFE_TARGET_APPROVAL_ID", "").strip()
+    confirmed = os.getenv("FRANCIS_ONE_VISIBLE_LOOP_CONFIRM_LIVE_SAFE_TARGET_ACTION") == "1"
+    if not confirmed:
+        return {
+            "ok": False,
+            "status": "blocked",
+            "blocker": "live_safe_target_confirmation_required",
+            "approval_id": approval_id,
+        }
+    if not approval_id:
+        return {
+            "ok": False,
+            "status": "blocked",
+            "blocker": "live_safe_target_approval_id_required",
+            "approval_id": "",
+        }
+
+    approval_path = _repo_root() / "data" / "approvals" / "approved" / f"{approval_id}.json"
+    approval = _read_json(approval_path)
+    payload = approval.get("payload") if isinstance(approval.get("payload"), dict) else {}
+    expires_at = float(payload.get("expires_at", 0) or 0)
+    checks = {
+        "approval_record": bool(approval),
+        "approved": approval.get("status") == "approved",
+        "action": approval.get("action") == LIVE_SAFE_TARGET_ACTION,
+        "decision_actor": str(approval.get("decision_actor") or "") == "codex.builder",
+        "delegated_operator_approval": approval.get("decision_kind") == "delegated_operator_approval",
+        "safe_target_id": payload.get("safe_target_id") == LIVE_SAFE_TARGET_ID,
+        "target_title": payload.get("target_title") == LIVE_SAFE_TARGET_TITLE,
+        "backend": payload.get("backend") == "win32_post_message",
+        "input_kind": payload.get("input_kind") == "keyboard.type",
+        "no_physical_input": payload.get("physical_input_performed") is False,
+        "no_user_cursor": payload.get("uses_user_os_cursor") is False,
+        "not_expired": expires_at > time.time(),
+    }
+    return {
+        "ok": all(checks.values()),
+        "status": "approved" if all(checks.values()) else "blocked",
+        "blocker": "" if all(checks.values()) else "live_safe_target_approval_invalid_or_expired",
+        "approval_id": approval_id,
+        "approval_path": str(approval_path),
+        "decision_kind": str(approval.get("decision_kind") or ""),
+        "delegation_id": str(approval.get("delegation_id") or ""),
+        "expires_at": expires_at,
+        "checks": checks,
+    }
+
+
+def _live_safe_target_window_script() -> str:
+    return r'''
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+$form = New-Object System.Windows.Forms.Form
+$form.Text = 'Francis One Visible Loop Live Safe Target'
+$form.Name = 'FrancisOneVisibleLoopLiveSafeTarget'
+$form.StartPosition = 'Manual'
+$form.Location = New-Object System.Drawing.Point(80, 80)
+$form.Size = New-Object System.Drawing.Size(520, 240)
+$form.TopMost = $true
+$form.ShowInTaskbar = $true
+$text = New-Object System.Windows.Forms.TextBox
+$text.Name = 'FrancisLiveSafeTargetText'
+$text.Multiline = $true
+$text.Location = New-Object System.Drawing.Point(24, 48)
+$text.Size = New-Object System.Drawing.Size(450, 110)
+$text.Text = 'ready'
+$form.Controls.Add($text)
+$form.Add_Shown({ $form.Activate(); $text.Focus() })
+[void]$form.ShowDialog()
+'''
+
+
+def _start_live_safe_target() -> subprocess.Popen[bytes]:
+    powershell = shutil.which("powershell.exe") or shutil.which("powershell")
+    if not powershell:
+        raise RuntimeError("Windows PowerShell is required for the live safe-target proof")
+    encoded = base64.b64encode(_live_safe_target_window_script().encode("utf-16le")).decode("ascii")
+    return subprocess.Popen(
+        [powershell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Sta", "-EncodedCommand", encoded],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
+def _find_live_safe_target(process_id: int) -> dict[str, int]:
+    try:
+        import win32gui  # type: ignore[import-not-found]
+        import win32process  # type: ignore[import-not-found]
+    except ImportError as exc:
+        raise RuntimeError("pywin32 is required for the live safe-target proof") from exc
+
+    deadline = time.monotonic() + 10.0
+    while time.monotonic() < deadline:
+        matches: list[int] = []
+
+        def collect(hwnd: int, _extra: object) -> None:
+            if not win32gui.IsWindowVisible(hwnd):
+                return
+            if str(win32gui.GetWindowText(hwnd)).strip() != LIVE_SAFE_TARGET_TITLE:
+                return
+            _, owner_pid = win32process.GetWindowThreadProcessId(hwnd)
+            if int(owner_pid) == process_id:
+                matches.append(hwnd)
+
+        win32gui.EnumWindows(collect, None)
+        if matches:
+            top_level = matches[0]
+            edit_controls: list[int] = []
+
+            def collect_child(hwnd: int, _extra: object) -> None:
+                if str(win32gui.GetClassName(hwnd)).strip().casefold() == "edit":
+                    edit_controls.append(hwnd)
+
+            win32gui.EnumChildWindows(top_level, collect_child, None)
+            if edit_controls:
+                child = edit_controls[0]
+                left, top, right, bottom = (int(value) for value in win32gui.GetWindowRect(child))
+                return {
+                    "top_level_hwnd": int(top_level),
+                    "child_hwnd": int(child),
+                    "x": int((left + right) / 2),
+                    "y": int((top + bottom) / 2),
+                }
+        time.sleep(0.05)
+    raise RuntimeError("live safe-target window did not become ready")
+
+
+def _current_orb_position() -> tuple[int, int]:
+    operator_state = _read_json(_repo_root() / ".francis" / "orb_operator" / "virtual_pointer_state.json")
+    if operator_state.get("x") is not None and operator_state.get("y") is not None:
+        return int(operator_state["x"]), int(operator_state["y"])
+    renderer = _read_json(_repo_root() / "data" / "runtime" / "native-orb-renderer" / "status.json")
+    return int(renderer.get("center_x") or 1700), int(renderer.get("center_y") or 900)
+
+
+def _live_safe_target_action_proof() -> dict[str, Any]:
+    if os.name != "nt":
+        return {"status": "blocked", "blocker": "live_safe_target_windows_only"}
+    approval = _live_safe_target_approval()
+    if not approval.get("ok"):
+        return {
+            "status": "blocked",
+            "blocker": approval.get("blocker", "live_safe_target_approval_required"),
+            "approval": approval,
+        }
+
+    target_process: subprocess.Popen[bytes] | None = None
+    approach: dict[str, Any] = {}
+    action: dict[str, Any] = {}
+    handback: dict[str, Any] = {}
+    previous_bridge_enable = os.environ.get("FRANCIS_ORB_DESKTOP_BRIDGE_ENABLE")
+    previous_state_dir = os.environ.get("FRANCIS_ORB_OPERATOR_STATE_DIR")
+    original_x, original_y = _current_orb_position()
+    try:
+        target_process = _start_live_safe_target()
+        target = _find_live_safe_target(target_process.pid)
+        os.environ["FRANCIS_ORB_DESKTOP_BRIDGE_ENABLE"] = "1"
+        os.environ["FRANCIS_ORB_OPERATOR_STATE_DIR"] = str(_repo_root() / ".francis" / "orb_operator")
+        shared = {
+            "mode": "orb_pointer",
+            "actor": "codex.builder",
+            "session_id": f"one-visible-loop-live-{approval['approval_id']}",
+        }
+        approach = submit_orb_intent(
+            {
+                **shared,
+                "objective": "Approach the approved Stage 6 live safe target with the Orb virtual pointer",
+                "intent": {"kind": "mouse.move", "x": target["x"], "y": target["y"]},
+            }
+        )
+        time.sleep(0.6)
+        action = submit_orb_intent(
+            {
+                **shared,
+                "objective": "Prove a bounded observable window-message effect on the approved Stage 6 safe target",
+                "intent": {"kind": "keyboard.type", "text": " Francis live safe-target effect confirmed"},
+            }
+        )
+        time.sleep(0.25)
+        handback = submit_orb_intent(
+            {
+                **shared,
+                "objective": "Return the Orb virtual pointer after the approved Stage 6 safe-target proof",
+                "intent": {"kind": "mouse.move", "x": original_x, "y": original_y},
+            }
+        )
+        time.sleep(0.6)
+    except Exception as exc:
+        return {
+            "status": "blocked",
+            "blocker": "live_safe_target_execution_failed",
+            "error": type(exc).__name__,
+            "approval": approval,
+        }
+    finally:
+        if previous_bridge_enable is None:
+            os.environ.pop("FRANCIS_ORB_DESKTOP_BRIDGE_ENABLE", None)
+        else:
+            os.environ["FRANCIS_ORB_DESKTOP_BRIDGE_ENABLE"] = previous_bridge_enable
+        if previous_state_dir is None:
+            os.environ.pop("FRANCIS_ORB_OPERATOR_STATE_DIR", None)
+        else:
+            os.environ["FRANCIS_ORB_OPERATOR_STATE_DIR"] = previous_state_dir
+        if target_process is not None:
+            target_process.terminate()
+            try:
+                target_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                target_process.kill()
+                target_process.wait(timeout=5)
+
+    backend = action.get("backend") if isinstance(action.get("backend"), dict) else {}
+    backend_result = backend.get("result") if isinstance(backend.get("result"), dict) else {}
+    bridge = backend_result.get("desktop_bridge") if isinstance(backend_result.get("desktop_bridge"), dict) else {}
+    passed = bool(
+        approach.get("ok")
+        and action.get("ok")
+        and handback.get("ok")
+        and bridge.get("desktop_action_sent")
+        and bridge.get("desktop_effect_performed")
+        and bridge.get("desktop_effect_confirmed")
+        and bridge.get("target_observer_status") == "confirmed_target_state_changed"
+        and not bridge.get("physical_input_performed")
+        and not bridge.get("uses_user_os_cursor")
+    )
+    return {
+        "status": "passed" if passed else "blocked",
+        "proof_mode": "live_operator_approved_safe_target",
+        "approval": approval,
+        "safe_target_id": LIVE_SAFE_TARGET_ID,
+        "safe_target_title": LIVE_SAFE_TARGET_TITLE,
+        "safe_target_process_id": target_process.pid if target_process is not None else 0,
+        "orb_approach_receipt_path": approach.get("operator_receipt_path", ""),
+        "operator_receipt_path": action.get("operator_receipt_path", ""),
+        "orb_handback_receipt_path": handback.get("operator_receipt_path", ""),
+        "desktop_bridge_receipt_path": bridge.get("receipt_path", ""),
+        "desktop_action_sent": bool(bridge.get("desktop_action_sent")),
+        "desktop_effect_performed": bool(bridge.get("desktop_effect_performed")),
+        "desktop_effect_confirmed": bool(bridge.get("desktop_effect_confirmed")),
+        "target_observer_status": str(bridge.get("target_observer_status") or ""),
+        "target_state_changed": bool(bridge.get("target_state_changed")),
+        "raw_input": False,
+        "physical_input_performed": False,
+        "uses_user_os_cursor": False,
+        "user_mouse_taken": False,
+        "safe_target_process_stopped": target_process is not None and target_process.poll() is not None,
+    }
+
+
 def _fixture_action_proof() -> dict[str, Any]:
     use_fixture = os.getenv("FRANCIS_ONE_VISIBLE_LOOP_USE_FIXTURE_SAFE_TARGET") == "1"
     operator_approved = os.getenv("FRANCIS_ONE_VISIBLE_LOOP_OPERATOR_APPROVED_FIXTURE_ACTION") == "1"
@@ -273,6 +541,12 @@ def _fixture_action_proof() -> dict[str, Any]:
         "user_mouse_taken": bool(result.get("governance", {}).get("user_mouse_taken")),
         "physical_input_performed": bool(result.get("governance", {}).get("physical_input_performed")),
     }
+
+
+def _operator_action_proof() -> dict[str, Any]:
+    if os.getenv("FRANCIS_ONE_VISIBLE_LOOP_USE_LIVE_SAFE_TARGET") == "1":
+        return _live_safe_target_action_proof()
+    return _fixture_action_proof()
 
 
 def _operator_decision_queue(
@@ -472,7 +746,7 @@ canonical_checks = (
     else {}
 )
 overlay = _overlay_status()
-action = _fixture_action_proof()
+action = _operator_action_proof()
 operator_decision_queue = _operator_decision_queue(
     summon_payload,
     host_supervisor_payload,
