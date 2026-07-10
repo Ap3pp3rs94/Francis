@@ -565,13 +565,17 @@ def test_lens_stage6_prerequisite_bringup_plan_has_confirmed_request_and_grant_b
     assert "[switch]$ConfirmGrant" in script
     assert "[switch]$ConfirmExecute" in script
     assert "[string]$ApprovalId" in script
-    assert "[int]$RunSeconds" in script
+    assert "[int]$RunSeconds = 0" in script
+    assert "-RunSeconds 0" in script
+    assert "-RunSeconds 2" not in script
     assert "[ValidateSet('', 'WindowsSapi', 'ElevenLabs')]" in script
     assert "[string]$OverlayVoiceProvider" in script
     assert "FRANCIS_BRINGUP_OVERLAY_VOICE_PROVIDER" in script
     assert "voice_provider=overlay_voice_provider" in script
     assert "_MAX_STAGE6_PREREQUISITE_RUN_SECONDS = 15 * 60" in script
     assert "max(0, min(parsed, _MAX_STAGE6_PREREQUISITE_RUN_SECONDS))" in script
+    assert 'parsed = int(float(value or "0"))' in script
+    assert 'FRANCIS_BRINGUP_RUN_SECONDS", "0"' in script
     assert "max(1, min(parsed, _MAX_STAGE6_PREREQUISITE_RUN_SECONDS))" not in script
     assert "min(parsed, 60)" not in script
     assert "refused_confirmation_required" in script
@@ -1884,7 +1888,7 @@ def test_lens_stage6_prerequisite_bringup_execute_next_runs_only_current_bounded
     assert ready_payload["next_operator_command"] == {
         "command": (
             ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 "
-            f"-Mode ExecuteNext -Actor <actor> -ApprovalId {resident_approval_id} -RunSeconds 2 -ConfirmExecute"
+            f"-Mode ExecuteNext -Actor <actor> -ApprovalId {resident_approval_id} -RunSeconds 0 -ConfirmExecute"
         ),
         "mode": "ExecuteNext",
         "requires_confirmation": True,
@@ -2051,7 +2055,7 @@ def test_lens_stage6_prerequisite_bringup_tray_execution_advances_to_hotkey(
     assert tray_ready_payload["next_operator_command"] == {
         "command": (
             ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 "
-            f"-Mode ExecuteNext -Actor <actor> -ApprovalId {tray_approval_id} -RunSeconds 2 -ConfirmExecute"
+            f"-Mode ExecuteNext -Actor <actor> -ApprovalId {tray_approval_id} -RunSeconds 0 -ConfirmExecute"
         ),
         "mode": "ExecuteNext",
         "requires_confirmation": True,
@@ -2198,7 +2202,7 @@ def test_lens_stage6_prerequisite_bringup_hotkey_execution_advances_to_overlay(
     assert hotkey_ready_payload["next_operator_command"] == {
         "command": (
             ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 "
-            f"-Mode ExecuteNext -Actor <actor> -ApprovalId {hotkey_approval_id} -RunSeconds 2 -ConfirmExecute"
+            f"-Mode ExecuteNext -Actor <actor> -ApprovalId {hotkey_approval_id} -RunSeconds 0 -ConfirmExecute"
         ),
         "mode": "ExecuteNext",
         "requires_confirmation": True,
@@ -2363,7 +2367,7 @@ def test_lens_stage6_prerequisite_bringup_overlay_execution_advances_to_summon(
     assert overlay_ready_payload["next_operator_command"] == {
         "command": (
             ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 "
-            f"-Mode ExecuteNext -Actor <actor> -ApprovalId {overlay_approval_id} -RunSeconds 2 "
+            f"-Mode ExecuteNext -Actor <actor> -ApprovalId {overlay_approval_id} -RunSeconds 0 "
             "-OverlayVoiceProvider <WindowsSapi|ElevenLabs> -ConfirmExecute"
         ),
         "mode": "ExecuteNext",
@@ -2562,7 +2566,7 @@ def test_lens_stage6_prerequisite_bringup_summon_execution_advances_to_enablemen
     assert summon_ready_payload["next_operator_command"] == {
         "command": (
             ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 "
-            f"-Mode ExecuteNext -Actor <actor> -ApprovalId {summon_approval_id} -RunSeconds 2 -ConfirmExecute"
+            f"-Mode ExecuteNext -Actor <actor> -ApprovalId {summon_approval_id} -RunSeconds 0 -ConfirmExecute"
         ),
         "mode": "ExecuteNext",
         "requires_confirmation": True,
@@ -2690,7 +2694,7 @@ def test_lens_stage6_prerequisite_bringup_applies_enablement_to_temp_service_con
     assert apply_ready_payload["next_operator_command"] == {
         "command": (
             ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 "
-            f"-Mode ExecuteNext -Actor <actor> -ApprovalId {execution_approval_id} -RunSeconds 2 -ConfirmExecute"
+            f"-Mode ExecuteNext -Actor <actor> -ApprovalId {execution_approval_id} -RunSeconds 0 -ConfirmExecute"
         ),
         "mode": "ExecuteNext",
         "requires_confirmation": True,

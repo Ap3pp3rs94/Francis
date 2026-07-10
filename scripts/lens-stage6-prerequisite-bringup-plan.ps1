@@ -13,7 +13,7 @@ param(
 
   [string]$Reason = 'request next Stage 6 Lens prerequisite authority review',
 
-  [int]$RunSeconds = 2,
+  [int]$RunSeconds = 0,
 
   [ValidateSet('', 'WindowsSapi', 'ElevenLabs')]
   [string]$OverlayVoiceProvider = '',
@@ -819,7 +819,7 @@ def _operator_command(action: dict[str, Any]) -> dict[str, Any]:
             voice_provider_arg = f" -OverlayVoiceProvider {voice_provider}"
         command = (
             ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 "
-            f"-Mode ExecuteNext -Actor <actor> -ApprovalId {approval_arg} -RunSeconds 2"
+            f"-Mode ExecuteNext -Actor <actor> -ApprovalId {approval_arg} -RunSeconds 0"
             f"{voice_provider_arg} -ConfirmExecute"
         )
         result = {
@@ -1282,9 +1282,9 @@ def _grant_next_action(action: dict[str, Any], actor: str, approval_id: str, rea
 
 def _safe_run_seconds(value: str) -> int:
     try:
-        parsed = int(float(value or "2"))
+        parsed = int(float(value or "0"))
     except (TypeError, ValueError):
-        return 2
+        return 0
     return max(0, min(parsed, _MAX_STAGE6_PREREQUISITE_RUN_SECONDS))
 
 
@@ -1459,7 +1459,7 @@ def _run() -> tuple[int, dict[str, Any]]:
     actor = os.environ.get("FRANCIS_BRINGUP_ACTOR", "").strip()
     approval_id = os.environ.get("FRANCIS_BRINGUP_APPROVAL_ID", "").strip()
     reason = os.environ.get("FRANCIS_BRINGUP_REASON", "").strip()
-    run_seconds = _safe_run_seconds(os.environ.get("FRANCIS_BRINGUP_RUN_SECONDS", "2"))
+    run_seconds = _safe_run_seconds(os.environ.get("FRANCIS_BRINGUP_RUN_SECONDS", "0"))
     overlay_voice_provider = os.environ.get("FRANCIS_BRINGUP_OVERLAY_VOICE_PROVIDER", "").strip()
     confirm_request = os.environ.get("FRANCIS_BRINGUP_CONFIRM_REQUEST", "").strip() == "1"
     confirm_grant = os.environ.get("FRANCIS_BRINGUP_CONFIRM_GRANT", "").strip() == "1"
