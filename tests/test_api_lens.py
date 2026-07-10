@@ -928,6 +928,98 @@ def test_lens_runtime_process_scan_flags_competing_overlay(monkeypatch) -> None:
     assert "<canonical_data_root>" in payload["candidates"][0]["command_line_redacted"]
 
 
+def test_lens_runtime_process_scan_flags_extra_native_renderer(monkeypatch) -> None:
+    import francis.lens.status as status_module
+
+    process_payload = [
+        {
+            "component": "renderer",
+            "process_id": 106,
+            "parent_process_id": 105,
+            "name": "native_orb_renderer.exe",
+            "command_line": r'"D:\Francis\native\orb\build\native_orb_renderer.exe" --run-seconds 0',
+        },
+        {
+            "component": "renderer",
+            "process_id": 777,
+            "parent_process_id": 666,
+            "name": "native_orb_renderer.exe",
+            "command_line": r'"C:\Temp\native_orb_renderer.exe" --run-seconds 0',
+        },
+    ]
+
+    def fake_run(command: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            args=command,
+            returncode=0,
+            stdout=json.dumps(process_payload),
+            stderr="",
+        )
+
+    monkeypatch.setattr(status_module.os, "name", "nt")
+    monkeypatch.setattr(status_module.shutil, "which", lambda _: "powershell.exe")
+    monkeypatch.setattr(status_module.subprocess, "run", fake_run)
+
+    payload = status_module._lens_runtime_process_scan({"renderer": 106})
+
+    assert payload["status"] == "competing_detected"
+    assert payload["renderer_process_count"] == 2
+    assert payload["renderer_pids"] == [106, 777]
+    assert payload["competing_candidates"][0]["component"] == "renderer"
+    assert payload["competing_candidates"][0]["pid"] == 777
+
+
+def test_lens_orb_runtime_identity_correlates_renderer_to_overlay_owner(monkeypatch, tmp_path: Path) -> None:
+    import francis.lens.status as status_module
+
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
+    launch_manifest = {
+        "process_readback": {"state_status": "resident_running", "pid": 101, "process_alive": True},
+        "supervisor_readback": {
+            "status": "resident_supervising",
+            "supervisor_pid": 102,
+            "resident_supervised_runtime": True,
+            "fresh_readback": True,
+        },
+        "tray_runtime_readback": {"ready": True, "pid": 103, "process_alive": True},
+        "hotkey_runtime_readback": {"ready": True, "pid": 104, "process_alive": True},
+        "overlay_runtime_readback": {
+            "ready": True,
+            "pid": 105,
+            "process_alive": True,
+            "overlay_window_visible": True,
+            "always_on_top": True,
+            "native_renderer": {"pid": 106, "process_alive": True, "active_renderer": True},
+            "orb_visual": {"ring_color_contract": {"renderer": "native_cpp_orb_renderer"}},
+            "overlay_voice": {"voice_provider": "ElevenLabs"},
+            "voice_provider_readiness": {"selected_provider": "ElevenLabs"},
+        },
+        "summon_runtime_readback": {"ready": True, "status": "observed"},
+    }
+    scan = {
+        "checked_process_table": True,
+        "renderer_process_count": 1,
+        "renderer_pids": [106],
+        "candidates": [{"component": "renderer", "pid": 106, "parent_pid": 105}],
+        "competing_candidates": [],
+        "blockers": [],
+    }
+    monkeypatch.setattr(status_module, "_lens_runtime_process_scan", lambda *_args, **_kwargs: scan)
+
+    payload = status_module._canonical_orb_runtime_identity(
+        launch_manifest=launch_manifest,
+        summon_enablement_gate={"route": "/lens/summon", "ready": True, "status": "ready"},
+        tray_enablement_gate={"route": "/lens/tray", "ready": True, "status": "ready"},
+        overlay_enablement_gate={"route": "/lens/overlay", "ready": True, "status": "ready"},
+        include_process_scan=True,
+    )
+
+    assert payload["renderer_identity"]["status"] == "correlated"
+    assert payload["renderer_identity"]["expected_renderer_pid"] == 106
+    assert payload["renderer_identity"]["renderer_parent_matches_overlay"] is True
+    assert "canonical_orb_renderer_runtime_missing" not in payload["blockers"]
+
+
 def test_lens_orb_body_perspective_contract_models_orb_as_body_without_physical_input() -> None:
     from francis.lens.status import _orb_body_perspective_contract
 

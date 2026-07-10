@@ -5719,7 +5719,7 @@ $Patterns = @(
   'lens-host.ps1'
 )
 $CurrentPid = $PID
-$Matches = Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe' OR Name = 'pwsh.exe'" |
+$ScriptMatches = Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe' OR Name = 'pwsh.exe'" |
   Where-Object {
     $ProcessCommandLine = [string]$_.CommandLine
     $_.ProcessId -ne $CurrentPid -and
@@ -5733,7 +5733,18 @@ $Matches = Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe' OR Nam
       command_line = [string]$_.CommandLine
     }
   }
-@($Matches) | ConvertTo-Json -Depth 4
+$RendererMatches = Get-CimInstance Win32_Process -Filter "Name = 'native_orb_renderer.exe'" |
+  ForEach-Object {
+    [ordered]@{
+      component = 'renderer'
+      process_id = [int]$_.ProcessId
+      parent_process_id = [int]$_.ParentProcessId
+      name = [string]$_.Name
+      command_line = [string]$_.CommandLine
+    }
+  }
+@($ScriptMatches) + @($RendererMatches) |
+  ConvertTo-Json -Depth 4
 """
     try:
         proc = subprocess.run(
@@ -5773,12 +5784,14 @@ $Matches = Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe' OR Nam
     for raw_item in raw_items:
         item = _as_dict(raw_item)
         command_line = _safe_str(item.get("command_line"))
-        component = _lens_runtime_process_component(command_line)
+        component = _safe_str(item.get("component")).strip() or _lens_runtime_process_component(command_line)
         pid = _runtime_pid(item.get("process_id"))
         process_data_root = _extract_lens_runtime_data_root(command_line)
         expected_pid = expected_pids.get(component, 0)
         data_root_matches = bool(process_data_root) and process_data_root.casefold() == canonical_data_root_key
-        expected_canonical_process = bool(expected_pid) and pid == expected_pid and data_root_matches
+        expected_canonical_process = (
+            bool(expected_pid) and pid == expected_pid and (component == "renderer" or data_root_matches)
+        )
         candidate = {
             "component": component,
             "pid": pid,
@@ -5802,6 +5815,8 @@ $Matches = Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe' OR Nam
         "limit": safe_limit,
         "candidate_count": len(candidates),
         "competing_candidate_count": len(competing),
+        "renderer_process_count": sum(1 for candidate in candidates if candidate["component"] == "renderer"),
+        "renderer_pids": [candidate["pid"] for candidate in candidates if candidate["component"] == "renderer"],
         "candidates": candidates[:safe_limit],
         "competing_candidates": competing[:safe_limit],
         "candidates_truncated": len(candidates) > safe_limit,
@@ -5825,6 +5840,7 @@ def _canonical_orb_runtime_identity(
     hotkey = _as_dict(launch_manifest.get("hotkey_runtime_readback"))
     overlay = _as_dict(launch_manifest.get("overlay_runtime_readback"))
     summon = _as_dict(launch_manifest.get("summon_runtime_readback"))
+    native_renderer = _as_dict(overlay.get("native_renderer"))
     resident_ready = (
         bool(process.get("process_alive"))
         and _safe_str(process.get("state_status")).strip() == "resident_running"
@@ -5885,6 +5901,7 @@ def _canonical_orb_runtime_identity(
         "tray": _runtime_pid(tray.get("pid")),
         "hotkey": _runtime_pid(hotkey.get("pid")),
         "overlay": _runtime_pid(overlay.get("pid")),
+        "renderer": _runtime_pid(native_renderer.get("pid")),
     }
     process_scan = (
         _lens_runtime_process_scan(expected_pids, limit=process_scan_limit)
@@ -5898,7 +5915,51 @@ def _canonical_orb_runtime_identity(
             "blockers": [],
         }
     )
-    blockers = _ordered_status_values([*blockers, *_as_list(process_scan.get("blockers"))])
+    renderer_candidates = [
+        _as_dict(candidate)
+        for candidate in _as_list(process_scan.get("candidates"))
+        if _safe_str(_as_dict(candidate).get("component")).strip() == "renderer"
+    ]
+    expected_renderer_pid = expected_pids["renderer"]
+    canonical_renderer_candidate = next(
+        (candidate for candidate in renderer_candidates if _runtime_pid(candidate.get("pid")) == expected_renderer_pid),
+        {},
+    )
+    renderer_parent_pid = _runtime_pid(canonical_renderer_candidate.get("parent_pid"))
+    overlay_pid = expected_pids["overlay"]
+    renderer_parent_matches_overlay = (
+        bool(expected_renderer_pid)
+        and bool(overlay_pid)
+        and bool(canonical_renderer_candidate)
+        and renderer_parent_pid == overlay_pid
+    )
+    renderer_blockers: list[str] = []
+    if bool(process_scan.get("checked_process_table")) and expected_renderer_pid:
+        if not canonical_renderer_candidate:
+            renderer_blockers.append("canonical_orb_renderer_runtime_missing")
+        elif len(renderer_candidates) != 1:
+            renderer_blockers.append("canonical_orb_renderer_count_mismatch")
+        elif overlay_pid and not renderer_parent_matches_overlay:
+            renderer_blockers.append("canonical_orb_renderer_overlay_owner_mismatch")
+    renderer_identity = {
+        "status": (
+            "correlated"
+            if expected_renderer_pid and not renderer_blockers and renderer_parent_matches_overlay
+            else "drift_detected"
+            if renderer_blockers
+            else "not_observed"
+        ),
+        "expected_renderer_pid": expected_renderer_pid,
+        "active_renderer": bool(native_renderer.get("active_renderer")),
+        "renderer_process_alive": bool(native_renderer.get("process_alive")),
+        "renderer_process_count": _safe_int(process_scan.get("renderer_process_count"), default=0, minimum=0),
+        "renderer_pids": [_runtime_pid(renderer_pid) for renderer_pid in _as_list(process_scan.get("renderer_pids"))],
+        "observed_renderer_parent_pid": renderer_parent_pid,
+        "renderer_parent_matches_overlay": renderer_parent_matches_overlay,
+        "process_scan_checked": bool(process_scan.get("checked_process_table")),
+        "blockers": renderer_blockers,
+    }
+    blockers = _ordered_status_values([*blockers, *renderer_blockers, *_as_list(process_scan.get("blockers"))])
     ready = (
         all(bool(components[key].get("ready")) for key in ("resident_host", "tray", "hotkey", "overlay", "summon"))
         and resident_ready
@@ -5932,6 +5993,7 @@ def _canonical_orb_runtime_identity(
         },
         "components": components,
         "visual_identity": visual,
+        "renderer_identity": renderer_identity,
         "voice_identity": voice,
         "process_scan": process_scan,
         "gates": {
