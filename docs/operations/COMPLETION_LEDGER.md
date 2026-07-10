@@ -56,9 +56,9 @@ operator product surface:
 - `P8_MEMORY`: partial
 
 Current active workstream: Capability Economy / Stage 17 closure reconciliation.
-The current goal is ordered as final-head CI and wiring trust, current Stage 17
-route/readback reconciliation, then the FR-017 operator/physical evidence
-boundary and final closure decision.
+The current goal is ordered as final-head CI and closure review for the six
+software criteria now reporting ready, then the FR-017 operator/physical
+evidence boundary and final governed closure decision.
 
 Stage 6 Lens MVP is ledger-closed against its five canonical acceptance criteria,
 and Stages 7 through 16 retain their existing receipt-backed closures.
@@ -115,6 +115,84 @@ What is materially true now:
 
 > Older dated entries are archived under docs/operations/archive/ (see scripts/archive-completion-ledger.ps1).
 > Historical undated ledger body is archived under docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md.
+
+### 2026-07-10 14:31Z - Stage 17 software criteria ready for closure review
+
+Current posture: Phase 2 and Stage 17 remain open, but the Capability Economy
+software closure matrix now reports all six criteria `ready` at exact code head
+`5004ef2bd34db9e3dfa48d591a0dc8c08693e0b3`. The quality-remediation queue is
+empty, every catalog pack is ready, catalog coherence has no reported gaps, and
+receipt-linked cross-mission reuse proof remains ready. This closes the current
+route/readback reconciliation gate. It does not supply FR-017 physical evidence,
+make the final governed Stage 17 closure decision, start Stage 18, or clear
+FR-018.
+
+What changed:
+
+- The quality-remediation GET and writer now use the same synchronized full-scan
+  catalog truth, so readback no longer advertises reconstruction that the writer
+  will reject.
+- Quality dry runs plan from an in-memory catalog and leave registry/catalog
+  bytes unchanged while reporting no write authority.
+- Explicit legacy-pack migration budgets may exceed the default 500-member
+  ceiling up to a hard 1,000-member cap, and the quality batch writer preserves
+  every explicitly admitted member instead of truncating at 500.
+- Governed metadata, candidate-reference, and reconstruction passes drained all
+  17 blocked packs. Candidate test/doc references remain explicitly
+  `candidate_reference_only_not_pack_specific_proof`; reconstruction receipts do
+  not approve proposals, promote capabilities, enable capabilities, or execute
+  them.
+
+Evidence:
+
+- Exact-head source-loaded readback returned
+  `stage17_closure_matrix.status=ready_for_closure_review`,
+  `all_criteria_ready=true`, and `closure_claimed=false`; criteria 1 through 6
+  each report `status=ready` with no blockers.
+- Pack/catalog readback returned 52 of 52 packs ready, 4,052 packed entries,
+  4,052 tested and documented entries, zero unpacked entries, and zero duplicate,
+  lineage, validation-lineage, or quality gaps.
+- Quality readback returned `status=ready`, `remediation_queue_count=0`,
+  `artifact_reconstruction_required_count=0`, and a synchronized full artifact
+  scan. Migration readback returned `candidate_total=0`.
+- Invocation audit returned `status=ready` and
+  `proof_readiness.status=reuse_proof_ready` from two accepted receipt-linked
+  mission operation shapes using the same pack reuse key.
+- Seventeen metadata receipts under
+  `data/artifacts/plugins/capability_packs/metadata_receipts/` bind 3,288 legacy
+  generated capability members to versioned pack governance. The first and last
+  receipts are
+  `capability_pack_metadata_1783690993_legacy-generated-capabilitylineageplugin`
+  and `capability_pack_metadata_1783693467_legacy-generated-opsplugin`.
+- Ten reconstruction receipts under
+  `data/artifacts/plugins/capability_packs/artifact_reconstructions/` close 208
+  missing validation/proposal-lineage records. Receipt IDs are
+  `stage17_artifact_reconstruction_batch_1783691376_1ab66038_receipt`,
+  `stage17_artifact_reconstruction_batch_1783691643_250ccd50_receipt`,
+  `stage17_artifact_reconstruction_batch_1783691859_7f1d47d4_receipt`,
+  `stage17_artifact_reconstruction_batch_1783692395_4af1992a_receipt`,
+  `stage17_artifact_reconstruction_batch_1783692588_e097dc61_receipt`,
+  `stage17_artifact_reconstruction_batch_1783692776_69100f24_receipt`,
+  `stage17_artifact_reconstruction_batch_1783692913_f53cab73_receipt`,
+  `stage17_artifact_reconstruction_batch_1783693046_d247469a_receipt`,
+  `stage17_artifact_reconstruction_batch_1783693177_f00e410e_receipt`, and
+  `stage17_artifact_reconstruction_batch_1783693761_9d4f4a0c_receipt`.
+- Bounded code commits `1ad1c55b`, `0a73a598`, `f8cd767f`, and `5004ef2b`
+  passed focused plugin route/batch tests, Ruff lint, Ruff format, and diff checks
+  before being pushed directly to `main`.
+
+Remaining truthful gap:
+
+- Final-head GitHub CI must pass before the software posture is treated as the
+  broad validated head.
+- FR-017 still requires the physically present operator evidence chain: accepted
+  measurement/setup evidence, non-powered mockup and mannequin/interface work,
+  pilot static-fit and movement evidence, quick-release/cable-snag evidence,
+  professional engineering review, and the final human physical decision.
+- Stage 17 remains open until that evidence and the final governed closure
+  decision are recorded. Stage 18 and FR-018 remain blocked.
+- The full local `scripts/check.ps1` gate was not run; focused local validation
+  and final-head remote CI are the stated gates for this slice.
 
 ### 2026-07-10 12:34Z - Stage 6 Lens MVP acceptance closure
 

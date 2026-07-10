@@ -59,8 +59,8 @@ def test_francis_completion_model_status_projects_ledger_backed_loop_guard() -> 
         "found": True,
         "workstream": "Capability Economy / Stage 17 closure reconciliation.",
         "current_goal": (
-            "final-head CI and wiring trust, current Stage 17 route/readback reconciliation, "
-            "then the FR-017 operator/physical evidence boundary and final closure decision."
+            "final-head CI and closure review for the six software criteria now reporting ready, "
+            "then the FR-017 operator/physical evidence boundary and final governed closure decision."
         ),
         "read_only_contract": True,
         "writes_repo": False,
