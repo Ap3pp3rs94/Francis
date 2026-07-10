@@ -1223,6 +1223,10 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "function Set-NativeOrbRendererPosition" in script
     assert "function Start-NativeOrbRenderer" in script
     assert "function Stop-NativeOrbRenderer" in script
+    assert "$ExistingRenderer = Get-NativeOrbRendererReadback -Root $Root" in script
+    assert "LensOverlayNativeRendererReused" in script
+    assert "return $ExistingRenderer" in script
+    assert "if (-not $script:LensOverlayNativeRendererReused)" in script
     assert "FindRendererWindow" in script
     assert "PostMessage" in script
     assert "MoveCenterMessage" in script

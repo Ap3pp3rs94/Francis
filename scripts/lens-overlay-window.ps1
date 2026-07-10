@@ -1725,11 +1725,18 @@ function Start-NativeOrbRenderer {
     [int]$Y
   )
 
+  $RuntimeRoot = Get-NativeOrbRendererRuntimeRoot -Root $Root
+  $ExistingRenderer = Get-NativeOrbRendererReadback -Root $Root
+  if ((Get-BoolProperty -Payload $ExistingRenderer -Name 'active_renderer' -Default $false) -and
+      (Get-BoolProperty -Payload $ExistingRenderer -Name 'process_alive' -Default $false)) {
+    $script:LensOverlayNativeRendererReused = $true
+    return $ExistingRenderer
+  }
+
   $BuildScript = Join-Path $RepoRoot 'native\orb\build-native-orb-renderer.ps1'
   if (-not (Test-Path -LiteralPath $BuildScript -PathType Leaf)) {
     throw 'Native Orb renderer build script is missing.'
   }
-  $RuntimeRoot = Get-NativeOrbRendererRuntimeRoot -Root $Root
   $NativeRunSeconds = if ($RunSeconds -gt 0) { $RunSeconds } else { 0 }
   [void](Stop-NativeOrbRenderer -Root $Root)
   & $BuildScript -Launch -RunSeconds $NativeRunSeconds -Size $Size -X $X -Y $Y -RuntimeDir $RuntimeRoot | Out-Null
@@ -7258,6 +7265,7 @@ if ($Mode -eq 'Run') {
   $script:LensOverlayLastOrbVirtualPointerWriteTicks = [Int64]0
   $script:LensOverlayApplication = $null
   $script:LensOverlayNativeRenderer = $null
+  $script:LensOverlayNativeRendererReused = $false
   $script:LensOverlayOrbPanelPopup = $null
   $script:LensOverlayOrbPanelInput = $null
   $script:LensOverlayOrbPanelStatusText = $null
@@ -7541,7 +7549,9 @@ if ($Mode -eq 'Run') {
       } catch {
       }
     }
-    [void](Stop-NativeOrbRenderer -Root $DataRoot)
+    if (-not $script:LensOverlayNativeRendererReused) {
+      [void](Stop-NativeOrbRenderer -Root $DataRoot)
+    }
     if (-not $Failed) {
       Write-OverlayState -Root $DataRoot -Status 'overlay_stopped' -OverlayWindowVisible $false -AlwaysOnTop $false -Message 'Francis Lens overlay window stopped.' -OrbVisual $script:LensOverlayOrbVisual
     }
