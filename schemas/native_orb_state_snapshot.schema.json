@@ -70,10 +70,10 @@
           "const": "contract_ready"
         },
         "implemented": {
-          "const": false
+          "const": true
         },
         "active_renderer": {
-          "const": false
+          "const": true
         },
         "body_renderer_only": {
           "const": true
@@ -108,13 +108,13 @@
           "const": false
         },
         "current_renderer": {
-          "const": "wpf_3d_animated_energy_orb"
+          "const": "native_cpp_orb_renderer"
         },
         "native_renderer_active": {
-          "const": false
+          "const": true
         },
         "visual_baseline_replacement_required_for_changes": {
-          "const": true
+          "const": false
         }
       },
       "additionalProperties": false

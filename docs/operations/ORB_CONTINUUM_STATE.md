@@ -425,9 +425,10 @@ Acceptance criteria for the completed multi-run review scoring sub-slice:
 Current Orb rendering path:
 
 - Chat UI inline presenter: `apps/chat_ui/src/lens/orbGlyph.ts`
-- Desktop overlay renderer: `scripts/lens-overlay-window.ps1`
+- Desktop visual renderer: `native/orb/native_orb_renderer.cpp`
+- Desktop overlay host/lifecycle owner: `scripts/lens-overlay-window.ps1`
 - Overlay visual projection: `New-OrbVisualProjection`
-- Desktop Orb surface: `New-OrbEnergySurface`
+- Desktop Orb surface: `Start-NativeOrbRenderer` / `New-NativeOrbControlSurface`
 
 Current Orb state path:
 

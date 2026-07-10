@@ -119,8 +119,8 @@ def test_lens_host_manifest_normalizes_locked_orb_ring_color_contract(
                 "overlay_window_visible": True,
                 "always_on_top": True,
                 "orb_visual": {
-                    "visual_contract": "chat_ui.orbGlyph.energy_reference",
-                    "renderer": "wpf_3d_animated_energy_orb",
+                    "visual_contract": "native_cpp_orb.liquid_streamer_identity",
+                    "renderer": "native_cpp_orb_renderer",
                     "animated": True,
                     "transparent_background": True,
                 },
@@ -136,12 +136,12 @@ def test_lens_host_manifest_normalizes_locked_orb_ring_color_contract(
     contract = visual["ring_color_contract"]
 
     assert overlay["ready"] is True
-    assert visual["visual_contract"] == "chat_ui.orbGlyph.energy_reference"
+    assert visual["visual_contract"] == "native_cpp_orb.liquid_streamer_identity"
     assert contract["kind"] == "lens.overlay.orb_ring_color_contract"
     assert contract["source"] == "docs/operations/ORB_VISUAL_LOCK.md"
-    assert contract["renderer"] == "wpf_3d_animated_energy_orb"
+    assert contract["renderer"] == "native_cpp_orb_renderer"
     assert contract["state_driven_render_object"] is True
-    assert contract["ring_family"]["three_d_ring_color"] == "#E2EEFC"
-    assert contract["ring_family"]["two_d_orbit_color"] == "#E0ECFA"
+    assert contract["ring_family"]["main_streamer_ring_count"] == 15
+    assert contract["ring_family"]["single_identity_ring_count"] == 20
     assert contract["grants_execution_authority"] is False
     assert contract["grants_mutation_authority"] is False

@@ -17,10 +17,11 @@ def test_orb_visual_lock_manifest_records_current_locked_surface() -> None:
     assert "`apps/chat_ui/src/lens/orbGlyph.ts`" in manifest
     assert "`apps/chat_ui/src/App.tsx`" in manifest
     assert "`scripts/lens-overlay-window.ps1`" in manifest
+    assert "`native/orb/native_orb_renderer.cpp`" in manifest
     assert "core color: `#0b1220`" in manifest
     assert "ring color: `#dbe4f0`" in manifest
-    assert "visual contract: `chat_ui.orbGlyph.energy_reference`" in manifest
-    assert "renderer: `wpf_3d_animated_energy_orb`" in manifest
+    assert "visual contract: `native_cpp_orb.liquid_streamer_identity`" in manifest
+    assert "renderer: `native_cpp_orb_renderer`" in manifest
     assert "Do not change the Orb:" in manifest
 
 
@@ -57,17 +58,23 @@ def test_chat_ui_orb_overlay_defaults_to_right_corner_lock() -> None:
 def test_overlay_orb_renderer_visual_constants_remain_locked() -> None:
     script = _read("scripts/lens-overlay-window.ps1")
 
-    assert "visual_contract = 'chat_ui.orbGlyph.energy_reference'" in script
-    assert "renderer = 'wpf_3d_animated_energy_orb'" in script
+    assert "visual_contract = 'native_cpp_orb.liquid_streamer_identity'" in script
+    assert "renderer = 'native_cpp_orb_renderer'" in script
     assert "motion_profile = if ($AutonomousMotion) { 'bounded_desktop_roam' }" in script
     assert "transparent_background = $true" in script
     assert "route = '/?francis_lens=orb_overlay'" in script
-    assert "function New-OrbEnergySurface" in script
-    assert "[double]$Size = 220" in script
+    assert "function New-NativeOrbControlSurface" in script
+    assert "function Set-NativeOrbRendererPosition" in script
+    assert "function Start-NativeOrbRenderer" in script
+    assert "function Stop-NativeOrbRenderer" in script
+    assert "PostMessage" in script
+    assert "MoveCenterMessage" in script
+    assert "[double]$Size = 270" in script
     assert "[double]$HitBoxSize = 72" in script
-    assert "$OrbSize = 220" in script
+    assert "$OrbSize = Get-NativeOrbRendererSize" in script
     assert "$OrbHitBoxSize = Get-OrbHitBoxSize" in script
-    assert "New-OrbEnergySurface -Size $OrbSize -HitBoxSize $OrbHitBoxSize" in script
+    assert "New-NativeOrbControlSurface -Size $OrbSize -HitBoxSize $OrbHitBoxSize" in script
+    assert "Start-NativeOrbRenderer -Root $DataRoot" in script
     assert "$Form.WindowStyle = [System.Windows.WindowStyle]::None" in script
     assert "$Form.AllowsTransparency = $true" in script
     assert "$Form.Background = [System.Windows.Media.Brushes]::Transparent" in script
@@ -81,20 +88,13 @@ def test_overlay_orb_renderer_visual_constants_remain_locked() -> None:
     assert "$script:LensOverlayWindow.DragMove()" not in script
     assert "right_corner_locked" in script
     assert "default_anchor = if ($AutonomousMotion) { 'bounded_work_area' }" in script
-    assert "$Viewport = New-Object System.Windows.Controls.Viewport3D" in script
-    assert "$Camera.Position = New-Object System.Windows.Media.Media3D.Point3D -ArgumentList 0, 0, 3.2" in script
-    assert "$Camera.FieldOfView = 56" in script
-    assert "for ($Index = 0; $Index -lt 38; $Index += 1)" in script
-    assert "for ($Index = 0; $Index -lt 56; $Index += 1)" in script
-    assert "for ($Index = 0; $Index -lt 12; $Index += 1)" in script
-    assert "$OuterGlow.Width = 148" in script
-    assert "$OuterGlow.Height = 148" in script
-    assert "$OuterGlow.Opacity = 0.38" in script
-    assert "$OuterGlow.Effect = New-Object System.Windows.Media.Effects.BlurEffect -Property @{ Radius = 16 }" in script
-    assert "$Core.Width = 64" in script
-    assert "$Core.Height = 64" in script
-    assert "$HotCenter.Width = 34" in script
-    assert "$HotCenter.Height = 34" in script
+    assert "native_renderer_size = Get-NativeOrbRendererSize" in script
+    assert "wpf_visual_surface_removed = $true" in script
+    assert "native_renderer_move_applied" in script
+    assert "function New-OrbEnergySurface" not in script
+    assert "System.Windows.Controls.Viewport3D" not in script
+    assert "System.Windows.Media.Media3D" not in script
+    assert "New-NativeOrbControlSurface -Size $OrbSize -HitBoxSize $OrbHitBoxSize" in script
 
 
 def test_overlay_orb_virtual_pointer_uses_locked_desktop_orb_not_browser_marker() -> None:
@@ -107,7 +107,9 @@ def test_overlay_orb_virtual_pointer_uses_locked_desktop_orb_not_browser_marker(
     assert "francis.orb_operator.virtual_pointer_state" in script
     assert "lens.overlay.orb_virtual_pointer.receipt" in script
     assert "Set-OrbWindowCoordinatePosition -Window $Window -WorkArea $WorkArea -X $X -Y $Y" in script
+    assert "Set-NativeOrbRendererPosition -Root $Root" in script
     assert "[void](Invoke-OverlayOrbVirtualPointerState -Root $script:LensOverlayDataRoot)" in script
+    assert "native_renderer_move_status" in script
     assert "last_public_action_kind" in script
     assert "last_action_button" in script
     assert "drag_start_x" in script

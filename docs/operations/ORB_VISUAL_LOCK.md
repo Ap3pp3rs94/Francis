@@ -18,6 +18,7 @@ The current Orb visual surface is formed by these files:
 - `apps/chat_ui/src/lens/orbGlyph.ts`
 - `apps/chat_ui/src/App.tsx`
 - `scripts/lens-overlay-window.ps1`
+- `native/orb/native_orb_renderer.cpp`
 
 These files are visually sensitive. They may be edited only when the rendered
 Orb appearance remains unchanged and the change is narrowly isolated to behavior,
@@ -40,40 +41,39 @@ grant execution authority, grant mutation authority, or invent Orb state.
 
 ## Desktop Overlay Orb
 
-`scripts/lens-overlay-window.ps1` owns the current transparent desktop overlay
-Orb renderer. The locked visual functions and constants include:
+`native/orb/native_orb_renderer.cpp` owns the current transparent desktop Orb
+renderer. `scripts/lens-overlay-window.ps1` remains the lifecycle/control-plane
+owner for start, stop, status, wake, voice, and bounded overlay controls. The
+locked visual functions and constants include:
 
 - `New-OrbVisualProjection`
-- `New-OrbEnergySurface`
-- `New-OrbTorusMesh`
-- `New-OrbSphereMesh`
-- `New-OrbEnergyMaterial`
-- `Add-Orb3DEnergyRing`
-- `Add-OrbEllipse`
-- `New-OrbArgbColor`
-- visual contract: `chat_ui.orbGlyph.energy_reference`
-- renderer: `wpf_3d_animated_energy_orb`
+- `New-NativeOrbControlSurface`
+- `Set-NativeOrbRendererPosition`
+- `Start-NativeOrbRenderer`
+- `Stop-NativeOrbRenderer`
+- `draw_pearlescent_liquid_blob`
+- `draw_flow_streamer_field`
+- `draw_glow_single_ring_field`
+- visual contract: `native_cpp_orb.liquid_streamer_identity`
+- renderer: `native_cpp_orb_renderer`
 - overlay route marker: `/?francis_lens=orb_overlay`
-- default Orb surface size: `220`
+- default native Orb surface size: `270`
 - WPF transparent host: borderless window, transparent background, taskbar
-  presence, topmost behavior
-- 3D viewport: `Viewport3D`, `PerspectiveCamera`, camera z distance `3.2`,
-  field of view `56`
-- 3D ring count: `38`
-- 2D fine orbit count: `56`
-- 2D brighter orbit count: `12`
-- outer glow size: `148 x 148`
-- outer glow opacity: `0.38`
-- outer glow blur radius: `16`
-- core size: `64 x 64`
-- hot center size: `34 x 34`
-- ring material color family: silver/white values currently encoded in the
-  renderer
-- core and hot-center gradient stop values currently encoded in the renderer
+  presence, topmost behavior, and native renderer lifecycle ownership
+- native renderer: layered topmost click-through Win32/GDI+ window
+- native movement bridge: bounded move-center message to the known renderer
+  window only
+- main streamer ring count: `15`
+- fine streamer ring count: `5`
+- single identity ring count: `20`
+- rings follow the pearlescent blob flow
+- single identity rings pulse independently
+- render-only authority: no click, drag, typing, OS cursor control, network, or
+  desktop mutation authority
 
-The current renderer is transparent, 3D, animated, and frame-synced. It must not
-be replaced with a new component, static image, SVG-only rewrite, black backdrop,
-green tint, title bar, decorative chrome, or second overlay application.
+The current renderer is transparent, animated, native C++, and render-only. It
+must not be replaced with a static image, SVG-only rewrite, black backdrop,
+green tint, title bar, decorative chrome, or authority-bearing desktop actor.
 
 ## Behavior Surface
 
@@ -99,9 +99,10 @@ is approved by the operator.
 
 - `apps/chat_ui/src/lens/orbGlyph.test.ts` asserts the inline glyph colors,
   readiness mapping, no network I/O, and no authority grant.
-- `tests/test_lens_overlay_window_script.py` asserts the WPF overlay stays
-  transparent, taskbar-visible, topmost, 3D, frame-synced, draggable, and bound
-  to the current Lens MCP body-state routes.
+- `tests/test_lens_overlay_window_script.py` asserts the WPF overlay host stays
+  transparent, taskbar-visible, topmost, frame-synced, draggable, bound to the
+  current Lens MCP body-state routes, and free of the removed WPF Orb visual
+  renderer.
 - `tests/test_orb_phase0_contracts.py` asserts this manifest and the key locked
   renderer constants stay present.
 
@@ -124,7 +125,7 @@ Do not change the Orb:
 - shadows
 - highlights
 - particle/ring counts
-- shader or WPF material appearance
+- shader or native Orb material appearance
 - asset references
 - visual proportions
 - general visual personality

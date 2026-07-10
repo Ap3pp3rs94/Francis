@@ -148,8 +148,8 @@ void validate_native_orb_state_snapshot(Json const& root) {
     Json const& runtime = require_object(root, "runtime_contract");
     expect_string(runtime, "native_runtime", "cpp");
     expect_string(runtime, "status", "contract_ready");
-    expect_bool(runtime, "implemented", false);
-    expect_bool(runtime, "active_renderer", false);
+    expect_bool(runtime, "implemented", true);
+    expect_bool(runtime, "active_renderer", true);
     expect_bool(runtime, "body_renderer_only", true);
     expect_string(runtime, "authority_layer", "francis_core");
     expect_bool(runtime, "francis_core_remains_authority", true);
@@ -158,7 +158,8 @@ void validate_native_orb_state_snapshot(Json const& root) {
     expect_string(visual_lock, "source", "docs/operations/ORB_VISUAL_LOCK.md");
     expect_bool(visual_lock, "parity_required", true);
     expect_bool(visual_lock, "redesign_allowed", false);
-    expect_bool(visual_lock, "native_renderer_active", false);
+    expect_string(visual_lock, "current_renderer", "native_cpp_orb_renderer");
+    expect_bool(visual_lock, "native_renderer_active", true);
 
     Json const& pointer = require_object(root, "virtual_pointer");
     expect_bool(pointer, "controls_user_os_cursor", false);
@@ -197,8 +198,8 @@ void validate_native_orb_state_snapshot(Json const& root) {
     expect_bool(events, "desktop_action_events_require_governed_path", true);
 
     Json const& limitations = require_array(root, "limitations");
-    if (!array_contains(limitations, "no_cpp_renderer_implemented")) {
-        fail("snapshot must keep native renderer unimplemented");
+    if (!array_contains(limitations, "no_native_event_channel_implemented")) {
+        fail("snapshot must keep native event channel unimplemented");
     }
     if (!array_contains(limitations, "no_desktop_mutation_authority")) {
         fail("snapshot must deny desktop mutation authority");
@@ -223,8 +224,8 @@ int wmain(int argc, wchar_t** argv) {
         std::cout << "francis_native_orb_state_probe=accepted_read_only_snapshot\n";
         std::cout << "schema_version=" << require_string(root, "schema_version") << "\n";
         std::cout << "runtime=cpp\n";
-        std::cout << "renderer_implemented=false\n";
-        std::cout << "native_renderer_active=false\n";
+        std::cout << "renderer_implemented=true\n";
+        std::cout << "native_renderer_active=true\n";
         std::cout << "render_only=true\n";
         std::cout << "feedback_state=" << require_string(render_state, "feedback_state") << "\n";
         std::cout << "virtual_pointer_available=" << (require_bool(pointer, "available") ? "true" : "false")

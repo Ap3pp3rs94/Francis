@@ -43,8 +43,10 @@ def test_native_orb_cpp_probe_fails_closed_on_authority_flags() -> None:
     source = (_repo_root() / "native" / "orb" / "native_orb_state_probe.cpp").read_text(encoding="utf-8")
 
     required_denials = [
-        'expect_bool(runtime, "implemented", false)',
-        'expect_bool(runtime, "active_renderer", false)',
+        'expect_bool(runtime, "implemented", true)',
+        'expect_bool(runtime, "active_renderer", true)',
+        'expect_string(visual_lock, "current_renderer", "native_cpp_orb_renderer")',
+        'expect_bool(visual_lock, "native_renderer_active", true)',
         'expect_bool(pointer, "controls_user_os_cursor", false)',
         'expect_bool(pointer, "user_mouse_taken", false)',
         'expect_bool(authority, "native_runtime_authority", false)',

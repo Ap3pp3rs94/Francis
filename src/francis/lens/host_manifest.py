@@ -86,28 +86,28 @@ def _orb_ring_color_contract() -> dict[str, Any]:
         "kind": "lens.overlay.orb_ring_color_contract",
         "status": "ready",
         "source": "docs/operations/ORB_VISUAL_LOCK.md",
-        "render_source": "scripts/lens-overlay-window.ps1",
-        "visual_contract": "chat_ui.orbGlyph.energy_reference",
-        "renderer": "wpf_3d_animated_energy_orb",
+        "render_source": "native/orb/native_orb_renderer.cpp",
+        "visual_contract": "native_cpp_orb.liquid_streamer_identity",
+        "renderer": "native_cpp_orb_renderer",
         "visual_lock_status": "locked",
         "state_driven_render_object": True,
-        "ring_motion_contract": "parametric_orbital_motion",
+        "ring_motion_contract": "native_liquid_blob_flow",
         "grants_execution_authority": False,
         "grants_mutation_authority": False,
         "ring_family": {
-            "material": "silver_white_energy_ring",
-            "three_d_ring_color": "#E2EEFC",
-            "two_d_orbit_color": "#E0ECFA",
-            "three_d_ring_count": 38,
-            "fine_orbit_count": 56,
-            "bright_orbit_count": 12,
+            "material": "pearlescent_liquid_streamer_rings",
+            "main_streamer_ring_count": 15,
+            "fine_streamer_ring_count": 5,
+            "single_identity_ring_count": 20,
+            "follows_blob_flow": True,
+            "independent_ring_pulses": True,
         },
         "glow_family": {
-            "outer_glow_primary": "#EBF5FF",
-            "outer_glow_secondary": "#B6CDEB",
+            "outer_glow_primary": "#DAEEFF",
+            "outer_glow_secondary": "#FFFFFF",
             "core_primary": "#FFFFFF",
             "core_secondary": "#E6F0FC",
-            "core_shadow": "#8092A8",
+            "core_shadow": "#1C2E48",
             "hot_center": "#FFFFFF",
         },
     }
@@ -124,7 +124,7 @@ def _orb_visual_runtime_readback(value: Any) -> dict[str, Any]:
         return orb_visual
     visual_contract = str(orb_visual.get("visual_contract") or "").strip()
     renderer = str(orb_visual.get("renderer") or "").strip()
-    if visual_contract == "chat_ui.orbGlyph.energy_reference" and renderer == "wpf_3d_animated_energy_orb":
+    if visual_contract == "native_cpp_orb.liquid_streamer_identity" and renderer == "native_cpp_orb_renderer":
         orb_visual["ring_color_contract"] = _orb_ring_color_contract()
     return orb_visual
 

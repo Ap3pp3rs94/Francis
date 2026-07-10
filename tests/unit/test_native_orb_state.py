@@ -28,8 +28,8 @@ def test_native_orb_state_snapshot_is_read_only_contract() -> None:
     assert snapshot["runtime_contract"] == {
         "native_runtime": "cpp",
         "status": "contract_ready",
-        "implemented": False,
-        "active_renderer": False,
+        "implemented": True,
+        "active_renderer": True,
         "body_renderer_only": True,
         "authority_layer": "francis_core",
         "francis_core_remains_authority": True,
@@ -37,6 +37,8 @@ def test_native_orb_state_snapshot_is_read_only_contract() -> None:
     assert snapshot["visual_lock"]["source"] == "docs/operations/ORB_VISUAL_LOCK.md"
     assert snapshot["visual_lock"]["parity_required"] is True
     assert snapshot["visual_lock"]["redesign_allowed"] is False
+    assert snapshot["visual_lock"]["current_renderer"] == "native_cpp_orb_renderer"
+    assert snapshot["visual_lock"]["native_renderer_active"] is True
     assert snapshot["render_state"]["posture"] == "ambient_rest"
     assert snapshot["authority"]["read_only"] is True
     assert snapshot["authority"]["render_only"] is True
@@ -51,7 +53,7 @@ def test_native_orb_state_snapshot_is_read_only_contract() -> None:
     assert snapshot["ipc"]["event_channel"] == "not_implemented"
     assert snapshot["ipc"]["accepts_mutation_events"] is False
     assert snapshot["event_contract"]["emits_intent_events"] is False
-    assert "no_cpp_renderer_implemented" in snapshot["limitations"]
+    assert "no_native_event_channel_implemented" in snapshot["limitations"]
 
 
 def test_native_orb_state_snapshot_surfaces_virtual_pointer_without_user_cursor() -> None:
@@ -154,7 +156,7 @@ def test_native_orb_state_schema_fixture_matches_required_contract() -> None:
     fixture = json.loads((root / "schemas" / "native_orb_state_snapshot.fixture.json").read_text(encoding="utf-8"))
 
     assert schema["properties"]["runtime_contract"]["properties"]["native_runtime"]["const"] == "cpp"
-    assert schema["properties"]["runtime_contract"]["properties"]["implemented"]["const"] is False
+    assert schema["properties"]["runtime_contract"]["properties"]["implemented"]["const"] is True
     assert schema["properties"]["authority"]["properties"]["native_runtime_authority"]["const"] is False
     assert schema["properties"]["authority"]["properties"]["can_click"]["const"] is False
     assert schema["properties"]["authority"]["properties"]["can_drag"]["const"] is False

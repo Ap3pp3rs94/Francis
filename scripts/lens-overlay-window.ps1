@@ -529,48 +529,6 @@ function Get-OrbEnergyReady {
   return ($LiveStatus -eq 'ready' -and $BodyStatus -eq 'ready' -and $BlockersCount -eq 0)
 }
 
-function New-OrbArgbColor {
-  param(
-    [int]$Alpha,
-    [int]$Red,
-    [int]$Green,
-    [int]$Blue
-  )
-
-  return [System.Windows.Media.Color]::FromArgb([byte]$Alpha, [byte]$Red, [byte]$Green, [byte]$Blue)
-}
-
-function New-OrbRotateAnimation {
-  param(
-    [double]$From,
-    [double]$To,
-    [double]$Seconds
-  )
-
-  $Animation = New-Object System.Windows.Media.Animation.DoubleAnimation
-  $Animation.From = $From
-  $Animation.To = $To
-  $Animation.Duration = New-Object System.Windows.Duration([TimeSpan]::FromSeconds($Seconds))
-  $Animation.RepeatBehavior = [System.Windows.Media.Animation.RepeatBehavior]::Forever
-  return $Animation
-}
-
-function New-OrbPulseAnimation {
-  param(
-    [double]$From,
-    [double]$To,
-    [double]$Seconds
-  )
-
-  $Animation = New-Object System.Windows.Media.Animation.DoubleAnimation
-  $Animation.From = $From
-  $Animation.To = $To
-  $Animation.Duration = New-Object System.Windows.Duration([TimeSpan]::FromSeconds($Seconds))
-  $Animation.AutoReverse = $true
-  $Animation.RepeatBehavior = [System.Windows.Media.Animation.RepeatBehavior]::Forever
-  return $Animation
-}
-
 function Clamp-OverlayDouble {
   param(
     [double]$Value,
@@ -793,28 +751,28 @@ function New-OrbRingColorContract {
     kind = 'lens.overlay.orb_ring_color_contract'
     status = 'ready'
     source = 'docs/operations/ORB_VISUAL_LOCK.md'
-    render_source = 'scripts/lens-overlay-window.ps1'
-    visual_contract = 'chat_ui.orbGlyph.energy_reference'
-    renderer = 'wpf_3d_animated_energy_orb'
+    render_source = 'native/orb/native_orb_renderer.cpp'
+    visual_contract = 'native_cpp_orb.liquid_streamer_identity'
+    renderer = 'native_cpp_orb_renderer'
     visual_lock_status = 'locked'
     state_driven_render_object = $true
-    ring_motion_contract = 'parametric_orbital_motion'
+    ring_motion_contract = 'native_liquid_blob_flow'
     grants_execution_authority = $false
     grants_mutation_authority = $false
     ring_family = [ordered]@{
-      material = 'silver_white_energy_ring'
-      three_d_ring_color = '#E2EEFC'
-      two_d_orbit_color = '#E0ECFA'
-      three_d_ring_count = 38
-      fine_orbit_count = 56
-      bright_orbit_count = 12
+      material = 'pearlescent_liquid_streamer_rings'
+      main_streamer_ring_count = 15
+      fine_streamer_ring_count = 5
+      single_identity_ring_count = 20
+      follows_blob_flow = $true
+      independent_ring_pulses = $true
     }
     glow_family = [ordered]@{
-      outer_glow_primary = '#EBF5FF'
-      outer_glow_secondary = '#B6CDEB'
+      outer_glow_primary = '#DAEEFF'
+      outer_glow_secondary = '#FFFFFF'
       core_primary = '#FFFFFF'
       core_secondary = '#E6F0FC'
-      core_shadow = '#8092A8'
+      core_shadow = '#1C2E48'
       hot_center = '#FFFFFF'
     }
   }
@@ -849,10 +807,15 @@ function New-OrbVisualProjection {
 
   return [ordered]@{
     source = 'lens_orb_mcp_status_bridge'
-    visual_contract = 'chat_ui.orbGlyph.energy_reference'
-    renderer = 'wpf_3d_animated_energy_orb'
+    visual_contract = 'native_cpp_orb.liquid_streamer_identity'
+    renderer = 'native_cpp_orb_renderer'
+    render_source = 'native/orb/native_orb_renderer.cpp'
     animated = $true
     transparent_background = $true
+    native_renderer_size = Get-NativeOrbRendererSize
+    wpf_visual_surface_removed = $true
+    control_plane = 'scripts/lens-overlay-window.ps1'
+    native_renderer_status_path = 'data/runtime/native-orb-renderer/status.json'
     ring_color_contract = New-OrbRingColorContract
     autonomous_motion = $AutonomousMotion
     right_corner_locked = (-not $AutonomousMotion -and -not $ManualDrag)
@@ -990,6 +953,13 @@ function Update-OrbAutonomousMotion {
     $OffsetX = Get-OrbInWindowOffsetX
     $OffsetY = Get-OrbInWindowOffsetY
     Set-OrbInWindowOffset -OffsetX ($OffsetX + (($TargetOffsetX - $OffsetX) * $Ease)) -OffsetY ($OffsetY + (($TargetOffsetY - $OffsetY) * $Ease))
+    $RootVariable = Get-Variable -Name LensOverlayDataRoot -Scope Script -ErrorAction SilentlyContinue
+    $Root = if ($null -ne $RootVariable) { [string]$RootVariable.Value } else { '' }
+    if (-not [string]::IsNullOrWhiteSpace($Root)) {
+      $CurrentCenterX = [double]$Window.Left + ([double]$Window.Width / 2.0) + (Get-OrbInWindowOffsetX)
+      $CurrentCenterY = [double]$Window.Top + ([double]$Window.Height / 2.0) + (Get-OrbInWindowOffsetY)
+      [void](Set-NativeOrbRendererPosition -Root $Root -CenterX $CurrentCenterX -CenterY $CurrentCenterY -SkipStatusWrite)
+    }
     return
   }
   $MaximumLeft = [Math]::Max($MinimumLeft, [double]$MotionState['work_right'] - [double]$Window.Width)
@@ -999,6 +969,11 @@ function Update-OrbAutonomousMotion {
   $Ease = [Math]::Min(1.0, [Math]::Max(0.18, $DeltaSeconds * 12.0))
   $Window.Left = [double]$Window.Left + (($TargetLeft - [double]$Window.Left) * $Ease)
   $Window.Top = [double]$Window.Top + (($TargetTop - [double]$Window.Top) * $Ease)
+  $RootVariable = Get-Variable -Name LensOverlayDataRoot -Scope Script -ErrorAction SilentlyContinue
+  $Root = if ($null -ne $RootVariable) { [string]$RootVariable.Value } else { '' }
+  if (-not [string]::IsNullOrWhiteSpace($Root)) {
+    [void](Set-NativeOrbRendererPosition -Root $Root -CenterX ([double]$Window.Left + ([double]$Window.Width / 2.0)) -CenterY ([double]$Window.Top + ([double]$Window.Height / 2.0)) -SkipStatusWrite)
+  }
 }
 
 function Set-OverlayStatusProperty {
@@ -1200,333 +1175,18 @@ function Stop-OrbFrameSyncedMotion {
   }
 }
 
-function New-OrbTorusMesh {
+function New-NativeOrbControlSurface {
   param(
-    [double]$MajorRadius,
-    [double]$TubeRadius,
-    [int]$MajorSegments = 96,
-    [int]$TubeSegments = 6
-  )
-
-  $Mesh = New-Object System.Windows.Media.Media3D.MeshGeometry3D
-  for ($MajorIndex = 0; $MajorIndex -lt $MajorSegments; $MajorIndex += 1) {
-    $Theta = 2.0 * [Math]::PI * $MajorIndex / $MajorSegments
-    $CosTheta = [Math]::Cos($Theta)
-    $SinTheta = [Math]::Sin($Theta)
-    for ($TubeIndex = 0; $TubeIndex -lt $TubeSegments; $TubeIndex += 1) {
-      $Phi = 2.0 * [Math]::PI * $TubeIndex / $TubeSegments
-      $CosPhi = [Math]::Cos($Phi)
-      $SinPhi = [Math]::Sin($Phi)
-      $Radius = $MajorRadius + ($TubeRadius * $CosPhi)
-      $X = $Radius * $CosTheta
-      $Y = $Radius * $SinTheta
-      $Z = $TubeRadius * $SinPhi
-      [void]$Mesh.Positions.Add((New-Object System.Windows.Media.Media3D.Point3D -ArgumentList $X, $Y, $Z))
-      [void]$Mesh.Normals.Add((New-Object System.Windows.Media.Media3D.Vector3D -ArgumentList ($CosPhi * $CosTheta), ($CosPhi * $SinTheta), $SinPhi))
-      [void]$Mesh.TextureCoordinates.Add((New-Object System.Windows.Point -ArgumentList ($MajorIndex / $MajorSegments), ($TubeIndex / $TubeSegments)))
-    }
-  }
-
-  for ($MajorIndex = 0; $MajorIndex -lt $MajorSegments; $MajorIndex += 1) {
-    $NextMajor = ($MajorIndex + 1) % $MajorSegments
-    for ($TubeIndex = 0; $TubeIndex -lt $TubeSegments; $TubeIndex += 1) {
-      $NextTube = ($TubeIndex + 1) % $TubeSegments
-      $A = ($MajorIndex * $TubeSegments) + $TubeIndex
-      $B = ($NextMajor * $TubeSegments) + $TubeIndex
-      $C = ($NextMajor * $TubeSegments) + $NextTube
-      $D = ($MajorIndex * $TubeSegments) + $NextTube
-      [void]$Mesh.TriangleIndices.Add([int]$A)
-      [void]$Mesh.TriangleIndices.Add([int]$B)
-      [void]$Mesh.TriangleIndices.Add([int]$C)
-      [void]$Mesh.TriangleIndices.Add([int]$A)
-      [void]$Mesh.TriangleIndices.Add([int]$C)
-      [void]$Mesh.TriangleIndices.Add([int]$D)
-    }
-  }
-
-  return $Mesh
-}
-
-function New-OrbSphereMesh {
-  param(
-    [double]$Radius,
-    [int]$LatitudeSegments = 18,
-    [int]$LongitudeSegments = 36
-  )
-
-  $Mesh = New-Object System.Windows.Media.Media3D.MeshGeometry3D
-  for ($Lat = 0; $Lat -le $LatitudeSegments; $Lat += 1) {
-    $Theta = [Math]::PI * $Lat / $LatitudeSegments
-    $SinTheta = [Math]::Sin($Theta)
-    $CosTheta = [Math]::Cos($Theta)
-    for ($Lon = 0; $Lon -le $LongitudeSegments; $Lon += 1) {
-      $Phi = 2.0 * [Math]::PI * $Lon / $LongitudeSegments
-      $X = $Radius * $SinTheta * [Math]::Cos($Phi)
-      $Y = $Radius * $CosTheta
-      $Z = $Radius * $SinTheta * [Math]::Sin($Phi)
-      [void]$Mesh.Positions.Add((New-Object System.Windows.Media.Media3D.Point3D -ArgumentList $X, $Y, $Z))
-      [void]$Mesh.Normals.Add((New-Object System.Windows.Media.Media3D.Vector3D -ArgumentList ($X / $Radius), ($Y / $Radius), ($Z / $Radius)))
-      [void]$Mesh.TextureCoordinates.Add((New-Object System.Windows.Point -ArgumentList ($Lon / $LongitudeSegments), ($Lat / $LatitudeSegments)))
-    }
-  }
-
-  for ($Lat = 0; $Lat -lt $LatitudeSegments; $Lat += 1) {
-    for ($Lon = 0; $Lon -lt $LongitudeSegments; $Lon += 1) {
-      $A = ($Lat * ($LongitudeSegments + 1)) + $Lon
-      $B = $A + $LongitudeSegments + 1
-      $C = $B + 1
-      $D = $A + 1
-      [void]$Mesh.TriangleIndices.Add([int]$A)
-      [void]$Mesh.TriangleIndices.Add([int]$B)
-      [void]$Mesh.TriangleIndices.Add([int]$C)
-      [void]$Mesh.TriangleIndices.Add([int]$A)
-      [void]$Mesh.TriangleIndices.Add([int]$C)
-      [void]$Mesh.TriangleIndices.Add([int]$D)
-    }
-  }
-
-  return $Mesh
-}
-
-function New-OrbEnergyMaterial {
-  param(
-    [int]$Alpha,
-    [int]$Red,
-    [int]$Green,
-    [int]$Blue
-  )
-
-  $Brush = New-Object System.Windows.Media.SolidColorBrush (New-OrbArgbColor -Alpha $Alpha -Red $Red -Green $Green -Blue $Blue)
-  $Brush.Opacity = [Math]::Min(1.0, [Math]::Max(0.0, $Alpha / 255.0))
-  $Material = New-Object System.Windows.Media.Media3D.EmissiveMaterial
-  $Material.Brush = $Brush
-  return $Material
-}
-
-function Add-Orb3DEnergyRing {
-  param(
-    [object]$ModelGroup,
-    [int]$Index
-  )
-
-  $MajorRadius = 0.34 + ((($Index * 17) % 22) / 100.0)
-  $TubeRadius = 0.0028 + ((($Index * 11) % 8) / 10000.0)
-  $Mesh = New-OrbTorusMesh -MajorRadius $MajorRadius -TubeRadius $TubeRadius -MajorSegments 104 -TubeSegments 5
-  $Alpha = 58 + (($Index * 23) % 132)
-  $Material = New-OrbEnergyMaterial -Alpha $Alpha -Red 226 -Green 238 -Blue 252
-  $Geometry = New-Object System.Windows.Media.Media3D.GeometryModel3D
-  $Geometry.Geometry = $Mesh
-  $Geometry.Material = $Material
-  $Geometry.BackMaterial = $Material
-
-  $Transforms = New-Object System.Windows.Media.Media3D.Transform3DGroup
-  $Scale = New-Object System.Windows.Media.Media3D.ScaleTransform3D
-  $Scale.ScaleX = 0.72 + ((($Index * 19) % 30) / 100.0)
-  $Scale.ScaleY = 0.26 + ((($Index * 13) % 38) / 100.0)
-  $Scale.ScaleZ = 0.58 + ((($Index * 29) % 30) / 100.0)
-  [void]$Transforms.Children.Add($Scale)
-
-  $PreTiltAxis = New-Object System.Windows.Media.Media3D.Vector3D -ArgumentList ((($Index * 3) % 7) - 3), ((($Index * 5) % 9) - 4), ((($Index * 7) % 11) - 5)
-  if ($PreTiltAxis.Length -lt 0.1) {
-    $PreTiltAxis = New-Object System.Windows.Media.Media3D.Vector3D -ArgumentList 1, 0, 0
-  }
-  $PreTiltAxis.Normalize()
-  $PreTilt = New-Object System.Windows.Media.Media3D.AxisAngleRotation3D -ArgumentList $PreTiltAxis, (($Index * 37) % 360)
-  [void]$Transforms.Children.Add((New-Object System.Windows.Media.Media3D.RotateTransform3D -ArgumentList $PreTilt))
-
-  $SpinAxis = New-Object System.Windows.Media.Media3D.Vector3D -ArgumentList ((($Index * 7) % 5) - 2), ((($Index * 11) % 7) - 3), ((($Index * 13) % 9) - 4)
-  if ($SpinAxis.Length -lt 0.1) {
-    $SpinAxis = New-Object System.Windows.Media.Media3D.Vector3D -ArgumentList 0, 1, 0
-  }
-  $SpinAxis.Normalize()
-  $Spin = New-Object System.Windows.Media.Media3D.AxisAngleRotation3D -ArgumentList $SpinAxis, (($Index * 53) % 360)
-  [void]$Transforms.Children.Add((New-Object System.Windows.Media.Media3D.RotateTransform3D -ArgumentList $Spin))
-
-  $Geometry.Transform = $Transforms
-  [void]$ModelGroup.Children.Add($Geometry)
-
-  $From = (($Index * 53) % 360)
-  $To = if (($Index % 2) -eq 0) { $From + 360 } else { $From - 360 }
-  $Spin.BeginAnimation([System.Windows.Media.Media3D.AxisAngleRotation3D]::AngleProperty, (New-OrbRotateAnimation -From $From -To $To -Seconds (12 + (($Index * 5) % 27))))
-}
-
-function Add-OrbEllipse {
-  param(
-    [object]$Canvas,
-    [double]$Center,
-    [double]$Width,
-    [double]$Height,
-    [double]$Angle,
-    [double]$OffsetX,
-    [double]$OffsetY,
-    [double]$Opacity,
-    [double]$StrokeThickness,
-    [int]$Alpha,
-    [double]$Seconds,
-    [bool]$Reverse
-  )
-
-  $Ellipse = New-Object System.Windows.Shapes.Ellipse
-  $Ellipse.Width = $Width
-  $Ellipse.Height = $Height
-  $Ellipse.Fill = $null
-  $Ellipse.StrokeThickness = $StrokeThickness
-  $Ellipse.Stroke = New-Object System.Windows.Media.SolidColorBrush (New-OrbArgbColor -Alpha $Alpha -Red 224 -Green 236 -Blue 250)
-  $Ellipse.Opacity = $Opacity
-  $Ellipse.RenderTransformOrigin = New-Object System.Windows.Point(0.5, 0.5)
-  $Rotate = New-Object System.Windows.Media.RotateTransform
-  $Rotate.Angle = $Angle
-  $Ellipse.RenderTransform = $Rotate
-  [System.Windows.Controls.Canvas]::SetLeft($Ellipse, $Center - ($Width / 2) + $OffsetX)
-  [System.Windows.Controls.Canvas]::SetTop($Ellipse, $Center - ($Height / 2) + $OffsetY)
-  if ($StrokeThickness -lt 0.8) {
-    $Ellipse.Effect = New-Object System.Windows.Media.Effects.BlurEffect -Property @{ Radius = 0.45 }
-  }
-  [void]$Canvas.Children.Add($Ellipse)
-
-  $To = if ($Reverse) { $Angle - 360 } else { $Angle + 360 }
-  $Rotate.BeginAnimation([System.Windows.Media.RotateTransform]::AngleProperty, (New-OrbRotateAnimation -From $Angle -To $To -Seconds $Seconds))
-  $Ellipse.BeginAnimation([System.Windows.UIElement]::OpacityProperty, (New-OrbPulseAnimation -From ([Math]::Max(0.05, $Opacity * 0.58)) -To ([Math]::Min(0.72, $Opacity * 1.35)) -Seconds ([Math]::Max(4, $Seconds / 3))))
-}
-
-function New-OrbEnergySurface {
-  param(
-    [double]$Size = 220,
+    [double]$Size = 270,
     [double]$HitBoxSize = 72
   )
 
   $Root = New-Object System.Windows.Controls.Grid
   $Root.Width = $Size
   $Root.Height = $Size
-  $Root.Background = $null
+  $Root.Background = [System.Windows.Media.Brushes]::Transparent
   $Root.ClipToBounds = $false
 
-  $GlowCanvas = New-Object System.Windows.Controls.Canvas
-  $GlowCanvas.Width = $Size
-  $GlowCanvas.Height = $Size
-  $GlowCanvas.Background = [System.Windows.Media.Brushes]::Transparent
-  $Center = $Size / 2
-
-  $OuterGlow = New-Object System.Windows.Shapes.Ellipse
-  $OuterGlow.Width = 148
-  $OuterGlow.Height = 148
-  $OuterGlow.Opacity = 0.38
-  $OuterGlow.Effect = New-Object System.Windows.Media.Effects.BlurEffect -Property @{ Radius = 16 }
-  $GlowBrush = New-Object System.Windows.Media.RadialGradientBrush
-  $GlowBrush.GradientStops.Add((New-Object System.Windows.Media.GradientStop((New-OrbArgbColor -Alpha 170 -Red 235 -Green 245 -Blue 255), 0.0)))
-  $GlowBrush.GradientStops.Add((New-Object System.Windows.Media.GradientStop((New-OrbArgbColor -Alpha 40 -Red 182 -Green 205 -Blue 235), 0.42)))
-  $GlowBrush.GradientStops.Add((New-Object System.Windows.Media.GradientStop((New-OrbArgbColor -Alpha 0 -Red 0 -Green 0 -Blue 0), 1.0)))
-  $OuterGlow.Fill = $GlowBrush
-  [System.Windows.Controls.Canvas]::SetLeft($OuterGlow, $Center - 74)
-  [System.Windows.Controls.Canvas]::SetTop($OuterGlow, $Center - 74)
-  [void]$GlowCanvas.Children.Add($OuterGlow)
-  [void]$Root.Children.Add($GlowCanvas)
-
-  $Viewport = New-Object System.Windows.Controls.Viewport3D
-  $Viewport.Width = $Size
-  $Viewport.Height = $Size
-  $Viewport.ClipToBounds = $false
-  $Viewport.IsHitTestVisible = $false
-  $Camera = New-Object System.Windows.Media.Media3D.PerspectiveCamera
-  $Camera.Position = New-Object System.Windows.Media.Media3D.Point3D -ArgumentList 0, 0, 3.2
-  $Camera.LookDirection = New-Object System.Windows.Media.Media3D.Vector3D -ArgumentList 0, 0, -3.2
-  $Camera.UpDirection = New-Object System.Windows.Media.Media3D.Vector3D -ArgumentList 0, 1, 0
-  $Camera.FieldOfView = 56
-  $Viewport.Camera = $Camera
-
-  $ModelGroup = New-Object System.Windows.Media.Media3D.Model3DGroup
-  [void]$ModelGroup.Children.Add((New-Object System.Windows.Media.Media3D.AmbientLight -ArgumentList (New-OrbArgbColor -Alpha 255 -Red 140 -Green 170 -Blue 205)))
-  [void]$ModelGroup.Children.Add((New-Object System.Windows.Media.Media3D.DirectionalLight -ArgumentList (New-OrbArgbColor -Alpha 255 -Red 255 -Green 255 -Blue 255), (New-Object System.Windows.Media.Media3D.Vector3D -ArgumentList -0.2, -0.4, -1.0)))
-
-  for ($Index = 0; $Index -lt 38; $Index += 1) {
-    Add-Orb3DEnergyRing -ModelGroup $ModelGroup -Index $Index
-  }
-
-  $CoreMesh = New-OrbSphereMesh -Radius 0.24 -LatitudeSegments 22 -LongitudeSegments 44
-  $CoreMaterial = New-OrbEnergyMaterial -Alpha 235 -Red 248 -Green 252 -Blue 255
-  $CoreGeometry = New-Object System.Windows.Media.Media3D.GeometryModel3D
-  $CoreGeometry.Geometry = $CoreMesh
-  $CoreGeometry.Material = $CoreMaterial
-  $CoreGeometry.BackMaterial = $CoreMaterial
-  $CoreScale = New-Object System.Windows.Media.Media3D.ScaleTransform3D
-  $CoreScale.ScaleX = 1.0
-  $CoreScale.ScaleY = 0.9
-  $CoreScale.ScaleZ = 1.0
-  $CoreGeometry.Transform = $CoreScale
-  [void]$ModelGroup.Children.Add($CoreGeometry)
-  $CoreScale.BeginAnimation([System.Windows.Media.Media3D.ScaleTransform3D]::ScaleXProperty, (New-OrbPulseAnimation -From 0.84 -To 1.08 -Seconds 3.2))
-  $CoreScale.BeginAnimation([System.Windows.Media.Media3D.ScaleTransform3D]::ScaleYProperty, (New-OrbPulseAnimation -From 0.78 -To 1.02 -Seconds 3.2))
-  $CoreScale.BeginAnimation([System.Windows.Media.Media3D.ScaleTransform3D]::ScaleZProperty, (New-OrbPulseAnimation -From 0.9 -To 1.16 -Seconds 3.2))
-
-  $ModelVisual = New-Object System.Windows.Media.Media3D.ModelVisual3D
-  $ModelVisual.Content = $ModelGroup
-  [void]$Viewport.Children.Add($ModelVisual)
-  [void]$Root.Children.Add($Viewport)
-
-  $Canvas = New-Object System.Windows.Controls.Canvas
-  $Canvas.Width = $Size
-  $Canvas.Height = $Size
-  $Canvas.Background = [System.Windows.Media.Brushes]::Transparent
-  $Canvas.IsHitTestVisible = $false
-
-  for ($Index = 0; $Index -lt 56; $Index += 1) {
-    $Width = 42 + (($Index * 29) % 76)
-    $Height = 14 + (($Index * 17) % 50)
-    $Angle = (($Index * 137.507) % 360) + ((($Index * 19) % 34) - 17)
-    $OffsetX = (($Index * 23) % 24) - 12
-    $OffsetY = (($Index * 31) % 24) - 12
-    $Opacity = 0.08 + ((($Index * 13) % 22) / 100.0)
-    $Alpha = 65 + (($Index * 11) % 95)
-    $Seconds = 11 + (($Index * 7) % 29)
-    Add-OrbEllipse -Canvas $Canvas -Center $Center -Width $Width -Height $Height -Angle $Angle -OffsetX $OffsetX -OffsetY $OffsetY -Opacity $Opacity -StrokeThickness 0.55 -Alpha $Alpha -Seconds $Seconds -Reverse (($Index % 2) -eq 0)
-  }
-
-  for ($Index = 0; $Index -lt 12; $Index += 1) {
-    $Width = 58 + (($Index * 17) % 58)
-    $Height = 18 + (($Index * 11) % 38)
-    $Angle = (($Index * 41) % 360)
-    $OffsetX = (($Index * 7) % 16) - 8
-    $OffsetY = (($Index * 13) % 18) - 9
-    Add-OrbEllipse -Canvas $Canvas -Center $Center -Width $Width -Height $Height -Angle $Angle -OffsetX $OffsetX -OffsetY $OffsetY -Opacity 0.22 -StrokeThickness 0.9 -Alpha 150 -Seconds (16 + $Index) -Reverse (($Index % 2) -eq 1)
-  }
-
-  $Core = New-Object System.Windows.Shapes.Ellipse
-  $Core.Width = 64
-  $Core.Height = 64
-  $Core.Effect = New-Object System.Windows.Media.Effects.BlurEffect -Property @{ Radius = 1.6 }
-  $CoreBrush = New-Object System.Windows.Media.RadialGradientBrush
-  $CoreBrush.GradientStops.Add((New-Object System.Windows.Media.GradientStop((New-OrbArgbColor -Alpha 255 -Red 255 -Green 255 -Blue 255), 0.0)))
-  $CoreBrush.GradientStops.Add((New-Object System.Windows.Media.GradientStop((New-OrbArgbColor -Alpha 235 -Red 230 -Green 240 -Blue 252), 0.24)))
-  $CoreBrush.GradientStops.Add((New-Object System.Windows.Media.GradientStop((New-OrbArgbColor -Alpha 160 -Red 128 -Green 146 -Blue 168), 0.52)))
-  $CoreBrush.GradientStops.Add((New-Object System.Windows.Media.GradientStop((New-OrbArgbColor -Alpha 35 -Red 9 -Green 14 -Blue 24), 1.0)))
-  $Core.Fill = $CoreBrush
-  $Core.RenderTransformOrigin = New-Object System.Windows.Point(0.5, 0.5)
-  $CoreScale = New-Object System.Windows.Media.ScaleTransform
-  $CoreScale.ScaleX = 1
-  $CoreScale.ScaleY = 1
-  $Core.RenderTransform = $CoreScale
-  [System.Windows.Controls.Canvas]::SetLeft($Core, $Center - 32)
-  [System.Windows.Controls.Canvas]::SetTop($Core, $Center - 32)
-  [void]$Canvas.Children.Add($Core)
-  $Core.BeginAnimation([System.Windows.UIElement]::OpacityProperty, (New-OrbPulseAnimation -From 0.74 -To 1.0 -Seconds 2.8))
-  $CoreScale.BeginAnimation([System.Windows.Media.ScaleTransform]::ScaleXProperty, (New-OrbPulseAnimation -From 0.92 -To 1.08 -Seconds 3.2))
-  $CoreScale.BeginAnimation([System.Windows.Media.ScaleTransform]::ScaleYProperty, (New-OrbPulseAnimation -From 0.94 -To 1.06 -Seconds 3.2))
-
-  $HotCenter = New-Object System.Windows.Shapes.Ellipse
-  $HotCenter.Width = 34
-  $HotCenter.Height = 34
-  $HotCenter.Effect = New-Object System.Windows.Media.Effects.BlurEffect -Property @{ Radius = 3.2 }
-  $HotBrush = New-Object System.Windows.Media.RadialGradientBrush
-  $HotBrush.GradientStops.Add((New-Object System.Windows.Media.GradientStop((New-OrbArgbColor -Alpha 255 -Red 255 -Green 255 -Blue 255), 0.0)))
-  $HotBrush.GradientStops.Add((New-Object System.Windows.Media.GradientStop((New-OrbArgbColor -Alpha 160 -Red 255 -Green 255 -Blue 255), 0.48)))
-  $HotBrush.GradientStops.Add((New-Object System.Windows.Media.GradientStop((New-OrbArgbColor -Alpha 0 -Red 255 -Green 255 -Blue 255), 1.0)))
-  $HotCenter.Fill = $HotBrush
-  [System.Windows.Controls.Canvas]::SetLeft($HotCenter, $Center - 17)
-  [System.Windows.Controls.Canvas]::SetTop($HotCenter, $Center - 17)
-  [void]$Canvas.Children.Add($HotCenter)
-  $HotCenter.BeginAnimation([System.Windows.UIElement]::OpacityProperty, (New-OrbPulseAnimation -From 0.72 -To 1.0 -Seconds 1.9))
-
-  [void]$Root.Children.Add($Canvas)
   $HitBox = New-Object System.Windows.Controls.Border
   $HitBox.Width = $HitBoxSize
   $HitBox.Height = $HitBoxSize
@@ -1766,6 +1426,321 @@ function Get-OverlayConfig {
     mcp_status_route = Get-StringProperty -Payload $Config -Name 'mcp_status_route' -Default '/lens/mcp/status'
     orb_mcp_status_route = Get-StringProperty -Payload $Config -Name 'orb_mcp_status_route' -Default '/lens/orb/mcp-status'
   }
+}
+
+function Get-NativeOrbRendererSize {
+  return 270
+}
+
+function Get-NativeOrbRendererRuntimeRoot {
+  param([string]$Root)
+
+  return (Join-Path $Root 'runtime\native-orb-renderer')
+}
+
+function Get-NativeOrbRendererPidPath {
+  param([string]$Root)
+
+  return (Join-Path (Get-NativeOrbRendererRuntimeRoot -Root $Root) 'native-orb-renderer.pid')
+}
+
+function Get-NativeOrbRendererStatusPath {
+  param([string]$Root)
+
+  return (Join-Path (Get-NativeOrbRendererRuntimeRoot -Root $Root) 'status.json')
+}
+
+function Test-NativeOrbRendererProcess {
+  param([int]$ProcessId)
+
+  if ($ProcessId -le 0) {
+    return $false
+  }
+  try {
+    $Process = Get-Process -Id $ProcessId -ErrorAction Stop
+  } catch {
+    return $false
+  }
+  return ([string]$Process.ProcessName -eq 'native_orb_renderer')
+}
+
+function Initialize-NativeOrbRendererInterop {
+  if ('FrancisNativeOrbRendererNative' -as [type]) {
+    return
+  }
+
+  Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+
+public static class FrancisNativeOrbRendererNative
+{
+    public const int MoveCenterMessage = 0x8000 + 0x46;
+
+    public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern int GetClassName(IntPtr hWnd, StringBuilder className, int maxCount);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool PostMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+
+    public static IntPtr FindRendererWindow(int processId)
+    {
+        IntPtr found = IntPtr.Zero;
+        EnumWindows(delegate(IntPtr hWnd, IntPtr lParam)
+        {
+            uint windowProcessId = 0;
+            GetWindowThreadProcessId(hWnd, out windowProcessId);
+            if (windowProcessId != (uint)processId)
+            {
+                return true;
+            }
+
+            StringBuilder className = new StringBuilder(128);
+            GetClassName(hWnd, className, className.Capacity);
+            if (className.ToString() == "FrancisNativeOrbRendererWindow")
+            {
+                found = hWnd;
+                return false;
+            }
+            return true;
+        }, IntPtr.Zero);
+        return found;
+    }
+}
+'@
+}
+
+function Get-NativeOrbRendererReadback {
+  param([string]$Root)
+
+  $RuntimeRoot = Get-NativeOrbRendererRuntimeRoot -Root $Root
+  $PidPath = Get-NativeOrbRendererPidPath -Root $Root
+  $StatusPath = Get-NativeOrbRendererStatusPath -Root $Root
+  $Status = Read-JsonFile -Path $StatusPath
+  $NativeRendererPid = 0
+  if (Test-Path -LiteralPath $PidPath -PathType Leaf) {
+    try {
+      $NativeRendererPid = [int]((Get-Content -LiteralPath $PidPath -Raw -ErrorAction Stop).Trim())
+    } catch {
+      $NativeRendererPid = 0
+    }
+  }
+  $StatusPid = Get-IntegerProperty -Payload $Status -Name 'process_id' -Default 0
+  if ($NativeRendererPid -le 0) {
+    $NativeRendererPid = $StatusPid
+  }
+  $ProcessAlive = Test-NativeOrbRendererProcess -ProcessId $NativeRendererPid
+  $ActiveRenderer = $ProcessAlive -and (Get-BoolProperty -Payload $Status -Name 'active_renderer' -Default $false)
+  return [ordered]@{
+    kind = 'francis.native_orb_renderer.runtime_readback'
+    renderer = 'native_cpp_orb_renderer'
+    runtime_root = $RuntimeRoot
+    pid_path = $PidPath
+    status_path = $StatusPath
+    status_exists = (Test-Path -LiteralPath $StatusPath -PathType Leaf)
+    pid_present = (Test-Path -LiteralPath $PidPath -PathType Leaf)
+    pid = $NativeRendererPid
+    status_pid = $StatusPid
+    pid_matches_status = ($NativeRendererPid -gt 0 -and $StatusPid -gt 0 -and $NativeRendererPid -eq $StatusPid)
+    process_alive = $ProcessAlive
+    active_renderer = $ActiveRenderer
+    size = Get-IntegerProperty -Payload $Status -Name 'size' -Default (Get-NativeOrbRendererSize)
+    x = Get-IntegerProperty -Payload $Status -Name 'x' -Default 0
+    y = Get-IntegerProperty -Payload $Status -Name 'y' -Default 0
+    center_x = Get-IntegerProperty -Payload $Status -Name 'center_x' -Default 0
+    center_y = Get-IntegerProperty -Payload $Status -Name 'center_y' -Default 0
+    move_message_supported = $true
+    render_only = Get-BoolProperty -Payload $Status -Name 'render_only' -Default $true
+    authority_granted = Get-BoolProperty -Payload $Status -Name 'authority_granted' -Default $false
+    controls_user_os_cursor = Get-BoolProperty -Payload $Status -Name 'controls_user_os_cursor' -Default $false
+    can_click = Get-BoolProperty -Payload $Status -Name 'can_click' -Default $false
+    can_drag = Get-BoolProperty -Payload $Status -Name 'can_drag' -Default $false
+    can_type = Get-BoolProperty -Payload $Status -Name 'can_type' -Default $false
+  }
+}
+
+function Set-NativeOrbRendererPosition {
+  param(
+    [string]$Root,
+    [double]$CenterX,
+    [double]$CenterY,
+    [switch]$SkipStatusWrite
+  )
+
+  if ([string]::IsNullOrWhiteSpace($Root)) {
+    return [ordered]@{
+      attempted = $false
+      applied = $false
+      status = 'native_renderer_root_not_configured'
+      grants_execution_authority = $false
+      grants_mutation_authority = $false
+    }
+  }
+
+  $Readback = Get-NativeOrbRendererReadback -Root $Root
+  $ProcessId = Get-IntegerProperty -Payload $Readback -Name 'pid' -Default 0
+  $Size = Get-IntegerProperty -Payload $Readback -Name 'size' -Default (Get-NativeOrbRendererSize)
+  $CenterXi = [int][Math]::Round($CenterX)
+  $CenterYi = [int][Math]::Round($CenterY)
+  $Left = [int][Math]::Round($CenterX - ($Size / 2.0))
+  $Top = [int][Math]::Round($CenterY - ($Size / 2.0))
+  $Status = 'native_renderer_position_unavailable'
+  $Applied = $false
+  $WindowHandle = [Int64]0
+
+  if ((Get-BoolProperty -Payload $Readback -Name 'process_alive' -Default $false) -and $ProcessId -gt 0) {
+    try {
+      Initialize-NativeOrbRendererInterop
+      $Handle = [FrancisNativeOrbRendererNative]::FindRendererWindow($ProcessId)
+      $WindowHandle = $Handle.ToInt64()
+      if ($Handle -ne [IntPtr]::Zero) {
+        $Applied = [bool][FrancisNativeOrbRendererNative]::PostMessage(
+          $Handle,
+          [FrancisNativeOrbRendererNative]::MoveCenterMessage,
+          ([IntPtr]$CenterXi),
+          ([IntPtr]$CenterYi)
+        )
+        $Status = if ($Applied) { 'native_renderer_position_posted' } else { 'native_renderer_position_post_failed' }
+      } else {
+        $Status = 'native_renderer_window_not_found'
+      }
+    } catch {
+      $Status = 'native_renderer_position_post_failed'
+    }
+  } else {
+    $Status = 'native_renderer_process_not_alive'
+  }
+
+  $MoveResult = [ordered]@{
+    attempted = $true
+    applied = $Applied
+    status = $Status
+    renderer = 'native_cpp_orb_renderer'
+    process_id = $ProcessId
+    window_handle = $WindowHandle
+    center_x = $CenterXi
+    center_y = $CenterYi
+    x = $Left
+    y = $Top
+    size = $Size
+    message = 'native_move_center'
+    controls_user_os_cursor = $false
+    can_click = $false
+    can_drag = $false
+    can_type = $false
+    grants_execution_authority = $false
+    grants_mutation_authority = $false
+  }
+
+  if (-not $SkipStatusWrite) {
+    $RuntimeRoot = Get-NativeOrbRendererRuntimeRoot -Root $Root
+    $StatusPath = Get-NativeOrbRendererStatusPath -Root $Root
+    New-Item -ItemType Directory -Force -Path $RuntimeRoot | Out-Null
+    $StatusPayload = Read-JsonFile -Path $StatusPath
+    if ($null -eq $StatusPayload) {
+      $StatusPayload = [pscustomobject]@{
+        kind = 'francis.native_orb_renderer.runtime_status'
+        schema_version = 'francis.native_orb_renderer.runtime_status.v1'
+        renderer = 'native_cpp_orb_renderer'
+        active_renderer = $false
+        render_only = $true
+        authority_granted = $false
+      }
+    }
+    Set-OverlayStatusProperty -Payload $StatusPayload -Name 'x' -Value $Left
+    Set-OverlayStatusProperty -Payload $StatusPayload -Name 'y' -Value $Top
+    Set-OverlayStatusProperty -Payload $StatusPayload -Name 'center_x' -Value $CenterXi
+    Set-OverlayStatusProperty -Payload $StatusPayload -Name 'center_y' -Value $CenterYi
+    Set-OverlayStatusProperty -Payload $StatusPayload -Name 'last_move' -Value $MoveResult
+    Set-OverlayStatusProperty -Payload $StatusPayload -Name 'updated_at' -Value ([DateTimeOffset]::UtcNow.ToString('o'))
+    $TempPath = Join-Path $RuntimeRoot ("status.{0}.tmp" -f ([Guid]::NewGuid().ToString('N')))
+    try {
+      $StatusPayload | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $TempPath -Encoding UTF8
+      Move-OverlayRuntimeStateFile -TempPath $TempPath -DestinationPath $StatusPath
+    } finally {
+      Remove-Item -LiteralPath $TempPath -Force -ErrorAction SilentlyContinue
+    }
+  }
+
+  return $MoveResult
+}
+
+function Stop-NativeOrbRenderer {
+  param([string]$Root)
+
+  $RuntimeRoot = Get-NativeOrbRendererRuntimeRoot -Root $Root
+  $PidPath = Get-NativeOrbRendererPidPath -Root $Root
+  $StatusPath = Get-NativeOrbRendererStatusPath -Root $Root
+  $NativeRendererPid = 0
+  if (Test-Path -LiteralPath $PidPath -PathType Leaf) {
+    try {
+      $NativeRendererPid = [int]((Get-Content -LiteralPath $PidPath -Raw -ErrorAction Stop).Trim())
+    } catch {
+      $NativeRendererPid = 0
+    }
+  }
+  $Stopped = $false
+  if (Test-NativeOrbRendererProcess -ProcessId $NativeRendererPid) {
+    Stop-Process -Id $NativeRendererPid -Force -ErrorAction Stop
+    $Stopped = $true
+  }
+  New-Item -ItemType Directory -Force -Path $RuntimeRoot | Out-Null
+  Remove-Item -LiteralPath $PidPath -Force -ErrorAction SilentlyContinue
+  [pscustomobject]@{
+    kind = 'francis.native_orb_renderer.runtime_status'
+    schema_version = 'francis.native_orb_renderer.runtime_status.v1'
+    status = 'stopped'
+    active_renderer = $false
+    renderer = 'native_cpp_orb_renderer'
+    body_renderer_only = $true
+    render_only = $true
+    authority_granted = $false
+    accepts_mutation_events = $false
+    controls_user_os_cursor = $false
+    can_click = $false
+    can_drag = $false
+    can_type = $false
+    process_id = $NativeRendererPid
+    stopped_process = $Stopped
+    stopped_at_utc = [DateTime]::UtcNow.ToString('o')
+  } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $StatusPath -Encoding UTF8
+  return $Stopped
+}
+
+function Start-NativeOrbRenderer {
+  param(
+    [string]$Root,
+    [int]$RunSeconds,
+    [int]$Size,
+    [int]$X,
+    [int]$Y
+  )
+
+  $BuildScript = Join-Path $RepoRoot 'native\orb\build-native-orb-renderer.ps1'
+  if (-not (Test-Path -LiteralPath $BuildScript -PathType Leaf)) {
+    throw 'Native Orb renderer build script is missing.'
+  }
+  $RuntimeRoot = Get-NativeOrbRendererRuntimeRoot -Root $Root
+  $NativeRunSeconds = if ($RunSeconds -gt 0) { $RunSeconds } else { 0 }
+  [void](Stop-NativeOrbRenderer -Root $Root)
+  & $BuildScript -Launch -RunSeconds $NativeRunSeconds -Size $Size -X $X -Y $Y -RuntimeDir $RuntimeRoot | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    throw "Native Orb renderer launch failed with exit code $LASTEXITCODE."
+  }
+  $Readback = Get-NativeOrbRendererReadback -Root $Root
+  if (-not [bool]$Readback.active_renderer) {
+    throw 'Native Orb renderer launch did not produce an active renderer readback.'
+  }
+  return $Readback
 }
 
 function New-OverlayVoiceProjection {
@@ -3181,6 +3156,9 @@ function Write-OverlayOrbPositionCommandReceipt {
     receipt_path = 'data/runtime/lens-overlay/orb-position-commands'
     overlay_runtime_owns_execution = $true
     bounded_overlay_position_mutation = $true
+    native_renderer_move_attempted = Get-BoolProperty -Payload $Result -Name 'native_renderer_move_attempted' -Default $false
+    native_renderer_move_applied = Get-BoolProperty -Payload $Result -Name 'native_renderer_move_applied' -Default $false
+    native_renderer_move_status = Get-StringProperty -Payload $Result -Name 'native_renderer_move_status' -Default ''
     authority_scope = $AuthorityScope
     mutation_authority_scope = 'runtime_overlay_position_only'
     chat_route_writes_conversation_ledger = $false
@@ -3239,6 +3217,9 @@ function Write-OverlayOrbVirtualPointerReceipt {
     receipt_path = 'data/runtime/lens-overlay/orb-position-commands'
     overlay_runtime_owns_execution = $true
     bounded_overlay_position_mutation = $true
+    native_renderer_move_attempted = Get-BoolProperty -Payload $Result -Name 'native_renderer_move_attempted' -Default $false
+    native_renderer_move_applied = Get-BoolProperty -Payload $Result -Name 'native_renderer_move_applied' -Default $false
+    native_renderer_move_status = Get-StringProperty -Payload $Result -Name 'native_renderer_move_status' -Default ''
     mutation_authority_scope = 'runtime_overlay_position_only'
     controls_user_os_cursor = $false
     user_mouse_taken = $false
@@ -4061,6 +4042,17 @@ function Set-OrbWindowSidePosition {
     if (-not [string]::IsNullOrWhiteSpace($TargetAnchor)) {
       $script:LensOverlayOperatorPositionAnchor = $TargetAnchor
     }
+    $NativeRendererMove = if (-not [string]::IsNullOrWhiteSpace($Root)) {
+      Set-NativeOrbRendererPosition -Root $Root -CenterX ([double]$Placement['orb_center_x']) -CenterY ([double]$Placement['orb_center_y'])
+    } else {
+      [ordered]@{
+        attempted = $false
+        applied = $false
+        status = 'native_renderer_root_not_configured'
+        grants_execution_authority = $false
+        grants_mutation_authority = $false
+      }
+    }
     Reset-OrbAutonomousMotionAnchor -Window $Window -MotionState $MotionState
     $PositionReceiptWritten = $false
     if (-not [string]::IsNullOrWhiteSpace($Root)) {
@@ -4083,6 +4075,10 @@ function Set-OrbWindowSidePosition {
       click_hit_box_scope = [string]$Placement['click_hit_box_scope']
       reach_mode = [string]$Placement['reach_mode']
       position_receipt_written = $PositionReceiptWritten
+      native_renderer_move = $NativeRendererMove
+      native_renderer_move_attempted = [bool]$NativeRendererMove['attempted']
+      native_renderer_move_applied = [bool]$NativeRendererMove['applied']
+      native_renderer_move_status = [string]$NativeRendererMove['status']
     }
   }
 
@@ -4189,6 +4185,17 @@ function Set-OrbWindowCoordinatePosition {
     $Window.Left = $TargetLeft
     $Window.Top = $TargetTop
     Set-OrbInWindowOffset -OffsetX ([double]$Placement['offset_x']) -OffsetY ([double]$Placement['offset_y'])
+    $NativeRendererMove = if (-not [string]::IsNullOrWhiteSpace($Root)) {
+      Set-NativeOrbRendererPosition -Root $Root -CenterX ([double]$Placement['orb_center_x']) -CenterY ([double]$Placement['orb_center_y'])
+    } else {
+      [ordered]@{
+        attempted = $false
+        applied = $false
+        status = 'native_renderer_root_not_configured'
+        grants_execution_authority = $false
+        grants_mutation_authority = $false
+      }
+    }
     if (-not [string]::IsNullOrWhiteSpace($TargetAnchor)) {
       $script:LensOverlayOperatorPositionAnchor = $TargetAnchor
     }
@@ -4218,6 +4225,10 @@ function Set-OrbWindowCoordinatePosition {
       reach_mode = [string]$Placement['reach_mode']
       target_anchor = $TargetAnchor
       position_receipt_written = $PositionReceiptWritten
+      native_renderer_move = $NativeRendererMove
+      native_renderer_move_attempted = [bool]$NativeRendererMove['attempted']
+      native_renderer_move_applied = [bool]$NativeRendererMove['applied']
+      native_renderer_move_status = [string]$NativeRendererMove['status']
     }
   }
 
@@ -4344,6 +4355,11 @@ function Start-OrbWindowCoordinateTravel {
         $OffsetX = [double]$Context['start_offset_x'] + (([double]$Context['target_offset_x'] - [double]$Context['start_offset_x']) * $Ease)
         $OffsetY = [double]$Context['start_offset_y'] + (([double]$Context['target_offset_y'] - [double]$Context['start_offset_y']) * $Ease)
         Set-OrbInWindowOffset -OffsetX $OffsetX -OffsetY $OffsetY
+        if (-not [string]::IsNullOrWhiteSpace([string]$Context['root'])) {
+          $CurrentCenterX = [double]$TravelWindow.Left + ([double]$TravelWindow.Width / 2.0) + (Get-OrbInWindowOffsetX)
+          $CurrentCenterY = [double]$TravelWindow.Top + ([double]$TravelWindow.Height / 2.0) + (Get-OrbInWindowOffsetY)
+          [void](Set-NativeOrbRendererPosition -Root ([string]$Context['root']) -CenterX $CurrentCenterX -CenterY $CurrentCenterY -SkipStatusWrite)
+        }
 
         if ($Progress -lt 1.0) {
           return
@@ -4354,6 +4370,17 @@ function Start-OrbWindowCoordinateTravel {
         Set-OrbInWindowOffset -OffsetX ([double]$Context['target_offset_x']) -OffsetY ([double]$Context['target_offset_y'])
         if (-not [string]::IsNullOrWhiteSpace([string]$Context['target_anchor'])) {
           $script:LensOverlayOperatorPositionAnchor = [string]$Context['target_anchor']
+        }
+        $NativeRendererMove = if (-not [string]::IsNullOrWhiteSpace([string]$Context['root'])) {
+          Set-NativeOrbRendererPosition -Root ([string]$Context['root']) -CenterX ([double]$Context['orb_center_x']) -CenterY ([double]$Context['orb_center_y'])
+        } else {
+          [ordered]@{
+            attempted = $false
+            applied = $false
+            status = 'native_renderer_root_not_configured'
+            grants_execution_authority = $false
+            grants_mutation_authority = $false
+          }
         }
         Reset-OrbAutonomousMotionAnchor -Window $TravelWindow -MotionState $Context['motion_state']
         $PositionReceiptWritten = $false
@@ -4391,6 +4418,10 @@ function Start-OrbWindowCoordinateTravel {
           travel_distance = [double]$Context['distance']
           travel_timing_source = 'composition_rendering'
           travel_easing = 'smootherstep'
+          native_renderer_move = $NativeRendererMove
+          native_renderer_move_attempted = [bool]$NativeRendererMove['attempted']
+          native_renderer_move_applied = [bool]$NativeRendererMove['applied']
+          native_renderer_move_status = [string]$NativeRendererMove['status']
           bounded_overlay_position_mutation = $true
           mutation_authority_scope = 'runtime_overlay_position_only'
           controls_user_os_cursor = $false
@@ -4829,6 +4860,9 @@ function Invoke-OverlayOrbVirtualPointerState {
     click_hit_box_scope = Get-StringProperty -Payload $Position -Name 'click_hit_box_scope' -Default ''
     reach_mode = Get-StringProperty -Payload $Position -Name 'reach_mode' -Default ''
     position_receipt_written = Get-BoolProperty -Payload $Position -Name 'position_receipt_written' -Default $false
+    native_renderer_move_attempted = Get-BoolProperty -Payload $Position -Name 'native_renderer_move_attempted' -Default $false
+    native_renderer_move_applied = Get-BoolProperty -Payload $Position -Name 'native_renderer_move_applied' -Default $false
+    native_renderer_move_status = Get-StringProperty -Payload $Position -Name 'native_renderer_move_status' -Default ''
     controls_user_os_cursor = $false
     user_mouse_taken = $false
     physical_input_performed = $false
@@ -5053,6 +5087,9 @@ function Invoke-OverlayVoiceOrbCommand {
   $Payload.ok = $true
   $Payload.runtime_overlay_position_changed = $true
   $Payload.position_receipt_written = Get-BoolProperty -Payload $Position -Name 'position_receipt_written' -Default $false
+  $Payload.native_renderer_move_attempted = Get-BoolProperty -Payload $Position -Name 'native_renderer_move_attempted' -Default $false
+  $Payload.native_renderer_move_applied = Get-BoolProperty -Payload $Position -Name 'native_renderer_move_applied' -Default $false
+  $Payload.native_renderer_move_status = Get-StringProperty -Payload $Position -Name 'native_renderer_move_status' -Default ''
   $Payload.overlay_left = [double]$Position['left']
   $Payload.overlay_top = [double]$Position['top']
   $Payload.message = 'Orb position voice command applied locally and not forwarded to chat.'
@@ -6620,6 +6657,7 @@ function Write-OverlayState {
     orb_mcp_status_route = $Config.orb_mcp_status_route
     mcp_body_state = $McpBodyState
     orb_visual = $OrbVisual
+    native_renderer = Get-NativeOrbRendererReadback -Root $Root
     voice = Get-OverlayVoiceReadback -Root $Root
     voice_turn = Get-OverlayVoiceTurnReadback -Root $Root
     overlay_voice = $OverlayVoice
@@ -6716,6 +6754,8 @@ function Get-OverlayRuntimeReadback {
   $OverlayPosition = if ($null -ne $StatusOverlayPosition) { $StatusOverlayPosition } else { New-OverlayWindowPositionProjection -Window $null -MotionState $null -OverlayWindowVisible $false }
   $StatusOrbControls = if ($null -ne $Status -and $null -ne $Status.PSObject.Properties['orb_controls']) { $Status.PSObject.Properties['orb_controls'].Value } else { $null }
   $OrbControls = if ($null -ne $StatusOrbControls) { $StatusOrbControls } else { Get-OverlayOrbControlReadback }
+  $NativeRenderer = Get-NativeOrbRendererReadback -Root $Root
+  $NativeRendererReady = (Get-BoolProperty -Payload $NativeRenderer -Name 'active_renderer' -Default $false) -and (Get-BoolProperty -Payload $NativeRenderer -Name 'process_alive' -Default $false)
   $StatusClaimsRunningOverlay = (
     $StatusKind -eq 'lens.overlay.runtime_state' -and
     $StatusValue -eq 'overlay_running' -and
@@ -6728,9 +6768,11 @@ function Get-OverlayRuntimeReadback {
   $ProcessAlive = if ($StatusClaimsRunningOverlay) { Get-ProcessAlive -ProcessId $RuntimePid } else { $false }
   $OverlayVisible = $ProcessAlive -and (Get-BoolProperty -Payload $Status -Name 'overlay_window_visible' -Default $false)
   $AlwaysOnTop = $OverlayVisible -and (Get-BoolProperty -Payload $Status -Name 'always_on_top' -Default $false)
-  $Ready = $OverlayVisible -and $AlwaysOnTop
+  $Ready = $OverlayVisible -and $AlwaysOnTop -and $NativeRendererReady
   $RequirementState = if ($Ready) {
     'visible'
+  } elseif ($OverlayVisible -and $AlwaysOnTop -and -not $NativeRendererReady) {
+    'native_renderer_missing'
   } elseif ($ProcessAlive) {
     'process_running_no_visible_overlay_claim'
   } elseif ($RuntimeStateExists -or $PidPresent) {
@@ -6740,6 +6782,8 @@ function Get-OverlayRuntimeReadback {
   }
   $Blocker = if ($Ready) {
     ''
+  } elseif ($OverlayVisible -and $AlwaysOnTop -and -not $NativeRendererReady) {
+    'native_cpp_orb_renderer_not_active'
   } elseif ($ProcessAlive) {
     'overlay_window_not_observed'
   } else {
@@ -6770,6 +6814,7 @@ function Get-OverlayRuntimeReadback {
     mcp_body_state_route = $McpStatusRoute
     mcp_body_state = $McpBodyState
     orb_visual = $OrbVisual
+    native_renderer = $NativeRenderer
     voice = $Voice
     voice_turn = $VoiceTurn
     overlay_voice = $OverlayVoice
@@ -6822,6 +6867,7 @@ function New-StatusPayload {
     mcp_body_state_route = $Config.mcp_status_route
     mcp_body_state = $Readback.mcp_body_state
     orb_visual = $Readback.orb_visual
+    native_renderer = $Readback.native_renderer
     voice = $Readback.voice
     voice_turn = $Readback.voice_turn
     overlay_voice = $Readback.overlay_voice
@@ -7139,6 +7185,7 @@ if ($Mode -eq 'Run') {
   $script:LensOverlayLastOrbVirtualPointerUpdatedAt = ''
   $script:LensOverlayLastOrbVirtualPointerWriteTicks = [Int64]0
   $script:LensOverlayApplication = $null
+  $script:LensOverlayNativeRenderer = $null
   $script:LensOverlayOrbPanelPopup = $null
   $script:LensOverlayOrbPanelInput = $null
   $script:LensOverlayOrbPanelStatusText = $null
@@ -7171,7 +7218,7 @@ if ($Mode -eq 'Run') {
     Set-OverlayHardwareRenderMode
     $script:LensOverlayOrbVisual = New-OrbVisualProjection -AutonomousMotion $AutonomousMotionEnabled -ManualDrag $ManualOrbDragEnabled
     $Config = Get-OverlayConfig
-    $OrbSize = 220
+    $OrbSize = Get-NativeOrbRendererSize
     $OrbHitBoxSize = Get-OrbHitBoxSize
     $Screen = Get-OverlayVirtualScreenBounds
     $Form = New-Object System.Windows.Window
@@ -7192,7 +7239,7 @@ if ($Mode -eq 'Run') {
     $OverlayRoot.Height = [double]$Screen.Height
     $OverlayRoot.Background = [System.Windows.Media.Brushes]::Transparent
     $OverlayRoot.ClipToBounds = $false
-    $EnergyRoot = New-OrbEnergySurface -Size $OrbSize -HitBoxSize $OrbHitBoxSize
+    $EnergyRoot = New-NativeOrbControlSurface -Size $OrbSize -HitBoxSize $OrbHitBoxSize
     $OrbOffsetTransform = New-Object System.Windows.Media.TranslateTransform
     $EnergyRoot.RenderTransform = $OrbOffsetTransform
     $script:LensOverlayOrbWindowOffsetTransform = $OrbOffsetTransform
@@ -7268,9 +7315,12 @@ if ($Mode -eq 'Run') {
     $script:LensOverlayVoiceEnvironmentScope = $VoiceEnvironmentScope
     $script:LensOverlayManualOrbDragEnabled = $ManualOrbDragEnabled
     Register-OverlayOrbHitTestHook -Window $Form -HitBox $OrbClickTarget
-    $InitialOrbX = [double]$Screen.Right - ($OrbSize / 2.0) - 48.0
-    $InitialOrbY = [double]$Screen.Bottom - ($OrbSize / 2.0) - 48.0
+    $InitialOrbX = [double]$Screen.Right - ($OrbSize / 2.0) - 72.0
+    $InitialOrbY = [double]$Screen.Bottom - ($OrbSize / 2.0) - 96.0
     Set-OrbInWindowOffset -OffsetX ($InitialOrbX - ([double]$Form.Left + ([double]$Form.Width / 2.0))) -OffsetY ($InitialOrbY - ([double]$Form.Top + ([double]$Form.Height / 2.0)))
+    $NativeOrbX = [int]([Math]::Max(12.0, [double]$Screen.Right - [double]$OrbSize - 72.0))
+    $NativeOrbY = [int]([Math]::Max(12.0, [double]$Screen.Bottom - [double]$OrbSize - 96.0))
+    $script:LensOverlayNativeRenderer = Start-NativeOrbRenderer -Root $DataRoot -RunSeconds $RunSeconds -Size ([int]$OrbSize) -X $NativeOrbX -Y $NativeOrbY
     $script:LensOverlayEnableWakeListen = [bool]$EnableWakeListen
     $script:LensOverlayVoiceUseLlmRequested = [bool]$EnableVoiceLlm
     $script:LensOverlayWakeRecognizer = $null
@@ -7418,6 +7468,7 @@ if ($Mode -eq 'Run') {
       } catch {
       }
     }
+    [void](Stop-NativeOrbRenderer -Root $DataRoot)
     if (-not $Failed) {
       Write-OverlayState -Root $DataRoot -Status 'overlay_stopped' -OverlayWindowVisible $false -AlwaysOnTop $false -Message 'Francis Lens overlay window stopped.' -OrbVisual $script:LensOverlayOrbVisual
     }
@@ -7436,6 +7487,7 @@ if ($Mode -eq 'Stop') {
   if ($RuntimePidToStop -gt 0) {
     Stop-OverlayRuntimeProcess -ProcessId $RuntimePidToStop | Out-Null
   }
+  [void](Stop-NativeOrbRenderer -Root $DataRoot)
   Write-OverlayStoppedState -Root $DataRoot -Message 'Francis Lens overlay window stopped by operator command.'
   Remove-Item -LiteralPath (Join-Path $DataRoot 'runtime\lens-overlay\lens-overlay.pid') -Force -ErrorAction SilentlyContinue
   New-StoppedStatusPayload -Root $DataRoot -ModeName $ModeName | ConvertTo-Json -Depth 8

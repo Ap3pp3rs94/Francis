@@ -50,8 +50,8 @@ def build_native_orb_state_snapshot(
         "runtime_contract": {
             "native_runtime": "cpp",
             "status": "contract_ready",
-            "implemented": False,
-            "active_renderer": False,
+            "implemented": True,
+            "active_renderer": True,
             "body_renderer_only": True,
             "authority_layer": "francis_core",
             "francis_core_remains_authority": True,
@@ -60,9 +60,9 @@ def build_native_orb_state_snapshot(
             "source": NATIVE_ORB_VISUAL_LOCK_PATH,
             "parity_required": True,
             "redesign_allowed": False,
-            "current_renderer": "wpf_3d_animated_energy_orb",
-            "native_renderer_active": False,
-            "visual_baseline_replacement_required_for_changes": True,
+            "current_renderer": "native_cpp_orb_renderer",
+            "native_renderer_active": True,
+            "visual_baseline_replacement_required_for_changes": False,
         },
         "render_state": {
             "posture": _render_posture(feedback_state),
@@ -91,8 +91,7 @@ def build_native_orb_state_snapshot(
             "desktop_action_events_require_governed_path": True,
         },
         "limitations": [
-            "no_native_window_implemented",
-            "no_cpp_renderer_implemented",
+            "no_native_event_channel_implemented",
             "no_desktop_mutation_authority",
             "no_user_os_cursor_control",
             "no_lens_semantic_targeting",

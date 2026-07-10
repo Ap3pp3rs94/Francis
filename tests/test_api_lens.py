@@ -714,8 +714,8 @@ def test_lens_orb_runtime_identity_reports_voice_input_output_contract_split(
             "overlay_name": "Francis Lens Overlay",
             "overlay_scope": "user_session",
             "orb_visual": {
-                "visual_contract": "chat_ui.orbGlyph.energy_reference",
-                "renderer": "wpf_3d_animated_energy_orb",
+                "visual_contract": "native_cpp_orb.liquid_streamer_identity",
+                "renderer": "native_cpp_orb_renderer",
                 "animated": True,
             },
             "overlay_voice": {
@@ -799,14 +799,14 @@ def test_lens_orb_runtime_identity_accepts_locked_ring_color_contract(
             "overlay_window_visible": True,
             "always_on_top": True,
             "orb_visual": {
-                "visual_contract": "chat_ui.orbGlyph.energy_reference",
-                "renderer": "wpf_3d_animated_energy_orb",
+                "visual_contract": "native_cpp_orb.liquid_streamer_identity",
+                "renderer": "native_cpp_orb_renderer",
                 "animated": True,
                 "transparent_background": True,
                 "ring_color_contract": {
                     "kind": "lens.overlay.orb_ring_color_contract",
                     "source": "docs/operations/ORB_VISUAL_LOCK.md",
-                    "renderer": "wpf_3d_animated_energy_orb",
+                    "renderer": "native_cpp_orb_renderer",
                 },
             },
             "overlay_voice": {

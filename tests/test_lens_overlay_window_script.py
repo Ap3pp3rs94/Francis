@@ -99,13 +99,13 @@ def test_lens_overlay_window_status_reports_missing_runtime(tmp_path: Path) -> N
     ring_color_contract = payload["orb_visual"]["ring_color_contract"]
     assert ring_color_contract["kind"] == "lens.overlay.orb_ring_color_contract"
     assert ring_color_contract["source"] == "docs/operations/ORB_VISUAL_LOCK.md"
-    assert ring_color_contract["render_source"] == "scripts/lens-overlay-window.ps1"
-    assert ring_color_contract["visual_contract"] == "chat_ui.orbGlyph.energy_reference"
-    assert ring_color_contract["renderer"] == "wpf_3d_animated_energy_orb"
+    assert ring_color_contract["render_source"] == "native/orb/native_orb_renderer.cpp"
+    assert ring_color_contract["visual_contract"] == "native_cpp_orb.liquid_streamer_identity"
+    assert ring_color_contract["renderer"] == "native_cpp_orb_renderer"
     assert ring_color_contract["state_driven_render_object"] is True
-    assert ring_color_contract["ring_family"]["three_d_ring_color"] == "#E2EEFC"
-    assert ring_color_contract["ring_family"]["two_d_orbit_color"] == "#E0ECFA"
-    assert ring_color_contract["glow_family"]["outer_glow_primary"] == "#EBF5FF"
+    assert ring_color_contract["ring_family"]["main_streamer_ring_count"] == 15
+    assert ring_color_contract["ring_family"]["single_identity_ring_count"] == 20
+    assert ring_color_contract["glow_family"]["outer_glow_primary"] == "#DAEEFF"
     assert payload["overlay_position"]["status"] == "window_unavailable"
     assert payload["overlay_position"]["right_corner_locked"] is True
     assert payload["overlay_position"]["default_anchor"] == "bottom_right"
@@ -192,7 +192,9 @@ def test_lens_overlay_window_stop_handles_corrupt_runtime_status(tmp_path: Path)
     assert payload["overlay_runtime"]["runtime_process_alive"] is False
 
 
-def test_lens_overlay_window_status_reports_live_runtime_readback(tmp_path: Path) -> None:
+def test_lens_overlay_window_status_reports_native_renderer_missing_for_synthetic_runtime(
+    tmp_path: Path,
+) -> None:
     data_dir = tmp_path / "data"
     runtime_dir = data_dir / "runtime" / "lens-overlay"
     runtime_dir.mkdir(parents=True)
@@ -320,9 +322,9 @@ def test_lens_overlay_window_status_reports_live_runtime_readback(tmp_path: Path
     assert proc.returncode == 0, proc.stderr
     payload = json.loads(proc.stdout)
     assert payload["kind"] == "lens.overlay.window.runtime"
-    assert payload["status"] == "visible"
-    assert payload["ready"] is True
-    assert payload["overlay_window"] is True
+    assert payload["status"] == "missing"
+    assert payload["ready"] is False
+    assert payload["overlay_window"] is False
     assert payload["mcp_status_route"] == "/lens/mcp/status"
     assert payload["mcp_body_state"]["route"] == "/lens/mcp/status"
     assert payload["mcp_body_state"]["read_only"] is True
@@ -336,7 +338,7 @@ def test_lens_overlay_window_status_reports_live_runtime_readback(tmp_path: Path
     assert payload["mcp_body_state"]["orb_semantic_state"]["read_only"] is True
     assert payload["mcp_body_state"]["orb_semantic_state"]["private_ui_state"] is False
     assert payload["mcp_body_state"]["orb_semantic_state"]["visual_change"] is False
-    assert payload["next_smallest_truthful_gap"] == "lens_voice_default_microphone_signal"
+    assert payload["next_smallest_truthful_gap"] == "overlay_window_runtime"
     assert payload["overlay_runtime"]["process_alive"] is True
     assert payload["overlay_runtime"]["runtime_process_alive"] is False
     assert payload["overlay_runtime"]["overlay_window_visible"] is True
@@ -349,8 +351,10 @@ def test_lens_overlay_window_status_reports_live_runtime_readback(tmp_path: Path
     assert payload["overlay_position"]["desktop_roam_bounds"] == "work_area"
     assert payload["overlay_position"]["manual_drag_supported"] is False
     assert payload["overlay_runtime"]["overlay_position"]["roam_right"] == 1280.0
-    assert payload["overlay_runtime"]["requirement_state"] == "visible"
-    assert payload["overlay_runtime"]["blocker"] == ""
+    assert payload["overlay_runtime"]["requirement_state"] == "native_renderer_missing"
+    assert payload["overlay_runtime"]["blocker"] == "native_cpp_orb_renderer_not_active"
+    assert payload["overlay_runtime"]["native_renderer"]["active_renderer"] is False
+    assert payload["overlay_runtime"]["native_renderer"]["process_alive"] is False
     assert payload["overlay_runtime"]["runtime_status_pid_matches_pid_file"] is True
     assert payload["overlay_runtime"]["mcp_body_state_route"] == "/lens/mcp/status"
     assert payload["voice"]["status"] == "spoken"
@@ -454,7 +458,10 @@ def test_lens_overlay_window_status_clears_stale_voice_suppression_readback(tmp_
 
     assert proc.returncode == 0, proc.stderr
     payload = json.loads(proc.stdout)
-    assert payload["status"] == "visible"
+    assert payload["status"] == "missing"
+    assert payload["ready"] is False
+    assert payload["overlay_runtime"]["requirement_state"] == "native_renderer_missing"
+    assert payload["overlay_runtime"]["blocker"] == "native_cpp_orb_renderer_not_active"
     assert payload["voice"]["status"] == "listening"
     assert payload["voice"]["selected_voice"] == "Emma"
     assert payload["voice"]["previous_voice_status"] == "voice_input_suppressed_while_speaking"
@@ -877,7 +884,8 @@ def test_lens_overlay_orb_move_place_mode_is_one_shot_bounded_and_receipted() ->
     assert "$Form.Width = [double]$Screen.Width" in script
     assert "$Form.Height = [double]$Screen.Height" in script
     assert "$OverlayRoot = New-Object System.Windows.Controls.Canvas" in script
-    assert "New-OrbEnergySurface -Size $OrbSize -HitBoxSize $OrbHitBoxSize" in script
+    assert "New-NativeOrbControlSurface -Size $OrbSize -HitBoxSize $OrbHitBoxSize" in script
+    assert "Start-NativeOrbRenderer -Root $DataRoot" in script
     assert "function Register-OverlayOrbHitTestHook" in script
     assert "$OrbClickTarget.Add_MouseRightButtonDown({" in script
     assert "$script:LensOverlayWindow.DragMove()" not in script
@@ -1188,9 +1196,17 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "function New-McpBodyStateProjection" in script
     assert "function Read-McpBodyStateForOverlay" in script
     assert "function Format-McpBodyStateLabel" in script
-    assert "function New-OrbEnergySurface" in script
-    assert "function New-OrbTorusMesh" in script
-    assert "function Add-Orb3DEnergyRing" in script
+    assert "function New-NativeOrbControlSurface" in script
+    assert "function Initialize-NativeOrbRendererInterop" in script
+    assert "function Set-NativeOrbRendererPosition" in script
+    assert "function Start-NativeOrbRenderer" in script
+    assert "function Stop-NativeOrbRenderer" in script
+    assert "FindRendererWindow" in script
+    assert "PostMessage" in script
+    assert "MoveCenterMessage" in script
+    assert "function New-OrbEnergySurface" not in script
+    assert "function New-OrbTorusMesh" not in script
+    assert "function Add-Orb3DEnergyRing" not in script
     assert "function New-OrbAutonomousMotionState" in script
     assert "function Update-OrbAutonomousMotion" in script
     assert "function Get-OverlayWpfRenderProfile" in script
@@ -1229,12 +1245,13 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "live_status' -Value 'refresh_failed'" in script
     assert "Overlay runtime stayed visible after MCP body-state refresh failed." in script
     assert "francis_lens=orb_overlay" in script
-    assert "chat_ui.orbGlyph.energy_reference" in script
-    assert "wpf_3d_animated_energy_orb" in script
+    assert "native_cpp_orb.liquid_streamer_identity" in script
+    assert "native_cpp_orb_renderer" in script
     assert "bounded_desktop_roam" in script
     assert "composition_target_rendering" in script
     assert "elapsed_time_delta_clamped" in script
-    assert "render_profile = Get-OverlayWpfRenderProfile" in script
+    assert "native_renderer_size = Get-NativeOrbRendererSize" in script
+    assert "Set-NativeOrbRendererPosition -Root $Root" in script
     assert "[System.Windows.Media.CompositionTarget]::add_Rendering" in script
     assert "[System.Windows.Media.CompositionTarget]::remove_Rendering" in script
     assert "Set-OverlayHardwareRenderMode" in script
@@ -1509,10 +1526,10 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "speech_recognition_diagnostics = 'redacted_counts_only'" in script
     assert "wake_acknowledged" in script
     assert "Microsoft Zira Desktop" in script
-    assert "System.Windows.Controls.Viewport3D" in script
-    assert "System.Windows.Media.Media3D.PerspectiveCamera" in script
-    assert "System.Windows.Media.Media3D.GeometryModel3D" in script
-    assert "System.Windows.Media.Animation.DoubleAnimation" in script
+    assert "System.Windows.Controls.Viewport3D" not in script
+    assert "System.Windows.Media.Media3D.PerspectiveCamera" not in script
+    assert "System.Windows.Media.Media3D.GeometryModel3D" not in script
+    assert "System.Windows.Media.Animation.DoubleAnimation" not in script
     assert "MCP body-state" in script
     assert "Tools: {0}/{1}" in script
     assert "Takeover: {0} | Input: {1} | Blockers: {2}" in script
@@ -1540,6 +1557,9 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "$OrbClickTarget.Add_MouseMove" in script
     assert "$script:LensOverlayOrbDragActive = $true" in script
     assert "Set-OrbWindowCoordinatePosition -Window $script:LensOverlayWindow" in script
+    assert "native_renderer_move_attempted" in script
+    assert "native_renderer_move_applied" in script
+    assert "native_renderer_move_status" in script
     assert "$script:LensOverlayWindow.DragMove()" not in script
     assert "Reset-OrbAutonomousMotionAnchor" in script
     assert "bounded_desktop_roam" in script
