@@ -7492,6 +7492,8 @@ def test_plugins_capability_pack_quality_evidence_remediation_apply_backfills_ca
     ]
     assert before_item["quality_reference_backfill_candidate"] is True
     receipts_before = client.get("/plugins/capabilities/packs/metadata/receipts?limit=20").json()["items"]
+    registry_before_dry_run = plugins._registry_path().read_bytes()
+    catalog_before_dry_run = plugins._runtime_catalog_path().read_bytes()
 
     dry_run = client.post(
         "/plugins/capabilities/packs/quality/evidence/remediation/apply",
@@ -7510,6 +7512,8 @@ def test_plugins_capability_pack_quality_evidence_remediation_apply_backfills_ca
     assert dry_run_body["planned"][0]["validation_receipt_links"]["count"] == 1
     assert dry_run_body["planned"][0]["proposal_lineage_links"]["count"] == 1
     assert dry_run_body["governance"]["writes_registry_metadata"] is False
+    assert plugins._registry_path().read_bytes() == registry_before_dry_run
+    assert plugins._runtime_catalog_path().read_bytes() == catalog_before_dry_run
     post_dry_run = plugins._read_plugin(plugins._load_registry(), plugin_id)
     assert post_dry_run is not None
     assert "quality" not in dict(post_dry_run.get("meta") or {})

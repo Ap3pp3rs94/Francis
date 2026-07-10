@@ -14471,8 +14471,7 @@ def apply_capability_pack_quality_evidence_remediation(
 
         registry = _load_registry()
         _sync_generated_plugins(registry)
-        catalog = _save_registry_and_catalog(registry)
-        runtime_catalog = _read_runtime_catalog_payload(catalog)
+        runtime_catalog = _runtime_catalog_payload_from_registry(registry)
         marketplace = marketplace_from_plugin_catalog(runtime_catalog)
         entries = marketplace.catalog()
         promotion_remediation = analyze_capability_pack_promotion_rule_remediation(entries)
