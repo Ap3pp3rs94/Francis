@@ -323,7 +323,7 @@ def _find_live_safe_target(process_id: int) -> dict[str, int]:
             edit_controls: list[int] = []
 
             def collect_child(hwnd: int, _extra: object) -> None:
-                if str(win32gui.GetClassName(hwnd)).strip().casefold() == "edit":
+                if "edit" in str(win32gui.GetClassName(hwnd)).strip().casefold():
                     edit_controls.append(hwnd)
 
             win32gui.EnumChildWindows(top_level, collect_child, None)
