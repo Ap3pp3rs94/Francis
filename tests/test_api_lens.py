@@ -931,6 +931,7 @@ def test_lens_runtime_process_scan_flags_competing_overlay(monkeypatch) -> None:
 def test_lens_runtime_process_scan_flags_extra_native_renderer(monkeypatch) -> None:
     import francis.lens.status as status_module
 
+    canonical_root = r"D:\Francis\data"
     process_payload = [
         {
             "component": "renderer",
@@ -958,6 +959,7 @@ def test_lens_runtime_process_scan_flags_extra_native_renderer(monkeypatch) -> N
 
     monkeypatch.setattr(status_module.os, "name", "nt")
     monkeypatch.setattr(status_module.shutil, "which", lambda _: "powershell.exe")
+    monkeypatch.setattr(status_module, "data_dir", lambda: canonical_root)
     monkeypatch.setattr(status_module.subprocess, "run", fake_run)
 
     payload = status_module._lens_runtime_process_scan({"renderer": 106})
