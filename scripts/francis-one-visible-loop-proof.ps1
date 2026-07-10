@@ -242,7 +242,7 @@ def _live_safe_target_approval() -> dict[str, Any]:
         "safe_target_id": payload.get("safe_target_id") == LIVE_SAFE_TARGET_ID,
         "target_title": payload.get("target_title") == LIVE_SAFE_TARGET_TITLE,
         "backend": payload.get("backend") == "win32_post_message",
-        "input_kind": payload.get("input_kind") == "keyboard.type",
+        "input_kind": payload.get("input_kind") == "mouse.click",
         "no_physical_input": payload.get("physical_input_performed") is False,
         "no_user_cursor": payload.get("uses_user_os_cursor") is False,
         "not_expired": expires_at > time.time(),
@@ -273,14 +273,17 @@ $form.Location = [System.Drawing.Point]::new(80, 80)
 $form.Size = [System.Drawing.Size]::new(520, 240)
 $form.TopMost = $true
 $form.ShowInTaskbar = $true
-$text = New-Object System.Windows.Forms.TextBox
-$text.Name = 'FrancisLiveSafeTargetText'
-$text.Multiline = $true
-$text.Location = [System.Drawing.Point]::new(24, 48)
-$text.Size = [System.Drawing.Size]::new(450, 110)
-$text.Text = 'ready'
-$form.Controls.Add($text)
-$form.Add_Shown({ $form.Activate(); $text.Focus() })
+$button = New-Object System.Windows.Forms.Button
+$button.Name = 'FrancisLiveSafeTargetButton'
+$button.Location = [System.Drawing.Point]::new(120, 72)
+$button.Size = [System.Drawing.Size]::new(260, 64)
+$button.Text = 'Apply approved effect'
+$button.Add_Click({
+  $button.Text = 'Approved effect confirmed'
+  $form.Text = 'Francis One Visible Loop Live Safe Target Confirmed'
+})
+$form.Controls.Add($button)
+$form.Add_Shown({ $form.Activate(); $button.Focus() })
 [void]$form.ShowDialog()
 '''
 
@@ -320,15 +323,15 @@ def _find_live_safe_target(process_id: int) -> dict[str, int]:
         win32gui.EnumWindows(collect, None)
         if matches:
             top_level = matches[0]
-            edit_controls: list[int] = []
+            action_controls: list[int] = []
 
             def collect_child(hwnd: int, _extra: object) -> None:
-                if "edit" in str(win32gui.GetClassName(hwnd)).strip().casefold():
-                    edit_controls.append(hwnd)
+                if "button" in str(win32gui.GetClassName(hwnd)).strip().casefold():
+                    action_controls.append(hwnd)
 
             win32gui.EnumChildWindows(top_level, collect_child, None)
-            if edit_controls:
-                child = edit_controls[0]
+            if action_controls:
+                child = action_controls[0]
                 left, top, right, bottom = (int(value) for value in win32gui.GetWindowRect(child))
                 return {
                     "top_level_hwnd": int(top_level),
@@ -389,8 +392,11 @@ def _live_safe_target_action_proof() -> dict[str, Any]:
                 **shared,
                 "objective": "Prove a bounded observable window-message effect on the approved Stage 6 safe target",
                 "intent": {
-                    "kind": "keyboard.type",
-                    "text": " Francis live safe-target effect confirmed",
+                    "kind": "mouse.click",
+                    "x": target["x"],
+                    "y": target["y"],
+                    "button": "left",
+                    "clicks": 1,
                     "metadata": {"expected_target_title": LIVE_SAFE_TARGET_TITLE},
                 },
             }

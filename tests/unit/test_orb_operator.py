@@ -193,6 +193,7 @@ def test_orb_pointer_click_with_desktop_bridge_records_action_without_user_mouse
         assert kwargs["input_kind"] == "mouse.click"
         assert kwargs["payload"]["x"] == 10
         assert kwargs["payload"]["y"] == 20
+        assert kwargs["payload"]["expected_target_title"] == "Approved Safe Target"
         return {
             "ok": True,
             "status": "desktop_action_sent",
@@ -209,7 +210,17 @@ def test_orb_pointer_click_with_desktop_bridge_records_action_without_user_mouse
     monkeypatch.setattr(orb_operator_module, "perform_orb_desktop_action", fake_bridge)
 
     result = submit_orb_intent(
-        {"mode": "orb_pointer", "intent": {"kind": "click", "x": 10, "y": 20, "button": "left", "clicks": 1}}
+        {
+            "mode": "orb_pointer",
+            "intent": {
+                "kind": "click",
+                "x": 10,
+                "y": 20,
+                "button": "left",
+                "clicks": 1,
+                "metadata": {"expected_target_title": "Approved Safe Target"},
+            },
+        }
     )
 
     assert result["ok"] is True
@@ -222,6 +233,7 @@ def test_orb_pointer_click_with_desktop_bridge_records_action_without_user_mouse
     assert result["governance"]["physical_input_performed"] is False
     assert result["governance"]["uses_user_os_cursor"] is False
     assert result["governance"]["user_mouse_taken"] is False
+    assert result["resolved_target"]["expected_target_title_present"] is True
 
 
 def test_orb_pointer_click_with_desktop_bridge_propagates_confirmed_effect(

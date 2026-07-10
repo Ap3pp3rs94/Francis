@@ -81,6 +81,10 @@ def _public_action(kind: str, payload: dict[str, Any]) -> dict[str, Any]:
             "button": _clean_text(payload.get("button"), "left").lower(),
             "clicks": max(1, min(_safe_int(payload.get("clicks"), 1), 3)),
         }
+        expected_target_title = _clean_text(payload.get("expected_target_title"))
+        if expected_target_title:
+            public["expected_target_title_present"] = True
+            public["expected_target_title_sha256"] = _hash_text(expected_target_title)
         if payload.get("x") is not None and payload.get("y") is not None:
             public["x"] = _bounded_coord(payload.get("x"), "x")
             public["y"] = _bounded_coord(payload.get("y"), "y")

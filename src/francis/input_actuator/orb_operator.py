@@ -509,6 +509,7 @@ class DesktopInputBackend:
         clicks: int = 1,
         x: int | None = None,
         y: int | None = None,
+        expected_target_title: str = "",
         proposal_id: str = "",
         approval_phrase: str = "",
     ) -> BackendAttempt:
@@ -516,6 +517,8 @@ class DesktopInputBackend:
         if x is not None and y is not None:
             payload["x"] = x
             payload["y"] = y
+        if expected_target_title:
+            payload["expected_target_title"] = expected_target_title
         return self._submit("mouse.click", payload, proposal_id=proposal_id, approval_phrase=approval_phrase)
 
     def type_text(
@@ -871,6 +874,11 @@ def _resolve_intent(intent: OrbIntent) -> IntentResolution:
             x, y = _rect_center(intent.rect)
             payload.update({"x": x, "y": y})
             resolved.update({"x": x, "y": y, "source": "rect_center"})
+        expected_target_title = _clean_text(intent.metadata.get("expected_target_title"))
+        if expected_target_title:
+            payload["expected_target_title"] = expected_target_title
+            resolved["expected_target_title_present"] = True
+            resolved["expected_target_title_sha256"] = _hash_text(expected_target_title)
         return IntentResolution(
             feedback_state="clicking",
             input_kind="mouse.click",
@@ -998,6 +1006,7 @@ def _run_backend(
             clicks=_safe_int(payload.get("clicks"), 1),
             x=payload.get("x"),
             y=payload.get("y"),
+            expected_target_title=_clean_text(payload.get("expected_target_title")),
             proposal_id=proposal_id,
             approval_phrase=approval_phrase,
         )

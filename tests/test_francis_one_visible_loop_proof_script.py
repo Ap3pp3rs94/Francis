@@ -67,14 +67,14 @@ def test_one_visible_loop_proof_exercises_confirmed_effect_with_fixture_safe_tar
     assert '"delegated_operator_approval": approval.get("decision_kind") == "delegated_operator_approval"' in script
     assert "_start_live_safe_target" in script
     assert "_find_live_safe_target" in script
-    assert 'if "edit" in str(win32gui.GetClassName(hwnd)).strip().casefold()' in script
+    assert 'if "button" in str(win32gui.GetClassName(hwnd)).strip().casefold()' in script
     assert "[System.Drawing.Point]::new(80, 80)" in script
     assert "[System.Drawing.Size]::new(520, 240)" in script
     assert '"error_detail": str(exc)[:240]' in script
     assert 'os.environ["FRANCIS_ORB_DESKTOP_BRIDGE_ENABLE"] = "1"' in script
     assert 'os.environ["FRANCIS_ORB_OPERATOR_STATE_DIR"] = str(_repo_root() / ".francis" / "orb_operator")' in script
     assert '"kind": "mouse.move"' in script
-    assert '"kind": "keyboard.type"' in script
+    assert '"kind": "mouse.click"' in script
     assert '"metadata": {"expected_target_title": LIVE_SAFE_TARGET_TITLE}' in script
     assert '"proof_mode": "live_operator_approved_safe_target"' in script
     assert '"safe_target_process_stopped"' in script
