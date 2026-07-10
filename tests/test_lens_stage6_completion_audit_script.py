@@ -1694,6 +1694,30 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
     assert "New-ChildProofRunSummary -Name 'overlay_api_execution'" in script
     assert "New-ChildProofRunSummary -Name 'summon_api_bounded_execution'" in script
     assert "New-ChildProofRunSummary -Name 'persistent_supervision_api_execution'" in script
+
+
+def test_lens_stage6_completion_audit_can_consume_canonical_summon_without_launching_competitor() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+
+    assert "[switch]$UseCanonicalSummonRuntimeReadback" in script
+    assert "$CanonicalSummonRuntimeProofScript" in script
+    assert "lens-canonical-summon-runtime-proof.ps1" in script
+    assert "if ($UseCanonicalSummonRuntimeReadback) {" in script
+    assert "$AllowLaunchOnHotkey = $false" in script
+    assert "$SyntheticLaunchOnHotkeyProofsRequested = [bool]$AllowLaunchOnHotkey" in script
+    assert "} elseif ($AllowLaunchOnHotkey) {" in script
+    assert "'-DataDir', (Join-Path $RepoRoot 'data')" in script
+    assert "[string]$SummonApiLaunchOnHotkeyProof.kind -eq 'lens.summon.canonical_runtime.proof'" in script
+    assert "[string]$SummonApiLaunchOnHotkeyProof.source -eq 'canonical_live_runtime_readback'" in script
+    assert "[bool]$SummonApiLaunchOnHotkeyProofGovernance.read_only_contract" in script
+    assert "-not [bool]$SummonApiLaunchOnHotkeyProofGovernance.launches_process" in script
+    assert "-not [bool]$SummonApiLaunchOnHotkeyProofGovernance.stops_process" in script
+    assert "-not [bool]$SummonApiLaunchOnHotkeyProofGovernance.restarts_process" in script
+    assert "canonical_summon_runtime_readback = [bool]$UseCanonicalSummonRuntimeReadback" in script
+    assert (
+        "$ChildProofRuns += New-ChildProofRunSummary -Name 'canonical_summon_runtime_readback' "
+        "-Result $SummonApiLaunchOnHotkeyProofResult" in script
+    )
     assert (
         "-ScriptPath $PersistentSupervisionApiExecutionProofScript `\n"
         "    -ScriptArgs @('-Mode', 'Status', '-RunSeconds', '10')" in script
@@ -2126,7 +2150,7 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
     assert "scripts/lens-resident-runtime-api-execution-proof.ps1 -Mode Status" in script
     assert "scripts/lens-tray-presence-api-execution-proof.ps1 -Mode Status" in script
     assert "scripts/lens-os-binding-api-execution-proof.ps1 -Mode Status" in script
-    assert "launch_on_hotkey_runtime_readback_opt_in = [bool]$AllowLaunchOnHotkey" in script
+    assert "launch_on_hotkey_runtime_readback_opt_in = $LaunchOnHotkeyRuntimeReadbackOptIn" in script
     assert "read_only_contract = -not [bool]$AllowLaunchOnHotkey" in script
 
 

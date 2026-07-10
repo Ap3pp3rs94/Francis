@@ -19,6 +19,8 @@ param(
 
   [switch]$AllowLaunchOnHotkey,
 
+  [switch]$UseCanonicalSummonRuntimeReadback,
+
   [ValidateRange(0, 3600)]
   [int]$OverallTimeoutSeconds = 600,
 
@@ -26,6 +28,11 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$SyntheticLaunchOnHotkeyProofsRequested = [bool]$AllowLaunchOnHotkey
+if ($UseCanonicalSummonRuntimeReadback) {
+  $AllowLaunchOnHotkey = $false
+}
+$LaunchOnHotkeyRuntimeReadbackOptIn = $SyntheticLaunchOnHotkeyProofsRequested -or [bool]$UseCanonicalSummonRuntimeReadback
 
 function ConvertTo-StringArray {
   param(
@@ -159,6 +166,9 @@ if (-not $AuditWatchdogChild -and $OverallTimeoutSeconds -gt 0) {
   if ($AllowLaunchOnHotkey) {
     $InnerArgumentParts += '-AllowLaunchOnHotkey'
   }
+  if ($UseCanonicalSummonRuntimeReadback) {
+    $InnerArgumentParts += '-UseCanonicalSummonRuntimeReadback'
+  }
 
   $CommandText = (
     '& ' + (Quote-ProcessArgument -Value $PowerShellForWatchdog.Source) + ' ' +
@@ -271,7 +281,7 @@ if (-not $AuditWatchdogChild -and $OverallTimeoutSeconds -gt 0) {
       child_stderr_preview = $StderrPreview
       child_exit_code = 124
       child_proof_timeout_seconds = $ChildProofTimeoutSeconds
-      allow_launch_on_hotkey = [bool]$AllowLaunchOnHotkey
+      allow_launch_on_hotkey = $LaunchOnHotkeyRuntimeReadbackOptIn
       next_smallest_truthful_gap = 'stage6_completion_audit_timeout'
       recommended_next_slice = 'bound_stage6_completion_audit_child_proofs_before_replay'
       recommended_proof_script = 'scripts/lens-stage6-completion-audit.ps1 -Mode Status -OverallTimeoutSeconds <seconds>'
@@ -589,6 +599,7 @@ $SummonResidentHostBlockerProofScript = Join-Path $PSScriptRoot 'lens-summon-res
 $SummonAuthorityBlockerProofScript = Join-Path $PSScriptRoot 'lens-summon-authority-blocker-proof.ps1'
 $SummonAnywhereFamilyChainProofScript = Join-Path $PSScriptRoot 'lens-summon-anywhere-family-chain-proof.ps1'
 $SummonApiExecutionProofScript = Join-Path $PSScriptRoot 'lens-summon-api-execution-proof.ps1'
+$CanonicalSummonRuntimeProofScript = Join-Path $PSScriptRoot 'lens-canonical-summon-runtime-proof.ps1'
 $ResidentRuntimeApiExecutionProofScript = Join-Path $PSScriptRoot 'lens-resident-runtime-api-execution-proof.ps1'
 $TrayPresenceApiExecutionProofScript = Join-Path $PSScriptRoot 'lens-tray-presence-api-execution-proof.ps1'
 $OsBindingApiExecutionProofScript = Join-Path $PSScriptRoot 'lens-os-binding-api-execution-proof.ps1'
@@ -682,7 +693,7 @@ if ([bool]$CheckpointResult.timed_out -or [int]$CheckpointResult.exit_code -ne 0
     can_close_stage6 = $false
     transition_allowed = $false
     child_proof_timeout_seconds = $ChildProofTimeoutSeconds
-    allow_launch_on_hotkey = [bool]$AllowLaunchOnHotkey
+    allow_launch_on_hotkey = $LaunchOnHotkeyRuntimeReadbackOptIn
     child_proof_timeouts = @($CheckpointChildProofTimeouts)
     child_readback_timeouts = [string[]]@()
     child_proof_runs = @($CheckpointChildRun)
@@ -788,7 +799,7 @@ if ($SummonAnywhereLensStatusReadbackTimedOut) {
     can_close_stage6 = $false
     transition_allowed = $false
     child_proof_timeout_seconds = $ChildProofTimeoutSeconds
-    allow_launch_on_hotkey = [bool]$AllowLaunchOnHotkey
+    allow_launch_on_hotkey = $LaunchOnHotkeyRuntimeReadbackOptIn
     child_proof_timeouts = [string[]]@()
     child_readback_timeouts = @($SummonAnywhereChildReadbackTimeouts)
     child_proof_runs = @($SummonAnywhereChildRun)
@@ -917,7 +928,13 @@ $SummonApiLaunchOnHotkeyProofResult = [ordered]@{
   timeout_seconds = 0
   duration_ms = 0
 }
-if ($AllowLaunchOnHotkey) {
+if ($UseCanonicalSummonRuntimeReadback) {
+  $SummonApiLaunchOnHotkeyProofResult = Invoke-JsonScript `
+    -PowerShellPath $PowerShell.Source `
+    -ScriptPath $CanonicalSummonRuntimeProofScript `
+    -ScriptArgs @('-Mode', 'Status', '-DataDir', (Join-Path $RepoRoot 'data')) `
+    -TimeoutSeconds ([Math]::Max($ChildProofTimeoutSeconds, 60))
+} elseif ($AllowLaunchOnHotkey) {
   $SummonApiLaunchOnHotkeyProofResult = Invoke-JsonScript `
     -PowerShellPath $PowerShell.Source `
     -ScriptPath $SummonApiExecutionProofScript `
@@ -2047,7 +2064,9 @@ $ChildProofRuns = @(
   New-ChildProofRunSummary -Name 'persistent_supervision_resident_claim_boundary' -Result $PersistentSupervisionResidentClaimBoundaryProofResult
   New-ChildProofRunSummary -Name 'persistent_supervision_enablement_transition_plan' -Result $PersistentSupervisionEnablementTransitionPlanProofResult
 )
-if ($AllowLaunchOnHotkey) {
+if ($UseCanonicalSummonRuntimeReadback) {
+  $ChildProofRuns += New-ChildProofRunSummary -Name 'canonical_summon_runtime_readback' -Result $SummonApiLaunchOnHotkeyProofResult
+} elseif ($AllowLaunchOnHotkey) {
   $ChildProofRuns += New-ChildProofRunSummary -Name 'summon_api_launch_on_hotkey' -Result $SummonApiLaunchOnHotkeyProofResult
   $ChildProofRuns += New-ChildProofRunSummary -Name 'resident_runtime_api_execution' -Result $ResidentRuntimeApiExecutionProofResult
   $ChildProofRuns += New-ChildProofRunSummary -Name 'tray_presence_api_execution' -Result $TrayPresenceApiExecutionProofResult
@@ -3934,7 +3953,8 @@ $SummonApiLaunchOnHotkeyCleanupErrors = ConvertTo-StringArray -Value (
   $SummonApiLaunchOnHotkeyProof.cleanup_errors
 )
 $SummonApiLaunchOnHotkeyProofObserved = (
-  [bool]$AllowLaunchOnHotkey -and
+  (
+    [bool]$AllowLaunchOnHotkey -and
   [int]$SummonApiLaunchOnHotkeyProofResult.exit_code -eq 0 -and
   [bool]$SummonApiLaunchOnHotkeyProof.ok -and
   [string]$SummonApiLaunchOnHotkeyProof.kind -eq 'lens.summon.api_execution.proof' -and
@@ -3984,7 +4004,44 @@ $SummonApiLaunchOnHotkeyProofObserved = (
   -not [bool]$SummonApiLaunchOnHotkeyProofGovernance.capture_authority -and
   -not [bool]$SummonApiLaunchOnHotkeyProofGovernance.new_sensing_authority -and
   -not [bool]$SummonApiLaunchOnHotkeyProofGovernance.memory_write -and
-  -not [bool]$SummonApiLaunchOnHotkeyProofGovernance.resident_claim_authority
+    -not [bool]$SummonApiLaunchOnHotkeyProofGovernance.resident_claim_authority
+  ) -or (
+    [bool]$UseCanonicalSummonRuntimeReadback -and
+    [int]$SummonApiLaunchOnHotkeyProofResult.exit_code -eq 0 -and
+    [bool]$SummonApiLaunchOnHotkeyProof.ok -and
+    [string]$SummonApiLaunchOnHotkeyProof.kind -eq 'lens.summon.canonical_runtime.proof' -and
+    [string]$SummonApiLaunchOnHotkeyProof.status -eq 'proof_passed' -and
+    [string]$SummonApiLaunchOnHotkeyProof.source -eq 'canonical_live_runtime_readback' -and
+    [bool]$SummonApiLaunchOnHotkeyProof.allow_launch_on_hotkey -and
+    [bool]$SummonApiLaunchOnHotkeyProof.opened -and
+    -not [bool]$SummonApiLaunchOnHotkeyProof.no_launch -and
+    [bool]$SummonApiLaunchOnHotkeyProof.summon_anywhere -and
+    [bool]$SummonApiLaunchOnHotkeyProof.os_level_summon -and
+    [bool]$SummonApiLaunchOnHotkeyProof.hotkey_launch_on_press_authority -and
+    [bool]$SummonApiLaunchOnHotkeyProof.hotkey_launch_on_press -and
+    @($SummonApiLaunchOnHotkeyCleanupErrors).Count -eq 0 -and
+    [string]$SummonApiLaunchOnHotkeyProof.summon_readiness_status_after_execute -eq 'ready_for_operator_review' -and
+    @($SummonApiLaunchOnHotkeyReadinessBlockers).Count -eq 0 -and
+    [string]$SummonApiLaunchOnHotkeyProof.recommended_handoff_source -eq 'canonical_live_summon_runtime_readback_handoff' -and
+    [string]$SummonApiLaunchOnHotkeyProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit' -and
+    [bool]$SummonApiLaunchOnHotkeyProofGovernance.diagnostic_only -and
+    [bool]$SummonApiLaunchOnHotkeyProofGovernance.read_only_contract -and
+    [bool]$SummonApiLaunchOnHotkeyProofGovernance.canonical_runtime_only -and
+    -not [bool]$SummonApiLaunchOnHotkeyProofGovernance.launches_process -and
+    -not [bool]$SummonApiLaunchOnHotkeyProofGovernance.stops_process -and
+    -not [bool]$SummonApiLaunchOnHotkeyProofGovernance.restarts_process -and
+    -not [bool]$SummonApiLaunchOnHotkeyProofGovernance.writes_runtime_state -and
+    -not [bool]$SummonApiLaunchOnHotkeyProofGovernance.execution_authority -and
+    -not [bool]$SummonApiLaunchOnHotkeyProofGovernance.approval_decision_authority -and
+    -not [bool]$SummonApiLaunchOnHotkeyProofGovernance.local_process_launch_authority -and
+    -not [bool]$SummonApiLaunchOnHotkeyProofGovernance.process_supervision_authority -and
+    -not [bool]$SummonApiLaunchOnHotkeyProofGovernance.tray_registration_authority -and
+    -not [bool]$SummonApiLaunchOnHotkeyProofGovernance.hotkey_registration_authority -and
+    -not [bool]$SummonApiLaunchOnHotkeyProofGovernance.overlay_control_authority -and
+    -not [bool]$SummonApiLaunchOnHotkeyProofGovernance.summon_authority -and
+    -not [bool]$SummonApiLaunchOnHotkeyProofGovernance.memory_write -and
+    -not [bool]$SummonApiLaunchOnHotkeyProofGovernance.mutation_authority_granted
+  )
 )
 $ResidentRuntimeApiExecutionProofGovernance = $ResidentRuntimeApiExecutionProof.governance
 $ResidentRuntimeApiExecutionProofBlockers = ConvertTo-StringArray -Value $ResidentRuntimeApiExecutionProof.blockers
@@ -7094,7 +7151,8 @@ $Payload = [ordered]@{
   requested_child_host_launch_run_seconds = $HostLaunchRunSeconds
   child_host_launch_run_seconds = $ChildHostLaunchRunSeconds
   child_proof_timeout_seconds = $ChildProofTimeoutSeconds
-  allow_launch_on_hotkey = [bool]$AllowLaunchOnHotkey
+  allow_launch_on_hotkey = $LaunchOnHotkeyRuntimeReadbackOptIn
+  canonical_summon_runtime_readback = [bool]$UseCanonicalSummonRuntimeReadback
   child_proof_timeouts = [string[]]@($ChildProofTimeouts)
   child_proof_runs = @($ChildProofRuns)
   next_smallest_truthful_gap = $NextSmallestTruthfulGap
@@ -9753,7 +9811,8 @@ $Payload = [ordered]@{
   governance = [ordered]@{
     read_only_contract = -not [bool]$AllowLaunchOnHotkey
     diagnostic_only = $true
-    launch_on_hotkey_runtime_readback_opt_in = [bool]$AllowLaunchOnHotkey
+    launch_on_hotkey_runtime_readback_opt_in = $LaunchOnHotkeyRuntimeReadbackOptIn
+    canonical_summon_runtime_readback = [bool]$UseCanonicalSummonRuntimeReadback
     checkpoint_readback = $true
     child_proof_timeout_readback = $true
     stage6_completion_evidence_review_readback = $Stage6CompletionEvidenceReviewed
