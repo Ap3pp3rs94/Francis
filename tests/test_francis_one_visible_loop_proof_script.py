@@ -31,6 +31,16 @@ def test_one_visible_loop_proof_preserves_operator_authority_boundaries() -> Non
     assert "script_would_execute" in script
     assert "self_granted" in script
     assert "scripts/lens-host-supervisor.ps1 -Mode Status" in script
+    assert "lens-canonical-summon-runtime-proof.ps1" in script
+    assert "_canonical_summon_runtime_observed" in script
+    assert "canonical_live_summon_runtime_readback" in script
+    assert "canonical_summon_authority_already_evidenced" in script
+    assert "summon_authority_evidence_observed" in script
+    assert "one_visible_loop_safe_target_effect_and_render_proof" in script
+    assert "configure_and_approve_live_safe_target_bridge_proof" in script
+    assert "perform_browser_or_live_chat_lens_ui_proof" in script
+    assert "and actual_render_verified" in script
+    assert '"physical_input_used": False' in script
     assert "actual_chat_ui_render_verified" in script
     assert "actual_lens_ui_render_verified" in script
     assert "ui_contract_visible_render_unverified" in script

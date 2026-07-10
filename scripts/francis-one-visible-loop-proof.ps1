@@ -90,6 +90,36 @@ def _read_json(path: Path) -> dict[str, Any]:
     return parsed if isinstance(parsed, dict) else {}
 
 
+def _canonical_summon_runtime_observed(result: dict[str, Any]) -> bool:
+    payload = result.get("payload") if isinstance(result.get("payload"), dict) else {}
+    checks = payload.get("checks") if isinstance(payload.get("checks"), dict) else {}
+    required_checks = (
+        "summon_status",
+        "evidence_fresh",
+        "global_hotkey_trigger",
+        "request_consumed",
+        "request_correlation",
+        "summon_receipt",
+        "orb_control_receipt",
+        "overlay_runtime",
+        "hotkey_runtime",
+        "tray_runtime",
+        "supervised_resident_host",
+        "single_canonical_renderer",
+        "authority_ready",
+        "no_browser_fallback",
+        "no_physical_input",
+    )
+    return bool(
+        result.get("exit_code") == 0
+        and payload.get("ok") is True
+        and payload.get("kind") == "lens.summon.canonical_runtime.proof"
+        and payload.get("status") == "proof_passed"
+        and payload.get("source") == "canonical_live_runtime_readback"
+        and all(checks.get(name) is True for name in required_checks)
+    )
+
+
 def _overlay_status() -> dict[str, Any]:
     path = _repo_root() / "data" / "runtime" / "lens-overlay" / "status.json"
     payload = _read_json(path)
@@ -245,7 +275,22 @@ def _fixture_action_proof() -> dict[str, Any]:
     }
 
 
-def _operator_decision_queue(summon_payload: dict[str, Any], host_payload: dict[str, Any]) -> dict[str, Any]:
+def _operator_decision_queue(
+    summon_payload: dict[str, Any],
+    host_payload: dict[str, Any],
+    canonical_payload: dict[str, Any],
+    canonical_runtime_observed: bool,
+) -> dict[str, Any]:
+    if canonical_runtime_observed:
+        return {
+            "status": "canonical_summon_authority_already_evidenced",
+            "queued_decision_count": 0,
+            "decisions": [],
+            "evidence_source": "canonical_live_summon_runtime_readback",
+            "summon_receipt_id": str(canonical_payload.get("summon_receipt_id") or ""),
+            "orb_control_receipt_id": str(canonical_payload.get("orb_control_receipt_id") or ""),
+        }
+
     missing = summon_payload.get("missing_required_before_enable")
     missing_requirements = [str(item) for item in missing] if isinstance(missing, list) else []
     first_missing = str(summon_payload.get("first_missing_required_before_enable") or "")
@@ -412,48 +457,141 @@ summon = _run_json_script(str(repo / "scripts" / "lens-summon-preflight.ps1"), "
 summon_payload = summon["payload"]
 host_supervisor = _run_json_script(str(repo / "scripts" / "lens-host-supervisor.ps1"), "-Mode", "Status")
 host_supervisor_payload = host_supervisor["payload"]
+canonical_summon = _run_json_script(
+    str(repo / "scripts" / "lens-canonical-summon-runtime-proof.ps1"),
+    "-Mode",
+    "Status",
+    "-DataDir",
+    str(repo / "data"),
+)
+canonical_summon_payload = canonical_summon["payload"]
+canonical_summon_runtime_observed = _canonical_summon_runtime_observed(canonical_summon)
+canonical_checks = (
+    canonical_summon_payload.get("checks")
+    if isinstance(canonical_summon_payload.get("checks"), dict)
+    else {}
+)
 overlay = _overlay_status()
 action = _fixture_action_proof()
-operator_decision_queue = _operator_decision_queue(summon_payload, host_supervisor_payload)
+operator_decision_queue = _operator_decision_queue(
+    summon_payload,
+    host_supervisor_payload,
+    canonical_summon_payload,
+    canonical_summon_runtime_observed,
+)
 chat_lens_visibility = _chat_lens_visibility_contract(action)
 operator_approved_summon = os.getenv("FRANCIS_ONE_VISIBLE_LOOP_OPERATOR_APPROVED_SUMMON") == "1"
-summon_ready = not bool(summon_payload.get("missing_required_before_enable"))
+summon_authority_evidence_observed = bool(operator_approved_summon or canonical_summon_runtime_observed)
+summon_ready = bool(
+    canonical_summon_runtime_observed or not bool(summon_payload.get("missing_required_before_enable"))
+)
+resident_supervised_runtime = bool(
+    canonical_checks.get("supervised_resident_host") is True
+    or host_supervisor_payload.get("resident_supervised_runtime")
+)
+actual_render_verified = bool(
+    chat_lens_visibility.get("actual_chat_ui_render_verified") is True
+    and chat_lens_visibility.get("actual_lens_ui_render_verified") is True
+)
 visible_loop_ready = (
-    bool(operator_approved_summon)
+    summon_authority_evidence_observed
     and summon_ready
+    and resident_supervised_runtime
     and overlay.get("overlay_window_visible") is True
     and action.get("status") == "passed"
+    and actual_render_verified
 )
+if not summon_authority_evidence_observed:
+    next_operator_decision = "approve_summon_enable_and_live_safe_target_bridge_proof"
+elif action.get("status") != "passed":
+    next_operator_decision = "configure_and_approve_live_safe_target_bridge_proof"
+elif not actual_render_verified:
+    next_operator_decision = "perform_browser_or_live_chat_lens_ui_proof"
+else:
+    next_operator_decision = "none"
 proof = {
     "kind": "francis.one_visible_loop.proof",
     "mode": "Status",
     "created_at": datetime.now(UTC).isoformat(),
     "proof_path": os.getenv("FRANCIS_ONE_VISIBLE_LOOP_PROOF_PATH", ""),
     "status": "passed" if visible_loop_ready else "blocked",
-    "next_operator_decision": (
-        "approve_summon_enable_and_live_safe_target_bridge_proof"
-        if not visible_loop_ready
-        else "none"
-    ),
+    "next_operator_decision": next_operator_decision,
     "summon": {
         "operator_approved_summon_decision": operator_approved_summon,
-        "status": summon_payload.get("status", "unknown"),
-        "global_hotkey": summon_payload.get("global_hotkey", ""),
+        "summon_authority_evidence_observed": summon_authority_evidence_observed,
+        "canonical_runtime_readback_observed": canonical_summon_runtime_observed,
+        "status": (
+            canonical_summon_payload.get("summon_readiness_status_after_execute", "ready_for_operator_review")
+            if canonical_summon_runtime_observed
+            else summon_payload.get("status", "unknown")
+        ),
+        "global_hotkey": (
+            canonical_summon_payload.get("global_hotkey", "")
+            if canonical_summon_runtime_observed
+            else summon_payload.get("global_hotkey", "")
+        ),
         "required_before_enable": summon_payload.get("required_before_enable", []),
-        "missing_required_before_enable": summon_payload.get("missing_required_before_enable", []),
-        "first_missing_required_before_enable": summon_payload.get("first_missing_required_before_enable", ""),
+        "missing_required_before_enable": (
+            [] if canonical_summon_runtime_observed else summon_payload.get("missing_required_before_enable", [])
+        ),
+        "first_missing_required_before_enable": (
+            "" if canonical_summon_runtime_observed else summon_payload.get("first_missing_required_before_enable", "")
+        ),
         "hotkey_runtime_readback": summon_payload.get("hotkey_runtime_readback", {}),
         "tray_runtime_readback": summon_payload.get("tray_runtime_readback", {}),
         "overlay_runtime_readback": summon_payload.get("overlay_runtime_readback", {}),
-        "next_smallest_truthful_gap": summon_payload.get("next_smallest_truthful_gap", ""),
+        "next_smallest_truthful_gap": (
+            "one_visible_loop_safe_target_effect_and_render_proof"
+            if canonical_summon_runtime_observed
+            else summon_payload.get("next_smallest_truthful_gap", "")
+        ),
+        "preflight_status": summon_payload.get("status", "unknown"),
+        "preflight_missing_required_before_enable": summon_payload.get("missing_required_before_enable", []),
+        "canonical_runtime_readback": {
+            "exit_code": canonical_summon.get("exit_code"),
+            "status": canonical_summon_payload.get("status", "missing"),
+            "source": canonical_summon_payload.get("source", ""),
+            "request_id": canonical_summon_payload.get("request_id", ""),
+            "summon_receipt_id": canonical_summon_payload.get("summon_receipt_id", ""),
+            "orb_control_receipt_id": canonical_summon_payload.get("orb_control_receipt_id", ""),
+            "overlay_pid": canonical_summon_payload.get("overlay_pid", 0),
+            "hotkey_pid": canonical_summon_payload.get("hotkey_pid", 0),
+            "tray_pid": canonical_summon_payload.get("tray_pid", 0),
+            "supervisor_pid": canonical_summon_payload.get("supervisor_pid", 0),
+            "resident_host_pid": canonical_summon_payload.get("resident_host_pid", 0),
+            "renderer_pid": canonical_summon_payload.get("renderer_pid", 0),
+            "renderer_process_count": canonical_summon_payload.get("renderer_process_count", 0),
+            "checks": canonical_checks,
+            "blockers": canonical_summon_payload.get("blockers", []),
+        },
     },
     "resident_host": {
-        "status": host_supervisor_payload.get("status", "unknown"),
-        "resident_supervised_runtime": bool(host_supervisor_payload.get("resident_supervised_runtime")),
-        "supervisor_process_alive": bool(host_supervisor_payload.get("supervisor_process_alive")),
+        "status": (
+            "supervised_resident_runtime_observed"
+            if canonical_summon_runtime_observed
+            else host_supervisor_payload.get("status", "unknown")
+        ),
+        "readback_source": (
+            "canonical_live_summon_runtime_readback"
+            if canonical_summon_runtime_observed
+            else "lens_host_supervisor_status"
+        ),
+        "resident_supervised_runtime": resident_supervised_runtime,
+        "supervisor_process_alive": bool(
+            canonical_summon_runtime_observed or host_supervisor_payload.get("supervisor_process_alive")
+        ),
+        "supervisor_pid": canonical_summon_payload.get("supervisor_pid", 0),
+        "resident_host_pid": canonical_summon_payload.get("resident_host_pid", 0),
         "authority_required": host_supervisor_payload.get("authority_required", ""),
-        "authority_granted": bool(host_supervisor_payload.get("authority_granted")),
-        "next_smallest_truthful_gap": host_supervisor_payload.get("next_smallest_truthful_gap", ""),
+        "authority_granted": bool(
+            canonical_checks.get("authority_ready") is True or host_supervisor_payload.get("authority_granted")
+        ),
+        "next_smallest_truthful_gap": (
+            "one_visible_loop_safe_target_effect_and_render_proof"
+            if canonical_summon_runtime_observed
+            else host_supervisor_payload.get("next_smallest_truthful_gap", "")
+        ),
+        "generic_supervisor_status": host_supervisor_payload.get("status", "unknown"),
     },
     "orb_presence": overlay,
     "operator_action": action,
@@ -462,6 +600,8 @@ proof = {
     "governance": {
         "does_not_self_enable_summon": True,
         "does_not_default_enable_desktop_bridge": True,
+        "canonical_runtime_readback_only": True,
+        "physical_input_used": False,
         "fixture_safe_target_is_not_live_desktop_completion": action.get("proof_mode") == "fixture_safe_target",
         "grants_execution_authority": False,
         "grants_mutation_authority": False,
