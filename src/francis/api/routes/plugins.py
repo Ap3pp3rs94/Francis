@@ -3418,6 +3418,14 @@ def _artifact_link_scan_limit(value: int | None) -> int | None:
     return max(1, min(raw, 5000))
 
 
+def _capability_pack_migration_capability_limit(value: int | None) -> int:
+    try:
+        raw = int(value or 500)
+    except (TypeError, ValueError):
+        raw = 500
+    return max(1, min(raw, 1000))
+
+
 def _empty_plugin_artifact_payloads(*, scan_limit: int | None, unreadable_artifact_count: int = 0) -> dict[str, Any]:
     return {
         "items": [],
@@ -14463,7 +14471,9 @@ def apply_capability_pack_quality_evidence_remediation(
 
         safe_max_pack_count = max(1, min(int(payload.max_pack_count or 10), 50))
         safe_max_total_capability_count = max(1, min(int(payload.max_total_capability_count or 1000), 10000))
-        safe_max_capability_count_per_pack = max(1, min(int(payload.max_capability_count_per_pack or 500), 500))
+        safe_max_capability_count_per_pack = _capability_pack_migration_capability_limit(
+            payload.max_capability_count_per_pack
+        )
         try:
             selected_pack_ids = {_validate_plugin_id(raw_id) for raw_id in _unique_texts(payload.pack_ids, limit=100)}
         except Exception:
@@ -19632,7 +19642,9 @@ def record_capability_pack_metadata_receipts_from_plan(
 
         safe_max_pack_count = max(1, min(int(payload.max_pack_count or 50), 100))
         safe_max_total_capability_count = max(1, min(int(payload.max_total_capability_count or 5000), 10000))
-        safe_max_capability_count_per_pack = max(1, min(int(payload.max_capability_count_per_pack or 500), 500))
+        safe_max_capability_count_per_pack = _capability_pack_migration_capability_limit(
+            payload.max_capability_count_per_pack
+        )
         selected_pack_ids = {_validate_plugin_id(raw_id) for raw_id in _unique_texts(payload.pack_ids, limit=100)}
 
         registry = _load_registry()

@@ -3826,6 +3826,16 @@ def test_plugins_capability_pack_readbacks_cache_static_plans_and_sync_quality_p
     assert quality_body["requirements"]["artifact_body_scan_is_limited_by_default"] is False
 
 
+def test_plugins_capability_pack_migration_limit_requires_explicit_large_pack_budget() -> None:
+    from francis.api.routes import plugins
+
+    assert plugins._capability_pack_migration_capability_limit(None) == 500
+    assert plugins._capability_pack_migration_capability_limit(0) == 500
+    assert plugins._capability_pack_migration_capability_limit(500) == 500
+    assert plugins._capability_pack_migration_capability_limit(501) == 501
+    assert plugins._capability_pack_migration_capability_limit(5000) == 1000
+
+
 def test_plugins_capability_pack_metadata_receipts_bulk_from_migration_plan(
     monkeypatch,
     tmp_path: Path,
