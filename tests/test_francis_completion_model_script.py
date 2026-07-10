@@ -57,10 +57,10 @@ def test_francis_completion_model_status_projects_ledger_backed_loop_guard() -> 
     assert payload["stage17_status"]["grants_mutation_authority"] is False
     assert payload["active_workstream"] == {
         "found": True,
-        "workstream": "Orb embodiment / Stage 6 Lens runtime completion.",
+        "workstream": "Telemetry MVP / Stage 7 contextual sensing.",
         "current_goal": (
-            "summon prerequisites, Orb presence stability, confirmed desktop bridge effects, "
-            "voice replay proof, and one visible loop proof."
+            "terminal, git, and IDE context connectors, followed by redaction, visible sensing "
+            "indicators, and a Stage 7 acceptance audit."
         ),
         "read_only_contract": True,
         "writes_repo": False,

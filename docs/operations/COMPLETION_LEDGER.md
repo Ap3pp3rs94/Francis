@@ -55,9 +55,10 @@ operator product surface:
 - `P7_EXECUTION`: partial
 - `P8_MEMORY`: partial
 
-Current active workstream: Orb embodiment / Stage 6 Lens runtime completion.
-The current goal is ordered as summon prerequisites, Orb presence stability,
-confirmed desktop bridge effects, voice replay proof, and one visible loop proof.
+Current active workstream: Telemetry MVP / Stage 7 contextual sensing.
+Stage 6 Lens MVP is ledger-closed against its five canonical acceptance criteria.
+The current goal is ordered as terminal, git, and IDE context connectors, followed
+by redaction, visible sensing indicators, and a Stage 7 acceptance audit.
 
 Older phase-history prose was moved to
 `docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md` so the
@@ -76,8 +77,9 @@ What is materially true now:
   blocked runtime receipt when Win32 `RegisterHotKey` fails.
 - PowerShell status, Python preflight/readiness, and OS-binding execution
   preserve that blocker and point to `choose_unclaimed_global_hotkey`.
-- The final summon enable flip remains an operator authority decision. The repo
-  is prepared up to the decision surface; Francis did not self-grant summon.
+- Stage 6 summon authority was enabled through delegated operator approval, and
+  the canonical `Ctrl+Alt+F` hotkey now produces correlated summon and Orb-control
+  receipts without physical input or user-cursor takeover.
 - The live Lens overlay can run as a virtual-screen coordinate plane including
   the taskbar, with the Orb moving inside that plane instead of being confined
   to a small window.
@@ -98,18 +100,89 @@ What is materially true now:
   same-provider readability repair when the primary local model returns
   unreadable output; the forced-garbage path still rewrites to
   `unreadable_rewritten` without leaking raw salad.
-- The one-visible-loop proof now separates receipt/trace artifact visibility,
-  Lens/chat contract visibility, and actual rendered UI proof, leaving render
-  verification false until a browser/live UI check proves it.
-- The canonical Orb runtime identity readback now exposes the locked ring/color
-  contract from `docs/operations/ORB_VISUAL_LOCK.md` and the active WPF overlay
-  renderer constants; live readback clears `orb_ring_color_contract_missing`
-  while still preserving the separate voice-provider drift blocker.
+- The one-visible-loop proof now consumes hash-bound browser screenshots and a
+  DOM snapshot of the live Chat and Lens surfaces, then confirms a governed
+  disposable-target effect without physical input or user-cursor takeover.
+- The canonical Orb runtime identity readback exposes the locked ring/color
+  contract from `docs/operations/ORB_VISUAL_LOCK.md`, one native renderer, and
+  aligned ElevenLabs input/output/readiness fields; live readback clears both
+  ring/color and voice-provider identity drift.
 
 ## 4. Latest validation evidence
 
 > Older dated entries are archived under docs/operations/archive/ (see scripts/archive-completion-ledger.ps1).
 > Historical undated ledger body is archived under docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md.
+
+### 2026-07-10 12:34Z - Stage 6 Lens MVP acceptance closure
+
+Current posture: Phase 2 continues, but Stage 6 Lens MVP is now ledger-closed
+against the five done criteria in `docs/canonical/ROADMAP.md`. The exact-head
+completion audit, canonical live runtime, rendered Lens/Chat surfaces, fresh
+hotkey summon, and one-visible-loop effect proof agree at code commit
+`c40cf6b965b4a262b45484a53d351b2f45e609e0`. Stage 7 Telemetry MVP is the next
+ordered roadmap workstream. This does not complete Phase 2 or Francis, close
+Stage 17, claim physical validation, or clear FR-018.
+
+What changed:
+
+- The Stage 6 completion audit can reuse a fresh hash-verified checkpoint only
+  when its repository root and exact commit match, removing the prior audit
+  timeout without weakening evidence integrity.
+- Canonical Orb identity readback now correlates the supervised resident host,
+  tray, hotkey, overlay, summon, voice, visual contract, and single native
+  renderer against the same live instance.
+- Browser evidence now proves the existing `/diagnostics` Lens and collaboration
+  surfaces actually rendered with read-only authority, policy receipt visibility,
+  and zero Lens blockers.
+- The one-visible-loop proof now requires that render evidence and confirms an
+  operator-approved app-targeted effect on a disposable safe target before it can
+  pass.
+
+Evidence:
+
+- `data/logs/operations/stage6/lens_stage6_completion_audit_resumed_20260710_122358469.json`
+  returned `ok=true`, `audit_status=complete`, `ready_to_close=true`,
+  `can_close_stage6=true`, `transition_allowed=true`, no blocked criteria, and
+  `closure_decision=stage6_ready_for_ledger_closure`. Its SHA256-verified
+  checkpoint records the exact code head above.
+- All five canonical acceptance criteria are `ready`: `summon_anywhere`,
+  `helpful_not_noisy`, `mode_visibility`, `pilot_visibility_groundwork`, and
+  `system_resident_presence`.
+- Fresh canonical hotkey evidence records request
+  `summon-global_hotkey-e4fdbba678554848a2a903fc7f4e4800`, summon receipt
+  `lsum_1783686821_111205091a31`, and Orb-control receipt
+  `orb-control-8dd7cf73431e441bae6672512b140562`.
+- `data/logs/operations/one_visible_loop/francis_lens_ui_render_proof_20260710_123410048.json`
+  validated as `render_verified` with zero blockers. Its Lens and Chat screenshots
+  are SHA256-bound as `0120b69f994884f23860c8ca44e3c8257a7703aab356feea3f9a31c44defaae0`
+  and `3442be07f3f7fc38d80e3d3702597e41b38870fc39d7489a12de3c761b8ce913`.
+- `data/logs/operations/one_visible_loop/francis_one_visible_loop_proof_20260710_073428301.json`
+  returned `status=passed`, `next_operator_decision=none`, actual Chat/Lens render
+  verification, `desktop_effect_confirmed=true`, `target_state_changed=true`,
+  `physical_input_performed=false`, `user_mouse_taken=false`, and confirmed the
+  disposable target stopped.
+- The live canonical process family remained supervisor `2608`, resident host
+  `10108`, tray `1992`, hotkey `26076`, overlay `36728`, and native renderer
+  `37312`; the process scan reported zero competing candidates.
+- Safe-target authority used approval
+  `9632c9ad-78f2-4d86-b054-b741e3092aaf`, delegation
+  `opdel_7bee8173cc6d52e7adc4fdeaad80c2b2`, operator receipt
+  `.francis/orb_operator/receipts/orb_operator_b4b65f66b7c3.json`, and desktop
+  bridge receipt
+  `.francis/orb_operator/desktop_bridge_receipts/orb_desktop_bridge_b377ac03ab68.json`.
+- Focused tests, Ruff lint/format checks, PowerShell parser checks, and diff checks
+  passed for the five bounded code slices from `4d8141b9` through `c40cf6b9`.
+  CodeQL for `c40cf6b9` passed; the full GitHub CI matrix was still running its
+  pytest jobs when this evidence was recorded.
+
+Remaining blockers:
+
+- Stage 7 still requires truthful terminal, git, and IDE telemetry connectors,
+  redaction, visible sensing indicators, and acceptance evidence. Existing
+  observability strength is not itself a Stage 7 completion claim.
+- The full local `scripts/check.ps1` gate was not run for this live acceptance
+  slice; final remote CI remains the broad gate.
+- Later roadmap stages, Stage 17 physical validation, and FR-018 remain open.
 
 ### 2026-07-10 01:37Z - Stage 6 command-palette readback under large continuity ledger
 
