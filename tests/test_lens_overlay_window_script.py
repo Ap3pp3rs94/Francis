@@ -1215,6 +1215,7 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
 
     assert "function Test-OverlayRuntimeProcess" in script
     assert "function Stop-OverlayRuntimeProcess" in script
+    assert "function Test-OverlayRuntimeStateOwner" in script
     assert "function New-McpBodyStateProjection" in script
     assert "function Read-McpBodyStateForOverlay" in script
     assert "function Format-McpBodyStateLabel" in script
@@ -1230,6 +1231,8 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "return $ExistingRenderer" in script
     assert "$script:LensOverlayNativeRendererOwnership = 'launched'" in script
     assert "if ($script:LensOverlayNativeRendererOwnership -eq 'launched')" in script
+    assert "$OwnsRuntimeState = Test-OverlayRuntimeStateOwner -Root $DataRoot -OwnerPid $PID" in script
+    assert "if (-not $Failed -and $OwnsRuntimeState)" in script
     assert "FindRendererWindow" in script
     assert "PostMessage" in script
     assert "MoveCenterMessage" in script
@@ -1740,3 +1743,48 @@ function Test-NativeOrbRendererProcess {
         "executable_path": "",
         "match_source": "command_line",
     }
+
+
+def test_lens_overlay_window_runtime_state_owner_rejects_stale_process() -> None:
+    script_path = _repo_root() / "scripts" / "lens-overlay-window.ps1"
+    probe = (
+        "$scriptPath = "
+        + json.dumps(str(script_path))
+        + r"""
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile($scriptPath, [ref]$tokens, [ref]$parseErrors)
+if ($parseErrors.Count -gt 0) {
+  throw 'overlay script parse failed'
+}
+$definition = $ast.FindAll({
+  param($node)
+  $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+  $node.Name -eq 'Test-OverlayRuntimeStateOwner'
+}, $true) | Select-Object -First 1
+if ($null -eq $definition) {
+  throw 'runtime state owner function missing'
+}
+. ([scriptblock]::Create($definition.Extent.Text))
+function Get-OverlayRuntimePidFromFile {
+  param([string]$Root)
+  return 4321
+}
+[pscustomobject]@{
+  owner = Test-OverlayRuntimeStateOwner -Root 'D:\Francis\data' -OwnerPid 4321
+  stale = Test-OverlayRuntimeStateOwner -Root 'D:\Francis\data' -OwnerPid 9999
+} | ConvertTo-Json -Compress
+"""
+    )
+
+    proc = subprocess.run(
+        [_powershell(), "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", probe],
+        cwd=_repo_root(),
+        check=False,
+        text=True,
+        capture_output=True,
+        timeout=30,
+    )
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    assert json.loads(proc.stdout) == {"owner": True, "stale": False}

@@ -1428,6 +1428,15 @@ function Get-OverlayConfig {
   }
 }
 
+function Test-OverlayRuntimeStateOwner {
+  param(
+    [string]$Root,
+    [int]$OwnerPid = $PID
+  )
+
+  return $OwnerPid -gt 0 -and (Get-OverlayRuntimePidFromFile -Root $Root) -eq $OwnerPid
+}
+
 function Get-NativeOrbRendererSize {
   return 270
 }
@@ -6777,6 +6786,11 @@ function Write-OverlayState {
   $PidPath = Join-Path $RuntimeRoot 'lens-overlay.pid'
   $StatusPath = Join-Path $RuntimeRoot 'status.json'
   if ($Status -eq 'overlay_running') {
+    $ExistingRuntimePid = Get-OverlayRuntimePidFromFile -Root $Root
+    if ($ExistingRuntimePid -gt 0 -and $ExistingRuntimePid -ne $PID -and
+        (Test-OverlayRuntimeProcess -ProcessId $ExistingRuntimePid)) {
+      return $false
+    }
     Set-Content -LiteralPath $PidPath -Value ([string]$PID) -Encoding UTF8
   }
   if ($null -eq $McpBodyState) {
@@ -7574,7 +7588,9 @@ if ($Mode -eq 'Run') {
     [void]$Application.Run($Form)
   } catch {
     $Failed = $true
-    Write-OverlayState -Root $DataRoot -Status 'failed' -OverlayWindowVisible $false -AlwaysOnTop $false -Message ([string]$_.Exception.Message)
+    if (Test-OverlayRuntimeStateOwner -Root $DataRoot -OwnerPid $PID) {
+      Write-OverlayState -Root $DataRoot -Status 'failed' -OverlayWindowVisible $false -AlwaysOnTop $false -Message ([string]$_.Exception.Message)
+    }
     exit 1
   } finally {
     if ($null -ne $RefreshTimer) {
@@ -7620,10 +7636,13 @@ if ($Mode -eq 'Run') {
     if ($script:LensOverlayNativeRendererOwnership -eq 'launched') {
       [void](Stop-NativeOrbRenderer -Root $DataRoot)
     }
-    if (-not $Failed) {
+    $OwnsRuntimeState = Test-OverlayRuntimeStateOwner -Root $DataRoot -OwnerPid $PID
+    if (-not $Failed -and $OwnsRuntimeState) {
       Write-OverlayState -Root $DataRoot -Status 'overlay_stopped' -OverlayWindowVisible $false -AlwaysOnTop $false -Message 'Francis Lens overlay window stopped.' -OrbVisual $script:LensOverlayOrbVisual
     }
-    Remove-Item -LiteralPath (Join-Path $DataRoot 'runtime\lens-overlay\lens-overlay.pid') -Force -ErrorAction SilentlyContinue
+    if ($OwnsRuntimeState) {
+      Remove-Item -LiteralPath (Join-Path $DataRoot 'runtime\lens-overlay\lens-overlay.pid') -Force -ErrorAction SilentlyContinue
+    }
   }
   exit 0
 }
