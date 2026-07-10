@@ -14,7 +14,9 @@ param(
 
   [string]$LiveSafeTargetApprovalId = '',
 
-  [switch]$ConfirmLiveSafeTargetAction
+  [switch]$ConfirmLiveSafeTargetAction,
+
+  [string]$UiRenderProofPath = ''
 )
 
 Set-StrictMode -Version Latest
@@ -46,6 +48,7 @@ $env:FRANCIS_ONE_VISIBLE_LOOP_OPERATOR_APPROVED_SUMMON = if ($OperatorApprovedSu
 $env:FRANCIS_ONE_VISIBLE_LOOP_USE_LIVE_SAFE_TARGET = if ($UseLiveSafeTarget) { '1' } else { '0' }
 $env:FRANCIS_ONE_VISIBLE_LOOP_LIVE_SAFE_TARGET_APPROVAL_ID = $LiveSafeTargetApprovalId
 $env:FRANCIS_ONE_VISIBLE_LOOP_CONFIRM_LIVE_SAFE_TARGET_ACTION = if ($ConfirmLiveSafeTargetAction) { '1' } else { '0' }
+$env:FRANCIS_ONE_VISIBLE_LOOP_UI_RENDER_PROOF_PATH = $UiRenderProofPath
 $env:FRANCIS_ONE_VISIBLE_LOOP_STATE_ROOT = Join-Path $RepoRoot (".francis\one-visible-loop\{0}" -f $Stamp)
 
 $PythonSource = @'
@@ -63,6 +66,7 @@ from pathlib import Path
 from typing import Any
 
 from francis.input_actuator.orb_operator import submit_orb_intent
+from francis.lens.ui_render_proof import validate_lens_ui_render_proof
 
 
 LIVE_SAFE_TARGET_ACTION = "lens.orb_desktop_bridge.live_safe_target"
@@ -105,6 +109,21 @@ def _read_json(path: Path) -> dict[str, Any]:
     except Exception:
         return {}
     return parsed if isinstance(parsed, dict) else {}
+
+
+def _repo_head() -> str:
+    try:
+        proc = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=_repo_root(),
+            text=True,
+            capture_output=True,
+            timeout=5,
+            check=False,
+        )
+    except Exception:
+        return ""
+    return (proc.stdout or "").strip() if proc.returncode == 0 else ""
 
 
 def _canonical_summon_runtime_observed(result: dict[str, Any]) -> bool:
@@ -679,7 +698,10 @@ def _file_contains_all(path: Path, needles: list[str]) -> bool:
     return all(needle in text for needle in needles)
 
 
-def _chat_lens_visibility_contract(action: dict[str, Any]) -> dict[str, Any]:
+def _chat_lens_visibility_contract(
+    action: dict[str, Any],
+    canonical_summon_payload: dict[str, Any],
+) -> dict[str, Any]:
     repo = _repo_root()
     lens_source = repo / "apps" / "chat_ui" / "src" / "lens" / "index.ts"
     lens_test = repo / "apps" / "chat_ui" / "src" / "lens" / "index.test.ts"
@@ -724,16 +746,90 @@ def _chat_lens_visibility_contract(action: dict[str, Any]) -> dict[str, Any]:
         and presentation_demo_contract_verified
         and receipt_trace_artifact_paths_present
     )
+    render_proof_path = os.getenv("FRANCIS_ONE_VISIBLE_LOOP_UI_RENDER_PROOF_PATH", "").strip()
+    if render_proof_path:
+        render_proof = validate_lens_ui_render_proof(
+            render_proof_path,
+            repo_root=repo,
+            expected_repo_head=_repo_head(),
+        )
+    else:
+        render_proof = {
+            "ok": False,
+            "status": "render_unverified",
+            "proof_path": "",
+            "chat_render_verified": False,
+            "lens_render_verified": False,
+            "canonical_runtime": {},
+            "artifacts": {},
+            "blockers": ["ui_render_proof_not_supplied"],
+        }
+
+    render_runtime = (
+        render_proof.get("canonical_runtime")
+        if isinstance(render_proof.get("canonical_runtime"), dict)
+        else {}
+    )
+    correlation_blockers: list[str] = []
+    for pid_name in (
+        "overlay_pid",
+        "hotkey_pid",
+        "tray_pid",
+        "supervisor_pid",
+        "resident_host_pid",
+        "renderer_pid",
+    ):
+        expected_pid = int(canonical_summon_payload.get(pid_name) or 0)
+        observed_pid = int(render_runtime.get(pid_name) or 0)
+        if expected_pid <= 0 or observed_pid != expected_pid:
+            correlation_blockers.append(f"ui_render_canonical_pid_mismatch:{pid_name}")
+    expected_renderer_count = int(canonical_summon_payload.get("renderer_process_count") or 0)
+    observed_renderer_count = int(render_runtime.get("renderer_process_count") or 0)
+    if expected_renderer_count != 1 or observed_renderer_count != expected_renderer_count:
+        correlation_blockers.append("ui_render_canonical_renderer_count_mismatch")
+    render_proof_correlated_to_canonical_runtime = bool(
+        render_proof.get("ok") is True and not correlation_blockers
+    )
+    actual_chat_ui_render_verified = bool(
+        render_proof_correlated_to_canonical_runtime
+        and render_proof.get("chat_render_verified") is True
+    )
+    actual_lens_ui_render_verified = bool(
+        render_proof_correlated_to_canonical_runtime
+        and render_proof.get("lens_render_verified") is True
+    )
+    render_verified = actual_chat_ui_render_verified and actual_lens_ui_render_verified
+    render_blockers = list(
+        dict.fromkeys(
+            [str(item) for item in render_proof.get("blockers", []) if str(item)]
+            + correlation_blockers
+        )
+    )
     return {
-        "status": "ui_contract_visible_render_unverified" if contract_verified else "ui_contract_gap",
+        "status": (
+            "ui_contract_visible_render_verified"
+            if contract_verified and render_verified
+            else "ui_contract_visible_render_unverified"
+            if contract_verified
+            else "ui_contract_gap"
+        ),
         "receipt_trace_status_paths": receipt_trace_paths,
         "receipt_trace_artifact_paths_present": receipt_trace_artifact_paths_present,
         "lens_status_contract_verified": lens_status_contract_verified,
         "lens_status_test_contract_verified": lens_status_test_contract_verified,
         "presentation_demo_contract_verified": presentation_demo_contract_verified,
-        "render_validation_required": "browser_or_live_chat_lens_ui_proof",
-        "actual_chat_ui_render_verified": False,
-        "actual_lens_ui_render_verified": False,
+        "render_validation_required": (
+            "satisfied" if render_verified else "browser_or_live_chat_lens_ui_proof"
+        ),
+        "render_proof_path": str(render_proof.get("proof_path") or ""),
+        "render_proof_status": str(render_proof.get("status") or "render_unverified"),
+        "render_proof_age_seconds": render_proof.get("age_seconds"),
+        "render_proof_repo_head": str(render_proof.get("repo_head") or ""),
+        "render_proof_artifacts": render_proof.get("artifacts", {}),
+        "render_proof_correlated_to_canonical_runtime": render_proof_correlated_to_canonical_runtime,
+        "render_proof_blockers": render_blockers,
+        "actual_chat_ui_render_verified": actual_chat_ui_render_verified,
+        "actual_lens_ui_render_verified": actual_lens_ui_render_verified,
     }
 
 
@@ -764,7 +860,7 @@ operator_decision_queue = _operator_decision_queue(
     canonical_summon_payload,
     canonical_summon_runtime_observed,
 )
-chat_lens_visibility = _chat_lens_visibility_contract(action)
+chat_lens_visibility = _chat_lens_visibility_contract(action, canonical_summon_payload)
 operator_approved_summon = os.getenv("FRANCIS_ONE_VISIBLE_LOOP_OPERATOR_APPROVED_SUMMON") == "1"
 summon_authority_evidence_observed = bool(operator_approved_summon or canonical_summon_runtime_observed)
 summon_ready = bool(

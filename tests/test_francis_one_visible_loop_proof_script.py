@@ -43,12 +43,19 @@ def test_one_visible_loop_proof_preserves_operator_authority_boundaries() -> Non
     assert '"physical_input_used": False' in script
     assert "actual_chat_ui_render_verified" in script
     assert "actual_lens_ui_render_verified" in script
+    assert '"actual_chat_ui_render_verified": False' not in script
+    assert '"actual_lens_ui_render_verified": False' not in script
     assert "ui_contract_visible_render_unverified" in script
+    assert "ui_contract_visible_render_verified" in script
     assert "receipt_trace_artifact_paths_present" in script
     assert "lens_status_contract_verified" in script
     assert "lens_status_test_contract_verified" in script
     assert "presentation_demo_contract_verified" in script
     assert "browser_or_live_chat_lens_ui_proof" in script
+    assert "UiRenderProofPath" in script
+    assert "validate_lens_ui_render_proof" in script
+    assert "render_proof_correlated_to_canonical_runtime" in script
+    assert "ui_render_canonical_pid_mismatch" in script
     assert "fixture_safe_target_is_not_live_desktop_completion" in script
     assert 'payload.get("status") == "overlay_running"' in script
     assert 'encoding="utf-8-sig"' in script
