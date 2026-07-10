@@ -1115,7 +1115,7 @@ def test_lens_overlay_orb_right_click_panel_controls_and_chat_are_receipted() ->
     assert "function Set-OverlayOrbFeatureToggle" in script
     assert "function Invoke-OverlayOrbPanelChatSubmit" in script
     assert "$OrbClickTarget.Add_MouseRightButtonDown({" in script
-    assert "Show-OverlayOrbRightClickPanel -PlacementTarget $Sender" in script
+    assert "[void](Show-OverlayOrbRightClickPanel -PlacementTarget $Sender)" in script
     assert "$Popup = New-Object System.Windows.Controls.Primitives.Popup" in script
     assert "$Popup.Placement = [System.Windows.Controls.Primitives.PlacementMode]::MousePoint" in script
     assert "$Popup.StaysOpen = $false" in script
@@ -1135,7 +1135,8 @@ def test_lens_overlay_orb_right_click_panel_controls_and_chat_are_receipted() ->
     assert "orb-controls" in script
     assert "kind = 'lens.overlay.orb_control.receipt'" in script
     assert "-Action 'panel_open'" in script
-    assert "trigger = 'right_click'" in script
+    assert "[string]$Trigger = 'right_click'" in script
+    assert "trigger = $Trigger" in script
     assert "-Action 'feature_toggle'" in script
     assert "wake_listen" in script
     assert "continuous_voice_chat" in script
@@ -1161,6 +1162,27 @@ def test_lens_overlay_orb_right_click_panel_controls_and_chat_are_receipted() ->
     assert "physical_input_performed = $false" in script
     assert "desktop_effect_performed = $false" in script
     assert "ShowDialog()" not in script
+
+
+def test_lens_overlay_consumes_correlated_canonical_summon_requests() -> None:
+    script = (_repo_root() / "scripts" / "lens-overlay-window.ps1").read_text(encoding="utf-8")
+
+    assert "function Get-OverlaySummonRequestPath" in script
+    assert "function Invoke-OverlayQueuedSummonRequest" in script
+    assert "'summon-request.json'" in script
+    assert "'lens.overlay.summon_request'" in script
+    assert "'open_orb_panel'" in script
+    assert "'runtime_overlay_panel_only'" in script
+    assert "@('global_hotkey', 'local_open') -notcontains $Trigger" in script
+    assert "Show-OverlayOrbRightClickPanel -PlacementTarget $PlacementTarget -Trigger $Trigger" in script
+    assert "Invoke-OverlayQueuedSummonRequest -Root $script:LensOverlayDataRoot" in script
+    assert "latest_request_id" in script
+    assert "Publish-OverlayOrbControlRuntimeState" in script
+    assert (
+        "$script:LensOverlayOrbPanelPopup.Placement = [System.Windows.Controls.Primitives.PlacementMode]::Right"
+        in script
+    )
+    assert "$script:LensOverlayOrbPanelPopup.HorizontalOffset = 12" in script
 
 
 def test_lens_overlay_voice_chat_falls_back_when_llm_bridge_is_slow() -> None:

@@ -894,7 +894,11 @@ if ($Mode -eq 'Run') {
             '-File',
             $SummonScript,
             '-Mode',
-            'LocalOpen'
+            'LocalOpen',
+            '-DataDir',
+            $script:DataRoot,
+            '-Trigger',
+            'global_hotkey'
           )
           if (-not [string]::IsNullOrWhiteSpace($script:ConfigOverridePath)) {
             $SummonArguments += @('-ConfigOverridePath', $script:ConfigOverridePath)

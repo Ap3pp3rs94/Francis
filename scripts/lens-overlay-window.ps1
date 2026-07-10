@@ -3598,6 +3598,8 @@ function Get-OverlayOrbControlState {
       latest_status = 'not_opened'
       latest_action = ''
       latest_feature = ''
+      latest_request_id = ''
+      latest_trigger = ''
       last_receipt_path = ''
       grants_execution_authority = $false
       grants_mutation_authority = $false
@@ -6119,27 +6121,97 @@ function New-OverlayOrbRightClickPanel {
 }
 
 function Show-OverlayOrbRightClickPanel {
-  param([object]$PlacementTarget)
+  param(
+    [object]$PlacementTarget,
+    [string]$Trigger = 'right_click',
+    [string]$RequestId = ''
+  )
 
   if ($null -eq (Get-OverlayScriptValue -Name LensOverlayOrbPanelPopup)) {
     $script:LensOverlayOrbPanelPopup = New-OverlayOrbRightClickPanel -PlacementTarget $PlacementTarget
+  }
+  $script:LensOverlayOrbPanelPopup.PlacementTarget = $PlacementTarget
+  if ($Trigger -eq 'right_click') {
+    $script:LensOverlayOrbPanelPopup.Placement = [System.Windows.Controls.Primitives.PlacementMode]::MousePoint
+    $script:LensOverlayOrbPanelPopup.HorizontalOffset = 0
+    $script:LensOverlayOrbPanelPopup.VerticalOffset = 0
+  } else {
+    $script:LensOverlayOrbPanelPopup.Placement = [System.Windows.Controls.Primitives.PlacementMode]::Right
+    $script:LensOverlayOrbPanelPopup.HorizontalOffset = 12
+    $script:LensOverlayOrbPanelPopup.VerticalOffset = -24
   }
   Update-OverlayOrbPanelFeatureChecks
   $State = Get-OverlayOrbControlState
   $State['panel_visible'] = $true
   $State['latest_status'] = 'panel_open'
-  [void](Write-OverlayOrbControlReceipt -Root $script:LensOverlayDataRoot -Action 'panel_open' -Details ([ordered]@{
+  $State['latest_request_id'] = $RequestId
+  $State['latest_trigger'] = $Trigger
+  $Receipt = Write-OverlayOrbControlReceipt -Root $script:LensOverlayDataRoot -Action 'panel_open' -Details ([ordered]@{
         status = 'panel_open'
-        trigger = 'right_click'
+        trigger = $Trigger
+        request_id = $RequestId
         panel_width = 292
         panel_max_height = 268
         features = Get-OverlayOrbControlFeatures
-      }))
+      })
   $script:LensOverlayOrbPanelPopup.IsOpen = $true
   Set-OverlayOrbControlStatusText -Text 'Receipted Orb chat. Replies speak through voice.'
   try {
     [void]$script:LensOverlayOrbPanelInput.Focus()
   } catch {
+  }
+  Publish-OverlayOrbControlRuntimeState
+  return $Receipt
+}
+
+function Get-OverlaySummonRequestPath {
+  param([string]$Root)
+
+  return Join-Path (Join-Path $Root 'runtime\lens-overlay') 'summon-request.json'
+}
+
+function Invoke-OverlayQueuedSummonRequest {
+  param([string]$Root)
+
+  if ([string]::IsNullOrWhiteSpace($Root)) {
+    return $null
+  }
+  $RequestPath = Get-OverlaySummonRequestPath -Root $Root
+  $Request = Read-JsonFile -Path $RequestPath
+  if ($null -eq $Request) {
+    return $null
+  }
+
+  $RequestId = Get-StringProperty -Payload $Request -Name 'request_id' -Default ''
+  $RequestKind = Get-StringProperty -Payload $Request -Name 'kind' -Default ''
+  $Action = Get-StringProperty -Payload $Request -Name 'action' -Default ''
+  $AuthorityScope = Get-StringProperty -Payload $Request -Name 'authority_scope' -Default ''
+  $Trigger = Get-StringProperty -Payload $Request -Name 'trigger' -Default ''
+  $PlacementTarget = Get-OverlayScriptValue -Name LensOverlayOrbHitBox
+  if ($null -eq $PlacementTarget) {
+    $PlacementTarget = Get-OverlayScriptValue -Name LensOverlayEnergyRoot
+  }
+
+  try {
+    if (
+      [string]::IsNullOrWhiteSpace($RequestId) -or
+      $RequestKind -ne 'lens.overlay.summon_request' -or
+      $Action -ne 'open_orb_panel' -or
+      $AuthorityScope -ne 'runtime_overlay_panel_only' -or
+      @('global_hotkey', 'local_open') -notcontains $Trigger -or
+      $null -eq $PlacementTarget
+    ) {
+      return Write-OverlayOrbControlReceipt -Root $Root -Action 'summon_refused' -Details ([ordered]@{
+          status = 'summon_refused'
+          request_id = $RequestId
+          trigger = $Trigger
+          error = 'invalid_or_unavailable_summon_request'
+          authority_scope = $AuthorityScope
+        })
+    }
+    return Show-OverlayOrbRightClickPanel -PlacementTarget $PlacementTarget -Trigger $Trigger -RequestId $RequestId
+  } finally {
+    Remove-Item -LiteralPath $RequestPath -Force -ErrorAction SilentlyContinue
   }
 }
 
@@ -7255,7 +7327,7 @@ if ($Mode -eq 'Run') {
         param($Sender, $EventArgs)
 
         $EventArgs.Handled = $true
-        Show-OverlayOrbRightClickPanel -PlacementTarget $Sender
+        [void](Show-OverlayOrbRightClickPanel -PlacementTarget $Sender)
       })
     if ($ManualOrbDragEnabled) {
       $OrbClickTarget.Add_MouseLeftButtonDown({
@@ -7396,6 +7468,7 @@ if ($Mode -eq 'Run') {
     $CommandTimer.Interval = [TimeSpan]::FromMilliseconds(500)
     $CommandTimer.Add_Tick({
         [void](Invoke-OverlayOrbVirtualPointerState -Root $script:LensOverlayDataRoot)
+        [void](Invoke-OverlayQueuedSummonRequest -Root $script:LensOverlayDataRoot)
         [void](Invoke-OverlayQueuedOrbPositionCommand -Root $script:LensOverlayDataRoot)
       })
     $CommandTimer.Start()

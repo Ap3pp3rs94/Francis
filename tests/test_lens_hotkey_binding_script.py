@@ -88,6 +88,15 @@ def test_lens_hotkey_binding_registers_configured_global_hotkey() -> None:
     assert "RegisterHotKey($Window.Handle, 1, 0x0003, 0x20)" not in source
 
 
+def test_lens_hotkey_binding_launches_canonical_summon_with_runtime_identity() -> None:
+    source = (_repo_root() / "scripts" / "lens-hotkey-binding.ps1").read_text(encoding="utf-8")
+
+    assert "'-DataDir'" in source
+    assert "$script:DataRoot" in source
+    assert "'-Trigger'" in source
+    assert "'global_hotkey'" in source
+
+
 def test_lens_hotkey_binding_registers_ctrl_m_orb_move_command_trigger() -> None:
     source = (_repo_root() / "scripts" / "lens-hotkey-binding.ps1").read_text(encoding="utf-8")
     config = (_repo_root() / "config" / "runtime" / "lens" / "summon.json").read_text(encoding="utf-8")
