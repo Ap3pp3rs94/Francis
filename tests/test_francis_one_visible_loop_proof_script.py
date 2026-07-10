@@ -75,6 +75,7 @@ def test_one_visible_loop_proof_exercises_confirmed_effect_with_fixture_safe_tar
     assert 'os.environ["FRANCIS_ORB_OPERATOR_STATE_DIR"] = str(_repo_root() / ".francis" / "orb_operator")' in script
     assert '"kind": "mouse.move"' in script
     assert '"kind": "keyboard.type"' in script
+    assert '"metadata": {"expected_target_title": LIVE_SAFE_TARGET_TITLE}' in script
     assert '"proof_mode": "live_operator_approved_safe_target"' in script
     assert '"safe_target_process_stopped"' in script
     assert '"physical_input_performed": False' in script

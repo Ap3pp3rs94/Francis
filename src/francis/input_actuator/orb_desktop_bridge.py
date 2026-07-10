@@ -96,7 +96,12 @@ def _public_action(kind: str, payload: dict[str, Any]) -> dict[str, Any]:
         }
     if kind == "keyboard.type":
         text = str(payload.get("text", ""))
-        return {"kind": kind, "text_length": len(text), "text_sha256": _hash_text(text)}
+        public = {"kind": kind, "text_length": len(text), "text_sha256": _hash_text(text)}
+        expected_target_title = _clean_text(payload.get("expected_target_title"))
+        if expected_target_title:
+            public["expected_target_title_present"] = True
+            public["expected_target_title_sha256"] = _hash_text(expected_target_title)
+        return public
     if kind == "keyboard.hotkey":
         raw_keys = payload.get("keys")
         keys = raw_keys if isinstance(raw_keys, list) else []
@@ -367,10 +372,14 @@ def _target_for_payload(kind: str, payload: dict[str, Any]) -> _WindowTarget | N
     else:
         x = _bounded_coord(payload.get("x"), "x")
         y = _bounded_coord(payload.get("y"), "y")
-    return _resolve_target_window(x, y)
+    return _resolve_target_window(
+        x,
+        y,
+        expected_target_title=_clean_text(payload.get("expected_target_title")),
+    )
 
 
-def _resolve_target_window(x: int, y: int) -> _WindowTarget | None:
+def _resolve_target_window(x: int, y: int, *, expected_target_title: str = "") -> _WindowTarget | None:
     try:
         import win32gui  # type: ignore[import-not-found]
     except ImportError as exc:
@@ -384,6 +393,8 @@ def _resolve_target_window(x: int, y: int) -> _WindowTarget | None:
         title = _clean_text(win32gui.GetWindowText(hwnd))
         class_name = _clean_text(win32gui.GetClassName(hwnd))
         if not _safe_window_target(title=title, class_name=class_name):
+            return
+        if expected_target_title and title != expected_target_title:
             return
         left, top, right, bottom = win32gui.GetWindowRect(hwnd)
         if left <= x < right and top <= y < bottom:

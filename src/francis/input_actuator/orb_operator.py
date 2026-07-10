@@ -518,8 +518,18 @@ class DesktopInputBackend:
             payload["y"] = y
         return self._submit("mouse.click", payload, proposal_id=proposal_id, approval_phrase=approval_phrase)
 
-    def type_text(self, text: str, *, proposal_id: str = "", approval_phrase: str = "") -> BackendAttempt:
-        return self._submit("keyboard.type", {"text": text}, proposal_id=proposal_id, approval_phrase=approval_phrase)
+    def type_text(
+        self,
+        text: str,
+        *,
+        expected_target_title: str = "",
+        proposal_id: str = "",
+        approval_phrase: str = "",
+    ) -> BackendAttempt:
+        payload = {"text": text}
+        if expected_target_title:
+            payload["expected_target_title"] = expected_target_title
+        return self._submit("keyboard.type", payload, proposal_id=proposal_id, approval_phrase=approval_phrase)
 
     def key_press(self, key: str, *, proposal_id: str = "", approval_phrase: str = "") -> BackendAttempt:
         return self._submit(
@@ -871,11 +881,21 @@ def _resolve_intent(intent: OrbIntent) -> IntentResolution:
     if intent.kind == "type_text":
         if not intent.text:
             return IntentResolution(feedback_state="blocked", supported=False, reason="type_text_requires_text")
+        input_payload = {"text": intent.text}
+        resolved_target: dict[str, Any] = {
+            "text_length": len(intent.text),
+            "text_sha256": _hash_text(intent.text),
+        }
+        expected_target_title = _clean_text(intent.metadata.get("expected_target_title"))
+        if expected_target_title:
+            input_payload["expected_target_title"] = expected_target_title
+            resolved_target["expected_target_title_present"] = True
+            resolved_target["expected_target_title_sha256"] = _hash_text(expected_target_title)
         return IntentResolution(
             feedback_state="typing",
             input_kind="keyboard.type",
-            input_payload={"text": intent.text},
-            resolved_target={"text_length": len(intent.text), "text_sha256": _hash_text(intent.text)},
+            input_payload=input_payload,
+            resolved_target=resolved_target,
         )
 
     if intent.kind == "key_press":
@@ -982,7 +1002,12 @@ def _run_backend(
             approval_phrase=approval_phrase,
         )
     if resolution.input_kind == "keyboard.type":
-        return backend.type_text(str(payload["text"]), proposal_id=proposal_id, approval_phrase=approval_phrase)
+        return backend.type_text(
+            str(payload["text"]),
+            expected_target_title=_clean_text(payload.get("expected_target_title")),
+            proposal_id=proposal_id,
+            approval_phrase=approval_phrase,
+        )
     if resolution.input_kind == "keyboard.hotkey":
         keys = payload.get("keys") if isinstance(payload.get("keys"), list) else []
         key = _clean_text(keys[0] if keys else "")

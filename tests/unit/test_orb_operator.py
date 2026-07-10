@@ -289,6 +289,49 @@ def test_orb_pointer_type_bridge_receipt_redacts_text(tmp_path: Path, monkeypatc
     assert result["governance"]["user_mouse_taken"] is False
 
 
+def test_orb_pointer_type_carries_expected_target_title_to_bridge(tmp_path: Path, monkeypatch) -> None:
+    _envs(tmp_path, monkeypatch)
+    monkeypatch.setenv("FRANCIS_ORB_DESKTOP_BRIDGE_ENABLE", "1")
+    submit_orb_intent({"mode": "orb_pointer", "intent": {"kind": "mouse.move", "x": 120, "y": 140}})
+
+    def fake_bridge(**kwargs):
+        assert kwargs["input_kind"] == "keyboard.type"
+        assert kwargs["payload"]["x"] == 120
+        assert kwargs["payload"]["y"] == 140
+        assert kwargs["payload"]["expected_target_title"] == "Approved Safe Target"
+        return {
+            "ok": True,
+            "status": "desktop_action_confirmed",
+            "receipt_id": "orb_desktop_bridge_expected_target",
+            "receipt_path": str(tmp_path / "bridge-expected-target.json"),
+            "desktop_action_sent": True,
+            "desktop_effect_performed": True,
+            "desktop_effect_confirmed": True,
+            "target_observer_status": "confirmed_target_state_changed",
+            "uses_user_os_cursor": False,
+            "user_mouse_taken": False,
+            "physical_input_performed": False,
+        }
+
+    monkeypatch.setattr(orb_operator_module, "perform_orb_desktop_action", fake_bridge)
+    result = submit_orb_intent(
+        {
+            "mode": "orb_pointer",
+            "intent": {
+                "kind": "type_text",
+                "text": "bounded effect",
+                "metadata": {"expected_target_title": "Approved Safe Target"},
+            },
+        }
+    )
+
+    assert result["ok"] is True, result
+    assert result["status"] == "complete"
+    assert result["resolved_target"]["expected_target_title_present"] is True
+    assert "expected_target_title_sha256" in result["resolved_target"]
+    assert result["governance"]["physical_input_performed"] is False
+
+
 def test_orb_key_press_dry_run_uses_keyboard_hotkey(tmp_path: Path, monkeypatch) -> None:
     _envs(tmp_path, monkeypatch)
 

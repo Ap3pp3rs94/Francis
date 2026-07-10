@@ -388,7 +388,11 @@ def _live_safe_target_action_proof() -> dict[str, Any]:
             {
                 **shared,
                 "objective": "Prove a bounded observable window-message effect on the approved Stage 6 safe target",
-                "intent": {"kind": "keyboard.type", "text": " Francis live safe-target effect confirmed"},
+                "intent": {
+                    "kind": "keyboard.type",
+                    "text": " Francis live safe-target effect confirmed",
+                    "metadata": {"expected_target_title": LIVE_SAFE_TARGET_TITLE},
+                },
             }
         )
         time.sleep(0.25)

@@ -135,6 +135,57 @@ def test_keyboard_type_confirms_target_side_state_change_and_redacts_text(
     assert text not in receipt_text
 
 
+def test_keyboard_type_filters_overlapping_windows_to_expected_target(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _state_env(tmp_path, monkeypatch)
+    monkeypatch.setenv("FRANCIS_ORB_DESKTOP_BRIDGE_ENABLE", "1")
+    text = "approved target only"
+    fake = _install_fake_win32gui(
+        monkeypatch,
+        {
+            100: {
+                "title": "Unapproved Overlapping Window",
+                "class_name": "ConsoleWindowClass",
+                "rect": (0, 0, 300, 240),
+            },
+            200: {
+                "title": "Approved Safe Target",
+                "class_name": "SafeWindow",
+                "rect": (0, 0, 300, 240),
+                "child_hwnd": 201,
+            },
+            201: {
+                "child": True,
+                "text": "",
+                "class_name": "Edit",
+                "rect": (0, 0, 300, 240),
+            },
+        },
+    )
+
+    result = orb_desktop_bridge.perform_orb_desktop_action(
+        input_kind="keyboard.type",
+        payload={
+            "x": 10,
+            "y": 20,
+            "text": text,
+            "expected_target_title": "Approved Safe Target",
+        },
+        actor="test",
+        objective="target only the explicitly approved overlapping window",
+        session_id="expected-target-title",
+    )
+
+    assert result["status"] == "desktop_action_confirmed"
+    assert result["target"]["title"] == "Approved Safe Target"
+    assert fake.windows[100].get("text", "") == ""
+    assert fake.windows[201]["text"] == text
+    assert {post[0] for post in fake.posts} == {201}
+    assert result["public_action"]["expected_target_title_present"] is True
+    assert "expected_target_title" not in result["public_action"]
+
+
 def test_mouse_click_does_not_claim_confirmation_without_observed_state_change(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
