@@ -12511,7 +12511,11 @@ def _read_cached_runtime_catalog_payload() -> dict[str, Any]:
     return raw
 
 
-def _capability_pack_readback_catalog_snapshot(registry: dict[str, Any]) -> dict[str, Any]:
+def _capability_pack_readback_catalog_snapshot(
+    registry: dict[str, Any],
+    *,
+    sync_generated_plugins: bool = False,
+) -> dict[str, Any]:
     catalog_path = _runtime_catalog_path()
     registry_path = _registry_path()
     registry_plugins = registry.get("plugins") if isinstance(registry.get("plugins"), dict) else {}
@@ -12519,7 +12523,12 @@ def _capability_pack_readback_catalog_snapshot(registry: dict[str, Any]) -> dict
     catalog_mtime = _path_mtime(catalog_path)
     cached = _read_cached_runtime_catalog_payload()
     cached_current = bool(cached) and catalog_mtime >= registry_mtime
-    if cached_current:
+    generated_plugin_sync_count = _sync_generated_plugins(registry) if sync_generated_plugins else 0
+    if generated_plugin_sync_count:
+        runtime_catalog = _runtime_catalog_payload_from_registry(registry)
+        source = "in_memory_generated_plugin_projection"
+        compiled_in_memory = True
+    elif cached_current:
         runtime_catalog = cached
         source = "cached_runtime_catalog"
         compiled_in_memory = False
@@ -12537,7 +12546,8 @@ def _capability_pack_readback_catalog_snapshot(registry: dict[str, Any]) -> dict
             "catalog_stale": bool(cached) and not cached_current,
             "catalog_written": False,
             "compiled_in_memory": compiled_in_memory,
-            "generated_plugin_sync_performed": False,
+            "generated_plugin_sync_performed": generated_plugin_sync_count > 0,
+            "generated_plugin_sync_count": generated_plugin_sync_count,
             "registry_plugin_count": len(registry_plugins),
             "total_plugins": int(runtime_catalog.get("total_plugins") or 0),
             "total_tools": int(runtime_catalog.get("total_tools") or 0),
@@ -14410,11 +14420,14 @@ def capability_pack_lineage_proposals() -> dict[str, object]:
 
 @router.get("/capabilities/packs/quality/evidence/remediation")
 def capability_pack_quality_evidence_remediation(
-    artifact_scan_limit: int = _PLUGIN_ARTIFACT_LINK_SCAN_LIMIT,
+    artifact_scan_limit: int = 0,
 ) -> dict[str, object]:
     try:
         registry = _load_registry()
-        catalog_snapshot = _capability_pack_readback_catalog_snapshot(registry)
+        catalog_snapshot = _capability_pack_readback_catalog_snapshot(
+            registry,
+            sync_generated_plugins=True,
+        )
         runtime_catalog = catalog_snapshot["runtime_catalog"]
         marketplace = marketplace_from_plugin_catalog(runtime_catalog)
         entries = marketplace.catalog()

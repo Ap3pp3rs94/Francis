@@ -3760,7 +3760,7 @@ def test_plugins_capability_pack_migration_plan_projects_review_candidates(monke
     assert candidate["suggested_pack_governance"]["execution_authority"] is False
 
 
-def test_plugins_capability_pack_readbacks_use_cached_catalog_without_generated_sync(
+def test_plugins_capability_pack_readbacks_cache_static_plans_and_sync_quality_planning(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
@@ -3786,6 +3786,7 @@ def test_plugins_capability_pack_readbacks_use_cached_catalog_without_generated_
     assert built.status_code == 200
     assert built.json()["ok"] is True
     plugins._runtime_catalog_path().touch()
+    original_generated_sync = plugins._sync_generated_plugins
 
     def fail_generated_sync(*_args, **_kwargs):
         raise AssertionError("readback GET routes must not sync generated plugins")
@@ -3798,7 +3799,6 @@ def test_plugins_capability_pack_readbacks_use_cached_catalog_without_generated_
 
     for path in (
         "/plugins/capabilities/packs/migration/plan",
-        "/plugins/capabilities/packs/quality/evidence/remediation",
         "/plugins/capabilities/packs/promotion/rules/remediation",
     ):
         response = client.get(path)
@@ -3809,6 +3809,21 @@ def test_plugins_capability_pack_readbacks_use_cached_catalog_without_generated_
         assert body["catalog"]["cached_runtime_catalog_used"] is True
         assert body["catalog"]["generated_plugin_sync_performed"] is False
         assert body["catalog"]["catalog_written"] is False
+
+    monkeypatch.setattr(plugins, "_sync_generated_plugins", original_generated_sync)
+    quality = client.get("/plugins/capabilities/packs/quality/evidence/remediation")
+    assert quality.status_code == 200
+    quality_body = quality.json()
+    assert quality_body["ok"] is True
+    assert quality_body["catalog"]["source"] == "in_memory_generated_plugin_projection"
+    assert quality_body["catalog"]["cached_runtime_catalog_used"] is False
+    assert quality_body["catalog"]["generated_plugin_sync_performed"] is True
+    assert quality_body["catalog"]["generated_plugin_sync_count"] == 1
+    assert quality_body["catalog"]["compiled_in_memory"] is True
+    assert quality_body["catalog"]["catalog_written"] is False
+    assert quality_body["projection_limits"]["artifact_scan_limit"] == 0
+    assert quality_body["projection_limits"]["artifact_scan_limited"] is False
+    assert quality_body["requirements"]["artifact_body_scan_is_limited_by_default"] is False
 
 
 def test_plugins_capability_pack_metadata_receipts_bulk_from_migration_plan(
