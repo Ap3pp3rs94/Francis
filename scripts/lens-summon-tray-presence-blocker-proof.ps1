@@ -2,7 +2,9 @@ param(
   [ValidateSet('Status')]
   [string]$Mode = 'Status',
 
-  [string]$DataDir = ''
+  [string]$DataDir = '',
+
+  [string]$CachedSummonBlockersProofPath = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -161,7 +163,20 @@ if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
   $ChildDataRoot = [System.IO.Path]::GetFullPath($DataDir)
 }
 
-$SummonResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonBlockersScript -ScriptArgs @('-Mode', 'Status') -DataRoot $ChildDataRoot
+$SummonResult = [ordered]@{
+  exit_code = 0
+  payload = $null
+  output = ''
+  cached = $false
+}
+if (-not [string]::IsNullOrWhiteSpace($CachedSummonBlockersProofPath)) {
+  $ResolvedCachedSummonBlockersProofPath = (Resolve-Path -LiteralPath $CachedSummonBlockersProofPath -ErrorAction Stop).Path
+  $SummonResult.payload = Get-Content -LiteralPath $ResolvedCachedSummonBlockersProofPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+  $SummonResult.output = $ResolvedCachedSummonBlockersProofPath
+  $SummonResult.cached = $true
+} else {
+  $SummonResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonBlockersScript -ScriptArgs @('-Mode', 'Status') -DataRoot $ChildDataRoot
+}
 $SummonPayload = $SummonResult.payload
 $ResidentHostSupervisedRuntimeObserved = [bool](
   Get-PropertyValue -Payload $SummonPayload -Name 'resident_host_supervised_runtime_observed' -Default $false
@@ -419,6 +434,7 @@ $Payload = [ordered]@{
   governance = [ordered]@{
     diagnostic_only = $true
     wraps_summon_anywhere_blockers_proof = $true
+    cached_summon_anywhere_blockers_proof = [bool]$SummonResult.cached
     wraps_summon_resident_host_blocker_proof = $false
     uses_resident_host_family_contract_readback = $ResidentHostContractReadbackObservedLegacy
     resident_host_contract_readback = $ResidentHostContractReadbackObservedLegacy

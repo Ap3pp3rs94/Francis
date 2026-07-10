@@ -359,6 +359,8 @@ def test_lens_stage6_completion_audit_consumes_tray_presence_blocker_readback() 
     assert "$SummonTrayPresenceBlockerProofScript" in script
     assert "lens-summon-tray-presence-blocker-proof.ps1" in script
     assert "[string]$SummonAnywhereBlockersProof.first_blocker_family -eq 'tray_presence'" in script
+    assert "$SummonAnywhereBlockersProofCachePath = Write-ProofPayloadCache" in script
+    assert "'-CachedSummonBlockersProofPath', $SummonAnywhereBlockersProofCachePath" in script
     assert "New-ChildProofRunSummary -Name 'summon_tray_presence_blocker'" in script
     assert "$SummonTrayPresenceBlockerProofObserved = (" in script
     assert "[string]$SummonTrayPresenceBlockerProof.kind -eq 'lens.summon_tray_presence_blocker.proof'" in script

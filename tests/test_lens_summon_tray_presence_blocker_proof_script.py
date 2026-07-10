@@ -152,6 +152,7 @@ def test_lens_summon_tray_presence_blocker_proof_is_readback_only(tmp_path: Path
     assert payload["governance"] == {
         "diagnostic_only": True,
         "wraps_summon_anywhere_blockers_proof": True,
+        "cached_summon_anywhere_blockers_proof": False,
         "wraps_summon_resident_host_blocker_proof": False,
         "uses_resident_host_family_contract_readback": False,
         "resident_host_contract_readback": False,

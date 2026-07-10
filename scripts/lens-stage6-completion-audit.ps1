@@ -765,6 +765,7 @@ if ($CheckpointLensStatusCacheAvailable) {
 }
 $SummonAnywhereBlockersProofResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonAnywhereBlockersProofScript -ScriptArgs $SummonAnywhereBlockersProofArgs -TimeoutSeconds $ChildProofTimeoutSeconds
 $SummonAnywhereBlockersProof = $SummonAnywhereBlockersProofResult.payload
+$SummonAnywhereBlockersProofCachePath = Write-ProofPayloadCache -Payload $SummonAnywhereBlockersProof -FileName 'summon-anywhere-blockers-proof.json'
 $SummonAnywhereLensStatusReadback = $SummonAnywhereBlockersProof.lens_status_readback
 $SummonAnywhereLensStatusReadbackTimedOut = (
   [bool]$SummonAnywhereBlockersProofResult.timed_out -or
@@ -847,7 +848,7 @@ if ([string]$SummonAnywhereBlockersProof.first_blocker_family -eq 'tray_presence
   $SummonTrayPresenceBlockerProofResult = Invoke-JsonScript `
     -PowerShellPath $PowerShell.Source `
     -ScriptPath $SummonTrayPresenceBlockerProofScript `
-    -ScriptArgs @('-Mode', 'Status') `
+    -ScriptArgs @('-Mode', 'Status', '-CachedSummonBlockersProofPath', $SummonAnywhereBlockersProofCachePath) `
     -TimeoutSeconds ([Math]::Max($ChildProofTimeoutSeconds, 120))
 }
 $SummonTrayPresenceBlockerProof = $SummonTrayPresenceBlockerProofResult.payload

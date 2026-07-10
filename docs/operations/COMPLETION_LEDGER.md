@@ -111,6 +111,61 @@ What is materially true now:
 > Older dated entries are archived under docs/operations/archive/ (see scripts/archive-completion-ledger.ps1).
 > Historical undated ledger body is archived under docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md.
 
+### 2026-07-10 01:37Z - Stage 6 command-palette readback under large continuity ledger
+
+Current posture: Phase 2 / Stage 6 Orb embodiment remains incomplete, but the
+checkpoint no longer loses the command-palette shell bridge when the local
+continuity ledger is large. The live checkpoint now advances past
+`command_palette_shell_bridge_readback` and reports
+`stage6_lens_completion_audit` as the next smallest truthful gap. This does not
+close Stage 6, claim one-visible-loop completion, grant tray/hotkey/overlay
+authority, or clear the full completion audit.
+
+What changed:
+
+- `francis.chat.continuity.ledger.tail()` now reads recent JSONL entries from
+  the end of the ledger with bounded reverse line collection instead of reading
+  the full historical ledger file before slicing.
+- The continuity ledger tail cache is keyed by ledger path, requested limit,
+  size, and mtime, so repeated status composition in one process reuses the
+  same parsed recent entries while appends naturally invalidate the cache.
+- `scripts/lens-stage6-completion-audit.ps1` now writes the already-computed
+  summon-anywhere blockers proof to a cache file and passes it to
+  `scripts/lens-summon-tray-presence-blocker-proof.ps1`, avoiding a duplicate
+  child proof in the completion-audit chain.
+
+Evidence:
+
+- `python -m pytest tests/test_continuity_ledger.py -q` passed.
+- `python -m pytest tests/test_lens_summon_tray_presence_blocker_proof_script.py::test_lens_summon_tray_presence_blocker_proof_is_readback_only tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_consumes_tray_presence_blocker_readback -q`
+  passed.
+- `python -m ruff check src\francis\chat\continuity\ledger.py tests\test_continuity_ledger.py tests\test_lens_stage6_completion_audit_script.py tests\test_lens_summon_tray_presence_blocker_proof_script.py`
+  passed.
+- `python -m ruff format --check src\francis\chat\continuity\ledger.py tests\test_continuity_ledger.py tests\test_lens_stage6_completion_audit_script.py tests\test_lens_summon_tray_presence_blocker_proof_script.py`
+  passed.
+- Direct local timing against the live `data\conversations\ledger\ledger.jsonl`
+  returned `tail(1000)` in about `0.062` seconds for the current 88 MB ledger.
+- `scripts\lens-command-palette.ps1 -Mode Status` returned `ok=true`,
+  `status=blocked`, `readback_ready=true`, `command_total=24`,
+  `summon_anywhere=true`, and only the expected
+  `os_level_command_palette_missing` blocker.
+- `scripts\lens-stage6-checkpoint.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3 -LensStatusTimeoutSeconds 105 -ChildProofTimeoutSeconds 105`
+  returned `ok=true`, `status=blocked`,
+  `command_palette_shell_bridge.status=blocked`,
+  `command_palette_shell_bridge.readback_ready=true`, `command_total=24`,
+  and `next_smallest_truthful_gap=stage6_lens_completion_audit`.
+
+Remaining blockers:
+
+- `scripts\lens-stage6-completion-audit.ps1 -Mode Status -OverallTimeoutSeconds 300 -ChildProofTimeoutSeconds 120`
+  still returned `ok=false`, `audit_status=checkpoint_timed_out`,
+  `child_proof_timeouts=["stage6_checkpoint"]`, and
+  `next_smallest_truthful_gap=stage6_completion_audit_checkpoint_timeout`.
+- A standalone checkpoint with the audit's effective child settings completed
+  in about `171.32` seconds, so the next bounded slice is to make the completion
+  audit checkpoint wrapper/budget contract robust without hiding slow child
+  proofs or claiming Stage 6 closure.
+
 ### 2026-07-09 21:44Z - Stage 6 resident-surface proof/readback boundary
 
 Current posture: Phase 2 / Stage 6 Orb embodiment remains incomplete, but the
