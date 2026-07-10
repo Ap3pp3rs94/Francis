@@ -7,6 +7,7 @@ projection without claiming residency or granting control authority.
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from francis.governance.redaction import redact_governed_display_value
@@ -16,6 +17,7 @@ from francis.world_state.orb import snapshot as _orb_status_snapshot
 
 EXPECTED_MIN_TOOL_COUNT = 18
 LENS_ORB_MCP_STATUS_KIND = "francis.lens_orb.mcp_status_bridge"
+_READBACK_WORKER_LIMIT = 9
 
 _REQUIRED_STATUS_TOOLS = {
     "francis.health",
@@ -125,6 +127,23 @@ def _call_readback(tool: str, args: dict[str, Any], available: set[str]) -> dict
     if tool not in available:
         return None
     return _mcp_run_tool(tool, args)
+
+
+def _call_readbacks(
+    calls: list[tuple[str, dict[str, Any]]],
+    available: set[str],
+) -> dict[str, dict[str, Any] | None]:
+    results: dict[str, dict[str, Any] | None] = {tool: None for tool, _args in calls}
+    available_calls = [(tool, args) for tool, args in calls if tool in available]
+    if not available_calls:
+        return results
+
+    worker_count = min(_READBACK_WORKER_LIMIT, len(available_calls))
+    with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="lens-mcp-readback") as executor:
+        futures = {tool: executor.submit(_call_readback, tool, args, available) for tool, args in available_calls}
+        for tool, _args in available_calls:
+            results[tool] = futures[tool].result()
+    return results
 
 
 def _latest_receipt_id(receipts_component: dict[str, Any]) -> str:
@@ -239,16 +258,18 @@ def lens_orb_mcp_status_bridge(*, actor: str = "lens-orb", receipt_limit: int = 
     missing_required = sorted(_REQUIRED_STATUS_TOOLS - tool_names)
     tool_count = len(tools)
 
-    components: dict[str, dict[str, Any]] = {}
-    for tool in sorted(_REQUIRED_STATUS_TOOLS):
-        components[tool] = _component_from_result(tool, _call_readback(tool, {}, tool_names))
-
-    optional_components: dict[str, dict[str, Any]] = {}
+    required_calls: list[tuple[str, dict[str, Any]]] = [(tool, {}) for tool in sorted(_REQUIRED_STATUS_TOOLS)]
+    optional_calls: list[tuple[str, dict[str, Any]]] = []
     for tool, args in sorted(_OPTIONAL_READBACK_TOOLS.items()):
         call_args = dict(args)
         if tool == "francis.receipts.readback":
             call_args["limit"] = max(1, min(int(receipt_limit or 10), 100))
-        optional_components[tool] = _component_from_result(tool, _call_readback(tool, call_args, tool_names))
+        optional_calls.append((tool, call_args))
+
+    readback_calls = required_calls + optional_calls
+    readback_results = _call_readbacks(readback_calls, tool_names)
+    components = {tool: _component_from_result(tool, readback_results[tool]) for tool, _args in required_calls}
+    optional_components = {tool: _component_from_result(tool, readback_results[tool]) for tool, _args in optional_calls}
 
     developer_bridge = _developer_bridge_status()
     blockers: list[str] = []
@@ -276,6 +297,13 @@ def lens_orb_mcp_status_bridge(*, actor: str = "lens-orb", receipt_limit: int = 
         "resident": False,
         "resident_claim": "not_enabled_by_mcp_status_bridge",
         "orb_semantic_state": orb_semantic_state,
+        "readback_aggregation": {
+            "mode": "bounded_concurrent",
+            "worker_limit": _READBACK_WORKER_LIMIT,
+            "requested_tool_count": len(readback_calls),
+            "available_tool_count": sum(1 for tool, _args in readback_calls if tool in tool_names),
+            "read_only_tools_only": True,
+        },
         "mcp": {
             # UI/operator-friendly alias paired with the explicit minimum contract.
             "expected_tool_count": EXPECTED_MIN_TOOL_COUNT,

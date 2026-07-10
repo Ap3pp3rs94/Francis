@@ -7,6 +7,7 @@ receipts, and handoff status.
 
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -218,6 +219,53 @@ def test_lens_orb_mcp_status_bridge_degrades_when_required_mcp_tool_missing(monk
     assert out["mcp"]["expected_min_tool_count"] == 18
     assert out["mcp"]["tool_count"] == 0
     assert out["mcp"]["missing_tools"] == out["mcp"]["missing_required_tools"]
+
+
+def test_lens_orb_mcp_status_bridge_runs_bounded_readbacks_concurrently(monkeypatch) -> None:
+    tool_names = sorted(bridge._REQUIRED_STATUS_TOOLS | set(bridge._OPTIONAL_READBACK_TOOLS))
+    barrier = threading.Barrier(len(tool_names))
+    calls: list[str] = []
+
+    monkeypatch.setattr(
+        bridge,
+        "_mcp_list_tools",
+        lambda: [
+            {"name": name, "read_only": True, "requires_approval": False}
+            for name in tool_names + [f"francis.test.readback.{index}" for index in range(10)]
+        ],
+    )
+
+    def fake_run(tool: str, _args: dict[str, Any]) -> dict[str, Any]:
+        calls.append(tool)
+        barrier.wait(timeout=2)
+        return {
+            "ok": True,
+            "status": "ready",
+            "tool": tool,
+            "data": {},
+            "governance": {
+                "read_only": True,
+                "raw_shell": False,
+                "raw_input": False,
+                "screenshots": False,
+                "pixels": False,
+                "authority": "readback",
+            },
+        }
+
+    monkeypatch.setattr(bridge, "_mcp_run_tool", fake_run)
+    monkeypatch.setattr(bridge, "_orb_status_snapshot", lambda: {"ok": False, "state": {}})
+
+    out = bridge.lens_orb_mcp_status_bridge(actor="test.concurrent")
+
+    assert sorted(calls) == tool_names
+    assert out["readback_aggregation"] == {
+        "mode": "bounded_concurrent",
+        "worker_limit": 9,
+        "requested_tool_count": 9,
+        "available_tool_count": 9,
+        "read_only_tools_only": True,
+    }
 
 
 def test_lens_orb_mcp_status_bridge_does_not_invoke_mutating_tools(monkeypatch) -> None:
