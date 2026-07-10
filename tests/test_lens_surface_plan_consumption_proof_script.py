@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import platform
 import shutil
 import subprocess
@@ -39,11 +40,46 @@ def _run_script(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def test_lens_surface_plan_consumption_proof_consumes_summon_handoff_readback() -> None:
+def test_lens_surface_plan_consumption_proof_consumes_summon_handoff_readback(tmp_path: Path) -> None:
     if platform.system() != "Windows":
         pytest.skip("Live resident host surface plan-consumption proof is Windows-hosted.")
 
-    proc = _run_script("-Mode", "Status")
+    renderer_query = subprocess.run(
+        [
+            _powershell(),
+            "-NoProfile",
+            "-Command",
+            "@(Get-Process -Name native_orb_renderer -ErrorAction SilentlyContinue).Id -join ','",
+        ],
+        check=False,
+        text=True,
+        capture_output=True,
+        timeout=10,
+    )
+    existing_renderer_pids = [int(value) for value in renderer_query.stdout.strip().split(",") if value.strip()]
+    if len(existing_renderer_pids) > 1:
+        pytest.skip("surface plan proof fixture requires zero or one existing native renderer")
+
+    renderer: subprocess.Popen[bytes] | None = None
+    if existing_renderer_pids:
+        renderer_pid = existing_renderer_pids[0]
+    else:
+        source = Path(os.environ["SystemRoot"]) / "System32" / "ping.exe"
+        renderer_exe = tmp_path / "native_orb_renderer.exe"
+        shutil.copy2(source, renderer_exe)
+        renderer = subprocess.Popen(
+            [str(renderer_exe), "-n", "180", "127.0.0.1"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        renderer_pid = renderer.pid
+
+    try:
+        proc = _run_script("-Mode", "Status", "-NativeRendererProcessId", str(renderer_pid))
+    finally:
+        if renderer is not None:
+            renderer.terminate()
+            renderer.wait(timeout=10)
 
     assert proc.returncode == 0, proc.stderr or proc.stdout
     payload = json.loads(proc.stdout)
@@ -54,6 +90,9 @@ def test_lens_surface_plan_consumption_proof_consumes_summon_handoff_readback() 
     assert payload["ready_to_close"] is False
     assert payload["data_root_removed"] is True
     assert payload["live_resident_host_observed"] is True
+    assert payload["native_renderer_process_id"] == renderer_pid
+    assert payload["native_renderer_process_source"] == "caller_provided_process"
+    assert payload["native_renderer_runtime_readback_written"] is True
     assert payload["coordinated_surface_runtime_readback_observed"] is True
     assert payload["persistent_supervision_plan_consumed_surface_runtime"] is True
     assert payload["resident_dependency_ready"] is True
@@ -126,6 +165,7 @@ def test_lens_surface_plan_consumption_proof_consumes_summon_handoff_readback() 
         "synthetic_hotkey_runtime_readback": True,
         "synthetic_overlay_runtime_readback": True,
         "synthetic_summon_runtime_readback": True,
+        "synthetic_native_renderer_runtime_readback": True,
         "os_tray_registered": False,
         "global_hotkey_registered": False,
         "overlay_opened": False,

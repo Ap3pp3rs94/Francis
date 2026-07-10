@@ -1,7 +1,10 @@
 [CmdletBinding()]
 param(
   [ValidateSet('Status')]
-  [string]$Mode = 'Status'
+  [string]$Mode = 'Status',
+
+  [ValidateRange(0, 2147483647)]
+  [int]$NativeRendererProcessId = 0
 )
 
 Set-StrictMode -Version 2
@@ -175,7 +178,8 @@ function Write-RuntimeJson {
 function Write-ProofSurfaceRuntimeStates {
   param(
     [string]$DataRoot,
-    [int]$ProcessId
+    [int]$ProcessId,
+    [int]$RendererProcessId
   )
 
   $Now = [DateTimeOffset]::UtcNow.ToString('o')
@@ -234,12 +238,63 @@ function Write-ProofSurfaceRuntimeStates {
       updated_at = $Now
       message = 'Synthetic summon runtime readback bound to the live proof process; no OS-level summon or browser launch occurred.'
     })
+  $NativeRenderer = $null
+  if ($RendererProcessId -gt 0) {
+    $NativeRenderer = Write-RuntimeJson -DataRoot $DataRoot -RuntimeName 'native-orb-renderer' -PidFileName 'native-orb-renderer.pid' -ProcessId $RendererProcessId -Payload ([ordered]@{
+        kind = 'francis.native_orb_renderer.runtime_status'
+        schema_version = 'francis.native_orb_renderer.runtime_status.v1'
+        status = 'running'
+        renderer = 'native_cpp_orb_renderer'
+        process_id = $RendererProcessId
+        active_renderer = $true
+        render_only = $true
+        controls_user_os_cursor = $false
+        can_click = $false
+        can_drag = $false
+        proof_only = $true
+        updated_at = $Now
+        message = 'Synthetic native renderer readback bound to a caller-provided renderer process; the proof runner did not launch or stop it.'
+      })
+  }
 
   return [ordered]@{
     tray = $Tray
     hotkey = $Hotkey
     overlay = $Overlay
     summon = $Summon
+    native_renderer = $NativeRenderer
+  }
+}
+
+function Resolve-ProofNativeRendererProcess {
+  param([int]$RequestedProcessId)
+
+  if ($RequestedProcessId -gt 0) {
+    try {
+      $RequestedProcess = Get-Process -Id $RequestedProcessId -ErrorAction Stop
+    } catch {
+      throw "Requested native renderer process $RequestedProcessId is not running."
+    }
+    if ([string]$RequestedProcess.ProcessName -ne 'native_orb_renderer') {
+      throw "Requested native renderer process $RequestedProcessId is not named native_orb_renderer."
+    }
+    return [ordered]@{
+      process_id = $RequestedProcessId
+      source = 'caller_provided_process'
+    }
+  }
+
+  $ExistingProcesses = @(Get-Process -Name 'native_orb_renderer' -ErrorAction SilentlyContinue)
+  if ($ExistingProcesses.Count -eq 1) {
+    return [ordered]@{
+      process_id = [int]$ExistingProcesses[0].Id
+      source = 'single_existing_process'
+    }
+  }
+
+  return [ordered]@{
+    process_id = 0
+    source = if ($ExistingProcesses.Count -gt 1) { 'competing_processes_detected' } else { 'not_observed' }
   }
 }
 
@@ -268,6 +323,10 @@ $PlanRetryAttempted = $false
 $PlanRetryReason = ''
 $StopResult = $null
 $DataRootRemoved = $false
+$NativeRendererProcess = [ordered]@{
+  process_id = 0
+  source = 'not_observed'
+}
 
 try {
   $StartResult = Invoke-JsonScript `
@@ -278,7 +337,11 @@ try {
     -RunRoot $DataRoot `
     -Name 'start-resident'
 
-  $SurfaceRuntimeStates = Write-ProofSurfaceRuntimeStates -DataRoot $DataRoot -ProcessId $PID
+  $NativeRendererProcess = Resolve-ProofNativeRendererProcess -RequestedProcessId $NativeRendererProcessId
+  $SurfaceRuntimeStates = Write-ProofSurfaceRuntimeStates `
+    -DataRoot $DataRoot `
+    -ProcessId $PID `
+    -RendererProcessId ([int]$NativeRendererProcess['process_id'])
 
   $SurfaceRuntimeResult = Invoke-JsonScript `
     -PowerShellPath $PowerShellPath `
@@ -536,6 +599,9 @@ $Payload = [ordered]@{
   ready_to_close = $false
   data_root_removed = $DataRootRemoved
   live_resident_host_observed = $LiveResidentHostObserved
+  native_renderer_process_id = [int]$NativeRendererProcess['process_id']
+  native_renderer_process_source = [string]$NativeRendererProcess['source']
+  native_renderer_runtime_readback_written = $null -ne (Get-PropertyValue -Payload $SurfaceRuntimeStates -Name 'native_renderer')
   coordinated_surface_runtime_readback_observed = $SurfaceRuntimeObserved
   persistent_supervision_plan_consumed_surface_runtime = $PlanConsumedSurfaceRuntime
   resident_dependency_ready = $ResidentDependencyReady
@@ -576,6 +642,7 @@ $Payload = [ordered]@{
     synthetic_hotkey_runtime_readback = $true
     synthetic_overlay_runtime_readback = $true
     synthetic_summon_runtime_readback = $true
+    synthetic_native_renderer_runtime_readback = $null -ne (Get-PropertyValue -Payload $SurfaceRuntimeStates -Name 'native_renderer')
     os_tray_registered = $false
     global_hotkey_registered = $false
     overlay_opened = $false
