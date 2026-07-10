@@ -2121,7 +2121,8 @@ $PersistentSupervisionEnablementExecutionDenialObserved = (
 $Criteria = @($Checkpoint.criteria)
 $ReadyCriteria = @($Criteria | Where-Object { [bool]$_.ready })
 $BlockedCriteria = @($Criteria | Where-Object { -not [bool]$_.ready })
-$ReadyToClose = [bool]$Checkpoint.ready_to_close
+$CheckpointReadyToClose = [bool]$Checkpoint.ready_to_close
+$ReadyToClose = $CheckpointReadyToClose
 $Blockers = if ($ReadyToClose) {
   [string[]]@()
 } else {
@@ -4047,6 +4048,19 @@ $CanonicalSummonRuntimeReadbackObserved = (
   [bool]$UseCanonicalSummonRuntimeReadback -and
   $SummonApiLaunchOnHotkeyProofObserved
 )
+$RequestedSummonRuntimeReadbackObserved = (
+  -not $LaunchOnHotkeyRuntimeReadbackOptIn -or
+  $SummonApiLaunchOnHotkeyProofObserved
+)
+if ($LaunchOnHotkeyRuntimeReadbackOptIn -and -not $SummonApiLaunchOnHotkeyProofObserved) {
+  $ReadyToClose = $false
+  $RequestedSummonRuntimeReadbackBlocker = if ($UseCanonicalSummonRuntimeReadback) {
+    'canonical_summon_runtime_readback_missing_or_failed'
+  } else {
+    'summon_api_launch_on_hotkey_readback_missing_or_failed'
+  }
+  $Blockers = [string[]]@($Blockers + $RequestedSummonRuntimeReadbackBlocker | Select-Object -Unique)
+}
 $SummonAuthorityEvidenceObserved = (
   $SummonAuthorityBlockerProofObserved -or $CanonicalSummonRuntimeReadbackObserved
 )
@@ -4608,7 +4622,7 @@ $Stage6CompletionEvidenceReview = [ordered]@{
   checkpoint_summon_enablement_gate_handoff = $CheckpointSummonEnablementGateHandoffObserved
   summon_authority_blocker_proof = $SummonAuthorityEvidenceObserved
   summon_anywhere_family_chain_proof = $SummonAnywhereFamilyEvidenceObserved
-  summon_api_launch_on_hotkey_proof = (-not [bool]$AllowLaunchOnHotkey -or $SummonApiLaunchOnHotkeyProofObserved)
+  summon_api_launch_on_hotkey_proof = $RequestedSummonRuntimeReadbackObserved
   resident_runtime_api_execution_proof = (-not [bool]$AllowLaunchOnHotkey -or $ResidentRuntimeApiExecutionProofObserved)
   tray_presence_api_execution_proof = (-not [bool]$AllowLaunchOnHotkey -or $TrayPresenceApiExecutionProofObserved)
   os_binding_api_execution_proof = (-not [bool]$AllowLaunchOnHotkey -or $OsBindingApiExecutionProofObserved)
@@ -4646,7 +4660,12 @@ $Stage6CompletionReviewMissing = [string[]]@(
     Where-Object { -not [bool]$_.Value } |
     ForEach-Object { [string]$_.Key }
 )
-$NextSmallestTruthfulGap = if ($ReadyToClose) {
+$NextSmallestTruthfulGap = if (
+  $UseCanonicalSummonRuntimeReadback -and
+  -not $RequestedSummonRuntimeReadbackObserved
+) {
+  'canonical_summon_runtime_readback'
+} elseif ($ReadyToClose) {
   'stage6_ledger_closure'
 } elseif (-not $ResidentRuntimeResidentClaimBoundaryObserved -and $ResidentRuntimeOverlayWindowBoundaryObserved) {
   'resident_runtime_resident_claim_authority_boundary'
@@ -5215,7 +5234,51 @@ $Stage6CompletionAuditHandoffConsumedByClosureReadback = (
   $SummonResidentHostBlockerProofObserved -and
   $Stage6PrerequisiteBringupPlanObserved
 )
-if (
+if ($NextSmallestTruthfulGap -eq 'canonical_summon_runtime_readback') {
+  $CanonicalSummonRuntimeBlockers = ConvertTo-StringArray -Value (
+    Get-PropertyValue -Payload $SummonApiLaunchOnHotkeyProof -Name 'blockers'
+  )
+  $CanonicalSummonRuntimeChecks = Get-PropertyValue -Payload $SummonApiLaunchOnHotkeyProof -Name 'checks'
+  $RecommendedHandoffSource = 'canonical_live_summon_runtime_readback_handoff'
+  $RecommendedHandoff = [ordered]@{
+    status = 'blocked'
+    previous_next_smallest_truthful_gap = if ($CheckpointReadyToClose) {
+      'stage6_ledger_closure'
+    } else {
+      [string]$Checkpoint.next_smallest_truthful_gap
+    }
+    checkpoint_ready_to_close = $CheckpointReadyToClose
+    canonical_summon_runtime_readback_requested = $true
+    canonical_summon_runtime_readback_observed = $CanonicalSummonRuntimeReadbackObserved
+    next_smallest_truthful_gap = 'canonical_summon_runtime_readback'
+    next_step = 'trigger_canonical_global_hotkey_then_replay_readback'
+    next_operator_action = 'Trigger Ctrl+Alt+F through the canonical hotkey runtime, then replay the read-only canonical summon proof.'
+    proof_script = 'scripts/lens-canonical-summon-runtime-proof.ps1 -Mode Status -DataDir D:\Francis\data'
+    route = '/lens/summon/readiness'
+    readiness_route = '/lens/summon/readiness'
+    acceptance_criterion = 'summon_anywhere'
+    authority_required = 'existing_governed_hotkey_summon_authority'
+    authority_granted = [bool](Get-PropertyValue -Payload $CanonicalSummonRuntimeChecks -Name 'authority_ready' -Default $false)
+    read_only_contract = $true
+    diagnostic_only = $true
+    operator_action_required = $true
+    would_execute = $false
+    would_mutate = $false
+    would_launch_process = $false
+    would_stop_process = $false
+    would_restart_process = $false
+    would_register_hotkey = $false
+    would_control_overlay = $false
+    would_summon = $false
+    would_write_memory = $false
+    would_decide_approval = $false
+    blockers = [string[]]@($Blockers)
+    canonical_proof_blockers = [string[]]@($CanonicalSummonRuntimeBlockers)
+  }
+  $RecommendedNextSlice = [string]$RecommendedHandoff.next_step
+  $RecommendedProofScript = [string]$RecommendedHandoff.proof_script
+  $RecommendedAuthorityRequired = [string]$RecommendedHandoff.authority_required
+} elseif (
   $NextSmallestTruthfulGap -eq 'summon_authority_blocker_boundary' -and
   $SummonGlobalHotkeyBindingBlockerProofObserved -and
   $SummonAuthorityBlockerProofObserved
@@ -7162,6 +7225,8 @@ $Payload = [ordered]@{
   child_host_launch_run_seconds = $ChildHostLaunchRunSeconds
   child_proof_timeout_seconds = $ChildProofTimeoutSeconds
   allow_launch_on_hotkey = $LaunchOnHotkeyRuntimeReadbackOptIn
+  checkpoint_ready_to_close = $CheckpointReadyToClose
+  requested_summon_runtime_readback_observed = $RequestedSummonRuntimeReadbackObserved
   canonical_summon_runtime_readback = [bool]$UseCanonicalSummonRuntimeReadback
   canonical_summon_runtime_readback_observed = $CanonicalSummonRuntimeReadbackObserved
   child_proof_timeouts = [string[]]@($ChildProofTimeouts)
@@ -9838,6 +9903,7 @@ $Payload = [ordered]@{
     read_only_contract = -not [bool]$AllowLaunchOnHotkey
     diagnostic_only = $true
     launch_on_hotkey_runtime_readback_opt_in = $LaunchOnHotkeyRuntimeReadbackOptIn
+    requested_summon_runtime_readback_observed = $RequestedSummonRuntimeReadbackObserved
     canonical_summon_runtime_readback = [bool]$UseCanonicalSummonRuntimeReadback
     canonical_summon_runtime_readback_observed = $CanonicalSummonRuntimeReadbackObserved
     checkpoint_readback = $true

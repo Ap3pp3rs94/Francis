@@ -1715,6 +1715,15 @@ def test_lens_stage6_completion_audit_can_consume_canonical_summon_without_launc
     assert "-not [bool]$SummonApiLaunchOnHotkeyProofGovernance.restarts_process" in script
     assert "canonical_summon_runtime_readback = [bool]$UseCanonicalSummonRuntimeReadback" in script
     assert "$CanonicalSummonRuntimeReadbackObserved = (" in script
+    assert "$CheckpointReadyToClose = [bool]$Checkpoint.ready_to_close" in script
+    assert "$RequestedSummonRuntimeReadbackObserved = (" in script
+    assert "$LaunchOnHotkeyRuntimeReadbackOptIn -and -not $SummonApiLaunchOnHotkeyProofObserved" in script
+    assert "canonical_summon_runtime_readback_missing_or_failed" in script
+    assert "$NextSmallestTruthfulGap -eq 'canonical_summon_runtime_readback'" in script
+    assert "$RecommendedHandoffSource = 'canonical_live_summon_runtime_readback_handoff'" in script
+    assert "next_step = 'trigger_canonical_global_hotkey_then_replay_readback'" in script
+    assert "scripts/lens-canonical-summon-runtime-proof.ps1 -Mode Status -DataDir D:\\Francis\\data" in script
+    assert "summon_api_launch_on_hotkey_proof = $RequestedSummonRuntimeReadbackObserved" in script
     assert "$SummonAuthorityEvidenceObserved = (" in script
     assert "$SummonAnywhereFamilyEvidenceObserved = (" in script
     assert "summon_authority_blocker_proof = $SummonAuthorityEvidenceObserved" in script
@@ -2133,7 +2142,8 @@ def test_lens_stage6_completion_audit_can_consume_canonical_summon_without_launc
     )
     assert runtime_resident_claim_branch in script
     assert stale_prerequisite_branch in script
-    gap_selector = script[script.index("$NextSmallestTruthfulGap = if ($ReadyToClose)") :]
+    gap_selector = script[script.index("$NextSmallestTruthfulGap = if (") :]
+    assert gap_selector.index("'canonical_summon_runtime_readback'") < gap_selector.index("'stage6_ledger_closure'")
     assert gap_selector.index(runtime_resident_claim_branch) < gap_selector.index(stale_prerequisite_branch)
     assert "'persistent_supervision_resident_claim_authority_boundary'" in script
     assert "$RecommendedHandoffSource = 'stage6_persistent_supervision_api_execution_resident_claim_boundary'" in script
