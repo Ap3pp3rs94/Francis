@@ -1223,10 +1223,13 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "function Set-NativeOrbRendererPosition" in script
     assert "function Start-NativeOrbRenderer" in script
     assert "function Stop-NativeOrbRenderer" in script
+    assert "function Get-NativeOrbRendererProcessCandidates" in script
     assert "$ExistingRenderer = Get-NativeOrbRendererReadback -Root $Root" in script
-    assert "LensOverlayNativeRendererReused" in script
+    assert "$LiveRendererCandidates = @(Get-NativeOrbRendererProcessCandidates" in script
+    assert "refusing to stop or replace it" in script
     assert "return $ExistingRenderer" in script
-    assert "if (-not $script:LensOverlayNativeRendererReused)" in script
+    assert "$script:LensOverlayNativeRendererOwnership = 'launched'" in script
+    assert "if ($script:LensOverlayNativeRendererOwnership -eq 'launched')" in script
     assert "FindRendererWindow" in script
     assert "PostMessage" in script
     assert "MoveCenterMessage" in script
@@ -1671,3 +1674,69 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "[System.IO.File]::Replace($TempPath, $DestinationPath, $BackupPath)" in script
     assert "runtime_process_alive = $RuntimeProcessAlive" in script
     assert "Stop-OverlayRuntimeProcess -ProcessId ([int]$TimedOut.pid)" in script
+
+
+def test_lens_overlay_window_native_renderer_candidate_guard_matches_expected_executable() -> None:
+    script_path = _repo_root() / "scripts" / "lens-overlay-window.ps1"
+    probe = (
+        "$scriptPath = "
+        + json.dumps(str(script_path))
+        + r"""
+$tokens = $null
+$parseErrors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile($scriptPath, [ref]$tokens, [ref]$parseErrors)
+if ($parseErrors.Count -gt 0) {
+  throw 'overlay script parse failed'
+}
+$definition = $ast.FindAll({
+  param($node)
+  $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+  $node.Name -eq 'Get-NativeOrbRendererProcessCandidates'
+}, $true) | Select-Object -First 1
+if ($null -eq $definition) {
+  throw 'candidate guard function missing'
+}
+. ([scriptblock]::Create($definition.Extent.Text))
+function Get-CimInstance {
+  param([Parameter(ValueFromRemainingArguments=$true)]$Arguments)
+  @(
+    [pscustomobject]@{
+      ProcessId = 4321
+      ParentProcessId = 1234
+      ExecutablePath = ''
+      CommandLine = '"C:\Francis\native\orb\build\native_orb_renderer.exe" --run-seconds 0'
+    }
+    [pscustomobject]@{
+      ProcessId = 8765
+      ParentProcessId = 5678
+      ExecutablePath = 'C:\Other\native_orb_renderer.exe'
+      CommandLine = '"C:\Other\native_orb_renderer.exe" --run-seconds 0'
+    }
+  )
+}
+function Test-NativeOrbRendererProcess {
+  param([int]$ProcessId)
+  return $ProcessId -in @(4321, 8765)
+}
+@(Get-NativeOrbRendererProcessCandidates -ExecutablePath 'C:\Francis\native\orb\build\native_orb_renderer.exe') |
+  ConvertTo-Json -Compress
+"""
+    )
+
+    proc = subprocess.run(
+        [_powershell(), "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", probe],
+        cwd=_repo_root(),
+        check=False,
+        text=True,
+        capture_output=True,
+        timeout=30,
+    )
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = json.loads(proc.stdout)
+    assert payload == {
+        "pid": 4321,
+        "parent_pid": 1234,
+        "executable_path": "",
+        "match_source": "command_line",
+    }

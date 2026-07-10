@@ -1464,6 +1464,65 @@ function Test-NativeOrbRendererProcess {
   return ([string]$Process.ProcessName -eq 'native_orb_renderer')
 }
 
+function Get-NativeOrbRendererProcessCandidates {
+  param([string]$ExecutablePath)
+
+  if ([string]::IsNullOrWhiteSpace($ExecutablePath)) {
+    return @()
+  }
+
+  try {
+    $ExpectedExecutablePath = [System.IO.Path]::GetFullPath($ExecutablePath)
+  } catch {
+    return @()
+  }
+
+  try {
+    $Processes = @(Get-CimInstance Win32_Process -Filter "Name = 'native_orb_renderer.exe'" -ErrorAction Stop)
+  } catch {
+    return @()
+  }
+
+  $Candidates = [System.Collections.ArrayList]::new()
+  foreach ($Process in $Processes) {
+    $ProcessId = [int]$Process.ProcessId
+    $CandidatePath = [string]$Process.ExecutablePath
+    $CandidateCommandLine = [string]$Process.CommandLine
+    if ($ProcessId -le 0) {
+      continue
+    }
+    $MatchSource = ''
+    if (-not [string]::IsNullOrWhiteSpace($CandidatePath)) {
+      try {
+        $CandidatePath = [System.IO.Path]::GetFullPath($CandidatePath)
+      } catch {
+        $CandidatePath = ''
+      }
+      if ([string]::Equals($CandidatePath, $ExpectedExecutablePath, [System.StringComparison]::OrdinalIgnoreCase)) {
+        $MatchSource = 'executable_path'
+      }
+    }
+    if ([string]::IsNullOrWhiteSpace($MatchSource) -and
+        -not [string]::IsNullOrWhiteSpace($CandidateCommandLine) -and
+        $CandidateCommandLine.IndexOf($ExpectedExecutablePath, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+      $MatchSource = 'command_line'
+    }
+    if ([string]::IsNullOrWhiteSpace($MatchSource)) {
+      continue
+    }
+    if (-not (Test-NativeOrbRendererProcess -ProcessId $ProcessId)) {
+      continue
+    }
+    [void]$Candidates.Add([ordered]@{
+        pid = $ProcessId
+        parent_pid = [int]$Process.ParentProcessId
+        executable_path = $CandidatePath
+        match_source = $MatchSource
+      })
+  }
+  return @($Candidates.ToArray())
+}
+
 function Initialize-NativeOrbRendererInterop {
   if ('FrancisNativeOrbRendererNative' -as [type]) {
     return
@@ -1729,7 +1788,7 @@ function Start-NativeOrbRenderer {
   $ExistingRenderer = Get-NativeOrbRendererReadback -Root $Root
   if ((Get-BoolProperty -Payload $ExistingRenderer -Name 'active_renderer' -Default $false) -and
       (Get-BoolProperty -Payload $ExistingRenderer -Name 'process_alive' -Default $false)) {
-    $script:LensOverlayNativeRendererReused = $true
+    $script:LensOverlayNativeRendererOwnership = 'reused'
     return $ExistingRenderer
   }
 
@@ -1737,12 +1796,21 @@ function Start-NativeOrbRenderer {
   if (-not (Test-Path -LiteralPath $BuildScript -PathType Leaf)) {
     throw 'Native Orb renderer build script is missing.'
   }
+  $NativeRendererExecutable = Join-Path $RepoRoot 'native\orb\build\native_orb_renderer.exe'
+  $LiveRendererCandidates = @(Get-NativeOrbRendererProcessCandidates -ExecutablePath $NativeRendererExecutable)
+  if ($LiveRendererCandidates.Count -gt 0) {
+    $script:LensOverlayNativeRendererOwnership = 'external_live_candidate'
+    $CandidatePids = @($LiveRendererCandidates | ForEach-Object { [int]$_.pid }) -join ', '
+    throw "A live Francis native Orb renderer candidate ($CandidatePids) exists without an active canonical readback; refusing to stop or replace it."
+  }
+
   $NativeRunSeconds = if ($RunSeconds -gt 0) { $RunSeconds } else { 0 }
   [void](Stop-NativeOrbRenderer -Root $Root)
   & $BuildScript -Launch -RunSeconds $NativeRunSeconds -Size $Size -X $X -Y $Y -RuntimeDir $RuntimeRoot | Out-Null
   if ($LASTEXITCODE -ne 0) {
     throw "Native Orb renderer launch failed with exit code $LASTEXITCODE."
   }
+  $script:LensOverlayNativeRendererOwnership = 'launched'
   $Readback = Get-NativeOrbRendererReadback -Root $Root
   if (-not [bool]$Readback.active_renderer) {
     throw 'Native Orb renderer launch did not produce an active renderer readback.'
@@ -7265,7 +7333,7 @@ if ($Mode -eq 'Run') {
   $script:LensOverlayLastOrbVirtualPointerWriteTicks = [Int64]0
   $script:LensOverlayApplication = $null
   $script:LensOverlayNativeRenderer = $null
-  $script:LensOverlayNativeRendererReused = $false
+  $script:LensOverlayNativeRendererOwnership = 'not_started'
   $script:LensOverlayOrbPanelPopup = $null
   $script:LensOverlayOrbPanelInput = $null
   $script:LensOverlayOrbPanelStatusText = $null
@@ -7549,7 +7617,7 @@ if ($Mode -eq 'Run') {
       } catch {
       }
     }
-    if (-not $script:LensOverlayNativeRendererReused) {
+    if ($script:LensOverlayNativeRendererOwnership -eq 'launched') {
       [void](Stop-NativeOrbRenderer -Root $DataRoot)
     }
     if (-not $Failed) {
