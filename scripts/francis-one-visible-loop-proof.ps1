@@ -269,15 +269,15 @@ $form = New-Object System.Windows.Forms.Form
 $form.Text = 'Francis One Visible Loop Live Safe Target'
 $form.Name = 'FrancisOneVisibleLoopLiveSafeTarget'
 $form.StartPosition = 'Manual'
-$form.Location = New-Object System.Drawing.Point(80, 80)
-$form.Size = New-Object System.Drawing.Size(520, 240)
+$form.Location = [System.Drawing.Point]::new(80, 80)
+$form.Size = [System.Drawing.Size]::new(520, 240)
 $form.TopMost = $true
 $form.ShowInTaskbar = $true
 $text = New-Object System.Windows.Forms.TextBox
 $text.Name = 'FrancisLiveSafeTargetText'
 $text.Multiline = $true
-$text.Location = New-Object System.Drawing.Point(24, 48)
-$text.Size = New-Object System.Drawing.Size(450, 110)
+$text.Location = [System.Drawing.Point]::new(24, 48)
+$text.Size = [System.Drawing.Size]::new(450, 110)
 $text.Text = 'ready'
 $form.Controls.Add($text)
 $form.Add_Shown({ $form.Activate(); $text.Focus() })
@@ -405,6 +405,7 @@ def _live_safe_target_action_proof() -> dict[str, Any]:
             "status": "blocked",
             "blocker": "live_safe_target_execution_failed",
             "error": type(exc).__name__,
+            "error_detail": str(exc)[:240],
             "approval": approval,
         }
     finally:
