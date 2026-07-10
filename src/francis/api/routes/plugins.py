@@ -9858,7 +9858,7 @@ def _record_capability_pack_quality_evidence_remediation_batch(
     for item in prepared:
         pack_id = _safe_str(item.get("pack_id")).strip()
         pack_version = _safe_str(item.get("pack_version")).strip()
-        capability_ids = _unique_texts(item.get("capability_ids"), limit=500)
+        capability_ids = _unique_texts(item.get("capability_ids"), limit=1000)
         references = item.get("quality_references") if isinstance(item.get("quality_references"), dict) else {}
         test_refs = _unique_texts(references.get("tests"), limit=50)
         doc_refs = _unique_texts(references.get("docs"), limit=50)

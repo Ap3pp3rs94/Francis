@@ -3836,6 +3836,58 @@ def test_plugins_capability_pack_migration_limit_requires_explicit_large_pack_bu
     assert plugins._capability_pack_migration_capability_limit(5000) == 1000
 
 
+def test_plugins_quality_evidence_batch_preserves_explicit_large_pack_members(
+    monkeypatch,
+) -> None:
+    from francis.api.routes import plugins
+
+    capability_ids = [f"stage17.large_pack.capability_{index:03d}" for index in range(501)]
+    registry: dict[str, object] = {"version": 1, "plugins": {}}
+    for capability_id in capability_ids:
+        plugins._write_plugin(
+            registry,
+            plugins._normalize_plugin_record(
+                capability_id,
+                {
+                    "id": capability_id,
+                    "status": "staged",
+                    "enabled": False,
+                    "meta": {},
+                },
+            ),
+        )
+    monkeypatch.setattr(plugins, "_save_registry_and_catalog", lambda _registry: {})
+
+    batch = plugins._record_capability_pack_quality_evidence_remediation_batch(
+        registry=registry,
+        prepared=[
+            {
+                "pack_id": "ops.explicit_large_pack",
+                "pack_version": "1.0.0",
+                "capability_ids": capability_ids,
+                "quality_references": {
+                    "tests": ["tests/test_api_plugins.py"],
+                    "docs": ["README.md"],
+                },
+                "validation_receipt_links": {},
+                "proposal_lineage_links": {},
+                "evidence_blockers": ["tests_missing", "docs_missing"],
+            }
+        ],
+    )
+
+    assert batch["failed"] == []
+    recorded = batch["recorded"][0]
+    assert recorded["capability_count"] == 501
+    assert recorded["changed_capability_count"] == 501
+    for capability_id in (capability_ids[0], capability_ids[-1]):
+        plugin = plugins._read_plugin(registry, capability_id)
+        assert plugin is not None
+        quality = dict((plugin.get("meta") or {}).get("quality") or {})
+        assert quality["tests"] == ["tests/test_api_plugins.py"]
+        assert quality["docs"] == ["README.md"]
+
+
 def test_plugins_capability_pack_metadata_receipts_bulk_from_migration_plan(
     monkeypatch,
     tmp_path: Path,
