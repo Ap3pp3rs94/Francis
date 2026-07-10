@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -20,6 +21,13 @@ _PYTEST_SESSION_RETENTION_KEEP_COUNT = 50
 _PYTEST_SESSION_RETENTION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60
 _PYTEST_SESSION_RETENTION_KIND = "retention.execution.receipt"
 _PYTEST_SESSION_RETENTION_ENV = "FRANCIS_PYTEST_SESSION_RETENTION_ROOT"
+_GENERATED_PLUGIN_API_TEST_NODEID_PREFIXES = (
+    "tests/test_api_forge.py::",
+    "tests/test_api_missions.py::",
+    "tests/test_api_operations.py::",
+    "tests/test_api_plugins.py::",
+    "tests/test_api_plugins_permission_gate.py::",
+)
 APPROVAL_DECISION_TEST_ACTOR = "test.approvals.decision"
 APPROVAL_DECISION_TEST_SCOPE = "approvals.decide"
 APPROVAL_REQUEST_TEST_SCOPE = "approvals.request"
@@ -632,3 +640,22 @@ def _api_actor_scopes(monkeypatch: pytest.MonkeyPatch) -> None:
         "FRANCIS_API_ACTOR_SCOPES",
         json.dumps(_test_actor_scope_policy()),
     )
+
+
+@pytest.fixture(autouse=True)
+def _isolate_generated_plugin_roots_for_api_plugin_tests(
+    request: pytest.FixtureRequest,
+    monkeypatch: pytest.MonkeyPatch,
+    _francis_tmp_root: Path,
+) -> None:
+    nodeid = request.node.nodeid.replace("\\", "/")
+    if not nodeid.startswith(_GENERATED_PLUGIN_API_TEST_NODEID_PREFIXES):
+        return
+
+    from francis.api.routes import plugins
+    from francis.plugin_factory import spec_builder
+
+    digest = hashlib.sha256(nodeid.encode("utf-8")).hexdigest()[:12]
+    generated_root = _francis_tmp_root / "generated_plugins" / digest
+    monkeypatch.setattr(plugins, "_gen_dir", lambda: generated_root)
+    monkeypatch.setattr(spec_builder, "_gen_dir", lambda: generated_root)

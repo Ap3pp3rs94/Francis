@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pytest
 
+from francis.kernel.paths import repo_root as francis_repo_root
+
 _PLUGIN_ACTOR = "test.plugins.write"
 
 
@@ -32,6 +34,7 @@ def test_forge_proposal_and_promotion_readback(monkeypatch, tmp_path: Path) -> N
     from fastapi.testclient import TestClient
 
     from francis.api.app import create_app
+    from francis.api.routes import plugins
 
     client = TestClient(create_app())
     raw_secret = "sk-" + ("z" * 24)
@@ -69,6 +72,10 @@ def test_forge_proposal_and_promotion_readback(monkeypatch, tmp_path: Path) -> N
     built_body = built.json()
     assert built_body["ok"] is True
     plugin_id = str(built_body["plugin_id"])
+    assert plugins._gen_dir() != francis_repo_root() / "plugins" / "generated"
+    registry_plugin = plugins._read_plugin(plugins._load_registry(), plugin_id)
+    assert registry_plugin is not None
+    assert Path(str(registry_plugin["generated_dir"])).parent == plugins._gen_dir()
     proposal_id = str(built_body["proposal_id"])
     validation_receipt_id = str(built_body["validation_receipt_id"])
     validation_receipt = built_body["validation_receipt"]
