@@ -79,6 +79,7 @@ from francis.lens import (
     lens_overlay_window_execution_receipts,
     lens_orb_body_perspective_contract,
     lens_orb_runtime_identity,
+    lens_perception_runtime_readback,
     lens_resident_runtime_activation_denial_receipts,
     lens_resident_runtime_activation_execution_receipts,
     lens_preflight,
@@ -430,6 +431,11 @@ def orb_runtime_identity(
 @router.get("/orb/body-perspective")
 def orb_body_perspective() -> dict[str, Any]:
     return lens_orb_body_perspective_contract()
+
+
+@router.get("/perception")
+def perception() -> dict[str, Any]:
+    return lens_perception_runtime_readback()
 
 
 @router.get("/preflight")

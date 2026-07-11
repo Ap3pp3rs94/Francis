@@ -74,6 +74,7 @@ from francis.lens.host_runtime_plan import (
     lens_host_runtime_loop_denial_receipts,
     lens_host_runtime_loop_readiness_audit,
 )
+from francis.lens.perception import lens_perception_runtime_readback
 from francis.lens.os_binding_authority import (
     lens_os_binding_authority_request_readback,
     lens_os_binding_execution_receipts,
@@ -6078,11 +6079,13 @@ def _orb_body_perspective_contract(
     *,
     orb_runtime_identity: dict[str, Any],
     operator_state: dict[str, Any],
+    perception_runtime: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     components = _as_dict(orb_runtime_identity.get("components"))
     overlay = _as_dict(components.get("overlay"))
     body_ready = bool(overlay.get("ready")) and bool(overlay.get("overlay_window_visible"))
-    lens_plane_ready = body_ready
+    perception = _as_dict(perception_runtime) if perception_runtime is not None else lens_perception_runtime_readback()
+    lens_plane_ready = bool(perception.get("ready"))
     pointer = _as_dict(operator_state.get("virtual_pointer"))
     last_action = _as_dict(pointer.get("last_action"))
     current_actuator_mode = _orb_body_current_actuator_mode(operator_state)
@@ -6129,16 +6132,19 @@ def _orb_body_perspective_contract(
             "voice_identity": _as_dict(orb_runtime_identity.get("voice_identity")),
         },
         "perspective": {
-            "source": "Lens desktop plane",
+            "source": "Lens situation model",
             "mode": "third_person_desktop",
-            "plane": "full_desktop_readback",
+            "plane": "desktop_situation_model",
             "lens_is_perception_plane": True,
             "orb_is_body_inside_plane": True,
             "llm_prompt_contract": (
-                "You are Francis. Your visible body is the Orb. Your current view is the Lens desktop readback. "
+                "You are Francis. Your visible body is the Orb. Your current view is the Lens situation model. "
+                "Treat the view as unavailable or partial unless its runtime state is ready, fresh, and authority-scoped. "
                 "Your allowed actions are governed and may only occur through approved actuator paths."
             ),
             "ready": lens_plane_ready,
+            "runtime": perception,
+            "blockers": _as_list(perception.get("blockers")),
         },
         "pointer": {
             "kind": "orb_virtual_pointer",
@@ -6256,6 +6262,7 @@ def lens_orb_body_perspective_contract() -> dict[str, Any]:
     return _orb_body_perspective_contract(
         orb_runtime_identity=lens_orb_runtime_identity(include_process_scan=False),
         operator_state=latest_orb_operator_state(create_dirs=False),
+        perception_runtime=lens_perception_runtime_readback(),
     )
 
 
@@ -6314,6 +6321,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
     overlay_enablement_gate = lens_overlay_enablement_gate(preflight=preflight)
     overlay_authority_requests = lens_overlay_authority_request_readback(limit=safe_limit)
     overlay_execution_receipts = lens_overlay_window_execution_receipts(limit=safe_limit)
+    perception_runtime = lens_perception_runtime_readback()
     orb_runtime_identity = _canonical_orb_runtime_identity(
         launch_manifest=launch_manifest,
         summon_enablement_gate=summon_enablement_gate,
@@ -6324,6 +6332,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
     orb_body_perspective_contract = _orb_body_perspective_contract(
         orb_runtime_identity=orb_runtime_identity,
         operator_state=latest_orb_operator_state(create_dirs=False),
+        perception_runtime=perception_runtime,
     )
     resident_surface_activation = lens_resident_surface_activation_boundary(limit=safe_limit)
     pilot_indicator = _pilot_indicator(mode)
@@ -6359,6 +6368,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
         "hud": hud,
         "resident_host": resident_host,
         "orb_runtime_identity": orb_runtime_identity,
+        "perception": perception_runtime,
         "orb_body_perspective_contract": orb_body_perspective_contract,
         "preflight": preflight,
         "os_binding_readiness": os_binding_readiness,

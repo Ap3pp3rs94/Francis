@@ -1064,6 +1064,13 @@ def test_lens_orb_body_perspective_contract_models_orb_as_body_without_physical_
                 "physical_input_performed": False,
             },
         },
+        perception_runtime={
+            "ready": True,
+            "status": "ready",
+            "route": "/lens/perception",
+            "blockers": [],
+            "situation_model": {"status": "ready"},
+        },
     )
 
     assert payload["kind"] == "lens.orb.body_perspective_contract"
@@ -1071,6 +1078,8 @@ def test_lens_orb_body_perspective_contract_models_orb_as_body_without_physical_
     assert payload["body"]["francis_body"] == "Orb"
     assert payload["body"]["body_is_chat_widget"] is False
     assert payload["perspective"]["mode"] == "third_person_desktop"
+    assert payload["perspective"]["source"] == "Lens situation model"
+    assert payload["perspective"]["runtime"]["route"] == "/lens/perception"
     assert payload["perspective"]["lens_is_perception_plane"] is True
     assert payload["perspective"]["orb_is_body_inside_plane"] is True
     assert payload["pointer"]["kind"] == "orb_virtual_pointer"
@@ -1087,6 +1096,28 @@ def test_lens_orb_body_perspective_contract_models_orb_as_body_without_physical_
     assert payload["governance"]["execution_authority"] is False
     assert payload["governance"]["sendinput_authority"] is False
     assert payload["blockers"] == []
+
+
+def test_lens_orb_body_perspective_does_not_treat_overlay_as_desktop_perception() -> None:
+    from francis.lens.status import _orb_body_perspective_contract
+
+    payload = _orb_body_perspective_contract(
+        orb_runtime_identity={
+            "components": {"overlay": {"ready": True, "overlay_window_visible": True}},
+        },
+        operator_state={"virtual_pointer": {}},
+        perception_runtime={
+            "ready": False,
+            "status": "not_observed",
+            "route": "/lens/perception",
+            "blockers": ["lens_perception_runtime_state_missing"],
+        },
+    )
+
+    assert payload["ready"] is False
+    assert "lens_desktop_perception_plane_missing" in payload["blockers"]
+    assert payload["perspective"]["ready"] is False
+    assert payload["perspective"]["blockers"] == ["lens_perception_runtime_state_missing"]
 
 
 def test_lens_orb_body_perspective_route_uses_contract(monkeypatch) -> None:
@@ -1118,6 +1149,34 @@ def test_lens_orb_body_perspective_route_uses_contract(monkeypatch) -> None:
     assert body["kind"] == "lens.orb.body_perspective_contract"
     assert body["perspective"]["mode"] == "third_person_desktop"
     assert body["governance"]["execution_authority"] is False
+
+
+def test_lens_perception_route_uses_fail_closed_runtime_readback(monkeypatch) -> None:
+    from fastapi.testclient import TestClient
+
+    import francis.api.routes.lens as lens_routes
+    from francis.api.app import create_app
+
+    def fake_readback() -> dict[str, Any]:
+        return {
+            "kind": "lens.perception.runtime_readback",
+            "status": "not_observed",
+            "ready": False,
+            "blockers": ["lens_perception_runtime_state_missing"],
+            "governance": {"read_only_contract": True, "capture_authority": False},
+        }
+
+    monkeypatch.setattr(lens_routes, "lens_perception_runtime_readback", fake_readback)
+    client = TestClient(create_app())
+
+    response = client.get("/lens/perception")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["kind"] == "lens.perception.runtime_readback"
+    assert body["ready"] is False
+    assert body["blockers"] == ["lens_perception_runtime_state_missing"]
+    assert body["governance"]["capture_authority"] is False
 
 
 def test_lens_os_binding_readiness_groups_blockers_without_authority(
@@ -2006,6 +2065,10 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert body["ok"] is True
     assert body["kind"] == "lens.status"
     assert body["read_only"] is True
+    assert body["perception"]["status"] == "not_observed"
+    assert body["perception"]["ready"] is False
+    assert body["perception"]["blockers"] == ["lens_perception_runtime_state_missing"]
+    assert body["orb_body_perspective_contract"]["perspective"]["runtime"] == body["perception"]
     assert body["os_binding_authority_requests"]["route"] == "/lens/os-binding/authority/requests"
     assert body["os_binding_authority_requests"]["request_route"] == "/lens/os-binding/authority/request"
     assert body["os_binding_authority_requests"]["authority_route"] == "/lens/os-binding/authority"

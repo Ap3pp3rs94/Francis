@@ -128,6 +128,7 @@ from francis.lens.mcp_perception import (
     lens_perceive_via_mcp,
 )
 from francis.lens.mcp_status_bridge import lens_orb_mcp_status_bridge
+from francis.lens.perception import lens_perception_runtime_readback
 from francis.lens.status import (
     lens_host_status,
     lens_orb_body_perspective_contract,
@@ -196,6 +197,7 @@ __all__ = [
     "lens_mcp_perception_contract",
     "lens_mcp_perception_receipts",
     "lens_observe_overlay_region",
+    "lens_perception_runtime_readback",
     "lens_orb_mcp_status_bridge",
     "lens_orb_body_perspective_contract",
     "lens_orb_runtime_identity",
