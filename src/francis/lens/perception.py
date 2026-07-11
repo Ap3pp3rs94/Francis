@@ -47,6 +47,10 @@ def _runtime_state_path() -> Path:
     return data_dir() / "runtime" / "lens-perception" / "status.json"
 
 
+def _supervisor_state_path() -> Path:
+    return data_dir() / "runtime" / "lens-host-supervisor" / "status.json"
+
+
 def _read_runtime_state(path: Path) -> dict[str, Any]:
     if not path.exists() or not path.is_file():
         return {}
@@ -77,6 +81,8 @@ def lens_perception_runtime_readback(*, now: float | None = None) -> dict[str, A
     observed_now = time.time() if now is None else float(now)
     path = _runtime_state_path()
     raw = _read_runtime_state(path)
+    supervisor_path = _supervisor_state_path()
+    supervisor = _read_runtime_state(supervisor_path)
     runtime_present = bool(raw)
     capture = _as_dict(raw.get("capture"))
     desktop_capture = _bounded_capture_readback(_as_dict(capture.get("desktop")))
@@ -90,7 +96,12 @@ def lens_perception_runtime_readback(*, now: float | None = None) -> dict[str, A
     state_kind_valid = _safe_str(raw.get("kind")) == LENS_PERCEPTION_RUNTIME_STATE_KIND
     version_valid = raw.get("version") == LENS_PERCEPTION_RUNTIME_STATE_VERSION
     owner_valid = owner == _EXPECTED_OWNER
-    runtime_valid = bool(runtime_present and state_kind_valid and version_valid and owner_valid)
+    supervisor_active = (
+        _safe_str(supervisor.get("kind")) == "lens.host.supervisor_state"
+        and _safe_str(supervisor.get("status")) == "resident_supervising"
+        and supervisor.get("supervisor_process_alive") is True
+    )
+    runtime_valid = bool(runtime_present and state_kind_valid and version_valid and owner_valid and supervisor_active)
     situation_status = _safe_str(raw_situation.get("status"))
     situation_ready = situation_status == "ready"
 
@@ -104,6 +115,8 @@ def lens_perception_runtime_readback(*, now: float | None = None) -> dict[str, A
             blockers.append("lens_perception_runtime_state_version_invalid")
         if not owner_valid:
             blockers.append("lens_perception_runtime_owner_not_supervised")
+        if not supervisor_active:
+            blockers.append("lens_perception_supervisor_not_observed")
         if state != "running":
             blockers.append("lens_perception_runtime_not_running")
         if not fresh:
@@ -128,6 +141,14 @@ def lens_perception_runtime_readback(*, now: float | None = None) -> dict[str, A
         "runtime_state_valid": runtime_valid,
         "owner": owner or "not_observed",
         "expected_owner": _EXPECTED_OWNER,
+        "supervision": {
+            "state_path": str(supervisor_path),
+            "active": supervisor_active,
+            "status": _safe_str(supervisor.get("status")) or "not_observed",
+            "supervisor_pid": supervisor.get("supervisor_pid")
+            if isinstance(supervisor.get("supervisor_pid"), int)
+            else None,
+        },
         "state": state or "not_observed",
         "updated_at": updated_at,
         "age_ms": round(age_seconds * 1000.0, 3) if age_seconds is not None else None,
