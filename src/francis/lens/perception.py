@@ -9,6 +9,7 @@ It does not start capture, write state, or grant sensing authority.
 from __future__ import annotations
 
 import json
+import os
 import time
 from pathlib import Path
 from typing import Any
@@ -41,6 +42,46 @@ def _safe_float(value: Any) -> float | None:
         except ValueError:
             return None
     return None
+
+
+def _process_is_alive(value: Any) -> bool:
+    if isinstance(value, bool):
+        return False
+    try:
+        process_id = int(value)
+    except (TypeError, ValueError):
+        return False
+    if process_id <= 0:
+        return False
+    if os.name == "nt":
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        kernel32.OpenProcess.restype = wintypes.HANDLE
+        kernel32.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+        kernel32.GetExitCodeProcess.restype = wintypes.BOOL
+        kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+        kernel32.CloseHandle.restype = wintypes.BOOL
+
+        process_query_limited_information = 0x1000
+        still_active = 259
+        handle = kernel32.OpenProcess(process_query_limited_information, False, process_id)
+        if not handle:
+            return False
+        try:
+            exit_code = wintypes.DWORD()
+            if not kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+                return False
+            return int(exit_code.value) == still_active
+        finally:
+            kernel32.CloseHandle(handle)
+    try:
+        os.kill(process_id, 0)
+    except OSError:
+        return False
+    return True
 
 
 def _runtime_state_path() -> Path:
@@ -96,10 +137,13 @@ def lens_perception_runtime_readback(*, now: float | None = None) -> dict[str, A
     state_kind_valid = _safe_str(raw.get("kind")) == LENS_PERCEPTION_RUNTIME_STATE_KIND
     version_valid = raw.get("version") == LENS_PERCEPTION_RUNTIME_STATE_VERSION
     owner_valid = owner == _EXPECTED_OWNER
+    supervisor_reported_alive = supervisor.get("supervisor_process_alive") is True
+    supervisor_process_alive = _process_is_alive(supervisor.get("supervisor_pid"))
     supervisor_active = (
         _safe_str(supervisor.get("kind")) == "lens.host.supervisor_state"
         and _safe_str(supervisor.get("status")) == "resident_supervising"
-        and supervisor.get("supervisor_process_alive") is True
+        and supervisor_reported_alive
+        and supervisor_process_alive
     )
     runtime_valid = bool(runtime_present and state_kind_valid and version_valid and owner_valid and supervisor_active)
     situation_status = _safe_str(raw_situation.get("status"))
@@ -148,6 +192,8 @@ def lens_perception_runtime_readback(*, now: float | None = None) -> dict[str, A
             "supervisor_pid": supervisor.get("supervisor_pid")
             if isinstance(supervisor.get("supervisor_pid"), int)
             else None,
+            "reported_process_alive": supervisor_reported_alive,
+            "process_alive": supervisor_process_alive,
         },
         "state": state or "not_observed",
         "updated_at": updated_at,
