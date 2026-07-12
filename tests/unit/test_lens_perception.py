@@ -50,6 +50,51 @@ def _write_ring_frame(*, receipt_id: str, captured_at: float) -> None:
     )
 
 
+def _write_situation_heartbeat(
+    data_root: Path,
+    *,
+    revision: str,
+    updated_at: float,
+    semantic_comprehension_ready: bool,
+) -> None:
+    path = data_root / "runtime" / "lens-perception" / "situation-model.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "kind": "lens.perception.situation_model",
+                "version": 1,
+                "status": "heartbeat_partial",
+                "revision": revision,
+                "updated_at": updated_at,
+                "has_current_desktop_state": True,
+                "semantic_comprehension_ready": semantic_comprehension_ready,
+                "runtime_identity": {
+                    "authority_receipt_id": "lens-perception-enable-42",
+                    "execution_approval_id": "approved-perception-execution",
+                },
+                "present": {"plane": "desktop"},
+                "sources": {},
+                "blockers": [],
+                "governance": {
+                    "runtime_state_only": True,
+                    "observation_only": True,
+                    "desktop_capture_authority": True,
+                    "execution_authority": True,
+                    "camera_capture_authority": False,
+                    "microphone_capture_authority": False,
+                    "keyboard_content_captured": False,
+                    "user_mouse_captured": False,
+                    "input_execution_authority": False,
+                    "memory_write": False,
+                    "raw_pixels_in_state": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 def test_perception_readback_fails_closed_when_runtime_state_is_missing(tmp_path: Path, monkeypatch) -> None:
     data_root = tmp_path / "data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
@@ -93,6 +138,12 @@ def test_perception_readback_requires_fresh_supervised_authorized_situation_mode
         },
     )
     _write_supervisor_state(data_root)
+    _write_situation_heartbeat(
+        data_root,
+        revision="42",
+        updated_at=100.0,
+        semantic_comprehension_ready=True,
+    )
     _write_runtime_state(
         data_root,
         {
@@ -104,7 +155,14 @@ def test_perception_readback_requires_fresh_supervised_authorized_situation_mode
             "host_pid": os.getpid(),
             "supervisor_pid": os.getpid(),
             "updated_at": 100.0,
-            "situation_model": {"status": "ready", "revision": "42"},
+            "situation_model": {
+                "status": "heartbeat_ready",
+                "revision": "42",
+                "heartbeat_ready": True,
+                "fresh": True,
+                "has_current_desktop_state": True,
+                "semantic_comprehension_ready": True,
+            },
             "execution": {
                 "active": True,
                 "approval_id": "approved-perception-execution",
@@ -143,11 +201,30 @@ def test_perception_readback_requires_fresh_supervised_authorized_situation_mode
     assert payload["execution"]["active"] is True
     assert payload["execution"]["authority_receipt_matches_capture"] is True
     assert payload["situation_model"]["revision"] == "42"
+    assert payload["situation_model"]["heartbeat_ready"] is True
+    assert payload["situation_model"]["semantic_comprehension_ready"] is True
     assert payload["ring_buffer"]["ready"] is True
     assert payload["ring_buffer"]["raw_pixels_in_readback"] is False
     assert payload["capture"]["desktop"]["pixels_in_readback"] is False
     assert payload["capture"]["desktop"]["authority_receipt"]["active"] is True
     assert payload["capture"]["keyboard_content_captured"] is False
+
+    situation_path = data_root / "runtime" / "lens-perception" / "situation-model.json"
+    situation_state = json.loads(situation_path.read_text(encoding="utf-8"))
+    situation_state["semantic_comprehension_ready"] = False
+    situation_path.write_text(json.dumps(situation_state), encoding="utf-8")
+    runtime_path = data_root / "runtime" / "lens-perception" / "status.json"
+    runtime_state = json.loads(runtime_path.read_text(encoding="utf-8"))
+    runtime_state["situation_model"]["semantic_comprehension_ready"] = False
+    runtime_path.write_text(json.dumps(runtime_state), encoding="utf-8")
+
+    partial = lens_perception_runtime_readback(now=102.0)
+
+    assert partial["status"] == "blocked"
+    assert partial["situation_model"]["heartbeat_ready"] is True
+    assert partial["situation_model"]["has_current_desktop_state"] is True
+    assert partial["situation_model"]["semantic_comprehension_ready"] is False
+    assert "lens_situation_model_semantic_comprehension_not_ready" in partial["blockers"]
 
 
 def test_perception_readback_rejects_self_reported_execution_without_exact_approval(

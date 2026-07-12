@@ -34,6 +34,10 @@ from francis.lens.perception_execution_contract import (
     LENS_PERCEPTION_EXECUTION_REQUEST_KIND,
     lens_perception_execution_approval_status,
 )
+from francis.lens.situation_model import (
+    lens_situation_model_readback,
+    write_lens_situation_model_heartbeat,
+)
 
 _MAX_SUPERVISOR_STATE_AGE_SECONDS = 5.0
 
@@ -155,6 +159,23 @@ class LensPerceptionWorker:
                 capture_active=False,
             )
 
+        situation_model: dict[str, Any]
+        situation_blockers: list[str] = ["lens_situation_model_not_ready"]
+        try:
+            situation_model = write_lens_situation_model_heartbeat(
+                frame=frame,
+                ring_buffer=ring_buffer,
+                authority_receipt_id=self.config.authority_receipt_id,
+                execution_approval_id=self.config.execution_approval_id,
+                worker_pid=self.process_id,
+                host_pid=_safe_int(supervision.get("observed_pid")),
+                supervisor_pid=_safe_int(supervision.get("supervisor_pid")),
+                observed_at=max(frame.captured_at, self._clock()),
+            )
+        except (OSError, ValueError):
+            situation_model = lens_situation_model_readback(now=max(frame.captured_at, self._clock()))
+            situation_blockers.append("lens_situation_model_heartbeat_write_failed")
+
         return self._write_state(
             state="running",
             updated_at=frame.captured_at,
@@ -162,8 +183,9 @@ class LensPerceptionWorker:
             execution=execution,
             supervision=supervision,
             ring_buffer=ring_buffer,
-            blockers=["lens_situation_model_not_ready"],
+            blockers=situation_blockers,
             capture_active=True,
+            situation_model=situation_model,
         )
 
     def run(self, *, max_frames: int = 0, exit_after_seconds: float = 0.0) -> dict[str, Any]:
@@ -201,6 +223,7 @@ class LensPerceptionWorker:
             ring_buffer=self.ring.readback(now=stopped_at),
             blockers=[],
             capture_active=False,
+            situation_model=_as_dict(latest.get("situation_model")),
         )
         return {
             "ok": True,
@@ -222,10 +245,12 @@ class LensPerceptionWorker:
         ring_buffer: dict[str, Any],
         blockers: list[str],
         capture_active: bool,
+        situation_model: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         authority_active = authority.get("active") is True
         execution_active = execution.get("active") is True
         supervision_active = supervision.get("active") is True
+        heartbeat = situation_model or lens_situation_model_readback(now=updated_at)
         payload = {
             "kind": LENS_PERCEPTION_RUNTIME_STATE_KIND,
             "version": LENS_PERCEPTION_RUNTIME_STATE_VERSION,
@@ -237,10 +262,18 @@ class LensPerceptionWorker:
             "updated_at": updated_at,
             "sample_rate_hz": self.config.sample_rate_hz,
             "situation_model": {
-                "status": "warming" if state == "running" else "not_ready",
-                "revision": "",
-                "has_current_desktop_state": False,
-                "semantic_comprehension_ready": False,
+                "status": str(heartbeat.get("status") or "not_ready"),
+                "route": str(heartbeat.get("route") or "/lens/perception/now"),
+                "revision": str(heartbeat.get("revision") or ""),
+                "updated_at": heartbeat.get("updated_at"),
+                "lag_ms": heartbeat.get("lag_ms"),
+                "fresh": heartbeat.get("fresh") is True,
+                "heartbeat_ready": heartbeat.get("heartbeat_ready") is True,
+                "has_current_desktop_state": heartbeat.get("has_current_desktop_state") is True,
+                "semantic_comprehension_ready": heartbeat.get("semantic_comprehension_ready") is True,
+                "sources": _as_dict(heartbeat.get("sources")),
+                "source_blockers": _string_items(heartbeat.get("source_blockers")),
+                "blockers": _string_items(heartbeat.get("blockers")),
             },
             "capture": {
                 "desktop": {

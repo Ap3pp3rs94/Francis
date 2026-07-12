@@ -18,6 +18,7 @@ from francis.kernel.paths import data_dir
 from francis.lens.perception_authority import lens_perception_desktop_authority_receipt_status
 from francis.lens.perception_capture import lens_perception_ring_buffer_readback
 from francis.lens.perception_execution_contract import lens_perception_execution_approval_status
+from francis.lens.situation_model import lens_situation_model_readback
 
 LENS_PERCEPTION_RUNTIME_STATE_KIND = "lens.perception.runtime_state"
 LENS_PERCEPTION_RUNTIME_STATE_VERSION = 1
@@ -152,6 +153,7 @@ def lens_perception_runtime_readback(*, now: float | None = None) -> dict[str, A
     ring_buffer = lens_perception_ring_buffer_readback(now=observed_now)
     camera_capture = _bounded_capture_readback(_as_dict(capture.get("camera")))
     raw_situation = _as_dict(raw.get("situation_model"))
+    situation_heartbeat = lens_situation_model_readback(now=observed_now)
     owner = _safe_str(raw.get("owner"))
     state = _safe_str(raw.get("state"))
     worker_pid = _safe_pid(raw.get("pid"))
@@ -204,7 +206,20 @@ def lens_perception_runtime_readback(*, now: float | None = None) -> dict[str, A
         and host_pid_matches
     )
     situation_status = _safe_str(raw_situation.get("status"))
-    situation_ready = situation_status == "ready"
+    situation_revision = _safe_str(raw_situation.get("revision"))
+    situation_heartbeat_ready = bool(
+        raw_situation.get("heartbeat_ready") is True
+        and raw_situation.get("fresh") is True
+        and raw_situation.get("has_current_desktop_state") is True
+        and situation_heartbeat.get("heartbeat_ready") is True
+        and situation_revision
+        and situation_revision == _safe_str(situation_heartbeat.get("revision"))
+    )
+    semantic_comprehension_ready = bool(
+        raw_situation.get("semantic_comprehension_ready") is True
+        and situation_heartbeat.get("semantic_comprehension_ready") is True
+    )
+    situation_ready = situation_heartbeat_ready and semantic_comprehension_ready
 
     blockers: list[str] = []
     if not runtime_present:
@@ -264,8 +279,10 @@ def lens_perception_runtime_readback(*, now: float | None = None) -> dict[str, A
             blockers.append("lens_perception_ring_buffer_not_ready")
         elif _safe_str(ring_buffer.get("authority_receipt_id")) != desktop_capture["receipt_id"]:
             blockers.append("lens_perception_ring_buffer_authority_receipt_mismatch")
-        if not situation_ready:
+        if not situation_heartbeat_ready:
             blockers.append("lens_situation_model_not_ready")
+        elif not semantic_comprehension_ready:
+            blockers.append("lens_situation_model_semantic_comprehension_not_ready")
 
     ready = (
         runtime_valid
@@ -319,8 +336,12 @@ def lens_perception_runtime_readback(*, now: float | None = None) -> dict[str, A
         "fresh": fresh,
         "situation_model": {
             "status": situation_status or "not_observed",
-            "revision": _safe_str(raw_situation.get("revision")),
-            "has_current_desktop_state": situation_ready,
+            "route": "/lens/perception/now",
+            "revision": situation_revision,
+            "heartbeat_ready": situation_heartbeat_ready,
+            "semantic_comprehension_ready": semantic_comprehension_ready,
+            "has_current_desktop_state": situation_heartbeat_ready,
+            "heartbeat": situation_heartbeat,
             "raw_desktop_content_in_readback": False,
         },
         "ring_buffer": ring_buffer,

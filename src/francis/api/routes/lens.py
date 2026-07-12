@@ -99,6 +99,7 @@ from francis.lens import (
     lens_resident_surface_activation_boundary,
     lens_resident_surface_readback,
     lens_status,
+    lens_situation_model_readback,
     lens_summon_action_execution_receipts,
     lens_summon_authority_grant_receipts,
     lens_summon_authority_request_readback,
@@ -469,6 +470,11 @@ def orb_body_perspective() -> dict[str, Any]:
 @router.get("/perception")
 def perception() -> dict[str, Any]:
     return lens_perception_runtime_readback()
+
+
+@router.get("/perception/now")
+def perception_now() -> dict[str, Any]:
+    return lens_situation_model_readback()
 
 
 @router.get("/perception/authority")

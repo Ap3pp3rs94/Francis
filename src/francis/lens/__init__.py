@@ -149,6 +149,7 @@ from francis.lens.status import (
     lens_resident_surface_readback,
     lens_status,
 )
+from francis.lens.situation_model import lens_situation_model_readback
 
 __all__ = [
     "deny_lens_host_activation_execution",
@@ -255,6 +256,7 @@ __all__ = [
     "lens_resident_surface_readback",
     "lens_resident_surface_activation_boundary",
     "lens_status",
+    "lens_situation_model_readback",
     "lens_summon_action_execution_receipts",
     "lens_summon_authority_grant_receipts",
     "lens_summon_authority_request_readback",

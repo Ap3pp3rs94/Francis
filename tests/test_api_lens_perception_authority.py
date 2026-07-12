@@ -49,6 +49,43 @@ def _write_perception_state(
     write_ring: bool = True,
 ) -> None:
     observed_at = time.time()
+    situation_revision = f"authority-integration-{receipt_id}"
+    situation_path = data_root / "runtime" / "lens-perception" / "situation-model.json"
+    situation_path.parent.mkdir(parents=True, exist_ok=True)
+    situation_path.write_text(
+        json.dumps(
+            {
+                "kind": "lens.perception.situation_model",
+                "version": 1,
+                "status": "heartbeat_partial",
+                "revision": situation_revision,
+                "updated_at": observed_at,
+                "has_current_desktop_state": True,
+                "semantic_comprehension_ready": True,
+                "runtime_identity": {
+                    "authority_receipt_id": receipt_id,
+                    "execution_approval_id": execution_approval_id,
+                },
+                "present": {"plane": "desktop"},
+                "sources": {},
+                "blockers": [],
+                "governance": {
+                    "runtime_state_only": True,
+                    "observation_only": True,
+                    "desktop_capture_authority": True,
+                    "execution_authority": True,
+                    "camera_capture_authority": False,
+                    "microphone_capture_authority": False,
+                    "keyboard_content_captured": False,
+                    "user_mouse_captured": False,
+                    "input_execution_authority": False,
+                    "memory_write": False,
+                    "raw_pixels_in_state": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
     path = data_root / "runtime" / "lens-perception" / "status.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
@@ -62,7 +99,14 @@ def _write_perception_state(
                 "host_pid": os.getpid(),
                 "supervisor_pid": os.getpid(),
                 "updated_at": observed_at,
-                "situation_model": {"status": "ready", "revision": "authority-integration"},
+                "situation_model": {
+                    "status": "heartbeat_ready",
+                    "revision": situation_revision,
+                    "heartbeat_ready": True,
+                    "fresh": True,
+                    "has_current_desktop_state": True,
+                    "semantic_comprehension_ready": True,
+                },
                 "execution": {
                     "active": True,
                     "approval_id": execution_approval_id,

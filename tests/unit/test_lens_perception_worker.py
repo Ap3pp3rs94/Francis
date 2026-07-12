@@ -95,7 +95,7 @@ def test_worker_refuses_before_frame_capture_when_execution_is_not_approved(tmp_
     assert not (tmp_path / "runtime" / "lens-perception" / "frames").exists()
 
 
-def test_worker_captures_on_supervised_approved_cadence_but_keeps_situation_model_warming(
+def test_worker_captures_on_supervised_approved_cadence_and_updates_partial_situation_heartbeat(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -108,7 +108,7 @@ def test_worker_captures_on_supervised_approved_cadence_but_keeps_situation_mode
         authority_status=_active_authority,
         execution_status=_active_execution,
         supervision_status=_active_supervision,
-        clock=iter((100.0, 100.5, 101.0)).__next__,
+        clock=iter((100.0, 100.0, 100.5, 100.5, 101.0)).__next__,
         monotonic_clock=monotonic_values.__next__,
         sleeper=lambda _seconds: None,
         process_id=800,
@@ -122,13 +122,20 @@ def test_worker_captures_on_supervised_approved_cadence_but_keeps_situation_mode
     assert source.capture_count == 2
     latest = result["latest_running"]
     assert latest["state"] == "running"
-    assert latest["situation_model"]["status"] == "warming"
+    assert latest["situation_model"]["status"] == "heartbeat_ready"
+    assert latest["situation_model"]["heartbeat_ready"] is True
+    assert latest["situation_model"]["has_current_desktop_state"] is True
     assert latest["situation_model"]["semantic_comprehension_ready"] is False
+    assert latest["situation_model"]["revision"]
     assert latest["capture"]["desktop"]["active"] is True
     assert latest["capture"]["camera"]["active"] is False
     assert latest["ring_buffer"]["frame_count"] == 2
     assert latest["ring_buffer"]["raw_pixels_in_readback"] is False
     assert "lens_situation_model_not_ready" in latest["blockers"]
+    situation_path = tmp_path / "runtime" / "lens-perception" / "situation-model.json"
+    situation = json.loads(situation_path.read_text(encoding="utf-8"))
+    assert situation["status"] == "heartbeat_partial"
+    assert situation["governance"]["raw_pixels_in_state"] is False
     stopped = json.loads((tmp_path / "runtime" / "lens-perception" / "status.json").read_text(encoding="utf-8"))
     assert stopped["state"] == "stopped"
     assert stopped["capture"]["desktop"]["active"] is False
