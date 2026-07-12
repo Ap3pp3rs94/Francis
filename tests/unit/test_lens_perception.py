@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 
+from francis.lens import perception as perception_module
 from francis.lens.perception import lens_perception_runtime_readback
 
 
@@ -47,6 +48,21 @@ def test_perception_readback_fails_closed_when_runtime_state_is_missing(tmp_path
 def test_perception_readback_requires_fresh_supervised_authorized_situation_model(tmp_path: Path, monkeypatch) -> None:
     data_root = tmp_path / "data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setattr(
+        perception_module,
+        "lens_perception_desktop_authority_receipt_status",
+        lambda receipt_id, now=None: {
+            "status": "active",
+            "valid": True,
+            "active": True,
+            "receipt_id": receipt_id,
+            "approval_id": "approved-desktop-capture",
+            "approval_status": "approved",
+            "plane": "desktop",
+            "expires_ts": int(now or 0) + 60,
+            "blockers": [],
+        },
+    )
     _write_supervisor_state(data_root)
     _write_runtime_state(
         data_root,
@@ -76,7 +92,39 @@ def test_perception_readback_requires_fresh_supervised_authorized_situation_mode
     assert payload["supervision"]["active"] is True
     assert payload["situation_model"]["revision"] == "42"
     assert payload["capture"]["desktop"]["pixels_in_readback"] is False
+    assert payload["capture"]["desktop"]["authority_receipt"]["active"] is True
     assert payload["capture"]["keyboard_content_captured"] is False
+
+
+def test_perception_readback_rejects_an_unresolved_authority_receipt(tmp_path: Path, monkeypatch) -> None:
+    data_root = tmp_path / "data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _write_supervisor_state(data_root)
+    _write_runtime_state(
+        data_root,
+        {
+            "kind": "lens.perception.runtime_state",
+            "version": 1,
+            "owner": "lens_supervisor",
+            "state": "running",
+            "updated_at": 100.0,
+            "situation_model": {"status": "ready", "revision": "forged"},
+            "capture": {
+                "desktop": {
+                    "authority_granted": True,
+                    "active": True,
+                    "receipt_id": "receipt-shaped-but-unresolved",
+                    "source": "desktop_ring_buffer",
+                }
+            },
+        },
+    )
+
+    payload = lens_perception_runtime_readback(now=101.0)
+
+    assert payload["ready"] is False
+    assert payload["capture"]["desktop"]["authority_receipt"]["active"] is False
+    assert "desktop_capture_authority_receipt_not_found" in payload["blockers"]
 
 
 def test_perception_readback_rejects_stale_or_unauthorized_state(tmp_path: Path, monkeypatch) -> None:

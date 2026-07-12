@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from francis.kernel.paths import data_dir
+from francis.lens.perception_authority import lens_perception_desktop_authority_receipt_status
 
 LENS_PERCEPTION_RUNTIME_STATE_KIND = "lens.perception.runtime_state"
 LENS_PERCEPTION_RUNTIME_STATE_VERSION = 1
@@ -130,6 +131,10 @@ def lens_perception_runtime_readback(*, now: float | None = None) -> dict[str, A
     runtime_present = bool(raw)
     capture = _as_dict(raw.get("capture"))
     desktop_capture = _bounded_capture_readback(_as_dict(capture.get("desktop")))
+    desktop_authority_receipt = lens_perception_desktop_authority_receipt_status(
+        desktop_capture["receipt_id"],
+        now=int(observed_now),
+    )
     camera_capture = _bounded_capture_readback(_as_dict(capture.get("camera")))
     raw_situation = _as_dict(raw.get("situation_model"))
     owner = _safe_str(raw.get("owner"))
@@ -174,6 +179,10 @@ def lens_perception_runtime_readback(*, now: float | None = None) -> dict[str, A
             blockers.append("desktop_capture_not_active")
         if not desktop_capture["receipt_id"]:
             blockers.append("desktop_capture_receipt_missing")
+        elif not desktop_authority_receipt["active"]:
+            blockers.extend(
+                _safe_str(item) for item in desktop_authority_receipt.get("blockers", []) if _safe_str(item)
+            )
         if not situation_ready:
             blockers.append("lens_situation_model_not_ready")
 
@@ -210,7 +219,10 @@ def lens_perception_runtime_readback(*, now: float | None = None) -> dict[str, A
             "raw_desktop_content_in_readback": False,
         },
         "capture": {
-            "desktop": desktop_capture,
+            "desktop": {
+                **desktop_capture,
+                "authority_receipt": desktop_authority_receipt,
+            },
             "camera": camera_capture,
             "keyboard_content_captured": False,
             "user_mouse_captured": False,

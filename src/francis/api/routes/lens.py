@@ -25,6 +25,7 @@ from francis.lens import (
     execute_lens_tray_presence,
     grant_lens_os_binding_authority,
     grant_lens_overlay_authority,
+    grant_lens_perception_authority,
     grant_lens_summon_authority,
     grant_lens_host_activation_authority,
     grant_lens_host_persistent_supervision_resident_claim_authority,
@@ -79,6 +80,8 @@ from francis.lens import (
     lens_overlay_window_execution_receipts,
     lens_orb_body_perspective_contract,
     lens_orb_runtime_identity,
+    lens_perception_authority_grant_receipts,
+    lens_perception_authority_request_readback,
     lens_perception_runtime_readback,
     lens_resident_runtime_activation_denial_receipts,
     lens_resident_runtime_activation_execution_receipts,
@@ -109,6 +112,7 @@ from francis.lens import (
     request_lens_host_supervision_authority,
     request_lens_os_binding_authority,
     request_lens_overlay_authority,
+    request_lens_perception_authority,
     request_lens_resident_runtime_execution_authority,
     request_lens_summon_authority,
     request_lens_tray_authority,
@@ -414,6 +418,18 @@ class LensOverlayExecuteIn(BaseModel):
     voice_provider: str = Field(default="")
 
 
+class LensPerceptionAuthorityRequestIn(BaseModel):
+    actor: str | None = None
+    reason: str = "request Lens desktop perception capture authority review"
+
+
+class LensPerceptionAuthorityGrantIn(BaseModel):
+    actor: str | None = None
+    approval_id: str = ""
+    reason: str = "attempt Lens desktop perception capture authority grant"
+    lease_seconds: int = Field(default=3600, ge=60, le=86400)
+
+
 @router.get("/status")
 @router.get("/hud")
 def status(limit: int = Query(5, ge=1, le=50)) -> dict[str, Any]:
@@ -436,6 +452,56 @@ def orb_body_perspective() -> dict[str, Any]:
 @router.get("/perception")
 def perception() -> dict[str, Any]:
     return lens_perception_runtime_readback()
+
+
+@router.get("/perception/authority")
+@router.get("/perception/authority/requests")
+def perception_authority_requests(limit: int = Query(5, ge=1, le=50)) -> dict[str, Any]:
+    return lens_perception_authority_request_readback(limit=limit)
+
+
+@router.get("/perception/authority/grants")
+def perception_authority_grants(
+    limit: int = Query(5, ge=1, le=50),
+    approval_id: str = "",
+    status: str = "",
+    active_only: bool = False,
+) -> dict[str, Any]:
+    return lens_perception_authority_grant_receipts(
+        limit=limit,
+        approval_id=approval_id,
+        status=status,
+        active_only=active_only,
+    )
+
+
+@router.post("/perception/authority/request")
+def perception_authority_request(
+    request: Request,
+    payload: LensPerceptionAuthorityRequestIn,
+) -> dict[str, Any]:
+    return request_lens_perception_authority(
+        actor=payload.actor,
+        reason=payload.reason,
+        route=request.url.path,
+        method=request.method,
+    )
+
+
+@router.post("/perception/authority")
+def perception_authority_grant(
+    request: Request,
+    payload: LensPerceptionAuthorityGrantIn,
+) -> dict[str, Any]:
+    return grant_lens_perception_authority(
+        approval_id=payload.approval_id,
+        actor=payload.actor,
+        reason=payload.reason,
+        route=request.url.path,
+        method=request.method,
+        record_receipt=True,
+        lease_seconds=payload.lease_seconds,
+    )
 
 
 @router.get("/preflight")
