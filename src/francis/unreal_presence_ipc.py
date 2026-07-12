@@ -25,6 +25,7 @@ from francis.unreal_presence_wire import (
     validate_presence_delivery_ack,
 )
 from francis.windows_named_mutex import WindowsNamedMutex
+from francis.windows_ctypes import get_last_error, load_win_dll, set_last_error
 from francis.world_state.presence_transport import (
     bind_presence_transport_envelope,
     validate_presence_transport_envelope,
@@ -410,7 +411,7 @@ class WindowsNamedPipePresencePublisher:
             return self._failure(
                 bound,
                 status="pipe_create_failed",
-                reason=f"win32_error_{ctypes.get_last_error()}",
+                reason=f"win32_error_{get_last_error()}",
                 delivery_attempted=True,
                 validation=validation.to_dict(),
             )
@@ -979,10 +980,10 @@ def _wait_for_client(handle: int, config: PresencePipeConfig) -> tuple[bool, str
     kernel32 = _kernel32()
     deadline = time.monotonic() + config.connect_timeout_ms / 1_000
     while True:
-        ctypes.set_last_error(0)
+        set_last_error(0)
         if kernel32.ConnectNamedPipe(handle, None):
             return True, ""
-        error = ctypes.get_last_error()
+        error = get_last_error()
         if error == _ERROR_PIPE_CONNECTED:
             return True, ""
         if error not in {_ERROR_PIPE_LISTENING, _ERROR_NO_DATA}:
@@ -996,7 +997,7 @@ def _write_pipe_frame(handle: int, frame: bytes) -> tuple[int, str]:
     kernel32 = _kernel32()
     written = wintypes.DWORD(0)
     buffer = ctypes.create_string_buffer(frame)
-    ctypes.set_last_error(0)
+    set_last_error(0)
     ok = kernel32.WriteFile(
         handle,
         buffer,
@@ -1005,7 +1006,7 @@ def _write_pipe_frame(handle: int, frame: bytes) -> tuple[int, str]:
         None,
     )
     if not ok:
-        return int(written.value), f"win32_error_{ctypes.get_last_error()}"
+        return int(written.value), f"win32_error_{get_last_error()}"
     return int(written.value), ""
 
 
@@ -1014,7 +1015,7 @@ def _read_pipe_frame(handle: int, config: PresencePipeConfig) -> tuple[bytes, st
     deadline = time.monotonic() + config.ack_timeout_ms / 1_000
     while True:
         available = wintypes.DWORD(0)
-        ctypes.set_last_error(0)
+        set_last_error(0)
         ready = kernel32.PeekNamedPipe(
             handle,
             None,
@@ -1026,7 +1027,7 @@ def _read_pipe_frame(handle: int, config: PresencePipeConfig) -> tuple[bytes, st
         if ready and available.value > 0:
             buffer = ctypes.create_string_buffer(config.max_message_bytes + 4)
             read = wintypes.DWORD(0)
-            ctypes.set_last_error(0)
+            set_last_error(0)
             ok = kernel32.ReadFile(
                 handle,
                 buffer,
@@ -1036,11 +1037,11 @@ def _read_pipe_frame(handle: int, config: PresencePipeConfig) -> tuple[bytes, st
             )
             if ok and read.value > 0:
                 return bytes(buffer.raw[: read.value]), ""
-            error = ctypes.get_last_error()
+            error = get_last_error()
             if error not in {_ERROR_NO_DATA, _ERROR_PIPE_LISTENING}:
                 return b"", f"win32_error_{error}"
         elif not ready:
-            error = ctypes.get_last_error()
+            error = get_last_error()
             if error not in {_ERROR_NO_DATA, _ERROR_PIPE_LISTENING}:
                 return b"", f"win32_error_{error}"
         if time.monotonic() >= deadline:
@@ -1056,7 +1057,7 @@ def _close_named_pipe(handle: int, *, disconnect: bool) -> None:
 
 
 def _kernel32() -> Any:
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32 = load_win_dll("kernel32")
     kernel32.CreateNamedPipeW.argtypes = [
         wintypes.LPCWSTR,
         wintypes.DWORD,

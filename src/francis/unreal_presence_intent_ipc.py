@@ -17,6 +17,7 @@ from francis.unreal_presence_wire import (
     PRESENCE_INTENT_CHANNEL,
     PresenceIpcAuthenticator,
 )
+from francis.windows_ctypes import get_last_error, load_win_dll, set_last_error
 
 
 PRESENCE_INTENT_PIPE_MAX_MESSAGE_BYTES = 64 * 1024
@@ -185,7 +186,7 @@ class WindowsNamedPipePresenceIntentReceiver:
         if handle is None:
             return self._failure(
                 status="pipe_create_failed",
-                reason=f"win32_error_{ctypes.get_last_error()}",
+                reason=f"win32_error_{get_last_error()}",
                 client_connected=False,
             )
         connected = False
@@ -331,10 +332,10 @@ def _wait_for_client(handle: int, config: PresenceIntentPipeConfig) -> tuple[boo
     kernel32 = _kernel32()
     deadline = time.monotonic() + config.wait_timeout_ms / 1_000
     while True:
-        ctypes.set_last_error(0)
+        set_last_error(0)
         if kernel32.ConnectNamedPipe(handle, None):
             return True, ""
-        error = ctypes.get_last_error()
+        error = get_last_error()
         if error in {_ERROR_PIPE_CONNECTED, _ERROR_NO_DATA}:
             return True, ""
         if error != _ERROR_PIPE_LISTENING:
@@ -350,7 +351,7 @@ def _read_pipe_frame(handle: int, config: PresenceIntentPipeConfig) -> tuple[byt
     while True:
         buffer = ctypes.create_string_buffer(config.max_message_bytes + 4)
         read = wintypes.DWORD(0)
-        ctypes.set_last_error(0)
+        set_last_error(0)
         ok = kernel32.ReadFile(
             handle,
             buffer,
@@ -360,7 +361,7 @@ def _read_pipe_frame(handle: int, config: PresenceIntentPipeConfig) -> tuple[byt
         )
         if ok and read.value > 0:
             return bytes(buffer.raw[: read.value]), ""
-        error = ctypes.get_last_error()
+        error = get_last_error()
         if error not in {_ERROR_NO_DATA, _ERROR_PIPE_LISTENING}:
             return b"", f"win32_error_{error}"
         if time.monotonic() >= deadline:
@@ -376,7 +377,7 @@ def _close_named_pipe(handle: int, *, disconnect: bool) -> None:
 
 
 def _kernel32() -> Any:
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32 = load_win_dll("kernel32")
     kernel32.CreateNamedPipeW.argtypes = [
         wintypes.LPCWSTR,
         wintypes.DWORD,

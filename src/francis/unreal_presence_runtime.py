@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from francis.unreal_presence_selection import unreal_presence_selection_readback
+from francis.windows_ctypes import get_last_error, load_win_dll
 
 
 UNREAL_PRESENCE_RUNTIME_STATUS_KIND = "francis.grounded_presence.unreal_runtime_status"
@@ -254,7 +255,7 @@ def _windows_process_alive(process_id: int) -> bool:
 
     process_query_limited_information = 0x1000
     still_active = 259
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32 = load_win_dll("kernel32")
     open_process = kernel32.OpenProcess
     open_process.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
     open_process.restype = wintypes.HANDLE
@@ -267,7 +268,7 @@ def _windows_process_alive(process_id: int) -> bool:
 
     handle = open_process(process_query_limited_information, False, process_id)
     if not handle:
-        return ctypes.get_last_error() == 5
+        return get_last_error() == 5
     try:
         exit_code = wintypes.DWORD()
         return bool(get_exit_code(handle, ctypes.byref(exit_code))) and exit_code.value == still_active
