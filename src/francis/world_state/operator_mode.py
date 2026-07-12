@@ -429,7 +429,7 @@ def _writes_state(run_mode: str, runtime_mode: str, governance_mode: str, minimu
     return "enabled"
 
 
-def snapshot() -> dict[str, Any]:
+def snapshot(*, continuity: dict[str, Any] | None = None) -> dict[str, Any]:
     root = repo_root()
     data = data_dir()
     env_profile = _safe_str(os.getenv("FRANCIS_ENV_PROFILE")).strip() or "dev"
@@ -454,7 +454,11 @@ def snapshot() -> dict[str, Any]:
     runtime_mode = _safe_str(runtime.get("mode")).strip() or env_profile
 
     backlog = _backlog_snapshot(data / "tasks", data / "approvals")
-    continuity = mission_continuity_snapshot(recent_limit=5, queue_limit=3, deadletter_limit=2, activity_log_limit=20)
+    continuity = (
+        continuity
+        if isinstance(continuity, dict)
+        else mission_continuity_snapshot(recent_limit=5, queue_limit=3, deadletter_limit=2, activity_log_limit=20)
+    )
     mission_counts = (
         continuity.get("mission_status_counts") if isinstance(continuity.get("mission_status_counts"), dict) else {}
     )

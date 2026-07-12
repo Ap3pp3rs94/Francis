@@ -1,0 +1,285 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://francis.local/schemas/grounded_presence_intent_receipt.schema.json",
+  "title": "Francis Grounded Presence Intent Receipt",
+  "description": "Metadata-only audit receipt for an accepted or rejected renderer intent.",
+  "type": "object",
+  "required": [
+    "kind",
+    "schema_version",
+    "schema_path",
+    "receipt_id",
+    "recorded_at",
+    "decision",
+    "event",
+    "security",
+    "authority",
+    "limitations"
+  ],
+  "properties": {
+    "kind": {
+      "const": "francis.grounded_presence.intent_receipt"
+    },
+    "schema_version": {
+      "const": "francis.grounded_presence.intent_receipt.v1"
+    },
+    "schema_path": {
+      "const": "schemas/grounded_presence_intent_receipt.schema.json"
+    },
+    "receipt_id": {
+      "type": "string",
+      "pattern": "^gpr_[0-9a-f]{32}$"
+    },
+    "recorded_at": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "decision": {
+      "type": "object",
+      "required": [
+        "status",
+        "accepted",
+        "reasons",
+        "dispatch_attempted",
+        "dispatch_allowed",
+        "mutation_applied"
+      ],
+      "properties": {
+        "status": {
+          "enum": ["accepted_for_core_routing_not_dispatched", "rejected"]
+        },
+        "accepted": {
+          "type": "boolean"
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240
+          },
+          "uniqueItems": true
+        },
+        "dispatch_attempted": {
+          "const": false
+        },
+        "dispatch_allowed": {
+          "const": false
+        },
+        "mutation_applied": {
+          "const": false
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "accepted_for_core_routing_not_dispatched"
+              }
+            },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "accepted": {
+                "const": true
+              },
+              "reasons": {
+                "maxItems": 0
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "accepted": {
+                "const": false
+              },
+              "reasons": {
+                "minItems": 1
+              }
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "event": {
+      "type": "object",
+      "required": [
+        "event_id",
+        "intent",
+        "intent_class",
+        "event_sequence",
+        "adapter_id",
+        "session_id",
+        "source_envelope_id",
+        "source_sequence",
+        "target_kind",
+        "target_id",
+        "required_core_route",
+        "raw_event_persisted"
+      ],
+      "properties": {
+        "event_id": {
+          "$ref": "#/$defs/contract_id"
+        },
+        "intent": {
+          "enum": [
+            "unknown",
+            "request_context_refresh",
+            "acknowledge_handback",
+            "request_review",
+            "request_panic_stop"
+          ]
+        },
+        "intent_class": {
+          "enum": [
+            "unknown",
+            "read_request",
+            "acknowledgement_request",
+            "governed_action_request",
+            "safety_request"
+          ]
+        },
+        "event_sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "adapter_id": {
+          "$ref": "#/$defs/contract_id"
+        },
+        "session_id": {
+          "$ref": "#/$defs/contract_id"
+        },
+        "source_envelope_id": {
+          "$ref": "#/$defs/contract_id"
+        },
+        "source_sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "target_kind": {
+          "enum": ["none", "mission", "operation", "receipt", "surface", "unknown"]
+        },
+        "target_id": {
+          "type": "string",
+          "maxLength": 160,
+          "pattern": "^[A-Za-z0-9._-]*$"
+        },
+        "required_core_route": {
+          "enum": ["unknown", "/continuity/presence", "operator_review_required", "/takeover/panic-stop"]
+        },
+        "raw_event_persisted": {
+          "const": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "security": {
+      "type": "object",
+      "required": [
+        "application_authenticated",
+        "authentication_status",
+        "authentication_key_id",
+        "digest_valid",
+        "expired",
+        "replayed"
+      ],
+      "properties": {
+        "application_authenticated": {
+          "type": "boolean"
+        },
+        "authentication_status": {
+          "enum": [
+            "hmac_sha256_verified",
+            "hmac_sha256_rejected",
+            "not_evaluated_internal_gateway"
+          ]
+        },
+        "authentication_key_id": {
+          "type": "string",
+          "maxLength": 160,
+          "pattern": "^[A-Za-z0-9._-]*$"
+        },
+        "digest_valid": {
+          "type": "boolean"
+        },
+        "expired": {
+          "type": "boolean"
+        },
+        "replayed": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "authority": {
+      "type": "object",
+      "required": [
+        "francis_core_authoritative",
+        "grants_execution_authority",
+        "grants_desktop_authority",
+        "grants_network_authority",
+        "grants_memory_write_authority",
+        "grants_approval_authority"
+      ],
+      "properties": {
+        "francis_core_authoritative": {
+          "const": true
+        },
+        "grants_execution_authority": {
+          "const": false
+        },
+        "grants_desktop_authority": {
+          "const": false
+        },
+        "grants_network_authority": {
+          "const": false
+        },
+        "grants_memory_write_authority": {
+          "const": false
+        },
+        "grants_approval_authority": {
+          "const": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 2,
+      "uniqueItems": true,
+      "allOf": [
+        {
+          "contains": {
+            "const": "intent_not_dispatched"
+          },
+          "minContains": 1
+        },
+        {
+          "contains": {
+            "const": "raw_event_not_persisted"
+          },
+          "minContains": 1
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "contract_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[A-Za-z0-9._-]+$"
+    }
+  },
+  "additionalProperties": false
+}

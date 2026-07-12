@@ -1,0 +1,309 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://francis.local/schemas/grounded_presence_transport_envelope.schema.json",
+  "title": "Francis Grounded Presence Transport Envelope",
+  "description": "Bounded Core-to-Unreal local transport envelope for a grounded presence snapshot.",
+  "type": "object",
+  "required": [
+    "kind",
+    "schema_version",
+    "schema_path",
+    "envelope_id",
+    "channel",
+    "direction",
+    "adapter",
+    "sequence",
+    "issued_at",
+    "expires_at",
+    "ttl_ms",
+    "integrity",
+    "transport",
+    "payload",
+    "authority",
+    "limitations"
+  ],
+  "properties": {
+    "kind": {
+      "const": "francis.grounded_presence.transport_envelope"
+    },
+    "schema_version": {
+      "const": "francis.grounded_presence.transport_envelope.v1"
+    },
+    "schema_path": {
+      "const": "schemas/grounded_presence_transport_envelope.schema.json"
+    },
+    "envelope_id": {
+      "type": "string",
+      "pattern": "^gpe_[0-9a-f]{32}$"
+    },
+    "channel": {
+      "const": "francis.presence.render.v1"
+    },
+    "direction": {
+      "const": "francis_core_to_unreal"
+    },
+    "adapter": {
+      "type": "object",
+      "required": ["id", "kind", "role", "engine", "engine_version", "session_id"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/contract_id"
+        },
+        "kind": {
+          "const": "unreal"
+        },
+        "role": {
+          "const": "governed_renderer_adapter"
+        },
+        "engine": {
+          "const": "Unreal Engine"
+        },
+        "engine_version": {
+          "const": "5.8"
+        },
+        "session_id": {
+          "$ref": "#/$defs/contract_id"
+        }
+      },
+      "additionalProperties": false
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "issued_at": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "expires_at": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "ttl_ms": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5000
+    },
+    "integrity": {
+      "type": "object",
+      "required": ["algorithm", "canonicalization", "payload_digest"],
+      "properties": {
+        "algorithm": {
+          "const": "sha256"
+        },
+        "canonicalization": {
+          "const": "json_sort_keys_compact_utf8"
+        },
+        "payload_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "transport": {
+      "type": "object",
+      "required": [
+        "protocol",
+        "binding_status",
+        "endpoint_id",
+        "local_only",
+        "network_allowed",
+        "monotonic_sequence_required",
+        "expiry_required",
+        "replay_rejection_required",
+        "runtime_enforcement_status"
+      ],
+      "properties": {
+        "protocol": {
+          "const": "local_ipc"
+        },
+        "binding_status": {
+          "enum": ["unbound", "windows_named_pipe"]
+        },
+        "endpoint_id": {
+          "type": "string",
+          "maxLength": 160,
+          "pattern": "^[A-Za-z0-9._-]*$"
+        },
+        "local_only": {
+          "const": true
+        },
+        "network_allowed": {
+          "const": false
+        },
+        "monotonic_sequence_required": {
+          "const": true
+        },
+        "expiry_required": {
+          "const": true
+        },
+        "replay_rejection_required": {
+          "const": true
+        },
+        "runtime_enforcement_status": {
+          "enum": ["consumer_guard_required", "publisher_guard_active"]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "binding_status": {
+                "const": "unbound"
+              }
+            },
+            "required": ["binding_status"]
+          },
+          "then": {
+            "properties": {
+              "endpoint_id": {
+                "const": ""
+              },
+              "runtime_enforcement_status": {
+                "const": "consumer_guard_required"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "binding_status": {
+                "const": "windows_named_pipe"
+              }
+            },
+            "required": ["binding_status"]
+          },
+          "then": {
+            "properties": {
+              "endpoint_id": {
+                "$ref": "#/$defs/contract_id"
+              },
+              "runtime_enforcement_status": {
+                "const": "publisher_guard_active"
+              }
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "payload": {
+      "$ref": "https://francis.local/schemas/grounded_presence_snapshot.schema.json"
+    },
+    "authority": {
+      "type": "object",
+      "required": [
+        "francis_core_authoritative",
+        "adapter_read_only",
+        "grants_execution_authority",
+        "grants_desktop_authority",
+        "grants_network_authority",
+        "grants_memory_write_authority",
+        "grants_approval_authority"
+      ],
+      "properties": {
+        "francis_core_authoritative": {
+          "const": true
+        },
+        "adapter_read_only": {
+          "const": true
+        },
+        "grants_execution_authority": {
+          "const": false
+        },
+        "grants_desktop_authority": {
+          "const": false
+        },
+        "grants_network_authority": {
+          "const": false
+        },
+        "grants_memory_write_authority": {
+          "const": false
+        },
+        "grants_approval_authority": {
+          "const": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 2,
+      "uniqueItems": true
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "transport": {
+            "properties": {
+              "binding_status": {
+                "const": "unbound"
+              }
+            },
+            "required": ["binding_status"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "limitations": {
+            "contains": {
+              "const": "transport_binding_not_implemented"
+            },
+            "minContains": 1
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "limitations": {
+            "not": {
+              "contains": {
+                "const": "transport_binding_not_implemented"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "properties": {
+        "limitations": {
+          "contains": {
+            "const": "durable_consumer_deduplication_required"
+          },
+          "minContains": 1
+        }
+      }
+    },
+    {
+      "properties": {
+        "limitations": {
+          "contains": {
+            "const": "ipc_hmac_authentication_required_at_binding"
+          },
+          "minContains": 1
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "contract_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[A-Za-z0-9._-]+$"
+    }
+  },
+  "additionalProperties": false
+}

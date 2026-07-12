@@ -5,6 +5,7 @@ import {
   SettingsApiError,
   SettingsClient,
   missionReadinessEvidenceLines,
+  parseGroundedPresenceSnapshot,
   presentMissionDeadletterItems,
   presentMissionReadinessCriteria,
   presentMissionRecoveryItems,
@@ -42,6 +43,35 @@ function jsonRequestBody(init?: RequestInit): unknown {
   if (typeof body !== "string" || !body.trim()) return undefined;
   return JSON.parse(body) as unknown;
 }
+
+test("parseGroundedPresenceSnapshot preserves confirmed Unreal selection without runtime authority", () => {
+  const presence = parseGroundedPresenceSnapshot({
+    kind: "francis.grounded_presence.snapshot",
+    schema_version: "francis.grounded_presence.snapshot.v1",
+    generated_at: "2026-07-10T12:00:00Z",
+    unreal_adapter: {
+      engine: "Unreal Engine",
+      engine_version: "5.8",
+      status: "operator_selection_confirmed_runtime_not_observed",
+      technology_selection_status: "operator_confirmed",
+      project_selection_status: "operator_confirmed",
+      runtime_observed: false,
+      accepts_authority: false,
+    },
+    authority: {
+      francis_core_authoritative: true,
+      grants_execution_authority: false,
+    },
+    blockers: [],
+    limitations: ["unreal_runtime_not_configured"],
+  });
+
+  assert.equal(presence?.unreal_adapter?.technology_selection_status, "operator_confirmed");
+  assert.equal(presence?.unreal_adapter?.project_selection_status, "operator_confirmed");
+  assert.equal(presence?.unreal_adapter?.runtime_observed, false);
+  assert.equal(presence?.unreal_adapter?.accepts_authority, false);
+  assert.equal(presence?.authority?.grants_execution_authority, false);
+});
 
 test("presentMissionReadinessCriteria prioritizes actionable readiness evidence", () => {
   const presentation = presentMissionReadinessCriteria(
@@ -1768,6 +1798,72 @@ test("SettingsClient.getContinuityBriefing falls back to alias routes and preser
           available: true,
           state: { current: "observe", handback_state: { state: "none" } },
         },
+        presence: {
+          kind: "francis.grounded_presence.snapshot",
+          schema_version: "francis.grounded_presence.snapshot.v1",
+          generated_at: "2026-07-09T20:00:00Z",
+          stage: {
+            id: 1,
+            name: "Grounded Presence",
+            status: "ready",
+            criteria: { no_fabricated_state: true, action_receipt_linkage: true },
+          },
+          presence: {
+            state: "handoff",
+            tone: "calm_operator",
+            truthful: true,
+            headline: "Review the receipt-linked handoff.",
+            focus: { id: "mission_alpha", objective: "Carry continuity" },
+            return_to_context: { available: true, fresh: true, next_step: "Review approval" },
+          },
+          intent: {
+            available: true,
+            request_only: true,
+            action: "review_pending_approval",
+            target_kind: "operation",
+            target_id: "tsk_focus",
+            mission_id: "mission_alpha",
+            operation_id: "tsk_focus",
+            gate: "approvals_gate",
+            grants_execution_authority: false,
+          },
+          evidence: {
+            status: "ready",
+            receipt_linkage_required: true,
+            receipt_linkage_ready: true,
+            correlation: { status: "receipt_linked", receipt_ids: ["receipt_1"] },
+            references: [{ kind: "receipt", id: "receipt_1" }],
+          },
+          freshness: {
+            status: "observed",
+            stale_after_seconds: 300,
+            sources: { continuity_briefing: { status: "observed", stale: false } },
+          },
+          voice: {
+            status: "unknown",
+            listening: null,
+            speaking: null,
+            provider: "",
+            source: "",
+            reason: "voice_readback_not_available_in_orb_surface",
+          },
+          visual_state: { render_state: "handback", approval_required: true },
+          unreal_adapter: {
+            engine: "Unreal Engine",
+            engine_version: "5.8",
+            status: "contract_defined_runtime_not_implemented",
+            technology_selection_status: "operator_confirmation_required",
+            project_selection_status: "operator_confirmation_required",
+            runtime_observed: false,
+            accepts_authority: false,
+          },
+          authority: {
+            francis_core_authoritative: true,
+            grants_execution_authority: false,
+          },
+          blockers: [],
+          limitations: ["unreal_project_not_configured"],
+        },
       });
     }
 
@@ -1843,6 +1939,17 @@ test("SettingsClient.getContinuityBriefing falls back to alias routes and preser
       current: "observe",
       handback_state: { state: "none" },
     });
+    assert.equal(briefing.presence?.stage?.status, "ready");
+    assert.equal(briefing.presence?.presence?.headline, "Review the receipt-linked handoff.");
+    assert.equal(briefing.presence?.presence?.return_to_context?.next_step, "Review approval");
+    assert.equal(briefing.presence?.intent?.request_only, true);
+    assert.equal(briefing.presence?.intent?.grants_execution_authority, false);
+    assert.equal(briefing.presence?.evidence?.correlation?.status, "receipt_linked");
+    assert.equal(briefing.presence?.freshness?.status, "observed");
+    assert.equal(briefing.presence?.voice?.status, "unknown");
+    assert.equal(briefing.presence?.voice?.listening, null);
+    assert.equal(briefing.presence?.unreal_adapter?.runtime_observed, false);
+    assert.equal(briefing.presence?.authority?.grants_execution_authority, false);
   } finally {
     restoreFetch();
   }
@@ -2359,6 +2466,80 @@ test("SettingsClient.getContinuityBriefing preserves counts and handoff lists wi
     assert.equal(briefing.briefing?.observer?.recent_scans?.[0]?.anomaly?.level, "clear");
     assert.equal(briefing.briefing?.headline, "");
     assert.equal(briefing.briefing?.focus?.length, 0);
+  } finally {
+    restoreFetch();
+  }
+});
+
+test("SettingsClient.getGroundedPresence falls back to alias and preserves unknown voice state", async () => {
+  const requestPaths: string[] = [];
+  const restoreFetch = installFetch(async (url) => {
+    const path = new URL(url).pathname;
+    requestPaths.push(path);
+    if (path === "/continuity/presence") return jsonResponse({ ok: false }, 404);
+    if (path === "/continuity/grounded-presence") {
+      return jsonResponse({
+        ok: true,
+        presence: {
+          kind: "francis.grounded_presence.snapshot",
+          schema_version: "francis.grounded_presence.snapshot.v1",
+          generated_at: "2026-07-09T20:00:00Z",
+          stage: { id: 1, name: "Grounded Presence", status: "blocked", criteria: {} },
+          presence: {
+            state: "unknown",
+            tone: "calm_operator",
+            truthful: true,
+            headline: "",
+            focus: {},
+            return_to_context: {},
+          },
+          intent: {
+            available: false,
+            request_only: true,
+            action: "",
+            target_kind: "none",
+            target_id: "",
+            mission_id: "",
+            operation_id: "",
+            gate: "",
+            grants_execution_authority: false,
+          },
+          voice: {
+            status: "unknown",
+            listening: null,
+            speaking: null,
+            provider: "",
+            source: "",
+            reason: "voice_readback_not_available_in_orb_surface",
+          },
+          unreal_adapter: {
+            engine: "Unreal Engine",
+            engine_version: "5.8",
+            status: "contract_defined_runtime_not_implemented",
+            technology_selection_status: "operator_confirmation_required",
+            project_selection_status: "operator_confirmation_required",
+            runtime_observed: false,
+            accepts_authority: false,
+          },
+          blockers: ["no_fabricated_state"],
+          limitations: ["unreal_project_not_configured"],
+        },
+      });
+    }
+    return jsonResponse({ ok: false }, 500);
+  });
+
+  try {
+    const client = new SettingsClient("http://127.0.0.1:8000");
+    const presence = await client.getGroundedPresence({ timeoutMs: 50 });
+
+    assert.deepEqual(requestPaths, ["/continuity/presence", "/continuity/grounded-presence"]);
+    assert.equal(presence?.stage?.status, "blocked");
+    assert.equal(presence?.voice?.status, "unknown");
+    assert.equal(presence?.voice?.listening, null);
+    assert.equal(presence?.intent?.request_only, true);
+    assert.equal(presence?.intent?.grants_execution_authority, false);
+    assert.equal(presence?.unreal_adapter?.runtime_observed, false);
   } finally {
     restoreFetch();
   }

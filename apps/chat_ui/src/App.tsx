@@ -73,6 +73,7 @@ import {
 } from "./lens/commandPaletteMonitor";
 import { bodyStateReady, presentOrbGlyph, type OrbGlyphState } from "./lens/orbGlyph";
 import { shouldOpenLensOrbOverlay } from "./lens";
+import { SettingsClient, type GroundedPresenceSnapshot } from "./settings";
 import {
   FrancisVoiceClient,
   type FrancisVoiceIngressResponse,
@@ -120,6 +121,7 @@ type SpeechRecognitionEventLike = {
 const BRIDGE_MONITOR_POLL_MS = 15000;
 const COLLABORATION_PANEL_POLL_MS = 5000;
 const LENS_MCP_STATUS_TIMEOUT_MS = 5000;
+const GROUNDED_PRESENCE_TIMEOUT_MS = 15000;
 const COLLABORATION_READBACK_TIMEOUT_MS = 9000;
 const COLLABORATION_TRANSCRIPT_LIMIT = 40;
 const COLLABORATION_SESSION_ITEM_LIMIT = 50;
@@ -244,16 +246,18 @@ function Pill(props: { label: string; value: string; tone?: "ready" | "blocked" 
   return (
     <span
       style={{
+        alignItems: "baseline",
         border: `1px solid ${border}`,
         borderRadius: 999,
         display: "inline-flex",
         gap: 8,
+        maxWidth: "100%",
+        minWidth: 0,
         padding: "6px 10px",
-        whiteSpace: "nowrap",
       }}
     >
-      <strong>{props.label}</strong>
-      <span>{props.value}</span>
+      <strong style={{ flex: "0 0 auto" }}>{props.label}</strong>
+      <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>{props.value}</span>
     </span>
   );
 }
@@ -621,6 +625,112 @@ function speakBrowserText(text: string, onDone: () => void): boolean {
   window.speechSynthesis.cancel();
   window.speechSynthesis.speak(utterance);
   return true;
+}
+
+function GroundedPresencePanel(props: {
+  presence: GroundedPresenceSnapshot | null;
+  loading: boolean;
+  error: string;
+  onRefresh: () => void;
+}) {
+  const presence = props.presence;
+  const focus = recordValue(presence?.presence?.focus);
+  const returnContext = recordValue(presence?.presence?.return_to_context);
+  const stageReady = presence?.stage?.status === "ready";
+  const receiptReady = presence?.evidence?.receipt_linkage_ready === true;
+  const runtimeObserved = presence?.unreal_adapter?.runtime_observed === true;
+  const headline = presence?.presence?.headline || "No grounded briefing observed.";
+  const objective = stringValue(focus["objective"], stringValue(focus["title"], "No active focus"));
+  const nextStep = stringValue(returnContext["next_step"], "No next step observed");
+
+  return (
+    <section
+      data-grounded-presence-panel="true"
+      style={{
+        background: "#080b11",
+        border: "1px solid rgba(148, 163, 184, 0.35)",
+        borderRadius: 8,
+        marginTop: 18,
+        padding: 20,
+      }}
+    >
+      <div
+        style={{
+          alignItems: "flex-start",
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 16,
+          justifyContent: "space-between",
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <p style={{ color: "#93c5fd", fontSize: 12, margin: 0, textTransform: "uppercase" }}>
+            Grounded Presence
+          </p>
+          <h2 style={{ fontSize: 22, margin: "6px 0 6px" }}>{headline}</h2>
+          <p style={{ color: "#cbd5e1", margin: 0 }}>{objective}</p>
+        </div>
+        <button
+          type="button"
+          onClick={props.onRefresh}
+          disabled={props.loading}
+          style={{
+            background: "#e2e8f0",
+            border: 0,
+            borderRadius: 6,
+            color: "#0f172a",
+            cursor: props.loading ? "wait" : "pointer",
+            fontWeight: 700,
+            padding: "9px 12px",
+          }}
+        >
+          {props.loading ? "Refreshing..." : "Refresh"}
+        </button>
+      </div>
+
+      {props.error ? (
+        <div style={{ border: "1px solid #fca5a5", borderRadius: 6, color: "#fecaca", marginTop: 16, padding: 12 }}>
+          {props.error}
+        </div>
+      ) : null}
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 18 }}>
+        <Pill label="stage" value={statusText(presence?.stage?.status)} tone={stageReady ? "ready" : "blocked"} />
+        <Pill label="freshness" value={statusText(presence?.freshness?.status)} tone={stageReady ? "ready" : "blocked"} />
+        <Pill label="evidence" value={statusText(presence?.evidence?.status)} tone={receiptReady ? "ready" : "blocked"} />
+        <Pill label="voice" value={statusText(presence?.voice?.status)} tone="neutral" />
+        <Pill label="Unreal" value={runtimeObserved ? "observed" : "not observed"} tone="neutral" />
+      </div>
+
+      <dl
+        style={{
+          display: "grid",
+          gap: 14,
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          margin: "20px 0 0",
+        }}
+      >
+        <div>
+          <dt style={{ color: "#94a3b8" }}>Next step</dt>
+          <dd style={{ margin: "4px 0 0" }}>{nextStep}</dd>
+        </div>
+        <div>
+          <dt style={{ color: "#94a3b8" }}>Receipt linkage</dt>
+          <dd style={{ margin: "4px 0 0" }}>{receiptReady ? "linked" : "not linked"}</dd>
+        </div>
+        <div>
+          <dt style={{ color: "#94a3b8" }}>Intent posture</dt>
+          <dd style={{ margin: "4px 0 0" }}>{presence?.intent?.request_only ? "request only" : "unverified"}</dd>
+        </div>
+        <div>
+          <dt style={{ color: "#94a3b8" }}>Unreal selection</dt>
+          <dd style={{ margin: "4px 0 0" }}>
+            {statusText(presence?.unreal_adapter?.technology_selection_status)}
+          </dd>
+        </div>
+      </dl>
+    </section>
+  );
 }
 
 function VoiceTranscriptionPanel(props: { baseUrl: string }) {
@@ -5004,7 +5114,11 @@ function BridgeMonitorPanel(props: { baseUrl: string }) {
   );
 }
 
-function OrbOverlaySurface(props: { status: LensMcpStatus | null; loading: boolean }) {
+function OrbOverlaySurface(props: {
+  status: LensMcpStatus | null;
+  presence: GroundedPresenceSnapshot | null;
+  loading: boolean;
+}) {
   const orb = presentOrbGlyph(props.status, props.loading);
   const dragState = useRef<{ pointerId: number; offsetX: number; offsetY: number } | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -5069,6 +5183,12 @@ function OrbOverlaySurface(props: { status: LensMcpStatus | null; loading: boole
         type="button"
         aria-label={orb.label}
         data-orb-overlay="true"
+        data-grounded-presence-state={props.presence?.presence?.state ?? "unknown"}
+        data-grounded-presence-freshness={props.presence?.freshness?.status ?? "unknown"}
+        data-grounded-presence-request-only={String(props.presence?.intent?.request_only === true)}
+        data-grounded-presence-execution-authority={String(
+          props.presence?.authority?.["grants_execution_authority"] === true,
+        )}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={releasePointer}
@@ -5104,7 +5224,11 @@ export default function App() {
   const [status, setStatus] = useState<LensMcpStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [presence, setPresence] = useState<GroundedPresenceSnapshot | null>(null);
+  const [presenceLoading, setPresenceLoading] = useState(false);
+  const [presenceError, setPresenceError] = useState("");
   const baseUrl = useMemo(() => apiBaseUrl(), []);
+  const settingsClient = useMemo(() => new SettingsClient(baseUrl), [baseUrl]);
   const surfacePath = useMemo(() => {
     if (typeof window === "undefined") return "/";
     return window.location.pathname.replace(/\/+$/, "") || "/";
@@ -5137,12 +5261,36 @@ export default function App() {
     [baseUrl],
   );
 
+  const loadPresence = useCallback(
+    (signal?: AbortSignal) => {
+      setPresenceLoading(true);
+      setPresenceError("");
+      void settingsClient
+        .getGroundedPresence(
+          signal
+            ? { signal, timeoutMs: GROUNDED_PRESENCE_TIMEOUT_MS }
+            : { timeoutMs: GROUNDED_PRESENCE_TIMEOUT_MS },
+        )
+        .then((nextPresence) => setPresence(nextPresence))
+        .catch((err: unknown) => {
+          if (signal?.aborted || isAbortError(err)) return;
+          setPresenceError(err instanceof Error ? err.message : "Grounded Presence request failed.");
+        })
+        .finally(() => {
+          if (signal?.aborted) return;
+          setPresenceLoading(false);
+        });
+    },
+    [settingsClient],
+  );
+
   useEffect(() => {
-    if (communicationOnly) return;
+    if (communicationOnly && !orbOverlayIntent) return;
     const controller = new AbortController();
     loadStatus(controller.signal);
+    loadPresence(controller.signal);
     return () => controller.abort();
-  }, [communicationOnly, loadStatus]);
+  }, [communicationOnly, loadPresence, loadStatus, orbOverlayIntent]);
 
   const shell: CSSProperties = {
     background: "radial-gradient(circle at 32% 18%, #070a10 0, #04060a 55%, #030407 100%)",
@@ -5153,7 +5301,7 @@ export default function App() {
   };
 
   if (orbOverlayIntent) {
-    return <OrbOverlaySurface status={status} loading={loading} />;
+    return <OrbOverlaySurface status={status} presence={presence} loading={loading || presenceLoading} />;
   }
 
   if (communicationOnly) {
@@ -5167,6 +5315,12 @@ export default function App() {
   return (
     <main style={shell}>
       <BodyStatePanel status={status} loading={loading} error={error} onRefresh={() => loadStatus()} />
+      <GroundedPresencePanel
+        presence={presence}
+        loading={presenceLoading}
+        error={presenceError}
+        onRefresh={() => loadPresence()}
+      />
       <VoiceTranscriptionPanel baseUrl={baseUrl} />
       <CollaborationAgentsPanel baseUrl={baseUrl} />
       <BridgeMonitorPanel baseUrl={baseUrl} />

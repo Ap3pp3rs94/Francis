@@ -1,0 +1,153 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://francis.local/schemas/grounded_presence_delivery_ack.schema.json",
+  "title": "Francis Grounded Presence Delivery Acknowledgement",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "schema_version",
+    "schema_path",
+    "ack_id",
+    "acknowledged_at",
+    "request",
+    "consumer",
+    "authority"
+  ],
+  "properties": {
+    "kind": {
+      "const": "francis.grounded_presence.delivery_ack"
+    },
+    "schema_version": {
+      "const": "francis.grounded_presence.delivery_ack.v1"
+    },
+    "schema_path": {
+      "const": "schemas/grounded_presence_delivery_ack.schema.json"
+    },
+    "ack_id": {
+      "type": "string",
+      "pattern": "^gpa_[0-9a-f]{32}$"
+    },
+    "acknowledged_at": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "message_id",
+        "envelope_id",
+        "adapter_id",
+        "session_id",
+        "sequence",
+        "endpoint_id",
+        "payload_digest"
+      ],
+      "properties": {
+        "message_id": {
+          "type": "string",
+          "pattern": "^gpm_[0-9a-f]{32}$"
+        },
+        "envelope_id": {
+          "type": "string",
+          "pattern": "^gpe_[0-9a-f]{32}$"
+        },
+        "adapter_id": {
+          "$ref": "#/$defs/contract_id"
+        },
+        "session_id": {
+          "$ref": "#/$defs/contract_id"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "endpoint_id": {
+          "$ref": "#/$defs/contract_id"
+        },
+        "payload_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "consumer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "durable_deduplication",
+        "sequence_committed",
+        "render_application_status",
+        "payload_persisted"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "accepted_for_render",
+            "duplicate_already_accepted"
+          ]
+        },
+        "durable_deduplication": {
+          "const": true
+        },
+        "sequence_committed": {
+          "const": true
+        },
+        "render_application_status": {
+          "const": "queued_not_proven"
+        },
+        "payload_persisted": {
+          "const": false
+        }
+      }
+    },
+    "authority": {
+      "$ref": "#/$defs/authority"
+    }
+  },
+  "$defs": {
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "contract_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[A-Za-z0-9._-]+$"
+    },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "francis_core_authoritative",
+        "grants_execution_authority",
+        "grants_desktop_authority",
+        "grants_network_authority",
+        "grants_memory_write_authority",
+        "grants_approval_authority"
+      ],
+      "properties": {
+        "francis_core_authoritative": {
+          "const": true
+        },
+        "grants_execution_authority": {
+          "const": false
+        },
+        "grants_desktop_authority": {
+          "const": false
+        },
+        "grants_network_authority": {
+          "const": false
+        },
+        "grants_memory_write_authority": {
+          "const": false
+        },
+        "grants_approval_authority": {
+          "const": false
+        }
+      }
+    }
+  }
+}

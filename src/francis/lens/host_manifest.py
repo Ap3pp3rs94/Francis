@@ -615,6 +615,12 @@ def _lens_overlay_runtime_readback() -> dict[str, Any]:
     }
 
 
+def lens_overlay_runtime_readback() -> dict[str, Any]:
+    """Return the bounded live overlay readback without composing the full host manifest."""
+
+    return _lens_overlay_runtime_readback()
+
+
 def _lens_summon_runtime_readback() -> dict[str, Any]:
     override_file = data_dir() / "runtime" / "lens-summon" / "summon-action-override.json"
     hotkey_override_file = data_dir() / "runtime" / "lens-hotkey" / "os-binding-summon-override.json"

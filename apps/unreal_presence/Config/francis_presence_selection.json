@@ -1,0 +1,61 @@
+{
+  "kind": "francis.grounded_presence.unreal_selection",
+  "schema_version": "francis.grounded_presence.unreal_selection.v1",
+  "schema_path": "schemas/grounded_presence_unreal_selection.schema.json",
+  "confirmed_at": "2026-07-10T18:00:00+00:00",
+  "confirmation": {
+    "actor": "operator",
+    "project_selected": true,
+    "technology_stack_selected": true
+  },
+  "engine": {
+    "name": "Unreal Engine",
+    "version": "5.8",
+    "root_path": "C:\\Program Files\\Epic Games\\UE_5.8",
+    "build_changelist": 55116800,
+    "build_version_sha256": "2dbc75e44f11207d10b94639b222bbcecd2eb2e45eb0a901d0cca1005d36125e"
+  },
+  "project": {
+    "path": "D:\\Francis\\apps\\unreal_presence\\FrancisPresence.uproject",
+    "descriptor_sha256": "8b9858407732e323fb85913e1c707ae7f12de041a92fef90de1a6118874fe97d"
+  },
+  "technology_stack": [
+    {
+      "id": "cpp_runtime_module",
+      "role": "authenticated_transport_and_dedup"
+    },
+    {
+      "id": "slate_operator_surface",
+      "role": "grounded_presence_hud"
+    },
+    {
+      "id": "lumen_dynamic_gi",
+      "role": "presence_scene_lighting"
+    },
+    {
+      "id": "substrate_materials",
+      "role": "state_reactive_surface_shading"
+    },
+    {
+      "id": "niagara_fx",
+      "role": "ambient_presence_motion"
+    },
+    {
+      "id": "enhanced_input",
+      "role": "request_only_operator_intents"
+    },
+    {
+      "id": "procedural_presence_stage",
+      "role": "runtime_orb_and_state_geometry"
+    }
+  ],
+  "authority": {
+    "francis_core_authoritative": true,
+    "grants_execution_authority": false,
+    "grants_desktop_authority": false,
+    "grants_network_authority": false,
+    "grants_memory_write_authority": false,
+    "grants_approval_authority": false
+  },
+  "selection_id": "gpu_3b6be00fac5f6c710bce4ca84fce4fec"
+}

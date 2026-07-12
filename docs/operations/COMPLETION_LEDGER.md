@@ -110,11 +110,97 @@ What is materially true now:
   contract from `docs/operations/ORB_VISUAL_LOCK.md`, one native renderer, and
   aligned ElevenLabs input/output/readiness fields; live readback clears both
   ring/color and voice-provider identity drift.
+- A dedicated Unreal Engine 5.8 Grounded Presence project now renders a
+  Core-authored, receipt-linked projection over authenticated local named pipes.
+  Its reverse path is request-only and default-deny; it grants no execution,
+  desktop, network, memory-write, or approval authority.
 
 ## 4. Latest validation evidence
 
 > Older dated entries are archived under docs/operations/archive/ (see scripts/archive-completion-ledger.ps1).
 > Historical undated ledger body is archived under docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md.
+
+### 2026-07-12 20:04Z - Stage 1 Unreal Grounded Presence live acceptance
+
+Current posture: the operator-selected Unreal Engine 5.8 project at
+`apps/unreal_presence` is a live-validated governed renderer for Stage 1
+Grounded Presence. Francis Core remains authoritative. This is cross-stage
+hardening of a previously closed foundation stage; it does not close Phase 2,
+close Stage 17, supply FR-017 physical evidence, start Stage 18, grant resident
+Orb authority, or complete Francis.
+
+What is materially true now:
+
+- Versioned presence, selection, runtime, envelope, authenticated wrapper,
+  signed ACK, delivery-attempt, delivery-journal, delivery-receipt, intent, and
+  intent-receipt contracts are implemented and tested.
+- Core-to-Unreal and Unreal-to-Core transport uses local-only Windows named
+  pipes with HMAC-SHA256 process-environment keys, bounded framing/timeouts,
+  signed correlation, cross-process writer locking, durable sequence state,
+  replay rejection, and payload-free recovery metadata.
+- The dedicated C++ runtime consumes the Core projection, renders a procedural
+  state-reactive presence with the selected UE 5.8 stack, and emits only
+  whitelisted request intents. Core receipts accepted intents without dispatch
+  or mutation.
+- `/continuity/presence`, `/continuity/presence/contracts`, and
+  `/continuity/presence/unreal-runtime` expose live runtime truth; the operator
+  UI and read-only Orb overlay consume the same bounded projection.
+- The standard API launcher supplies the pinned operator selection through the
+  explicit environment contract without inferring another project. The host
+  uses a semantic digest plus bounded heartbeat, so timestamp-only refreshes do
+  not race intent source correlation.
+- Launch and stop scripts refuse PID drift, never persist the secret, restore
+  the caller environment exactly, bound screenshots to the dedicated runtime
+  directory, support a bounded test lifetime, and stop only the Unreal
+  host/editor processes they own. The separately managed native Orb is not
+  launched or granted residency by this project.
+
+Validation actually run:
+
+- Focused Python presence, host, selection, named-pipe, operator, and Orb suite:
+  `175` tests passed.
+- UI suite: `289` tests passed; Vite production build passed.
+- Ruff, format, no-incremental mypy, all `11` Grounded Presence schemas,
+  selection digest readback, PowerShell parser checks, bounded screenshot
+  rejection, environment restoration, and `git diff --check` passed for the
+  touched path.
+- `FrancisPresenceEditor Win64 Development` and
+  `FrancisPresence Win64 Development` both built successfully against Unreal
+  Engine 5.8; the native C++ Orb renderer also built in compile-only mode.
+- The runtime config enables the operator-selected stack and explicitly disables
+  Nanite. MegaLights was not selected or claimed as validated. Enhanced Input
+  initializes a real local-player mapping rather than remaining a linked-only
+  dependency.
+- Bounded live session `francis_unreal_stage1_acceptance_v7` reached
+  `contracts_implemented_runtime_observed`, returned the presence projection in
+  `0.806` seconds, wrote delivery receipt
+  `gpd_e2ba69dd41a3da65314df581fbed0b84`, and captured the nonblank engine frame
+  `data/runtime/unreal-presence/acceptance-v7.png`. The live projection
+  truthfully remained `blocked` for the current receipt/evidence posture.
+- The same session wrote five accepted request-only intent receipts. The
+  auto-injected context refresh wrote `gpr_ef105c731c8c3e64bc3cef81fe736887`;
+  focused Enhanced Input F6 wrote handback receipt
+  `gpr_8e0c657389d776262c11b6f6d716f519`; and F7 wrote review receipt
+  `gpr_ac78026fec935948d33479413fc870f0`. All reported no dispatch, mutation, or
+  execution authority.
+- Desktop inspection confirmed the rendered Orb plus Slate truth panel. The
+  launcher restored all twelve environment entries, reported no persisted
+  secret, and then stopped host PID `106240` plus Unreal PID `101908`. Final
+  readback found no Unreal, host, native Orb, overlay, or test API process.
+
+Remaining limits:
+
+- Unreal presence residency is intentionally disabled; it is launched only for
+  bounded tests until the operator accepts the version for normal use.
+- The acceptance frame proves the selected visual runtime rendered, not that
+  its art direction is permanently locked or that every device/driver profile
+  has been qualified.
+- The saved engine screenshot intentionally excludes Slate UI; the panel was
+  verified through bounded desktop inspection. Repo-wide `npx tsc --noEmit`
+  remains a separate baseline gap with `9,740` pre-existing diagnostics across
+  `30` UI files; the production build and `289` UI tests are green.
+- Phase 2, Stage 17 physical validation, the final governed Stage 17 closure
+  decision, FR-018, Stage 18, and later roadmap work remain open.
 
 ### 2026-07-10 14:31Z - Stage 17 software criteria ready for closure review
 

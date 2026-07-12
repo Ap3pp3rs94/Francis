@@ -1,0 +1,246 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://francis.local/schemas/grounded_presence_delivery_receipt.schema.json",
+  "title": "Francis Grounded Presence Delivery Receipt",
+  "description": "Durable metadata-only receipt for one Core-to-Unreal presence envelope delivery.",
+  "type": "object",
+  "required": [
+    "kind",
+    "schema_version",
+    "schema_path",
+    "receipt_id",
+    "recorded_at",
+    "delivery",
+    "evidence",
+    "security",
+    "authority",
+    "limitations"
+  ],
+  "properties": {
+    "kind": {
+      "const": "francis.grounded_presence.delivery_receipt"
+    },
+    "schema_version": {
+      "const": "francis.grounded_presence.delivery_receipt.v1"
+    },
+    "schema_path": {
+      "const": "schemas/grounded_presence_delivery_receipt.schema.json"
+    },
+    "receipt_id": {
+      "type": "string",
+      "pattern": "^gpd_[0-9a-f]{32}$"
+    },
+    "recorded_at": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "delivery": {
+      "type": "object",
+      "required": [
+        "status",
+        "envelope_id",
+        "channel",
+        "adapter_id",
+        "session_id",
+        "sequence",
+        "endpoint_id",
+        "transport",
+        "bytes_written",
+        "payload_digest",
+        "issued_at",
+        "expires_at",
+        "message_id",
+        "ack_id",
+        "consumer_status",
+        "consumer_durable_deduplication"
+      ],
+      "properties": {
+        "status": {
+          "const": "delivered"
+        },
+        "envelope_id": {
+          "type": "string",
+          "pattern": "^gpe_[0-9a-f]{32}$"
+        },
+        "channel": {
+          "const": "francis.presence.render.v1"
+        },
+        "adapter_id": {
+          "$ref": "#/$defs/contract_id"
+        },
+        "session_id": {
+          "$ref": "#/$defs/contract_id"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "endpoint_id": {
+          "$ref": "#/$defs/contract_id"
+        },
+        "transport": {
+          "const": "windows_named_pipe"
+        },
+        "bytes_written": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 262148
+        },
+        "payload_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "issued_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "expires_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "message_id": {
+          "type": "string",
+          "pattern": "^gpm_[0-9a-f]{32}$"
+        },
+        "ack_id": {
+          "type": "string",
+          "pattern": "^gpa_[0-9a-f]{32}$"
+        },
+        "consumer_status": {
+          "enum": ["accepted_for_render", "duplicate_already_accepted"]
+        },
+        "consumer_durable_deduplication": {
+          "const": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "object",
+      "required": [
+        "payload_kind",
+        "payload_schema_version",
+        "presence_stage_status",
+        "source_receipt_ids",
+        "payload_persisted"
+      ],
+      "properties": {
+        "payload_kind": {
+          "const": "francis.grounded_presence.snapshot"
+        },
+        "payload_schema_version": {
+          "const": "francis.grounded_presence.snapshot.v1"
+        },
+        "presence_stage_status": {
+          "enum": ["ready", "blocked"]
+        },
+        "source_receipt_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/contract_id"
+          },
+          "uniqueItems": true
+        },
+        "payload_persisted": {
+          "const": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "security": {
+      "type": "object",
+      "required": [
+        "local_only",
+        "remote_clients_rejected",
+        "application_authenticated",
+        "authentication_status",
+        "authentication_key_id",
+        "acknowledgement_authenticated",
+        "replay_posture"
+      ],
+      "properties": {
+        "local_only": {
+          "const": true
+        },
+        "remote_clients_rejected": {
+          "const": true
+        },
+        "application_authenticated": {
+          "const": true
+        },
+        "authentication_status": {
+          "const": "hmac_sha256_signed_ack"
+        },
+        "authentication_key_id": {
+          "$ref": "#/$defs/contract_id"
+        },
+        "acknowledgement_authenticated": {
+          "const": true
+        },
+        "replay_posture": {
+          "const": "cross_process_mutex_plus_durable_receipt_sequence_watermark"
+        }
+      },
+      "additionalProperties": false
+    },
+    "authority": {
+      "type": "object",
+      "required": [
+        "francis_core_authoritative",
+        "grants_execution_authority",
+        "grants_desktop_authority",
+        "grants_network_authority",
+        "grants_memory_write_authority",
+        "grants_approval_authority"
+      ],
+      "properties": {
+        "francis_core_authoritative": {
+          "const": true
+        },
+        "grants_execution_authority": {
+          "const": false
+        },
+        "grants_desktop_authority": {
+          "const": false
+        },
+        "grants_network_authority": {
+          "const": false
+        },
+        "grants_memory_write_authority": {
+          "const": false
+        },
+        "grants_approval_authority": {
+          "const": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 1,
+      "uniqueItems": true,
+      "allOf": [
+        {
+          "contains": {
+            "const": "render_application_not_proven_by_transport_ack"
+          },
+          "minContains": 1
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "contract_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[A-Za-z0-9._-]+$"
+    }
+  },
+  "additionalProperties": false
+}

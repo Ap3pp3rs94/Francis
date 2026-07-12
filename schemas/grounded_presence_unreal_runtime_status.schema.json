@@ -1,0 +1,232 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://francis.local/schemas/grounded_presence_unreal_runtime_status.schema.json",
+  "title": "Francis Grounded Presence Unreal Runtime Status",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "schema_version",
+    "schema_path",
+    "observed_at",
+    "process_id",
+    "adapter_id",
+    "session_id",
+    "endpoint_id",
+    "authentication_key_id",
+    "transport",
+    "render",
+    "intent",
+    "technology",
+    "authority",
+    "stores_presence_payload"
+  ],
+  "properties": {
+    "kind": {
+      "const": "francis.grounded_presence.unreal_runtime_status"
+    },
+    "schema_version": {
+      "const": "francis.grounded_presence.unreal_runtime_status.v1"
+    },
+    "schema_path": {
+      "const": "schemas/grounded_presence_unreal_runtime_status.schema.json"
+    },
+    "observed_at": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "process_id": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "adapter_id": {
+      "$ref": "#/$defs/contract_id"
+    },
+    "session_id": {
+      "$ref": "#/$defs/contract_id"
+    },
+    "endpoint_id": {
+      "$ref": "#/$defs/contract_id"
+    },
+    "authentication_key_id": {
+      "$ref": "#/$defs/contract_id"
+    },
+    "transport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "configured",
+        "pipe_connected",
+        "accepted_message_count",
+        "rejected_message_count",
+        "duplicate_message_count",
+        "last_error"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "configured": {
+          "type": "boolean"
+        },
+        "pipe_connected": {
+          "type": "boolean"
+        },
+        "accepted_message_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rejected_message_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "duplicate_message_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "last_error": {
+          "type": "string",
+          "maxLength": 240
+        }
+      }
+    },
+    "render": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "envelope_id",
+        "sequence",
+        "received_at",
+        "rendered_at",
+        "presence_state",
+        "headline",
+        "authenticated",
+        "runtime_observed"
+      ],
+      "properties": {
+        "status": {
+          "enum": ["waiting", "queued", "applied"]
+        },
+        "envelope_id": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "received_at": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "rendered_at": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "presence_state": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "headline": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "authenticated": {
+          "type": "boolean"
+        },
+        "runtime_observed": {
+          "type": "boolean"
+        }
+      }
+    },
+    "intent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["last_sequence", "last_kind", "last_event_id", "sent_count", "last_write_succeeded"],
+      "properties": {
+        "last_sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "last_kind": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "last_event_id": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "sent_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "last_write_succeeded": {
+          "type": "boolean"
+        }
+      }
+    },
+    "technology": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["engine", "engine_version", "active_stack"],
+      "properties": {
+        "engine": {
+          "const": "Unreal Engine"
+        },
+        "engine_version": {
+          "const": "5.8"
+        },
+        "active_stack": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/contract_id"
+          }
+        }
+      }
+    },
+    "authority": {
+      "$ref": "#/$defs/authority"
+    },
+    "stores_presence_payload": {
+      "const": false
+    }
+  },
+  "$defs": {
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "contract_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[A-Za-z0-9._-]+$"
+    },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "francis_core_authoritative",
+        "grants_execution_authority",
+        "grants_desktop_authority",
+        "grants_network_authority",
+        "grants_memory_write_authority",
+        "grants_approval_authority"
+      ],
+      "properties": {
+        "francis_core_authoritative": { "const": true },
+        "grants_execution_authority": { "const": false },
+        "grants_desktop_authority": { "const": false },
+        "grants_network_authority": { "const": false },
+        "grants_memory_write_authority": { "const": false },
+        "grants_approval_authority": { "const": false }
+      }
+    }
+  }
+}

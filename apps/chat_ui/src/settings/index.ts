@@ -1050,6 +1050,70 @@ export type ContinuityOrbSurface = {
   state?: Record<string, unknown>;
 };
 
+export type GroundedPresenceSnapshot = {
+  kind: string;
+  schema_version: string;
+  generated_at: string;
+  stage?: {
+    id: number;
+    name: string;
+    status: string;
+    criteria: Record<string, boolean>;
+  };
+  presence?: {
+    state: string;
+    tone: string;
+    truthful: boolean;
+    headline: string;
+    focus: Record<string, unknown>;
+    return_to_context: Record<string, unknown>;
+  };
+  intent?: {
+    available: boolean;
+    request_only: boolean;
+    action: string;
+    target_kind: string;
+    target_id: string;
+    mission_id: string;
+    operation_id: string;
+    gate: string;
+    grants_execution_authority: boolean;
+  };
+  evidence?: {
+    status: string;
+    receipt_linkage_required: boolean;
+    receipt_linkage_ready: boolean;
+    correlation: Record<string, unknown>;
+    references: Record<string, unknown>[];
+  };
+  freshness?: {
+    status: string;
+    stale_after_seconds: number;
+    sources: Record<string, unknown>;
+  };
+  voice?: {
+    status: string;
+    listening: boolean | null;
+    speaking: boolean | null;
+    provider: string;
+    source: string;
+    reason: string;
+  };
+  visual_state?: Record<string, unknown>;
+  unreal_adapter?: {
+    engine: string;
+    engine_version: string;
+    status: string;
+    technology_selection_status: string;
+    project_selection_status: string;
+    runtime_observed: boolean;
+    accepts_authority: boolean;
+  };
+  authority?: Record<string, boolean>;
+  blockers: string[];
+  limitations: string[];
+};
+
 export type ContinuityBriefingSnapshot = {
   ok: boolean;
   subsystem?: string;
@@ -1059,6 +1123,7 @@ export type ContinuityBriefingSnapshot = {
   recent_missions?: WorldStateMissionSummary[];
   operator?: ContinuityOperatorSurface;
   orb?: ContinuityOrbSurface;
+  presence?: GroundedPresenceSnapshot;
   meta?: Record<string, unknown>;
 };
 
@@ -3563,6 +3628,107 @@ function parseContinuityOrbSurface(raw: unknown): ContinuityOrbSurface | undefin
   return surface;
 }
 
+function parseBooleanMap(raw: unknown): Record<string, boolean> {
+  if (!isRecord(raw)) return {};
+  const result: Record<string, boolean> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (typeof value === "boolean") result[key] = value;
+  }
+  return result;
+}
+
+export function parseGroundedPresenceSnapshot(raw: unknown): GroundedPresenceSnapshot | undefined {
+  if (!isRecord(raw) || safeString(raw["kind"], "") !== "francis.grounded_presence.snapshot") return undefined;
+  const stageRaw = isRecord(raw["stage"]) ? raw["stage"] : {};
+  const presenceRaw = isRecord(raw["presence"]) ? raw["presence"] : {};
+  const intentRaw = isRecord(raw["intent"]) ? raw["intent"] : {};
+  const evidenceRaw = isRecord(raw["evidence"]) ? raw["evidence"] : {};
+  const freshnessRaw = isRecord(raw["freshness"]) ? raw["freshness"] : {};
+  const voiceRaw = isRecord(raw["voice"]) ? raw["voice"] : {};
+  const unrealRaw = isRecord(raw["unreal_adapter"]) ? raw["unreal_adapter"] : {};
+  const snapshot: GroundedPresenceSnapshot = {
+    kind: safeString(raw["kind"], ""),
+    schema_version: safeString(raw["schema_version"], ""),
+    generated_at: safeString(raw["generated_at"], ""),
+    blockers: safeStringArray(raw["blockers"]),
+    limitations: safeStringArray(raw["limitations"]),
+  };
+
+  if (Object.keys(stageRaw).length) {
+    snapshot.stage = {
+      id: safeNumber(stageRaw["id"], 0),
+      name: safeString(stageRaw["name"], ""),
+      status: safeString(stageRaw["status"], ""),
+      criteria: parseBooleanMap(stageRaw["criteria"]),
+    };
+  }
+  if (Object.keys(presenceRaw).length) {
+    snapshot.presence = {
+      state: safeString(presenceRaw["state"], "unknown"),
+      tone: safeString(presenceRaw["tone"], ""),
+      truthful: safeBoolean(presenceRaw["truthful"], false),
+      headline: safeString(presenceRaw["headline"], ""),
+      focus: isRecord(presenceRaw["focus"]) ? presenceRaw["focus"] : {},
+      return_to_context: isRecord(presenceRaw["return_to_context"])
+        ? presenceRaw["return_to_context"]
+        : {},
+    };
+  }
+  if (Object.keys(intentRaw).length) {
+    snapshot.intent = {
+      available: safeBoolean(intentRaw["available"], false),
+      request_only: safeBoolean(intentRaw["request_only"], false),
+      action: safeString(intentRaw["action"], ""),
+      target_kind: safeString(intentRaw["target_kind"], "none"),
+      target_id: safeString(intentRaw["target_id"], ""),
+      mission_id: safeString(intentRaw["mission_id"], ""),
+      operation_id: safeString(intentRaw["operation_id"], ""),
+      gate: safeString(intentRaw["gate"], ""),
+      grants_execution_authority: safeBoolean(intentRaw["grants_execution_authority"], false),
+    };
+  }
+  if (Object.keys(evidenceRaw).length) {
+    snapshot.evidence = {
+      status: safeString(evidenceRaw["status"], ""),
+      receipt_linkage_required: safeBoolean(evidenceRaw["receipt_linkage_required"], false),
+      receipt_linkage_ready: safeBoolean(evidenceRaw["receipt_linkage_ready"], false),
+      correlation: isRecord(evidenceRaw["correlation"]) ? evidenceRaw["correlation"] : {},
+      references: (Array.isArray(evidenceRaw["references"]) ? evidenceRaw["references"] : []).filter(isRecord),
+    };
+  }
+  if (Object.keys(freshnessRaw).length) {
+    snapshot.freshness = {
+      status: safeString(freshnessRaw["status"], ""),
+      stale_after_seconds: safeNumber(freshnessRaw["stale_after_seconds"], 0),
+      sources: isRecord(freshnessRaw["sources"]) ? freshnessRaw["sources"] : {},
+    };
+  }
+  if (Object.keys(voiceRaw).length) {
+    snapshot.voice = {
+      status: safeString(voiceRaw["status"], "unknown"),
+      listening: typeof voiceRaw["listening"] === "boolean" ? voiceRaw["listening"] : null,
+      speaking: typeof voiceRaw["speaking"] === "boolean" ? voiceRaw["speaking"] : null,
+      provider: safeString(voiceRaw["provider"], ""),
+      source: safeString(voiceRaw["source"], ""),
+      reason: safeString(voiceRaw["reason"], ""),
+    };
+  }
+  if (isRecord(raw["visual_state"])) snapshot.visual_state = raw["visual_state"];
+  if (Object.keys(unrealRaw).length) {
+    snapshot.unreal_adapter = {
+      engine: safeString(unrealRaw["engine"], ""),
+      engine_version: safeString(unrealRaw["engine_version"], ""),
+      status: safeString(unrealRaw["status"], ""),
+      technology_selection_status: safeString(unrealRaw["technology_selection_status"], ""),
+      project_selection_status: safeString(unrealRaw["project_selection_status"], ""),
+      runtime_observed: safeBoolean(unrealRaw["runtime_observed"], false),
+      accepts_authority: safeBoolean(unrealRaw["accepts_authority"], false),
+    };
+  }
+  if (isRecord(raw["authority"])) snapshot.authority = parseBooleanMap(raw["authority"]);
+  return snapshot;
+}
+
 function parseContinuityBriefingSnapshot(raw: unknown): ContinuityBriefingSnapshot {
   if (!isRecord(raw)) return { ok: false };
 
@@ -3627,6 +3793,7 @@ function parseContinuityBriefingSnapshot(raw: unknown): ContinuityBriefingSnapsh
       .filter((item): item is WorldStateMissionSummary => item !== null),
     operator: parseContinuityOperatorSurface(raw["operator"]),
     orb: parseContinuityOrbSurface(raw["orb"]),
+    presence: parseGroundedPresenceSnapshot(raw["presence"]),
   };
 
   if (!snapshot.subsystem) delete snapshot.subsystem;
@@ -3653,6 +3820,7 @@ function parseContinuityBriefingSnapshot(raw: unknown): ContinuityBriefingSnapsh
   if (!snapshot.recent_missions?.length) delete snapshot.recent_missions;
   if (!snapshot.operator) delete snapshot.operator;
   if (!snapshot.orb) delete snapshot.orb;
+  if (!snapshot.presence) delete snapshot.presence;
   if (isRecord(raw["meta"])) snapshot.meta = raw["meta"] as Record<string, unknown>;
 
   return snapshot;
@@ -3668,6 +3836,7 @@ export type SettingsEndpoints = {
   worldState: () => string[];
   continuityLedger: () => string[];
   continuityBriefing: () => string[];
+  groundedPresence: () => string[];
   observerEvents: () => string[];
   orbStatus: () => string[];
   operatorMode: () => string[];
@@ -3692,6 +3861,7 @@ export function defaultSettingsEndpoints(): SettingsEndpoints {
     worldState: () => ["/system/world_state", "/system/world-state"],
     continuityLedger: () => ["/continuity/ledger"],
     continuityBriefing: () => ["/continuity/briefing", "/continuity/shift_briefing", "/continuity/shift-briefing"],
+    groundedPresence: () => ["/continuity/presence", "/continuity/grounded-presence"],
     observerEvents: () => ["/system/observer/events", "/system/observer/log", "/system/observer/audit"],
     orbStatus: () => ["/system/orb_status", "/system/orb-status", "/system/orb"],
     operatorMode: () => ["/system/operator_mode", "/system/operator-mode"],
@@ -3831,6 +4001,15 @@ export class SettingsClient {
   }): Promise<ContinuityBriefingSnapshot> {
     const { json } = await this.fetchFirstOk(this.endpoints.continuityBriefing(), this.init(opts));
     return parseContinuityBriefingSnapshot(json);
+  }
+
+  async getGroundedPresence(opts?: {
+    signal?: AbortSignal;
+    timeoutMs?: number;
+  }): Promise<GroundedPresenceSnapshot | null> {
+    const { json } = await this.fetchFirstOk(this.endpoints.groundedPresence(), this.init(opts));
+    const candidate = isRecord(json) && isRecord(json["presence"]) ? json["presence"] : json;
+    return parseGroundedPresenceSnapshot(candidate) ?? null;
   }
 
   async getObserverEvents(opts?: {

@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://francis.local/schemas/grounded_presence_ipc_message.schema.json",
+  "title": "Francis Grounded Presence Authenticated IPC Message",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "schema_version",
+    "schema_path",
+    "message_id",
+    "channel",
+    "direction",
+    "issued_at",
+    "expires_at",
+    "ttl_ms",
+    "nonce",
+    "integrity",
+    "authentication",
+    "payload",
+    "authority"
+  ],
+  "properties": {
+    "kind": {
+      "const": "francis.grounded_presence.ipc_message"
+    },
+    "schema_version": {
+      "const": "francis.grounded_presence.ipc_message.v1"
+    },
+    "schema_path": {
+      "const": "schemas/grounded_presence_ipc_message.schema.json"
+    },
+    "message_id": {
+      "type": "string",
+      "pattern": "^gpm_[0-9a-f]{32}$"
+    },
+    "channel": {
+      "enum": [
+        "francis.presence.render.v1",
+        "francis.presence.render.ack.v1",
+        "francis.presence.intent.v1"
+      ]
+    },
+    "direction": {
+      "enum": [
+        "francis_core_to_unreal",
+        "unreal_to_francis_core"
+      ]
+    },
+    "issued_at": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "expires_at": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "ttl_ms": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5000
+    },
+    "nonce": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm",
+        "canonicalization",
+        "payload_digest"
+      ],
+      "properties": {
+        "algorithm": {
+          "const": "sha256"
+        },
+        "canonicalization": {
+          "const": "json_sort_keys_compact_utf8"
+        },
+        "payload_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "authentication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm",
+        "key_id",
+        "signature"
+      ],
+      "properties": {
+        "algorithm": {
+          "const": "hmac-sha256"
+        },
+        "key_id": {
+          "$ref": "#/$defs/contract_id"
+        },
+        "signature": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "payload": {
+      "type": "object"
+    },
+    "authority": {
+      "$ref": "#/$defs/authority"
+    }
+  },
+  "$defs": {
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "contract_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[A-Za-z0-9._-]+$"
+    },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "francis_core_authoritative",
+        "grants_execution_authority",
+        "grants_desktop_authority",
+        "grants_network_authority",
+        "grants_memory_write_authority",
+        "grants_approval_authority"
+      ],
+      "properties": {
+        "francis_core_authoritative": {
+          "const": true
+        },
+        "grants_execution_authority": {
+          "const": false
+        },
+        "grants_desktop_authority": {
+          "const": false
+        },
+        "grants_network_authority": {
+          "const": false
+        },
+        "grants_memory_write_authority": {
+          "const": false
+        },
+        "grants_approval_authority": {
+          "const": false
+        }
+      }
+    }
+  }
+}

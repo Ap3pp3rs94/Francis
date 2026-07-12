@@ -1,0 +1,353 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://francis.local/schemas/grounded_presence_intent_event.schema.json",
+  "title": "Francis Grounded Presence Intent Event",
+  "description": "Default-deny request emitted by an Unreal renderer for Francis Core routing.",
+  "type": "object",
+  "required": [
+    "kind",
+    "schema_version",
+    "schema_path",
+    "event_id",
+    "adapter",
+    "event_sequence",
+    "source",
+    "issued_at",
+    "expires_at",
+    "ttl_ms",
+    "intent",
+    "routing",
+    "authority",
+    "limitations",
+    "integrity"
+  ],
+  "properties": {
+    "kind": {
+      "const": "francis.grounded_presence.intent_event"
+    },
+    "schema_version": {
+      "const": "francis.grounded_presence.intent_event.v1"
+    },
+    "schema_path": {
+      "const": "schemas/grounded_presence_intent_event.schema.json"
+    },
+    "event_id": {
+      "type": "string",
+      "pattern": "^gpi_[0-9a-f]{32}$"
+    },
+    "adapter": {
+      "type": "object",
+      "required": ["id", "kind", "role", "engine_version", "session_id", "authentication_status"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/contract_id"
+        },
+        "kind": {
+          "const": "unreal"
+        },
+        "role": {
+          "const": "governed_renderer_adapter"
+        },
+        "engine_version": {
+          "const": "5.8"
+        },
+        "session_id": {
+          "$ref": "#/$defs/contract_id"
+        },
+        "authentication_status": {
+          "const": "ipc_hmac_wrapper_required"
+        }
+      },
+      "additionalProperties": false
+    },
+    "event_sequence": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "source": {
+      "type": "object",
+      "required": ["envelope_id", "sequence", "channel"],
+      "properties": {
+        "envelope_id": {
+          "type": "string",
+          "pattern": "^gpe_[0-9a-f]{32}$"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "channel": {
+          "const": "francis.presence.render.v1"
+        }
+      },
+      "additionalProperties": false
+    },
+    "issued_at": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "expires_at": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "ttl_ms": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2000
+    },
+    "intent": {
+      "type": "object",
+      "required": ["kind", "class", "target", "request_only"],
+      "properties": {
+        "kind": {
+          "enum": [
+            "request_context_refresh",
+            "acknowledge_handback",
+            "request_review",
+            "request_panic_stop"
+          ]
+        },
+        "class": {
+          "enum": [
+            "read_request",
+            "acknowledgement_request",
+            "governed_action_request",
+            "safety_request"
+          ]
+        },
+        "target": {
+          "type": "object",
+          "required": ["kind", "id"],
+          "properties": {
+            "kind": {
+              "enum": ["none", "mission", "operation", "receipt", "surface"]
+            },
+            "id": {
+              "type": "string",
+              "maxLength": 160,
+              "pattern": "^[A-Za-z0-9._-]*$"
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "kind": {
+                    "const": "none"
+                  }
+                },
+                "required": ["kind"]
+              },
+              "then": {
+                "properties": {
+                  "id": {
+                    "const": ""
+                  }
+                }
+              },
+              "else": {
+                "properties": {
+                  "id": {
+                    "$ref": "#/$defs/contract_id"
+                  }
+                }
+              }
+            }
+          ],
+          "additionalProperties": false
+        },
+        "request_only": {
+          "const": true
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "request_context_refresh"
+              }
+            },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "class": {
+                "const": "read_request"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "acknowledge_handback"
+              }
+            },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "class": {
+                "const": "acknowledgement_request"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "request_review"
+              }
+            },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "class": {
+                "const": "governed_action_request"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "request_panic_stop"
+              }
+            },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "class": {
+                "const": "safety_request"
+              }
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "routing": {
+      "type": "object",
+      "required": [
+        "required_core_route",
+        "status",
+        "dispatch_allowed",
+        "mutation_allowed",
+        "receipt_required_before_dispatch"
+      ],
+      "properties": {
+        "required_core_route": {
+          "enum": ["/continuity/presence", "operator_review_required", "/takeover/panic-stop"]
+        },
+        "status": {
+          "const": "not_dispatched"
+        },
+        "dispatch_allowed": {
+          "const": false
+        },
+        "mutation_allowed": {
+          "const": false
+        },
+        "receipt_required_before_dispatch": {
+          "const": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "authority": {
+      "type": "object",
+      "required": [
+        "francis_core_authoritative",
+        "grants_execution_authority",
+        "grants_desktop_authority",
+        "grants_network_authority",
+        "grants_memory_write_authority",
+        "grants_approval_authority"
+      ],
+      "properties": {
+        "francis_core_authoritative": {
+          "const": true
+        },
+        "grants_execution_authority": {
+          "const": false
+        },
+        "grants_desktop_authority": {
+          "const": false
+        },
+        "grants_network_authority": {
+          "const": false
+        },
+        "grants_memory_write_authority": {
+          "const": false
+        },
+        "grants_approval_authority": {
+          "const": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 3,
+      "uniqueItems": true,
+      "allOf": [
+        {
+          "contains": {
+            "const": "application_authentication_applied_at_ipc_wrapper"
+          },
+          "minContains": 1
+        },
+        {
+          "contains": {
+            "const": "intent_is_not_a_dispatched_action"
+          },
+          "minContains": 1
+        },
+        {
+          "contains": {
+            "const": "core_policy_route_required"
+          },
+          "minContains": 1
+        }
+      ]
+    },
+    "integrity": {
+      "type": "object",
+      "required": ["algorithm", "canonicalization", "event_digest"],
+      "properties": {
+        "algorithm": {
+          "const": "sha256"
+        },
+        "canonicalization": {
+          "const": "json_sort_keys_compact_utf8_without_integrity"
+        },
+        "event_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "contract_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[A-Za-z0-9._-]+$"
+    }
+  },
+  "additionalProperties": false
+}

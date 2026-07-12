@@ -318,3 +318,9 @@ docker-compose.local.yaml
 # ==============================================================================
 *.pid
 *.sock
+
+# Unreal Grounded Presence local build and runtime outputs
+/apps/unreal_presence/Binaries/
+/apps/unreal_presence/DerivedDataCache/
+/apps/unreal_presence/Intermediate/
+/apps/unreal_presence/Saved/

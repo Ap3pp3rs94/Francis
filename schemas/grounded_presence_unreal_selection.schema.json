@@ -1,0 +1,162 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://francis.local/schemas/grounded_presence_unreal_selection.schema.json",
+  "title": "Francis Grounded Presence Unreal Selection",
+  "description": "Operator-confirmed, digest-pinned Unreal 5.8 project and technology selection. This artifact grants no runtime authority.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "schema_version",
+    "schema_path",
+    "selection_id",
+    "confirmed_at",
+    "confirmation",
+    "engine",
+    "project",
+    "technology_stack",
+    "authority"
+  ],
+  "properties": {
+    "kind": {
+      "const": "francis.grounded_presence.unreal_selection"
+    },
+    "schema_version": {
+      "const": "francis.grounded_presence.unreal_selection.v1"
+    },
+    "schema_path": {
+      "const": "schemas/grounded_presence_unreal_selection.schema.json"
+    },
+    "selection_id": {
+      "type": "string",
+      "pattern": "^gpu_[0-9a-f]{32}$"
+    },
+    "confirmed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "confirmation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actor", "project_selected", "technology_stack_selected"],
+      "properties": {
+        "actor": {
+          "const": "operator"
+        },
+        "project_selected": {
+          "const": true
+        },
+        "technology_stack_selected": {
+          "const": true
+        }
+      }
+    },
+    "engine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "root_path", "build_changelist", "build_version_sha256"],
+      "properties": {
+        "name": {
+          "const": "Unreal Engine"
+        },
+        "version": {
+          "const": "5.8"
+        },
+        "root_path": {
+          "$ref": "#/$defs/local_path"
+        },
+        "build_changelist": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "build_version_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "descriptor_sha256"],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/local_path"
+        },
+        "descriptor_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "technology_stack": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "role"],
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/contract_id"
+          },
+          "role": {
+            "$ref": "#/$defs/contract_id"
+          }
+        }
+      }
+    },
+    "authority": {
+      "$ref": "#/$defs/authority"
+    }
+  },
+  "$defs": {
+    "local_path": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 1024
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "contract_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[A-Za-z0-9._-]+$"
+    },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "francis_core_authoritative",
+        "grants_execution_authority",
+        "grants_desktop_authority",
+        "grants_network_authority",
+        "grants_memory_write_authority",
+        "grants_approval_authority"
+      ],
+      "properties": {
+        "francis_core_authoritative": {
+          "const": true
+        },
+        "grants_execution_authority": {
+          "const": false
+        },
+        "grants_desktop_authority": {
+          "const": false
+        },
+        "grants_network_authority": {
+          "const": false
+        },
+        "grants_memory_write_authority": {
+          "const": false
+        },
+        "grants_approval_authority": {
+          "const": false
+        }
+      }
+    }
+  }
+}

@@ -31,11 +31,24 @@ function Test-VenvPython([string]$Path) {
 $python = if (Test-VenvPython $venvPy) { $venvPy } else { 'python' }
 
 $prevPythonPath = $env:PYTHONPATH
+$unrealSelectionEnv = 'FRANCIS_UNREAL_PRESENCE_SELECTION_PATH'
+$hadUnrealSelectionPath = Test-Path -LiteralPath "Env:$unrealSelectionEnv"
+$prevUnrealSelectionPath = [Environment]::GetEnvironmentVariable($unrealSelectionEnv, 'Process')
+$repoUnrealSelectionPath = Join-Path $repoRoot 'apps\unreal_presence\Config\francis_presence_selection.json'
+$configureRepoUnrealSelection = (
+  @($Args).Count -gt 0 -and
+  $Args[0] -eq 'api' -and
+  -not $prevUnrealSelectionPath -and
+  (Test-Path -LiteralPath $repoUnrealSelectionPath -PathType Leaf)
+)
 try {
   if ($prevPythonPath) {
     $env:PYTHONPATH = "$srcPath;$prevPythonPath"
   } else {
     $env:PYTHONPATH = "$srcPath"
+  }
+  if ($configureRepoUnrealSelection) {
+    [Environment]::SetEnvironmentVariable($unrealSelectionEnv, $repoUnrealSelectionPath, 'Process')
   }
 
   Push-Location $repoRoot
@@ -47,4 +60,11 @@ try {
   }
 } finally {
   $env:PYTHONPATH = $prevPythonPath
+  if ($configureRepoUnrealSelection) {
+    if ($hadUnrealSelectionPath) {
+      [Environment]::SetEnvironmentVariable($unrealSelectionEnv, $prevUnrealSelectionPath, 'Process')
+    } else {
+      Remove-Item -LiteralPath "Env:$unrealSelectionEnv" -ErrorAction SilentlyContinue
+    }
+  }
 }

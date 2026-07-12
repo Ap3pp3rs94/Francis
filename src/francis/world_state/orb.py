@@ -525,7 +525,7 @@ def _orb_operator_input_state() -> dict[str, Any]:
     }
 
 
-def snapshot() -> dict[str, Any]:
+def snapshot(*, operator_report: dict[str, Any] | None = None) -> dict[str, Any]:
     root = repo_root()
     plane_map_path = root / "meta" / "plane_map.yaml"
     action_taxonomy_path = root / "meta" / "action_taxonomy.yaml"
@@ -535,7 +535,7 @@ def snapshot() -> dict[str, Any]:
 
     planes = _plane_summaries(plane_map)
     plane_by_id = {item["id"]: item for item in planes if item.get("id")}
-    operator_report = operator_mode_snapshot()
+    operator_report = operator_report if isinstance(operator_report, dict) else operator_mode_snapshot()
 
     return {
         "ok": True,
