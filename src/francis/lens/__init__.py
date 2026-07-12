@@ -136,6 +136,13 @@ from francis.lens.perception_authority import (
     lens_perception_desktop_authority_receipt_status,
     request_lens_perception_authority,
 )
+from francis.lens.perception_input_authority import (
+    grant_lens_perception_input_authority,
+    lens_perception_input_authority_grant_receipts,
+    lens_perception_input_authority_receipt_status,
+    lens_perception_input_authority_request_readback,
+    request_lens_perception_input_authority,
+)
 from francis.lens.perception_execution import (
     enable_lens_perception_execution,
     lens_perception_execution_enablement_readback,
@@ -217,6 +224,9 @@ __all__ = [
     "lens_perception_desktop_authority_receipt_status",
     "lens_perception_execution_enablement_readback",
     "lens_perception_execution_request_readback",
+    "lens_perception_input_authority_grant_receipts",
+    "lens_perception_input_authority_receipt_status",
+    "lens_perception_input_authority_request_readback",
     "lens_perception_runtime_readback",
     "lens_orb_mcp_status_bridge",
     "lens_orb_body_perspective_contract",
@@ -229,6 +239,7 @@ __all__ = [
     "grant_lens_os_binding_authority",
     "grant_lens_overlay_authority",
     "grant_lens_perception_authority",
+    "grant_lens_perception_input_authority",
     "grant_lens_summon_authority",
     "lens_os_binding_authority_grant_receipts",
     "lens_os_binding_authority_request_contract",
@@ -276,6 +287,7 @@ __all__ = [
     "request_lens_overlay_authority",
     "request_lens_perception_authority",
     "request_lens_perception_execution",
+    "request_lens_perception_input_authority",
     "request_lens_summon_authority",
     "request_lens_tray_authority",
 ]
