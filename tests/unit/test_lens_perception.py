@@ -81,6 +81,17 @@ def test_perception_readback_requires_fresh_supervised_authorized_situation_mode
             "blockers": [],
         },
     )
+    monkeypatch.setattr(
+        perception_module,
+        "lens_perception_execution_approval_status",
+        lambda approval_id, authority_receipt_id: {
+            "status": "approved",
+            "active": True,
+            "approval_id": approval_id,
+            "authority_receipt_id": authority_receipt_id,
+            "blockers": [],
+        },
+    )
     _write_supervisor_state(data_root)
     _write_runtime_state(
         data_root,
@@ -94,6 +105,20 @@ def test_perception_readback_requires_fresh_supervised_authorized_situation_mode
             "supervisor_pid": os.getpid(),
             "updated_at": 100.0,
             "situation_model": {"status": "ready", "revision": "42"},
+            "execution": {
+                "active": True,
+                "approval_id": "approved-perception-execution",
+                "authority_receipt_id": "lens-perception-enable-42",
+            },
+            "governance": {
+                "execution_authority": True,
+                "camera_capture_authority": False,
+                "microphone_capture_authority": False,
+                "keyboard_capture_authority": False,
+                "user_mouse_capture_authority": False,
+                "input_execution_authority": False,
+                "memory_write": False,
+            },
             "capture": {
                 "desktop": {
                     "authority_granted": True,
@@ -115,12 +140,77 @@ def test_perception_readback_requires_fresh_supervised_authorized_situation_mode
     assert payload["supervision"]["active"] is True
     assert payload["supervision"]["host_pid_matches"] is True
     assert payload["supervision"]["supervisor_pid_matches"] is True
+    assert payload["execution"]["active"] is True
+    assert payload["execution"]["authority_receipt_matches_capture"] is True
     assert payload["situation_model"]["revision"] == "42"
     assert payload["ring_buffer"]["ready"] is True
     assert payload["ring_buffer"]["raw_pixels_in_readback"] is False
     assert payload["capture"]["desktop"]["pixels_in_readback"] is False
     assert payload["capture"]["desktop"]["authority_receipt"]["active"] is True
     assert payload["capture"]["keyboard_content_captured"] is False
+
+
+def test_perception_readback_rejects_self_reported_execution_without_exact_approval(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    data_root = tmp_path / "data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setattr(
+        perception_module,
+        "lens_perception_desktop_authority_receipt_status",
+        lambda receipt_id, now=None: {
+            "active": True,
+            "receipt_id": receipt_id,
+            "expires_ts": int(now or 0) + 60,
+            "blockers": [],
+        },
+    )
+    _write_supervisor_state(data_root)
+    _write_runtime_state(
+        data_root,
+        {
+            "kind": "lens.perception.runtime_state",
+            "version": 1,
+            "owner": "lens_supervisor",
+            "state": "running",
+            "pid": os.getpid(),
+            "host_pid": os.getpid(),
+            "supervisor_pid": os.getpid(),
+            "updated_at": 100.0,
+            "situation_model": {"status": "ready", "revision": "forged-execution"},
+            "execution": {
+                "active": True,
+                "approval_id": "missing-approval",
+                "authority_receipt_id": "capture-receipt",
+            },
+            "governance": {
+                "execution_authority": True,
+                "camera_capture_authority": False,
+                "microphone_capture_authority": False,
+                "keyboard_capture_authority": False,
+                "user_mouse_capture_authority": False,
+                "input_execution_authority": False,
+                "memory_write": False,
+            },
+            "capture": {
+                "desktop": {
+                    "authority_granted": True,
+                    "active": True,
+                    "receipt_id": "capture-receipt",
+                    "source": "desktop_ring_buffer",
+                }
+            },
+        },
+    )
+    _write_ring_frame(receipt_id="capture-receipt", captured_at=100.0)
+
+    payload = lens_perception_runtime_readback(now=101.0)
+
+    assert payload["ready"] is False
+    assert payload["execution"]["reported_active"] is True
+    assert payload["execution"]["active"] is False
+    assert "desktop_capture_execution_approval_not_found" in payload["blockers"]
 
 
 def test_perception_readback_rejects_an_unresolved_authority_receipt(tmp_path: Path, monkeypatch) -> None:

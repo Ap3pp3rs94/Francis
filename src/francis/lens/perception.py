@@ -17,6 +17,7 @@ from typing import Any
 from francis.kernel.paths import data_dir
 from francis.lens.perception_authority import lens_perception_desktop_authority_receipt_status
 from francis.lens.perception_capture import lens_perception_ring_buffer_readback
+from francis.lens.perception_execution_contract import lens_perception_execution_approval_status
 
 LENS_PERCEPTION_RUNTIME_STATE_KIND = "lens.perception.runtime_state"
 LENS_PERCEPTION_RUNTIME_STATE_VERSION = 1
@@ -142,6 +143,8 @@ def lens_perception_runtime_readback(*, now: float | None = None) -> dict[str, A
     runtime_present = bool(raw)
     capture = _as_dict(raw.get("capture"))
     desktop_capture = _bounded_capture_readback(_as_dict(capture.get("desktop")))
+    runtime_execution = _as_dict(raw.get("execution"))
+    runtime_governance = _as_dict(raw.get("governance"))
     desktop_authority_receipt = lens_perception_desktop_authority_receipt_status(
         desktop_capture["receipt_id"],
         now=int(observed_now),
@@ -154,6 +157,12 @@ def lens_perception_runtime_readback(*, now: float | None = None) -> dict[str, A
     worker_pid = _safe_pid(raw.get("pid"))
     runtime_host_pid = _safe_pid(raw.get("host_pid"))
     runtime_supervisor_pid = _safe_pid(raw.get("supervisor_pid"))
+    execution_approval_id = _safe_str(runtime_execution.get("approval_id"))
+    execution_authority_receipt_id = _safe_str(runtime_execution.get("authority_receipt_id"))
+    execution_validation = lens_perception_execution_approval_status(
+        execution_approval_id,
+        execution_authority_receipt_id,
+    )
     updated_at = _safe_float(raw.get("updated_at"))
     age_seconds = observed_now - updated_at if updated_at is not None else None
     fresh = bool(age_seconds is not None and 0.0 <= age_seconds <= _MAX_STATE_AGE_SECONDS)
@@ -168,6 +177,15 @@ def lens_perception_runtime_readback(*, now: float | None = None) -> dict[str, A
     worker_process_alive = _process_is_alive(worker_pid)
     supervisor_pid_matches = runtime_supervisor_pid == observed_supervisor_pid and runtime_supervisor_pid > 0
     host_pid_matches = runtime_host_pid == observed_host_pid and runtime_host_pid > 0
+    execution_receipt_matches_capture = (
+        bool(execution_authority_receipt_id) and execution_authority_receipt_id == desktop_capture["receipt_id"]
+    )
+    execution_active = bool(
+        runtime_execution.get("active") is True
+        and execution_validation.get("active") is True
+        and execution_receipt_matches_capture
+        and runtime_governance.get("execution_authority") is True
+    )
     supervisor_active = (
         _safe_str(supervisor.get("kind")) == "lens.host.supervisor_state"
         and _safe_str(supervisor.get("status")) == "resident_supervising"
@@ -222,6 +240,26 @@ def lens_perception_runtime_readback(*, now: float | None = None) -> dict[str, A
             blockers.extend(
                 _safe_str(item) for item in desktop_authority_receipt.get("blockers", []) if _safe_str(item)
             )
+        if runtime_execution.get("active") is not True:
+            blockers.append("desktop_capture_execution_not_active")
+        if execution_validation.get("active") is not True:
+            blockers.extend(_safe_str(item) for item in execution_validation.get("blockers", []) if _safe_str(item))
+        if not execution_receipt_matches_capture:
+            blockers.append("desktop_capture_execution_authority_receipt_mismatch")
+        if runtime_governance.get("execution_authority") is not True:
+            blockers.append("desktop_capture_execution_runtime_authority_missing")
+        if any(
+            runtime_governance.get(field) is not False
+            for field in (
+                "camera_capture_authority",
+                "microphone_capture_authority",
+                "keyboard_capture_authority",
+                "user_mouse_capture_authority",
+                "input_execution_authority",
+                "memory_write",
+            )
+        ):
+            blockers.append("lens_perception_runtime_authority_overbroad")
         if ring_buffer.get("ready") is not True:
             blockers.append("lens_perception_ring_buffer_not_ready")
         elif _safe_str(ring_buffer.get("authority_receipt_id")) != desktop_capture["receipt_id"]:
@@ -233,6 +271,7 @@ def lens_perception_runtime_readback(*, now: float | None = None) -> dict[str, A
         runtime_valid
         and state == "running"
         and fresh
+        and execution_active
         and ring_buffer.get("ready") is True
         and situation_ready
         and not blockers
@@ -264,6 +303,14 @@ def lens_perception_runtime_readback(*, now: float | None = None) -> dict[str, A
         "worker": {
             "pid": worker_pid or None,
             "process_alive": worker_process_alive,
+        },
+        "execution": {
+            "active": execution_active,
+            "reported_active": runtime_execution.get("active") is True,
+            "approval_id": execution_approval_id,
+            "authority_receipt_id": execution_authority_receipt_id,
+            "authority_receipt_matches_capture": execution_receipt_matches_capture,
+            "validation": execution_validation,
         },
         "state": state or "not_observed",
         "updated_at": updated_at,

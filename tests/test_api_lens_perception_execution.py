@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import time
 from pathlib import Path
 
 
@@ -209,6 +211,7 @@ def test_perception_execution_enablement_writes_durable_host_handoff_without_sta
     assert readback["ready"] is True
     assert readback["executed"] is False
     assert readback["worker_runtime_observed"] is False
+    assert readback["execution_blockers"] == ["lens_perception_runtime_state_missing"]
     assert readback["enablement_receipt_id"] == body["enablement_receipt_id"]
     assert readback["approval_id"] == approval_id
     assert readback["authority_receipt_id"] == receipt_id
@@ -217,6 +220,71 @@ def test_perception_execution_enablement_writes_durable_host_handoff_without_sta
     assert readback["enablement"]["user_mouse_capture_authority"] is False
     assert readback["enablement"]["input_execution_authority"] is False
     assert not (data_root / "runtime" / "lens-perception" / "frames").exists()
+
+    supervisor_path = data_root / "runtime" / "lens-host-supervisor" / "status.json"
+    supervisor_path.parent.mkdir(parents=True, exist_ok=True)
+    supervisor_path.write_text(
+        json.dumps(
+            {
+                "kind": "lens.host.supervisor_state",
+                "status": "resident_supervising",
+                "supervisor_pid": os.getpid(),
+                "supervisor_process_alive": True,
+                "observed_pid": os.getpid(),
+            }
+        ),
+        encoding="utf-8",
+    )
+    runtime_path = data_root / "runtime" / "lens-perception" / "status.json"
+    runtime_path.write_text(
+        json.dumps(
+            {
+                "kind": "lens.perception.runtime_state",
+                "version": 1,
+                "owner": "lens_supervisor",
+                "state": "running",
+                "pid": os.getpid(),
+                "host_pid": os.getpid(),
+                "supervisor_pid": os.getpid(),
+                "updated_at": time.time(),
+                "situation_model": {"status": "warming", "semantic_comprehension_ready": False},
+                "capture": {
+                    "desktop": {
+                        "authority_granted": True,
+                        "active": True,
+                        "receipt_id": receipt_id,
+                        "source": "desktop_ring_buffer",
+                    },
+                    "keyboard_content_captured": False,
+                    "user_mouse_captured": False,
+                },
+                "execution": {
+                    "active": True,
+                    "approval_id": approval_id,
+                    "authority_receipt_id": receipt_id,
+                },
+                "governance": {
+                    "execution_authority": True,
+                    "camera_capture_authority": False,
+                    "microphone_capture_authority": False,
+                    "keyboard_capture_authority": False,
+                    "user_mouse_capture_authority": False,
+                    "input_execution_authority": False,
+                    "memory_write": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    running = client.get("/lens/perception/execution/enablement").json()
+    assert running["status"] == "running"
+    assert running["ready"] is True
+    assert running["executed"] is True
+    assert running["worker_runtime_observed"] is True
+    assert running["execution_blockers"] == []
+    assert running["worker_runtime"]["execution"]["approval_id"] == approval_id
+    assert running["worker_runtime"]["desktop_capture"]["receipt_id"] == receipt_id
 
 
 def test_perception_execution_enablement_refuses_before_exact_approval(monkeypatch, tmp_path: Path) -> None:

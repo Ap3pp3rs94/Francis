@@ -14,8 +14,9 @@ from francis.governance.approvals import list_requests, request as create_approv
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.governance.redaction import redact_governed_display_value, redact_secret_text
 from francis.kernel.paths import data_dir
+from francis.lens.perception import lens_perception_runtime_readback
 from francis.lens.perception_authority import lens_perception_desktop_authority_receipt_status
-from francis.lens.perception_worker import (
+from francis.lens.perception_execution_contract import (
     LENS_PERCEPTION_EXECUTION_ACTION,
     LENS_PERCEPTION_EXECUTION_REQUEST_KIND,
     lens_perception_execution_approval_status,
@@ -405,10 +406,51 @@ def lens_perception_execution_enablement_readback() -> dict[str, Any]:
     if execution.get("active") is not True:
         blockers.extend(_string_items(execution.get("blockers")) or ["desktop_capture_execution_not_approved"])
     ready = not blockers
+    runtime = lens_perception_runtime_readback()
+    runtime_execution = _as_dict(runtime.get("execution"))
+    runtime_worker = _as_dict(runtime.get("worker"))
+    runtime_supervision = _as_dict(runtime.get("supervision"))
+    runtime_capture = _as_dict(_as_dict(runtime.get("capture")).get("desktop"))
+    worker_runtime_observed = bool(
+        runtime.get("runtime_state_present") is True and runtime_worker.get("process_alive") is True
+    )
+    execution_blockers: list[str] = []
+    executed = False
+    if ready:
+        if runtime.get("runtime_state_present") is not True:
+            execution_blockers.append("lens_perception_runtime_state_missing")
+        else:
+            if runtime.get("runtime_state_valid") is not True:
+                execution_blockers.append("lens_perception_worker_runtime_invalid")
+            if runtime.get("state") != "running":
+                execution_blockers.append("lens_perception_runtime_not_running")
+            if runtime.get("fresh") is not True:
+                execution_blockers.append("lens_perception_runtime_state_stale")
+            if runtime_worker.get("process_alive") is not True:
+                execution_blockers.append("lens_perception_worker_process_missing")
+            if runtime_supervision.get("active") is not True:
+                execution_blockers.append("lens_perception_supervisor_not_observed")
+            if runtime_capture.get("active") is not True:
+                execution_blockers.append("desktop_capture_not_active")
+            if _safe_str(runtime_capture.get("receipt_id")) != authority_receipt_id:
+                execution_blockers.append("desktop_capture_execution_authority_receipt_mismatch")
+            if runtime_execution.get("active") is not True:
+                execution_blockers.append("desktop_capture_execution_not_active")
+            if _safe_str(runtime_execution.get("approval_id")) != approval_id:
+                execution_blockers.append("desktop_capture_execution_approval_mismatch")
+            if _safe_str(runtime_execution.get("authority_receipt_id")) != authority_receipt_id:
+                execution_blockers.append("desktop_capture_execution_authority_receipt_mismatch")
+        executed = not execution_blockers
     return {
         "ok": True,
         "kind": "lens.perception.desktop_capture_execution.enablement_readback",
-        "status": "ready_for_host_consumption" if ready else "missing" if not enablement else "blocked",
+        "status": "running"
+        if executed
+        else "ready_for_host_consumption"
+        if ready
+        else "missing"
+        if not enablement
+        else "blocked",
         "ready": ready,
         "route": LENS_PERCEPTION_EXECUTION_ENABLEMENT_ROUTE,
         "enable_route": LENS_PERCEPTION_EXECUTION_ENABLE_ROUTE,
@@ -419,8 +461,20 @@ def lens_perception_execution_enablement_readback() -> dict[str, Any]:
         "receipt": receipt,
         "capture_authority": authority,
         "execution_validation": execution,
-        "executed": False,
-        "worker_runtime_observed": False,
+        "executed": executed,
+        "worker_runtime_observed": worker_runtime_observed,
+        "worker_runtime": {
+            "runtime_state_path": runtime.get("runtime_state_path"),
+            "runtime_state_present": runtime.get("runtime_state_present") is True,
+            "runtime_state_valid": runtime.get("runtime_state_valid") is True,
+            "state": runtime.get("state"),
+            "fresh": runtime.get("fresh") is True,
+            "worker": runtime_worker,
+            "supervision": runtime_supervision,
+            "desktop_capture": runtime_capture,
+            "execution": runtime_execution,
+        },
+        "execution_blockers": _dedupe(execution_blockers),
         "blockers": _dedupe(blockers),
         "governance": {
             **_governance(
@@ -429,7 +483,13 @@ def lens_perception_execution_enablement_readback() -> dict[str, Any]:
                 permission=None,
             ),
             "read_only_contract": True,
-            "next_step": "resident_host_consume_perception_enablement" if ready else "resolve_enablement_blockers",
+            "next_step": (
+                "observe_running_perception_worker"
+                if executed
+                else "resident_host_consume_perception_enablement"
+                if ready
+                else "resolve_enablement_blockers"
+            ),
         },
     }
 

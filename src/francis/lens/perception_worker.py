@@ -19,7 +19,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol
 
-from francis.governance.approvals import approved_dir
 from francis.kernel.paths import data_dir
 from francis.lens.perception import LENS_PERCEPTION_RUNTIME_STATE_KIND, LENS_PERCEPTION_RUNTIME_STATE_VERSION
 from francis.lens.perception import _process_is_alive as process_is_alive
@@ -30,9 +29,11 @@ from francis.lens.perception_capture import (
     PerceptionRingBuffer,
     Win32GdiDesktopFrameSource,
 )
-
-LENS_PERCEPTION_EXECUTION_ACTION = "lens.perception.desktop_capture_execution"
-LENS_PERCEPTION_EXECUTION_REQUEST_KIND = "lens.perception.desktop_capture_execution.request"
+from francis.lens.perception_execution_contract import (
+    LENS_PERCEPTION_EXECUTION_ACTION,
+    LENS_PERCEPTION_EXECUTION_REQUEST_KIND,
+    lens_perception_execution_approval_status,
+)
 
 _MAX_SUPERVISOR_STATE_AGE_SECONDS = 5.0
 
@@ -278,56 +279,6 @@ class LensPerceptionWorker:
         }
         _atomic_write_json(self.status_path, payload)
         return payload
-
-
-def lens_perception_execution_approval_status(
-    approval_id: str,
-    authority_receipt_id: str,
-) -> dict[str, Any]:
-    cleaned_approval_id = str(approval_id or "").strip()
-    cleaned_receipt_id = str(authority_receipt_id or "").strip()
-    blockers: list[str] = []
-    if not _safe_identifier(cleaned_approval_id):
-        blockers.append("desktop_capture_execution_approval_invalid")
-        record: dict[str, Any] = {}
-    else:
-        record = _read_json(approved_dir() / f"{cleaned_approval_id}.json")
-    payload = _as_dict(record.get("payload"))
-    if not record:
-        blockers.append("desktop_capture_execution_approval_not_found")
-    else:
-        if str(record.get("id") or "") != cleaned_approval_id:
-            blockers.append("desktop_capture_execution_approval_id_mismatch")
-        if record.get("status") != "approved":
-            blockers.append("desktop_capture_execution_approval_not_approved")
-        if record.get("action") != LENS_PERCEPTION_EXECUTION_ACTION:
-            blockers.append("desktop_capture_execution_approval_wrong_action")
-        if payload.get("kind") != LENS_PERCEPTION_EXECUTION_REQUEST_KIND:
-            blockers.append("desktop_capture_execution_approval_contract_invalid")
-        if str(payload.get("authority_receipt_id") or "") != cleaned_receipt_id:
-            blockers.append("desktop_capture_execution_authority_receipt_mismatch")
-        if payload.get("source") != "desktop_ring_buffer" or payload.get("mode") != "resident":
-            blockers.append("desktop_capture_execution_scope_invalid")
-        if any(
-            payload.get(field) is not False
-            for field in (
-                "camera_capture_authority",
-                "microphone_capture_authority",
-                "keyboard_capture_authority",
-                "user_mouse_capture_authority",
-                "input_execution_authority",
-                "memory_write",
-            )
-        ):
-            blockers.append("desktop_capture_execution_approval_overbroad")
-    return {
-        "status": "approved" if not blockers else "blocked",
-        "active": not blockers,
-        "approval_id": cleaned_approval_id,
-        "action": LENS_PERCEPTION_EXECUTION_ACTION,
-        "authority_receipt_id": cleaned_receipt_id,
-        "blockers": _dedupe(blockers),
-    }
 
 
 def lens_perception_worker_supervision_readback(

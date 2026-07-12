@@ -41,7 +41,13 @@ def _write_supervisor_state(data_root: Path) -> None:
     )
 
 
-def _write_perception_state(data_root: Path, *, receipt_id: str, write_ring: bool = True) -> None:
+def _write_perception_state(
+    data_root: Path,
+    *,
+    receipt_id: str,
+    execution_approval_id: str,
+    write_ring: bool = True,
+) -> None:
     observed_at = time.time()
     path = data_root / "runtime" / "lens-perception" / "status.json"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -57,6 +63,20 @@ def _write_perception_state(data_root: Path, *, receipt_id: str, write_ring: boo
                 "supervisor_pid": os.getpid(),
                 "updated_at": observed_at,
                 "situation_model": {"status": "ready", "revision": "authority-integration"},
+                "execution": {
+                    "active": True,
+                    "approval_id": execution_approval_id,
+                    "authority_receipt_id": receipt_id,
+                },
+                "governance": {
+                    "execution_authority": True,
+                    "camera_capture_authority": False,
+                    "microphone_capture_authority": False,
+                    "keyboard_capture_authority": False,
+                    "user_mouse_capture_authority": False,
+                    "input_execution_authority": False,
+                    "memory_write": False,
+                },
                 "capture": {
                     "desktop": {
                         "authority_granted": True,
@@ -116,7 +136,10 @@ def test_perception_authority_grant_requires_an_approved_matching_request(monkey
     assert not (data_root / "runtime" / "lens-perception").exists()
 
 
-def test_perception_authority_receipt_is_required_for_ready_runtime_readback(monkeypatch, tmp_path: Path) -> None:
+def test_perception_authority_and_execution_receipts_are_required_for_ready_runtime_readback(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
     client, data_root = _client(monkeypatch, tmp_path)
 
     requested = client.post(
@@ -173,8 +196,32 @@ def test_perception_authority_receipt_is_required_for_ready_runtime_readback(mon
     assert authority_readback["status"] == "authority_granted"
     assert authority_readback["active_authority_grant"]["receipt_id"] == receipt["receipt_id"]
 
+    execution_request = client.post(
+        "/lens/perception/execution/request",
+        json={
+            "actor": "test.system.write",
+            "authority_receipt_id": receipt["receipt_id"],
+            "reason": "request exact perception execution for ready readback",
+        },
+    ).json()
+    execution_approval_id = execution_request["approval_id"]
+    execution_decision = client.post(
+        "/approvals/decision",
+        json={
+            "id": execution_approval_id,
+            "action": "approve",
+            "actor": "test.approvals.decision",
+            "comment": "approve exact perception execution for ready readback",
+        },
+    ).json()
+    assert execution_decision["status"] == "approved"
+
     _write_supervisor_state(data_root)
-    _write_perception_state(data_root, receipt_id=receipt["receipt_id"])
+    _write_perception_state(
+        data_root,
+        receipt_id=receipt["receipt_id"],
+        execution_approval_id=execution_approval_id,
+    )
     ready = client.get("/lens/perception").json()
     assert ready["status"] == "ready"
     assert ready["ready"] is True
@@ -191,7 +238,12 @@ def test_perception_authority_receipt_is_required_for_ready_runtime_readback(mon
     assert overbroad["ready"] is False
     assert "desktop_capture_authority_receipt_overbroad" in overbroad["blockers"]
 
-    _write_perception_state(data_root, receipt_id="receipt-shaped-but-unresolved", write_ring=False)
+    _write_perception_state(
+        data_root,
+        receipt_id="receipt-shaped-but-unresolved",
+        execution_approval_id=execution_approval_id,
+        write_ring=False,
+    )
     blocked = client.get("/lens/perception").json()
     assert blocked["status"] == "blocked"
     assert blocked["ready"] is False
