@@ -5,6 +5,8 @@ import os
 import time
 from pathlib import Path
 
+from francis.lens.perception_capture import DesktopFrame, PerceptionRingBuffer
+
 
 def _client(monkeypatch, tmp_path: Path):
     repo_root = tmp_path / "repo"
@@ -38,7 +40,8 @@ def _write_supervisor_state(data_root: Path) -> None:
     )
 
 
-def _write_perception_state(data_root: Path, *, receipt_id: str) -> None:
+def _write_perception_state(data_root: Path, *, receipt_id: str, write_ring: bool = True) -> None:
+    observed_at = time.time()
     path = data_root / "runtime" / "lens-perception" / "status.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
@@ -48,7 +51,7 @@ def _write_perception_state(data_root: Path, *, receipt_id: str) -> None:
                 "version": 1,
                 "owner": "lens_supervisor",
                 "state": "running",
-                "updated_at": time.time(),
+                "updated_at": observed_at,
                 "situation_model": {"status": "ready", "revision": "authority-integration"},
                 "capture": {
                     "desktop": {
@@ -62,6 +65,20 @@ def _write_perception_state(data_root: Path, *, receipt_id: str) -> None:
         ),
         encoding="utf-8",
     )
+    if write_ring:
+        PerceptionRingBuffer().append(
+            DesktopFrame(
+                captured_at=observed_at,
+                origin_x=0,
+                origin_y=0,
+                source_width=1,
+                source_height=1,
+                width=1,
+                height=1,
+                bgra=b"\x00\x00\x00\x00",
+            ),
+            authority_receipt_id=receipt_id,
+        )
 
 
 def test_perception_authority_grant_requires_an_approved_matching_request(monkeypatch, tmp_path: Path) -> None:
@@ -157,6 +174,8 @@ def test_perception_authority_receipt_is_required_for_ready_runtime_readback(mon
     ready = client.get("/lens/perception").json()
     assert ready["status"] == "ready"
     assert ready["ready"] is True
+    assert ready["ring_buffer"]["ready"] is True
+    assert ready["ring_buffer"]["raw_pixels_in_readback"] is False
     assert ready["capture"]["desktop"]["authority_receipt"]["active"] is True
     assert ready["capture"]["desktop"]["authority_receipt"]["approval_id"] == approval_id
 
@@ -168,7 +187,7 @@ def test_perception_authority_receipt_is_required_for_ready_runtime_readback(mon
     assert overbroad["ready"] is False
     assert "desktop_capture_authority_receipt_overbroad" in overbroad["blockers"]
 
-    _write_perception_state(data_root, receipt_id="receipt-shaped-but-unresolved")
+    _write_perception_state(data_root, receipt_id="receipt-shaped-but-unresolved", write_ring=False)
     blocked = client.get("/lens/perception").json()
     assert blocked["status"] == "blocked"
     assert blocked["ready"] is False

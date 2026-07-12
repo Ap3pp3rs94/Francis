@@ -16,6 +16,7 @@ from typing import Any
 
 from francis.kernel.paths import data_dir
 from francis.lens.perception_authority import lens_perception_desktop_authority_receipt_status
+from francis.lens.perception_capture import lens_perception_ring_buffer_readback
 
 LENS_PERCEPTION_RUNTIME_STATE_KIND = "lens.perception.runtime_state"
 LENS_PERCEPTION_RUNTIME_STATE_VERSION = 1
@@ -135,6 +136,7 @@ def lens_perception_runtime_readback(*, now: float | None = None) -> dict[str, A
         desktop_capture["receipt_id"],
         now=int(observed_now),
     )
+    ring_buffer = lens_perception_ring_buffer_readback(now=observed_now)
     camera_capture = _bounded_capture_readback(_as_dict(capture.get("camera")))
     raw_situation = _as_dict(raw.get("situation_model"))
     owner = _safe_str(raw.get("owner"))
@@ -177,16 +179,29 @@ def lens_perception_runtime_readback(*, now: float | None = None) -> dict[str, A
             blockers.append("desktop_capture_authority_not_granted")
         if not desktop_capture["active"]:
             blockers.append("desktop_capture_not_active")
+        if desktop_capture["source"] != "desktop_ring_buffer":
+            blockers.append("desktop_capture_source_mismatch")
         if not desktop_capture["receipt_id"]:
             blockers.append("desktop_capture_receipt_missing")
         elif not desktop_authority_receipt["active"]:
             blockers.extend(
                 _safe_str(item) for item in desktop_authority_receipt.get("blockers", []) if _safe_str(item)
             )
+        if ring_buffer.get("ready") is not True:
+            blockers.append("lens_perception_ring_buffer_not_ready")
+        elif _safe_str(ring_buffer.get("authority_receipt_id")) != desktop_capture["receipt_id"]:
+            blockers.append("lens_perception_ring_buffer_authority_receipt_mismatch")
         if not situation_ready:
             blockers.append("lens_situation_model_not_ready")
 
-    ready = runtime_valid and state == "running" and fresh and situation_ready and not blockers
+    ready = (
+        runtime_valid
+        and state == "running"
+        and fresh
+        and ring_buffer.get("ready") is True
+        and situation_ready
+        and not blockers
+    )
     return {
         "kind": LENS_PERCEPTION_RUNTIME_READBACK_KIND,
         "status": "ready" if ready else "not_observed" if not runtime_present else "blocked",
@@ -218,6 +233,7 @@ def lens_perception_runtime_readback(*, now: float | None = None) -> dict[str, A
             "has_current_desktop_state": situation_ready,
             "raw_desktop_content_in_readback": False,
         },
+        "ring_buffer": ring_buffer,
         "capture": {
             "desktop": {
                 **desktop_capture,
