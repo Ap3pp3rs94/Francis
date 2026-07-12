@@ -1575,6 +1575,40 @@ def test_collaboration_runtime_health_is_read_only_and_reports_recurrence(tmp_pa
     assert health["governance"]["grants_memory_write_authority"] is False
 
 
+def test_collaboration_runtime_prompt_budget_preserves_transcript_storage_order(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    from francis.developer_bridge import collaboration_runtime
+
+    created_at = "2026-07-12T20:35:00+00:00"
+    latest_prompt_id = "collab-0000000000000000-000000000000"
+    older_prompt_id = "collab-ffffffffffffffff-ffffffffffff"
+    monkeypatch.setattr(
+        collaboration_runtime,
+        "read_collaboration_transcript",
+        lambda **_kwargs: {
+            "items": [
+                {
+                    "id": latest_prompt_id,
+                    "created_at": created_at,
+                    "objective": "latest bounded driver prompt",
+                    "prompt": "Francis1 compact prompt.",
+                },
+                {
+                    "id": older_prompt_id,
+                    "created_at": created_at,
+                    "objective": "older over-budget driver prompt",
+                    "prompt": "Francis1 " + ("x" * 705),
+                },
+            ]
+        },
+    )
+
+    budget = collaboration_runtime._driver_prompt_budget_readback(limit=2)
+
+    assert budget["latest_prompt_id"] == latest_prompt_id
+    assert budget["latest_prompt_within_budget"] is True
+    assert budget["latest_violation_prompt_id"] == older_prompt_id
+
+
 def test_collaboration_driver_waits_for_ollama_before_next_turn(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path / "data"))
     from francis.developer_bridge.collaboration_driver import drive_once
