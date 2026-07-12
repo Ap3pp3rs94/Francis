@@ -94,6 +94,56 @@ function Get-PowerShellPath {
   return ''
 }
 
+function Get-PythonPath {
+  $WindowsVenv = Join-Path $RepoRoot '.venv\Scripts\python.exe'
+  if (Test-Path -LiteralPath $WindowsVenv -PathType Leaf) {
+    $VenvConfigPath = Join-Path $RepoRoot '.venv\pyvenv.cfg'
+    try {
+      $HomeLine = Get-Content -LiteralPath $VenvConfigPath -ErrorAction Stop |
+        Where-Object { $_ -match '^\s*home\s*=' } |
+        Select-Object -First 1
+      if (-not [string]::IsNullOrWhiteSpace([string]$HomeLine)) {
+        $BaseHome = ([string]$HomeLine -split '=', 2)[1].Trim()
+        $BasePython = Join-Path $BaseHome 'python.exe'
+        if (Test-Path -LiteralPath $BasePython -PathType Leaf) {
+          return $BasePython
+        }
+      }
+    } catch {
+    }
+    return ''
+  }
+  $UnixVenv = Join-Path $RepoRoot '.venv/bin/python'
+  if (Test-Path -LiteralPath $UnixVenv -PathType Leaf) {
+    return $UnixVenv
+  }
+  foreach ($CommandName in @('python3', 'python')) {
+    $Python = Get-Command $CommandName -ErrorAction SilentlyContinue
+    if ($null -ne $Python) {
+      return [string]$Python.Source
+    }
+  }
+  return ''
+}
+
+function Get-PythonSitePackagesPath {
+  $WindowsSitePackages = Join-Path $RepoRoot '.venv\Lib\site-packages'
+  if (Test-Path -LiteralPath $WindowsSitePackages -PathType Container) {
+    return $WindowsSitePackages
+  }
+  $UnixLib = Join-Path $RepoRoot '.venv/lib'
+  if (Test-Path -LiteralPath $UnixLib -PathType Container) {
+    $SitePackages = Get-ChildItem -LiteralPath $UnixLib -Directory -ErrorAction SilentlyContinue |
+      ForEach-Object { Join-Path $_.FullName 'site-packages' } |
+      Where-Object { Test-Path -LiteralPath $_ -PathType Container } |
+      Select-Object -First 1
+    if (-not [string]::IsNullOrWhiteSpace([string]$SitePackages)) {
+      return [string]$SitePackages
+    }
+  }
+  return ''
+}
+
 function Quote-ProcessArgument {
   param([string]$Value)
 
@@ -142,6 +192,347 @@ function Get-PropertyValue {
   return $Property.Value
 }
 
+function Test-SafeIdentifier {
+  param([object]$Value)
+
+  $Raw = [string]$Value
+  $Cleaned = $Raw.Trim()
+  return (
+    -not [string]::IsNullOrWhiteSpace($Cleaned) -and
+    $Raw -eq $Cleaned -and
+    -not $Cleaned.Contains('/') -and
+    -not $Cleaned.Contains('\') -and
+    -not $Cleaned.Contains('..') -and
+    $Cleaned.Length -le 180
+  )
+}
+
+function Get-PerceptionWorkerHandoff {
+  $ExecutionDir = Join-Path (Join-Path (Join-Path $DataRoot 'runtime') 'lens-perception') 'execution'
+  $EnablementPath = Join-Path $ExecutionDir 'enablement.json'
+  $Result = [ordered]@{
+    status = 'not_enabled'
+    ready = $false
+    enablement_path = 'data/runtime/lens-perception/execution/enablement.json'
+    enablement_receipt_id = ''
+    approval_id = ''
+    authority_receipt_id = ''
+    sample_rate_hz = 0.0
+    retention_seconds = 0.0
+    max_frames = 0
+    expires_ts = 0
+    blockers = @('lens_perception_execution_enablement_missing')
+  }
+  if (-not (Test-Path -LiteralPath $EnablementPath -PathType Leaf)) {
+    return [pscustomobject]$Result
+  }
+
+  $Enablement = Read-JsonFile -Path $EnablementPath
+  if ($null -eq $Enablement) {
+    $Result['status'] = 'blocked'
+    $Result['blockers'] = @('lens_perception_execution_enablement_unreadable')
+    return [pscustomobject]$Result
+  }
+
+  $Blockers = @()
+  $Kind = [string](Get-PropertyValue -Payload $Enablement -Name 'kind' -Default '')
+  $Status = [string](Get-PropertyValue -Payload $Enablement -Name 'status' -Default '')
+  $Enabled = Get-PropertyValue -Payload $Enablement -Name 'enabled' -Default $null
+  $Source = [string](Get-PropertyValue -Payload $Enablement -Name 'source' -Default '')
+  $ExecutionMode = [string](Get-PropertyValue -Payload $Enablement -Name 'mode' -Default '')
+  $WorkerModule = [string](Get-PropertyValue -Payload $Enablement -Name 'worker_module' -Default '')
+  if (
+    $Kind -ne 'lens.perception.desktop_capture_execution.enablement' -or
+    $Status -ne 'enabled_for_host_consumption' -or
+    ($Enabled -isnot [bool]) -or
+    -not [bool]$Enabled
+  ) {
+    $Blockers += 'lens_perception_execution_enablement_invalid'
+  }
+  if ($Source -ne 'desktop_ring_buffer' -or $ExecutionMode -ne 'resident' -or $WorkerModule -ne 'francis.lens.perception_worker') {
+    $Blockers += 'lens_perception_execution_enablement_scope_invalid'
+  }
+
+  $EnablementReceiptId = [string](Get-PropertyValue -Payload $Enablement -Name 'enablement_receipt_id' -Default '')
+  $ApprovalId = [string](Get-PropertyValue -Payload $Enablement -Name 'approval_id' -Default '')
+  $AuthorityReceiptId = [string](Get-PropertyValue -Payload $Enablement -Name 'authority_receipt_id' -Default '')
+  if (
+    -not (Test-SafeIdentifier -Value $EnablementReceiptId) -or
+    -not (Test-SafeIdentifier -Value $ApprovalId) -or
+    -not (Test-SafeIdentifier -Value $AuthorityReceiptId)
+  ) {
+    $Blockers += 'lens_perception_execution_enablement_identifiers_invalid'
+  }
+
+  $ExpiresTs = 0L
+  try {
+    $ExpiresTs = [long](Get-PropertyValue -Payload $Enablement -Name 'expires_ts' -Default 0)
+  } catch {
+    $ExpiresTs = 0L
+  }
+  if ($ExpiresTs -le [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()) {
+    $Blockers += 'lens_perception_execution_enablement_expired'
+  }
+
+  foreach ($Field in @(
+    'camera_capture_authority',
+    'microphone_capture_authority',
+    'keyboard_capture_authority',
+    'user_mouse_capture_authority',
+    'input_execution_authority',
+    'memory_write'
+  )) {
+    $FieldValue = Get-PropertyValue -Payload $Enablement -Name $Field -Default $null
+    if (($FieldValue -isnot [bool]) -or [bool]$FieldValue) {
+      $Blockers += 'lens_perception_execution_enablement_overbroad'
+      break
+    }
+  }
+
+  $SampleRateHz = 0.0
+  $RetentionSeconds = 0.0
+  $MaxFrames = 0
+  try { $SampleRateHz = [double](Get-PropertyValue -Payload $Enablement -Name 'sample_rate_hz' -Default 0.0) } catch { $SampleRateHz = 0.0 }
+  try { $RetentionSeconds = [double](Get-PropertyValue -Payload $Enablement -Name 'retention_seconds' -Default 0.0) } catch { $RetentionSeconds = 0.0 }
+  try { $MaxFrames = [int](Get-PropertyValue -Payload $Enablement -Name 'max_frames' -Default 0) } catch { $MaxFrames = 0 }
+  if (
+    [double]::IsNaN($SampleRateHz) -or [double]::IsInfinity($SampleRateHz) -or
+    $SampleRateHz -lt 0.5 -or $SampleRateHz -gt 4.0 -or
+    [double]::IsNaN($RetentionSeconds) -or [double]::IsInfinity($RetentionSeconds) -or
+    $RetentionSeconds -lt 60.0 -or $RetentionSeconds -gt 120.0 -or
+    $MaxFrames -lt 1 -or $MaxFrames -gt 1200
+  ) {
+    $Blockers += 'lens_perception_execution_enablement_limits_invalid'
+  }
+
+  if (Test-SafeIdentifier -Value $EnablementReceiptId) {
+    $ReceiptPath = Join-Path (Join-Path $ExecutionDir 'receipts') ($EnablementReceiptId + '.json')
+    $Receipt = Read-JsonFile -Path $ReceiptPath
+    if ($null -eq $Receipt) {
+      $Blockers += 'lens_perception_execution_enablement_receipt_missing'
+    } else {
+      $ReceiptKind = [string](Get-PropertyValue -Payload $Receipt -Name 'kind' -Default '')
+      $ReceiptStatus = [string](Get-PropertyValue -Payload $Receipt -Name 'status' -Default '')
+      $ReceiptId = [string](Get-PropertyValue -Payload $Receipt -Name 'receipt_id' -Default '')
+      $ReceiptApprovalId = [string](Get-PropertyValue -Payload $Receipt -Name 'approval_id' -Default '')
+      $ReceiptAuthorityId = [string](Get-PropertyValue -Payload $Receipt -Name 'authority_receipt_id' -Default '')
+      $ReceiptSource = [string](Get-PropertyValue -Payload $Receipt -Name 'source' -Default '')
+      $ReceiptMode = [string](Get-PropertyValue -Payload $Receipt -Name 'mode' -Default '')
+      $ReceiptExpiresTs = 0L
+      try { $ReceiptExpiresTs = [long](Get-PropertyValue -Payload $Receipt -Name 'expires_ts' -Default 0) } catch { $ReceiptExpiresTs = 0L }
+      if ($ReceiptKind -ne 'lens.perception.desktop_capture_execution.enablement_receipt' -or $ReceiptStatus -ne 'enabled_for_host_consumption') {
+        $Blockers += 'lens_perception_execution_enablement_receipt_invalid'
+      }
+      if (
+        $ReceiptId -ne $EnablementReceiptId -or
+        $ReceiptApprovalId -ne $ApprovalId -or
+        $ReceiptAuthorityId -ne $AuthorityReceiptId -or
+        $ReceiptSource -ne 'desktop_ring_buffer' -or
+        $ReceiptMode -ne 'resident' -or
+        $ReceiptExpiresTs -ne $ExpiresTs
+      ) {
+        $Blockers += 'lens_perception_execution_enablement_receipt_mismatch'
+      }
+      $Authorities = Get-PropertyValue -Payload $Receipt -Name 'authorities' -Default $null
+      foreach ($Field in @(
+        'camera_capture_authority',
+        'microphone_capture_authority',
+        'keyboard_capture_authority',
+        'user_mouse_capture_authority',
+        'input_execution_authority',
+        'memory_write'
+      )) {
+        $FieldValue = Get-PropertyValue -Payload $Authorities -Name $Field -Default $null
+        if (($FieldValue -isnot [bool]) -or [bool]$FieldValue) {
+          $Blockers += 'lens_perception_execution_enablement_receipt_overbroad'
+          break
+        }
+      }
+      foreach ($Field in @('desktop_capture_authority', 'execution_authority', 'host_handoff_write_authority')) {
+        $FieldValue = Get-PropertyValue -Payload $Authorities -Name $Field -Default $null
+        if (($FieldValue -isnot [bool]) -or -not [bool]$FieldValue) {
+          $Blockers += 'lens_perception_execution_enablement_receipt_authority_missing'
+          break
+        }
+      }
+    }
+  }
+
+  $Result['enablement_receipt_id'] = $EnablementReceiptId
+  $Result['approval_id'] = $ApprovalId
+  $Result['authority_receipt_id'] = $AuthorityReceiptId
+  $Result['sample_rate_hz'] = $SampleRateHz
+  $Result['retention_seconds'] = $RetentionSeconds
+  $Result['max_frames'] = $MaxFrames
+  $Result['expires_ts'] = $ExpiresTs
+  $Result['blockers'] = @($Blockers | Select-Object -Unique)
+  if ($Result['blockers'].Count -eq 0) {
+    $Result['status'] = 'ready_for_host_consumption'
+    $Result['ready'] = $true
+  } else {
+    $Result['status'] = 'blocked'
+  }
+  return [pscustomobject]$Result
+}
+
+function Update-PerceptionWorkerState {
+  param([System.Collections.Specialized.OrderedDictionary]$RunningState)
+
+  if ($null -ne $script:PerceptionWorkerProcess) {
+    try {
+      if (-not $script:PerceptionWorkerProcess.HasExited) {
+        $RunningState['perception_worker']['status'] = 'running'
+        $RunningState['perception_worker']['process_alive'] = $true
+        return
+      }
+      $script:PerceptionWorkerProcess.WaitForExit()
+      $script:PerceptionWorkerProcess.Refresh()
+      $RunningState['perception_worker']['status'] = 'exited'
+      $RunningState['perception_worker']['process_alive'] = $false
+      $RunningState['perception_worker']['process_exit_code'] = [int]$script:PerceptionWorkerProcess.ExitCode
+      $WorkerResult = Read-JsonFile -Path $script:PerceptionWorkerStdoutPath
+      if ($null -ne $WorkerResult) {
+        $RunningState['perception_worker']['result_status'] = [string](Get-PropertyValue -Payload $WorkerResult -Name 'status' -Default '')
+        try {
+          $RunningState['perception_worker']['exit_code'] = [int](Get-PropertyValue -Payload $WorkerResult -Name 'exit_code' -Default $null)
+        } catch {
+          $RunningState['perception_worker']['exit_code'] = $null
+        }
+      }
+      $RunningState['perception_worker']['blockers'] = @('lens_perception_worker_exited_for_enablement')
+      $script:PerceptionWorkerProcess = $null
+    } catch {
+      $RunningState['perception_worker']['status'] = 'unreadable'
+      $RunningState['perception_worker']['process_alive'] = $false
+      $RunningState['perception_worker']['blockers'] = @('lens_perception_worker_process_readback_failed')
+      $script:PerceptionWorkerProcess = $null
+    }
+  }
+
+  $Handoff = Get-PerceptionWorkerHandoff
+  $RunningState['perception_worker']['enablement_status'] = [string]$Handoff.status
+  $RunningState['perception_worker']['enablement_receipt_id'] = [string]$Handoff.enablement_receipt_id
+  $RunningState['perception_worker']['approval_id'] = [string]$Handoff.approval_id
+  $RunningState['perception_worker']['authority_receipt_id'] = [string]$Handoff.authority_receipt_id
+  $RunningState['perception_worker']['expires_ts'] = [long]$Handoff.expires_ts
+  if (-not [bool]$Handoff.ready) {
+    if ($RunningState['perception_worker']['status'] -ne 'exited') {
+      $RunningState['perception_worker']['status'] = [string]$Handoff.status
+      $RunningState['perception_worker']['blockers'] = @($Handoff.blockers)
+    }
+    return
+  }
+
+  $EnablementReceiptId = [string]$Handoff.enablement_receipt_id
+  if ($EnablementReceiptId -eq $script:PerceptionWorkerAttemptedReceiptId) {
+    return
+  }
+  $script:PerceptionWorkerAttemptedReceiptId = $EnablementReceiptId
+
+  $PythonPath = Get-PythonPath
+  if ([string]::IsNullOrWhiteSpace($PythonPath)) {
+    $RunningState['perception_worker']['status'] = 'blocked'
+    $RunningState['perception_worker']['blockers'] = @('lens_perception_worker_python_missing')
+    return
+  }
+
+  $PerceptionRuntimeDir = Join-Path (Join-Path $DataRoot 'runtime') 'lens-perception'
+  New-Item -ItemType Directory -Force -Path $PerceptionRuntimeDir | Out-Null
+  $StdoutPath = Join-Path $PerceptionRuntimeDir ('worker-' + $EnablementReceiptId + '-stdout.json')
+  $StderrPath = Join-Path $PerceptionRuntimeDir ('worker-' + $EnablementReceiptId + '-stderr.txt')
+  $Arguments = @(
+    '-m',
+    'francis.lens.perception_worker',
+    '--authority-receipt-id',
+    [string]$Handoff.authority_receipt_id,
+    '--execution-approval-id',
+    [string]$Handoff.approval_id,
+    '--sample-rate-hz',
+    ([double]$Handoff.sample_rate_hz).ToString([System.Globalization.CultureInfo]::InvariantCulture),
+    '--retention-seconds',
+    ([double]$Handoff.retention_seconds).ToString([System.Globalization.CultureInfo]::InvariantCulture),
+    '--max-frames',
+    ([int]$Handoff.max_frames).ToString([System.Globalization.CultureInfo]::InvariantCulture)
+  )
+
+  $PreviousRootExists = Test-Path Env:\FRANCIS_ROOT
+  $PreviousDataExists = Test-Path Env:\FRANCIS_DATA_DIR
+  $PreviousPythonPathExists = Test-Path Env:\PYTHONPATH
+  $PreviousRoot = [string]$env:FRANCIS_ROOT
+  $PreviousData = [string]$env:FRANCIS_DATA_DIR
+  $PreviousPythonPath = [string]$env:PYTHONPATH
+  try {
+    $env:FRANCIS_ROOT = $RepoRoot
+    $env:FRANCIS_DATA_DIR = $DataRoot
+    $SourceRoot = Join-Path $RepoRoot 'src'
+    $PythonPathEntries = @($SourceRoot)
+    $SitePackagesPath = Get-PythonSitePackagesPath
+    if (-not [string]::IsNullOrWhiteSpace($SitePackagesPath)) {
+      $PythonPathEntries += $SitePackagesPath
+    }
+    if (-not [string]::IsNullOrWhiteSpace($PreviousPythonPath)) {
+      $PythonPathEntries += $PreviousPythonPath
+    }
+    $env:PYTHONPATH = $PythonPathEntries -join [System.IO.Path]::PathSeparator
+    $StartParameters = @{
+      FilePath = $PythonPath
+      ArgumentList = $Arguments
+      WorkingDirectory = $RepoRoot
+      PassThru = $true
+      RedirectStandardOutput = $StdoutPath
+      RedirectStandardError = $StderrPath
+    }
+    if ([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)) {
+      $StartParameters['WindowStyle'] = 'Hidden'
+    }
+    $script:PerceptionWorkerProcess = Start-Process @StartParameters
+    $script:PerceptionWorkerStdoutPath = $StdoutPath
+    $LaunchedAt = (Get-Date).ToUniversalTime().ToString('o')
+    $RunningState['perception_worker']['status'] = 'launched'
+    $RunningState['perception_worker']['pid'] = [int]$script:PerceptionWorkerProcess.Id
+    $RunningState['perception_worker']['process_alive'] = $true
+    $RunningState['perception_worker']['started_at'] = $LaunchedAt
+    $RunningState['perception_worker']['stdout_path'] = 'data/runtime/lens-perception/' + [System.IO.Path]::GetFileName($StdoutPath)
+    $RunningState['perception_worker']['stderr_path'] = 'data/runtime/lens-perception/' + [System.IO.Path]::GetFileName($StderrPath)
+    $RunningState['perception_worker']['blockers'] = @()
+    $RunningState['governance']['local_process_launch_authority'] = $true
+    $RunningState['governance']['perception_worker_launch_authority'] = $true
+    $RunningState['governance']['mutation_authority_granted'] = $true
+  } catch {
+    $RunningState['perception_worker']['status'] = 'launch_failed'
+    $RunningState['perception_worker']['process_alive'] = $false
+    $RunningState['perception_worker']['blockers'] = @('lens_perception_worker_process_launch_failed')
+    $script:PerceptionWorkerProcess = $null
+  } finally {
+    if ($PreviousRootExists) { $env:FRANCIS_ROOT = $PreviousRoot } else { Remove-Item Env:\FRANCIS_ROOT -ErrorAction SilentlyContinue }
+    if ($PreviousDataExists) { $env:FRANCIS_DATA_DIR = $PreviousData } else { Remove-Item Env:\FRANCIS_DATA_DIR -ErrorAction SilentlyContinue }
+    if ($PreviousPythonPathExists) { $env:PYTHONPATH = $PreviousPythonPath } else { Remove-Item Env:\PYTHONPATH -ErrorAction SilentlyContinue }
+  }
+}
+
+function Stop-OwnedPerceptionWorker {
+  param([System.Collections.Specialized.OrderedDictionary]$RunningState)
+
+  if ($null -eq $script:PerceptionWorkerProcess) {
+    return
+  }
+  try {
+    if (-not $script:PerceptionWorkerProcess.HasExited) {
+      Stop-Process -Id $script:PerceptionWorkerProcess.Id -Force -ErrorAction Stop
+      $script:PerceptionWorkerProcess.WaitForExit(3000)
+      $RunningState['perception_worker']['status'] = 'stopped_with_resident_host'
+    } else {
+      $RunningState['perception_worker']['status'] = 'exited'
+    }
+    $RunningState['perception_worker']['process_exit_code'] = [int]$script:PerceptionWorkerProcess.ExitCode
+  } catch {
+    $RunningState['perception_worker']['status'] = 'stop_failed'
+    $RunningState['perception_worker']['blockers'] = @('lens_perception_worker_owned_process_stop_failed')
+  }
+  $RunningState['perception_worker']['process_alive'] = $false
+  $script:PerceptionWorkerProcess = $null
+}
+
 function Wait-ForRuntimeState {
   param(
     [string]$StatePath,
@@ -164,11 +555,24 @@ $DataRoot = Get-DataRoot
 $RuntimeDir = Join-Path (Join-Path $DataRoot 'runtime') 'lens-host'
 $ProcessStatePath = Join-Path $RuntimeDir 'status.json'
 $PidPath = Join-Path $RuntimeDir 'lens-host.pid'
+$script:PerceptionWorkerProcess = $null
+$script:PerceptionWorkerAttemptedReceiptId = ''
+$script:PerceptionWorkerStdoutPath = ''
 $ProcessStateExists = Test-Path -LiteralPath $ProcessStatePath -PathType Leaf
 $ProcessStateStatus = ''
 $ProcessStateUpdatedAt = ''
 $ProcessStateHeartbeatCount = 0
 $ProcessStateLastHeartbeatAt = ''
+$ProcessStatePerceptionWorker = [ordered]@{
+  status = 'not_observed'
+  pid = 0
+  process_alive = $false
+  enablement_status = 'unknown'
+  enablement_receipt_id = ''
+  approval_id = ''
+  authority_receipt_id = ''
+  blockers = @('lens_perception_worker_runtime_not_observed')
+}
 if ($ProcessStateExists) {
   try {
     $ProcessStatePayload = Get-Content -LiteralPath $ProcessStatePath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
@@ -191,6 +595,10 @@ if ($ProcessStateExists) {
     $LastHeartbeatProperty = $ProcessStatePayload.PSObject.Properties['last_heartbeat_at']
     if ($null -ne $LastHeartbeatProperty) {
       $ProcessStateLastHeartbeatAt = [string]$LastHeartbeatProperty.Value
+    }
+    $PerceptionWorkerProperty = $ProcessStatePayload.PSObject.Properties['perception_worker']
+    if ($null -ne $PerceptionWorkerProperty -and $null -ne $PerceptionWorkerProperty.Value) {
+      $ProcessStatePerceptionWorker = $PerceptionWorkerProperty.Value
     }
   } catch {
     $ProcessStateStatus = 'unreadable'
@@ -322,6 +730,7 @@ $payload = [ordered]@{
     restart_supported = $false
     supervision_authority = $false
     blocked_reason = $ProcessBlockedReason
+    perception_worker = $ProcessStatePerceptionWorker
   }
   route = '/lens/host'
   manifest_route = '/lens/host/manifest'
@@ -352,6 +761,7 @@ $payload = [ordered]@{
     capture_authority = $false
     new_sensing_authority = $false
     local_process_launch_authority = $false
+    perception_worker_launch_authority = $false
     service_install_authority = $false
     service_control_authority = $false
     runtime_state_write = $Mode -eq 'Foreground' -or $Mode -eq 'Resident'
@@ -378,6 +788,7 @@ if ($Mode -eq 'Resident') {
     capture_authority = $false
     new_sensing_authority = $false
     local_process_launch_authority = $false
+    perception_worker_launch_authority = $false
     service_install_authority = $false
     service_control_authority = $false
     runtime_state_write = $true
@@ -405,6 +816,23 @@ if ($Mode -eq 'Resident') {
     heartbeat_count = 0
     last_heartbeat_at = $StartedAt
     bounded_run_seconds = $RunSeconds
+    perception_worker = [ordered]@{
+      status = 'not_enabled'
+      pid = 0
+      process_alive = $false
+      enablement_status = 'not_enabled'
+      enablement_receipt_id = ''
+      approval_id = ''
+      authority_receipt_id = ''
+      expires_ts = 0
+      started_at = ''
+      result_status = ''
+      exit_code = $null
+      process_exit_code = $null
+      stdout_path = ''
+      stderr_path = ''
+      blockers = @('lens_perception_execution_enablement_missing')
+    }
     governance = $RunningGovernance
   }
   New-Item -ItemType Directory -Force -Path $RuntimeDir | Out-Null
@@ -414,29 +842,19 @@ if ($Mode -eq 'Resident') {
   $HeartbeatCount = 0
   $LastHeartbeatAt = $StartedAt
   try {
-    if ($RunSeconds -gt 0) {
-      $HeartbeatDeadline = (Get-Date).AddSeconds($RunSeconds)
-      while ((Get-Date) -lt $HeartbeatDeadline) {
-        Start-Sleep -Milliseconds 500
-        $HeartbeatCount += 1
-        $LastHeartbeatAt = (Get-Date).ToUniversalTime().ToString('o')
-        $RunningState['updated_at'] = $LastHeartbeatAt
-        $RunningState['heartbeat_count'] = $HeartbeatCount
-        $RunningState['last_heartbeat_at'] = $LastHeartbeatAt
-        Write-JsonFile -Path $ProcessStatePath -Payload $RunningState
-      }
-    } else {
-      while ($true) {
-        Start-Sleep -Milliseconds 500
-        $HeartbeatCount += 1
-        $LastHeartbeatAt = (Get-Date).ToUniversalTime().ToString('o')
-        $RunningState['updated_at'] = $LastHeartbeatAt
-        $RunningState['heartbeat_count'] = $HeartbeatCount
-        $RunningState['last_heartbeat_at'] = $LastHeartbeatAt
-        Write-JsonFile -Path $ProcessStatePath -Payload $RunningState
-      }
+    $HeartbeatDeadline = if ($RunSeconds -gt 0) { (Get-Date).AddSeconds($RunSeconds) } else { $null }
+    while ($null -eq $HeartbeatDeadline -or (Get-Date) -lt $HeartbeatDeadline) {
+      Start-Sleep -Milliseconds 500
+      $HeartbeatCount += 1
+      $LastHeartbeatAt = (Get-Date).ToUniversalTime().ToString('o')
+      $RunningState['updated_at'] = $LastHeartbeatAt
+      $RunningState['heartbeat_count'] = $HeartbeatCount
+      $RunningState['last_heartbeat_at'] = $LastHeartbeatAt
+      Update-PerceptionWorkerState -RunningState $RunningState
+      Write-JsonFile -Path $ProcessStatePath -Payload $RunningState
     }
   } finally {
+    Stop-OwnedPerceptionWorker -RunningState $RunningState
     $StoppedAt = (Get-Date).ToUniversalTime().ToString('o')
     $StoppedState = [ordered]@{
       kind = 'lens.host.runtime_state'
@@ -458,6 +876,7 @@ if ($Mode -eq 'Resident') {
       last_heartbeat_at = $LastHeartbeatAt
       bounded_run_seconds = $RunSeconds
       stop_reason = 'resident_runtime_candidate_stopped'
+      perception_worker = $RunningState['perception_worker']
       governance = $RunningGovernance
     }
     Write-JsonFile -Path $ProcessStatePath -Payload $StoppedState
@@ -475,6 +894,7 @@ if ($Mode -eq 'Resident') {
   $payload.process_readback.pid_present = $false
   $payload.process_readback.pid = 0
   $payload.process_readback.process_alive = $false
+  $payload.process_readback.perception_worker = $RunningState['perception_worker']
   $payload.foreground_supported = $true
   $payload.foreground_session = $false
   $payload.resident_supported = $true
@@ -483,6 +903,9 @@ if ($Mode -eq 'Resident') {
   $payload.resident = $false
   $payload.resident_claim_allowed = $false
   $payload.foreground_run_seconds = $RunSeconds
+  $payload.governance.local_process_launch_authority = $RunningGovernance['local_process_launch_authority']
+  $payload.governance.perception_worker_launch_authority = $RunningGovernance['perception_worker_launch_authority']
+  $payload.governance.mutation_authority_granted = $RunningGovernance['mutation_authority_granted']
   $payload.message = 'Lens host resident runtime candidate completed; persistent service supervision, tray, summon, overlay, and resident claim remain blocked.'
   $payload | ConvertTo-Json -Depth 8
   exit 0
