@@ -46,6 +46,16 @@ def _safe_float(value: Any) -> float | None:
     return None
 
 
+def _safe_pid(value: Any) -> int:
+    if isinstance(value, bool):
+        return 0
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return 0
+    return parsed if parsed > 0 else 0
+
+
 def _process_is_alive(value: Any) -> bool:
     if isinstance(value, bool):
         return False
@@ -141,6 +151,9 @@ def lens_perception_runtime_readback(*, now: float | None = None) -> dict[str, A
     raw_situation = _as_dict(raw.get("situation_model"))
     owner = _safe_str(raw.get("owner"))
     state = _safe_str(raw.get("state"))
+    worker_pid = _safe_pid(raw.get("pid"))
+    runtime_host_pid = _safe_pid(raw.get("host_pid"))
+    runtime_supervisor_pid = _safe_pid(raw.get("supervisor_pid"))
     updated_at = _safe_float(raw.get("updated_at"))
     age_seconds = observed_now - updated_at if updated_at is not None else None
     fresh = bool(age_seconds is not None and 0.0 <= age_seconds <= _MAX_STATE_AGE_SECONDS)
@@ -148,14 +161,30 @@ def lens_perception_runtime_readback(*, now: float | None = None) -> dict[str, A
     version_valid = raw.get("version") == LENS_PERCEPTION_RUNTIME_STATE_VERSION
     owner_valid = owner == _EXPECTED_OWNER
     supervisor_reported_alive = supervisor.get("supervisor_process_alive") is True
-    supervisor_process_alive = _process_is_alive(supervisor.get("supervisor_pid"))
+    observed_supervisor_pid = _safe_pid(supervisor.get("supervisor_pid"))
+    observed_host_pid = _safe_pid(supervisor.get("observed_pid"))
+    supervisor_process_alive = _process_is_alive(observed_supervisor_pid)
+    observed_host_process_alive = _process_is_alive(observed_host_pid)
+    worker_process_alive = _process_is_alive(worker_pid)
+    supervisor_pid_matches = runtime_supervisor_pid == observed_supervisor_pid and runtime_supervisor_pid > 0
+    host_pid_matches = runtime_host_pid == observed_host_pid and runtime_host_pid > 0
     supervisor_active = (
         _safe_str(supervisor.get("kind")) == "lens.host.supervisor_state"
         and _safe_str(supervisor.get("status")) == "resident_supervising"
         and supervisor_reported_alive
         and supervisor_process_alive
+        and observed_host_process_alive
     )
-    runtime_valid = bool(runtime_present and state_kind_valid and version_valid and owner_valid and supervisor_active)
+    runtime_valid = bool(
+        runtime_present
+        and state_kind_valid
+        and version_valid
+        and owner_valid
+        and supervisor_active
+        and worker_process_alive
+        and supervisor_pid_matches
+        and host_pid_matches
+    )
     situation_status = _safe_str(raw_situation.get("status"))
     situation_ready = situation_status == "ready"
 
@@ -171,6 +200,12 @@ def lens_perception_runtime_readback(*, now: float | None = None) -> dict[str, A
             blockers.append("lens_perception_runtime_owner_not_supervised")
         if not supervisor_active:
             blockers.append("lens_perception_supervisor_not_observed")
+        if not worker_process_alive:
+            blockers.append("lens_perception_worker_process_missing")
+        if not supervisor_pid_matches:
+            blockers.append("lens_perception_worker_supervisor_mismatch")
+        if not host_pid_matches:
+            blockers.append("lens_perception_worker_host_mismatch")
         if state != "running":
             blockers.append("lens_perception_runtime_not_running")
         if not fresh:
@@ -216,11 +251,19 @@ def lens_perception_runtime_readback(*, now: float | None = None) -> dict[str, A
             "state_path": str(supervisor_path),
             "active": supervisor_active,
             "status": _safe_str(supervisor.get("status")) or "not_observed",
-            "supervisor_pid": supervisor.get("supervisor_pid")
-            if isinstance(supervisor.get("supervisor_pid"), int)
-            else None,
+            "supervisor_pid": observed_supervisor_pid or None,
+            "observed_host_pid": observed_host_pid or None,
             "reported_process_alive": supervisor_reported_alive,
             "process_alive": supervisor_process_alive,
+            "observed_host_process_alive": observed_host_process_alive,
+            "runtime_supervisor_pid": runtime_supervisor_pid or None,
+            "runtime_host_pid": runtime_host_pid or None,
+            "supervisor_pid_matches": supervisor_pid_matches,
+            "host_pid_matches": host_pid_matches,
+        },
+        "worker": {
+            "pid": worker_pid or None,
+            "process_alive": worker_process_alive,
         },
         "state": state or "not_observed",
         "updated_at": updated_at,

@@ -26,6 +26,7 @@ def _write_supervisor_state(data_root: Path) -> Path:
                 "status": "resident_supervising",
                 "supervisor_pid": os.getpid(),
                 "supervisor_process_alive": True,
+                "observed_pid": os.getpid(),
             }
         ),
         encoding="utf-8",
@@ -88,6 +89,9 @@ def test_perception_readback_requires_fresh_supervised_authorized_situation_mode
             "version": 1,
             "owner": "lens_supervisor",
             "state": "running",
+            "pid": os.getpid(),
+            "host_pid": os.getpid(),
+            "supervisor_pid": os.getpid(),
             "updated_at": 100.0,
             "situation_model": {"status": "ready", "revision": "42"},
             "capture": {
@@ -107,7 +111,10 @@ def test_perception_readback_requires_fresh_supervised_authorized_situation_mode
     assert payload["status"] == "ready"
     assert payload["ready"] is True
     assert payload["fresh"] is True
+    assert payload["worker"]["process_alive"] is True
     assert payload["supervision"]["active"] is True
+    assert payload["supervision"]["host_pid_matches"] is True
+    assert payload["supervision"]["supervisor_pid_matches"] is True
     assert payload["situation_model"]["revision"] == "42"
     assert payload["ring_buffer"]["ready"] is True
     assert payload["ring_buffer"]["raw_pixels_in_readback"] is False
@@ -127,6 +134,9 @@ def test_perception_readback_rejects_an_unresolved_authority_receipt(tmp_path: P
             "version": 1,
             "owner": "lens_supervisor",
             "state": "running",
+            "pid": os.getpid(),
+            "host_pid": os.getpid(),
+            "supervisor_pid": os.getpid(),
             "updated_at": 100.0,
             "situation_model": {"status": "ready", "revision": "forged"},
             "capture": {
@@ -176,6 +186,9 @@ def test_perception_readback_rejects_ring_buffer_from_another_authority_receipt(
             "version": 1,
             "owner": "lens_supervisor",
             "state": "running",
+            "pid": os.getpid(),
+            "host_pid": os.getpid(),
+            "supervisor_pid": os.getpid(),
             "updated_at": 100.0,
             "situation_model": {"status": "ready", "revision": "mismatch"},
             "capture": {

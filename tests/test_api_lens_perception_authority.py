@@ -34,6 +34,7 @@ def _write_supervisor_state(data_root: Path) -> None:
                 "status": "resident_supervising",
                 "supervisor_pid": os.getpid(),
                 "supervisor_process_alive": True,
+                "observed_pid": os.getpid(),
             }
         ),
         encoding="utf-8",
@@ -51,6 +52,9 @@ def _write_perception_state(data_root: Path, *, receipt_id: str, write_ring: boo
                 "version": 1,
                 "owner": "lens_supervisor",
                 "state": "running",
+                "pid": os.getpid(),
+                "host_pid": os.getpid(),
+                "supervisor_pid": os.getpid(),
                 "updated_at": observed_at,
                 "situation_model": {"status": "ready", "revision": "authority-integration"},
                 "capture": {
