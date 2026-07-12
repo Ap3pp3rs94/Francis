@@ -136,6 +136,10 @@ from francis.lens.perception_authority import (
     lens_perception_desktop_authority_receipt_status,
     request_lens_perception_authority,
 )
+from francis.lens.perception_execution import (
+    lens_perception_execution_request_readback,
+    request_lens_perception_execution,
+)
 from francis.lens.status import (
     lens_host_status,
     lens_orb_body_perspective_contract,
@@ -207,6 +211,7 @@ __all__ = [
     "lens_perception_authority_grant_receipts",
     "lens_perception_authority_request_readback",
     "lens_perception_desktop_authority_receipt_status",
+    "lens_perception_execution_request_readback",
     "lens_perception_runtime_readback",
     "lens_orb_mcp_status_bridge",
     "lens_orb_body_perspective_contract",
@@ -264,6 +269,7 @@ __all__ = [
     "request_lens_os_binding_authority",
     "request_lens_overlay_authority",
     "request_lens_perception_authority",
+    "request_lens_perception_execution",
     "request_lens_summon_authority",
     "request_lens_tray_authority",
 ]

@@ -82,6 +82,7 @@ from francis.lens import (
     lens_orb_runtime_identity,
     lens_perception_authority_grant_receipts,
     lens_perception_authority_request_readback,
+    lens_perception_execution_request_readback,
     lens_perception_runtime_readback,
     lens_resident_runtime_activation_denial_receipts,
     lens_resident_runtime_activation_execution_receipts,
@@ -113,6 +114,7 @@ from francis.lens import (
     request_lens_os_binding_authority,
     request_lens_overlay_authority,
     request_lens_perception_authority,
+    request_lens_perception_execution,
     request_lens_resident_runtime_execution_authority,
     request_lens_summon_authority,
     request_lens_tray_authority,
@@ -430,6 +432,12 @@ class LensPerceptionAuthorityGrantIn(BaseModel):
     lease_seconds: int = Field(default=3600, ge=60, le=86400)
 
 
+class LensPerceptionExecutionRequestIn(BaseModel):
+    actor: str | None = None
+    authority_receipt_id: str = ""
+    reason: str = "request resident Lens desktop perception execution review"
+
+
 @router.get("/status")
 @router.get("/hud")
 def status(limit: int = Query(5, ge=1, le=50)) -> dict[str, Any]:
@@ -501,6 +509,26 @@ def perception_authority_grant(
         method=request.method,
         record_receipt=True,
         lease_seconds=payload.lease_seconds,
+    )
+
+
+@router.get("/perception/execution")
+@router.get("/perception/execution/requests")
+def perception_execution_requests(limit: int = Query(5, ge=1, le=50)) -> dict[str, Any]:
+    return lens_perception_execution_request_readback(limit=limit)
+
+
+@router.post("/perception/execution/request")
+def perception_execution_request(
+    request: Request,
+    payload: LensPerceptionExecutionRequestIn,
+) -> dict[str, Any]:
+    return request_lens_perception_execution(
+        authority_receipt_id=payload.authority_receipt_id,
+        actor=payload.actor,
+        reason=payload.reason,
+        route=request.url.path,
+        method=request.method,
     )
 
 
