@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from francis.lens import situation_model as situation_model_module
 from francis.lens.perception_capture import DesktopFrame
 from francis.lens.situation_model import (
     lens_situation_model_readback,
@@ -51,6 +52,17 @@ def test_situation_model_readback_is_missing_without_runtime_write(tmp_path: Pat
 
 def test_situation_model_heartbeat_rewrites_one_current_state_without_pixels(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(
+        situation_model_module,
+        "lens_orb_body_runtime_readback",
+        lambda: {
+            "status": "ready",
+            "ready": True,
+            "body": "francis_orb",
+            "renderer_pid": 800,
+            "blockers": [],
+        },
+    )
     path = tmp_path / "runtime" / "lens-perception" / "situation-model.json"
 
     first = write_lens_situation_model_heartbeat(
@@ -82,7 +94,11 @@ def test_situation_model_heartbeat_rewrites_one_current_state_without_pixels(tmp
     assert second["present"]["change"]["detected"] is False
     assert second["sources"]["window_events"]["ready"] is False
     assert second["sources"]["input_events"]["ready"] is False
+    assert second["sources"]["orb_body"]["ready"] is True
+    assert second["present"]["orb_activity"] == "visible"
+    assert second["present"]["orb_body"]["body"] == "francis_orb"
     assert "lens_semantic_watcher_not_ready" in second["source_blockers"]
+    assert "lens_orb_body_state_not_connected" not in second["source_blockers"]
     assert second["governance"]["raw_pixels_in_readback"] is False
     assert list(path.parent.glob("situation-model*.json")) == [path]
     stored = json.loads(path.read_text(encoding="utf-8"))

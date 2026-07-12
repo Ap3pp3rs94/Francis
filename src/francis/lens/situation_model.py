@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from francis.kernel.paths import data_dir
+from francis.lens.orb_body_state import lens_orb_body_runtime_readback
 from francis.lens.perception_capture import DesktopFrame
 
 LENS_SITUATION_MODEL_KIND = "lens.perception.situation_model"
@@ -44,6 +45,14 @@ def write_lens_situation_model_heartbeat(
         raise ValueError("lens_situation_model_authority_missing")
 
     lag_seconds = max(0.0, now - frame.captured_at)
+    orb_body = lens_orb_body_runtime_readback()
+    source_blockers = [
+        "lens_window_event_stream_not_connected",
+        "lens_input_event_stream_not_connected",
+        "lens_semantic_watcher_not_ready",
+    ]
+    if orb_body.get("ready") is not True:
+        source_blockers.extend(_string_items(orb_body.get("blockers")) or ["lens_orb_body_state_not_connected"])
     payload = {
         "kind": LENS_SITUATION_MODEL_KIND,
         "version": LENS_SITUATION_MODEL_VERSION,
@@ -78,14 +87,18 @@ def write_lens_situation_model_heartbeat(
                 "difference_hash": str(ring_buffer.get("latest_difference_hash") or ""),
             },
             "user_activity": "not_observed",
-            "orb_activity": "not_connected",
+            "orb_activity": "visible" if orb_body.get("ready") is True else "not_connected",
+            "orb_body": orb_body,
         },
         "sources": {
             "desktop_ring_buffer": {"status": "ready", "ready": True},
             "frame_diff": {"status": "ready", "ready": True},
             "window_events": {"status": "not_connected", "ready": False},
             "input_events": {"status": "not_connected", "ready": False},
-            "orb_body": {"status": "not_connected", "ready": False},
+            "orb_body": {
+                "status": str(orb_body.get("status") or "not_connected"),
+                "ready": orb_body.get("ready") is True,
+            },
             "semantic_watcher": {"status": "not_connected", "ready": False},
         },
         "runtime_identity": {
@@ -95,12 +108,7 @@ def write_lens_situation_model_heartbeat(
             "authority_receipt_id": receipt_id,
             "execution_approval_id": approval_id,
         },
-        "blockers": [
-            "lens_window_event_stream_not_connected",
-            "lens_input_event_stream_not_connected",
-            "lens_orb_body_state_not_connected",
-            "lens_semantic_watcher_not_ready",
-        ],
+        "blockers": _dedupe(source_blockers),
         "governance": {
             "runtime_state_only": True,
             "observation_only": True,
