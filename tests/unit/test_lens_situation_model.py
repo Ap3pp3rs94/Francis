@@ -125,3 +125,80 @@ def test_situation_model_heartbeat_readback_rejects_stale_state(tmp_path: Path, 
     assert readback["heartbeat_ready"] is False
     assert readback["fresh"] is False
     assert "lens_situation_model_heartbeat_stale" in readback["blockers"]
+
+
+def test_situation_model_heartbeat_accepts_exact_ready_input_event_stream(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(
+        situation_model_module,
+        "lens_orb_body_runtime_readback",
+        lambda: {"status": "ready", "ready": True, "body": "francis_orb", "blockers": []},
+    )
+
+    readback = write_lens_situation_model_heartbeat(
+        frame=_frame(captured_at=100.0, value=0),
+        ring_buffer=_ring(frame_id="frame-with-input", changed=True),
+        authority_receipt_id="capture-receipt",
+        execution_approval_id="execution-approval",
+        worker_pid=800,
+        host_pid=900,
+        supervisor_pid=700,
+        input_events={
+            "ready": True,
+            "route": "/lens/perception/input",
+            "authority_receipt_id": "input-receipt",
+            "authority": {
+                "active": True,
+                "authorities": {"desktop_input_observation_authority": True},
+            },
+            "governance": {
+                "runtime_state_only": True,
+                "keyboard_content_captured": False,
+                "key_codes_captured": False,
+                "typed_characters_captured": False,
+                "window_titles_captured": False,
+                "clipboard_content_captured": False,
+                "input_execution_authority": False,
+                "user_cursor_control_authority": False,
+                "memory_write": False,
+            },
+            "event_count": 4,
+            "gesture_count": 2,
+            "current": {
+                "cursor": {"x": 120, "y": 220},
+                "foreground": {"window_id": 42, "process_id": 84},
+            },
+            "pointer_activity": {"active": True, "orb_yield_required": True},
+            "source_blockers": ["lens_input_scroll_source_not_connected"],
+        },
+        observed_at=100.1,
+    )
+
+    assert readback["sources"]["input_events"]["ready"] is True
+    assert readback["sources"]["window_events"]["ready"] is True
+    assert readback["present"]["user_activity"] == "active"
+    assert readback["present"]["user_cursor"] == {"x": 120, "y": 220}
+    assert readback["present"]["orb_yield_required"] is True
+    assert readback["runtime_identity"]["input_authority_receipt_id"] == "input-receipt"
+    assert "lens_input_event_stream_not_connected" not in readback["source_blockers"]
+    assert "lens_input_scroll_source_not_connected" in readback["source_blockers"]
+
+
+def test_situation_model_does_not_accept_self_labeled_input_event_stream(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
+
+    readback = write_lens_situation_model_heartbeat(
+        frame=_frame(captured_at=100.0, value=0),
+        ring_buffer=_ring(frame_id="frame-with-fake-input", changed=True),
+        authority_receipt_id="capture-receipt",
+        execution_approval_id="execution-approval",
+        worker_pid=800,
+        host_pid=900,
+        supervisor_pid=700,
+        input_events={"ready": True, "authority_receipt_id": "unvalidated-input-receipt"},
+        observed_at=100.1,
+    )
+
+    assert readback["sources"]["input_events"]["ready"] is False
+    assert readback["runtime_identity"]["input_authority_receipt_id"] == ""
+    assert "lens_input_event_stream_not_connected" in readback["source_blockers"]

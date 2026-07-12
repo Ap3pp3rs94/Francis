@@ -61,6 +61,7 @@ from francis.lens import (
     lens_host_runtime_loop_denial_receipts,
     lens_host_runtime_loop_readiness_audit,
     lens_host_status,
+    lens_input_event_stream_readback,
     lens_host_supervision_authority_denial_receipts,
     lens_host_supervision_authority_grant_receipts,
     lens_host_supervision_authority_request_readback,
@@ -491,6 +492,11 @@ def perception() -> dict[str, Any]:
 @router.get("/perception/now")
 def perception_now() -> dict[str, Any]:
     return lens_situation_model_readback()
+
+
+@router.get("/perception/input")
+def perception_input() -> dict[str, Any]:
+    return lens_input_event_stream_readback()
 
 
 @router.get("/perception/authority")

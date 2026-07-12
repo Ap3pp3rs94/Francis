@@ -29,6 +29,7 @@ def write_lens_situation_model_heartbeat(
     worker_pid: int,
     host_pid: int,
     supervisor_pid: int,
+    input_events: dict[str, Any] | None = None,
     observed_at: float | None = None,
 ) -> dict[str, Any]:
     now = time.time() if observed_at is None else float(observed_at)
@@ -46,11 +47,37 @@ def write_lens_situation_model_heartbeat(
 
     lag_seconds = max(0.0, now - frame.captured_at)
     orb_body = lens_orb_body_runtime_readback()
-    source_blockers = [
-        "lens_window_event_stream_not_connected",
-        "lens_input_event_stream_not_connected",
-        "lens_semantic_watcher_not_ready",
-    ]
+    input_stream = _as_dict(input_events)
+    input_governance = _as_dict(input_stream.get("governance"))
+    input_authority = _as_dict(input_stream.get("authority"))
+    input_authorities = _as_dict(input_authority.get("authorities"))
+    input_stream_ready = bool(
+        input_stream.get("ready") is True
+        and input_authority.get("active") is True
+        and input_authorities.get("desktop_input_observation_authority") is True
+        and input_governance.get("runtime_state_only") is True
+        and all(
+            input_governance.get(field) is False
+            for field in (
+                "keyboard_content_captured",
+                "key_codes_captured",
+                "typed_characters_captured",
+                "window_titles_captured",
+                "clipboard_content_captured",
+                "input_execution_authority",
+                "user_cursor_control_authority",
+                "memory_write",
+            )
+        )
+    )
+    input_current = _as_dict(input_stream.get("current"))
+    pointer_activity = _as_dict(input_stream.get("pointer_activity"))
+    foreground = _as_dict(input_current.get("foreground"))
+    source_blockers = ["lens_semantic_watcher_not_ready"]
+    if not input_stream_ready:
+        source_blockers.extend(["lens_window_event_stream_not_connected", "lens_input_event_stream_not_connected"])
+    else:
+        source_blockers.extend(_string_items(input_stream.get("source_blockers")))
     if orb_body.get("ready") is not True:
         source_blockers.extend(_string_items(orb_body.get("blockers")) or ["lens_orb_body_state_not_connected"])
     payload = {
@@ -86,15 +113,28 @@ def write_lens_situation_model_heartbeat(
                 "score": ring_buffer.get("latest_change_score"),
                 "difference_hash": str(ring_buffer.get("latest_difference_hash") or ""),
             },
-            "user_activity": "not_observed",
+            "user_activity": "active" if pointer_activity.get("active") is True else "idle",
+            "user_cursor": _as_dict(input_current.get("cursor")) if input_stream_ready else {},
+            "foreground": foreground if input_stream_ready else {},
+            "orb_yield_required": pointer_activity.get("orb_yield_required") is True,
             "orb_activity": "visible" if orb_body.get("ready") is True else "not_connected",
             "orb_body": orb_body,
         },
         "sources": {
             "desktop_ring_buffer": {"status": "ready", "ready": True},
             "frame_diff": {"status": "ready", "ready": True},
-            "window_events": {"status": "not_connected", "ready": False},
-            "input_events": {"status": "not_connected", "ready": False},
+            "window_events": {
+                "status": "ready" if input_stream_ready else "not_connected",
+                "ready": input_stream_ready,
+            },
+            "input_events": {
+                "status": "ready" if input_stream_ready else "not_connected",
+                "ready": input_stream_ready,
+                "route": str(input_stream.get("route") or "/lens/perception/input"),
+                "event_count": int(input_stream.get("event_count") or 0),
+                "gesture_count": int(input_stream.get("gesture_count") or 0),
+                "authority_receipt_id": str(input_stream.get("authority_receipt_id") or ""),
+            },
             "orb_body": {
                 "status": str(orb_body.get("status") or "not_connected"),
                 "ready": orb_body.get("ready") is True,
@@ -107,6 +147,9 @@ def write_lens_situation_model_heartbeat(
             "supervisor_pid": max(0, int(supervisor_pid)),
             "authority_receipt_id": receipt_id,
             "execution_approval_id": approval_id,
+            "input_authority_receipt_id": (
+                str(input_stream.get("authority_receipt_id") or "") if input_stream_ready else ""
+            ),
         },
         "blockers": _dedupe(source_blockers),
         "governance": {
@@ -114,6 +157,7 @@ def write_lens_situation_model_heartbeat(
             "observation_only": True,
             "desktop_capture_authority": True,
             "execution_authority": True,
+            "desktop_input_observation_authority": input_stream_ready,
             "camera_capture_authority": False,
             "microphone_capture_authority": False,
             "keyboard_content_captured": False,
