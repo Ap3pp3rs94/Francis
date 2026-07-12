@@ -15,6 +15,7 @@ from francis.lens import (
     deny_lens_host_persistent_supervision_enablement,
     deny_lens_host_persistent_supervision_enablement_execution,
     deny_lens_host_runtime_loop_execution,
+    enable_lens_perception_execution,
     execute_lens_host_activation,
     execute_lens_host_persistent_supervision_enablement,
     execute_lens_host_supervision_once,
@@ -82,6 +83,7 @@ from francis.lens import (
     lens_orb_runtime_identity,
     lens_perception_authority_grant_receipts,
     lens_perception_authority_request_readback,
+    lens_perception_execution_enablement_readback,
     lens_perception_execution_request_readback,
     lens_perception_runtime_readback,
     lens_resident_runtime_activation_denial_receipts,
@@ -438,6 +440,13 @@ class LensPerceptionExecutionRequestIn(BaseModel):
     reason: str = "request resident Lens desktop perception execution review"
 
 
+class LensPerceptionExecutionEnableIn(BaseModel):
+    actor: str | None = None
+    approval_id: str = ""
+    authority_receipt_id: str = ""
+    reason: str = "enable approved resident Lens desktop perception execution handoff"
+
+
 @router.get("/status")
 @router.get("/hud")
 def status(limit: int = Query(5, ge=1, le=50)) -> dict[str, Any]:
@@ -524,6 +533,26 @@ def perception_execution_request(
     payload: LensPerceptionExecutionRequestIn,
 ) -> dict[str, Any]:
     return request_lens_perception_execution(
+        authority_receipt_id=payload.authority_receipt_id,
+        actor=payload.actor,
+        reason=payload.reason,
+        route=request.url.path,
+        method=request.method,
+    )
+
+
+@router.get("/perception/execution/enablement")
+def perception_execution_enablement() -> dict[str, Any]:
+    return lens_perception_execution_enablement_readback()
+
+
+@router.post("/perception/execution/enable")
+def perception_execution_enable(
+    request: Request,
+    payload: LensPerceptionExecutionEnableIn,
+) -> dict[str, Any]:
+    return enable_lens_perception_execution(
+        approval_id=payload.approval_id,
         authority_receipt_id=payload.authority_receipt_id,
         actor=payload.actor,
         reason=payload.reason,

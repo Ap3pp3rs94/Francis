@@ -137,6 +137,8 @@ from francis.lens.perception_authority import (
     request_lens_perception_authority,
 )
 from francis.lens.perception_execution import (
+    enable_lens_perception_execution,
+    lens_perception_execution_enablement_readback,
     lens_perception_execution_request_readback,
     request_lens_perception_execution,
 )
@@ -161,6 +163,7 @@ __all__ = [
     "execute_lens_host_supervision_once",
     "execute_lens_resident_runtime_activation",
     "execute_lens_tray_presence",
+    "enable_lens_perception_execution",
     "grant_lens_host_activation_authority",
     "grant_lens_host_persistent_supervision_resident_claim_authority",
     "grant_lens_resident_runtime_execution_authority",
@@ -211,6 +214,7 @@ __all__ = [
     "lens_perception_authority_grant_receipts",
     "lens_perception_authority_request_readback",
     "lens_perception_desktop_authority_receipt_status",
+    "lens_perception_execution_enablement_readback",
     "lens_perception_execution_request_readback",
     "lens_perception_runtime_readback",
     "lens_orb_mcp_status_bridge",

@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+import os
+import time
+from pathlib import Path
 from typing import Any
 
 from francis.governance.approval_projection import approval_projection_fields
 from francis.governance.approvals import list_requests, request as create_approval_request
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.governance.redaction import redact_governed_display_value, redact_secret_text
+from francis.kernel.paths import data_dir
 from francis.lens.perception_authority import lens_perception_desktop_authority_receipt_status
 from francis.lens.perception_worker import (
     LENS_PERCEPTION_EXECUTION_ACTION,
@@ -18,6 +24,8 @@ from francis.lens.perception_worker import (
 LENS_PERCEPTION_EXECUTION_SCOPE = "system.write"
 LENS_PERCEPTION_EXECUTION_REQUEST_ROUTE = "/lens/perception/execution/request"
 LENS_PERCEPTION_EXECUTION_REQUESTS_ROUTE = "/lens/perception/execution/requests"
+LENS_PERCEPTION_EXECUTION_ENABLE_ROUTE = "/lens/perception/execution/enable"
+LENS_PERCEPTION_EXECUTION_ENABLEMENT_ROUTE = "/lens/perception/execution/enablement"
 
 _APPROVAL_STATUSES = ("pending", "approved", "rejected", "emergency")
 
@@ -185,6 +193,247 @@ def lens_perception_execution_request_readback(*, limit: int = 5) -> dict[str, A
     }
 
 
+def enable_lens_perception_execution(
+    *,
+    approval_id: Any,
+    authority_receipt_id: Any,
+    actor: Any,
+    reason: Any = "enable approved resident Lens desktop perception execution handoff",
+    route: str = LENS_PERCEPTION_EXECUTION_ENABLE_ROUTE,
+    method: str = "POST",
+) -> dict[str, Any]:
+    safe_route = _safe_str(route) or LENS_PERCEPTION_EXECUTION_ENABLE_ROUTE
+    safe_approval_id = _safe_str(approval_id)
+    safe_receipt_id = _safe_str(authority_receipt_id)
+    permission = _permission(actor, route=safe_route, method=method)
+    authority = lens_perception_desktop_authority_receipt_status(safe_receipt_id)
+    execution = lens_perception_execution_approval_status(safe_approval_id, safe_receipt_id)
+    blockers: list[str] = []
+    if not permission.allowed:
+        blockers.append("system_write_scope_not_ready")
+    if authority.get("active") is not True:
+        blockers.extend(_string_items(authority.get("blockers")) or ["desktop_capture_authority_not_active"])
+    if execution.get("active") is not True:
+        blockers.extend(_string_items(execution.get("blockers")) or ["desktop_capture_execution_not_approved"])
+    if blockers:
+        return {
+            "ok": True,
+            "kind": "lens.perception.desktop_capture_execution.enablement_denial",
+            "status": "blocked",
+            "route": safe_route,
+            "approval_id": safe_approval_id,
+            "authority_receipt_id": safe_receipt_id,
+            "applied": False,
+            "executed": False,
+            "starts_capture": False,
+            "launches_process": False,
+            "receipt_written": False,
+            "blockers": _dedupe(blockers),
+            "governance": _governance(
+                route=safe_route,
+                approval_request_write=False,
+                permission=permission,
+            ),
+        }
+
+    now_ns = time.time_ns()
+    now = now_ns // 1_000_000_000
+    enablement_receipt_id = _enablement_receipt_id(
+        approval_id=safe_approval_id,
+        authority_receipt_id=safe_receipt_id,
+        actor=_safe_str(actor),
+        issued_at_ns=now_ns,
+    )
+    expires_ts = int(authority.get("expires_ts") or 0)
+    receipt = {
+        "kind": "lens.perception.desktop_capture_execution.enablement_receipt",
+        "version": 1,
+        "receipt_id": enablement_receipt_id,
+        "status": "enabled_for_host_consumption",
+        "ts": now,
+        "expires_ts": expires_ts,
+        "approval_id": safe_approval_id,
+        "approval_action": LENS_PERCEPTION_EXECUTION_ACTION,
+        "authority_receipt_id": safe_receipt_id,
+        "actor": redact_secret_text(_safe_str(actor)),
+        "reason": redact_secret_text(_safe_str(reason)),
+        "source": "desktop_ring_buffer",
+        "mode": "resident",
+        "enable_route": LENS_PERCEPTION_EXECUTION_ENABLE_ROUTE,
+        "enablement_route": LENS_PERCEPTION_EXECUTION_ENABLEMENT_ROUTE,
+        "applied": True,
+        "executed": False,
+        "starts_capture": False,
+        "launches_process": False,
+        "authorities": {
+            "desktop_capture_authority": True,
+            "execution_authority": True,
+            "host_handoff_write_authority": True,
+            "camera_capture_authority": False,
+            "microphone_capture_authority": False,
+            "keyboard_capture_authority": False,
+            "user_mouse_capture_authority": False,
+            "input_execution_authority": False,
+            "memory_write": False,
+        },
+    }
+    enablement = {
+        "kind": "lens.perception.desktop_capture_execution.enablement",
+        "version": 1,
+        "status": "enabled_for_host_consumption",
+        "enabled": True,
+        "enabled_at": now,
+        "expires_ts": expires_ts,
+        "enablement_receipt_id": enablement_receipt_id,
+        "approval_id": safe_approval_id,
+        "authority_receipt_id": safe_receipt_id,
+        "source": "desktop_ring_buffer",
+        "mode": "resident",
+        "worker_module": "francis.lens.perception_worker",
+        "sample_rate_hz": 2.0,
+        "retention_seconds": 120.0,
+        "max_frames": 240,
+        "camera_capture_authority": False,
+        "microphone_capture_authority": False,
+        "keyboard_capture_authority": False,
+        "user_mouse_capture_authority": False,
+        "input_execution_authority": False,
+        "memory_write": False,
+    }
+    _atomic_write_json(_enablement_receipt_path(enablement_receipt_id), receipt)
+    _atomic_write_json(_enablement_path(), enablement)
+    return {
+        "ok": True,
+        "kind": "lens.perception.desktop_capture_execution.enablement",
+        "status": "enabled_for_host_consumption",
+        "route": safe_route,
+        "approval_id": safe_approval_id,
+        "authority_receipt_id": safe_receipt_id,
+        "enablement_receipt_id": enablement_receipt_id,
+        "enablement": enablement,
+        "applied": True,
+        "executed": False,
+        "starts_capture": False,
+        "launches_process": False,
+        "receipt_written": True,
+        "receipt": receipt,
+        "blockers": ["lens_perception_worker_runtime_not_observed"],
+        "governance": {
+            **_governance(
+                route=safe_route,
+                approval_request_write=False,
+                permission=permission,
+            ),
+            "host_handoff_write_authority": True,
+            "receipt_write_authority": True,
+            "mutation_authority_granted": True,
+            "next_step": "resident_host_consume_perception_enablement",
+        },
+    }
+
+
+def lens_perception_execution_enablement_readback() -> dict[str, Any]:
+    enablement = _read_json(_enablement_path())
+    approval_id = _safe_str(enablement.get("approval_id"))
+    authority_receipt_id = _safe_str(enablement.get("authority_receipt_id"))
+    enablement_receipt_id = _safe_str(enablement.get("enablement_receipt_id"))
+    receipt = _read_json(_enablement_receipt_path(enablement_receipt_id))
+    authority = lens_perception_desktop_authority_receipt_status(authority_receipt_id)
+    execution = lens_perception_execution_approval_status(approval_id, authority_receipt_id)
+    blockers: list[str] = []
+    if not enablement:
+        blockers.append("lens_perception_execution_enablement_missing")
+    else:
+        if enablement.get("kind") != "lens.perception.desktop_capture_execution.enablement":
+            blockers.append("lens_perception_execution_enablement_invalid")
+        if enablement.get("enabled") is not True or enablement.get("status") != "enabled_for_host_consumption":
+            blockers.append("lens_perception_execution_enablement_not_active")
+        if enablement.get("source") != "desktop_ring_buffer" or enablement.get("mode") != "resident":
+            blockers.append("lens_perception_execution_enablement_scope_invalid")
+        if any(
+            enablement.get(field) is not False
+            for field in (
+                "camera_capture_authority",
+                "microphone_capture_authority",
+                "keyboard_capture_authority",
+                "user_mouse_capture_authority",
+                "input_execution_authority",
+                "memory_write",
+            )
+        ):
+            blockers.append("lens_perception_execution_enablement_overbroad")
+    if not receipt or receipt.get("receipt_id") != enablement_receipt_id:
+        blockers.append("lens_perception_execution_enablement_receipt_missing")
+    else:
+        if (
+            receipt.get("kind") != "lens.perception.desktop_capture_execution.enablement_receipt"
+            or receipt.get("status") != "enabled_for_host_consumption"
+        ):
+            blockers.append("lens_perception_execution_enablement_receipt_invalid")
+        if (
+            _safe_str(receipt.get("approval_id")) != approval_id
+            or _safe_str(receipt.get("authority_receipt_id")) != authority_receipt_id
+            or receipt.get("source") != "desktop_ring_buffer"
+            or receipt.get("mode") != "resident"
+        ):
+            blockers.append("lens_perception_execution_enablement_receipt_scope_mismatch")
+        receipt_authorities = _as_dict(receipt.get("authorities"))
+        if any(
+            receipt_authorities.get(field) is not False
+            for field in (
+                "camera_capture_authority",
+                "microphone_capture_authority",
+                "keyboard_capture_authority",
+                "user_mouse_capture_authority",
+                "input_execution_authority",
+                "memory_write",
+            )
+        ):
+            blockers.append("lens_perception_execution_enablement_receipt_overbroad")
+        if (
+            receipt_authorities.get("desktop_capture_authority") is not True
+            or receipt_authorities.get("execution_authority") is not True
+            or receipt_authorities.get("host_handoff_write_authority") is not True
+        ):
+            blockers.append("lens_perception_execution_enablement_receipt_authority_missing")
+    enablement_expires_ts = int(_safe_float(enablement.get("expires_ts")))
+    receipt_expires_ts = int(_safe_float(receipt.get("expires_ts")))
+    if enablement and (enablement_expires_ts <= int(time.time()) or receipt_expires_ts != enablement_expires_ts):
+        blockers.append("lens_perception_execution_enablement_expired_or_mismatched")
+    if authority.get("active") is not True:
+        blockers.extend(_string_items(authority.get("blockers")) or ["desktop_capture_authority_not_active"])
+    if execution.get("active") is not True:
+        blockers.extend(_string_items(execution.get("blockers")) or ["desktop_capture_execution_not_approved"])
+    ready = not blockers
+    return {
+        "ok": True,
+        "kind": "lens.perception.desktop_capture_execution.enablement_readback",
+        "status": "ready_for_host_consumption" if ready else "missing" if not enablement else "blocked",
+        "ready": ready,
+        "route": LENS_PERCEPTION_EXECUTION_ENABLEMENT_ROUTE,
+        "enable_route": LENS_PERCEPTION_EXECUTION_ENABLE_ROUTE,
+        "approval_id": approval_id,
+        "authority_receipt_id": authority_receipt_id,
+        "enablement_receipt_id": enablement_receipt_id,
+        "enablement": enablement,
+        "receipt": receipt,
+        "capture_authority": authority,
+        "execution_validation": execution,
+        "executed": False,
+        "worker_runtime_observed": False,
+        "blockers": _dedupe(blockers),
+        "governance": {
+            **_governance(
+                route=LENS_PERCEPTION_EXECUTION_ENABLEMENT_ROUTE,
+                approval_request_write=False,
+                permission=None,
+            ),
+            "read_only_contract": True,
+            "next_step": "resident_host_consume_perception_enablement" if ready else "resolve_enablement_blockers",
+        },
+    }
+
+
 def _permission(actor: Any, *, route: str, method: str) -> ApiPermissionDecision:
     return ApiPermissionGate.from_env().check(
         actor_id=actor,
@@ -253,6 +502,59 @@ def _as_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _enablement_root() -> Path:
+    return data_dir() / "runtime" / "lens-perception" / "execution"
+
+
+def _enablement_path() -> Path:
+    return _enablement_root() / "enablement.json"
+
+
+def _enablement_receipt_path(receipt_id: Any) -> Path:
+    cleaned = _safe_file_token(receipt_id)
+    return _enablement_root() / "receipts" / f"{cleaned or '__missing__'}.json"
+
+
+def _enablement_receipt_id(
+    *,
+    approval_id: str,
+    authority_receipt_id: str,
+    actor: str,
+    issued_at_ns: int,
+) -> str:
+    material = "\0".join((approval_id, authority_receipt_id, actor, str(issued_at_ns)))
+    digest = hashlib.sha256(material.encode("utf-8")).hexdigest()[:24]
+    return f"lens-perception-execution-enable-{digest}"
+
+
+def _read_json(path: Path) -> dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8-sig", errors="replace"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".tmp-{os.getpid()}-{time.time_ns()}.json")
+    try:
+        temporary.write_text(
+            json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=True, allow_nan=False) + "\n",
+            encoding="utf-8",
+        )
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _safe_file_token(value: Any) -> str:
+    cleaned = _safe_str(value)
+    if not cleaned or "/" in cleaned or "\\" in cleaned or ".." in cleaned or len(cleaned) > 180:
+        return ""
+    return cleaned
+
+
 def _string_items(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
@@ -264,8 +566,12 @@ def _dedupe(values: list[str]) -> list[str]:
 
 
 __all__ = [
+    "LENS_PERCEPTION_EXECUTION_ENABLE_ROUTE",
+    "LENS_PERCEPTION_EXECUTION_ENABLEMENT_ROUTE",
     "LENS_PERCEPTION_EXECUTION_REQUEST_ROUTE",
     "LENS_PERCEPTION_EXECUTION_REQUESTS_ROUTE",
+    "enable_lens_perception_execution",
+    "lens_perception_execution_enablement_readback",
     "lens_perception_execution_request_readback",
     "request_lens_perception_execution",
 ]
