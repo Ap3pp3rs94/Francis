@@ -6086,6 +6086,12 @@ def _orb_body_perspective_contract(
     body_ready = bool(overlay.get("ready")) and bool(overlay.get("overlay_window_visible"))
     perception = _as_dict(perception_runtime) if perception_runtime is not None else lens_perception_runtime_readback()
     lens_plane_ready = bool(perception.get("ready"))
+    situation_model = _as_dict(perception.get("situation_model"))
+    situation_heartbeat = _as_dict(situation_model.get("heartbeat"))
+    current_desktop_state_available = bool(
+        lens_plane_ready
+        or (situation_model.get("heartbeat_ready") is True and situation_model.get("has_current_desktop_state") is True)
+    )
     pointer = _as_dict(operator_state.get("virtual_pointer"))
     last_action = _as_dict(pointer.get("last_action"))
     current_actuator_mode = _orb_body_current_actuator_mode(operator_state)
@@ -6100,7 +6106,13 @@ def _orb_body_perspective_contract(
     )
     blockers = _ordered_status_values(
         [
-            *(["lens_desktop_perception_plane_missing"] if not lens_plane_ready else []),
+            *(
+                ["lens_desktop_perception_semantic_comprehension_not_ready"]
+                if current_desktop_state_available and not lens_plane_ready
+                else ["lens_desktop_perception_plane_missing"]
+                if not current_desktop_state_available
+                else []
+            ),
             *(["orb_body_state_missing"] if not body_ready else []),
             *(["safe_app_targeted_actuator_path_missing"] if not safe_app_targeted_actuator_path_available else []),
             *(["user_input_capture_claimed_by_orb_pointer"] if pointer_claims_user_input else []),
@@ -6142,7 +6154,12 @@ def _orb_body_perspective_contract(
                 "Treat the view as unavailable or partial unless its runtime state is ready, fresh, and authority-scoped. "
                 "Your allowed actions are governed and may only occur through approved actuator paths."
             ),
+            "status": "ready" if lens_plane_ready else "partial" if current_desktop_state_available else "missing",
             "ready": lens_plane_ready,
+            "current_state_available": current_desktop_state_available,
+            "semantic_comprehension_ready": situation_model.get("semantic_comprehension_ready") is True,
+            "now_route": "/lens/perception/now",
+            "now": situation_heartbeat,
             "runtime": perception,
             "blockers": _as_list(perception.get("blockers")),
         },

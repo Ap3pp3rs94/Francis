@@ -1120,6 +1120,55 @@ def test_lens_orb_body_perspective_does_not_treat_overlay_as_desktop_perception(
     assert payload["perspective"]["blockers"] == ["lens_perception_runtime_state_missing"]
 
 
+def test_lens_orb_body_perspective_reports_current_heartbeat_as_partial_until_semantic_ready() -> None:
+    from francis.lens.status import _orb_body_perspective_contract
+
+    payload = _orb_body_perspective_contract(
+        orb_runtime_identity={
+            "components": {
+                "overlay": {
+                    "ready": True,
+                    "overlay_window_visible": True,
+                    "pid": 42,
+                    "always_on_top": True,
+                }
+            }
+        },
+        operator_state={
+            "virtual_pointer": {
+                "available": True,
+                "controls_user_os_cursor": False,
+                "user_mouse_taken": False,
+                "physical_input_performed": False,
+            }
+        },
+        perception_runtime={
+            "ready": False,
+            "blockers": ["lens_situation_model_semantic_comprehension_not_ready"],
+            "situation_model": {
+                "heartbeat_ready": True,
+                "has_current_desktop_state": True,
+                "semantic_comprehension_ready": False,
+                "heartbeat": {
+                    "status": "heartbeat_ready",
+                    "route": "/lens/perception/now",
+                    "revision": "frame-42",
+                    "raw_pixels_in_readback": False,
+                },
+            },
+        },
+    )
+
+    assert payload["ready"] is False
+    assert payload["perspective"]["status"] == "partial"
+    assert payload["perspective"]["current_state_available"] is True
+    assert payload["perspective"]["semantic_comprehension_ready"] is False
+    assert payload["perspective"]["now_route"] == "/lens/perception/now"
+    assert payload["perspective"]["now"]["revision"] == "frame-42"
+    assert "lens_desktop_perception_semantic_comprehension_not_ready" in payload["blockers"]
+    assert "lens_desktop_perception_plane_missing" not in payload["blockers"]
+
+
 def test_lens_orb_body_perspective_route_uses_contract(monkeypatch) -> None:
     from fastapi.testclient import TestClient
 
