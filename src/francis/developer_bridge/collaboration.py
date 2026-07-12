@@ -7,7 +7,7 @@ import re
 from datetime import UTC, datetime
 from pathlib import Path
 from threading import Lock
-from time import monotonic
+from time import monotonic, time_ns
 from typing import Any
 from uuid import uuid4
 
@@ -33,9 +33,11 @@ _RECENT_PROMPT_SCAN_MAX = 500
 _KNOWN_STATUSES = frozenset({"queued", "acknowledged", "delivered", "blocked", "closed"})
 _KNOWN_OPERATOR_TARGETS = ("codex", "claude", "ollama")
 _PROMPT_CACHE_LOCK = Lock()
+_RELAY_ORDER_LOCK = Lock()
 _prompt_cache_root: Path | None = None
 _prompt_cache_deadline = 0.0
 _prompt_cache_records: list[dict[str, object]] | None = None
+_last_relay_order_ns = 0
 
 
 def submit_collaboration_prompt(
@@ -58,6 +60,7 @@ def submit_collaboration_prompt(
     clean_context = _bounded_optional_text(context, max_chars=_MAX_CONTEXT_CHARS)
 
     created_at = _utc_now()
+    relay_order_ns = _next_relay_order_ns()
     prompt_id = _prompt_id(created_at, source, target, clean_prompt)
     redacted_objective = redact_secret_text(clean_objective)
     redacted_prompt = redact_secret_text(clean_prompt)
@@ -67,6 +70,7 @@ def submit_collaboration_prompt(
         "id": prompt_id,
         "created_at": created_at,
         "updated_at": created_at,
+        "relay_order_ns": relay_order_ns,
         "status": "queued",
         "source_agent": source,
         "target_agent": target,
@@ -416,9 +420,27 @@ def _recent_unfiltered_prompts(*, limit: int) -> _FilteredPrompts | None:
     return _FilteredPrompts(items=sorted_records[:limit], truncated=len(paths) > limit)
 
 
-def _recent_sort_key(record: dict[str, object], path_sort_key: tuple[int, str]) -> tuple[str, int, str, str]:
+def _recent_sort_key(record: dict[str, object], path_sort_key: tuple[int, str]) -> tuple[str, int, int, str, str]:
     mtime_ns, path_name = path_sort_key
-    return (str(record.get("created_at") or ""), mtime_ns, str(record.get("id") or ""), path_name)
+    return (
+        str(record.get("created_at") or ""),
+        _relay_order_ns(record),
+        mtime_ns,
+        str(record.get("id") or ""),
+        path_name,
+    )
+
+
+def _relay_order_ns(record: dict[str, object]) -> int:
+    value = record.get("relay_order_ns")
+    if isinstance(value, int) and not isinstance(value, bool):
+        return max(0, value)
+    if not isinstance(value, str):
+        return 0
+    try:
+        return max(0, int(value))
+    except ValueError:
+        return 0
 
 
 def _path_sort_key(path: Path) -> tuple[int, str]:
@@ -452,7 +474,7 @@ def _sorted_prompts() -> list[dict[str, object]]:
     return [dict(record) for record in sorted_records]
 
 
-def _sort_key(record: dict[str, object], path_sort_key: tuple[int, str]) -> tuple[str, int, str, str]:
+def _sort_key(record: dict[str, object], path_sort_key: tuple[int, str]) -> tuple[str, int, int, str, str]:
     return _recent_sort_key(record, path_sort_key)
 
 
@@ -829,6 +851,14 @@ def _chat_handoff(
 
 def _utc_now() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def _next_relay_order_ns() -> int:
+    global _last_relay_order_ns
+    observed = time_ns()
+    with _RELAY_ORDER_LOCK:
+        _last_relay_order_ns = max(observed, _last_relay_order_ns + 1)
+        return _last_relay_order_ns
 
 
 def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
