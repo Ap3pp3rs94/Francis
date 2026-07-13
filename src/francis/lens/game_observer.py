@@ -463,8 +463,11 @@ def windows_foreground_process_readback() -> dict[str, Any]:
     try:
         from ctypes import wintypes
 
-        user32 = ctypes.WinDLL("user32", use_last_error=True)
-        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        win_dll = getattr(ctypes, "WinDLL", None)
+        if win_dll is None:
+            return {"supported": False, "available": False, "reason": "foreground_process_platform_unsupported"}
+        user32 = win_dll("user32", use_last_error=True)
+        kernel32 = win_dll("kernel32", use_last_error=True)
         user32.GetForegroundWindow.restype = wintypes.HWND
         user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
         user32.GetWindowThreadProcessId.restype = wintypes.DWORD
