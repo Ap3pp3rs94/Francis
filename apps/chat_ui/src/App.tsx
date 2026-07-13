@@ -4,9 +4,12 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
 } from "react";
+import { Activity, MessageCircle, Orbit, Radio, ServerCog, ShieldCheck } from "lucide-react";
+
+import "./francis-shell.css";
 
 import { fetchLensMcpStatus, type LensMcpStatus } from "./lens/mcpStatus";
 import {
@@ -74,6 +77,7 @@ import {
 import { bodyStateReady, presentOrbGlyph, type OrbGlyphState } from "./lens/orbGlyph";
 import { shouldOpenLensOrbOverlay } from "./lens";
 import { SettingsClient, type GroundedPresenceSnapshot } from "./settings";
+import { francisSurfaceForPath, francisSurfaceHref, type FrancisSurface } from "./shell";
 import {
   FrancisVoiceClient,
   type FrancisVoiceIngressResponse,
@@ -392,6 +396,7 @@ function BodyStatePanel(props: { status: LensMcpStatus | null; loading: boolean;
 
   return (
     <section
+      className="francis-panel francis-panel--body"
       style={{
         border: "1px solid rgba(148, 163, 184, 0.35)",
         borderRadius: 18,
@@ -645,6 +650,7 @@ function GroundedPresencePanel(props: {
 
   return (
     <section
+      className="francis-panel francis-panel--presence"
       data-grounded-presence-panel="true"
       style={{
         background: "#080b11",
@@ -1035,6 +1041,7 @@ function VoiceTranscriptionPanel(props: { baseUrl: string }) {
 
   return (
     <section
+      className="francis-panel francis-panel--voice"
       style={{
         background: "rgba(9, 13, 20, 0.92)",
         border: "1px solid rgba(148, 163, 184, 0.32)",
@@ -1750,6 +1757,7 @@ function CollaborationAgentsPanel(props: { baseUrl: string }) {
 
   return (
     <section
+      className="francis-panel francis-panel--collaboration"
       style={{
         background: "rgba(9, 13, 20, 0.92)",
         border: "1px solid rgba(148, 163, 184, 0.32)",
@@ -4837,6 +4845,7 @@ function BridgeMonitorPanel(props: { baseUrl: string }) {
 
   return (
     <section
+      className="francis-panel francis-panel--bridge"
       style={{
         background: "rgba(9, 13, 20, 0.92)",
         border: "1px solid rgba(148, 163, 184, 0.32)",
@@ -5220,6 +5229,213 @@ function OrbOverlaySurface(props: {
   );
 }
 
+type StatusRibbonItem = {
+  label: string;
+  value: string;
+};
+
+function StatusRibbon(props: { items: StatusRibbonItem[] }) {
+  return (
+    <div className="francis-status-ribbon" aria-label="Runtime summary">
+      {props.items.map((item) => (
+        <div className="francis-status-ribbon__item" key={item.label}>
+          <span className="francis-status-ribbon__label">{item.label}</span>
+          <span className="francis-status-ribbon__value" title={item.value}>
+            {item.value}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FrancisShell(props: {
+  children: ReactNode;
+  readbackReady: boolean;
+  surface: FrancisSurface;
+}) {
+  const surfaces: Array<{ icon: typeof MessageCircle; label: string; value: FrancisSurface }> = [
+    { icon: MessageCircle, label: "Frontend", value: "frontend" },
+    { icon: ServerCog, label: "Backend", value: "backend" },
+  ];
+
+  return (
+    <div className="francis-shell" data-francis-surface={props.surface}>
+      <header className="francis-shell__header">
+        <a className="francis-brand" href={francisSurfaceHref("frontend")}>
+          <span className="francis-brand__mark" aria-hidden="true">
+            <Orbit size={16} strokeWidth={1.5} />
+          </span>
+          <span className="francis-brand__copy">
+            <span className="francis-brand__name">Francis</span>
+            <span className="francis-brand__phase">Phase 2 operator layer</span>
+          </span>
+        </a>
+
+        <nav className="francis-mode-switch" aria-label="Francis surfaces">
+          {surfaces.map((item) => {
+            const Icon = item.icon;
+            return (
+              <a
+                className="francis-mode-switch__item"
+                href={francisSurfaceHref(item.value)}
+                aria-current={props.surface === item.value ? "page" : undefined}
+                key={item.value}
+              >
+                <Icon size={15} strokeWidth={1.7} aria-hidden="true" />
+                {item.label}
+              </a>
+            );
+          })}
+        </nav>
+
+        <div className="francis-header-state">
+          <span
+            className="francis-header-state__dot"
+            data-ready={String(props.readbackReady)}
+            aria-hidden="true"
+          />
+          <span>{props.readbackReady ? "Live readback" : "Readback pending"}</span>
+        </div>
+      </header>
+      <main className="francis-shell__main">{props.children}</main>
+    </div>
+  );
+}
+
+function FrontendSurface(props: {
+  baseUrl: string;
+  loading: boolean;
+  onRefreshPresence: () => void;
+  presence: GroundedPresenceSnapshot | null;
+  presenceError: string;
+  presenceLoading: boolean;
+  status: LensMcpStatus | null;
+}) {
+  const orb = presentOrbGlyph(props.status, props.loading);
+  const presenceState = statusText(props.presence?.presence?.state);
+  const presenceHeadline =
+    props.presence?.presence?.headline ||
+    (props.presenceError ? "Grounded presence is not currently available." : "Waiting for grounded presence.");
+
+  return (
+    <>
+      <section className="francis-page-heading" aria-labelledby="francis-frontend-title">
+        <div>
+          <p className="francis-page-heading__eyebrow">
+            <Radio size={13} strokeWidth={1.8} aria-hidden="true" />
+            Frontend
+          </p>
+          <h1 id="francis-frontend-title">Francis</h1>
+          <p>{presenceHeadline}</p>
+        </div>
+        <div className="francis-front-orb" data-orb-state={orb.tone}>
+          <OrbGlyph state={orb} />
+          <div className="francis-front-orb__status">
+            <strong>Francis Orb</strong>
+            <span>
+              {orb.posture} / {orb.status} / {orb.readOnly ? "read-only" : "authority projected"}
+            </span>
+          </div>
+        </div>
+      </section>
+
+      <StatusRibbon
+        items={[
+          { label: "Lens", value: statusText(props.status?.status) },
+          { label: "Presence", value: presenceState },
+          {
+            label: "Unreal",
+            value: props.presence?.unreal_adapter?.runtime_observed ? "Runtime observed" : "Contract ready",
+          },
+          {
+            label: "Authority",
+            value: props.presence?.intent?.request_only ? "Request only" : "Not asserted",
+          },
+        ]}
+      />
+
+      <div className="francis-front-stack">
+        <GroundedPresencePanel
+          presence={props.presence}
+          loading={props.presenceLoading}
+          error={props.presenceError}
+          onRefresh={props.onRefreshPresence}
+        />
+        <VoiceTranscriptionPanel baseUrl={props.baseUrl} />
+        <CollaborationAgentsPanel baseUrl={props.baseUrl} />
+      </div>
+    </>
+  );
+}
+
+function BackendSurface(props: {
+  baseUrl: string;
+  error: string;
+  loading: boolean;
+  onRefreshPresence: () => void;
+  onRefreshStatus: () => void;
+  presence: GroundedPresenceSnapshot | null;
+  presenceError: string;
+  presenceLoading: boolean;
+  status: LensMcpStatus | null;
+}) {
+  const stage = props.presence?.stage;
+  const stageLabel = stage?.name ? `${stage.name} - ${statusText(stage.status)}` : "Stage readback pending";
+
+  return (
+    <>
+      <section className="francis-page-heading" aria-labelledby="francis-backend-title">
+        <div>
+          <p className="francis-page-heading__eyebrow">
+            <Activity size={13} strokeWidth={1.8} aria-hidden="true" />
+            Backend
+          </p>
+          <h1 id="francis-backend-title">Systems</h1>
+          <p>
+            Runtime health, governed presence, voice ingress, collaboration, and bridge evidence in one
+            operator surface.
+          </p>
+        </div>
+        <div className="francis-quiet-note">
+          <ShieldCheck size={17} strokeWidth={1.6} aria-hidden="true" />
+          <span>Bounded authority</span>
+        </div>
+      </section>
+
+      <StatusRibbon
+        items={[
+          { label: "Build phase", value: "Phase 2" },
+          { label: "Current stage", value: stageLabel },
+          { label: "Lens", value: statusText(props.status?.status) },
+          { label: "API", value: props.baseUrl || "Same origin" },
+        ]}
+      />
+
+      <div className="francis-backend-grid">
+        <div className="francis-backend-grid__wide">
+          <BodyStatePanel
+            status={props.status}
+            loading={props.loading}
+            error={props.error}
+            onRefresh={props.onRefreshStatus}
+          />
+        </div>
+        <GroundedPresencePanel
+          presence={props.presence}
+          loading={props.presenceLoading}
+          error={props.presenceError}
+          onRefresh={props.onRefreshPresence}
+        />
+        <BridgeMonitorPanel baseUrl={props.baseUrl} />
+        <div className="francis-backend-grid__wide">
+          <VoiceTranscriptionPanel baseUrl={props.baseUrl} />
+        </div>
+      </div>
+    </>
+  );
+}
+
 export default function App() {
   const [status, setStatus] = useState<LensMcpStatus | null>(null);
   const [loading, setLoading] = useState(false);
@@ -5233,8 +5449,7 @@ export default function App() {
     if (typeof window === "undefined") return "/";
     return window.location.pathname.replace(/\/+$/, "") || "/";
   }, []);
-  const diagnosticsOnly = surfacePath === "/diagnostics";
-  const communicationOnly = !diagnosticsOnly;
+  const surface = useMemo(() => francisSurfaceForPath(surfacePath), [surfacePath]);
   const orbOverlayIntent = useMemo(() => {
     if (typeof window === "undefined") return false;
     return shouldOpenLensOrbOverlay(window.location.search, window.location.hash);
@@ -5285,45 +5500,45 @@ export default function App() {
   );
 
   useEffect(() => {
-    if (communicationOnly && !orbOverlayIntent) return;
     const controller = new AbortController();
     loadStatus(controller.signal);
     loadPresence(controller.signal);
     return () => controller.abort();
-  }, [communicationOnly, loadPresence, loadStatus, orbOverlayIntent]);
-
-  const shell: CSSProperties = {
-    background: "radial-gradient(circle at 32% 18%, #070a10 0, #04060a 55%, #030407 100%)",
-    color: "#f8fafc",
-    fontFamily: "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-    minHeight: "100vh",
-    padding: 32,
-  };
+  }, [loadPresence, loadStatus, orbOverlayIntent]);
 
   if (orbOverlayIntent) {
     return <OrbOverlaySurface status={status} presence={presence} loading={loading || presenceLoading} />;
   }
 
-  if (communicationOnly) {
+  if (surface === "frontend") {
     return (
-      <main style={shell}>
-        <CollaborationAgentsPanel baseUrl={baseUrl} />
-      </main>
+      <FrancisShell surface={surface} readbackReady={status !== null && presence !== null}>
+        <FrontendSurface
+          baseUrl={baseUrl}
+          status={status}
+          loading={loading}
+          presence={presence}
+          presenceLoading={presenceLoading}
+          presenceError={presenceError}
+          onRefreshPresence={() => loadPresence()}
+        />
+      </FrancisShell>
     );
   }
 
   return (
-    <main style={shell}>
-      <BodyStatePanel status={status} loading={loading} error={error} onRefresh={() => loadStatus()} />
-      <GroundedPresencePanel
+    <FrancisShell surface={surface} readbackReady={status !== null && presence !== null}>
+      <BackendSurface
+        baseUrl={baseUrl}
+        status={status}
+        loading={loading}
+        error={error}
         presence={presence}
-        loading={presenceLoading}
-        error={presenceError}
-        onRefresh={() => loadPresence()}
+        presenceLoading={presenceLoading}
+        presenceError={presenceError}
+        onRefreshStatus={() => loadStatus()}
+        onRefreshPresence={() => loadPresence()}
       />
-      <VoiceTranscriptionPanel baseUrl={baseUrl} />
-      <CollaborationAgentsPanel baseUrl={baseUrl} />
-      <BridgeMonitorPanel baseUrl={baseUrl} />
-    </main>
+    </FrancisShell>
   );
 }
