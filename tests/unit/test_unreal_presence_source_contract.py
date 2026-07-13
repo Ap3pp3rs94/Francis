@@ -68,3 +68,43 @@ def test_operator_ui_uses_a_bounded_presence_specific_timeout() -> None:
     assert "const GROUNDED_PRESENCE_TIMEOUT_MS = 15000;" in app
     assert ".getGroundedPresence(" in app
     assert "timeoutMs: GROUNDED_PRESENCE_TIMEOUT_MS" in app
+
+
+def test_native_operator_ui_has_local_frontend_backend_pages_without_new_authority() -> None:
+    header = _read(UNREAL_SOURCE / "SFrancisPresencePanel.h")
+    panel = _read(UNREAL_SOURCE / "SFrancisPresencePanel.cpp")
+    game_mode = _read(UNREAL_SOURCE / "FrancisPresenceGameMode.cpp")
+
+    assert "enum class EFrancisPresencePage" in header
+    assert "Frontend" in header
+    assert "Backend" in header
+    assert "SWidgetSwitcher" in panel
+    assert 'TEXT("FRONTEND  /  GROUNDED PRESENCE")' in panel
+    assert 'TEXT("BACKEND  /  SYSTEMS")' in panel
+    assert 'TEXT("CORE AUTHORITATIVE  /  ADAPTER READ ONLY")' in panel
+    assert "FInputModeGameAndUI" in game_mode
+    assert "SetHideCursorDuringCapture(false)" in game_mode
+    assert "SetWidgetToFocus(PresencePanel)" not in game_mode
+
+    frontend_body = panel.split("FReply SFrancisPresencePanel::ShowFrontend()", 1)[1].split(
+        "FReply SFrancisPresencePanel::ShowBackend()", 1
+    )[0]
+    backend_body = panel.split("FReply SFrancisPresencePanel::ShowBackend()", 1)[1].split(
+        "FText SFrancisPresencePanel::HeadlineText()", 1
+    )[0]
+    assert "QueueIntent" not in frontend_body
+    assert "QueueIntent" not in backend_body
+
+
+def test_native_operator_ui_preserves_governed_intents_and_click_navigation() -> None:
+    panel = _read(UNREAL_SOURCE / "SFrancisPresencePanel.cpp")
+
+    assert ".OnClicked(this, &SFrancisPresencePanel::ShowFrontend)" in panel
+    assert ".OnClicked(this, &SFrancisPresencePanel::ShowBackend)" in panel
+    assert "PageSwitcher->SetActiveWidgetIndex(static_cast<int32>(ActivePage))" in panel
+    assert "EKeys::F1" not in panel
+    assert "EKeys::F2" not in panel
+    assert 'QueueIntent(TEXT("request_context_refresh"))' in panel
+    assert 'QueueIntent(TEXT("request_review"))' in panel
+    assert 'QueueIntent(TEXT("acknowledge_handback"))' in panel
+    assert 'QueueIntent(TEXT("request_panic_stop"))' in panel
