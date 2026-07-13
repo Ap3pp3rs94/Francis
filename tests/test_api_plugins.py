@@ -3788,7 +3788,7 @@ def test_plugins_stage17_closure_accepts_active_full_operator_delegation(
     data_root = tmp_path / "francis_data"
     delegation_id = "opdel_stage17_test"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
-    monkeypatch.setenv("FRANCIS_ENV", "dev")
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
     monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", "{}")
     delegation_path = data_root / "approvals" / "operator_delegation_receipts" / f"{delegation_id}.json"
     delegation_path.parent.mkdir(parents=True, exist_ok=True)
@@ -3807,6 +3807,29 @@ def test_plugins_stage17_closure_accepts_active_full_operator_delegation(
                 "governance": {
                     "full_operator_authority": True,
                     "stage_closure_allowed": True,
+                    "subdelegation_allowed": False,
+                },
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    shadow_path = delegation_path.with_name("opdel_stage17_shadow.json")
+    shadow_path.write_text(
+        json.dumps(
+            {
+                "kind": "operator.delegation.receipt",
+                "delegation_id": "opdel_stage17_shadow",
+                "delegating_actor": "Austin",
+                "receiving_actor": "codex.builder",
+                "granted_scope": ["*"],
+                "status": "active",
+                "revoked": False,
+                "expires_ts": None,
+                "authority": "delegated_operator",
+                "governance": {
+                    "full_operator_authority": True,
+                    "stage_closure_allowed": False,
                     "subdelegation_allowed": False,
                 },
             },

@@ -50,7 +50,7 @@ from francis.governance.approvals import (
     BUILDER_APPROVAL_ACTOR,
     DELEGATED_OPERATOR_AUTHORITY,
     FULL_OPERATOR_AUTHORITY_SCOPE,
-    active_operator_delegation_for,
+    list_operator_delegation_receipts,
 )
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.governance.redaction import (
@@ -322,28 +322,31 @@ def _stage17_closure_write_permission(
     if actor_id != BUILDER_APPROVAL_ACTOR:
         return decision, {}
 
-    delegation = active_operator_delegation_for(
+    delegation_readback = list_operator_delegation_receipts(
+        limit=100,
         receiving_actor=BUILDER_APPROVAL_ACTOR,
-        required_scopes=[FULL_OPERATOR_AUTHORITY_SCOPE],
+        active_only=True,
     )
-    if delegation is None:
+    raw_items = delegation_readback.get("items")
+    items = raw_items if isinstance(raw_items, list) else []
+    delegation: dict[str, Any] = {}
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        raw_scopes = item.get("granted_scope")
+        scope_items = raw_scopes if isinstance(raw_scopes, list) else []
+        scopes = {_safe_str(scope).strip() for scope in scope_items}
+        raw_governance = item.get("governance")
+        governance = raw_governance if isinstance(raw_governance, dict) else {}
+        scope_allowed = FULL_OPERATOR_AUTHORITY_SCOPE in scopes or STAGE17_CLOSURE_WRITE_SCOPE in scopes
+        if scope_allowed and bool(governance.get("stage_closure_allowed")):
+            delegation = item
+            break
+    if not delegation:
         return decision, {}
 
     raw_governance = delegation.get("governance")
     governance: dict[str, Any] = raw_governance if isinstance(raw_governance, dict) else {}
-    if not bool(governance.get("stage_closure_allowed")):
-        return (
-            ApiPermissionDecision(
-                allowed=False,
-                reason="delegation_stage_closure_not_allowed",
-                evidence={
-                    **decision.evidence,
-                    "delegation_id": _safe_str(delegation.get("delegation_id")).strip(),
-                    "authority": DELEGATED_OPERATOR_AUTHORITY,
-                },
-            ),
-            {},
-        )
 
     return (
         ApiPermissionDecision(
