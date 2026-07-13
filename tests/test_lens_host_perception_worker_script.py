@@ -131,7 +131,7 @@ def test_resident_host_consumes_approved_handoff_but_worker_blocks_before_captur
     client, data_root = _client(monkeypatch, tmp_path)
     enabled = _approved_enablement(client)
 
-    result = _run_resident_host(data_root, run_seconds=3)
+    result = _run_resident_host(data_root, run_seconds=12)
 
     assert result.returncode == 0, result.stderr
     host_output = json.loads(result.stdout)
@@ -152,7 +152,7 @@ def test_resident_host_consumes_approved_handoff_but_worker_blocks_before_captur
     assert worker_state["capture"]["desktop"]["active"] is False
     assert worker_state["capture"]["keyboard_content_captured"] is False
     assert worker_state["capture"]["user_mouse_captured"] is False
-    assert "lens_perception_supervisor_state_invalid" in worker_state["blockers"]
+    assert "lens_perception_supervisor_state_unavailable" in worker_state["blockers"]
     assert not (data_root / "runtime" / "lens-perception" / "frames").exists()
 
     host_state = json.loads((data_root / "runtime" / "lens-host" / "status.json").read_text(encoding="utf-8-sig"))

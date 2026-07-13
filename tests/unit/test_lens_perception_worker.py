@@ -40,6 +40,65 @@ class _FrameSource:
         )
 
 
+class _GameObserver:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def observe(
+        self,
+        *,
+        frame: DesktopFrame,
+        source_frame_id: str,
+        authority_receipt_id: str,
+        observed_at: float | None = None,
+    ) -> dict[str, Any]:
+        self.calls += 1
+        assert observed_at is not None and observed_at >= frame.captured_at
+        return {
+            "kind": "lens.game.observation",
+            "version": 1,
+            "status": "scene_classified",
+            "ready": True,
+            "semantic_scene_ready": True,
+            "source_frame_id": source_frame_id,
+            "target": {
+                "id": "sand",
+                "configured": True,
+                "process_names": ["Sand.exe"],
+                "foreground": True,
+                "visibility_basis": "foreground_process_match",
+            },
+            "foreground": {
+                "target_match": True,
+                "process_id": 55,
+                "process_name": "Sand.exe",
+                "window_id": 44,
+                "window_title_included": False,
+            },
+            "scene": {"ready": True, "id": "active_gameplay", "confidence": 0.8},
+            "classification": {"source_frame_id": source_frame_id, "device": "cpu"},
+            "model": {"id": "test/siglip", "remote_inference": False},
+            "runtime_identity": {"authority_receipt_id": authority_receipt_id},
+            "blockers": [],
+            "governance": {
+                "observation_only": True,
+                "local_inference_only": True,
+                "remote_frame_transfer": False,
+                "raw_pixels_in_state": False,
+                "window_titles_captured": False,
+                "keyboard_content_captured": False,
+                "user_mouse_captured": False,
+                "input_execution_authority": False,
+                "memory_write": False,
+                "learning_authority": False,
+                "reward_authority": False,
+            },
+        }
+
+    def close(self) -> None:
+        return None
+
+
 def _active_authority(receipt_id: str, _now: int) -> dict[str, Any]:
     return {"status": "active", "active": True, "receipt_id": receipt_id, "blockers": []}
 
@@ -104,6 +163,7 @@ def test_worker_captures_on_supervised_approved_cadence_and_updates_partial_situ
 ) -> None:
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
     source = _FrameSource()
+    game_observer = _GameObserver()
     monotonic_values = iter((0.0, 0.0, 0.1, 0.5, 0.6, 0.7))
     worker = LensPerceptionWorker(
         _config(),
@@ -111,6 +171,7 @@ def test_worker_captures_on_supervised_approved_cadence_and_updates_partial_situ
         authority_status=_active_authority,
         execution_status=_active_execution,
         supervision_status=_active_supervision,
+        game_observer=game_observer,
         clock=iter((100.0, 100.0, 100.5, 100.5, 101.0)).__next__,
         monotonic_clock=monotonic_values.__next__,
         sleeper=lambda _seconds: None,
@@ -129,11 +190,14 @@ def test_worker_captures_on_supervised_approved_cadence_and_updates_partial_situ
     assert latest["situation_model"]["heartbeat_ready"] is True
     assert latest["situation_model"]["has_current_desktop_state"] is True
     assert latest["situation_model"]["semantic_comprehension_ready"] is False
+    assert latest["situation_model"]["game_scene_ready"] is True
+    assert latest["situation_model"]["present"]["game"]["scene"]["id"] == "active_gameplay"
     assert latest["situation_model"]["revision"]
     assert latest["capture"]["desktop"]["active"] is True
     assert latest["capture"]["camera"]["active"] is False
     assert latest["ring_buffer"]["frame_count"] == 2
     assert latest["ring_buffer"]["raw_pixels_in_readback"] is False
+    assert game_observer.calls == 2
     assert "lens_situation_model_not_ready" in latest["blockers"]
     situation_path = tmp_path / "runtime" / "lens-perception" / "situation-model.json"
     situation = json.loads(situation_path.read_text(encoding="utf-8"))

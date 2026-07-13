@@ -31,6 +31,7 @@ def write_lens_situation_model_heartbeat(
     host_pid: int,
     supervisor_pid: int,
     input_events: dict[str, Any] | None = None,
+    game_observation: dict[str, Any] | None = None,
     observed_at: float | None = None,
 ) -> dict[str, Any]:
     now = time.time() if observed_at is None else float(observed_at)
@@ -74,6 +75,13 @@ def write_lens_situation_model_heartbeat(
     input_current = _as_dict(input_stream.get("current"))
     pointer_activity = _as_dict(input_stream.get("pointer_activity"))
     foreground = _as_dict(input_current.get("foreground"))
+    game_state = _as_dict(game_observation)
+    game_contract_valid = _game_observation_contract_valid(game_state, frame_id=frame_id, receipt_id=receipt_id)
+    game_target = _as_dict(game_state.get("target"))
+    game_model = _as_dict(game_state.get("model"))
+    game_scene_ready = bool(
+        game_contract_valid and game_state.get("ready") is True and game_state.get("semantic_scene_ready") is True
+    )
     source_blockers = ["lens_semantic_watcher_not_ready"]
     if not input_stream_ready:
         source_blockers.extend(["lens_window_event_stream_not_connected", "lens_input_event_stream_not_connected"])
@@ -81,6 +89,12 @@ def write_lens_situation_model_heartbeat(
         source_blockers.extend(_string_items(input_stream.get("source_blockers")))
     if orb_body.get("ready") is not True:
         source_blockers.extend(_string_items(orb_body.get("blockers")) or ["lens_orb_body_state_not_connected"])
+    if not game_state:
+        source_blockers.append("lens_game_observer_not_connected")
+    elif not game_contract_valid:
+        source_blockers.append("lens_game_observer_contract_invalid")
+    else:
+        source_blockers.extend(_string_items(game_state.get("blockers")))
     payload = {
         "kind": LENS_SITUATION_MODEL_KIND,
         "version": LENS_SITUATION_MODEL_VERSION,
@@ -93,6 +107,7 @@ def write_lens_situation_model_heartbeat(
         "max_lag_ms": int(_MAX_HEARTBEAT_AGE_SECONDS * 1000),
         "has_current_desktop_state": True,
         "semantic_comprehension_ready": False,
+        "game_scene_ready": game_scene_ready,
         "present": {
             "plane": "desktop",
             "coordinate_space": "windows_virtual_screen",
@@ -120,6 +135,7 @@ def write_lens_situation_model_heartbeat(
             "orb_yield_required": pointer_activity.get("orb_yield_required") is True,
             "orb_activity": "visible" if orb_body.get("ready") is True else "not_connected",
             "orb_body": orb_body,
+            "game": _game_observation_present(game_state) if game_contract_valid else {},
         },
         "sources": {
             "desktop_ring_buffer": {"status": "ready", "ready": True},
@@ -140,6 +156,21 @@ def write_lens_situation_model_heartbeat(
                 "status": str(orb_body.get("status") or "not_connected"),
                 "ready": orb_body.get("ready") is True,
             },
+            "game_observer": {
+                "status": (
+                    str(game_state.get("status") or "blocked")
+                    if game_contract_valid
+                    else "not_connected"
+                    if not game_state
+                    else "invalid"
+                ),
+                "ready": game_scene_ready,
+                "configured": game_target.get("configured") is True if game_contract_valid else False,
+                "target_id": str(game_target.get("id") or "") if game_contract_valid else "",
+                "model_id": str(game_model.get("id") or "") if game_contract_valid else "",
+                "local_inference_only": game_contract_valid,
+                "remote_inference": False,
+            },
             "semantic_watcher": {"status": "not_connected", "ready": False},
         },
         "runtime_identity": {
@@ -150,6 +181,11 @@ def write_lens_situation_model_heartbeat(
             "execution_approval_id": approval_id,
             "input_authority_receipt_id": (
                 str(input_stream.get("authority_receipt_id") or "") if input_stream_ready else ""
+            ),
+            "game_observer_authority_receipt_id": (
+                str(_as_dict(game_state.get("runtime_identity")).get("authority_receipt_id") or "")
+                if game_contract_valid
+                else ""
             ),
         },
         "blockers": _dedupe(source_blockers),
@@ -166,6 +202,10 @@ def write_lens_situation_model_heartbeat(
             "input_execution_authority": False,
             "memory_write": False,
             "raw_pixels_in_state": False,
+            "local_game_inference": game_contract_valid,
+            "remote_frame_transfer": False,
+            "learning_authority": False,
+            "reward_authority": False,
         },
     }
     _atomic_write_json(_situation_model_path(), payload)
@@ -182,6 +222,8 @@ def lens_situation_model_readback(*, now: float | None = None) -> dict[str, Any]
     )
     runtime_identity = _as_dict(payload.get("runtime_identity"))
     governance = _as_dict(payload.get("governance"))
+    sources = _as_dict(payload.get("sources"))
+    game_source = _as_dict(sources.get("game_observer"))
     blockers: list[str] = []
     if not payload:
         blockers.append("lens_situation_model_heartbeat_missing")
@@ -214,8 +256,22 @@ def lens_situation_model_readback(*, now: float | None = None) -> dict[str, Any]
                 "memory_write",
                 "raw_pixels_in_state",
             )
+        ) or any(
+            governance.get(field, False) is not False
+            for field in (
+                "remote_frame_transfer",
+                "learning_authority",
+                "reward_authority",
+            )
         ):
             blockers.append("lens_situation_model_heartbeat_overbroad")
+        if payload.get("game_scene_ready") is True and (
+            game_source.get("ready") is not True
+            or game_source.get("local_inference_only") is not True
+            or game_source.get("remote_inference") is not False
+            or governance.get("local_game_inference") is not True
+        ):
+            blockers.append("lens_situation_model_game_observer_contract_invalid")
     heartbeat_ready = not blockers
     return {
         "kind": "lens.perception.situation_model_readback",
@@ -223,6 +279,7 @@ def lens_situation_model_readback(*, now: float | None = None) -> dict[str, Any]
         "route": LENS_SITUATION_MODEL_ROUTE,
         "heartbeat_ready": heartbeat_ready,
         "semantic_comprehension_ready": payload.get("semantic_comprehension_ready") is True,
+        "game_scene_ready": heartbeat_ready and payload.get("game_scene_ready") is True,
         "has_current_desktop_state": payload.get("has_current_desktop_state") is True,
         "revision": str(payload.get("revision") or ""),
         "updated_at": updated_at,
@@ -244,6 +301,10 @@ def lens_situation_model_readback(*, now: float | None = None) -> dict[str, Any]
             "input_execution_authority": False,
             "memory_write": False,
             "raw_pixels_in_readback": False,
+            "local_game_inference": governance.get("local_game_inference") is True,
+            "remote_frame_transfer": False,
+            "learning_authority": False,
+            "reward_authority": False,
         },
     }
 
@@ -260,6 +321,114 @@ def _safe_float(value: Any) -> float | None:
     except (TypeError, ValueError):
         return None
     return parsed if math.isfinite(parsed) else None
+
+
+def _safe_int(value: Any) -> int:
+    if isinstance(value, bool):
+        return 0
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError, OverflowError):
+        return 0
+
+
+def _game_observation_contract_valid(game_state: dict[str, Any], *, frame_id: str, receipt_id: str) -> bool:
+    if not game_state:
+        return False
+    governance = _as_dict(game_state.get("governance"))
+    runtime_identity = _as_dict(game_state.get("runtime_identity"))
+    return bool(
+        game_state.get("kind") == "lens.game.observation"
+        and game_state.get("version") == 1
+        and str(game_state.get("source_frame_id") or "") == frame_id
+        and str(runtime_identity.get("authority_receipt_id") or "") == receipt_id
+        and governance.get("observation_only") is True
+        and governance.get("local_inference_only") is True
+        and all(
+            governance.get(field) is False
+            for field in (
+                "remote_frame_transfer",
+                "raw_pixels_in_state",
+                "window_titles_captured",
+                "keyboard_content_captured",
+                "user_mouse_captured",
+                "input_execution_authority",
+                "memory_write",
+                "learning_authority",
+                "reward_authority",
+            )
+        )
+    )
+
+
+def _game_observation_present(game_state: dict[str, Any]) -> dict[str, Any]:
+    target = _as_dict(game_state.get("target"))
+    foreground = _as_dict(game_state.get("foreground"))
+    scene = _as_dict(game_state.get("scene"))
+    classification = _as_dict(game_state.get("classification"))
+    model = _as_dict(game_state.get("model"))
+    candidates: list[dict[str, Any]] = []
+    raw_candidates = scene.get("candidates")
+    if isinstance(raw_candidates, list):
+        for raw_candidate in raw_candidates[:3]:
+            candidate = _as_dict(raw_candidate)
+            scene_id = str(candidate.get("scene_id") or "")
+            score = _safe_float(candidate.get("score"))
+            if scene_id and score is not None:
+                candidates.append({"scene_id": scene_id, "score": score})
+    return {
+        "status": str(game_state.get("status") or ""),
+        "ready": game_state.get("ready") is True,
+        "semantic_scene_ready": game_state.get("semantic_scene_ready") is True,
+        "source_frame_id": str(game_state.get("source_frame_id") or ""),
+        "target": {
+            "id": str(target.get("id") or ""),
+            "configured": target.get("configured") is True,
+            "process_names": _string_items(target.get("process_names")),
+            "foreground": target.get("foreground") is True,
+            "visibility_basis": str(target.get("visibility_basis") or ""),
+        },
+        "foreground": {
+            "target_match": foreground.get("target_match") is True,
+            "process_id": _safe_int(foreground.get("process_id")),
+            "process_name": str(foreground.get("process_name") or ""),
+            "window_id": _safe_int(foreground.get("window_id")),
+            "window_title_included": False,
+        },
+        "scene": (
+            {
+                "ready": scene.get("ready") is True,
+                "id": str(scene.get("id") or ""),
+                "top_candidate_id": str(scene.get("top_candidate_id") or ""),
+                "confidence": _safe_float(scene.get("confidence")),
+                "margin": _safe_float(scene.get("margin")),
+                "min_confidence": _safe_float(scene.get("min_confidence")),
+                "min_margin": _safe_float(scene.get("min_margin")),
+                "candidates": candidates,
+            }
+            if scene
+            else {}
+        ),
+        "classification": (
+            {
+                "source_frame_id": str(classification.get("source_frame_id") or ""),
+                "classified_at": _safe_float(classification.get("classified_at")),
+                "age_ms": _safe_float(classification.get("age_ms")),
+                "inference_ms": _safe_float(classification.get("inference_ms")),
+                "device": str(classification.get("device") or ""),
+                "backend": str(classification.get("backend") or ""),
+                "score_normalization": str(classification.get("score_normalization") or ""),
+            }
+            if classification
+            else {}
+        ),
+        "model": {
+            "id": str(model.get("id") or ""),
+            "configured": model.get("configured") is True,
+            "local_files_present": model.get("local_files_present") is True,
+            "remote_inference": False,
+        },
+    }
 
 
 def _as_dict(value: Any) -> dict[str, Any]:

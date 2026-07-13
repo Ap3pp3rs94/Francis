@@ -66,6 +66,14 @@ llm = [
   "tiktoken",
   "numpy",
 ]
+vision = [
+  "numpy",
+  "pillow",
+  "protobuf",
+  "sentencepiece",
+  "torch",
+  "transformers",
+]
 security = [
   "cryptography",
   "argon2-cffi",

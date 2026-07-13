@@ -21,6 +21,7 @@ from typing import Any, Protocol
 from francis.kernel.paths import data_dir
 from francis.lens.atomic_io import atomic_write_json as _atomic_write_json
 from francis.lens.atomic_io import read_json_object as _read_json
+from francis.lens.game_observer import GameObserver, LensGameObserver
 from francis.lens.perception import LENS_PERCEPTION_RUNTIME_STATE_KIND, LENS_PERCEPTION_RUNTIME_STATE_VERSION
 from francis.lens.perception import _process_is_alive as process_is_alive
 from francis.lens.perception_authority import lens_perception_desktop_authority_receipt_status
@@ -89,6 +90,7 @@ class LensPerceptionWorker:
         authority_status: AuthorityStatusProvider | None = None,
         execution_status: ExecutionStatusProvider | None = None,
         supervision_status: SupervisionStatusProvider | None = None,
+        game_observer: GameObserver | None = None,
         clock: Callable[[], float] = time.time,
         monotonic_clock: Callable[[], float] = time.monotonic,
         sleeper: Callable[[float], None] = time.sleep,
@@ -100,6 +102,7 @@ class LensPerceptionWorker:
         self._authority_status = authority_status or _desktop_authority_status
         self._execution_status = execution_status or lens_perception_execution_approval_status
         self._supervision_status = supervision_status or lens_perception_worker_supervision_readback
+        self._game_observer = game_observer or LensGameObserver.from_environment()
         self._clock = clock
         self._monotonic = monotonic_clock
         self._sleep = sleeper
@@ -111,6 +114,9 @@ class LensPerceptionWorker:
             max_frames=config.max_frames,
             authority_status=self._authority_status,
         )
+
+    def close(self) -> None:
+        self._game_observer.close()
 
     def capture_once(self) -> dict[str, Any]:
         observed_at = self._clock()
@@ -171,6 +177,13 @@ class LensPerceptionWorker:
         situation_model: dict[str, Any]
         situation_blockers: list[str] = ["lens_situation_model_not_ready"]
         try:
+            situation_observed_at = max(frame.captured_at, self._clock())
+            game_observation = self._game_observer.observe(
+                frame=frame,
+                source_frame_id=str(ring_buffer.get("latest_frame_id") or ""),
+                authority_receipt_id=self.config.authority_receipt_id,
+                observed_at=situation_observed_at,
+            )
             situation_model = write_lens_situation_model_heartbeat(
                 frame=frame,
                 ring_buffer=ring_buffer,
@@ -179,7 +192,8 @@ class LensPerceptionWorker:
                 worker_pid=self.process_id,
                 host_pid=_safe_int(supervision.get("observed_pid")),
                 supervisor_pid=_safe_int(supervision.get("supervisor_pid")),
-                observed_at=max(frame.captured_at, self._clock()),
+                game_observation=game_observation,
+                observed_at=situation_observed_at,
             )
         except (OSError, ValueError):
             situation_model = lens_situation_model_readback(now=max(frame.captured_at, self._clock()))
@@ -291,6 +305,8 @@ class LensPerceptionWorker:
                 "heartbeat_ready": heartbeat.get("heartbeat_ready") is True,
                 "has_current_desktop_state": heartbeat.get("has_current_desktop_state") is True,
                 "semantic_comprehension_ready": heartbeat.get("semantic_comprehension_ready") is True,
+                "game_scene_ready": heartbeat.get("game_scene_ready") is True,
+                "present": _as_dict(heartbeat.get("present")),
                 "sources": _as_dict(heartbeat.get("sources")),
                 "source_blockers": _string_items(heartbeat.get("source_blockers")),
                 "blockers": _string_items(heartbeat.get("blockers")),
@@ -423,7 +439,10 @@ def main(argv: list[str] | None = None) -> int:
         ),
         authority_status=authority_status,
     )
-    result = worker.run(exit_after_seconds=args.exit_after_seconds)
+    try:
+        result = worker.run(exit_after_seconds=args.exit_after_seconds)
+    finally:
+        worker.close()
     print(json.dumps(_bounded_cli_result(result), indent=2, sort_keys=True))
     return int(result.get("exit_code") or 0)
 

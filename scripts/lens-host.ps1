@@ -518,13 +518,28 @@ function Stop-OwnedPerceptionWorker {
   }
   try {
     if (-not $script:PerceptionWorkerProcess.HasExited) {
-      Stop-Process -Id $script:PerceptionWorkerProcess.Id -Force -ErrorAction Stop
-      $script:PerceptionWorkerProcess.WaitForExit(3000)
-      $RunningState['perception_worker']['status'] = 'stopped_with_resident_host'
+      $GracefulExit = $script:PerceptionWorkerProcess.WaitForExit(3000)
+      if (-not $GracefulExit) {
+        Stop-Process -Id $script:PerceptionWorkerProcess.Id -Force -ErrorAction Stop
+        $script:PerceptionWorkerProcess.WaitForExit()
+        $RunningState['perception_worker']['status'] = 'stopped_with_resident_host'
+      } else {
+        $RunningState['perception_worker']['status'] = 'exited'
+      }
     } else {
       $RunningState['perception_worker']['status'] = 'exited'
     }
+    $script:PerceptionWorkerProcess.Refresh()
     $RunningState['perception_worker']['process_exit_code'] = [int]$script:PerceptionWorkerProcess.ExitCode
+    $WorkerResult = Read-JsonFile -Path $script:PerceptionWorkerStdoutPath
+    if ($null -ne $WorkerResult) {
+      $RunningState['perception_worker']['result_status'] = [string](Get-PropertyValue -Payload $WorkerResult -Name 'status' -Default '')
+      try {
+        $RunningState['perception_worker']['exit_code'] = [int](Get-PropertyValue -Payload $WorkerResult -Name 'exit_code' -Default $null)
+      } catch {
+        $RunningState['perception_worker']['exit_code'] = $null
+      }
+    }
   } catch {
     $RunningState['perception_worker']['status'] = 'stop_failed'
     $RunningState['perception_worker']['blockers'] = @('lens_perception_worker_owned_process_stop_failed')

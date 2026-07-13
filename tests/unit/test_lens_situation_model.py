@@ -38,6 +38,54 @@ def _ring(*, frame_id: str, changed: bool) -> dict[str, object]:
     }
 
 
+def _game_observation(*, frame_id: str, learning_authority: bool = False) -> dict[str, object]:
+    return {
+        "kind": "lens.game.observation",
+        "version": 1,
+        "status": "scene_classified",
+        "ready": True,
+        "semantic_scene_ready": True,
+        "source_frame_id": frame_id,
+        "target": {
+            "id": "sand",
+            "configured": True,
+            "process_names": ["Sand.exe"],
+            "foreground": True,
+            "visibility_basis": "foreground_process_match",
+        },
+        "foreground": {
+            "target_match": True,
+            "process_id": 55,
+            "process_name": "Sand.exe",
+            "window_id": 44,
+            "window_title_included": False,
+        },
+        "scene": {"ready": True, "id": "active_gameplay", "confidence": 0.78, "margin": 0.44},
+        "classification": {"source_frame_id": frame_id, "device": "cpu"},
+        "model": {
+            "id": "google/siglip-base-patch16-224",
+            "configured": True,
+            "local_files_present": True,
+            "remote_inference": False,
+        },
+        "runtime_identity": {"authority_receipt_id": "capture-receipt"},
+        "blockers": [],
+        "governance": {
+            "observation_only": True,
+            "local_inference_only": True,
+            "remote_frame_transfer": False,
+            "raw_pixels_in_state": False,
+            "window_titles_captured": False,
+            "keyboard_content_captured": False,
+            "user_mouse_captured": False,
+            "input_execution_authority": False,
+            "memory_write": False,
+            "learning_authority": learning_authority,
+            "reward_authority": False,
+        },
+    }
+
+
 def test_situation_model_readback_is_missing_without_runtime_write(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
 
@@ -105,6 +153,87 @@ def test_situation_model_heartbeat_rewrites_one_current_state_without_pixels(tmp
     assert stored["revision"] == "frame-2"
     assert stored["governance"]["keyboard_content_captured"] is False
     assert "bgra" not in json.dumps(stored).lower()
+
+
+def test_situation_model_accepts_authority_correlated_local_game_scene(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(
+        situation_model_module,
+        "lens_orb_body_runtime_readback",
+        lambda: {"status": "ready", "ready": True, "body": "francis_orb", "blockers": []},
+    )
+
+    readback = write_lens_situation_model_heartbeat(
+        frame=_frame(captured_at=100.0, value=0),
+        ring_buffer=_ring(frame_id="frame-game", changed=True),
+        authority_receipt_id="capture-receipt",
+        execution_approval_id="execution-approval",
+        worker_pid=800,
+        host_pid=900,
+        supervisor_pid=700,
+        game_observation=_game_observation(frame_id="frame-game"),
+        observed_at=100.1,
+    )
+
+    assert readback["heartbeat_ready"] is True
+    assert readback["semantic_comprehension_ready"] is False
+    assert readback["game_scene_ready"] is True
+    assert readback["sources"]["game_observer"]["ready"] is True
+    assert readback["sources"]["game_observer"]["target_id"] == "sand"
+    assert readback["present"]["game"]["scene"]["id"] == "active_gameplay"
+    assert readback["present"]["game"]["foreground"]["window_title_included"] is False
+    assert "lens_game_observer_contract_invalid" not in readback["source_blockers"]
+    assert readback["governance"]["learning_authority"] is False
+    assert readback["governance"]["reward_authority"] is False
+
+
+def test_situation_model_projects_only_bounded_game_observation_fields(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
+    observation = _game_observation(frame_id="frame-bounded-game")
+    observation["scene"]["raw_pixels"] = "must-not-persist"
+    observation["classification"]["frame_bytes"] = "must-not-persist"
+    observation["model"]["access_token"] = "must-not-persist"
+
+    readback = write_lens_situation_model_heartbeat(
+        frame=_frame(captured_at=100.0, value=0),
+        ring_buffer=_ring(frame_id="frame-bounded-game", changed=True),
+        authority_receipt_id="capture-receipt",
+        execution_approval_id="execution-approval",
+        worker_pid=800,
+        host_pid=900,
+        supervisor_pid=700,
+        game_observation=observation,
+        observed_at=100.1,
+    )
+
+    projected = json.dumps(readback["present"]["game"])
+    assert readback["game_scene_ready"] is True
+    assert "must-not-persist" not in projected
+    assert "raw_pixels" not in projected
+    assert "frame_bytes" not in projected
+    assert "access_token" not in projected
+
+
+def test_situation_model_rejects_self_labeled_game_learning_authority(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
+
+    readback = write_lens_situation_model_heartbeat(
+        frame=_frame(captured_at=100.0, value=0),
+        ring_buffer=_ring(frame_id="frame-overbroad-game", changed=True),
+        authority_receipt_id="capture-receipt",
+        execution_approval_id="execution-approval",
+        worker_pid=800,
+        host_pid=900,
+        supervisor_pid=700,
+        game_observation=_game_observation(frame_id="frame-overbroad-game", learning_authority=True),
+        observed_at=100.1,
+    )
+
+    assert readback["heartbeat_ready"] is True
+    assert readback["game_scene_ready"] is False
+    assert readback["sources"]["game_observer"]["status"] == "invalid"
+    assert readback["present"]["game"] == {}
+    assert "lens_game_observer_contract_invalid" in readback["source_blockers"]
 
 
 def test_situation_model_heartbeat_readback_rejects_stale_state(tmp_path: Path, monkeypatch) -> None:
