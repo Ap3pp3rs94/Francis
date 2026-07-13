@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from francis.governance.approvals import approved_dir
 from francis.lens import perception_worker as perception_worker_module
 from francis.lens.perception_capture import DesktopFrame
@@ -143,7 +145,18 @@ def test_worker_captures_on_supervised_approved_cadence_and_updates_partial_situ
     assert stopped["governance"]["user_mouse_capture_authority"] is False
 
 
-def test_worker_pauses_capture_during_bounded_supervisor_staleness_then_recovers(tmp_path: Path, monkeypatch) -> None:
+@pytest.mark.parametrize(
+    "transient_blocker",
+    [
+        "lens_perception_supervisor_state_stale",
+        "lens_perception_supervisor_state_unavailable",
+    ],
+)
+def test_worker_pauses_capture_during_bounded_supervisor_readback_gap_then_recovers(
+    transient_blocker: str,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
     source = _FrameSource()
     supervision_calls = 0
@@ -158,7 +171,7 @@ def test_worker_pauses_capture_during_bounded_supervisor_staleness_then_recovers
                 "active": False,
                 "supervisor_pid": 700,
                 "observed_pid": parent_pid,
-                "blockers": ["lens_perception_supervisor_state_stale"],
+                "blockers": [transient_blocker],
             }
         return _active_supervision(parent_pid, _now)
 
@@ -329,6 +342,23 @@ def test_supervision_readback_retries_transient_status_replace_race(tmp_path: Pa
     assert attempts == 2
     assert readback["active"] is True
     assert readback["blockers"] == []
+
+
+def test_supervision_readback_reports_transient_state_unavailability(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
+
+    def unexpected_process_lookup(_pid: int) -> bool:
+        raise AssertionError("process lookup must not run without state")
+
+    monkeypatch.setattr(perception_worker_module, "_read_json", lambda _path: {})
+    monkeypatch.setattr(perception_worker_module, "process_is_alive", unexpected_process_lookup)
+
+    readback = lens_perception_worker_supervision_readback(parent_process_id=900, now=101.0)
+
+    assert readback["active"] is False
+    assert readback["observed_pid"] == 0
+    assert readback["parent_process_id"] == 900
+    assert readback["blockers"] == ["lens_perception_supervisor_state_unavailable"]
 
 
 def test_supervision_readback_tolerates_bounded_concurrent_heartbeat_skew(tmp_path: Path, monkeypatch) -> None:

@@ -43,7 +43,12 @@ from francis.lens.situation_model import (
 _MAX_SUPERVISOR_STATE_AGE_SECONDS = 5.0
 _MAX_SUPERVISOR_FUTURE_SKEW_SECONDS = 0.25
 _SUPERVISOR_STALE_GRACE_SECONDS = 10.0
-_TRANSIENT_SUPERVISION_BLOCKERS = frozenset({"lens_perception_supervisor_state_stale"})
+_TRANSIENT_SUPERVISION_BLOCKERS = frozenset(
+    {
+        "lens_perception_supervisor_state_stale",
+        "lens_perception_supervisor_state_unavailable",
+    }
+)
 
 AuthorityStatusProvider = Callable[[str, int], dict[str, Any]]
 ExecutionStatusProvider = Callable[[str, str], dict[str, Any]]
@@ -204,7 +209,7 @@ class LensPerceptionWorker:
             latest = self.capture_once()
             if latest.get("state") != "running":
                 blocker_set = frozenset(_string_items(latest.get("blockers")))
-                if blocker_set == _TRANSIENT_SUPERVISION_BLOCKERS:
+                if blocker_set and blocker_set.issubset(_TRANSIENT_SUPERVISION_BLOCKERS):
                     retry_observed = self._monotonic()
                     if supervisor_stale_since is None:
                         supervisor_stale_since = retry_observed
@@ -335,6 +340,22 @@ def lens_perception_worker_supervision_readback(
 ) -> dict[str, Any]:
     path = data_dir() / "runtime" / "lens-host-supervisor" / "status.json"
     record = _read_json(path)
+    if not record:
+        return {
+            "status": "blocked",
+            "active": False,
+            "state_path": str(path),
+            "supervisor_pid": 0,
+            "observed_pid": 0,
+            "parent_process_id": parent_process_id,
+            "parent_matches_resident_host": False,
+            "supervisor_process_alive": False,
+            "resident_host_process_alive": False,
+            "fresh": False,
+            "age_ms": None,
+            "max_future_skew_ms": int(_MAX_SUPERVISOR_FUTURE_SKEW_SECONDS * 1000),
+            "blockers": ["lens_perception_supervisor_state_unavailable"],
+        }
     supervisor_pid = _safe_int(record.get("supervisor_pid"))
     observed_pid = _safe_int(record.get("observed_pid"))
     updated_at = _timestamp(record.get("updated_at"))
