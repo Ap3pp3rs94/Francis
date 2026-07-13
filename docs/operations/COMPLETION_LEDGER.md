@@ -56,9 +56,10 @@ operator product surface:
 - `P8_MEMORY`: partial
 
 Current active workstream: Capability Economy / Stage 17 closure reconciliation.
-The current goal is ordered as final-head CI and closure review for the six
-software criteria now reporting ready, then the FR-017 operator/physical
-evidence boundary and final governed closure decision.
+All six software criteria are broad-validated at exact code head
+`52e69b323fa43336207b1344da3310fb85f9567c`.
+The current goal is the FR-017 operator/physical evidence boundary followed by
+the final governed closure decision.
 
 Stage 6 Lens MVP is ledger-closed against its five canonical acceptance criteria,
 and Stages 7 through 16 retain their existing receipt-backed closures.
@@ -119,6 +120,51 @@ What is materially true now:
 
 > Older dated entries are archived under docs/operations/archive/ (see scripts/archive-completion-ledger.ps1).
 > Historical undated ledger body is archived under docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md.
+
+### 2026-07-13 00:41Z - Stage 17 software posture broad-validated at final head
+
+Current posture: Phase 2 and Stage 17 remain open, but the Capability Economy
+software closure posture is now broad-validated at exact code head
+`52e69b323fa43336207b1344da3310fb85f9567c`. All six derived software criteria
+remain ready with no blockers, and the full GitHub CI matrix plus CodeQL passed
+for that head. This closes the final-head software-validation gap recorded by
+the 2026-07-10 checkpoint. It does not supply FR-017 physical evidence, make the
+final governed Stage 17 closure decision, start Stage 18, clear FR-018, or claim
+that the currently running Orb process family is healthy.
+
+Evidence:
+
+- Fresh source-loaded `/plugins/capabilities/catalog?limit=1` readback from the
+  exact head returned `stage17_closure_matrix.status=ready_for_closure_review`,
+  `all_criteria_ready=true`, `closure_claimed=false`, and criteria 1 through 6
+  each `ready` with no blockers.
+- Pack readiness returned 52 of 52 packs ready, all 4,052 catalog entries packed,
+  tested, and documented, and zero unpacked entries.
+- Catalog coherence returned zero duplicate capabilities, duplicate proposals,
+  lineage gaps, validation-lineage gaps, and quality gaps.
+- Receipt-linked reuse proof remained ready across the mission-linked plugin and
+  mission-linked tool-operation contexts for the same pack reuse key.
+- GitHub CI run `29212950024` passed at the exact head across Ubuntu and Windows
+  on Python 3.12 and 3.13. GitHub CodeQL run `29212950040` also passed.
+- The code-bearing perception/input slices on this head passed their focused
+  API, authority-matrix, Situation Model, worker, Ruff, format, mypy, and
+  `git diff --check` gates before push.
+
+Remaining truthful gap:
+
+- FR-017 still requires the physically present operator evidence chain:
+  accepted measurement/setup evidence, non-powered mockup and
+  mannequin/interface work, pilot static-fit and movement evidence,
+  quick-release/cable-snag evidence, professional engineering review, and the
+  final human physical decision.
+- Stage 17 remains open until that evidence and the final governed closure
+  decision are recorded. Stage 18 and FR-018 remain blocked.
+- Full local `scripts/check.ps1` was not run for this checkpoint; the focused
+  local validation and exact-head remote CI/CodeQL results above are the stated
+  software gates.
+- Read-only live Orb identity inspection separately reports a missing resident
+  supervisor process and missing tray runtime. No process was stopped, started,
+  restarted, or modified while recording this checkpoint.
 
 ### 2026-07-12 20:04Z - Stage 1 Unreal Grounded Presence live acceptance
 

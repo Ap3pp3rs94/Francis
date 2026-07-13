@@ -414,6 +414,56 @@ def test_completion_model_snapshot_keeps_stage17_gap_when_latest_entry_is_other_
     ]
 
 
+def test_completion_model_selects_newest_timestamped_entry_from_newest_first_ledger(tmp_path: Path) -> None:
+    ledger = tmp_path / "ledger.md"
+    ledger.write_text(
+        """# Ledger
+
+## 2. Current build phase
+
+Francis is in `Phase 2`.
+
+### 2026-07-13 00:41Z - Stage 17 software posture broad-validated at final head
+
+Remaining truthful gap:
+
+- Stage 17 remains open until FR-017 physical evidence and the final governed decision are recorded.
+
+### 2026-07-12 20:04Z - Stage 1 later-lane hardening
+
+Remaining truthful gap:
+
+- Stage 1 visual tuning remains optional.
+
+### 2026-07-10 14:31Z - Stage 17 software criteria ready for closure review
+
+Remaining truthful gap:
+
+- Final-head GitHub CI must pass before broad validation.
+""",
+        encoding="utf-8",
+    )
+    manifest = tmp_path / "manifest.md"
+    manifest.write_text("# Manifest (Phase 2)\n", encoding="utf-8")
+
+    payload = completion_model_status_snapshot(
+        ledger_path=ledger,
+        build_manifest_path=manifest,
+    )
+
+    assert payload["latest_ledger_entry"]["title"] == (
+        "2026-07-13 00:41Z - Stage 17 software posture broad-validated at final head"
+    )
+    assert payload["stage17_status"]["latest_ledger_entry"]["title"] == (
+        "2026-07-13 00:41Z - Stage 17 software posture broad-validated at final head"
+    )
+    assert "FR-017 physical evidence" in payload["stage17_status"]["latest_ledger_entry"]["remaining_truthful_gap"]
+    assert (
+        "Final-head GitHub CI must pass"
+        not in payload["stage17_status"]["latest_ledger_entry"]["remaining_truthful_gap"]
+    )
+
+
 def test_completion_model_snapshot_uses_archive_when_main_ledger_is_compacted(tmp_path: Path) -> None:
     ledger = tmp_path / "ledger.md"
     ledger.write_text(

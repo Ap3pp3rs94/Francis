@@ -281,8 +281,8 @@ def _latest_ledger_entry(ledger_text: str) -> dict[str, Any]:
     update_rule_index = body.find("\n## 6. Update rule")
     if update_rule_index >= 0:
         body = body[:update_rule_index]
-    matches = list(re.finditer(r"(?m)^### (?P<title>.+)$", body))
-    if not matches:
+    entries = _ledger_entries(body)
+    if not entries:
         return {
             "found": False,
             "title": "",
@@ -290,12 +290,12 @@ def _latest_ledger_entry(ledger_text: str) -> dict[str, Any]:
             "remaining_truthful_gap": "",
             "has_remaining_truthful_gap": False,
         }
-    latest = matches[-1]
-    entry_text = body[latest.start() :].strip()
+    latest = max(entries, key=lambda entry: entry["rank"])
+    entry_text = str(latest["text"])
     remaining_gap = _first_match(entry_text, r"(?s)Remaining truthful gap:\s*(?P<gap>.+)$", "gap")
     return {
         "found": True,
-        "title": latest.group("title").strip(),
+        "title": str(latest["title"]),
         "roadmap_area": _labeled_paragraph(entry_text, "Roadmap area"),
         "remaining_truthful_gap": _limit_text(remaining_gap, max_length=700),
         "has_remaining_truthful_gap": bool(remaining_gap.strip()),
@@ -308,23 +308,28 @@ def _stage17_status(ledger_text: str) -> dict[str, Any]:
     if update_rule_index >= 0:
         body = body[:update_rule_index]
 
-    matches = list(re.finditer(r"(?m)^### (?P<title>.+)$", body))
-    latest_stage17_entry: dict[str, Any] | None = None
-    for index, match in enumerate(matches):
-        next_start = matches[index + 1].start() if index + 1 < len(matches) else len(body)
-        entry_text = body[match.start() : next_start].strip()
-        title = match.group("title").strip()
+    stage17_entries: list[dict[str, Any]] = []
+    for entry in _ledger_entries(body):
+        entry_text = str(entry["text"])
+        title = str(entry["title"])
         roadmap_area = _labeled_paragraph(entry_text, "Roadmap area")
         if not _is_stage17_ledger_entry(title=title, roadmap_area=roadmap_area):
             continue
         remaining_gap = _first_match(entry_text, r"(?s)Remaining truthful gap:\s*(?P<gap>.+)$", "gap")
-        latest_stage17_entry = {
-            "found": True,
-            "title": title,
-            "roadmap_area": roadmap_area,
-            "remaining_truthful_gap": _limit_text(remaining_gap, max_length=700),
-            "has_remaining_truthful_gap": bool(remaining_gap.strip()),
-        }
+        stage17_entries.append(
+            {
+                "found": True,
+                "title": title,
+                "roadmap_area": roadmap_area,
+                "remaining_truthful_gap": _limit_text(remaining_gap, max_length=700),
+                "has_remaining_truthful_gap": bool(remaining_gap.strip()),
+                "rank": entry["rank"],
+            }
+        )
+
+    latest_stage17_entry = max(stage17_entries, key=lambda entry: entry["rank"]) if stage17_entries else None
+    if latest_stage17_entry is not None:
+        latest_stage17_entry.pop("rank", None)
 
     if latest_stage17_entry is None:
         return {
@@ -361,6 +366,37 @@ def _stage17_status(ledger_text: str) -> dict[str, Any]:
         if latest_stage17_entry["has_remaining_truthful_gap"]
         else "name_stage17_remaining_truthful_gap_in_ledger",
     }
+
+
+def _ledger_entries(body: str) -> list[dict[str, Any]]:
+    matches = list(re.finditer(r"(?m)^### (?P<title>.+)$", body))
+    entries: list[dict[str, Any]] = []
+    for index, match in enumerate(matches):
+        next_start = matches[index + 1].start() if index + 1 < len(matches) else len(body)
+        title = match.group("title").strip()
+        entries.append(
+            {
+                "title": title,
+                "text": body[match.start() : next_start].strip(),
+                "rank": _ledger_entry_rank(title, index=index),
+            }
+        )
+    return entries
+
+
+def _ledger_entry_rank(title: str, *, index: int) -> tuple[int, float, int]:
+    match = re.match(
+        r"^(?P<date>\d{4}-\d{2}-\d{2})(?:\s+(?P<time>\d{2}:\d{2})(?:Z)?)?(?:\s|$)",
+        title,
+    )
+    if match is None:
+        return (0, 0.0, index)
+    timestamp_text = f"{match.group('date')}T{match.group('time') or '00:00'}:00+00:00"
+    try:
+        timestamp = datetime.fromisoformat(timestamp_text).timestamp()
+    except ValueError:
+        return (0, 0.0, index)
+    return (1, timestamp, index)
 
 
 def _stage17_status_with_archive_fallback(

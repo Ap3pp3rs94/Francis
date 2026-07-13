@@ -147,6 +147,42 @@ function Get-PrefixedParagraph {
   return ''
 }
 
+function Get-LedgerEntries {
+  param([string]$Body)
+
+  $Matches = [regex]::Matches([string]$Body, '(?m)^### (?<title>.+)$')
+  $Entries = New-Object System.Collections.ArrayList
+  for ($Index = 0; $Index -lt $Matches.Count; $Index += 1) {
+    $Match = $Matches[$Index]
+    $NextStart = if (($Index + 1) -lt $Matches.Count) { $Matches[$Index + 1].Index } else { $Body.Length }
+    $Title = ([string]$Match.Groups['title'].Value).Trim()
+    $TimestampMatch = [regex]::Match(
+      $Title,
+      '^(?<date>\d{4}-\d{2}-\d{2})(?:\s+(?<time>\d{2}:\d{2})(?:Z)?)?(?:\s|$)'
+    )
+    $RankDated = 0
+    $RankTicks = [Int64]0
+    if ($TimestampMatch.Success) {
+      $TimestampText = '{0}T{1}:00+00:00' -f (
+        [string]$TimestampMatch.Groups['date'].Value
+      ), $(if ($TimestampMatch.Groups['time'].Success) { [string]$TimestampMatch.Groups['time'].Value } else { '00:00' })
+      $Timestamp = [DateTimeOffset]::MinValue
+      if ([DateTimeOffset]::TryParse($TimestampText, [ref]$Timestamp)) {
+        $RankDated = 1
+        $RankTicks = $Timestamp.UtcTicks
+      }
+    }
+    [void]$Entries.Add([pscustomobject]@{
+        title = $Title
+        text = $Body.Substring($Match.Index, $NextStart - $Match.Index).Trim()
+        rank_dated = $RankDated
+        rank_ticks = $RankTicks
+        rank_index = $Index
+      })
+  }
+  return @($Entries)
+}
+
 function Get-LatestLedgerEntry {
   param([string]$LedgerText)
 
@@ -156,8 +192,8 @@ function Get-LatestLedgerEntry {
     $Body = $Body.Substring(0, $UpdateRuleIndex)
   }
 
-  $Matches = [regex]::Matches($Body, '(?m)^### (?<title>.+)$')
-  if ($Matches.Count -eq 0) {
+  $Entries = @(Get-LedgerEntries -Body $Body)
+  if ($Entries.Count -eq 0) {
     return [ordered]@{
       found = $false
       title = ''
@@ -167,9 +203,9 @@ function Get-LatestLedgerEntry {
     }
   }
 
-  $Latest = $Matches[$Matches.Count - 1]
-  $EntryText = $Body.Substring($Latest.Index).Trim()
-  $Title = ([string]$Latest.Groups['title'].Value).Trim()
+  $Latest = $Entries | Sort-Object rank_dated, rank_ticks, rank_index | Select-Object -Last 1
+  $EntryText = [string]$Latest.text
+  $Title = [string]$Latest.title
   $RoadmapArea = Get-LabeledParagraph -Text $EntryText -Label 'Roadmap area'
   $RemainingGap = Get-FirstRegexGroup -Text $EntryText -Pattern '(?s)Remaining truthful gap:\s*(?<gap>.+)$' -GroupName 'gap'
 
@@ -210,25 +246,38 @@ function Get-Stage17Status {
     $Body = $Body.Substring(0, $UpdateRuleIndex)
   }
 
-  $Matches = [regex]::Matches($Body, '(?m)^### (?<title>.+)$')
-  $LatestStage17Entry = $null
-  for ($Index = 0; $Index -lt $Matches.Count; $Index += 1) {
-    $Match = $Matches[$Index]
-    $NextStart = if (($Index + 1) -lt $Matches.Count) { $Matches[$Index + 1].Index } else { $Body.Length }
-    $EntryText = $Body.Substring($Match.Index, $NextStart - $Match.Index).Trim()
-    $Title = ([string]$Match.Groups['title'].Value).Trim()
+  $Stage17Entries = New-Object System.Collections.ArrayList
+  foreach ($Entry in @(Get-LedgerEntries -Body $Body)) {
+    $EntryText = [string]$Entry.text
+    $Title = [string]$Entry.title
     $RoadmapArea = Get-LabeledParagraph -Text $EntryText -Label 'Roadmap area'
     if (-not (Test-Stage17LedgerEntry -Title $Title -RoadmapArea $RoadmapArea)) {
       continue
     }
     $RemainingGap = Get-FirstRegexGroup -Text $EntryText -Pattern '(?s)Remaining truthful gap:\s*(?<gap>.+)$' -GroupName 'gap'
-    $LatestStage17Entry = [ordered]@{
-      found = $true
-      title = $Title
-      roadmap_area = $RoadmapArea
-      remaining_truthful_gap = Limit-CompletionModelText -Text $RemainingGap -MaxLength 700
-      has_remaining_truthful_gap = -not [string]::IsNullOrWhiteSpace($RemainingGap)
+    [void]$Stage17Entries.Add([pscustomobject]@{
+        found = $true
+        title = $Title
+        roadmap_area = $RoadmapArea
+        remaining_truthful_gap = Limit-CompletionModelText -Text $RemainingGap -MaxLength 700
+        has_remaining_truthful_gap = -not [string]::IsNullOrWhiteSpace($RemainingGap)
+        rank_dated = $Entry.rank_dated
+        rank_ticks = $Entry.rank_ticks
+        rank_index = $Entry.rank_index
+      })
+  }
+
+  $LatestStage17Entry = if ($Stage17Entries.Count -gt 0) {
+    $Selected = $Stage17Entries | Sort-Object rank_dated, rank_ticks, rank_index | Select-Object -Last 1
+    [ordered]@{
+      found = [bool]$Selected.found
+      title = [string]$Selected.title
+      roadmap_area = [string]$Selected.roadmap_area
+      remaining_truthful_gap = [string]$Selected.remaining_truthful_gap
+      has_remaining_truthful_gap = [bool]$Selected.has_remaining_truthful_gap
     }
+  } else {
+    $null
   }
 
   if ($null -eq $LatestStage17Entry) {
@@ -772,6 +821,9 @@ if ([string]::IsNullOrWhiteSpace($CurrentPhase)) {
 $LatestLedgerEntry = Get-LatestLedgerEntry -LedgerText $LedgerText
 $ActiveWorkstream = Get-FirstRegexGroup -Text $LedgerText -Pattern '(?m)^Current active workstream:\s*(?<workstream>.+?)\s*$' -GroupName 'workstream'
 $ActiveWorkstreamGoal = Get-PrefixedParagraph -Text $LedgerText -Prefix 'The current goal is ordered as'
+if ([string]::IsNullOrWhiteSpace($ActiveWorkstreamGoal)) {
+  $ActiveWorkstreamGoal = Get-PrefixedParagraph -Text $LedgerText -Prefix 'The current goal is'
+}
 $Stage17Status = Get-Stage17StatusWithArchiveFallback -LedgerText $LedgerText -ArchivePaths $LedgerArchivePaths
 $Planes = Get-PlaneReadiness -BuildManifestText $BuildManifestText
 $LoopGuard = New-CompletionLoopGuard -LedgerExists $LedgerExists -BuildManifestExists $BuildManifestExists -LatestLedgerEntry $LatestLedgerEntry -Stage17Status $Stage17Status
