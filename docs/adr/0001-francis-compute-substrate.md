@@ -145,6 +145,27 @@ Durable compute receipts are bounded to compute receipt fields. They do not pers
 
 The substrate also returns an explicit `LiveLearningEvent` contract object. It does not persist that event into long-term memory. Memory persistence requires a separate governance review because it crosses a durable memory boundary.
 
+## Virtual Workfield Simulation Contract
+
+A later internal contract-only slice adds a typed virtual workfield plan for the
+VR/simulation compute concept. The plan models virtual work lanes, bounded work
+units, resource budgets, and future adapter obligations under `P6_SIMULATION`
+while staying attached to the Compute Substrate and managed-worker contract
+boundaries.
+
+This contract records the grounded thesis: Francis may use VR-readable state,
+local-first scheduling, sandboxing, reusable capability paths, and receipts to
+improve useful work per watt. It does not claim virtual compute creates free
+compute, does not claim Francis has solved data-center scaling, and does not
+turn visual simulation into executable capacity.
+
+The virtual workfield plan is contract-only. It starts no process, runs no
+shell, uses no network, uses no GPU, grants no filesystem authority, writes no
+memory, persists no live-learning event, and implements no real adapter. Its
+managed-worker plan remains a dry-run `simulation` worker contract that requires
+future substrate governor, worker registry, receipt, status, approval, sandbox,
+and adapter bindings before any execution attempt can become real.
+
 ## Consequences
 
 The substrate can grow toward stronger workers without changing Francis's authority model. Visual runtimes, virtual machines, containers, remote workers, and simulations become bounded execution adapters with policy, budget, receipt, and verification obligations.
