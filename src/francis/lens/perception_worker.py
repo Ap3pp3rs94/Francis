@@ -42,6 +42,8 @@ from francis.lens.situation_model import (
 
 _MAX_SUPERVISOR_STATE_AGE_SECONDS = 5.0
 _MAX_SUPERVISOR_FUTURE_SKEW_SECONDS = 0.25
+_SUPERVISOR_STALE_GRACE_SECONDS = 10.0
+_TRANSIENT_SUPERVISION_BLOCKERS = frozenset({"lens_perception_supervisor_state_stale"})
 
 AuthorityStatusProvider = Callable[[str, int], dict[str, Any]]
 ExecutionStatusProvider = Callable[[str, str], dict[str, Any]]
@@ -196,10 +198,20 @@ class LensPerceptionWorker:
         started = self._monotonic()
         captured = 0
         latest: dict[str, Any] = {}
+        supervisor_stale_since: float | None = None
         while True:
             iteration_started = self._monotonic()
             latest = self.capture_once()
             if latest.get("state") != "running":
+                blocker_set = frozenset(_string_items(latest.get("blockers")))
+                if blocker_set == _TRANSIENT_SUPERVISION_BLOCKERS:
+                    retry_observed = self._monotonic()
+                    if supervisor_stale_since is None:
+                        supervisor_stale_since = retry_observed
+                    if retry_observed - supervisor_stale_since < _SUPERVISOR_STALE_GRACE_SECONDS:
+                        elapsed = retry_observed - iteration_started
+                        self._sleep(max(0.0, (1.0 / self.config.sample_rate_hz) - elapsed))
+                        continue
                 return {
                     "ok": False,
                     "status": "blocked",
@@ -207,6 +219,7 @@ class LensPerceptionWorker:
                     "captured_frames": captured,
                     "latest": latest,
                 }
+            supervisor_stale_since = None
             captured += 1
             if max_frames and captured >= max_frames:
                 break

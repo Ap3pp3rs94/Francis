@@ -143,6 +143,81 @@ def test_worker_captures_on_supervised_approved_cadence_and_updates_partial_situ
     assert stopped["governance"]["user_mouse_capture_authority"] is False
 
 
+def test_worker_pauses_capture_during_bounded_supervisor_staleness_then_recovers(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
+    source = _FrameSource()
+    supervision_calls = 0
+    sleep_calls: list[float] = []
+
+    def recovering_supervision(parent_pid: int, _now: float) -> dict[str, Any]:
+        nonlocal supervision_calls
+        supervision_calls += 1
+        if supervision_calls <= 2:
+            return {
+                "status": "blocked",
+                "active": False,
+                "supervisor_pid": 700,
+                "observed_pid": parent_pid,
+                "blockers": ["lens_perception_supervisor_state_stale"],
+            }
+        return _active_supervision(parent_pid, _now)
+
+    worker = LensPerceptionWorker(
+        _config(),
+        frame_source=source,
+        authority_status=_active_authority,
+        execution_status=_active_execution,
+        supervision_status=recovering_supervision,
+        clock=iter((100.0, 100.5, 101.0, 101.0, 101.5)).__next__,
+        monotonic_clock=iter((0.0, 0.0, 0.1, 0.5, 0.6, 1.0)).__next__,
+        sleeper=sleep_calls.append,
+        process_id=800,
+        parent_process_id=900,
+    )
+
+    result = worker.run(max_frames=1)
+
+    assert result["ok"] is True
+    assert result["captured_frames"] == 1
+    assert supervision_calls == 3
+    assert source.capture_count == 1
+    assert sleep_calls == [0.4, 0.4]
+
+
+def test_worker_exits_when_supervisor_staleness_exceeds_grace(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
+    source = _FrameSource()
+
+    def stale_supervision(parent_pid: int, _now: float) -> dict[str, Any]:
+        return {
+            "status": "blocked",
+            "active": False,
+            "supervisor_pid": 700,
+            "observed_pid": parent_pid,
+            "blockers": ["lens_perception_supervisor_state_stale"],
+        }
+
+    worker = LensPerceptionWorker(
+        _config(),
+        frame_source=source,
+        authority_status=_active_authority,
+        execution_status=_active_execution,
+        supervision_status=stale_supervision,
+        clock=iter((100.0, 111.0)).__next__,
+        monotonic_clock=iter((0.0, 0.0, 0.1, 10.9, 11.0)).__next__,
+        sleeper=lambda _seconds: None,
+        process_id=800,
+        parent_process_id=900,
+    )
+
+    result = worker.run()
+
+    assert result["ok"] is False
+    assert result["exit_code"] == 2
+    assert result["latest"]["blockers"] == ["lens_perception_supervisor_state_stale"]
+    assert source.capture_count == 0
+
+
 def test_execution_approval_status_requires_exact_capture_receipt(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
     approval_id = "approved-execution"

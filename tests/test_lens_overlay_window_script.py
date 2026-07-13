@@ -1675,6 +1675,8 @@ def test_lens_overlay_window_script_uses_atomic_state_and_owned_process_stop() -
     assert "status.{0}.tmp" in script
     assert "Move-OverlayRuntimeStateFile -TempPath $TempPath -DestinationPath $StatusPath" in script
     assert "[System.IO.File]::Replace($TempPath, $DestinationPath, $BackupPath)" in script
+    assert "[int]$MaxAttempts = 20" in script
+    assert "Start-Sleep -Milliseconds $RetryDelayMilliseconds" in script
     assert "runtime_process_alive = $RuntimeProcessAlive" in script
     assert "Stop-OverlayRuntimeProcess -ProcessId ([int]$TimedOut.pid)" in script
 

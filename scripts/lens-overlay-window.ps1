@@ -2981,16 +2981,41 @@ function Get-OverlayVoiceStatusPath {
 function Move-OverlayRuntimeStateFile {
   param(
     [string]$TempPath,
-    [string]$DestinationPath
+    [string]$DestinationPath,
+    [int]$MaxAttempts = 20,
+    [int]$RetryDelayMilliseconds = 25
   )
 
-  if (Test-Path -LiteralPath $DestinationPath -PathType Leaf) {
-    $BackupPath = '{0}.bak.{1}' -f $DestinationPath, ([Guid]::NewGuid().ToString('N'))
-    [System.IO.File]::Replace($TempPath, $DestinationPath, $BackupPath)
-    Remove-Item -LiteralPath $BackupPath -Force -ErrorAction SilentlyContinue
-    return
+  for ($Attempt = 1; $Attempt -le $MaxAttempts; $Attempt++) {
+    $BackupPath = ''
+    try {
+      if (Test-Path -LiteralPath $DestinationPath -PathType Leaf) {
+        $BackupPath = '{0}.bak.{1}' -f $DestinationPath, ([Guid]::NewGuid().ToString('N'))
+        [System.IO.File]::Replace($TempPath, $DestinationPath, $BackupPath)
+        Remove-Item -LiteralPath $BackupPath -Force -ErrorAction SilentlyContinue
+        return
+      }
+      Move-Item -LiteralPath $TempPath -Destination $DestinationPath -Force
+      return
+    } catch {
+      if (-not [string]::IsNullOrWhiteSpace($BackupPath)) {
+        Remove-Item -LiteralPath $BackupPath -Force -ErrorAction SilentlyContinue
+      }
+      $Exception = $_.Exception
+      $Retryable = $false
+      while ($null -ne $Exception) {
+        if ($Exception -is [System.IO.IOException] -or $Exception -is [System.UnauthorizedAccessException]) {
+          $Retryable = $true
+          break
+        }
+        $Exception = $Exception.InnerException
+      }
+      if (-not $Retryable -or $Attempt -ge $MaxAttempts) {
+        throw
+      }
+      Start-Sleep -Milliseconds $RetryDelayMilliseconds
+    }
   }
-  Move-Item -LiteralPath $TempPath -Destination $DestinationPath -Force
 }
 
 function Join-OverlayProcessArguments {
