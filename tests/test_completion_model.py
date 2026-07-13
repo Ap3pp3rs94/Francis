@@ -36,7 +36,8 @@ def test_completion_model_snapshot_is_read_only_and_loop_guarded() -> None:
         "found": True,
         "workstream": "Capability Economy / Stage 17 closure reconciliation.",
         "current_goal": (
-            "the FR-017 operator/physical evidence boundary followed by the final governed closure decision."
+            "the governed Capability Economy Stage 17 closure decision and receipt, "
+            "based only on canonical capability evidence."
         ),
         "read_only_contract": True,
         "writes_repo": False,
@@ -177,6 +178,20 @@ def test_completion_model_snapshot_is_read_only_and_loop_guarded() -> None:
     assert "PM-owned publication marker" in checklist["stage17_worker_publication_handoff_guard"]["evidence"]
     assert checklist["stage17_worker_execution_liveness_guard"]["status"] == "enforced"
     assert "process liveness or exit code" in checklist["stage17_worker_execution_liveness_guard"]["evidence"]
+
+
+def test_stage17_roadmap_steering_excludes_fr017_forearm_naming_collision() -> None:
+    root = Path(__file__).resolve().parents[1]
+    ledger = (root / "docs" / "operations" / "COMPLETION_LEDGER.md").read_text(encoding="utf-8")
+    matrix = (root / "docs" / "operations" / "STAGE17_CLOSURE_MATRIX.md").read_text(encoding="utf-8")
+    manifest = (root / "FR-017_Stage17_Package" / "FR-017-STAGE17-PACKAGE-MANIFEST.json").read_text(encoding="utf-8")
+
+    assert "The current goal is the governed Capability Economy Stage 17 closure decision" in ledger
+    assert "The current goal is the FR-017 operator/physical evidence boundary" not in ledger
+    assert "The remaining gates are the physically present" not in matrix
+    assert "explicitly permissioned operator closure-decision route" in matrix
+    assert "excluded_collision" in manifest
+    assert "Capability Economy records are not FR-017 forearm-cuff source material" in manifest
 
 
 def test_completion_model_snapshot_blocks_when_sources_are_missing(tmp_path: Path) -> None:

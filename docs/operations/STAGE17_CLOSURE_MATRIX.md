@@ -27,9 +27,10 @@ readback reports `ready_for_closure_review`, `all_criteria_ready=true`, and no
 criterion blockers. GitHub CI run `29212950024` and CodeQL run `29212950040`
 both passed for the same head.
 
-This is not Stage 17 closure. The remaining gates are the physically present
-FR-017 evidence chain and the final governed Stage 17 closure decision. Stage
-18 and FR-018 remain blocked until those gates close.
+This is not Stage 17 closure. The remaining gate is an explicit governed
+Capability Economy Stage 17 closure decision and durable receipt. FR-017
+Forearm Cuffs is a separate physical-design package whose manifest explicitly
+identifies the shared number as an unrelated naming collision.
 
 ## Closure Criteria
 
@@ -46,17 +47,18 @@ FR-017 evidence chain and the final governed Stage 17 closure decision. Stage
 
 No software criterion currently reports a blocker. The readback still returns a
 deterministic `weakest_criterion` for ordering, but all six statuses are `ready`.
-That does not satisfy the separate FR-017 physical evidence or final governed
-closure-decision gates.
+That makes the canonical Stage 17 evidence ready for an explicit governed
+closure decision; it does not write or imply that decision.
 
 ## Next Evidence Needed
 
-1. Complete the physically present FR-017 evidence chain recorded in the
-   completion ledger.
-2. Review that evidence through the existing governed handoff and final-decision
-   surfaces.
-3. Record the final governed Stage 17 closure decision only if the physical and
-   software evidence still agree at that time.
+1. Expose a read-only Stage 17 completion review derived from the six canonical
+   Capability Economy criteria and current exact-head validation evidence.
+2. Add an explicitly permissioned operator closure-decision route that refuses
+   closure unless that review is ready.
+3. Persist a durable receipt only for an explicit `close_stage17` decision and
+   make Stage 18 consume that receipt as its prerequisite.
 
-No physical-validation, FR-018 clearance, Stage 18 transition, or Stage 17
-closure is claimed by this matrix.
+No Stage 17 closure, Stage 18 transition, authority grant, capability promotion,
+or execution is claimed by this matrix. FR-017 physical-design validation is
+outside this Capability Economy closure contract.

@@ -58,8 +58,8 @@ operator product surface:
 Current active workstream: Capability Economy / Stage 17 closure reconciliation.
 All six software criteria are broad-validated at exact code head
 `52e69b323fa43336207b1344da3310fb85f9567c`.
-The current goal is the FR-017 operator/physical evidence boundary followed by
-the final governed closure decision.
+The current goal is the governed Capability Economy Stage 17 closure decision
+and receipt, based only on canonical capability evidence.
 
 Stage 6 Lens MVP is ledger-closed against its five canonical acceptance criteria,
 and Stages 7 through 16 retain their existing receipt-backed closures.
@@ -120,6 +120,39 @@ What is materially true now:
 
 > Older dated entries are archived under docs/operations/archive/ (see scripts/archive-completion-ledger.ps1).
 > Historical undated ledger body is archived under docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md.
+
+### 2026-07-13 22:45Z - Stage 17 naming collision removed from roadmap steering
+
+Current posture: Phase 2 and Stage 17 remain open. The canonical Stage 17
+Capability Economy criteria are software capability criteria; they do not
+include FR-017 Forearm Cuffs or any other physical suit measurement gate. The
+FR-017 package manifest itself records this as an excluded naming collision.
+This checkpoint removes that unrelated package from roadmap steering without
+claiming Stage 17 closure, writing a closure receipt, starting Stage 18, or
+changing FR-017's separate physical-design posture.
+
+Evidence:
+
+- `docs/canonical/ROADMAP.md` section 25.20 defines Stage 17 solely through
+  reusable packs, pack-carried governance, catalog coherence, and visible
+  compounding leverage.
+- `FR-017_Stage17_Package/FR-017-STAGE17-PACKAGE-MANIFEST.json` explicitly says
+  repository Stage 17 Capability Economy records are not FR-017 forearm-cuff
+  source material.
+- Fresh source-loaded `/plugins/capabilities/catalog?limit=1` readback reports
+  all six derived software criteria `ready`, 52 of 52 packs ready, 4,052 packed
+  entries, and no catalog coherence blockers.
+- GitHub CI run `29267102199` and CodeQL run `29267102194` passed at current
+  committed head `53bbc74b7a3c58206a69c1320879faf1c757fe19`.
+
+Remaining truthful gap:
+
+- Stage 17 still needs an explicit governed operator closure-decision route and
+  durable receipt backed by the current Capability Economy matrix. No such
+  receipt is claimed by this checkpoint.
+- Stage 18 remains blocked until that canonical Stage 17 closure receipt exists.
+- FR-017 Forearm Cuffs remains a separate physical-design package and does not
+  block the Francis software roadmap.
 
 ### 2026-07-13 00:41Z - Stage 17 software posture broad-validated at final head
 

@@ -56,10 +56,10 @@ def test_francis_completion_model_status_projects_ledger_backed_loop_guard() -> 
     assert payload["stage17_status"]["grants_execution_authority"] is False
     assert payload["stage17_status"]["grants_mutation_authority"] is False
     assert payload["latest_ledger_entry"]["title"] == (
-        "2026-07-13 00:41Z - Stage 17 software posture broad-validated at final head"
+        "2026-07-13 22:45Z - Stage 17 naming collision removed from roadmap steering"
     )
     assert payload["stage17_status"]["latest_ledger_entry"]["title"] == (
-        "2026-07-13 00:41Z - Stage 17 software posture broad-validated at final head"
+        "2026-07-13 22:45Z - Stage 17 naming collision removed from roadmap steering"
     )
     assert (
         "Final-head GitHub CI must pass"
@@ -69,7 +69,8 @@ def test_francis_completion_model_status_projects_ledger_backed_loop_guard() -> 
         "found": True,
         "workstream": "Capability Economy / Stage 17 closure reconciliation.",
         "current_goal": (
-            "the FR-017 operator/physical evidence boundary followed by the final governed closure decision."
+            "the governed Capability Economy Stage 17 closure decision and receipt, "
+            "based only on canonical capability evidence."
         ),
         "read_only_contract": True,
         "writes_repo": False,
