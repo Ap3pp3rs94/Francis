@@ -79,7 +79,7 @@ def test_native_operator_ui_has_local_frontend_backend_pages_without_new_authori
     assert "Frontend" in header
     assert "Backend" in header
     assert "SWidgetSwitcher" in panel
-    assert 'TEXT("FRONTEND  /  GROUNDED PRESENCE")' in panel
+    assert 'TEXT("YOUR FRANCIS")' in panel
     assert 'TEXT("BACKEND  /  SYSTEMS")' in panel
     assert 'TEXT("CORE AUTHORITATIVE  /  ADAPTER READ ONLY")' in panel
     assert "FInputModeGameAndUI" in game_mode
@@ -94,6 +94,27 @@ def test_native_operator_ui_has_local_frontend_backend_pages_without_new_authori
     )[0]
     assert "QueueIntent" not in frontend_body
     assert "QueueIntent" not in backend_body
+
+
+def test_native_frontend_prioritizes_the_operator_decision_over_system_telemetry() -> None:
+    panel = _read(UNREAL_SOURCE / "SFrancisPresencePanel.cpp")
+    frontend_layout = panel.split("TSharedRef<SWidget> SFrancisPresencePanel::BuildFrontendPage()", 1)[1].split(
+        "TSharedRef<SWidget> SFrancisPresencePanel::BuildBackendPage()", 1
+    )[0]
+
+    assert 'TEXT("Home")' in panel
+    assert 'TEXT("Systems")' in panel
+    assert 'TEXT("RECOMMENDED NEXT STEP")' in frontend_layout
+    assert 'TEXT("CURRENT FOCUS")' in frontend_layout
+    assert 'TEXT("Review with Francis")' in frontend_layout
+    assert 'TEXT("Actions are governed requests. Francis Core remains in control.")' in frontend_layout
+    assert "UserStatusTitleText" in frontend_layout
+    assert "RecommendedActionTitleText" in frontend_layout
+    assert "ContextConfidenceText" in frontend_layout
+    assert "VoiceStatusText" not in frontend_layout
+    assert "TransportStatusText" not in frontend_layout
+    assert "RuntimeStatusText" not in frontend_layout
+    assert "ModeStatusText" not in frontend_layout
 
 
 def test_native_operator_ui_preserves_governed_intents_and_click_navigation() -> None:

@@ -28,8 +28,14 @@ private:
     void SetActivePage(EFrancisPresencePage Page);
 
     FText HeadlineText() const;
+    FText UserStatusTitleText() const;
+    FText UserStatusLabelText() const;
     FText FocusText() const;
+    FText FocusTitleText() const;
     FText NextStepText() const;
+    FText RecommendedActionTitleText() const;
+    FText ContextConfidenceText() const;
+    FText UserTrustLineText() const;
     FText PresenceStatusText() const;
     FText StageStatusText() const;
     FText EvidenceStatusText() const;

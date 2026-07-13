@@ -112,7 +112,7 @@ TSharedRef<SWidget> SFrancisPresencePanel::BuildHeader()
                 + SVerticalBox::Slot().AutoHeight()
                 [
                     SNew(STextBlock)
-                    .Text(FText::FromString(TEXT("LOCAL OPERATOR LAYER  /  UNREAL 5.8")))
+                    .Text(FText::FromString(TEXT("YOUR LOCAL WORKSPACE")))
                     .Font(MetaFont)
                     .ColorAndOpacity(Muted)
                 ]
@@ -132,7 +132,7 @@ TSharedRef<SWidget> SFrancisPresencePanel::BuildHeader()
                 .OnClicked(this, &SFrancisPresencePanel::ShowFrontend)
                 [
                     SNew(STextBlock)
-                    .Text(FText::FromString(TEXT("Frontend")))
+                    .Text(FText::FromString(TEXT("Home")))
                     .Font(NavFont)
                     .ColorAndOpacity_Lambda([this]() { return PageButtonTextColor(EFrancisPresencePage::Frontend); })
                 ]
@@ -148,7 +148,7 @@ TSharedRef<SWidget> SFrancisPresencePanel::BuildHeader()
                 .OnClicked(this, &SFrancisPresencePanel::ShowBackend)
                 [
                     SNew(STextBlock)
-                    .Text(FText::FromString(TEXT("Backend")))
+                    .Text(FText::FromString(TEXT("Systems")))
                     .Font(NavFont)
                     .ColorAndOpacity_Lambda([this]() { return PageButtonTextColor(EFrancisPresencePage::Backend); })
                 ]
@@ -184,11 +184,14 @@ TSharedRef<SWidget> SFrancisPresencePanel::BuildHeader()
 TSharedRef<SWidget> SFrancisPresencePanel::BuildFrontendPage()
 {
     const FSlateFontInfo EyebrowFont = FCoreStyle::GetDefaultFontStyle(TEXT("Bold"), 11);
-    const FSlateFontInfo DisplayFont = FCoreStyle::GetDefaultFontStyle(TEXT("Regular"), 44);
-    const FSlateFontInfo HeadingFont = FCoreStyle::GetDefaultFontStyle(TEXT("Bold"), 25);
+    const FSlateFontInfo DisplayFont = FCoreStyle::GetDefaultFontStyle(TEXT("Regular"), 36);
+    const FSlateFontInfo HeadingFont = FCoreStyle::GetDefaultFontStyle(TEXT("Bold"), 23);
+    const FSlateFontInfo FocusFont = FCoreStyle::GetDefaultFontStyle(TEXT("Bold"), 17);
     const FSlateFontInfo BodyFont = FCoreStyle::GetDefaultFontStyle(TEXT("Regular"), 14);
+    const FSlateFontInfo FocusBodyFont = FCoreStyle::GetDefaultFontStyle(TEXT("Regular"), 12);
     const FSlateFontInfo SmallFont = FCoreStyle::GetDefaultFontStyle(TEXT("Regular"), 10);
     const FSlateFontInfo ButtonFont = FCoreStyle::GetDefaultFontStyle(TEXT("Bold"), 11);
+    const FLinearColor PrimaryButtonFill(0.18f, 0.15f, 0.09f, 1.0f);
 
     return SNew(SVerticalBox)
         + SVerticalBox::Slot()
@@ -201,16 +204,18 @@ TSharedRef<SWidget> SFrancisPresencePanel::BuildFrontendPage()
                 + SVerticalBox::Slot().AutoHeight()
                 [
                     SNew(STextBlock)
-                    .Text(FText::FromString(TEXT("FRONTEND  /  GROUNDED PRESENCE")))
+                    .Text(FText::FromString(TEXT("YOUR FRANCIS")))
                     .Font(EyebrowFont)
                     .ColorAndOpacity(Champagne)
                 ]
                 + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
                 [
                     SNew(STextBlock)
-                    .Text(FText::FromString(TEXT("Francis")))
+                    .Text(this, &SFrancisPresencePanel::UserStatusTitleText)
                     .Font(DisplayFont)
                     .ColorAndOpacity(Ink)
+                    .AutoWrapText(true)
+                    .WrapTextAt(780.0f)
                 ]
                 + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
                 [
@@ -222,12 +227,18 @@ TSharedRef<SWidget> SFrancisPresencePanel::BuildFrontendPage()
                     .WrapTextAt(720.0f)
                 ]
             ]
-            + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom)
+            + SHorizontalBox::Slot().AutoWidth().Padding(24.0f, 0.0f, 0.0f, 0.0f).VAlign(VAlign_Bottom)
             [
-                SNew(STextBlock)
-                .Text(this, &SFrancisPresencePanel::PresenceStatusText)
-                .Font(BodyFont)
-                .ColorAndOpacity(this, &SFrancisPresencePanel::StateColor)
+                SNew(SBorder)
+                .BorderImage(FCoreStyle::Get().GetBrush(TEXT("WhiteBrush")))
+                .BorderBackgroundColor(SurfaceRaised)
+                .Padding(FMargin(14.0f, 9.0f))
+                [
+                    SNew(STextBlock)
+                    .Text(this, &SFrancisPresencePanel::UserStatusLabelText)
+                    .Font(EyebrowFont)
+                    .ColorAndOpacity(this, &SFrancisPresencePanel::StateColor)
+                ]
             ]
         ]
         + SVerticalBox::Slot()
@@ -239,74 +250,106 @@ TSharedRef<SWidget> SFrancisPresencePanel::BuildFrontendPage()
         .AutoHeight()
         [
             SNew(SHorizontalBox)
-            + SHorizontalBox::Slot().FillWidth(0.66f).Padding(0.0f, 0.0f, 9.0f, 0.0f)
+            + SHorizontalBox::Slot().FillWidth(0.64f).Padding(0.0f, 0.0f, 9.0f, 0.0f)
             [
                 SNew(SBorder)
                 .BorderImage(FCoreStyle::Get().GetBrush(TEXT("WhiteBrush")))
                 .BorderBackgroundColor(Surface)
-                .Padding(FMargin(22.0f, 18.0f))
+                .Padding(FMargin(24.0f, 20.0f))
                 [
                     SNew(SVerticalBox)
                     + SVerticalBox::Slot().AutoHeight()
                     [
                         SNew(STextBlock)
-                        .Text(FText::FromString(TEXT("CURRENT BRIEFING")))
+                        .Text(FText::FromString(TEXT("RECOMMENDED NEXT STEP")))
                         .Font(SmallFont)
                         .ColorAndOpacity(Steel)
                     ]
                     + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 0.0f)
                     [
                         SNew(STextBlock)
-                        .Text(this, &SFrancisPresencePanel::HeadlineText)
+                        .Text(this, &SFrancisPresencePanel::RecommendedActionTitleText)
                         .Font(HeadingFont)
                         .ColorAndOpacity(Ink)
                         .AutoWrapText(true)
                     ]
-                    + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)
+                    + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
                     [
                         SNew(STextBlock)
-                        .Text(this, &SFrancisPresencePanel::FocusText)
+                        .Text(this, &SFrancisPresencePanel::NextStepText)
                         .Font(BodyFont)
                         .ColorAndOpacity(FLinearColor(0.72f, 0.75f, 0.76f, 1.0f))
+                        .AutoWrapText(true)
+                    ]
+                    + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 16.0f, 0.0f, 0.0f)
+                    [
+                        SNew(SHorizontalBox)
+                        + SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 8.0f, 0.0f)
+                        [
+                            SNew(SButton)
+                            .ContentPadding(FMargin(18.0f, 9.0f))
+                            .ButtonColorAndOpacity(PrimaryButtonFill)
+                            .OnClicked(this, &SFrancisPresencePanel::RequestReview)
+                            [
+                                SNew(STextBlock)
+                                .Text(FText::FromString(TEXT("Review with Francis")))
+                                .Font(ButtonFont)
+                                .ColorAndOpacity(Ink)
+                            ]
+                        ]
+                        + SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 8.0f, 0.0f)
+                        [
+                            SNew(SButton)
+                            .ContentPadding(FMargin(14.0f, 9.0f))
+                            .ButtonColorAndOpacity(SurfaceRaised)
+                            .OnClicked(this, &SFrancisPresencePanel::RequestContextRefresh)
+                            [SNew(STextBlock).Text(FText::FromString(TEXT("Refresh briefing"))).Font(ButtonFont).ColorAndOpacity(Ink)]
+                        ]
+                        + SHorizontalBox::Slot().AutoWidth()
+                        [
+                            SNew(SButton)
+                            .ContentPadding(FMargin(14.0f, 9.0f))
+                            .ButtonColorAndOpacity(SurfaceRaised)
+                            .OnClicked(this, &SFrancisPresencePanel::AcknowledgeHandback)
+                            [SNew(STextBlock).Text(FText::FromString(TEXT("Hand back"))).Font(ButtonFont).ColorAndOpacity(Ink)]
+                        ]
+                    ]
+                    + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 0.0f)
+                    [
+                        SNew(STextBlock)
+                        .Text(this, &SFrancisPresencePanel::UserTrustLineText)
+                        .Font(SmallFont)
+                        .ColorAndOpacity(Muted)
+                    ]
+                ]
+            ]
+            + SHorizontalBox::Slot().FillWidth(0.36f).Padding(9.0f, 0.0f, 0.0f, 0.0f)
+            [
+                SNew(SBorder)
+                .BorderImage(FCoreStyle::Get().GetBrush(TEXT("WhiteBrush")))
+                .BorderBackgroundColor(Surface)
+                .Padding(FMargin(22.0f, 20.0f))
+                [
+                    SNew(SVerticalBox)
+                    + SVerticalBox::Slot().AutoHeight()
+                    [
+                        SNew(STextBlock).Text(FText::FromString(TEXT("CURRENT FOCUS"))).Font(SmallFont).ColorAndOpacity(Steel)
+                    ]
+                    + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 9.0f, 0.0f, 0.0f)
+                    [
+                        SNew(STextBlock)
+                        .Text(this, &SFrancisPresencePanel::FocusTitleText)
+                        .Font(FocusFont)
+                        .ColorAndOpacity(Ink)
                         .AutoWrapText(true)
                     ]
                     + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 9.0f, 0.0f, 0.0f)
                     [
                         SNew(STextBlock)
-                        .Text(this, &SFrancisPresencePanel::NextStepText)
-                        .Font(BodyFont)
-                        .ColorAndOpacity(Ink)
+                        .Text(this, &SFrancisPresencePanel::FocusText)
+                        .Font(FocusBodyFont)
+                        .ColorAndOpacity(Muted)
                         .AutoWrapText(true)
-                    ]
-                ]
-            ]
-            + SHorizontalBox::Slot().FillWidth(0.34f).Padding(9.0f, 0.0f, 0.0f, 0.0f)
-            [
-                SNew(SBorder)
-                .BorderImage(FCoreStyle::Get().GetBrush(TEXT("WhiteBrush")))
-                .BorderBackgroundColor(Surface)
-                .Padding(FMargin(20.0f, 18.0f))
-                [
-                    SNew(SVerticalBox)
-                    + SVerticalBox::Slot().AutoHeight()
-                    [
-                        SNew(STextBlock).Text(FText::FromString(TEXT("LIVE TRUTH"))).Font(SmallFont).ColorAndOpacity(Steel)
-                    ]
-                    + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)
-                    [
-                        SNew(STextBlock).Text(this, &SFrancisPresencePanel::VoiceStatusText).Font(BodyFont).ColorAndOpacity(Ink)
-                    ]
-                    + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 0.0f)
-                    [
-                        SNew(STextBlock).Text(this, &SFrancisPresencePanel::EvidenceStatusText).Font(BodyFont).ColorAndOpacity(Ink)
-                    ]
-                    + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 0.0f)
-                    [
-                        SNew(STextBlock).Text(this, &SFrancisPresencePanel::FreshnessStatusText).Font(BodyFont).ColorAndOpacity(Ink)
-                    ]
-                    + SVerticalBox::Slot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 0.0f)
-                    [
-                        SNew(STextBlock).Text(this, &SFrancisPresencePanel::ModeStatusText).Font(BodyFont).ColorAndOpacity(Muted).AutoWrapText(true)
                     ]
                     + SVerticalBox::Slot().FillHeight(1.0f)
                     [
@@ -315,9 +358,10 @@ TSharedRef<SWidget> SFrancisPresencePanel::BuildFrontendPage()
                     + SVerticalBox::Slot().AutoHeight()
                     [
                         SNew(STextBlock)
-                        .Text(FText::FromString(TEXT("CORE AUTHORITY  /  REQUEST ONLY")))
+                        .Text(this, &SFrancisPresencePanel::ContextConfidenceText)
                         .Font(SmallFont)
-                        .ColorAndOpacity(Live)
+                        .ColorAndOpacity(this, &SFrancisPresencePanel::StateColor)
+                        .AutoWrapText(true)
                     ]
                 ]
             ]
@@ -327,23 +371,12 @@ TSharedRef<SWidget> SFrancisPresencePanel::BuildFrontendPage()
         .Padding(0.0f, 14.0f, 0.0f, 0.0f)
         [
             SNew(SHorizontalBox)
-            + SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 8.0f, 0.0f)
+            + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
             [
-                SNew(SButton).ContentPadding(FMargin(14.0f, 7.0f)).ButtonColorAndOpacity(SurfaceRaised)
-                .OnClicked(this, &SFrancisPresencePanel::RequestContextRefresh)
-                [SNew(STextBlock).Text(FText::FromString(TEXT("Refresh"))).Font(ButtonFont).ColorAndOpacity(Ink)]
-            ]
-            + SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 8.0f, 0.0f)
-            [
-                SNew(SButton).ContentPadding(FMargin(14.0f, 7.0f)).ButtonColorAndOpacity(SurfaceRaised)
-                .OnClicked(this, &SFrancisPresencePanel::RequestReview)
-                [SNew(STextBlock).Text(FText::FromString(TEXT("Request review"))).Font(ButtonFont).ColorAndOpacity(Ink)]
-            ]
-            + SHorizontalBox::Slot().AutoWidth()
-            [
-                SNew(SButton).ContentPadding(FMargin(14.0f, 7.0f)).ButtonColorAndOpacity(SurfaceRaised)
-                .OnClicked(this, &SFrancisPresencePanel::AcknowledgeHandback)
-                [SNew(STextBlock).Text(FText::FromString(TEXT("Handback"))).Font(ButtonFont).ColorAndOpacity(Ink)]
+                SNew(STextBlock)
+                .Text(FText::FromString(TEXT("Actions are governed requests. Francis Core remains in control.")))
+                .Font(SmallFont)
+                .ColorAndOpacity(Muted)
             ]
             + SHorizontalBox::Slot().FillWidth(1.0f)
             [
@@ -353,7 +386,7 @@ TSharedRef<SWidget> SFrancisPresencePanel::BuildFrontendPage()
             [
                 SNew(SButton).ContentPadding(FMargin(14.0f, 7.0f)).ButtonColorAndOpacity(FLinearColor(0.22f, 0.08f, 0.07f, 1.0f))
                 .OnClicked(this, &SFrancisPresencePanel::RequestPanicStop)
-                [SNew(STextBlock).Text(FText::FromString(TEXT("Request panic stop"))).Font(ButtonFont).ColorAndOpacity(FLinearColor(0.95f, 0.70f, 0.65f, 1.0f))]
+                [SNew(STextBlock).Text(FText::FromString(TEXT("Request emergency stop"))).Font(ButtonFont).ColorAndOpacity(FLinearColor(0.95f, 0.70f, 0.65f, 1.0f))]
             ]
         ];
 }
@@ -496,19 +529,108 @@ FText SFrancisPresencePanel::HeadlineText() const
     return FText::FromString(Bridge ? Bridge->GetViewModel().Headline : TEXT("Bridge unavailable."));
 }
 
+FText SFrancisPresencePanel::UserStatusTitleText() const
+{
+    const FFrancisPresenceViewModel State = Bridge ? Bridge->GetViewModel() : FFrancisPresenceViewModel();
+    const FString Combined =
+        (State.PresenceState + TEXT(" ") + State.SemanticState + TEXT(" ") + State.HandbackState).ToLower();
+    if (!State.bAuthenticated) return FText::FromString(TEXT("Francis is getting ready"));
+    if (Combined.Contains(TEXT("fault")) || Combined.Contains(TEXT("error")) || Combined.Contains(TEXT("panic")))
+        return FText::FromString(TEXT("Francis needs your attention"));
+    if (State.bApprovalRequired || Combined.Contains(TEXT("blocked")) || Combined.Contains(TEXT("attention")))
+        return FText::FromString(TEXT("A decision is waiting for you"));
+    if (Combined.Contains(TEXT("handback")) || Combined.Contains(TEXT("handoff")))
+        return FText::FromString(TEXT("Francis is ready to hand back"));
+    if (Combined.Contains(TEXT("review"))) return FText::FromString(TEXT("A review is ready for you"));
+    if (Combined.Contains(TEXT("idle")) || Combined.Contains(TEXT("ready")))
+        return FText::FromString(TEXT("Everything is steady"));
+    return FText::FromString(TEXT("Here is what matters now"));
+}
+
+FText SFrancisPresencePanel::UserStatusLabelText() const
+{
+    const FFrancisPresenceViewModel State = Bridge ? Bridge->GetViewModel() : FFrancisPresenceViewModel();
+    const FString Combined =
+        (State.PresenceState + TEXT(" ") + State.SemanticState + TEXT(" ") + State.HandbackState).ToLower();
+    if (!State.bAuthenticated) return FText::FromString(TEXT("CONNECTING"));
+    if (Combined.Contains(TEXT("fault")) || Combined.Contains(TEXT("error")) || Combined.Contains(TEXT("panic")))
+        return FText::FromString(TEXT("ACTION REQUIRED"));
+    if (State.bApprovalRequired || Combined.Contains(TEXT("blocked")) || Combined.Contains(TEXT("attention")))
+        return FText::FromString(TEXT("WAITING FOR YOU"));
+    if (Combined.Contains(TEXT("handback")) || Combined.Contains(TEXT("handoff")))
+        return FText::FromString(TEXT("HANDOFF READY"));
+    if (Combined.Contains(TEXT("idle")) || Combined.Contains(TEXT("ready")))
+        return FText::FromString(TEXT("ALL CLEAR"));
+    return FText::FromString(TEXT("ACTIVE"));
+}
+
 FText SFrancisPresencePanel::FocusText() const
 {
     if (!Bridge) return FText::GetEmpty();
     const FFrancisPresenceViewModel State = Bridge->GetViewModel();
-    const FString Focus = !State.FocusObjective.IsEmpty() ? State.FocusObjective : State.FocusTitle;
-    return FText::FromString(Focus.IsEmpty() ? TEXT("Focus  /  No active focus has been observed.") : FString(TEXT("Focus  /  ")) + Focus);
+    if (State.FocusObjective.IsEmpty() || State.FocusObjective.Equals(State.FocusTitle))
+    {
+        return FText::GetEmpty();
+    }
+    return FText::FromString(State.FocusObjective);
+}
+
+FText SFrancisPresencePanel::FocusTitleText() const
+{
+    const FFrancisPresenceViewModel State = Bridge ? Bridge->GetViewModel() : FFrancisPresenceViewModel();
+    return FText::FromString(State.FocusTitle.IsEmpty() ? TEXT("Current priority") : State.FocusTitle);
 }
 
 FText SFrancisPresencePanel::NextStepText() const
 {
     if (!Bridge) return FText::GetEmpty();
     const FString Next = Bridge->GetViewModel().NextStep;
-    return FText::FromString(Next.IsEmpty() ? TEXT("Next  /  No grounded next step is available.") : FString(TEXT("Next  /  ")) + Next);
+    return FText::FromString(Next.IsEmpty() ? TEXT("No grounded next step is available yet.") : Next);
+}
+
+FText SFrancisPresencePanel::RecommendedActionTitleText() const
+{
+    const FFrancisPresenceViewModel State = Bridge ? Bridge->GetViewModel() : FFrancisPresenceViewModel();
+    const FString Handback = State.HandbackState.ToLower();
+    const FString Evidence = State.EvidenceStatus.ToLower();
+    const FString Stage = State.StageStatus.ToLower();
+    if (!State.bAuthenticated) return FText::FromString(TEXT("Wait for Francis to finish connecting"));
+    if (State.bApprovalRequired) return FText::FromString(TEXT("Review before Francis continues"));
+    if (Handback.Contains(TEXT("operator_action_required")) || Handback.Contains(TEXT("handback")))
+        return FText::FromString(TEXT("Take the handback"));
+    if (Evidence.Contains(TEXT("blocked")) || Evidence.Contains(TEXT("missing")))
+        return FText::FromString(TEXT("Review the missing context"));
+    if (Stage.Contains(TEXT("blocked"))) return FText::FromString(TEXT("Resolve the current blocker"));
+    if (!State.NextStep.IsEmpty()) return FText::FromString(TEXT("Continue with the next step"));
+    return FText::FromString(TEXT("Refresh your briefing"));
+}
+
+FText SFrancisPresencePanel::ContextConfidenceText() const
+{
+    const FFrancisPresenceViewModel State = Bridge ? Bridge->GetViewModel() : FFrancisPresenceViewModel();
+    const FString Evidence = State.EvidenceStatus.ToLower();
+    const FString Freshness = State.FreshnessStatus.ToLower();
+    if (!State.bAuthenticated) return FText::FromString(TEXT("CONTEXT  /  CONNECTING"));
+    if (Freshness.Contains(TEXT("stale"))) return FText::FromString(TEXT("CONTEXT  /  MAY BE OUT OF DATE"));
+    if (Evidence.Contains(TEXT("blocked")) || Evidence.Contains(TEXT("missing")))
+        return FText::FromString(TEXT("CONTEXT  /  NEEDS REVIEW"));
+    if (State.bTruthful && State.bReceiptLinked)
+        return FText::FromString(TEXT("CONTEXT  /  GROUNDED AND RECEIPT LINKED"));
+    if (State.bTruthful) return FText::FromString(TEXT("CONTEXT  /  GROUNDED"));
+    return FText::FromString(TEXT("CONTEXT  /  OBSERVED LOCALLY"));
+}
+
+FText SFrancisPresencePanel::UserTrustLineText() const
+{
+    const FFrancisPresenceViewModel State = Bridge ? Bridge->GetViewModel() : FFrancisPresenceViewModel();
+    const FFrancisPresenceBridgeReadback Runtime = Bridge ? Bridge->GetReadback() : FFrancisPresenceBridgeReadback();
+    if (State.bAuthenticated && State.bRuntimeObserved)
+        return FText::FromString(TEXT("Authenticated local state  /  Updated from Francis Core"));
+    if (State.bAuthenticated)
+        return FText::FromString(TEXT("Authenticated local state  /  Runtime observation pending"));
+    if (Runtime.bConfigured)
+        return FText::FromString(TEXT("Local connection configured  /  Waiting for authenticated state"));
+    return FText::FromString(TEXT("Local connection is not configured"));
 }
 
 FText SFrancisPresencePanel::PresenceStatusText() const
@@ -638,16 +760,18 @@ FText SFrancisPresencePanel::SequenceText() const
 {
     const FFrancisPresenceViewModel State = Bridge ? Bridge->GetViewModel() : FFrancisPresenceViewModel();
     return FText::FromString(State.Sequence > 0
-        ? FString::Printf(TEXT("ENVELOPE %lld  /  AUTHENTICATED"), State.Sequence)
-        : TEXT("WAITING FOR AUTHENTICATED CORE STATE"));
+        ? FString::Printf(TEXT("AUTHENTICATED  /  UPDATE %lld"), State.Sequence)
+        : TEXT("WAITING FOR AUTHENTICATED STATE"));
 }
 
 FText SFrancisPresencePanel::LocalLinkText() const
 {
     const FFrancisPresenceBridgeReadback State = Bridge ? Bridge->GetReadback() : FFrancisPresenceBridgeReadback();
-    if (State.bPipeConnected) return FText::FromString(TEXT("LOCAL LINK LIVE"));
-    if (State.bConfigured) return FText::FromString(TEXT("LOCAL LINK WAITING"));
-    return FText::FromString(TEXT("LOCAL LINK UNCONFIGURED"));
+    if (State.bPipeConnected) return FText::FromString(TEXT("LOCAL CONNECTION ACTIVE"));
+    if (State.bConfigured && State.AcceptedMessageCount > 0)
+        return FText::FromString(TEXT("LOCAL CONNECTION READY"));
+    if (State.bConfigured) return FText::FromString(TEXT("LOCAL CONNECTION STARTING"));
+    return FText::FromString(TEXT("LOCAL CONNECTION UNCONFIGURED"));
 }
 
 FSlateColor SFrancisPresencePanel::StateColor() const
@@ -672,12 +796,12 @@ FSlateColor SFrancisPresencePanel::TransportColor() const
 
 FSlateColor SFrancisPresencePanel::PageButtonColor(EFrancisPresencePage Page) const
 {
-    return ActivePage == Page ? Champagne : SurfaceRaised;
+    return ActivePage == Page ? FLinearColor(0.18f, 0.15f, 0.09f, 1.0f) : SurfaceRaised;
 }
 
 FSlateColor SFrancisPresencePanel::PageButtonTextColor(EFrancisPresencePage Page) const
 {
-    return ActivePage == Page ? FLinearColor(0.08f, 0.075f, 0.06f, 1.0f) : Ink;
+    return ActivePage == Page ? Champagne : Ink;
 }
 
 FReply SFrancisPresencePanel::RequestContextRefresh()
