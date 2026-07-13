@@ -16,7 +16,22 @@ _SAFE_PLAN_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,120}$")
 
 @router.get("/status")
 def status() -> dict[str, object]:
-    return {"ok": True, "route": "simulation", "status": "ready"}
+    return {
+        "ok": True,
+        "route": "simulation",
+        "status": "partial",
+        "ready": False,
+        "implemented_operations": [
+            "status_readback",
+            "virtual_workfield_contract_readback",
+        ],
+        "blockers": ["simulation_execution_adapter_not_implemented"],
+        "governance": {
+            "read_only": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+    }
 
 
 @router.get("/virtual-workfield")
