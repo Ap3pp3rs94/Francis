@@ -44,6 +44,8 @@ def stage17_operator_stage_closure_decision_readback(*, limit: int = 20) -> dict
         "latest_receipt": latest_receipt,
         "latest_receipt_id": _safe_text(latest_receipt.get("receipt_id")),
         "latest_decision": _safe_text(latest_receipt.get("decision")),
+        "latest_authority": _safe_text(latest_receipt.get("authority")),
+        "latest_delegation_id": _safe_text(latest_receipt.get("delegation_id")),
         "latest_recorded_ts": _safe_int(latest_receipt.get("recorded_ts")),
         "latest_review_fingerprint": _safe_text(latest_receipt.get("review_fingerprint")),
         "latest_receipt_valid": latest_receipt_valid,
@@ -82,10 +84,19 @@ def record_stage17_operator_stage_closure_decision(
     decision: Any,
     review: dict[str, Any],
     notes: Any = "",
+    authority: Any = "operator",
+    delegation_id: Any = "",
+    delegated_operator: bool = False,
 ) -> dict[str, Any]:
     safe_decision = _safe_closure_decision(decision)
     closure_ready = bool(review.get("stage17_completion_review_ready"))
-    stage17_closed_by_receipt = safe_decision == "close_stage17" and closure_ready
+    safe_authority = _safe_text(authority) or "operator"
+    safe_delegation_id = _safe_text(delegation_id)
+    delegated_operator_approval = (
+        delegated_operator and safe_authority == "delegated_operator" and bool(safe_delegation_id)
+    )
+    authority_ready = safe_authority == "operator" or delegated_operator_approval
+    stage17_closed_by_receipt = safe_decision == "close_stage17" and closure_ready and authority_ready
     review_evidence = _review_evidence_snapshot(review)
     review_fingerprint = hashlib.sha256(
         json.dumps(review_evidence, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -103,6 +114,9 @@ def record_stage17_operator_stage_closure_decision(
         "reason": _redacted_text(reason)[:500],
         "decision": safe_decision,
         "notes": _redacted_text(notes)[:500],
+        "authority": safe_authority,
+        "delegation_id": safe_delegation_id,
+        "delegated_operator_approval": delegated_operator_approval,
         "review_status": _safe_text(review.get("status")),
         "completion_review_ready": closure_ready,
         "criteria_ready_count": _safe_int(review.get("criteria_ready_count")),
@@ -125,6 +139,9 @@ def record_stage17_operator_stage_closure_decision(
             "permission_scope": STAGE17_CLOSURE_WRITE_SCOPE,
             "explicit_operator_decision": True,
             "stage_closure_decision": True,
+            "authority": safe_authority,
+            "delegation_id": safe_delegation_id,
+            "delegated_operator_authority": delegated_operator_approval,
             "completion_review_ready": closure_ready,
             "canonical_criteria_only": True,
             "does_not_mutate_runtime_stage_state": True,
@@ -146,6 +163,8 @@ def record_stage17_operator_stage_closure_decision(
         reason=payload["reason"],
         receipt_id=receipt_id,
         decision=safe_decision,
+        authority=safe_authority,
+        delegation_id=safe_delegation_id,
         review_fingerprint=review_fingerprint,
         stage17_closed_by_receipt=stage17_closed_by_receipt,
     )
@@ -181,6 +200,12 @@ def _valid_stage17_closure_receipt(receipt: dict[str, Any]) -> bool:
     raw_governance = receipt.get("governance")
     governance: dict[str, Any] = raw_governance if isinstance(raw_governance, dict) else {}
     fingerprint = _safe_text(receipt.get("review_fingerprint"))
+    authority = _safe_text(receipt.get("authority"))
+    delegation_id = _safe_text(receipt.get("delegation_id"))
+    delegated_operator_approval = bool(receipt.get("delegated_operator_approval"))
+    authority_valid = authority == "operator" or (
+        authority == "delegated_operator" and delegated_operator_approval and bool(delegation_id)
+    )
     return (
         _safe_text(receipt.get("kind")) == STAGE17_CLOSURE_DECISION_KIND
         and bool(_safe_text(receipt.get("receipt_id")))
@@ -188,6 +213,7 @@ def _valid_stage17_closure_receipt(receipt: dict[str, Any]) -> bool:
         and _safe_text(receipt.get("decision")) == "close_stage17"
         and bool(receipt.get("completion_review_ready"))
         and bool(receipt.get("stage17_closed_by_receipt"))
+        and authority_valid
         and len(fingerprint) == 64
         and all(character in "0123456789abcdef" for character in fingerprint)
         and _safe_int(receipt.get("recorded_ts")) > 0
@@ -195,6 +221,9 @@ def _valid_stage17_closure_receipt(receipt: dict[str, Any]) -> bool:
         and bool(governance.get("explicit_operator_decision"))
         and bool(governance.get("stage_closure_decision"))
         and bool(governance.get("canonical_criteria_only"))
+        and _safe_text(governance.get("authority")) == authority
+        and _safe_text(governance.get("delegation_id")) == delegation_id
+        and bool(governance.get("delegated_operator_authority")) == delegated_operator_approval
         and not bool(governance.get("grants_execution_authority"))
         and not bool(governance.get("grants_mutation_authority"))
     )

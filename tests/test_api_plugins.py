@@ -3687,6 +3687,9 @@ def test_plugins_stage17_closure_decision_records_canonical_review_receipt(
     assert body["ok"] is True
     assert body["status"] == "recorded"
     assert body["decision"] == "close_stage17"
+    assert body["authority"] == "operator"
+    assert body["delegation_id"] == ""
+    assert body["delegated_operator_approval"] is False
     assert body["stage17_closed_by_receipt"] is True
     assert body["receipt_id"].startswith("stage17_capability_economy_closure_")
     assert body["writes_receipt"] is True
@@ -3698,6 +3701,8 @@ def test_plugins_stage17_closure_decision_records_canonical_review_receipt(
 
     receipt = body["receipt"]
     assert receipt["completion_review_ready"] is True
+    assert receipt["authority"] == "operator"
+    assert receipt["delegated_operator_approval"] is False
     assert receipt["criteria_ready_count"] == 6
     assert receipt["criteria_required_count"] == 6
     assert len(receipt["review_fingerprint"]) == 64
@@ -3774,6 +3779,77 @@ def test_plugins_stage17_closure_decision_refuses_unready_review(
     assert body["review"]["stage17_completion_review_ready"] is False
     assert body["next_smallest_truthful_gap"] == "stage17_fixture_evidence"
     assert not (data_root / "logs" / "plugins" / "stage17_operator_stage_closure_decisions.jsonl").exists()
+
+
+def test_plugins_stage17_closure_accepts_active_full_operator_delegation(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    delegation_id = "opdel_stage17_test"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV", "dev")
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", "{}")
+    delegation_path = data_root / "approvals" / "operator_delegation_receipts" / f"{delegation_id}.json"
+    delegation_path.parent.mkdir(parents=True, exist_ok=True)
+    delegation_path.write_text(
+        json.dumps(
+            {
+                "kind": "operator.delegation.receipt",
+                "delegation_id": delegation_id,
+                "delegating_actor": "Austin",
+                "receiving_actor": "codex.builder",
+                "granted_scope": ["*"],
+                "status": "active",
+                "revoked": False,
+                "expires_ts": None,
+                "authority": "delegated_operator",
+                "governance": {
+                    "full_operator_authority": True,
+                    "stage_closure_allowed": True,
+                    "subdelegation_allowed": False,
+                },
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    monkeypatch.setattr(
+        plugins,
+        "list_plugin_capabilities",
+        lambda **_: _stage17_catalog_closure_fixture(),
+    )
+    client = TestClient(create_app())
+    response = client.post(
+        "/plugins/capabilities/stage17/stage-closure-decision",
+        json={
+            "actor": "codex.builder",
+            "reason": "operator delegated Stage 17 closure",
+            "decision": "close_stage17",
+            "notes": f"delegation_id={delegation_id}",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["status"] == "recorded"
+    assert body["stage17_closed_by_receipt"] is True
+    assert body["authority"] == "delegated_operator"
+    assert body["delegation_id"] == delegation_id
+    assert body["delegated_operator_approval"] is True
+    assert body["receipt"]["governance"]["delegated_operator_authority"] is True
+
+    readback = client.get("/plugins/capabilities/stage17/stage-closure-decisions").json()
+    assert readback["stage17_closed_by_receipt"] is True
+    assert readback["latest_authority"] == "delegated_operator"
+    assert readback["latest_delegation_id"] == delegation_id
 
 
 def test_plugins_capability_catalog_projects_stage17_pack_readiness(monkeypatch, tmp_path: Path) -> None:
