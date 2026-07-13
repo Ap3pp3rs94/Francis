@@ -975,6 +975,7 @@ def test_lens_runtime_process_scan_excludes_parallel_scan_helpers(monkeypatch) -
     import francis.lens.status as status_module
 
     captured_script = ""
+    canonical_root = r"D:\Francis\data"
 
     def fake_run(command: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
         nonlocal captured_script
@@ -983,6 +984,7 @@ def test_lens_runtime_process_scan_excludes_parallel_scan_helpers(monkeypatch) -
 
     monkeypatch.setattr(status_module.os, "name", "nt")
     monkeypatch.setattr(status_module.shutil, "which", lambda _: "powershell.exe")
+    monkeypatch.setattr(status_module, "data_dir", lambda: canonical_root)
     monkeypatch.setattr(status_module.subprocess, "run", fake_run)
 
     payload = status_module._lens_runtime_process_scan({})
