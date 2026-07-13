@@ -971,6 +971,27 @@ def test_lens_runtime_process_scan_flags_extra_native_renderer(monkeypatch) -> N
     assert payload["competing_candidates"][0]["pid"] == 777
 
 
+def test_lens_runtime_process_scan_excludes_parallel_scan_helpers(monkeypatch) -> None:
+    import francis.lens.status as status_module
+
+    captured_script = ""
+
+    def fake_run(command: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
+        nonlocal captured_script
+        captured_script = command[-1]
+        return subprocess.CompletedProcess(args=command, returncode=0, stdout="[]", stderr="")
+
+    monkeypatch.setattr(status_module.os, "name", "nt")
+    monkeypatch.setattr(status_module.shutil, "which", lambda _: "powershell.exe")
+    monkeypatch.setattr(status_module.subprocess, "run", fake_run)
+
+    payload = status_module._lens_runtime_process_scan({})
+
+    assert payload["status"] == "none_observed"
+    assert "$ProcessScanMarker = 'francis-lens-runtime-process-scan-v1'" in captured_script
+    assert '$ProcessCommandLine -notlike "*$ProcessScanMarker*"' in captured_script
+
+
 def test_lens_orb_runtime_identity_correlates_renderer_to_overlay_owner(monkeypatch, tmp_path: Path) -> None:
     import francis.lens.status as status_module
 

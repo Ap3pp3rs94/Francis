@@ -5719,11 +5719,13 @@ $Patterns = @(
   'lens-host-supervisor.ps1',
   'lens-host.ps1'
 )
+$ProcessScanMarker = 'francis-lens-runtime-process-scan-v1'
 $CurrentPid = $PID
 $ScriptMatches = Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe' OR Name = 'pwsh.exe'" |
   Where-Object {
     $ProcessCommandLine = [string]$_.CommandLine
     $_.ProcessId -ne $CurrentPid -and
+    $ProcessCommandLine -notlike "*$ProcessScanMarker*" -and
     ($Patterns | Where-Object { $ProcessCommandLine -like "*$_*" }).Count -gt 0
   } |
   ForEach-Object {
