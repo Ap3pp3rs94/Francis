@@ -1098,7 +1098,7 @@ wheels = [
 
 [[package]]
 name = "fastapi"
-version = "0.138.1"
+version = "0.139.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "annotated-doc" },
@@ -1107,9 +1107,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "typing-inspection" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/8a/c9/5e8defe249899c0dc900643695fc07829a67fc88b4ff2cdb03fcbdbf5a4b/fastapi-0.138.1.tar.gz", hash = "sha256:96e3702dce09ee0dce48856135620d3d865ca684a79fe7513fd7b13a12f82862", size = 419646, upload-time = "2026-06-25T15:40:42.115Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d3/af/a5f50ccfa659ec1802cb4ca842c23f06d906a8cc9aef6016a2caeea3d4ed/fastapi-0.139.0.tar.gz", hash = "sha256:99ab7b2d92223c76d6cf10757ab3f89d45b38267fc20b2a136cf02f6beac3145", size = 423016, upload-time = "2026-07-01T16:35:33.436Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/38/a9/69a6924f645eb4dd8cd625bf255b3625990eb3e14e073438a53c405dcd3e/fastapi-0.138.1-py3-none-any.whl", hash = "sha256:b994cae7ba8b82c976a728b544244de31333fa5f7d261f9a1dffe526444cae23", size = 129182, upload-time = "2026-06-25T15:40:40.771Z" },
+    { url = "https://files.pythonhosted.org/packages/9e/7c/8e3c6ad324ea5cb36604fc3f968554887891c316d9dfde57761611d907ad/fastapi-0.139.0-py3-none-any.whl", hash = "sha256:cf15e1e9e667ddb0ad63811e60bd11390d1aac838ca4a7a23f421807b2308189", size = 130339, upload-time = "2026-07-01T16:35:32.19Z" },
 ]
 
 [[package]]
@@ -3461,7 +3461,7 @@ wheels = [
 
 [[package]]
 name = "prefect"
-version = "3.7.6"
+version = "3.7.8"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiosqlite" },
@@ -3522,9 +3522,9 @@ dependencies = [
     { name = "websockets" },
     { name = "whenever", marker = "python_full_version >= '3.13'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/fd/0e/9f950eb98408f45b0ba3a4410a349d8f830abdcffe05058499eca7260ca9/prefect-3.7.6.tar.gz", hash = "sha256:f35ae765369bc0ab70d622f46e163f38dfad99589e86baa780262166b815212c", size = 14125194, upload-time = "2026-06-25T23:59:41.979Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/56/03/905ed55a75d5dafa7caf2150ccda295c01ad750e25bc1c4555db2d0ca80e/prefect-3.7.8.tar.gz", hash = "sha256:f8e363d44b92ca11abae3a9307bf1325236c3387cd5969694e7b03a5179ab6d8", size = 14160532, upload-time = "2026-07-09T22:02:40.064Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/48/f2/0769d480c05b33a77a330bd49783d62c32c5e0b4b8303c031e7076ad5bc9/prefect-3.7.6-py3-none-any.whl", hash = "sha256:6ddf34b58b472cb30b44ba0705a5785be94fc1015776d86cc970760baef94f44", size = 15019522, upload-time = "2026-06-25T23:59:38.829Z" },
+    { url = "https://files.pythonhosted.org/packages/7d/5c/47d17acb87e352fbf1e39f2d0170a25bc40e4e3fd6fb6fa36f2230263350/prefect-3.7.8-py3-none-any.whl", hash = "sha256:6816c7f938c4a78b0b6b6f74e254a77472cb2773ad4a62462452ccfadbf9acbf", size = 15097251, upload-time = "2026-07-09T22:02:36.69Z" },
 ]
 
 [[package]]
