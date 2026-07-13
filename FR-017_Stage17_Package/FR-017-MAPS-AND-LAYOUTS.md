@@ -1,6 +1,6 @@
 # FR-017-MAPS-AND-LAYOUTS
 
-FRANCIS status: Map and layout rollup created from `FRANCIS_FR-017_Forearm_Cuffs_v1.0`.
+FRANCIS status: Map and layout rollup created from [`FR-017-FOREARM-CUFFS.md`](./FR-017-FOREARM-CUFFS.md).
 
 ## Validation State
 

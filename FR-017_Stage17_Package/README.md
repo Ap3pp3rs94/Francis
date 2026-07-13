@@ -4,7 +4,7 @@ FRANCIS status: Stage 17 documentation and evidence containers are packaged. Phy
 
 ## Package Scope
 
-This directory supports `FRANCIS_FR-017_Forearm_Cuffs_v1.0`.
+This directory contains the [FR-017 Forearm Cuffs master manual](./FR-017-FOREARM-CUFFS.md).
 
 It packages FR-017 Forearm Cuffs as a documentation-ready and test-record-ready stage without claiming fabrication, fit, mannequin, pilot, powered, load, or professional engineering validation.
 

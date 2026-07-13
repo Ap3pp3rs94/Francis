@@ -6,8 +6,8 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MANUAL_PATH = ROOT / "FRANCIS_FR-017_Forearm_Cuffs_v1.0"
 PACKAGE_DIR = ROOT / "FR-017_Stage17_Package"
+MANUAL_PATH = PACKAGE_DIR / "FR-017-FOREARM-CUFFS.md"
 MANIFEST_PATH = PACKAGE_DIR / "FR-017-STAGE17-PACKAGE-MANIFEST.json"
 
 

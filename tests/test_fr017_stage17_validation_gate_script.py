@@ -49,7 +49,6 @@ def _payload(stdout: str) -> dict[str, object]:
 
 
 def _copy_stage17_package(tmp_path: Path) -> Path:
-    shutil.copy2(ROOT / "FRANCIS_FR-017_Forearm_Cuffs_v1.0", tmp_path / "FRANCIS_FR-017_Forearm_Cuffs_v1.0")
     package_root = tmp_path / "FR-017_Stage17_Package"
     shutil.copytree(ROOT / "FR-017_Stage17_Package", package_root)
     return package_root / "FR-017-STAGE17-PACKAGE-MANIFEST.json"

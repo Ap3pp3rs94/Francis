@@ -1,4 +1,7 @@
-# FRANCIS_FR-017_Forearm_Cuffs_v1.0
+# FR-017 Forearm Cuffs
+
+> **Revision:** 1.0
+> **Validation posture:** Documentation complete; physical validation pending.
 
 FRANCIS ONLINE.
 Stage 17 loaded: FR-017 Forearm Cuffs.
@@ -511,7 +514,7 @@ Tests still required:
 
 Files or records that should be saved:
 
-- `FRANCIS_FR-017_Forearm_Cuffs_v1.0`
+- `FR-017_Stage17_Package/FR-017-FOREARM-CUFFS.md`
 - `FR-017_Stage17_Package/README.md`
 - `FR-017_Stage17_Package/FR-017-MEASUREMENTS-LEFT-RIGHT_PENDING.md`
 - `FR-017_Stage17_Package/FR-017-MEASUREMENTS-INPUT-TEMPLATE.json`

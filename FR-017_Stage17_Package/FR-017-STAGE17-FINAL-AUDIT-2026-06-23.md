@@ -18,7 +18,7 @@ Stage 17 / FR-017 Forearm Cuffs is not complete for physical validation, powered
 
 | Evidence item | Status | File |
 | --- | --- | --- |
-| Master manual | COMPLETE | `../FRANCIS_FR-017_Forearm_Cuffs_v1.0` |
+| Master manual | COMPLETE | [`FR-017-FOREARM-CUFFS.md`](./FR-017-FOREARM-CUFFS.md) |
 | Package index | COMPLETE | `README.md` |
 | Measurement record | PENDING PHYSICAL INPUT | `FR-017-MEASUREMENTS-LEFT-RIGHT_PENDING.md` |
 | Measurement input template | COMPLETE | `FR-017-MEASUREMENTS-INPUT-TEMPLATE.json` |

@@ -12,7 +12,7 @@ FR-018 implementation clearance: NOT CLEARED.
 
 ## Evidence
 
-- `FRANCIS_FR-017_Forearm_Cuffs_v1.0` exists.
+- [`FR-017-FOREARM-CUFFS.md`](./FR-017-FOREARM-CUFFS.md) exists.
 - 25/25 requested documentation deliverables are present in the manual.
 - FR-017-CUSTOM-001 through FR-017-CUSTOM-019 are present.
 - Support records in `FR-017_Stage17_Package/` have been created as pending evidence containers.
@@ -26,7 +26,7 @@ FR-018 implementation clearance: NOT CLEARED.
 
 | Criterion | Status | Evidence | Remaining action |
 | --- | --- | --- | --- |
-| Core manual section exists | DOCUMENTED | `FRANCIS_FR-017_Forearm_Cuffs_v1.0` | None |
+| Core manual section exists | DOCUMENTED | [`FR-017-FOREARM-CUFFS.md`](./FR-017-FOREARM-CUFFS.md) | None |
 | Required design packet deliverables covered | DOCUMENTED | Manual section A-G | None |
 | Custom records 001-019 present | DOCUMENTED | Manual and maps rollup | None |
 | Measurement record ready | DOCUMENTED | `FR-017-MEASUREMENTS-LEFT-RIGHT_PENDING.md` | Enter measurements |
