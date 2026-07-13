@@ -24,8 +24,8 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
     assert body["status"] == "stage18_prerequisites_blocked"
     assert body["status_readback_ready"] is True
     assert body["stage17_closed_by_receipt"] is False
-    assert body["stage17_blocker"] == "stage17_capability_library_operator_proposal_evidence_refs"
-    assert body["next_smallest_truthful_gap"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["stage17_blocker"] == "stage17_operator_stage_closure_decision"
+    assert body["next_smallest_truthful_gap"] == "stage17_operator_stage_closure_decision"
     assert body["ready_count"] == 0
     assert body["required_count"] == len(body["deliverables"])
     assert body["routes"] == {
@@ -48,6 +48,7 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
         "runtime_evidence_readbacks": "/managed-copies/runtime-evidence-readbacks",
         "runtime_evidence_readback": "/managed-copies/runtime-evidence-readback",
         "completion_review": "/managed-copies/completion-review",
+        "stage17_closure_decisions": "/plugins/capabilities/stage17/stage-closure-decisions",
     }
 
     deliverable_ids = {item["id"] for item in body["deliverables"]}
@@ -118,6 +119,109 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
     assert governance["uncontrolled_forks_allowed"] is False
     assert governance["invisible_vendor_power_allowed"] is False
     assert not data_root.exists()
+
+
+def test_managed_copies_consume_valid_stage17_closure_receipt_without_enabling_runtime(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    actor = "stage18.copy-after-stage17"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({actor: ["managed_copies.copy_creation.write"]}),
+    )
+
+    from francis.economy.stage17_closure import record_stage17_operator_stage_closure_decision
+
+    criteria = [{"id": f"criterion_{index}", "status": "ready", "blockers": []} for index in range(1, 7)]
+    closure_receipt = record_stage17_operator_stage_closure_decision(
+        actor="test.stage17.operator",
+        reason="validated Stage 17 closure fixture",
+        decision="close_stage17",
+        review={
+            "status": "ready",
+            "stage17_completion_review_ready": True,
+            "criteria_ready_count": 6,
+            "criteria_required_count": 6,
+            "closure_matrix": {
+                "kind": "plugin.capability_catalog.stage17_closure_matrix",
+                "status": "ready_for_closure_review",
+                "all_criteria_ready": True,
+                "criteria": criteria,
+                "source_readbacks": {"catalog_route": "/plugins/capabilities/catalog"},
+            },
+        },
+    )
+
+    client = TestClient(create_app())
+    status = client.get("/managed-copies/status").json()
+    assert status["status"] == "stage18_groundwork_open"
+    assert status["stage17_closed_by_receipt"] is True
+    assert status["stage17_closure_receipt_id"] == closure_receipt["receipt_id"]
+    assert status["stage17_closure_receipt_valid"] is True
+    assert status["stage17_blocker"] == ""
+    assert status["ready_count"] == 1
+    assert status["deliverables"][0]["ready"] is True
+    assert status["next_smallest_truthful_gap"] == "stage18_copy_creation_process"
+
+    contract_routes = [
+        "/managed-copies/copy-creation-contract",
+        "/managed-copies/isolation-rules-contract",
+        "/managed-copies/safe-delta-model-contract",
+        "/managed-copies/rogue-recovery-contract",
+        "/managed-copies/sla-framework-contract",
+        "/managed-copies/roles-contract",
+        "/managed-copies/decommission-contract",
+    ]
+    for route in contract_routes:
+        contract = client.get(route).json()
+        assert contract["stage17_closed_by_receipt"] is True, route
+        assert contract["stage17_blocker"] == "", route
+        assert contract["next_smallest_truthful_gap"] == "stage18_copy_creation_process", route
+        assert contract["grants_execution_authority"] is False, route
+        assert contract["grants_mutation_authority"] is False, route
+
+    runtime_contract = client.get("/managed-copies/runtime-evidence-contract").json()
+    closure_requirement = next(
+        item for item in runtime_contract["requirements"] if item["id"] == "stage17_closure_receipt"
+    )
+    assert closure_requirement["ready"] is True
+    assert closure_requirement["receipt_id"] == closure_receipt["receipt_id"]
+    assert closure_requirement["blocker"] == ""
+    assert runtime_contract["ready_count"] == 1
+    assert "stage17_operator_stage_closure_decision" not in runtime_contract["blockers"]
+
+    runtime_readbacks = client.get("/managed-copies/runtime-evidence-readbacks").json()
+    closure_check = next(item for item in runtime_readbacks["checks"] if item["id"] == "stage17_closure_receipt")
+    assert closure_check["passed"] is True
+    assert closure_check["receipt_id"] == closure_receipt["receipt_id"]
+    assert "stage17_closure_receipt" not in runtime_readbacks["missing_evidence"]
+
+    completion = client.get("/managed-copies/completion-review").json()
+    stage17_check = next(item for item in completion["checks"] if item["id"] == "stage17_ledger_closure_backstop")
+    assert stage17_check["passed"] is True
+    assert completion["stage18_completion_review_ready"] is False
+    assert "stage17_operator_stage_closure_decision" not in completion["blockers"]
+    assert completion["next_smallest_truthful_gap"] == "stage18_copy_creation_runtime_not_implemented"
+
+    request = client.post(
+        "/managed-copies/copy-creation-request",
+        json={
+            "request_actor": actor,
+            "tenant_id": "tenant-still-not-created",
+        },
+    ).json()
+    assert request["status"] == "blocked_stage18_runtime_not_implemented"
+    assert request["error"] == "stage18_runtime_not_implemented"
+    assert request["stage17_closed_by_receipt"] is True
+    assert request["stage17_blocker"] == ""
+    assert request["copy_created"] is False
+    assert request["writes_receipts"] is False
+    assert request["writes_tenant_state"] is False
+    assert request["grants_execution_authority"] is False
+    assert request["grants_mutation_authority"] is False
 
 
 def test_managed_copy_creation_request_denies_unscoped_actor_without_writing(
@@ -209,7 +313,7 @@ def test_managed_copy_creation_request_blocks_scoped_actor_until_stage17_closes(
     }
     assert raw_tenant_id not in json.dumps(body)
     assert body["stage17_closed_by_receipt"] is False
-    assert body["stage17_blocker"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["stage17_blocker"] == "stage17_operator_stage_closure_decision"
     assert body["copy_creation_enabled"] is False
     assert body["copy_creation_allowed"] is False
     assert body["copy_request_recording_enabled"] is False
@@ -227,7 +331,7 @@ def test_managed_copy_creation_request_blocks_scoped_actor_until_stage17_closes(
     assert body["expected_request_receipt_path"] == "logs/managed_copies/copy_requests.jsonl"
     assert body["required_scope"] == "managed_copies.copy_creation.write"
     assert body["routes"]["copy_creation_request"] == "/managed-copies/copy-creation-request"
-    assert body["next_smallest_truthful_gap"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["next_smallest_truthful_gap"] == "stage17_operator_stage_closure_decision"
 
     governance = body["governance"]
     assert governance["write_route"] is True
@@ -301,13 +405,11 @@ def test_managed_copy_completion_review_blocks_closure_without_runtime_evidence(
     assert all(item["readback_ready"] is True for item in body["checks"])
     assert all(item["runtime_ready"] is False for item in body["checks"])
     assert all(item["passed"] is False for item in body["checks"])
-    assert check_by_id["stage17_ledger_closure_backstop"]["blocker"] == (
-        "stage17_capability_library_operator_proposal_evidence_refs"
-    )
+    assert check_by_id["stage17_ledger_closure_backstop"]["blocker"] == ("stage17_operator_stage_closure_decision")
     assert check_by_id["copy_creation_contract"]["route"] == "/managed-copies/copy-creation-contract"
     assert check_by_id["decommission_contract"]["route"] == "/managed-copies/decommission-contract"
     assert body["blockers"] == [
-        "stage17_capability_library_operator_proposal_evidence_refs",
+        "stage17_operator_stage_closure_decision",
         "stage18_copy_creation_runtime_not_implemented",
         "stage18_tenant_isolation_runtime_not_implemented",
         "stage18_safe_delta_runtime_not_implemented",
@@ -345,7 +447,7 @@ def test_managed_copy_completion_review_blocks_closure_without_runtime_evidence(
     assert body["captures_screen"] is False
     assert body["grants_execution_authority"] is False
     assert body["grants_mutation_authority"] is False
-    assert body["next_smallest_truthful_gap"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["next_smallest_truthful_gap"] == "stage17_operator_stage_closure_decision"
 
     governance = body["governance"]
     assert governance["completion_review_only"] is True
@@ -380,7 +482,7 @@ def test_managed_copy_runtime_evidence_contract_is_readonly_and_not_recording(
     assert body["runtime_evidence_recording_enabled"] is False
     assert body["runtime_evidence_ready"] is False
     assert body["stage17_closed_by_receipt"] is False
-    assert body["stage17_blocker"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["stage17_blocker"] == "stage17_operator_stage_closure_decision"
     assert body["completion_review_route"] == "/managed-copies/completion-review"
     assert body["routes"]["runtime_evidence_contract"] == "/managed-copies/runtime-evidence-contract"
     assert body["routes"]["runtime_evidence_readbacks"] == "/managed-copies/runtime-evidence-readbacks"
@@ -413,7 +515,7 @@ def test_managed_copy_runtime_evidence_contract_is_readonly_and_not_recording(
     assert requirement_by_id["decommission_runtime_proof"]["proof_kind"] == "decommission_runtime_receipt"
 
     assert body["blockers"] == [
-        "stage17_capability_library_operator_proposal_evidence_refs",
+        "stage17_operator_stage_closure_decision",
         "stage18_copy_creation_runtime_not_implemented",
         "stage18_tenant_isolation_runtime_not_implemented",
         "stage18_safe_delta_runtime_not_implemented",
@@ -447,7 +549,7 @@ def test_managed_copy_runtime_evidence_contract_is_readonly_and_not_recording(
     assert body["captures_screen"] is False
     assert body["grants_execution_authority"] is False
     assert body["grants_mutation_authority"] is False
-    assert body["next_smallest_truthful_gap"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["next_smallest_truthful_gap"] == "stage17_operator_stage_closure_decision"
 
     governance = body["governance"]
     assert governance["runtime_evidence_contract_only"] is True
@@ -498,7 +600,7 @@ def test_managed_copy_runtime_evidence_readbacks_are_empty_and_readonly(
         "decommission_runtime_proof",
     ]
     assert body["missing_blockers"] == [
-        "stage17_capability_library_operator_proposal_evidence_refs",
+        "stage17_operator_stage_closure_decision",
         "stage18_copy_creation_runtime_not_implemented",
         "stage18_tenant_isolation_runtime_not_implemented",
         "stage18_safe_delta_runtime_not_implemented",
@@ -524,7 +626,7 @@ def test_managed_copy_runtime_evidence_readbacks_are_empty_and_readonly(
     assert body["captures_screen"] is False
     assert body["grants_execution_authority"] is False
     assert body["grants_mutation_authority"] is False
-    assert body["next_smallest_truthful_gap"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["next_smallest_truthful_gap"] == "stage17_operator_stage_closure_decision"
 
     governance = body["governance"]
     assert governance["runtime_evidence_readback_only"] is True
@@ -679,7 +781,7 @@ def test_managed_copy_runtime_evidence_readback_blocks_scoped_actor_until_stage1
     assert body["trace_id"] == "trace-managed-copy-runtime-proof-blocked"
     assert body["evidence_summary_present"] is True
     assert body["stage17_closed_by_receipt"] is False
-    assert body["stage17_blocker"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["stage17_blocker"] == "stage17_operator_stage_closure_decision"
     assert body["runtime_evidence_recording_enabled"] is False
     assert body["receipt_ready"] is False
     assert body["writes_receipt"] is False
@@ -690,7 +792,7 @@ def test_managed_copy_runtime_evidence_readback_blocks_scoped_actor_until_stage1
     assert body["expected_receipt_path"] == "logs/managed_copies/runtime_evidence.jsonl"
     assert body["required_scope"] == "managed_copies.runtime_evidence.write"
     assert body["routes"]["runtime_evidence_readback"] == "/managed-copies/runtime-evidence-readback"
-    assert body["next_smallest_truthful_gap"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["next_smallest_truthful_gap"] == "stage17_operator_stage_closure_decision"
 
     governance = body["governance"]
     assert governance["write_route"] is True
@@ -733,8 +835,8 @@ def test_managed_copy_decommission_contract_is_projection_only_and_inactive(
     assert body["proof_receipts_enabled"] is False
     assert body["copy_creation_enabled"] is False
     assert body["stage17_closed_by_receipt"] is False
-    assert body["stage17_blocker"] == "stage17_capability_library_operator_proposal_evidence_refs"
-    assert body["next_smallest_truthful_gap"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["stage17_blocker"] == "stage17_operator_stage_closure_decision"
+    assert body["next_smallest_truthful_gap"] == "stage17_operator_stage_closure_decision"
     assert body["decommission_review_route"] == "/managed-copies/decommission-review"
     assert body["routes"]["decommission_review"] == "/managed-copies/decommission-review"
 
@@ -970,7 +1072,7 @@ def test_managed_copy_decommission_review_blocks_scoped_actor_until_stage17_clos
     assert body["retention_scope_known_count"] == 1
     assert body["retention_scope_unknown_count"] == 0
     assert body["stage17_closed_by_receipt"] is False
-    assert body["stage17_blocker"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["stage17_blocker"] == "stage17_operator_stage_closure_decision"
     assert body["decommission_contract_ready"] is False
     assert body["decommission_review_enabled"] is False
     assert body["decommission_enabled"] is False
@@ -999,7 +1101,7 @@ def test_managed_copy_decommission_review_blocks_scoped_actor_until_stage17_clos
     assert body["expected_review_receipt_path"] == "logs/managed_copies/decommission_reviews.jsonl"
     assert body["required_scope"] == "managed_copies.decommission.write"
     assert body["routes"]["decommission_review"] == "/managed-copies/decommission-review"
-    assert body["next_smallest_truthful_gap"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["next_smallest_truthful_gap"] == "stage17_operator_stage_closure_decision"
 
     governance = body["governance"]
     assert governance["write_route"] is True
@@ -1049,8 +1151,8 @@ def test_managed_copy_roles_contract_is_projection_only_and_authority_inactive(
     assert body["paired_node_authority_enabled"] is False
     assert body["copy_creation_enabled"] is False
     assert body["stage17_closed_by_receipt"] is False
-    assert body["stage17_blocker"] == "stage17_capability_library_operator_proposal_evidence_refs"
-    assert body["next_smallest_truthful_gap"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["stage17_blocker"] == "stage17_operator_stage_closure_decision"
+    assert body["next_smallest_truthful_gap"] == "stage17_operator_stage_closure_decision"
     assert body["role_authority_review_route"] == "/managed-copies/role-authority-review"
     assert body["routes"]["role_authority_review"] == "/managed-copies/role-authority-review"
 
@@ -1248,7 +1350,7 @@ def test_managed_copy_role_authority_review_blocks_scoped_actor_until_stage17_cl
     assert body["node_pairing_requested"] is False
     assert body["evidence_ref_count"] == 2
     assert body["stage17_closed_by_receipt"] is False
-    assert body["stage17_blocker"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["stage17_blocker"] == "stage17_operator_stage_closure_decision"
     assert body["roles_contract_ready"] is False
     assert body["role_authority_review_enabled"] is False
     assert body["role_authority_active"] is False
@@ -1275,7 +1377,7 @@ def test_managed_copy_role_authority_review_blocks_scoped_actor_until_stage17_cl
     assert body["expected_review_receipt_path"] == "logs/managed_copies/role_authority_reviews.jsonl"
     assert body["required_scope"] == "managed_copies.role_authority.write"
     assert body["routes"]["role_authority_review"] == "/managed-copies/role-authority-review"
-    assert body["next_smallest_truthful_gap"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["next_smallest_truthful_gap"] == "stage17_operator_stage_closure_decision"
 
     governance = body["governance"]
     assert governance["write_route"] is True
@@ -1324,8 +1426,8 @@ def test_managed_copy_sla_framework_contract_is_projection_only_and_inactive(
     assert body["billing_entitlements_enabled"] is False
     assert body["copy_creation_enabled"] is False
     assert body["stage17_closed_by_receipt"] is False
-    assert body["stage17_blocker"] == "stage17_capability_library_operator_proposal_evidence_refs"
-    assert body["next_smallest_truthful_gap"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["stage17_blocker"] == "stage17_operator_stage_closure_decision"
+    assert body["next_smallest_truthful_gap"] == "stage17_operator_stage_closure_decision"
     assert body["sla_commitment_review_route"] == "/managed-copies/sla-commitment-review"
     assert body["routes"]["sla_commitment_review"] == "/managed-copies/sla-commitment-review"
 
@@ -1516,7 +1618,7 @@ def test_managed_copy_sla_commitment_review_blocks_scoped_actor_until_stage17_cl
     assert body["metric"] == "uptime_window"
     assert body["metric_known"] is True
     assert body["stage17_closed_by_receipt"] is False
-    assert body["stage17_blocker"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["stage17_blocker"] == "stage17_operator_stage_closure_decision"
     assert body["sla_framework_ready"] is False
     assert body["sla_review_enabled"] is False
     assert body["sla_commitments_active"] is False
@@ -1541,7 +1643,7 @@ def test_managed_copy_sla_commitment_review_blocks_scoped_actor_until_stage17_cl
     assert body["expected_review_receipt_path"] == "logs/managed_copies/sla_commitment_reviews.jsonl"
     assert body["required_scope"] == "managed_copies.sla.write"
     assert body["routes"]["sla_commitment_review"] == "/managed-copies/sla-commitment-review"
-    assert body["next_smallest_truthful_gap"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["next_smallest_truthful_gap"] == "stage17_operator_stage_closure_decision"
 
     governance = body["governance"]
     assert governance["write_route"] is True
@@ -1589,8 +1691,8 @@ def test_managed_copy_rogue_recovery_contract_is_projection_only_and_disabled(
     assert body["restore_enabled"] is False
     assert body["copy_creation_enabled"] is False
     assert body["stage17_closed_by_receipt"] is False
-    assert body["stage17_blocker"] == "stage17_capability_library_operator_proposal_evidence_refs"
-    assert body["next_smallest_truthful_gap"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["stage17_blocker"] == "stage17_operator_stage_closure_decision"
+    assert body["next_smallest_truthful_gap"] == "stage17_operator_stage_closure_decision"
     assert body["rogue_recovery_review_route"] == "/managed-copies/rogue-recovery-review"
     assert body["routes"]["rogue_recovery_review"] == "/managed-copies/rogue-recovery-review"
 
@@ -1782,7 +1884,7 @@ def test_managed_copy_rogue_recovery_review_blocks_scoped_actor_until_stage17_cl
     assert body["action_writes_receipt"] is True
     assert body["action_mutates_copy_state"] is True
     assert body["stage17_closed_by_receipt"] is False
-    assert body["stage17_blocker"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["stage17_blocker"] == "stage17_operator_stage_closure_decision"
     assert body["rogue_recovery_ready"] is False
     assert body["rogue_recovery_review_enabled"] is False
     assert body["rogue_detection_enabled"] is False
@@ -1807,7 +1909,7 @@ def test_managed_copy_rogue_recovery_review_blocks_scoped_actor_until_stage17_cl
     assert body["expected_review_receipt_path"] == "logs/managed_copies/rogue_recovery_reviews.jsonl"
     assert body["required_scope"] == "managed_copies.rogue_recovery.write"
     assert body["routes"]["rogue_recovery_review"] == "/managed-copies/rogue-recovery-review"
-    assert body["next_smallest_truthful_gap"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["next_smallest_truthful_gap"] == "stage17_operator_stage_closure_decision"
 
     governance = body["governance"]
     assert governance["write_route"] is True
@@ -1853,8 +1955,8 @@ def test_managed_copy_safe_delta_model_contract_denies_raw_pooling_and_exports(
     assert body["learning_write_enabled"] is False
     assert body["copy_creation_enabled"] is False
     assert body["stage17_closed_by_receipt"] is False
-    assert body["stage17_blocker"] == "stage17_capability_library_operator_proposal_evidence_refs"
-    assert body["next_smallest_truthful_gap"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["stage17_blocker"] == "stage17_operator_stage_closure_decision"
+    assert body["next_smallest_truthful_gap"] == "stage17_operator_stage_closure_decision"
     assert body["safe_delta_review_route"] == "/managed-copies/safe-delta-review"
     assert body["routes"]["safe_delta_review"] == "/managed-copies/safe-delta-review"
 
@@ -2041,7 +2143,7 @@ def test_managed_copy_safe_delta_review_blocks_scoped_actor_until_stage17_closes
     assert body["signal_denied_by_contract"] is False
     assert body["direction"] == "export"
     assert body["stage17_closed_by_receipt"] is False
-    assert body["stage17_blocker"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["stage17_blocker"] == "stage17_operator_stage_closure_decision"
     assert body["safe_delta_model_ready"] is False
     assert body["safe_delta_review_enabled"] is False
     assert body["safe_delta_approved"] is False
@@ -2065,7 +2167,7 @@ def test_managed_copy_safe_delta_review_blocks_scoped_actor_until_stage17_closes
     assert body["expected_review_receipt_path"] == "logs/managed_copies/safe_delta_reviews.jsonl"
     assert body["required_scope"] == "managed_copies.safe_delta.write"
     assert body["routes"]["safe_delta_review"] == "/managed-copies/safe-delta-review"
-    assert body["next_smallest_truthful_gap"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["next_smallest_truthful_gap"] == "stage17_operator_stage_closure_decision"
 
     governance = body["governance"]
     assert governance["write_route"] is True
@@ -2111,8 +2213,8 @@ def test_managed_copy_isolation_rules_contract_is_projection_only_and_unenforced
     assert body["isolation_enforcement_enabled"] is False
     assert body["copy_creation_enabled"] is False
     assert body["stage17_closed_by_receipt"] is False
-    assert body["stage17_blocker"] == "stage17_capability_library_operator_proposal_evidence_refs"
-    assert body["next_smallest_truthful_gap"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["stage17_blocker"] == "stage17_operator_stage_closure_decision"
+    assert body["next_smallest_truthful_gap"] == "stage17_operator_stage_closure_decision"
     assert body["isolation_verification_route"] == "/managed-copies/isolation-verification"
     assert body["routes"]["isolation_verification"] == "/managed-copies/isolation-verification"
 
@@ -2287,7 +2389,7 @@ def test_managed_copy_isolation_verification_blocks_scoped_actor_until_stage17_c
     assert all(item["verified"] is False for item in body["domain_checks"])
     assert all(item["status"] == "blocked_stage17_prerequisite" for item in body["domain_checks"])
     assert body["stage17_closed_by_receipt"] is False
-    assert body["stage17_blocker"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["stage17_blocker"] == "stage17_operator_stage_closure_decision"
     assert body["isolation_rules_ready"] is False
     assert body["isolation_enforcement_enabled"] is False
     assert body["isolation_verification_enabled"] is False
@@ -2308,7 +2410,7 @@ def test_managed_copy_isolation_verification_blocks_scoped_actor_until_stage17_c
     assert body["expected_verification_receipt_path"] == "logs/managed_copies/isolation_verifications.jsonl"
     assert body["required_scope"] == "managed_copies.isolation_verification.write"
     assert body["routes"]["isolation_verification"] == "/managed-copies/isolation-verification"
-    assert body["next_smallest_truthful_gap"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["next_smallest_truthful_gap"] == "stage17_operator_stage_closure_decision"
 
     governance = body["governance"]
     assert governance["write_route"] is True
@@ -2348,8 +2450,8 @@ def test_managed_copy_creation_contract_is_projection_only_and_disabled(
     assert body["copy_creation_enabled"] is False
     assert body["copy_creation_allowed"] is False
     assert body["stage17_closed_by_receipt"] is False
-    assert body["stage17_blocker"] == "stage17_capability_library_operator_proposal_evidence_refs"
-    assert body["next_smallest_truthful_gap"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["stage17_blocker"] == "stage17_operator_stage_closure_decision"
+    assert body["next_smallest_truthful_gap"] == "stage17_operator_stage_closure_decision"
     assert body["copy_creation_request_route"] == "/managed-copies/copy-creation-request"
     assert body["routes"]["copy_creation_request"] == "/managed-copies/copy-creation-request"
 

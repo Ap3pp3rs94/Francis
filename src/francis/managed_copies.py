@@ -4,6 +4,10 @@ import json
 from pathlib import Path
 from typing import Any
 
+from francis.economy.stage17_closure import (
+    STAGE17_CLOSURE_DECISION_GAP,
+    stage17_operator_stage_closure_decision_readback,
+)
 from francis.kernel.paths import data_dir
 
 STAGE18_MANAGED_COPIES_STAGE = "Stage 18 / Managed Copies Platform"
@@ -34,7 +38,6 @@ MANAGED_COPIES_RUNTIME_EVIDENCE_CONTRACT_KIND = "francis.stage18.managed_copies.
 MANAGED_COPIES_RUNTIME_EVIDENCE_READBACKS_KIND = "francis.stage18.managed_copies.runtime_evidence_readbacks"
 MANAGED_COPIES_RUNTIME_EVIDENCE_READBACK_KIND = "francis.stage18.managed_copies.runtime_evidence_readback"
 MANAGED_COPIES_RUNTIME_EVIDENCE_WRITE_SCOPE = "managed_copies.runtime_evidence.write"
-STAGE17_OPERATOR_EVIDENCE_REFS_GAP = "stage17_capability_library_operator_proposal_evidence_refs"
 
 
 def _safe_str(value: Any) -> str:
@@ -299,6 +302,12 @@ def _completion_check(
     }
 
 
+def _managed_copy_preflight_block(stage17_closed: bool) -> tuple[str, str]:
+    if stage17_closed:
+        return ("blocked_stage18_runtime_not_implemented", "stage18_runtime_not_implemented")
+    return ("blocked_stage17_prerequisite", "stage17_prerequisite_not_closed")
+
+
 def _runtime_evidence_requirement(
     requirement_id: str,
     title: str,
@@ -307,16 +316,19 @@ def _runtime_evidence_requirement(
     proof_kind: str,
     blocker: str,
     requires_receipt: bool = True,
+    ready: bool = False,
+    receipt_id: str = "",
 ) -> dict[str, Any]:
     return {
         "id": requirement_id,
         "title": title,
-        "status": "required_not_present",
-        "ready": False,
+        "status": "ready" if ready else "required_not_present",
+        "ready": ready,
         "source_contract_route": source_contract_route,
         "proof_kind": proof_kind,
-        "blocker": blocker,
+        "blocker": "" if ready else blocker,
         "requires_receipt": requires_receipt,
+        "receipt_id": receipt_id if ready else "",
         "recording_enabled": False,
         "writes_receipt": False,
         "mutates_tenant_state": False,
@@ -357,15 +369,21 @@ def _latest_runtime_evidence_by_requirement(items: list[dict[str, Any]]) -> dict
 def managed_copies_status_snapshot() -> dict[str, Any]:
     """Return the Stage 18 managed-copy substrate posture without creating state."""
     governance = _governance()
+    stage17 = stage17_operator_stage_closure_decision_readback(limit=5)
+    stage17_closed = bool(stage17["stage17_closed_by_receipt"])
+    stage17_receipt_id = _safe_str(stage17.get("latest_receipt_id")).strip()
+    stage17_blocker = "" if stage17_closed else STAGE17_CLOSURE_DECISION_GAP
     deliverables = [
         _deliverable(
             "stage17_ledger_closure_backstop",
             "Stage 17 closure backstop",
-            ready=False,
-            status="blocked",
-            next_gap=STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+            ready=stage17_closed,
+            status="ready" if stage17_closed else "blocked",
+            next_gap=stage17_blocker,
             evidence=[
-                "Stage 17 still requires real operator refs to pass import-preview, dry-run, and governed apply.",
+                f"Stage 17 closure receipt: {stage17_receipt_id}"
+                if stage17_closed
+                else "Stage 17 requires an explicit governed closure decision over the canonical six-criterion review.",
             ],
         ),
         _deliverable(
@@ -446,10 +464,12 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
         "kind": MANAGED_COPIES_STATUS_KIND,
         "stage": STAGE18_MANAGED_COPIES_STAGE,
         "source_id": "managed_copies",
-        "status": "stage18_prerequisites_blocked",
+        "status": "stage18_groundwork_open" if stage17_closed else "stage18_prerequisites_blocked",
         "status_readback_ready": True,
-        "stage17_closed_by_receipt": False,
-        "stage17_blocker": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "stage17_closed_by_receipt": stage17_closed,
+        "stage17_closure_receipt_id": stage17_receipt_id,
+        "stage17_closure_receipt_valid": bool(stage17.get("latest_receipt_valid")),
+        "stage17_blocker": stage17_blocker,
         "ready_count": ready_count,
         "required_count": len(deliverables),
         "deliverables": deliverables,
@@ -473,6 +493,7 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
             "runtime_evidence_readbacks": "/managed-copies/runtime-evidence-readbacks",
             "runtime_evidence_readback": "/managed-copies/runtime-evidence-readback",
             "completion_review": "/managed-copies/completion-review",
+            "stage17_closure_decisions": "/plugins/capabilities/stage17/stage-closure-decisions",
         },
         "managed_copy_roles_required": [
             "end_user",
@@ -510,7 +531,9 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
         "captures_screen": governance["captures_screen"],
         "grants_execution_authority": governance["grants_execution_authority"],
         "grants_mutation_authority": governance["grants_mutation_authority"],
-        "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "next_smallest_truthful_gap": (
+            "stage18_copy_creation_process" if stage17_closed else STAGE17_CLOSURE_DECISION_GAP
+        ),
     }
 
 
@@ -521,11 +544,13 @@ def managed_copy_creation_contract_snapshot() -> dict[str, Any]:
     requirements = [
         _contract_requirement(
             "stage17_closed_by_receipt",
-            "Stage 17 closure is backed by real operator proposal-evidence refs",
-            ready=False,
-            next_gap=STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+            "Stage 17 closure is backed by a governed canonical-criteria receipt",
+            ready=bool(status["stage17_closed_by_receipt"]),
+            next_gap=_safe_str(status["stage17_blocker"]),
             evidence=[
-                "Current ledger posture keeps Stage 17 open until real refs pass import-preview, dry-run, and apply.",
+                f"Stage 17 closure receipt: {status['stage17_closure_receipt_id']}"
+                if status["stage17_closed_by_receipt"]
+                else "No valid Stage 17 operator closure receipt is present.",
             ],
         ),
         _contract_requirement(
@@ -622,8 +647,8 @@ def managed_copy_creation_contract_snapshot() -> dict[str, Any]:
         "contract_readback_ready": True,
         "copy_creation_enabled": False,
         "copy_creation_allowed": False,
-        "stage17_closed_by_receipt": False,
-        "stage17_blocker": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "stage17_closed_by_receipt": bool(status["stage17_closed_by_receipt"]),
+        "stage17_blocker": status["stage17_blocker"],
         "requirements": requirements,
         "required_count": len(requirements),
         "ready_count": sum(1 for requirement in requirements if requirement["ready"]),
@@ -688,7 +713,7 @@ def managed_copy_creation_contract_snapshot() -> dict[str, Any]:
         "captures_screen": governance["captures_screen"],
         "grants_execution_authority": governance["grants_execution_authority"],
         "grants_mutation_authority": governance["grants_mutation_authority"],
-        "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "next_smallest_truthful_gap": status["next_smallest_truthful_gap"],
     }
 
 
@@ -697,9 +722,10 @@ def managed_copy_creation_request_blocked_snapshot(
     *,
     actor: str,
 ) -> dict[str, Any]:
-    """Return a governed copy-creation request preflight blocked by Stage 17."""
+    """Return a governed copy-creation request preflight without creating state."""
     governance = _governance()
     contract = managed_copy_creation_contract_snapshot()
+    blocked_status, blocked_error = _managed_copy_preflight_block(bool(contract["stage17_closed_by_receipt"]))
     request_field_presence = {
         "tenant_id": bool(_safe_str(payload.get("tenant_id")).strip()),
         "tenant_identity": bool(payload.get("tenant_identity")),
@@ -715,13 +741,13 @@ def managed_copy_creation_request_blocked_snapshot(
         "kind": MANAGED_COPIES_COPY_CREATION_REQUEST_KIND,
         "stage": STAGE18_MANAGED_COPIES_STAGE,
         "source_id": "managed_copies",
-        "status": "blocked_stage17_prerequisite",
-        "error": "stage17_prerequisite_not_closed",
+        "status": blocked_status,
+        "error": blocked_error,
         "actor": _safe_str(actor).strip(),
         "request_known": any(request_field_presence.values()),
         "request_field_presence": request_field_presence,
         "stage17_closed_by_receipt": bool(contract["stage17_closed_by_receipt"]),
-        "stage17_blocker": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "stage17_blocker": contract["stage17_blocker"],
         "copy_creation_enabled": False,
         "copy_creation_allowed": False,
         "copy_request_recording_enabled": False,
@@ -773,7 +799,7 @@ def managed_copy_creation_request_blocked_snapshot(
         },
         "read_only": governance["read_only"],
         "projection_only": governance["projection_only"],
-        "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "next_smallest_truthful_gap": contract["next_smallest_truthful_gap"],
     }
 
 
@@ -842,8 +868,8 @@ def managed_copy_isolation_rules_contract_snapshot() -> dict[str, Any]:
         "isolation_rules_ready": False,
         "isolation_enforcement_enabled": False,
         "copy_creation_enabled": False,
-        "stage17_closed_by_receipt": False,
-        "stage17_blocker": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "stage17_closed_by_receipt": bool(status["stage17_closed_by_receipt"]),
+        "stage17_blocker": status["stage17_blocker"],
         "isolation_domains": isolation_domains,
         "required_domain_count": len(isolation_domains),
         "enforced_domain_count": sum(1 for domain in isolation_domains if domain["isolated"]),
@@ -905,7 +931,7 @@ def managed_copy_isolation_rules_contract_snapshot() -> dict[str, Any]:
         "raw_private_pooling_allowed": False,
         "support_backdoor_allowed": False,
         "tenant_state_shared": False,
-        "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "next_smallest_truthful_gap": status["next_smallest_truthful_gap"],
     }
 
 
@@ -914,9 +940,10 @@ def managed_copy_isolation_verification_blocked_snapshot(
     *,
     actor: str,
 ) -> dict[str, Any]:
-    """Return a governed isolation verification preflight blocked by Stage 17."""
+    """Return a governed isolation verification preflight without enforcing isolation."""
     governance = _governance()
     contract = managed_copy_isolation_rules_contract_snapshot()
+    blocked_status, blocked_error = _managed_copy_preflight_block(bool(contract["stage17_closed_by_receipt"]))
     raw_domains = payload.get("domains")
     domain_values = raw_domains if isinstance(raw_domains, list) else []
     requested_domains = {_safe_str(domain).strip() for domain in domain_values if _safe_str(domain).strip()}
@@ -926,7 +953,7 @@ def managed_copy_isolation_verification_blocked_snapshot(
             "id": domain_id,
             "requested": domain_id in requested_domains,
             "verified": False,
-            "status": "blocked_stage17_prerequisite",
+            "status": blocked_status,
             "verification_gap": next(
                 item["verification_gap"] for item in contract["isolation_domains"] if item["id"] == domain_id
             ),
@@ -939,8 +966,8 @@ def managed_copy_isolation_verification_blocked_snapshot(
         "kind": MANAGED_COPIES_ISOLATION_VERIFICATION_KIND,
         "stage": STAGE18_MANAGED_COPIES_STAGE,
         "source_id": "managed_copies",
-        "status": "blocked_stage17_prerequisite",
-        "error": "stage17_prerequisite_not_closed",
+        "status": blocked_status,
+        "error": blocked_error,
         "actor": _safe_str(actor).strip(),
         "copy_id_present": bool(_safe_str(payload.get("copy_id")).strip()),
         "tenant_id_present": bool(_safe_str(payload.get("tenant_id")).strip()),
@@ -950,7 +977,7 @@ def managed_copy_isolation_verification_blocked_snapshot(
         "verified_domain_count": 0,
         "domain_checks": domain_checks,
         "stage17_closed_by_receipt": bool(contract["stage17_closed_by_receipt"]),
-        "stage17_blocker": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "stage17_blocker": contract["stage17_blocker"],
         "isolation_rules_ready": False,
         "isolation_enforcement_enabled": False,
         "isolation_verification_enabled": False,
@@ -1005,7 +1032,7 @@ def managed_copy_isolation_verification_blocked_snapshot(
         },
         "read_only": governance["read_only"],
         "projection_only": governance["projection_only"],
-        "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "next_smallest_truthful_gap": contract["next_smallest_truthful_gap"],
     }
 
 
@@ -1107,8 +1134,8 @@ def managed_copy_safe_delta_model_contract_snapshot() -> dict[str, Any]:
         "delta_import_enabled": False,
         "learning_write_enabled": False,
         "copy_creation_enabled": False,
-        "stage17_closed_by_receipt": False,
-        "stage17_blocker": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "stage17_closed_by_receipt": bool(status["stage17_closed_by_receipt"]),
+        "stage17_blocker": status["stage17_blocker"],
         "allowed_signal_classes": allowed_signal_classes,
         "denied_signal_classes": denied_signal_classes,
         "allowed_signal_count": len(allowed_signal_classes),
@@ -1173,7 +1200,7 @@ def managed_copy_safe_delta_model_contract_snapshot() -> dict[str, Any]:
         "tenant_reidentification_allowed": False,
         "unattributed_learning_allowed": False,
         "safe_delta_flow_active": False,
-        "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "next_smallest_truthful_gap": status["next_smallest_truthful_gap"],
     }
 
 
@@ -1182,9 +1209,10 @@ def managed_copy_safe_delta_review_blocked_snapshot(
     *,
     actor: str,
 ) -> dict[str, Any]:
-    """Return a governed safe-delta review preflight blocked by Stage 17."""
+    """Return a governed safe-delta review preflight without exporting data."""
     governance = _governance()
     contract = managed_copy_safe_delta_model_contract_snapshot()
+    blocked_status, blocked_error = _managed_copy_preflight_block(bool(contract["stage17_closed_by_receipt"]))
     signal_class = _safe_str(payload.get("signal_class")).strip()
     allowed_signal_ids = {item["id"] for item in contract["allowed_signal_classes"]}
     denied_signal_ids = {item["id"] for item in contract["denied_signal_classes"]}
@@ -1195,8 +1223,8 @@ def managed_copy_safe_delta_review_blocked_snapshot(
         "kind": MANAGED_COPIES_SAFE_DELTA_REVIEW_KIND,
         "stage": STAGE18_MANAGED_COPIES_STAGE,
         "source_id": "managed_copies",
-        "status": "blocked_stage17_prerequisite",
-        "error": "stage17_prerequisite_not_closed",
+        "status": blocked_status,
+        "error": blocked_error,
         "actor": _safe_str(actor).strip(),
         "copy_id_present": bool(_safe_str(payload.get("copy_id")).strip()),
         "tenant_id_present": bool(_safe_str(payload.get("tenant_id")).strip()),
@@ -1207,7 +1235,7 @@ def managed_copy_safe_delta_review_blocked_snapshot(
         "signal_denied_by_contract": signal_class in denied_signal_ids,
         "direction": direction,
         "stage17_closed_by_receipt": bool(contract["stage17_closed_by_receipt"]),
-        "stage17_blocker": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "stage17_blocker": contract["stage17_blocker"],
         "safe_delta_model_ready": False,
         "safe_delta_review_enabled": False,
         "safe_delta_approved": False,
@@ -1270,7 +1298,7 @@ def managed_copy_safe_delta_review_blocked_snapshot(
         },
         "read_only": governance["read_only"],
         "projection_only": governance["projection_only"],
-        "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "next_smallest_truthful_gap": contract["next_smallest_truthful_gap"],
     }
 
 
@@ -1380,8 +1408,8 @@ def managed_copy_rogue_recovery_contract_snapshot() -> dict[str, Any]:
         "replacement_enabled": False,
         "restore_enabled": False,
         "copy_creation_enabled": False,
-        "stage17_closed_by_receipt": False,
-        "stage17_blocker": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "stage17_closed_by_receipt": bool(status["stage17_closed_by_receipt"]),
+        "stage17_blocker": status["stage17_blocker"],
         "detection_signals": detection_signals,
         "detection_signal_count": len(detection_signals),
         "recovery_steps": recovery_steps,
@@ -1442,7 +1470,7 @@ def managed_copy_rogue_recovery_contract_snapshot() -> dict[str, Any]:
         "replaces_copy": False,
         "restores_copy": False,
         "support_backdoor_allowed": False,
-        "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "next_smallest_truthful_gap": status["next_smallest_truthful_gap"],
     }
 
 
@@ -1451,9 +1479,10 @@ def managed_copy_rogue_recovery_review_blocked_snapshot(
     *,
     actor: str,
 ) -> dict[str, Any]:
-    """Return a governed rogue-recovery review preflight blocked by Stage 17."""
+    """Return a governed rogue-recovery review preflight without acting on a copy."""
     governance = _governance()
     contract = managed_copy_rogue_recovery_contract_snapshot()
+    blocked_status, blocked_error = _managed_copy_preflight_block(bool(contract["stage17_closed_by_receipt"]))
     signal_id = _safe_str(payload.get("signal_id") or payload.get("detection_signal")).strip()
     signal_by_id = {item["id"]: item for item in contract["detection_signals"]}
     signal = signal_by_id.get(signal_id, {})
@@ -1467,8 +1496,8 @@ def managed_copy_rogue_recovery_review_blocked_snapshot(
         "kind": MANAGED_COPIES_ROGUE_RECOVERY_REVIEW_KIND,
         "stage": STAGE18_MANAGED_COPIES_STAGE,
         "source_id": "managed_copies",
-        "status": "blocked_stage17_prerequisite",
-        "error": "stage17_prerequisite_not_closed",
+        "status": blocked_status,
+        "error": blocked_error,
         "actor": _safe_str(actor).strip(),
         "copy_id_present": bool(_safe_str(payload.get("copy_id")).strip()),
         "tenant_id_present": bool(_safe_str(payload.get("tenant_id")).strip()),
@@ -1482,7 +1511,7 @@ def managed_copy_rogue_recovery_review_blocked_snapshot(
         "action_writes_receipt": bool(step.get("writes_receipt")),
         "action_mutates_copy_state": bool(step.get("mutates_copy_state")),
         "stage17_closed_by_receipt": bool(contract["stage17_closed_by_receipt"]),
-        "stage17_blocker": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "stage17_blocker": contract["stage17_blocker"],
         "rogue_recovery_ready": False,
         "rogue_recovery_review_enabled": False,
         "rogue_detection_enabled": False,
@@ -1544,7 +1573,7 @@ def managed_copy_rogue_recovery_review_blocked_snapshot(
         },
         "read_only": governance["read_only"],
         "projection_only": governance["projection_only"],
-        "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "next_smallest_truthful_gap": contract["next_smallest_truthful_gap"],
     }
 
 
@@ -1604,8 +1633,8 @@ def managed_copy_sla_framework_contract_snapshot() -> dict[str, Any]:
         "support_tiers_enabled": False,
         "billing_entitlements_enabled": False,
         "copy_creation_enabled": False,
-        "stage17_closed_by_receipt": False,
-        "stage17_blocker": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "stage17_closed_by_receipt": bool(status["stage17_closed_by_receipt"]),
+        "stage17_blocker": status["stage17_blocker"],
         "commitments": commitments,
         "commitment_count": len(commitments),
         "active_commitment_count": sum(1 for commitment in commitments if commitment["active"]),
@@ -1674,7 +1703,7 @@ def managed_copy_sla_framework_contract_snapshot() -> dict[str, Any]:
         "opens_incident": False,
         "records_sla_receipt": False,
         "grants_support_authority": False,
-        "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "next_smallest_truthful_gap": status["next_smallest_truthful_gap"],
     }
 
 
@@ -1683,9 +1712,10 @@ def managed_copy_sla_commitment_review_blocked_snapshot(
     *,
     actor: str,
 ) -> dict[str, Any]:
-    """Return a governed SLA commitment review preflight blocked by Stage 17."""
+    """Return a governed SLA commitment review preflight without activating service."""
     governance = _governance()
     contract = managed_copy_sla_framework_contract_snapshot()
+    blocked_status, blocked_error = _managed_copy_preflight_block(bool(contract["stage17_closed_by_receipt"]))
     raw_commitment_id = _safe_str(payload.get("commitment_id") or payload.get("commitment")).strip()
     commitment_by_id = {item["id"]: item for item in contract["commitments"]}
     commitment = commitment_by_id.get(raw_commitment_id, {})
@@ -1700,8 +1730,8 @@ def managed_copy_sla_commitment_review_blocked_snapshot(
         "kind": MANAGED_COPIES_SLA_COMMITMENT_REVIEW_KIND,
         "stage": STAGE18_MANAGED_COPIES_STAGE,
         "source_id": "managed_copies",
-        "status": "blocked_stage17_prerequisite",
-        "error": "stage17_prerequisite_not_closed",
+        "status": blocked_status,
+        "error": blocked_error,
         "actor": _safe_str(actor).strip(),
         "copy_id_present": bool(_safe_str(payload.get("copy_id")).strip()),
         "tenant_id_present": bool(_safe_str(payload.get("tenant_id")).strip()),
@@ -1716,7 +1746,7 @@ def managed_copy_sla_commitment_review_blocked_snapshot(
         "metric": raw_metric if metric_known else "unknown",
         "metric_known": metric_known,
         "stage17_closed_by_receipt": bool(contract["stage17_closed_by_receipt"]),
-        "stage17_blocker": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "stage17_blocker": contract["stage17_blocker"],
         "sla_framework_ready": False,
         "sla_review_enabled": False,
         "sla_commitments_active": False,
@@ -1778,7 +1808,7 @@ def managed_copy_sla_commitment_review_blocked_snapshot(
         },
         "read_only": governance["read_only"],
         "projection_only": governance["projection_only"],
-        "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "next_smallest_truthful_gap": contract["next_smallest_truthful_gap"],
     }
 
 
@@ -1886,8 +1916,8 @@ def managed_copy_roles_contract_snapshot() -> dict[str, Any]:
         "automation_principal_enabled": False,
         "paired_node_authority_enabled": False,
         "copy_creation_enabled": False,
-        "stage17_closed_by_receipt": False,
-        "stage17_blocker": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "stage17_closed_by_receipt": bool(status["stage17_closed_by_receipt"]),
+        "stage17_blocker": status["stage17_blocker"],
         "roles": roles,
         "required_role_count": len(roles),
         "active_role_count": sum(1 for role in roles if role["authority_active"]),
@@ -1949,7 +1979,7 @@ def managed_copy_roles_contract_snapshot() -> dict[str, Any]:
         "activates_automation_principal": False,
         "pairs_node": False,
         "revokes_role": False,
-        "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "next_smallest_truthful_gap": status["next_smallest_truthful_gap"],
     }
 
 
@@ -1958,9 +1988,10 @@ def managed_copy_role_authority_review_blocked_snapshot(
     *,
     actor: str,
 ) -> dict[str, Any]:
-    """Return a governed role-authority review preflight blocked by Stage 17."""
+    """Return a governed role-authority review preflight without binding authority."""
     governance = _governance()
     contract = managed_copy_roles_contract_snapshot()
+    blocked_status, blocked_error = _managed_copy_preflight_block(bool(contract["stage17_closed_by_receipt"]))
     role_id = _safe_str(payload.get("role_id") or payload.get("role")).strip()
     role_by_id = {item["id"]: item for item in contract["roles"]}
     role = role_by_id.get(role_id, {})
@@ -1986,8 +2017,8 @@ def managed_copy_role_authority_review_blocked_snapshot(
         "kind": MANAGED_COPIES_ROLE_AUTHORITY_REVIEW_KIND,
         "stage": STAGE18_MANAGED_COPIES_STAGE,
         "source_id": "managed_copies",
-        "status": "blocked_stage17_prerequisite",
-        "error": "stage17_prerequisite_not_closed",
+        "status": blocked_status,
+        "error": blocked_error,
         "actor": _safe_str(actor).strip(),
         "copy_id_present": bool(_safe_str(payload.get("copy_id")).strip()),
         "tenant_id_present": bool(_safe_str(payload.get("tenant_id")).strip()),
@@ -2005,7 +2036,7 @@ def managed_copy_role_authority_review_blocked_snapshot(
         "node_pairing_requested": payload.get("node_pairing") is not None,
         "evidence_ref_count": evidence_ref_count,
         "stage17_closed_by_receipt": bool(contract["stage17_closed_by_receipt"]),
-        "stage17_blocker": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "stage17_blocker": contract["stage17_blocker"],
         "roles_contract_ready": False,
         "role_authority_review_enabled": False,
         "role_authority_active": False,
@@ -2070,7 +2101,7 @@ def managed_copy_role_authority_review_blocked_snapshot(
         },
         "read_only": governance["read_only"],
         "projection_only": governance["projection_only"],
-        "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "next_smallest_truthful_gap": contract["next_smallest_truthful_gap"],
     }
 
 
@@ -2145,8 +2176,8 @@ def managed_copy_decommission_contract_snapshot() -> dict[str, Any]:
         "node_unpairing_enabled": False,
         "proof_receipts_enabled": False,
         "copy_creation_enabled": False,
-        "stage17_closed_by_receipt": False,
-        "stage17_blocker": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "stage17_closed_by_receipt": bool(status["stage17_closed_by_receipt"]),
+        "stage17_blocker": status["stage17_blocker"],
         "decommission_steps": steps,
         "step_count": len(steps),
         "active_step_count": sum(1 for step in steps if step["status"] == "enabled"),
@@ -2228,7 +2259,7 @@ def managed_copy_decommission_contract_snapshot() -> dict[str, Any]:
         "purges_memory": False,
         "records_decommission_receipt": False,
         "weakens_other_copies": False,
-        "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "next_smallest_truthful_gap": status["next_smallest_truthful_gap"],
     }
 
 
@@ -2251,9 +2282,10 @@ def managed_copy_decommission_review_blocked_snapshot(
     *,
     actor: str,
 ) -> dict[str, Any]:
-    """Return a governed decommission review preflight blocked by Stage 17."""
+    """Return a governed decommission review preflight without mutating tenant state."""
     governance = _governance()
     contract = managed_copy_decommission_contract_snapshot()
+    blocked_status, blocked_error = _managed_copy_preflight_block(bool(contract["stage17_closed_by_receipt"]))
     action = _safe_str(payload.get("action") or payload.get("decommission_step")).strip()
     step_by_id = {item["id"]: item for item in contract["decommission_steps"]}
     step = step_by_id.get(action, {})
@@ -2267,8 +2299,8 @@ def managed_copy_decommission_review_blocked_snapshot(
         "kind": MANAGED_COPIES_DECOMMISSION_REVIEW_KIND,
         "stage": STAGE18_MANAGED_COPIES_STAGE,
         "source_id": "managed_copies",
-        "status": "blocked_stage17_prerequisite",
-        "error": "stage17_prerequisite_not_closed",
+        "status": blocked_status,
+        "error": blocked_error,
         "actor": _safe_str(actor).strip(),
         "copy_id_present": bool(_safe_str(payload.get("copy_id")).strip()),
         "tenant_id_present": bool(_safe_str(payload.get("tenant_id")).strip()),
@@ -2288,7 +2320,7 @@ def managed_copy_decommission_review_blocked_snapshot(
         "retention_scope_known_count": retention_scope_counts["known_count"],
         "retention_scope_unknown_count": retention_scope_counts["unknown_count"],
         "stage17_closed_by_receipt": bool(contract["stage17_closed_by_receipt"]),
-        "stage17_blocker": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "stage17_blocker": contract["stage17_blocker"],
         "decommission_contract_ready": False,
         "decommission_review_enabled": False,
         "decommission_enabled": False,
@@ -2355,7 +2387,7 @@ def managed_copy_decommission_review_blocked_snapshot(
         },
         "read_only": governance["read_only"],
         "projection_only": governance["projection_only"],
-        "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "next_smallest_truthful_gap": contract["next_smallest_truthful_gap"],
     }
 
 
@@ -2377,7 +2409,7 @@ def managed_copy_completion_review_snapshot() -> dict[str, Any]:
             readback_ready=True,
             runtime_ready=bool(status["stage17_closed_by_receipt"]),
             route="/managed-copies/status",
-            blocker=STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+            blocker=_safe_str(status["stage17_blocker"]),
         ),
         _completion_check(
             "copy_creation_contract",
@@ -2499,7 +2531,7 @@ def managed_copy_completion_review_snapshot() -> dict[str, Any]:
         "captures_screen": governance["captures_screen"],
         "grants_execution_authority": governance["grants_execution_authority"],
         "grants_mutation_authority": governance["grants_mutation_authority"],
-        "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "next_smallest_truthful_gap": blockers[0] if blockers else "stage18_stage_closure_decision",
     }
 
 
@@ -2513,7 +2545,9 @@ def managed_copy_runtime_evidence_contract_snapshot() -> dict[str, Any]:
             "Stage 17 closure receipt proves capability-economy prerequisites are closed",
             source_contract_route="/managed-copies/status",
             proof_kind="ledger_closure_receipt",
-            blocker=STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+            blocker=_safe_str(status["stage17_blocker"]),
+            ready=bool(status["stage17_closed_by_receipt"]),
+            receipt_id=_safe_str(status["stage17_closure_receipt_id"]),
         ),
         _runtime_evidence_requirement(
             "copy_creation_runtime_proof",
@@ -2576,11 +2610,11 @@ def managed_copy_runtime_evidence_contract_snapshot() -> dict[str, Any]:
         "runtime_evidence_recording_enabled": False,
         "runtime_evidence_ready": False,
         "stage17_closed_by_receipt": bool(status["stage17_closed_by_receipt"]),
-        "stage17_blocker": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "stage17_blocker": status["stage17_blocker"],
         "requirements": requirements,
         "ready_count": sum(1 for requirement in requirements if requirement["ready"]),
         "required_count": len(requirements),
-        "blockers": [requirement["blocker"] for requirement in requirements],
+        "blockers": [requirement["blocker"] for requirement in requirements if not requirement["ready"]],
         "accepted_proof_kinds": [requirement["proof_kind"] for requirement in requirements],
         "receipt_logical_scope": "future_managed_copy_runtime_evidence",
         "completion_review_route": "/managed-copies/completion-review",
@@ -2610,7 +2644,7 @@ def managed_copy_runtime_evidence_contract_snapshot() -> dict[str, Any]:
         "captures_screen": governance["captures_screen"],
         "grants_execution_authority": governance["grants_execution_authority"],
         "grants_mutation_authority": governance["grants_mutation_authority"],
-        "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "next_smallest_truthful_gap": status["next_smallest_truthful_gap"],
     }
 
 
@@ -2623,20 +2657,32 @@ def managed_copy_runtime_evidence_readbacks_snapshot(*, limit: int = 100) -> dic
     checks: list[dict[str, Any]] = []
     for requirement in contract["requirements"]:
         item = latest_by_requirement.get(requirement["id"], {})
-        receipt_ready = _runtime_evidence_ready(item, requirement)
+        prerequisite_ready = bool(requirement.get("ready"))
+        receipt_ready = prerequisite_ready or _runtime_evidence_ready(item, requirement)
+        receipt_id = (
+            _safe_str(requirement.get("receipt_id")).strip()
+            if prerequisite_ready
+            else _safe_str(item.get("receipt_id")).strip()
+        )
         checks.append(
             {
                 "id": requirement["id"],
                 "passed": receipt_ready,
                 "receipt_ready": receipt_ready,
                 "status": "observed" if receipt_ready else "not_observed",
-                "receipt_id": _safe_str(item.get("receipt_id")).strip(),
-                "proof_kind": _safe_str(item.get("proof_kind")).strip(),
+                "receipt_id": receipt_id,
+                "proof_kind": requirement["proof_kind"]
+                if prerequisite_ready
+                else _safe_str(item.get("proof_kind")).strip(),
                 "trace_id": _safe_str(item.get("trace_id")).strip(),
                 "source_contract_route": requirement["source_contract_route"],
                 "blocker": requirement["blocker"],
-                "evidence": _safe_str(item.get("evidence_summary")).strip()
-                or f"no {requirement['id']} runtime evidence receipt has been recorded",
+                "evidence": (
+                    f"validated prerequisite receipt {receipt_id}"
+                    if prerequisite_ready
+                    else _safe_str(item.get("evidence_summary")).strip()
+                    or f"no {requirement['id']} runtime evidence receipt has been recorded"
+                ),
             }
         )
     missing_evidence = [check["id"] for check in checks if not check["passed"]]
@@ -2646,7 +2692,7 @@ def managed_copy_runtime_evidence_readbacks_snapshot(*, limit: int = 100) -> dic
         "kind": MANAGED_COPIES_RUNTIME_EVIDENCE_READBACKS_KIND,
         "stage": STAGE18_MANAGED_COPIES_STAGE,
         "source_id": "managed_copies",
-        "status": "ready" if ready else "partial" if items else "empty",
+        "status": "ready" if ready else "partial" if any(check["passed"] for check in checks) else "empty",
         "items": items,
         "checks": checks,
         "count": len(items),
@@ -2656,7 +2702,7 @@ def managed_copy_runtime_evidence_readbacks_snapshot(*, limit: int = 100) -> dic
         "runtime_evidence_readback_ready": ready,
         "runtime_evidence_ready": ready,
         "missing_evidence": missing_evidence,
-        "missing_blockers": [check["blocker"] for check in checks if not check["passed"]],
+        "missing_blockers": [check["blocker"] for check in checks if not check["passed"] and check["blocker"]],
         "expected_receipt_path": "logs/managed_copies/runtime_evidence.jsonl",
         "runtime_evidence_recording_enabled": False,
         "routes": {
@@ -2683,7 +2729,7 @@ def managed_copy_runtime_evidence_readbacks_snapshot(*, limit: int = 100) -> dic
         "captures_screen": governance["captures_screen"],
         "grants_execution_authority": governance["grants_execution_authority"],
         "grants_mutation_authority": governance["grants_mutation_authority"],
-        "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP
+        "next_smallest_truthful_gap": contract["next_smallest_truthful_gap"]
         if missing_evidence
         else "stage18_completion_review",
     }
@@ -2694,9 +2740,10 @@ def managed_copy_runtime_evidence_readback_blocked_snapshot(
     *,
     actor: str,
 ) -> dict[str, Any]:
-    """Return a governed runtime-evidence write preflight blocked by Stage 17."""
+    """Return a governed runtime-evidence write preflight without recording evidence."""
     governance = _governance()
     contract = managed_copy_runtime_evidence_contract_snapshot()
+    blocked_status, blocked_error = _managed_copy_preflight_block(bool(contract["stage17_closed_by_receipt"]))
     requirement_id = _safe_str(payload.get("requirement_id")).strip()
     proof_kind = _safe_str(payload.get("proof_kind")).strip()
     requirement_by_id = {item["id"]: item for item in contract["requirements"]}
@@ -2707,8 +2754,8 @@ def managed_copy_runtime_evidence_readback_blocked_snapshot(
         "kind": MANAGED_COPIES_RUNTIME_EVIDENCE_READBACK_KIND,
         "stage": STAGE18_MANAGED_COPIES_STAGE,
         "source_id": "managed_copies",
-        "status": "blocked_stage17_prerequisite",
-        "error": "stage17_prerequisite_not_closed",
+        "status": blocked_status,
+        "error": blocked_error,
         "actor": _safe_str(actor).strip(),
         "requirement_id": requirement_id,
         "requirement_known": bool(requirement),
@@ -2719,7 +2766,7 @@ def managed_copy_runtime_evidence_readback_blocked_snapshot(
         "reason": _safe_str(payload.get("reason")).strip()[:500],
         "evidence_summary_present": bool(_safe_str(payload.get("evidence_summary")).strip()),
         "stage17_closed_by_receipt": bool(contract["stage17_closed_by_receipt"]),
-        "stage17_blocker": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "stage17_blocker": contract["stage17_blocker"],
         "runtime_evidence_recording_enabled": False,
         "receipt_ready": False,
         "writes_receipt": False,
@@ -2750,5 +2797,5 @@ def managed_copy_runtime_evidence_readback_blocked_snapshot(
         },
         "read_only": governance["read_only"],
         "projection_only": governance["projection_only"],
-        "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "next_smallest_truthful_gap": contract["next_smallest_truthful_gap"],
     }
