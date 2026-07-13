@@ -174,10 +174,13 @@ def test_lens_host_supervisor_explicit_stop_tracks_observed_host_pid() -> None:
 
 def test_lens_host_supervisor_runtime_state_write_retries_atomic_move() -> None:
     script = (_repo_root() / "scripts" / "lens-host-supervisor.ps1").read_text(encoding="utf-8")
+    write_json = script[script.index("function Write-JsonFile") : script.index("function Get-PropertyValue")]
 
-    assert "for ($Attempt = 0; $Attempt -lt 20 -and -not $Moved; $Attempt += 1)" in script
-    assert "Move-Item -LiteralPath $TempPath -Destination $Path -Force -ErrorAction Stop" in script
-    assert "Start-Sleep -Milliseconds 50" in script
+    assert "for ($Attempt = 0; $Attempt -lt 20 -and -not $Moved; $Attempt += 1)" in write_json
+    assert "[System.IO.File]::Replace($TempPath, $Path, $BackupPath, $true)" in write_json
+    assert "Move-Item -LiteralPath $TempPath -Destination $Path -Force -ErrorAction Stop" in write_json
+    assert "Remove-Item -LiteralPath $Path" not in write_json
+    assert "Start-Sleep -Milliseconds 50" in write_json
 
 
 def test_lens_host_supervisor_observes_existing_bounded_host_without_restart(tmp_path: Path) -> None:

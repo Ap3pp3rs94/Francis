@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-import json
 import math
-import os
 import time
 from pathlib import Path
 from typing import Any
 
 from francis.kernel.paths import data_dir
+from francis.lens.atomic_io import atomic_write_json as _atomic_write_json
+from francis.lens.atomic_io import read_json_object as _read_json
 from francis.lens.orb_body_state import lens_orb_body_runtime_readback
 from francis.lens.perception_capture import DesktopFrame
 
@@ -18,6 +18,7 @@ LENS_SITUATION_MODEL_VERSION = 1
 LENS_SITUATION_MODEL_ROUTE = "/lens/perception/now"
 
 _MAX_HEARTBEAT_AGE_SECONDS = 2.5
+_MAX_HEARTBEAT_FUTURE_SKEW_SECONDS = 0.25
 
 
 def write_lens_situation_model_heartbeat(
@@ -176,7 +177,9 @@ def lens_situation_model_readback(*, now: float | None = None) -> dict[str, Any]
     payload = _read_json(_situation_model_path())
     updated_at = _safe_float(payload.get("updated_at"))
     age_seconds = observed_at - updated_at if updated_at is not None else None
-    fresh = bool(age_seconds is not None and 0.0 <= age_seconds <= _MAX_HEARTBEAT_AGE_SECONDS)
+    fresh = bool(
+        age_seconds is not None and -_MAX_HEARTBEAT_FUTURE_SKEW_SECONDS <= age_seconds <= _MAX_HEARTBEAT_AGE_SECONDS
+    )
     runtime_identity = _as_dict(payload.get("runtime_identity"))
     governance = _as_dict(payload.get("governance"))
     blockers: list[str] = []
@@ -225,6 +228,7 @@ def lens_situation_model_readback(*, now: float | None = None) -> dict[str, Any]
         "updated_at": updated_at,
         "lag_ms": round(age_seconds * 1000.0, 3) if age_seconds is not None else None,
         "max_lag_ms": int(_MAX_HEARTBEAT_AGE_SECONDS * 1000),
+        "max_future_skew_ms": int(_MAX_HEARTBEAT_FUTURE_SKEW_SECONDS * 1000),
         "fresh": fresh,
         "present": _as_dict(payload.get("present")),
         "sources": _as_dict(payload.get("sources")),
@@ -246,27 +250,6 @@ def lens_situation_model_readback(*, now: float | None = None) -> dict[str, Any]
 
 def _situation_model_path() -> Path:
     return data_dir() / "runtime" / "lens-perception" / "situation-model.json"
-
-
-def _read_json(path: Path) -> dict[str, Any]:
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8-sig", errors="replace"))
-    except (OSError, json.JSONDecodeError):
-        return {}
-    return payload if isinstance(payload, dict) else {}
-
-
-def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.parent / f".{os.getpid():x}.{time.time_ns():x}.tmp"
-    try:
-        temporary.write_text(
-            json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=True, allow_nan=False) + "\n",
-            encoding="utf-8",
-        )
-        os.replace(temporary, path)
-    finally:
-        temporary.unlink(missing_ok=True)
 
 
 def _safe_float(value: Any) -> float | None:

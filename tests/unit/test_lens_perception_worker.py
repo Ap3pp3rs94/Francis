@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from francis.governance.approvals import approved_dir
+from francis.lens import perception_worker as perception_worker_module
 from francis.lens.perception_capture import DesktopFrame
 from francis.lens.perception_worker import (
     LENS_PERCEPTION_EXECUTION_ACTION,
@@ -213,3 +214,72 @@ def test_supervision_readback_rejects_worker_whose_parent_is_not_the_resident_ho
     assert readback["active"] is False
     assert readback["parent_matches_resident_host"] is False
     assert "lens_perception_worker_parent_not_resident_host" in readback["blockers"]
+
+
+def test_supervision_readback_retries_transient_status_replace_race(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
+    status_path = tmp_path / "runtime" / "lens-host-supervisor" / "status.json"
+    status_path.parent.mkdir(parents=True)
+    status_path.write_text(
+        json.dumps(
+            {
+                "kind": "lens.host.supervisor_state",
+                "status": "resident_supervising",
+                "supervisor_pid": 700,
+                "supervisor_process_alive": True,
+                "observed_pid": 900,
+                "resident_supervised_runtime": True,
+                "process_supervision_authority": True,
+                "updated_at": 100.0,
+            }
+        ),
+        encoding="utf-8",
+    )
+    original_read_text = Path.read_text
+    attempts = 0
+
+    def flaky_read_text(path: Path, *args, **kwargs):
+        nonlocal attempts
+        if path == status_path and attempts < 2:
+            attempts += 1
+            raise PermissionError("transient supervisor status replacement")
+        return original_read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", flaky_read_text)
+    monkeypatch.setattr(perception_worker_module.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(perception_worker_module, "process_is_alive", lambda _pid: True)
+
+    readback = lens_perception_worker_supervision_readback(parent_process_id=900, now=101.0)
+
+    assert attempts == 2
+    assert readback["active"] is True
+    assert readback["blockers"] == []
+
+
+def test_supervision_readback_tolerates_bounded_concurrent_heartbeat_skew(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
+    status_path = tmp_path / "runtime" / "lens-host-supervisor" / "status.json"
+    status_path.parent.mkdir(parents=True)
+    status_path.write_text(
+        json.dumps(
+            {
+                "kind": "lens.host.supervisor_state",
+                "status": "resident_supervising",
+                "supervisor_pid": 700,
+                "supervisor_process_alive": True,
+                "observed_pid": 900,
+                "resident_supervised_runtime": True,
+                "process_supervision_authority": True,
+                "updated_at": 101.005,
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(perception_worker_module, "process_is_alive", lambda _pid: True)
+
+    readback = lens_perception_worker_supervision_readback(parent_process_id=900, now=101.0)
+
+    assert readback["active"] is True
+    assert readback["age_ms"] == -5.0
+    assert readback["max_future_skew_ms"] == 250
+    assert readback["blockers"] == []

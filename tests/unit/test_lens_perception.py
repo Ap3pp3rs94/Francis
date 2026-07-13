@@ -108,6 +108,29 @@ def test_perception_readback_fails_closed_when_runtime_state_is_missing(tmp_path
     assert not (data_root / "runtime" / "lens-perception").exists()
 
 
+def test_perception_snapshot_retries_a_concurrent_situation_revision(monkeypatch) -> None:
+    revisions = iter(("frame-1", "frame-2"))
+    sleeps: list[float] = []
+
+    monkeypatch.setattr(
+        perception_module,
+        "_read_runtime_state",
+        lambda _path: {"situation_model": {"revision": next(revisions)}},
+    )
+    monkeypatch.setattr(
+        perception_module,
+        "lens_situation_model_readback",
+        lambda now=None: {"revision": "frame-2", "heartbeat_ready": True},
+    )
+    monkeypatch.setattr(perception_module.time, "sleep", sleeps.append)
+
+    runtime, heartbeat = perception_module._read_runtime_situation_snapshot(Path("status.json"), 100.0)
+
+    assert runtime["situation_model"]["revision"] == "frame-2"
+    assert heartbeat["revision"] == "frame-2"
+    assert len(sleeps) == 1
+
+
 def test_perception_readback_requires_fresh_supervised_authorized_situation_model(tmp_path: Path, monkeypatch) -> None:
     data_root = tmp_path / "data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
@@ -208,6 +231,15 @@ def test_perception_readback_requires_fresh_supervised_authorized_situation_mode
     assert payload["capture"]["desktop"]["pixels_in_readback"] is False
     assert payload["capture"]["desktop"]["authority_receipt"]["active"] is True
     assert payload["capture"]["keyboard_content_captured"] is False
+
+    concurrent = lens_perception_runtime_readback(now=99.9)
+
+    assert concurrent["ready"] is True
+    assert concurrent["fresh"] is True
+    assert concurrent["age_ms"] == -100.0
+    assert concurrent["max_future_skew_ms"] == 250
+    assert concurrent["ring_buffer"]["fresh"] is True
+    assert concurrent["situation_model"]["heartbeat_ready"] is True
 
     situation_path = data_root / "runtime" / "lens-perception" / "situation-model.json"
     situation_state = json.loads(situation_path.read_text(encoding="utf-8"))

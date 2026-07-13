@@ -118,6 +118,15 @@ def test_lens_host_manifest_normalizes_locked_orb_ring_color_contract(
                 "overlay_scope": "user_session",
                 "overlay_window_visible": True,
                 "always_on_top": True,
+                "native_renderer": {
+                    "pid": live_pid,
+                    "status_pid": live_pid,
+                    "pid_matches_status": True,
+                    "process_alive": True,
+                    "active_renderer": True,
+                    "render_only": True,
+                    "authority_granted": False,
+                },
                 "orb_visual": {
                     "visual_contract": "native_cpp_orb.liquid_streamer_identity",
                     "renderer": "native_cpp_orb_renderer",
@@ -136,6 +145,8 @@ def test_lens_host_manifest_normalizes_locked_orb_ring_color_contract(
     contract = visual["ring_color_contract"]
 
     assert overlay["ready"] is True
+    assert overlay["native_renderer"]["pid"] == live_pid
+    assert overlay["native_renderer"]["active_renderer"] is True
     assert visual["visual_contract"] == "native_cpp_orb.liquid_streamer_identity"
     assert contract["kind"] == "lens.overlay.orb_ring_color_contract"
     assert contract["source"] == "docs/operations/ORB_VISUAL_LOCK.md"

@@ -8,13 +8,13 @@ It does not start capture, write state, or grant sensing authority.
 
 from __future__ import annotations
 
-import json
 import os
 import time
 from pathlib import Path
 from typing import Any
 
 from francis.kernel.paths import data_dir
+from francis.lens.atomic_io import read_json_object as _read_runtime_state
 from francis.lens.perception_authority import lens_perception_desktop_authority_receipt_status
 from francis.lens.perception_capture import lens_perception_ring_buffer_readback
 from francis.lens.perception_execution_contract import lens_perception_execution_approval_status
@@ -25,6 +25,9 @@ LENS_PERCEPTION_RUNTIME_STATE_VERSION = 1
 LENS_PERCEPTION_RUNTIME_READBACK_KIND = "lens.perception.runtime_readback"
 _EXPECTED_OWNER = "lens_supervisor"
 _MAX_STATE_AGE_SECONDS = 5.0
+_MAX_STATE_FUTURE_SKEW_SECONDS = 0.25
+_CONSISTENT_SNAPSHOT_ATTEMPTS = 5
+_CONSISTENT_SNAPSHOT_RETRY_SECONDS = 0.02
 
 
 def _safe_str(value: Any) -> str:
@@ -109,16 +112,6 @@ def _supervisor_state_path() -> Path:
     return data_dir() / "runtime" / "lens-host-supervisor" / "status.json"
 
 
-def _read_runtime_state(path: Path) -> dict[str, Any]:
-    if not path.exists() or not path.is_file():
-        return {}
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8-sig", errors="replace"))
-    except (OSError, json.JSONDecodeError):
-        return {}
-    return raw if isinstance(raw, dict) else {}
-
-
 def _bounded_capture_readback(value: dict[str, Any]) -> dict[str, Any]:
     return {
         "authority_granted": value.get("authority_granted") is True,
@@ -127,6 +120,21 @@ def _bounded_capture_readback(value: dict[str, Any]) -> dict[str, Any]:
         "source": _safe_str(value.get("source")),
         "pixels_in_readback": False,
     }
+
+
+def _read_runtime_situation_snapshot(path: Path, observed_now: float) -> tuple[dict[str, Any], dict[str, Any]]:
+    raw: dict[str, Any] = {}
+    heartbeat: dict[str, Any] = {}
+    for attempt in range(_CONSISTENT_SNAPSHOT_ATTEMPTS):
+        raw = _read_runtime_state(path)
+        heartbeat = lens_situation_model_readback(now=observed_now)
+        runtime_revision = _safe_str(_as_dict(raw.get("situation_model")).get("revision"))
+        heartbeat_revision = _safe_str(heartbeat.get("revision"))
+        if not raw or not runtime_revision or not heartbeat_revision or runtime_revision == heartbeat_revision:
+            break
+        if attempt + 1 < _CONSISTENT_SNAPSHOT_ATTEMPTS:
+            time.sleep(_CONSISTENT_SNAPSHOT_RETRY_SECONDS)
+    return raw, heartbeat
 
 
 def lens_perception_runtime_readback(*, now: float | None = None) -> dict[str, Any]:
@@ -138,7 +146,7 @@ def lens_perception_runtime_readback(*, now: float | None = None) -> dict[str, A
 
     observed_now = time.time() if now is None else float(now)
     path = _runtime_state_path()
-    raw = _read_runtime_state(path)
+    raw, situation_heartbeat = _read_runtime_situation_snapshot(path, observed_now)
     supervisor_path = _supervisor_state_path()
     supervisor = _read_runtime_state(supervisor_path)
     runtime_present = bool(raw)
@@ -153,7 +161,6 @@ def lens_perception_runtime_readback(*, now: float | None = None) -> dict[str, A
     ring_buffer = lens_perception_ring_buffer_readback(now=observed_now)
     camera_capture = _bounded_capture_readback(_as_dict(capture.get("camera")))
     raw_situation = _as_dict(raw.get("situation_model"))
-    situation_heartbeat = lens_situation_model_readback(now=observed_now)
     owner = _safe_str(raw.get("owner"))
     state = _safe_str(raw.get("state"))
     worker_pid = _safe_pid(raw.get("pid"))
@@ -167,7 +174,7 @@ def lens_perception_runtime_readback(*, now: float | None = None) -> dict[str, A
     )
     updated_at = _safe_float(raw.get("updated_at"))
     age_seconds = observed_now - updated_at if updated_at is not None else None
-    fresh = bool(age_seconds is not None and 0.0 <= age_seconds <= _MAX_STATE_AGE_SECONDS)
+    fresh = bool(age_seconds is not None and -_MAX_STATE_FUTURE_SKEW_SECONDS <= age_seconds <= _MAX_STATE_AGE_SECONDS)
     state_kind_valid = _safe_str(raw.get("kind")) == LENS_PERCEPTION_RUNTIME_STATE_KIND
     version_valid = raw.get("version") == LENS_PERCEPTION_RUNTIME_STATE_VERSION
     owner_valid = owner == _EXPECTED_OWNER
@@ -333,6 +340,7 @@ def lens_perception_runtime_readback(*, now: float | None = None) -> dict[str, A
         "updated_at": updated_at,
         "age_ms": round(age_seconds * 1000.0, 3) if age_seconds is not None else None,
         "max_age_ms": int(_MAX_STATE_AGE_SECONDS * 1000),
+        "max_future_skew_ms": int(_MAX_STATE_FUTURE_SKEW_SECONDS * 1000),
         "fresh": fresh,
         "situation_model": {
             "status": situation_status or "not_observed",

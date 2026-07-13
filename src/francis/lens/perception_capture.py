@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import ctypes
 import hashlib
-import json
 import math
 import os
 import re
@@ -18,10 +17,12 @@ import time
 import zlib
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
 
 from francis.kernel.paths import data_dir
+from francis.lens.atomic_io import atomic_write_bytes as _atomic_write_bytes
+from francis.lens.atomic_io import atomic_write_json as _atomic_write_json
+from francis.lens.atomic_io import read_json_object as _read_json
 from francis.lens.perception_authority import lens_perception_desktop_authority_receipt_status
 
 LENS_PERCEPTION_RING_BUFFER_KIND = "lens.perception.ring_buffer_manifest"
@@ -33,6 +34,7 @@ _DEFAULT_RETENTION_SECONDS = 120.0
 _DEFAULT_MAX_FRAMES = 240
 _DEFAULT_CHANGE_THRESHOLD = 0.02
 _DEFAULT_MAX_LAG_SECONDS = 5.0
+_DEFAULT_MAX_FUTURE_SKEW_SECONDS = 0.25
 _FRAME_FILE_PATTERN = re.compile(r"^frame_[0-9]{13}_[0-9]{6}_[0-9a-f]{12}\.png$")
 _SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
@@ -359,7 +361,9 @@ class PerceptionRingBuffer:
         oldest_at = _safe_float(oldest.get("captured_at"))
         newest_at = _safe_float(latest.get("captured_at"))
         age_seconds = observed_at - newest_at if newest_at is not None else None
-        fresh = bool(age_seconds is not None and 0.0 <= age_seconds <= _DEFAULT_MAX_LAG_SECONDS)
+        fresh = bool(
+            age_seconds is not None and -_DEFAULT_MAX_FUTURE_SKEW_SECONDS <= age_seconds <= _DEFAULT_MAX_LAG_SECONDS
+        )
         latest_stored = _as_dict(latest.get("stored_frame"))
         latest_change = _as_dict(latest.get("change"))
         integrity_valid = self._frame_integrity_valid(latest) if latest else False
@@ -387,6 +391,7 @@ class PerceptionRingBuffer:
             "newest_frame_at": newest_at,
             "lag_ms": round(age_seconds * 1000.0, 3) if age_seconds is not None else None,
             "max_lag_ms": int(_DEFAULT_MAX_LAG_SECONDS * 1000),
+            "max_future_skew_ms": int(_DEFAULT_MAX_FUTURE_SKEW_SECONDS * 1000),
             "fresh": fresh,
             "integrity_valid": integrity_valid,
             "latest_frame_id": str(latest.get("frame_id") or ""),
@@ -588,31 +593,6 @@ def _safe_int(value: Any) -> int:
 
 def _as_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
-
-
-def _read_json(path: Path) -> dict[str, Any]:
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8-sig", errors="replace"))
-    except (OSError, json.JSONDecodeError):
-        return {}
-    return payload if isinstance(payload, dict) else {}
-
-
-def _atomic_write_bytes(path: Path, payload: bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.{os.getpid()}.{time.time_ns()}.tmp")
-    try:
-        temporary.write_bytes(payload)
-        os.replace(temporary, path)
-    finally:
-        temporary.unlink(missing_ok=True)
-
-
-def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
-    _atomic_write_bytes(
-        path,
-        (json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=True, allow_nan=False) + "\n").encode("utf-8"),
-    )
 
 
 __all__ = [

@@ -127,6 +127,28 @@ def test_situation_model_heartbeat_readback_rejects_stale_state(tmp_path: Path, 
     assert "lens_situation_model_heartbeat_stale" in readback["blockers"]
 
 
+def test_situation_model_heartbeat_tolerates_bounded_concurrent_skew(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
+    write_lens_situation_model_heartbeat(
+        frame=_frame(captured_at=100.0, value=0),
+        ring_buffer=_ring(frame_id="frame-concurrent", changed=True),
+        authority_receipt_id="capture-receipt",
+        execution_approval_id="execution-approval",
+        worker_pid=800,
+        host_pid=900,
+        supervisor_pid=700,
+        observed_at=100.1,
+    )
+
+    readback = lens_situation_model_readback(now=100.0)
+
+    assert readback["heartbeat_ready"] is True
+    assert readback["fresh"] is True
+    assert readback["lag_ms"] == -100.0
+    assert readback["max_future_skew_ms"] == 250
+    assert readback["blockers"] == []
+
+
 def test_situation_model_heartbeat_accepts_exact_ready_input_event_stream(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
     monkeypatch.setattr(

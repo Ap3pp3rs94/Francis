@@ -205,6 +205,23 @@ def test_ring_buffer_readback_rejects_stale_frames(
     assert readback["lag_ms"] == 6000.0
 
 
+def test_ring_buffer_readback_tolerates_bounded_concurrent_frame_skew(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(tmp_path))
+    ring = PerceptionRingBuffer(authority_status=_active_authority)
+    ring.append(_frame(captured_at=100.1, value=32), authority_receipt_id="receipt-concurrent")
+
+    readback = ring.readback(now=100.0)
+
+    assert readback["status"] == "ready"
+    assert readback["ready"] is True
+    assert readback["fresh"] is True
+    assert readback["lag_ms"] == -100.0
+    assert readback["max_future_skew_ms"] == 250
+
+
 def test_ring_buffer_readback_rejects_tampered_latest_frame(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

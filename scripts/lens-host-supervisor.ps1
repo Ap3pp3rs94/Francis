@@ -51,13 +51,18 @@ function Write-JsonFile {
   }
   $FileName = [System.IO.Path]::GetFileName($Path)
   $TempPath = Join-Path $Parent ('.' + $FileName + '.' + [guid]::NewGuid().ToString('N') + '.tmp')
+  $BackupPath = $TempPath + '.bak'
   try {
     $Payload | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $TempPath -Encoding UTF8
     $Moved = $false
     for ($Attempt = 0; $Attempt -lt 20 -and -not $Moved; $Attempt += 1) {
       try {
-        Remove-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
-        Move-Item -LiteralPath $TempPath -Destination $Path -Force -ErrorAction Stop
+        if (Test-Path -LiteralPath $Path -PathType Leaf) {
+          [System.IO.File]::Replace($TempPath, $Path, $BackupPath, $true)
+          Remove-Item -LiteralPath $BackupPath -Force -ErrorAction SilentlyContinue
+        } else {
+          Move-Item -LiteralPath $TempPath -Destination $Path -Force -ErrorAction Stop
+        }
         $Moved = $true
       } catch {
         if ($Attempt -ge 19) {
@@ -68,6 +73,7 @@ function Write-JsonFile {
     }
   } finally {
     Remove-Item -LiteralPath $TempPath -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $BackupPath -Force -ErrorAction SilentlyContinue
   }
 }
 

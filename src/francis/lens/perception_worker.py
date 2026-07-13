@@ -16,10 +16,11 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Protocol
 
 from francis.kernel.paths import data_dir
+from francis.lens.atomic_io import atomic_write_json as _atomic_write_json
+from francis.lens.atomic_io import read_json_object as _read_json
 from francis.lens.perception import LENS_PERCEPTION_RUNTIME_STATE_KIND, LENS_PERCEPTION_RUNTIME_STATE_VERSION
 from francis.lens.perception import _process_is_alive as process_is_alive
 from francis.lens.perception_authority import lens_perception_desktop_authority_receipt_status
@@ -40,6 +41,7 @@ from francis.lens.situation_model import (
 )
 
 _MAX_SUPERVISOR_STATE_AGE_SECONDS = 5.0
+_MAX_SUPERVISOR_FUTURE_SKEW_SECONDS = 0.25
 
 AuthorityStatusProvider = Callable[[str, int], dict[str, Any]]
 ExecutionStatusProvider = Callable[[str, str], dict[str, Any]]
@@ -324,7 +326,10 @@ def lens_perception_worker_supervision_readback(
     observed_pid = _safe_int(record.get("observed_pid"))
     updated_at = _timestamp(record.get("updated_at"))
     age_seconds = now - updated_at if updated_at is not None else None
-    fresh = bool(age_seconds is not None and 0.0 <= age_seconds <= _MAX_SUPERVISOR_STATE_AGE_SECONDS)
+    fresh = bool(
+        age_seconds is not None
+        and -_MAX_SUPERVISOR_FUTURE_SKEW_SECONDS <= age_seconds <= _MAX_SUPERVISOR_STATE_AGE_SECONDS
+    )
     supervisor_alive = process_is_alive(supervisor_pid)
     host_alive = process_is_alive(observed_pid)
     blockers: list[str] = []
@@ -354,6 +359,7 @@ def lens_perception_worker_supervision_readback(
         "resident_host_process_alive": host_alive,
         "fresh": fresh,
         "age_ms": round(age_seconds * 1000.0, 3) if age_seconds is not None else None,
+        "max_future_skew_ms": int(_MAX_SUPERVISOR_FUTURE_SKEW_SECONDS * 1000),
         "blockers": _dedupe(blockers),
     }
 
@@ -445,27 +451,6 @@ def _timestamp(value: Any) -> float | None:
         return datetime.fromisoformat(text.replace("Z", "+00:00")).timestamp()
     except (ValueError, OverflowError, OSError):
         return None
-
-
-def _read_json(path: Path) -> dict[str, Any]:
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8-sig", errors="replace"))
-    except (OSError, json.JSONDecodeError):
-        return {}
-    return payload if isinstance(payload, dict) else {}
-
-
-def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.{os.getpid()}.{time.time_ns()}.tmp")
-    try:
-        temporary.write_text(
-            json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=True, allow_nan=False) + "\n",
-            encoding="utf-8",
-        )
-        os.replace(temporary, path)
-    finally:
-        temporary.unlink(missing_ok=True)
 
 
 def _as_dict(value: Any) -> dict[str, Any]:
