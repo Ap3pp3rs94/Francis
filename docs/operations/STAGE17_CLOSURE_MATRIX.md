@@ -1,8 +1,8 @@
 # Stage 17 Closure Matrix
 
-This matrix is a current-state closure audit for Stage 17 / Capability Economy.
-It is not a closure claim, publication marker, queue receipt, or roadmap
-replacement.
+This matrix is the evidence index for the governed Stage 17 / Capability
+Economy closure. The durable closure receipt and its validated route readback,
+not this document, are the authoritative closure record.
 
 Sources inspected for this matrix:
 
@@ -20,17 +20,17 @@ Sources inspected for this matrix:
 
 ## Current Readback
 
-As of the 2026-07-13 exact-head checkpoint, Stage 17 / Capability Economy
-remains open, but its six software criteria are broad-validated at
-`52e69b323fa43336207b1344da3310fb85f9567c`. Fresh source-loaded catalog
-readback reports `ready_for_closure_review`, `all_criteria_ready=true`, and no
-criterion blockers. GitHub CI run `29212950024` and CodeQL run `29212950040`
-both passed for the same head.
+As of the 2026-07-13 23:40Z checkpoint, Stage 17 / Capability Economy is closed
+by governed receipt `stage17_capability_economy_closure_afd0fa32f7d1`, recorded
+at code head `cf8d1fb1745f0c3f51850c82cd79ddb214c4644b`. The receipt binds explicit
+decision `close_stage17` by actor `codex.builder` to Austin's active full
+operator delegation `opdel_2a7e1182b90a5c98bea67233661065ba` and fingerprint
+`b934b89946672dc47750029e80e2168f592220083b2a392e36d9bbd320c263dc`.
 
-This is not Stage 17 closure. The remaining gate is an explicit governed
-Capability Economy Stage 17 closure decision and durable receipt. FR-017
-Forearm Cuffs is a separate physical-design package whose manifest explicitly
-identifies the shared number as an unrelated naming collision.
+Fresh source-loaded readback validates that receipt, reports all six software
+criteria ready with no blockers, and opens Stage 18 groundwork without enabling
+its runtime. FR-017 Forearm Cuffs remains a separate physical-design package
+whose manifest identifies the shared number as an unrelated naming collision.
 
 ## Closure Criteria
 
@@ -45,20 +45,22 @@ identifies the shared number as an unrelated naming collision.
 
 ## Weakest Criterion
 
-No software criterion currently reports a blocker. The readback still returns a
-deterministic `weakest_criterion` for ordering, but all six statuses are `ready`.
-That makes the canonical Stage 17 evidence ready for an explicit governed
-closure decision; it does not write or imply that decision.
+No software criterion reports a blocker. The closure receipt captures the
+canonical six-criterion review fingerprint, and the readback validates the
+receipt before reporting Stage 17 closed. The deterministic
+`weakest_criterion` remains an ordering field even though all six statuses are
+`ready`.
 
 ## Next Evidence Needed
 
-1. Expose a read-only Stage 17 completion review derived from the six canonical
-   Capability Economy criteria and current exact-head validation evidence.
-2. Add an explicitly permissioned operator closure-decision route that refuses
-   closure unless that review is ready.
-3. Persist a durable receipt only for an explicit `close_stage17` decision and
-   make Stage 18 consume that receipt as its prerequisite.
+The three planned closure items are now landed and exercised:
 
-No Stage 17 closure, Stage 18 transition, authority grant, capability promotion,
-or execution is claimed by this matrix. FR-017 physical-design validation is
-outside this Capability Economy closure contract.
+1. Read-only completion review derived from the six canonical criteria.
+2. Explicitly permissioned closure-decision route that refuses an unready review.
+3. Durable `close_stage17` receipt consumed as the Stage 18 prerequisite.
+
+The next evidence belongs to Stage 18: implement and validate the governed
+`stage18_copy_creation_process`. No Stage 18 runtime, Stage 18 completion,
+FR-018 clearance, authority grant, capability promotion, or execution is
+claimed by this matrix. FR-017 physical-design validation remains outside this
+Capability Economy closure contract.

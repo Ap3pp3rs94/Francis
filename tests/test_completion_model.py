@@ -23,7 +23,9 @@ def test_completion_model_snapshot_is_read_only_and_loop_guarded() -> None:
     assert payload["latest_ledger_entry"]["found"] is True
     assert payload["latest_ledger_entry"]["has_remaining_truthful_gap"] is True
     assert payload["stage17_status"]["found"] is True
-    assert payload["stage17_status"]["status"] == "open"
+    assert payload["stage17_status"]["status"] == "closed"
+    assert payload["stage17_status"]["stage17_closed_by_receipt"] is True
+    assert payload["stage17_status"]["closure_receipt_id"] == ("stage17_capability_economy_closure_afd0fa32f7d1")
     assert payload["stage17_status"]["read_only_contract"] is True
     assert payload["stage17_status"]["writes_repo"] is False
     assert payload["stage17_status"]["writes_data"] is False
@@ -34,10 +36,10 @@ def test_completion_model_snapshot_is_read_only_and_loop_guarded() -> None:
     assert payload["routes"]["status"] == "/completion-model/status"
     assert payload["active_workstream"] == {
         "found": True,
-        "workstream": "Capability Economy / Stage 17 closure reconciliation.",
+        "workstream": "Managed Copies Platform / Stage 18 groundwork.",
         "current_goal": (
-            "the governed Capability Economy Stage 17 closure decision and receipt, "
-            "based only on canonical capability evidence."
+            "the first actual Stage 18 runtime gap, `stage18_copy_creation_process`; "
+            "contract-only surfaces do not satisfy it."
         ),
         "read_only_contract": True,
         "writes_repo": False,
@@ -54,7 +56,7 @@ def test_completion_model_snapshot_is_read_only_and_loop_guarded() -> None:
     assert selected_gap_contract["status"] == "selected"
     assert selected_gap_contract["selected_gap_source"] == "active_workstream_current_goal"
     assert selected_gap_contract["selection_basis"] == "active_workstream_current_goal"
-    assert selected_gap_contract["selected_gap_is_stage17"] is True
+    assert selected_gap_contract["selected_gap_is_stage17"] is False
     assert selected_gap_contract["selected_gap_is_active_workstream"] is True
     assert selected_gap_contract["read_only_selection"] is True
     assert selected_gap_contract["writes_repo"] is False
@@ -159,7 +161,7 @@ def test_completion_model_snapshot_is_read_only_and_loop_guarded() -> None:
         "validation_or_blocker_evidence",
     ]
     checklist = {item["id"]: item for item in payload["continue_loop_guard"]["checklist"]}
-    assert checklist["stage17_lane_gap_preserved"]["status"] == "ready"
+    assert checklist["stage17_lane_gap_preserved"]["status"] == "not_applicable"
     assert checklist["stage17_lane_gap_preserved"]["evidence"]
     assert checklist["dirty_worktree_preservation_guard"]["status"] == "enforced"
     assert checklist["material_ledger_update_guard"]["status"] == "enforced"
@@ -186,10 +188,11 @@ def test_stage17_roadmap_steering_excludes_fr017_forearm_naming_collision() -> N
     matrix = (root / "docs" / "operations" / "STAGE17_CLOSURE_MATRIX.md").read_text(encoding="utf-8")
     manifest = (root / "FR-017_Stage17_Package" / "FR-017-STAGE17-PACKAGE-MANIFEST.json").read_text(encoding="utf-8")
 
-    assert "The current goal is the governed Capability Economy Stage 17 closure decision" in ledger
+    assert "The current goal is the first actual Stage 18 runtime gap" in ledger
+    assert "stage17_capability_economy_closure_afd0fa32f7d1" in ledger
     assert "The current goal is the FR-017 operator/physical evidence boundary" not in ledger
     assert "The remaining gates are the physically present" not in matrix
-    assert "explicitly permissioned operator closure-decision route" in matrix
+    assert "Explicitly permissioned closure-decision route" in matrix
     assert "excluded_collision" in manifest
     assert "Capability Economy records are not FR-017 forearm-cuff source material" in manifest
 
@@ -614,7 +617,7 @@ def test_completion_model_status_route_is_mounted_and_read_only() -> None:
     assert body["active_workstream"]["found"] is True
     assert body["next_continue_decision"]["selected_gap_source"] == "active_workstream_current_goal"
     assert body["next_continue_decision"]["selected_gap_contract"]["read_only_selection"] is True
-    assert body["next_continue_decision"]["selected_gap_contract"]["selected_gap_is_stage17"] is True
+    assert body["next_continue_decision"]["selected_gap_contract"]["selected_gap_is_stage17"] is False
     assert body["next_continue_decision"]["selected_gap_contract"]["apply_authority_granted"] is False
     assert (
         body["next_continue_decision"]["selected_gap_contract"]["selected_gap_is_proposal_evidence_reference"] is False

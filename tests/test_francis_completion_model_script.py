@@ -49,28 +49,27 @@ def test_francis_completion_model_status_projects_ledger_backed_loop_guard() -> 
     assert payload["current_phase"] == "Phase 2"
     assert payload["latest_ledger_entry"]["found"] is True
     assert payload["stage17_status"]["found"] is True
-    assert payload["stage17_status"]["status"] == "open"
+    assert payload["stage17_status"]["status"] == "closed"
+    assert payload["stage17_status"]["stage17_closed_by_receipt"] is True
+    assert payload["stage17_status"]["closure_receipt_id"] == ("stage17_capability_economy_closure_afd0fa32f7d1")
     assert payload["stage17_status"]["read_only_contract"] is True
     assert payload["stage17_status"]["writes_repo"] is False
     assert payload["stage17_status"]["writes_data"] is False
     assert payload["stage17_status"]["grants_execution_authority"] is False
     assert payload["stage17_status"]["grants_mutation_authority"] is False
     assert payload["latest_ledger_entry"]["title"] == (
-        "2026-07-13 22:45Z - Stage 17 naming collision removed from roadmap steering"
+        "2026-07-13 23:40Z - Stage 17 Capability Economy governed closure"
     )
     assert payload["stage17_status"]["latest_ledger_entry"]["title"] == (
-        "2026-07-13 22:45Z - Stage 17 naming collision removed from roadmap steering"
+        "2026-07-13 23:40Z - Stage 17 Capability Economy governed closure"
     )
-    assert (
-        "Final-head GitHub CI must pass"
-        not in payload["stage17_status"]["latest_ledger_entry"]["remaining_truthful_gap"]
-    )
+    assert payload["stage17_status"]["next_smallest_truthful_gap"] == ("select_active_post_stage17_workstream")
     assert payload["active_workstream"] == {
         "found": True,
-        "workstream": "Capability Economy / Stage 17 closure reconciliation.",
+        "workstream": "Managed Copies Platform / Stage 18 groundwork.",
         "current_goal": (
-            "the governed Capability Economy Stage 17 closure decision and receipt, "
-            "based only on canonical capability evidence."
+            "the first actual Stage 18 runtime gap, `stage18_copy_creation_process`; "
+            "contract-only surfaces do not satisfy it."
         ),
         "read_only_contract": True,
         "writes_repo": False,
@@ -88,7 +87,7 @@ def test_francis_completion_model_status_projects_ledger_backed_loop_guard() -> 
     assert selected_gap_contract["status"] == "selected"
     assert selected_gap_contract["selected_gap_source"] == "active_workstream_current_goal"
     assert selected_gap_contract["selection_basis"] == "active_workstream_current_goal"
-    assert selected_gap_contract["selected_gap_is_stage17"] is True
+    assert selected_gap_contract["selected_gap_is_stage17"] is False
     assert selected_gap_contract["selected_gap_is_active_workstream"] is True
     assert selected_gap_contract["read_only_selection"] is True
     assert selected_gap_contract["writes_repo"] is False
@@ -212,7 +211,7 @@ def test_francis_completion_model_status_projects_ledger_backed_loop_guard() -> 
     assert "stage17_worker_publication_handoff_guard" in checklist_ids
     assert "stage17_worker_execution_liveness_guard" in checklist_ids
     checklist = {item["id"]: item for item in payload["continue_loop_guard"]["checklist"]}
-    assert checklist["stage17_lane_gap_preserved"]["status"] == "ready"
+    assert checklist["stage17_lane_gap_preserved"]["status"] == "not_applicable"
     assert checklist["dirty_worktree_preservation_guard"]["status"] == "enforced"
     assert checklist["material_ledger_update_guard"]["status"] == "enforced"
     assert checklist["stage17_readback_apply_boundary_guard"]["status"] == "enforced"

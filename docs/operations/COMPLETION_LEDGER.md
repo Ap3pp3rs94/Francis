@@ -55,11 +55,13 @@ operator product surface:
 - `P7_EXECUTION`: partial
 - `P8_MEMORY`: partial
 
-Current active workstream: Capability Economy / Stage 17 closure reconciliation.
-All six software criteria are broad-validated at exact code head
-`52e69b323fa43336207b1344da3310fb85f9567c`.
-The current goal is the governed Capability Economy Stage 17 closure decision
-and receipt, based only on canonical capability evidence.
+Current active workstream: Managed Copies Platform / Stage 18 groundwork.
+Stage 17 / Capability Economy is ledger-closed by governed receipt
+`stage17_capability_economy_closure_afd0fa32f7d1`, recorded at code head
+`cf8d1fb1745f0c3f51850c82cd79ddb214c4644b` after all six canonical software
+criteria read ready.
+The current goal is the first actual Stage 18 runtime gap,
+`stage18_copy_creation_process`; contract-only surfaces do not satisfy it.
 
 Stage 6 Lens MVP is ledger-closed against its five canonical acceptance criteria,
 and Stages 7 through 16 retain their existing receipt-backed closures.
@@ -120,6 +122,49 @@ What is materially true now:
 
 > Older dated entries are archived under docs/operations/archive/ (see scripts/archive-completion-ledger.ps1).
 > Historical undated ledger body is archived under docs/operations/archive/COMPLETION_LEDGER_STATIC_HISTORY_2026-07-03.md.
+
+### 2026-07-13 23:40Z - Stage 17 Capability Economy governed closure
+
+Current posture: Phase 2 continues. Stage 17 / Capability Economy is closed by
+governed operator-delegation receipt after its six canonical software criteria
+read ready with no blockers. Stage 18 / Managed Copies Platform now reads
+`stage18_groundwork_open`; its first truthful gap is the actual
+`stage18_copy_creation_process`. This closure does not start a Stage 18 runtime,
+grant execution or mutation authority, promote or enable a capability, clear
+FR-018, or change the separate FR-017 Forearm Cuffs package.
+
+Evidence:
+
+- Source-loaded `GET /plugins/capabilities/stage17/completion-review` returned
+  `status=ready`, `stage17_completion_review_ready=true`, and six of six
+  canonical criteria ready before the decision.
+- `POST /plugins/capabilities/stage17/stage-closure-decision` recorded explicit
+  decision `close_stage17` for actor `codex.builder` under Austin's active full
+  operator delegation `opdel_2a7e1182b90a5c98bea67233661065ba`.
+- Durable receipt `stage17_capability_economy_closure_afd0fa32f7d1` is stored in
+  `data/logs/plugins/stage17_operator_stage_closure_decisions.jsonl`; readback
+  validates receipt fingerprint
+  `b934b89946672dc47750029e80e2168f592220083b2a392e36d9bbd320c263dc`.
+- Post-decision `GET /plugins/capabilities/stage17/stage-closure-decisions`
+  returned `status=closed`, `latest_receipt_valid=true`, and delegated-operator
+  authority bound to the same delegation.
+- Post-decision `GET /managed-copies/status` returned
+  `status=stage18_groundwork_open`, `stage17_closed_by_receipt=true`, an empty
+  Stage 17 blocker, and `next_smallest_truthful_gap=stage18_copy_creation_process`.
+- Focused Stage 17 closure, Stage 18 prerequisite, catalog, Ruff, format, mypy,
+  and diff checks passed for the implementation slices. CodeQL run
+  `29293381242` passed at implementation head `cf8d1fb1`; full CI run
+  `29293381261` was still in progress when the receipt was recorded and remains
+  a final-head verification requirement.
+
+Remaining truthful gap:
+
+- Stage 18 has no implemented copy-creation runtime. Its copy creation,
+  isolation, safe-delta, rogue-recovery, SLA, role-authority, decommission, and
+  runtime-evidence write paths remain disabled until implemented and validated.
+- No Stage 18 completion, FR-018 clearance, or physical-validation claim is made.
+- The full local `scripts/check.ps1` gate was not run; focused local validation
+  plus exact-head GitHub CI/CodeQL are the stated gates for this slice.
 
 ### 2026-07-13 22:45Z - Stage 17 naming collision removed from roadmap steering
 

@@ -344,6 +344,8 @@ def _stage17_status(ledger_text: str) -> dict[str, Any]:
         if not _is_stage17_ledger_entry(title=title, roadmap_area=roadmap_area):
             continue
         remaining_gap = _first_match(entry_text, r"(?s)Remaining truthful gap:\s*(?P<gap>.+)$", "gap")
+        closure_receipt_id = _stage17_closure_receipt_id(entry_text)
+        stage17_closed_by_receipt = _text_says_stage17_closed_by_receipt(entry_text)
         stage17_entries.append(
             {
                 "found": True,
@@ -351,6 +353,8 @@ def _stage17_status(ledger_text: str) -> dict[str, Any]:
                 "roadmap_area": roadmap_area,
                 "remaining_truthful_gap": _limit_text(remaining_gap, max_length=700),
                 "has_remaining_truthful_gap": bool(remaining_gap.strip()),
+                "stage17_closed_by_receipt": stage17_closed_by_receipt,
+                "closure_receipt_id": closure_receipt_id if stage17_closed_by_receipt else "",
                 "rank": entry["rank"],
             }
         )
@@ -369,17 +373,27 @@ def _stage17_status(ledger_text: str) -> dict[str, Any]:
             "writes_data": False,
             "grants_execution_authority": False,
             "grants_mutation_authority": False,
+            "stage17_closed_by_receipt": False,
+            "closure_receipt_id": "",
             "latest_ledger_entry": {
                 "found": False,
                 "title": "",
                 "roadmap_area": "",
                 "remaining_truthful_gap": "",
                 "has_remaining_truthful_gap": False,
+                "stage17_closed_by_receipt": False,
+                "closure_receipt_id": "",
             },
             "next_smallest_truthful_gap": "name_stage17_remaining_truthful_gap_in_ledger",
         }
 
-    status = "open" if _text_says_stage17_open(str(latest_stage17_entry["remaining_truthful_gap"])) else "review"
+    stage17_closed_by_receipt = bool(latest_stage17_entry["stage17_closed_by_receipt"])
+    if stage17_closed_by_receipt:
+        status = "closed"
+    elif _text_says_stage17_open(str(latest_stage17_entry["remaining_truthful_gap"])):
+        status = "open"
+    else:
+        status = "review"
     return {
         "found": True,
         "status": status,
@@ -389,10 +403,16 @@ def _stage17_status(ledger_text: str) -> dict[str, Any]:
         "writes_data": False,
         "grants_execution_authority": False,
         "grants_mutation_authority": False,
+        "stage17_closed_by_receipt": stage17_closed_by_receipt,
+        "closure_receipt_id": (str(latest_stage17_entry["closure_receipt_id"]) if stage17_closed_by_receipt else ""),
         "latest_ledger_entry": latest_stage17_entry,
-        "next_smallest_truthful_gap": "select_from_latest_stage17_remaining_truthful_gap"
-        if latest_stage17_entry["has_remaining_truthful_gap"]
-        else "name_stage17_remaining_truthful_gap_in_ledger",
+        "next_smallest_truthful_gap": (
+            "select_active_post_stage17_workstream"
+            if stage17_closed_by_receipt
+            else "select_from_latest_stage17_remaining_truthful_gap"
+            if latest_stage17_entry["has_remaining_truthful_gap"]
+            else "name_stage17_remaining_truthful_gap_in_ledger"
+        ),
     }
 
 
@@ -477,6 +497,20 @@ def _is_stage17_active_workstream(workstream: str) -> bool:
 def _text_says_stage17_open(text: str) -> bool:
     key = text.casefold()
     return "stage 17 remains open" in key or "stage 17 still needs" in key
+
+
+def _stage17_closure_receipt_id(text: str) -> str:
+    match = re.search(r"\bstage17_capability_economy_closure_[0-9a-f]+\b", text, flags=re.IGNORECASE)
+    return match.group(0) if match else ""
+
+
+def _text_says_stage17_closed_by_receipt(text: str) -> bool:
+    key = text.casefold()
+    closure_language_present = (
+        "stage 17 / capability economy is closed by" in key
+        or "stage 17 / capability economy is ledger-closed by" in key
+    )
+    return closure_language_present and bool(_stage17_closure_receipt_id(text))
 
 
 def _loop_guard(

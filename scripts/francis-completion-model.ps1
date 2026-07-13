@@ -237,6 +237,32 @@ function Test-Stage17OpenText {
   return ($Key.Contains('stage 17 remains open') -or $Key.Contains('stage 17 still needs'))
 }
 
+function Get-Stage17ClosureReceiptId {
+  param([string]$Text)
+
+  $Match = [regex]::Match(
+    [string]$Text,
+    '\bstage17_capability_economy_closure_[0-9a-f]+\b',
+    [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
+  )
+  if (-not $Match.Success) {
+    return ''
+  }
+  return [string]$Match.Value
+}
+
+function Test-Stage17ClosedByReceiptText {
+  param([string]$Text)
+
+  $Key = ([string]$Text).ToLowerInvariant()
+  $ReceiptId = Get-Stage17ClosureReceiptId -Text $Text
+  $ClosureLanguagePresent = (
+    $Key.Contains('stage 17 / capability economy is closed by') -or
+    $Key.Contains('stage 17 / capability economy is ledger-closed by')
+  )
+  return ($ClosureLanguagePresent -and -not [string]::IsNullOrWhiteSpace($ReceiptId))
+}
+
 function Get-Stage17Status {
   param([string]$LedgerText)
 
@@ -255,12 +281,16 @@ function Get-Stage17Status {
       continue
     }
     $RemainingGap = Get-FirstRegexGroup -Text $EntryText -Pattern '(?s)Remaining truthful gap:\s*(?<gap>.+)$' -GroupName 'gap'
+    $ClosureReceiptId = Get-Stage17ClosureReceiptId -Text $EntryText
+    $Stage17ClosedByReceipt = Test-Stage17ClosedByReceiptText -Text $EntryText
     [void]$Stage17Entries.Add([pscustomobject]@{
         found = $true
         title = $Title
         roadmap_area = $RoadmapArea
         remaining_truthful_gap = Limit-CompletionModelText -Text $RemainingGap -MaxLength 700
         has_remaining_truthful_gap = -not [string]::IsNullOrWhiteSpace($RemainingGap)
+        stage17_closed_by_receipt = $Stage17ClosedByReceipt
+        closure_receipt_id = if ($Stage17ClosedByReceipt) { $ClosureReceiptId } else { '' }
         rank_dated = $Entry.rank_dated
         rank_ticks = $Entry.rank_ticks
         rank_index = $Entry.rank_index
@@ -275,6 +305,8 @@ function Get-Stage17Status {
       roadmap_area = [string]$Selected.roadmap_area
       remaining_truthful_gap = [string]$Selected.remaining_truthful_gap
       has_remaining_truthful_gap = [bool]$Selected.has_remaining_truthful_gap
+      stage17_closed_by_receipt = [bool]$Selected.stage17_closed_by_receipt
+      closure_receipt_id = [string]$Selected.closure_receipt_id
     }
   } else {
     $null
@@ -290,28 +322,49 @@ function Get-Stage17Status {
       writes_data = $false
       grants_execution_authority = $false
       grants_mutation_authority = $false
+      stage17_closed_by_receipt = $false
+      closure_receipt_id = ''
       latest_ledger_entry = [ordered]@{
         found = $false
         title = ''
         roadmap_area = ''
         remaining_truthful_gap = ''
         has_remaining_truthful_gap = $false
+        stage17_closed_by_receipt = $false
+        closure_receipt_id = ''
       }
       next_smallest_truthful_gap = 'name_stage17_remaining_truthful_gap_in_ledger'
     }
   }
 
+  $Stage17ClosedByReceipt = [bool]$LatestStage17Entry.stage17_closed_by_receipt
+  $Stage17StatusValue = if ($Stage17ClosedByReceipt) {
+    'closed'
+  } elseif (Test-Stage17OpenText -Text ([string]$LatestStage17Entry.remaining_truthful_gap)) {
+    'open'
+  } else {
+    'review'
+  }
+
   return [ordered]@{
     found = $true
-    status = if (Test-Stage17OpenText -Text ([string]$LatestStage17Entry.remaining_truthful_gap)) { 'open' } else { 'review' }
+    status = $Stage17StatusValue
     readback_scope = 'latest_stage17_ledger_entry'
     read_only_contract = $true
     writes_repo = $false
     writes_data = $false
     grants_execution_authority = $false
     grants_mutation_authority = $false
+    stage17_closed_by_receipt = $Stage17ClosedByReceipt
+    closure_receipt_id = if ($Stage17ClosedByReceipt) { [string]$LatestStage17Entry.closure_receipt_id } else { '' }
     latest_ledger_entry = $LatestStage17Entry
-    next_smallest_truthful_gap = if ([bool]$LatestStage17Entry.has_remaining_truthful_gap) { 'select_from_latest_stage17_remaining_truthful_gap' } else { 'name_stage17_remaining_truthful_gap_in_ledger' }
+    next_smallest_truthful_gap = if ($Stage17ClosedByReceipt) {
+      'select_active_post_stage17_workstream'
+    } elseif ([bool]$LatestStage17Entry.has_remaining_truthful_gap) {
+      'select_from_latest_stage17_remaining_truthful_gap'
+    } else {
+      'name_stage17_remaining_truthful_gap_in_ledger'
+    }
   }
 }
 
