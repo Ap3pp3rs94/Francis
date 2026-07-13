@@ -8,6 +8,47 @@ from pathlib import Path
 _PLUGIN_ACTOR = "test.plugins.write"
 
 
+def _stage17_catalog_closure_fixture(*, ready: bool = True) -> dict[str, object]:
+    criterion_ids = [
+        "criterion_1_reusable_operational_assets",
+        "criterion_2_pack_evidence_travels",
+        "criterion_3_executable_lifecycle",
+        "criterion_4_catalog_coherence",
+        "criterion_5_governed_operator_paths",
+        "criterion_6_reuse_leverage",
+    ]
+    criteria = [
+        {
+            "id": criterion_id,
+            "status": "ready" if ready or index > 0 else "partial",
+            "blockers": [] if ready or index > 0 else ["fixture_evidence_missing"],
+            "next_step": "stage17_completion_reconciliation" if ready or index > 0 else "stage17_fixture_evidence",
+        }
+        for index, criterion_id in enumerate(criterion_ids)
+    ]
+    return {
+        "ok": True,
+        "total": 4052,
+        "summary": {"total": 4052},
+        "pack_readiness": {"pack_total": 52, "ready_pack_count": 52},
+        "coherence": {"total": 4052},
+        "stage17_closure_matrix": {
+            "kind": "plugin.capability_catalog.stage17_closure_matrix",
+            "stage": "Stage 17 / Capability Economy",
+            "status": "ready_for_closure_review" if ready else "open",
+            "all_criteria_ready": ready,
+            "weakest_criterion": criteria[0],
+            "criteria": criteria,
+            "source_readbacks": {
+                "catalog_route": "/plugins/capabilities/catalog",
+                "coherence_field": "coherence",
+                "pack_readiness_field": "pack_readiness",
+                "invocation_audit_route": "/plugins/capabilities/library/invocations/audit",
+            },
+        },
+    }
+
+
 def _forge_promotion_meta(label: str) -> dict[str, object]:
     return {
         "friction_summary": f"Repeated {label} plugin review",
@@ -3553,6 +3594,186 @@ def test_plugins_capability_catalog_readback(monkeypatch, tmp_path: Path) -> Non
     filtered_ids = {str(item.get("capability")) for item in filtered_body["items"]}
     assert plugin_id in filtered_ids
     assert filtered_body["filters"] == {"status": "staged", "risk_tier": "normal", "source": ""}
+
+
+def test_plugins_stage17_completion_review_and_closure_decision_require_explicit_scope(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    monkeypatch.setattr(
+        plugins,
+        "list_plugin_capabilities",
+        lambda **_: _stage17_catalog_closure_fixture(),
+    )
+    client = TestClient(create_app())
+
+    review_response = client.get("/plugins/capabilities/stage17/completion-review")
+    assert review_response.status_code == 200
+    review = review_response.json()
+    assert review["ok"] is True
+    assert review["kind"] == "francis.stage17.capability_economy.completion_review"
+    assert review["status"] == "ready"
+    assert review["stage17_completion_review_ready"] is True
+    assert review["stage17_closed_by_receipt"] is False
+    assert review["stage_closure_decision_required"] is True
+    assert review["criteria_ready_count"] == 6
+    assert review["criteria_required_count"] == 6
+    assert review["governance"]["closure_write_scope"] == "plugins.stage17.closure.write"
+    assert review["governance"]["does_not_start_stage18_runtime"] is True
+    assert review["next_smallest_truthful_gap"] == "stage17_operator_stage_closure_decision"
+
+    denied_response = client.post(
+        "/plugins/capabilities/stage17/stage-closure-decision",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "actor has plugins.write but not the Stage 17 closure scope",
+            "decision": "close_stage17",
+        },
+    )
+    assert denied_response.status_code == 200
+    denied = denied_response.json()
+    assert denied["ok"] is False
+    assert denied["status"] == "denied"
+    assert denied["error"] == "api_permission_denied"
+    assert denied["writes_receipt"] is False
+    assert denied["governance"]["required_scope"] == "plugins.stage17.closure.write"
+    assert denied["grants_execution_authority"] is False
+    assert denied["grants_mutation_authority"] is False
+    assert not (data_root / "logs" / "plugins" / "stage17_operator_stage_closure_decisions.jsonl").exists()
+
+
+def test_plugins_stage17_closure_decision_records_canonical_review_receipt(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({"test.stage17.closure": ["plugins.stage17.closure.write"]}),
+    )
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    monkeypatch.setattr(
+        plugins,
+        "list_plugin_capabilities",
+        lambda **_: _stage17_catalog_closure_fixture(),
+    )
+    client = TestClient(create_app())
+    response = client.post(
+        "/plugins/capabilities/stage17/stage-closure-decision",
+        json={
+            "actor": "test.stage17.closure",
+            "reason": "canonical software criteria reviewed token=stage17reasonsecret123",
+            "decision": "close_stage17",
+            "notes": "No FR-017 hardware evidence used token=stage17notessecret123",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["status"] == "recorded"
+    assert body["decision"] == "close_stage17"
+    assert body["stage17_closed_by_receipt"] is True
+    assert body["receipt_id"].startswith("stage17_capability_economy_closure_")
+    assert body["writes_receipt"] is True
+    assert body["marks_runtime_stage_state"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["governance"]["required_scope"] == "plugins.stage17.closure.write"
+    assert body["governance"]["does_not_start_stage18_runtime"] is True
+
+    receipt = body["receipt"]
+    assert receipt["completion_review_ready"] is True
+    assert receipt["criteria_ready_count"] == 6
+    assert receipt["criteria_required_count"] == 6
+    assert len(receipt["review_fingerprint"]) == 64
+    assert receipt["review_evidence"]["all_criteria_ready"] is True
+    assert len(receipt["review_evidence"]["criteria"]) == 6
+    assert receipt["governance"]["canonical_criteria_only"] is True
+    receipt_text = json.dumps(receipt, sort_keys=True)
+    assert "stage17reasonsecret123" not in receipt_text
+    assert "stage17notessecret123" not in receipt_text
+
+    readback = client.get("/plugins/capabilities/stage17/stage-closure-decisions").json()
+    assert readback["status"] == "closed"
+    assert readback["latest_receipt_id"] == body["receipt_id"]
+    assert readback["latest_receipt_valid"] is True
+    assert readback["stage17_closed_by_receipt"] is True
+    assert readback["governance"]["validates_receipt_contract"] is True
+    assert readback["next_smallest_truthful_gap"] == "stage17_ledger_closure"
+
+    review = client.get("/plugins/capabilities/stage17/completion-review").json()
+    assert review["status"] == "closed"
+    assert review["stage17_closed_by_receipt"] is True
+    assert review["stage_closure_decision_required"] is False
+    assert review["latest_closure_receipt_id"] == body["receipt_id"]
+
+    duplicate = client.post(
+        "/plugins/capabilities/stage17/stage-closure-decision",
+        json={
+            "actor": "test.stage17.closure",
+            "reason": "duplicate close attempt",
+            "decision": "close_stage17",
+        },
+    ).json()
+    assert duplicate["status"] == "already_closed"
+    assert duplicate["writes_receipt"] is False
+    assert duplicate["receipt_id"] == body["receipt_id"]
+
+
+def test_plugins_stage17_closure_decision_refuses_unready_review(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({"test.stage17.closure": ["plugins.stage17.closure.write"]}),
+    )
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    monkeypatch.setattr(
+        plugins,
+        "list_plugin_capabilities",
+        lambda **_: _stage17_catalog_closure_fixture(ready=False),
+    )
+    response = TestClient(create_app()).post(
+        "/plugins/capabilities/stage17/stage-closure-decision",
+        json={
+            "actor": "test.stage17.closure",
+            "reason": "must not close an unready review",
+            "decision": "close_stage17",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["status"] == "awaiting_stage17_closure_readiness"
+    assert body["receipt"] is None
+    assert body["writes_receipt"] is False
+    assert body["review"]["stage17_completion_review_ready"] is False
+    assert body["next_smallest_truthful_gap"] == "stage17_fixture_evidence"
+    assert not (data_root / "logs" / "plugins" / "stage17_operator_stage_closure_decisions.jsonl").exists()
 
 
 def test_plugins_capability_catalog_projects_stage17_pack_readiness(monkeypatch, tmp_path: Path) -> None:

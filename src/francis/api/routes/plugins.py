@@ -38,6 +38,13 @@ from francis.economy.markets.capability_pack_quality_standards import analyze_ca
 from francis.economy.markets.capability_pack_quality_tests import analyze_capability_pack_quality_tests
 from francis.economy.markets.capability_pack_readiness import analyze_capability_pack_readiness
 from francis.economy.markets.capability_pack_validation_receipts import analyze_capability_pack_validation_receipts
+from francis.economy.stage17_closure import (
+    STAGE17_CAPABILITY_ECONOMY_STAGE,
+    STAGE17_CLOSURE_DECISION_GAP,
+    STAGE17_CLOSURE_WRITE_SCOPE,
+    record_stage17_operator_stage_closure_decision,
+    stage17_operator_stage_closure_decision_readback,
+)
 from francis.governance import approvals as approval_store
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.governance.redaction import (
@@ -286,6 +293,42 @@ def _permission_denied(decision: ApiPermissionDecision) -> dict[str, object]:
             "reason": decision.reason,
             "next_step": "configure_actor_scope_before_mutating_plugins",
             "evidence": decision.evidence,
+        },
+    }
+
+
+def _stage17_closure_write_permission(actor: Any, *, route: str, method: str) -> ApiPermissionDecision:
+    return ApiPermissionGate.from_env().check(
+        actor_id=actor,
+        required_scopes=[STAGE17_CLOSURE_WRITE_SCOPE],
+        route=route,
+        method=method,
+    )
+
+
+def _stage17_closure_permission_denied(decision: ApiPermissionDecision) -> dict[str, object]:
+    return {
+        "ok": False,
+        "status": "denied",
+        "error": "api_permission_denied",
+        "source_id": "capability_economy",
+        "writes_receipt": False,
+        "writes_tasks": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "starts_processes": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "gate": "permission_gate",
+            "required_scope": STAGE17_CLOSURE_WRITE_SCOPE,
+            "reason": decision.reason,
+            "next_step": "configure_stage17_closure_scope_before_operator_decision",
+            "evidence": decision.evidence,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
         },
     }
 
@@ -13384,6 +13427,13 @@ class CapabilityPackOperatorReviewDecisionIn(BaseModel):
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
+class Stage17OperatorStageClosureDecisionIn(BaseModel):
+    actor: str = Field(default="", max_length=240)
+    reason: str = Field(default="", max_length=500)
+    decision: str = Field(default="needs_more_evidence", max_length=80)
+    notes: str = Field(default="", max_length=500)
+
+
 class CapabilityPackOperatorReviewBulkDecisionFromSurfaceIn(BaseModel):
     action: str
     actor: str = ""
@@ -13899,6 +13949,195 @@ def list_plugin_capabilities(
             "limit": 0,
             "error": api_error_message(exc),
         }
+
+
+def _stage17_completion_review_snapshot() -> dict[str, Any]:
+    catalog_readback = list_plugin_capabilities(limit=1)
+    matrix = (
+        catalog_readback.get("stage17_closure_matrix")
+        if isinstance(catalog_readback.get("stage17_closure_matrix"), dict)
+        else {}
+    )
+    criteria = matrix.get("criteria") if isinstance(matrix.get("criteria"), list) else []
+    criteria_ready_count = sum(
+        1
+        for criterion in criteria
+        if isinstance(criterion, dict) and _safe_str(criterion.get("status")).strip() == "ready"
+    )
+    matrix_ready = bool(matrix.get("all_criteria_ready")) and bool(criteria)
+    closure_readback = stage17_operator_stage_closure_decision_readback(limit=20)
+    stage17_closed_by_receipt = bool(closure_readback.get("stage17_closed_by_receipt"))
+    weakest = matrix.get("weakest_criterion") if isinstance(matrix.get("weakest_criterion"), dict) else {}
+    next_gap = (
+        "stage17_ledger_closure"
+        if stage17_closed_by_receipt
+        else STAGE17_CLOSURE_DECISION_GAP
+        if matrix_ready
+        else _safe_str(weakest.get("next_step")).strip() or "stage17_closure_evidence"
+    )
+    return {
+        "ok": bool(catalog_readback.get("ok")),
+        "kind": "francis.stage17.capability_economy.completion_review",
+        "stage": STAGE17_CAPABILITY_ECONOMY_STAGE,
+        "source_id": "capability_economy",
+        "status": "closed" if stage17_closed_by_receipt else "ready" if matrix_ready else "blocked",
+        "stage17_completion_review_ready": matrix_ready,
+        "stage17_closed_by_receipt": stage17_closed_by_receipt,
+        "stage_closure_decision_required": matrix_ready and not stage17_closed_by_receipt,
+        "criteria_ready_count": criteria_ready_count,
+        "criteria_required_count": len(criteria),
+        "closure_matrix": matrix,
+        "latest_closure_receipt_id": _safe_str(closure_readback.get("latest_receipt_id")).strip(),
+        "latest_closure_decision": _safe_str(closure_readback.get("latest_decision")).strip(),
+        "latest_closure_receipt_valid": bool(closure_readback.get("latest_receipt_valid")),
+        "catalog_evidence": {
+            "total": int(catalog_readback.get("total") or 0),
+            "summary": catalog_readback.get("summary") if isinstance(catalog_readback.get("summary"), dict) else {},
+            "pack_readiness": catalog_readback.get("pack_readiness")
+            if isinstance(catalog_readback.get("pack_readiness"), dict)
+            else {},
+            "coherence": catalog_readback.get("coherence")
+            if isinstance(catalog_readback.get("coherence"), dict)
+            else {},
+        },
+        "routes": {
+            "catalog": "/plugins/capabilities/catalog",
+            "completion_review": "/plugins/capabilities/stage17/completion-review",
+            "stage_closure_decision": "/plugins/capabilities/stage17/stage-closure-decision",
+            "stage_closure_decisions": "/plugins/capabilities/stage17/stage-closure-decisions",
+        },
+        "governance": {
+            "read_only": True,
+            "derived_from_canonical_stage17_matrix": True,
+            "closure_requires_explicit_operator_decision": True,
+            "closure_write_scope": STAGE17_CLOSURE_WRITE_SCOPE,
+            "does_not_write_receipts": True,
+            "does_not_promote_capabilities": True,
+            "does_not_enable_capabilities": True,
+            "does_not_execute_capabilities": True,
+            "does_not_start_stage18_runtime": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": next_gap,
+    }
+
+
+@router.get("/capabilities/stage17/completion-review")
+def stage17_completion_review() -> dict[str, Any]:
+    return _stage17_completion_review_snapshot()
+
+
+@router.get("/capabilities/stage17/stage-closure-decisions")
+def stage17_closure_decisions(limit: int = 20) -> dict[str, Any]:
+    return stage17_operator_stage_closure_decision_readback(limit=limit)
+
+
+@router.post("/capabilities/stage17/stage-closure-decision")
+def stage17_closure_decision(
+    request: Request,
+    payload: Stage17OperatorStageClosureDecisionIn,
+) -> dict[str, Any]:
+    route = "/plugins/capabilities/stage17/stage-closure-decision"
+    permission = _stage17_closure_write_permission(payload.actor, route=route, method="POST")
+    if not permission.allowed:
+        return _stage17_closure_permission_denied(permission)
+
+    review = _stage17_completion_review_snapshot()
+    if review.get("stage17_closed_by_receipt"):
+        return {
+            "ok": True,
+            "kind": "francis.stage17.capability_economy.operator_stage_closure_decision.record",
+            "status": "already_closed",
+            "source_id": "capability_economy",
+            "target": "stage17_capability_economy",
+            "review": review,
+            "receipt": None,
+            "receipt_id": _safe_str(review.get("latest_closure_receipt_id")).strip(),
+            "stage17_closed_by_receipt": True,
+            "writes_receipt": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+            "next_smallest_truthful_gap": "stage17_ledger_closure",
+        }
+    if not review.get("stage17_completion_review_ready"):
+        return {
+            "ok": True,
+            "kind": "francis.stage17.capability_economy.operator_stage_closure_decision.record",
+            "status": "awaiting_stage17_closure_readiness",
+            "source_id": "capability_economy",
+            "target": "stage17_capability_economy",
+            "review": review,
+            "receipt": None,
+            "receipt_id": "",
+            "writes_receipt": False,
+            "writes_tasks": False,
+            "writes_memory": False,
+            "runs_tools": False,
+            "runs_shell": False,
+            "runs_git": False,
+            "starts_processes": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+            "governance": {
+                "required_scope": STAGE17_CLOSURE_WRITE_SCOPE,
+                "route": str(request.url.path),
+                "explicit_operator_decision": True,
+                "does_not_record_when_review_not_ready": True,
+                "does_not_mutate_runtime_stage_state": True,
+                "grants_execution_authority": False,
+                "grants_mutation_authority": False,
+            },
+            "next_smallest_truthful_gap": review.get(
+                "next_smallest_truthful_gap",
+                "stage17_closure_evidence",
+            ),
+        }
+
+    receipt = record_stage17_operator_stage_closure_decision(
+        actor=payload.actor,
+        reason=payload.reason,
+        decision=payload.decision,
+        notes=payload.notes,
+        review=review,
+    )
+    return {
+        "ok": True,
+        "kind": "francis.stage17.capability_economy.operator_stage_closure_decision.record",
+        "status": "recorded",
+        "source_id": "capability_economy",
+        "target": "stage17_capability_economy",
+        "review": review,
+        "receipt": receipt,
+        "receipt_id": receipt.get("receipt_id", ""),
+        "decision": receipt.get("decision", ""),
+        "stage17_closed_by_receipt": bool(receipt.get("stage17_closed_by_receipt")),
+        "writes_receipt": True,
+        "writes_tasks": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "starts_processes": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "marks_runtime_stage_state": False,
+        "governance": {
+            "required_scope": STAGE17_CLOSURE_WRITE_SCOPE,
+            "route": str(request.url.path),
+            "explicit_operator_decision": True,
+            "does_not_mutate_runtime_stage_state": True,
+            "does_not_promote_capabilities": True,
+            "does_not_enable_capabilities": True,
+            "does_not_execute_capabilities": True,
+            "does_not_start_stage18_runtime": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": (
+            "stage17_ledger_closure" if receipt.get("stage17_closed_by_receipt") else STAGE17_CLOSURE_DECISION_GAP
+        ),
+    }
 
 
 @router.get("/capabilities/packs/metadata/receipts")
