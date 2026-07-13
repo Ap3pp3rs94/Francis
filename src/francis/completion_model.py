@@ -38,6 +38,7 @@ def completion_model_status_snapshot(
         archive_paths=archive_paths,
         root=root,
     )
+    active_workstream = _active_workstream_status(ledger_text)
     loop_guard = _loop_guard(
         ledger_exists=ledger_exists,
         build_manifest_exists=build_manifest_exists,
@@ -48,6 +49,7 @@ def completion_model_status_snapshot(
         loop_guard=loop_guard,
         latest_ledger_entry=latest_ledger_entry,
         stage17_status=stage17_status,
+        active_workstream=active_workstream,
     )
 
     return {
@@ -69,6 +71,7 @@ def completion_model_status_snapshot(
         "current_phase": _current_phase(ledger_text=ledger_text, build_manifest_text=build_manifest_text),
         "plane_readiness_snapshot": _plane_readiness_snapshot(build_manifest_text),
         "latest_ledger_entry": latest_ledger_entry,
+        "active_workstream": active_workstream,
         "stage17_status": stage17_status,
         "completion_percentage_model": _completion_percentage_model(),
         "continue_loop_guard": loop_guard,
@@ -84,11 +87,13 @@ def _next_continue_decision(
     loop_guard: dict[str, Any],
     latest_ledger_entry: dict[str, Any],
     stage17_status: dict[str, Any],
+    active_workstream: dict[str, Any],
 ) -> dict[str, Any]:
     selected_source = "none"
     selected_title = ""
     selected_roadmap_area = ""
     stage17_gap_preferred = False
+    selected_gap_is_stage17 = False
     next_gap = "name_remaining_truthful_gap_in_ledger"
 
     if loop_guard["status"] != "ready":
@@ -96,7 +101,13 @@ def _next_continue_decision(
         next_gap = "restore_completion_model_sources"
     else:
         stage17_entry = stage17_status.get("latest_ledger_entry")
-        if (
+        if active_workstream.get("found") is True:
+            selected_source = "active_workstream_current_goal"
+            selected_title = str(active_workstream.get("workstream", ""))
+            selected_roadmap_area = selected_title
+            selected_gap_is_stage17 = _is_stage17_active_workstream(selected_title)
+            next_gap = str(active_workstream.get("current_goal", ""))
+        elif (
             stage17_status.get("found") is True
             and stage17_status.get("status") == "open"
             and isinstance(stage17_entry, dict)
@@ -106,6 +117,7 @@ def _next_continue_decision(
             selected_title = str(stage17_entry.get("title", ""))
             selected_roadmap_area = str(stage17_entry.get("roadmap_area", ""))
             stage17_gap_preferred = True
+            selected_gap_is_stage17 = True
             next_gap = str(stage17_entry.get("remaining_truthful_gap", ""))
         elif latest_ledger_entry["has_remaining_truthful_gap"]:
             selected_source = "latest_ledger_entry"
@@ -122,18 +134,33 @@ def _next_continue_decision(
         "selected_gap_source": selected_source,
         "selected_ledger_title": selected_title,
         "selected_roadmap_area": selected_roadmap_area,
+        "active_workstream": str(active_workstream.get("workstream", "")),
+        "active_workstream_goal": str(active_workstream.get("current_goal", "")),
+        "active_workstream_preferred": selected_source == "active_workstream_current_goal",
         "stage17_gap_preferred": stage17_gap_preferred,
         "next_smallest_truthful_gap": next_gap,
         "selected_gap_contract": _selected_gap_contract(
             selected_source=selected_source,
             stage17_gap_preferred=stage17_gap_preferred,
+            selected_gap_is_stage17=selected_gap_is_stage17,
         ),
     }
 
 
-def _selected_gap_contract(*, selected_source: str, stage17_gap_preferred: bool) -> dict[str, Any]:
-    selected = selected_source in {"stage17_latest_ledger_entry", "latest_ledger_entry"}
-    if stage17_gap_preferred:
+def _selected_gap_contract(
+    *,
+    selected_source: str,
+    stage17_gap_preferred: bool,
+    selected_gap_is_stage17: bool,
+) -> dict[str, Any]:
+    selected = selected_source in {
+        "active_workstream_current_goal",
+        "stage17_latest_ledger_entry",
+        "latest_ledger_entry",
+    }
+    if selected_source == "active_workstream_current_goal":
+        selection_basis = "active_workstream_current_goal"
+    elif stage17_gap_preferred:
         selection_basis = "latest_open_stage17_remaining_gap"
     elif selected_source == "latest_ledger_entry":
         selection_basis = "latest_ledger_remaining_gap"
@@ -147,7 +174,8 @@ def _selected_gap_contract(*, selected_source: str, stage17_gap_preferred: bool)
         "status": "selected" if selected else "blocked",
         "selected_gap_source": selected_source,
         "selection_basis": selection_basis,
-        "selected_gap_is_stage17": stage17_gap_preferred,
+        "selected_gap_is_stage17": selected_gap_is_stage17,
+        "selected_gap_is_active_workstream": selected_source == "active_workstream_current_goal",
         "read_only_selection": True,
         "writes_repo": False,
         "writes_data": False,
@@ -441,6 +469,11 @@ def _is_stage17_ledger_entry(*, title: str, roadmap_area: str) -> bool:
     return title_is_stage17_slice or roadmap_key.startswith("stage 17 /")
 
 
+def _is_stage17_active_workstream(workstream: str) -> bool:
+    key = workstream.casefold()
+    return "capability economy" in key or re.search(r"\bstage\s*17\b", key) is not None
+
+
 def _text_says_stage17_open(text: str) -> bool:
     key = text.casefold()
     return "stage 17 remains open" in key or "stage 17 still needs" in key
@@ -651,6 +684,43 @@ def _labeled_paragraph(text: str, label: str) -> str:
             parts.append(continuation.strip())
         return _limit_text(" ".join(part for part in parts if part), max_length=700)
     return ""
+
+
+def _prefixed_paragraph(text: str, prefix: str) -> str:
+    prefix_key = prefix.casefold()
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped.casefold().startswith(prefix_key):
+            continue
+        parts = [stripped[len(prefix) :].strip()]
+        for continuation in lines[index + 1 :]:
+            if not continuation.strip():
+                break
+            parts.append(continuation.strip())
+        return _limit_text(" ".join(part for part in parts if part), max_length=700)
+    return ""
+
+
+def _active_workstream_status(ledger_text: str) -> dict[str, Any]:
+    workstream = _first_match(
+        ledger_text,
+        r"(?m)^Current active workstream:\s*(?P<workstream>.+?)\s*$",
+        "workstream",
+    )
+    current_goal = _prefixed_paragraph(ledger_text, "The current goal is ordered as")
+    if not current_goal:
+        current_goal = _prefixed_paragraph(ledger_text, "The current goal is")
+    return {
+        "found": bool(workstream and current_goal),
+        "workstream": workstream,
+        "current_goal": current_goal,
+        "read_only_contract": True,
+        "writes_repo": False,
+        "writes_data": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+    }
 
 
 def _limit_text(text: str, *, max_length: int) -> str:

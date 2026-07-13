@@ -32,15 +32,29 @@ def test_completion_model_snapshot_is_read_only_and_loop_guarded() -> None:
     assert payload["continue_loop_guard"]["status"] == "ready"
     assert payload["completion_percentage_model"]["movement_allowed_by_this_readback"] is False
     assert payload["routes"]["status"] == "/completion-model/status"
+    assert payload["active_workstream"] == {
+        "found": True,
+        "workstream": "Capability Economy / Stage 17 closure reconciliation.",
+        "current_goal": (
+            "the FR-017 operator/physical evidence boundary followed by the final governed closure decision."
+        ),
+        "read_only_contract": True,
+        "writes_repo": False,
+        "writes_data": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+    }
     assert payload["next_continue_decision"]["status"] == "bounded_slice_required"
-    assert payload["next_continue_decision"]["selected_gap_source"] == "stage17_latest_ledger_entry"
-    assert payload["next_continue_decision"]["stage17_gap_preferred"] is True
+    assert payload["next_continue_decision"]["selected_gap_source"] == "active_workstream_current_goal"
+    assert payload["next_continue_decision"]["active_workstream_preferred"] is True
+    assert payload["next_continue_decision"]["stage17_gap_preferred"] is False
     selected_gap_contract = payload["next_continue_decision"]["selected_gap_contract"]
     assert selected_gap_contract["kind"] == "francis.completion_model.selected_gap_contract"
     assert selected_gap_contract["status"] == "selected"
-    assert selected_gap_contract["selected_gap_source"] == "stage17_latest_ledger_entry"
-    assert selected_gap_contract["selection_basis"] == "latest_open_stage17_remaining_gap"
+    assert selected_gap_contract["selected_gap_source"] == "active_workstream_current_goal"
+    assert selected_gap_contract["selection_basis"] == "active_workstream_current_goal"
     assert selected_gap_contract["selected_gap_is_stage17"] is True
+    assert selected_gap_contract["selected_gap_is_active_workstream"] is True
     assert selected_gap_contract["read_only_selection"] is True
     assert selected_gap_contract["writes_repo"] is False
     assert selected_gap_contract["writes_data"] is False
@@ -235,6 +249,39 @@ def test_completion_model_snapshot_reads_wrapped_roadmap_area(tmp_path: Path) ->
         "Stage 6 / Lens MVP, Orb embodiment, voice-to-substrate routing, "
         "overlay command receipts, and P9 observability."
     )
+
+
+def test_completion_model_classifies_non_stage17_active_workstream(tmp_path: Path) -> None:
+    ledger = tmp_path / "ledger.md"
+    ledger.write_text(
+        """# Ledger
+
+Francis is in `Phase 2`.
+
+Current active workstream: Lens / Stage 6 runtime repair.
+The current goal is restore resident supervision without granting new authority.
+
+### 2026-07-13 05:00Z - Runtime repair remains bounded
+
+Remaining truthful gap:
+
+- Restore resident supervision.
+""",
+        encoding="utf-8",
+    )
+    manifest = tmp_path / "manifest.md"
+    manifest.write_text("# Manifest (Phase 2)\n", encoding="utf-8")
+
+    payload = completion_model_status_snapshot(
+        ledger_path=ledger,
+        build_manifest_path=manifest,
+    )
+
+    assert payload["next_continue_decision"]["selected_gap_source"] == "active_workstream_current_goal"
+    assert payload["next_continue_decision"]["active_workstream_preferred"] is True
+    selected_gap_contract = payload["next_continue_decision"]["selected_gap_contract"]
+    assert selected_gap_contract["selected_gap_is_active_workstream"] is True
+    assert selected_gap_contract["selected_gap_is_stage17"] is False
 
 
 def test_completion_model_snapshot_keeps_stage17_gap_when_latest_entry_is_other_lane(tmp_path: Path) -> None:
@@ -549,7 +596,10 @@ def test_completion_model_status_route_is_mounted_and_read_only() -> None:
     assert body["stage17_status"]["grants_execution_authority"] is False
     assert body["stage17_status"]["grants_mutation_authority"] is False
     assert body["completion_percentage_model"]["movement_allowed_by_this_readback"] is False
+    assert body["active_workstream"]["found"] is True
+    assert body["next_continue_decision"]["selected_gap_source"] == "active_workstream_current_goal"
     assert body["next_continue_decision"]["selected_gap_contract"]["read_only_selection"] is True
+    assert body["next_continue_decision"]["selected_gap_contract"]["selected_gap_is_stage17"] is True
     assert body["next_continue_decision"]["selected_gap_contract"]["apply_authority_granted"] is False
     assert (
         body["next_continue_decision"]["selected_gap_contract"]["selected_gap_is_proposal_evidence_reference"] is False

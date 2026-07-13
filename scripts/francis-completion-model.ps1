@@ -611,7 +611,8 @@ function New-CompletionLoopGuard {
 function New-SelectedGapContract {
   param(
     [string]$SelectedSource,
-    [bool]$Stage17GapPreferred
+    [bool]$Stage17GapPreferred,
+    [bool]$SelectedGapIsStage17
   )
 
   $Selected = (
@@ -636,7 +637,7 @@ function New-SelectedGapContract {
     status = if ($Selected) { 'selected' } else { 'blocked' }
     selected_gap_source = $SelectedSource
     selection_basis = $SelectionBasis
-    selected_gap_is_stage17 = $Stage17GapPreferred
+    selected_gap_is_stage17 = $SelectedGapIsStage17
     selected_gap_is_active_workstream = ($SelectedSource -eq 'active_workstream_current_goal')
     read_only_selection = $true
     writes_repo = $false
@@ -756,6 +757,7 @@ function New-NextContinueDecision {
   $SelectedTitle = ''
   $SelectedRoadmapArea = ''
   $Stage17GapPreferred = $false
+  $SelectedGapIsStage17 = $false
   $NextGap = 'name_remaining_truthful_gap_in_ledger'
 
   if ($LoopGuard.status -ne 'ready') {
@@ -768,6 +770,10 @@ function New-NextContinueDecision {
       $SelectedTitle = $ActiveWorkstream
       $SelectedRoadmapArea = $ActiveWorkstream
       $Stage17GapPreferred = $false
+      $SelectedGapIsStage17 = (
+        $ActiveWorkstream.IndexOf('Capability Economy', [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -or
+        [regex]::IsMatch($ActiveWorkstream, '\bstage\s*17\b', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+      )
       $NextGap = $ActiveWorkstreamGoal
     } elseif (
       [bool]$Stage17Status.found -and
@@ -779,6 +785,7 @@ function New-NextContinueDecision {
       $SelectedTitle = [string]$Stage17Entry.title
       $SelectedRoadmapArea = [string]$Stage17Entry.roadmap_area
       $Stage17GapPreferred = $true
+      $SelectedGapIsStage17 = $true
       $NextGap = [string]$Stage17Entry.remaining_truthful_gap
     } elseif ([bool]$LatestLedgerEntry.has_remaining_truthful_gap) {
       $SelectedSource = 'latest_ledger_entry'
@@ -799,7 +806,7 @@ function New-NextContinueDecision {
     active_workstream_preferred = ($SelectedSource -eq 'active_workstream_current_goal')
     stage17_gap_preferred = $Stage17GapPreferred
     next_smallest_truthful_gap = $NextGap
-    selected_gap_contract = New-SelectedGapContract -SelectedSource $SelectedSource -Stage17GapPreferred $Stage17GapPreferred
+    selected_gap_contract = New-SelectedGapContract -SelectedSource $SelectedSource -Stage17GapPreferred $Stage17GapPreferred -SelectedGapIsStage17 $SelectedGapIsStage17
   }
 }
 

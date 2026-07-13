@@ -87,7 +87,7 @@ def test_francis_completion_model_status_projects_ledger_backed_loop_guard() -> 
     assert selected_gap_contract["status"] == "selected"
     assert selected_gap_contract["selected_gap_source"] == "active_workstream_current_goal"
     assert selected_gap_contract["selection_basis"] == "active_workstream_current_goal"
-    assert selected_gap_contract["selected_gap_is_stage17"] is False
+    assert selected_gap_contract["selected_gap_is_stage17"] is True
     assert selected_gap_contract["selected_gap_is_active_workstream"] is True
     assert selected_gap_contract["read_only_selection"] is True
     assert selected_gap_contract["writes_repo"] is False
@@ -229,6 +229,45 @@ def test_francis_completion_model_status_projects_ledger_backed_loop_guard() -> 
     assert "PM-owned publication marker" in checklist["stage17_worker_publication_handoff_guard"]["evidence"]
     assert checklist["stage17_worker_execution_liveness_guard"]["status"] == "enforced"
     assert "process liveness or exit code" in checklist["stage17_worker_execution_liveness_guard"]["evidence"]
+
+
+def test_francis_completion_model_classifies_non_stage17_active_workstream(tmp_path: Path) -> None:
+    ledger = tmp_path / "ledger.md"
+    ledger.write_text(
+        """# Ledger
+
+Francis is in `Phase 2`.
+
+Current active workstream: Lens / Stage 6 runtime repair.
+The current goal is restore resident supervision without granting new authority.
+
+### 2026-07-13 05:00Z - Runtime repair remains bounded
+
+Remaining truthful gap:
+
+- Restore resident supervision.
+""",
+        encoding="utf-8",
+    )
+    manifest = tmp_path / "manifest.md"
+    manifest.write_text("# Manifest (Phase 2)\n", encoding="utf-8")
+
+    result = _run_completion_model(
+        "-Mode",
+        "Status",
+        "-LedgerPath",
+        str(ledger),
+        "-BuildManifestPath",
+        str(manifest),
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["next_continue_decision"]["selected_gap_source"] == "active_workstream_current_goal"
+    assert payload["next_continue_decision"]["active_workstream_preferred"] is True
+    selected_gap_contract = payload["next_continue_decision"]["selected_gap_contract"]
+    assert selected_gap_contract["selected_gap_is_active_workstream"] is True
+    assert selected_gap_contract["selected_gap_is_stage17"] is False
 
 
 def test_francis_completion_model_percentages_are_evidence_gated_not_invented() -> None:
