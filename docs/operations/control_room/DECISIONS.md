@@ -60,3 +60,98 @@
 - Affected contracts: Stage 18 request/provision/isolation/safe-delta chain
 - ADR required: no
 - Operator involvement: production facts and approvals remain operator-only
+
+## CR-DEC-0005 - Correct LUMEN front to transferred repo truth
+
+- Date: 2026-07-14
+- Issue: the proposed Orb visual/choreography card did not match the transferred
+  patch, which implements right-click request queue durability plus a visual-lock
+  ring-count correction
+- Agents involved: ATLAS, LUMEN, VERA
+- Evidence considered: LUMEN KICKOFF, exact five-file diff, ADR 0008 boundaries
+- Decision: retain the coherent transferred patch under LUMEN, revise CR-LUMEN-001
+  to right-click delivery/visual-lock alignment, and keep canonical state-to-
+  choreography mapping as a separate future front
+- Affected fronts: CR-LUMEN-001; future choreography front
+- Affected task cards: `orb-visual-choreography.md` (revised in place)
+- Affected contracts: native right-click request, overlay queue/readback, visual
+  lock, native renderer status
+- ADR required: no; the decision narrows work to existing contracts
+- Operator involvement: no new authority or live-runtime decision required
+
+## CR-DEC-0006 - Version expanded Lens observer contracts
+
+- Date: 2026-07-14
+- Issue: transferred producer/consumer code adds mandatory governance fields while
+  retaining v1 observation and heartbeat versions
+- Agents involved: ATLAS, ARGUS, VERA
+- Evidence considered: ARGUS KICKOFF, strict situation-model validators, persisted
+  status/readback compatibility requirement, portable loader audit
+- Decision: expanded producer contracts require a new version; readers must
+  explicitly recognize legacy v1 payloads and handle missing new governance facts
+  conservatively rather than silently treating them as the new contract
+- Affected fronts: CR-ARGUS-001
+- Affected task cards: `lens-game-observer.md`
+- Affected contracts: `lens.game.observation`, situation-model heartbeat/readback
+- ADR required: no; this is a compatible schema evolution inside existing
+  architecture
+- Operator involvement: no authority or live-process decision required
+
+## CR-DEC-0007 - Commit local Control Room state and gate every push
+
+- Date: 2026-07-14
+- Issue: repository files are not durable organizational memory until committed,
+  while publishing is an external action
+- Agents involved: OPERATOR, ATLAS
+- Evidence considered: operator Control Room addendum; dirty main status
+- Decision: every material sync is an exact docs-only local-main commit named
+  `ops(control-room): sync CR-YYYYMMDD-NNN`; pushing any ref remains operator-only
+- Affected fronts: all
+- Affected task cards: all current and future cards
+- Affected contracts: operating memory, external/public action boundary
+- ADR required: no
+- Operator involvement: explicitly directed and retained for every push
+
+## CR-DEC-0008 - Deny live services without a runtime lease
+
+- Date: 2026-07-14
+- Issue: worktrees do not isolate data roots, ports, processes, or the live Orb
+- Agents involved: OPERATOR, ATLAS, FORGE, ARGUS, LUMEN
+- Evidence considered: operator addendum; port and state-root readback at
+  2026-07-14T09:37:19-05:00
+- Decision: each mutating card receives a unique runtime lease; current cards
+  permit tests/compile only and deny all persistent services and real Orb access
+- Affected fronts: CR-FORGE-001, CR-ARGUS-001, CR-LUMEN-001
+- Affected task cards: all three active cards
+- Affected contracts: runtime isolation and protected live paths
+- ADR required: no; this is execution containment
+- Operator involvement: explicit operating mandate
+
+## CR-DEC-0009 - Durable specialist seats do not imply staffed agents
+
+- Date: 2026-07-14
+- Issue: expanded scrutiny requires stable roles without fabricated activity
+- Agents involved: OPERATOR, ATLAS
+- Evidence considered: addendum role charters and current agent-session inventory
+- Decision: add CLAUDE, MERIDIAN, SENTINEL, HARBOR, ARCHIVIST, and ECHO as durable
+  seats; mark them unstaffed/unverified until a real session or bridge exists
+- Affected fronts: all
+- Affected task cards: cards name concrete review questions
+- Affected contracts: review provenance and liveness
+- ADR required: no
+- Operator involvement: explicit role definition
+
+## CR-DEC-0010 - Route VERA preflight findings into worker acceptance
+
+- Date: 2026-07-14
+- Issue: VERA found acceptance gaps beyond each worker's first KICKOFF finding
+- Agents involved: ATLAS, VERA, FORGE, ARGUS, LUMEN
+- Evidence considered: `reviews/VERA/CR-20260714-preflight.md`; transfer handoff
+- Decision: keep every front `ACTIVE`, expand only the bounded acceptance contract
+  needed for fail-closed receipt/readback, observer identity/versioning, and
+  queue/ring truth; no front is review-ready
+- Affected fronts: CR-FORGE-001, CR-ARGUS-001, CR-LUMEN-001
+- Affected task cards: all three active cards
+- Affected contracts: safe-delta readback; observer lineage; queue and visual lock
+- ADR required: unverified until MERIDIAN reviews any final architecture impact
+- Operator involvement: no gated product action is performed

@@ -1,28 +1,71 @@
 # Francis Control Room Protocol
 
-## Ownership
+## Operating Principle
 
-ATLAS is the sole writer for aggregate Control Room state:
+Central coordination. Isolated execution. Evidence-backed integration.
+
+Seats are durable; sessions are replaceable. A seat name never proves a live
+agent exists. No conversation, capability, review, or audit may be fabricated.
+
+## Aggregate Ownership And Durability
+
+ATLAS is the authoritative writer for:
 
 - `docs/operations/SESSION_BRIEF.md`
-- `ROSTER.md`
-- `BOARD.md`
-- `MESSAGE_LOG.md`
-- `DECISIONS.md`
-- `INTEGRATION_QUEUE.md`
+- `ROSTER.md`, `BOARD.md`, `MESSAGE_LOG.md`, `DECISIONS.md`
+- `INTEGRATION_QUEUE.md`, `RUNTIME_LEASES.md`, `OPERATOR_QUEUE.md`
+- `EVIDENCE_INDEX.md`
+- aggregate seat state, task cards, material messages, handoffs, and reviews
 
-Workers submit structured reports to ATLAS. Workers may add uniquely named
-evidence/handoff artifacts only when their task card permits it. VERA writes
-uniquely named review reports; ATLAS integrates their disposition into aggregates.
+Workers submit structured reports. They do not edit aggregate files from their
+worktrees. Uniquely named evidence may be created only when the task card permits.
 
-## Assignment Rules
+At every sync cycle where operating state changes, ATLAS must:
+
+1. inspect `git status --short --branch`;
+2. stage only exact ATLAS-owned operational paths;
+3. inspect staged names and the complete staged diff;
+4. exclude source, secrets, runtime data, generated files, and unknown changes;
+5. commit on local `main` as `ops(control-room): sync CR-YYYYMMDD-NNN`.
+
+Uncommitted Control Room state is not durable organizational memory. Pushing
+`main` or any branch is operator-gated.
+
+A sync cycle opens when ATLAS begins reconciliation of new operator direction,
+worker reports, reviews, leases, or integration state. It closes only when that
+state is either unchanged or represented by the corresponding local-main Control
+Room commit. The cycle ID is `CR-YYYYMMDD-NNN`; active-seat liveness is measured
+once against that closing cycle.
+
+## Assignment And Isolation
 
 - Maximum three concurrent mutating fronts.
-- One worker, task card, `codex/*` branch, and worktree per front.
-- Workers never write `main`, share implementation worktrees, merge themselves,
-  or edit another front's scope without a revised card.
-- VERA is read-only by default and does not consume a mutating slot.
-- ATLAS may make only small, necessary, immediately validated integration fixes.
+- One named worker, task card, `codex/*` branch, worktree, bounded objective,
+  file scope, do-not-touch list, acceptance contract, and runtime lease per front.
+- Workers never write to `main`, share implementation worktrees, merge
+  themselves, or modify another front's files without a revised assignment.
+- ATLAS is manager/integrator, not a fourth feature worker.
+- Read-only seats do not consume mutating slots. A specialist may mutate only
+  after receiving one of those slots plus a card, branch, and worktree.
+
+## Runtime Isolation
+
+Worktrees do not isolate runtime state. Every mutating card must assign:
+
+- unique `FRANCIS_DATA_DIR` and any other state directories;
+- API, overlay, and frontend ports;
+- permitted services and processes;
+- whether the operator-visible Orb may be used;
+- startup, shutdown, and cleanup procedures.
+
+All allocations are recorded in `RUNTIME_LEASES.md`. Live-service access is
+denied by default. Ports `8000`, `8787`, and `5173` are operator-reserved. No two
+fronts may share a writable data directory or active port. Unknown processes are
+never killed merely because they hold a desired port.
+
+Before `READY_FOR_REVIEW`, the worker stops every owned service, releases ports,
+preserves required logs/receipts, and submits cleanup evidence. ARGUS and LUMEN
+may not operate against the same live Orb or shared runtime state concurrently.
 
 ## Front States
 
@@ -31,16 +74,12 @@ Allowed states:
 `QUEUED`, `READY`, `ACTIVE`, `BLOCKED`, `READY_FOR_REVIEW`, `IN_REVIEW`,
 `REMEDIATION_REQUIRED`, `READY_FOR_PROMOTION`, `PROMOTED`, `CANCELLED`.
 
-`DONE` is forbidden. State transitions require evidence in `MESSAGE_LOG.md` and
-an updated board entry.
+Workers never report `DONE`. A state transition requires exact evidence in a
+message shard and an updated board entry.
 
-## Required Worker Reports
+## Messages And Shards
 
-Workers report assignment acceptance, initial inspection, first material
-finding, dependencies, contract collisions, blockers, acceptance evidence,
-review readiness, remediation completion, and handoff/reassignment.
-
-Every material report uses exactly these fields:
+Each material report has ID `MSG-YYYYMMDD-NNN` and exactly these fields:
 
 ```text
 FROM:
@@ -60,31 +99,121 @@ REQUESTED ACTION:
 NEXT SMALLEST TRUTHFUL STEP:
 ```
 
-Allowed message types: `KICKOFF`, `FINDING`, `DEPENDENCY`, `QUESTION`,
+Message types: `KICKOFF`, `FINDING`, `DEPENDENCY`, `QUESTION`,
 `CONTRACT_COLLISION`, `BLOCKER`, `EVIDENCE`, `READY_FOR_REVIEW`,
 `REVIEW_RESULT`, `DECISION`, `HANDOFF`.
 
+`MESSAGE_LOG.md` is a bounded index. Messages live under monthly/front shards.
+Roll a shard at 128 KiB or 250 material messages. Closed shards are immutable;
+corrections are new messages referencing the original ID.
+
+`EVIDENCE_INDEX.md` records exact commits, commands/runs, receipt IDs, external
+artifact paths/hashes, and verification status. `OPERATOR_QUEUE.md` contains only
+gated decisions; queue presence never grants authority.
+
+## Seat Liveness
+
+Each staffed active seat submits a material report or structured heartbeat every
+Control Room sync cycle. A heartbeat includes seat, front, card, branch,
+worktree, commit, state, latest validation, blocker, and next action.
+
+- One consecutive missed cycle: mark `STALE`, request a heartbeat, inspect held
+  dependencies/leases, and reject reliance on unverified progress.
+- Two consecutive missed cycles: mark the session `PRESUMED_DEAD`, preserve the
+  last verified commit, inspect without reset/clean, preserve and quarantine
+  uncertain work, release only proven resources, replace the session in the same
+  seat, and use a continuation branch such as `codex/<slice>-r2` if necessary.
+
+The replacement receives the seat file, card, messages, contracts, last verified
+commit, unresolved questions, and next action. Recovery state is committed in
+the next Control Room sync.
+
 ## Review Routing
 
-1. Worker reports `READY_FOR_REVIEW at <commit>`.
-2. ATLAS verifies branch/worktree identity and task-card scope.
-3. VERA independently maps every acceptance criterion to exact evidence.
-4. Findings return to the same worker unless ATLAS creates a separate card.
-5. ATLAS runs required validation, including `scripts/check.ps1`.
-6. Certain routine work may be fast-forwarded to `main`; uncertain promotion is
-   escalated to the operator.
-7. Post-merge reachability, checks, readback, receipts, and ledger truth are
-   verified before the front becomes `PROMOTED`.
+1. Worker reports `READY_FOR_REVIEW at <commit>` with exact acceptance evidence.
+2. MERIDIAN reviews architecture/contract impact when the card asks a concrete
+   architecture question.
+3. SENTINEL reviews authority, tenancy, security, or destructive impact when
+   applicable.
+4. HARBOR reviews portability, branch base, CI, and exact-head integration.
+5. VERA independently maps every acceptance criterion to evidence.
+6. ARCHIVIST verifies receipt, ledger, and traceability claims when applicable.
+7. CLAUDE audits the story/substrate only through a verified external bridge.
+8. ATLAS decides whether routine local promotion is justified.
+9. The operator decides every gated action.
 
-## Escalation
+Review is not ceremonial. Each requested seat receives a concrete question. A
+reviewer reports findings; it does not edit the worker branch or redefine the
+card. Remediation returns to the owning worker.
 
-Operator-only: governance/authority changes, legal/license text, secrets,
-credentials, public releases/settings, stage closure, destructive/irreversible
-operations, live process changes outside an explicit card, and any merge ATLAS
-is not certain about.
+## Exact-Head Promotion
+
+Control Room commits can advance local `main`, so pre-rebase evidence is not
+sufficient. Before promotion ATLAS must:
+
+1. record the worker's review-ready commit;
+2. commit current Control Room state;
+3. rebase the worker branch onto that exact local `main` head;
+4. rerun the complete card acceptance suite on the rebased head;
+5. run `scripts/check.ps1` on the rebased head;
+6. confirm the final diff still satisfies the card and required reviews;
+7. freeze new local-main commits;
+8. fast-forward local `main` only when certain;
+9. verify commit reachability;
+10. run meaningful post-promotion validation;
+11. commit the resulting Control Room sync.
+
+The exact promoted head must be the head that passed final validation. Publishing
+or pushing remains operator-gated. Remote branch deletion is operator-gated.
+
+## Operator Escalation Gates
+
+The operator alone controls these actions.
+
+### Governance And Authority
+
+- governance-rule, authority-boundary, policy, approval-rule, tenancy, or trust-
+  boundary changes;
+- weakening receipts, auditability, or readback requirements.
+
+### Legal
+
+- `LICENSE`, legal text, copyright, attribution, or acceptance of third-party
+  legal terms.
+
+### Secrets And Credentials
+
+- creating, exposing, rotating, transmitting, committing, or deleting secrets;
+- credential-store changes, production credentials, or sensitive data.
+
+### External And Public Surfaces
+
+- pushing `main`, publishing branches, GitHub settings/visibility, releases,
+  public tags/packages/docs/announcements, or external-service changes.
+
+### Roadmap And Closure
+
+- roadmap redefinition, closure-criteria changes, stage closure/reopening,
+  project completion, or accepting unresolved remediation as complete.
+
+### Destructive Or Irreversible Actions
+
+- deleting or overwriting unknown work; destructive reset/clean; force-push;
+  shared-history rewrite; remote-branch, receipt, or operator-data deletion;
+  irreversible migrations or external actions.
+
+### Uncertain Promotion
+
+- any merge ATLAS is less than certain about; unresolved conflict; missing
+  evidence; unexplained scope expansion; ambiguous validation; uncertain
+  portability/authority impact; or uncertain protected-live-path impact.
+
+When a gate is reached: stop that action, preserve work, stage exact evidence,
+name the decision, present options, recommend one, state risks/consequences, and
+ask the operator. Other isolated work may continue.
 
 ## Handoff Minimum
 
-A replacement packet names the seat, front, card, branch, worktree, latest
-verified commit, contracts, validation, findings, dependencies, blocker, and next
-smallest truthful action. No handoff may depend on chat memory alone.
+A handoff names the seat, front, card, branch, worktree, runtime lease, latest
+verified commit, contracts, validation, messages, findings, dependencies,
+blocker, and next smallest truthful action. No handoff may rely on chat memory.

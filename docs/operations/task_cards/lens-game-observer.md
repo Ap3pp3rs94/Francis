@@ -4,7 +4,7 @@ Task ID: `CR-ARGUS-001`
 
 Assigned seat: ARGUS
 
-Status: `QUEUED` pending patch preservation and worktree creation
+Status: `ACTIVE` after ARGUS KICKOFF; versioned compatibility remediation required
 
 ## Objective
 
@@ -15,8 +15,20 @@ contract that composes safely with the Lens situation model.
 
 - Branch: `codex/argus-game-observer`
 - Worktree: `D:\Francis-worktrees\argus-game-observer`
-- Base: current `origin/main` at assignment time
+- Assignment base: `8c84dc4e972b7921e9204e62f7cd655bd3ede037`
+- Final review base: exact committed local `main` head after Control Room sync
 - Never work in `D:\Francis`.
+
+## RUNTIME ISOLATION
+
+- Lease: `LEASE-ARGUS-001` in `control_room/RUNTIME_LEASES.md`
+- `FRANCIS_DATA_DIR`: `D:\Francis-runtime-leases\argus-game-observer\data`
+- API / overlay / frontend ports: `18002` / `18782` / `15172`
+- Permitted services: none; pytest/Ruff/mypy processes only
+- Operator-visible Orb: denied
+- Startup command: prohibited; no observer/watcher/bridge may be launched
+- Shutdown: verify no front-owned persistent process or listener before review
+- Cleanup: preserve test evidence; remove only proven front-owned temporary state
 
 ## Files In Scope
 
@@ -54,8 +66,15 @@ contract that composes safely with the Lens situation model.
   stale lineage, low confidence, or malformed configuration.
 - Situation-model readback accepts only a valid observer contract and surfaces a
   precise blocker for invalid data.
+- Acceptance validates bounded target, process, model, scene, classification,
+  frame, receipt, and teaching lineage rather than only checking field presence.
+- New mandatory governance fields use a new producer contract version. Persisted
+  v1 observation/heartbeat payloads receive explicit, conservative legacy
+  handling and cannot be silently reinterpreted as the new contract.
 - Windows process/window APIs use `getattr(ctypes, "WinDLL", None)` and return an
   explicit unsupported readback on non-Windows hosts.
+- Model-path overrides remain under the governed data boundary; arbitrary
+  absolute paths fail closed. Direct non-Windows tests cover the unsupported path.
 - No watcher is launched, no process is manipulated, and no input authority is
   introduced by tests or implementation.
 - Tests change in step with code.
@@ -67,9 +86,20 @@ Required commands, all with exit code 0:
 .venv\Scripts\python.exe -m ruff check src/francis/lens/game_observer.py src/francis/lens/situation_model.py tests/unit/test_lens_game_observer.py tests/unit/test_lens_situation_model.py
 .venv\Scripts\python.exe -m ruff format --check src/francis/lens/game_observer.py src/francis/lens/situation_model.py tests/unit/test_lens_game_observer.py tests/unit/test_lens_situation_model.py
 .venv\Scripts\python.exe -m mypy src/francis/lens/game_observer.py src/francis/lens/situation_model.py
-git diff --check origin/main...HEAD
+git diff --check main...HEAD
 .\scripts\check.ps1
 ```
+
+## Mandatory Review Questions
+
+- MERIDIAN: is the v2 producer plus conservative v1 reader an explicit compatible
+  schema evolution, and does any part require an ADR?
+- SENTINEL: do local-only, foreground-target, model-boundary, and no-input
+  invariants remain fail closed?
+- HARBOR: do Windows loaders preserve the `adcb62a2` portable pattern, does
+  non-Windows collection pass, and is the exact rebased head tested?
+- VERA: are every identity/lineage and legacy-version claim covered directly?
+- ARCHIVIST is required only if the final diff adds or changes receipt evidence.
 
 ## Worker Receipt
 
