@@ -100,6 +100,8 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
         ("GET", "/managed-copies/status"),
         ("GET", "/managed-copies/copy-creation-contract"),
         ("POST", "/managed-copies/copy-creation-request"),
+        ("POST", "/managed-copies/copy-creation-preflight"),
+        ("GET", "/managed-copies/copy-creation-preflights"),
         ("GET", "/managed-copies/isolation-rules-contract"),
         ("POST", "/managed-copies/isolation-verification"),
         ("GET", "/managed-copies/safe-delta-model-contract"),
